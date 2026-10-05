@@ -17,7 +17,7 @@ import type { RunSummary } from "@/api/run-grpc";
 import { formatRelativeTime } from "@/lib/relativeTime";
 import { cn } from "@/lib/utils";
 import Card from "../forge-ui/card";
-import { LaunchKindIcon, RunRow } from "./RunRow";
+import { LaunchKindIcon, RunListHeader, RunRow } from "./RunRow";
 import { groupRuns, sectionRuns, type RunListItem } from "./runSections";
 
 interface RunListProps {
@@ -49,6 +49,7 @@ export function RunList({ runs, groupRepeats, projectNames, footer, bare = false
 
   const body = (
     <>
+      <RunListHeader />
       {sections.needsYou.length > 0 && (
         <RunSection label="Needs you" id="runs-needs-you">
           {sections.needsYou.map((run) => (
@@ -90,7 +91,7 @@ function RunSection({ label, id, children }: { label: string; id: string; childr
     <section aria-labelledby={id} className="border-b border-border/60 last:border-b-0">
       <h2
         id={id}
-        className="px-5 pb-1.5 pt-4 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
+        className="px-4 pb-1 pt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground"
       >
         {label}
       </h2>
@@ -121,7 +122,7 @@ function RepeatGroup({
         aria-expanded={expanded}
         aria-controls={listId}
         onClick={() => setExpanded((open) => !open)}
-        className="flex w-full items-center gap-3 px-5 py-3 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
+        className="flex w-full items-center gap-3 px-4 py-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-muted/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring/40"
       >
         <ChevronRight
           className={cn("h-4 w-4 shrink-0 transition-transform motion-reduce:transition-none", expanded && "rotate-90")}
@@ -133,7 +134,7 @@ function RepeatGroup({
       {expanded && (
         <ul id={listId} aria-label={`${item.triggerName} runs`} className="divide-y divide-border/60 border-t border-border/60">
           {item.runs.map((run) => (
-            <RunRow key={run.chatId} run={run} projectName={projectName(run)} className="pl-12" />
+            <RunRow key={run.chatId} run={run} projectName={projectName(run)} className="pl-11" />
           ))}
         </ul>
       )}

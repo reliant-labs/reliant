@@ -64,7 +64,7 @@ export function ComingUpTimeline({ triggers, now: nowOverride }: { triggers: Tri
   const marks = hourMarks(model.start, model.end);
 
   return (
-    <section aria-labelledby={headingId} className="mb-6" data-testid="coming-up-timeline">
+    <section aria-labelledby={headingId} data-testid="coming-up-timeline">
       <Card padding="none">
         <div className="flex items-baseline justify-between gap-4 border-b border-border/60 px-5 py-3">
           <h2 id={headingId} className="text-sm font-semibold text-foreground">

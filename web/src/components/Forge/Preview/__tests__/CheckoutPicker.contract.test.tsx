@@ -68,9 +68,35 @@ function report(): ForgeCheckoutsReport {
   };
 }
 
+/** The list lives behind the trigger: open it the way a user would. */
+async function renderOpen(props: Partial<React.ComponentProps<typeof CheckoutPicker>> = {}) {
+  const view = render(<CheckoutPicker report={report()} selected="" onSelect={vi.fn()} {...props} />);
+  await userEvent.click(screen.getByTestId("checkout-picker-trigger"));
+  return view;
+}
+
 describe("the checkout picker", () => {
-  it("offers only checkouts that exist on disk", () => {
+  it("is a dropdown: one trigger naming the current branch, options hidden until opened", async () => {
     render(<CheckoutPicker report={report()} selected="" onSelect={vi.fn()} />);
+    // The owner's complaint: branches rendered as a wrap of clickable tags.
+    expect(screen.queryAllByTestId("checkout-option")).toHaveLength(0);
+    const trigger = screen.getByTestId("checkout-picker-trigger");
+    expect(trigger).toHaveAttribute("aria-haspopup", "listbox");
+    // Empty selection is the main checkout, which forge marks selected.
+    expect(trigger).toHaveTextContent("main");
+
+    await userEvent.click(trigger);
+    expect(screen.getAllByTestId("checkout-option")).toHaveLength(3);
+  });
+
+  it("states uncommitted changes on the trigger, not only in the list", () => {
+    render(<CheckoutPicker report={report()} selected="/src/wt/fix-thing" onSelect={vi.fn()} />);
+    expect(screen.getByTestId("checkout-picker-trigger")).toHaveTextContent("fix/thing");
+    expect(screen.getByTestId("checkout-trigger-dirty")).toBeInTheDocument();
+  });
+
+  it("offers only checkouts that exist on disk", async () => {
+    await renderOpen();
 
     const options = screen.getAllByTestId("checkout-option");
     expect(options).toHaveLength(3);
@@ -79,8 +105,8 @@ describe("the checkout picker", () => {
     expect(screen.queryByText("origin/main")).not.toBeInTheDocument();
   });
 
-  it("marks a checkout with uncommitted changes", () => {
-    render(<CheckoutPicker report={report()} selected="" onSelect={vi.fn()} />);
+  it("marks a checkout with uncommitted changes", async () => {
+    await renderOpen();
 
     const dirty = screen.getAllByTestId("checkout-option").find(
       (option) => option.getAttribute("data-dirty") === "true"
@@ -89,8 +115,8 @@ describe("the checkout picker", () => {
     expect(dirty?.textContent).toContain("uncommitted changes");
   });
 
-  it("shows the distance from main when it is known", () => {
-    render(<CheckoutPicker report={report()} selected="" onSelect={vi.fn()} />);
+  it("shows the distance from main when it is known", async () => {
+    await renderOpen();
 
     const text = screen.getAllByTestId("checkout-option")
       .map((option) => option.textContent ?? "")
@@ -100,14 +126,14 @@ describe("the checkout picker", () => {
     expect(text).toContain("In step with main");
   });
 
-  it("says NOTHING about the distance when forge could not compare", () => {
+  it("says NOTHING about the distance when forge could not compare", async () => {
     // The regression this prevents: a missing count rendered as "in step with
     // main" tells the user their branch is current when nobody checked.
     const spike = report().checkouts?.[3];
     expect(aheadBehindKnown(spike!)).toBe(false);
     expect(distanceFromMain(spike!)).toBeNull();
 
-    render(<CheckoutPicker report={report()} selected="" onSelect={vi.fn()} />);
+    await renderOpen();
     const option = screen
       .getAllByTestId("checkout-option")
       .find((candidate) => candidate.textContent?.includes("spike"));
@@ -118,7 +144,7 @@ describe("the checkout picker", () => {
 
   it("reports the chosen checkout's path", async () => {
     const onSelect = vi.fn();
-    render(<CheckoutPicker report={report()} selected="" onSelect={onSelect} />);
+    await renderOpen({ onSelect });
 
     const option = screen
       .getAllByTestId("checkout-option")

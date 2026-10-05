@@ -53,10 +53,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 
 import { useProjectStore, type Project } from "@/store/projectStore";
-import { useForgeEnvironments } from "@/hooks/forge-queries";
+import { useForgeRoster } from "@/hooks/forge-queries";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 
-import { ForgeHeader } from "./ForgeHeader";
+import { ForgeCloseButton, ForgeProjectSwitcher } from "./ForgeHeader";
 import { ForgeProjectPicker } from "./ForgeProjectPicker";
 import { ForgeShell } from "./ForgeShell";
 
@@ -190,14 +190,17 @@ export function ForgeLayout() {
   const showPicker = resolved && !currentProject;
 
   /**
-   * The nav's environment list — the SAME joined list the pages read (daemon
-   * topology ∪ control plane), from the same cached queries, so the sidebar
-   * can never list an environment the Overview does not, or miss one only the
-   * control plane knows about while the daemon is asleep.
+   * The nav's environment list — the SAME roster the Overview reads (backend
+   * environments, then the checkout's unregistered ones, labelled), from the
+   * same cached queries, so the sidebar and the Overview cannot disagree about
+   * which environments exist.
    */
   const projectId = projectParam ?? currentProject?.id ?? null;
-  const { envs } = useForgeEnvironments(showPicker ? null : projectId);
-  const navEnvs = useMemo(() => envs.map((env) => ({ name: env.name, where: env.where })), [envs]);
+  const roster = useForgeRoster(showPicker ? null : projectId);
+  const navEnvs = useMemo(
+    () => roster.envs.map((env) => ({ name: env.name, lifecycle: env.lifecycle, source: env.source })),
+    [roster.envs]
+  );
 
   /**
    * The project carries across every nav link. Built here rather than in the
@@ -214,8 +217,10 @@ export function ForgeLayout() {
     <ForgeShell
       activePath={pathname}
       envs={navEnvs}
+      envsLoading={!resolved || roster.isLoading || roster.resolvingName}
       search={navSearch}
-      headerContent={<ForgeHeader onClose={onClose} onProjectSelected={onProjectSelected} />}
+      scope={<ForgeProjectSwitcher onProjectSelected={onProjectSelected} />}
+      exit={<ForgeCloseButton onClose={onClose} />}
     >
       {showPicker ? <ForgeProjectPicker onSelected={onProjectSelected} /> : <Outlet />}
     </ForgeShell>

@@ -7,12 +7,12 @@
  * lives in `@/services/controlPlane/environments`; this file is presentation +
  * local UI state only.
  *
- * Layout: a single machines view (list / create / detail). Everything is
- * rendered inside /settings/environments; the detail view is internal
- * component state (no nested route needed). An optional `?daemon=<id>` search
- * param deep-links straight into a detail view (used by the onboarding
- * DaemonConnectingGate "View logs" action). Daemon access tokens are managed
- * in the standalone System → Access Tokens settings section.
+ * Layout: a single machines view (list / create / detail). The list is
+ * /settings/environments and one machine's detail is
+ * /settings/environments/$machineId, so Back, refresh and deep links (the
+ * onboarding DaemonConnectingGate "View logs" action, docs) all work. Daemon
+ * access tokens are managed in the standalone System → Access Tokens settings
+ * section.
  *
  * Each machine's detail view carries an Access section (./machineAccess): the
  * outside AI apps granted access to that machine. Those grants are reliant's,
@@ -24,7 +24,7 @@
 import React, { useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useSearch } from "@tanstack/react-router";
+import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   Activity,
@@ -409,9 +409,17 @@ function SelfHostedSetupCard() {
 
 // ── Root section ────────────────────────────────────────────────────────────
 export function MachinesSection() {
-  const search = useSearch({ strict: false }) as { daemon?: string };
-  // Deep-link: ?daemon=<id> opens the detail view directly.
-  const [selectedId, setSelectedId] = useState<string | null>(search.daemon ?? null);
+  // The open machine is the URL (/settings/environments/$machineId), so Back
+  // returns to the list, a refresh keeps it open, and it can be linked to.
+  // `?daemon=<id>` is the older deep link; the route redirects it onto the
+  // path, and it is still read here so a stale link never lands on the list.
+  const params = useParams({ strict: false }) as { machineId?: string };
+  const search = useSearch({ strict: false }) as { daemon?: string; from?: string };
+  const navigate = useNavigate();
+  const selectedId = params.machineId ?? search.daemon ?? null;
+  const openMachine = (machineId: string) =>
+    navigate({ to: "/settings/environments/$machineId", params: { machineId } });
+  const backToList = () => navigate({ to: "/settings/$section", params: { section: "environments" } });
   // Without a control plane there are no managed machines to create or
   // drive, but registered machines — and the app access granted to them —
   // still exist, so the list and detail render in a registry-only mode rather
@@ -421,7 +429,7 @@ export function MachinesSection() {
   return (
     <div className="mx-auto max-w-5xl">
       {selectedId ? (
-        <EnvironmentDetail daemonId={selectedId} cloud={cloud} onBack={() => setSelectedId(null)} />
+        <EnvironmentDetail daemonId={selectedId} cloud={cloud} onBack={backToList} />
       ) : (
         <div className="space-y-6">
           <div>
@@ -435,7 +443,19 @@ export function MachinesSection() {
                 Self-hosted machines you connect still appear here.
               </p>
             )}
-            <EnvironmentsList cloud={cloud} onOpenDetail={(id) => setSelectedId(id)} />
+            {search.from === "connectors" && (
+              <p
+                role="status"
+                className="mb-4 rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
+              >
+                <span className="font-medium">Connectors moved here.</span>{" "}
+                <span className="text-muted-foreground">
+                  Outside AI apps now get access to one machine at a time. Open a machine and use its Access
+                  section to grant, review or revoke an app.
+                </span>
+              </p>
+            )}
+            <EnvironmentsList cloud={cloud} onOpenDetail={openMachine} />
           </div>
           <SelfHostedSetupCard />
         </div>
@@ -789,8 +809,14 @@ function ManagedMachinesTable({
                         {suspendedFeeOf(d, pricing)} while suspended
                       </span>
                     )}
-                    <Button variant="ghost" size="sm" onClick={() => onDelete(d)}>
-                      <Trash2 className="h-4 w-4 text-destructive" />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => onDelete(d)}
+                      aria-label={`Delete ${daemonDisplayName(d)}`}
+                      title="Delete machine"
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" aria-hidden="true" />
                     </Button>
                   </div>
                 )}

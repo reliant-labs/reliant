@@ -1,8 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The forge surface's CHROME — sidebar, nav, header slot — with no data,
- * no routing and no project resolution.
+ * The forge surface's CHROME — sidebar, nav, scope — with no data, no routing
+ * and no project resolution.
  *
  * WHY THIS IS A SEPARATE COMPONENT, and it is not a refactor for tidiness.
  *
@@ -11,36 +11,35 @@
  * version, a cluster that could not be reached, a declared-but-never-set key)
  * are the ones hardest to produce on demand against a live backend. So each
  * screen grew a dev-only preview harness rendering it against fabricated data.
- *
- * Those harnesses rendered the screen BARE — no sidebar, no header. That made
- * them actively misleading: a screenshot from a preview looks like the product
- * and is not, and the difference is invisible unless you already know which
- * URL produced it. It cost two review cycles here, both spent on "where is the
- * left nav?" when the nav was present in the app the whole time.
- *
- * The fix is structural rather than a note in a README: the previews render
- * THIS, the same component the real layout renders. A harness can no longer
- * drift from the product chrome, because there is only one copy of it.
+ * Those harnesses render THIS, the same component the real layout renders, so
+ * a harness cannot drift from the product chrome — there is only one copy.
  *
  * ForgeLayout owns everything stateful — auth, the project-resolution ladder,
  * the Escape binding, the router Outlet. This owns only what you can see.
  *
- * ── THE NAV IS THE ENVIRONMENT LIST ─────────────────────────────────────────
+ * ── THE NAV IS THE ENVIRONMENT ROSTER ───────────────────────────────────────
  *
- * It used to name one screen per forge COMMAND (Releases, Environments,
- * Secrets, Status). A reader does not think in commands; they think "prod".
- * So the nav is the Overview plus one entry per environment, and everything
- * about an environment — its workloads, secrets, releases and dev stack — is
- * on that environment's page. The environment list is passed in rather than
- * fetched, for the reason above: a preview has to be able to draw it.
+ * Overview and Domains, then every environment filed by what it IS:
+ *
+ *   Local           runs on a developer machine via `forge env up`.
+ *   Deployed        everything the control plane records as deployed.
+ *   Not registered  declared in the checkout, unknown to Reliant. Only the
+ *                   daemon can see these, which is why they are a separate,
+ *                   labelled group rather than mixed into the record — and
+ *                   why an asleep daemon empties only this group.
+ *
+ * While the backend list is still arriving the sections are SKELETONS, not
+ * absent: a sidebar that renders two links and then grows four more reads as
+ * a project with no environments for the first second of every visit.
  */
 
 import { useMemo, type ReactNode } from "react";
-import { Cloud, Cpu, Globe, LayoutGrid, Server } from "lucide-react";
+import { CircleDashed, Cloud, Cpu, Globe, LayoutGrid } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
+import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
-import type { EnvWhere } from "@/services/forge/environments";
+import type { EnvLifecycle, RosterSource } from "@/services/forge/roster";
 
 /** The Overview's path. */
 export const FORGE_OVERVIEW_PATH = "/forge";
@@ -60,43 +59,68 @@ export function forgeEnvPath(env: string): string {
 
 export interface ForgeNavEnv {
   name: string;
-  where: EnvWhere;
+  lifecycle: EnvLifecycle;
+  source: RosterSource;
 }
 
-/** The icon says where it runs, so the list is scannable before any page loads. */
-function iconFor(where: EnvWhere) {
-  switch (where) {
-    case "local":
-      return Cpu;
-    case "cloud":
-      return Cloud;
-    default:
-      return Server;
-  }
+/** Which nav section an environment is filed under. */
+export function navSectionOf(env: Pick<ForgeNavEnv, "lifecycle" | "source">): string {
+  if (env.source === "checkout") return "Not registered";
+  return env.lifecycle === "local" ? "Local" : "Deployed";
 }
+
+function iconFor(env: ForgeNavEnv) {
+  if (env.source === "checkout") return CircleDashed;
+  return env.lifecycle === "local" ? Cpu : Cloud;
+}
+
+/** Local first: it is the one a developer opens most. */
+const SECTION_ORDER = ["Local", "Deployed", "Not registered"];
 
 export interface ForgeShellProps {
   /** The current pathname; the matching nav entry is marked active. */
   activePath: string;
-  /** The environments to list under the Overview. Empty while unknown. */
+  /** The environments to list. Empty while unknown. */
   envs?: ForgeNavEnv[];
+  /** The backend list has not answered yet — the nav shows skeleton rows. */
+  envsLoading?: boolean;
   /**
    * Appended to each nav href. The real layout passes the project so context
    * survives navigation; a preview passes nothing.
    */
   search?: string;
-  /** The top bar. ForgeLayout passes ForgeHeader; a preview passes its controls. */
+  /** The scope control under the brand — ForgeLayout passes the project switcher. */
+  scope?: ReactNode;
+  /** The exit, in the brand row — ForgeLayout passes ForgeCloseButton. */
+  exit?: ReactNode;
+  /**
+   * A top bar. The product passes none (each page owns its header); the dev
+   * preview harnesses put their case pickers here.
+   */
   headerContent?: ReactNode;
   children: ReactNode;
 }
 
-export function ForgeShell({ activePath, envs = [], search, headerContent, children }: ForgeShellProps) {
-  // The sidebar's brand row spans the window's leading edge, so it — not the
-  // header bar — is what has to clear the macOS traffic lights.
-  const { trafficLightPadding } = useTitleBarChrome({ collapsedPadding: "0px" });
+export function ForgeShell({
+  activePath,
+  envs = [],
+  envsLoading = false,
+  search,
+  scope,
+  exit,
+  headerContent,
+  children,
+}: ForgeShellProps) {
+  // The sidebar's brand row spans the window's leading edge, so it is what has
+  // to clear the macOS traffic lights — and, with no top bar, it is also the
+  // window's drag handle.
+  const { trafficLightPadding, dragRegionStyle } = useTitleBarChrome({ collapsedPadding: "0px" });
 
   const navItems = useMemo(() => {
     const withSearch = (path: string) => (search ? `${path}?${search}` : path);
+    const sorted = [...envs].sort(
+      (a, b) => SECTION_ORDER.indexOf(navSectionOf(a)) - SECTION_ORDER.indexOf(navSectionOf(b))
+    );
     return [
       {
         label: "Overview",
@@ -112,15 +136,15 @@ export function ForgeShell({ activePath, envs = [], search, headerContent, child
         section: "Project",
         icon: <Globe className="h-4 w-4" aria-hidden="true" />,
       },
-      ...envs.map((env) => {
-        const Icon = iconFor(env.where);
+      ...sorted.map((env) => {
+        const Icon = iconFor(env);
         const path = forgeEnvPath(env.name);
         return {
           label: env.name,
           href: withSearch(path),
           // decodeURI so an env whose name needed escaping still matches.
           active: decodeURI(activePath) === decodeURI(path),
-          section: "Environments",
+          section: navSectionOf(env),
           icon: <Icon className="h-4 w-4" aria-hidden="true" />,
         };
       }),
@@ -139,14 +163,23 @@ export function ForgeShell({ activePath, envs = [], search, headerContent, child
       <SidebarLayout
         brand={
           <div
-            className="flex items-center transition-[padding] duration-200 ease-in-out"
-            style={{ paddingLeft: trafficLightPadding }}
+            className="flex items-center gap-2 transition-[padding] duration-200 ease-in-out"
+            style={{ paddingLeft: trafficLightPadding, ...dragRegionStyle }}
           >
+            {exit}
             <span className="text-sm font-semibold tracking-tight text-ink">Deployments</span>
           </div>
         }
+        brandAccessory={scope}
         navItems={navItems}
         headerContent={headerContent}
+        navAppendix={
+          envsLoading && envs.length === 0 ? (
+            <div data-testid="forge-nav-loading" aria-label="Loading environments" className="space-y-2 px-3">
+              <SkeletonLoader variant="text" count={1} width="70%" />
+            </div>
+          ) : undefined
+        }
       >
         {children}
       </SidebarLayout>

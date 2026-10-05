@@ -36,7 +36,7 @@ function trigger(overrides: Partial<Trigger> & Pick<Trigger, "id">): Trigger {
     updatedAt: "",
     nextFireAt: inMinutes(60),
     lastEvent: { id: "e", occurredAt: "", outcome: "launched", outcomeDetail: "", manual: false },
-    schedule: { cron: ["0 9 * * *"], timezone: "UTC", overlap: "skip" },
+    source: { kind: "schedule", schedule: { cron: ["0 9 * * *"], timezone: "UTC", overlap: "skip" } },
     ...overrides,
   };
 }

@@ -216,16 +216,14 @@ describe("DaemonConnectingGate", () => {
       screen.getByText(/Image pull failed: ECR rate limit/),
     ).toBeInTheDocument();
 
-    // "View machine" navigates in-app to the Machines settings
-    // section, deep-linking to the failing machine via the `daemon`
-    // search param (keyed by the machine's UUID).
+    // "View machine" navigates in-app straight to the failing machine's
+    // detail view (keyed by the machine's UUID).
     act(() => {
       screen.getByRole("button", { name: /View machine/i }).click();
     });
     expect(mockNavigate).toHaveBeenCalledWith({
-      to: "/settings/$section",
-      params: { section: "environments" },
-      search: { daemon: "daemon-abc-123" },
+      to: "/settings/environments/$machineId",
+      params: { machineId: "daemon-abc-123" },
     });
 
     // Skip and continue is the escape hatch — exits without retrying.

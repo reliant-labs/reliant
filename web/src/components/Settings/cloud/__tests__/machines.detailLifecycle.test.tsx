@@ -62,6 +62,7 @@ vi.mock('@/services/controlPlane/capabilities', () => ({
 vi.mock('@tanstack/react-router', () => ({
   useSearch: () => ({ daemon: 'd-1' }),
   useNavigate: () => mocks.navigate,
+  useParams: () => ({}),
 }))
 
 vi.mock('@/services/controlPlane/environments', () => ({

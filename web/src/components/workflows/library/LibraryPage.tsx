@@ -1,37 +1,32 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * The Library tab (/workflows/library, WORKFLOW_UI.md §2.2): find a workflow
- * and see whether it is in use. It replaces the old hub's Workflows tab.
+ * The Library (/workflows/library, WORKFLOW_UI.md §2.2): find a workflow and
+ * see whether it is in use. It replaces the old hub's Workflows tab.
  *
- * Rows, not a card grid: a row reads faster and has room for the two facts
- * the hub never had — how many automations run a workflow, and how its last
- * run went (LastRunPerWorkflow, one request for the whole list). The hub's
- * sections are kept: Custom, Built-in, and "Failed to load" for definitions
- * that did not parse. Clicking a workflow opens its detail page.
+ * ONE table, not a card per section: a header row and fixed column widths
+ * (forge-ui DataTable), so every row's Automations and Last run line up under
+ * a label — the two facts the hub never had (LastRunPerWorkflow, one request
+ * for the whole list). The hub's sections survive as the Source column and
+ * filter; "Needs attention" rows are pinned on top and flagged; definitions
+ * that did not parse get their own alert below, since they have no columns.
  *
- * Above the list: a search, a source filter and a sort, all search params
+ * Above the table: a search, a Source menu and a Sort menu, all search params
  * (librarySearchSchema) so a narrowed library is a link. What they select is
- * libraryView.ts, including the "Needs attention" section pinned on top.
+ * libraryView.ts.
  */
 
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
-import { AlertTriangle, BookOpen, FolderOpen, Plus, Search, Upload } from "lucide-react";
+import { AlertTriangle, BookOpen, FolderOpen, Plus, Upload } from "lucide-react";
 import { toast } from "sonner";
 
 import type { InvalidWorkflow, WorkflowResponse } from "@/api/workflow-grpc";
 import { useDebounce } from "@/hooks/useDebounce";
 import { useLastRunPerWorkflow } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
-import { cn } from "@/lib/utils";
 import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
-import {
-  LIBRARY_SOURCE_KEYS,
-  type LibrarySearch,
-  type LibrarySortKey,
-  type LibrarySourceKey,
-} from "@/routeSchemas";
+import type { LibrarySearch, LibrarySortKey, LibrarySourceKey } from "@/routeSchemas";
 import {
   useCopyWorkflow,
   useDeleteWorkflow,
@@ -43,24 +38,31 @@ import { usePreferencesStore } from "@/store/preferencesStore";
 import { useProjectStore } from "@/store/projectStore";
 import { workflowGrpc } from "@/api/workflow-grpc";
 import Card from "../../forge-ui/card";
+import DataTable from "../../forge-ui/data_table";
+import EmptyState from "../../forge-ui/empty_state";
+import PageHeader from "../../forge-ui/page_header";
 import { Button } from "../../ui/Button";
 import { Modal } from "../../ui/Modal";
 import { RunWorkflowDialog } from "../../workflow/run/RunWorkflowDialog";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
-import { WorkflowRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
-import { libraryView, type LibrarySection as LibraryViewSection } from "./libraryView";
+import { FilterSearch, SelectFilter } from "../FilterMenu";
+import { libraryColumns, type LibraryTableRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
+import { libraryView } from "./libraryView";
 
-const SOURCE_LABELS: Record<LibrarySourceKey, string> = {
-  yours: "Your workflows",
-  builtin: "Built-in",
-  failed: "Failed to load",
-};
+type SourceChoice = LibrarySourceKey | "all";
 
-const SORT_LABELS: Record<LibrarySortKey, string> = {
-  name: "Name",
-  recent: "Recently run",
-};
+const SOURCE_OPTIONS: Array<{ value: SourceChoice; label: string }> = [
+  { value: "all", label: "All" },
+  { value: "yours", label: "Yours & project" },
+  { value: "builtin", label: "Built-in" },
+  { value: "failed", label: "Failed to load" },
+];
+
+const SORT_OPTIONS: Array<{ value: LibrarySortKey; label: string }> = [
+  { value: "name", label: "Name" },
+  { value: "recent", label: "Recently run" },
+];
 
 /**
  * The Library's search params, and a setter that replaces them. Replace, not
@@ -85,7 +87,7 @@ export function LibraryPage() {
   const projectsLoading = useProjectStore((state) => state.isLoading);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       <LibraryHeader projectId={projectId} />
       {projectId ? (
         <LibraryBody projectId={projectId} />
@@ -123,51 +125,52 @@ function LibraryHeader({ projectId }: { projectId?: string }) {
   };
 
   return (
-    <div className="flex flex-wrap items-end justify-between gap-4">
-      <div className="min-w-0">
-        <h1 className="text-2xl font-semibold tracking-tight text-foreground">Workflows</h1>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          What your agents can run.{" "}
-          <a
-            href="https://docs.reliantlabs.io/"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-primary hover:underline"
-          >
-            <BookOpen className="h-3 w-3" aria-hidden="true" />
-            Docs
-          </a>
-        </p>
-      </div>
-      {projectId && (
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => fileInput.current?.click()}
-            disabled={importWorkflow.isPending}
-            leftIcon={<Upload className="h-4 w-4" />}
-          >
-            Import
-          </Button>
-          <input
-            ref={fileInput}
-            type="file"
-            accept=".yaml,.yml"
-            onChange={(event) => void onFile(event)}
-            className="hidden"
-            data-testid="workflow-import-input"
-          />
-          <Button
-            variant="primary"
-            size="sm"
-            onClick={() => void navigate({ to: "/workflow/new" })}
-            leftIcon={<Plus className="h-4 w-4" />}
-          >
-            New workflow
-          </Button>
-        </div>
-      )}
+    <div className="forge-ui">
+      <PageHeader
+        className=""
+        title="Library"
+        subtitle={
+          <>
+            The workflows your agents can run.{" "}
+            <a
+              href="https://docs.reliantlabs.io/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 text-primary hover:underline"
+            >
+              <BookOpen className="h-3 w-3" aria-hidden="true" />
+              Docs
+            </a>
+          </>
+        }
+        actions={
+          projectId
+            ? [
+                {
+                  label: "Import",
+                  variant: "secondary",
+                  icon: <Upload className="h-4 w-4" aria-hidden="true" />,
+                  onClick: () => fileInput.current?.click(),
+                  disabled: importWorkflow.isPending,
+                },
+                {
+                  label: "New workflow",
+                  variant: "primary",
+                  icon: <Plus className="h-4 w-4" aria-hidden="true" />,
+                  onClick: () => void navigate({ to: "/workflow/new" }),
+                },
+              ]
+            : []
+        }
+      />
+      <input
+        ref={fileInput}
+        type="file"
+        accept=".yaml,.yml"
+        onChange={(event) => void onFile(event)}
+        className="hidden"
+        data-testid="workflow-import-input"
+      />
       {conflict && projectId && (
         <ImportConflictModal
           projectId={projectId}
@@ -400,57 +403,33 @@ function LibraryBody({ projectId }: { projectId: string }) {
     return actions;
   };
 
-  const renderRows = (workflows: WorkflowResponse[]) =>
-    workflows.map((workflow) => {
-      const ref = normalizeWorkflowRef(workflow.name);
-      return (
-        <WorkflowRow
-          key={workflow.name}
-          workflow={toItem(workflow)}
-          lastRun={lastRuns.data?.get(workflow.name)}
-          automationCount={view.automationCounts.get(ref) ?? 0}
-          failingAutomationCount={view.failingCounts.get(ref) ?? 0}
-          project={search.project}
-          onRun={workflow.status === "draft" ? undefined : () => setRunRef(workflow.name)}
-          actions={actionsFor(workflow)}
-        />
-      );
-    });
+  const tableRows: LibraryTableRow[] = view.rows.map(({ workflow, attention }) => {
+    const ref = normalizeWorkflowRef(workflow.name);
+    return {
+      workflow: toItem(workflow),
+      lastRun: lastRuns.data?.get(workflow.name),
+      automationCount: view.automationCounts.get(ref) ?? 0,
+      failingAutomationCount: view.failingCounts.get(ref) ?? 0,
+      attention,
+      onRun: workflow.status === "draft" ? undefined : () => setRunRef(workflow.name),
+      actions: actionsFor(workflow),
+    };
+  });
+  const attentionCount = view.rows.filter((row) => row.attention).length;
 
   const clearNarrowing = () => setSearch({ ...search, q: undefined, source: undefined });
 
-  const renderSection = (section: LibraryViewSection) => (
-    <LibrarySection
-      key={section.key}
-      label={section.label}
-      count={section.workflows.length}
-      attention={section.key === "attention"}
-      description={
-        section.key === "attention" ? "An automation that runs these has failed twice or more in a row." : undefined
-      }
-      empty={
-        section.key === "yours" ? (
-          <p className="px-5 py-4 text-sm text-muted-foreground">
-            Start from a built-in, or{" "}
-            <button
-              type="button"
-              onClick={() => void navigate({ to: "/workflow/new" })}
-              className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              create your own
-            </button>
-            .
-          </p>
-        ) : undefined
-      }
-    >
-      {renderRows(section.workflows)}
-    </LibrarySection>
-  );
-
   return (
-    <div className="space-y-6" data-onboarding="workflow-hub">
+    <div className="space-y-3" data-onboarding="workflow-hub">
       <LibraryControls search={search} onChange={setSearch} />
+
+      {attentionCount > 0 && (
+        <p className="flex items-center gap-1.5 text-xs text-warning-ink" role="status">
+          <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+          {attentionCount === 1 ? "1 workflow needs" : `${attentionCount} workflows need`} attention: an automation that
+          runs it has failed twice or more in a row. Pinned to the top.
+        </p>
+      )}
 
       {view.noMatches ? (
         <Card padding="lg" role="status">
@@ -463,7 +442,36 @@ function LibraryBody({ projectId }: { projectId: string }) {
         </Card>
       ) : (
         <>
-          {view.sections.map(renderSection)}
+          {tableRows.length > 0 && (
+            <div className="forge-ui">
+              <DataTable<LibraryTableRow>
+                ariaLabel="Workflows"
+                columns={libraryColumns(search.project)}
+                data={tableRows}
+                layout="fixed"
+                compact
+                getRowKey={(row) => row.workflow.name}
+                getRowProps={(row) => ({
+                  "data-testid": `workflow-row-${row.workflow.name}`,
+                  "data-attention": row.attention ? "true" : undefined,
+                  className: row.attention ? "bg-warning/5" : undefined,
+                })}
+              />
+            </div>
+          )}
+          {view.noWorkflowsOfYourOwn && (
+            <p className="px-1 text-sm text-muted-foreground">
+              None of your own yet. Start from a built-in, or{" "}
+              <button
+                type="button"
+                onClick={() => void navigate({ to: "/workflow/new" })}
+                className="font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+              >
+                create your own
+              </button>
+              .
+            </p>
+          )}
           {view.invalid.length > 0 && <InvalidSection workflows={view.invalid} />}
         </>
       )}
@@ -479,8 +487,8 @@ function LibraryBody({ projectId }: { projectId: string }) {
 }
 
 /**
- * Search, source and sort. Chips, as on the Runs filter row: each says its
- * own state (aria-pressed) and nothing hides behind a popover.
+ * Search, source and sort: one compact row. Source and Sort are menus whose
+ * buttons say their value, so an applied filter is always visible.
  */
 function LibraryControls({ search, onChange }: { search: LibrarySearch; onChange: (next: LibrarySearch) => void }) {
   // The box writes to the URL once typing pauses, not per keystroke.
@@ -496,115 +504,29 @@ function LibraryControls({ search, onChange }: { search: LibrarySearch; onChange
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only the URL drives this
   }, [search.q]);
 
-  const sort = search.sort ?? "name";
   return (
-    <div className="flex flex-wrap items-center gap-x-4 gap-y-2" role="group" aria-label="Find workflows">
-      <label className="relative flex min-w-[14rem] flex-1 items-center sm:max-w-xs">
-        <span className="sr-only">Search workflows</span>
-        <Search className="pointer-events-none absolute left-2.5 h-4 w-4 text-muted-foreground" aria-hidden="true" />
-        <input
-          type="search"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Search names and descriptions"
-          className="h-8 w-full rounded-md border border-border bg-background pl-8 pr-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-        />
-      </label>
-      <ChipGroup label="Source">
-        <Chip pressed={!search.source} onClick={() => onChange({ ...search, source: undefined })}>
-          All
-        </Chip>
-        {LIBRARY_SOURCE_KEYS.map((key) => (
-          <Chip key={key} pressed={search.source === key} onClick={() => onChange({ ...search, source: key })}>
-            {SOURCE_LABELS[key]}
-          </Chip>
-        ))}
-      </ChipGroup>
-      <ChipGroup label="Sort">
-        {(Object.keys(SORT_LABELS) as LibrarySortKey[]).map((key) => (
-          <Chip
-            key={key}
-            pressed={sort === key}
-            onClick={() => onChange({ ...search, sort: key === "name" ? undefined : key })}
-          >
-            {SORT_LABELS[key]}
-          </Chip>
-        ))}
-      </ChipGroup>
+    <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Find workflows">
+      <FilterSearch
+        value={query}
+        onChange={setQuery}
+        placeholder="Search names and descriptions"
+        label="Search workflows"
+      />
+      <SelectFilter<SourceChoice>
+        label="Source"
+        options={SOURCE_OPTIONS}
+        value={search.source ?? "all"}
+        defaultValue="all"
+        onChange={(source) => onChange({ ...search, source: source === "all" ? undefined : source })}
+      />
+      <SelectFilter<LibrarySortKey>
+        label="Sort"
+        options={SORT_OPTIONS}
+        value={search.sort ?? "name"}
+        defaultValue="name"
+        onChange={(sort) => onChange({ ...search, sort: sort === "name" ? undefined : sort })}
+      />
     </div>
-  );
-}
-
-function ChipGroup({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div role="group" aria-label={label} className="flex flex-wrap items-center gap-1">
-      <span className="mr-0.5 text-xs text-muted-foreground" aria-hidden="true">
-        {label}
-      </span>
-      {children}
-    </div>
-  );
-}
-
-function Chip({ pressed, onClick, children }: { pressed: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button
-      type="button"
-      aria-pressed={pressed}
-      onClick={onClick}
-      className={cn(
-        "inline-flex h-7 items-center rounded-full border px-2.5 text-xs font-medium transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40",
-        pressed
-          ? "border-primary/50 bg-primary/10 text-foreground"
-          : "border-border bg-background text-muted-foreground hover:bg-muted/50 hover:text-foreground",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
-
-function LibrarySection({
-  label,
-  count,
-  attention = false,
-  description,
-  empty,
-  children,
-}: {
-  label: string;
-  count: number;
-  /** The pinned "Needs attention" section: a warning heading and border. */
-  attention?: boolean;
-  description?: string;
-  empty?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  return (
-    <section aria-label={label}>
-      <h2
-        className={cn(
-          "mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide",
-          attention ? "text-warning" : "text-muted-foreground",
-        )}
-      >
-        {attention && <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />}
-        {label}
-        <span className={cn("ml-0.5 font-medium", attention ? "text-warning/70" : "text-muted-foreground/70")}>
-          {count}
-        </span>
-      </h2>
-      {description && <p className="-mt-1 mb-2 px-1 text-xs text-muted-foreground">{description}</p>}
-      <Card padding="none" className={cn(attention && "border-warning/60")}>
-        {count === 0 && empty ? (
-          empty
-        ) : (
-          <ul aria-label={label} className="divide-y divide-border/60">
-            {children}
-          </ul>
-        )}
-      </Card>
-    </section>
   );
 }
 
@@ -614,8 +536,8 @@ function LibrarySection({
  */
 function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
   return (
-    <section aria-label="Failed to load">
-      <h2 className="mb-2 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-destructive">
+    <section aria-label="Failed to load" className="pt-2">
+      <h2 className="mb-1.5 flex items-center gap-1.5 px-1 text-xs font-semibold uppercase tracking-wide text-destructive">
         <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
         Failed to load
         <span className="ml-0.5 font-medium text-destructive/70">{workflows.length}</span>
@@ -623,7 +545,7 @@ function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
       <Card padding="none" className="border-destructive/40">
         <ul aria-label="Failed to load" className="divide-y divide-border/60">
           {workflows.map((workflow) => (
-            <li key={`${workflow.source}-${workflow.name}`} className="px-5 py-3.5" data-testid={`invalid-workflow-${workflow.name}`}>
+            <li key={`${workflow.source}-${workflow.name}`} className="px-4 py-2.5" data-testid={`invalid-workflow-${workflow.name}`}>
               <p className="text-sm font-medium text-foreground">{getWorkflowDisplayName(workflow.name, true)}</p>
               <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground" title={workflow.path}>
                 {workflow.path}
@@ -647,28 +569,24 @@ function InvalidSection({ workflows }: { workflows: InvalidWorkflow[] }) {
 }
 
 function NoProject() {
-  const navigate = useNavigate();
+  // The project switcher is in the header bar above, so this points at it
+  // rather than sending the user out of the area to pick one.
   return (
-    <Card padding="lg" className="flex flex-col items-center px-6 py-12 text-center">
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-background text-muted-foreground">
-        <FolderOpen className="h-6 w-6" aria-hidden="true" />
-      </div>
-      <h2 className="mt-4 text-base font-semibold text-foreground">Workflows run inside a project</h2>
-      <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        Pick a project to see its workflows. Runs and Automations list every project.
-      </p>
-      <Button className="mt-6" variant="outline" onClick={() => void navigate({ to: "/", search: {} })}>
-        Choose a project
-      </Button>
-    </Card>
+    <div className="forge-ui">
+      <EmptyState
+        icon={<FolderOpen className="h-6 w-6" aria-hidden="true" />}
+        title="Workflows run inside a project"
+        description="Choose a project from the Project menu above to see its workflows. Runs and Automations list every project."
+      />
+    </div>
   );
 }
 
 function LibrarySkeleton() {
   return (
     <Card padding="none" aria-busy="true" aria-label="Loading workflows">
-      {Array.from({ length: 5 }, (_, row) => (
-        <div key={row} className="flex items-center gap-4 border-b border-border/60 px-5 py-4 last:border-b-0">
+      {Array.from({ length: 6 }, (_, row) => (
+        <div key={row} className="flex items-center gap-4 border-b border-border/60 px-4 py-2.5 last:border-b-0">
           <div className="flex-1 space-y-1.5">
             <div className="h-3.5 w-48 max-w-full animate-pulse rounded bg-border motion-reduce:animate-none" />
             <div className="h-3 w-72 max-w-full animate-pulse rounded bg-border/60 motion-reduce:animate-none" />

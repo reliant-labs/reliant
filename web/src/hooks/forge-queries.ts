@@ -83,7 +83,8 @@ import {
   type ManagedStoreTarget,
   type SetSecretResult,
 } from "../services/forge/secretStore";
-import type { ForgeEnvStatusReport } from "../services/forge/status";
+import { isLocalLifecycle, type ForgeEnvStatusReport } from "../services/forge/status";
+import { forgeEnvRoster } from "../services/forge/roster";
 import {
   environments,
   mergeVerifyIntoTopology,
@@ -175,11 +176,14 @@ export const forgeKeys = {
  * problem, and hammering a daemon that is not answering only delays the moment
  * the user is told.
  */
-export function useForgeTopology(projectId: string | null | undefined) {
+export function useForgeTopology(projectId: string | null | undefined, options?: { enabled?: boolean }) {
+  // `enabled: false` with a real project id still READS the cache — another
+  // surface (the sidebar's roster) may already have asked — it just never
+  // asks itself.
   return useQuery<ForgeOutcome<ForgeTopologyReport>>({
     queryKey: forgeKeys.topology(projectId ?? ""),
     queryFn: () => forgeGrpc.getTopology({ projectId: projectId as string }),
-    enabled: !!projectId,
+    enabled: !!projectId && options?.enabled !== false,
     staleTime: 30_000,
     retry: forgeRetry,
   });
@@ -510,6 +514,69 @@ export function useForgeEnvironments(projectId: string | null | undefined): Forg
   };
 }
 
+/**
+ * THE ROSTER: backend environments, then the ones only the checkout declares.
+ *
+ * The backend half (GetLiveView) renders on its own; the daemon's topology is
+ * queried in PARALLEL and only ever ADDS labelled "not registered" entries, so
+ * an asleep daemon costs the list nothing it could show. See
+ * services/forge/roster.ts.
+ *
+ * Lifecycle hints come from env-status reports ALREADY IN THE CACHE — this
+ * hook never asks the daemon for one. An env page that read dev's status
+ * (forge says `lifecycle: local`) is what lets the sidebar file dev under
+ * "Local" afterwards; forge's topology row does not carry the field.
+ */
+export function useForgeRoster(projectId: string | null | undefined) {
+  const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
+  const topology = useForgeTopology(projectId);
+  const projectName = resolveForgeProjectName(persistedName, topology.data);
+  const live = useLiveView(projectName.name);
+
+  // SUBSCRIBE to each declared env's cached status without ever fetching one
+  // (`enabled: false`), so the sidebar re-files dev under Local the moment its
+  // page has read forge's answer.
+  const topologyNames = topology.data?.kind === "report"
+    ? environments(topology.data.report).map((env) => env.env)
+    : [];
+  const cachedStatuses = useQueries({
+    queries: topologyNames.map((env) => ({
+      queryKey: forgeKeys.envStatus(projectId ?? "", env),
+      queryFn: () => forgeGrpc.getEnvStatus(projectId as string, env),
+      enabled: false,
+    })),
+  });
+  const localKey = cachedStatuses
+    .map((result, index) =>
+      result.data?.kind === "report" && isLocalLifecycle(result.data.report) ? topologyNames[index] : null
+    )
+    .filter((name): name is string => !!name)
+    .sort()
+    .join(",");
+
+  const envs = useMemo(
+    () =>
+      forgeEnvRoster(
+        live.data?.envs ?? [],
+        topology.data?.kind === "report" ? environments(topology.data.report) : [],
+        { localByForge: new Set(localKey === "" ? [] : localKey.split(",")) }
+      ),
+    [live.data, topology.data, localKey]
+  );
+
+  return {
+    envs,
+    live,
+    topology,
+    projectName,
+    daemon: daemonSideOf(topology.data, topology.error),
+    /** Nothing from the backend yet. The daemon's half never blocks. */
+    isLoading: !!projectName.name && live.isLoading && !live.data,
+    /** No forge project name is known at all — neither persisted nor reported yet. */
+    resolvingName: !projectName.name && topology.isLoading,
+  };
+}
+
 /** Invalidate everything the control plane reports for a project after a write moved it. */
 export function useInvalidateCloudEnvironments() {
   const queryClient = useQueryClient();
@@ -618,10 +685,7 @@ export function useForgeEnvStatus(
 ) {
   return useQuery<ForgeOutcome<ForgeEnvStatusReport>>({
     queryKey: forgeKeys.envStatus(projectId ?? "", env ?? ""),
-    queryFn: () =>
-      forgeGrpc.getEnvStatus(projectId as string, env as string) as Promise<
-        ForgeOutcome<ForgeEnvStatusReport>
-      >,
+    queryFn: () => forgeGrpc.getEnvStatus(projectId as string, env as string),
     enabled: !!projectId && !!env,
     staleTime: 10_000,
     retry: forgeRetry,

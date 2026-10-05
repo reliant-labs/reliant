@@ -132,7 +132,7 @@ export default function WorkloadInventoryPreview() {
   return (
     <ForgeShell
       activePath={`/forge/env/${active.env}`}
-      envs={[{ name: "dev", where: "local" }, { name: "prod", where: "cluster" }]}
+      envs={[{ name: "dev", lifecycle: "local", source: "backend" }, { name: "prod", lifecycle: "deployed", source: "backend" }]}
       headerContent={
         <div className="flex flex-wrap items-center gap-3 px-4">
         <select

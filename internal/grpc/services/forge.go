@@ -7,10 +7,12 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -150,6 +152,46 @@ const (
 	// there would stack requests behind an unresponsive daemon.
 	forgeDeployStatusTimeoutMs = 15_000
 )
+
+// forgeRPCHeadroom is how much longer the HTTP request may live than the
+// daemon dispatch it carries. The handler's OWN budget must fire first: it is
+// what turns a slow cluster read into a classified UNREACHABLE answer, whereas
+// the request deadline firing first just cancels the context and the user sees
+// a bare DeadlineExceeded with no meta at all.
+const forgeRPCHeadroom = 5 * time.Second
+
+// ForgeRPCDeadlines is the request deadline every ForgeService procedure needs,
+// for the api-server's TimeoutInterceptor.
+//
+// WITHOUT THIS, EVERY BUDGET ABOVE WAS DEAD CODE. The interceptor's default is
+// 10s and it had no forge entries, so `forge env status <env>` (about 5s cold on
+// control-plane, much more under load) was cancelled at 10s regardless of its
+// 45s budget — and because a cancelled cluster read is classified as
+// UNREACHABLE with an empty reply, the web then rendered "this project has no
+// forge.yaml" for a project that has one. Deriving the map from the same
+// constants the handlers dispatch with is what keeps the two from drifting;
+// TestForgeRPCDeadlinesCoverEveryProcedure pins it.
+func ForgeRPCDeadlines() map[string]time.Duration {
+	ms := func(budget int32) time.Duration {
+		return time.Duration(budget)*time.Millisecond + forgeRPCHeadroom
+	}
+	return map[string]time.Duration{
+		reliantv1connect.ForgeServiceGetTopologyProcedure:     ms(forgeTopologyVerifyTimeoutMs),
+		reliantv1connect.ForgeServiceVerifyEnvProcedure:       ms(forgeEnvVerifyTimeoutMs),
+		reliantv1connect.ForgeServiceListSecretsProcedure:     ms(forgeSecretListTimeoutMs),
+		reliantv1connect.ForgeServiceGetAuditProcedure:        ms(forgeAuditTimeoutMs),
+		reliantv1connect.ForgeServiceGetEnvStatusProcedure:    ms(forgeEnvStatusTimeoutMs),
+		reliantv1connect.ForgeServiceGetEnvShapeProcedure:     ms(forgeEnvStatusTimeoutMs),
+		reliantv1connect.ForgeServicePlanPromoteProcedure:     ms(forgePromotePlanTimeoutMs),
+		reliantv1connect.ForgeServiceApplyPromoteProcedure:    ms(forgePromoteApplyTimeoutMs),
+		reliantv1connect.ForgeServicePlanDeployProcedure:      ms(forgeDeployPlanTimeoutMs),
+		reliantv1connect.ForgeServiceStartDeployPlanProcedure: ms(forgeDeployStartTimeoutMs),
+		reliantv1connect.ForgeServiceListCheckoutsProcedure:   ms(forgeDeployPlanTimeoutMs),
+		reliantv1connect.ForgeServiceDiffEnvProcedure:         ms(forgeDeployPlanTimeoutMs),
+		reliantv1connect.ForgeServiceStartDeployProcedure:     ms(forgeDeployStartTimeoutMs),
+		reliantv1connect.ForgeServiceGetDeployStatusProcedure: ms(forgeDeployStatusTimeoutMs),
+	}
+}
 
 // -----------------------------------------------------------------------------
 // Error-text markers.

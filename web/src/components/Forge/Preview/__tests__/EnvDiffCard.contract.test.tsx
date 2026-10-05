@@ -60,11 +60,12 @@ const diffEnv = vi.fn();
 vi.mock("@/api/forge-grpc", () => ({
   forgeGrpc: {
     diffEnv: (...args: unknown[]) => diffEnv(...args),
+    listCheckouts: () => Promise.resolve({ kind: "report", report: { checkouts: [] }, meta: {} }),
   },
 }));
 
 import { EnvDiffCard } from "../EnvDiffCard";
-import { EnvDiffCards, declaredEnvNames } from "../EnvDiffCards";
+import { ChangesTab } from "../../EnvPage/EnvTabPanels";
 
 /** forge's report, wrapped as the transport's classified outcome. */
 function report(document: unknown) {
@@ -355,69 +356,51 @@ describe("an environment nothing has been deployed to", () => {
   });
 });
 
-// ─── WHICH CARDS APPEAR ─────────────────────────────────────────────────────
+// ─── THE CHANGES TAB IS ABOUT ITS OWN ENVIRONMENT ───────────────────────────
 
-describe("the card list", () => {
-  it("leads with the environment the user is looking at", () => {
-    const names = declaredEnvNames(
-      {
-        environments: [
-          { env: "dev", declared: true },
-          { env: "prod", declared: true },
-          { env: "staging", declared: true },
-        ],
-      },
-      "staging"
-    );
-    expect(names).toEqual(["staging", "dev", "prod"]);
-  });
-
-  it("omits environments this checkout does not declare", () => {
-    // Code that does not declare an environment would do nothing to it, so
-    // Preview has no answer for it. That environment is Live's subject.
-    const names = declaredEnvNames(
-      { environments: [{ env: "dev", declared: true }, { env: "legacy", declared: false }] },
-      "dev"
-    );
-    expect(names).toEqual(["dev"]);
-  });
-
-  it("is absent entirely when there is nothing to show", () => {
-    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    render(
-      <QueryClientProvider client={client}>
-        <EnvDiffCards projectId="proj-1" topology={null} checkoutPath="" currentEnv="" />
-      </QueryClientProvider>
-    );
-    // A heading over a blank area asks the reader to work out whether
-    // something failed.
-    expect(screen.queryByTestId("env-diff-cards")).not.toBeInTheDocument();
-  });
-
-  it("renders a card per declared environment, none of which fetches", async () => {
+describe("the Changes tab", () => {
+  it("shows ONE card, for the page's environment, and renders it on arrival", async () => {
+    // The owner's complaint: on prod's page, "What would change" listed prod,
+    // dev, dev-k8s and e2e. A page about one environment answers about one.
     diffEnv.mockImplementation(() => report(neverBuilt));
     const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
     render(
       <QueryClientProvider client={client}>
-        <EnvDiffCards
+        <ChangesTab
           projectId="proj-1"
-          topology={{
-            environments: [
-              { env: "dev", declared: true },
-              { env: "prod", declared: true },
-              { env: "staging", declared: true },
-            ],
-          }}
+          envName="prod"
+          daemon="ok"
+          lifecycle="deployed"
           checkoutPath=""
-          currentEnv="prod"
+          onCheckoutChange={() => {}}
         />
       </QueryClientProvider>
     );
 
-    await Promise.resolve();
-    expect(screen.getAllByTestId(/^env-diff-card-/)).toHaveLength(3);
-    // THREE closed cards is three renders NOT paid for. `--all` would have
-    // bought every one of them before anyone asked.
+    const cards = screen.getAllByTestId(/^env-diff-card-/);
+    expect(cards).toHaveLength(1);
+    expect(cards[0]).toHaveAttribute("data-testid", "env-diff-card-prod");
+    // The user navigated to this question, so the render is what they asked for.
+    expect(cards[0]).toHaveAttribute("data-open", "true");
+    await waitFor(() => expect(diffEnv).toHaveBeenCalledTimes(1));
+    expect(diffEnv.mock.calls[0]?.[0]).toMatchObject({ env: "prod" });
+  });
+
+  it("does not ask the daemon at all while it is offline", () => {
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={client}>
+        <ChangesTab
+          projectId="proj-1"
+          envName="prod"
+          daemon="offline"
+          lifecycle="deployed"
+          checkoutPath=""
+          onCheckoutChange={() => {}}
+        />
+      </QueryClientProvider>
+    );
+    expect(screen.getByTestId("daemon-needed")).toBeInTheDocument();
     expect(diffEnv).not.toHaveBeenCalled();
   });
 });

@@ -3,37 +3,37 @@
 /**
  * Route component for /forge — THE OVERVIEW.
  *
- * One row per environment: where it runs, what it is on, where that came
- * from, and when it last moved. Everything deeper is on the environment's
- * page.
+ * One row per environment Reliant records: where it runs, what it is on,
+ * where that came from, and when it last moved. Below it, the environments
+ * this project's CODE declares that Reliant has no record of yet.
  *
- * ── THE LIST COMES FROM THE CONTROL PLANE, SO IT RENDERS DAEMON-OFFLINE ─────
+ * ── THE TABLE IS THE BACKEND, SO IT RENDERS DAEMON-OFFLINE ──────────────────
  *
- * `GetLiveView` is the only source here (design §8.0, O-14). The page used to
- * join a daemon topology report with a control-plane list, which meant an
- * asleep laptop blanked rows describing production environments the control
- * plane was observing the whole time — and told the user to "start your daemon
- * once to see them", which was the tool asking for a favour to show facts it
- * already had.
+ * `GetLiveView` is the table's only source (design §8.0, O-14). The
+ * "not registered" list underneath is the one thing only the checkout knows,
+ * so it comes from the daemon — labelled as such, and simply absent when the
+ * daemon is asleep. It never mixes into the table: a row that exists because
+ * a laptop is awake is not a row in the record.
  *
- * So there is no daemon hook on this page at all. The one thing the checkout
- * knows and the control plane does not — an environment declared only in the
- * KCL — belongs to PREVIEW, which labels it "would be created" and offers to
- * register it. Nothing on this list pretends to know about an environment
- * nothing has ever recorded.
+ * ── LOADING IS A SKELETON OF THE TABLE, NOT A SENTENCE ──────────────────────
  *
- * The project AUDIT moved to Preview for the same reason: it is forge's static
- * analysis over files on the user's disk, so it was never something this page
- * could show without a daemon.
+ * The page used to say "Reading this project's environments…" and then
+ * replace the sentence with a table. The skeleton holds the table's shape so
+ * nothing jumps when the rows land.
  */
 
 import { useCallback, useMemo } from "react";
 import { useNavigate, useSearch } from "@tanstack/react-router";
+import { CircleDashed, Layers } from "lucide-react";
 
+import Card, { CardHeader } from "@/components/forge-ui/card";
+import EmptyState from "@/components/forge-ui/empty_state";
 import PageHeader from "@/components/forge-ui/page_header";
-import { useCloudEnvStatuses, useLiveView } from "@/hooks/forge-queries";
+import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
+import { useCloudEnvStatuses, useForgeRoster } from "@/hooks/forge-queries";
 import { isPlacedKind } from "@/services/forge/live";
-import { useProjectStore, type Project } from "@/store/projectStore";
+import type { RosterEnv } from "@/services/forge/roster";
+import { useProjectStore } from "@/store/projectStore";
 
 import { CloudNotice } from "../SourceNotices";
 import { EnvironmentTable, type EnvironmentRow } from "./EnvironmentTable";
@@ -43,29 +43,30 @@ export function ForgeOverviewPage() {
   const { project: projectParam } = useSearch({ from: "/_authenticated/_forge/forge" });
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = projectParam ?? currentProject?.id ?? null;
-  const forgeProject = useProjectStore((state) => persistedForgeProjectName(state, projectId));
 
-  const live = useLiveView(forgeProject);
-  // Memoised so the `?? []` fallback does not allocate a fresh array on every
-  // render and re-run both useMemos below it.
-  const envs = useMemo(() => live.data?.envs ?? [], [live.data]);
+  const roster = useForgeRoster(projectId);
+  const backendEnvs = useMemo(
+    () => roster.envs.filter((env) => env.source === "backend" && env.live).map((env) => env.live!),
+    [roster.envs]
+  );
+  const checkoutEnvs = useMemo(() => roster.envs.filter((env) => env.source === "checkout"), [roster.envs]);
 
   // GetStatus per PLACED environment. A self-managed env has no server-side
   // observer, so asking would answer for a cluster the platform has never
   // connected to; its row shows what the last render declared instead.
   const placedIds = useMemo(
-    () => envs.filter((env) => isPlacedKind(env.kind)).map((env) => env.id),
-    [envs]
+    () => backendEnvs.filter((env) => isPlacedKind(env.kind)).map((env) => env.id),
+    [backendEnvs]
   );
   const statuses = useCloudEnvStatuses(placedIds);
 
   const rows: EnvironmentRow[] = useMemo(
     () =>
-      envs.map((env) => {
+      backendEnvs.map((env) => {
         const status = isPlacedKind(env.kind) ? statuses.get(env.id) : undefined;
         return { env, status: status?.data, statusLoading: !!status?.isLoading };
       }),
-    [envs, statuses]
+    [backendEnvs, statuses]
   );
 
   const openEnv = useCallback(
@@ -79,17 +80,7 @@ export function ForgeOverviewPage() {
     [navigate, projectId]
   );
 
-  const openPreview = useCallback(
-    (env: string) => {
-      void navigate({
-        to: "/forge/env/$env",
-        params: { env },
-        search: { project: projectId ?? undefined, tab: "preview" },
-      });
-    },
-    [navigate, projectId]
-  );
-
+  const forgeProject = roster.projectName.name;
   const header = (
     <PageHeader
       title="Overview"
@@ -106,13 +97,13 @@ export function ForgeOverviewPage() {
     />
   );
 
-  if (live.isLoading && !live.data) {
+  if (roster.isLoading || roster.resolvingName) {
     return (
-      <div className="space-y-6">
+      <div className="space-y-6" data-testid="forge-overview-loading">
         {header}
-        <p data-testid="forge-overview-loading" className="text-sm text-muted-foreground">
-          Reading this project&apos;s environments…
-        </p>
+        <Card padding="none" aria-label="Loading environments" aria-busy="true">
+          <SkeletonLoader variant="table-row" count={4} />
+        </Card>
       </div>
     );
   }
@@ -121,43 +112,67 @@ export function ForgeOverviewPage() {
     <div className="space-y-6" data-testid="forge-overview">
       {header}
 
-      <CloudNotice availability={live.data?.availability} detail={live.data?.detail} />
+      <CloudNotice availability={roster.live.data?.availability} detail={roster.live.data?.detail} />
 
       {rows.length === 0 ? (
-        <div
-          data-testid="forge-overview-empty"
-          className="space-y-2 rounded-lg border border-dashed border-border px-6 py-12 text-center text-sm text-muted-foreground"
-        >
-          {/* Not an error, and not a request to go and start something. A
-              project with no recorded environment is a project nobody has
-              built yet, and the remedy is a command. */}
-          <p>No environments have been built yet.</p>
-          <p className="text-xs">
-            <code className="font-mono text-foreground">forge env build &lt;env&gt;</code> records
-            the first one, or open an environment&apos;s Preview to register it.
-          </p>
+        <div data-testid="forge-overview-empty">
+          <EmptyState
+            icon={<Layers className="h-6 w-6" aria-hidden="true" />}
+            title="No environments recorded yet"
+            description={
+              checkoutEnvs.length > 0
+                ? "Your code declares the environments below. Open one and register it to track its releases and set its secrets here."
+                : "Run forge env build <env> to record the first one, or open an environment your code declares and register it."
+            }
+          />
         </div>
       ) : (
-        <EnvironmentTable rows={rows} onOpen={openEnv} onPreview={openPreview} />
+        <EnvironmentTable rows={rows} onOpen={openEnv} />
       )}
 
-      <p className="text-xs text-muted-foreground">
-        Timestamps are <span className="text-foreground">promote</span> times, not deploy times —
-        promotion writes a pointer, deployment moves bytes.
-      </p>
+      {checkoutEnvs.length > 0 && <UnregisteredEnvs envs={checkoutEnvs} onOpen={openEnv} />}
     </div>
   );
 }
 
-/** The forge project name persisted on `projectId`'s row, from whichever store slot holds it. */
-function persistedForgeProjectName(
-  state: { projects: Project[]; currentProject: Project | null },
-  projectId: string | null | undefined
-): string | null {
-  if (!projectId) return null;
-  const row =
-    state.currentProject?.id === projectId
-      ? state.currentProject
-      : state.projects.find((project) => project.id === projectId);
-  return row?.forge_project_name ?? null;
+/**
+ * Declared in the checkout, unknown to Reliant. From the daemon, and said so.
+ * forge's own ledger facts (the release it last promoted from this machine)
+ * are shown, because "not registered" is not "never deployed" — control-plane's
+ * prod is on v1.7.15 by forge's file ledger with no row in Reliant.
+ */
+function UnregisteredEnvs({ envs, onOpen }: { envs: RosterEnv[]; onOpen: (env: string) => void }) {
+  return (
+    <Card padding="none" data-testid="forge-overview-unregistered">
+      <CardHeader
+        title="Not registered in Reliant"
+        description="Declared in your checkout. Reliant has no record of these yet, so their history and secrets aren't tracked here. Read from your daemon."
+      />
+      <ul className="divide-y divide-border/60">
+        {envs.map((env) => (
+          <li key={env.name}>
+            <button
+              type="button"
+              onClick={() => onOpen(env.name)}
+              data-testid={`unregistered-${env.name}`}
+              className="flex w-full items-center gap-3 px-4 py-2.5 text-left transition-colors hover:bg-muted/50 focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-ring"
+            >
+              <CircleDashed className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+              <span className="font-mono text-sm font-medium text-foreground">{env.name}</span>
+              {/* Only a lifecycle someone actually stated. Without a control-
+                  plane row or forge's runtime answer, "deployed" would be a
+                  guess — dev's destination is `mixed`, same as prod's. */}
+              {env.lifecycle === "local" && <span className="text-xs text-muted-foreground">Runs locally</span>}
+              {env.forge?.release && (
+                <span className="text-xs text-muted-foreground">
+                  · forge ledger: <span className="font-mono text-foreground">{env.forge.release}</span>
+                </span>
+              )}
+              <span className="ml-auto text-xs text-primary">Open</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
 }

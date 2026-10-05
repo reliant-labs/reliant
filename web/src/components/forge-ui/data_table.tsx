@@ -2,11 +2,23 @@ import React, { useState } from "react";
 
 interface Column<T> {
   key: string;
+  /** Header text. Use `srHeader` for a column whose header is visually empty (row actions). */
   header: string;
   render?: (value: unknown, row: T) => React.ReactNode;
   sortable?: boolean;
   width?: string;
+  /** Extra classes for this column's cells (alignment, truncation). */
+  className?: string;
+  /** Extra classes for this column's header cell. */
+  headerClassName?: string;
+  /** Render the header for screen readers only. */
+  srHeader?: boolean;
 }
+
+/** Attributes a caller may set on a body row: a test id, a highlight. */
+export type DataTableRowProps = {
+  className?: string;
+} & { [dataAttribute: `data-${string}`]: string | undefined };
 
 interface DataTableProps<T extends Record<string, unknown>> {
   columns: Column<T>[];
@@ -36,6 +48,24 @@ interface DataTableProps<T extends Record<string, unknown>> {
    * footer on a paged table, `true` to keep it on an uncontrolled one.
    */
   paginated?: boolean;
+  /**
+   * A stable key per row. Defaults to the row index, which is wrong for any
+   * list that re-sorts or filters: React then reuses one row's DOM (and its
+   * open menus, focus) for a different record.
+   */
+  getRowKey?: (row: T, index: number) => React.Key;
+  /** Per-row attributes: a test id, a highlight class. */
+  getRowProps?: (row: T, index: number) => DataTableRowProps;
+  /**
+   * "fixed" lays the table out from the column widths alone, so every row's
+   * cells line up and a long value truncates instead of widening its column.
+   * Give each column a `width` (one may be left to take the remainder).
+   */
+  layout?: "auto" | "fixed";
+  /** Tighter cell padding, for dense lists. */
+  compact?: boolean;
+  /** The table's accessible name. */
+  ariaLabel?: string;
 }
 
 function SkeletonRow({ cols }: { cols: number }) {
@@ -70,7 +100,13 @@ export default function DataTable<T extends Record<string, unknown>>({
   emptyMessage = "No data available",
   selectable = false,
   paginated,
+  getRowKey,
+  getRowProps,
+  layout = "auto",
+  compact = false,
+  ariaLabel,
 }: DataTableProps<T>) {
+  const cellPadding = compact ? "px-4 py-2" : "px-4 py-3";
   const [sortKey, setSortKey] = useState<string | null>(null);
   const [sortDir, setSortDir] = useState<"asc" | "desc">("asc");
   const [selected, setSelected] = useState<Set<number>>(new Set());
@@ -116,11 +152,14 @@ export default function DataTable<T extends Record<string, unknown>>({
   return (
     <div className="overflow-hidden rounded-lg border border-border bg-surface">
       <div className="overflow-x-auto">
-        <table className="min-w-full divide-y divide-border">
+        <table
+          className={`min-w-full divide-y divide-border ${layout === "fixed" ? "w-full table-fixed" : ""}`}
+          aria-label={ariaLabel}
+        >
           <thead className="bg-surface-muted">
             <tr>
               {selectable && (
-                <th className="w-10 px-4 py-3">
+                <th className={`w-10 ${cellPadding}`}>
                   <input
                     type="checkbox"
                     aria-label="Select all rows"
@@ -133,15 +172,16 @@ export default function DataTable<T extends Record<string, unknown>>({
               {columns.map((col) => (
                 <th
                   key={col.key}
-                  className={`px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-ink-muted ${
+                  scope="col"
+                  className={`${cellPadding} text-left text-xs font-semibold uppercase tracking-wider text-ink-muted ${
                     col.sortable
                       ? "cursor-pointer select-none hover:text-ink-muted"
                       : ""
-                  }`}
+                  } ${col.headerClassName ?? ""}`}
                   style={col.width ? { width: col.width } : undefined}
                   onClick={() => col.sortable && handleSort(col.key)}
                 >
-                  <span className="inline-flex items-center gap-1">
+                  <span className={col.srHeader ? "sr-only" : "inline-flex items-center gap-1"}>
                     {col.header}
                     {col.sortable && sortKey === col.key && (
                       <span className="text-accent">
@@ -165,15 +205,18 @@ export default function DataTable<T extends Record<string, unknown>>({
                 </td>
               </tr>
             ) : (
-              data.map((row, i) => (
+              data.map((row, i) => {
+                const { className: rowClassName, ...rowAttributes } = getRowProps?.(row, i) ?? {};
+                return (
                 <tr
-                  key={i}
+                  key={getRowKey ? getRowKey(row, i) : i}
+                  {...rowAttributes}
                   className={`transition-colors hover:bg-surface-muted ${
                     selected.has(i) ? "bg-accent-surface" : ""
-                  }`}
+                  } ${rowClassName ?? ""}`}
                 >
                   {selectable && (
-                    <td className="px-4 py-3">
+                    <td className={cellPadding}>
                       <input
                         type="checkbox"
                         aria-label={`Select row ${i + 1}`}
@@ -186,7 +229,7 @@ export default function DataTable<T extends Record<string, unknown>>({
                   {columns.map((col) => (
                     <td
                       key={col.key}
-                      className="whitespace-nowrap px-4 py-3 text-sm text-ink-muted"
+                      className={`whitespace-nowrap ${cellPadding} text-sm text-ink-muted ${col.className ?? ""}`}
                     >
                       {col.render
                         ? col.render(row[col.key], row)
@@ -194,7 +237,8 @@ export default function DataTable<T extends Record<string, unknown>>({
                     </td>
                   ))}
                 </tr>
-              ))
+                );
+              })
             )}
           </tbody>
         </table>

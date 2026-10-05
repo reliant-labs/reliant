@@ -45,9 +45,27 @@ export interface LibrarySection {
   workflows: WorkflowResponse[];
 }
 
+/** One row of the Library table. */
+export interface LibraryRow {
+  workflow: WorkflowResponse;
+  /** Pinned on top: an automation that runs it is FAILING. */
+  attention: boolean;
+}
+
 export interface LibraryView {
   /** In display order. "attention" is present only when non-empty. */
   sections: LibrarySection[];
+  /**
+   * The table's rows: the sections, flattened in display order. One table
+   * rather than a card per section, so every column lines up under one header
+   * row; a row's section survives as its Source column and `attention` flag.
+   */
+  rows: LibraryRow[];
+  /**
+   * "Your workflows" is empty and nothing narrowed it: the page offers
+   * create-your-own, which the empty section used to carry.
+   */
+  noWorkflowsOfYourOwn: boolean;
   /** Definitions that failed to load, after search and source. */
   invalid: InvalidWorkflow[];
   /** Per workflow ref (normalized): how many automations run it. */
@@ -64,6 +82,17 @@ const SOURCE_LABEL: Record<"yours" | "builtin", string> = {
   yours: "Your workflows",
   builtin: "Built-in",
 };
+
+/**
+ * The Automations column's text. `null` means none, which the cell renders as
+ * a dash under the column's label — the dash means "no automation runs this
+ * workflow", and it is only legible because the column is labelled.
+ */
+export function automationsSummary(count: number, failing = 0): string | null {
+  if (count <= 0) return null;
+  const base = `${count} ${count === 1 ? "automation" : "automations"}`;
+  return failing > 0 ? `${base} · ${failing} failing` : base;
+}
 
 function matches(query: string, ...fields: (string | undefined)[]): boolean {
   return fields.some((field) => field?.toLowerCase().includes(query));
@@ -135,6 +164,10 @@ export function libraryView({
   const narrowed = Boolean(query) || Boolean(source);
   return {
     sections,
+    rows: sections.flatMap((section) =>
+      section.workflows.map((workflow) => ({ workflow, attention: section.key === "attention" })),
+    ),
+    noWorkflowsOfYourOwn: sections.some((section) => section.key === "yours" && section.workflows.length === 0),
     invalid: visibleInvalid,
     automationCounts,
     failingCounts,

@@ -146,7 +146,8 @@ func NewServer(cfg *Config) (*Server, error) {
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
 
 	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
-	opts := newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), authInterceptor, domainWhitelistInterceptor)
+	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(services.ForgeRPCDeadlines())
+	opts := newHandlerOptions(timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to

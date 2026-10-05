@@ -104,6 +104,30 @@ describe('buildInterceptors factory', () => {
   })
 })
 
+describe('per-procedure timeouts', () => {
+  // Every forge call runs a `forge` subprocess on the daemon with a 15–110s
+  // budget. At the 10s default the transport aborted them, the api-server saw
+  // a cancelled request, and the UI rendered "no forge.yaml" for control-plane.
+  it('gives every ForgeService method more than the 10s default', async () => {
+    const { timeoutForProcedure } = await import('../transport')
+    const { ForgeService } = await import('../../gen/reliant/v1/forge_pb')
+    for (const method of ForgeService.methods) {
+      expect(
+        timeoutForProcedure(ForgeService.typeName, method.name),
+        `${method.name} must not inherit the 10s default`,
+      ).toBeGreaterThan(10_000)
+    }
+  })
+
+  it('scopes the forge budget to ForgeService, not to the bare method name', async () => {
+    // control-plane's DeployService also has a PlanDeploy, and it is a quick
+    // read that should keep the short default.
+    const { timeoutForProcedure } = await import('../transport')
+    expect(timeoutForProcedure('reliant.v1.ForgeService', 'PlanDeploy')).toBeGreaterThan(100_000)
+    expect(timeoutForProcedure('controlplane.v1.DeployService', 'PlanDeploy')).toBe(10_000)
+  })
+})
+
 describe('in-flight starvation diagnostics', () => {
   // formatInFlight is the pure core of describeInFlight() — the line the
   // timeout handler logs so a wedged connection (2026-07-09 incident) is

@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => ({
   })),
   listDaemonTokens: vi.fn(async () => []),
   navigate: vi.fn(),
+  search: {} as Record<string, string>,
 }))
 
 // The machines gate reads compute eligibility from the server rather than
@@ -65,8 +66,9 @@ vi.mock('@/services/controlPlane/capabilities', () => ({
 
 // useNavigate backs useGoToBilling, which the un-funded prompt routes through.
 vi.mock('@tanstack/react-router', () => ({
-  useSearch: () => ({}),
+  useSearch: () => mocks.search,
   useNavigate: () => mocks.navigate,
+  useParams: () => ({}),
 }))
 
 // The real module exports proto enums at module scope that machines.tsx
@@ -130,6 +132,7 @@ describe('MachinesSection', () => {
   beforeEach(() => {
     mocks.caps.cloudDaemons = true
     vi.clearAllMocks()
+    mocks.search = {}
     mocks.listDaemons.mockResolvedValue({ daemons: [] })
     mocks.getComputeSubscription.mockResolvedValue({})
     mocks.getComputeEligibility.mockResolvedValue({
@@ -271,6 +274,33 @@ describe('MachinesSection', () => {
       expect(await screen.findByText('Cloud machines')).toBeInTheDocument()
       expect(screen.queryByText('Self-hosted machines')).not.toBeInTheDocument()
     })
+
+    // The open machine is the URL, so Back, refresh and links work: opening
+    // one navigates rather than flipping local state.
+    it('opens a machine by navigating to its own URL', async () => {
+      mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
+      renderSection()
+
+      fireEvent.click(await screen.findByText('onboarding-daemon'))
+      expect(mocks.navigate).toHaveBeenCalledWith({
+        to: '/settings/environments/$machineId',
+        params: { machineId: managedDaemon.daemonId },
+      })
+    })
+
+    it('names the icon-only delete button', async () => {
+      mocks.listDaemons.mockResolvedValue({ daemons: [managedDaemon] })
+      renderSection()
+
+      expect(await screen.findByRole('button', { name: 'Delete onboarding-daemon' })).toBeInTheDocument()
+    })
+  })
+
+  it('explains where Connectors went when redirected from the retired page', async () => {
+    mocks.search = { from: 'connectors' }
+    renderSection()
+
+    expect(await screen.findByRole('status')).toHaveTextContent(/Connectors moved here/)
   })
 
   // The registry row has ONE name field — hostname — where control-plane's had

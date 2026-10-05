@@ -21,7 +21,7 @@ import PageHeader from "../forge-ui/page_header";
 import SkeletonLoader from "../forge-ui/skeleton_loader";
 import { Button } from "../ui/Button";
 import { AreaShell } from "../Layout/AreaShell";
-import { InboxItem } from "./InboxItem";
+import { InboxItem, type InboxItemOmissions } from "./InboxItem";
 
 export function InboxPage() {
   return (
@@ -88,6 +88,30 @@ export function groupInboxItems(items: InboxItemData[]): InboxGroup[] {
     groups.push(group);
   }
   return groups;
+}
+
+const normalizeDetail = (text: string) => text.trim().replace(/\s+/g, " ").toLowerCase();
+
+/**
+ * What each row in one automation's group can leave out because a sibling
+ * already says it. A failed launch counts as a failure, so the same streak
+ * yields a "failing" row AND a "could not start" row, and both would read
+ * "Failed 3 times in a row. <the same reason>". The failing row keeps the
+ * streak count; the launch row keeps the reason; neither repeats the other.
+ */
+export function automationGroupOmissions(items: InboxItemData[]): Map<string, InboxItemOmissions> {
+  const omissions = new Map<string, InboxItemOmissions>();
+  const failing = items.find((item) => item.payload.case === "automationFailing");
+  const launch = items.find((item) => item.payload.case === "automationLaunchFailed");
+  if (!failing || !launch) return omissions;
+  if (failing.payload.case !== "automationFailing" || launch.payload.case !== "automationLaunchFailed") return omissions;
+  const detail = failing.payload.value.health?.lastFailureDetail ?? "";
+  const reason = launch.payload.value.reason;
+  if (detail && normalizeDetail(detail) === normalizeDetail(reason)) {
+    omissions.set(failing.itemId, { detail: true });
+  }
+  omissions.set(launch.itemId, { streak: true });
+  return omissions;
 }
 
 /** "Failing · could not start · 2 runs finished": what one automation has waiting. */
@@ -231,6 +255,7 @@ function AutomationGroup({ group }: { group: InboxGroup }) {
   const first = group.items[0]!;
   const name = first.triggerName || "Automation";
   const summary = automationGroupSummary(group.items);
+  const omissions = automationGroupOmissions(group.items);
   return (
     <li data-testid={`inbox-group-${group.key}`}>
       <div className="flex items-baseline justify-between gap-3 px-4 pt-3">
@@ -245,7 +270,7 @@ function AutomationGroup({ group }: { group: InboxGroup }) {
       </div>
       <ul aria-label={`${name}: ${summary}`} className="divide-y divide-border/60">
         {group.items.map((item) => (
-          <InboxItem key={item.itemId} item={item} groupedBy="automation" />
+          <InboxItem key={item.itemId} item={item} groupedBy="automation" omit={omissions.get(item.itemId)} />
         ))}
       </ul>
     </li>

@@ -27,11 +27,14 @@ import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWor
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "../workflow/run/RunWorkflowForm";
 import { countRunInputs, type RunWorkflowValue } from "../workflow/run/runWorkflowValues";
 import {
+  sourceKindLabel,
   triggerErrorMessage,
+  triggerSchedule,
   type OverlapPolicy,
   type Trigger,
   type TriggerDefinitionInput,
   type TriggerSchedule,
+  type TriggerSource,
 } from "@/api/trigger-grpc";
 import {
   useCreateTrigger,
@@ -56,6 +59,7 @@ import {
 } from "./scheduleForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../workflow/run/runFormStyles";
 import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
+import { validateTimezone } from "./timezone";
 
 /**
  * Starting values for a NEW automation — a starter template, or "Save as
@@ -89,6 +93,13 @@ export interface AutomationFormDialogProps {
 
 /** A Go duration ("90s", "10m", "1h30m"); the server is the final judge. */
 const GO_DURATION = /^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$/;
+
+/**
+ * A source arm this build's generated code predates arrives with nothing to
+ * send back, and UpdateTrigger is a full replacement — so it cannot be saved.
+ */
+const UNKNOWN_SOURCE_MESSAGE =
+  "This automation's trigger was set up in a newer version of Reliant. Reload the app to edit it.";
 
 function browserTimezone(): string {
   try {
@@ -147,7 +158,11 @@ function AutomationFormBody({
   }, [loadProjects]);
 
   // An edit starts from the trigger; a new automation from the prefill.
-  const initialSchedule = trigger?.schedule ?? prefill?.schedule;
+  const initialSchedule = trigger ? triggerSchedule(trigger) : prefill?.schedule;
+  // Only a schedule has an editor here. Any other kind of source is shown
+  // read-only and sent back exactly as stored, so editing the name or prompt
+  // can never rewrite what makes the trigger fire.
+  const lockedSource = trigger && trigger.source.kind !== "schedule" ? trigger.source : undefined;
 
   const [name, setName] = useState(trigger?.name ?? prefill?.name ?? "");
   const [projectId, setProjectId] = useState(
@@ -183,10 +198,38 @@ function AutomationFormBody({
   );
   const [errors, setErrors] = useState<FieldErrors>({});
   const [attempted, setAttempted] = useState(false);
+  // "Discard your changes?" — shown when the dialog is dismissed while dirty.
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  // What the dialog opened with, to tell whether the user has changed anything.
+  // The daemon is excluded: the form defaults it on its own once the daemon
+  // list loads, which is not a change the user made (an explicit choice is
+  // tracked by daemonChosen instead).
+  const initialFields = useRef({
+    name,
+    projectId,
+    workflow,
+    message,
+    schedule: JSON.stringify(schedule),
+    timezone,
+    overlap,
+    catchupWindow,
+    notifyOnComplete,
+  });
+  // Workflow inputs change on their own too (RunWorkflowForm applies a
+  // workflow's default presets asynchronously). Until the user interacts with
+  // the inputs region, every change is absorbed into the baseline.
+  const inputsTouched = useRef(false);
+  const inputsBaseline = useRef(JSON.stringify(inputs));
+  if (!inputsTouched.current) inputsBaseline.current = JSON.stringify(inputs);
 
   // The project list loads asynchronously; settle on a project once it does.
+  // That is the form's default, not an edit, so it moves the baseline too.
   useEffect(() => {
-    if (!projectId && projects.length > 0) setProjectId(projects[0]!.id);
+    if (!projectId && projects.length > 0) {
+      setProjectId(projects[0]!.id);
+      initialFields.current.projectId = projects[0]!.id;
+    }
   }, [projectId, projects]);
 
   /** Inputs belong to the workflow (and a workspace to the project): reset both. */
@@ -214,7 +257,12 @@ function AutomationFormBody({
   const workflowsQuery = useProjectWorkflowList(projectId || undefined);
   const workflowOptions = useMemo(() => {
     const seen = new Set<string>();
-    const options = (workflowsQuery.data ?? [])
+    const listed = workflowsQuery.data ?? [];
+    const options = listed
+      // A draft is never runnable, so it is never offered where a runnable
+      // workflow is required (WorkflowDraftStatus in workflow.proto): an
+      // automation pinned to one would fail every firing.
+      .filter((w) => w.status !== "draft")
       .filter((w) => {
         const key = normalizeWorkflowRef(w.name).toLowerCase();
         if (seen.has(key)) return false;
@@ -223,9 +271,14 @@ function AutomationFormBody({
       })
       .map((w) => ({ value: w.name, label: getWorkflowDisplayName(w.name, true) }))
       .sort((a, b) => a.label.localeCompare(b.label));
-    // Keep a stored workflow selectable even if this project no longer lists it.
+    // Keep a stored workflow selectable even if this project no longer lists
+    // it, or it has gone back to draft — saying so, rather than blanking it.
     if (workflow && !options.some((o) => normalizeWorkflowRef(o.value) === normalizeWorkflowRef(workflow))) {
-      options.unshift({ value: workflow, label: getWorkflowDisplayName(workflow, true) });
+      const isDraft = listed.some(
+        (w) => w.status === "draft" && normalizeWorkflowRef(w.name) === normalizeWorkflowRef(workflow),
+      );
+      const label = getWorkflowDisplayName(workflow, true);
+      options.unshift({ value: workflow, label: isDraft ? `${label} (draft, cannot run)` : label });
     }
     return options;
   }, [workflowsQuery.data, workflow]);
@@ -272,25 +325,18 @@ function AutomationFormBody({
   const saving = createMutation.isPending || updateMutation.isPending;
 
   const scheduleError = validateScheduleForm(schedule);
-  const preview = scheduleError
-    ? null
-    : describeSchedule({ ...scheduleFromForm(schedule), timezone });
+  const timezoneError = validateTimezone(timezone);
+  const preview =
+    scheduleError || timezoneError ? null : describeSchedule({ ...scheduleFromForm(schedule), timezone });
 
   const updateSchedule = (patch: Partial<ScheduleFormState>) =>
     setSchedule((prev) => ({ ...prev, ...patch }));
 
-  const buildDefinition = (): TriggerDefinitionInput => {
+  const buildSource = (): TriggerSource => {
+    if (lockedSource) return lockedSource;
     const wire = scheduleFromForm(schedule);
     return {
-      name: name.trim(),
-      projectId,
-      worktreeId: inputs.worktreeId,
-      workflow,
-      presets: inputs.presets,
-      params: inputs.params,
-      message: message.trim(),
-      daemonId,
-      notifyOnComplete,
+      kind: "schedule",
       schedule: {
         cron: wire.cron,
         interval: wire.interval,
@@ -300,6 +346,19 @@ function AutomationFormBody({
       },
     };
   };
+
+  const buildDefinition = (): TriggerDefinitionInput => ({
+    name: name.trim(),
+    projectId,
+    worktreeId: inputs.worktreeId,
+    workflow,
+    presets: inputs.presets,
+    params: inputs.params,
+    message: message.trim(),
+    daemonId,
+    notifyOnComplete,
+    source: buildSource(),
+  });
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -320,15 +379,17 @@ function AutomationFormBody({
     } else if (inputsStatus && inputsStatus.missingRequired.length > 0) {
       next.inputs = `Fill in the required inputs: ${inputsStatus.missingRequired.join(", ")}.`;
     }
-    if (scheduleError) next.schedule = scheduleError;
+    if (lockedSource?.kind === "unknown") next.form = UNKNOWN_SOURCE_MESSAGE;
+    if (scheduleError && !lockedSource) next.schedule = scheduleError;
+    if (timezoneError && !lockedSource) next.timezone = timezoneError;
     const catchup = catchupWindow.trim();
-    if (catchup && !GO_DURATION.test(catchup)) {
+    if (catchup && !lockedSource && !GO_DURATION.test(catchup)) {
       next.catchup = "Use a duration like 10m, 2h or 1h30m.";
       setAdvancedOpen(true);
     }
     setErrors(next);
     if (Object.keys(next).length > 0) {
-      const first = (["name", "project", "daemon", "message", "inputs", "schedule", "catchup"] as const).find(
+      const first = (["name", "project", "daemon", "message", "inputs", "schedule", "timezone", "catchup"] as const).find(
         (k) => next[k],
       );
       if (first) document.getElementById(fieldId(first))?.focus();
@@ -356,10 +417,42 @@ function AutomationFormBody({
   const describedBy = (...parts: Array<string | false | undefined>) =>
     parts.filter(Boolean).join(" ") || undefined;
 
+  const isDirty = () => {
+    const initial = initialFields.current;
+    return (
+      name !== initial.name ||
+      projectId !== initial.projectId ||
+      workflow !== initial.workflow ||
+      message !== initial.message ||
+      JSON.stringify(schedule) !== initial.schedule ||
+      timezone !== initial.timezone ||
+      overlap !== initial.overlap ||
+      catchupWindow !== initial.catchupWindow ||
+      notifyOnComplete !== initial.notifyOnComplete ||
+      (daemonChosen.current && daemonId !== (trigger?.daemonId ?? "")) ||
+      (inputsTouched.current && JSON.stringify(inputs) !== inputsBaseline.current)
+    );
+  };
+
+  // Escape, the backdrop and the close button all come here. Unsaved input —
+  // above all a long prompt — is never dropped without asking.
+  const requestClose = () => {
+    if (saving) return;
+    if (confirmDiscard) {
+      setConfirmDiscard(false);
+      return;
+    }
+    if (isDirty()) {
+      setConfirmDiscard(true);
+      return;
+    }
+    onClose();
+  };
+
   return (
     <Modal
       isOpen
-      onClose={saving ? () => undefined : onClose}
+      onClose={requestClose}
       title={isEdit ? "Edit automation" : "New automation"}
       size="lg"
     >
@@ -556,7 +649,16 @@ function AutomationFormBody({
           )}
 
           {projectId && (
-            <div id={fieldId("inputs")} tabIndex={-1} className="focus:outline-none">
+            <div
+              id={fieldId("inputs")}
+              tabIndex={-1}
+              className="focus:outline-none"
+              // Any user interaction here makes later input changes count as
+              // edits; before it, changes are the form's own defaults.
+              onChangeCapture={() => (inputsTouched.current = true)}
+              onClickCapture={() => (inputsTouched.current = true)}
+              onKeyDownCapture={() => (inputsTouched.current = true)}
+            >
               <RunWorkflowForm
                 projectId={projectId}
                 workflowRef={workflow}
@@ -582,51 +684,69 @@ function AutomationFormBody({
             When it runs
           </h3>
 
-          <ScheduleFields
-            fieldId={fieldId}
-            schedule={schedule}
-            onChange={updateSchedule}
-            error={errors.schedule}
-          />
-
-          <div>
-            <label htmlFor={fieldId("timezone")} className={labelClass}>
-              Time zone
-            </label>
-            <input
-              id={fieldId("timezone")}
-              className={fieldClass}
-              value={timezone}
-              onChange={(e) => setTimezone(e.target.value)}
-              list={fieldId("timezones")}
-              autoComplete="off"
-              spellCheck={false}
-              aria-invalid={!!errors.timezone}
-              aria-describedby={describedBy(fieldId("timezone-hint"), errors.timezone && fieldId("timezone-error"))}
-            />
-            <datalist id={fieldId("timezones")}>
-              {zones.map((zone) => (
-                <option key={zone} value={zone} />
-              ))}
-            </datalist>
-            <p id={fieldId("timezone-hint")} className={hintClass}>
-              An IANA zone such as America/New_York. Times above are in this zone.
+          {lockedSource ? (
+            <p
+              id={fieldId("locked-source")}
+              className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
+            >
+              <span className="font-medium">{sourceKindLabel(lockedSource)} trigger.</span>{" "}
+              <span className="text-muted-foreground">
+                {lockedSource.kind === "unknown"
+                  ? UNKNOWN_SOURCE_MESSAGE
+                  : "Its trigger settings can't be changed here yet. Saving keeps them exactly as they are."}
+              </span>
             </p>
-            {errors.timezone && (
-              <p id={fieldId("timezone-error")} className={errorTextClass}>
-                {errors.timezone}
+          ) : (
+            <>
+              <ScheduleFields
+                fieldId={fieldId}
+                schedule={schedule}
+                onChange={updateSchedule}
+                error={errors.schedule}
+              />
+
+              <div>
+                <label htmlFor={fieldId("timezone")} className={labelClass}>
+                  Time zone
+                </label>
+                <input
+                  id={fieldId("timezone")}
+                  className={fieldClass}
+                  value={timezone}
+                  onChange={(e) => setTimezone(e.target.value)}
+                  list={fieldId("timezones")}
+                  autoComplete="off"
+                  spellCheck={false}
+                  aria-invalid={!!errors.timezone}
+                  aria-describedby={describedBy(fieldId("timezone-hint"), errors.timezone && fieldId("timezone-error"))}
+                />
+                <datalist id={fieldId("timezones")}>
+                  {zones.map((zone) => (
+                    <option key={zone} value={zone} />
+                  ))}
+                </datalist>
+                <p id={fieldId("timezone-hint")} className={hintClass}>
+                  An IANA zone such as America/New_York. Times above are in this zone.
+                </p>
+                {errors.timezone && (
+                  <p id={fieldId("timezone-error")} className={errorTextClass}>
+                    {errors.timezone}
+                  </p>
+                )}
+              </div>
+
+              <p
+                className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
+                aria-live="polite"
+              >
+                <span className="text-muted-foreground">Runs: </span>
+                {preview ??
+                  (timezoneError && !scheduleError
+                    ? "Fix the time zone to see when this runs."
+                    : "Finish the schedule to see when this runs.")}
               </p>
-            )}
-          </div>
-
-          <p
-            className="rounded-md border border-border/60 bg-background px-3 py-2 text-sm text-foreground"
-            aria-live="polite"
-          >
-            <span className="text-muted-foreground">Runs: </span>
-            {preview ?? "Finish the schedule to see when this runs."}
-          </p>
-
+            </>
+          )}
         </section>
 
         <section aria-labelledby={fieldId("advanced-heading")}>
@@ -647,27 +767,30 @@ function AutomationFormBody({
           </h3>
           {/* Kept mounted while closed so a value set here is never lost. */}
           <div id={fieldId("advanced-body")} hidden={!advancedOpen} className="mt-4 space-y-4">
-            <fieldset>
-              <legend className={labelClass}>If the previous run is still going</legend>
-              <div className="space-y-2">
-                <OverlapOption
-                  id={fieldId("overlap-skip")}
-                  name={fieldId("overlap")}
-                  checked={overlap === "skip"}
-                  onSelect={() => setOverlap("skip")}
-                  title="Skip this run"
-                  description="Recommended. Nothing starts while the last run is active or paused; the skip is recorded in the history."
-                />
-                <OverlapOption
-                  id={fieldId("overlap-allow")}
-                  name={fieldId("overlap")}
-                  checked={overlap === "allow"}
-                  onSelect={() => setOverlap("allow")}
-                  title="Start another run anyway"
-                  description="Runs can pile up side by side if each one takes longer than the gap between them."
-                />
-              </div>
-            </fieldset>
+            {/* Overlap and catch-up live on the schedule source; a locked source keeps its own. */}
+            {!lockedSource && (
+              <fieldset>
+                <legend className={labelClass}>If the previous run is still going</legend>
+                <div className="space-y-2">
+                  <OverlapOption
+                    id={fieldId("overlap-skip")}
+                    name={fieldId("overlap")}
+                    checked={overlap === "skip"}
+                    onSelect={() => setOverlap("skip")}
+                    title="Skip this run"
+                    description="Recommended. Nothing starts while the last run is active or paused; the skip is recorded in the history."
+                  />
+                  <OverlapOption
+                    id={fieldId("overlap-allow")}
+                    name={fieldId("overlap")}
+                    checked={overlap === "allow"}
+                    onSelect={() => setOverlap("allow")}
+                    title="Start another run anyway"
+                    description="Runs can pile up side by side if each one takes longer than the gap between them."
+                  />
+                </div>
+              </fieldset>
+            )}
 
             <div>
               <label className="flex cursor-pointer items-start gap-2 text-sm text-foreground">
@@ -687,41 +810,74 @@ function AutomationFormBody({
               </p>
             </div>
 
-            <div>
-              <label htmlFor={fieldId("catchup")} className={labelClass}>
-                Catch-up window
-              </label>
-              <input
-                id={fieldId("catchup")}
-                className={cn(fieldClass, "font-mono sm:w-48")}
-                value={catchupWindow}
-                onChange={(e) => setCatchupWindow(e.target.value)}
-                placeholder="10m"
-                spellCheck={false}
-                autoComplete="off"
-                aria-invalid={!!errors.catchup}
-                aria-describedby={describedBy(fieldId("catchup-hint"), errors.catchup && fieldId("catchup-error"))}
-              />
-              <p id={fieldId("catchup-hint")} className={hintClass}>
-                How late a run missed during an outage may still start, such as 30m or 2h. Empty means 10 minutes.
-              </p>
-              {errors.catchup && (
-                <p id={fieldId("catchup-error")} className={errorTextClass}>
-                  {errors.catchup}
+            {!lockedSource && (
+              <div>
+                <label htmlFor={fieldId("catchup")} className={labelClass}>
+                  Catch-up window
+                </label>
+                <input
+                  id={fieldId("catchup")}
+                  className={cn(fieldClass, "font-mono sm:w-48")}
+                  value={catchupWindow}
+                  onChange={(e) => setCatchupWindow(e.target.value)}
+                  placeholder="10m"
+                  spellCheck={false}
+                  autoComplete="off"
+                  aria-invalid={!!errors.catchup}
+                  aria-describedby={describedBy(fieldId("catchup-hint"), errors.catchup && fieldId("catchup-error"))}
+                />
+                <p id={fieldId("catchup-hint")} className={hintClass}>
+                  How late a run missed during an outage may still start, such as 30m or 2h. Empty means 10 minutes.
                 </p>
-              )}
-            </div>
+                {errors.catchup && (
+                  <p id={fieldId("catchup-error")} className={errorTextClass}>
+                    {errors.catchup}
+                  </p>
+                )}
+              </div>
+            )}
           </div>
         </section>
 
-        <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
-          <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>
-            Cancel
-          </Button>
-          <Button type="submit" variant="primary" loading={saving}>
-            {isEdit ? "Save changes" : "Create automation"}
-          </Button>
-        </div>
+        {confirmDiscard ? (
+          <div
+            role="alertdialog"
+            aria-labelledby={fieldId("discard-title")}
+            aria-describedby={fieldId("discard-description")}
+            className="flex flex-wrap items-center justify-between gap-3 border-t border-border/60 pt-4"
+          >
+            <div className="min-w-0">
+              <p id={fieldId("discard-title")} className="text-sm font-medium text-foreground">
+                Discard your changes?
+              </p>
+              <p id={fieldId("discard-description")} className="text-xs text-muted-foreground">
+                {isEdit ? "Your edits to this automation" : "This new automation"} will be lost.
+              </p>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                type="button"
+                variant="ghost"
+                autoFocus
+                onClick={() => setConfirmDiscard(false)}
+              >
+                Keep editing
+              </Button>
+              <Button type="button" variant="destructive" onClick={onClose}>
+                Discard
+              </Button>
+            </div>
+          </div>
+        ) : (
+          <div className="flex justify-end gap-2 border-t border-border/60 pt-4">
+            <Button type="button" variant="ghost" onClick={requestClose} disabled={saving}>
+              Cancel
+            </Button>
+            <Button type="submit" variant="primary" loading={saving}>
+              {isEdit ? "Save changes" : "Create automation"}
+            </Button>
+          </div>
+        )}
       </form>
     </Modal>
   );
