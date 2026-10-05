@@ -133,6 +133,7 @@ type Repo struct {
 	workflowCatalog core.WorkflowCatalogStore
 	triggers        core.TriggerStore
 	inbox           core.InboxStore
+	runEvents       core.RunEventStore
 	tokenCounts     tokenCountStore
 
 	// Update notifiers — set via SetUpdateNotifiers to push events to
@@ -176,6 +177,7 @@ func NewRepoWithDriver(db *sql.DB, driver DatabaseDriver) *Repo {
 		workflowCatalog: postgresstore.NewWorkflowCatalogStore(pgQueries),
 		triggers:        postgresstore.NewTriggerStore(pgQueries),
 		inbox:           postgresstore.NewInboxStore(pgQueries),
+		runEvents:       postgresstore.NewRunEventStore(pgQueries),
 		tokenCounts:     tokenCounts,
 	}
 }

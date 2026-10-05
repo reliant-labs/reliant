@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	v2activities "github.com/reliant-labs/reliant/internal/workflow/runtime/activities"
@@ -226,6 +227,19 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		)
 	} else {
 		logging.Warn("no trigger launcher configured; this worker will not execute scheduled fires")
+	}
+
+	// Workflow-event triggers: same split as schedules. The dispatch workflow
+	// is always registered; its activity needs the launcher.
+	w.RegisterWorkflowWithOptions(workflowevent.RunEventDispatchWorkflow, workflow.RegisterOptions{
+		Name: workflowevent.DispatchWorkflowName,
+	})
+	if cfg.TriggerLauncher != nil {
+		dispatcher := workflowevent.NewDispatcher(cfg.Database, cfg.TriggerLauncher, nil)
+		w.RegisterActivityWithOptions(
+			workflowevent.NewActivity(cfg.Database, dispatcher).Dispatch,
+			activity.RegisterOptions{Name: workflowevent.DispatchActivityName},
+		)
 	}
 
 	// Start worker with lifecycle management

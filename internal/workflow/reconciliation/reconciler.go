@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 )
@@ -859,7 +860,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 	if !temporalState.Exists {
 		// Workflow not in Temporal (expired/lost) — repair DB status
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Completed(), wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, db.Completed(), temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark lost workflow as completed: %w", err)
 			return result
@@ -1059,7 +1060,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		r.clearStuckObservation(wf.ID)
 
 		// Mark workflow as failed in DB (CAS prevents duplicate transitions)
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, db.Failed(), temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to mark workflow as failed: %w", err)
 			return result
@@ -1159,7 +1160,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 			// Mark failed (CAS prevents duplicate transitions). Failed + kept
 			// position checkpoint = the next user message resumes at position.
-			swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
+			swapped, err := r.swapStatus(ctx, wf, db.Failed(), temporalState.RunID)
 			if err != nil {
 				result.Error = fmt.Errorf("failed to mark stalled workflow as failed: %w", err)
 				return result
@@ -1203,7 +1204,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			"temporalStatus", temporalState.Status,
 		)
 
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, temporalState.Status, wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, temporalState.Status, temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to repair paused workflow status: %w", err)
 			return result
@@ -1242,7 +1243,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			"temporalStatus", temporalState.Status,
 		)
 
-		swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, temporalState.Status, wf.Status)
+		swapped, err := r.swapStatus(ctx, wf, temporalState.Status, temporalState.RunID)
 		if err != nil {
 			result.Error = fmt.Errorf("failed to repair workflow status: %w", err)
 			return result
@@ -1309,7 +1310,7 @@ func (r *Reconciler) terminateWedgedWorkflow(ctx context.Context, wf *db.Workflo
 
 	// Mark failed (CAS prevents duplicate transitions). Failed + kept
 	// position checkpoint = the next user message resumes at position.
-	swapped, err := r.repo.CompareAndSwapWorkflowStatus(ctx, wf.ID, db.Failed(), wf.Status)
+	swapped, err := r.swapStatus(ctx, wf, db.Failed(), temporalState.RunID)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to mark wedged workflow as failed: %w", err)
 		return
@@ -1330,6 +1331,53 @@ func (r *Reconciler) terminateWedgedWorkflow(ctx context.Context, wf *db.Workflo
 
 	result.WasStale = true
 	result.TemporalStatus = db.Failed()
+}
+
+// swapStatus is CompareAndSwapWorkflowStatus plus the workflow-event outbox
+// row, in ONE transaction. The reconciler is the only component that observes
+// a run Temporal killed outright — no workflow code runs again, so the
+// WorkflowStatus activity that normally emits the event never will — and a
+// repair that moved a ROOT run to a terminal state is exactly the transition a
+// workflow_event trigger listens for. The event commits with the repair, or
+// neither does, and only the pass whose CAS wins emits it.
+func (r *Reconciler) swapStatus(ctx context.Context, wf *db.Workflow, to db.WorkflowStatus, temporalRunID string) (bool, error) {
+	var swapped bool
+	err := r.repo.RunTx(ctx, func(txCtx context.Context) error {
+		var err error
+		swapped, err = r.repo.CompareAndSwapWorkflowStatus(txCtx, wf.ID, to, wf.Status)
+		if err != nil || !swapped || wf.ParentID != nil {
+			return err
+		}
+		var outcome core.RunEventOutcome
+		switch to {
+		case db.Completed():
+			outcome = core.RunEventFinished
+		case db.Failed():
+			outcome = core.RunEventFailed
+		default:
+			return nil
+		}
+		_, err = runevents.EmitTerminal(txCtx, r.repo, runevents.Terminal{
+			ChatID:       wf.ChatID,
+			WorkflowID:   wf.ID,
+			WorkflowName: wf.WorkflowName,
+			RunID:        temporalRunID,
+			Outcome:      outcome,
+			Error:        reconciledFailureText(outcome),
+		}, time.Now().UTC())
+		return err
+	})
+	return swapped, err
+}
+
+// reconciledFailureText is the error a reconciler-repaired failure reports. The
+// detailed reason (Temporal's close event) is written to the chat separately;
+// this is what a workflow-event trigger sees.
+func reconciledFailureText(outcome core.RunEventOutcome) string {
+	if outcome != core.RunEventFailed {
+		return ""
+	}
+	return "The workflow was stopped by the system before it could finish."
 }
 
 // transitionChatOnCompletion switches the chat to the completed ROOT workflow's

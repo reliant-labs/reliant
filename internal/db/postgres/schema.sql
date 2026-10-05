@@ -911,6 +911,25 @@ CREATE TABLE public.repos (
 );
 
 --
+-- Name: run_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.run_events (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    chat_id text NOT NULL,
+    workflow_name text DEFAULT ''::text NOT NULL,
+    outcome text NOT NULL,
+    dedupe_key text NOT NULL,
+    payload jsonb DEFAULT '{}'::jsonb NOT NULL,
+    occurred_at timestamp with time zone NOT NULL,
+    claimed_until timestamp with time zone,
+    dispatched_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT run_events_outcome_check CHECK ((outcome = ANY (ARRAY['finished'::text, 'failed'::text, 'blocked'::text])))
+);
+
+--
 -- Name: settings; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1619,6 +1638,20 @@ ALTER TABLE ONLY public.repos
     ADD CONSTRAINT repos_project_id_relative_path_key UNIQUE (project_id, relative_path);
 
 --
+-- Name: run_events run_events_dedupe_key_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_dedupe_key_key UNIQUE (dedupe_key);
+
+--
+-- Name: run_events run_events_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_pkey PRIMARY KEY (id);
+
+--
 -- Name: settings settings_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2175,6 +2208,24 @@ CREATE INDEX idx_questions_workflow_id ON public.questions USING btree (workflow
 CREATE INDEX idx_repos_project ON public.repos USING btree (project_id);
 
 --
+-- Name: idx_run_events_chat; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_chat ON public.run_events USING btree (chat_id);
+
+--
+-- Name: idx_run_events_dispatched_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_dispatched_at ON public.run_events USING btree (dispatched_at) WHERE (dispatched_at IS NOT NULL);
+
+--
+-- Name: idx_run_events_undispatched; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_run_events_undispatched ON public.run_events USING btree (created_at, id) WHERE (dispatched_at IS NULL);
+
+--
 -- Name: idx_step_executions_chat_read; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2543,6 +2594,13 @@ ALTER TABLE ONLY public.project_daemons
 
 ALTER TABLE ONLY public.repos
     ADD CONSTRAINT repos_project_id_fkey FOREIGN KEY (project_id) REFERENCES public.projects(id) ON DELETE CASCADE;
+
+--
+-- Name: run_events run_events_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.run_events
+    ADD CONSTRAINT run_events_chat_id_fkey FOREIGN KEY (chat_id) REFERENCES public.chats(id) ON DELETE CASCADE;
 
 --
 -- Name: task_dependencies task_dependencies_from_task_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

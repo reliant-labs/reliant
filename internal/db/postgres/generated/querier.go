@@ -80,6 +80,10 @@ type Querier interface {
 	// messages: a peer agent's spawn_send is not the human's to reclaim, and the
 	// UI never offered it.
 	ClaimQueuedAgentMessagesForThread(ctx context.Context, arg ClaimQueuedAgentMessagesForThreadParams) ([]AgentMessage, error)
+	// Leases up to `max` undispatched events whose lease is free or expired.
+	// SKIP LOCKED lets several relays drain the queue without handing the same
+	// row to two of them.
+	ClaimRunEvents(ctx context.Context, arg ClaimRunEventsParams) ([]RunEvent, error)
 	// Atomically update workflow lifecycle only if the current one matches
 	// expected. Returns the updated row if swapped, sql.ErrNoRows if it did not
 	// match.
@@ -106,6 +110,9 @@ type Querier interface {
 	CountMessagesByContextWindowUpToSeq(ctx context.Context, arg CountMessagesByContextWindowUpToSeqParams) (int64, error)
 	// Count messages in a thread (uses denormalized thread_id)
 	CountMessagesByThread(ctx context.Context, threadID string) (int64, error)
+	// Pending approvals and questions in the chat other than exclude_id. Zero
+	// means the item being created is the one that blocks the run.
+	CountOtherPendingBlockers(ctx context.Context, arg CountOtherPendingBlockersParams) (int32, error)
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
 	CountThreadsInConversation(ctx context.Context, chatID string) (int64, error)
 	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
@@ -131,6 +138,11 @@ type Querier interface {
 	// own UNIQUE (user_id, project_id, key) constraint is a usable conflict target.
 	CreateProjectSetting(ctx context.Context, arg CreateProjectSettingParams) error
 	CreateRepo(ctx context.Context, arg CreateRepoParams) error
+	// run_events: the outbox for workflow-event triggers. See the migration
+	// 20261005010407_run_events.sql for the model.
+	// DO NOTHING on a dedupe_key that already exists: the first row for a
+	// transition is the record, and an activity retry must not add a second.
+	CreateRunEvent(ctx context.Context, arg CreateRunEventParams) (int64, error)
 	// Upsert, not a plain insert. A setting is identified by (user_id, project_id,
 	// key), so writing the same key twice must REPLACE the value rather than add a
 	// second row.
@@ -172,6 +184,7 @@ type Querier interface {
 	DeleteContextWindow(ctx context.Context, id string) error
 	DeleteContextWindowsByThread(ctx context.Context, threadID string) error
 	DeleteDefaultPresetAssignment(ctx context.Context, arg DeleteDefaultPresetAssignmentParams) error
+	DeleteDispatchedRunEventsBefore(ctx context.Context, dispatchedAt sql.NullTime) (int64, error)
 	DeleteMessage(ctx context.Context, id string) error
 	DeletePlan(ctx context.Context, id string) error
 	DeletePreset(ctx context.Context, id string) error
@@ -365,6 +378,8 @@ type Querier interface {
 	// lives on threads.status, so the "thread:*"/"fork:*" name filters this query
 	// used to carry are gone along with the records they excluded.
 	GetRootWorkflowStatusForChat(ctx context.Context, chatID string) (GetRootWorkflowStatusForChatRow, error)
+	GetRunEvent(ctx context.Context, id string) (RunEvent, error)
+	GetRunEventByDedupe(ctx context.Context, dedupeKey string) (RunEvent, error)
 	GetSetting(ctx context.Context, arg GetSettingParams) (Setting, error)
 	GetStepExecution(ctx context.Context, id string) (StepExecution, error)
 	// Get all executions of a specific step in a workflow (for CEL history queries)
@@ -464,6 +479,10 @@ type Querier interface {
 	// able to use the same key without colliding.
 	GetWorktreeByIdempotencyKey(ctx context.Context, arg GetWorktreeByIdempotencyKeyParams) (Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (Worktree, error)
+	// Whether the user owns at least one enabled trigger of the kind. The emitter
+	// asks this before writing an outbox row, so users without workflow-event
+	// triggers never pay for one.
+	HasEnabledTriggerOfKind(ctx context.Context, arg HasEnabledTriggerOfKindParams) (bool, error)
 	// Whether any message in this context window precedes before_seq. Used to
 	// compute hasMore for the cursor-bounded read without fetching the rows.
 	HasMessagesBeforeInContextWindow(ctx context.Context, arg HasMessagesBeforeInContextWindowParams) (bool, error)
@@ -790,6 +809,10 @@ type Querier interface {
 	// Used for startup recovery to restart workers for active workflows.
 	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
 	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
+	// Row-locks the chat for the rest of the transaction. Serializes the "was the
+	// run already blocked?" check across concurrent approval and question
+	// creations in the same chat.
+	LockChatForRunEvent(ctx context.Context, id string) (string, error)
 	// Row lock on the trigger for the rest of the transaction. Serializes the
 	// overlap check with the launch it guards across concurrent fires.
 	LockTrigger(ctx context.Context, id string) (string, error)
@@ -834,6 +857,7 @@ type Querier interface {
 	// drain did not win are moved. delivered_at is deliberately left NULL -- the
 	// absence of a delivery time IS the record that no delivery occurred.
 	MarkQueuedAgentMessagesUndeliveredForThread(ctx context.Context, toThreadID string) (int64, error)
+	MarkRunEventDispatched(ctx context.Context, arg MarkRunEventDispatchedParams) error
 	// Pause all active workflows for a chat.
 	// Used when pausing a chat to ensure child workflows (e.g., agent threads) are also paused,
 	// so the chats_with_activity view correctly reports the chat as paused.

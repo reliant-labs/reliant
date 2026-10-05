@@ -43,6 +43,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/triggers/workflowevent"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -356,6 +357,13 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)
 	}
+
+	// Workflow-event triggers: move run-event outbox rows into dispatch
+	// workflows. Every worker runs a relay; rows are leased with SKIP LOCKED,
+	// so they share the queue rather than duplicating it.
+	relayCtx, stopRelay := context.WithCancel(ctx)
+	defer stopRelay()
+	go workflowevent.NewRelay(repo, temporalClient, v2workflow.SharedTaskQueue).Run(relayCtx)
 
 	// -----------------------------------------------------------------
 	// 12. Health endpoint

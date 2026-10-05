@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
 )
@@ -226,6 +227,18 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 
 		if err := a.repo.CreateChatUpdate(txCtx, input.ChatID, db.UpdateTypeApproval, approvalID, string(updateDataJSON)); err != nil {
 			return fmt.Errorf("failed to create chat_update: %w", err)
+		}
+
+		// The run is now waiting on a human: a workflow-event "blocked"
+		// transition, recorded with the approval it is blocked on.
+		if _, err := runevents.EmitBlocked(txCtx, a.repo, runevents.Blocked{
+			ChatID:      input.ChatID,
+			WorkflowID:  input.WorkflowID,
+			BlockerID:   approvalID,
+			BlockerKind: "approval",
+			Prompt:      input.Title,
+		}, approval.CreatedAt); err != nil {
+			return fmt.Errorf("failed to record run event: %w", err)
 		}
 
 		return nil

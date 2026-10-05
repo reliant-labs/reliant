@@ -291,11 +291,25 @@ func (m *mockRepo) UpdateWorkflowStatus(_ context.Context, id string, status db.
 	return nil
 }
 
+// RunTx runs f inline: the mock has no transactions, and the reconciler's
+// status repair wraps its CAS in one so the run-event outbox row commits with it.
+func (m *mockRepo) RunTx(ctx context.Context, f func(ctx context.Context) error) error {
+	return f(ctx)
+}
+
+// HasEnabledTriggerOfKind reports no workflow-event triggers, so a repair
+// writes no run event unless a test opts in.
+func (m *mockRepo) HasEnabledTriggerOfKind(context.Context, string, core.TriggerKind) (bool, error) {
+	return false, nil
+}
+
 func (m *mockRepo) GetChat(_ context.Context, id string) (*db.Chat, error) {
 	if chat, ok := m.chats[id]; ok {
 		return chat, nil
 	}
-	return nil, fmt.Errorf("chat not found: %s", id)
+	// Same sentinel the real store wraps, so callers can tell a miss from a
+	// failure.
+	return nil, fmt.Errorf("%w: %s", core.ErrChatNotFound, id)
 }
 
 func (m *mockRepo) CreateUserUpdate(_ context.Context, update *db.UserUpdate) error {
