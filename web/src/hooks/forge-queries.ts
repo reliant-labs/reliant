@@ -176,11 +176,14 @@ export const forgeKeys = {
  * problem, and hammering a daemon that is not answering only delays the moment
  * the user is told.
  */
-export function useForgeTopology(projectId: string | null | undefined) {
+export function useForgeTopology(projectId: string | null | undefined, options?: { enabled?: boolean }) {
+  // `enabled: false` with a real project id still READS the cache — another
+  // surface (the sidebar's roster) may already have asked — it just never
+  // asks itself.
   return useQuery<ForgeOutcome<ForgeTopologyReport>>({
     queryKey: forgeKeys.topology(projectId ?? ""),
     queryFn: () => forgeGrpc.getTopology({ projectId: projectId as string }),
-    enabled: !!projectId,
+    enabled: !!projectId && options?.enabled !== false,
     staleTime: 30_000,
     retry: forgeRetry,
   });

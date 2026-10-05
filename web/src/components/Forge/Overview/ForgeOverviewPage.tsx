@@ -159,9 +159,10 @@ function UnregisteredEnvs({ envs, onOpen }: { envs: RosterEnv[]; onOpen: (env: s
             >
               <CircleDashed className="h-4 w-4 shrink-0 text-muted-foreground" aria-hidden="true" />
               <span className="font-mono text-sm font-medium text-foreground">{env.name}</span>
-              <span className="text-xs text-muted-foreground">
-                {env.lifecycle === "local" ? "Local" : "Deployed"}
-              </span>
+              {/* Only a lifecycle someone actually stated. Without a control-
+                  plane row or forge's runtime answer, "deployed" would be a
+                  guess — dev's destination is `mixed`, same as prod's. */}
+              {env.lifecycle === "local" && <span className="text-xs text-muted-foreground">Runs locally</span>}
               {env.forge?.release && (
                 <span className="text-xs text-muted-foreground">
                   · forge ledger: <span className="font-mono text-foreground">{env.forge.release}</span>

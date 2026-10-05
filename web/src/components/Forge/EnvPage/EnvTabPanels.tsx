@@ -408,6 +408,7 @@ export function ChangesTab({
   checkoutPath,
   onCheckoutChange,
   onDeploy,
+  onRetryDaemon,
 }: {
   projectId: string | null;
   envName: string;
@@ -417,11 +418,14 @@ export function ChangesTab({
   onCheckoutChange: (path: string) => void;
   /** Deploy THIS branch. Absent for a local env. */
   onDeploy?: () => void;
+  onRetryDaemon?: () => void;
 }) {
   const daemonOk = daemon === "ok";
   const checkouts = useForgeCheckouts(daemonOk ? projectId : null);
 
-  if (daemon === "offline") return <DaemonNeeded what={`what your branch would change in ${envName}`} />;
+  if (daemon === "offline") {
+    return <DaemonNeeded what={`what your branch would change in ${envName}`} onRetry={onRetryDaemon} />;
+  }
   if (daemon === "loading") return <PanelSkeleton testId="changes-loading" />;
 
   return (
@@ -472,6 +476,7 @@ export function ChecksTab({
   envStatusError,
   canVerify,
   projectName,
+  onRetryDaemon,
 }: {
   projectId: string | null;
   envName: string;
@@ -482,13 +487,16 @@ export function ChecksTab({
   envStatusError: Error | null;
   canVerify: boolean;
   projectName?: string;
+  onRetryDaemon?: () => void;
 }) {
   const daemonOk = daemon === "ok";
   const audit = useForgeAudit(daemonOk ? projectId : null);
   const { verify, pendingEnv, lastOutcome } = useVerifyForgeEnv(projectId);
   const [verified, setVerified] = useState(false);
 
-  if (daemon === "offline") return <DaemonNeeded what={`forge's checks of ${envName} and this project`} />;
+  if (daemon === "offline") {
+    return <DaemonNeeded what={`forge's checks of ${envName} and this project`} onRetry={onRetryDaemon} />;
+  }
   if (daemon === "loading") return <PanelSkeleton testId="checks-loading" />;
 
   const verifyNotice =

@@ -98,8 +98,11 @@ export function ForgeEnvPage() {
   const askDaemonForIdentity = backendSettled && !backendKnowsDeployed;
 
   const [requestedTab, setRequestedTab] = useState<EnvTab | null>(null);
+  // The tab the reader asked for — a click (state) wins over the URL, which a
+  // replace-navigation updates a beat later.
+  const askedTab = requestedTab ?? tabSearch;
   const tabWantsDaemon =
-    tabSearch === "changes" || tabSearch === "checks" || tabSearch === "running" || tabSearch === "preview";
+    askedTab === "changes" || askedTab === "checks" || askedTab === "running" || askedTab === "preview";
 
   // A header action is a request for the daemon too: Promote and Deploy are
   // planned by forge on the user's checkout.
@@ -107,7 +110,10 @@ export function ForgeEnvPage() {
   const [actionAsked, setActionAsked] = useState(false);
   const daemonWanted = askDaemonForIdentity || tabWantsDaemon || actionAsked;
 
-  const topology = useForgeTopology(daemonWanted ? projectId : null);
+  const topology = useForgeTopology(projectId, { enabled: daemonWanted });
+  // A cached answer counts (the sidebar may have asked); an unasked, uncached
+  // daemon is "not asked yet", never "offline".
+  const daemonAsked = daemonWanted || topology.data !== undefined || topology.error !== null;
   const daemon = daemonSideOf(topology.data, topology.error);
 
   // A topology report can name the project when nothing was persisted yet.
@@ -172,7 +178,7 @@ export function ForgeEnvPage() {
   const currentRelease = liveEnv?.release || forgeEnv?.release || "";
   // Until something has asked the daemon there is no reason to show: the
   // buttons are enabled, and a click asks (see the effect below).
-  const daemonReason = !daemonWanted
+  const daemonReason = !daemonAsked
     ? null
     : daemon === "ok"
       ? null
@@ -181,7 +187,7 @@ export function ForgeEnvPage() {
         : "Needs your daemon: forge plans this against your checkout.";
   const promoteReason =
     daemonReason ??
-    (!daemonWanted
+    (!daemonAsked
       ? null
       : !latestRelease
         ? "No release has been cut from this checkout yet. Run forge env build --release."
@@ -308,6 +314,7 @@ export function ForgeEnvPage() {
             checkoutPath={checkoutPath}
             onCheckoutChange={setCheckoutPath}
             onDeploy={lifecycle === "local" ? undefined : () => setDeployOpen(true)}
+            onRetryDaemon={() => void topology.refetch()}
           />
         ) : (
           <ChecksTab
@@ -320,6 +327,10 @@ export function ForgeEnvPage() {
             envStatusError={envStatus.error as Error | null}
             canVerify={(forgeEnv?.images?.length ?? 0) > 0}
             projectName={currentProject?.name}
+            onRetryDaemon={() => {
+              void topology.refetch();
+              void envStatus.refetch();
+            }}
           />
         )}
       </div>

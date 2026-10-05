@@ -69,14 +69,16 @@ export function RegisterEnvPanel({
     <section
       className="space-y-3"
       data-testid="register-env-panel"
-      aria-labelledby="register-env-heading"
+      aria-label={`Register ${envName}`}
     >
-      <div className="flex flex-wrap items-center gap-2">
-        <h3 id="register-env-heading" className="text-sm font-semibold text-foreground">
-          <span className="font-mono">{envName}</span>
-        </h3>
+      {/* The env's name and "not registered" are the page's header and this
+          panel's card title; repeating them here read as a second page. */}
+      <p className="flex items-center gap-2 text-sm text-foreground">
         <Badge label="would be created" variant="neutral" size="sm" />
-      </div>
+        <span>
+          Registering creates <span className="font-mono">{envName}</span> in Reliant.
+        </span>
+      </p>
 
       {/* The customer's nouns (#366): what they get, not where we file it.
           "Reliant has no record of it" is a fact about their project;
