@@ -28,6 +28,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
@@ -342,6 +343,13 @@ func Run(ctx context.Context, opts Options) error {
 	// schedule path.
 	triggerLauncher := runLauncher
 
+	// The same registry the api-server builds, so both agree on which
+	// integrations are polled.
+	triggerPollers, err := webhook.RegistryFromEnv(os.Getenv)
+	if err != nil {
+		return fmt.Errorf("integration pollers: %w", err)
+	}
+
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
 		TemporalClient:         temporalClient,
 		Database:               repo,
@@ -353,6 +361,7 @@ func Run(ctx context.Context, opts Options) error {
 		ConfigProvider:         storedConfigProvider,
 		TriggerLauncher:        triggerLauncher,
 		IntegrationCredentials: integrationCredentials,
+		TriggerPollers:         triggerPollers,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to start worker: %w", err)

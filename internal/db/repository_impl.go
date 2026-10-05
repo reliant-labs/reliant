@@ -3818,6 +3818,58 @@ func (r *Repo) GetLatestTriggerEvent(ctx context.Context, triggerID string, outc
 	return r.triggers.GetLatestTriggerEvent(ctx, triggerID, outcome)
 }
 
+func (r *Repo) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.SetTriggerWebhookTokenHash(ctx, id, hash)
+}
+
+func (r *Repo) SetTriggerWebhookSecret(ctx context.Context, id string, sealed []byte) error {
+	if id == "" {
+		return fmt.Errorf("trigger ID cannot be empty")
+	}
+	return r.triggers.SetTriggerWebhookSecret(ctx, id, sealed)
+}
+
+func (r *Repo) GetTriggerWebhookCredentials(ctx context.Context, id string) (*core.TriggerWebhookCredentials, error) {
+	if id == "" {
+		return nil, core.ErrTriggerNotFound
+	}
+	return r.triggers.GetTriggerWebhookCredentials(ctx, id)
+}
+
+func (r *Repo) ListIntegrationTriggers(ctx context.Context, integration string) ([]*core.IntegrationTriggerRoute, error) {
+	return r.triggers.ListIntegrationTriggers(ctx, integration)
+}
+
+func (r *Repo) ListStalePendingTriggerEvents(ctx context.Context, olderThan time.Time, limit int) ([]*core.TriggerEvent, error) {
+	return r.triggers.ListStalePendingTriggerEvents(ctx, olderThan, limit)
+}
+
+func (r *Repo) ClaimPendingTriggerEvent(ctx context.Context, id string, payload map[string]any) (bool, error) {
+	return r.triggers.ClaimPendingTriggerEvent(ctx, id, payload)
+}
+
+func (r *Repo) SettlePendingTriggerEvent(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string) (bool, error) {
+	return r.triggers.SettlePendingTriggerEvent(ctx, id, outcome, detail)
+}
+
+func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*core.TriggerRegistration, error) {
+	return r.triggers.GetTriggerRegistration(ctx, triggerID)
+}
+
+func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
+	if reg == nil || reg.TriggerID == "" {
+		return fmt.Errorf("trigger registration needs a trigger ID")
+	}
+	return r.triggers.UpsertTriggerRegistration(ctx, reg)
+}
+
+func (r *Repo) DeleteTriggerRegistration(ctx context.Context, triggerID string) error {
+	return r.triggers.DeleteTriggerRegistration(ctx, triggerID)
+}
+
 // ==================== Step Executions ====================
 
 func (r *Repo) CreateStepExecution(ctx context.Context, exec *StepExecution) error {

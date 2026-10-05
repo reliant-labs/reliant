@@ -307,8 +307,8 @@ CREATE TABLE public.trigger_events (
     outcome_detail text DEFAULT ''::text NOT NULL,
     chat_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text]))),
-    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['launched'::text, 'skipped'::text, 'failed'::text])))
+    CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text]))),
+    CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['pending'::text, 'launched'::text, 'skipped'::text, 'failed'::text])))
 );
 
 --
@@ -1065,6 +1065,23 @@ CREATE TABLE public.tool_calls (
 );
 
 --
+-- Name: trigger_registrations; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.trigger_registrations (
+    trigger_id text NOT NULL,
+    provider text NOT NULL,
+    registration_id text DEFAULT ''::text NOT NULL,
+    cursor text DEFAULT ''::text NOT NULL,
+    last_polled_at timestamp with time zone,
+    status text DEFAULT 'active'::text NOT NULL,
+    status_detail text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT trigger_registrations_status_check CHECK ((status = ANY (ARRAY['active'::text, 'error'::text])))
+);
+
+--
 -- Name: triggers; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -1085,7 +1102,11 @@ CREATE TABLE public.triggers (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     daemon_id text NOT NULL,
     notify_on_complete boolean DEFAULT false NOT NULL,
-    CONSTRAINT triggers_kind_check CHECK ((kind = 'schedule'::text))
+    filter text DEFAULT ''::text NOT NULL,
+    connection_id text,
+    webhook_token_hash bytea,
+    webhook_secret_sealed bytea,
+    CONSTRAINT triggers_kind_check CHECK ((kind = ANY (ARRAY['schedule'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text])))
 );
 
 --
@@ -1736,6 +1757,13 @@ ALTER TABLE ONLY public.trigger_events
     ADD CONSTRAINT trigger_events_pkey PRIMARY KEY (id);
 
 --
+-- Name: trigger_registrations trigger_registrations_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_registrations
+    ADD CONSTRAINT trigger_registrations_pkey PRIMARY KEY (trigger_id);
+
+--
 -- Name: triggers triggers_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2328,10 +2356,28 @@ CREATE INDEX idx_trigger_events_failed ON public.trigger_events USING btree (tri
 CREATE INDEX idx_trigger_events_parent_chat ON public.trigger_events USING btree (((payload ->> 'parent_chat_id'::text))) WHERE (kind = 'agent.start_run'::text);
 
 --
+-- Name: idx_trigger_events_pending; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_trigger_events_pending ON public.trigger_events USING btree (created_at) WHERE (outcome = 'pending'::text);
+
+--
 -- Name: idx_trigger_events_trigger_occurred_id; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX idx_trigger_events_trigger_occurred_id ON public.trigger_events USING btree (trigger_id, occurred_at DESC, id DESC);
+
+--
+-- Name: idx_triggers_connection; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_connection ON public.triggers USING btree (connection_id) WHERE (connection_id IS NOT NULL);
+
+--
+-- Name: idx_triggers_integration; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_triggers_integration ON public.triggers USING btree (((config ->> 'integration'::text))) WHERE ((kind = 'integration'::text) AND enabled);
 
 --
 -- Name: idx_triggers_project; Type: INDEX; Schema: public; Owner: -
@@ -2678,6 +2724,20 @@ ALTER TABLE ONLY public.trigger_events
 
 ALTER TABLE ONLY public.trigger_events
     ADD CONSTRAINT trigger_events_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES public.triggers(id) ON DELETE SET NULL;
+
+--
+-- Name: trigger_registrations trigger_registrations_trigger_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.trigger_registrations
+    ADD CONSTRAINT trigger_registrations_trigger_id_fkey FOREIGN KEY (trigger_id) REFERENCES public.triggers(id) ON DELETE CASCADE;
+
+--
+-- Name: triggers triggers_connection_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.triggers
+    ADD CONSTRAINT triggers_connection_id_fkey FOREIGN KEY (connection_id) REFERENCES public.connections(id) ON DELETE SET NULL;
 
 --
 -- Name: triggers triggers_project_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

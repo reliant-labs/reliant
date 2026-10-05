@@ -76,16 +76,8 @@ func newFixture(t *testing.T) *fixture {
 	if testing.Short() {
 		t.Skip("needs a database; skipped under -short")
 	}
-	repo, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
+	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
-	// The workflow_event kind's production migration belongs to the
-	// trigger-receivers stream; widen this test database's CHECK until it is
-	// on main. Delete once it is.
-	_, err := sqlDB.Exec(`ALTER TABLE triggers DROP CONSTRAINT IF EXISTS triggers_kind_check;
-		ALTER TABLE triggers ADD CONSTRAINT triggers_kind_check CHECK (kind IN ('schedule', 'webhook', 'integration', 'workflow_event'));
-		ALTER TABLE trigger_events DROP CONSTRAINT IF EXISTS trigger_events_kind_check;
-		ALTER TABLE trigger_events ADD CONSTRAINT trigger_events_kind_check CHECK (kind IN ('chat.start', 'schedule', 'agent.start_run', 'builder.test', 'webhook', 'integration', 'workflow_event'))`)
-	require.NoError(t, err)
 
 	ctx := context.Background()
 	f := &fixture{t: t, repo: repo, starter: &countingStarter{},
@@ -142,17 +134,15 @@ func (f *fixture) addFilteredTrigger(userID, projectID, name, workflow string, s
 	if !strings.HasPrefix(workflow, "builtin://") {
 		f.addWorkflow(userID, workflow)
 	}
-	config, err := json.Marshal(struct {
-		Source
-		Filter string `json:"filter,omitempty"`
-	}{src, filter})
+	config, err := json.Marshal(src)
 	require.NoError(f.t, err)
 	now := time.Now().UTC()
 	tr := &core.Trigger{
 		ID: uuid.NewString(), UserID: userID, ProjectID: projectID, Name: name,
-		Kind: runevents.TriggerKind, Enabled: true, Workflow: workflow,
+		Kind: core.TriggerKindWorkflowEvent, Enabled: true, Workflow: workflow,
 		Params:  map[string]any{"model": map[string]any{"id": "mock"}},
 		Message: "react to the source run", DaemonID: f.daemonID, Config: config,
+		Filter:    filter,
 		CreatedAt: now, UpdatedAt: now,
 	}
 	require.NoError(f.t, f.repo.CreateTrigger(context.Background(), tr))

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/client"
 
@@ -46,10 +47,25 @@ func ManualFireWorkflowID(triggerID string) string {
 }
 
 // Syncer converges Temporal Schedules onto the triggers table.
+//
+// Two kinds of trigger have a schedule: a schedule trigger (its action is
+// the fire workflow) and an integration trigger whose integration is POLLED
+// (its action is the poll workflow). Every other trigger has none, and Sync
+// removes one left behind by an earlier definition.
 type Syncer struct {
 	schedules ScheduleClient
 	repo      Repo
 	taskQueue string
+	// polled reports whether an integration is polled on this server. nil
+	// means none is.
+	polled func(integration string) bool
+}
+
+// WithPolledIntegrations tells the syncer which integrations are polled, so
+// their triggers get a poll schedule.
+func (s *Syncer) WithPolledIntegrations(polled func(integration string) bool) *Syncer {
+	s.polled = polled
+	return s
 }
 
 // NewSyncer builds a Syncer. taskQueue is the queue the fire workflow runs on;
@@ -83,21 +99,44 @@ func (s *Syncer) Sync(ctx context.Context, triggerID string) error {
 	return s.converge(ctx, t)
 }
 
+// hasSchedule reports whether t is converged onto a Temporal Schedule.
+func (s *Syncer) hasSchedule(t *core.Trigger) bool {
+	switch t.Kind {
+	case core.TriggerKindSchedule:
+		return true
+	case core.TriggerKindIntegration:
+		if s.polled == nil {
+			return false
+		}
+		cfg, err := IntegrationConfigFor(t)
+		return err == nil && s.polled(cfg.Integration)
+	}
+	return false
+}
+
 // converge makes the schedule match t, which the caller has just read.
 func (s *Syncer) converge(ctx context.Context, t *core.Trigger) error {
 	if t == nil {
 		return errors.New("triggers: converge called with nil trigger")
 	}
-	if t.Kind != core.TriggerKindSchedule {
-		return fmt.Errorf("triggers: cannot sync a schedule for kind %q", t.Kind)
+	if !s.hasSchedule(t) {
+		return s.Delete(ctx, t.ID)
 	}
 
-	sched, err := ScheduleFor(t)
-	if err != nil {
-		return err
+	var desired client.Schedule
+	if t.Kind == core.TriggerKindSchedule {
+		sched, err := ScheduleFor(t)
+		if err != nil {
+			return err
+		}
+		desired = s.scheduleBody(t, sched)
+	} else {
+		cfg, err := IntegrationConfigFor(t)
+		if err != nil {
+			return err
+		}
+		desired = s.pollBody(t, cfg)
 	}
-
-	desired := s.scheduleBody(t, sched)
 	paused := !t.Enabled
 
 	handle := s.schedules.GetHandle(ctx, ScheduleID(t.ID))
@@ -107,10 +146,10 @@ func (s *Syncer) converge(ctx context.Context, t *core.Trigger) error {
 		}
 		_, err = s.schedules.Create(ctx, client.ScheduleOptions{
 			ID:            ScheduleID(t.ID),
-			Spec:          sched.Spec,
+			Spec:          *desired.Spec,
 			Action:        desired.Action,
-			Overlap:       sched.TemporalOverlap(),
-			CatchupWindow: sched.CatchupWindow,
+			Overlap:       desired.Policy.Overlap,
+			CatchupWindow: desired.Policy.CatchupWindow,
 			Paused:        paused,
 			Note:          scheduleNote(t),
 		})
@@ -126,7 +165,7 @@ func (s *Syncer) converge(ctx context.Context, t *core.Trigger) error {
 	// Replace the whole body rather than diffing it. The row is the truth, so
 	// "what changed" is not a question worth asking — and a partial update is
 	// how a schedule ends up half converged.
-	err = handle.Update(ctx, client.ScheduleUpdateOptions{
+	err := handle.Update(ctx, client.ScheduleUpdateOptions{
 		DoUpdate: func(in client.ScheduleUpdateInput) (*client.ScheduleUpdate, error) {
 			body := desired
 			state := &client.ScheduleState{Paused: paused, Note: scheduleNote(t)}
@@ -204,7 +243,9 @@ func (s *Syncer) SyncAll(ctx context.Context) error {
 	live := make(map[string]struct{}, len(all))
 	var errs []error
 	for _, t := range all {
-		if t.Kind != core.TriggerKindSchedule {
+		if !s.hasSchedule(t) {
+			// No schedule wanted; one left from an earlier definition is
+			// collected by the orphan pass below.
 			continue
 		}
 		live[ScheduleID(t.ID)] = struct{}{}
@@ -235,9 +276,12 @@ func (s *Syncer) SyncAll(ctx context.Context) error {
 		triggerID := strings.TrimPrefix(entry.ID, schedulePrefix)
 		// `live` is a snapshot from before the converge loop, so a trigger
 		// created since then is absent from it while its schedule is already
-		// listed. Re-check the row before deleting anything.
-		if _, err := s.repo.GetTrigger(ctx, triggerID); err == nil {
-			continue
+		// listed. Re-check the row before deleting anything: a row that
+		// exists and still wants a schedule keeps it.
+		if t, err := s.repo.GetTrigger(ctx, triggerID); err == nil {
+			if s.hasSchedule(t) {
+				continue
+			}
 		} else if !errors.Is(err, core.ErrTriggerNotFound) {
 			errs = append(errs, fmt.Errorf("re-check orphan schedule %s: %w", entry.ID, err))
 			continue
@@ -273,6 +317,30 @@ func (s *Syncer) scheduleBody(t *core.Trigger, sched *Schedule) client.Schedule 
 			// firing only when a human disables it; a transient launch failure
 			// must not silently retire the schedule, because nothing would
 			// tell the owner it had stopped.
+			PauseOnFailure: false,
+		},
+	}
+}
+
+// pollBody is a polled trigger's schedule: run the poll workflow every
+// interval. SKIP overlap, unlike a fire schedule: a poll that overruns its
+// interval makes the next one redundant, and polls carry no per-slot record
+// that dropping one would lose.
+func (s *Syncer) pollBody(t *core.Trigger, cfg core.IntegrationConfig) client.Schedule {
+	return client.Schedule{
+		Spec: &client.ScheduleSpec{Intervals: []client.ScheduleIntervalSpec{{Every: pollIntervalFor(cfg)}}},
+		Action: &client.ScheduleWorkflowAction{
+			ID:                       PollWorkflowID(t.ID),
+			Workflow:                 PollWorkflowName,
+			Args:                     []any{PollInput{TriggerID: t.ID}},
+			TaskQueue:                s.taskQueue,
+			WorkflowExecutionTimeout: fireWorkflowTimeout,
+		},
+		Policy: &client.SchedulePolicies{
+			Overlap: enumspb.SCHEDULE_OVERLAP_POLICY_SKIP,
+			// A poll missed during an outage is not worth running late: the
+			// next one picks up everything from the cursor.
+			CatchupWindow:  time.Minute,
 			PauseOnFailure: false,
 		},
 	}

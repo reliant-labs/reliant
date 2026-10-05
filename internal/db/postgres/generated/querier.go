@@ -65,6 +65,12 @@ type Querier interface {
 	// status IN (2, 6) is the same fail-closed guard the workflow cascade
 	// applies: an already-terminal thread is left untouched.
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, arg CascadeTerminalStatusToThreadSubtreeParams) error
+	// The launcher adopts an inbound event the receiver recorded: the row moves
+	// from pending to launched (chat attached later in the same transaction) and
+	// takes the launch's start record as its payload. The outcome predicate is
+	// what makes two concurrent fires of one event launch it once: the loser
+	// updates zero rows.
+	ClaimPendingTriggerEvent(ctx context.Context, arg ClaimPendingTriggerEventParams) (int64, error)
 	// Atomically take every still-queued HUMAN message for a thread and return
 	// the rows that were actually taken. This is the "flush the queue back into
 	// the composer" primitive behind Send now / Send all.
@@ -205,6 +211,7 @@ type Querier interface {
 	DeleteThread(ctx context.Context, id string) error
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	DeleteTrigger(ctx context.Context, id string) error
+	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
@@ -455,6 +462,9 @@ type Querier interface {
 	// idx_trigger_events_chat.
 	GetTriggerEventByChatID(ctx context.Context, chatID sql.NullString) (TriggerEvent, error)
 	GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEventByDedupeParams) (TriggerEvent, error)
+	GetTriggerRegistration(ctx context.Context, triggerID string) (TriggerRegistration, error)
+	// Only the webhook receiver reads these. They are never rendered.
+	GetTriggerWebhookCredentials(ctx context.Context, id string) (GetTriggerWebhookCredentialsRow, error)
 	// Get a usable workflow by slug (for runtime loading)
 	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (WorkflowDraft, error)
 	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
@@ -550,6 +560,12 @@ type Querier interface {
 	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
 	//                    id and the block's start, so a later block is a new item
 	ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error)
+	// Every ENABLED integration trigger for one integration, with its
+	// connection's routing identity. The inner join drops triggers whose
+	// connection is gone, revoked or belongs to someone else: an event can only
+	// reach a trigger through its own owner's live connection. Status is returned
+	// rather than filtered so a caller can tell needs_reauth apart.
+	ListIntegrationTriggers(ctx context.Context, integration string) ([]ListIntegrationTriggersRow, error)
 	ListItemDefaults(ctx context.Context, itemType int32) ([]ListItemDefaultsRow, error)
 	// Every background spawn issued anywhere inside one root execution that is
 	// still open: tool_calls.status = 6 (backgrounded) and no terminal report in
@@ -707,6 +723,10 @@ type Querier interface {
 	// Measured on the busiest real chat: 60 rows in 1.9ms via
 	// idx_tool_calls_child_workflow_id, against 10,622 tool calls.
 	ListSpawnToolCallIDsByChildThread(ctx context.Context, chatID string) ([]ListSpawnToolCallIDsByChildThreadRow, error)
+	// Inbound events recorded but not yet settled, older than the cutoff: the
+	// fire workflow for them was never started (the receiver crashed between the
+	// insert and the start) or died. The redriver restarts their fires.
+	ListStalePendingTriggerEvents(ctx context.Context, arg ListStalePendingTriggerEventsParams) ([]TriggerEvent, error)
 	// The async-spawn counterpart to ListStrandedSpawnToolCalls above (spec:
 	// async-spawn-and-agent-messaging.md, §7.1). A background=true spawn
 	// (dispatchSpawnBackground/workflow.go) writes tool_calls.status = 6
@@ -1030,6 +1050,11 @@ type Querier interface {
 	// so callers can run it on every successful forge read.
 	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
 	SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error)
+	// NULL clears the HMAC secret. Sealed by the caller under the owner's tenant.
+	SetTriggerWebhookSecret(ctx context.Context, arg SetTriggerWebhookSecretParams) (int64, error)
+	// The token hash has its own write path: no definition update can touch it,
+	// and rotating it is one statement.
+	SetTriggerWebhookTokenHash(ctx context.Context, arg SetTriggerWebhookTokenHashParams) (int64, error)
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
 	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (WorkflowDraft, error)
 	// Move a draft between 'draft' and 'complete'. The caller validates before
@@ -1040,6 +1065,9 @@ type Querier interface {
 	// a graph that routes to its `failed` node is a COMPLETED Temporal execution,
 	// so the verdict has nowhere else to live.
 	SetWorkflowOutcome(ctx context.Context, arg SetWorkflowOutcomeParams) (Workflow, error)
+	// Records the verdict on an inbound event that did NOT launch. Conditional on
+	// pending, so it can never overwrite a launch that won a race.
+	SettlePendingTriggerEvent(ctx context.Context, arg SettlePendingTriggerEventParams) (int64, error)
 	TouchProject(ctx context.Context, arg TouchProjectParams) error
 	UnarchiveWorktree(ctx context.Context, id string) error
 	// Update the status of an approval
@@ -1111,6 +1139,7 @@ type Querier interface {
 	// place instead of erroring on the primary key.
 	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) error
 	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) error
+	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error
 	// Workflow position checkpoints (resume-at-position support).
 	// One row per workflow ID. Written at cheap boundaries: top-level node entry
 	// and per loop iteration for top-level loop nodes.
