@@ -148,6 +148,60 @@ func TestActivateTriggerSchedule(t *testing.T) {
 	assert.Equal(t, []string{meta.TriggerID}, e.backend.synced)
 }
 
+// A chat with no machine activates a no-machine trigger, as start_run starts a
+// no-machine run. Before, the tool sent the caller's (absent) daemon, so
+// CreateTrigger refused it with "daemon_id is required" — safe, but it left a
+// no-machine agent unable to set up any automation at all.
+func TestActivateTriggerFromANoMachineChatCreatesANoMachineTrigger(t *testing.T) {
+	e := setup(t, "https://api.example.com")
+	ctx := context.Background()
+	now := time.Now().UTC()
+	wf := "builtin://agent"
+	noMachineChat := uuid.NewString()
+	require.NoError(t, e.repo.CreateChat(ctx, &db.Chat{ID: noMachineChat, UserID: e.userID, ProjectID: e.projectID,
+		Title: "no machine", WorkflowName: &wf, NoMachine: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	e.chatID = noMachineChat
+
+	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nightly", Message: "Summarize."})
+	require.False(t, resp.IsError, resp.Content)
+
+	var meta tools.ActivateTriggerResponseMetadata
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &meta))
+	stored, err := e.repo.GetTrigger(ctx, meta.TriggerID)
+	require.NoError(t, err)
+	assert.True(t, stored.NoMachine, "a no-machine caller activates a no-machine trigger")
+	assert.Empty(t, stored.DaemonID, "and pins no daemon")
+}
+
+// Inheriting no-machine never weakens the check: a workflow that needs a
+// machine is still refused at activation, with nothing stored.
+func TestActivateTriggerFromANoMachineChatRefusesAMachineWorkflow(t *testing.T) {
+	e := setup(t, "https://api.example.com")
+	ctx := context.Background()
+	now := time.Now().UTC()
+	require.NoError(t, e.repo.CreateWorkflowDraft(ctx, &db.WorkflowDraft{ID: uuid.NewString(), UserID: e.userID,
+		Name: "shelly", Slug: "shelly", Definition: `name: shelly
+triggers:
+  - name: nightly
+    schedule: {cron: "0 9 * * 1-5"}
+entry: [w]
+nodes:
+  - id: w
+    type: create_worktree
+    args: {branch: x}
+`, Status: db.WorkflowDraftStatusComplete, CreatedAt: now, UpdatedAt: now}))
+	wf := "builtin://agent"
+	noMachineChat := uuid.NewString()
+	require.NoError(t, e.repo.CreateChat(ctx, &db.Chat{ID: noMachineChat, UserID: e.userID, ProjectID: e.projectID,
+		Title: "no machine", WorkflowName: &wf, NoMachine: true, CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	e.chatID = noMachineChat
+
+	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "shelly", Trigger: "nightly", Message: "Go."})
+	require.True(t, resp.IsError, "a machine-only workflow must not become a no-machine automation: %s", resp.Content)
+	assert.Contains(t, resp.Content, "this workflow needs a machine", "refused by the no-machine check, not incidentally")
+	assert.Empty(t, e.backend.synced, "nothing was created")
+}
+
 func TestActivateTriggerWebhookReturnsURLAndTokenOnce(t *testing.T) {
 	e := setup(t, "https://api.example.com/")
 	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "hook", Message: "Deploy.", Name: "ci hook"})
