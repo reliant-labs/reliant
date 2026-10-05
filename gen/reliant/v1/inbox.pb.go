@@ -98,7 +98,10 @@ func (InboxItemKind) EnumDescriptor() ([]byte, []int) {
 type ListInboxRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Maximum items returned. 0 returns counts only. Default (unset) is 100.
-	Limit         *int32 `protobuf:"varint,1,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	Limit *int32 `protobuf:"varint,1,opt,name=limit,proto3,oneof" json:"limit,omitempty"`
+	// Only items of this project. Unset lists every project. The counts follow
+	// the same scope.
+	ProjectId     *string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3,oneof" json:"project_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -140,6 +143,13 @@ func (x *ListInboxRequest) GetLimit() int32 {
 	return 0
 }
 
+func (x *ListInboxRequest) GetProjectId() string {
+	if x != nil && x.ProjectId != nil {
+		return *x.ProjectId
+	}
+	return ""
+}
+
 type ListInboxResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Sorted by kind (priority), then waiting_since ascending (longest-waiting
@@ -152,9 +162,12 @@ type ListInboxResponse struct {
 	// True when any failure item exists (the badge shows a dot, not a count).
 	HasInformational bool `protobuf:"varint,3,opt,name=has_informational,json=hasInformational,proto3" json:"has_informational,omitempty"`
 	// True when limit cut the list short.
-	Truncated     bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Truncated bool `protobuf:"varint,4,opt,name=truncated,proto3" json:"truncated,omitempty"`
+	// With project_id set: how many items are waiting in the caller's OTHER
+	// projects, so a scoped view can say what it is not showing. 0 when unscoped.
+	OtherProjectsCount int32 `protobuf:"varint,5,opt,name=other_projects_count,json=otherProjectsCount,proto3" json:"other_projects_count,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *ListInboxResponse) Reset() {
@@ -215,14 +228,24 @@ func (x *ListInboxResponse) GetTruncated() bool {
 	return false
 }
 
+func (x *ListInboxResponse) GetOtherProjectsCount() int32 {
+	if x != nil {
+		return x.OtherProjectsCount
+	}
+	return 0
+}
+
 type InboxItem struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Kind  InboxItemKind          `protobuf:"varint,1,opt,name=kind,proto3,enum=reliant.v1.InboxItemKind" json:"kind,omitempty"`
-	// Stable key for dismissal and de-duplication. Approvals and questions use
-	// their row id; waiting-for-machine uses the chat id; run-finished uses the
-	// chat id. Automation failure items embed the id of the FIRST failing event
-	// of the current failure episode, so repeated failures stay one item and a
-	// new episode is a new item.
+	// Stable key for dismissal and de-duplication, prefixed by kind
+	// ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
+	// "automation_launch_failed:", "run_finished:"). Approvals and questions
+	// embed their row id; waiting-for-machine embeds the chat id and when the
+	// block began, so a later block is a new item; run-finished embeds the chat
+	// id. Automation failure items embed the id of the FIRST failing event of the
+	// current failure episode, so repeated failures stay one item and a new
+	// episode is a new item.
 	ItemId string `protobuf:"bytes,2,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
 	// The chat the item belongs to. Empty for automation failure kinds that have
 	// no run.
@@ -829,8 +852,9 @@ func (*InboxRunFinished) Descriptor() ([]byte, []int) {
 }
 
 type DismissInboxItemRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ItemId        string                 `protobuf:"bytes,1,opt,name=item_id,json=itemId,proto3" json:"item_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// One row, or a whole section ("Dismiss all").
+	ItemIds       []string `protobuf:"bytes,2,rep,name=item_ids,json=itemIds,proto3" json:"item_ids,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -865,11 +889,11 @@ func (*DismissInboxItemRequest) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *DismissInboxItemRequest) GetItemId() string {
+func (x *DismissInboxItemRequest) GetItemIds() []string {
 	if x != nil {
-		return x.ItemId
+		return x.ItemIds
 	}
-	return ""
+	return nil
 }
 
 type DismissInboxItemResponse struct {
@@ -908,20 +932,104 @@ func (*DismissInboxItemResponse) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{10}
 }
 
+type RestoreInboxItemRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ItemIds       []string               `protobuf:"bytes,1,rep,name=item_ids,json=itemIds,proto3" json:"item_ids,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreInboxItemRequest) Reset() {
+	*x = RestoreInboxItemRequest{}
+	mi := &file_reliant_v1_inbox_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreInboxItemRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreInboxItemRequest) ProtoMessage() {}
+
+func (x *RestoreInboxItemRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_inbox_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreInboxItemRequest.ProtoReflect.Descriptor instead.
+func (*RestoreInboxItemRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *RestoreInboxItemRequest) GetItemIds() []string {
+	if x != nil {
+		return x.ItemIds
+	}
+	return nil
+}
+
+type RestoreInboxItemResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RestoreInboxItemResponse) Reset() {
+	*x = RestoreInboxItemResponse{}
+	mi := &file_reliant_v1_inbox_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RestoreInboxItemResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RestoreInboxItemResponse) ProtoMessage() {}
+
+func (x *RestoreInboxItemResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_inbox_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RestoreInboxItemResponse.ProtoReflect.Descriptor instead.
+func (*RestoreInboxItemResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_inbox_proto_rawDescGZIP(), []int{12}
+}
+
 var File_reliant_v1_inbox_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/inbox.proto\x12\n" +
-	"reliant.v1\x1a\x19reliant/v1/approval.proto\x1a\x18reliant/v1/trigger.proto\"7\n" +
+	"reliant.v1\x1a\x19reliant/v1/approval.proto\x1a\x18reliant/v1/trigger.proto\"j\n" +
 	"\x10ListInboxRequest\x12\x19\n" +
-	"\x05limit\x18\x01 \x01(\x05H\x00R\x05limit\x88\x01\x01B\b\n" +
-	"\x06_limit\"\xb2\x01\n" +
+	"\x05limit\x18\x01 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"project_id\x18\x02 \x01(\tH\x01R\tprojectId\x88\x01\x01B\b\n" +
+	"\x06_limitB\r\n" +
+	"\v_project_id\"\xe4\x01\n" +
 	"\x11ListInboxResponse\x12+\n" +
 	"\x05items\x18\x01 \x03(\v2\x15.reliant.v1.InboxItemR\x05items\x12%\n" +
 	"\x0eblocking_count\x18\x02 \x01(\x05R\rblockingCount\x12+\n" +
 	"\x11has_informational\x18\x03 \x01(\bR\x10hasInformational\x12\x1c\n" +
-	"\ttruncated\x18\x04 \x01(\bR\ttruncated\"\xc0\x06\n" +
+	"\ttruncated\x18\x04 \x01(\bR\ttruncated\x120\n" +
+	"\x14other_projects_count\x18\x05 \x01(\x05R\x12otherProjectsCount\"\xc0\x06\n" +
 	"\tInboxItem\x12-\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x19.reliant.v1.InboxItemKindR\x04kind\x12\x17\n" +
 	"\aitem_id\x18\x02 \x01(\tR\x06itemId\x12\x17\n" +
@@ -976,10 +1084,13 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x121\n" +
 	"\x14consecutive_failures\x18\x03 \x01(\x05R\x13consecutiveFailures\"\x12\n" +
-	"\x10InboxRunFinished\"2\n" +
-	"\x17DismissInboxItemRequest\x12\x17\n" +
-	"\aitem_id\x18\x01 \x01(\tR\x06itemId\"\x1a\n" +
-	"\x18DismissInboxItemResponse*\x8d\x02\n" +
+	"\x10InboxRunFinished\"C\n" +
+	"\x17DismissInboxItemRequest\x12\x19\n" +
+	"\bitem_ids\x18\x02 \x03(\tR\aitemIdsJ\x04\b\x01\x10\x02R\aitem_id\"\x1a\n" +
+	"\x18DismissInboxItemResponse\"4\n" +
+	"\x17RestoreInboxItemRequest\x12\x19\n" +
+	"\bitem_ids\x18\x01 \x03(\tR\aitemIds\"\x1a\n" +
+	"\x18RestoreInboxItemResponse*\x8d\x02\n" +
 	"\rInboxItemKind\x12\x1f\n" +
 	"\x1bINBOX_ITEM_KIND_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18INBOX_ITEM_KIND_APPROVAL\x10\x01\x12\x1c\n" +
@@ -987,10 +1098,11 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"#INBOX_ITEM_KIND_WAITING_FOR_MACHINE\x10\x03\x12&\n" +
 	"\"INBOX_ITEM_KIND_AUTOMATION_FAILING\x10\x04\x12,\n" +
 	"(INBOX_ITEM_KIND_AUTOMATION_LAUNCH_FAILED\x10\x05\x12 \n" +
-	"\x1cINBOX_ITEM_KIND_RUN_FINISHED\x10\x062\xbb\x01\n" +
+	"\x1cINBOX_ITEM_KIND_RUN_FINISHED\x10\x062\x9c\x02\n" +
 	"\fInboxService\x12J\n" +
 	"\tListInbox\x12\x1c.reliant.v1.ListInboxRequest\x1a\x1d.reliant.v1.ListInboxResponse\"\x00\x12_\n" +
-	"\x10DismissInboxItem\x12#.reliant.v1.DismissInboxItemRequest\x1a$.reliant.v1.DismissInboxItemResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x10DismissInboxItem\x12#.reliant.v1.DismissInboxItemRequest\x1a$.reliant.v1.DismissInboxItemResponse\"\x00\x12_\n" +
+	"\x10RestoreInboxItem\x12#.reliant.v1.RestoreInboxItemRequest\x1a$.reliant.v1.RestoreInboxItemResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_inbox_proto_rawDescOnce sync.Once
@@ -1005,7 +1117,7 @@ func file_reliant_v1_inbox_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_inbox_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_inbox_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_reliant_v1_inbox_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_reliant_v1_inbox_proto_goTypes = []any{
 	(InboxItemKind)(0),                  // 0: reliant.v1.InboxItemKind
 	(*ListInboxRequest)(nil),            // 1: reliant.v1.ListInboxRequest
@@ -1019,8 +1131,10 @@ var file_reliant_v1_inbox_proto_goTypes = []any{
 	(*InboxRunFinished)(nil),            // 9: reliant.v1.InboxRunFinished
 	(*DismissInboxItemRequest)(nil),     // 10: reliant.v1.DismissInboxItemRequest
 	(*DismissInboxItemResponse)(nil),    // 11: reliant.v1.DismissInboxItemResponse
-	(ApprovalType)(0),                   // 12: reliant.v1.ApprovalType
-	(*TriggerHealth)(nil),               // 13: reliant.v1.TriggerHealth
+	(*RestoreInboxItemRequest)(nil),     // 12: reliant.v1.RestoreInboxItemRequest
+	(*RestoreInboxItemResponse)(nil),    // 13: reliant.v1.RestoreInboxItemResponse
+	(ApprovalType)(0),                   // 14: reliant.v1.ApprovalType
+	(*TriggerHealth)(nil),               // 15: reliant.v1.TriggerHealth
 }
 var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	3,  // 0: reliant.v1.ListInboxResponse.items:type_name -> reliant.v1.InboxItem
@@ -1031,14 +1145,16 @@ var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	7,  // 5: reliant.v1.InboxItem.automation_failing:type_name -> reliant.v1.InboxAutomationFailing
 	8,  // 6: reliant.v1.InboxItem.automation_launch_failed:type_name -> reliant.v1.InboxAutomationLaunchFailed
 	9,  // 7: reliant.v1.InboxItem.run_finished:type_name -> reliant.v1.InboxRunFinished
-	12, // 8: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
-	13, // 9: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
+	14, // 8: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
+	15, // 9: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
 	1,  // 10: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
 	10, // 11: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	2,  // 12: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	11, // 13: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	12, // [12:14] is the sub-list for method output_type
-	10, // [10:12] is the sub-list for method input_type
+	12, // 12: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
+	2,  // 13: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	11, // 14: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	13, // 15: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
+	13, // [13:16] is the sub-list for method output_type
+	10, // [10:13] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
 	10, // [10:10] is the sub-list for extension extendee
 	0,  // [0:10] is the sub-list for field type_name
@@ -1069,7 +1185,7 @@ func file_reliant_v1_inbox_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_inbox_proto_rawDesc), len(file_reliant_v1_inbox_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   11,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

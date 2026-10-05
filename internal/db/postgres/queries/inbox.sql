@@ -10,11 +10,21 @@
 -- the trigger's firings — internal/triggers owns that rule. Archived chats are
 -- not waiting on anyone.
 --
+-- Every item must be OPENABLE, so every branch INNER-joins its project and
+-- requires the same owner. chats.project_id has no foreign key: deleting a
+-- project leaves its chats (and their pending questions) behind, and the run
+-- page cannot open a chat whose project is gone. A LEFT JOIN here listed those
+-- as dead "This run doesn't exist" items. Likewise a blocking item of a run
+-- that completed (stop_reason 1) or was cancelled (4) can never be answered —
+-- nothing expires it when the run stops — so it is not listed either. A failed
+-- (2) or paused (3) run is resumable and keeps its items.
+--
 -- Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 --   approval:        a_text title, b_text metadata JSON, a_int approval_type
 --   question:        a_text thread_id, b_text metadata JSON
 --   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
---   waiting machine: a_text daemon_id, b_text daemon name
+--   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
+--                    id and the block's start, so a later block is a new item
 
 -- name: ListInboxPending :many
 SELECT * FROM (
@@ -35,11 +45,12 @@ SELECT * FROM (
         a.approval_type::integer AS a_int
     FROM approvals a
     JOIN chats_with_activity c ON c.id = a.chat_id
-    LEFT JOIN projects p ON p.id = c.project_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE a.status = 1
       AND c.user_id = sqlc.arg('user_id')::text
       AND c.state IS DISTINCT FROM 3
+      AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))
 
     UNION ALL
 
@@ -60,17 +71,18 @@ SELECT * FROM (
         0
     FROM questions q
     JOIN chats_with_activity c ON c.id = q.chat_id
-    LEFT JOIN projects p ON p.id = c.project_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
     WHERE q.status = 1
       AND c.user_id = sqlc.arg('user_id')::text
       AND c.state IS DISTINCT FROM 3
+      AND NOT (c.root_workflow_state = 3 AND c.root_workflow_stop_reason IN (1, 4))
 
     UNION ALL
 
     SELECT
         3,
-        c.id,
+        c.id || '@' || to_char(COALESCE(c.daemon_blocked_at, c.last_active) AT TIME ZONE 'UTC', 'YYYYMMDD"T"HH24MISS.US'),
         c.id,
         COALESCE(c.workflow_id, c.id),
         COALESCE(c.trigger_id, ''),
@@ -84,7 +96,7 @@ SELECT * FROM (
         COALESCE(d.hostname, ''),
         0
     FROM chats_with_activity c
-    LEFT JOIN projects p ON p.id = c.project_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN triggers t ON t.id = c.trigger_id
     LEFT JOIN daemons d ON d.id = COALESCE(c.active_daemon_id, t.daemon_id) AND d.user_id = c.user_id
     WHERE c.display_state = 8
@@ -136,7 +148,7 @@ SELECT * FROM (
         WHERE x.trigger_id = t.id AND x.outcome = 'failed'
           AND (lt.id IS NULL OR (x.occurred_at, x.id) > (lt.occurred_at, lt.id))
     ) ep ON true
-    LEFT JOIN projects p ON p.id = t.project_id
+    JOIN projects p ON p.id = t.project_id AND p.user_id = t.user_id
     WHERE t.user_id = sqlc.arg('user_id')::text
       AND t.enabled
       AND ep.failures > 0
@@ -164,7 +176,7 @@ SELECT * FROM (
         0
     FROM chats_with_activity c
     JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
-    LEFT JOIN projects p ON p.id = c.project_id
+    JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
     WHERE c.launch_kind = 'schedule'
       AND t.notify_on_complete
@@ -182,7 +194,12 @@ SELECT item_id FROM inbox_dismissals
 WHERE user_id = sqlc.arg('user_id')::text
   AND item_id = ANY(sqlc.arg('item_ids')::text[]);
 
--- name: DismissInboxItem :exec
+-- name: DismissInboxItems :exec
 INSERT INTO inbox_dismissals (user_id, item_id, dismissed_at)
-VALUES ($1, $2, $3)
+SELECT sqlc.arg('user_id')::text, unnest(sqlc.arg('item_ids')::text[]), sqlc.arg('dismissed_at')::timestamptz
 ON CONFLICT (user_id, item_id) DO NOTHING;
+
+-- name: RestoreInboxItems :exec
+DELETE FROM inbox_dismissals
+WHERE user_id = sqlc.arg('user_id')::text
+  AND item_id = ANY(sqlc.arg('item_ids')::text[]);

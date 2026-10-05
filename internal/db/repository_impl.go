@@ -3718,11 +3718,18 @@ func (r *Repo) ListDismissedInboxItemIDs(ctx context.Context, userID string, ite
 	return r.inbox.ListDismissedInboxItemIDs(ctx, userID, itemIDs)
 }
 
-func (r *Repo) DismissInboxItem(ctx context.Context, userID, itemID string, at time.Time) error {
-	if userID == "" || itemID == "" {
-		return fmt.Errorf("user ID and item ID cannot be empty")
+func (r *Repo) DismissInboxItems(ctx context.Context, userID string, itemIDs []string, at time.Time) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
 	}
-	return r.inbox.DismissInboxItem(ctx, userID, itemID, at)
+	return r.inbox.DismissInboxItems(ctx, userID, itemIDs, at)
+}
+
+func (r *Repo) RestoreInboxItems(ctx context.Context, userID string, itemIDs []string) error {
+	if userID == "" {
+		return fmt.Errorf("user ID cannot be empty")
+	}
+	return r.inbox.RestoreInboxItems(ctx, userID, itemIDs)
 }
 
 func (r *Repo) RecentTriggerFirings(ctx context.Context, userID string, triggerIDs []string, perTrigger int) (map[string][]*core.TriggerEventWithRun, error) {

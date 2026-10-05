@@ -24,15 +24,29 @@ import (
 
 const defaultInboxLimit = 100
 
-// Item id prefixes for the dismissable kinds. A failure id embeds the FIRST
-// failing event of the current episode, so more failures stay one item (and
-// one dismissal), while a new episode after a success is a new item. A
-// run-finished id embeds its chat.
+// Item id prefixes, one per kind, so an id names what it dismisses. A failure
+// id embeds the FIRST failing event of the current episode, so more failures
+// stay one item (and one dismissal), while a new episode after a success is a
+// new item. A waiting-for-machine id embeds the chat and when the block began,
+// so a later block is a new item. Approval, question and run-finished ids
+// embed their row or chat.
 const (
-	inboxFailingPrefix      = "automation_failing:"
-	inboxLaunchFailedPrefix = "automation_launch_failed:"
-	inboxRunFinishedPrefix  = "run_finished:"
+	inboxApprovalPrefix          = "approval:"
+	inboxQuestionPrefix          = "question:"
+	inboxWaitingForMachinePrefix = "waiting_for_machine:"
+	inboxFailingPrefix           = "automation_failing:"
+	inboxLaunchFailedPrefix      = "automation_launch_failed:"
+	inboxRunFinishedPrefix       = "run_finished:"
 )
+
+var inboxItemPrefixes = []string{
+	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
+	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix,
+}
+
+// maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
+// section). The list itself is capped at defaultInboxLimit.
+const maxInboxDismissBatch = 500
 
 // InboxService implements the InboxService RPC handlers.
 type InboxService struct {
@@ -45,9 +59,13 @@ func NewInboxService(database db.Repository) *InboxService {
 	return &InboxService{database: database}
 }
 
-// ListInbox returns everything waiting on the caller. Pending rows come from
-// one UNION ALL query; automation health reuses triggers.ComputeHealth over one
-// batched firings query, so the cost does not grow with the number of triggers.
+// ListInbox returns everything waiting on the caller, optionally within one
+// project. Pending rows come from one UNION ALL query; automation health reuses
+// triggers.ComputeHealth over one batched firings query, so the cost does not
+// grow with the number of triggers.
+//
+// Scoping is applied after dismissal so the scoped response can also say how
+// many items wait in the caller's other projects (one read, not two).
 func (s *InboxService) ListInbox(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListInboxRequest],
@@ -63,6 +81,8 @@ func (s *InboxService) ListInbox(
 			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("limit must not be negative"))
 		}
 	}
+
+	projectID := strings.TrimSpace(req.Msg.GetProjectId())
 
 	pending, err := s.database.ListInboxPending(ctx, userID)
 	if err != nil {
@@ -87,6 +107,19 @@ func (s *InboxService) ListInbox(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list inbox"))
 	}
 
+	resp := &reliantv1.ListInboxResponse{}
+	if projectID != "" {
+		scoped := items[:0]
+		for _, it := range items {
+			if it.ProjectId == projectID {
+				scoped = append(scoped, it)
+			} else {
+				resp.OtherProjectsCount++
+			}
+		}
+		items = scoped
+	}
+
 	sort.SliceStable(items, func(i, j int) bool {
 		if items[i].Kind != items[j].Kind {
 			return items[i].Kind < items[j].Kind
@@ -97,7 +130,6 @@ func (s *InboxService) ListInbox(
 		return items[i].ItemId < items[j].ItemId
 	})
 
-	resp := &reliantv1.ListInboxResponse{}
 	for _, it := range items {
 		switch it.Kind {
 		case reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL,
@@ -116,7 +148,8 @@ func (s *InboxService) ListInbox(
 	return connect.NewResponse(resp), nil
 }
 
-// DismissInboxItem hides a failure item for the caller.
+// DismissInboxItem hides items from the caller's inbox. Hiding an approval or
+// a question does not resolve it; the run still waits on it.
 func (s *InboxService) DismissInboxItem(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DismissInboxItemRequest],
@@ -125,20 +158,52 @@ func (s *InboxService) DismissInboxItem(
 	if !ok || userID == "" {
 		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
 	}
-	itemID := req.Msg.ItemId
-	if !isDismissableInboxItem(itemID) {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("only automation failure and run-finished items can be dismissed; approvals and questions clear when resolved"))
+	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
+		return nil, err
 	}
-	if err := s.database.DismissInboxItem(ctx, userID, itemID, time.Now().UTC()); err != nil {
-		logging.Error("Failed to dismiss inbox item", "error", err, "itemID", itemID)
+	if err := s.database.DismissInboxItems(ctx, userID, req.Msg.ItemIds, time.Now().UTC()); err != nil {
+		logging.Error("Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to dismiss inbox item"))
 	}
 	return connect.NewResponse(&reliantv1.DismissInboxItemResponse{}), nil
 }
 
-func isDismissableInboxItem(itemID string) bool {
-	for _, prefix := range []string{inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix} {
+// RestoreInboxItem undoes DismissInboxItem (the Undo on the dismiss toast).
+func (s *InboxService) RestoreInboxItem(
+	ctx context.Context,
+	req *connect.Request[reliantv1.RestoreInboxItemRequest],
+) (*connect.Response[reliantv1.RestoreInboxItemResponse], error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
+		return nil, err
+	}
+	if err := s.database.RestoreInboxItems(ctx, userID, req.Msg.ItemIds); err != nil {
+		logging.Error("Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to restore inbox item"))
+	}
+	return connect.NewResponse(&reliantv1.RestoreInboxItemResponse{}), nil
+}
+
+func validateInboxItemIDs(itemIDs []string) error {
+	if len(itemIDs) == 0 {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("item_ids is required"))
+	}
+	if len(itemIDs) > maxInboxDismissBatch {
+		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d item ids per call", maxInboxDismissBatch))
+	}
+	for _, id := range itemIDs {
+		if !isInboxItemID(id) {
+			return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("not an inbox item id: %q", id))
+		}
+	}
+	return nil
+}
+
+func isInboxItemID(itemID string) bool {
+	for _, prefix := range inboxItemPrefixes {
 		if strings.HasPrefix(itemID, prefix) && len(itemID) > len(prefix) {
 			return true
 		}
@@ -210,11 +275,9 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 }
 
 func (s *InboxService) dropDismissed(ctx context.Context, userID string, items []*reliantv1.InboxItem) ([]*reliantv1.InboxItem, error) {
-	var candidates []string
+	candidates := make([]string, 0, len(items))
 	for _, it := range items {
-		if isDismissableInboxItem(it.ItemId) {
-			candidates = append(candidates, it.ItemId)
-		}
+		candidates = append(candidates, it.ItemId)
 	}
 	dismissed, err := s.database.ListDismissedInboxItemIDs(ctx, userID, candidates)
 	if err != nil {
@@ -248,9 +311,11 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 	switch p.Kind {
 	case core.InboxPendingApproval:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_APPROVAL
+		item.ItemId = inboxApprovalPrefix + p.ItemKey
 		item.Payload = &reliantv1.InboxItem_Approval{Approval: inboxApproval(p)}
 	case core.InboxPendingQuestion:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_QUESTION
+		item.ItemId = inboxQuestionPrefix + p.ItemKey
 		q := &reliantv1.InboxQuestion{QuestionId: p.ItemKey, ThreadId: p.Text1, Prompt: firstQuestionPrompt(p.Text2)}
 		if p.Text2 != "" {
 			meta := p.Text2
@@ -259,6 +324,7 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 		item.Payload = &reliantv1.InboxItem_Question{Question: q}
 	case core.InboxPendingWaitingForMachine:
 		item.Kind = reliantv1.InboxItemKind_INBOX_ITEM_KIND_WAITING_FOR_MACHINE
+		item.ItemId = inboxWaitingForMachinePrefix + p.ItemKey
 		item.Payload = &reliantv1.InboxItem_WaitingForMachine{WaitingForMachine: &reliantv1.InboxWaitingForMachine{
 			DaemonId: p.Text1, DaemonName: p.Text2,
 		}}

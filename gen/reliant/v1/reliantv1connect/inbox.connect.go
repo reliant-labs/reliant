@@ -40,6 +40,9 @@ const (
 	// InboxServiceDismissInboxItemProcedure is the fully-qualified name of the InboxService's
 	// DismissInboxItem RPC.
 	InboxServiceDismissInboxItemProcedure = "/reliant.v1.InboxService/DismissInboxItem"
+	// InboxServiceRestoreInboxItemProcedure is the fully-qualified name of the InboxService's
+	// RestoreInboxItem RPC.
+	InboxServiceRestoreInboxItemProcedure = "/reliant.v1.InboxService/RestoreInboxItem"
 )
 
 // InboxServiceClient is a client for the reliant.v1.InboxService service.
@@ -48,11 +51,15 @@ type InboxServiceClient interface {
 	// trip. With limit = 0 it returns no items, only the counts, which is the
 	// cheap call the nav badge makes.
 	ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error)
-	// DismissInboxItem hides a failure item. Approvals and questions are not
-	// dismissable (they clear when resolved) and are rejected with
-	// INVALID_ARGUMENT. A newer failure of the same automation has a new item_id,
-	// so it reappears.
+	// DismissInboxItem hides items from the caller's inbox. Every kind can be
+	// dismissed. Hiding an approval or a question does not resolve it: the run
+	// still waits, and the chat still shows it. A newer failure of the same
+	// automation, or a new block on the same machine, has a new item_id and so
+	// appears again. Unknown ids are rejected with INVALID_ARGUMENT.
 	DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error)
+	// RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
+	// dismissed is a no-op.
+	RestoreInboxItem(context.Context, *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error)
 }
 
 // NewInboxServiceClient constructs a client for the reliant.v1.InboxService service. By default, it
@@ -78,6 +85,12 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(inboxServiceMethods.ByName("DismissInboxItem")),
 			connect.WithClientOptions(opts...),
 		),
+		restoreInboxItem: connect.NewClient[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse](
+			httpClient,
+			baseURL+InboxServiceRestoreInboxItemProcedure,
+			connect.WithSchema(inboxServiceMethods.ByName("RestoreInboxItem")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -85,6 +98,7 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type inboxServiceClient struct {
 	listInbox        *connect.Client[v1.ListInboxRequest, v1.ListInboxResponse]
 	dismissInboxItem *connect.Client[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse]
+	restoreInboxItem *connect.Client[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse]
 }
 
 // ListInbox calls reliant.v1.InboxService.ListInbox.
@@ -97,17 +111,26 @@ func (c *inboxServiceClient) DismissInboxItem(ctx context.Context, req *connect.
 	return c.dismissInboxItem.CallUnary(ctx, req)
 }
 
+// RestoreInboxItem calls reliant.v1.InboxService.RestoreInboxItem.
+func (c *inboxServiceClient) RestoreInboxItem(ctx context.Context, req *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error) {
+	return c.restoreInboxItem.CallUnary(ctx, req)
+}
+
 // InboxServiceHandler is an implementation of the reliant.v1.InboxService service.
 type InboxServiceHandler interface {
 	// ListInbox returns the caller's inbox items in priority order. One round
 	// trip. With limit = 0 it returns no items, only the counts, which is the
 	// cheap call the nav badge makes.
 	ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error)
-	// DismissInboxItem hides a failure item. Approvals and questions are not
-	// dismissable (they clear when resolved) and are rejected with
-	// INVALID_ARGUMENT. A newer failure of the same automation has a new item_id,
-	// so it reappears.
+	// DismissInboxItem hides items from the caller's inbox. Every kind can be
+	// dismissed. Hiding an approval or a question does not resolve it: the run
+	// still waits, and the chat still shows it. A newer failure of the same
+	// automation, or a new block on the same machine, has a new item_id and so
+	// appears again. Unknown ids are rejected with INVALID_ARGUMENT.
 	DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error)
+	// RestoreInboxItem undoes DismissInboxItem. Restoring an item that was not
+	// dismissed is a no-op.
+	RestoreInboxItem(context.Context, *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error)
 }
 
 // NewInboxServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -129,12 +152,20 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(inboxServiceMethods.ByName("DismissInboxItem")),
 		connect.WithHandlerOptions(opts...),
 	)
+	inboxServiceRestoreInboxItemHandler := connect.NewUnaryHandler(
+		InboxServiceRestoreInboxItemProcedure,
+		svc.RestoreInboxItem,
+		connect.WithSchema(inboxServiceMethods.ByName("RestoreInboxItem")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.InboxService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case InboxServiceListInboxProcedure:
 			inboxServiceListInboxHandler.ServeHTTP(w, r)
 		case InboxServiceDismissInboxItemProcedure:
 			inboxServiceDismissInboxItemHandler.ServeHTTP(w, r)
+		case InboxServiceRestoreInboxItemProcedure:
+			inboxServiceRestoreInboxItemHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -150,4 +181,8 @@ func (UnimplementedInboxServiceHandler) ListInbox(context.Context, *connect.Requ
 
 func (UnimplementedInboxServiceHandler) DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.DismissInboxItem is not implemented"))
+}
+
+func (UnimplementedInboxServiceHandler) RestoreInboxItem(context.Context, *connect.Request[v1.RestoreInboxItemRequest]) (*connect.Response[v1.RestoreInboxItemResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.RestoreInboxItem is not implemented"))
 }
