@@ -20,17 +20,19 @@ import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useProjectStore } from "@/store/projectStore";
 import Card from "../forge-ui/card";
+import PageHeader from "../forge-ui/page_header";
 import { Button } from "../ui/Button";
 import { WORKFLOWS_AUTOMATIONS_PATH, WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { RunList } from "./RunList";
-import { RunFilters, hasActiveRunFilters, useRunsSearch } from "./RunFilters";
+import { RunFilters, useRunsSearch } from "./RunFilters";
+import { clearRunFilters, hasActiveRunFilters } from "./runFilterState";
 
 export function RunsPage() {
   return <RunsView />;
 }
 
 export function RunsView() {
-  const [search, setSearch] = useRunsSearch();
+  const [search] = useRunsSearch();
   const currentProject = useProjectStore((state) => state.currentProject);
   const projects = useProjectStore((state) => state.projects);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -74,24 +76,13 @@ export function RunsView() {
   const filtered = hasActiveRunFilters(search);
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-end justify-between gap-4">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-semibold tracking-tight text-foreground">Runs</h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-            Every run, whoever started it: your chats, your automations, and runs your agents
-            started.
-          </p>
-        </div>
-        <label className="flex items-center gap-2 text-xs text-muted-foreground">
-          <input
-            type="checkbox"
-            checked={groupRepeats}
-            onChange={(event) => setSearch({ ...search, group: event.target.checked ? undefined : false })}
-            className="h-3.5 w-3.5 rounded border-border accent-primary"
-          />
-          Group repeated runs
-        </label>
+    <div className="space-y-4">
+      <div className="forge-ui">
+        <PageHeader
+          className=""
+          title="Runs"
+          subtitle="Every run, whoever started it: your chats, your automations, and runs your agents started."
+        />
       </div>
 
       <RunFilters
@@ -197,7 +188,7 @@ function NoRuns() {
 function NoMatchingRuns() {
   const [search, setSearch] = useRunsSearch();
   const range = search.range;
-  const clear = () => setSearch({ allProjects: search.allProjects, group: search.group, project: search.project });
+  const clear = () => setSearch(clearRunFilters(search));
   const widen = () => setSearch({ ...search, range: "30d" });
   const windowLabel = range === "7d" ? "7 days" : range === "30d" ? "30 days" : range === "all" ? undefined : "24 hours";
 

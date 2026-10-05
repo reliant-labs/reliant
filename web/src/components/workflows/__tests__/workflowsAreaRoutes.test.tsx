@@ -128,10 +128,43 @@ describe("Workflows area routes render inside the shell with the right tab", () 
     expect(router.state.location.search).toMatchObject({ project: "proj-1" });
   });
 
-  it("a detail page's exit steps back into its tab", async () => {
-    renderAt("/workflows/runs/chat-1");
+  it("the exit always leaves the area; the sidebar is the way back to a list", async () => {
+    const router = renderAt("/workflows/runs/chat-1?project=%22proj-1%22");
     await screen.findByTestId("page-run-detail");
-    expect(screen.getByRole("button", { name: "Back to all runs" })).toBeInTheDocument();
+    const runs = within(screen.getByRole("navigation", { name: "Workflows" })).getByRole("link", { name: "Runs" });
+    expect(runs).toHaveAttribute("aria-current", "page");
+    expect(runs).toHaveAttribute("href", "/workflows/runs?project=proj-1");
+    screen.getByRole("button", { name: "Back to app" }).click();
+    await waitFor(() => expect(router.state.location.pathname).toBe("/"));
+  });
+
+  it("Escape on a detail page steps back to its list", async () => {
+    const router = renderAt("/workflows/automations/trig-1");
+    await screen.findByTestId("page-automation-detail");
+    window.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape" }));
+    await waitFor(() => expect(router.state.location.pathname).toBe("/workflows/automations"));
+  });
+
+  // A regression guard, NOT a reproduction: the original bug needs a real
+  // keypress, where the browser runs a microtask checkpoint between listeners
+  // and React removes the menu before the window listener looks for it. A
+  // scripted dispatchEvent (jsdom, user-event) never checkpoints mid-dispatch,
+  // so this passes against the bubble-phase check too. The fix — the capture
+  // phase check in useEscapeToLeave — was verified in Chrome.
+  it("Escape with a menu open closes only the menu, not the area", async () => {
+    const router = renderAt("/workflows/library");
+    await screen.findByTestId("page-library");
+    screen.getByTestId("workflows-project-switcher").click();
+    expect(await screen.findByRole("menu", { name: "Projects" })).toBeInTheDocument();
+    // As a real keypress does: dispatched at the focused element, bubbling to document and window.
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true }));
+    await waitFor(() => expect(screen.queryByRole("menu", { name: "Projects" })).toBeNull());
+    expect(router.state.location.pathname).toBe("/workflows/library");
+  });
+
+  it("the project switcher is in the header for Library and Runs, not Automations", async () => {
+    renderAt("/workflows/library");
+    expect(await screen.findByTestId("workflows-project-switcher")).toHaveTextContent("Reliant");
   });
 });
 

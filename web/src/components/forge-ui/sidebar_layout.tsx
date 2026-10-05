@@ -28,6 +28,19 @@ interface SidebarLayoutProps {
   collapsed?: boolean;
   /** Controlled mode: toggle callback. When omitted, uses internal handler. */
   onToggle?: () => void;
+  /**
+   * "padded" (default) is a padded, scrolling content area. "fill" hands the
+   * page the whole remaining height, unpadded, and lets it own scrolling — for
+   * a page that hosts its own scroller (a transcript, an editor).
+   */
+  contentLayout?: "padded" | "fill";
+  /** The nav landmark's accessible name, e.g. the area it navigates. */
+  navLabel?: string;
+  /**
+   * Extra classes for the sidebar alone — e.g. a token scope (`forge-ui`)
+   * that should style the nav without reaching into the page content.
+   */
+  sidebarClassName?: string;
 }
 
 export default function SidebarLayout({
@@ -38,6 +51,9 @@ export default function SidebarLayout({
   headerContent,
   collapsed: controlledCollapsed,
   onToggle,
+  contentLayout = "padded",
+  navLabel,
+  sidebarClassName,
 }: SidebarLayoutProps) {
   const [internalCollapsed, setInternalCollapsed] = useState(false);
   const collapsed = controlledCollapsed ?? internalCollapsed;
@@ -57,7 +73,7 @@ export default function SidebarLayout({
       <aside
         className={`flex flex-col border-r border-border bg-surface transition-all duration-200 ${
           collapsed ? "w-16" : "w-64"
-        }`}
+        } ${sidebarClassName ?? ""}`}
       >
         {/* Brand */}
         <div className="flex h-16 shrink-0 items-center justify-between border-b border-border px-4">
@@ -93,7 +109,7 @@ export default function SidebarLayout({
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 overflow-y-auto p-3">
+        <nav className="flex-1 overflow-y-auto p-3" aria-label={navLabel}>
           {Array.from(sections.entries()).map(([section, items], si) => (
             <div key={si} className={si > 0 ? "mt-6" : ""}>
               {section && !collapsed && (
@@ -166,8 +182,19 @@ export default function SidebarLayout({
           {headerContent}
         </header>
 
-        {/* Content */}
-        <main className="flex-1 overflow-y-auto p-6">{children}</main>
+        {/*
+         * Content. `relative` is load-bearing: it makes the scroller the
+         * containing block for absolutely positioned descendants. Without it
+         * every `sr-only` span (position: absolute) in a long list resolves
+         * against the initial containing block instead, stretches the
+         * DOCUMENT past the viewport, and the whole window scrolls into blank
+         * space below the content.
+         */}
+        {contentLayout === "fill" ? (
+          <main className="relative flex min-h-0 flex-1 flex-col">{children}</main>
+        ) : (
+          <main className="relative flex-1 overflow-y-auto p-6">{children}</main>
+        )}
       </div>
     </div>
   );

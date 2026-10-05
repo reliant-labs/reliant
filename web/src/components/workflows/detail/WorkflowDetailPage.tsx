@@ -12,24 +12,29 @@
  * old hub, with the global list in Settings → Presets), and Used by: the
  * workflows that call this one through `ref:`.
  *
- * Actions: Run… (RunWorkflowDialog), Edit (the builder), New automation
- * (AutomationFormDialog, prefilled with this workflow).
+ * Actions live in the page header and nowhere else: Run… (RunWorkflowDialog),
+ * Edit (the builder) and New automation (AutomationFormDialog, prefilled with
+ * this workflow). The Definition card used to repeat Edit twice more ("Open in
+ * builder", and the diagram's own pencil under a second header); one action,
+ * one header.
  */
 
 import { useMemo, useState } from "react";
-import { Link, useNavigate, useParams } from "@tanstack/react-router";
-import { CalendarClock, Pencil, Play, Plus } from "lucide-react";
+import { Link, useNavigate, useParams, useSearch } from "@tanstack/react-router";
+import { CalendarClock, Pencil, Play } from "lucide-react";
 
 import type { Trigger } from "@/api/trigger-grpc";
 import type { WorkflowResponse } from "@/api/workflow-grpc";
 import { useRunList } from "@/hooks/run-queries";
 import { useTriggers } from "@/hooks/trigger-queries";
 import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
-import { formatValueForDisplay } from "@/lib/paramUtils";
+import { formatInputDefault } from "@/lib/inputDefaultDisplay";
 import { getInputDefault, getInputDescription } from "@/lib/inputHelpers";
+import { WORKFLOWS_LIBRARY_PATH } from "@/lib/workflowsArea";
 import { usePreferencesStore } from "@/store/preferencesStore";
 import { useProjectStore } from "@/store/projectStore";
 import Card, { CardHeader, CardInset } from "../../forge-ui/card";
+import PageHeader from "../../forge-ui/page_header";
 import { Button } from "../../ui/Button";
 import { AutomationRow } from "../../Automations/AutomationRow";
 import { AutomationFormDialog } from "../../Automations/AutomationFormDialog";
@@ -58,6 +63,7 @@ export function WorkflowDetailPage() {
 
 export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; workflowRef: string }) {
   const navigate = useNavigate();
+  const { project } = useSearch({ strict: false }) as { project?: string };
   const library = useWorkflowLibrary(projectId);
   const definition = useWorkflowDefinition(projectId, workflowRef);
   const defaultWorkflow = usePreferencesStore((state) => state.preferences?.defaultWorkflow);
@@ -81,67 +87,67 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
         : null;
   const openBuilder = () =>
     void navigate({ to: "/workflow/$workflowName", params: { workflowName: workflowRef } });
+  const libraryHref = project ? `${WORKFLOWS_LIBRARY_PATH}?project=${encodeURIComponent(project)}` : WORKFLOWS_LIBRARY_PATH;
 
   return (
-    <div className="space-y-6" data-testid="workflow-detail">
-      <header className="flex flex-wrap items-start justify-between gap-4">
-        <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
-            <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{displayName}</h1>
-            {listing && <WorkflowSourceBadge source={listing.source} />}
-            {defaultWorkflow === workflowRef && <WorkflowBadge label="Default" variant="info" />}
-            {isDraft && <WorkflowBadge label="Draft" variant="warning" />}
-          </div>
-          {listing?.description && (
-            <p className="mt-1 max-w-2xl text-sm text-muted-foreground">{listing.description}</p>
-          )}
-        </div>
-        <div className="flex flex-col items-end gap-1.5">
-          <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" leftIcon={<Pencil className="h-4 w-4" />} onClick={openBuilder}>
-              Edit
-            </Button>
-            <Button
-              variant="outline"
-              size="sm"
-              leftIcon={<CalendarClock className="h-4 w-4" />}
-              onClick={() => setCreatingAutomation(true)}
-            >
-              New automation
-            </Button>
-            <Button
-              variant="primary"
-              size="sm"
-              leftIcon={<Play className="h-4 w-4" />}
-              onClick={() => setRunning(true)}
-              disabled={!!runBlockedReason}
-            >
-              Run…
-            </Button>
-          </div>
-          {/* The reason is text, not only a tooltip (§2.3). */}
-          {runBlockedReason && <p className="text-xs text-muted-foreground">{runBlockedReason}</p>}
-        </div>
-      </header>
+    <div className="space-y-4" data-testid="workflow-detail">
+      <div className="forge-ui">
+        <PageHeader
+          className=""
+          breadcrumbs={[{ label: "Library", href: libraryHref }, { label: displayName }]}
+          title={displayName}
+          titleAccessory={
+            <>
+              {listing && <WorkflowSourceBadge source={listing.source} />}
+              {defaultWorkflow === workflowRef && <WorkflowBadge label="Default" variant="info" />}
+              {isDraft && <WorkflowBadge label="Draft" variant="warning" />}
+            </>
+          }
+          subtitle={
+            listing?.description || runBlockedReason ? (
+              <>
+                {listing?.description && <span className="block max-w-3xl">{listing.description}</span>}
+                {/* The reason is text, not only a tooltip (§2.3). */}
+                {runBlockedReason && <span className="mt-1 block text-warning-ink">{runBlockedReason}</span>}
+              </>
+            ) : undefined
+          }
+          actions={[
+            { label: "Edit", variant: "secondary", icon: <Pencil className="h-4 w-4" aria-hidden="true" />, onClick: openBuilder },
+            {
+              label: "New automation",
+              variant: "secondary",
+              icon: <CalendarClock className="h-4 w-4" aria-hidden="true" />,
+              onClick: () => setCreatingAutomation(true),
+            },
+            {
+              label: "Run…",
+              variant: "primary",
+              icon: <Play className="h-4 w-4" aria-hidden="true" />,
+              onClick: () => setRunning(true),
+              disabled: !!runBlockedReason,
+            },
+          ]}
+        />
+      </div>
 
-      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
-        <div className="min-w-0 space-y-6">
+      <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
+        <div className="min-w-0 space-y-4">
           <RecentRunsCard
             projectId={projectId}
             workflowRef={workflowRef}
             onRun={runBlockedReason ? undefined : () => setRunning(true)}
             onSchedule={() => setCreatingAutomation(true)}
           />
-          <AutomationsCard projectId={projectId} workflowRef={workflowRef} onAdd={() => setCreatingAutomation(true)} />
+          <AutomationsCard projectId={projectId} workflowRef={workflowRef} />
           <DefinitionCard
             projectId={projectId}
             workflowRef={workflowRef}
             definition={definition}
             invalidErrors={invalid?.errors}
-            onOpenBuilder={openBuilder}
           />
         </div>
-        <aside className="min-w-0 space-y-6" aria-label="About this workflow">
+        <aside className="min-w-0 space-y-4" aria-label="About this workflow">
           <Card>
             <CardHeader title="About" />
             <dl className="space-y-2 text-sm">
@@ -235,8 +241,8 @@ function RecentRunsCard({
 
   return (
     <section aria-label="Recent runs">
-      <Card padding="none">
-        <div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
+      <Card padding="none" className="overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
           <h2 className="text-sm font-semibold text-foreground">Recent runs</h2>
           <Link
             to="/workflows/runs"
@@ -247,11 +253,11 @@ function RecentRunsCard({
           </Link>
         </div>
         {list.isLoading ? (
-          <p className="px-5 py-4 text-sm text-muted-foreground" aria-busy="true">Loading runs…</p>
+          <p className="px-4 py-3 text-sm text-muted-foreground" aria-busy="true">Loading runs…</p>
         ) : list.isError ? (
-          <p className="px-5 py-4 text-sm text-muted-foreground" role="alert">Runs could not be loaded.</p>
+          <p className="px-4 py-3 text-sm text-muted-foreground" role="alert">Runs could not be loaded.</p>
         ) : runs.length === 0 ? (
-          <div className="flex flex-wrap items-center gap-2 px-5 py-4 text-sm text-muted-foreground">
+          <div className="flex flex-wrap items-center gap-2 px-4 py-3 text-sm text-muted-foreground">
             <span>Not run yet.</span>
             {onRun && (
               <Button variant="ghost" size="sm" onClick={onRun}>
@@ -272,15 +278,8 @@ function RecentRunsCard({
   );
 }
 
-function AutomationsCard({
-  projectId,
-  workflowRef,
-  onAdd,
-}: {
-  projectId: string;
-  workflowRef: string;
-  onAdd: () => void;
-}) {
+/** The automations that run this workflow. "New automation" is the page header's. */
+function AutomationsCard({ projectId, workflowRef }: { projectId: string; workflowRef: string }) {
   const triggers = useTriggers(projectId);
   const usingThis = useMemo<Trigger[]>(
     () =>
@@ -292,17 +291,14 @@ function AutomationsCard({
 
   return (
     <section aria-label="Automations">
-      <Card padding="none">
-        <div className="flex items-center justify-between gap-3 border-b border-border/60 px-5 py-3">
+      <Card padding="none" className="overflow-hidden">
+        <div className="flex items-center justify-between gap-3 border-b border-border/60 px-4 py-2.5">
           <h2 className="text-sm font-semibold text-foreground">Automations</h2>
-          <Button variant="ghost" size="sm" leftIcon={<Plus className="h-3.5 w-3.5" />} onClick={onAdd}>
-            Add schedule
-          </Button>
         </div>
         {triggers.isLoading ? (
-          <p className="px-5 py-4 text-sm text-muted-foreground" aria-busy="true">Loading automations…</p>
+          <p className="px-4 py-3 text-sm text-muted-foreground" aria-busy="true">Loading automations…</p>
         ) : usingThis.length === 0 ? (
-          <p className="px-5 py-4 text-sm text-muted-foreground">Nothing runs this workflow on its own.</p>
+          <p className="px-4 py-3 text-sm text-muted-foreground">Nothing runs this workflow on its own.</p>
         ) : (
           <ul aria-label="Automations using this workflow" className="divide-y divide-border/60" data-testid="workflow-detail-automations">
             {usingThis.map((trigger) => (
@@ -315,18 +311,20 @@ function AutomationsCard({
   );
 }
 
+/**
+ * The definition: its diagram, read-only, and its typed inputs. ONE header —
+ * Edit is the page header's, so neither this card nor the diagram repeats it.
+ */
 function DefinitionCard({
   projectId,
   workflowRef,
   definition,
   invalidErrors,
-  onOpenBuilder,
 }: {
   projectId: string;
   workflowRef: string;
   definition: ReturnType<typeof useWorkflowDefinition>;
   invalidErrors?: string[];
-  onOpenBuilder: () => void;
 }) {
   const inputs = definition.inputGroups.flatMap((group) =>
     group.inputs.map((input) => ({ ...input, group: group.name })),
@@ -336,18 +334,7 @@ function DefinitionCard({
   return (
     <section aria-label="Definition">
       <Card>
-        <CardHeader
-          title="Definition"
-          actions={
-            <button
-              type="button"
-              onClick={onOpenBuilder}
-              className="rounded-sm text-xs font-medium text-primary hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-            >
-              Open in builder
-            </button>
-          }
-        />
+        <CardHeader title="Definition" />
         {brokenErrors ? (
           <CardInset role="alert">
             <p className="text-sm font-medium text-foreground">This definition has errors.</p>
@@ -359,36 +346,55 @@ function DefinitionCard({
           </CardInset>
         ) : (
           <div className="space-y-4">
-            <CardInset padding="none" className="h-72 overflow-hidden" data-testid="workflow-detail-diagram">
-              <WorkflowViewerPanel projectId={projectId} workflowName={workflowRef} compact hideFullscreen />
+            <CardInset padding="none" className="h-64 overflow-hidden" data-testid="workflow-detail-diagram">
+              <WorkflowViewerPanel
+                projectId={projectId}
+                workflowName={workflowRef}
+                compact
+                hideFullscreen
+                hideHeader
+                hideLegend
+              />
             </CardInset>
             <div>
-              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inputs</h3>
+              <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Inputs</h3>
               {definition.loading ? (
                 <p className="text-sm text-muted-foreground">Loading inputs…</p>
               ) : inputs.length === 0 ? (
                 <p className="text-sm text-muted-foreground">This workflow takes no inputs beyond the prompt.</p>
               ) : (
-                <CardInset padding="none">
-                  <ul aria-label="Inputs" className="divide-y divide-border/60" data-testid="workflow-detail-inputs">
-                    {inputs.map(({ name, schema }) => {
-                      const fallback = formatValueForDisplay(getInputDefault(schema));
-                      const description = getInputDescription(schema);
-                      return (
-                        <li key={name} className="grid grid-cols-[minmax(0,1fr)_auto] gap-x-3 px-3 py-2">
-                          <span className="truncate font-mono text-xs text-foreground">{name}</span>
-                          <span className="text-xs text-muted-foreground">{schema.type ?? ""}</span>
-                          {(description || fallback) && (
-                            <span className="col-span-2 text-xs text-muted-foreground">
-                              {description}
-                              {description && fallback ? " · " : ""}
-                              {fallback && <>Default: <span className="font-mono">{fallback}</span></>}
-                            </span>
-                          )}
-                        </li>
-                      );
-                    })}
-                  </ul>
+                <CardInset padding="none" className="overflow-hidden">
+                  <table className="w-full table-fixed text-xs" aria-label="Inputs" data-testid="workflow-detail-inputs">
+                    <thead className="border-b border-border/60 text-left font-semibold uppercase tracking-wider text-muted-foreground">
+                      <tr>
+                        <th scope="col" className="w-[28%] px-3 py-1.5">Name</th>
+                        <th scope="col" className="w-20 px-3 py-1.5">Type</th>
+                        <th scope="col" className="w-[24%] px-3 py-1.5">Default</th>
+                        <th scope="col" className="px-3 py-1.5">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-border/60">
+                      {inputs.map(({ name, schema }) => {
+                        const fallback = formatInputDefault(getInputDefault(schema));
+                        const description = getInputDescription(schema);
+                        return (
+                          <tr key={name} className="align-top">
+                            <td className="truncate px-3 py-1.5 font-mono text-foreground" title={name}>{name}</td>
+                            <td className="px-3 py-1.5 text-muted-foreground">{schema.type ?? ""}</td>
+                            <td className="truncate px-3 py-1.5 text-foreground" title={fallback}>
+                              {fallback ?? (
+                                <span className="text-muted-foreground">
+                                  <span aria-hidden="true">—</span>
+                                  <span className="sr-only">None</span>
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-3 py-1.5 text-muted-foreground">{description}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
                 </CardInset>
               )}
             </div>
