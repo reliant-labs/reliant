@@ -112,6 +112,10 @@ func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, er
 		return nil, &ValidationError{Reason: "at least one user message or attachment is required"}
 	}
 
+	if spec.NoMachine && spec.DaemonID != "" {
+		return nil, &ValidationError{Reason: "no_machine and daemon_id are mutually exclusive: a run either has a machine or it does not"}
+	}
+
 	if ev.OccurredAt.IsZero() {
 		ev.OccurredAt = time.Now().UTC()
 	}
@@ -219,6 +223,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only.
 	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
 		return nil, err
+	}
+	if spec.NoMachine {
+		if err := l.validateNoMachine(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+			return nil, err
+		}
+		chat.NoMachine = true
 	}
 
 	if err := ValidateWorkflowParamStructure(spec.Params); err != nil {
@@ -506,6 +516,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	}
 	if !pending {
 		return nil, ErrNotPending
+	}
+	// A pending chat is a branch, and a branch's worktree is a checkout on
+	// one machine: it cannot start without that machine.
+	if spec.NoMachine {
+		return nil, &ValidationError{Reason: "a branched chat runs on its worktree's machine, so it cannot start with no machine"}
 	}
 
 	project, err := l.repo.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
@@ -965,10 +980,10 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	//
 	// Injected AFTER validation, like session_daemon_id above, because it is a
 	// fact about the RUN rather than a declared workflow input — no workflow
-	// declares `unattended`, so validating it against the schema rejects it as
-	// an unknown input. Unlike session_daemon_id it is NOT in
-	// workflow.RuntimeInjectedInputs, which only matters for the validation
-	// filter this now runs after.
+	// declares `unattended`. It is in workflow.RuntimeInjectedInputs for the
+	// same reason session_daemon_id is: the runtime validates inputs again
+	// inside the workflow, and BuildWorkflowInputs refuses to take any such
+	// key from a client, so only a launch can make a run unattended.
 	if p.spec.Unattended {
 		initialData[v2.InputKeyUnattended] = true
 	}

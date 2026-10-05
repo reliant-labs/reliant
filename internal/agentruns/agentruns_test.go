@@ -38,6 +38,16 @@ func (f *fakeLauncher) Launch(_ context.Context, ev launch.Event, spec launch.Sp
 	return f.res, f.err
 }
 
+func TestStartRun_CarriesNoMachineIntoTheLaunch(t *testing.T) {
+	launcher := &fakeLauncher{res: &launch.Result{Chat: &db.Chat{ID: "new-chat"}, RunID: "run-1"}}
+	_, err := New(launcher, nil).StartRun(context.Background(), tools.StartRunRequest{
+		OwnerUserID: "owner", ProjectID: "proj", Workflow: "builtin://agent", Message: "do it",
+		DedupeKey: "parent:toolu_nm", NoMachine: true,
+	})
+	require.NoError(t, err)
+	assert.True(t, launcher.spec.NoMachine, "a run started from a no-machine chat has no machine")
+}
+
 func TestStartRun_LaunchesNotUnattendedWithAgentStartRunEvent(t *testing.T) {
 	launcher := &fakeLauncher{res: &launch.Result{Chat: &db.Chat{ID: "new-chat"}, RunID: "run-1"}}
 	runs := New(launcher, nil)

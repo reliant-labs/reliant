@@ -8,6 +8,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/mcp"
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -39,7 +40,9 @@ func NewLocalMCPContextBinder(runtime mcp.Runtime) MCPContextBinder {
 // NewDaemonMCPContextBinder binds a daemon-backed MCP runtime resolved from execution context.
 func NewDaemonMCPContextBinder(router DaemonRouter) MCPContextBinder {
 	return MCPContextBinderFunc(func(toolCtx *rctx.ToolContext) *rctx.ToolContext {
-		if toolCtx == nil || router == nil {
+		// A run with no machine has no MCP servers: every user-configured
+		// server runs on the daemon.
+		if toolCtx == nil || router == nil || nomachine.Is(toolCtx.Context) {
 			return toolCtx
 		}
 		userID, ok := auth.GetUserIDFromContext(toolCtx.Context)

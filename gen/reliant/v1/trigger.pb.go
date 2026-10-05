@@ -1092,8 +1092,11 @@ type Trigger struct {
 	// Read-only: this trigger's most recent firing, of any outcome. Unset when
 	// it has never fired.
 	LastEvent *TriggerEvent `protobuf:"bytes,13,opt,name=last_event,json=lastEvent,proto3,oneof" json:"last_event,omitempty"`
-	// The daemon every tool call in each launched run executes on. Always set.
+	// The daemon every tool call in each launched run executes on. Empty exactly
+	// when no_machine is set.
 	DaemonId string `protobuf:"bytes,14,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// Launched runs have no machine; see TriggerDefinition.no_machine.
+	NoMachine bool `protobuf:"varint,27,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
 	// Read-only: how this trigger's recent firings went.
 	Health *TriggerHealth `protobuf:"bytes,15,opt,name=health,proto3" json:"health,omitempty"`
 	// Read-only: name of the project the runs execute in. Empty if it was
@@ -1269,6 +1272,13 @@ func (x *Trigger) GetDaemonId() string {
 		return x.DaemonId
 	}
 	return ""
+}
+
+func (x *Trigger) GetNoMachine() bool {
+	if x != nil {
+		return x.NoMachine
+	}
+	return false
 }
 
 func (x *Trigger) GetHealth() *TriggerHealth {
@@ -1549,10 +1559,20 @@ type TriggerDefinition struct {
 	Params map[string]*structpb.Value `protobuf:"bytes,7,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// The seed prompt each launched run starts from.
 	Message string `protobuf:"bytes,8,opt,name=message,proto3" json:"message,omitempty"`
-	// The daemon every tool call in each launched run executes on. Required, and
-	// replaceable on update. Must be one of the caller's daemons and, when the
-	// project is installed on any daemon, one that has it installed.
+	// The daemon every tool call in each launched run executes on. Required
+	// unless no_machine is set, and replaceable on update. Must be one of the
+	// caller's daemons and, when the project is installed on any daemon, one
+	// that has it installed.
 	DaemonId string `protobuf:"bytes,9,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// Launched runs have no machine: they run on Reliant's servers only and are
+	// offered only tools that run there (web, integrations, planning). An
+	// explicit choice, so that leaving daemon_id empty is still a mistake rather
+	// than a silent mode switch. Mutually exclusive with daemon_id. Refused with
+	// FailedPrecondition, naming what needs a machine, when the workflow has a
+	// node that cannot run without one or its agent is given machine tools (for
+	// the builtin agent: its `tools` param, which defaults to tag:coding:default;
+	// set it to e.g. ["tag:web"]). See research/DAEMONLESS_RUNS.md.
+	NoMachine bool `protobuf:"varint,14,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
 	// Notify the owner when a run completes. Replaced on update, like every
 	// other field here, so a client editing a trigger must send the current
 	// value back.
@@ -1675,6 +1695,13 @@ func (x *TriggerDefinition) GetDaemonId() string {
 		return x.DaemonId
 	}
 	return ""
+}
+
+func (x *TriggerDefinition) GetNoMachine() bool {
+	if x != nil {
+		return x.NoMachine
+	}
+	return false
 }
 
 func (x *TriggerDefinition) GetNotifyOnComplete() bool {
@@ -2894,7 +2921,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\b\n" +
-	"\x06source\"\xb2\n" +
+	"\x06source\"\xd1\n" +
 	"\n" +
 	"\aTrigger\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
@@ -2917,7 +2944,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"nextFireAt\x88\x01\x01\x12<\n" +
 	"\n" +
 	"last_event\x18\r \x01(\v2\x18.reliant.v1.TriggerEventH\x03R\tlastEvent\x88\x01\x01\x12\x1b\n" +
-	"\tdaemon_id\x18\x0e \x01(\tR\bdaemonId\x121\n" +
+	"\tdaemon_id\x18\x0e \x01(\tR\bdaemonId\x12\x1d\n" +
+	"\n" +
+	"no_machine\x18\x1b \x01(\bR\tnoMachine\x121\n" +
 	"\x06health\x18\x0f \x01(\v2\x19.reliant.v1.TriggerHealthR\x06health\x12!\n" +
 	"\fproject_name\x18\x10 \x01(\tR\vprojectName\x12\x1f\n" +
 	"\vdaemon_name\x18\x11 \x01(\tR\n" +
@@ -2960,7 +2989,7 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\v_trigger_idB\n" +
 	"\n" +
 	"\b_chat_idB\x06\n" +
-	"\x04_run\"\x96\b\n" +
+	"\x04_run\"\xb5\b\n" +
 	"\x11TriggerDefinition\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +
@@ -2972,7 +3001,9 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\apresets\x18\x06 \x03(\v2*.reliant.v1.TriggerDefinition.PresetsEntryR\apresets\x12A\n" +
 	"\x06params\x18\a \x03(\v2).reliant.v1.TriggerDefinition.ParamsEntryR\x06params\x12\x18\n" +
 	"\amessage\x18\b \x01(\tR\amessage\x12\x1b\n" +
-	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x12,\n" +
+	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x12\x1d\n" +
+	"\n" +
+	"no_machine\x18\x0e \x01(\bR\tnoMachine\x12,\n" +
 	"\x12notify_on_complete\x18\n" +
 	" \x01(\bR\x10notifyOnComplete\x12\x16\n" +
 	"\x06filter\x18\v \x01(\tR\x06filter\x12(\n" +

@@ -1788,10 +1788,8 @@ func registerActivityInternal[TInput any, TOutput any](
 	// NOTE: Some activities (e.g., V2_CallLLM) pre-register in init() with flat input types
 	// to allow workflows to use args like `model: "claude-4-sonnet"` instead of nested
 	// `node: { model: "..." }`. Don't overwrite those registrations.
-	if !schema.IsActivityTypeRegistered(name) {
-		var i TInput
-		schema.RegisterActivityType(name, reflect.TypeOf(i), reflect.TypeOf(o))
-	}
+	var i TInput
+	schema.RegisterActivityTypeIfAbsent(name, reflect.TypeOf(i), reflect.TypeOf(o))
 }
 
 // wrapActivity builds the function registered with Temporal for one activity:

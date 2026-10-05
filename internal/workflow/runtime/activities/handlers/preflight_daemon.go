@@ -62,6 +62,14 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 		return PreflightDaemonCheckOutput{}, fmt.Errorf("failed to get chat for preflight check: %w", err)
 	}
 
+	// A run with no machine never wakes one. Its launch already refused a
+	// workflow that hard-requires a machine, and the tools it is offered all
+	// run without one, so there is nothing for this check to establish — and
+	// waking here is exactly what must not happen.
+	if chat.NoMachine {
+		return PreflightDaemonCheckOutput{DaemonAvailable: false}, nil
+	}
+
 	project, err := a.repo.GetProject(ctx, chat.ProjectID)
 	if err != nil {
 		return PreflightDaemonCheckOutput{}, fmt.Errorf("failed to get project for preflight check: %w", err)

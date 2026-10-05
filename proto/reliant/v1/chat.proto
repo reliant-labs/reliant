@@ -315,6 +315,9 @@ message Chat {
   // When the user adopted this run into their chats (AdoptChat). Unset when not
   // adopted. Origin (launch_kind, trigger_id) is never rewritten by adoption.
   optional string adopted_at = 35;
+  // This chat has no machine by design (StartChatRequest.no_machine, or a
+  // no-machine trigger). Its runs are offered only server-side tools.
+  bool no_machine = 36;
 }
 
 // ArchivedChat includes worktree information for archived chats
@@ -448,6 +451,15 @@ message StartChatRequest {
   // is already pinned (a branch is pinned to its worktree's daemon) rejects a
   // different daemon_id: the worktree exists on exactly one machine.
   optional string daemon_id = 18;
+
+  // no_machine starts a chat with no machine by design: every run in it is
+  // offered only tools that run on Reliant's servers (web, integrations,
+  // planning), and nothing resolves or wakes a daemon. Mutually exclusive with
+  // daemon_id, and not allowed with chat_id (a branch runs on its worktree's
+  // machine). A workflow with a node that cannot run without a machine (a shell
+  // `run`, a `create_worktree`) is refused with FailedPrecondition. See
+  // research/DAEMONLESS_RUNS.md.
+  optional bool no_machine = 20;
 
   // builder_test marks this start as a test run from the workflow builder. The
   // launch event is recorded as kind "builder.test" instead of "chat.start", so

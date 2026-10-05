@@ -23,6 +23,11 @@ type PreflightConfig struct {
 	IsDaemonTool DaemonToolChecker
 	// ExpandToolFilter expands tool filter specs (tags, globs) into tool names.
 	ExpandToolFilter ToolFilterExpander
+	// NeedsMachine returns true if the named tool touches the user's machine
+	// at all — a superset of IsDaemonTool (tools.NeedsMachine). Read only by
+	// MachineRequirements, never by RequiresDaemon, whose answer is part of
+	// workflow replay.
+	NeedsMachine DaemonToolChecker
 }
 
 // defaultPreflightConfig is the package-level PreflightConfig set by SetPreflightConfig.

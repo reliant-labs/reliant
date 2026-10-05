@@ -130,8 +130,11 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 	}
 
 	// Never fall back to another daemon: the trigger named this one, and the
-	// credential its runs hold is bound to it. Record why and stop.
-	if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
+	// credential its runs hold is bound to it. Record why and stop. A
+	// no-machine trigger names none, by design (research/DAEMONLESS_RUNS.md).
+	if trigger.NoMachine {
+		// nothing to look up
+	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
@@ -305,6 +308,7 @@ func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireReques
 		Title:       &title,
 		Workflow:    trigger.Workflow,
 		DaemonID:    trigger.DaemonID,
+		NoMachine:   trigger.NoMachine,
 		Presets:     trigger.Presets,
 		Params:      params,
 		Messages:    messages,

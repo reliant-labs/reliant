@@ -184,6 +184,7 @@ func chatFromRow(row pgdb.ChatsWithActivity) *core.Chat {
 		Activity:        &activity,
 		Unread:          row.Unread != 0,
 		ActiveDaemonID:  chatNullStringToPtr(row.ActiveDaemonID),
+		NoMachine:       row.NoMachine,
 		AdoptedAt:       chatNullTimeToPtr(row.AdoptedAt),
 		ListInSidebar:   row.ListInSidebar.Bool,
 		LaunchKind:      row.LaunchKind.String,
@@ -243,6 +244,7 @@ func chatToCreateParams(chat *core.Chat) pgdb.CreateChatParams {
 		UpdatedAt:       chat.UpdatedAt,
 		LastActive:      chat.LastActive,
 		ActiveDaemonID:  chatPtrToNullString(chat.ActiveDaemonID),
+		NoMachine:       chat.NoMachine,
 	}
 }
 
@@ -290,6 +292,7 @@ func archivedChatInfosFromRows(rows []pgdb.ListArchivedChatsRow) []*core.Archive
 				Activity:        &activity,
 				Unread:          row.Unread != 0,
 				ActiveDaemonID:  chatNullStringToPtr(row.ActiveDaemonID),
+				NoMachine:       row.NoMachine,
 				LaunchKind:      row.LaunchKind.String,
 				TriggerID:       chatNullStringToPtr(row.TriggerID),
 				RootStatus:      chatRootStatus(row.RootWorkflowState, row.RootWorkflowStopReason),

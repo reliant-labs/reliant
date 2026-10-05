@@ -117,9 +117,14 @@ type Trigger struct {
 	Params     map[string]any
 	Message    string // seed prompt for each launched run
 	// DaemonID is the daemon every tool call in each launched run executes
-	// on. Required; validated at write time (there is no FK because the
-	// daemons table is a cache of the control plane's).
+	// on, validated at write time (there is no FK because the daemons table is
+	// a cache of the control plane's). Empty exactly when NoMachine is set.
 	DaemonID string
+	// NoMachine is the owner's explicit choice that launched runs have no
+	// machine: they are offered only tools that run on the server, and a
+	// workflow that needs a machine is refused when the trigger is written.
+	// See research/DAEMONLESS_RUNS.md.
+	NoMachine bool
 	// NotifyOnComplete opts the owner in to being told when a run of this
 	// trigger completes (unread + OS notification + a Run finished Inbox
 	// item). Unattended completions are otherwise silent.

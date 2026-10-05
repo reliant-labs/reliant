@@ -3,7 +3,28 @@ import { create } from "@bufbuild/protobuf";
 
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectInstallState, type ProjectDaemonInfo } from "@/api/project-grpc";
-import { buildDaemonChoices, daemonLabel, defaultDaemonId } from "../daemonChoices";
+import { buildDaemonChoices, daemonLabel, defaultDaemonId, noMachineBlockerFor } from "../daemonChoices";
+
+describe("noMachineBlockerFor", () => {
+  const listed = [
+    { name: "builtin://agent", needsMachine: ["input `tools` includes shell"] },
+    { name: "digest", needsMachine: [] },
+    { name: "unanalysed" },
+  ];
+
+  it("offers No machine only for a workflow the server said runs without one", () => {
+    expect(noMachineBlockerFor(listed, "digest")).toBeUndefined();
+    expect(noMachineBlockerFor(listed, "builtin://agent")).toMatch(/needs a machine/);
+    // The form stores builtins with or without the prefix.
+    expect(noMachineBlockerFor(listed, "agent")).toMatch(/needs a machine/);
+  });
+
+  it("treats unknown as needing one: the default workflow, an unlisted one, one with no analysis", () => {
+    expect(noMachineBlockerFor(listed, "")).toMatch(/default workflow/);
+    expect(noMachineBlockerFor(listed, "not-listed")).toMatch(/needs a machine/);
+    expect(noMachineBlockerFor(listed, "unanalysed")).toMatch(/needs a machine/);
+  });
+});
 
 const daemon = (daemonId: string, hostname: string, status = DaemonStatus.ACTIVE) =>
   create(DaemonInfoSchema, { daemonId, hostname, status });

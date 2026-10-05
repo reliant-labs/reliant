@@ -2,8 +2,8 @@
 INSERT INTO chats (
     id, user_id, title, project_id, worktree_id,
     workflow_name, state, workflow_id, run_id, selected_presets, created_at, updated_at, last_active,
-    active_daemon_id
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14);
+    active_daemon_id, no_machine
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15);
 
 -- name: GetChat :one
 SELECT * FROM chats_with_activity WHERE id = $1;

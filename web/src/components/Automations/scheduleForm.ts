@@ -219,8 +219,16 @@ export function serverErrorField(
   message: string,
 ): "schedule" | "timezone" | "daemon" | "catchup" | "form" {
   // validateTriggerDaemon: "daemon_id is required…", "daemon not found",
-  // "project is not installed on that daemon".
-  if (/^daemon(_id)?\b/.test(message) || /installed on that daemon/.test(message)) return "daemon";
+  // "project is not installed on that daemon"; validateNoMachineWorkflow:
+  // "this workflow needs a machine: …", "no_machine and daemon_id …".
+  if (
+    /^daemon(_id)?\b/.test(message) ||
+    /installed on that daemon/.test(message) ||
+    /needs a machine/.test(message) ||
+    /^no_machine\b/.test(message)
+  ) {
+    return "daemon";
+  }
   if (/^catchup_window\b/.test(message)) return "catchup";
   if (/^(cron|interval)\b/.test(message) || /schedule needs/.test(message)) {
     return "schedule";

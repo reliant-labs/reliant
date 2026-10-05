@@ -21,8 +21,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/workflow"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // defaultTriggerEventLimit bounds ListTriggerEvents when the caller asks for
@@ -615,16 +618,27 @@ func (s *TriggerService) triggerFromDefinition(
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("project_id is required"))
 	}
 
-	if def.DaemonId == "" {
+	// The machine is an explicit choice: a daemon, or no_machine. An empty
+	// daemon_id alone is still the mistake it always was, so a client that
+	// omits the field cannot silently create a run with no machine.
+	switch {
+	case def.NoMachine && def.DaemonId != "":
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("daemon_id is required: a trigger must name the daemon its runs execute on"))
+			errors.New("no_machine and daemon_id are mutually exclusive: runs either have a machine or they do not"))
+	case !def.NoMachine && def.DaemonId == "":
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("daemon_id is required: a trigger must name the daemon its runs execute on, or set no_machine"))
 	}
 
 	if _, err := s.database.GetProjectWithUserCheck(ctx, def.ProjectId, userID); err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, errors.New("project not found"))
 	}
 
-	if err := s.validateTriggerDaemon(ctx, userID, def.ProjectId, def.DaemonId); err != nil {
+	if def.NoMachine {
+		if err := s.validateNoMachineWorkflow(ctx, userID, def); err != nil {
+			return nil, err
+		}
+	} else if err := s.validateTriggerDaemon(ctx, userID, def.ProjectId, def.DaemonId); err != nil {
 		return nil, err
 	}
 
@@ -697,6 +711,7 @@ func (s *TriggerService) triggerFromDefinition(
 		Params:           triggers.ParamsFromProto(def.Params),
 		Message:          def.Message,
 		DaemonID:         def.DaemonId,
+		NoMachine:        def.NoMachine,
 		NotifyOnComplete: def.NotifyOnComplete,
 		Config:           src.Config,
 		CreatedAt:        now,
@@ -777,6 +792,40 @@ func (s *TriggerService) resolveActivation(ctx context.Context, userID string, d
 // cannot probe which daemon ids exist.
 func (s *TriggerService) validateTriggerDaemon(ctx context.Context, userID, projectID, daemonID string) error {
 	return validateOwnedProjectDaemon(ctx, s.database, userID, projectID, daemonID)
+}
+
+// validateNoMachineWorkflow refuses a no-machine trigger whose workflow will not
+// work without a machine, so the author learns it while writing the trigger
+// rather than from a run nobody is watching. Stricter than a no-machine chat
+// launch: an agent GIVEN machine tools is refused too, because for an
+// unattended run "it quietly had fewer tools than you configured" is a silent
+// downgrade. The trigger's params are what the run will start with, so a
+// builtin agent with tools: ["tag:web"] passes. See research/DAEMONLESS_RUNS.md.
+func (s *TriggerService) validateNoMachineWorkflow(ctx context.Context, userID string, def *reliantv1.TriggerDefinition) error {
+	workflowName := def.Workflow
+	if workflowName == "" {
+		workflowName = workflow.DefaultWorkflow
+	}
+	wf, err := launch.ResolveRunWorkflow(ctx, s.database, userID, workflowName, def.ProjectId)
+	if err != nil {
+		var lookup *launch.WorkflowLookupError
+		if errors.As(err, &lookup) {
+			return triggerDBError("resolve workflow", err)
+		}
+		// An unresolvable workflow is reported where it is resolved for the
+		// launch itself; nothing about machines can be said of it here.
+		return nil
+	}
+	loader := func(ref string) (*reliantv1.Workflow, error) {
+		return launch.ResolveRunWorkflow(ctx, s.database, userID, ref, def.ProjectId)
+	}
+	req := v2.MachineRequirements(wf, triggers.ParamsFromProto(def.Params), loader, tools.PreflightConfig())
+	if req.None() {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		"this workflow needs a machine: %s. Pick a machine for this automation, or give it only tools "+
+			"that run without one (for example tools: [\"tag:web\"])", req.Summary()))
 }
 
 // render builds the wire trigger, resolving the read-only projections.

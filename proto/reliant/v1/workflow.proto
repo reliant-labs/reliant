@@ -105,6 +105,12 @@ message WorkflowListItem {
   // Human-facing display name from the workflow definition's `title`. Empty
   // when the definition declares none; UIs then derive one from `name`.
   string title = 19;
+  // Why this workflow cannot run without the user's machine, at its declared
+  // input defaults: nodes that need one (a shell `run`, `create_worktree`, …)
+  // and agent tool lists that reach machine tools. Empty means it can run
+  // with no machine. A run's own inputs can change the tool reasons (the
+  // builtin agent's `tools`), so a trigger write re-checks with them.
+  repeated string needs_machine = 20;
 }
 
 // ============================================

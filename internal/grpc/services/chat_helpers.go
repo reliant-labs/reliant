@@ -141,6 +141,7 @@ func chatToProto(c *db.Chat) *reliantv1.Chat {
 	if c.ActiveDaemonID != nil {
 		proto.ActiveDaemonId = c.ActiveDaemonID
 	}
+	proto.NoMachine = c.NoMachine
 	// The root run's lifecycle: the web decides paused/pending from these, and
 	// a pending state is what tells it to StartChat rather than SendMessage.
 	proto.WorkflowState = workflowStateToProto(c.RootStatus.State)

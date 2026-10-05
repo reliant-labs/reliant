@@ -122,7 +122,10 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 	if !resuming && !manual && !trigger.Enabled {
 		return f.settle(ctx, ev, core.TriggerEventSkipped, "trigger is disabled", nil)
 	}
-	if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
+	// A no-machine trigger names no daemon, by design.
+	if trigger.NoMachine {
+		// nothing to look up
+	} else if _, err := f.repo.GetDaemon(ctx, trigger.DaemonID); err != nil {
 		if !errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("load daemon %s: %w", trigger.DaemonID, err)
 		}
@@ -227,6 +230,7 @@ func (f *EventFirer) buildSpec(trigger *core.Trigger, ev *core.TriggerEvent, dec
 		Title:     &title,
 		Workflow:  trigger.Workflow,
 		DaemonID:  trigger.DaemonID,
+		NoMachine: trigger.NoMachine,
 		Presets:   trigger.Presets,
 		Params:    params,
 		Messages: []launch.SeedMessage{

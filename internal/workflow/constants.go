@@ -93,6 +93,11 @@ var RuntimeInjectedInputs = map[string]bool{
 	"__thread":           true, // Internal signal routing key for thread-scoped updates
 	"session_daemon_id":  true, // Session-level active daemon for tool execution
 	"__trigger":          true, // Launch event, exposed to CEL as `trigger`
+	// No human is watching (runtime.InputKeyUnattended). Injected by the
+	// launcher for trigger runs; the runtime's own input validation runs
+	// inside the workflow and rejected it as unknown, so every trigger fire of
+	// a workflow with declared inputs failed before its first node.
+	"unattended": true,
 }
 
 // NewWorkflowID generates a new random UUID for a root workflow.

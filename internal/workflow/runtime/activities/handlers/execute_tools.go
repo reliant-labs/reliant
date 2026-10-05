@@ -14,6 +14,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -569,6 +570,24 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	tec, errMsg := a.loadToolExecutionContext(ctx, chatID, thread, toolName, toolInput, toolCallID, projectPath)
 	if errMsg != "" {
 		return a.buildToolResult(toolCallID, toolName, errMsg, "", true, nil, nil)
+	}
+
+	// A run with no machine (research/DAEMONLESS_RUNS.md) was never offered a
+	// tool that needs one; a call to one anyway — named from history, or
+	// hallucinated — is refused here, before dispatch. Recorded FAILED like any
+	// refusal. The text is not a daemon-offline result, so the offline breaker
+	// stays neutral: there is no machine to wait for.
+	if tec.chat.NoMachine {
+		ctx = nomachine.With(ctx)
+		if tools.NeedsMachine(toolName) {
+			result := a.buildToolResult(toolCallID, toolName, nomachine.Refusal(toolName), "", true, nil, nil)
+			completedAt := time.Now()
+			a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+				completedAt:  &completedAt,
+				errorMessage: nomachine.ErrNoMachine.Error(),
+			}, &toolCallResultWrite{content: result.Content, isError: true})
+			return result
+		}
 	}
 
 	// Daemon routing priority: explicit node/workflow selector > the worktree's

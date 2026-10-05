@@ -95,6 +95,7 @@ func (r *Runs) StartRun(ctx context.Context, req tools.StartRunRequest) (tools.S
 		Workflow:    req.Workflow,
 		Presets:     req.Presets,
 		DaemonID:    req.DaemonID,
+		NoMachine:   req.NoMachine,
 		Params:      params,
 		Messages: []launch.SeedMessage{{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,

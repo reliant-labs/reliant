@@ -42,7 +42,8 @@ func (s *triggerStore) CreateTrigger(ctx context.Context, t *core.Trigger) error
 		Config:     triggerConfigToJSON(t.Config),
 		CreatedAt:  t.CreatedAt,
 		UpdatedAt:  t.UpdatedAt,
-		DaemonID:   t.DaemonID,
+		DaemonID:   triggerDaemonToNull(t.DaemonID),
+		NoMachine:  t.NoMachine,
 
 		NotifyOnComplete: t.NotifyOnComplete,
 		Filter:           t.Filter,
@@ -129,11 +130,12 @@ func (s *triggerStore) UpdateTrigger(ctx context.Context, t *core.Trigger) error
 		Message:          t.Message,
 		Config:           triggerConfigToJSON(t.Config),
 		UpdatedAt:        t.UpdatedAt,
-		DaemonID:         t.DaemonID,
+		DaemonID:         triggerDaemonToNull(t.DaemonID),
 		NotifyOnComplete: t.NotifyOnComplete,
 		Filter:           t.Filter,
 		ConnectionID:     triggerPtrToNullString(t.ConnectionID),
 		WorkflowTrigger:  triggerPtrToNullString(t.WorkflowTrigger),
+		NoMachine:        t.NoMachine,
 		ID:               t.ID,
 	})
 	if err != nil {
@@ -460,7 +462,8 @@ func triggerFromPG(row pgdb.Trigger) (*core.Trigger, error) {
 		ConnectionID:     triggerNullStringToPtr(row.ConnectionID),
 		CreatedAt:        row.CreatedAt,
 		UpdatedAt:        row.UpdatedAt,
-		DaemonID:         row.DaemonID,
+		DaemonID:         row.DaemonID.String,
+		NoMachine:        row.NoMachine,
 		NotifyOnComplete: row.NotifyOnComplete,
 		WorkflowTrigger:  triggerNullStringToPtr(row.WorkflowTrigger),
 	}, nil
@@ -507,6 +510,12 @@ func triggersFromPG(rows []pgdb.Trigger) ([]*core.Trigger, error) {
 		out = append(out, t)
 	}
 	return out, nil
+}
+
+// triggerDaemonToNull stores a no-machine trigger's empty daemon as NULL,
+// which is what triggers_machine_choice_check pairs with no_machine.
+func triggerDaemonToNull(daemonID string) sql.NullString {
+	return sql.NullString{String: daemonID, Valid: daemonID != ""}
 }
 
 func (s *triggerStore) SetTriggerWebhookTokenHash(ctx context.Context, id string, hash []byte) error {

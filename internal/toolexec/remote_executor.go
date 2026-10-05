@@ -10,6 +10,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/nomachine"
 )
 
 // daemonCancelPushTimeout bounds the detached "stop that tool" push sent when a
@@ -162,6 +163,19 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 	}
 	switch placement {
 	case tools.PlacementDaemon:
+		// A run with no machine was never offered this tool and execute_tools
+		// refuses it before dispatch; this is the transport's own backstop.
+		if nomachine.Is(ctx) {
+			return &ToolResult{
+				Success:      false,
+				IsError:      true,
+				Content:      nomachine.Refusal(req.ToolName),
+				ErrorMessage: nomachine.ErrNoMachine.Error(),
+				ErrorCode:    "NO_MACHINE",
+				StartTime:    startTime,
+				EndTime:      time.Now(),
+			}, nil
+		}
 		return e.executeOnDaemon(ctx, req, startTime)
 	case tools.PlacementServer, tools.PlacementAny:
 		return e.executeOnServer(ctx, req, startTime)
@@ -210,8 +224,12 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 
 	// Create a per-request daemon client via the factory (thread-safe).
 	// Falls back to the executor's default daemon when no factory is set.
+	//
+	// A run with no machine gets none: the client resolves (and can wake) the
+	// user's default daemon, and tools that need one already report that it
+	// is missing.
 	var daemonClient daemon.Client
-	if e.daemonFactory != nil {
+	if e.daemonFactory != nil && !nomachine.Is(ctx) {
 		daemonClient = e.daemonFactory(req.UserID)
 	}
 	// MCP tools bind a daemon-backed runtime from this context; carrying the

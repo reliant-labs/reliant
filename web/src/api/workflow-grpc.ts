@@ -125,6 +125,13 @@ export interface WorkflowResponse {
   title?: string;
   hasPresetGroups?: boolean;
   draftId?: string;
+  /**
+   * Why this workflow cannot run without the user's machine, at its input
+   * defaults. Empty: it can run with no machine (research/DAEMONLESS_RUNS.md).
+   * Absent on responses built client-side, which carry no analysis — read
+   * that as unknown, never as "runs without one".
+   */
+  needsMachine?: string[];
 }
 
 export interface InvalidWorkflow {
@@ -212,6 +219,7 @@ function listItemToResponse(proto: ProtoWorkflowListItem): WorkflowResponse {
     title: proto.title || undefined,
     hasPresetGroups: proto.hasPresetGroups || false,
     draftId: proto.draftId || undefined,
+    needsMachine: [...(proto.needsMachine || [])],
   };
 }
 

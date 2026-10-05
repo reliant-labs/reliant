@@ -111,6 +111,35 @@ export function buildDaemonChoices(
 }
 
 /**
+ * The "Runs on" value for an automation with no machine: it runs on Reliant's
+ * servers only (TriggerDefinition.no_machine; research/DAEMONLESS_RUNS.md). A
+ * sentinel rather than a second control, so there is still exactly one place
+ * that says where runs execute.
+ */
+export const NO_MACHINE = "__no_machine__";
+
+/**
+ * Why "No machine" cannot be offered for this workflow, or undefined when it
+ * can. Mirrors WorkflowListItem.needs_machine, which the server computes at the
+ * workflow's input defaults; the server re-checks with the trigger's own inputs
+ * on save, so this only decides what the picker offers.
+ *
+ * Unknown is treated as "needs one": "your default workflow" (empty) resolves
+ * to the agent and its coding tools, and a workflow the listing did not
+ * analyse is not one the form can vouch for.
+ */
+export function noMachineBlockerFor(
+  workflows: ReadonlyArray<{ name: string; needsMachine?: string[] }>,
+  workflow: string,
+): string | undefined {
+  if (!workflow) return "your default workflow needs a machine";
+  const normalized = workflow.replace(/^builtin:\/\//, "").toLowerCase();
+  const listed = workflows.find((w) => w.name.replace(/^builtin:\/\//, "").toLowerCase() === normalized);
+  if (!listed || listed.needsMachine === undefined) return "this workflow needs a machine";
+  return listed.needsMachine.length > 0 ? "this workflow needs a machine" : undefined;
+}
+
+/**
  * The daemon to preselect: the single obvious one, or nothing.
  *
  * Obvious means exactly one eligible daemon with the project installed, or —

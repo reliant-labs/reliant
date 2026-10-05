@@ -106,7 +106,13 @@ type WorkflowListItem struct {
 	ValidationErrors []*ValidationError `protobuf:"bytes,18,rep,name=validation_errors,json=validationErrors,proto3" json:"validation_errors,omitempty"`
 	// Human-facing display name from the workflow definition's `title`. Empty
 	// when the definition declares none; UIs then derive one from `name`.
-	Title         string `protobuf:"bytes,19,opt,name=title,proto3" json:"title,omitempty"`
+	Title string `protobuf:"bytes,19,opt,name=title,proto3" json:"title,omitempty"`
+	// Why this workflow cannot run without the user's machine, at its declared
+	// input defaults: nodes that need one (a shell `run`, `create_worktree`, …)
+	// and agent tool lists that reach machine tools. Empty means it can run
+	// with no machine. A run's own inputs can change the tool reasons (the
+	// builtin agent's `tools`), so a trigger write re-checks with them.
+	NeedsMachine  []string `protobuf:"bytes,20,rep,name=needs_machine,json=needsMachine,proto3" json:"needs_machine,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -251,6 +257,13 @@ func (x *WorkflowListItem) GetTitle() string {
 		return x.Title
 	}
 	return ""
+}
+
+func (x *WorkflowListItem) GetNeedsMachine() []string {
+	if x != nil {
+		return x.NeedsMachine
+	}
+	return nil
 }
 
 // HighlightSpan represents a character range to highlight in the condition
@@ -3391,7 +3404,7 @@ var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xe5\x06\n" +
+	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x1creliant/v1/workflow_v2.proto\"\x8a\a\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -3411,7 +3424,8 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\bdraft_id\x18\x10 \x01(\tH\x01R\adraftId\x88\x01\x01\x127\n" +
 	"\x06status\x18\x11 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
 	"\x11validation_errors\x18\x12 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x14\n" +
-	"\x05title\x18\x13 \x01(\tR\x05title\x1aL\n" +
+	"\x05title\x18\x13 \x01(\tR\x05title\x12#\n" +
+	"\rneeds_machine\x18\x14 \x03(\tR\fneedsMachine\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +

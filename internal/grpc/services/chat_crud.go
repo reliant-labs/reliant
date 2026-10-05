@@ -96,11 +96,21 @@ func (s *ChatService) StartChat(
 		spec.UserJWT = jwt
 	}
 
+	// A chat with no machine by design: there is nothing to choose, validate
+	// or wake. The launcher refuses the contradictions (with a daemon_id, or
+	// a branch) and a workflow that cannot run without a machine.
+	spec.NoMachine = req.Msg.GetNoMachine()
+
 	// The chat the wake should target: a branch's own chat (pinned by its
 	// worktree) or, for a new chat, one that carries the chosen daemon.
 	var wakeChat *db.Chat
 	chosen := req.Msg.GetDaemonId()
-	if id := req.Msg.GetChatId(); id != "" {
+	if spec.NoMachine {
+		// Left for the launcher to reject alongside no_machine.
+		spec.DaemonID = chosen
+		chosen = ""
+	}
+	if id := req.Msg.GetChatId(); id != "" && !spec.NoMachine {
 		// A branch's first send.
 		if branch, getErr := s.getChatForUser(ctx, id, userID); getErr == nil {
 			wakeChat = branch
@@ -129,7 +139,11 @@ func (s *ChatService) StartChat(
 			wakeChat = &pinnedCopy
 		}
 	}
-	s.wakeDaemonForAttendedTurn(ctx, userID, wakeChat)
+	// A nil wakeChat still wakes the user's default machine, so a run with no
+	// machine skips the wake outright rather than relying on the chat row.
+	if !spec.NoMachine {
+		s.wakeDaemonForAttendedTurn(ctx, userID, wakeChat)
+	}
 
 	result, err := s.launcher().Launch(ctx, event, spec)
 	if err != nil {
