@@ -534,3 +534,44 @@ func TestParamValidationAgainstSchema(t *testing.T) {
 		t.Error("unknown param must fail")
 	}
 }
+
+// A query_expr value that is a list becomes a repeated parameter: APIs that
+// take one id per occurrence (Gmail's labelIds=INBOX&labelIds=UNREAD) need
+// it, and a JSON-encoded list would be read as one malformed id.
+func TestQueryExprListBecomesRepeatedParam(t *testing.T) {
+	var got map[string][]string
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		got = r.URL.Query()
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{}`))
+	}))
+	defer srv.Close()
+	m, a := mustParse(t, manifestFor(srv.URL, `    params: { type: object }
+    request:
+      method: GET
+      path: /messages
+      query_expr: '{?"labelIds": params.?labels, ?"q": params.?q}'
+`))
+	r := newRunner()
+	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+	if _, err := r.Run(context.Background(), m, a, map[string]any{"labels": []any{"INBOX", "UNREAD"}, "q": "from:ann"}); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Join(got["labelIds"], ",") != "INBOX,UNREAD" {
+		t.Errorf("labelIds = %v, want two repeated values", got["labelIds"])
+	}
+	if strings.Join(got["q"], ",") != "from:ann" {
+		t.Errorf("q = %v", got["q"])
+	}
+
+	// An empty list sends nothing, and a list of non-scalars is refused.
+	if _, err := r.Run(context.Background(), m, a, map[string]any{"labels": []any{}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := got["labelIds"]; ok {
+		t.Errorf("an empty list must send no parameter: %v", got)
+	}
+	if _, err := r.Run(context.Background(), m, a, map[string]any{"labels": []any{map[string]any{"x": 1}}}); err == nil {
+		t.Error("a list of objects is not a query value")
+	}
+}

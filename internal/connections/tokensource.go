@@ -70,26 +70,71 @@ func NewTokenSource(store tokenStore, v Sealer, providers *Registry, doer HTTPDo
 // Token returns the access token (or, for api_key and basic connections, the
 // stored credential) for a connection the user owns.
 func (s *TokenSource) Token(ctx context.Context, userID, connectionID string) (vault.Secret, error) {
-	conn, err := s.store.GetConnection(ctx, userID, connectionID)
-	if err != nil {
-		return vault.Secret{}, mapStoreErr(err)
-	}
-	switch conn.Status {
-	case core.ConnectionStatusNeedsReauth:
-		return vault.Secret{}, newError(CodeNeedsReauth, "connection %q needs to be reconnected", conn.Name)
-	case core.ConnectionStatusActive:
-	default:
-		return vault.Secret{}, newError(CodeFailedPrecondition, "connection %q is not active", conn.Name)
-	}
+	tok, _, err := s.token(ctx, userID, connectionID)
+	return tok, err
+}
 
+// token is Token plus the access token's generation (0 for a static
+// credential), which a later RefreshAfterRejection names.
+func (s *TokenSource) token(ctx context.Context, userID, connectionID string) (vault.Secret, int64, error) {
+	conn, err := s.activeConnection(ctx, userID, connectionID)
+	if err != nil {
+		return vault.Secret{}, 0, err
+	}
 	if conn.AuthKind == core.ConnectionAuthOAuth2 {
 		return s.oauthToken(ctx, conn)
 	}
 	secrets, err := s.store.GetSecrets(ctx, userID, connectionID)
 	if err != nil {
-		return vault.Secret{}, mapStoreErr(err)
+		return vault.Secret{}, 0, mapStoreErr(err)
 	}
-	return s.openStatic(ctx, conn, secrets)
+	tok, err := s.openStatic(ctx, conn, secrets)
+	return tok, 0, err
+}
+
+func (s *TokenSource) activeConnection(ctx context.Context, userID, connectionID string) (*core.Connection, error) {
+	conn, err := s.store.GetConnection(ctx, userID, connectionID)
+	if err != nil {
+		return nil, mapStoreErr(err)
+	}
+	switch conn.Status {
+	case core.ConnectionStatusNeedsReauth:
+		return nil, newError(CodeNeedsReauth, "connection %q needs to be reconnected", conn.Name)
+	case core.ConnectionStatusActive:
+		return conn, nil
+	default:
+		return nil, newError(CodeFailedPrecondition, "connection %q is not active", conn.Name)
+	}
+}
+
+// RefreshAfterRejection is called when the provider refused an access token
+// that had not expired (revoked at the provider, or invalidated early).
+// rejectedGeneration is the generation that token was issued at.
+//
+// An OAuth connection is refreshed through the same single-flight, row lock
+// and generation check as an expiry refresh: if another caller already
+// replaced the rejected token, its replacement is returned without a second
+// provider call; a refused refresh grant marks the connection needs_reauth.
+// A credential that cannot be refreshed (an API key, or OAuth with no refresh
+// token) was simply refused, so it is marked needs_reauth: the user must
+// supply a new one, and retrying the same one would only be refused again.
+func (s *TokenSource) RefreshAfterRejection(ctx context.Context, userID, connectionID string, rejectedGeneration int64) (vault.Secret, int64, error) {
+	conn, err := s.activeConnection(ctx, userID, connectionID)
+	if err != nil {
+		return vault.Secret{}, 0, err
+	}
+	s.Forget(connectionID)
+	if conn.AuthKind != core.ConnectionAuthOAuth2 {
+		var marked error
+		if err := s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
+			marked = s.markNeedsReauth(ctx, tx, conn, "rejected")
+			return nil
+		}); err != nil {
+			return vault.Secret{}, 0, mapStoreErr(err)
+		}
+		return vault.Secret{}, 0, marked
+	}
+	return s.refresh(ctx, conn, rejectedGeneration)
 }
 
 func (s *TokenSource) openStatic(ctx context.Context, conn *core.Connection, secrets map[string]core.ConnectionSecret) (vault.Secret, error) {
@@ -130,25 +175,25 @@ func (s *TokenSource) open(ctx context.Context, conn *core.Connection, sec core.
 	return secret, nil
 }
 
-func (s *TokenSource) oauthToken(ctx context.Context, conn *core.Connection) (vault.Secret, error) {
+func (s *TokenSource) oauthToken(ctx context.Context, conn *core.Connection) (vault.Secret, int64, error) {
 	secrets, err := s.store.GetSecrets(ctx, conn.UserID, conn.ID)
 	if err != nil {
-		return vault.Secret{}, mapStoreErr(err)
+		return vault.Secret{}, 0, mapStoreErr(err)
 	}
 	access, ok := secrets[core.SecretFieldAccessToken]
 	if !ok {
-		return vault.Secret{}, newError(CodeInternal, "connection %q has no access token", conn.Name)
+		return vault.Secret{}, 0, newError(CodeInternal, "connection %q has no access token", conn.Name)
 	}
 	if tok, ok := s.cached(conn.ID, access.Generation); ok {
-		return tok, nil
+		return tok, access.Generation, nil
 	}
 	if !s.expiring(conn.AccessExpiresAt) {
 		tok, err := s.open(ctx, conn, access)
 		if err != nil {
-			return vault.Secret{}, err
+			return vault.Secret{}, 0, err
 		}
 		s.store2cache(conn.ID, access.Generation, tok, conn.AccessExpiresAt)
-		return tok, nil
+		return tok, access.Generation, nil
 	}
 	return s.refresh(ctx, conn, access.Generation)
 }
@@ -197,7 +242,13 @@ func (s *TokenSource) Forget(connectionID string) {
 	}
 }
 
-func (s *TokenSource) refresh(ctx context.Context, conn *core.Connection, seenGeneration int64) (vault.Secret, error) {
+// refreshed is a refresh's outcome: the token and its generation.
+type refreshed struct {
+	tok vault.Secret
+	gen int64
+}
+
+func (s *TokenSource) refresh(ctx context.Context, conn *core.Connection, seenGeneration int64) (vault.Secret, int64, error) {
 	key := fmt.Sprintf("%s@%d", conn.ID, seenGeneration)
 	v, err, _ := s.flight.Do(key, func() (any, error) {
 		// The shared call must not die with the first caller's context, or one
@@ -205,21 +256,22 @@ func (s *TokenSource) refresh(ctx context.Context, conn *core.Connection, seenGe
 		return s.refreshLocked(context.WithoutCancel(ctx), conn, seenGeneration)
 	})
 	if err != nil {
-		return vault.Secret{}, err
+		return vault.Secret{}, 0, err
 	}
-	return v.(vault.Secret), nil
+	r := v.(refreshed)
+	return r.tok, r.gen, nil
 }
 
-func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, seenGeneration int64) (vault.Secret, error) {
+func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, seenGeneration int64) (refreshed, error) {
 	provider, ok := s.providers.Get(conn.IntegrationID)
 	if !ok || !provider.OAuthAvailable() {
-		return vault.Secret{}, newError(CodeFailedPrecondition, "integration %q is not configured on this deployment", conn.IntegrationID)
+		return refreshed{}, newError(CodeFailedPrecondition, "integration %q is not configured on this deployment", conn.IntegrationID)
 	}
 	tokenURL, err := provider.endpoint(oauthSpec(provider).GetTokenUrl(), conn.Params)
 	if err != nil {
-		return vault.Secret{}, err
+		return refreshed{}, err
 	}
-	var result vault.Secret
+	var result refreshed
 	var permanent error
 	err = s.store.WithSecretsLock(ctx, conn.UserID, conn.ID, func(tx core.SecretsTx) error {
 		secrets := tx.Secrets()
@@ -233,7 +285,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 				if err != nil {
 					return err
 				}
-				result = tok
+				result = refreshed{tok: tok, gen: access.Generation}
 				s.store2cache(fresh.ID, access.Generation, tok, fresh.AccessExpiresAt)
 				return nil
 			}
@@ -271,7 +323,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 		if spec.GetScopeSeparator() == "," && len(conn.Scopes) > 0 {
 			req.Scopes, req.ScopeSeparator = conn.Scopes, scopeSeparator(spec)
 		}
-		refreshed, err := ex.Refresh(ctx, req)
+		next, err := ex.Refresh(ctx, req)
 		if err != nil {
 			var oerr *oauth2.Error
 			if errors.As(err, &oerr) && isPermanentRefreshFailure(oerr) {
@@ -286,7 +338,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 			return newError(CodeUnavailable, "token refresh for connection %q is temporarily unavailable", conn.Name)
 		}
 
-		nextAccess, err := s.vault.Seal(ctx, vault.UserTenant(conn.UserID), []byte(refreshed.Token.AccessToken), SecretAAD(conn.ID, core.SecretFieldAccessToken))
+		nextAccess, err := s.vault.Seal(ctx, vault.UserTenant(conn.UserID), []byte(next.Token.AccessToken), SecretAAD(conn.ID, core.SecretFieldAccessToken))
 		if err != nil {
 			return err
 		}
@@ -295,10 +347,10 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 			return err
 		}
 		updates := []core.ConnectionSecret{{Field: core.SecretFieldAccessToken, VaultKeyID: nextAccessID, Ciphertext: nextAccess}}
-		// Refreshed.RefreshToken is always the token to present next: the
+		// next.RefreshToken is always the token to present next: the
 		// rotated one when the provider sent one, else the one just used.
-		if refreshed.Rotated {
-			nextRefresh, err := s.vault.Seal(ctx, vault.UserTenant(conn.UserID), []byte(refreshed.RefreshToken.Secret()), SecretAAD(conn.ID, core.SecretFieldRefreshToken))
+		if next.Rotated {
+			nextRefresh, err := s.vault.Seal(ctx, vault.UserTenant(conn.UserID), []byte(next.RefreshToken.Secret()), SecretAAD(conn.ID, core.SecretFieldRefreshToken))
 			if err != nil {
 				return err
 			}
@@ -309,7 +361,7 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 			updates = append(updates, core.ConnectionSecret{Field: core.SecretFieldRefreshToken, VaultKeyID: id, Ciphertext: nextRefresh})
 		}
 		var expires *time.Time
-		if exp := refreshed.Token.Expiry(s.now()); !exp.IsZero() {
+		if exp := next.Token.Expiry(s.now()); !exp.IsZero() {
 			expires = &exp
 		}
 		if err := tx.Replace(ctx, access.Generation, updates, expires); err != nil {
@@ -318,15 +370,15 @@ func (s *TokenSource) refreshLocked(ctx context.Context, conn *core.Connection, 
 		if err := tx.AppendEvent(ctx, workerEvent(core.ConnectionEventRefreshed, conn.UserID)); err != nil {
 			return err
 		}
-		result = vault.NewSecret([]byte(refreshed.Token.AccessToken))
-		s.store2cache(conn.ID, access.Generation+1, result, expires)
+		result = refreshed{tok: vault.NewSecret([]byte(next.Token.AccessToken)), gen: access.Generation + 1}
+		s.store2cache(conn.ID, result.gen, result.tok, expires)
 		return nil
 	})
 	if err != nil {
-		return vault.Secret{}, err
+		return refreshed{}, err
 	}
 	if permanent != nil {
-		return vault.Secret{}, permanent
+		return refreshed{}, permanent
 	}
 	return result, nil
 }

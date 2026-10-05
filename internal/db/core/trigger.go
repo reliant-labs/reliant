@@ -229,10 +229,18 @@ type TriggerRegistration struct {
 	RegistrationID string
 	Cursor         string
 	LastPolledAt   *time.Time
-	Status         string // active | error
+	Status         string // active | error | needs_reauth
 	StatusDetail   string
-	CreatedAt      time.Time
-	UpdatedAt      time.Time
+	// StatusSince is when the source entered Status. Read-only: the store
+	// moves it only when Status changes, however often the source is polled.
+	StatusSince time.Time
+	// LastGapAt and LastGapDetail record the last time the source lost its
+	// place (a cursor the provider no longer honoured) and re-baselined,
+	// firing nothing for what arrived in between. Nil when it never has.
+	LastGapAt     *time.Time
+	LastGapDetail string
+	CreatedAt     time.Time
+	UpdatedAt     time.Time
 }
 
 // Trigger registration statuses.
@@ -427,6 +435,10 @@ type TriggerStore interface {
 
 	// GetTriggerRegistration returns ErrTriggerRegistrationNotFound on a miss.
 	GetTriggerRegistration(ctx context.Context, triggerID string) (*TriggerRegistration, error)
+	// ListTriggerRegistrations returns the named triggers' registrations,
+	// keyed by trigger id, in one query. Triggers belonging to other users,
+	// and triggers with no registration, have no entry.
+	ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*TriggerRegistration, error)
 	UpsertTriggerRegistration(ctx context.Context, reg *TriggerRegistration) error
 	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
 }

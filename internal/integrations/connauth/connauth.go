@@ -121,6 +121,17 @@ func (c credential) Apply(req *http.Request) error { return c.r.Apply(req) }
 func (c credential) Scrub(s string) string         { return c.r.Redactor.Scrub(s) }
 func (c credential) Params() map[string]string     { return c.r.Params() }
 
+// Rejected implements httpaction.RejectableCredential.
+func (c credential) Rejected(ctx context.Context) (httpaction.Credential, error) {
+	next, err := c.r.RefreshAfterRejection(ctx)
+	if err != nil {
+		return nil, mapError(err)
+	}
+	return credential{r: next}, nil
+}
+
+var _ httpaction.RejectableCredential = credential{}
+
 // Credential resolves the connection for the run's owner. The integration id
 // must match the connection's, and a daemon-placed call is refused.
 func (s *Source) Credential(ctx context.Context, req httpaction.CredentialRequest) (httpaction.Credential, error) {

@@ -22,6 +22,17 @@ import (
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
+// checkExecutors fails boot when a shipped manifest names a go: executor this
+// binary did not register, instead of failing that action at its first call.
+// Executors register from their package's init; the integration packages are
+// linked in through webhook (gmail), so a missing one is a wiring defect.
+func checkExecutors() error {
+	if err := httpaction.Executors().CheckManifests(catalog.MustBuiltin().Manifests()); err != nil {
+		return fmt.Errorf("integrations: %w", err)
+	}
+	return nil
+}
+
 // newConnectionResolver builds the worker-side resolver. It shares the vault
 // key with the api-server: the worker is the only process that reads secrets,
 // and the only one besides the api-server that writes them (on refresh).

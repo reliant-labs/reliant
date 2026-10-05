@@ -25,6 +25,18 @@ type Credential interface {
 	Params() map[string]string
 }
 
+// RejectableCredential is a Credential that can be replaced when the provider
+// refuses it (a 401 for a token that had not expired: revoked or invalidated
+// at the provider). Rejected returns the replacement — a refreshed OAuth
+// token — or a *CredentialError with CodeNeedsReauth when there is none, which
+// also marks the connection for reconnecting. Code that makes its own
+// requests (a go: executor, a poller) retries a 401 ONCE with the
+// replacement; a second 401 is final.
+type RejectableCredential interface {
+	Credential
+	Rejected(ctx context.Context) (Credential, error)
+}
+
 // CredentialRequest names the connection a call wants. It carries references
 // only: the owner is looked up by the source from RunID, never supplied.
 type CredentialRequest struct {

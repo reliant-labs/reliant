@@ -53,12 +53,13 @@ func overlapToProto(overlap string) reliantv1.TriggerOverlapPolicy {
 	return reliantv1.TriggerOverlapPolicy_TRIGGER_OVERLAP_POLICY_SKIP
 }
 
-// ToProto renders a stored trigger. nextFireAt and firings are the read-only
-// projections the caller resolved; either may be empty.
+// ToProto renders a stored trigger. nextFireAt, firings and reg are the
+// read-only projections the caller resolved; any may be empty.
 //
 // firings is the trigger's recent window, newest first; the newest becomes
-// last_event and the whole window yields health.
-func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun) (*reliantv1.Trigger, error) {
+// last_event and the whole window yields health. reg is a polled trigger's
+// source state, folded into health (WithSource).
+func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEventWithRun, reg *core.TriggerRegistration) (*reliantv1.Trigger, error) {
 	params, err := paramsToProto(t.Params)
 	if err != nil {
 		return nil, fmt.Errorf("trigger %s params: %w", t.ID, err)
@@ -79,7 +80,7 @@ func ToProto(t *core.Trigger, nextFireAt *time.Time, firings []*core.TriggerEven
 		NotifyOnComplete: t.NotifyOnComplete,
 		ProjectName:      t.ProjectName,
 		DaemonName:       t.DaemonName,
-		Health:           ComputeHealth(firings),
+		Health:           WithSource(ComputeHealth(firings), reg, time.Now()),
 		Filter:           t.Filter,
 		ConnectionId:     t.ConnectionID,
 		WorkflowTrigger:  t.WorkflowTrigger,

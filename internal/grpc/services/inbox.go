@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -235,6 +236,13 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 	if err != nil {
 		return nil, err
 	}
+	// A polled source that cannot authenticate never fires, so it has no
+	// failed firing to show; its source state is what says it is failing.
+	regs, err := s.database.ListTriggerRegistrations(ctx, userID, ids)
+	if err != nil {
+		return nil, err
+	}
+	now := time.Now()
 
 	var out []*reliantv1.InboxItem
 	for _, t := range stored {
@@ -242,6 +250,24 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 			continue
 		}
 		firings := recent[t.ID]
+		if reg := regs[t.ID]; reg != nil && reg.Status == core.TriggerRegistrationNeedsReauth {
+			// Not receiving events at all until the owner reconnects. The
+			// episode is the registration's: it starts when the source
+			// entered needs_reauth, so a dismissal holds until the next one.
+			health := triggers.WithSource(triggers.ComputeHealth(firings), reg, now)
+			out = append(out, &reliantv1.InboxItem{
+				Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_AUTOMATION_FAILING,
+				ItemId:       inboxFailingPrefix + "source:" + t.ID + ":" + strconv.FormatInt(reg.StatusSince.UnixMilli(), 10),
+				TriggerId:    t.ID,
+				TriggerName:  t.Name,
+				ProjectId:    t.ProjectID,
+				ProjectName:  t.ProjectName,
+				WorkflowName: t.Workflow,
+				WaitingSince: reg.StatusSince.UTC().Format(time.RFC3339Nano),
+				Payload:      &reliantv1.InboxItem_AutomationFailing{AutomationFailing: &reliantv1.InboxAutomationFailing{Health: health}},
+			})
+			continue
+		}
 		health := triggers.ComputeHealth(firings)
 		if health.Status != reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING {
 			continue

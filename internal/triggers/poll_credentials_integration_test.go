@@ -253,3 +253,42 @@ func TestPollDeadRefreshGrantIsRecordedOnTheRegistration(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, refreshes, e.tokens.refreshes)
 }
+
+// The registration's source state round-trips through the real store:
+// status_since moves only on a status change (so a stuck needs_reauth is one
+// inbox episode), the gap is kept, and the batched read is owner-scoped.
+func TestTriggerRegistrationStateInTheStore(t *testing.T) {
+	e := newPollCredEnv(t)
+	ctx := context.Background()
+	conn := e.oauthConnection(t, "alice", "ghu_a", false)
+	trigger := e.githubTrigger(t, "alice", conn.ID)
+	bobConn := e.oauthConnection(t, "bob", "ghu_b", false)
+	bobs := e.githubTrigger(t, "bob", bobConn.ID)
+
+	save := func(reg *core.TriggerRegistration) *core.TriggerRegistration {
+		require.NoError(t, e.repo.UpsertTriggerRegistration(ctx, reg))
+		got, err := e.repo.GetTriggerRegistration(ctx, reg.TriggerID)
+		require.NoError(t, err)
+		return got
+	}
+	first := save(&core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "1", Status: core.TriggerRegistrationNeedsReauth, StatusDetail: "reconnect"})
+	require.False(t, first.StatusSince.IsZero())
+	time.Sleep(20 * time.Millisecond)
+	polled := time.Now()
+	again := save(&core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "1", Status: core.TriggerRegistrationNeedsReauth, StatusDetail: "reconnect", LastPolledAt: &polled})
+	assert.True(t, first.StatusSince.Equal(again.StatusSince), "re-polling a stuck source keeps its episode start")
+
+	time.Sleep(20 * time.Millisecond)
+	gapAt := time.Now().UTC().Truncate(time.Microsecond)
+	active := save(&core.TriggerRegistration{TriggerID: trigger.ID, Provider: "github", Cursor: "2", Status: core.TriggerRegistrationActive, LastGapAt: &gapAt, LastGapDetail: "lost"})
+	assert.True(t, active.StatusSince.After(first.StatusSince), "a status change starts a new episode")
+	require.NotNil(t, active.LastGapAt)
+	assert.True(t, gapAt.Equal(active.LastGapAt.UTC()))
+	assert.Equal(t, "lost", active.LastGapDetail)
+
+	save(&core.TriggerRegistration{TriggerID: bobs.ID, Provider: "github", Cursor: "9"})
+	regs, err := e.repo.ListTriggerRegistrations(ctx, "alice", []string{trigger.ID, bobs.ID})
+	require.NoError(t, err)
+	require.Contains(t, regs, trigger.ID)
+	assert.NotContains(t, regs, bobs.ID, "another user's registration never appears")
+}

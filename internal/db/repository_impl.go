@@ -3909,6 +3909,13 @@ func (r *Repo) GetTriggerRegistration(ctx context.Context, triggerID string) (*c
 	return r.triggers.GetTriggerRegistration(ctx, triggerID)
 }
 
+func (r *Repo) ListTriggerRegistrations(ctx context.Context, userID string, triggerIDs []string) (map[string]*core.TriggerRegistration, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.triggers.ListTriggerRegistrations(ctx, userID, triggerIDs)
+}
+
 func (r *Repo) UpsertTriggerRegistration(ctx context.Context, reg *core.TriggerRegistration) error {
 	if reg == nil || reg.TriggerID == "" {
 		return fmt.Errorf("trigger registration needs a trigger ID")

@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"fmt"
+	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -73,6 +74,61 @@ func ComputeHealth(firings []*core.TriggerEventWithRun) *reliantv1.TriggerHealth
 		health.Status = reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED
 	case anySuccess:
 		health.Status = reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_HEALTHY
+	}
+	return health
+}
+
+// GapWindow is how long a polled source's lost place (a re-baseline that
+// skipped what arrived meanwhile) keeps the trigger DEGRADED.
+const GapWindow = 24 * time.Hour
+
+// WithSource folds a polled trigger's source state into health computed from
+// its firings. A source that cannot deliver produces no firings at all, so
+// firings alone would read a dead source as healthy (or never-fired) forever:
+//
+//   - needs_reauth: FAILING. The connection must be reconnected before any
+//     event can arrive; the detail says so. Nothing else is worth reading.
+//   - error: at least DEGRADED, with the poll's error as the detail. Polls
+//     are retried on their schedule; a transient failure clears itself.
+//   - a gap within GapWindow: at least DEGRADED, detail naming what was lost.
+//
+// A worse status from the firings stands, and so does its detail. reg nil
+// (not polled, or never polled) leaves health unchanged.
+func WithSource(health *reliantv1.TriggerHealth, reg *core.TriggerRegistration, now time.Time) *reliantv1.TriggerHealth {
+	if health == nil || reg == nil {
+		return health
+	}
+	degrade := func(detail string) {
+		if health.Status == reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING {
+			return
+		}
+		health.Status = reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_DEGRADED
+		if health.LastFailureDetail == "" {
+			health.LastFailureDetail = detail
+		}
+	}
+	switch reg.Status {
+	case core.TriggerRegistrationNeedsReauth:
+		health.Status = reliantv1.TriggerHealthStatus_TRIGGER_HEALTH_STATUS_FAILING
+		detail := reg.StatusDetail
+		if detail == "" {
+			detail = "the trigger's connection needs to be reconnected"
+		}
+		health.LastFailureDetail = "Not receiving events: " + detail
+		return health
+	case core.TriggerRegistrationError:
+		detail := reg.StatusDetail
+		if detail == "" {
+			detail = "the last poll failed"
+		}
+		degrade("Polling failed: " + detail)
+	}
+	if reg.LastGapAt != nil && now.Sub(*reg.LastGapAt) < GapWindow {
+		detail := reg.LastGapDetail
+		if detail == "" {
+			detail = "the source lost its place and restarted from the present"
+		}
+		degrade(fmt.Sprintf("Events were missed (%s): %s", reg.LastGapAt.UTC().Format("2006-01-02 15:04 MST"), detail))
 	}
 	return health
 }

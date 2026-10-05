@@ -70,6 +70,15 @@ func key(id string, version int32) string { return id + "@" + strconv.Itoa(int(v
 // Manifests lists every manifest, sorted by id then version.
 func (c *Catalog) Manifests() []*reliantv1.IntegrationManifest { return c.manifests }
 
+// Manifest returns the manifest for id at a major version.
+func (c *Catalog) Manifest(id string, version int32) (*reliantv1.IntegrationManifest, error) {
+	m, ok := c.byKey[key(id, version)]
+	if !ok {
+		return nil, fmt.Errorf("unknown integration %s@%d", id, version)
+	}
+	return m, nil
+}
+
 var usesPattern = regexp.MustCompile(`^([a-z][a-z0-9_]*)/([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)*)@([0-9]+)$`)
 
 // ParseUses splits "<integration>/<action>@<major>".

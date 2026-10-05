@@ -172,6 +172,9 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	if err := checkExecutors(); err != nil {
+		return err
+	}
 	integrationCredentials, err := newIntegrationCredentials(connResolver, os.Getenv)
 	if err != nil {
 		return err

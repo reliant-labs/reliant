@@ -69,19 +69,35 @@ WHERE id = $3 AND outcome = 'pending';
 SELECT * FROM trigger_registrations WHERE trigger_id = $1;
 
 -- name: UpsertTriggerRegistration :exec
+-- status_since moves only when status changes, so it is the start of the
+-- current status episode however often the source is polled.
 INSERT INTO trigger_registrations (
-    trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail, created_at, updated_at
+    trigger_id, provider, registration_id, cursor, last_polled_at, status, status_detail,
+    last_gap_at, last_gap_detail, status_since, created_at, updated_at
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, NOW(), NOW()
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, NOW(), NOW(), NOW()
 )
 ON CONFLICT (trigger_id) DO UPDATE SET
     provider = EXCLUDED.provider,
     registration_id = EXCLUDED.registration_id,
     cursor = EXCLUDED.cursor,
     last_polled_at = EXCLUDED.last_polled_at,
+    status_since = CASE WHEN trigger_registrations.status = EXCLUDED.status
+                        THEN trigger_registrations.status_since ELSE NOW() END,
     status = EXCLUDED.status,
     status_detail = EXCLUDED.status_detail,
+    last_gap_at = EXCLUDED.last_gap_at,
+    last_gap_detail = EXCLUDED.last_gap_detail,
     updated_at = NOW();
+
+-- name: ListTriggerRegistrations :many
+-- The named triggers' registrations, for health, in ONE query. Joined through
+-- triggers so only the caller's own appear.
+SELECT r.*
+FROM trigger_registrations r
+JOIN triggers t ON t.id = r.trigger_id
+WHERE t.user_id = sqlc.arg('user_id')::text
+    AND r.trigger_id = ANY(sqlc.arg('trigger_ids')::text[]);
 
 -- name: DeleteTriggerRegistration :exec
 DELETE FROM trigger_registrations WHERE trigger_id = $1;
