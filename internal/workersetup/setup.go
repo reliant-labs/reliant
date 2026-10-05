@@ -68,6 +68,12 @@ type Config struct {
 	// this worker retries until one that has it picks it up.
 	TriggerPollers triggers.Pollers
 
+	// TriggerCredentials resolves a polled trigger's credential from the
+	// trigger row (owner and connection), for the poll activity. Normally the
+	// same connauth.Source as IntegrationCredentials. nil skips every poll
+	// rather than letting a poller run unauthenticated.
+	TriggerCredentials triggers.PollCredentials
+
 	// IntegrationCredentials authenticates the action node's integration
 	// calls (research/CONNECTIONS_VAULT.md §3.1): saved connections, plus
 	// control-plane-delegated GitHub tokens when hosted. It exists on the
@@ -248,6 +254,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 				triggerPollRepo{Repo: repo, connections: repo.Connections()},
 				cfg.TriggerPollers,
 				triggers.NewIntake(repo, cfg.TemporalClient, cfg.taskQueueName()).WithWorkflows(declarations),
+				cfg.TriggerCredentials,
 			)
 			w.RegisterActivityWithOptions(poller.Poll, activity.RegisterOptions{Name: triggers.PollActivityName})
 		}

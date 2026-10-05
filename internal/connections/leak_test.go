@@ -46,9 +46,9 @@ func TestCanaryNeverLeaks(t *testing.T) {
 		connections.Ref{ConnectionID: conn.ID})
 	require.NoError(t, err)
 
-	// The credential reaches the wire...
+	// The credential reaches the wire (only ever over https)...
 	var seen string
-	echo := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	echo := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Get("X-API-Key")
 		// ...and a hostile provider echoes it back in an error body.
 		http.Error(w, "bad request; you sent X-API-Key: "+seen, http.StatusBadRequest)
@@ -56,7 +56,7 @@ func TestCanaryNeverLeaks(t *testing.T) {
 	defer echo.Close()
 	req, _ := http.NewRequest(http.MethodGet, echo.URL, nil)
 	require.NoError(t, got.Apply(req))
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := echo.Client().Do(req)
 	require.NoError(t, err)
 	body := new(bytes.Buffer)
 	_, _ = body.ReadFrom(resp.Body)

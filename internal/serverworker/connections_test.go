@@ -53,6 +53,17 @@ func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
 	assert.False(t, registered, "self-hosted has no control plane to delegate to")
 }
 
+// The poll activity is handed the same source integration actions use, so a
+// poll resolves a credential exactly as an action node would.
+func TestTriggerCredentialsIsTheIntegrationSource(t *testing.T) {
+	src, err := newIntegrationCredentials(nil, envOf(nil))
+	require.NoError(t, err)
+	got := triggerCredentials(src)
+	require.NotNil(t, got)
+	assert.Same(t, src, got)
+	assert.Nil(t, triggerCredentials(nil), "no source, no poll credentials: polls skip")
+}
+
 // The broker id the worker registers is the one the embedded github manifest
 // declares; a rename on either side would silently disable hosted GitHub.
 func TestGitHubManifestNamesTheRegisteredBroker(t *testing.T) {

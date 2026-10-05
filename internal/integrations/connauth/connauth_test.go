@@ -21,6 +21,7 @@ import (
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -292,6 +293,77 @@ func TestNilCredentialSourceRefusesInsteadOfRunningUnauthenticated(t *testing.T)
 	require.True(t, errors.As(err, &ce))
 	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
 	assert.Empty(t, seen.Get("Authorization"))
+}
+
+func (e *env) trigger(userID, integration string, connID *string) string {
+	e.t.Helper()
+	ctx := context.Background()
+	now := time.Now().UTC()
+	projectID := "proj-" + uuid.NewString()
+	require.NoError(e.t, e.repo.CreateProject(ctx, &db.Project{ID: projectID, UserID: userID, Name: "p", Path: e.t.TempDir(), CreatedAt: now, UpdatedAt: now, LastActive: now}))
+	cfg, err := json.Marshal(core.IntegrationConfig{Integration: integration, Events: []string{"x"}})
+	require.NoError(e.t, err)
+	id := "trg-" + uuid.NewString()
+	require.NoError(e.t, e.repo.CreateTrigger(ctx, &core.Trigger{
+		ID: id, UserID: userID, ProjectID: projectID, Name: id, Kind: core.TriggerKindIntegration, Enabled: true,
+		Workflow: "builtin://agent", DaemonID: "d", Config: cfg, ConnectionID: connID, CreatedAt: now, UpdatedAt: now,
+	}))
+	return id
+}
+
+// A poll resolves its credential by trigger id alone; the owner and the
+// connection come from the trigger row. The credential it gets is the
+// owner's, pinned to the integration's host and scrubbing itself.
+func TestForTriggerResolvesFromTheTriggerRow(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	pat := e.githubPAT("alice")
+	trigger := e.trigger("alice", "github", &pat)
+
+	cred, err := e.source.ForTrigger(ctx, trigger)
+	require.NoError(t, err)
+	assert.Equal(t, pat, cred.ConnectionID())
+	req, _ := http.NewRequest(http.MethodGet, "https://api.github.com/user", nil)
+	require.NoError(t, cred.Apply(req))
+	assert.Equal(t, "Bearer "+canary, req.Header.Get("Authorization"))
+	assert.NotContains(t, cred.Scrub("echo "+canary), canary)
+
+	off, _ := http.NewRequest(http.MethodGet, "https://attacker.example/collect", nil)
+	require.Error(t, cred.Apply(off), "a poller that builds a URL to another host gets nothing")
+	assert.Empty(t, off.Header.Get("Authorization"))
+}
+
+func TestForTriggerRefusesAnotherUsersConnection(t *testing.T) {
+	e := newEnv(t)
+	alices := e.githubPAT("alice")
+	bobsTrigger := e.trigger("bob", "github", &alices)
+
+	_, err := e.source.ForTrigger(context.Background(), bobsTrigger)
+	var ce *httpaction.CredentialError
+	require.True(t, errors.As(err, &ce))
+	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
+	assert.NotContains(t, err.Error(), alices, "the refusal does not confirm the foreign id exists")
+}
+
+func TestForTriggerNeedsReauthIsTyped(t *testing.T) {
+	e := newEnv(t)
+	pat := e.githubPAT("alice")
+	require.NoError(t, e.repo.Connections().WithSecretsLock(context.Background(), "alice", pat, func(tx core.SecretsTx) error {
+		return tx.MarkStatus(context.Background(), core.ConnectionStatusNeedsReauth, "invalid_grant")
+	}))
+	trigger := e.trigger("alice", "github", &pat)
+
+	_, err := e.source.ForTrigger(context.Background(), trigger)
+	var ce *httpaction.CredentialError
+	require.True(t, errors.As(err, &ce))
+	assert.Equal(t, httpaction.CodeNeedsReauth, ce.Code)
+}
+
+func TestForTriggerWithoutAResolverRefuses(t *testing.T) {
+	_, err := connauth.New(nil).ForTrigger(context.Background(), "trg-1")
+	var ce *httpaction.CredentialError
+	require.True(t, errors.As(err, &ce))
+	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
 }
 
 // The tool form resolves the connection for the run's owner, taken from the run

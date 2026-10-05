@@ -217,6 +217,34 @@ func paramVars(params map[string]string) map[string]string {
 	return out
 }
 
+// hosts is the set of hosts a connection's credential may be written to: the
+// base_url host with the connection's params expanded, plus allowed_hosts —
+// the same set the declarative runner lets a request reach. It is empty for
+// an integration that takes any public host (the generic HTTP one), whose
+// runtime start-host pin is the guard instead.
+func (p *Provider) hosts(params map[string]string) (map[string]bool, error) {
+	if p.spec.GetAllowAnyPublicHost() {
+		return nil, nil
+	}
+	out := map[string]bool{}
+	if raw := p.spec.GetBaseUrl(); raw != "" {
+		u, err := manifest.ExpandURL(raw, paramVars(params))
+		if err != nil {
+			return nil, newError(CodeFailedPrecondition, "%s: %s", p.DisplayName, err.Error())
+		}
+		out[strings.ToLower(u.Host)] = true
+	}
+	for _, h := range p.spec.GetAllowedHosts() {
+		out[strings.ToLower(h)] = true
+	}
+	if len(out) == 0 {
+		// A credentialed integration with no host at all could only be sent
+		// nowhere; refuse rather than read "no pin" as "any host".
+		return nil, newError(CodeFailedPrecondition, "%s declares no host its credential may be sent to", p.DisplayName)
+	}
+	return out, nil
+}
+
 // templateVar matches {{ name }} with any inner spacing.
 func templateVar(name string) *regexp.Regexp {
 	return regexp.MustCompile(`\{\{\s*` + regexp.QuoteMeta(name) + `\s*\}\}`)
