@@ -6,7 +6,7 @@ interface ChatMessagesContainerProps {
   className?: string;
   /**
    * Vestigial: this frame renders identically for every chat. Still declared
-   * because WorkflowBuilderChat passes it.
+   * because a compact host passes it.
    */
   chatId?: string;
 }

@@ -146,7 +146,7 @@ export function CodeContextChip({
           {languageLabel.length <= 3 ? languageLabel : languageLabel.slice(0, 2)}
         </div>
         {/* Remove button (shown on hover over badge) - uses same color as logo */}
-        <button
+        <button title="Remove from chat"
           onClick={handleRemove}
           className={cn(
             'absolute inset-0 opacity-0 group-hover/badge:opacity-100',
@@ -155,9 +155,7 @@ export function CodeContextChip({
             'transition-opacity pointer-events-none group-hover/badge:pointer-events-auto',
             'z-10',
             getLanguageColor(language)
-          )}
-          title="Remove from chat"
-        >
+          )} aria-label="Remove from chat">
           <X className="w-3.5 h-3.5 stroke-[2.5]" />
         </button>
       </div>

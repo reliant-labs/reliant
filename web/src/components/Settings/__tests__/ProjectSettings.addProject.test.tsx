@@ -1,19 +1,19 @@
 /**
- * Settings → Projects must offer a way to ADD a project.
+ * The Projects viewer tab (ProjectPanel) offers "Add project" only when its
+ * host wires in picker navigation.
  *
- * Per the add-project design the picker is the primary place and Settings is
- * the second one. Settings rendered `<ProjectPanel />` with no props, and
- * ProjectPanel gates both of its picker affordances on
- * `onNavigateToProjectPicker` being supplied — so the button existed in the
- * component and was unreachable from Settings, which is indistinguishable from
- * it not existing at all.
- *
- * These render the real ProjectPanel in both states Settings can be in: with a
- * project selected, and with none.
+ * ProjectPanel gates its picker affordance on `onNavigateToProjectPicker`
+ * being supplied. Settings once rendered it with no props, so the button
+ * existed in the component and was unreachable — indistinguishable from it not
+ * existing. Settings → Projects now has its own page (ProjectsSection, see
+ * ProjectSettings.section.test.tsx); ProjectPanel remains the viewer tab's
+ * surface, and TabbedViewerPanel does wire the navigation in.
  */
-import { render, screen } from "@testing-library/react";
+import { screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
+
+import { renderWithQuery } from "@/test/renderWithQuery";
 
 vi.mock("@/hooks/chat-queries", () => ({
   useChatList: () => ({ data: [] }),
@@ -25,6 +25,11 @@ const currentProject = {
   path: "/home/workspace/projects/my-app",
   is_git_repo: true,
   default_branch: "main",
+  worktree_count: 0,
+  last_active: "2025-01-01T00:00:00Z",
+  created_at: "2025-01-01T00:00:00Z",
+  updated_at: "2025-01-01T00:00:00Z",
+  is_forge: false,
 };
 
 vi.mock("@/store/projectStore", () => {
@@ -68,7 +73,7 @@ import { ProjectPanel } from "@/components/Projects/ProjectPanel";
 describe("Settings → Projects add-project entry point", () => {
   it("offers Add project when the picker navigation is wired in", async () => {
     const navigate = vi.fn();
-    render(<ProjectPanel onNavigateToProjectPicker={navigate} />);
+    renderWithQuery(<ProjectPanel onNavigateToProjectPicker={navigate} />);
 
     const button = await screen.findByTestId("project-panel-add-project");
     expect(button).toHaveTextContent(/add project/i);
@@ -80,7 +85,7 @@ describe("Settings → Projects add-project entry point", () => {
   it("has no add-project affordance at all when navigation is not supplied", () => {
     // This is exactly the state Settings shipped in, and the reason the
     // button has to be wired up rather than merely present in the component.
-    render(<ProjectPanel />);
+    renderWithQuery(<ProjectPanel />);
 
     expect(screen.queryByTestId("project-panel-add-project")).toBeNull();
   });

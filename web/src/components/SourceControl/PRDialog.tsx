@@ -123,19 +123,19 @@ export function PRDialog({
       <div className="space-y-6 p-6">
         {/* Success State */}
         {prUrl && (
-          <div className="p-4 bg-green-500/10 border border-green-500/20 rounded-lg">
+          <div className="rounded-lg border border-success/30 bg-success/10 p-4">
             <div className="flex items-start gap-3">
-              <GitPullRequest className="w-5 h-5 text-green-500 mt-0.5" />
+              <GitPullRequest className="mt-0.5 h-5 w-5 text-success" />
               <div className="flex-1">
-                <p className="text-sm font-medium text-green-500">
-                  Pull request created successfully!
+                <p className="text-sm font-medium text-success">
+                  Pull request created
                 </p>
                 {prUrl && (
                   <a
                     href={prUrl}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-sm text-green-500/80 hover:text-green-500 underline flex items-center gap-1 mt-1"
+                    className="text-sm text-success/80 underline hover:text-success flex items-center gap-1 mt-1"
                   >
                     View pull request
                     <ExternalLink className="w-3 h-3" />
@@ -196,7 +196,7 @@ export function PRDialog({
 
           <div className="text-xs text-muted-foreground">
             <p>
-              Base branch: <code className="px-1.5 py-0.5 bg-muted rounded font-mono">{defaultBranch || "(detecting...)"}</code>
+              Base branch: <code className="rounded border border-border/60 bg-background px-1.5 py-0.5 font-mono">{defaultBranch || "(detecting...)"}</code>
             </p>
           </div>
         </div>
@@ -204,8 +204,8 @@ export function PRDialog({
         {/* Actions */}
         <div className="flex items-center justify-between pt-4 border-t border-border">
           <div className="text-xs text-muted-foreground">
-            <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono">Ctrl</kbd> +{" "}
-            <kbd className="px-1.5 py-0.5 rounded bg-muted font-mono">Enter</kbd> to create
+            <kbd className="rounded border border-border/60 bg-background px-1.5 py-0.5 font-mono">Ctrl</kbd> +{" "}
+            <kbd className="rounded border border-border/60 bg-background px-1.5 py-0.5 font-mono">Enter</kbd> to create
           </div>
           
           <div className="flex items-center gap-2">

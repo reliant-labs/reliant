@@ -370,51 +370,25 @@ func TestGenerateImage_Registration(t *testing.T) {
 	assert.NotContains(t, ExpandToolFilter([]string{"tag:coding:default"}, nil), ToolGenerateImage)
 }
 
-// TestGenerateImage_ParamSchemaOffersNoModelChoice pins the deliberate absence
-// of a model parameter from the AGENT's view. The parameter now exists — a
-// human can bind it — but it is bound by default, so the schema the model sees
-// is byte-for-byte what it was when there was no model parameter at all.
-func TestGenerateImage_ParamSchemaOffersNoModelChoice(t *testing.T) {
+// TestGenerateImage_ParamSchemaOffersModelAndTier pins that the agent now
+// chooses by intent: `tier` and `model` are both visible, `prompt` stays the
+// only required parameter.
+func TestGenerateImage_ParamSchemaOffersModelAndTier(t *testing.T) {
 	t.Parallel()
 	schema := NewGenerateImageTool(nil, nil).ParamSchema()
 	require.NotNil(t, schema.Properties)
 
-	var names []string
-	for pair := schema.Properties.Oldest(); pair != nil; pair = pair.Next() {
-		names = append(names, pair.Key)
-	}
+	names := schemaPropertyNames(t, NewGenerateImageTool(nil, nil))
 	assert.Contains(t, names, "prompt")
-	assert.Contains(t, names, "save_to")
-	assert.NotContains(t, names, "model", "the agent must not name a model id")
+	assert.Contains(t, names, "tier")
+	assert.Contains(t, names, "model")
 	assert.Equal(t, []string{"prompt"}, schema.Required)
 }
 
-// TestGenerateImage_DefaultModelBindingIsAStrategy pins that the unconfigured
-// model default is a TAG STRATEGY, never a concrete model id. A pinned id keeps
-// being requested after the model is retired; a tag strategy re-resolves against
-// the registry on every call. We have shipped retired image models by pinning.
-func TestGenerateImage_DefaultModelBindingIsAStrategy(t *testing.T) {
-	t.Parallel()
-
-	tool := NewGenerateImageTool(nil, nil)
-	bindable, ok := tool.(BindableTool)
-	require.True(t, ok, "generate_image must be bindable")
-
-	bound, present := bindable.Bindings()["model"]
-	require.True(t, present, "model must be bound by default so the agent never sees it")
-
-	selector, ok := bound.Literal.(models.ModelSelector)
-	require.True(t, ok, "the model binding must be a ModelSelector, got %T", bound.Literal)
-	assert.Equal(t, []string{ImageGenTag, models.TagFlagship}, selector.Tags)
-	assert.Empty(t, selector.ID, "the default must be a tag strategy, never a pinned model id")
-	assert.Empty(t, selector.Providers)
-}
-
-// TestGenerateImage_UnboundModelResolvesByTag is the zero-configuration
-// invariant: with nothing bound by a human, the selector that reaches the
-// driver layer is exactly the tags:[image-gen, flagship] request that defaults
-// the image tool to Sunburst without pinning a concrete model id.
-func TestGenerateImage_UnboundModelResolvesByTag(t *testing.T) {
+// TestGenerateImage_UnboundCallResolvesDefaultTierByTag is the
+// zero-configuration invariant: with nothing chosen, the selector reaching the
+// driver layer is the tags:[image-gen, flagship] strategy, never a pinned id.
+func TestGenerateImage_UnboundCallResolvesDefaultTierByTag(t *testing.T) {
 	repo := newFakeAttachmentRepo()
 	recorder := &recordingResolver{generator: okGenerator()}
 	tool := NewGenerateImageTool(repo, recorder.resolve)
@@ -425,12 +399,13 @@ func TestGenerateImage_UnboundModelResolvesByTag(t *testing.T) {
 
 	require.Equal(t, 1, recorder.calls)
 	assert.Equal(t, models.ModelSelector{Tags: []string{ImageGenTag, models.TagFlagship}}, recorder.selector)
+	assert.Contains(t, resp.Content, "Chosen: gpt-image-2.5-flare via default tier=standard.")
 }
 
-// TestGenerateImage_ModelBindingReachesTheDriver is the point of the whole
-// exercise: a human can now fix the image model without the agent gaining any
-// say in it.
-func TestGenerateImage_ModelBindingReachesTheDriver(t *testing.T) {
+// TestGenerateImage_ModelBindingStillLocks is the point of binding: a human can
+// fix the image model, and the agent can neither see the parameter nor
+// override it.
+func TestGenerateImage_ModelBindingStillLocks(t *testing.T) {
 	repo := newFakeAttachmentRepo()
 	recorder := &recordingResolver{generator: okGenerator()}
 
@@ -442,12 +417,10 @@ func TestGenerateImage_ModelBindingReachesTheDriver(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	// Still invisible to the agent after rebinding.
 	names := schemaPropertyNames(t, configured)
 	assert.NotContains(t, names, "model")
 	assert.Contains(t, names, "prompt")
 
-	// Even if the model names one anyway, the human's binding wins.
 	resp, err := configured.Run(generateImageCtx(t), ToolCall{
 		ID:    "c1",
 		Input: `{"prompt":"a red bicycle","model":{"id":"some-model-the-agent-guessed"}}`,

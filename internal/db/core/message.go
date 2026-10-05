@@ -94,16 +94,12 @@ type MessageStore interface {
 	// above them. See 20260802000000_add_message_seq.sql.
 	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
 	ListMessages(ctx context.Context, chatID string, opts MessageListOptions, listContextWindowIDsByThread func(context.Context, string) ([]string, error)) ([]*Message, error)
-	// ListRecentMessages returns the most recent `limit` messages for a chat in
-	// ascending order, bounding the read in SQL rather than fetching the whole
-	// history and slicing in memory the way ListMessages does.
-	ListRecentMessages(ctx context.Context, chatID string, limit int) ([]*Message, error)
-	// ListRecentChatWindow returns the newest `limit` messages on mainThreadID
-	// plus every sibling-thread message inside that seq range, ascending. This
-	// is the correct bound for the initial snapshot: spawn threads out-write and
-	// out-live the main thread, so a chat-wide newest-N can be entirely spawn
-	// messages, which render inside their tool call rather than the transcript.
-	ListRecentChatWindow(ctx context.Context, chatID, mainThreadID string, limit int) ([]*Message, error)
+	// ListRecentTranscriptSiblingMessages returns, ascending, the newest
+	// `limit` messages with seq >= fromSeq on threads other than mainThreadID
+	// that are not spawn threads — the sibling rows the chat transcript renders
+	// inline. Spawn threads render as a tool-call card that fetches its own
+	// thread, so the chat snapshot never ships their transcripts.
+	ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error)
 	// CountMessagesInChat is the true total, so a bounded read can still report
 	// an honest count.
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)

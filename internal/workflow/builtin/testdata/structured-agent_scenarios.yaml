@@ -420,7 +420,9 @@ inputs:
   mode: auto
   max_turns: 100
   response_tool_name: submit_response
-  compaction_threshold: 10000
+  model:
+    tags: [flagship]
+    compaction_threshold: 10000
 events:
   # LLM reads a large file
   - node: agent_loop.call_llm
@@ -494,7 +496,9 @@ inputs:
   mode: auto
   max_turns: 100
   response_tool_name: submit_response
-  compaction_threshold: 185000
+  model:
+    tags: [flagship]
+    compaction_threshold: 185000
 events:
   # LLM reads a file
   - node: agent_loop.call_llm

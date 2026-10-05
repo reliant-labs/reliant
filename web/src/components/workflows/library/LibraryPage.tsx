@@ -33,6 +33,7 @@ import Card from "../../forge-ui/card";
 import { Button } from "../../ui/Button";
 import { Modal } from "../../ui/Modal";
 import { RunWorkflowDialog } from "../../workflow/run/RunWorkflowDialog";
+import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { WorkflowRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
@@ -247,13 +248,14 @@ function LibraryBody({ projectId }: { projectId: string }) {
     return counts;
   }, [triggers.data]);
 
-  const { custom, builtin } = useMemo(() => {
+  const { custom, builtin, buildingBlocks } = useMemo(() => {
     const workflows = library.data?.workflows ?? [];
     const byName = (a: WorkflowResponse, b: WorkflowResponse) =>
       normalizeWorkflowRef(a.name).localeCompare(normalizeWorkflowRef(b.name));
     return {
       custom: workflows.filter((w) => w.source !== "builtin").sort(byName),
-      builtin: workflows.filter((w) => w.source === "builtin").sort(byName),
+      builtin: workflows.filter((w) => w.source === "builtin" && !w.isHidden).sort(byName),
+      buildingBlocks: workflows.filter((w) => w.source === "builtin" && w.isHidden).sort(byName),
     };
   }, [library.data]);
 
@@ -277,6 +279,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
 
   const toItem = (workflow: WorkflowResponse): WorkflowRowItem => ({
     name: workflow.name,
+    title: workflow.title,
     description: workflow.description,
     source: workflow.source,
     isDraft: workflow.status === "draft",
@@ -286,7 +289,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
   });
 
   const actionsFor = (workflow: WorkflowResponse): WorkflowRowAction[] => {
-    const displayName = normalizeWorkflowRef(workflow.name);
+    const displayName = workflowDisplayName(workflow);
     const actions: WorkflowRowAction[] = [
       {
         label: "Edit",
@@ -404,6 +407,19 @@ function LibraryBody({ projectId }: { projectId: string }) {
         <LibrarySection label="Built-in" count={builtin.length}>
           {renderRows(builtin)}
         </LibrarySection>
+      )}
+
+      {buildingBlocks.length > 0 && (
+        <details className="group" data-testid="building-blocks">
+          <summary className="mb-2 cursor-pointer select-none px-1 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+            Building blocks
+            <span className="ml-1.5 font-medium text-muted-foreground/70">{buildingBlocks.length}</span>
+          </summary>
+          <p className="mb-2 px-1 text-xs text-muted-foreground">
+            Used by other workflows. You can run them directly, but they are not offered in the composer.
+          </p>
+          <Card padding="none">{renderRows(buildingBlocks)}</Card>
+        </details>
       )}
 
       {invalid.length > 0 && <InvalidSection workflows={invalid} />}

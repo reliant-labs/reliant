@@ -1,0 +1,95 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 9309,
+      "input_tokens": 56,
+      "output_tokens": 1939,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 5552,
+      "input_tokens": 56,
+      "output_tokens": 953,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 5
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 10655,
+      "input_tokens": 56,
+      "output_tokens": 2009,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T17:14:59Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

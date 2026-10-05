@@ -14,6 +14,7 @@ import (
 	"sort"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/google/uuid"
@@ -103,6 +104,12 @@ type Reconciler struct {
 	// ReconcilerConfig.Interventions). False = detect and log only.
 	interventions bool
 
+	// bgDaemons reaches the daemons that run backgrounded tool calls, for
+	// reconcileBackgroundedProcesses. Unset disables that sweep. Atomic
+	// because the server builds the daemon router after the poll loop has
+	// started, so the set and the loop's read are on different goroutines.
+	bgDaemons atomic.Pointer[backgroundProcessDaemonsHolder]
+
 	// stuckMu guards stuckObservations, the in-memory debounce state for
 	// stuck-task handling. In-memory tracking is acceptable here: a single
 	// reconciler process runs per deployment, and even if multiple replicas
@@ -185,6 +192,11 @@ const (
 	// ever read this, and the run lost a sub-agent's result."
 	anomalyStrandedBackgroundSpawnUndeliverable = "stranded_background_spawn_undeliverable"
 	anomalyOrphanedAgentMessagesResolved        = "orphaned_agent_messages_resolved"
+	// anomalyBackgroundedProcessClosed counts backgrounded tool calls moved off
+	// status 6 because their process ended. Not a fault — it is the normal
+	// lifecycle of every backgrounded call — but counted so a spike (a daemon
+	// restart closing many at once) is visible.
+	anomalyBackgroundedProcessClosed = "backgrounded_process_closed"
 	// anomalySilentTerminalDrift is a run that ended terminally in Temporal
 	// without ever reporting it — the DB still said running/paused when this
 	// pass found it. A hard TERMINATE is the archetype: the worker gets no
@@ -1932,6 +1944,20 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 		if resumable {
 			continue
 		}
+		if call.HasReport {
+			// The parent was already told — by the detached goroutine's own
+			// enqueue, or by an earlier pass — so there is nothing to write
+			// into its mailbox. But the report and the tool call's status are
+			// written by different code, and nothing on the report path moves
+			// the row: before this, a spawn that finished and reported
+			// NORMALLY stayed "backgrounded" forever, because the query
+			// filtered reported calls out and this close was never reached.
+			// Observed: toolu_013CJA3i on chat 8bb0a875, child stopped and
+			// its kind=4 report delivered on 10-01, row still status 6 on
+			// 10-04. Not a repair, so no anomaly is counted.
+			r.closeStrandedBackgroundSpawnCall(ctx, call)
+			continue
+		}
 		if call.ParentThreadID == nil || *call.ParentThreadID == "" {
 			// tool_calls.thread_id is nilable in general (a call can be
 			// recorded before its message is finalized), but a spawn old
@@ -1964,6 +1990,7 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			ToolCallID:   &toolCallID,
 			Status:       status,
 			CreatedAt:    time.Now().UTC(),
+			Synthesized:  true,
 		})
 		if err != nil {
 			logging.Error("[Reconciler] Failed to enqueue stranded background spawn completion",
@@ -2246,6 +2273,12 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	// what strands its mailbox, so resolving here catches the rows this very
 	// pass orphaned rather than leaving them until the next one.
 	if _, repairErr := r.resolveOrphanedAgentMessages(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
+	}
+	// Backgrounded processes are independent of every workflow repair above:
+	// their owner is a daemon, not a workflow, so a process outlives the turn
+	// (and the run) that started it, and only its daemon can say it ended.
+	if _, repairErr := r.reconcileBackgroundedProcesses(ctx, stats); repairErr != nil {
 		errors = append(errors, repairErr)
 	}
 

@@ -35,6 +35,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -217,6 +218,17 @@ func Run(ctx context.Context, opts Options) error {
 	logging.Info("Daemon state publisher wired",
 		"subjectPrefix", daemonstate.SubjectPrefix,
 	)
+
+	// User-update hub, publish-only: the gateway is the one process that
+	// receives daemon heartbeats and local-model inventories, and it forwards
+	// them as ephemeral (never persisted) user updates on the same subject the
+	// api-server's StreamUserUpdates subscribes to. Unwired, every heartbeat
+	// and the local-models refetch were silently discarded at the source —
+	// the api-server's copy of this wiring was removed with the monolith
+	// split, and the gateway never picked it up.
+	userUpdateHub := streaming.NewNATSUpdateHub[db.UserUpdate](nc, "user.updates", "UserUpdate")
+	defer func() { _ = userUpdateHub.Close() }()
+	toolsDaemonService.SetUserUpdateHub(userUpdateHub)
 
 	// Reliant-side derivation consumer: subscribes to the same subject and
 	// mirrors lifecycle events into daemon_attachment. Replaces the legacy

@@ -155,6 +155,11 @@ func ContentBlockToPart(ctx context.Context, chatID string, block *db.MessageCon
 					"error", err)
 				return nil
 			}
+			// Generated video is for the user, never the model: no chat model
+			// we route accepts it, and the bytes would bloat every replay.
+			if strings.HasPrefix(attachment.MimeType, "video/") {
+				return nil
+			}
 			return message.BinaryContent{
 				MIMEType: attachment.MimeType,
 				Data:     attachment.Content,

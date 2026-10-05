@@ -153,3 +153,11 @@ func TestResolveDaemonID_DaemonResolves_ReturnsID(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, "daemon-active", id)
 }
+
+func (f *fakeRegistryClient) RefreshLocalModels(context.Context, *connect.Request[reliantv1.RefreshLocalModelsRequest]) (*connect.Response[reliantv1.RefreshLocalModelsResponse], error) {
+	return nil, errors.New("not implemented")
+}
+
+func (f *fakeRegistryClient) SetLocalModelEndpoints(context.Context, *connect.Request[reliantv1.SetLocalModelEndpointsRequest]) (*connect.Response[reliantv1.SetLocalModelEndpointsResponse], error) {
+	return nil, errors.New("not implemented")
+}

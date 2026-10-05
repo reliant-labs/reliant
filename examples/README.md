@@ -20,14 +20,9 @@ examples/
 | Workflow | Description |
 |----------|-------------|
 | `agent.yaml` | Standard interactive agent with loop-based tool execution |
-| `auditing-agent.yaml` | Agent with per-turn audit oversight from a cheap reviewer model |
-| `discovery-relay.yaml` | Iterative waves with progressive knowledge transfer |
-| `env-setup.yaml` | Environment isolation pipeline: setup, validate, complete |
 | `get-it-right.yaml` | For complex brownfield codebases — try, fail, and learn before implementing |
 | `migrate.yaml` | Guided migration from Claude Code, Cursor, Codex, or Windsurf into Reliant |
-| `one-ring.yaml` | Unified development pipeline: planning → tests → get-it-right loop → complete |
 | `parallel-compete.yaml` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes |
-| `ralph-wiggum.yaml` | Brute-force iteration for complex tasks |
 | `structured-agent.yaml` | Agent that requires structured output via a response tool |
 
 ## Presets
@@ -65,9 +60,7 @@ under `internal/workflow/builtin/scenarios/<workflow>/`.
 | Directory | Description |
 |-----------|-------------|
 | `agent/` | Agent workflow test cases (happy path, manual mode, compaction, multi-tool, etc.) |
-| `auditing-agent/` | Auditing agent test cases (approval, rejection, guidance flows) |
 | `get-it-right/` | Get-it-right test cases (retries, max retries exhausted, restart) |
-| `one-ring/` | One-ring pipeline test cases (full pipeline, individual steps, retries) |
 | `parallel-compete/` | Parallel compete test cases (winner selection, synthesis, failure handling) |
 | `structured-agent/` | Structured agent test cases (schema validation, reminders, custom tools) |
 

@@ -36,15 +36,15 @@ The activity handles branch creation, directory setup, and file copying automati
 
 ### Parallel Implementation Patterns
 
-The **parallel-compete** workflow pattern uses workspaces to run multiple agents on the same task independently. Each agent gets its own environment, implements their solution, and the workflow compares results.
+The built-in **Best of Three** workflow (`parallel-compete`) uses workspaces to run multiple agents on the same task independently. Each agent gets its own environment and implements its solution, and the workflow compares the results.
 
-A parallel-compete workflow might:
+It works like this:
 
-1. Create two workspaces from the same base branch
-2. Spawn separate agent sessions in each workspace
-3. Give both agents the same implementation task
-4. Wait for both to complete
-5. Present both solutions for comparison
+1. Create three workspaces from the same base branch
+2. Run a separate agent in each workspace
+3. Give every agent the same implementation task
+4. Wait for all of them to complete
+5. Have a reviewer pick the winner, or merge the best parts of each
 
 Each agent has its own files, can install dependencies, run builds, and make commits without affecting the other.
 

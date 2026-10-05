@@ -24,7 +24,7 @@ import (
 // serves at least one model for. Each must be able to title a chat on its own.
 var titleProviders = []string{
 	"anthropic", "openai", "gemini", "codex", "openrouter",
-	"copilot", "xai", "antigravity", "reliant", "vertexai",
+	"copilot", "antigravity", "reliant", "vertexai",
 }
 
 // resolveTitleModel runs the production ladder exactly as resolveLLMCall does:

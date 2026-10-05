@@ -175,7 +175,7 @@ export function Tag({
 // Provider dot
 // ---------------------------------------------------------------------------
 
-export function ProviderDot({ provider }: { provider: "anthropic" | "openai" | "gemini" | "xai" }) {
+export function ProviderDot({ provider }: { provider: "anthropic" | "openai" | "gemini" }) {
   return <span className={`cpv2-provider-dot ${provider}`} />;
 }
 

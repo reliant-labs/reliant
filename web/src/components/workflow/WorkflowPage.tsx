@@ -6,6 +6,7 @@
  *   /workflow/new              → new blank workflow (isNew={true})
  *   /workflow/$workflowName    → load named workflow (incl. builtin://...)
  *   ?drill=<nodeId>            → one-shot: drill into a loop on load (tour)
+ *   ?chat=<chatId>             → the chat shown in the editor's chat panel
  *
  * This component replaces the old isWorkflowMode + workflowToOpen Zustand
  * flags. WorkflowBuilderPage is the underlying implementation; this is just
@@ -30,14 +31,13 @@ export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
   const navigate = useNavigate();
   const { pathname } = useLocation();
   const params = useParams({ strict: false }) as { workflowName?: string };
-  const search = useSearch({ strict: false }) as { drill?: string; tour?: string };
+  const search = useSearch({ strict: false }) as { drill?: string; tour?: string; chat?: string };
 
   // When the onboarding tour is active on a builder step, the user is viewing
   // a builtin workflow as a demo. Treat the workflow as editable in-memory so
   // the UI doesn't show "View Only / Create a Copy" prompts; saves are no-op'd
   // in WorkflowBuilderPage so nothing actually persists.
-  const tourMode =
-    search.tour === "workflow-builder" || search.tour === "workflow-builder-chat";
+  const tourMode = search.tour === "workflow-builder";
 
   // Decode any URL-encoded characters in the workflow name (e.g. builtin://
   // becomes builtin%3A%2F%2F in the URL).
@@ -56,11 +56,24 @@ export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
     navigate({ to: "/settings" });
   }, [navigate]);
 
+  const onChatIdChange = useCallback(
+    (chat: string | undefined) => {
+      navigate({
+        to: ".",
+        search: (prev: Record<string, unknown>) => ({ ...prev, chat }),
+        replace: true,
+      } as never);
+    },
+    [navigate],
+  );
+
   return (
     <WorkflowBuilderPage
       routeWorkflowName={workflowName}
       routeIsNew={isNew}
       routeDrillIntoNodeId={search.drill}
+      routeChatId={search.chat}
+      onChatIdChange={onChatIdChange}
       tourMode={tourMode}
       onClose={onClose}
       onNavigateToSettings={onNavigateToSettings}

@@ -239,9 +239,10 @@ proto-generate-go:
 ## proto-generate-controlplane: Generate the control-plane clients (Go + TS) from
 ## proto-vendor/controlplane/ — a generated export of control-plane's public
 ## contract. To pull a new contract first: node .github/scripts/sync-controlplane-proto.mjs
+## Both output dirs are replaced wholesale (pruning stale files), but only after
+## buf succeeds — a failed generate leaves the existing code in place.
 proto-generate-controlplane:
-	@rm -rf gen/controlplane web/src/gen/controlplane
-	@PATH="$(shell pwd)/web/node_modules/.bin:$(PATH)" buf generate --template buf.gen.controlplane.yaml
+	@scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane
 
 ## proto-lint: Lint protobuf files
 proto-lint:

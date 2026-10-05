@@ -5,12 +5,14 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -441,25 +443,15 @@ func (r *Repo) ListMessages(ctx context.Context, chatID string, opts MessageList
 	})
 }
 
-func (r *Repo) ListRecentMessages(ctx context.Context, chatID string, limit int) ([]*Message, error) {
-	if chatID == "" {
-		return nil, fmt.Errorf("chat ID cannot be empty")
-	}
-
-	return r.messages.ListRecentMessages(ctx, chatID, limit)
-}
-
-func (r *Repo) ListRecentChatWindow(ctx context.Context, chatID, mainThreadID string, limit int) ([]*Message, error) {
+func (r *Repo) ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error) {
 	if chatID == "" {
 		return nil, fmt.Errorf("chat ID cannot be empty")
 	}
 	if mainThreadID == "" {
-		// Without a main thread there is nothing to measure the window against;
-		// fall back to the chat-wide bound rather than returning nothing.
-		return r.messages.ListRecentMessages(ctx, chatID, limit)
+		return nil, fmt.Errorf("main thread ID cannot be empty")
 	}
 
-	return r.messages.ListRecentChatWindow(ctx, chatID, mainThreadID, limit)
+	return r.messages.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThreadID, fromSeq, limit)
 }
 
 func (r *Repo) CountMessagesInChat(ctx context.Context, chatID string) (int, error) {
@@ -1521,6 +1513,46 @@ func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string,
 		return fmt.Errorf("updating daemon attachment ports: %w", err)
 	}
 	return nil
+}
+
+// SetDaemonLocalModels stores the daemon's last-published local model
+// inventory (protojson of reliant.v1.LocalModelInventory). The value replaces
+// the previous one wholesale: the daemon always publishes its complete view.
+func (r *Repo) SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	query := r.bindQuery(`UPDATE daemons SET local_models = ? WHERE id = ?`)
+	if _, err := r.DB.ExecContext(ctx, query, inventoryJSON, daemonID); err != nil {
+		return fmt.Errorf("updating daemon local models: %w", err)
+	}
+	return nil
+}
+
+// ListDaemonLocalModels returns the stored local model inventory of every
+// daemon the user owns that has published one, keyed by daemon ID. Liveness is
+// NOT considered here; callers gate on the daemon being online before offering
+// a model for use.
+func (r *Repo) ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	query := r.bindQuery(`SELECT id, local_models FROM daemons WHERE user_id = ? AND local_models <> ''`)
+	rows, err := r.DB.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing daemon local models for user %s: %w", userID, err)
+	}
+	defer rows.Close()
+
+	inventories := make(map[string]string)
+	for rows.Next() {
+		var daemonID, inventoryJSON string
+		if err := rows.Scan(&daemonID, &inventoryJSON); err != nil {
+			return nil, fmt.Errorf("scanning daemon local models: %w", err)
+		}
+		inventories[daemonID] = inventoryJSON
+	}
+	return inventories, rows.Err()
 }
 
 func (r *Repo) DeleteDaemonAttachment(ctx context.Context, daemonID string) error {
@@ -4057,18 +4089,98 @@ func (r *Repo) DeleteContextWindowsByThread(ctx context.Context, threadID string
 // ==================== Workflow Drafts ==
 // User-owned workflows available across all projects
 
+// ErrWorkflowSlugTaken reports that the owner already has a workflow with the
+// slug. It is deliberately not retryable: the conflict is permanent, not a race.
+var ErrWorkflowSlugTaken = errors.New("workflow slug already taken")
+
+// workflowDraftTxOptions: each draft write is one single-row write plus the
+// user_updates insert, which allocates from the per-user counter row and so
+// needs READ COMMITTED (see CreateUserUpdate). Under SERIALIZABLE it would
+// abort against any concurrent update for the same user.
+var workflowDraftTxOptions = TxOptions{Isolation: IsolationReadCommitted}
+
+func (r *Repo) runWorkflowDraftTx(ctx context.Context, f func(txCtx context.Context) error) error {
+	return r.RunTxWithOptions(ctx, workflowDraftTxOptions, f)
+}
+
+// mapWorkflowSlugConflict turns a unique violation on workflow_drafts into
+// ErrWorkflowSlugTaken. The PgError is not wrapped (%w) so isRetryableError
+// does not see 23505 and walk the retry ladder for a permanent conflict.
+func mapWorkflowSlugConflict(err error, slug string) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "workflow_drafts_user_id_slug_key" {
+		return fmt.Errorf("%w: %q", ErrWorkflowSlugTaken, slug)
+	}
+	return err
+}
+
 func (r *Repo) CreateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) error {
 	if draft == nil {
 		return fmt.Errorf("draft cannot be nil")
 	}
-	return r.workflowCatalog.CreateWorkflowDraft(ctx, draft)
+	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if err := r.workflowCatalog.CreateWorkflowDraft(txCtx, draft); err != nil {
+			return mapWorkflowSlugConflict(err, draft.Slug)
+		}
+		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
+	})
 }
 
 func (r *Repo) UpsertWorkflowDraft(ctx context.Context, draft *WorkflowDraft) (*WorkflowDraft, error) {
 	if draft == nil {
 		return nil, fmt.Errorf("draft cannot be nil")
 	}
-	return r.workflowCatalog.UpsertWorkflowDraft(ctx, draft)
+	var saved *WorkflowDraft
+	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		row, err := r.workflowCatalog.UpsertWorkflowDraft(txCtx, draft)
+		if err != nil {
+			return mapWorkflowSlugConflict(err, draft.Slug)
+		}
+		saved = row
+		return r.publishWorkflowDraftUpdated(txCtx, row, false)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return saved, nil
+}
+
+// publishWorkflowDraftUpdated announces a draft write to the owner's open
+// editors. Every draft writer funnels through the Repo methods that call this,
+// so no tool or RPC can forget. It must run inside the write's transaction: a
+// rolled-back write then never announces itself. deleted marks the draft's
+// removal (data_json {"deleted": true}); the version is then the last one.
+func (r *Repo) publishWorkflowDraftUpdated(ctx context.Context, draft *WorkflowDraft, deleted bool) error {
+	if draft == nil {
+		return nil
+	}
+	payload := map[string]any{
+		"draft_id": draft.ID,
+		"slug":     draft.Slug,
+		"version":  draft.Version,
+	}
+	if deleted {
+		payload["deleted"] = true
+	}
+	data, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal workflow draft update: %w", err)
+	}
+	return r.CreateUserUpdate(ctx, &UserUpdate{
+		UserID:     draft.UserID,
+		UpdateType: UserUpdateWorkflowDraftUpdated,
+		EntityType: EntityTypeWorkflowDraft,
+		EntityID:   draft.ID,
+		Data:       data,
+	})
+}
+
+func (r *Repo) publishWorkflowDraftUpdatedByID(ctx context.Context, id string) error {
+	row, err := r.workflowCatalog.GetWorkflowDraft(ctx, id)
+	if err != nil {
+		return err
+	}
+	return r.publishWorkflowDraftUpdated(ctx, row, false)
 }
 
 func (r *Repo) GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error) {
@@ -4088,10 +4200,6 @@ func (r *Repo) GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) 
 
 func (r *Repo) GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error) {
 	return r.workflowCatalog.GetWorkflowDraftByName(ctx, userID, name)
-}
-
-func (r *Repo) GetWorkflowDraftByChatID(ctx context.Context, chatID string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.GetWorkflowDraftByChatID(ctx, chatID)
 }
 
 func (r *Repo) GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error) {
@@ -4125,28 +4233,82 @@ func (r *Repo) UpdateWorkflowDraft(ctx context.Context, draft *WorkflowDraft) er
 	if draft == nil {
 		return fmt.Errorf("draft cannot be nil")
 	}
-
-	return r.workflowCatalog.UpdateWorkflowDraft(ctx, draft)
+	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if err := r.workflowCatalog.UpdateWorkflowDraft(txCtx, draft); err != nil {
+			return mapWorkflowSlugConflict(err, draft.Slug)
+		}
+		return r.publishWorkflowDraftUpdatedByID(txCtx, draft.ID)
+	})
 }
 
 func (r *Repo) UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error {
-	return r.workflowCatalog.UpdateWorkflowDraftDefinition(ctx, id, name, slug, definition, status)
+	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		if err := r.workflowCatalog.UpdateWorkflowDraftDefinition(txCtx, id, name, slug, definition, status); err != nil {
+			return mapWorkflowSlugConflict(err, slug)
+		}
+		return r.publishWorkflowDraftUpdatedByID(txCtx, id)
+	})
 }
 
 func (r *Repo) SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error) {
-	return r.workflowCatalog.SetWorkflowDraftStatus(ctx, id, status)
+	var saved *WorkflowDraft
+	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		row, err := r.workflowCatalog.SetWorkflowDraftStatus(txCtx, id, status)
+		if err != nil {
+			return err
+		}
+		saved = row
+		return r.publishWorkflowDraftUpdated(txCtx, row, false)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return saved, nil
 }
 
 func (r *Repo) SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error) {
-	return r.workflowCatalog.SetWorkflowDraftHidden(ctx, id, isHidden)
+	var saved *WorkflowDraft
+	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		row, err := r.workflowCatalog.SetWorkflowDraftHidden(txCtx, id, isHidden)
+		if err != nil {
+			return err
+		}
+		saved = row
+		return r.publishWorkflowDraftUpdated(txCtx, row, false)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return saved, nil
 }
 
+// DeleteWorkflowDraft publishes {"deleted": true} with the deleted draft's
+// id/slug/last version, built from DELETE ... RETURNING so the read and the
+// delete are one atomic statement. Deleting a missing draft is a silent no-op.
 func (r *Repo) DeleteWorkflowDraft(ctx context.Context, id string) error {
-	return r.workflowCatalog.DeleteWorkflowDraft(ctx, id)
+	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		deleted, err := r.workflowCatalog.DeleteWorkflowDraft(txCtx, id)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return r.publishWorkflowDraftUpdated(txCtx, deleted, true)
+	})
 }
 
 func (r *Repo) DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error {
-	return r.workflowCatalog.DeleteWorkflowDraftBySlug(ctx, userID, slug)
+	return r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		deleted, err := r.workflowCatalog.DeleteWorkflowDraftBySlug(txCtx, userID, slug)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil
+		}
+		if err != nil {
+			return err
+		}
+		return r.publishWorkflowDraftUpdated(txCtx, deleted, true)
+	})
 }
 
 func (r *Repo) WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error) {
@@ -4157,12 +4319,20 @@ func (r *Repo) CountWorkflowDraftsByUser(ctx context.Context, userID string) (in
 	return r.workflowCatalog.CountWorkflowDraftsByUser(ctx, userID)
 }
 
-func (r *Repo) AssociateChatWithDraft(ctx context.Context, draftID string, chatID string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.AssociateChatWithDraft(ctx, draftID, chatID)
-}
-
 func (r *Repo) UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error) {
-	return r.workflowCatalog.UpdateWorkflowForkedFrom(ctx, draftID, forkedFrom)
+	var saved *WorkflowDraft
+	err := r.runWorkflowDraftTx(ctx, func(txCtx context.Context) error {
+		row, err := r.workflowCatalog.UpdateWorkflowForkedFrom(txCtx, draftID, forkedFrom)
+		if err != nil {
+			return err
+		}
+		saved = row
+		return r.publishWorkflowDraftUpdated(txCtx, row, false)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return saved, nil
 }
 
 // ==================== Preset Repository ====================

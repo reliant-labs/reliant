@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { GitBranch, FolderOpen, Link, Loader2, CheckCircle2, Github } from "lucide-react";
+import { AlertCircle, GitBranch, FolderOpen, Link, Loader2, CheckCircle2, Github } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { Button } from "../ui/Button";
 import { gitService } from "../../services/controlPlane/git";
@@ -139,7 +139,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Add Repository"
+      title="Clone a repository"
       size="lg"
     >
       {/* Loading GitHub status */}
@@ -153,7 +153,7 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
       {!checkingGitHub && !gitHubConnected && (
         <div className="space-y-6">
           <div className="flex flex-col items-center justify-center py-6 text-center">
-            <div className="p-4 rounded-full bg-muted ring-1 ring-border mb-4">
+            <div className="mb-4 rounded-full border border-border bg-background p-4">
               <Github className="w-8 h-8 text-muted-foreground" />
             </div>
             <h3 className="text-sm font-semibold text-foreground mb-2">
@@ -228,21 +228,19 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
             </div>
           )}
           {error && (
-            <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
-              <div className="flex items-start gap-2">
-                <span className="text-destructive mt-0.5">⚠️</span>
-                <span className="flex-1">{error}</span>
-              </div>
+            <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+              <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+              <span className="flex-1">{error}</span>
             </div>
           )}
 
           {/* Success message */}
           {modalState === "success" && clonedPath && (
-            <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
-              <div className="flex items-center gap-2 text-sm text-emerald-600 dark:text-emerald-400">
-                <CheckCircle2 className="w-4 h-4 flex-shrink-0" />
-                <span>Repository cloned to <code className="font-mono text-xs bg-muted px-1 py-0.5 rounded">{clonedPath}</code></span>
-              </div>
+            <div className="flex items-center gap-2 rounded-md border border-success/30 bg-success/10 px-3 py-2 text-sm text-success">
+              <CheckCircle2 className="h-4 w-4 flex-shrink-0" aria-hidden="true" />
+              <span>
+                Repository cloned to <code className="break-all font-mono text-xs text-foreground">{clonedPath}</code>
+              </span>
             </div>
           )}
 
@@ -310,21 +308,21 @@ export function AddRepoModal({ isOpen, onClose, daemonId }: AddRepoModalProps) {
             </div>
           </div>
 
-          <div className="flex gap-3 pt-6 border-t border-border">
+          <div className="flex justify-end gap-2 border-t border-border pt-4">
             <button
               type="button"
               onClick={handleClose}
-              className="flex-1 px-5 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+              className="h-8 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               disabled={modalState === "loading"}
             >
               Cancel
             </button>
             <button
               type="submit"
-              className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+              className="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
               disabled={modalState === "loading" || modalState === "success"}
             >
-              {modalState === "loading" ? "Cloning..." : modalState === "success" ? "Cloned!" : "Clone Repository"}
+              {modalState === "loading" ? "Cloning…" : modalState === "success" ? "Cloned" : "Clone repository"}
             </button>
           </div>
         </form>

@@ -43,6 +43,7 @@ type AgentMessage struct {
 	DeliveredAt        sql.NullTime          `json:"delivered_at"`
 	DeliveredMessageID sql.NullString        `json:"delivered_message_id"`
 	Attachments        pqtype.NullRawMessage `json:"attachments"`
+	Synthesized        bool                  `json:"synthesized"`
 }
 
 type AntigravityAuthToken struct {
@@ -299,6 +300,7 @@ type Daemon struct {
 	LastStatusChangedAt sql.NullTime   `json:"last_status_changed_at"`
 	LastOomKilledAt     sql.NullTime   `json:"last_oom_killed_at"`
 	OomKillCount        int32          `json:"oom_kill_count"`
+	LocalModels         string         `json:"local_models"`
 }
 
 type DaemonAttachment struct {
@@ -388,6 +390,21 @@ type MessageOrderCounter struct {
 	CounterKind  string `json:"counter_kind"`
 	ScopeID      string `json:"scope_id"`
 	LastAssigned int64  `json:"last_assigned"`
+}
+
+type ModelEndpoint struct {
+	ID                     string         `json:"id"`
+	UserID                 string         `json:"user_id"`
+	Name                   string         `json:"name"`
+	BaseUrl                string         `json:"base_url"`
+	Route                  string         `json:"route"`
+	DaemonID               sql.NullString `json:"daemon_id"`
+	CredentialConnectionID sql.NullString `json:"credential_connection_id"`
+	HeaderNames            []string       `json:"header_names"`
+	ModelsJson             string         `json:"models_json"`
+	ProbeJson              string         `json:"probe_json"`
+	CreatedAt              time.Time      `json:"created_at"`
+	UpdatedAt              time.Time      `json:"updated_at"`
 }
 
 type Plan struct {
@@ -592,6 +609,7 @@ type ToolCall struct {
 	CompletedAt         sql.NullTime   `json:"completed_at"`
 	CreatedAt           time.Time      `json:"created_at"`
 	UpdatedAt           time.Time      `json:"updated_at"`
+	DaemonID            sql.NullString `json:"daemon_id"`
 }
 
 type ToolCallResult struct {
@@ -654,6 +672,21 @@ type UserUpdate struct {
 	EntityID       string         `json:"entity_id"`
 	Data           string         `json:"data"`
 	CreatedAt      time.Time      `json:"created_at"`
+}
+
+type VideoGenerationJob struct {
+	ToolCallID   string         `json:"tool_call_id"`
+	UserID       string         `json:"user_id"`
+	ChatID       string         `json:"chat_id"`
+	Driver       string         `json:"driver"`
+	ModelID      string         `json:"model_id"`
+	ApiModel     string         `json:"api_model"`
+	ProviderJob  string         `json:"provider_job"`
+	State        string         `json:"state"`
+	AttachmentID sql.NullString `json:"attachment_id"`
+	ErrorMessage string         `json:"error_message"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
 }
 
 type VisibilityOverride struct {

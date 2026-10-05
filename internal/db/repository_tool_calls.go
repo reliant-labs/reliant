@@ -151,6 +151,14 @@ func (r *Repo) ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*Str
 	return store.ListStrandedBackgroundSpawnToolCalls(ctx)
 }
 
+func (r *Repo) ListBackgroundedProcessToolCalls(ctx context.Context) ([]*BackgroundedProcessCall, error) {
+	store, err := r.toolCalls(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return store.ListBackgroundedProcessToolCalls(ctx)
+}
+
 func (r *Repo) ListToolCallResultsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCallResult, error) {
 	if len(messageIDs) == 0 {
 		return []*ToolCallResult{}, nil

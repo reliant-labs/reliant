@@ -1,10 +1,12 @@
 /**
  * Onboarding Constants
  *
- * Step definitions for the 8-step guided tour, checklist items for the
+ * Step definitions for the guided tour, checklist items for the
  * achievement-based system, and shared settings keys.
  *
- * Flow: Tour (7 spotlight steps) → Completion → Checklist
+ * Flow: Tour (7 spotlight steps) → Checklist. There is no closing modal: the
+ * last spotlight's nav button reads "Finish", and finishing lands the user on
+ * their project's chat (useTourNavigation.completeAndAdvance).
  */
 
 import type {
@@ -13,6 +15,7 @@ import type {
   ChecklistItem,
   ChecklistItemId,
 } from "./types";
+import { isForgeUIEnabled } from "../../lib/forgeFeature";
 
 // ─── Tour Steps ──────────────────────────────────────────────────────────────
 
@@ -43,6 +46,19 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     skippable: true,
   },
   {
+    id: "workflow-controls",
+    type: "spotlight",
+    title: "Workflow controls",
+    description:
+      "Pick the workflow for this chat, then tune it. These controls come from the workflow's params — each one decides what shows up here, what sits behind ⚙, and what stays hidden.",
+    targetSelector: "[data-onboarding='chat-controls']",
+    skippable: true,
+    spotlightConfig: {
+      padding: 6,
+      detectBorderRadius: true,
+    },
+  },
+  {
     id: "workspaces",
     type: "spotlight",
     title: "Workspaces",
@@ -54,6 +70,22 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
       padding: 8,
       detectBorderRadius: true,
     },
+  },
+  {
+    id: "deployments",
+    type: "spotlight",
+    title: "Deployments",
+    description:
+      "See every environment your project ships to — what's running where, and what changes before you promote or deploy.",
+    targetSelector: "[data-onboarding='deployments-button']",
+    skippable: true,
+    spotlightConfig: {
+      padding: 4,
+      detectBorderRadius: true,
+    },
+    // The Deployments entry is the forge UI's, which a user can switch off in
+    // Settings → Developer — and then there is nothing to point at.
+    isAvailable: isForgeUIEnabled,
   },
   {
     id: "workflow-intro",
@@ -71,13 +103,13 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
   {
     id: "workflow-hub",
     type: "spotlight",
-    title: "Ready-made workflows",
+    title: "Library, runs, automations",
     description:
-      "Pick a template built for your task — Agent for a quick one-off, or Checklist for a full build-test-review pipeline.",
-    targetSelector: "[data-onboarding='workflow-hub']",
+      "Start from a ready-made workflow in the Library, follow every run in Runs, and put one on a schedule in Automations.",
+    targetSelector: "[data-onboarding='workflows-tabs']",
     skippable: true,
     spotlightConfig: {
-      padding: 16,
+      padding: 6,
       detectBorderRadius: true,
     },
   },
@@ -86,33 +118,13 @@ export const ONBOARDING_STEPS: OnboardingStep[] = [
     type: "spotlight",
     title: "Build your own",
     description:
-      "Drag steps onto the canvas and connect them to design your own multi-step process.",
+      "Drag steps onto the canvas and connect them, or describe what you want and the AI assistant builds it for you.",
     targetSelector: "[data-onboarding='workflow-canvas']",
     skippable: true,
     spotlightConfig: {
       padding: 0,
       borderRadius: "none",
     },
-  },
-  {
-    id: "workflow-builder-chat",
-    type: "spotlight",
-    title: "Describe, don't draw",
-    description:
-      "Describe what you want in plain English and it builds the workflow for you.",
-    targetSelector: "[data-onboarding='workflow-chat']",
-    skippable: true,
-    spotlightConfig: {
-      padding: 0,
-      borderRadius: "none",
-    },
-  },
-  {
-    id: "completion",
-    type: "modal",
-    title: "Ready to go",
-    description: "You're all set to start building",
-    skippable: false,
   },
 ];
 
@@ -124,70 +136,50 @@ export function getStepById(
   return ONBOARDING_STEPS.find((step) => step.id === id);
 }
 
-export function getStepIndex(id: OnboardingStepId): number {
-  return ONBOARDING_STEPS.findIndex((step) => step.id === id);
+/**
+ * The steps this user's tour actually walks: ONBOARDING_STEPS minus any whose
+ * `isAvailable` says no. Everything that orders or counts steps — Next, Back,
+ * "n / total", which step is last — reads this, never ONBOARDING_STEPS
+ * directly, so an unavailable step is invisible rather than a dead stop.
+ *
+ * ONBOARDING_STEPS stays the full static list: the URL schema and persisted
+ * progress must still recognise every id.
+ */
+export function getActiveTourSteps(): OnboardingStep[] {
+  return ONBOARDING_STEPS.filter((step) => step.isAvailable?.() ?? true);
 }
 
+/** Position of a step in the active tour, or -1 when it isn't in it. */
+export function getStepIndex(id: OnboardingStepId): number {
+  return getActiveTourSteps().findIndex((step) => step.id === id);
+}
+
+/**
+ * The active step after `currentId`. Walks the FULL list from `currentId`'s
+ * static position, so it still answers when the current step has itself just
+ * become unavailable (e.g. the forge UI was switched off mid-tour).
+ */
 export function getNextStepId(
   currentId: OnboardingStepId,
 ): OnboardingStepId | null {
-  const currentIndex = getStepIndex(currentId);
-  if (currentIndex === -1 || currentIndex >= ONBOARDING_STEPS.length - 1) {
-    return null;
-  }
-  return ONBOARDING_STEPS[currentIndex + 1].id;
+  const staticIndex = ONBOARDING_STEPS.findIndex((step) => step.id === currentId);
+  if (staticIndex === -1) return null;
+  const next = ONBOARDING_STEPS.slice(staticIndex + 1).find(
+    (step) => step.isAvailable?.() ?? true,
+  );
+  return next?.id ?? null;
 }
 
+/** The active step before `currentId`; see getNextStepId. */
 export function getPreviousStepId(
   currentId: OnboardingStepId,
 ): OnboardingStepId | null {
-  const currentIndex = getStepIndex(currentId);
-  if (currentIndex <= 0) {
-    return null;
-  }
-  return ONBOARDING_STEPS[currentIndex - 1].id;
-}
-
-// Step context — which view mode each step requires
-export const WORKFLOW_MODE_STEPS: OnboardingStepId[] = [
-  "workflow-hub",
-  "workflow-builder",
-  "workflow-builder-chat",
-];
-
-export const WORKFLOW_BUILDER_STEPS: OnboardingStepId[] = [
-  "workflow-builder",
-  "workflow-builder-chat",
-];
-
-export const CHAT_MODE_STEPS: OnboardingStepId[] = [
-  "chat-and-sidebars",
-  "workspaces",
-  "workflow-intro",
-];
-
-export const MODAL_STEPS: OnboardingStepId[] = [
-  "completion",
-];
-
-export const SETTINGS_MODE_STEPS: OnboardingStepId[] = [];
-
-export function stepRequiresWorkflowMode(stepId: OnboardingStepId): boolean {
-  return WORKFLOW_MODE_STEPS.includes(stepId);
-}
-
-export function stepRequiresWorkflowBuilder(
-  stepId: OnboardingStepId,
-): boolean {
-  return WORKFLOW_BUILDER_STEPS.includes(stepId);
-}
-
-export function stepRequiresChatMode(stepId: OnboardingStepId): boolean {
-  return CHAT_MODE_STEPS.includes(stepId);
-}
-
-export function stepRequiresSettingsMode(stepId: OnboardingStepId): boolean {
-  return SETTINGS_MODE_STEPS.includes(stepId);
+  const staticIndex = ONBOARDING_STEPS.findIndex((step) => step.id === currentId);
+  if (staticIndex <= 0) return null;
+  const previous = ONBOARDING_STEPS.slice(0, staticIndex)
+    .reverse()
+    .find((step) => step.isAvailable?.() ?? true);
+  return previous?.id ?? null;
 }
 
 // ─── Checklist Items ─────────────────────────────────────────────────────────
@@ -232,7 +224,7 @@ export const CHECKLIST_ITEMS: ChecklistItem[] = [
   {
     id: "take-product-tour",
     title: "Take the tour",
-    description: "A two-minute walkthrough of chat, workspaces, and workflows",
+    description: "A two-minute walkthrough of chat, workspaces, deployments, and workflows",
     category: "required",
     action: "navigate",
     actionTarget: "product-tour",
@@ -318,12 +310,12 @@ export const TOUR_SETTINGS_KEYS = {
 // the tuple stays in sync with ONBOARDING_STEPS.
 export const ONBOARDING_STEP_IDS = [
   "chat-and-sidebars",
+  "workflow-controls",
   "workspaces",
+  "deployments",
   "workflow-intro",
   "workflow-hub",
   "workflow-builder",
-  "workflow-builder-chat",
-  "completion",
 ] as const satisfies readonly OnboardingStepId[];
 
 if (

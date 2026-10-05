@@ -67,7 +67,115 @@ message DaemonMessage {
     // (e.g. one dispatched from the DAEMON_PENDING_COMMANDS queue after the
     // original caller already returned). See DaemonCommandFailed.
     DaemonCommandFailed daemon_command_failed = 13;
+
+    // Local-model relay: response head and body chunks for an
+    // LocalModelHTTPRequest, in order, ending with a chunk whose done=true.
+    LocalModelHTTPChunk local_model_http_chunk = 14;
+
+    // The local model servers this daemon can reach and the models they
+    // serve. Sent after registration, whenever detection changes, and on
+    // request (LocalModelRefresh). Replaces the daemon's previous inventory.
+    LocalModelInventory local_model_inventory = 15;
   }
+}
+
+// ============================================
+// Local models
+// ============================================
+//
+// A local model server (Ollama, LM Studio, llama.cpp, vLLM, ...) runs on the
+// DAEMON's machine, which in distributed mode is not the machine the worker
+// runs on. So the endpoint is a property of a daemon: the daemon detects and
+// probes it, publishes what it serves (LocalModelInventory), and relays the
+// worker's OpenAI-compatible HTTP requests to it (LocalModelHTTPRequest /
+// LocalModelHTTPChunk). The worker never dials the endpoint itself.
+
+// LocalModelInventory is a daemon's complete, current view of the local model
+// servers it can reach.
+message LocalModelInventory {
+  repeated LocalModelEndpoint endpoints = 1;
+  // When the daemon last probed, RFC3339.
+  string probed_at = 2;
+}
+
+// LocalModelEndpoint is one OpenAI-compatible server on the daemon's machine.
+message LocalModelEndpoint {
+  // Stable id for this endpoint on this daemon, e.g. "ollama" or
+  // "lmstudio", or a hash of base_url for a user-configured one. Requests
+  // name the endpoint by this id, never by URL.
+  string id = 1;
+  // "ollama", "lmstudio", "llamacpp", "vllm", or "openai_compatible".
+  string kind = 2;
+  // The base URL as seen FROM THE DAEMON (e.g. http://localhost:11434/v1).
+  // Informational for the UI; the server never dials it.
+  string base_url = 3;
+  // "detected" (well-known port probe) or "configured" (user config).
+  string source = 4;
+  // Empty when the endpoint answered; otherwise why it did not (connection
+  // refused, timeout, non-2xx), suitable for showing to the user.
+  string error = 5;
+  repeated LocalModelInfo models = 6;
+}
+
+// LocalModelInfo describes one model as reported by the server itself.
+message LocalModelInfo {
+  // The model name the server expects in requests (e.g. "qwen3:latest").
+  string name = 1;
+  // Context window the server will actually honor for this model, in
+  // tokens. For Ollama this is the num_ctx the daemon will request, not the
+  // server's 4096 default. 0 = unknown.
+  int64 context_window = 2;
+  bool supports_tools = 3;
+  bool supports_vision = 4;
+  bool supports_thinking = 5;
+  // False for embedding-only models; such models are never offered for chat.
+  bool supports_chat = 6;
+  // Size on disk in bytes, when the server reports it. 0 = unknown.
+  int64 size_bytes = 7;
+  // Server-reported parameter count label, e.g. "8.2B". Informational.
+  string parameter_size = 8;
+}
+
+// LocalModelRefresh asks the daemon to re-probe now and send a fresh
+// LocalModelInventory. Used by the UI's "Test connection" / "Refresh".
+message LocalModelRefresh {}
+
+// LocalModelHTTPRequest relays one HTTP request to a local model endpoint on
+// the daemon's machine. The daemon only forwards requests whose endpoint_id is
+// in its current inventory and whose path is on its allow-list (/v1/*,
+// /api/show, /api/tags, /api/v0/*, /props); it is not a general proxy.
+message LocalModelHTTPRequest {
+  // Correlates chunks and cancellation. Unique per request.
+  string request_id = 1;
+  string endpoint_id = 2;
+  string method = 3;
+  // Path relative to the endpoint's base URL, including any query string,
+  // e.g. "/chat/completions".
+  string path = 4;
+  map<string, string> headers = 5;
+  bytes body = 6;
+  // Milliseconds of silence (no bytes from the local server) after which the
+  // daemon aborts the request. 0 = daemon default.
+  int32 idle_timeout_ms = 7;
+}
+
+// LocalModelHTTPCancel aborts an in-flight LocalModelHTTPRequest.
+message LocalModelHTTPCancel {
+  string request_id = 1;
+}
+
+// LocalModelHTTPChunk carries a relayed response back in order. The first
+// chunk carries status and headers; later chunks carry body bytes; the last
+// has done=true. A transport failure before any response is reported as a
+// single done chunk with error set and status 0.
+message LocalModelHTTPChunk {
+  string request_id = 1;
+  uint64 sequence = 2;
+  int32 status = 3;
+  map<string, string> headers = 4;
+  bytes data = 5;
+  bool done = 6;
+  string error = 7;
 }
 
 // DaemonRegister is sent when daemon first connects.
@@ -170,6 +278,11 @@ message ServerMessage {
     // process. Mirrors tool_cancel: both reach a RUNNING execution by
     // request_id, which is the only handle the daemon keeps for one.
     ToolExecutionBackground tool_background = 16;
+
+    // Local-model relay. See LocalModelHTTPRequest.
+    LocalModelHTTPRequest local_model_http_request = 17;
+    LocalModelHTTPCancel local_model_http_cancel = 18;
+    LocalModelRefresh local_model_refresh = 19;
   }
 }
 

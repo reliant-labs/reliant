@@ -6,6 +6,7 @@
  * WORKFLOW_UI.md §2.2). Used by Library rows and preset rows.
  */
 
+import { Tooltip } from "../ui/Tooltip";
 import { useState } from "react";
 import { MoreHorizontal } from "lucide-react";
 
@@ -29,6 +30,7 @@ export function RowMenu({ label, actions }: { label: string; actions: RowMenuAct
       variant="form"
       contentClassName="min-w-44 py-1"
       trigger={
+        <Tooltip content={label} placement="left" delay={300} wrapperClassName="inline-flex">
         <button
           type="button"
           onClick={() => setOpen(!open)}
@@ -39,6 +41,7 @@ export function RowMenu({ label, actions }: { label: string; actions: RowMenuAct
         >
           <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
         </button>
+        </Tooltip>
       }
     >
       <div role="menu" aria-label={label}>

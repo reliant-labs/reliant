@@ -1,4 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
+import { Tooltip } from "../ui/Tooltip";
 import { useState, memo, useRef, useEffect } from "react";
 import {
   ChevronDown,
@@ -177,16 +178,16 @@ function RunStepExecutionComponent({ runOutput }: RunStepExecutionProps) {
                 <span className="text-xs font-mono text-muted-foreground">
                   {runOutput.output.length.toLocaleString()} chars
                 </span>
-                <button
+                <Tooltip content="Expand in modal" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                   onClick={(e) => {
                     e.stopPropagation();
                     setShowModal(true);
                   }}
-                  className="p-0.5 hover:bg-muted rounded transition-colors"
-                  title="Expand in modal"
-                >
+                  className="p-0.5 hover:bg-muted rounded transition-colors" aria-label="Expand in modal">
                   <Maximize2 className="w-3 h-3 text-muted-foreground" />
                 </button>
+</Tooltip>
                 {isExpanded ? (
                   <ChevronDown className="w-3 h-3 text-muted-foreground" />
                 ) : (

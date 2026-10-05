@@ -1,4 +1,5 @@
 name: forge-migrate
+title: Move to Forge
 apiVersion: "0.0.5"
 description: |
   Migrate an existing codebase into a Forge project. Distinct from `migrate`

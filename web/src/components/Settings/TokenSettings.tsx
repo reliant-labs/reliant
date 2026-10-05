@@ -13,6 +13,7 @@ import {
 import type { TokenInfo } from "../../gen/reliant/v1/token_pb";
 import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 // The permissions a daemon credential can carry. Mirrors the org-administration
 // half of forge/pkg/accesstoken plus daemon:connect, which every daemon token
@@ -189,13 +190,10 @@ export function TokenSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-2">Access Tokens</h2>
-        <p className="text-sm text-muted-foreground">
-          Create and manage access tokens for connecting headless daemons and
-          self-hosted environments.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Access Tokens"
+        description="Create tokens that let a self-hosted machine or headless daemon connect to your account. Come here to issue a token for a new machine, or revoke one you no longer trust."
+      />
 
       {error && (
         <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">

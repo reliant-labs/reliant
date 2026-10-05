@@ -29,6 +29,7 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Badge } from "../ui/Badge";
 import { cn } from "../../lib/utils";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 /**
  * Connector settings: grants that let a third-party MCP client (ChatGPT,
@@ -232,14 +233,10 @@ export function ConnectorSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-2">Connectors</h2>
-        <p className="text-sm text-muted-foreground">
-          Let ChatGPT, Claude, or another MCP client run tools inside one of
-          your cloud workspaces — including from your phone, where those apps
-          cannot run tools locally.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Connectors"
+        description="Let other AI apps (ChatGPT, Claude, or any MCP client) run tools inside one of your cloud workspaces, including from your phone where those apps cannot run tools locally. Each connector gets its own scoped grant that you can review and revoke here."
+      />
 
       {error && (
         <div className="rounded-lg bg-red-50 dark:bg-red-950/20 border border-red-200 dark:border-red-800 p-3">

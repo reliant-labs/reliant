@@ -14,7 +14,7 @@
  *      View logs (admin app), and Skip and continue CTAs.
  *   4. Stuck disconnected — same UI as Failed.
  *
- * The gate is rendered by terminal onboarding steps (ProjectPickerStep and
+ * The gate is rendered by terminal onboarding steps (FinishStep and
  * GitHubConnectStep) AFTER completeOnboarding succeeds but BEFORE navigating
  * to the chat view, so the user never lands on a silent "No daemon connected"
  * banner without context.

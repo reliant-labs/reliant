@@ -94,6 +94,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 
 				var wf struct {
 					Name        string `yaml:"name"`
+					Title       string `yaml:"title"`
 					Description string `yaml:"description"`
 				}
 				if err := yaml.Unmarshal(data, &wf); err != nil {
@@ -103,6 +104,9 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 				desc := wf.Description
 				if desc == "" {
 					desc = "(no description)"
+				}
+				if wf.Title != "" {
+					desc = wf.Title + " — " + desc
 				}
 
 				workflows = append(workflows, workflowInfo{
@@ -215,7 +219,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 	// a project slug, or a builtin name — and get_workflow's `id` accepts all
 	// three, so anything in this table can be pasted straight into it.
 	sb.WriteString("\nUse `get_workflow` with the `id` parameter to view the full YAML. " +
-		"`id` accepts the Workflow name/slug above or the UUID; omit it entirely to get the workflow this chat is editing.\n" +
+		"`id` accepts the Workflow name/slug above or the UUID; it is required.\n" +
 		"Builtin and project workflows are read-only — copy one with `create_workflow` to make an editable draft.\n")
 
 	return NewTextResponse(sb.String()), nil
@@ -226,7 +230,7 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 // =============================================================================
 
 type GetWorkflowParams struct {
-	ID string `json:"id,omitempty" jsonschema:"description=Workflow UUID, slug, or name. Optional — defaults to the workflow this chat is editing."`
+	ID string `json:"id" jsonschema:"required,description=Workflow UUID, slug, or name (from create_workflow or list_workflows)."`
 }
 
 type getWorkflowTool struct {
@@ -243,9 +247,8 @@ WHEN TO USE:
 - To read a builtin or project workflow as a starting point
 
 PARAMETERS:
-- id: (optional) Workflow UUID, slug, or name — including a builtin or project
-  workflow name straight out of list_workflows. Omit it to get the workflow this
-  chat is editing.
+- id: (required) Workflow UUID, slug, or name — including a builtin or project
+  workflow name straight out of list_workflows, or the id from create_workflow.
 
 RETURNS:
 The complete workflow YAML with validation status. For editable drafts it also

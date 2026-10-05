@@ -30,7 +30,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
-	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -42,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/videojobs"
 	"github.com/reliant-labs/reliant/internal/workersetup"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -134,7 +134,6 @@ func Run(ctx context.Context, opts Options) error {
 	if err := models.InitGlobalRegistryWithUserConfig(nil); err != nil {
 		return fmt.Errorf("failed to initialize model registry: %w", err)
 	}
-	local.SetLocalConfig(nil)
 
 	// -----------------------------------------------------------------
 	// 4. Database
@@ -290,6 +289,10 @@ func Run(ctx context.Context, opts Options) error {
 		// generate_image executes here, inside the ExecuteTools activity, so
 		// this is the wiring that actually decides whether the tool works.
 		ImageGeneratorResolver: resolveImageGenerator,
+		// generate_video executes in the worker; the api-server only reads its
+		// catalog metadata. The job store is what makes a render resumable.
+		VideoGeneratorResolver: resolveVideoGenerator,
+		VideoJobs:              videojobs.NewSQLStore(repo.DB.SQLDB()),
 		// run_scenario / write_scenario execute on the real runtime via the
 		// scenario runner; injected because the runner imports this package's
 		// dependents.
@@ -450,4 +453,10 @@ func Run(ctx context.Context, opts Options) error {
 // top of it, so no selector can degrade into a text model.
 func resolveImageGenerator(ctx context.Context, userID string, selector models.ModelSelector) (tools.ImageGenerator, error) {
 	return drivers.ResolveImageGenerator(ctx, userID, selector)
+}
+
+// resolveVideoGenerator adapts the driver layer's video-model selection to the
+// narrow interface the generate_video tool declares.
+func resolveVideoGenerator(ctx context.Context, userID string, selector models.ModelSelector) (tools.VideoGenerator, error) {
+	return drivers.ResolveVideoGenerator(ctx, userID, selector)
 }

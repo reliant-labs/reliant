@@ -290,7 +290,7 @@ export function CreateWorktreeModal({
         <Modal
           isOpen={isOpen && !showInitGitModal}
           onClose={onClose}
-          title="Git Repository Required"
+          title="Git repository required"
           size="md"
         >
           <div className="space-y-6">
@@ -299,10 +299,10 @@ export function CreateWorktreeModal({
                 <AlertCircle className="w-8 h-8 text-warning" />
               </div>
               <h3 className="text-sm font-semibold text-foreground mb-2">
-                Git Repository Required
+                This project isn't a git repository yet
               </h3>
               <p className="text-sm text-muted-foreground max-w-sm">
-                Workspaces require a git repository. Initialize git for this project to enable workspace management.
+                Each workspace is a git worktree on its own branch, so the project needs git first. Initializing git doesn't change your files.
               </p>
             </div>
 
@@ -349,11 +349,9 @@ export function CreateWorktreeModal({
     >
       <form onSubmit={handleSubmit} className="space-y-6">
         {error && (
-          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
-            <div className="flex items-start gap-2">
-              <span className="text-destructive mt-0.5">⚠️</span>
-              <span className="flex-1">{error}</span>
-            </div>
+          <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+            <span className="flex-1">{error}</span>
           </div>
         )}
 
@@ -500,7 +498,7 @@ export function CreateWorktreeModal({
                     />
                     {branchesError ? (
                       <p className="text-xs text-destructive flex items-center gap-1">
-                        <span>⚠️</span>
+                        <AlertCircle className="h-3 w-3 flex-shrink-0" aria-hidden="true" />
                         <span>{branchesError}</span>
                       </p>
                     ) : (
@@ -586,21 +584,21 @@ export function CreateWorktreeModal({
           </div>
         </div>
 
-        <div className="flex gap-3 pt-6 border-t border-border">
+        <div className="flex justify-end gap-2 border-t border-border pt-4">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 px-5 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="h-8 rounded-md border border-input bg-background px-3 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
             disabled={isCreating}
           >
             Cancel
           </button>
           <button
             type="submit"
-            className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+            className="h-8 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
             disabled={isCreating}
           >
-            {isCreating ? "Creating..." : "Create Workspace"}
+            {isCreating ? "Creating…" : "Create workspace"}
           </button>
         </div>
       </form>

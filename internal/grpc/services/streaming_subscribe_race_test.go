@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -76,7 +77,7 @@ func (r *snapshotGateRepo) ListMessages(context.Context, string, db.MessageListO
 	return nil, nil
 }
 
-func (r *snapshotGateRepo) ListRecentMessages(context.Context, string, int) ([]*db.Message, error) {
+func (r *snapshotGateRepo) ListRecentTranscriptSiblingMessages(context.Context, string, string, int64, int) ([]*db.Message, error) {
 	return nil, nil
 }
 
@@ -124,6 +125,13 @@ func (r *snapshotGateRepo) ListToolCallsByMessageIDs(context.Context, []string) 
 
 func (r *snapshotGateRepo) GetUpdatesSince(context.Context, string, int64, int) ([]db.ChatUpdate, error) {
 	return nil, nil
+}
+
+// The snapshot reads the main thread's recent transcript through its context
+// window chain. sql.ErrNoRows is how the store reports a thread with no
+// context window yet — an empty thread, which is what this chat is.
+func (r *snapshotGateRepo) GetLatestContextWindow(context.Context, string) (*db.ContextWindow, error) {
+	return nil, sql.ErrNoRows
 }
 
 // startTestNATS runs an in-process JetStream-enabled NATS server. JetStream is

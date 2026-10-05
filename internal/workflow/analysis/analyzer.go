@@ -1008,7 +1008,7 @@ func intFromInterface(value interface{}) (int, bool) {
 
 func isAgentRef(ref string) bool {
 	name := strings.TrimPrefix(ref, "builtin://")
-	return name == "agent" || strings.Contains(name, "agent") || name == "get-it-right" || name == "implement-review"
+	return name == "agent" || strings.Contains(name, "agent") || name == "get-it-right"
 }
 
 func isStructuredAgentRef(ref string) bool {

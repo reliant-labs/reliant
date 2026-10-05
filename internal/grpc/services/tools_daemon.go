@@ -143,6 +143,16 @@ type daemonConnection struct {
 	// every 15s but the port set rarely changes; caching the last write
 	// avoids a per-heartbeat UPDATE. Only the receive loop touches it.
 	lastDetectedPortsKey string
+
+	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
+	localModelMu sync.Mutex
+	// localModelRelays maps request_id -> the bridge's chunk consumer.
+	localModelRelays map[string]func(*reliantv1.LocalModelHTTPChunk)
+	// inventoryWaiters receive the next inventory the daemon publishes.
+	inventoryWaiters []chan *reliantv1.LocalModelInventory
+	// lastInventoryJSON is the last stored inventory encoding; byte-identical
+	// republishes skip the DB write. Only the receive loop touches it.
+	lastInventoryJSON string
 }
 
 // NewToolsDaemonService creates a new ToolsDaemonService.
@@ -391,6 +401,7 @@ func (s *ToolsDaemonService) teardownConnection(conn *daemonConnection, reason s
 	// specific connection unblock, even if the slot was already taken over.
 	conn.closeDone()
 	conn.closeAllSubscribers()
+	conn.failLocalModelRelays("daemon disconnected")
 
 	if removed {
 		s.notifyDisconnected(userID, daemonID)
@@ -989,6 +1000,10 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 						ErrorMessage: resp.ErrorMessage,
 						ErrorCode:    resp.ErrorCode,
 						Backgrounded: resp.Backgrounded,
+						// The connection's identity is gateway-assigned, never
+						// asserted by the daemon, so it is the trustworthy
+						// answer to "which machine ran this".
+						DaemonID: conn.daemonID,
 					}
 				}
 			}
@@ -1112,6 +1127,12 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 				}
 				conn.dispatchProcessOutputEvent(evt)
 			}
+
+		case *reliantv1.DaemonMessage_LocalModelHttpChunk:
+			conn.dispatchLocalModelChunk(m.LocalModelHttpChunk)
+
+		case *reliantv1.DaemonMessage_LocalModelInventory:
+			s.handleLocalModelInventory(ctx, conn, m.LocalModelInventory)
 
 		case *reliantv1.DaemonMessage_FileSystemChanged:
 			if err := s.handleFileSystemChanged(ctx, conn, m.FileSystemChanged); err != nil {

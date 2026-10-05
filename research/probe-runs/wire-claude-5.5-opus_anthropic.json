@@ -1,0 +1,104 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@anthropic reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2567,
+      "input_tokens": 4,
+      "output_tokens": 149,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5.5-opus@anthropic reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2529,
+      "input_tokens": 4,
+      "output_tokens": 133,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-opus@anthropic reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2753,
+      "input_tokens": 4,
+      "output_tokens": 191,
+      "has_signature": true,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 2
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T17:13:43Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

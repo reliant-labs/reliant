@@ -1,4 +1,5 @@
 name: get-it-right
+title: Get It Right
 apiVersion: "0.0.5"
 description: |
   Get It Right — for complex brownfield codebases where LLMs paper-mache code on top.
@@ -438,11 +439,10 @@ nodes:
           presets:
             default: code_reviewer
           args:
-            model: "{{inputs.model}}"
-            mode: "{{inputs.mode}}"
             # The reviewer is the correctness gate — always run it at high thinking,
-            # independent of whatever thinking level the implement model carries.
-            thinking_level: high
+            # independent of the thinking level the user's model value carries.
+            model: "{{merge(inputs.model, {'thinking_level': 'high'})}}"
+            mode: "{{inputs.mode}}"
             # Reviewer toolset. Default (from review_tools) is read-only; a caller can
             # pass browser + shell tools to give the review teeth — inspect the LIVE
             # app and run builds itself rather than trusting the implementer's report.

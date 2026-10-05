@@ -1,11 +1,22 @@
 /**
  * Which user message the timeline pins to the top of the transcript.
  *
- * The pin is a breadcrumb: it names the user message that heads the section
- * you are currently reading, for the case where that message has itself
- * scrolled out of sight. So the question it answers is geometric — "whose
- * section owns the top of the viewport right now" — and it has to be answered
- * from measured edges.
+ * The pin is a breadcrumb: it names the most recent user message that has
+ * slid ENTIRELY under the header. So the question it answers is geometric —
+ * "which prompt is the reader below, now that it is out of sight" — and it has
+ * to be answered from measured edges.
+ *
+ * Bottom edges, not top edges. A user-message row opens with an empty band
+ * reserved for its hover toolbar, so its top edge crosses the header while the
+ * bubble is still fully on screen below it. Swapping there printed the same
+ * message twice, one above the other — the reported "doesn't swap naturally".
+ * Keyed on the bottom edge, the header changes hands at the moment the bubble
+ * passes underneath it, which reads as the bubble sticking.
+ *
+ * The same choice is what lets the header leave at the top of the transcript.
+ * The first row starts below the scroll-back loader's space, which is INSIDE
+ * the header band, so a top-edge rule saw the first message as already
+ * scrolled away and the header sat over the very message it named.
  *
  * It used to be answered from Virtuoso's `rangeChanged.startIndex`, and both
  * reported defects came from that single choice:
@@ -45,8 +56,14 @@ export interface PinnedHeaderInput {
   /** Positional map: item index → index of the user message heading its section. */
   userMessageForItem: (number | null)[];
   /**
-   * The crossing line, measured down from the scroller's top edge. A heading
-   * at or above this line has been taken over by the header and is pinned.
+   * The crossing line, measured down from the scroller's top edge: the
+   * header's bottom edge. A user message whose bottom edge is at or above it
+   * is entirely behind the header, so the header takes it over.
+   *
+   * Pass the header's height whether or not a header is showing right now.
+   * A line that dropped to 0 whenever the header hid would make the decision
+   * read a geometry the decision itself produces, and a swap between two
+   * headers of different heights could flip it back.
    */
   line: number;
   /** Currently pinned index, for the release hysteresis below. */
@@ -54,12 +71,14 @@ export interface PinnedHeaderInput {
   /**
    * Slack applied ONLY to releasing the current pin, never to engaging one.
    *
-   * The header is an opaque overlay whose own height sets `line`, so the
-   * decision reads a geometry the decision itself produces. Without slack, a
-   * heading resting within a pixel of the line can be unpinned by a sub-pixel
-   * layout correction, which restores the geometry that pins it again — the
-   * boundary oscillation that reads as shake. An asymmetric band cannot
-   * oscillate: leaving the pinned state costs strictly more than entering it.
+   * A message resting within a pixel of the line could otherwise be unpinned
+   * by a sub-pixel layout correction (a row re-measured, a scroll adjusted),
+   * which restores the geometry that pins it again — the boundary oscillation
+   * that reads as shake. An asymmetric band cannot oscillate: leaving the
+   * pinned state costs strictly more than entering it.
+   *
+   * Keep it small. At the top of the transcript the first message's bottom
+   * edge has to clear `line + releaseHysteresisPx` for the header to leave.
    */
   releaseHysteresisPx: number;
 }
@@ -79,9 +98,17 @@ export function resolvePinnedUserMessage({
 }: PinnedHeaderInput): number | null {
   if (rows.length === 0) return null;
 
+  // The top of the transcript is in view: nothing has scrolled away, so there
+  // is nothing to breadcrumb, and the reader is owed the first message itself
+  // rather than a header drawn over it. The geometry below reaches the same
+  // answer only while the first row is taller than the header plus the
+  // release band — a short first message (mobile reserves no toolbar band)
+  // would otherwise keep the header pinned over it at scrollTop 0.
+  if (rows[0].index === 0 && rows[0].top >= 0) return null;
+
   // The row that owns the line: the first one whose bottom edge has not yet
-  // passed it. This is the real visual top, and unlike `startIndex` it is
-  // unaffected by how much Virtuoso chose to render above it.
+  // passed it. This is the real visual top, and unlike the first RENDERED row
+  // it is unaffected by how much overscan the virtualizer chose to render.
   //
   // Falling back to the last row covers the scroller being scrolled past
   // everything rendered — mid-correction, or a jump that has not settled.
@@ -96,14 +123,17 @@ export function resolvePinnedUserMessage({
   // above the rendered window. It is off-screen by definition, so it pins.
   if (!headingRow) return candidate;
 
-  // Sticky: an already-pinned heading has to clear the line by the hysteresis
+  // Sticky: an already-pinned message has to come back out by the hysteresis
   // band before it gives the header up.
   const threshold = candidate === previousPinned ? line + releaseHysteresisPx : line;
-  if (headingRow.top <= threshold) return candidate;
+  if (headingRow.bottom <= threshold) return candidate;
 
-  // The heading is below the line with nothing above it — the top of the
-  // transcript. Nothing has scrolled away, so there is nothing to breadcrumb.
-  return null;
+  // The section's own heading is still at least partly visible, so the band
+  // above it belongs to the PREVIOUS section, whose heading has necessarily
+  // gone: every row before the line-owning row has its bottom edge above the
+  // line. Never blank the header mid-conversation just because the next
+  // prompt is on its way up. With no previous section, this is the top.
+  return candidate > 0 ? (userMessageForItem[candidate - 1] ?? null) : null;
 }
 
 /** DOM attribute carrying a row's DATA-space index. */

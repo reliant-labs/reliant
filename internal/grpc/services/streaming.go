@@ -43,6 +43,25 @@ const (
 	// the unbounded read cost ~1.1s of server time and half a megabyte on the
 	// wire before the first message rendered.
 	snapshotMessageLimit = 200
+
+	// maxChatReplayGap is the most chat updates a reconnect will replay from
+	// the client's cursor before the server sends a fresh snapshot instead.
+	//
+	// Replay costs grow with the gap; a snapshot's do not. Replay reads
+	// batchSize (100) rows per round trip and enriches every message row with
+	// its own message + content-block reads, so 2,000 updates is 20 sequential
+	// batches and on the order of a few hundred enrichment reads — roughly the
+	// cost of one snapshot build on a long chat (~0.5s measured on chat
+	// 8bb0a875). Past that, replay is strictly worse: more server time, more
+	// bytes, and a client that has to apply thousands of superseded
+	// intermediate states (tool-call and node-execution churn is ~75% of
+	// chat_updates) where the snapshot hands it the latest one per entity.
+	//
+	// The client caches its cursor and resubscribes with it when a chat is
+	// reopened, so a cursor hours stale is the normal case for a busy chat,
+	// not an edge. Its chatSyncSnapshot handler replaces state, so switching
+	// paths is safe at any gap.
+	maxChatReplayGap = 2000
 )
 
 // StreamingService implements the StreamingService RPC handlers
@@ -120,15 +139,16 @@ func (s *StreamingService) StreamUserUpdates(
 		defer userUpdateSub.Unsubscribe()
 	}
 
-	// Send any user updates since sinceSeq
+	// Catch up (sinceSeq, latestSeq]. lastUserSeq is the user cursor this
+	// subscription has delivered up to; the live loop continues from it.
+	lastUserSeq := sinceSeq
 	if latestSeq > sinceSeq {
 		if err := s.sendUserUpdateBatches(ctx, userID, sinceSeq, latestSeq, projectID, stream); err != nil {
 			logging.Error(LOG_PREFIX_STREAM_USER+" Failed to send updates", "error", err, "userID", userID)
 			return err
 		}
-		sinceSeq = latestSeq
+		lastUserSeq = latestSeq
 	}
-	lastUserSeq := sinceSeq
 
 	// --- Per-chat subscription initialization ---
 	var lastChatSeq int64
@@ -166,9 +186,28 @@ func (s *StreamingService) StreamUserUpdates(
 			defer chatUpdateSub.Unsubscribe()
 		}
 
-		// Send initial chat sync
-		if chatSinceSeq == 0 {
-			// Send snapshot sync for initial load
+		// Send initial chat sync: a snapshot for an initial load, otherwise a
+		// replay from the client's cursor — unless that replay should not be
+		// attempted (see chatCursorNeedsSnapshot), which also gets a snapshot.
+		useSnapshot := chatSinceSeq == 0
+		var chatLatestSeq int64
+		if !useSnapshot {
+			chatLatestSeq, err = s.database.GetLatestUpdateSequence(ctx, subscribeChatID)
+			if err != nil {
+				logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to get latest sequence", "error", err, "chatID", subscribeChatID[:8])
+				return err
+			}
+			if chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq) {
+				logging.Info(LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
+					"chatID", subscribeChatID[:8], "chatSinceSeq", chatSinceSeq, "chatLatestSeq", chatLatestSeq)
+				useSnapshot = true
+			}
+		}
+
+		if useSnapshot {
+			// lastChatSeq comes from the snapshot's own high-water mark, not
+			// chatLatestSeq above: the snapshot reads it again, later, and
+			// anything committed in between is in the snapshot.
 			snapshotSeq, err := s.sendChatSnapshotViaUserStream(ctx, subscribeChatID, stream)
 			if err != nil {
 				logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send snapshot", "error", err, "chatID", subscribeChatID[:8])
@@ -176,12 +215,6 @@ func (s *StreamingService) StreamUserUpdates(
 			}
 			lastChatSeq = snapshotSeq
 		} else {
-			// Send incremental updates for reconnection
-			chatLatestSeq, err := s.database.GetLatestUpdateSequence(ctx, subscribeChatID)
-			if err != nil {
-				logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to get latest sequence", "error", err, "chatID", subscribeChatID[:8])
-				return err
-			}
 			if chatLatestSeq > chatSinceSeq {
 				if err := s.sendChatUpdateBatchesViaUserStream(ctx, subscribeChatID, chatSinceSeq, chatLatestSeq, stream); err != nil {
 					logging.Error(LOG_PREFIX_STREAM_CHAT+" Failed to send updates", "error", err, "chatID", subscribeChatID[:8])
@@ -189,6 +222,18 @@ func (s *StreamingService) StreamUserUpdates(
 				}
 			}
 			lastChatSeq = chatLatestSeq
+		}
+
+		// The initial chat sync is over, whichever path it took — including a
+		// replay of nothing, which sent no chat frame. Say so explicitly: the
+		// client shows its cached transcript as "syncing" until this arrives,
+		// and no other frame can tell it the sync is complete.
+		if err := stream.Send(&reliantv1.UserStreamEvent{
+			Event: &reliantv1.UserStreamEvent_ChatCaughtUp{
+				ChatCaughtUp: &reliantv1.ChatCaughtUp{LatestSequence: lastChatSeq},
+			},
+		}); err != nil {
+			return err
 		}
 	}
 
@@ -219,16 +264,45 @@ func (s *StreamingService) StreamUserUpdates(
 			return nil
 
 		case event := <-userUpdateCh:
+			// Ephemeral updates (daemon heartbeats, the daemon local-models
+			// REFETCH) are published straight to the hub and never persisted,
+			// so they carry no sequence. They sit outside the cursor entirely:
+			// not deduped (0 <= any cursor would drop every one), not a gap,
+			// and never moving lastUserSeq — they are not in user_updates, so a
+			// cursor that counted them would point at nothing.
+			if isEphemeralUserUpdate(event.SequenceNumber) {
+				if !userUpdateMatchesProject(&event.Payload, projectID) {
+					continue
+				}
+				if err := s.sendSingleUserUpdate(event.Payload, lastUserSeq, stream); err != nil {
+					return err
+				}
+				continue
+			}
 			// Dedup: skip events already sent during catch-up
 			if event.SequenceNumber <= lastUserSeq {
 				continue
 			}
+			// User sequences are contiguous per user and this subscription
+			// receives every one of them, filtered or not — so a jump means
+			// the hub dropped events (core NATS, slow consumer). Only the
+			// server can tell that apart from project filtering, so it fills
+			// the hole from the DB here, in order, before the event that
+			// revealed it. The client never infers loss from a skip.
+			if event.SequenceNumber > lastUserSeq+1 {
+				if err := s.sendUserUpdateBatches(ctx, userID, lastUserSeq, event.SequenceNumber-1, projectID, stream); err != nil {
+					logging.Error(LOG_PREFIX_STREAM_USER+" Failed to backfill dropped updates", "error", err,
+						"userID", userID, "fromSeq", lastUserSeq, "toSeq", event.SequenceNumber-1)
+					return err
+				}
+			}
 			lastUserSeq = event.SequenceNumber
-			// Filter by project if the client requested project-scoped updates
-			if projectID != "" && (event.Payload.ProjectID == nil || *event.Payload.ProjectID != projectID) {
+			// A filtered event is not sent; the next batch's latest_sequence
+			// carries the cursor past it.
+			if !userUpdateMatchesProject(&event.Payload, projectID) {
 				continue
 			}
-			if err := s.sendSingleUserUpdate(event.Payload, stream); err != nil {
+			if err := s.sendSingleUserUpdate(event.Payload, lastUserSeq, stream); err != nil {
 				return err
 			}
 
@@ -273,6 +347,20 @@ func (s *StreamingService) StreamUserUpdates(
 			}
 		}
 	}
+}
+
+// chatCursorNeedsSnapshot reports whether a reconnect at chatSinceSeq (> 0)
+// should get a fresh snapshot rather than an incremental replay up to
+// chatLatestSeq.
+//
+//   - The gap exceeds maxChatReplayGap: replay would cost more than the
+//     snapshot and deliver less useful state. See maxChatReplayGap.
+//   - The cursor is AHEAD of the chat: there is nothing to replay from. The
+//     cursor belongs to another database, or to a chat whose update log was
+//     rebuilt; "replay nothing" sent no chat state at all, leaving the client
+//     on its stale cache with no signal that it was wrong.
+func chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq int64) bool {
+	return chatSinceSeq > chatLatestSeq || chatLatestSeq-chatSinceSeq > maxChatReplayGap
 }
 
 // sendHeartbeat sends a heartbeat through the unified stream
@@ -321,13 +409,17 @@ func (s *StreamingService) userUpdateToProto(update db.UserUpdate) *reliantv1.Us
 	return protoUpdate
 }
 
-// sendSingleUserUpdate sends a single user update event received from the UpdateHub.
-func (s *StreamingService) sendSingleUserUpdate(update db.UserUpdate, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
+// sendSingleUserUpdate sends a single user update event received from the
+// UpdateHub. latestSeq is the subscription's user cursor after it — for an
+// ephemeral update, the cursor as it already stood, since nothing persisted
+// was delivered.
+func (s *StreamingService) sendSingleUserUpdate(update db.UserUpdate, latestSeq int64, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	protoUpdate := s.userUpdateToProto(update)
 	event := &reliantv1.UserStreamEvent{
 		Event: &reliantv1.UserStreamEvent_Updates{
 			Updates: &reliantv1.UserUpdateBatch{
-				Updates: []*reliantv1.UserUpdateData{protoUpdate},
+				Updates:        []*reliantv1.UserUpdateData{protoUpdate},
+				LatestSequence: latestSeq,
 			},
 		},
 	}
@@ -472,7 +564,6 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	var (
 		latestSeq         int64
 		chat              *db.Chat
-		childMessages     []*db.Message
 		otherUpdates      []*reliantv1.ChatUpdateData
 		totalMessageCount int
 		liveToolCalls     []*db.ToolCall
@@ -489,15 +580,6 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	g1.Go(func() error {
 		var err error
 		chat, err = s.database.GetChat(gctx, chatID)
-		return err
-	})
-
-	g1.Go(func() error {
-		var err error
-		// Bounded in SQL. ListMessages would fetch the chat's entire history
-		// and slice it in Go, so its Limit saves transfer but none of the
-		// query cost.
-		childMessages, err = s.database.ListRecentMessages(gctx, chatID, snapshotMessageLimit)
 		return err
 	})
 
@@ -538,62 +620,108 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		return nil, 0, err
 	}
 
-	// Determine main thread ID (the root workflow's thread ID, which equals the workflow ID)
+	// Determine main thread ID (the root workflow's thread ID, which equals the
+	// workflow ID). A chat with no workflow id falls back to its own id, the
+	// same convention ListMessages uses.
 	mainThread := chat.MainThreadID()
+	if mainThread == "" {
+		mainThread = chatID
+	}
 
 	// ── Phase 2: queries that depend on mainThread (from GetChat) ──
 	var (
 		mainThreadMessages []*db.Message
-		threadTokenCount   int64
+		// mainHasMore: the main thread has messages older than the window.
+		// mainReadOK is false when the main thread could not be read at all,
+		// in which case mainHasMore says nothing.
+		mainHasMore      bool
+		mainReadOK       bool
+		threadTokenCount int64
 		// Fallback only; the real per-model DERIVED value is fetched from
 		// GetContextUsage below. Kept single-source via threads.DefaultCompactionThreshold.
 		compactionThreshold int64 = threads.DefaultCompactionThreshold
 	)
 
-	if mainThread != "" {
-		g2, gctx2 := errgroup.WithContext(ctx)
+	g2, gctx2 := errgroup.WithContext(ctx)
 
-		g2.Go(func() error {
-			threadsSvc := threads.NewService(s.database)
-			var err error
-			mainThreadMessages, err = threadsSvc.LoadRecentDisplayMessages(gctx2, mainThread, snapshotMessageLimit)
-			if err != nil {
-				if err.Error() != "thread not found" {
-					logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
-						"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
-				}
-				mainThreadMessages = []*db.Message{}
-				return nil // non-fatal
+	g2.Go(func() error {
+		threadsSvc := threads.NewService(s.database)
+		// One row past the window answers "is there older history?" exactly,
+		// without a second query.
+		recent, err := threadsSvc.LoadRecentDisplayMessages(gctx2, mainThread, snapshotMessageLimit+1)
+		if err != nil {
+			if err.Error() != "thread not found" {
+				logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load main thread messages via CW chain",
+					"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
 			}
-			return nil
-		})
-
-		g2.Go(func() error {
-			contextUsage, err := s.database.GetContextUsage(gctx2, chatID, mainThread)
-			if err != nil {
-				logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
-				return nil // non-fatal
-			}
-			if contextUsage != nil {
-				threadTokenCount = contextUsage.ThreadTokenCount
-				compactionThreshold = contextUsage.CompactionThreshold
-			}
-			return nil
-		})
-
-		if err := g2.Wait(); err != nil {
-			return nil, 0, err
+			mainThreadMessages = []*db.Message{}
+			return nil // non-fatal
 		}
+		if len(recent) > snapshotMessageLimit {
+			mainHasMore = true
+			recent = recent[len(recent)-snapshotMessageLimit:]
+		}
+		mainThreadMessages = recent
+		mainReadOK = true
+		return nil
+	})
+
+	g2.Go(func() error {
+		contextUsage, err := s.database.GetContextUsage(gctx2, chatID, mainThread)
+		if err != nil {
+			logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to get context usage", "error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
+			return nil // non-fatal
+		}
+		if contextUsage != nil {
+			threadTokenCount = contextUsage.ThreadTokenCount
+			compactionThreshold = contextUsage.CompactionThreshold
+		}
+		return nil
+	})
+
+	if err := g2.Wait(); err != nil {
+		return nil, 0, err
 	}
 
-	// ── Phase 3: merge messages + fetch content blocks (sequential, data deps) ──
+	// ── Phase 3: sibling threads inside the window, then content blocks ──
+	//
+	// The window is measured on the MAIN THREAD: the newest N main-thread
+	// messages, plus the sibling-thread messages inside that seq range.
+	// Counting across every thread is badly wrong once a chat spawns
+	// sub-agents — spawn threads out-write the main thread by an order of
+	// magnitude and finish later, so they occupy the top of the seq range (in
+	// a real 1,470-message chat the newest 200 rows were 200 spawn messages
+	// and ZERO main-thread messages), and the user could not see their chat.
+	//
+	// Spawn threads are then left out of the siblings entirely. A spawn
+	// renders as one tool-call card in its parent's transcript: collapsed, the
+	// card is a header built from the call's input and the child workflow's
+	// state; expanded, SpawnPreview reads the child thread itself through
+	// ListMessages(thread_id). Nothing renders from spawn messages in the
+	// snapshot, and they were most of it — 636KB of a 2.32MB snapshot on a
+	// real 55k-message chat, chosen by "whatever fell into the newest 200 rows
+	// chat-wide", so which cards got a partial thread was an accident.
+	//
+	// What remains are the threads the transcript renders inline (workflow
+	// node and fork threads), capped at the same bound as the main window.
+	var fromSeq int64
+	for i, msg := range mainThreadMessages {
+		if i == 0 || msg.Seq < fromSeq {
+			fromSeq = msg.Seq
+		}
+	}
+	siblingMessages, err := s.database.ListRecentTranscriptSiblingMessages(ctx, chatID, mainThread, fromSeq, snapshotMessageLimit)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_STREAM_CHAT+" Failed to load sibling thread messages",
+			"error", err, "chatID", chatID[:8], "threadID", mainThread[:8])
+		siblingMessages = nil // non-fatal: the transcript still renders
+	}
 
-	// Merge: main thread messages (with inherited) + child workflow messages (excluding main thread duplicates)
-	messageMap := make(map[string]*db.Message)
+	messageMap := make(map[string]*db.Message, len(mainThreadMessages)+len(siblingMessages))
 	for _, msg := range mainThreadMessages {
 		messageMap[msg.ID] = msg
 	}
-	for _, msg := range childMessages {
+	for _, msg := range siblingMessages {
 		if _, exists := messageMap[msg.ID]; !exists {
 			messageMap[msg.ID] = msg
 		}
@@ -603,27 +731,9 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	for _, msg := range messageMap {
 		messages = append(messages, msg)
 	}
-
-	// Both sources are independently bounded to snapshotMessageLimit, so the
-	// merged set can be up to twice that. Trim to a single predictable bound —
-	// but measure that bound on the MAIN THREAD, not across the whole chat.
-	//
-	// Taking the newest N by seq across every thread looks natural (seq is a
-	// chat-global total order) and is badly wrong once a chat spawns sub-agents.
-	// Spawn threads out-write the main thread by an order of magnitude and
-	// finish later, so they occupy the top of the seq range: in a real
-	// 1,470-message chat the newest 200 rows were 200 spawn messages and ZERO
-	// main-thread messages. Spawn messages render collapsed inside the tool call
-	// that created them rather than in the transcript, so that snapshot painted
-	// an empty conversation and the user could not see their own chat.
-	//
-	// Keeping the newest N main-thread messages, plus every sibling-thread
-	// message inside that seq range, gives the transcript its N messages and
-	// still carries the spawn messages the tool-call previews render from.
 	sort.Slice(messages, func(i, j int) bool {
 		return messages[i].Seq < messages[j].Seq
 	})
-	messages = windowByMainThread(messages, mainThread, snapshotMessageLimit)
 
 	// Batch fetch all content blocks for all messages
 	messageIDs := make([]string, 0, len(messages))
@@ -711,7 +821,15 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 		}
 	}
 
-	hasMore := totalMessages > len(messages)
+	// has_more asks "is there older TRANSCRIPT to page back to?", so it comes
+	// from the main thread. The chat-wide count can't answer it: it includes
+	// every spawn message, none of which are in the snapshot, so a short chat
+	// with one busy spawn would report history that paging can never deliver.
+	// Only when the main thread could not be read does the count stand in.
+	hasMore := mainHasMore
+	if !mainReadOK {
+		hasMore = totalMessages > len(messages)
+	}
 
 	if messagesSkipped > 0 {
 		logging.Info(LOG_PREFIX_STREAM_CHAT+" Snapshot built",
@@ -1100,7 +1218,15 @@ func formatChatUpdateDataJSON(updateType reliantv1.ChatUpdateType, rawData json.
 	return string(wrapped)
 }
 
-// sendUserUpdateBatches sends user updates in batches
+// sendUserUpdateBatches replays the user updates in (startSeq, latestSeq]
+// that this subscription should see, and leaves the client's cursor at
+// latestSeq.
+//
+// Every batch carries latest_sequence: the cursor after it. A batch whose rows
+// were all filtered out (another project, REFETCH) is still sent when it is
+// the last one, with no updates — its only content is the cursor, and without
+// it a client whose project saw nothing new would resume from a stale cursor
+// and re-read the same rows on every reconnect.
 func (s *StreamingService) sendUserUpdateBatches(ctx context.Context, userID string, startSeq, latestSeq int64, projectID string, stream *connect.ServerStream[reliantv1.UserStreamEvent]) error {
 	currentSeq := startSeq
 
@@ -1110,45 +1236,77 @@ func (s *StreamingService) sendUserUpdateBatches(ctx context.Context, userID str
 			return err
 		}
 
-		if len(updates) == 0 {
-			break
-		}
-
 		// Convert updates, skipping ephemeral types that should not be replayed.
 		// REFETCH events are real-time signals ("re-fetch this data now"); replaying
 		// historical ones on catch-up causes hundreds of redundant API calls.
+		// Rows past latestSeq are left for the caller: in the live loop they are
+		// the event being backfilled for, or ones still in flight on the hub.
 		protoUpdates := make([]*reliantv1.UserUpdateData, 0, len(updates))
-		maxSeq := currentSeq
+		reachedEnd := len(updates) < batchSize
 		for _, update := range updates {
-			if update.SequenceNumber > maxSeq {
-				maxSeq = update.SequenceNumber
+			if update.SequenceNumber > latestSeq {
+				reachedEnd = true
+				break
 			}
+			currentSeq = update.SequenceNumber
 			if update.UpdateType == db.UserUpdateRefetch {
 				continue
 			}
-			// Filter by project if the client requested project-scoped updates
-			if projectID != "" && (update.ProjectID == nil || *update.ProjectID != projectID) {
+			if !userUpdateMatchesProject(&update, projectID) {
 				continue
 			}
 			protoUpdates = append(protoUpdates, s.userUpdateToProto(update))
 		}
-
-		// Send batch (skip if all updates were filtered out)
-		if len(protoUpdates) > 0 {
-			event := &reliantv1.UserStreamEvent{
-				Event: &reliantv1.UserStreamEvent_Updates{
-					Updates: &reliantv1.UserUpdateBatch{
-						Updates: protoUpdates,
-					},
-				},
-			}
-			if err := stream.Send(event); err != nil {
-				return err
-			}
+		// Nothing more exists up to latestSeq: the range is fully delivered.
+		// (A sequence can be absent only if its transaction rolled back.)
+		if reachedEnd {
+			currentSeq = latestSeq
 		}
 
-		currentSeq = maxSeq
+		if len(protoUpdates) == 0 && currentSeq < latestSeq {
+			continue // more to read; the cursor rides on a later batch
+		}
+		event := &reliantv1.UserStreamEvent{
+			Event: &reliantv1.UserStreamEvent_Updates{
+				Updates: &reliantv1.UserUpdateBatch{
+					Updates:        protoUpdates,
+					LatestSequence: currentSeq,
+				},
+			},
+		}
+		if err := stream.Send(event); err != nil {
+			return err
+		}
 	}
 
 	return nil
+}
+
+// userUpdateMatchesProject reports whether a project-scoped subscriber should
+// receive the update. Workflow drafts are user-scoped (they belong to no
+// project), so they always pass.
+//
+// So does an ephemeral update with no project. Those are daemon signals —
+// heartbeat liveness, memory pressure, detected_ports, the local-models
+// refetch — and a daemon serves a user, not a project: project_daemons maps
+// one daemon to many projects, and the client picks its active daemon from the
+// user-wide ListDaemons. Dropping them on the project-scoped stream every
+// client opens left the daemon dot and the preview affordance dead. Persisted
+// project-less updates keep the project filter; this exemption is for signals
+// that exist only live.
+func userUpdateMatchesProject(update *db.UserUpdate, projectID string) bool {
+	if projectID == "" || update.UpdateType == db.UserUpdateWorkflowDraftUpdated {
+		return true
+	}
+	if update.ProjectID == nil {
+		return isEphemeralUserUpdate(update.SequenceNumber)
+	}
+	return *update.ProjectID == projectID
+}
+
+// isEphemeralUserUpdate reports whether a user update was published to the hub
+// without being persisted. Persisted updates get a per-user sequence starting
+// at 1 inside CreateUserUpdate's transaction; ephemeral ones never do.
+func isEphemeralUserUpdate(sequenceNumber int64) bool {
+	return sequenceNumber == 0
 }

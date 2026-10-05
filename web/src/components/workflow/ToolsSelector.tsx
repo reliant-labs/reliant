@@ -1,5 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
 
+import { Tooltip } from "../ui/Tooltip";
 import { useState, useRef, useEffect, useMemo } from "react";
 import {
   Wrench,
@@ -367,7 +368,8 @@ export function ToolsSelector({
                   {QUICK_EXPRESSIONS.map((expr) => {
                     const selected = value.includes(expr.token);
                     return (
-                      <button
+                      <Tooltip content={expr.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                         key={expr.token}
                         type="button"
                         onClick={() => toggleToken(expr.token)}
@@ -376,11 +378,10 @@ export function ToolsSelector({
                           selected
                             ? "bg-primary/10 text-primary border-primary/30"
                             : "bg-background hover:bg-accent border-border",
-                        )}
-                        title={expr.description}
-                      >
+                        )} aria-label={expr.description}>
                         {expr.token}
                       </button>
+</Tooltip>
                     );
                   })}
                 </div>

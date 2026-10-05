@@ -41,6 +41,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/lib/utils";
+import { Tooltip } from "@/components/ui/Tooltip";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import {
   Button,
@@ -189,6 +190,21 @@ const EXTERNAL_DAEMON_TYPES = ["self_hosted", "external"];
 
 function isExternalDaemon(d: Pick<Daemon, "daemonType">): boolean {
   return EXTERNAL_DAEMON_TYPES.includes(d.daemonType);
+}
+
+export const CONNECTED_MACHINE_REMOVE_REASON =
+  "Connected machines can't be removed. Disconnect it first.";
+
+// A connected self-hosted machine re-registers itself on its next heartbeat, so
+// "forgetting" it just makes the row vanish and reappear. Cloud machines are
+// deleted as before; a disconnected self-hosted row can still be forgotten.
+export function canRemoveDaemon(
+  d: Pick<Daemon, "daemonType" | "status">,
+): { allowed: boolean; reason?: string } {
+  if (isExternalDaemon(d) && d.status === DaemonStatus.ACTIVE) {
+    return { allowed: false, reason: CONNECTED_MACHINE_REMOVE_REASON };
+  }
+  return { allowed: true };
 }
 
 // A UUID (v4-shaped, 36 chars with dashes at the standard offsets) is not a
@@ -805,9 +821,26 @@ function SelfHostedMachinesTable({
               <Td className="text-muted-foreground">{d.platform || "—"}</Td>
               <Td className="text-muted-foreground">{lastSeen}</Td>
               <Td className="text-right">
-                <Button variant="ghost" size="sm" onClick={() => onRemove(d)}>
-                  <Trash2 className="h-4 w-4 text-destructive" /> Remove
-                </Button>
+                {(() => {
+                  const removal = canRemoveDaemon(d);
+                  const button = (
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      disabled={!removal.allowed}
+                      onClick={() => onRemove(d)}
+                    >
+                      <Trash2 className="h-4 w-4 text-destructive" /> Remove
+                    </Button>
+                  );
+                  return removal.allowed ? (
+                    button
+                  ) : (
+                    <Tooltip content={removal.reason ?? ""} placement="left">
+                      {button}
+                    </Tooltip>
+                  );
+                })()}
               </Td>
             </Tr>
           );
@@ -1331,9 +1364,25 @@ function EnvironmentDetail({ daemonId, onBack }: { daemonId: string; onBack: () 
                 onResume={() => resumeMut.mutate()}
                 onRestart={() => setRestartOpen(true)}
               />
-              <Button variant="danger" disabled={busy} onClick={() => setDeleteOpen(true)}>
-                <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
-              </Button>
+              {(() => {
+                const removal = canRemoveDaemon(daemon);
+                const button = (
+                  <Button
+                    variant="danger"
+                    disabled={busy || !removal.allowed}
+                    onClick={() => setDeleteOpen(true)}
+                  >
+                    <Trash2 className="h-4 w-4" /> {external ? "Remove" : "Delete"}
+                  </Button>
+                );
+                return removal.allowed ? (
+                  button
+                ) : (
+                  <Tooltip content={removal.reason ?? ""} placement="bottom">
+                    {button}
+                  </Tooltip>
+                );
+              })()}
             </div>
           </div>
 

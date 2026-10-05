@@ -694,22 +694,17 @@ func (c *ClaudeCodeClient) streamResponseInternal(ctx context.Context, params an
 	return eventChan
 }
 
-// thinkingDisplayUpdates is the thinking.display value the 2.1.261 and 2.1.280
-// captures send. It postdates the SDK, whose declared ThinkingConfigAdaptiveDisplay
-// constants are only "summarized" and "omitted"; the type is a plain string, so the
-// conversion is the supported escape hatch rather than a workaround.
-const thinkingDisplayUpdates = anthropic.ThinkingConfigAdaptiveDisplay("updates")
-
 // claudeCodeThinkingConfig returns the base thinking config, adding the
-// display:"updates" field carried by the releases that send it (2.1.261 and
-// 2.1.280). Models on the 2.1.204 fingerprint keep emitting a bare
+// display field carried by the releases that send one (2.1.261 and 2.1.280).
+// The captures send "updates", which streams only empty thinking_delta events
+// with estimated_tokens; "summarized" (SDK-declared) streams readable text. Models on the 2.1.204 fingerprint keep emitting a bare
 // {"type":"adaptive"}, so the shared base.go builder stays untouched for the
 // plain Anthropic driver.
 func (c *ClaudeCodeClient) claudeCodeThinkingConfig() anthropic.ThinkingConfigParamUnion {
 	thinking := c.getThinkingConfig()
 	profile := claudeCodeProfileFor(c.options.Model.APIModel)
 	if profile.thinkingDisplay && thinking.OfAdaptive != nil {
-		thinking.OfAdaptive.Display = thinkingDisplayUpdates
+		thinking.OfAdaptive.Display = anthropic.ThinkingConfigAdaptiveDisplaySummarized
 	}
 	return thinking
 }

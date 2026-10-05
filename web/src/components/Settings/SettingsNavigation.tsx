@@ -1,5 +1,6 @@
 import { cn } from "../../lib/utils";
 import { Sparkles, Keyboard, Info, List, Monitor, Code, User, Shield, FolderOpen, Globe, FolderGit2, Bell, KeyRound, Github, CreditCard, Server, ExternalLink, Plug, Layers } from "lucide-react";
+import { Tooltip } from "../ui/Tooltip";
 import { McpIcon } from "../icons/McpIcon";
 import { hasControlPlane } from "../../services/controlPlane/config";
 import type { SettingsSection } from "../../routeSchemas";
@@ -141,11 +142,12 @@ export function SettingsNavigation({
               <div className="space-y-0.5">
                 {visibleItems.map((section) => {
                   const isActive = section.id === activeSection;
-                  return (
+                  const item = (
                     <button
                       key={section.id}
                       onClick={() => onSectionChange(section.id as SettingsSection)}
-                      title={isCollapsed ? section.label : undefined}
+                      aria-label={section.label}
+                      aria-current={isActive ? "page" : undefined}
                       className={cn(
                         "w-full cursor-pointer rounded-md border-l-2 px-3 py-1.5 text-sm transition-all",
                         isCollapsed ? "flex items-center justify-center px-2" : "text-left",
@@ -166,6 +168,13 @@ export function SettingsNavigation({
                         )}
                       </div>
                     </button>
+                  );
+                  return isCollapsed ? (
+                    <Tooltip key={section.id} content={section.label} placement="right" wrapperClassName="block w-full">
+                      {item}
+                    </Tooltip>
+                  ) : (
+                    item
                   );
                 })}
               </div>

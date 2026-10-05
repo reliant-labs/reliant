@@ -27,6 +27,10 @@ import (
 // open performs. Nothing about the result shape changes, so no other test sees
 // it.
 //
+// The skip scan may exclude MORE types than the index does (the live-only
+// AGENT_MESSAGES_DRAINED is one): NOT IN of a superset still implies NOT IN of
+// the subset. Excluding fewer would not, and this test would catch it.
+//
 // This test forces the generic plan, which is the one that bit.
 func TestSnapshotHeadsQueryUsesPartialIndexUnderGenericPlan(t *testing.T) {
 	_, raw, cleanup := SetupTestDBWithRawDB(t)
@@ -68,6 +72,24 @@ func TestSnapshotHeadsQueryUsesPartialIndexUnderGenericPlan(t *testing.T) {
 		"the generic plan's skip-scan probe must be an index condition on idx_chat_updates_snapshot_heads; "+
 			"otherwise every probe reads the chat's whole history. This happens when the update types are bound "+
 			"parameters instead of literals the planner can match against the index predicate. Plan:\n%s", plan)
+
+	// The re-keyed read (THREAD, QUESTION) must find its rows through
+	// idx_chat_updates_snapshot_rekeyed. Every other index that can answer
+	// `chat_id = ?` covers the chat's whole non-message history — on the
+	// measured chat, 165,843 rows rechecked on the heap to keep 758, ~350ms of
+	// the ~475ms read.
+	require.True(t, scanUsesIndex(plan, "idx_chat_updates_snapshot_rekeyed"),
+		"the generic plan's re-keyed read must scan idx_chat_updates_snapshot_rekeyed; otherwise it rechecks "+
+			"every non-message update of the chat to find a few hundred thread/question rows. This happens when "+
+			"the query's `update_type IN (...)` no longer matches the index predicate. Plan:\n%s", plan)
+}
+
+// scanUsesIndex reports whether any scan node in the plan reads index. Plain
+// and bitmap index scans spell it differently ("using" vs "on").
+func scanUsesIndex(plan, index string) bool {
+	return strings.Contains(plan, "Index Scan using "+index+" ") ||
+		strings.Contains(plan, "Index Only Scan using "+index+" ") ||
+		strings.Contains(plan, "Bitmap Index Scan on "+index+" ")
 }
 
 // probeUsesIndex reports whether the plan node that applies the skip scan's
@@ -94,9 +116,9 @@ func probeUsesIndex(plan, index string) bool {
 }
 
 // The literals in snapshotHeadsQuery are enum values written out by hand, and
-// the migration's index predicate is a third copy. If the enum is renumbered, or
-// the index predicate edited, the query would silently read the wrong set of
-// rows or lose the index. Pin all three together.
+// each migration's index predicate is another copy. If the enum is renumbered,
+// or an index predicate edited, the query would silently read the wrong set of
+// rows or lose the index. Pin them all together.
 func TestSnapshotHeadsQueryMatchesPartialIndex(t *testing.T) {
 	// The types the index (and the skip scan) excludes.
 	indexExcluded := []reliantv1.ChatUpdateType{
@@ -109,10 +131,22 @@ func TestSnapshotHeadsQueryMatchesPartialIndex(t *testing.T) {
 		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_THREAD,
 		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION,
 	}
+	// Live-only types: delivered by the live stream and replay, never by the
+	// snapshot. Still in idx_chat_updates_snapshot_heads; the probe filters
+	// them, which costs nothing in index usability because the skip scan's
+	// list stays a superset of the index's.
+	liveOnly := []reliantv1.ChatUpdateType{
+		reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED,
+	}
 
-	skipScan := "update_type NOT IN (" + joinEnum(append(append([]reliantv1.ChatUpdateType{}, indexExcluded...), rekeyed...)) + ")"
+	skipScanTypes := append(append(append([]reliantv1.ChatUpdateType{}, indexExcluded...), rekeyed...), liveOnly...)
+	skipScan := "update_type NOT IN (" + joinEnum(skipScanTypes) + ")"
 	require.Equal(t, 2, strings.Count(snapshotHeadsQuery, skipScan),
 		"both halves of the skip scan must exclude exactly %s", skipScan)
+	// The partial index is usable only if the skip scan's predicate implies
+	// its predicate, i.e. every type the index excludes is excluded here too.
+	require.Subset(t, skipScanTypes, indexExcluded,
+		"the skip scan must exclude at least everything idx_chat_updates_snapshot_heads excludes")
 	require.Contains(t, snapshotHeadsQuery, "update_type IN ("+joinEnum(rekeyed)+")")
 	require.Contains(t, snapshotHeadsQuery,
 		"WHEN update_type = "+strconv.Itoa(int(reliantv1.ChatUpdateType_CHAT_UPDATE_TYPE_QUESTION))+" THEN")
@@ -121,6 +155,12 @@ func TestSnapshotHeadsQueryMatchesPartialIndex(t *testing.T) {
 	require.NoError(t, err)
 	require.Contains(t, string(migration), "WHERE update_type NOT IN ("+joinEnum(indexExcluded)+");",
 		"idx_chat_updates_snapshot_heads must exclude exactly the types the query's skip scan relies on it excluding")
+
+	rekeyedMigration, err := FS.ReadFile("migrations/postgres/20261004172515_snapshot_rekeyed_updates_index.sql")
+	require.NoError(t, err)
+	require.Contains(t, string(rekeyedMigration), "WHERE update_type IN ("+joinEnum(rekeyed)+");",
+		"idx_chat_updates_snapshot_rekeyed must cover exactly the types the query's re-keyed read selects; "+
+			"the planner uses a partial index only when the query's literal predicate implies the index's")
 }
 
 func joinEnum(values []reliantv1.ChatUpdateType) string {

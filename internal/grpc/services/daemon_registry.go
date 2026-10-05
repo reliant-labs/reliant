@@ -4,10 +4,12 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
 	"connectrpc.com/connect"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -63,10 +65,13 @@ func (s *DaemonRegistryService) ListDaemons(
 	}
 
 	attached := s.attachedDaemonSet(ctx, userID)
+	inventories := s.storedLocalModels(ctx, userID)
 
 	resp := &reliantv1.ListDaemonsResponse{Daemons: make([]*reliantv1.DaemonInfo, 0, len(daemons))}
 	for _, d := range daemons {
-		resp.Daemons = append(resp.Daemons, daemonToProto(d, attached[d.ID]))
+		info := daemonToProto(d, attached[d.ID])
+		info.LocalModels = localModelsFromJSON(inventories[d.ID])
+		resp.Daemons = append(resp.Daemons, info)
 	}
 
 	return connect.NewResponse(resp), nil
@@ -111,7 +116,112 @@ func (s *DaemonRegistryService) GetDaemon(
 	}
 
 	attached := s.attachedDaemonSet(ctx, userID)
-	return connect.NewResponse(&reliantv1.GetDaemonResponse{Daemon: daemonToProto(daemon, attached[daemon.ID])}), nil
+	info := daemonToProto(daemon, attached[daemon.ID])
+	info.LocalModels = localModelsFromJSON(s.storedLocalModels(ctx, userID)[daemon.ID])
+	return connect.NewResponse(&reliantv1.GetDaemonResponse{Daemon: info}), nil
+}
+
+// storedLocalModels returns the user's stored inventories keyed by daemon id.
+// A read failure is logged and treated as "none published" so it cannot break
+// the daemon list.
+func (s *DaemonRegistryService) storedLocalModels(ctx context.Context, userID string) map[string]string {
+	inventories, err := s.database.ListDaemonLocalModels(ctx, userID)
+	if err != nil {
+		logging.Warn("[DaemonRegistry] Failed to list stored local models", "error", err, "userID", userID)
+		return map[string]string{}
+	}
+	return inventories
+}
+
+// localModelsFromJSON decodes a stored inventory (protojson). An absent or
+// undecodable value yields nil: a bad row must not break the daemon list.
+func localModelsFromJSON(stored string) *reliantv1.LocalModelInventory {
+	if stored == "" {
+		return nil
+	}
+	var inv reliantv1.LocalModelInventory
+	if err := (protojson.UnmarshalOptions{DiscardUnknown: true}).Unmarshal([]byte(stored), &inv); err != nil {
+		logging.Warn("[DaemonRegistry] Undecodable stored local model inventory", "error", err)
+		return nil
+	}
+	return &inv
+}
+
+// ownedOnlineDaemon verifies the caller owns the daemon and that it is
+// attached; offline daemons fail with Unavailable.
+func (s *DaemonRegistryService) ownedOnlineDaemon(ctx context.Context, daemonID string) (userID string, err error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok {
+		return "", connect.NewError(connect.CodeUnauthenticated, nil)
+	}
+	if daemonID == "" {
+		return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id is required"))
+	}
+	daemon, err := s.database.GetDaemon(ctx, daemonID)
+	if err != nil || daemon == nil || daemon.UserID != userID {
+		return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
+	}
+	if s.attachedDaemonSet(ctx, userID)[daemon.ID] == nil {
+		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon %s is offline", daemonID))
+	}
+	if s.router == nil {
+		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon router configured"))
+	}
+	return userID, nil
+}
+
+// localModelRelayError maps router failures to connect codes.
+func localModelRelayError(err error) error {
+	if errors.Is(err, toolexec.ErrLocalModelDaemonUnavailable) {
+		return connect.NewError(connect.CodeUnavailable, err)
+	}
+	var already *connect.Error
+	if errors.As(err, &already) {
+		return err
+	}
+	return connect.NewError(connect.CodeInternal, err)
+}
+
+func (s *DaemonRegistryService) RefreshLocalModels(
+	ctx context.Context,
+	req *connect.Request[reliantv1.RefreshLocalModelsRequest],
+) (*connect.Response[reliantv1.RefreshLocalModelsResponse], error) {
+	userID, err := s.ownedOnlineDaemon(ctx, req.Msg.GetDaemonId())
+	if err != nil {
+		return nil, err
+	}
+	inv, err := s.router.RefreshLocalModels(ctx, userID, req.Msg.GetDaemonId())
+	if err != nil {
+		return nil, localModelRelayError(err)
+	}
+	return connect.NewResponse(&reliantv1.RefreshLocalModelsResponse{LocalModels: inv}), nil
+}
+
+func (s *DaemonRegistryService) SetLocalModelEndpoints(
+	ctx context.Context,
+	req *connect.Request[reliantv1.SetLocalModelEndpointsRequest],
+) (*connect.Response[reliantv1.SetLocalModelEndpointsResponse], error) {
+	daemonID := req.Msg.GetDaemonId()
+	userID, err := s.ownedOnlineDaemon(ctx, daemonID)
+	if err != nil {
+		return nil, err
+	}
+	baseURLs := req.Msg.GetBaseUrls()
+	if baseURLs == nil {
+		baseURLs = []string{}
+	}
+	payload, err := json.Marshal(map[string][]string{"base_urls": baseURLs})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	if _, err := s.router.SendDaemonCommandToDaemon(ctx, userID, daemonID, toolexec.CommandLocalModelsSetEndpoints, payload, 15000); err != nil {
+		return nil, localModelRelayError(fmt.Errorf("writing local model endpoints on daemon %s: %w", daemonID, err))
+	}
+	inv, err := s.router.RefreshLocalModels(ctx, userID, daemonID)
+	if err != nil {
+		return nil, localModelRelayError(err)
+	}
+	return connect.NewResponse(&reliantv1.SetLocalModelEndpointsResponse{LocalModels: inv}), nil
 }
 
 func (s *DaemonRegistryService) ResolveDaemon(

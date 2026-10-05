@@ -123,6 +123,9 @@ type OpenRouterResponse struct {
 		PromptTokensDetails struct {
 			CachedTokens int `json:"cached_tokens"`
 		} `json:"prompt_tokens_details"`
+		CompletionTokensDetails struct {
+			ReasoningTokens int `json:"reasoning_tokens"`
+		} `json:"completion_tokens_details"`
 		CacheCreationInputTokens int `json:"cache_creation_input_tokens"`
 		CacheReadInputTokens     int `json:"cache_read_input_tokens"`
 	} `json:"usage"`
@@ -346,9 +349,10 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		ToolCalls:    toolCalls,
 		FinishReason: finishReason,
 		Usage: llm.TokenUsage{
-			TokenCount:   int64(openRouterResp.Usage.TotalTokens),
-			InputTokens:  int64(inputTokens),
-			OutputTokens: int64(outputTokens),
+			TokenCount:      int64(openRouterResp.Usage.TotalTokens),
+			InputTokens:     int64(inputTokens),
+			OutputTokens:    int64(outputTokens),
+			ReasoningTokens: int64(openRouterResp.Usage.CompletionTokensDetails.ReasoningTokens),
 			// Already parsed above for the debug line; carry them out so the
 			// cache split survives past this function.
 			CacheReadInputTokens:     int64(cacheReadTokens),
@@ -533,9 +537,10 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		ToolCalls:    toolCalls,
 		FinishReason: finishReason,
 		Usage: llm.TokenUsage{
-			TokenCount:   int64(openRouterResp.Usage.TotalTokens),
-			InputTokens:  int64(openRouterResp.Usage.PromptTokens),
-			OutputTokens: int64(openRouterResp.Usage.CompletionTokens),
+			TokenCount:      int64(openRouterResp.Usage.TotalTokens),
+			InputTokens:     int64(openRouterResp.Usage.PromptTokens),
+			OutputTokens:    int64(openRouterResp.Usage.CompletionTokens),
+			ReasoningTokens: int64(openRouterResp.Usage.CompletionTokensDetails.ReasoningTokens),
 		},
 	}, nil
 }

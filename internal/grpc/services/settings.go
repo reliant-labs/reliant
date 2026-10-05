@@ -1810,6 +1810,17 @@ func (s *SettingsService) GetConfigHealth(
 	// Get all errors from the collector
 	errors := collector.Errors()
 
+	// Credential health is per-user, so it is computed here rather than held in
+	// the process-global collector.
+	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
+		if stale, err := drivers.HasStaleReliantKey(ctx, s.database, userID); err == nil && stale {
+			errors = append(errors, validation.NewError(validation.CategoryConfig,
+				"Your Reliant LLM key is in a legacy format the gateway rejects, so Reliant models are unavailable. Reconnect your Reliant account (re-sync) to replace the key.").
+				Source("provider:reliant").
+				Build())
+		}
+	}
+
 	// Apply type filter if specified
 	if req.Msg.TypeFilter != nil && *req.Msg.TypeFilter != "" {
 		filtered := make([]*validation.Error, 0)

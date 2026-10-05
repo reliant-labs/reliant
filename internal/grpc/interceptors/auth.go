@@ -11,6 +11,7 @@ package interceptors
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"os"
 	"strings"
 	"sync"
@@ -247,6 +248,34 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 		"procedure", procedure)
 
 	return ctx, claims, tokenString, nil
+}
+
+// AuthenticateHTTP authenticates a plain HTTP request (not a Connect RPC) and
+// returns the caller's user id. The credential is the Authorization header, or
+// a `token` query parameter for clients that cannot set headers — a <video>
+// element, like the terminal WebSocket.
+func (i *AuthInterceptor) AuthenticateHTTP(r *http.Request) (string, error) {
+	authHeader := r.Header.Get("Authorization")
+	if authHeader == "" {
+		if token := r.URL.Query().Get("token"); token != "" {
+			authHeader = "Bearer " + token
+		}
+	}
+	header := func(key string) string {
+		if key == "Authorization" {
+			return authHeader
+		}
+		return r.Header.Get(key)
+	}
+	ctx, _, _, err := i.authenticateRequest(r.Context(), "http:"+r.URL.Path, header)
+	if err != nil {
+		return "", err
+	}
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return "", fmt.Errorf("no authenticated user")
+	}
+	return userID, nil
 }
 
 // trackSession handles analytics session tracking for authenticated users

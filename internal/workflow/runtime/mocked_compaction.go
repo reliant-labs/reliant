@@ -33,6 +33,8 @@ func ApplyMockedCompactionThreshold(output map[string]interface{}, node *reliant
 	if args := model.GetCallLLMArgs(node); args != nil {
 		if v, ok := coerceMockedInt(model.CelIntValue(args.GetCompactionThreshold())); ok && v > 0 {
 			threshold = v
+		} else if ct := model.CelModelSelectorValue(args.GetModel()).GetCompactionThreshold(); ct > 0 {
+			threshold = int(ct)
 		}
 	}
 	output["compaction_threshold"] = threshold

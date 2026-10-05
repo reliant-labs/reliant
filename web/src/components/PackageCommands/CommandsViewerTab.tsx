@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef, createContext, useContext, type ReactNode } from "react";
+import { Tooltip } from "../ui/Tooltip";
 import { packageCommandsGrpc } from "../../api/package-commands-grpc";
 import { Play, Square, ChevronDown, ChevronRight, RefreshCw, Terminal, Loader2, CheckCircle, XCircle, ExternalLink, Hammer, Package, Zap, Clock, Activity, RotateCw, Star, X, Globe, Layers } from "lucide-react";
 import { useContainerWidth } from "../../hooks/useContainerWidth";
@@ -1563,7 +1564,8 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       getLeftPadding()
     )}>
       {/* Run button */}
-      <button
+      <Tooltip content={isRunning ? `${command.name} is running` : `Run ${command.name}`} placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+<button
         onClick={onRun}
         disabled={isDisabled}
         className={cn(
@@ -1571,9 +1573,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
           isRunning ? "bg-green-500/20 text-green-500" : "bg-primary/10 hover:bg-primary/20 text-primary",
           isDisabled && "opacity-50 cursor-not-allowed",
           isCompact ? "p-1" : "p-1.5"
-        )}
-        title={isRunning ? `${command.name} is running` : `Run ${command.name}`}
-      >
+        )} aria-label={isRunning ? `${command.name} is running` : `Run ${command.name}`}>
         {isStarting ? (
           <Loader2 className="w-3 h-3 animate-spin" />
         ) : isRunning ? (
@@ -1584,6 +1584,7 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
           <Play className="w-3 h-3" />
         )}
       </button>
+</Tooltip>
       
       {/* Command info */}
       <div className="flex-1 min-w-0">
@@ -1595,30 +1596,30 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
               {command.relative_path}
             </span>
           )}
-          <button
+          <Tooltip content={isFavorite ? "Remove from favorites" : "Add to favorites"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={(e) => { e.stopPropagation(); onToggleFavorite(); }}
             className={cn(
               "p-0.5 rounded transition-colors flex-shrink-0",
               isFavorite ? "text-yellow-500 hover:text-yellow-400" : "text-muted-foreground/20 hover:text-yellow-500 group-hover:text-muted-foreground/50"
-            )}
-            title={isFavorite ? "Remove from favorites" : "Add to favorites"}
-          >
+            )} aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}>
             <Star className={cn(isCompact ? "w-3 h-3" : "w-3.5 h-3.5", isFavorite && "fill-current")} />
           </button>
+</Tooltip>
           {getStatusIndicator(isCompact)}
           {/* Show ports for running processes */}
           {runningProcess?.ports && runningProcess.ports.length > 0 && !isCompact && (
             <span className="flex items-center gap-1">
               {runningProcess.ports.slice(0, 2).map((p) => (
-                <button
+                <Tooltip content={`Open localhost:${p.port} in browser`} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                   key={p.port}
                   onClick={(e) => { e.stopPropagation(); onOpenPort(p.port); }}
-                  className="flex items-center gap-0.5 text-xs text-primary hover:text-primary/80 hover:underline"
-                  title={`Open localhost:${p.port} in browser`}
-                >
+                  className="flex items-center gap-0.5 text-xs text-primary hover:text-primary/80 hover:underline" aria-label={`Open localhost:${p.port} in browser`}>
                   <Globe className="w-3 h-3" />
                   <span>{p.port}</span>
                 </button>
+</Tooltip>
               ))}
             </span>
           )}
@@ -1633,7 +1634,8 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {(runningProcess || recentProcess) && (
-          <button
+          <Tooltip content="View logs" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={() => onViewLogs(runningProcess || recentProcess!)}
             className={cn(
               "rounded transition-colors flex items-center gap-1",
@@ -1641,12 +1643,11 @@ function CommandRow({ command, isStarting, runningProcess, recentProcess, isFavo
                 ? "bg-green-500/20 hover:bg-green-500/30 text-green-500" 
                 : "hover:bg-muted text-muted-foreground hover:text-foreground opacity-0 group-hover:opacity-100",
               isCompact ? "p-1" : "p-1.5"
-            )}
-            title="View logs"
-          >
+            )} aria-label="View logs">
             <ExternalLink className="w-3 h-3" />
             {runningProcess && !isCompact && <span className="text-xs">Logs</span>}
           </button>
+</Tooltip>
         )}
         
         {!isCompact && (
@@ -1841,55 +1842,55 @@ function ProcessRow({ process, onViewLogs, onKill, onRerun, canRerun, onDismiss,
       {/* Actions */}
       <div className="flex items-center gap-1 flex-shrink-0">
         {!isRunning && canRerun && onRerun && (
-          <button
+          <Tooltip content="Rerun command" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={(e) => { e.stopPropagation(); onRerun(); }}
-            className={cn("rounded hover:bg-primary/20 text-primary transition-colors", isCompact ? "p-1" : "p-1.5")}
-            title="Rerun command"
-          >
+            className={cn("rounded hover:bg-primary/20 text-primary transition-colors", isCompact ? "p-1" : "p-1.5")} aria-label="Rerun command">
             <RotateCw className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
           </button>
+</Tooltip>
         )}
-        <button
+        <Tooltip content="View logs" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
           onClick={(e) => { e.stopPropagation(); onViewLogs(); }}
           className={cn(
             "rounded transition-colors flex items-center gap-1",
             isRunning ? "bg-green-500/20 hover:bg-green-500/30 text-green-500" : "hover:bg-muted text-muted-foreground",
             isCompact ? "p-1" : "p-1.5"
-          )}
-          title="View logs"
-        >
+          )} aria-label="View logs">
           <ExternalLink className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
           {isRunning && !isCompact && <span className="text-xs font-medium">Logs</span>}
         </button>
+</Tooltip>
         {isRunning && onKill && (
-          <button
+          <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={handleKill}
             disabled={isCanceling}
             className={cn(
               "rounded transition-colors",
               isCanceling ? "text-yellow-500 cursor-wait" : "hover:bg-destructive/20 text-destructive",
               isCompact ? "p-1" : "p-1.5"
-            )}
-            title={isCanceling ? "Stopping..." : "Stop process"}
-          >
+            )} aria-label={isCanceling ? "Stopping..." : "Stop process"}>
             {isCanceling ? (
               <Loader2 className={isCompact ? "w-3 h-3 animate-spin" : "w-3.5 h-3.5 animate-spin"} />
             ) : (
               <Square className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
             )}
           </button>
+</Tooltip>
         )}
         {!isRunning && onDismiss && (
-          <button
+          <Tooltip content="Remove from list" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={(e) => { e.stopPropagation(); onDismiss(); }}
             className={cn(
               "rounded hover:bg-muted text-muted-foreground/50 hover:text-muted-foreground transition-colors",
               isCompact ? "p-1" : "p-1.5"
-            )}
-            title="Remove from list"
-          >
+            )} aria-label="Remove from list">
             <X className={isCompact ? "w-3 h-3" : "w-3.5 h-3.5"} />
           </button>
+</Tooltip>
         )}
       </div>
     </div>

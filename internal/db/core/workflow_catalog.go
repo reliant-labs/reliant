@@ -23,7 +23,6 @@ type WorkflowDraft struct {
 	Status      WorkflowDraftStatus `json:"status"`                // draft (work in progress) or complete (runnable)
 	SourcePath  *string             `json:"source_path,omitempty"` // Original file path if imported
 	ForkedFrom  *string             `json:"forked_from,omitempty"` // Origin workflow (e.g., "builtin://agent")
-	ChatID      *string             `json:"chat_id,omitempty"`     // Associated chat for implicit lookup
 	CreatedAt   time.Time           `json:"created_at"`
 	UpdatedAt   time.Time           `json:"updated_at"`
 	IsHidden    bool                `json:"is_hidden"`
@@ -99,7 +98,6 @@ type WorkflowCatalogStore interface {
 	GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error)
 	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
 	GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error)
-	GetWorkflowDraftByChatID(ctx context.Context, chatID string) (*WorkflowDraft, error)
 	GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error)
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error)
@@ -107,11 +105,10 @@ type WorkflowCatalogStore interface {
 	UpdateWorkflowDraftDefinition(ctx context.Context, id string, name string, slug string, definition string, status WorkflowDraftStatus) error
 	SetWorkflowDraftStatus(ctx context.Context, id string, status WorkflowDraftStatus) (*WorkflowDraft, error)
 	SetWorkflowDraftHidden(ctx context.Context, id string, isHidden bool) (*WorkflowDraft, error)
-	DeleteWorkflowDraft(ctx context.Context, id string) error
-	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error
+	DeleteWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error)
+	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
 	WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error)
 	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
-	AssociateChatWithDraft(ctx context.Context, draftID string, chatID string) (*WorkflowDraft, error)
 	UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error)
 
 	CreatePreset(ctx context.Context, preset *Preset) (*Preset, error)

@@ -13,7 +13,6 @@ type Querier interface {
 	AddCommandFavorite(ctx context.Context, arg AddCommandFavoriteParams) error
 	AppendToContentBlock(ctx context.Context, arg AppendToContentBlockParams) error
 	ArchiveWorktree(ctx context.Context, id string) error
-	AssociateChatWithDraft(ctx context.Context, arg AssociateChatWithDraftParams) (WorkflowDraft, error)
 	// Conditional on status = 1 so this can never delete a row that has already
 	// been drained -- the caller and the agent's own drain loop are racing for
 	// the same row, and only the DELETE that actually matched status = 1 may
@@ -161,7 +160,7 @@ type Querier interface {
 	// A workflow is "usable" (shows in agent selector, can be loaded at runtime)
 	// when status = 'complete' AND is_hidden = false. Validity is never stored: it
 	// is computed on read and re-checked at run start.
-	CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDraftParams) (WorkflowDraft, error)
+	CreateWorkflowDraft(ctx context.Context, arg CreateWorkflowDraftParams) (CreateWorkflowDraftRow, error)
 	// Workflow Scenarios - Test scenarios for workflow simulation
 	// Scenarios define event sequences to test workflow behavior
 	CreateWorkflowScenario(ctx context.Context, arg CreateWorkflowScenarioParams) (WorkflowScenario, error)
@@ -195,8 +194,8 @@ type Querier interface {
 	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
-	DeleteWorkflowDraft(ctx context.Context, id string) error
-	DeleteWorkflowDraftBySlug(ctx context.Context, arg DeleteWorkflowDraftBySlugParams) error
+	DeleteWorkflowDraft(ctx context.Context, id string) (DeleteWorkflowDraftRow, error)
+	DeleteWorkflowDraftBySlug(ctx context.Context, arg DeleteWorkflowDraftBySlugParams) (DeleteWorkflowDraftBySlugRow, error)
 	DeleteWorkflowScenario(ctx context.Context, id string) error
 	// Delete all scenarios for a workflow draft (used when deleting drafts)
 	DeleteWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) error
@@ -218,7 +217,33 @@ type Querier interface {
 	// Returns no row (id is the zero value) when a terminal report already
 	// existed -- callers must check RowsAffected via the id, not treat sql.ErrNoRows
 	// as failure.
+	//
+	// This is the PLACEHOLDER writer: the reconciler passes synthesized = true, and
+	// a real report later supersedes the row via EnqueueSpawnReport.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, arg EnqueueAgentMessageIfAbsentParams) (string, error)
+	// A REAL terminal spawn report. Unlike EnqueueAgentMessageIfAbsent (the
+	// reconciler's placeholder write, DO NOTHING), a real report replaces a
+	// placeholder the reconciler synthesized for the same tool_call_id -- see
+	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	//
+	// It is re-queued even if the placeholder was already delivered: the parent
+	// was told "result lost, go check spawn_status" and should also receive the
+	// outcome.
+	//
+	// The row takes the NEW id rather than keeping the placeholder's. A drain
+	// lists queued rows outside its transaction and then claims them by id, so a
+	// drain that listed the placeholder just before this supersede still holds
+	// the placeholder's id and stale body. Keeping the id would let that claim
+	// take the real report, write the placeholder text, and mark the real report
+	// delivered unseen. With a fresh id the stale claim matches nothing, which the
+	// drain already treats as "batch taken, re-read next boundary". Nothing
+	// references agent_messages.id, so the change is safe.
+	//
+	// WHERE agent_messages.synthesized is what protects a real report: against one,
+	// the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows =
+	// already reported, an idempotent no-op). xmax = 0 is true only for a fresh
+	// insert, distinguishing inserted from superseded.
+	EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReportParams) (EnqueueSpawnReportRow, error)
 	// Get all step executions in a workflow (for full history reconstruction)
 	GetAllStepExecutionsForWorkflow(ctx context.Context, workflowID string) ([]StepExecution, error)
 	// Get a specific approval by ID
@@ -441,24 +466,23 @@ type Querier interface {
 	GetTriggerEventByChatID(ctx context.Context, chatID sql.NullString) (TriggerEvent, error)
 	GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEventByDedupeParams) (TriggerEvent, error)
 	// Get a usable workflow by slug (for runtime loading)
-	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (WorkflowDraft, error)
+	GetUsableWorkflowBySlug(ctx context.Context, arg GetUsableWorkflowBySlugParams) (GetUsableWorkflowBySlugRow, error)
 	GetVisibilityOverride(ctx context.Context, arg GetVisibilityOverrideParams) (bool, error)
 	GetWorkflow(ctx context.Context, id string) (Workflow, error)
 	GetWorkflowByThread(ctx context.Context, arg GetWorkflowByThreadParams) (Workflow, error)
 	GetWorkflowCheckpoint(ctx context.Context, workflowID string) (WorkflowCheckpoint, error)
-	GetWorkflowDraft(ctx context.Context, id string) (WorkflowDraft, error)
-	GetWorkflowDraftByChatID(ctx context.Context, chatID sql.NullString) (WorkflowDraft, error)
+	GetWorkflowDraft(ctx context.Context, id string) (GetWorkflowDraftRow, error)
 	// Check if a workflow with this exact name exists for the user
 	// Used for duplicate name validation (different from slug check)
-	GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDraftByNameParams) (WorkflowDraft, error)
+	GetWorkflowDraftByName(ctx context.Context, arg GetWorkflowDraftByNameParams) (GetWorkflowDraftByNameRow, error)
 	// Lookup by user and slug (simple, no scope complexity)
-	GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDraftBySlugParams) (WorkflowDraft, error)
-	GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkflowDraftBySourcePathParams) (WorkflowDraft, error)
+	GetWorkflowDraftBySlug(ctx context.Context, arg GetWorkflowDraftBySlugParams) (GetWorkflowDraftBySlugRow, error)
+	GetWorkflowDraftBySourcePath(ctx context.Context, arg GetWorkflowDraftBySourcePathParams) (GetWorkflowDraftBySourcePathRow, error)
 	GetWorkflowScenario(ctx context.Context, id string) (WorkflowScenario, error)
 	// Get a scenario by name and draft ID (for upsert behavior)
 	GetWorkflowScenarioByName(ctx context.Context, arg GetWorkflowScenarioByNameParams) (WorkflowScenario, error)
 	// Get all workflows that were forked from a specific origin
-	GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsForkedFromParams) ([]WorkflowDraft, error)
+	GetWorkflowsForkedFrom(ctx context.Context, arg GetWorkflowsForkedFromParams) ([]GetWorkflowsForkedFromRow, error)
 	GetWorktree(ctx context.Context, id string) (Worktree, error)
 	// Scoped by project because the key is client-generated; two projects must be
 	// able to use the same key without colliding.
@@ -479,6 +503,19 @@ type Querier interface {
 	// chat read; falls back to project name if worktree name is unavailable.
 	ListArchivedChats(ctx context.Context, userID string) ([]ListArchivedChatsRow, error)
 	ListAttachmentsByUser(ctx context.Context, arg ListAttachmentsByUserParams) ([]Attachment, error)
+	// Every backgrounded call whose outcome lives in a daemon's process table:
+	// status 6 with no child workflow. Spawns are excluded — their outcome is the
+	// child workflow, which ListStrandedBackgroundSpawnToolCalls reconciles.
+	//
+	// Read by the reconciler's background-process sweep, which asks each owning
+	// daemon whether the process is still running and closes the call when it is
+	// not. daemon_id and background_process_id are NULL on rows written before
+	// they were recorded; the sweep closes those only when the user's daemons
+	// prove the process gone, so they are returned too.
+	//
+	// Served by idx_tool_calls_chat_live (status IN (1,2,6)), which stays small
+	// once the sweep keeps status 6 honest.
+	ListBackgroundedProcessToolCalls(ctx context.Context) ([]ListBackgroundedProcessToolCallsRow, error)
 	ListBlockersForTask(ctx context.Context, toTaskID string) ([]TaskDependency, error)
 	ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWithActivity, error)
 	// Get all threads that fork from a given thread (direct children only)
@@ -566,25 +603,6 @@ type Querier interface {
 	// Ordering is load-bearing: messages must be delivered in the order they
 	// were sent.
 	ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]AgentMessage, error)
-	// The initial chat snapshot's window: the newest N messages ON THE MAIN THREAD,
-	// plus every message from any other thread that falls inside that seq range.
-	//
-	// Bounding the window by the whole chat (ListRecentMessages) is wrong once a
-	// chat spawns sub-agents. Spawn threads write far more messages than the main
-	// thread and finish later, so they occupy the top of the chat's seq range: in a
-	// real 1,470-message chat the newest 200 rows were 200 spawn messages and ZERO
-	// main-thread messages. Spawn messages render collapsed inside the tool call
-	// that created them rather than in the transcript, so that snapshot painted an
-	// empty conversation.
-	//
-	// The main thread is what the transcript shows, so it is what the window must
-	// be measured in. Sibling-thread messages inside the resulting range still come
-	// along, because the spawn tool-call preview renders from them.
-	ListRecentChatWindow(ctx context.Context, arg ListRecentChatWindowParams) ([]Message, error)
-	// Most recent N messages for a chat, for the bounded initial chat snapshot.
-	// Ordered DESC so the LIMIT keeps the NEWEST rows; callers must reverse to get
-	// the ascending order every other consumer expects.
-	ListRecentMessages(ctx context.Context, arg ListRecentMessagesParams) ([]Message, error)
 	// Most recent N messages within a single thread. Returned DESC; reverse to
 	// restore ascending order.
 	ListRecentMessagesByThread(ctx context.Context, arg ListRecentMessagesByThreadParams) ([]Message, error)
@@ -594,6 +612,22 @@ type Querier interface {
 	// order. Paired with HasMessagesBeforeInContextWindow for the cursor path's
 	// hasMore check.
 	ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, arg ListRecentMessagesInContextWindowBeforeSeqParams) ([]Message, error)
+	// The chat snapshot's sibling-thread rows: the newest row_limit messages at or
+	// above from_seq that belong to neither the main thread (read separately,
+	// through its context-window chain) nor any spawn thread.
+	//
+	// Spawn threads are excluded outright. A spawn renders as one tool-call card
+	// in its parent's transcript, and the card reads its child thread through
+	// ListMessages(thread_id) when it is expanded, so spawn rows in the snapshot
+	// are never rendered from. They were also most of it: spawn threads out-write
+	// the main thread by an order of magnitude, so a chat-wide newest-N carried
+	// whichever partial spawn transcripts happened to sit at the top of the seq
+	// range (636KB of a 2.3MB snapshot on a real 55k-message chat).
+	//
+	// What remains are the threads the transcript renders inline (workflow-node
+	// and fork threads), bounded so a node-heavy chat cannot balloon the payload.
+	// Returned DESC so the LIMIT keeps the newest rows; callers reverse.
+	ListRecentTranscriptSiblingMessages(ctx context.Context, arg ListRecentTranscriptSiblingMessagesParams) ([]Message, error)
 	// The newest per_trigger firings of each named trigger, with their runs, in ONE
 	// query. This is what health and last_event are computed from, so listing N
 	// triggers costs one extra query rather than N. Same run_display_state table as
@@ -699,6 +733,16 @@ type Querier interface {
 	// fabricating a completion for a live spawn writes a lie into the parent's
 	// mailbox that no later pass can distinguish from a real one. A missing
 	// report is recoverable; an invented one is not.
+	//
+	// has_report: a terminal child whose report DID land is still returned while
+	// its row sits at status 6. The report and the status are written by
+	// different code (the detached goroutine enqueues; nothing on that path moves
+	// the row), so "reported" never implied "closed" — and filtering reported
+	// calls out made the close unreachable for exactly the spawns that finished
+	// normally. Observed: toolu_013CJA3i on chat 8bb0a875 still backgrounded two
+	// days after its child stopped and its kind=4 report was delivered. The
+	// caller enqueues only when has_report is false, and closes the row either
+	// way.
 	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]ListStrandedBackgroundSpawnToolCallsRow, error)
 	// Spawn tool calls whose child workflow is terminal but which never received a
 	// result: the join from a finished sub-agent back to its parent, broken.
@@ -770,7 +814,7 @@ type Querier interface {
 	ListUserPresetsGlobal(ctx context.Context, userID string) ([]Preset, error)
 	ListVisibilityOverrides(ctx context.Context, arg ListVisibilityOverridesParams) ([]ListVisibilityOverridesRow, error)
 	// List all workflows for a user, ordered by most recently updated
-	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]WorkflowDraft, error)
+	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]ListWorkflowDraftsByUserRow, error)
 	// List all scenarios for a workflow draft
 	ListWorkflowScenariosByDraft(ctx context.Context, workflowDraftID sql.NullString) ([]WorkflowScenario, error)
 	// List all scenarios for a user
@@ -996,10 +1040,10 @@ type Querier interface {
 	SetProjectForgeName(ctx context.Context, arg SetProjectForgeNameParams) (int64, error)
 	SetTriggerEnabled(ctx context.Context, arg SetTriggerEnabledParams) (int64, error)
 	SetVisibilityOverride(ctx context.Context, arg SetVisibilityOverrideParams) error
-	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (WorkflowDraft, error)
+	SetWorkflowDraftHidden(ctx context.Context, arg SetWorkflowDraftHiddenParams) (SetWorkflowDraftHiddenRow, error)
 	// Move a draft between 'draft' and 'complete'. The caller validates before
 	// marking complete; this query only records the decision.
-	SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (WorkflowDraft, error)
+	SetWorkflowDraftStatus(ctx context.Context, arg SetWorkflowDraftStatusParams) (SetWorkflowDraftStatusRow, error)
 	// Record the run's verdict (Node.outcome of the terminal node it reached).
 	// Written once at completion and never reconciled from Temporal, unlike status:
 	// a graph that routes to its `failed` node is a COMPLETED Temporal execution,
@@ -1035,10 +1079,10 @@ type Querier interface {
 	UpdateTrigger(ctx context.Context, arg UpdateTriggerParams) (int64, error)
 	UpdateTriggerEventOutcome(ctx context.Context, arg UpdateTriggerEventOutcomeParams) (int64, error)
 	UpdateTriggerEventPayload(ctx context.Context, arg UpdateTriggerEventPayloadParams) (int64, error)
-	UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (WorkflowDraft, error)
-	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (WorkflowDraft, error)
+	UpdateWorkflowDraft(ctx context.Context, arg UpdateWorkflowDraftParams) (UpdateWorkflowDraftRow, error)
+	UpdateWorkflowDraftDefinition(ctx context.Context, arg UpdateWorkflowDraftDefinitionParams) (UpdateWorkflowDraftDefinitionRow, error)
 	// Set or update the forked_from origin
-	UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkflowForkedFromParams) (WorkflowDraft, error)
+	UpdateWorkflowForkedFrom(ctx context.Context, arg UpdateWorkflowForkedFromParams) (UpdateWorkflowForkedFromRow, error)
 	// Update workflow name (only allowed while the run is still PENDING)
 	UpdateWorkflowName(ctx context.Context, arg UpdateWorkflowNameParams) (Workflow, error)
 	UpdateWorkflowScenario(ctx context.Context, arg UpdateWorkflowScenarioParams) (WorkflowScenario, error)
@@ -1082,7 +1126,7 @@ type Querier interface {
 	UpsertWorkflowCheckpoint(ctx context.Context, arg UpsertWorkflowCheckpointParams) error
 	// Create or update a workflow draft
 	// Unique on (user_id, slug)
-	UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDraftParams) (WorkflowDraft, error)
+	UpsertWorkflowDraft(ctx context.Context, arg UpsertWorkflowDraftParams) (UpsertWorkflowDraftRow, error)
 	WorkflowSlugExists(ctx context.Context, arg WorkflowSlugExistsParams) (bool, error)
 }
 

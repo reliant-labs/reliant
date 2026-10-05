@@ -73,7 +73,7 @@ function renderParams(
   );
 }
 
-const KNOWN_LEVELS = ["low", "medium", "high", "xhigh", "max", "ultra"];
+const KNOWN_LEVELS = ["low", "medium", "high", "xhigh", "max"];
 
 /** Open the thinking_level dropdown once and read the options it offers. */
 async function openThinkingOptions(current: string): Promise<string[]> {

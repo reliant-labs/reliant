@@ -61,8 +61,8 @@ func TestConsumeStreamCapture(t *testing.T) {
 	if resp.Usage.TokenCount != 13358 {
 		t.Errorf("total tokens = %d, want 13358", resp.Usage.TokenCount)
 	}
-	if resp.Usage.InputTokens != 13318 || resp.Usage.OutputTokens != 12 {
-		t.Errorf("usage = %+v, want input 13318 / output 12", resp.Usage)
+	if resp.Usage.InputTokens != 13318 || resp.Usage.OutputTokens != 40 || resp.Usage.ReasoningTokens != 28 {
+		t.Errorf("usage = %+v, want input 13318 / output 40 (12 candidates + 28 thoughts) / reasoning 28", resp.Usage)
 	}
 	// The final frame's signature rides on a text part with empty text.
 	if resp.ThinkingSignature != "EvEBCu4BAWkUfRNbbvBlFHw" {

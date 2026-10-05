@@ -325,3 +325,35 @@ type ProcessInfo struct {
 	// whose loopback is already reachable by the user).
 	DaemonID string `json:"daemon_id,omitempty"`
 }
+
+// ProcessStatusRequest is the payload of exec.bg_status: which background
+// processes the caller wants the outcome of.
+type ProcessStatusRequest struct {
+	ProcessIDs []string `json:"process_ids"`
+}
+
+// ProcessStatusResponse answers exec.bg_status.
+//
+// It is deliberately NOT exec.bg_list. bg_list scans the OS for every running
+// process's listening ports — the reason it once took 15.7s — and a caller
+// that only needs "has this process ended?" for a handful of ids must not pay
+// that on every reconciliation pass.
+type ProcessStatusResponse struct {
+	// Processes holds one entry per requested id the daemon is tracking.
+	Processes []ProcessStatusInfo `json:"processes"`
+	// Unknown lists requested ids the daemon has no record of. The registry
+	// is in-memory, so a daemon that restarted has forgotten every process
+	// it started before — and the restart killed them (KillAllRunning on
+	// shutdown), so an unknown id is a process that has ended.
+	Unknown []string `json:"unknown,omitempty"`
+}
+
+// ProcessStatusInfo is one tracked process's lifecycle state.
+type ProcessStatusInfo struct {
+	ID string `json:"id"`
+	// Status is "running", "completed", "failed", "killed" or
+	// "killed_externally".
+	Status   string     `json:"status"`
+	ExitCode *int       `json:"exit_code,omitempty"`
+	EndTime  *time.Time `json:"end_time,omitempty"`
+}

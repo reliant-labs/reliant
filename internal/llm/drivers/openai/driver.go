@@ -592,9 +592,10 @@ func (o *OpenaiClient) toolCalls(completion openai.ChatCompletion) []message.Too
 // cost for a request, and reliant holds no price table to derive one from.
 func (o *OpenaiClient) usage(completion openai.ChatCompletion) llm.TokenUsage {
 	return llm.TokenUsage{
-		TokenCount:   completion.Usage.PromptTokens,
-		InputTokens:  completion.Usage.PromptTokens,
-		OutputTokens: completion.Usage.CompletionTokens,
+		TokenCount:      completion.Usage.PromptTokens,
+		InputTokens:     completion.Usage.PromptTokens,
+		OutputTokens:    completion.Usage.CompletionTokens,
+		ReasoningTokens: completion.Usage.CompletionTokensDetails.ReasoningTokens,
 	}
 }
 
@@ -897,6 +898,8 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 		usage.TokenCount = resp.Usage.TotalTokens
 		usage.InputTokens = resp.Usage.InputTokens
 		usage.OutputTokens = resp.Usage.OutputTokens
+		usage.ReasoningTokens = resp.Usage.OutputTokensDetails.ReasoningTokens
+		usage.CachedInputTokens = resp.Usage.InputTokensDetails.CachedTokens
 	}
 
 	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
@@ -971,8 +974,13 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			case responses.ResponseReasoningSummaryPartAddedEvent:
 				// Streaming reasoning summary delta
 				if v.Part.Text != "" {
-					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Content: v.Part.Text}
+					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: v.Part.Text}
 				}
+			case responses.ResponseReasoningSummaryTextDeltaEvent:
+				if v.Delta != "" {
+					eventChan <- llm.DriverEvent{Type: llm.EventThinkingDelta, Thinking: v.Delta}
+				}
+
 			case responses.ResponseReasoningSummaryPartDoneEvent:
 				// Reasoning summary part complete - no action needed
 			case responses.ResponseFunctionCallArgumentsDeltaEvent:
@@ -1069,6 +1077,8 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 			usage.TokenCount = finalResp.Usage.TotalTokens
 			usage.InputTokens = finalResp.Usage.InputTokens
 			usage.OutputTokens = finalResp.Usage.OutputTokens
+			usage.ReasoningTokens = finalResp.Usage.OutputTokensDetails.ReasoningTokens
+			usage.CachedInputTokens = finalResp.Usage.InputTokensDetails.CachedTokens
 		}
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)

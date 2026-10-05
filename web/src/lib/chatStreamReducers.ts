@@ -81,9 +81,20 @@ export const bySequenceNumber = (
 ) => (a.sequence_number || 0) - (b.sequence_number || 0);
 
 // Tool-call statuses that must not be clobbered by a late "completed": once a
-// user cancels or backgrounds a tool, a completion racing in right after must
-// not resurrect it.
-export const TERMINAL_TOOL_STATUSES = new Set(["cancelled", "backgrounded"]);
+// user cancels a tool, a completion racing in right after must not resurrect
+// it.
+//
+// "backgrounded" is deliberately NOT here. It is a promise of a later outcome,
+// not an outcome: when the process exits, the server closes the call and
+// streams its real status (completed / failed / cancelled), and that update
+// must land. Listing it here threw the completion away, so an open chat kept
+// showing a running process for a command that had already finished.
+export const TERMINAL_TOOL_STATUSES = new Set(["cancelled"]);
+
+// Statuses that mean "this tool's work is no longer in the foreground", so a
+// stream ending underneath it says nothing about it. "backgrounded" belongs
+// here: the user asked the process to outlive the turn that started it.
+const DETACHED_TOOL_STATUSES = new Set(["backgrounded"]);
 
 // Statuses a tool reached by actually running to an outcome. A late "cancelled"
 // must not overwrite one: cancelling a single tool used to take its siblings
@@ -144,6 +155,19 @@ export function applyToolCallStateUpdates(
       continue; // a tool that ran to an outcome was not cancelled
     }
 
+    // A backgrounded tool moves only to a REPORTED outcome. A late
+    // "executing"/"pending" is stale (the call already left the foreground),
+    // and an inferred cancel is the abort pass guessing about a stream the
+    // process deliberately outlives — neither describes what the process did.
+    if (
+      prev &&
+      DETACHED_TOOL_STATUSES.has(prev.status) &&
+      (update.inferred === true ||
+        !(SETTLED_TOOL_STATUSES.has(mappedStatus) || mappedStatus === "cancelled"))
+    ) {
+      continue;
+    }
+
     next.set(update.tool_call_id, {
       ...prev,
       id: update.tool_call_id,
@@ -154,6 +178,11 @@ export function applyToolCallStateUpdates(
       // Carried explicitly rather than spread from `prev`: a status that was
       // once inferred and is now reported must stop being provisional.
       inferred: update.inferred === true,
+      // Which child a spawn started is fixed once known. Not every emitter of
+      // a status knows it (a call_llm cancellation, the abort pass), so a
+      // later update that omits it must not erase it — the card would lose
+      // its thread and fall back to "Starting…".
+      childWorkflowId: update.child_workflow_id || prev?.childWorkflowId,
     });
   }
   return next;
@@ -181,7 +210,11 @@ export function toolStatusSurvivesStreamAbort(
   status: string | undefined,
 ): boolean {
   if (!status) return false;
-  return SETTLED_TOOL_STATUSES.has(status) || TERMINAL_TOOL_STATUSES.has(status);
+  return (
+    SETTLED_TOOL_STATUSES.has(status) ||
+    TERMINAL_TOOL_STATUSES.has(status) ||
+    DETACHED_TOOL_STATUSES.has(status)
+  );
 }
 
 /**

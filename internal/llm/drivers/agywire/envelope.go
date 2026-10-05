@@ -156,12 +156,13 @@ type GenerationConfig struct {
 	ImageConfig     *ImageConfig    `json:"imageConfig,omitempty"`
 }
 
-// ThinkingConfig is the inner thinking control. It is SEPARATE from the effort
-// suffix on the top-level model id: the capture sends both, with an unbounded
-// budget of -1 while the effort level rides on "…-high".
+// ThinkingConfig is the inner thinking control. It travels WITH the effort
+// suffix on the top-level model id. ThinkingLevel is what the server honors;
+// a dynamic ThinkingBudget (-1) overrides it, so the two are exclusive.
 type ThinkingConfig struct {
-	IncludeThoughts bool  `json:"includeThoughts"`
-	ThinkingBudget  int32 `json:"thinkingBudget"`
+	IncludeThoughts bool   `json:"includeThoughts"`
+	ThinkingLevel   string `json:"thinkingLevel,omitempty"`
+	ThinkingBudget  *int32 `json:"thinkingBudget,omitempty"`
 }
 
 // ImageConfig is the image surface's only generation knob in the capture.

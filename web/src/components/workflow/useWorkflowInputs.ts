@@ -10,6 +10,7 @@ import { usePreferencesStore } from "../../store/preferencesStore";
 import type { InputGroupDef } from "./WorkflowInputGroup";
 import type { InputDef } from "../../lib/inputHelpers";
 import { getInputDefault } from "../../lib/inputHelpers";
+import { getCachedWorkflowDisplayName } from "../../lib/workflowDisplayName";
 import { isCelTemplate } from "../../lib/celTemplate";
 import { useWorkflowDefinition } from "./useWorkflowDefinition";
 
@@ -80,17 +81,12 @@ export function normalizeWorkflowRef(ref: string): string {
   return ref;
 }
 
-/** Get display-friendly workflow name (strips prefix, formats nicely) */
+/**
+ * Get display-friendly workflow name. With `format`, resolves the definition
+ * `title` from the cached workflow list, falling back to the slug title-cased.
+ */
 export function getWorkflowDisplayName(ref: string, format: boolean = false): string {
-  const name = normalizeWorkflowRef(ref);
-  if (!format) return name;
-
-  // Format: replace dashes/underscores with spaces, title case
-  return name
-    .replace(/[-_]/g, " ")
-    .split(" ")
-    .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-    .join(" ");
+  return format ? getCachedWorkflowDisplayName(ref) : normalizeWorkflowRef(ref);
 }
 
 // ============================================

@@ -1,0 +1,380 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4778,
+      "input_tokens": 81,
+      "output_tokens": 149,
+      "thinking_chars": 179,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 3,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7,
+        "thinking_delta": 3
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4994,
+      "input_tokens": 81,
+      "output_tokens": 137,
+      "thinking_chars": 189,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 3,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 7,
+        "thinking_delta": 3
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5147,
+      "input_tokens": 81,
+      "output_tokens": 183,
+      "thinking_chars": 202,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 4,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8,
+        "thinking_delta": 4
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 6909,
+      "input_tokens": 56,
+      "output_tokens": 1545,
+      "thinking_chars": 701,
+      "correct": true,
+      "thinking_delta_events": 3,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6,
+        "thinking_delta": 3
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 3770,
+      "input_tokens": 56,
+      "output_tokens": 788,
+      "thinking_chars": 581,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6,
+        "thinking_delta": 2
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.5-flash@openrouter reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 6714,
+      "input_tokens": 56,
+      "output_tokens": 1539,
+      "thinking_chars": 659,
+      "correct": true,
+      "thinking_delta_events": 3,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 6,
+        "thinking_delta": 3
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4101,
+      "input_tokens": 57,
+      "output_tokens": 1582,
+      "thinking_chars": 888,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 2,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 2,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 4479,
+      "input_tokens": 57,
+      "output_tokens": 1414,
+      "thinking_chars": 470,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@antigravity reasoning level=high",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 4582,
+      "input_tokens": 57,
+      "output_tokens": 1343,
+      "thinking_chars": 458,
+      "has_signature": true,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 1,
+        "content_start": 1,
+        "content_stop": 1,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.5@codex reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4176,
+      "input_tokens": 4407,
+      "output_tokens": 145,
+      "thinking_chars": 32,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.5@codex reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5794,
+      "input_tokens": 4407,
+      "output_tokens": 138,
+      "thinking_chars": 34,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.5@codex reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5856,
+      "input_tokens": 4407,
+      "output_tokens": 246,
+      "thinking_chars": 42,
+      "correct": true,
+      "thinking_delta_events": 1,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 1,
+        "content_delta": 2,
+        "thinking_delta": 1,
+        "thinking_start": 1,
+        "thinking_stop": 1
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T17:27:38Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

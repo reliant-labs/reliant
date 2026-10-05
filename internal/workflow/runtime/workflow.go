@@ -2968,6 +2968,10 @@ type spawnInlineResult struct {
 	// the right AgentMessageKind (spec §5.1: 2=completion, 3=cancelled,
 	// 4=failed).
 	Cancelled bool
+	// terminalStatus is the "completed"/"failed"/"cancelled" verb a deferred
+	// runSpawnInlineChild did NOT notify; the caller notifies it after the
+	// mailbox report is written. Empty when nothing is owed.
+	terminalStatus string
 }
 
 // toToolResult converts to the map format expected by the tool result pipeline.
@@ -3224,6 +3228,27 @@ func prepareSpawnInline(
 	}
 }
 
+// notifySpawnTerminal writes a detached spawn's terminal state: the child
+// workflow row and the spawn tool call's status.
+func notifySpawnTerminal(ctx workflow.Context, chatID string, config *spawnChildWorkflowConfig, prep *spawnPrepResult, parentWorkflowID, status string) {
+	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, prep.targetWorkflow, status, parentWorkflowID, config.childThread, &workflowStatusOpts{
+		SpawnedByToolCallID: config.toolCallID,
+	})
+	notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", status, prep.spawnStatusOpts)
+}
+
+func deferredStatus(deferred bool, status string) string {
+	if deferred {
+		return status
+	}
+	return ""
+}
+
+// spawnReportBeforeTerminalChangeID gates writing a detached spawn's mailbox
+// report BEFORE its terminal child/tool-call status. See
+// docs/incidents/2026-10-04-spawn-report-collision.md.
+const spawnReportBeforeTerminalChangeID = "spawn-report-before-terminal-status"
+
 // runSpawnInlineChild runs the child's turns to completion (or terminal
 // failure/cancellation) using an already-prepared spawnPrepResult, including
 // the transient-error retry loop and the completion/failure status
@@ -3244,6 +3269,7 @@ func runSpawnInlineChild(
 	makeThreadPauseCtrl func(string) *PauseController,
 	makeThreadInterrupt func(string) *ThreadInterrupt,
 	prep *spawnPrepResult,
+	deferTerminalStatus bool,
 ) *spawnInlineResult {
 	logger := workflow.GetLogger(ctx)
 	targetWorkflow := prep.targetWorkflow
@@ -3251,7 +3277,6 @@ func runSpawnInlineChild(
 	evalResult := prep.evalResult
 	childExecContext := prep.childExecContext
 	pauseCtrl := prep.pauseCtrl
-	spawnStatusOpts := prep.spawnStatusOpts
 
 	// Retry loop for transient errors (worker restarts, heartbeat timeouts).
 	// Spawn tool calls are long-running and must survive any number of worker restarts.
@@ -3283,14 +3308,14 @@ func runSpawnInlineChild(
 				"toolCallID", config.toolCallID,
 				"error", err,
 			)
-			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
-				SpawnedByToolCallID: config.toolCallID,
-			})
-			notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "failed", spawnStatusOpts)
+			if !deferTerminalStatus {
+				notifySpawnTerminal(ctx, chatID, config, prep, parentWorkflowID, "failed")
+			}
 			return &spawnInlineResult{
-				ToolCallID: config.toolCallID,
-				Content:    fmt.Sprintf("Failed to create spawn executor: %v", err),
-				IsError:    true,
+				ToolCallID:     config.toolCallID,
+				Content:        fmt.Sprintf("Failed to create spawn executor: %v", err),
+				IsError:        true,
+				terminalStatus: deferredStatus(deferTerminalStatus, "failed"),
 			}
 		}
 
@@ -3328,15 +3353,15 @@ func runSpawnInlineChild(
 				"toolCallID", config.toolCallID,
 				"childWorkflowID", config.childWorkflowID,
 			)
-			notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "cancelled", parentWorkflowID, config.childThread, &workflowStatusOpts{
-				SpawnedByToolCallID: config.toolCallID,
-			})
-			notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "cancelled", spawnStatusOpts)
+			if !deferTerminalStatus {
+				notifySpawnTerminal(ctx, chatID, config, prep, parentWorkflowID, "cancelled")
+			}
 			return &spawnInlineResult{
-				ToolCallID: config.toolCallID,
-				Content:    "Spawn cancelled by the user before it finished.",
-				IsError:    false,
-				Cancelled:  true,
+				ToolCallID:     config.toolCallID,
+				Content:        "Spawn cancelled by the user before it finished.",
+				IsError:        false,
+				Cancelled:      true,
+				terminalStatus: deferredStatus(deferTerminalStatus, "cancelled"),
 			}
 		}
 
@@ -3377,27 +3402,26 @@ func runSpawnInlineChild(
 			"childWorkflowID", config.childWorkflowID,
 			"error", execErr,
 		)
-		notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "failed", parentWorkflowID, config.childThread, &workflowStatusOpts{
-			SpawnedByToolCallID: config.toolCallID,
-		})
-		notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "failed", spawnStatusOpts)
+		if !deferTerminalStatus {
+			notifySpawnTerminal(ctx, chatID, config, prep, parentWorkflowID, "failed")
+		}
 		return &spawnInlineResult{
-			ToolCallID: config.toolCallID,
-			Content:    fmt.Sprintf("Spawned workflow failed: %v", execErr),
-			IsError:    true,
+			ToolCallID:     config.toolCallID,
+			Content:        fmt.Sprintf("Spawned workflow failed: %v", execErr),
+			IsError:        true,
+			terminalStatus: deferredStatus(deferTerminalStatus, "failed"),
 		}
 	}
 
-	// Notify workflow status "completed"
-	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, targetWorkflow, "completed", parentWorkflowID, config.childThread, &workflowStatusOpts{
-		SpawnedByToolCallID: config.toolCallID,
-	})
-
-	// Emit per-tool-call "completed" status so the UI marks this spawn as done
-	notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", "completed", spawnStatusOpts)
+	if !deferTerminalStatus {
+		notifySpawnTerminal(ctx, chatID, config, prep, parentWorkflowID, "completed")
+	}
 
 	// Fetch the last message from the child's thread as the spawn result
 	result := fetchSpawnResult(ctx, chatID, config.childThread, config.toolCallID)
+	if deferTerminalStatus {
+		result.terminalStatus = "completed"
+	}
 
 	logger.Info("[SpawnInline] Inline spawn completed",
 		"toolCallID", config.toolCallID,
@@ -3535,7 +3559,12 @@ func startDetachedSpawn(
 			}
 		}()
 
-		result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep)
+		// The sweep treats "terminal child + no report" as stranded, so the
+		// report must land before the child goes terminal; otherwise a stalled
+		// workflow task lets the reconciler write a placeholder first. The old
+		// order is kept for histories recorded before this version.
+		reportFirst := workflow.GetVersion(gCtx, spawnReportBeforeTerminalChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+		result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep, reportFirst)
 		if result == nil {
 			// Parked for a continue-as-new handoff. Still live; the
 			// successor relaunches it and reports its outcome.
@@ -3571,6 +3600,10 @@ func startDetachedSpawn(
 				"childThread", config.childThread,
 				"error", err,
 			)
+		}
+
+		if result.terminalStatus != "" {
+			notifySpawnTerminal(gCtx, chatID, config, prep, parentWorkflowID, result.terminalStatus)
 		}
 
 		childTracker.completeDetachedSpawn(config.toolCallID, parentThread)

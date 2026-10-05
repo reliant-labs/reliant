@@ -203,3 +203,22 @@ func TestToolResultAttachments_UnusableAttachmentIsSkippedNotFatal(t *testing.T)
 		})
 	}
 }
+
+// A generated video rides in an IMAGE-typed block (the UI splits by MIME), and
+// must not be skipped the way a non-image attachment is.
+func TestToolResultAttachments_VideoBecomesABlock(t *testing.T) {
+	repo := newFakeBlockRepo()
+	repo.attachments["att-video-1"] = &db.Attachment{
+		ID: "att-video-1", Filename: "generated-abc123.mp4", MimeType: "video/mp4",
+		AttachmentType: string(attachment.TypeVideo), Content: []byte("mp4"),
+	}
+	svc := NewService(repo)
+	blocks, err := svc.buildToolContentBlocks(context.Background(), "msg-1", SaveMessageOpts{
+		ToolResults: []ToolResult{{ToolCallID: "toolu_1", Name: "generate_video", Content: "ok", AttachmentIDs: []string{"att-video-1"}}},
+	}, time.Now().UTC())
+	require.NoError(t, err)
+	require.Len(t, blocks, 2)
+	assert.Equal(t, reliantv1.ContentBlockType_CONTENT_BLOCK_TYPE_IMAGE, blocks[1].BlockType)
+	require.NotNil(t, blocks[1].Content)
+	assert.Equal(t, "att-video-1", *blocks[1].Content)
+}

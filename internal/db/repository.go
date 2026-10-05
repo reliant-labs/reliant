@@ -50,17 +50,13 @@ type Repository interface {
 	// above them. See 20260802000000_add_message_seq.sql.
 	GetNextSeq(ctx context.Context, chatID, threadID string) (int64, error)
 	ListMessages(ctx context.Context, chatID string, opts MessageListOptions) ([]*Message, error)
-	// ListRecentMessages returns the most recent `limit` messages for a chat in
-	// ascending order, bounded in SQL. Prefer this over ListMessages+Limit for
-	// display paths: ListMessages materializes the whole history and slices it
-	// in Go, so its Limit saves transfer but none of the query cost.
-	ListRecentMessages(ctx context.Context, chatID string, limit int) ([]*Message, error)
-	// ListRecentChatWindow returns the newest `limit` messages on mainThreadID
-	// plus every sibling-thread message inside that seq range, ascending. The
-	// initial snapshot uses this rather than ListRecentMessages: a chat-wide
-	// newest-N can be entirely spawn-thread messages, which render collapsed
-	// inside their tool call and so leave the transcript looking empty.
-	ListRecentChatWindow(ctx context.Context, chatID, mainThreadID string, limit int) ([]*Message, error)
+	// ListRecentTranscriptSiblingMessages returns, ascending, the newest
+	// `limit` messages with seq >= fromSeq on threads other than mainThreadID
+	// that are not spawn threads, bounded in SQL. The chat snapshot reads its
+	// sibling rows through this: node and fork threads render inline in the
+	// transcript, while a spawn renders as a tool-call card that fetches its
+	// own thread (ListMessages with thread_id) when expanded.
+	ListRecentTranscriptSiblingMessages(ctx context.Context, chatID, mainThreadID string, fromSeq int64, limit int) ([]*Message, error)
 	// CountMessagesInChat returns the true message count for a chat.
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
 	// CountMessagesByContextWindow returns the row count of a single context
@@ -193,6 +189,10 @@ type Repository interface {
 	// a backgrounded spawn whose child workflow is terminal but which never
 	// reported back to the parent's mailbox (spec §7.1).
 	ListStrandedBackgroundSpawnToolCalls(ctx context.Context) ([]*StrandedBackgroundSpawn, error)
+	// ListBackgroundedProcessToolCalls reads every backgrounded call whose
+	// outcome lives in a daemon's process table, for the reconciler sweep
+	// that closes them once the process has ended.
+	ListBackgroundedProcessToolCalls(ctx context.Context) ([]*BackgroundedProcessCall, error)
 	ListToolCallResultsByMessageIDs(ctx context.Context, messageIDs []string) ([]*ToolCallResult, error)
 	// ListSpawnChildren returns every spawn call issued BY threadID (the
 	// caller's own thread — tool_calls.thread_id is always the parent's, so
@@ -319,6 +319,10 @@ type Repository interface {
 
 	// Agent mailbox (spawn_send, sub-agent completion notifications)
 	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
+	// EnqueueSpawnReport writes a real terminal spawn report, superseding a
+	// reconciler placeholder for the same tool call. See
+	// core.AgentMessageStore and docs/incidents/2026-10-04-spawn-report-collision.md.
+	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
 	// EnqueueAgentMessageIfAbsent is the conditional insert the stranded-
 	// background-spawn reconciler sweep uses so two concurrent passes cannot
 	// double-deliver a completion (spec §7.1). See AgentMessageStore for the
@@ -376,6 +380,19 @@ type Repository interface {
 	// ports (the in-pod preview surface) on the attachment record. No-op when
 	// the row doesn't exist.
 	UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error
+	// SetDaemonLocalModels / ListDaemonLocalModels store and read each daemon's
+	// last-published local model inventory (protojson LocalModelInventory).
+	// The inventory outlives a disconnect; liveness is separate.
+	SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error
+	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
+	// Custom model endpoints (model_endpoints). Every method is scoped to
+	// userID; another user's id behaves exactly like a missing one.
+	CreateModelEndpoint(ctx context.Context, e *ModelEndpoint) error
+	GetModelEndpoint(ctx context.Context, userID, id string) (*ModelEndpoint, error)
+	ListModelEndpoints(ctx context.Context, userID string) ([]*ModelEndpoint, error)
+	UpdateModelEndpoint(ctx context.Context, e *ModelEndpoint) error
+	SetModelEndpointProbe(ctx context.Context, userID, id, probeJSON string) error
+	DeleteModelEndpoint(ctx context.Context, userID, id string) error
 	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
 	// DeleteStaleDaemonAttachments GCs attachment rows whose lease has not
 	// been renewed for olderThan. Rows are deleted on graceful teardown only,
@@ -632,7 +649,6 @@ type Repository interface {
 	GetWorkflowDraft(ctx context.Context, id string) (*WorkflowDraft, error)
 	GetWorkflowDraftBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
 	GetWorkflowDraftByName(ctx context.Context, userID, name string) (*WorkflowDraft, error)
-	GetWorkflowDraftByChatID(ctx context.Context, chatID string) (*WorkflowDraft, error)
 	GetWorkflowDraftBySourcePath(ctx context.Context, userID, sourcePath string) (*WorkflowDraft, error)
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*WorkflowDraft, error)
 	ListWorkflowDraftsByUser(ctx context.Context, userID string) ([]*WorkflowDraft, error)
@@ -644,7 +660,6 @@ type Repository interface {
 	DeleteWorkflowDraftBySlug(ctx context.Context, userID, slug string) error
 	WorkflowSlugExists(ctx context.Context, userID, slug string) (bool, error)
 	CountWorkflowDraftsByUser(ctx context.Context, userID string) (int64, error)
-	AssociateChatWithDraft(ctx context.Context, draftID string, chatID string) (*WorkflowDraft, error)
 	UpdateWorkflowForkedFrom(ctx context.Context, draftID string, forkedFrom string) (*WorkflowDraft, error)
 
 	// Workflow Scenarios - Test scenarios for workflows

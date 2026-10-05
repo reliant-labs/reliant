@@ -30,6 +30,8 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `daemon` | CelDaemonSelector | No | - |
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
+| `title` | string | No | - |
+| `hidden` | boolean | No | - |
 
 ---
 

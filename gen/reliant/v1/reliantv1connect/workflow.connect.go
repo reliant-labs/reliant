@@ -64,15 +64,9 @@ const (
 	// WorkflowServiceCopyWorkflowProcedure is the fully-qualified name of the WorkflowService's
 	// CopyWorkflow RPC.
 	WorkflowServiceCopyWorkflowProcedure = "/reliant.v1.WorkflowService/CopyWorkflow"
-	// WorkflowServiceBuilderChatProcedure is the fully-qualified name of the WorkflowService's
-	// BuilderChat RPC.
-	WorkflowServiceBuilderChatProcedure = "/reliant.v1.WorkflowService/BuilderChat"
 	// WorkflowServiceCreateWorkflowDraftProcedure is the fully-qualified name of the WorkflowService's
 	// CreateWorkflowDraft RPC.
 	WorkflowServiceCreateWorkflowDraftProcedure = "/reliant.v1.WorkflowService/CreateWorkflowDraft"
-	// WorkflowServiceAssociateChatWithWorkflowDraftProcedure is the fully-qualified name of the
-	// WorkflowService's AssociateChatWithWorkflowDraft RPC.
-	WorkflowServiceAssociateChatWithWorkflowDraftProcedure = "/reliant.v1.WorkflowService/AssociateChatWithWorkflowDraft"
 	// WorkflowServiceSetWorkflowStatusProcedure is the fully-qualified name of the WorkflowService's
 	// SetWorkflowStatus RPC.
 	WorkflowServiceSetWorkflowStatusProcedure = "/reliant.v1.WorkflowService/SetWorkflowStatus"
@@ -119,15 +113,9 @@ type WorkflowServiceClient interface {
 	// CopyWorkflow creates a copy of an existing workflow with a new unique name
 	// The copy is saved to the user's DB with forked_from set to track origin
 	CopyWorkflow(context.Context, *connect.Request[v1.CopyWorkflowRequest]) (*connect.Response[v1.CopyWorkflowResponse], error)
-	// BuilderChat sends a message to the workflow builder AI assistant
-	// The assistant can read and modify the workflow using specialized tools
-	BuilderChat(context.Context, *connect.Request[v1.BuilderChatRequest]) (*connect.Response[v1.BuilderChatResponse], error)
 	// CreateWorkflowDraft creates an empty draft for the workflow builder
-	// Called when user clicks "New Workflow" - draft ID is needed before chat starts
+	// Called when user clicks "New Workflow" so the canvas has a draft to edit
 	CreateWorkflowDraft(context.Context, *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error)
-	// AssociateChatWithWorkflowDraft links a chat to a workflow draft
-	// Called after chat creation to enable tools to find the draft
-	AssociateChatWithWorkflowDraft(context.Context, *connect.Request[v1.AssociateChatWithWorkflowDraftRequest]) (*connect.Response[v1.AssociateChatWithWorkflowDraftResponse], error)
 	// SetWorkflowStatus moves a stored workflow between draft and complete.
 	// Marking complete validates the current definition and is rejected (with
 	// the errors) when it is invalid; moving to draft always succeeds.
@@ -199,22 +187,10 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			connect.WithSchema(workflowServiceMethods.ByName("CopyWorkflow")),
 			connect.WithClientOptions(opts...),
 		),
-		builderChat: connect.NewClient[v1.BuilderChatRequest, v1.BuilderChatResponse](
-			httpClient,
-			baseURL+WorkflowServiceBuilderChatProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("BuilderChat")),
-			connect.WithClientOptions(opts...),
-		),
 		createWorkflowDraft: connect.NewClient[v1.CreateWorkflowDraftRequest, v1.CreateWorkflowDraftResponse](
 			httpClient,
 			baseURL+WorkflowServiceCreateWorkflowDraftProcedure,
 			connect.WithSchema(workflowServiceMethods.ByName("CreateWorkflowDraft")),
-			connect.WithClientOptions(opts...),
-		),
-		associateChatWithWorkflowDraft: connect.NewClient[v1.AssociateChatWithWorkflowDraftRequest, v1.AssociateChatWithWorkflowDraftResponse](
-			httpClient,
-			baseURL+WorkflowServiceAssociateChatWithWorkflowDraftProcedure,
-			connect.WithSchema(workflowServiceMethods.ByName("AssociateChatWithWorkflowDraft")),
 			connect.WithClientOptions(opts...),
 		),
 		setWorkflowStatus: connect.NewClient[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse](
@@ -228,19 +204,17 @@ func NewWorkflowServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // workflowServiceClient implements WorkflowServiceClient.
 type workflowServiceClient struct {
-	listWorkflows                  *connect.Client[v1.ListWorkflowsRequest, v1.ListWorkflowsResponse]
-	saveWorkflow                   *connect.Client[v1.SaveWorkflowRequest, v1.SaveWorkflowResponse]
-	getWorkflow                    *connect.Client[v1.GetWorkflowRequest, v1.GetWorkflowResponse]
-	deleteWorkflow                 *connect.Client[v1.DeleteWorkflowRequest, v1.DeleteWorkflowResponse]
-	validateWorkflow               *connect.Client[v1.ValidateWorkflowRequest, v1.ValidateWorkflowResponse]
-	importWorkflow                 *connect.Client[v1.ImportWorkflowRequest, v1.ImportWorkflowResponse]
-	exportWorkflow                 *connect.Client[v1.ExportWorkflowRequest, v1.ExportWorkflowResponse]
-	setWorkflowVisibility          *connect.Client[v1.SetWorkflowVisibilityRequest, v1.SetWorkflowVisibilityResponse]
-	copyWorkflow                   *connect.Client[v1.CopyWorkflowRequest, v1.CopyWorkflowResponse]
-	builderChat                    *connect.Client[v1.BuilderChatRequest, v1.BuilderChatResponse]
-	createWorkflowDraft            *connect.Client[v1.CreateWorkflowDraftRequest, v1.CreateWorkflowDraftResponse]
-	associateChatWithWorkflowDraft *connect.Client[v1.AssociateChatWithWorkflowDraftRequest, v1.AssociateChatWithWorkflowDraftResponse]
-	setWorkflowStatus              *connect.Client[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse]
+	listWorkflows         *connect.Client[v1.ListWorkflowsRequest, v1.ListWorkflowsResponse]
+	saveWorkflow          *connect.Client[v1.SaveWorkflowRequest, v1.SaveWorkflowResponse]
+	getWorkflow           *connect.Client[v1.GetWorkflowRequest, v1.GetWorkflowResponse]
+	deleteWorkflow        *connect.Client[v1.DeleteWorkflowRequest, v1.DeleteWorkflowResponse]
+	validateWorkflow      *connect.Client[v1.ValidateWorkflowRequest, v1.ValidateWorkflowResponse]
+	importWorkflow        *connect.Client[v1.ImportWorkflowRequest, v1.ImportWorkflowResponse]
+	exportWorkflow        *connect.Client[v1.ExportWorkflowRequest, v1.ExportWorkflowResponse]
+	setWorkflowVisibility *connect.Client[v1.SetWorkflowVisibilityRequest, v1.SetWorkflowVisibilityResponse]
+	copyWorkflow          *connect.Client[v1.CopyWorkflowRequest, v1.CopyWorkflowResponse]
+	createWorkflowDraft   *connect.Client[v1.CreateWorkflowDraftRequest, v1.CreateWorkflowDraftResponse]
+	setWorkflowStatus     *connect.Client[v1.SetWorkflowStatusRequest, v1.SetWorkflowStatusResponse]
 }
 
 // ListWorkflows calls reliant.v1.WorkflowService.ListWorkflows.
@@ -288,19 +262,9 @@ func (c *workflowServiceClient) CopyWorkflow(ctx context.Context, req *connect.R
 	return c.copyWorkflow.CallUnary(ctx, req)
 }
 
-// BuilderChat calls reliant.v1.WorkflowService.BuilderChat.
-func (c *workflowServiceClient) BuilderChat(ctx context.Context, req *connect.Request[v1.BuilderChatRequest]) (*connect.Response[v1.BuilderChatResponse], error) {
-	return c.builderChat.CallUnary(ctx, req)
-}
-
 // CreateWorkflowDraft calls reliant.v1.WorkflowService.CreateWorkflowDraft.
 func (c *workflowServiceClient) CreateWorkflowDraft(ctx context.Context, req *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error) {
 	return c.createWorkflowDraft.CallUnary(ctx, req)
-}
-
-// AssociateChatWithWorkflowDraft calls reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft.
-func (c *workflowServiceClient) AssociateChatWithWorkflowDraft(ctx context.Context, req *connect.Request[v1.AssociateChatWithWorkflowDraftRequest]) (*connect.Response[v1.AssociateChatWithWorkflowDraftResponse], error) {
-	return c.associateChatWithWorkflowDraft.CallUnary(ctx, req)
 }
 
 // SetWorkflowStatus calls reliant.v1.WorkflowService.SetWorkflowStatus.
@@ -331,15 +295,9 @@ type WorkflowServiceHandler interface {
 	// CopyWorkflow creates a copy of an existing workflow with a new unique name
 	// The copy is saved to the user's DB with forked_from set to track origin
 	CopyWorkflow(context.Context, *connect.Request[v1.CopyWorkflowRequest]) (*connect.Response[v1.CopyWorkflowResponse], error)
-	// BuilderChat sends a message to the workflow builder AI assistant
-	// The assistant can read and modify the workflow using specialized tools
-	BuilderChat(context.Context, *connect.Request[v1.BuilderChatRequest]) (*connect.Response[v1.BuilderChatResponse], error)
 	// CreateWorkflowDraft creates an empty draft for the workflow builder
-	// Called when user clicks "New Workflow" - draft ID is needed before chat starts
+	// Called when user clicks "New Workflow" so the canvas has a draft to edit
 	CreateWorkflowDraft(context.Context, *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error)
-	// AssociateChatWithWorkflowDraft links a chat to a workflow draft
-	// Called after chat creation to enable tools to find the draft
-	AssociateChatWithWorkflowDraft(context.Context, *connect.Request[v1.AssociateChatWithWorkflowDraftRequest]) (*connect.Response[v1.AssociateChatWithWorkflowDraftResponse], error)
 	// SetWorkflowStatus moves a stored workflow between draft and complete.
 	// Marking complete validates the current definition and is rejected (with
 	// the errors) when it is invalid; moving to draft always succeeds.
@@ -407,22 +365,10 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 		connect.WithSchema(workflowServiceMethods.ByName("CopyWorkflow")),
 		connect.WithHandlerOptions(opts...),
 	)
-	workflowServiceBuilderChatHandler := connect.NewUnaryHandler(
-		WorkflowServiceBuilderChatProcedure,
-		svc.BuilderChat,
-		connect.WithSchema(workflowServiceMethods.ByName("BuilderChat")),
-		connect.WithHandlerOptions(opts...),
-	)
 	workflowServiceCreateWorkflowDraftHandler := connect.NewUnaryHandler(
 		WorkflowServiceCreateWorkflowDraftProcedure,
 		svc.CreateWorkflowDraft,
 		connect.WithSchema(workflowServiceMethods.ByName("CreateWorkflowDraft")),
-		connect.WithHandlerOptions(opts...),
-	)
-	workflowServiceAssociateChatWithWorkflowDraftHandler := connect.NewUnaryHandler(
-		WorkflowServiceAssociateChatWithWorkflowDraftProcedure,
-		svc.AssociateChatWithWorkflowDraft,
-		connect.WithSchema(workflowServiceMethods.ByName("AssociateChatWithWorkflowDraft")),
 		connect.WithHandlerOptions(opts...),
 	)
 	workflowServiceSetWorkflowStatusHandler := connect.NewUnaryHandler(
@@ -451,12 +397,8 @@ func NewWorkflowServiceHandler(svc WorkflowServiceHandler, opts ...connect.Handl
 			workflowServiceSetWorkflowVisibilityHandler.ServeHTTP(w, r)
 		case WorkflowServiceCopyWorkflowProcedure:
 			workflowServiceCopyWorkflowHandler.ServeHTTP(w, r)
-		case WorkflowServiceBuilderChatProcedure:
-			workflowServiceBuilderChatHandler.ServeHTTP(w, r)
 		case WorkflowServiceCreateWorkflowDraftProcedure:
 			workflowServiceCreateWorkflowDraftHandler.ServeHTTP(w, r)
-		case WorkflowServiceAssociateChatWithWorkflowDraftProcedure:
-			workflowServiceAssociateChatWithWorkflowDraftHandler.ServeHTTP(w, r)
 		case WorkflowServiceSetWorkflowStatusProcedure:
 			workflowServiceSetWorkflowStatusHandler.ServeHTTP(w, r)
 		default:
@@ -504,16 +446,8 @@ func (UnimplementedWorkflowServiceHandler) CopyWorkflow(context.Context, *connec
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.CopyWorkflow is not implemented"))
 }
 
-func (UnimplementedWorkflowServiceHandler) BuilderChat(context.Context, *connect.Request[v1.BuilderChatRequest]) (*connect.Response[v1.BuilderChatResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.BuilderChat is not implemented"))
-}
-
 func (UnimplementedWorkflowServiceHandler) CreateWorkflowDraft(context.Context, *connect.Request[v1.CreateWorkflowDraftRequest]) (*connect.Response[v1.CreateWorkflowDraftResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.CreateWorkflowDraft is not implemented"))
-}
-
-func (UnimplementedWorkflowServiceHandler) AssociateChatWithWorkflowDraft(context.Context, *connect.Request[v1.AssociateChatWithWorkflowDraftRequest]) (*connect.Response[v1.AssociateChatWithWorkflowDraftResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorkflowService.AssociateChatWithWorkflowDraft is not implemented"))
 }
 
 func (UnimplementedWorkflowServiceHandler) SetWorkflowStatus(context.Context, *connect.Request[v1.SetWorkflowStatusRequest]) (*connect.Response[v1.SetWorkflowStatusResponse], error) {

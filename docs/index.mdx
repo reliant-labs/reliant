@@ -49,19 +49,19 @@ Workflows automate that choreography. You define the steps, the agents, and the 
 
 ## What ships with Reliant
 
-Reliant includes built-in workflows you can use immediately:
+Reliant includes built-in workflows you can use immediately. Pick one from the workflow selector in the chat composer:
 
 | Workflow | What it does |
 | --- | --- |
-| **agent** | The default. Chat with an AI agent that can read, edit, search, and run commands in your project. |
-| **gsd** | "Get Shit Done." Discuss → research → plan → implement in parallel waves → verify. Fresh context per phase. |
-| **spec-driven** | Spec-first development. Write requirements → plan technical approach → implement. |
-| **simplify-first** | Refactor before building. Research simplifications → refactor → verify → plan → implement. For messy or legacy code. |
-| **superpowers** | Mandatory TDD. Brainstorm → plan → write failing tests → implement until green → structured review. |
-| **get-it-right** | For complex brownfield codebases. Expects first attempts to fail — attempt → evaluate → improve or restart → diagnose → final implementation. |
-| **one-ring** | Full pipeline: planning → testing → implementation → checks → evaluate → refactor loop. |
-| **parallel-compete** | Three agents implement the same thing in isolated worktrees. A reviewer picks the winner. |
-| **router** | Classifies your request and routes it to the best workflow automatically. |
+| **Agent** | The default. Chat with an AI agent that can read, edit, search, and run commands in your project. |
+| **Get It Right** | For complex changes in an existing codebase. Loops implement → lint/test/build → review, undoing bad attempts, until the reviewer passes the work. |
+| **Best of Three** | Three agents implement the same task in isolated worktrees. A reviewer picks the winner or merges the best parts. |
+| **Build an App** | Scopes an app with you, scaffolds it with Forge, then builds and verifies it end to end. |
+| **Move to Forge** | Migrates an existing codebase into a Forge project, porting it one component at a time. |
+| **Landing Page** | Scopes a landing page with you, writes it, reviews the copy and then the design, and serves it at a preview URL. |
+| **Pitch Deck** | Builds an investor deck from your company website, with competitive research, a short founder interview, and a visual review pass. |
+| **Create a Workflow** | Turns a conversation about what you want to automate into a working, tested workflow. |
+| **Import from Claude Code / Cursor** | Brings useful configuration across from Claude Code, Cursor, Codex, or Windsurf. |
 
 You can also build your own — see [Creating Custom Workflows](/workflows/custom-workflows).
 
@@ -77,7 +77,7 @@ Beyond the built-ins, workflows let you encode any repeatable multi-step process
 
 **Competitive implementations** — Three agents solve the same problem with different approaches in isolated worktrees. A reviewer picks the best one.
 
-**Plan-debate** — A proposer and critic alternate rounds, refining a plan until they converge. Better plans through adversarial thinking.
+**Plan debate** — A proposer and a critic alternate rounds, refining a plan until they converge. Better plans through adversarial thinking.
 
 **Continuous autonomous development** — Pick a task from a spec, implement it, verify it, commit it, pick the next task. Hands-off until done.
 

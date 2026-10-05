@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { Tooltip } from "../ui/Tooltip";
 import {
   GitMerge,
   RefreshCw,
@@ -87,18 +88,18 @@ export function FloatingWorkflowSidebar({
               const Icon = getNodeIcon(node.id)
               const bgColor = getNodeBgColor(node.id)
               return (
-                <button
+                <Tooltip content={node.description} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                   key={node.id}
                   type="button"
                   onClick={() => onAddStep(node.id)}
-                  className={nodeButtonClass}
-                  title={node.description}
-                >
+                  className={nodeButtonClass} aria-label={node.description}>
                   <div className={cn(iconClass, bgColor)}>
                     <Icon className="w-4 h-4 text-white" />
                   </div>
                   <span className="text-sm font-medium leading-none text-foreground">{node.displayName}</span>
                 </button>
+</Tooltip>
               )
             })}
           </div>

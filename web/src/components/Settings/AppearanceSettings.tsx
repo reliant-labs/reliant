@@ -11,6 +11,7 @@ import { getSpawnDisplayMode, setSpawnDisplayMode as saveSpawnDisplayMode, type 
 
 import "./settings-range.css";
 import { FONT_SIZE_MAP, applyRootFontSize, DEFAULT_FONT_SIZE } from "../../lib/rootFontSize";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 type FontSize = "xs" | "sm" | "md" | "lg" | "xl";
 type ChatTimelineVariant = "compact" | "card" | "minimal";
@@ -286,10 +287,10 @@ export function AppearanceSettings() {
   return (
     <div className="space-y-8">
       <div data-onboarding="appearance-settings">
-        <h2 className="text-lg font-semibold">Appearance</h2>
-        <p className="text-xs text-muted-foreground">
-          Customize the appearance of the application.
-        </p>
+        <SettingsPageHeader
+        title="Appearance"
+        description="Pick light or dark mode and a color scheme for the app. Changes apply immediately and are remembered on this device."
+      />
       </div>
 
       {/* Theme Toggle */}

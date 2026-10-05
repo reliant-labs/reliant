@@ -1,11 +1,14 @@
-import { useState, useEffect } from 'react';
-import { GitCommit as GitCommitIcon, RefreshCw, AlertCircle, Clock, User, ChevronDown, ChevronUp } from 'lucide-react';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshCw } from 'lucide-react';
 import { worktreeGrpc, type GitCommit } from '../../api/worktree-grpc';
 import { cn } from '../../lib/utils';
 import { toast } from '../../lib/toast-manager';
+import { Tooltip } from '../ui/Tooltip';
 
 interface CommitHistoryProps {
   worktreeId: string;
+  /** Scope to one nested repo of a multi-repo project. */
+  repoId?: string;
   className?: string;
   limit?: number;
   initialDisplay?: number;
@@ -23,60 +26,57 @@ interface CommitHistoryData {
   error?: string;
 }
 
-export function CommitHistory({ worktreeId, className = "", limit = 20, initialDisplay = 5 }: CommitHistoryProps) {
+export function formatCommitDate(dateStr: string, now: Date = new Date()): string {
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return dateStr;
+
+  const diffMs = now.getTime() - date.getTime();
+  const diffMins = Math.max(0, Math.floor(diffMs / 60000));
+  const diffHours = Math.floor(diffMs / 3600000);
+  const diffDays = Math.floor(diffMs / 86400000);
+
+  if (diffMins < 1) return 'just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  if (diffHours < 24) return `${diffHours}h ago`;
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined,
+  });
+}
+
+/**
+ * Commits on this workspace's branch that are not on its base branch.
+ * Dense list: one line per commit (message, then short hash and age), the
+ * hash copies on click.
+ */
+export function CommitHistory({ worktreeId, repoId, className = "", limit = 20, initialDisplay = 5 }: CommitHistoryProps) {
   const [data, setData] = useState<CommitHistoryData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isExpanded, setIsExpanded] = useState(false);
+  const requestIdRef = useRef(0);
 
-  const fetchCommits = async () => {
+  const fetchCommits = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
     setIsLoading(true);
     setError(null);
     try {
-      const grpcData = await worktreeGrpc.getCommits(worktreeId, limit);
-      setData(grpcData);
+      const grpcData = await worktreeGrpc.getCommits(worktreeId, limit, repoId);
+      if (requestIdRef.current === requestId) setData(grpcData);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to fetch commit history');
+      if (requestIdRef.current === requestId) {
+        setError(err instanceof Error ? err.message : 'Failed to fetch commit history');
+      }
     } finally {
-      setIsLoading(false);
+      if (requestIdRef.current === requestId) setIsLoading(false);
     }
-  };
+  }, [worktreeId, limit, repoId]);
 
   useEffect(() => {
-    if (worktreeId) {
-      fetchCommits();
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [worktreeId, limit]);
-
-  const formatDate = (dateStr: string) => {
-    try {
-      const date = new Date(dateStr);
-      if (isNaN(date.getTime())) return dateStr;
-      
-      const now = new Date();
-      const diffMs = now.getTime() - date.getTime();
-      const diffMins = Math.floor(diffMs / 60000);
-      const diffHours = Math.floor(diffMs / 3600000);
-      const diffDays = Math.floor(diffMs / 86400000);
-
-      if (diffMins < 60) {
-        return `${diffMins}m ago`;
-      } else if (diffHours < 24) {
-        return `${diffHours}h ago`;
-      } else if (diffDays < 7) {
-        return `${diffDays}d ago`;
-      } else {
-        return date.toLocaleDateString('en-US', { 
-          month: 'short', 
-          day: 'numeric',
-          year: date.getFullYear() !== now.getFullYear() ? 'numeric' : undefined
-        });
-      }
-    } catch {
-      return dateStr;
-    }
-  };
+    if (worktreeId) void fetchCommits();
+  }, [worktreeId, fetchCommits]);
 
   const copyToClipboard = async (text: string, shortHash: string) => {
     try {
@@ -88,145 +88,111 @@ export function CommitHistory({ worktreeId, className = "", limit = 20, initialD
     }
   };
 
-  if (isLoading) {
+  if (isLoading && !data) {
     return (
-      <div className={cn("flex items-center gap-2 text-xs text-muted-foreground font-mono", className)}>
-        <RefreshCw className="w-3 h-3 animate-spin" />
-        <span>Loading commits...</span>
+      <div className={cn("flex flex-col gap-2", className)} aria-busy="true" aria-label="Loading commits">
+        {[0, 1, 2].map((i) => (
+          <div key={i} className="flex flex-col gap-1">
+            <div className="h-3 w-4/5 animate-pulse rounded bg-border motion-reduce:animate-none" />
+            <div className="h-2.5 w-1/3 animate-pulse rounded bg-border motion-reduce:animate-none" />
+          </div>
+        ))}
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className={cn("flex items-center gap-2 text-xs text-muted-foreground font-mono", className)}>
-        <AlertCircle className="w-3 h-3" />
-        <span>No commits yet</span>
+      <div className={cn("flex items-center justify-between gap-2 text-xs text-muted-foreground", className)}>
+        <span className="min-w-0 truncate" title={error}>Couldn't load commits.</span>
+        <button
+          type="button"
+          onClick={() => void fetchCommits()}
+          className="shrink-0 font-medium text-foreground underline-offset-2 hover:underline"
+        >
+          Retry
+        </button>
       </div>
     );
   }
 
-  if (!data || data.commits.length === 0) {
-    return (
-      <div className={cn("flex items-center gap-2 text-xs text-muted-foreground font-mono", className)}>
-        <AlertCircle className="w-3 h-3" />
-        <span>No commits found</span>
-      </div>
-    );
-  }
+  if (!data) return null;
+
+  const compareLabel =
+    data.comparison_mode && data.comparison_ref
+      ? `${data.current_branch || data.branch} vs ${data.comparison_ref}`
+      : null;
+  const visible = data.commits.slice(0, isExpanded ? data.commits.length : initialDisplay);
+  const hidden = data.commits.length - initialDisplay;
 
   return (
     <div className={cn("flex flex-col gap-2", className)}>
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center gap-2 text-xs font-mono">
-            <GitCommitIcon className="w-3 h-3 text-muted-foreground" />
-            <span className="font-medium">{data.total} commit{data.total !== 1 ? 's' : ''}</span>
-            {data.comparison_mode && data.comparison_ref ? (
-              <span className="text-muted-foreground">
-                ({data.current_branch || data.branch} vs {data.comparison_ref})
-              </span>
-            ) : (
-              data.total > 0 && (
-                <span className="text-warning text-xs">
-                  (showing all commits - no base branch)
-                </span>
-              )
-            )}
-          </div>
-          {data.total === 0 && data.comparison_mode && (
-            <p className="text-xs text-muted-foreground font-mono pl-5">
-              No new commits on this branch
-            </p>
-          )}
-          {!data.comparison_mode && data.total > 0 && (
-            <p className="text-xs text-warning font-mono pl-5">
-              ⚠ Base branch not found. Showing all commits on {data.current_branch || data.branch}.
-            </p>
-          )}
-        </div>
-        <button
-          onClick={fetchCommits}
-          className="p-1 hover:bg-accent rounded transition-colors"
-          aria-label="Refresh commits"
-        >
-          <RefreshCw className="w-3 h-3 text-muted-foreground" />
-        </button>
+      <div className="flex items-center justify-between gap-2">
+        <p className="min-w-0 truncate text-xs text-muted-foreground">
+          <span className="font-medium tabular-nums text-foreground">{data.total}</span>{" "}
+          {data.total === 1 ? "commit" : "commits"}
+          {compareLabel && <span className="font-mono"> · {compareLabel}</span>}
+        </p>
+        <Tooltip content="Refresh commits" delay={300} wrapperClassName="flex">
+          <button
+            type="button"
+            onClick={() => void fetchCommits()}
+            aria-label="Refresh commits"
+            className="inline-flex h-6 w-6 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
+            <RefreshCw className={cn("h-3 w-3", isLoading && "animate-spin")} />
+          </button>
+        </Tooltip>
       </div>
 
-      {/* Commit List */}
-      {data.commits.length > 0 && (
-        <>
-          <div className="space-y-2">
-            {data.commits.slice(0, isExpanded ? data.commits.length : initialDisplay).map((commit) => (
-              <div
-                key={commit.hash}
-                className="flex flex-col gap-1 p-2 rounded-md hover:bg-muted/50 transition-colors"
-              >
-                {/* Commit message */}
-                <div className="flex items-start gap-2">
-                  <GitCommitIcon className="w-3 h-3 text-muted-foreground mt-0.5 flex-shrink-0" />
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-mono text-foreground break-words">
-                      {commit.message}
-                    </p>
-                  </div>
-                </div>
+      {!data.comparison_mode && data.total > 0 && (
+        <p className="text-xs text-warning">
+          Base branch not found, so this lists every commit on {data.current_branch || data.branch}.
+        </p>
+      )}
 
-                {/* Commit metadata */}
-                <div className="flex items-center gap-3 text-xs font-mono text-muted-foreground pl-5">
+      {data.commits.length === 0 ? (
+        <p className="text-xs text-muted-foreground">
+          {data.comparison_mode ? "No commits on this branch yet." : "No commits found."}
+        </p>
+      ) : (
+        <ol className="flex flex-col">
+          {visible.map((commit) => (
+            <li key={commit.hash} className="flex flex-col gap-0.5 border-b border-border/60 py-1.5 last:border-b-0">
+              <p className="truncate text-xs text-foreground" title={commit.message}>
+                {commit.message}
+              </p>
+              <div className="flex min-w-0 items-center gap-2 text-2xs text-muted-foreground">
+                <Tooltip content="Copy full hash" delay={300} wrapperClassName="flex">
                   <button
-                    onClick={() => copyToClipboard(commit.hash, commit.short_hash)}
-                    className="hover:text-foreground transition-colors font-medium"
-                    title="Click to copy full hash"
+                    type="button"
+                    onClick={() => void copyToClipboard(commit.hash, commit.short_hash)}
+                    aria-label={`Copy commit hash ${commit.short_hash}`}
+                    className="font-mono transition-colors hover:text-foreground"
                   >
                     {commit.short_hash}
                   </button>
-                  
-                  <div className="flex items-center gap-1">
-                    <User className="w-3 h-3" />
-                    <span className="truncate max-w-[150px]" title={commit.author}>
-                      {commit.author}
-                    </span>
-                  </div>
-                  
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-3 h-3" />
-                    <span title={commit.date}>{formatDate(commit.date)}</span>
-                  </div>
-                </div>
+                </Tooltip>
+                <span className="min-w-0 truncate" title={commit.author}>{commit.author}</span>
+                <span className="ml-auto shrink-0 tabular-nums" title={commit.date}>{formatCommitDate(commit.date)}</span>
               </div>
-            ))}
-          </div>
+            </li>
+          ))}
+        </ol>
+      )}
 
-          {/* Expand/Collapse button */}
-          {data.commits.length > initialDisplay && (
-            <button
-              onClick={() => setIsExpanded(!isExpanded)}
-              className="w-full flex items-center justify-center gap-2 py-2 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors border-t border-border/40"
-            >
-              {isExpanded ? (
-                <>
-                  <ChevronUp className="w-3 h-3" />
-                  <span>Show less</span>
-                </>
-              ) : (
-                <>
-                  <ChevronDown className="w-3 h-3" />
-                  <span>Show {data.commits.length - initialDisplay} more commit{data.commits.length - initialDisplay !== 1 ? 's' : ''}</span>
-                </>
-              )}
-            </button>
-          )}
+      {hidden > 0 && (
+        <button
+          type="button"
+          onClick={() => setIsExpanded(!isExpanded)}
+          className="self-start text-xs font-medium text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {isExpanded ? "Show fewer" : `Show ${hidden} more`}
+        </button>
+      )}
 
-          {/* Total commits hint */}
-          {data.total >= limit && isExpanded && (
-            <div className="text-xs text-muted-foreground font-mono text-center pt-2 border-t border-border/40">
-              Showing {limit} most recent commits
-            </div>
-          )}
-        </>
+      {data.total >= limit && isExpanded && (
+        <p className="text-2xs text-muted-foreground">Showing the {limit} most recent commits.</p>
       )}
     </div>
   );

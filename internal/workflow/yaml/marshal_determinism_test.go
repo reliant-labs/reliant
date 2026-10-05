@@ -118,7 +118,11 @@ func TestMarshalWorkflowIsDeterministic(t *testing.T) {
 func TestMarshalBuiltinWorkflowsAreDeterministic(t *testing.T) {
 	for _, name := range []string{"agent.yaml", "gsd.yaml", "build-workflow.yaml"} {
 		t.Run(name, func(t *testing.T) {
-			raw, err := os.ReadFile(filepath.Join("..", "builtin", name))
+			path := filepath.Join("..", "builtin", name)
+			if name == "gsd.yaml" {
+				path = filepath.Join("testdata", name)
+			}
+			raw, err := os.ReadFile(path)
 			if err != nil {
 				t.Skipf("builtin %s unavailable: %v", name, err)
 			}

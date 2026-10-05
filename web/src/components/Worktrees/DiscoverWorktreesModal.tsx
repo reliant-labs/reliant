@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo } from "react";
 import {
+  AlertCircle,
   Loader2,
   Search,
   CheckCircle2,
@@ -170,14 +171,12 @@ export function DiscoverWorktreesModal({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={onClose} title="Discover Worktrees" size="xl">
+    <Modal isOpen={isOpen} onClose={onClose} title="Import existing worktrees" size="xl">
       <div className="space-y-4">
         {error && (
-          <div className="p-4 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg text-sm">
-            <div className="flex items-start gap-2">
-              <span className="text-destructive mt-0.5">⚠️</span>
-              <span className="flex-1">{error}</span>
-            </div>
+          <div role="alert" className="flex items-start gap-2 rounded-md border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive">
+            <AlertCircle className="mt-0.5 h-4 w-4 flex-shrink-0" aria-hidden="true" />
+            <span className="flex-1">{error}</span>
           </div>
         )}
 
@@ -308,7 +307,7 @@ export function DiscoverWorktreesModal({
                   >
                     <div
                       className={cn(
-                        "flex items-start gap-3 p-4 hover:elevation-1 transition-colors",
+                        "flex items-start gap-3 p-3 transition-colors hover:bg-muted/50",
                         worktree.is_imported && "opacity-60"
                       )}
                     >
@@ -332,7 +331,7 @@ export function DiscoverWorktreesModal({
                             {worktree.name}
                           </span>
                           {worktree.is_imported && (
-                            <span className="text-xs px-2 py-0.5 bg-success/10 text-success rounded-full font-mono">
+                            <span className="rounded-full bg-success/10 px-1.5 py-0.5 text-2xs font-medium text-success">
                               Imported
                             </span>
                           )}
@@ -350,7 +349,7 @@ export function DiscoverWorktreesModal({
                         </div>
                         {importError && (
                           <div className="mt-2 text-xs text-destructive font-mono">
-                            ⚠️ {importError}
+                            {importError}
                           </div>
                         )}
                       </div>

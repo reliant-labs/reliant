@@ -35,6 +35,12 @@ import { chatGrpc } from "../../../api/chat-grpc";
 import { toast } from "../../../lib/toast-manager";
 
 const MAX_PREVIEW_MESSAGES = 10;
+// How much of the child thread the preview fetches. It renders the newest
+// MAX_PREVIEW_MESSAGES assistant messages, and a spawn's assistant and tool
+// rows interleave about 1:1, so this covers the preview with room to spare
+// while staying a fixed-size read: real spawn threads run to ~2,000 messages,
+// and the full thread view reads the whole thing on its own.
+const PREVIEW_FETCH_MESSAGES = 50;
 const MAX_TEXT_LENGTH = 150;
 const MAX_DETAIL_LENGTH = 40;
 const FIXED_HEIGHT = 150;
@@ -167,10 +173,17 @@ function SpawnPreview({ ctx }: ToolContentProps) {
   // a window sized for the MAIN transcript — a spawn out-writes its parent by
   // an order of magnitude, so they often did not, and the preview showed
   // "Starting…" over a thread with hundreds of messages.
+  //
+  // It is also lazy: the chat snapshot carries no spawn-thread messages, and
+  // this renderer only mounts when the card is opened, so opening the card is
+  // what loads them. Live messages for the thread keep arriving through the
+  // stream's fan-out once this read exists.
   const { data: threadMessages, isPending } = useThreadMessages(
     chatId,
     spawnThreadId,
+    { recent: PREVIEW_FETCH_MESSAGES },
   );
+  const isLoadingThread = !!spawnThreadId && isPending;
   const toolResultsByCallId = useToolResultsByCallId(chatId || "");
 
   const workflowFailed =
@@ -329,15 +342,21 @@ function SpawnPreview({ ctx }: ToolContentProps) {
             </div>
           ))}
         </div>
+      ) : isLoadingThread ? (
+        // The child thread is being fetched — opening the card is what loads
+        // it. Kept distinct from "Starting…" so neither state claims the
+        // other's meaning.
+        <div className="flex items-center gap-1.5 px-2 py-1.5 text-2xs text-muted-foreground">
+          <Loader2 className="w-2.5 h-2.5 shrink-0 animate-spin" />
+          <span>Loading agent activity…</span>
+        </div>
       ) : (
-        // "Starting…" now means what it says: the child thread is still being
-        // fetched, or it genuinely has nothing on it yet while the spawn runs.
-        // It is no longer reachable with a loaded-but-windowed-out thread,
-        // which is what made it a lie. A background spawn's child workflow
-        // row may not exist yet the instant it's dispatched — isDone falls
-        // back to ctx.isCompleted/hasFailed in that case, so this still
+        // "Starting…" means what it says: the child thread is loaded and has
+        // nothing on it yet while the spawn runs. A background spawn's child
+        // workflow row may not exist yet the instant it's dispatched — isDone
+        // falls back to ctx.isCompleted/hasFailed in that case, so this still
         // resolves to "Starting…" rather than getting stuck.
-        (isPending || !isDone) && (
+        !isDone && (
           <div className="px-2 py-1.5 text-2xs text-muted-foreground italic">
             Starting…
           </div>

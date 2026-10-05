@@ -13,10 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// createResolverDraft inserts a draft owned by "test-user", optionally bound to
-// a chat. Names and slugs are unique per call because drafts are unique on
+// createResolverDraft inserts a draft owned by "test-user", with unique
+// names. Names and slugs are unique per call because drafts are unique on
 // (user_id, slug) and these tests run in parallel against one database.
-func createResolverDraft(t *testing.T, repo db.Repository, chatID *string) *db.WorkflowDraft {
+func createResolverDraft(t *testing.T, repo db.Repository) *db.WorkflowDraft {
 	t.Helper()
 	now := time.Now()
 	unique := uuid.New().String()[:8]
@@ -27,7 +27,6 @@ func createResolverDraft(t *testing.T, repo db.Repository, chatID *string) *db.W
 		Slug:       "resolver-draft-" + unique,
 		Definition: validWorkflowYAML,
 		Status:     db.WorkflowDraftStatusComplete,
-		ChatID:     chatID,
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
@@ -40,7 +39,7 @@ func TestResolveWorkflowDraft_ByUUID(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	draft := createResolverDraft(t, repo, nil)
+	draft := createResolverDraft(t, repo)
 	ctx := createTestContext(t, "")
 
 	got, err := resolveWorkflowDraft(ctx, repo, draft.ID)
@@ -53,7 +52,7 @@ func TestResolveWorkflowDraft_BySlug(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	draft := createResolverDraft(t, repo, nil)
+	draft := createResolverDraft(t, repo)
 	ctx := createTestContext(t, "")
 
 	got, err := resolveWorkflowDraft(ctx, repo, draft.Slug)
@@ -66,31 +65,12 @@ func TestResolveWorkflowDraft_ByName(t *testing.T) {
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	draft := createResolverDraft(t, repo, nil)
+	draft := createResolverDraft(t, repo)
 	ctx := createTestContext(t, "")
 
 	// The display name is not the slug, so this can only be served by the
 	// name lookup that runs after the slug lookup misses.
 	got, err := resolveWorkflowDraft(ctx, repo, draft.Name)
-	require.NoError(t, err)
-	assert.Equal(t, draft.ID, got.ID)
-}
-
-// TestResolveWorkflowDraft_FromChatContext is the branch that replaces the
-// system message the frontend used to inject on every turn: with no id at all,
-// the tool still finds the workflow this chat is editing.
-func TestResolveWorkflowDraft_FromChatContext(t *testing.T) {
-	t.Parallel()
-	repo, cleanup := setupTestDB(t)
-	defer cleanup()
-
-	chatID := "resolver-chat-" + uuid.New().String()
-	createTestChat(t, repo, chatID)
-	draft := createResolverDraft(t, repo, &chatID)
-
-	ctx := createTestContext(t, chatID)
-
-	got, err := resolveWorkflowDraft(ctx, repo, "")
 	require.NoError(t, err)
 	assert.Equal(t, draft.ID, got.ID)
 }
@@ -116,112 +96,150 @@ func TestResolveWorkflowDraft_NotFound(t *testing.T) {
 		assert.Contains(t, err.Error(), "list_workflows")
 	})
 
-	t.Run("empty id with a chat that has no draft", func(t *testing.T) {
+	t.Run("empty id errors even in a chat context", func(t *testing.T) {
 		chatID := "resolver-empty-" + uuid.New().String()
 		createTestChat(t, repo, chatID)
 		ctx := createTestContext(t, chatID)
 
 		_, err := resolveWorkflowDraft(ctx, repo, "")
 		require.Error(t, err)
+		assert.Contains(t, err.Error(), "`id` is required")
 		assert.Contains(t, err.Error(), "create_workflow")
 		assert.Contains(t, err.Error(), "list_workflows")
 	})
-
-	t.Run("empty id with no chat context at all", func(t *testing.T) {
-		ctx := createTestContext(t, "")
-		_, err := resolveWorkflowDraft(ctx, repo, "")
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "create_workflow")
-	})
 }
 
-// TestGetWorkflow_DefaultsToChatWorkflow pins the end-to-end effect through a
-// real tool: no id in the arguments, and the right workflow still comes back.
-func TestGetWorkflow_DefaultsToChatWorkflow(t *testing.T) {
+// TestWorkflowTools_RequireID: every workflow/scenario tool that targets an
+// existing workflow declares `id` as required, rejects an empty id, and does
+// so even when a draft is still bound to the chat via the retired chat_id
+// column — nothing binds a chat to a workflow any more.
+func TestWorkflowTools_RequireID(t *testing.T) {
 	t.Parallel()
-	repo, cleanup := setupTestDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 
-	chatID := "get-workflow-chat-" + uuid.New().String()
+	chatID := "require-id-" + uuid.New().String()
 	createTestChat(t, repo, chatID)
-	draft := createResolverDraft(t, repo, &chatID)
-
-	tool := NewGetWorkflowTool(repo)
-	resp, err := tool.Run(createTestContext(t, chatID), ToolCall{
-		ID:    "test-get-default",
-		Name:  GetWorkflowToolName,
-		Input: "{}",
-	})
-
+	// A draft the chat is (legacy-)bound to. An empty id must not find it.
+	bound := createResolverDraft(t, repo)
+	_, err := rawDB.Exec(`UPDATE workflow_drafts SET chat_id = $1 WHERE id = $2`, chatID, bound.ID)
 	require.NoError(t, err)
-	assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content)
-	assert.Contains(t, resp.Content, draft.ID)
+
+	tools := map[string]Tool{
+		GetWorkflowToolName:   NewGetWorkflowTool(repo),
+		"edit_workflow":       NewEditWorkflowTool(repo),
+		"write_workflow":      NewWriteWorkflowTool(repo),
+		ListScenariosToolName: NewListScenariosTool(repo),
+		"view_scenario":       NewViewScenarioTool(repo),
+		"edit_scenario":       NewEditScenarioTool(repo),
+		"write_scenario":      NewWriteScenarioTool(repo, nil),
+		"delete_scenario":     NewDeleteScenarioTool(repo),
+		"run_scenario":        NewRunScenarioTool(repo, nil),
+	}
+	require.Len(t, tools, 9)
+	extra := map[string]string{
+		"edit_workflow":   `"old_string":"a","new_string":"b"`,
+		"write_workflow":  `"content":"name: x"`,
+		"view_scenario":   `"name":"s"`,
+		"edit_scenario":   `"name":"s","old_string":"a","new_string":"b"`,
+		"write_scenario":  `"name":"s","content":"name: s"`,
+		"delete_scenario": `"name":"s"`,
+		"run_scenario":    `"name":"s"`,
+	}
+	for name, tool := range tools {
+		t.Run(name, func(t *testing.T) {
+			require.Contains(t, tool.ParamSchema().Required, "id", "%s must declare id as required", name)
+
+			input := `{"id":""`
+			if e := extra[name]; e != "" {
+				input += "," + e
+			}
+			input += "}"
+			resp, err := tool.Run(createTestContext(t, chatID), ToolCall{ID: "req-id", Name: name, Input: input})
+			require.NoError(t, err)
+			require.True(t, resp.IsError, "%s must reject an empty id: %s", name, resp.Content)
+			assert.Contains(t, resp.Content, "`id` is required")
+		})
+	}
 }
 
-// TestWriteWorkflow_DefaultsToChatWorkflow covers a mutating tool taking the
-// same path, since write_workflow previously rejected a missing id outright.
-func TestWriteWorkflow_DefaultsToChatWorkflow(t *testing.T) {
+func TestResolveWorkflowDraft_OtherUsersUUIDNotFound(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	chatID := "write-workflow-chat-" + uuid.New().String()
-	createTestChat(t, repo, chatID)
-	draft := createResolverDraft(t, repo, &chatID)
-
+	now := time.Now()
 	unique := uuid.New().String()[:8]
-	content := `name: chat-default-` + unique + `
-entry: [agent]
-nodes:
-  - id: agent
-    type: call_llm
-    args:
-      model: mock
-edges: []
-`
-	inputJSON, err := json.Marshal(WriteWorkflowParams{Content: content})
-	require.NoError(t, err)
+	foreign := &db.WorkflowDraft{
+		ID: uuid.New().String(), UserID: "someone-else", Name: "Foreign " + unique,
+		Slug: "foreign-" + unique, Definition: validWorkflowYAML,
+		Status: db.WorkflowDraftStatusComplete, CreatedAt: now, UpdatedAt: now,
+	}
+	require.NoError(t, repo.CreateWorkflowDraft(context.Background(), foreign))
 
-	tool := NewWriteWorkflowTool(repo)
-	resp, err := tool.Run(createTestContext(t, chatID), ToolCall{
-		ID:    "test-write-default",
-		Name:  WriteWorkflowToolName,
-		Input: string(inputJSON),
-	})
-
-	require.NoError(t, err)
-	assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content)
-
-	var result WriteWorkflowResult
-	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &result))
-	assert.Equal(t, draft.ID, result.ID, "should have written the chat's own draft")
-
-	stored, err := repo.GetWorkflowDraft(context.Background(), draft.ID)
-	require.NoError(t, err)
-	assert.Equal(t, content, stored.Definition)
+	_, err := resolveWorkflowDraft(createTestContext(t, ""), repo, foreign.ID)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "workflow not found")
 }
 
-// TestListScenarios_DefaultsToChatWorkflow makes the list_scenarios prose
-// ("no parameters needed") true in the schema as well.
-func TestListScenarios_DefaultsToChatWorkflow(t *testing.T) {
+func TestCreateWorkflow_DuplicateSlugIsClearToolError(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := createTestContext(t, "")
+
+	name := "dup-" + uuid.New().String()[:8]
+	content := "name: " + name + "\nentry: [run]\nnodes:\n  - id: run\n    type: run\n    command: echo hi\n"
+	input, _ := json.Marshal(CreateWorkflowParams{Content: &content})
+	call := ToolCall{ID: "c", Name: "create_workflow", Input: string(input)}
+
+	first, err := NewCreateWorkflowTool(repo).Run(ctx, call)
+	require.NoError(t, err)
+	require.False(t, first.IsError, first.Content)
+
+	start := time.Now()
+	second, err := NewCreateWorkflowTool(repo).Run(ctx, call)
+	require.NoError(t, err)
+	require.True(t, second.IsError)
+	assert.Contains(t, second.Content, name)
+	assert.Contains(t, second.Content, "list_workflows")
+	assert.NotContains(t, second.Content, "SQLSTATE")
+	assert.Less(t, time.Since(start), 700*time.Millisecond)
+}
+
+// TestCreateWorkflow_ReturnedIDWorksWithoutChatBinding: create_workflow's id is
+// the only handle a chat needs.
+func TestCreateWorkflow_ReturnedIDWorksWithoutChatBinding(t *testing.T) {
 	t.Parallel()
 	repo, cleanup := setupTestDB(t)
 	defer cleanup()
 
-	chatID := "list-scenarios-chat-" + uuid.New().String()
+	chatID := "create-then-get-" + uuid.New().String()
 	createTestChat(t, repo, chatID)
-	draft := createResolverDraft(t, repo, &chatID)
+	ctx := createTestContext(t, chatID)
 
-	tool := NewListScenariosTool(repo)
-	resp, err := tool.Run(createTestContext(t, chatID), ToolCall{
-		ID:    "test-list-default",
-		Name:  ListScenariosToolName,
-		Input: "{}",
-	})
-
+	name := "unbound-" + uuid.New().String()[:8]
+	content := "name: " + name + "\ndescription: before\nentry: [run]\nnodes:\n  - id: run\n    type: run\n    command: echo hi\n"
+	createInput, _ := json.Marshal(CreateWorkflowParams{Content: &content})
+	resp, err := NewCreateWorkflowTool(repo).Run(ctx, ToolCall{ID: "c", Name: "create_workflow", Input: string(createInput)})
 	require.NoError(t, err)
-	assert.False(t, resp.IsError, "Should not be an error: %s", resp.Content)
-	// No scenarios exist yet, but the workflow resolved — which is the point.
-	assert.Contains(t, resp.Content, "No scenarios found")
-	_ = draft
+	require.False(t, resp.IsError, resp.Content)
+	var created CreateWorkflowResult
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &created))
+	assert.Contains(t, resp.Content, "Pass this `id`")
+
+	input, _ := json.Marshal(GetWorkflowParams{ID: created.ID})
+	got, err := NewGetWorkflowTool(repo).Run(ctx, ToolCall{ID: "g", Name: GetWorkflowToolName, Input: string(input)})
+	require.NoError(t, err)
+	assert.False(t, got.IsError, got.Content)
+	assert.Contains(t, got.Content, created.ID)
+
+	edit, _ := json.Marshal(EditWorkflowParams{ID: created.ID, OldString: "description: before", NewString: "description: after"})
+	ed, err := NewEditWorkflowTool(repo).Run(ctx, ToolCall{ID: "e", Name: "edit_workflow", Input: string(edit)})
+	require.NoError(t, err)
+	require.False(t, ed.IsError, ed.Content)
+
+	stored, err := repo.GetWorkflowDraft(ctx, created.ID)
+	require.NoError(t, err)
+	assert.Contains(t, stored.Definition, "description: after", "the edit must land on the draft named by id")
 }

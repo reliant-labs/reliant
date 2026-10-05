@@ -204,7 +204,9 @@ describe("ProjectPicker clone gating — suspended-only daemons", () => {
 
   it("still offers Resume for the suspended machine", async () => {
     renderPicker();
-    expect(await screen.findByText(/Resume machine-b/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: /Resume machine-b/ }),
+    ).toBeInTheDocument();
   });
 });
 

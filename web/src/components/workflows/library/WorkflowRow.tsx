@@ -19,7 +19,7 @@ import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
 import { RunStatusDot } from "../../ui/RunStatusIndicator";
 import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
-import { getWorkflowDisplayName } from "../../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
 import { WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
 
@@ -27,6 +27,7 @@ export type WorkflowRowAction = RowMenuAction;
 
 export interface WorkflowRowItem {
   name: string;
+  title?: string;
   description?: string;
   source: WorkflowSource;
   /** A draft cannot run until it validates; absent counts as complete. */
@@ -50,7 +51,7 @@ interface WorkflowRowProps {
 }
 
 export function WorkflowRow({ workflow, lastRun, automationCount, project, onRun, actions }: WorkflowRowProps) {
-  const displayName = getWorkflowDisplayName(workflow.name, true);
+  const displayName = workflowDisplayName(workflow);
   return (
     <li
       className={cn(

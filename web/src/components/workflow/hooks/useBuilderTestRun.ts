@@ -8,9 +8,11 @@
  * (a) asks the stream to follow the test chat and (b) reduces its events to a
  * status per node id, which the builder paints onto its own nodes.
  *
- * The stream follows ONE chat at a time and the builder assistant holds that
- * slot for its own chat. A test run takes it for as long as it is shown and
- * hands it back afterwards, so the assistant is not left silent.
+ * The stream follows ONE chat at a time. A test run takes it for as long as it
+ * is shown, then hands it back to whichever chat held it before — usually the
+ * editor's chat panel. That hand-back is required: ChatContainer re-asserts its
+ * subscription only when its chat id or the connection changes, so a slot that
+ * isn't returned leaves the panel silent until a reload.
  */
 
 import { useEffect, useMemo } from 'react'
@@ -21,19 +23,19 @@ import { nodeExecutionKey, useNodeExecutionStatus, type StreamNodeStatus } from 
 export function useBuilderTestRun(
   testChatId: string | null,
   nodeIds: readonly string[],
-  builderChatId?: string,
 ): Record<string, StreamNodeStatus> {
   const subscribeToChatDetails = useGlobalUpdatesStore((state) => state.subscribeToChatDetails)
   const unsubscribeFromChatDetails = useGlobalUpdatesStore((state) => state.unsubscribeFromChatDetails)
 
   useEffect(() => {
     if (!testChatId) return
+    const previousChatId = useGlobalUpdatesStore.getState().subscribedChatId
     subscribeToChatDetails(testChatId)
     return () => {
       unsubscribeFromChatDetails(testChatId)
-      if (builderChatId) subscribeToChatDetails(builderChatId)
+      if (previousChatId && previousChatId !== testChatId) subscribeToChatDetails(previousChatId)
     }
-  }, [testChatId, builderChatId, subscribeToChatDetails, unsubscribeFromChatDetails])
+  }, [testChatId, subscribeToChatDetails, unsubscribeFromChatDetails])
 
   // The root run's workflow id is the chat id, so a node's identity in the
   // stream is `${chatId}:${nodeId}`.

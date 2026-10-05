@@ -1,7 +1,7 @@
 /**
  * The terminal steps' handle on the commit point.
  *
- * All three of them (ProjectChoiceStep, ProjectPickerStep, GitHubConnectStep)
+ * All three of them (ProjectChoiceStep, FinishStep, GitHubConnectStep)
  * finish the same way — confirm onboarding server-side, then commit the plan —
  * and each used to re-derive its own version of "and now show a gate". One hook
  * means one place decides when the commit fires, which is the property the

@@ -5,6 +5,7 @@
  * Used by both Package Commands and Background Processes views.
  */
 
+import { Tooltip } from "../ui/Tooltip";
 import { useEffect, useRef, useState, useMemo } from "react";
 import {
   RefreshCw,
@@ -221,13 +222,13 @@ export function TerminalOutput({
       {/* Header */}
       <div className="flex items-center gap-3 px-4 py-3 border-b border-border bg-card/50">
         {onBack && (
-          <button
+          <Tooltip content="Back" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={onBack}
-            className="p-1.5 hover:bg-muted rounded transition-colors"
-            title="Back"
-          >
+            className="p-1.5 hover:bg-muted rounded transition-colors" aria-label="Back">
             <ArrowLeft className="w-4 h-4" />
           </button>
+</Tooltip>
         )}
 
         <div className="flex-1 min-w-0">
@@ -249,7 +250,8 @@ export function TerminalOutput({
 
         <div className="flex items-center gap-1">
           {isRunning && onKill && (
-            <button
+            <Tooltip content={isCanceling ? "Stopping..." : "Stop process"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={handleKill}
               disabled={isCanceling}
               className={cn(
@@ -257,37 +259,36 @@ export function TerminalOutput({
                 isCanceling 
                   ? "text-yellow-500 cursor-wait" 
                   : "hover:bg-destructive/10 text-destructive"
-              )}
-              title={isCanceling ? "Stopping..." : "Stop process"}
-            >
+              )} aria-label={isCanceling ? "Stopping..." : "Stop process"}>
   {isCanceling ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Square className="w-4 h-4" />
               )}
             </button>
+</Tooltip>
           )}
           {onRefresh && (
-            <button
+            <Tooltip content="Refresh" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={onRefresh}
-              className="p-1.5 hover:bg-muted rounded transition-colors"
-              title="Refresh"
-            >
+              className="p-1.5 hover:bg-muted rounded transition-colors" aria-label="Refresh">
               <RefreshCw className={cn("w-4 h-4", isLoading && "animate-spin")} />
             </button>
+</Tooltip>
           )}
-          <button
+          <Tooltip content="Copy output" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
             onClick={handleCopy}
             className="p-1.5 hover:bg-muted rounded transition-colors"
-            title="Copy output"
-            disabled={!output}
-          >
+            disabled={!output} aria-label="Copy output">
             {copied ? (
               <Check className="w-4 h-4 text-green-500" />
             ) : (
               <Copy className="w-4 h-4" />
             )}
           </button>
+</Tooltip>
         </div>
       </div>
 

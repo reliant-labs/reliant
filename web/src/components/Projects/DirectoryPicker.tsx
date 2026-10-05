@@ -159,7 +159,7 @@ export function DirectoryPicker({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Select Directory"
+      title="Choose a folder"
       size="lg"
     >
       <div className="flex flex-col gap-4">
@@ -178,7 +178,7 @@ export function DirectoryPicker({
                     "px-1.5 py-0.5 rounded transition-colors",
                     isLast
                       ? "text-foreground font-medium"
-                      : "text-muted-foreground hover:text-foreground hover:bg-muted/80",
+                      : "text-muted-foreground hover:bg-muted hover:text-foreground",
                   )}
                 >
                   {crumb.name}
@@ -193,7 +193,7 @@ export function DirectoryPicker({
           <button
             onClick={navigateUp}
             disabled={!resolvedPath || isAtRoot}
-            className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
           >
             <ArrowUp className="w-3.5 h-3.5" />
             Up
@@ -206,7 +206,7 @@ export function DirectoryPicker({
                 setIsCreatingFolder((v) => !v);
               }}
               disabled={!resolvedPath}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:cursor-not-allowed disabled:opacity-40"
               title="Create a new folder here"
             >
               <FolderPlus className="w-3.5 h-3.5" />
@@ -214,7 +214,7 @@ export function DirectoryPicker({
             </button>
             <button
               onClick={() => setShowHidden(!showHidden)}
-              className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors"
+              className="flex h-8 items-center gap-1.5 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
               title={showHidden ? "Hide hidden files" : "Show hidden files"}
             >
               {showHidden ? (
@@ -229,7 +229,7 @@ export function DirectoryPicker({
 
         {/* Inline "New folder" creator */}
         {isCreatingFolder && (
-          <div className="flex flex-col gap-2 p-3 bg-muted/30 border border-border rounded-lg">
+          <div className="flex flex-col gap-2 rounded-md border border-border/60 bg-background p-3">
             <div className="flex items-center gap-2">
               <FolderPlus className="w-4 h-4 text-primary flex-shrink-0" />
               <input
@@ -250,13 +250,13 @@ export function DirectoryPicker({
                 }}
                 placeholder="New folder name"
                 disabled={isSubmittingFolder}
-                className="flex-1 min-w-0 bg-background border border-border rounded-md px-2.5 py-1.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary disabled:opacity-60"
+                className="h-8 min-w-0 flex-1 rounded-md border border-input bg-card px-2.5 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary disabled:opacity-60"
               />
               <button
                 type="button"
                 onClick={() => void handleCreateFolder()}
                 disabled={isSubmittingFolder || !newFolderName.trim()}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-primary text-primary-foreground hover:bg-primary/90 rounded-md text-sm font-medium transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex h-8 items-center gap-1.5 rounded-md bg-primary px-3 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 {isSubmittingFolder && (
                   <Loader2 className="w-3.5 h-3.5 animate-spin" />
@@ -271,7 +271,8 @@ export function DirectoryPicker({
                   setCreateError(null);
                 }}
                 disabled={isSubmittingFolder}
-                className="p-1.5 text-muted-foreground hover:text-foreground hover:bg-muted/80 rounded-md transition-colors disabled:opacity-40"
+                className="rounded-md p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-40"
+                aria-label="Cancel new folder"
                 title="Cancel"
               >
                 <X className="w-3.5 h-3.5" />
@@ -285,7 +286,7 @@ export function DirectoryPicker({
 
         {/* Error state */}
         {error && (
-          <div className="p-3 bg-destructive/10 border border-destructive/30 text-destructive rounded-lg">
+          <div className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-destructive" role="alert">
             <div className="flex items-start gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0 mt-0.5" />
               <span className="text-sm">{error}</span>
@@ -294,7 +295,7 @@ export function DirectoryPicker({
         )}
 
         {/* Directory listing */}
-        <div className="border border-border rounded-lg overflow-hidden min-h-[300px] max-h-[400px] overflow-y-auto bg-background">
+        <div className="min-h-[300px] max-h-[400px] overflow-y-auto rounded-md border border-border/60 bg-background">
           {isLoading ? (
             <div className="flex items-center justify-center py-12">
               <Loader2 className="w-5 h-5 animate-spin text-muted-foreground" />
@@ -319,7 +320,7 @@ export function DirectoryPicker({
                   disabled={!entry.isDirectory}
                   className={`w-full flex items-center gap-3 px-4 py-2.5 text-left text-sm transition-colors ${
                     entry.isDirectory
-                      ? "hover:bg-muted/60 cursor-pointer text-foreground"
+                      ? "cursor-pointer text-foreground hover:bg-muted"
                       : "cursor-default text-muted-foreground/50"
                   }`}
                 >
@@ -351,17 +352,17 @@ export function DirectoryPicker({
 
         {/* Current selection display */}
         {resolvedPath && (
-          <div className="px-3 py-2 bg-muted/30 rounded-lg border border-border text-sm font-mono text-muted-foreground truncate">
+          <div className="truncate rounded-md border border-border/60 bg-background px-3 py-2 font-mono text-sm text-muted-foreground" title={resolvedPath}>
             {resolvedPath}
           </div>
         )}
 
         {/* Actions */}
-        <div className="flex gap-3 pt-2">
+        <div className="flex justify-end gap-2 pt-1">
           <button
             type="button"
             onClick={onClose}
-            className="flex-1 px-5 py-3 bg-muted hover:bg-muted/80 border border-border rounded-lg text-sm font-medium transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md border border-input bg-card px-4 text-sm font-medium text-foreground transition-colors hover:bg-muted focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 disabled:opacity-50"
           >
             Cancel
           </button>
@@ -369,9 +370,9 @@ export function DirectoryPicker({
             type="button"
             onClick={handleSelect}
             disabled={!resolvedPath}
-            className="flex-1 px-5 py-3 bg-primary text-primary-foreground hover:bg-primary/90 rounded-lg text-sm font-semibold shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
+            className="inline-flex h-9 items-center justify-center gap-2 rounded-md bg-primary px-4 text-sm font-medium text-primary-foreground shadow-sm transition-colors hover:bg-primary/90 focus:outline-none focus-visible:ring-2 focus-visible:ring-primary/40 focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            Select
+            Use this folder
           </button>
         </div>
       </div>

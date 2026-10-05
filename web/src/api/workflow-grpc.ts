@@ -17,11 +17,9 @@ import type {
 import {
   ListWorkflowsRequestSchema,
   CreateWorkflowDraftRequestSchema,
-  AssociateChatWithWorkflowDraftRequestSchema,
   GetWorkflowRequestSchema,
   DeleteWorkflowRequestSchema,
   ValidateWorkflowRequestSchema,
-  BuilderChatRequestSchema,
   SaveWorkflowRequestSchema,
   ImportWorkflowRequestSchema,
   ExportWorkflowRequestSchema,
@@ -122,8 +120,9 @@ export interface WorkflowResponse {
   nodes: Step[];
   edges: Edge[];
   updatedAt?: string;
-  builderChatId?: string;
   isHidden?: boolean;
+  /** Definition-level display name; empty when the workflow has none. */
+  title?: string;
   hasPresetGroups?: boolean;
   draftId?: string;
 }
@@ -140,18 +139,6 @@ export interface ListWorkflowsResult {
   invalidWorkflows: InvalidWorkflow[];
 }
 
-export interface ToolCallInfo {
-  name: string;
-  result: string;
-}
-
-export interface BuilderChatResponse {
-  message: string;
-  workflowUpdated: boolean;
-  workflow?: Workflow;
-  toolCalls: ToolCallInfo[];
-}
-
 export interface ValidationResponse {
   valid: boolean;
   errors: ValidationError[];
@@ -166,7 +153,6 @@ export interface SaveWorkflowResponse {
   validationErrors: ValidationError[];
   id: string;
   slug: string;
-  builderChatId?: string;
   version: number;
   yamlDefinition?: string;
   /** Resulting status; meaningful only when success. */
@@ -220,10 +206,10 @@ function listItemToResponse(proto: ProtoWorkflowListItem): WorkflowResponse {
     nodes: proto.nodes,
     edges: proto.edges,
     updatedAt: proto.updatedAt || undefined,
-    builderChatId: proto.builderChatId || undefined,
     status: draftStatusFromProto(proto.status),
     validationErrors: [...(proto.validationErrors || [])],
     isHidden: proto.isHidden || false,
+    title: proto.title || undefined,
     hasPresetGroups: proto.hasPresetGroups || false,
     draftId: proto.draftId || undefined,
   };
@@ -280,7 +266,6 @@ export const workflowGrpc = {
   ): Promise<{
     workflow?: Workflow;
     draftId?: string;
-    builderChatId?: string;
     version: number;
     parseError?: string;
     rawDefinition?: string;
@@ -309,7 +294,6 @@ export const workflowGrpc = {
     if (response.parseError) {
       return {
         draftId: response.draftId || undefined,
-        builderChatId: response.builderChatId || undefined,
         version: Number(response.version),
         parseError: response.parseError,
         rawDefinition: response.rawDefinition || undefined,
@@ -327,7 +311,6 @@ export const workflowGrpc = {
     return {
       workflow: response.workflow,
       draftId: response.draftId || undefined,
-      builderChatId: response.builderChatId || undefined,
       version: Number(response.version),
       source,
       sourcePath: response.sourcePath || undefined,
@@ -366,34 +349,6 @@ export const workflowGrpc = {
   },
 
   /**
-   * Send a message to the workflow builder AI assistant
-   */
-  async builderChat(
-    projectId: string,
-    sessionId: string,
-    message: string,
-    workflow: Workflow,
-  ): Promise<BuilderChatResponse> {
-    const client = grpcClient.workflow();
-    const request = create(BuilderChatRequestSchema, {
-      projectId,
-      sessionId,
-      message,
-      workflow: create(WorkflowSchema, toWorkflowInit(workflow)),
-    });
-    const response = await client.builderChat(request);
-    return {
-      message: response.message,
-      workflowUpdated: response.workflowUpdated,
-      workflow: response.workflow,
-      toolCalls: response.toolCalls.map((tc) => ({
-        name: tc.name,
-        result: tc.result,
-      })),
-    };
-  },
-
-  /**
    * Save a workflow (creates or updates).
    *
    * `status` is the intent: "draft" stores as-is (findings returned, not
@@ -404,7 +359,6 @@ export const workflowGrpc = {
   async saveWorkflow(
     projectId: string,
     workflow: Workflow,
-    builderChatId?: string,
     expectedVersion?: number,
     sourcePath?: string,
     draftId?: string,
@@ -414,7 +368,6 @@ export const workflowGrpc = {
     const request = create(SaveWorkflowRequestSchema, {
       projectId,
       workflow: create(WorkflowSchema, toWorkflowInit(workflow)),
-      builderChatId: builderChatId || undefined,
       expectedVersion: expectedVersion ? BigInt(expectedVersion) : undefined,
       sourcePath: sourcePath || undefined,
       draftId: draftId || undefined,
@@ -429,7 +382,6 @@ export const workflowGrpc = {
       validationErrors: response.validationErrors,
       id: response.id,
       slug: response.slug,
-      builderChatId: response.builderChatId || undefined,
       version: Number(response.version),
       yamlDefinition: response.yamlDefinition || undefined,
       status: draftStatusFromProto(response.status),
@@ -585,21 +537,6 @@ export const workflowGrpc = {
   },
 
   /**
-   * Associate a chat with a workflow draft
-   */
-  async associateChatWithWorkflowDraft(
-    chatId: string,
-    draftId: string,
-  ): Promise<void> {
-    const client = grpcClient.workflow();
-    const request = create(AssociateChatWithWorkflowDraftRequestSchema, {
-      chatId,
-      draftId,
-    });
-    await client.associateChatWithWorkflowDraft(request);
-  },
-
-  /**
    * Copy a workflow with auto-generated unique name
    */
   async copyWorkflow(
@@ -649,7 +586,7 @@ export async function getWorkflow(projectId: string, name: string): Promise<Work
 }
 
 /**
- * Get a workflow with its draft ID, builder chat ID, and version.
+ * Get a workflow with its draft ID and version.
  * May return parseError and rawDefinition instead of workflow if stored YAML is invalid.
  */
 export async function getWorkflowWithDraftId(projectId: string, name: string) {

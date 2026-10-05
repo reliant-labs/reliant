@@ -7,6 +7,7 @@ import { Tooltip } from "../ui/Tooltip";
 import { useWorkflows } from "../../store/globalDataStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
+import { workflowDisplayName } from "../../lib/workflowDisplayName";
 
 // Workflow refs appear in two formats: bare names from ListWorkflows ("agent")
 // and URIs from starter cards / preferences ("builtin://agent"). Every ref
@@ -171,7 +172,7 @@ export function WorkflowSelector({
   // Fall back to the effective value (not the default): an unmatched
   // selection should still label the trigger with what is actually selected.
   const displayText = selectedWorkflow
-    ? getWorkflowDisplayName(selectedWorkflow.name, true)
+    ? workflowDisplayName(selectedWorkflow)
     : getWorkflowDisplayName(effectiveValue, true);
 
   return (
@@ -256,7 +257,7 @@ export function WorkflowSelector({
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium truncate flex items-center gap-1">
-                              {getWorkflowDisplayName(workflow.name, true)}
+                              {workflowDisplayName(workflow)}
                               {isDefault && (
                                 <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
                               )}
@@ -308,7 +309,7 @@ export function WorkflowSelector({
                           </div>
                           <div className="flex-1 min-w-0">
                             <div className="font-medium truncate flex items-center gap-1">
-                              {getWorkflowDisplayName(workflow.name, true)}
+                              {workflowDisplayName(workflow)}
                               {isDefault && (
                                 <Star className="w-3 h-3 text-yellow-500 fill-yellow-500" />
                               )}

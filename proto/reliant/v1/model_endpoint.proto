@@ -1,0 +1,148 @@
+// Copyright (c) 2025 Reliant Labs. All rights reserved.
+syntax = "proto3";
+
+package reliant.v1;
+
+import "reliant/v1/tools_daemon.proto";
+
+option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
+
+// ModelEndpointService manages a user's custom model endpoints: any
+// OpenAI-compatible server (vLLM, a GPU cluster, LM Studio, Ollama, a hosted
+// inference API) the user wants Reliant to run models on.
+//
+// An endpoint is reached one of two ways, chosen per endpoint:
+//
+//   - DIRECT: Reliant's servers call the URL. For endpoints reachable from
+//     the public internet (or from wherever the worker runs, in self-host).
+//     Private and loopback addresses are refused in hosted deployments, so a
+//     user cannot point the shared worker at internal infrastructure.
+//
+//   - VIA_DAEMON: one of the user's machines relays the requests, using the
+//     daemon's existing local-model relay. For servers only that machine can
+//     reach — localhost, a LAN, or anything behind a VPN the machine is on.
+//
+// Auto-detected local servers (Ollama etc. on a daemon's well-known ports)
+// are NOT endpoints here; they appear in each daemon's LocalModelInventory.
+// Configuring an endpoint is for everything detection cannot find.
+service ModelEndpointService {
+  rpc ListModelEndpoints(ListModelEndpointsRequest) returns (ListModelEndpointsResponse) {}
+  // CreateModelEndpoint validates, probes, and stores an endpoint. The probe
+  // result is returned; a failing probe does NOT prevent saving (the server
+  // may simply be down right now), it is reported in `probe`.
+  rpc CreateModelEndpoint(CreateModelEndpointRequest) returns (CreateModelEndpointResponse) {}
+  rpc UpdateModelEndpoint(UpdateModelEndpointRequest) returns (UpdateModelEndpointResponse) {}
+  rpc DeleteModelEndpoint(DeleteModelEndpointRequest) returns (DeleteModelEndpointResponse) {}
+  // TestModelEndpoint probes an endpoint (saved, or an unsaved draft) and
+  // returns the models it serves. Backs the UI's "Test connection".
+  rpc TestModelEndpoint(TestModelEndpointRequest) returns (TestModelEndpointResponse) {}
+}
+
+enum ModelEndpointRoute {
+  MODEL_ENDPOINT_ROUTE_UNSPECIFIED = 0;
+  MODEL_ENDPOINT_ROUTE_DIRECT = 1;
+  MODEL_ENDPOINT_ROUTE_VIA_DAEMON = 2;
+}
+
+// ModelEndpoint is one user-configured endpoint. The API key is write-only:
+// it is accepted on create/update and never returned (masked_api_key only).
+message ModelEndpoint {
+  string id = 1;
+  // Display name, e.g. "Lab GPU cluster". Also the model-picker group label.
+  string name = 2;
+  // OpenAI-compatible base URL, e.g. "https://llm.example.com/v1". For
+  // VIA_DAEMON it is resolved FROM THE DAEMON'S machine.
+  string base_url = 3;
+  ModelEndpointRoute route = 4;
+  // Required for VIA_DAEMON: the machine that relays. Empty for DIRECT.
+  string daemon_id = 5;
+  bool has_api_key = 6;
+  // e.g. "sk-…a1b2". Empty when there is no key.
+  string masked_api_key = 7;
+  // Extra request headers sent on every call (e.g. an org header). Values
+  // are write-only like the key; only names are echoed back.
+  repeated string header_names = 8;
+  // Per-model settings for models this endpoint serves.
+  repeated ModelEndpointModel models = 9;
+  // Most recent probe outcome, refreshed on create/update/test and
+  // periodically by the server.
+  LocalModelEndpoint probe = 10;
+}
+
+// ModelEndpointModel is the user's configuration for one model the endpoint
+// serves. Probing discovers models; this lets the user hide some and fill in
+// what discovery cannot know (context window, capabilities) — OpenAI-
+// compatible /v1/models reports only ids.
+message ModelEndpointModel {
+  // The model id the server expects.
+  string name = 1;
+  // Hidden models stay configured but are not offered in the picker.
+  bool hidden = 2;
+  // Overrides. 0 / unset = use what the probe reported, or a conservative
+  // default (8192 context, no tools) when the probe reported nothing.
+  int64 context_window = 3;
+  int64 max_output_tokens = 4;
+  optional bool supports_tools = 5;
+  optional bool supports_vision = 6;
+  optional bool supports_thinking = 7;
+  // Default sampling parameters sent with every request to this model unless
+  // the chat's model settings override them.
+  optional double temperature = 8;
+  optional double top_p = 9;
+  // Arbitrary extra JSON merged into the request body (e.g. vLLM
+  // `repetition_penalty`, `min_p`, chat_template_kwargs). Must be a JSON
+  // object; reserved keys (model, messages, tools, stream) are rejected.
+  string extra_body_json = 10;
+}
+
+message ListModelEndpointsRequest {}
+message ListModelEndpointsResponse {
+  repeated ModelEndpoint endpoints = 1;
+}
+
+message ModelEndpointInput {
+  string name = 1;
+  string base_url = 2;
+  ModelEndpointRoute route = 3;
+  string daemon_id = 4;
+  // Write-only. On update: unset = keep the stored key, "" = clear it.
+  optional string api_key = 5;
+  // Write-only. On update: an absent name keeps its stored value; a name
+  // mapped to "" removes that header.
+  map<string, string> headers = 6;
+  repeated ModelEndpointModel models = 7;
+}
+
+message CreateModelEndpointRequest {
+  ModelEndpointInput endpoint = 1;
+}
+message CreateModelEndpointResponse {
+  ModelEndpoint endpoint = 1;
+}
+
+message UpdateModelEndpointRequest {
+  string id = 1;
+  ModelEndpointInput endpoint = 2;
+}
+message UpdateModelEndpointResponse {
+  ModelEndpoint endpoint = 1;
+}
+
+message DeleteModelEndpointRequest {
+  string id = 1;
+}
+message DeleteModelEndpointResponse {}
+
+message TestModelEndpointRequest {
+  oneof target {
+    // A saved endpoint, probed with its stored credentials.
+    string id = 1;
+    // An unsaved draft from the form.
+    ModelEndpointInput draft = 2;
+  }
+}
+message TestModelEndpointResponse {
+  LocalModelEndpoint probe = 1;
+  // Round-trip time of the probe, for the UI.
+  int64 latency_ms = 2;
+}

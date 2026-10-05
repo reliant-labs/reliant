@@ -3,6 +3,7 @@ package reconciliation
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"sync"
 	"testing"
@@ -217,6 +218,42 @@ type mockRepo struct {
 	orphanedMailboxRows       map[string]int64
 	orphanedMailboxResolveErr error
 	resolvedMailboxThreads    []string
+
+	// Backgrounded-process sweep: the calls the query reports, the daemon
+	// rows that exist (absent = deleted), and the status events emitted.
+	backgroundedProcessCalls []*db.BackgroundedProcessCall
+	daemons                  map[string]bool
+	emittedToolCallUpdates   []db.ToolCallUpdate
+}
+
+func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.BackgroundedProcessCall, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	// Mirror the real query: only rows still at status 6.
+	var out []*db.BackgroundedProcessCall
+	for _, call := range m.backgroundedProcessCalls {
+		if row, ok := m.toolCalls[call.ToolCallID]; ok && row.Status != core.ToolCallStatusBackgrounded {
+			continue
+		}
+		out = append(out, call)
+	}
+	return out, nil
+}
+
+func (m *mockRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.daemons[id] {
+		return &db.Daemon{ID: id}, nil
+	}
+	return nil, sql.ErrNoRows
+}
+
+func (m *mockRepo) EmitToolCallUpdate(_ context.Context, _ string, update db.ToolCallUpdate) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.emittedToolCallUpdates = append(m.emittedToolCallUpdates, update)
+	return nil
 }
 
 type savedMessage struct {

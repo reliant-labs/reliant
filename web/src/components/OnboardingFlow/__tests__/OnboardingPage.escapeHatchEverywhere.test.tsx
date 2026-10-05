@@ -121,7 +121,7 @@ const PLAN_FOR_STEP: Record<
     plan: { compute: "cloud_paid", modelProvider: "anthropic" },
     facts: OWES_MONEY,
   },
-  "project-picker": {
+  "finish": {
     plan: { compute: "local_daemon", modelProvider: "anthropic" },
     facts: ENTITLED,
   },

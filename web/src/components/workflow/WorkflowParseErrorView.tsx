@@ -8,13 +8,13 @@
  * - Use the chat assistant to help fix the issue
  */
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { ArrowLeft, Trash2, ChevronDown, ChevronUp, RefreshCw, MessageCircle } from "lucide-react";
 import { Button } from "../ui/Button";
 import { cn } from "../../lib/utils";
-import { WorkflowBuilderChat, type PanelSize } from "./WorkflowBuilderChat";
+import { WorkflowEditorChatPanel, type PanelSize } from "./WorkflowEditorChatPanel";
 import { useProjectStore } from "../../store/projectStore";
-import type { Workflow } from "../../types/workflow";
+import { subscribeToDraftUpdates } from "../../store/workflowDraftUpdates";
 
 interface WorkflowParseErrorViewProps {
   /** Name of the workflow that failed to parse */
@@ -25,18 +25,16 @@ interface WorkflowParseErrorViewProps {
   rawDefinition?: string;
   /** Draft ID for the workflow */
   draftId?: string;
-  /** Chat ID associated with this workflow */
-  builderChatId?: string;
+  /** Chat shown in the chat panel (route search param) */
+  chatId?: string;
+  /** Called when the panel starts a chat or the user clears it */
+  onChatIdChange?: (chatId: string | undefined) => void;
   /** Callback to go back to hub */
   onBack: () => void;
   /** Callback to clear/delete the corrupted workflow */
   onClear: () => void;
   /** Callback when the workflow has been fixed (reload attempt) */
   onFixed: () => void;
-  /** Callback when a new chat is created */
-  onChatIdChange?: (chatId: string) => void;
-  /** Callback when draft ID changes (when backend creates a new draft) */
-  onDraftIdChange?: (draftId: string) => void;
 }
 
 export function WorkflowParseErrorView({
@@ -44,30 +42,24 @@ export function WorkflowParseErrorView({
   parseError,
   rawDefinition,
   draftId,
-  builderChatId,
+  chatId,
+  onChatIdChange,
   onBack,
   onClear,
   onFixed,
-  onChatIdChange,
-  onDraftIdChange,
 }: WorkflowParseErrorViewProps) {
   const [showRawYaml, setShowRawYaml] = useState(false);
   const [chatOpen, setChatOpen] = useState(true);
   const [chatPanelSize, setChatPanelSize] = useState<PanelSize>("normal");
   const projectId = useProjectStore((state) => state.currentProject?.id);
 
-  // Create a minimal workflow definition for the chat
-  // This allows the chat to still function even though parsing failed
-  const placeholderWorkflow: Workflow = {
-    name: workflowName,
-    description: "",
-    nodes: [],
-    edges: [],
-    entry: [],
-    inputs: {},
-    outputs: {},
-    apiVersion: "",
-  };
+  // An agent fixing the stored YAML pushes a draft update; retry the load.
+  const onFixedRef = useRef(onFixed);
+  onFixedRef.current = onFixed;
+  useEffect(() => {
+    if (!draftId) return;
+    return subscribeToDraftUpdates(draftId, () => onFixedRef.current());
+  }, [draftId]);
 
   return (
     <div className="h-full w-full bg-background flex flex-col">
@@ -186,21 +178,14 @@ export function WorkflowParseErrorView({
 
         {/* Chat panel */}
         {projectId && (
-          <WorkflowBuilderChat
-            workflow={placeholderWorkflow}
-            onWorkflowChange={() => {
-              // When the chat modifies the workflow, try to reload it
-              onFixed();
-            }}
-            projectId={projectId}
+          <WorkflowEditorChatPanel
+            workflowSlug={workflowName}
+            chatId={chatId}
+            onChatIdChange={(id) => onChatIdChange?.(id)}
             isOpen={chatOpen}
             onOpenChange={setChatOpen}
             panelSize={chatPanelSize}
             onPanelSizeChange={setChatPanelSize}
-            builderChatId={builderChatId}
-            draftId={draftId}
-            onChatIdChange={onChatIdChange}
-            onDraftIdChange={onDraftIdChange}
           />
         )}
       </div>

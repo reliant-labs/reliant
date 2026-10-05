@@ -4,6 +4,7 @@ import { Input } from "../../components/ui/Input";
 import { Card } from "../../components/ui/Card";
 import { FileText, FolderOpen, RefreshCw, AlertCircle, CheckCircle } from "lucide-react";
 import { isForgeUIEnabled, setForgeUIEnabled } from "../../lib/forgeFeature";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 interface MockDriverConfig {
   enabled: boolean;
@@ -130,12 +131,10 @@ export function DeveloperSettings() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-base font-semibold mb-2">Developer Settings</h2>
-        <p className="text-sm text-muted-foreground">
-          Configure mock drivers and development tools for testing
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Developer"
+        description="Tools for testing Reliant itself, such as mock drivers and backend status. You only need this page if you are developing or debugging Reliant."
+      />
 
       {/* Backend Status */}
       <Card>

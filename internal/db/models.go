@@ -144,6 +144,9 @@ type ToolCallResult = core.ToolCallResult
 // StrandedBackgroundSpawn is an alias to the shared core model.
 type StrandedBackgroundSpawn = core.StrandedBackgroundSpawn
 
+// BackgroundedProcessCall is an alias to the shared core model.
+type BackgroundedProcessCall = core.BackgroundedProcessCall
+
 // The durable tool call status enum is deliberately NOT re-exported here as
 // `db.ToolCallStatus`: that name is already taken by the string-valued status
 // on ToolCallUpdate (chat_update_types.go), which describes the transient
@@ -177,6 +180,15 @@ type Approval = core.Approval
 
 // AgentMessage is an alias to the shared core agent mailbox model.
 type AgentMessage = core.AgentMessage
+
+// SpawnReportOutcome aliases core.SpawnReportOutcome.
+type SpawnReportOutcome = core.SpawnReportOutcome
+
+const (
+	SpawnReportInserted        = core.SpawnReportInserted
+	SpawnReportSuperseded      = core.SpawnReportSuperseded
+	SpawnReportAlreadyReported = core.SpawnReportAlreadyReported
+)
 
 // Daemon represents a persisted tools daemon identity registration.
 // Lifecycle state (connection, heartbeat) lives in daemon_attachment.
@@ -417,6 +429,9 @@ const (
 
 	// Daemon heartbeat - ephemeral signal so frontend knows daemon is alive
 	UserUpdateDaemonHeartbeat UserUpdateType = reliantv1.UserUpdateType_USER_UPDATE_TYPE_DAEMON_HEARTBEAT
+
+	// Workflow draft written (by any chat, tool or RPC) - open editors refetch
+	UserUpdateWorkflowDraftUpdated UserUpdateType = reliantv1.UserUpdateType_USER_UPDATE_TYPE_WORKFLOW_DRAFT_UPDATED
 )
 
 // UserUpdateEntityType represents the type of entity a user update is about (proto enum integer).
@@ -428,6 +443,7 @@ const (
 	EntityTypeWorktree          UserUpdateEntityType = reliantv1.EntityType_ENTITY_TYPE_WORKTREE
 	EntityTypeBackgroundProcess UserUpdateEntityType = reliantv1.EntityType_ENTITY_TYPE_BACKGROUND_PROCESS
 	EntityTypeSystem            UserUpdateEntityType = reliantv1.EntityType_ENTITY_TYPE_SYSTEM
+	EntityTypeWorkflowDraft     UserUpdateEntityType = reliantv1.EntityType_ENTITY_TYPE_WORKFLOW_DRAFT
 )
 
 // UserUpdate represents an update in the user_updates table

@@ -82,7 +82,11 @@ function WorkflowsTabBar({ activeTab }: { activeTab: string | null }) {
   const search = useSearch({ strict: false }) as { project?: string };
   const tabSearch = search.project ? { project: search.project } : {};
   return (
-    <nav aria-label="Workflows" className="ml-2 flex items-center gap-1 border-l border-border/60 pl-3">
+    <nav
+      aria-label="Workflows"
+      data-onboarding="workflows-tabs"
+      className="ml-2 flex items-center gap-1 border-l border-border/60 pl-3"
+    >
       {WORKFLOWS_TABS.map((tab) => {
         const active = tab.key === activeTab;
         return (

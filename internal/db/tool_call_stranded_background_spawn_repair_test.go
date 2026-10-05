@@ -115,20 +115,31 @@ func TestListStrandedBackgroundSpawnToolCalls_FailClosed(t *testing.T) {
 	stranded, err := repo.ListStrandedBackgroundSpawnToolCalls(ctx)
 	require.NoError(t, err)
 
-	got := map[string]bool{}
+	got := map[string]*StrandedBackgroundSpawn{}
 	for _, s := range stranded {
-		got[s.ToolCallID] = true
+		got[s.ToolCallID] = s
 	}
 	for _, notWant := range []struct {
 		id, why string
 	}{
 		{"tc-bg-running", "a running child is live work; fabricating its completion writes a lie the model reads as fact"},
 		{"tc-bg-paused", "paused is resumable — the spawn has not ended, so it has not failed to report"},
-		{"tc-bg-reported", "this call already has a real terminal report; a repair would double-deliver it"},
 	} {
-		if got[notWant.id] {
+		if _, returned := got[notWant.id]; returned {
 			t.Errorf("%s returned — %s", notWant.id, notWant.why)
 		}
+	}
+
+	// A terminal child that already REPORTED is still returned while its row
+	// is backgrounded — the close needs to see it — but flagged, so the
+	// caller never writes the report twice. Filtering it out is what left
+	// normally-finished spawns "backgrounded" forever.
+	reported, returned := got["tc-bg-reported"]
+	if !returned {
+		t.Fatal("tc-bg-reported not returned — its row is still status 6 and nothing else will close it")
+	}
+	if !reported.HasReport {
+		t.Error("tc-bg-reported returned without HasReport — the repair would double-deliver its report")
 	}
 }
 

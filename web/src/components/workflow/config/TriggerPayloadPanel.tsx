@@ -9,6 +9,7 @@
  * screen together.
  */
 
+import { Tooltip } from "../../ui/Tooltip";
 import { useState } from 'react'
 import { Braces, Rocket } from 'lucide-react'
 import { ConfigurationPanel } from '../ConfigurationPanel'
@@ -60,13 +61,12 @@ export function TriggerPayloadPanel({ onClose, bottomOffset, topOffset, docked =
             const path = triggerCelPath(field)
             return (
               <li key={field.name}>
-                <button
+                <Tooltip content={target ? `Insert ${path}` : "Click into an expression field first"} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                   type="button"
                   className="cpv2-trigger-payload-field"
                   disabled={!target}
-                  onClick={() => target?.insert(path)}
-                  title={target ? `Insert ${path}` : undefined}
-                >
+                  onClick={() => target?.insert(path)} aria-label={target ? `Insert ${path}` : undefined}>
                   <span className="flex items-center gap-1.5">
                     <Braces className="h-3 w-3 flex-shrink-0 text-muted-foreground" aria-hidden />
                     <code className="cpv2-trigger-payload-path">{path}</code>
@@ -74,6 +74,7 @@ export function TriggerPayloadPanel({ onClose, bottomOffset, topOffset, docked =
                   </span>
                   <span className="cpv2-trigger-payload-desc">{field.description}</span>
                 </button>
+</Tooltip>
               </li>
             )
           })}

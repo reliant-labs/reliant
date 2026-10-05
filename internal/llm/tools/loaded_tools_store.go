@@ -309,7 +309,13 @@ func SearchTools(query string, permission string, mcpTools []MCPToolInfo) []Tool
 	var results []ToolSearchResult
 	for _, def := range registry {
 		name := strings.ToLower(def.Name)
-		if !strings.Contains(name, q) {
+		matched := strings.Contains(name, q)
+		for _, tag := range def.Tags {
+			if strings.Contains(strings.ToLower(string(tag)), q) {
+				matched = true
+			}
+		}
+		if !matched {
 			continue
 		}
 		minPerm := MinimumPermissionForTool(def.Name)

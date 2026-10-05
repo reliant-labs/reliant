@@ -65,6 +65,10 @@ func (a *EmitToolCallStatusActivity) Execute(ctx context.Context, input EmitTool
 		ToolName:   input.ToolName,
 		Status:     db.ToolCallStatus(input.Status),
 		Timestamp:  time.Now().Format(time.RFC3339),
+		// The same fact persist() writes to the row. The event needs it too:
+		// it is the only live channel that can tell an open client which
+		// thread a spawn owns (see db.ToolCallUpdate.ChildWorkflowID).
+		ChildWorkflowID: input.ChildWorkflowID,
 	}
 
 	// Persist before emitting so a durable row exists even if the event fails.

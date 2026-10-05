@@ -161,11 +161,18 @@ describe("ProjectPicker project list", () => {
   it("keeps the list scrollable rather than letting it overflow", () => {
     renderPicker();
 
-    // The rows share a scroll container that bounds its own height; without
-    // it, a long list runs off the bottom of the fixed-height shell.
-    const list = screen.getAllByTestId("project-item")[0].closest("div.max-h-\\[22rem\\]");
+    // The rows share one scroll container. It is a flex item allowed to
+    // shrink below its content (min-h-0) inside the page's fixed-height
+    // column, so a long list scrolls in place instead of running off the
+    // bottom of the shell.
+    const list = screen.getAllByTestId("project-item")[0].closest("[data-testid=project-table]");
     expect(list).not.toBeNull();
     expect(list?.className).toMatch(/overflow-y-auto/);
+    expect(list?.className).toMatch(/min-h-0/);
+    // Every row lives in that one container.
+    for (const row of screen.getAllByTestId("project-item")) {
+      expect(list?.contains(row)).toBe(true);
+    }
   });
 
   it("searches across name and path", async () => {
@@ -284,7 +291,7 @@ describe("ProjectPicker project list", () => {
   });
 });
 
-describe("ProjectPicker management mode", () => {
+describe("ProjectPicker row management", () => {
   beforeEach(() => {
     mockProjects.mockReturnValue(PROJECTS);
     mockUpdateProject.mockClear();
@@ -295,17 +302,47 @@ describe("ProjectPicker management mode", () => {
     await user.click(screen.getByTestId("project-manage-toggle"));
   }
 
-  it("keeps management affordances hidden until Manage is clicked", async () => {
+  it("keeps selection checkboxes hidden until Select is clicked", async () => {
     const user = userEvent.setup();
     renderPicker();
 
     expect(screen.queryAllByTestId("project-select")).toHaveLength(0);
-    expect(screen.queryAllByTestId("project-rename")).toHaveLength(0);
-    expect(screen.queryAllByTestId("project-remove")).toHaveLength(0);
+    expect(screen.queryByTestId("project-select-all")).not.toBeInTheDocument();
 
     await enterManageMode(user);
     expect(screen.getAllByTestId("project-select")).toHaveLength(8);
+    expect(screen.getByTestId("project-select-all")).toBeInTheDocument();
+  });
+
+  it("offers rename and remove on every row without entering selection mode", () => {
+    renderPicker();
+
+    // Per-row actions are in the DOM (revealed on hover/focus by CSS), each
+    // with an accessible name that says which project it acts on.
     expect(screen.getAllByTestId("project-rename")).toHaveLength(8);
+    expect(screen.getAllByTestId("project-remove")).toHaveLength(8);
+    expect(screen.getByRole("button", { name: "Rename zulu" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Remove zulu" })).toBeInTheDocument();
+  });
+
+  it("row actions act on the row without opening the project", async () => {
+    const onSelected = vi.fn();
+    const user = userEvent.setup();
+    const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(<ProjectPicker onProjectSelected={onSelected} />, {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    });
+
+    await user.click(screen.getAllByTestId("project-remove")[0]);
+    expect(screen.getByTestId("confirm-remove-projects")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+    await user.click(screen.getAllByTestId("project-rename")[0]);
+    expect(screen.getByTestId("project-rename-input")).toBeInTheDocument();
+
+    expect(onSelected).not.toHaveBeenCalled();
   });
 
   it("selects rows instead of opening them while managing", async () => {
@@ -341,7 +378,6 @@ describe("ProjectPicker management mode", () => {
   it("renames a project inline and persists on Enter", async () => {
     const user = userEvent.setup();
     renderPicker();
-    await enterManageMode(user);
 
     await user.click(screen.getAllByTestId("project-rename")[0]);
     const input = screen.getByTestId("project-rename-input");
@@ -354,7 +390,6 @@ describe("ProjectPicker management mode", () => {
   it("abandons a rename on Escape without writing", async () => {
     const user = userEvent.setup();
     renderPicker();
-    await enterManageMode(user);
 
     await user.click(screen.getAllByTestId("project-rename")[0]);
     const input = screen.getByTestId("project-rename-input");
@@ -390,7 +425,6 @@ describe("ProjectPicker management mode", () => {
   it("cancelling the confirm leaves everything in place", async () => {
     const user = userEvent.setup();
     renderPicker();
-    await enterManageMode(user);
 
     await user.click(screen.getAllByTestId("project-remove")[0]);
     await user.click(screen.getByRole("button", { name: /^cancel$/i }));

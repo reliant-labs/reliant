@@ -1,3 +1,4 @@
+import { Tooltip } from "../ui/Tooltip";
 import { ChevronRight, Home } from "lucide-react";
 
 interface BreadcrumbsProps {
@@ -19,13 +20,13 @@ export function Breadcrumbs({ path, onPathChange }: BreadcrumbsProps) {
 
   return (
     <div className="flex items-center gap-1 text-sm overflow-x-auto">
-      <button
+      <Tooltip content="Root" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
         onClick={() => handleSegmentClick(-1)}
-        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground"
-        title="Root"
-      >
+        className="flex items-center gap-1 px-2 py-1 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground" aria-label="Root">
         <Home className="w-3.5 h-3.5" />
       </button>
+</Tooltip>
 
       {segments.map((segment, index) => (
         <div key={index} className="flex items-center gap-1">

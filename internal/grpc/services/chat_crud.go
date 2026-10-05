@@ -1118,6 +1118,7 @@ func (s *ChatService) CompactChat(
 		TaskQueue:                s.taskQueue,
 		WorkflowIDConflictPolicy: enums.WORKFLOW_ID_CONFLICT_POLICY_TERMINATE_EXISTING,
 		WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
+		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
 	// Compact workflow uses the specified thread
@@ -1481,11 +1482,10 @@ func (s *ChatService) listMessagesBounded(
 	// The seq span this page's main-thread window actually covers. Sibling
 	// threads are bounded to this range rather than their whole history --
 	// same effect as windowByMainThread's "every sibling message inside that
-	// seq range". The upper bound mirrors ListRecentChatWindow's own
-	// snapshot window (messages.sql), which is intentionally open above: a
-	// spawn thread can out-write and out-live the main thread, finishing
-	// after the main thread's newest message in this page, and the
-	// tool-call preview those spawn messages render from must still appear.
+	// seq range". On the newest page the range is open above, like the chat
+	// snapshot's own window (buildChatSnapshot): a sibling thread can
+	// out-write and out-live the main thread, finishing after the main
+	// thread's newest message in this page.
 	// The cursor itself is still the right upper bound on a page OTHER than
 	// the newest -- everything at or after beforeSeq belongs to a page
 	// already served.

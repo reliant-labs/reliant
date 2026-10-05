@@ -55,9 +55,8 @@ tags:
     # Trailing per-provider coverage. Every provider must answer every tier, or
     # a user whose only provider is that one gets a hard resolution failure
     # instead of a degraded model. These sit LAST, so they are reached only
-    # when nothing above them is servable — a copilot-only or xai-only user.
+    # when nothing above them is servable — a copilot-only user.
     - {model: claude-5-sonnet, thinking_level: xhigh}   # copilot
-    - {model: grok-4, thinking_level: high}             # xai (high is its top level)
 
   flagship:
     - {model: claude-5.5-opus, thinking_level: xhigh}
@@ -80,7 +79,6 @@ tags:
     - {model: gemini-3.7-flash, thinking_level: medium}
     - {model: gemini-3.1-pro-preview, thinking_level: high}
     - {model: gemini-3-pro-preview, thinking_level: high}
-    - {model: grok-4, thinking_level: medium}
     - {model: vertex-claude-5.5-opus, thinking_level: xhigh}
     - {model: vertex-claude-5-opus, thinking_level: high}
     - {model: vertex-claude-4.8-opus, thinking_level: high}
@@ -90,6 +88,11 @@ tags:
     - {model: vertex-claude-5-fable, thinking_level: high}
     - {model: vertex-claude-4.6-opus, thinking_level: high}
     - {model: gpt-image-2.5-sunburst}
+    - {model: gemini-omni-1.1-flash}
+    # Fast, not standard Veo: a credits-only user has no Omni, and the default
+    # tier must not silently land on the $0.40/s model. Veo 3.1 standard is
+    # reached through [video-gen, cinematic].
+    - {model: veo-3.1-fast-generate}
 
   moderate:
     # Implementation tier (the implementer preset). Sonnet 5.5 is the primary
@@ -116,9 +119,8 @@ tags:
     - {model: vertex-claude-4.5-sonnet, thinking_level: medium}
     - {model: vertex-gemini-2.5-pro, thinking_level: high}
     # Trailing per-provider coverage — reached only by a user whose only
-    # provider is antigravity or xai. See the note under `powerful`.
+    # provider is antigravity. See the note under `powerful`.
     - {model: gemini-3.8-flash, thinking_level: medium} # antigravity
-    - {model: grok-4, thinking_level: medium}           # xai
 
   fast:
     - {model: gemini-3.5-flash, thinking_level: low}
@@ -139,16 +141,10 @@ tags:
     # for that tier and a failure to resolve is not a slower title — it is no
     # title. Each entry runs at its model's LOWEST effort, which is the closest
     # these providers get to a fast tier.
-    #
-    # grok-3-mini-beta leads the three because it is the only one that is
-    # genuinely a small model. It already carried `cheap`, so a [fast, cheap]
-    # selector scores it level with terra and gemini-3.8-flash (both also carry
-    # cheap) and the tie breaks on position here — leading keeps an xai user's
-    # [fast, cheap] on grok rather than moving it to a frontier model at low
-    # effort.
-    - {model: grok-3-mini-beta}                         # xai
     - {model: gpt-5.6-terra, thinking_level: low}       # codex
     - {model: gemini-3.8-flash, thinking_level: low}    # antigravity
+    - {model: gpt-5.4-nano, thinking_level: low}        # copilot
+    - {model: mai-code-1.1-flash, thinking_level: low}  # copilot
 
   cheap:
     - {model: claude-4.5-haiku}
@@ -158,15 +154,17 @@ tags:
     - {model: gemini-3.1-flash-lite-preview}
     - {model: gemini-2.5-flash}
     - {model: gemini-2.5-flash-lite}
-    - {model: grok-3-mini-beta}
     - {model: vertex-claude-4.5-haiku}
     - {model: vertex-gemini-2.5-flash}
     - {model: gemini-3.1-flash-lite-image}
+    - {model: veo-3.1-lite-generate}
     # Trailing per-provider coverage — reached only by a codex-only or
     # antigravity-only user. Both are subscription-billed, so "cheap" means the
     # cheapest effort available rather than a cheaper per-token rate.
     - {model: gpt-5.6-terra, thinking_level: low}       # codex
     - {model: gemini-3.8-flash, thinking_level: low}    # antigravity
+    - {model: gpt-5.4-nano, thinking_level: low}        # copilot
+    - {model: mai-code-1.1-flash, thinking_level: low}  # copilot
 
   image-gen:
     - {model: gpt-image-2.5-flare}
@@ -176,11 +174,24 @@ tags:
     - {model: gemini-3.1-flash-image}
     - {model: gemini-3-pro-image}
 
+  # Video generation. ORDER IS THE DEFAULT, as for image-gen: scores tie across
+  # every video model, so the earliest definition with an available provider
+  # wins. [video-gen, flagship] is the generate_video tool's bound default.
+  video-gen:
+    - {model: gemini-omni-1.1-flash}
+    - {model: veo-3.1-generate}
+    - {model: veo-3.1-fast-generate}
+    - {model: veo-3.1-lite-generate}
+
+  # One-shot cinematic work, where Veo's quality is worth its per-second price.
+  cinematic:
+    - {model: veo-3.1-generate}
+    - {model: veo-3.1-fast-generate}
+
   meta:
     - {model: claude-4.5-haiku}
     - {model: gpt-5.4-mini, thinking_level: high}
     - {model: gpt-6-luna, thinking_level: low}
-    - {model: grok-3-mini-beta}
     - {model: vertex-claude-4.5-haiku}
     # Trailing per-provider coverage. Internal meta work (titling, routing,
     # summarizing) must be possible on every provider; these are reached only
@@ -215,7 +226,6 @@ tags:
     - {model: gemini-3.1-pro-preview, thinking_level: high}
     - {model: gemini-3-pro-preview, thinking_level: high}
     - {model: gemini-3.1-pro-preview-customtools, thinking_level: high}
-    - {model: grok-4, thinking_level: medium}
     - {model: claude-4.6-sonnet, thinking_level: medium}
     - {model: claude-4.5-sonnet, thinking_level: medium}
     - {model: gpt-5.2-pro, thinking_level: medium}
@@ -264,7 +274,7 @@ models:
       - driver: anthropic
         api_model: claude-opus-5-5
       - driver: openrouter
-        api_model: anthropic/claude-opus-5-5
+        api_model: anthropic/claude-opus-5.5
       - driver: reliant
         api_model: claude-opus-5-5
       - driver: vertexai
@@ -272,6 +282,7 @@ models:
       # GitHub Copilot: opus-5.5 mirrors the opus-5/opus-4.8 policy — served
       # only on paid plans, so no `copilot` entry (it would 400 upstream).
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: claude-5-opus
@@ -298,6 +309,7 @@ models:
       # plans (individual/free reports policy=disabled), so no `copilot` provider
       # entry to avoid offering a picker option that 400s upstream.
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   # Claude 5.1 Fable leads the `powerful` list, ahead of gpt-6-astra,
@@ -320,12 +332,13 @@ models:
       - driver: anthropic
         api_model: claude-fable-5-1
       - driver: openrouter
-        api_model: anthropic/claude-fable-5-1
+        api_model: anthropic/claude-fable-5.1
       - driver: reliant
         api_model: claude-fable-5-1
       - driver: vertexai
         api_model: claude-fable-5-1
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: claude-4.8-opus
@@ -346,14 +359,15 @@ models:
         api_model: claude-opus-4-8
       - driver: openrouter
         api_model: anthropic/claude-opus-4.8
-      - driver: reliant
-        api_model: claude-opus-4-8
+      # No `reliant` mapping: not in pkg/llmcatalog gatewayRoster (nor the
+      # control-plane LiteLLM config), so the gateway does not serve it.
       # NOTE: no `copilot` provider here. GitHub Copilot serves opus-4.8 only on
       # paid plans (the individual/free tier's /models reports it as
       # policy=disabled, restricted_to=[pro_plus,business,enterprise,max]), and the
       # enterprise Copilot tier has been removed. Mapping it here would offer a
       # broken picker option that 400s (model_not_supported) upstream.
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   # Claude Sonnet 5.5 (2026-09-28). Figures are from Anthropic's model page
@@ -370,9 +384,9 @@ models:
   # only forced-tool caller is chat titling, whose [fast, moderate] ladder
   # always reaches a haiku first on every provider this model is mapped to.
   #
-  # No vertexai mapping: Vertex users get vertex-claude-5.5-sonnet. No copilot
-  # mapping either — no Copilot account we have probed lists it, and an unserved
-  # mapping 400s.
+  # No vertexai mapping: Vertex users get vertex-claude-5.5-sonnet. Copilot
+  # serves it as `claude-sonnet-5.5` (individual plan, policy=enabled, probed
+  # 2026-10-04).
   - id: claude-5.5-sonnet
     name: Claude 5.5 Sonnet
     visibility: user
@@ -390,12 +404,17 @@ models:
       - driver: anthropic
         api_model: claude-sonnet-5-5
       - driver: openrouter
-        api_model: anthropic/claude-sonnet-5-5
+        api_model: anthropic/claude-sonnet-5.5
       # A mapping records that the gateway COULD route it; it is not sold
       # until it is added to pkg/llmcatalog's gatewayRoster.
       - driver: reliant
         api_model: claude-sonnet-5-5
+      # GitHub Copilot serves sonnet-5.5 on the Anthropic Messages dialect;
+      # this account's /models reports policy=enabled (2026-10-04).
+      - driver: copilot
+        api_model: claude-sonnet-5.5
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: claude-5-sonnet
@@ -416,14 +435,15 @@ models:
         api_model: claude-sonnet-5
       - driver: openrouter
         api_model: anthropic/claude-sonnet-5
-      - driver: reliant
-        api_model: claude-sonnet-5
+      # No `reliant` mapping: not in pkg/llmcatalog gatewayRoster (nor the
+      # control-plane LiteLLM config), so the gateway does not serve it.
       # GitHub Copilot serves sonnet-5 on the Anthropic Messages dialect
       # (/v1/messages). This account's /models reports it policy=enabled; verified
       # 200 with the gho_ Bearer alone (paid plan).
       - driver: copilot
         api_model: claude-sonnet-5
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: claude-5-fable
@@ -444,9 +464,10 @@ models:
         api_model: claude-fable-5
       - driver: openrouter
         api_model: anthropic/claude-fable-5
-      - driver: reliant
-        api_model: claude-fable-5
+      # No `reliant` mapping: not in pkg/llmcatalog gatewayRoster (nor the
+      # control-plane LiteLLM config), so the gateway does not serve it.
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: claude-4.6-opus
@@ -556,11 +577,11 @@ models:
   # field and an `x-codex-routing-hint` header. Ground truth for both is
   # .dev/codex/astra.txt + astra.curl (codex-tui 0.153.4).
   #
-  # Unlike sol/terra, astra tops out at `max` — it has no `ultra`. The capture's
-  # own spawn_agent tool description claims ultra for astra, but that string is
+  # Astra tops out at `max`. The capture's own spawn_agent tool description
+  # claims `ultra` for astra, but that string is
   # authored by the client, and OpenAI's API reference
   # (developers.openai.com/api/docs/models/gpt-6-astra) lists exactly
-  # low/medium/high/xhigh/max. The docs win; sending ultra would be guessing.
+  # low/medium/high/xhigh/max. The docs win; sending ultra is rejected by Codex.
   #
   # It is the GPT-6 `powerful` pick. Sol is the GPT-6 flagship and Terra is the
   # GPT-6 moderate model; astra remains above both for callers explicitly asking
@@ -598,7 +619,7 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
     # Powerful tier: astra gets its top practical effort. `max` is supported but
-    # reserved for explicit opt-in, matching how sol treats max/ultra.
+    # reserved for explicit opt-in, matching how sol treats max.
 
   # GPT-6 Sol (2026-09-29) — "near-Astra performance at a lower cost".
   # Figures from developers.openai.com/api/docs/models/gpt-6-sol.
@@ -666,8 +687,8 @@ models:
     providers:
       - driver: openai
         api_model: gpt-6-terra
-      - driver: openrouter
-        api_model: openai/gpt-6-terra
+      # Removed 2026-10-04 (live probe): OpenRouter 400s "openai/gpt-6-terra is not
+      # a valid model ID"; its /api/v1/models lists sol/luna/astra but no terra.
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -701,6 +722,9 @@ models:
         api_model: gpt-6-luna
       - driver: openrouter
         api_model: openai/gpt-6-luna
+      # GitHub Copilot, /responses only; /models policy=enabled.
+      - driver: copilot
+        api_model: gpt-6-luna
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -711,7 +735,8 @@ models:
   # rather than as top-level `instructions`/`tools`). See the codex driver's
   # buildParams and .dev/codex/SOL_PROTOCOL_NOTES.md for the wire details.
   #
-  # They add two reasoning efforts above xhigh: `max` and `ultra`. They also
+  # They add one reasoning effort above xhigh: `max` (Codex's 400 enumerates none/minimal/low/medium/high/xhigh/max; there is no `ultra`, probed
+  # 2026-10-04). They also
   # return no reasoning summaries — only encrypted reasoning content — so there
   # is no visible thinking to stream for these models.
   - id: gpt-5.6-sol
@@ -725,7 +750,7 @@ models:
       supports_caching: true
       max_context_window: 272000
       max_output_tokens: 128000
-      thinking_levels: [low, medium, high, xhigh, max, ultra]
+      thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
       - driver: codex
@@ -734,7 +759,7 @@ models:
       preferred_endpoint: responses
       temperature_mode: omit
       use_max_completion_tokens: true
-    # Powerful tier: sol gets its top practical effort. `max`/`ultra` are
+    # Powerful tier: sol gets its top practical effort. `max` is
     # supported but reserved for explicit opt-in rather than the default.
 
   # Terra is the faster/cheaper member of the 5.6 family, but it is deliberately
@@ -758,10 +783,13 @@ models:
       supports_caching: true
       max_context_window: 272000
       max_output_tokens: 128000
-      thinking_levels: [low, medium, high, xhigh, max, ultra]
+      thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
       - driver: codex
+        api_model: gpt-5.6-terra
+      # GitHub Copilot, /responses only; /models policy=enabled.
+      - driver: copilot
         api_model: gpt-5.6-terra
     driver_settings:
       preferred_endpoint: responses
@@ -784,12 +812,14 @@ models:
       supports_caching: true
       max_context_window: 272000
       max_output_tokens: 128000
-      # `max` is observed working on luna in the capture. `ultra` is omitted:
-      # it is only documented for sol and terra, and was never exercised here.
+      # `max` is observed working on luna in the capture.
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
       - driver: codex
+        api_model: gpt-5.6-luna
+      # GitHub Copilot, /responses only; /models policy=enabled.
+      - driver: copilot
         api_model: gpt-5.6-luna
     driver_settings:
       preferred_endpoint: responses
@@ -817,6 +847,9 @@ models:
         api_model: gpt-5.4
       - driver: openrouter
         api_model: openai/gpt-5.4
+      # GitHub Copilot, /responses; /models policy=enabled.
+      - driver: copilot
+        api_model: gpt-5.4
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -864,6 +897,9 @@ models:
         api_model: gpt-5.3-codex
       - driver: openrouter
         api_model: openai/gpt-5.3-codex
+      # GitHub Copilot, /responses only; /models has no policy block (unrestricted).
+      - driver: copilot
+        api_model: gpt-5.3-codex
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -945,6 +981,9 @@ models:
       # levels this model already declares above.
       - driver: antigravity
         api_model: gemini-3.8-flash
+      # GitHub Copilot, OpenAI Chat dialect; /models policy=enabled.
+      - driver: copilot
+        api_model: gemini-3.8-flash
     default_temperature: 1.0
 
   - id: gemini-3.7-flash
@@ -966,6 +1005,9 @@ models:
       - driver: openrouter
         api_model: google/gemini-3.7-flash
       - driver: reliant
+        api_model: gemini-3.7-flash
+      # GitHub Copilot, OpenAI Chat dialect; /models policy=enabled.
+      - driver: copilot
         api_model: gemini-3.7-flash
     default_temperature: 1.0
 
@@ -1007,8 +1049,8 @@ models:
     providers:
       - driver: gemini
         api_model: gemini-3-pro-preview
-      - driver: openrouter
-        api_model: google/gemini-3-pro-preview
+      # Removed 2026-10-04 (live probe): OpenRouter 404s "No endpoints found";
+      # its /api/v1/models lists gemini-3.1-pro-preview but not gemini-3-pro-preview.
     default_temperature: 1.0
 
   - id: gemini-3.1-pro-preview-customtools
@@ -1029,22 +1071,6 @@ models:
         api_model: gemini-3.1-pro-preview-customtools
     default_temperature: 1.0
 
-  - id: grok-4
-    name: Grok 4
-    visibility: user
-    capabilities:
-      can_reason: true
-      supports_tools: true
-      supports_attachments: false
-      supports_streaming: true
-      supports_caching: true
-      max_context_window: 256000
-      max_output_tokens: 20000
-      thinking_levels: [low, medium, high]
-    providers:
-      - driver: xai
-        api_model: grok-4
-    default_temperature: 1.0
 
   # ============================================================================
   # MODERATE MODELS - Good balance of quality and cost
@@ -1257,6 +1283,9 @@ models:
         api_model: gpt-5.4-mini
       - driver: openrouter
         api_model: openai/gpt-5.4-mini
+      # GitHub Copilot, /responses only; /models policy=enabled.
+      - driver: copilot
+        api_model: gpt-5.4-mini
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -1340,8 +1369,8 @@ models:
         api_model: gemini-2.5-flash
       - driver: openrouter
         api_model: google/gemini-2.5-flash
-      - driver: reliant
-        api_model: gemini-2.5-flash
+      # No `reliant` mapping: not in pkg/llmcatalog gatewayRoster (nor the
+      # control-plane LiteLLM config), so the gateway does not serve it.
     default_temperature: 1.0
 
 
@@ -1366,25 +1395,145 @@ models:
         api_model: gemini-2.5-flash-lite
       - driver: openrouter
         api_model: google/gemini-2.5-flash-lite
-      - driver: reliant
-        api_model: gemini-2.5-flash-lite
+      # No `reliant` mapping: not in pkg/llmcatalog gatewayRoster (nor the
+      # control-plane LiteLLM config), so the gateway does not serve it.
     default_temperature: 1.0
 
-  - id: grok-3-mini-beta
-    name: Grok 3 Mini Beta
-    visibility: meta
+
+  # ============================================================================
+  # COPILOT-ONLY MODELS - served by GitHub Copilot, no native provider here.
+  # Context / output / reasoning levels come from the account's /models
+  # (capabilities.limits, capabilities.supports) on 2026-10-04. Availability is
+  # per-account (policy.state) and enforced at resolution; see
+  # copilot.EnabledModels.
+  # ============================================================================
+
+  - id: grok-4.5
+    name: Grok 4.5
+    visibility: user
     capabilities:
-      can_reason: false
+      can_reason: true
       supports_tools: true
-      supports_attachments: false
+      supports_attachments: true
       supports_streaming: true
       supports_caching: false
-      max_context_window: 131072
-      max_output_tokens: 20000
+      max_context_window: 500000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image]
     providers:
-      - driver: xai
-        api_model: grok-3-mini-beta
+      # /responses only. Copilot announces deprecation on 2026-10-19.
+      - driver: copilot
+        api_model: grok-4.5
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: grok-4.6
+    name: Grok 4.6
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 500000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image]
+    providers:
+      - driver: copilot
+        api_model: grok-4.6
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: grok-4.7
+    name: Grok 4.7
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 500000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image]
+    providers:
+      - driver: copilot
+        api_model: grok-4.7
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: kimi-k3
+    name: Kimi K3
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 1048576
+      max_output_tokens: 131072
+      thinking_levels: [low, high, max]
+      supported_file_types: [image]
+    providers:
+      # /chat/completions only.
+      - driver: copilot
+        api_model: kimi-k3
     default_temperature: 1.0
+
+  - id: mai-code-1.1-flash
+    name: MAI-Code 1.1 Flash
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 256000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf]
+    providers:
+      - driver: copilot
+        api_model: mai-code-1.1-flash
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  - id: gpt-5.4-nano
+    name: GPT-5.4 Nano
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: false
+      max_context_window: 400000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh]
+      supported_file_types: [image, pdf]
+    providers:
+      # /responses only. Copilot's picker hides it (model_picker_enabled=false)
+      # but it serves requests.
+      - driver: copilot
+        api_model: gpt-5.4-nano
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
 
   # ============================================================================
   # VERTEX AI MODELS - Google Cloud Vertex AI hosted models
@@ -1411,6 +1560,7 @@ models:
       - driver: vertexai
         api_model: claude-opus-5-5
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: vertex-claude-5-opus
@@ -1430,6 +1580,7 @@ models:
       - driver: vertexai
         api_model: claude-opus-5
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: vertex-claude-4.8-opus
@@ -1449,6 +1600,7 @@ models:
       - driver: vertexai
         api_model: claude-opus-4-8
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   # The Vertex-only twin of claude-5.5-sonnet, which carries no vertexai
@@ -1471,6 +1623,7 @@ models:
       - driver: vertexai
         api_model: claude-sonnet-5-5
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: vertex-claude-5-sonnet
@@ -1490,6 +1643,7 @@ models:
       - driver: vertexai
         api_model: claude-sonnet-5
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: vertex-claude-5.1-fable
@@ -1509,6 +1663,7 @@ models:
       - driver: vertexai
         api_model: claude-fable-5-1
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: vertex-claude-5-fable
@@ -1528,6 +1683,7 @@ models:
       - driver: vertexai
         api_model: claude-fable-5
     driver_settings:
+      temperature_mode: omit
       thinking_mode: adaptive
 
   - id: vertex-claude-4.6-opus
@@ -1844,6 +2000,137 @@ models:
         api_model: gemini-3-pro-image
       - driver: reliant
         api_model: gemini-3-pro-image
+
+  # ============================================================================
+  # VIDEO GENERATION MODELS - output_modalities: [video]
+  #
+  # These do NOT serve chat and never appear in the chat model picker
+  # (GetUserVisibleModels filters on modality). They are reached through the
+  # video-generation call path (internal/llm/drivers/videogen), a Submit/Poll
+  # long-running job rather than a chat completion, and selected by a
+  # ModelSelector with RequireOutputModality=video.
+  #
+  # The `video:` block is the single source of request validation: the
+  # generate_video tool checks duration, resolution, aspect ratio, reference
+  # images and edit/extend against it and names the model and the allowed
+  # values in the error, rather than carrying per-model branches.
+  #
+  # Veo through a user's own gemini (AI Studio) key, or on Reliant credits via
+  # Vertex (`reliant` mapping, served by videogen/managed.go through the
+  # control-plane /v1/videos route). Omni has no `reliant` mapping: it is not
+  # on Vertex.
+  # Prices (paid tier, per second): omni ~$0.10, veo-3.1 $0.40, fast $0.10,
+  # lite $0.05 at 720p. Veo 3.1 renders audio natively on the Gemini API.
+  # ============================================================================
+
+  # Omni is the DEFAULT video model: it comes first in [video-gen] and is the
+  # [video-gen, flagship] pick. It is the newest, the only stable (GA) video model
+  # on the Gemini API, about a quarter of Veo 3.1's per-second price at 720p
+  # (~$0.10/s), and the only one the agent can iterate on conversationally
+  # (previous_interaction_id), which matters because the agent cannot see the
+  # output and refines by talking. Veo stays selectable with [video-gen,
+  # cinematic] for one-shot cinematic work.
+  #
+  # Omni uses the Interactions API, which Vertex does not serve, so this is a
+  # `gemini` (AI Studio key) mapping only. It has no negative_prompt and no
+  # audio on/off flag; the video client folds both into the prompt.
+  - id: gemini-omni-1.1-flash
+    name: Gemini Omni 1.1 Flash
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [video]
+      video:
+        durations: [3, 4, 5, 6, 7, 8, 9, 10]
+        resolutions: [360p, 720p, 1080p, 4k]
+        # 1080p and 4k are UPSCALED from a 720p render (ai.google.dev/gemini-api/docs/omni:
+        # "1080p output (upscaled)", "4K output (upscaled)"). Veo renders them natively.
+        native_resolutions: [360p, 720p]
+        aspects: ["16:9", "9:16"]
+        max_reference_images: 3
+        supports_edit: true
+        supports_extend: true
+    providers:
+      - driver: gemini
+        api_model: gemini-omni-1.1-flash
+
+  - id: veo-3.1-generate
+    name: Veo 3.1
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [video]
+      video:
+        durations: [4, 6, 8]
+        resolutions: [720p, 1080p, 4k]
+        aspects: ["16:9", "9:16"]
+        max_reference_images: 3
+        supports_negative_prompt: true
+        supports_extend: true
+        full_resolution_duration: 8
+        high_resolutions: [1080p, 4k]
+    providers:
+      - driver: gemini
+        api_model: veo-3.1-generate-preview
+      - driver: reliant
+        api_model: veo-3.1-generate-001
+
+  - id: veo-3.1-fast-generate
+    name: Veo 3.1 Fast
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [video]
+      video:
+        durations: [4, 6, 8]
+        resolutions: [720p, 1080p, 4k]
+        aspects: ["16:9", "9:16"]
+        max_reference_images: 3
+        supports_negative_prompt: true
+        supports_extend: true
+        full_resolution_duration: 8
+        high_resolutions: [1080p, 4k]
+    providers:
+      - driver: gemini
+        api_model: veo-3.1-fast-generate-preview
+      - driver: reliant
+        api_model: veo-3.1-fast-generate-001
+
+  # Lite: no reference images, no extension and no 4k.
+  - id: veo-3.1-lite-generate
+    name: Veo 3.1 Lite
+    visibility: user
+    capabilities:
+      can_reason: false
+      supports_tools: false
+      supports_attachments: false
+      supports_streaming: false
+      supports_caching: false
+      output_modalities: [video]
+      video:
+        durations: [4, 6, 8]
+        resolutions: [720p, 1080p]
+        aspects: ["16:9", "9:16"]
+        supports_negative_prompt: true
+        full_resolution_duration: 8
+        high_resolutions: [1080p]
+    providers:
+      - driver: gemini
+        api_model: veo-3.1-lite-generate-preview
+      - driver: reliant
+        api_model: veo-3.1-lite-generate-001
 
   # ============================================================================
   # TEST/MOCK MODELS - For testing only

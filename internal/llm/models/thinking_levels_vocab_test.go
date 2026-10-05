@@ -8,13 +8,13 @@ import "testing"
 // downgrade the request before it is ever built. This pins the vocabulary so a
 // new level has to be added here, in the one place every gate consults.
 func TestIsKnownThinkingLevel(t *testing.T) {
-	for _, level := range []string{"low", "medium", "high", "xhigh", "max", "ultra"} {
+	for _, level := range []string{"low", "medium", "high", "xhigh", "max"} {
 		if !IsKnownThinkingLevel(level) {
 			t.Errorf("expected %q to be a known thinking level", level)
 		}
 	}
 
-	for _, level := range []string{"", "auto", "off", "bogus", "MAX"} {
+	for _, level := range []string{"", "auto", "off", "bogus", "MAX", "ultra"} {
 		if IsKnownThinkingLevel(level) {
 			t.Errorf("expected %q not to be a known thinking level", level)
 		}
@@ -22,21 +22,21 @@ func TestIsKnownThinkingLevel(t *testing.T) {
 }
 
 // A known level must never become the auto-selected default just by existing —
-// "prefer medium" has to win first, or adding `ultra` to a model would quietly
+// "prefer medium" has to win first, or adding `max` to a model would quietly
 // make every unpinned request maximally expensive.
 func TestPreferredThinkingLevelPrefersMediumOverNewHighTiers(t *testing.T) {
-	all := []string{"low", "medium", "high", "xhigh", "max", "ultra"}
+	all := []string{"low", "medium", "high", "xhigh", "max"}
 	if got := PreferredThinkingLevel(all); got != "medium" {
 		t.Errorf("expected medium to win when available, got %q", got)
 	}
 
 	// Without medium, fall to the highest conventional tier rather than the
 	// most expensive one.
-	if got := PreferredThinkingLevel([]string{"low", "high", "xhigh", "max", "ultra"}); got != "xhigh" {
+	if got := PreferredThinkingLevel([]string{"low", "high", "xhigh", "max"}); got != "xhigh" {
 		t.Errorf("expected xhigh, got %q", got)
 	}
 
-	if got := PreferredThinkingLevel([]string{"max", "ultra"}); got != "ultra" {
-		t.Errorf("expected ultra when it is the only tier available, got %q", got)
+	if got := PreferredThinkingLevel([]string{"max"}); got != "max" {
+		t.Errorf("expected max when it is the only tier available, got %q", got)
 	}
 }

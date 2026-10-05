@@ -276,7 +276,7 @@ var (
 			Namespace: "reliant",
 			Subsystem: "reconciler",
 			Name:      "anomalies_total",
-			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_thread_reaped, silent_terminal_drift).",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_thread_reaped, silent_terminal_drift, backgrounded_process_closed).",
 		},
 		[]string{"class"},
 	)

@@ -52,6 +52,11 @@ type ToolsOptions struct {
 	// that image generation is unavailable here, which is correct for the
 	// daemon runtime.
 	ImageGeneratorResolver ImageGeneratorResolver
+	// VideoGeneratorResolver and VideoJobs bind generate_video to the driver
+	// layer and to the durable job record. Optional, like the image resolver:
+	// nil means generate_video reports it is unavailable here.
+	VideoGeneratorResolver VideoGeneratorResolver
+	VideoJobs              VideoJobStore
 	// ScenarioRunner executes run_scenario on the real DynamicWorkflow.
 	// Injected because the runner imports the runtime's activities, which
 	// import this package. Optional: nil means run_scenario reports that
@@ -252,6 +257,12 @@ func (f *ToolsFactory) WebSearch() Tool {
 // the bytes to the model.
 func (f *ToolsFactory) GenerateImage() Tool {
 	return NewGenerateImageTool(f.opts.Repo, f.opts.ImageGeneratorResolver)
+}
+
+// GenerateVideo generates a video, stores it as an attachment, and returns its
+// id. The bytes never enter the tool result.
+func (f *ToolsFactory) GenerateVideo() Tool {
+	return NewGenerateVideoTool(f.opts.Repo, f.opts.VideoJobs, f.opts.VideoGeneratorResolver)
 }
 
 // Planning tools

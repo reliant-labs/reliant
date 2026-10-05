@@ -101,6 +101,9 @@ type daemonClient struct {
 	fsWatchersMu    sync.Mutex
 	fsWatchersByPr  map[string]context.CancelFunc
 
+	localModelsOnce sync.Once
+	localModels     *localModelManager
+
 	terminalPumps     *terminalPumpTracker
 	processOutputSubs *processOutputSubTracker
 
@@ -748,6 +751,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat()
 	go d.runHeartbeats(heartbeatCtx)
+	go d.localModelMgr().run(heartbeatCtx, d.send)
 
 	for {
 		msg, err := stream.Receive()
@@ -807,6 +811,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			// registration and bound the connection. Record it — a successful
 			// local Send() proves nothing about the far end.
 			d.recordStream(daemonstate.StreamConnected, "")
+			d.localModelMgr().signalRegistered()
 
 			// Gateway derives both identities from the PAT used to authenticate
 			// the stream and tells us. Daemon stores them locally for downstream
@@ -920,6 +925,22 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			return nil
 		}
 		d.handleProcessOutputUnsubscribe(m.ProcessOutputUnsubscribe)
+		return nil
+
+	case *reliantv1.ServerMessage_LocalModelHttpRequest:
+		if m.LocalModelHttpRequest != nil {
+			d.handleLocalModelHTTPRequest(ctx, m.LocalModelHttpRequest)
+		}
+		return nil
+
+	case *reliantv1.ServerMessage_LocalModelHttpCancel:
+		if m.LocalModelHttpCancel != nil {
+			d.handleLocalModelHTTPCancel(m.LocalModelHttpCancel)
+		}
+		return nil
+
+	case *reliantv1.ServerMessage_LocalModelRefresh:
+		d.handleLocalModelRefresh()
 		return nil
 
 	default:

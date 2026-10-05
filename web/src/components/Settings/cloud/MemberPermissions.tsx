@@ -37,6 +37,7 @@ import {
   updateMemberPermissions,
   type MemberPermissions as Member,
 } from "@/services/controlPlane/memberPermissions";
+import { SettingsPageHeader } from "../SettingsPageHeader";
 
 // The org-administration permissions, in the order they are shown. Grouped by
 // family so the two halves of a read/write pair sit together.
@@ -119,13 +120,10 @@ export function MemberPermissions() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h2 className="text-lg font-semibold mb-2">Member Permissions</h2>
-        <p className="text-sm text-muted-foreground">
-          What each member may do in this organization. A token acting as
-          someone can never carry more than they hold.
-        </p>
-      </div>
+      <SettingsPageHeader
+        title="Member Permissions"
+        description="Control what each member of your organization is allowed to do. A token acting on someone's behalf can never carry more permissions than that person holds."
+      />
 
       {error && (
         <div className="rounded-lg border border-destructive/40 bg-destructive/10 p-3">

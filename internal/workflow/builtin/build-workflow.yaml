@@ -1,4 +1,5 @@
 name: build-workflow
+title: Create a Workflow
 apiVersion: "0.0.5"
 description: |
   Build Workflow — create a custom Reliant workflow from a conversation.

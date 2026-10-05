@@ -4,13 +4,16 @@ package handlers
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/modelprefs"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
 
@@ -53,6 +56,35 @@ type llmCallSpec struct {
 	// every request in a turn, so a model given real tools alongside it could
 	// never call them.
 	ForceToolChoice string
+
+	// TagPrefsReader, when set, layers the user's Settings → Model
+	// preferences (model.tag_config.<tag>) under Selector/Temperature/
+	// ThinkingLevel: node arg > model value > tag pref > tier/model default.
+	// Only the chat-turn path sets it. Compaction and title generation pick
+	// their own internal selectors ("cheap"/"fast" housekeeping tiers) and
+	// must not inherit a user's per-tier temperature, thinking effort or
+	// compaction threshold, nor be redirected to an expensive model_id the
+	// user chose for conversation. Ignored when a resolver is injected.
+	TagPrefsReader modelprefs.SettingsReader
+
+	// Local, when set, lets a selector name a model served by one of the
+	// user's daemons ("<name>@local", provider "local:<daemonID>"). Local
+	// models never come from the registry: they are synthesized per request
+	// from the daemons' published inventories.
+	Local *LocalModelSpec
+}
+
+// LocalModelSpec is what resolving a local model needs beyond the selector.
+// Exported so the dev probe can supply an in-process relay.
+type LocalModelSpec struct {
+	Directory local.Directory
+	Transport local.TransportFactory
+	// PreferDaemonID is the chat's worktree daemon, tried first when the
+	// selector does not pin a daemon.
+	PreferDaemonID string
+	// Custom reaches user-configured endpoints (model_endpoints); nil leaves
+	// them unavailable on this worker.
+	Custom *local.CustomRoutes
 }
 
 // resolvedLLMCall bundles the driver plus the effective settings the shared
@@ -87,6 +119,11 @@ type resolvedLLMCall struct {
 	// Temperature is the effective temperature (explicit override or model
 	// default), nil when neither is set.
 	Temperature *float64
+
+	// TagCompactionThreshold is the tag preference's compaction threshold, 0
+	// when none applied. The caller uses it only when neither the node arg
+	// nor the model value set one.
+	TagCompactionThreshold int32
 }
 
 // resolveLLMCall resolves a spec into a ready-to-use driver the same way for
@@ -105,8 +142,10 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 	var definition *models.ModelDefinition
 	var modelIDForDriver string
 	var providerDriver string
+	var localTransport http.RoundTripper
 	effectiveTemperature := spec.Temperature
 	effectiveThinkingLevel := spec.ThinkingLevel
+	var tagCompactionThreshold int32
 
 	if resolver != nil {
 		// Probe the injected resolver for its model. Explicit spec values are
@@ -123,21 +162,59 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			models.ResolveThinkingCapability(models.ModelCapabilities{CanReason: legacyModel.CanReason}),
 			effectiveThinkingLevel,
 		)
+	} else if local.IsSelector(spec.Selector) {
+		var err error
+		legacyModel, definition, modelIDForDriver, effectiveThinkingLevel, localTransport, err = resolveLocalModel(ctx, spec)
+		if err != nil {
+			return nil, err
+		}
+		providerDriver = string(local.Family)
+	} else if pinned, pinnedSpec, ok := resolvePinnedLocalPref(ctx, spec); ok {
+		legacyModel, definition, modelIDForDriver, effectiveThinkingLevel, localTransport = pinned.legacy, pinned.definition, pinned.modelID, pinned.thinkingLevel, pinned.transport
+		providerDriver = string(local.Family)
+		if effectiveTemperature == nil {
+			effectiveTemperature = pinnedSpec.Temperature
+		}
+		if pinnedSpec.TagCompactionThreshold > 0 {
+			tagCompactionThreshold = pinnedSpec.TagCompactionThreshold
+		}
 	} else {
 		// Resolve model using the registry against the providers the user has
 		// configured.
-		availableProviders := configuredProviderIDs(drivers.GetAvailableDrivers(ctx, spec.UserID))
+		availableDrivers := drivers.GetAvailableDrivers(ctx, spec.UserID)
+		availableProviders := configuredProviderIDs(availableDrivers)
 
-		registry := models.MustGetRegistry()
+		registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 		resolve := registry.Resolve
 		if len(spec.FallbackSelector.Tags) > 0 || spec.FallbackSelector.ID != "" {
 			resolve = func(selector models.ModelSelector, providers []string) (*models.ResolvedModel, error) {
 				return registry.ResolveWithFallback(selector, spec.FallbackSelector, providers)
 			}
 		}
-		resolved, err := resolve(spec.Selector, availableProviders)
-		if err != nil {
-			return nil, fmt.Errorf("failed to resolve model: %w. Please check your API key configuration in Settings", err)
+
+		prefs := loadTagPrefs(ctx, spec, registry)
+		var resolved *models.ResolvedModel
+		if preferred := prefs.PreferredModel(registry, spec.Selector, availableProviders); preferred != nil {
+			resolved = preferred
+		} else {
+			if prefs.ModelID != "" && !prefs.IsLocalModel() {
+				logging.Warn("[LLMRequest] Ignoring tag preference model_id: not available for this user",
+					"userID", spec.UserID, "tag", modelprefs.TagFor(spec.Selector), "modelID", prefs.ModelID)
+			}
+			var err error
+			resolved, err = resolve(spec.Selector, availableProviders)
+			if err != nil {
+				return nil, fmt.Errorf("failed to resolve model: %w. Please check your API key configuration in Settings", err)
+			}
+		}
+		if effectiveTemperature == nil {
+			effectiveTemperature = prefs.Temperature
+		}
+		if effectiveThinkingLevel == "" {
+			effectiveThinkingLevel = prefs.ValidThinkingLevel()
+		}
+		if prefs.CompactionThreshold != nil && *prefs.CompactionThreshold > 0 {
+			tagCompactionThreshold = *prefs.CompactionThreshold
 		}
 
 		resolvedDef := resolved.Definition
@@ -206,13 +283,31 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		driverOpts = append(driverOpts, llm.WithForceToolChoice(spec.ForceToolChoice))
 	}
 
-	resolve := drivers.GetDriver
-	if resolver != nil {
-		resolve = resolver
-	}
-	driver, err := resolve(ctx, spec.UserID, preferences, driverOpts...)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get LLM driver: %w", err)
+	var driver llm.Driver
+	if localTransport != nil {
+		driverOpts = append(driverOpts,
+			llm.WithBaseURL(local.PlaceholderBaseURL),
+			llm.WithTransport(localTransport),
+			llm.WithMaxTokens(int64(definition.Capabilities.MaxOutputTokens)))
+		if effectiveTemperature != nil {
+			driverOpts = append(driverOpts, llm.WithTemperature(*effectiveTemperature))
+		}
+		if spec.MaxTokens != nil {
+			driverOpts = append(driverOpts, llm.WithMaxTokens(*spec.MaxTokens))
+		}
+		var err error
+		if driver, err = drivers.NewLocalDriver(legacyModel, driverOpts...); err != nil {
+			return nil, fmt.Errorf("failed to get LLM driver: %w", err)
+		}
+	} else {
+		resolve := drivers.GetDriver
+		if resolver != nil {
+			resolve = resolver
+		}
+		var err error
+		if driver, err = resolve(ctx, spec.UserID, preferences, driverOpts...); err != nil {
+			return nil, fmt.Errorf("failed to get LLM driver: %w", err)
+		}
 	}
 
 	return &resolvedLLMCall{
@@ -223,7 +318,65 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 		ProviderDriver: providerDriver,
 		ThinkingLevel:  effectiveThinkingLevel,
 		Temperature:    effectiveTemperature,
+
+		TagCompactionThreshold: tagCompactionThreshold,
 	}, nil
+}
+
+type pinnedLocalPref struct {
+	legacy        models.Model
+	definition    *models.ModelDefinition
+	modelID       string
+	thinkingLevel string
+	transport     http.RoundTripper
+}
+
+// pinnedLocalSpec carries the pref-derived values the local path needs.
+type pinnedLocalSpec struct {
+	Temperature            *float64
+	TagCompactionThreshold int32
+}
+
+// resolvePinnedLocalPref applies a tag preference whose model_id is a local
+// model. It reports ok=false (so the caller falls back to the tier) when
+// there is no such preference or its machine cannot serve it right now.
+func resolvePinnedLocalPref(ctx context.Context, spec llmCallSpec) (pinnedLocalPref, pinnedLocalSpec, bool) {
+	prefs := loadTagPrefs(ctx, spec, nil)
+	if !prefs.IsLocalModel() {
+		return pinnedLocalPref{}, pinnedLocalSpec{}, false
+	}
+	localSpec := spec
+	localSpec.Selector = prefs.LocalSelector()
+	if localSpec.ThinkingLevel == "" {
+		localSpec.ThinkingLevel = prefs.ValidThinkingLevel()
+	}
+	legacy, def, modelID, thinking, transport, err := resolveLocalModel(ctx, localSpec)
+	if err != nil {
+		logging.Warn("[LLMRequest] Ignoring tag preference model_id: local model unavailable; using the tier",
+			"userID", spec.UserID, "tag", modelprefs.TagFor(spec.Selector), "modelID", prefs.ModelID, "error", err)
+		return pinnedLocalPref{}, pinnedLocalSpec{}, false
+	}
+	out := pinnedLocalSpec{Temperature: prefs.Temperature}
+	if prefs.CompactionThreshold != nil && *prefs.CompactionThreshold > 0 {
+		out.TagCompactionThreshold = *prefs.CompactionThreshold
+	}
+	return pinnedLocalPref{legacy, def, modelID, thinking, transport}, out, true
+}
+
+// loadTagPrefs returns the user's preference for the selector's tier, or the
+// zero value when there is none, the selector is id-based, no reader is
+// wired, or the settings read fails (a preference must never block a call).
+func loadTagPrefs(ctx context.Context, spec llmCallSpec, registry *models.ModelRegistry) modelprefs.TagPrefs {
+	tag := modelprefs.TagFor(spec.Selector)
+	if tag == "" || spec.TagPrefsReader == nil {
+		return modelprefs.TagPrefs{}
+	}
+	all, err := modelprefs.LoadAll(ctx, spec.TagPrefsReader, spec.UserID)
+	if err != nil {
+		logging.Warn("[LLMRequest] Model tag preferences partially unreadable; affected tags use defaults",
+			"userID", spec.UserID, "error", err)
+	}
+	return all[tag]
 }
 
 // configuredProviderIDs returns the driver IDs the user has properly
@@ -330,4 +483,37 @@ func flattenToolContentToText(messages []message.Message) []message.Message {
 	}
 
 	return flattened
+}
+
+// resolveLocalModel resolves a "<name>@local" selector against the inventories
+// of the user's daemons. Failures are *local.UnavailableError, worded for the
+// user; they are not API-key problems and are never reported as one.
+func resolveLocalModel(ctx context.Context, spec llmCallSpec) (legacy models.Model, def *models.ModelDefinition, modelID, thinkingLevel string, transport http.RoundTripper, err error) {
+	if spec.Local == nil || spec.Local.Directory == nil {
+		return legacy, nil, "", "", nil, &local.UnavailableError{
+			Model:  strings.TrimSuffix(spec.Selector.ID, "@"+local.IDSuffix),
+			Reason: "local models are not reachable from this server",
+		}
+	}
+	all, err := local.ListModels(ctx, spec.Local.Directory, spec.UserID)
+	if err != nil {
+		return legacy, nil, "", "", nil, fmt.Errorf("failed to list local models: %w", err)
+	}
+	picked, err := local.Resolve(all, spec.Selector, spec.Local.PreferDaemonID)
+	if err != nil {
+		return legacy, nil, "", "", nil, err
+	}
+
+	definition := picked.Definition
+	// A local model thinks only when asked and only at a level its server
+	// takes; no tag or capability default applies, since an unprompted level
+	// can 400 on a model that offers none.
+	if spec.ThinkingLevel != "" {
+		thinkingLevel = models.ReconcileThinkingLevel(models.ResolveThinkingCapability(definition.Capabilities), spec.ThinkingLevel)
+	}
+	transport, err = local.TransportFor(ctx, spec.UserID, picked, spec.Local.Transport, spec.Local.Custom)
+	if err != nil {
+		return legacy, nil, "", "", nil, err
+	}
+	return definition.ToModel(), &definition, picked.CatalogID(), thinkingLevel, transport, nil
 }

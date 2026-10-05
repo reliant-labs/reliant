@@ -379,7 +379,7 @@ func TestClampThinkingLevel(t *testing.T) {
 	}{
 		{"supported level passes through", reasoning("low", "medium", "high", "xhigh"), "xhigh", "xhigh"},
 		{"clamps down to the ceiling", reasoning("low", "medium", "high"), "xhigh", "high"},
-		{"clamps across several steps", reasoning("low"), "ultra", "low"},
+		{"clamps across several steps", reasoning("low"), "max", "low"},
 		{"empty requests the model default", reasoning("low", "medium", "high"), "", "medium"},
 		{"non-reasoning model gets nothing", ResolveThinkingCapability(ModelCapabilities{}), "xhigh", ""},
 		{"unknown level defers to reconcile", reasoning("low", "medium", "high"), "bogus", "medium"},

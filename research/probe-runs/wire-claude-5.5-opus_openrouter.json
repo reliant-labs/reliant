@@ -1,0 +1,95 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=default",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4908,
+      "input_tokens": 81,
+      "output_tokens": 149,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=low",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4850,
+      "input_tokens": 81,
+      "output_tokens": 149,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    },
+    {
+      "cell": {
+        "kind": "reasoning",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-opus@openrouter reasoning level=xhigh",
+      "status": "pass",
+      "text_excerpt": "104104",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4755,
+      "input_tokens": 81,
+      "output_tokens": 134,
+      "correct": true,
+      "finish_reason": "end_turn",
+      "event_types": {
+        "complete": 2,
+        "content_delta": 8
+      }
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T17:15:08Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

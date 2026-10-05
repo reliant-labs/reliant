@@ -1,0 +1,6169 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-haiku",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-haiku@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-haiku-4-5-20251001",
+      "effective_temperature": 1,
+      "latency_ms": 681,
+      "input_tokens": 3,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-haiku",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.5-haiku@anthropic temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-haiku-4-5-20251001",
+      "effective_temperature": 0,
+      "latency_ms": 713,
+      "input_tokens": 3,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-haiku",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.5-haiku@anthropic temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-haiku-4-5-20251001",
+      "effective_temperature": 0.7,
+      "latency_ms": 655,
+      "input_tokens": 3,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.5-haiku",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-haiku@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.5-haiku@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-haiku-4-5-20251001",
+      "effective_temperature": 1,
+      "latency_ms": 1522,
+      "input_tokens": 9,
+      "output_tokens": 71
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-haiku",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-haiku@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-haiku-4.5",
+      "effective_temperature": 1,
+      "latency_ms": 1111,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-haiku",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.5-haiku@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-haiku-4.5",
+      "effective_temperature": 0,
+      "latency_ms": 975,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-haiku",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.5-haiku@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-haiku-4.5",
+      "effective_temperature": 0.7,
+      "latency_ms": 1057,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.5-haiku",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-haiku@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**!",
+      "resolved_model": "claude-4.5-haiku@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-haiku-4.5",
+      "effective_temperature": 1,
+      "latency_ms": 1766,
+      "input_tokens": 1209,
+      "output_tokens": 53
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-opus@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1011,
+      "input_tokens": 10,
+      "output_tokens": 27,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.5-opus@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1166,
+      "input_tokens": 10,
+      "output_tokens": 27,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-4.5-opus@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1278,
+      "input_tokens": 10,
+      "output_tokens": 27,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.5-opus@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 938,
+      "input_tokens": 10,
+      "output_tokens": 27,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.5-opus@anthropic temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 922,
+      "input_tokens": 10,
+      "output_tokens": 27,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.5-opus@anthropic temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1172,
+      "input_tokens": 10,
+      "output_tokens": 27,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-opus@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-5-20251101",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2628,
+      "input_tokens": 11,
+      "output_tokens": 85,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-opus@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2147,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.5-opus@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1221,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-4.5-opus@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1363,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.5-opus@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1070,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.5-opus@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1375,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.5-opus@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1348,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-opus@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**.",
+      "resolved_model": "claude-4.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3084,
+      "input_tokens": 1209,
+      "output_tokens": 55
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-sonnet@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3014,
+      "input_tokens": 10,
+      "output_tokens": 80,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.5-sonnet@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1983,
+      "input_tokens": 10,
+      "output_tokens": 50,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-4.5-sonnet@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4166,
+      "input_tokens": 10,
+      "output_tokens": 73,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.5-sonnet@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 2556,
+      "input_tokens": 10,
+      "output_tokens": 54,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.5-sonnet@anthropic temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 2247,
+      "input_tokens": 10,
+      "output_tokens": 48,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.5-sonnet@anthropic temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 2078,
+      "input_tokens": 10,
+      "output_tokens": 60,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.5-sonnet@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-5-20250929",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3936,
+      "input_tokens": 16,
+      "output_tokens": 120,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-sonnet@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1682,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.5-sonnet@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1642,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-4.5-sonnet@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1634,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.5-sonnet@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1693,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.5-sonnet@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1818,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.5-sonnet@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1826,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.5-sonnet@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.5",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4954,
+      "input_tokens": 1222,
+      "output_tokens": 65
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.6-opus@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1896,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.6-opus@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1908,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-4.6-opus@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1823,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.6-opus@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1877,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.6-opus@anthropic temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1651,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.6-opus@anthropic temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1760,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.6-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.6-opus@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.6-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4198,
+      "input_tokens": 11,
+      "output_tokens": 89,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.6-opus@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1440,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.6-opus@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1246,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-4.6-opus@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1405,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.6-opus@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1265,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.6-opus@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1477,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.6-opus@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1205,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.6-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.6-opus@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**. 🍍",
+      "resolved_model": "claude-4.6-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3314,
+      "input_tokens": 1221,
+      "output_tokens": 70
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.6-sonnet@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 878,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.6-sonnet@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 855,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-4.6-sonnet@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 820,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.6-sonnet@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 887,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.6-sonnet@anthropic temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 894,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.6-sonnet@anthropic temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 870,
+      "input_tokens": 10,
+      "output_tokens": 17,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.6-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.6-sonnet@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.6-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-4-6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2558,
+      "input_tokens": 11,
+      "output_tokens": 94,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.6-sonnet@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1802,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.6-sonnet@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 914,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-4.6-sonnet@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 815,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.6-sonnet@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 941,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "claude-4.6-sonnet@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 829,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "claude-4.6-sonnet@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 825,
+      "input_tokens": 14,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.6-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.6-sonnet@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**! 🍍",
+      "resolved_model": "claude-4.6-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-4.6",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2572,
+      "input_tokens": 1221,
+      "output_tokens": 71
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.8-opus@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 764,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-4.8-opus@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 758,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-4.8-opus@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1685,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-4.8-opus@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 752,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-4.8-opus@anthropic level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 797,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.8-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-4.8-opus@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.8-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-4-8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2090,
+      "input_tokens": 4,
+      "output_tokens": 61
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.8-opus@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 950,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-4.8-opus@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 978,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-4.8-opus@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 916,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-4.8-opus@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 963,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-4.8-opus@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 953,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-4.8-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-4.8-opus@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-4.8-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-4.8",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2429,
+      "input_tokens": 847,
+      "output_tokens": 60
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-fable@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1862,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5-fable@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1648,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-5-fable@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2821,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-5-fable@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2112,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5-fable@anthropic level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3222,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5-fable",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-fable@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5406,
+      "input_tokens": 4,
+      "output_tokens": 90
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-fable@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2458,
+      "input_tokens": 17,
+      "output_tokens": 17
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5-fable@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2687,
+      "input_tokens": 17,
+      "output_tokens": 14
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-5-fable@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2375,
+      "input_tokens": 17,
+      "output_tokens": 14
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-5-fable@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2272,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5-fable@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2987,
+      "input_tokens": 17,
+      "output_tokens": 19
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5-fable",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-fable@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4663,
+      "input_tokens": 830,
+      "output_tokens": 43
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-opus@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1491,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5-opus@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1580,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-5-opus@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1593,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-5-opus@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1457,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5-opus@anthropic level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1419,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-opus@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3052,
+      "input_tokens": 4,
+      "output_tokens": 61
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-opus@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2678,
+      "input_tokens": 17,
+      "output_tokens": 19
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5-opus@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1705,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-5-opus@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1515,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-5-opus@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2360,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5-opus@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2697,
+      "input_tokens": 17,
+      "output_tokens": 19
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-opus@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3441,
+      "input_tokens": 833,
+      "output_tokens": 54
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1608,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5-sonnet@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2574,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-5-sonnet@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2184,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-5-sonnet@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1765,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5-sonnet@anthropic level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1836,
+      "input_tokens": 2,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3811,
+      "input_tokens": 4,
+      "output_tokens": 51
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1707,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5-sonnet@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1578,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-5-sonnet@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1789,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-5-sonnet@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1512,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5-sonnet@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1699,
+      "input_tokens": 17,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5-sonnet@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is: **pineapple**",
+      "resolved_model": "claude-5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2928,
+      "input_tokens": 978,
+      "output_tokens": 63
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.1-fable@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3225,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5.1-fable@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5713,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-5.1-fable@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3462,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-5.1-fable@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4287,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5.1-fable@anthropic level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3364,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5.1-fable",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.1-fable@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 7453,
+      "input_tokens": 6,
+      "output_tokens": 63
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.1-fable@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5-1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 6878,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.1-fable@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5-1",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5846,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-5.1-fable@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5-1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3176,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-5.1-fable@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5-1",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3914,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.1-fable@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5-1",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4256,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5.1-fable",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.1-fable@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5.1-fable@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-fable-5-1",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5963,
+      "input_tokens": 826,
+      "output_tokens": 43
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1283,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5.5-opus@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1330,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-5.5-opus@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1431,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-5.5-opus@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1394,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-opus@anthropic level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1380,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5.5-opus",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2519,
+      "input_tokens": 6,
+      "output_tokens": 51
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2614,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.5-opus@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2094,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-5.5-opus@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5483,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-5.5-opus@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2291,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-opus@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5845,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5.5-opus",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-opus@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The tool returned the secret word **pineapple**.",
+      "resolved_model": "claude-5.5-opus@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-opus-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4672,
+      "input_tokens": 826,
+      "output_tokens": 47
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@anthropic level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 962,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": "low"
+      },
+      "label": "claude-5.5-sonnet@anthropic level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 994,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": "medium"
+      },
+      "label": "claude-5.5-sonnet@anthropic level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1130,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": "high"
+      },
+      "label": "claude-5.5-sonnet@anthropic level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 974,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-sonnet@anthropic level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1071,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5.5-sonnet",
+        "provider": "anthropic",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@anthropic tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1968,
+      "input_tokens": 6,
+      "output_tokens": 51
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1459,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "claude-5.5-sonnet@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5-5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1320,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "claude-5.5-sonnet@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1332,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "claude-5.5-sonnet@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5-5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1473,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "claude-5.5-sonnet@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1476,
+      "input_tokens": 19,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "claude-5.5-sonnet",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "claude-5.5-sonnet@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word it returned is **pineapple**.",
+      "resolved_model": "claude-5.5-sonnet@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "anthropic/claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2562,
+      "input_tokens": 826,
+      "output_tokens": 46
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-2.5-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-2.5-flash@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash",
+      "effective_temperature": 1,
+      "latency_ms": 1038,
+      "input_tokens": 6,
+      "output_tokens": 27
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-2.5-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-2.5-flash@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash",
+      "effective_temperature": 0,
+      "latency_ms": 1112,
+      "input_tokens": 6,
+      "output_tokens": 38
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-2.5-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-2.5-flash@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash",
+      "effective_temperature": 0.7,
+      "latency_ms": 1120,
+      "input_tokens": 6,
+      "output_tokens": 35
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-2.5-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-2.5-flash@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is pineapple.",
+      "resolved_model": "gemini-2.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash",
+      "effective_temperature": 1,
+      "latency_ms": 1750,
+      "input_tokens": 94,
+      "output_tokens": 62
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-2.5-flash-lite",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-2.5-flash-lite@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-flash-lite@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash-lite",
+      "effective_temperature": 1,
+      "latency_ms": 1378,
+      "input_tokens": 6,
+      "output_tokens": 26
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-2.5-flash-lite",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-2.5-flash-lite@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-flash-lite@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash-lite",
+      "effective_temperature": 0,
+      "latency_ms": 1476,
+      "input_tokens": 6,
+      "output_tokens": 26
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-2.5-flash-lite",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-2.5-flash-lite@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-flash-lite@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash-lite",
+      "effective_temperature": 0.7,
+      "latency_ms": 1520,
+      "input_tokens": 6,
+      "output_tokens": 26
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-2.5-flash-lite",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-2.5-flash-lite@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is pineapple.",
+      "resolved_model": "gemini-2.5-flash-lite@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-flash-lite",
+      "effective_temperature": 1,
+      "latency_ms": 2446,
+      "input_tokens": 187,
+      "output_tokens": 104,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-2.5-pro@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3568,
+      "input_tokens": 6,
+      "output_tokens": 235
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-2.5-pro@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 3615,
+      "input_tokens": 6,
+      "output_tokens": 256
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gemini-2.5-pro@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2615,
+      "input_tokens": 6,
+      "output_tokens": 172
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-2.5-pro@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 4262,
+      "input_tokens": 6,
+      "output_tokens": 267
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-2.5-pro@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 3324,
+      "input_tokens": 6,
+      "output_tokens": 247
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-2.5-pro@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 3731,
+      "input_tokens": 6,
+      "output_tokens": 276
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-2.5-pro",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-2.5-pro@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is pineapple.",
+      "resolved_model": "gemini-2.5-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-2.5-pro",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 4989,
+      "input_tokens": 94,
+      "output_tokens": 319
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3-flash-preview",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3-flash-preview@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3-flash-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-flash-preview",
+      "effective_temperature": 1,
+      "latency_ms": 951,
+      "input_tokens": 6,
+      "output_tokens": 66
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3-flash-preview",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3-flash-preview@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3-flash-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-flash-preview",
+      "effective_temperature": 0,
+      "latency_ms": 11239,
+      "input_tokens": 7,
+      "output_tokens": 126
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3-flash-preview",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3-flash-preview@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3-flash-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-flash-preview",
+      "effective_temperature": 0.7,
+      "latency_ms": 1300,
+      "input_tokens": 6,
+      "output_tokens": 53
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3-flash-preview",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3-flash-preview@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is \"pineapple\".",
+      "resolved_model": "gemini-3-flash-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-flash-preview",
+      "effective_temperature": 1,
+      "latency_ms": 2652,
+      "input_tokens": 205,
+      "output_tokens": 129,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3-pro-preview",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3-pro-preview@openrouter level=default",
+      "status": "fail",
+      "class": "catalog-mapping",
+      "error": "API request failed with status 404: {\"error\":{\"message\":\"No endpoints found for google/gemini-3-pro-preview.\",\"code\":404},\"user_id\":\"user_30yOThRSuoxAh4CtvXeZv7DCYN1\"}",
+      "resolved_model": "gemini-3-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 18
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3-pro-preview",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3-pro-preview@openrouter level=low",
+      "status": "fail",
+      "class": "catalog-mapping",
+      "error": "API request failed with status 404: {\"error\":{\"message\":\"No endpoints found for google/gemini-3-pro-preview.\",\"code\":404},\"user_id\":\"user_30yOThRSuoxAh4CtvXeZv7DCYN1\"}",
+      "resolved_model": "gemini-3-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-pro-preview",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 18
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3-pro-preview",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3-pro-preview@openrouter level=high",
+      "status": "fail",
+      "class": "catalog-mapping",
+      "error": "API request failed with status 404: {\"error\":{\"message\":\"No endpoints found for google/gemini-3-pro-preview.\",\"code\":404},\"user_id\":\"user_30yOThRSuoxAh4CtvXeZv7DCYN1\"}",
+      "resolved_model": "gemini-3-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 20
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3-pro-preview",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3-pro-preview@openrouter temp=0",
+      "status": "fail",
+      "class": "catalog-mapping",
+      "error": "API request failed with status 404: {\"error\":{\"message\":\"No endpoints found for google/gemini-3-pro-preview.\",\"code\":404},\"user_id\":\"user_30yOThRSuoxAh4CtvXeZv7DCYN1\"}",
+      "resolved_model": "gemini-3-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 0,
+      "latency_ms": 22
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3-pro-preview",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3-pro-preview@openrouter temp=0.7",
+      "status": "fail",
+      "class": "catalog-mapping",
+      "error": "API request failed with status 404: {\"error\":{\"message\":\"No endpoints found for google/gemini-3-pro-preview.\",\"code\":404},\"user_id\":\"user_30yOThRSuoxAh4CtvXeZv7DCYN1\"}",
+      "resolved_model": "gemini-3-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 0.7,
+      "latency_ms": 18
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3-pro-preview",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3-pro-preview@openrouter tool-roundtrip",
+      "status": "fail",
+      "class": "catalog-mapping",
+      "error": "API request failed with status 404: {\"error\":{\"message\":\"No endpoints found for google/gemini-3-pro-preview.\",\"code\":404},\"user_id\":\"user_30yOThRSuoxAh4CtvXeZv7DCYN1\"}",
+      "note": "turn 1",
+      "resolved_model": "gemini-3-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 18
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.1-pro-preview@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 2347,
+      "input_tokens": 6,
+      "output_tokens": 99
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.1-pro-preview@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 2214,
+      "input_tokens": 6,
+      "output_tokens": 80
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.1-pro-preview@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 2374,
+      "input_tokens": 6,
+      "output_tokens": 83
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.1-pro-preview@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 0,
+      "latency_ms": 2427,
+      "input_tokens": 6,
+      "output_tokens": 115
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.1-pro-preview@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 0.7,
+      "latency_ms": 2199,
+      "input_tokens": 6,
+      "output_tokens": 97
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.1-pro-preview",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.1-pro-preview@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gemini-3.1-pro-preview@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.1-pro-preview",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 4328,
+      "input_tokens": 221,
+      "output_tokens": 190,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.5-flash@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1086,
+      "input_tokens": 6,
+      "output_tokens": 84
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.5-flash@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1211,
+      "input_tokens": 6,
+      "output_tokens": 88
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gemini-3.5-flash@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1361,
+      "input_tokens": 6,
+      "output_tokens": 86
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.5-flash@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1579,
+      "input_tokens": 6,
+      "output_tokens": 120
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.5-flash@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1151,
+      "input_tokens": 6,
+      "output_tokens": 91
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.5-flash@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1279,
+      "input_tokens": 6,
+      "output_tokens": 99
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.5-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.5-flash@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2011,
+      "input_tokens": 150,
+      "output_tokens": 73,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.6-flash@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 913,
+      "input_tokens": 6,
+      "output_tokens": 75
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.6-flash@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1104,
+      "input_tokens": 6,
+      "output_tokens": 63
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gemini-3.6-flash@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1119,
+      "input_tokens": 6,
+      "output_tokens": 109
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.6-flash@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1086,
+      "input_tokens": 6,
+      "output_tokens": 90
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.6-flash@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1062,
+      "input_tokens": 6,
+      "output_tokens": 86
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.6-flash@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1086,
+      "input_tokens": 6,
+      "output_tokens": 73
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.6-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.6-flash@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**.",
+      "resolved_model": "gemini-3.6-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.6-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1892,
+      "input_tokens": 151,
+      "output_tokens": 75,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.7-flash@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 2000,
+      "input_tokens": 6,
+      "output_tokens": 93
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.7-flash@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1439,
+      "input_tokens": 6,
+      "output_tokens": 2
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gemini-3.7-flash@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1953,
+      "input_tokens": 6,
+      "output_tokens": 68
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.7-flash@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1988,
+      "input_tokens": 6,
+      "output_tokens": 88
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.7-flash@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 2085,
+      "input_tokens": 6,
+      "output_tokens": 102
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.7-flash@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 1905,
+      "input_tokens": 6,
+      "output_tokens": 63
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.7-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.7-flash@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**.",
+      "resolved_model": "gemini-3.7-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.7-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3536,
+      "input_tokens": 154,
+      "output_tokens": 78,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@antigravity level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1887,
+      "input_tokens": 7,
+      "output_tokens": 2,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@antigravity level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 4542,
+      "input_tokens": 7,
+      "output_tokens": 2,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "medium"
+      },
+      "label": "gemini-3.8-flash@antigravity level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1628,
+      "input_tokens": 7,
+      "output_tokens": 2,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@antigravity level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 9499,
+      "input_tokens": 7,
+      "output_tokens": 2,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.8-flash@antigravity temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1385,
+      "input_tokens": 7,
+      "output_tokens": 2,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.8-flash@antigravity temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 4536,
+      "input_tokens": 7,
+      "output_tokens": 2,
+      "has_signature": true
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.8-flash",
+        "provider": "antigravity",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@antigravity tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word returned by the tool is **pineapple**.",
+      "resolved_model": "gemini-3.8-flash@antigravity",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3420,
+      "input_tokens": 410,
+      "output_tokens": 25,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1605,
+      "input_tokens": 6,
+      "output_tokens": 59
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gemini-3.8-flash@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1316,
+      "input_tokens": 6,
+      "output_tokens": 2
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gemini-3.8-flash@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 1561,
+      "input_tokens": 6,
+      "output_tokens": 98
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gemini-3.8-flash@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "high",
+      "effective_temperature": 1,
+      "latency_ms": 1511,
+      "input_tokens": 6,
+      "output_tokens": 107
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0
+      },
+      "label": "gemini-3.8-flash@openrouter temp=0",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0,
+      "latency_ms": 1736,
+      "input_tokens": 6,
+      "output_tokens": 88
+    },
+    {
+      "cell": {
+        "kind": "temp",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": "",
+        "temperature": 0.7
+      },
+      "label": "gemini-3.8-flash@openrouter temp=0.7",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 0.7,
+      "latency_ms": 2842,
+      "input_tokens": 6,
+      "output_tokens": 69
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gemini-3.8-flash",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gemini-3.8-flash@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gemini-3.8-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.8-flash",
+      "effective_thinking": "medium",
+      "effective_temperature": 1,
+      "latency_ms": 3491,
+      "input_tokens": 180,
+      "output_tokens": 99,
+      "tool_call_has_thought_signature": true
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 867,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.2@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1129,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-5.2@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1090,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.2@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1025,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.2",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "pineapple",
+      "resolved_model": "gpt-5.2@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1973,
+      "input_tokens": 8900,
+      "output_tokens": 35
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2-codex@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1958,
+      "input_tokens": 4361,
+      "output_tokens": 16
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.2-codex@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1523,
+      "input_tokens": 4361,
+      "output_tokens": 18
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-5.2-codex@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1632,
+      "input_tokens": 4361,
+      "output_tokens": 18
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.2-codex@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1645,
+      "input_tokens": 4361,
+      "output_tokens": 21
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.2-codex@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1447,
+      "input_tokens": 4361,
+      "output_tokens": 18
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.2-codex",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2-codex@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is pineapple.",
+      "resolved_model": "gpt-5.2-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1814,
+      "input_tokens": 8895,
+      "output_tokens": 34
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2-pro@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4626,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.2-pro@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3438,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-5.2-pro@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3641,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.2-pro@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4181,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.2-pro",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.2-pro@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "pineapple",
+      "resolved_model": "gpt-5.2-pro@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.2-pro",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 13787,
+      "input_tokens": 8901,
+      "output_tokens": 36
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.3-codex@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 925,
+      "input_tokens": 4361,
+      "output_tokens": 20
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.3-codex@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 853,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-5.3-codex@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1380,
+      "input_tokens": 4361,
+      "output_tokens": 20
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.3-codex@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1101,
+      "input_tokens": 4361,
+      "output_tokens": 21
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.3-codex@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1100,
+      "input_tokens": 4361,
+      "output_tokens": 21
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.3-codex",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.3-codex@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.3-codex@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.3-codex",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2867,
+      "input_tokens": 8897,
+      "output_tokens": 59
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.4@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1268,
+      "input_tokens": 4361,
+      "output_tokens": 20
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.4@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 915,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-5.4@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1172,
+      "input_tokens": 4361,
+      "output_tokens": 16
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.4@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1237,
+      "input_tokens": 4361,
+      "output_tokens": 27
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1103,
+      "input_tokens": 4361,
+      "output_tokens": 28
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.4",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.4@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.4@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2292,
+      "input_tokens": 8897,
+      "output_tokens": 68
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.4-mini@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 841,
+      "input_tokens": 4361,
+      "output_tokens": 23
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.4-mini@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 940,
+      "input_tokens": 4361,
+      "output_tokens": 16
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-5.4-mini@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1101,
+      "input_tokens": 4361,
+      "output_tokens": 20
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.4-mini@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 978,
+      "input_tokens": 4361,
+      "output_tokens": 25
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.4-mini@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 708,
+      "input_tokens": 4361,
+      "output_tokens": 28
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.4-mini",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.4-mini@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.4-mini@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.4-mini",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2355,
+      "input_tokens": 8901,
+      "output_tokens": 69
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.5@codex level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2416
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.5@codex level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2595
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "medium"
+      },
+      "label": "gpt-5.5@codex level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2678
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "high"
+      },
+      "label": "gpt-5.5@codex level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4544
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.5@codex level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2431
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.5",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.5@codex tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "pineapple",
+      "resolved_model": "gpt-5.5@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3005
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.5@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 699,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-5.5@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1003,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-5.5@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 920,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-5.5@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1075,
+      "input_tokens": 4361,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.5@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1270,
+      "input_tokens": 4361,
+      "output_tokens": 28
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.5",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-5.5@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "pineapple",
+      "resolved_model": "gpt-5.5@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-5.5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3257,
+      "input_tokens": 8898,
+      "output_tokens": 30
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-luna@codex level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1945
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.6-luna@codex level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1150
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": "medium"
+      },
+      "label": "gpt-5.6-luna@codex level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1176
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": "high"
+      },
+      "label": "gpt-5.6-luna@codex level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1305
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.6-luna@codex level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1488
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-5.6-luna@codex level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2095
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.6-luna",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-luna@codex tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.6-luna@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 7360
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-sol@codex level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1831
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.6-sol@codex level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1762
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "medium"
+      },
+      "label": "gpt-5.6-sol@codex level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2313
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "high"
+      },
+      "label": "gpt-5.6-sol@codex level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2450
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.6-sol@codex level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3444
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-5.6-sol@codex level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1411
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": "ultra"
+      },
+      "label": "gpt-5.6-sol@codex level=ultra",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://chatgpt.com/backend-api/codex/responses\": 400 Bad Request { \"message\": \"Invalid value: 'ultra'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'.\", \"type\": \"invalid_request_error\", \"param\": \"reasoning.effort\", \"code\": \"invalid_value\" }",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "ultra",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 398
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.6-sol",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-sol@codex tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gpt-5.6-sol@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4308
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-terra@codex level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1012
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-5.6-terra@codex level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1323
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "medium"
+      },
+      "label": "gpt-5.6-terra@codex level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1099
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "high"
+      },
+      "label": "gpt-5.6-terra@codex level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1170
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "xhigh"
+      },
+      "label": "gpt-5.6-terra@codex level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1565
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-5.6-terra@codex level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1515
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": "ultra"
+      },
+      "label": "gpt-5.6-terra@codex level=ultra",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://chatgpt.com/backend-api/codex/responses\": 400 Bad Request { \"message\": \"Invalid value: 'ultra'. Supported values are: 'none', 'minimal', 'low', 'medium', 'high', 'xhigh', and 'max'.\", \"type\": \"invalid_request_error\", \"param\": \"reasoning.effort\", \"code\": \"invalid_value\" }",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "ultra",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1053
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-5.6-terra",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-5.6-terra@codex tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is `pineapple`.",
+      "resolved_model": "gpt-5.6-terra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-5.6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3112
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-6-astra@codex level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2108
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": "low"
+      },
+      "label": "gpt-6-astra@codex level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 4836
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": "medium"
+      },
+      "label": "gpt-6-astra@codex level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2083
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": "high"
+      },
+      "label": "gpt-6-astra@codex level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1649
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": "xhigh"
+      },
+      "label": "gpt-6-astra@codex level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2364
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": "max"
+      },
+      "label": "gpt-6-astra@codex level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2179
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-6-astra",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-6-astra@codex tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gpt-6-astra@codex",
+      "resolved_provider": "codex",
+      "api_model": "gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 5154
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-astra@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2820,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-6-astra@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1251,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-6-astra@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1119,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-6-astra@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2371,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-6-astra@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1501,
+      "input_tokens": 12,
+      "output_tokens": 19
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": "max"
+      },
+      "label": "gpt-6-astra@openrouter level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1567,
+      "input_tokens": 12,
+      "output_tokens": 24
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-6-astra",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-astra@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gpt-6-astra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-astra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3512,
+      "input_tokens": 202,
+      "output_tokens": 39
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-luna@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 854,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-6-luna@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1224,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-6-luna@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1274,
+      "input_tokens": 12,
+      "output_tokens": 16
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-6-luna@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1041,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-6-luna@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1201,
+      "input_tokens": 12,
+      "output_tokens": 17
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": "max"
+      },
+      "label": "gpt-6-luna@openrouter level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1315,
+      "input_tokens": 12,
+      "output_tokens": 19
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-6-luna",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-luna@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gpt-6-luna@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-luna",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1965,
+      "input_tokens": 206,
+      "output_tokens": 43
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-sol@openrouter level=default",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1025,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-6-sol@openrouter level=low",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 901,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-6-sol@openrouter level=medium",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 898,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-6-sol@openrouter level=high",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 798,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-6-sol@openrouter level=xhigh",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 883,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": "max"
+      },
+      "label": "gpt-6-sol@openrouter level=max",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1074,
+      "input_tokens": 12,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-6-sol",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-sol@openrouter tool-roundtrip",
+      "status": "pass",
+      "text_excerpt": "The secret word is **pineapple**.",
+      "resolved_model": "gpt-6-sol@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-sol",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 2442,
+      "input_tokens": 202,
+      "output_tokens": 39
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-terra",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-terra@openrouter level=default",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://openrouter.ai/api/v1/responses\": 400 Bad Request {\"message\":\"openai/gpt-6-terra is not a valid model ID\",\"code\":400}",
+      "resolved_model": "gpt-6-terra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 21
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-terra",
+        "provider": "openrouter",
+        "level": "low"
+      },
+      "label": "gpt-6-terra@openrouter level=low",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://openrouter.ai/api/v1/responses\": 400 Bad Request {\"message\":\"openai/gpt-6-terra is not a valid model ID\",\"code\":400}",
+      "resolved_model": "gpt-6-terra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-terra",
+      "effective_thinking": "low",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 20
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-terra",
+        "provider": "openrouter",
+        "level": "medium"
+      },
+      "label": "gpt-6-terra@openrouter level=medium",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://openrouter.ai/api/v1/responses\": 400 Bad Request {\"message\":\"openai/gpt-6-terra is not a valid model ID\",\"code\":400}",
+      "resolved_model": "gpt-6-terra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 17
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-terra",
+        "provider": "openrouter",
+        "level": "high"
+      },
+      "label": "gpt-6-terra@openrouter level=high",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://openrouter.ai/api/v1/responses\": 400 Bad Request {\"message\":\"openai/gpt-6-terra is not a valid model ID\",\"code\":400}",
+      "resolved_model": "gpt-6-terra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-terra",
+      "effective_thinking": "high",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 19
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-terra",
+        "provider": "openrouter",
+        "level": "xhigh"
+      },
+      "label": "gpt-6-terra@openrouter level=xhigh",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://openrouter.ai/api/v1/responses\": 400 Bad Request {\"message\":\"openai/gpt-6-terra is not a valid model ID\",\"code\":400}",
+      "resolved_model": "gpt-6-terra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-terra",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 18
+    },
+    {
+      "cell": {
+        "kind": "basic",
+        "model": "gpt-6-terra",
+        "provider": "openrouter",
+        "level": "max"
+      },
+      "label": "gpt-6-terra@openrouter level=max",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://openrouter.ai/api/v1/responses\": 400 Bad Request {\"message\":\"openai/gpt-6-terra is not a valid model ID\",\"code\":400}",
+      "resolved_model": "gpt-6-terra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-terra",
+      "effective_thinking": "max",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 26
+    },
+    {
+      "cell": {
+        "kind": "tool",
+        "model": "gpt-6-terra",
+        "provider": "openrouter",
+        "level": ""
+      },
+      "label": "gpt-6-terra@openrouter tool-roundtrip",
+      "status": "fail",
+      "class": "driver-bug",
+      "error": "POST \"https://openrouter.ai/api/v1/responses\": 400 Bad Request {\"message\":\"openai/gpt-6-terra is not a valid model ID\",\"code\":400}",
+      "note": "turn 1",
+      "resolved_model": "gpt-6-terra@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "openai/gpt-6-terra",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 19
+    },
+    {
+      "cell": {
+        "kind": "tag",
+        "tag": "powerful",
+        "level": ""
+      },
+      "label": "tag:powerful (tag level)",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.1-fable@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-fable-5-1",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 3450,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tag",
+        "tag": "flagship",
+        "level": ""
+      },
+      "label": "tag:flagship (tag level)",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1473,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tag",
+        "tag": "moderate",
+        "level": ""
+      },
+      "label": "tag:moderate (tag level)",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-sonnet@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-sonnet-5-5",
+      "effective_thinking": "medium",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1150,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tag",
+        "tag": "fast",
+        "level": ""
+      },
+      "label": "tag:fast (tag level)",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "gemini-3.5-flash@openrouter",
+      "resolved_provider": "openrouter",
+      "api_model": "google/gemini-3.5-flash",
+      "effective_thinking": "low",
+      "effective_temperature": 1,
+      "latency_ms": 1088,
+      "input_tokens": 6,
+      "output_tokens": 71
+    },
+    {
+      "cell": {
+        "kind": "tag",
+        "tag": "cheap",
+        "level": ""
+      },
+      "label": "tag:cheap (tag level)",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-haiku-4-5-20251001",
+      "effective_temperature": 1,
+      "latency_ms": 485,
+      "input_tokens": 3,
+      "output_tokens": 6
+    },
+    {
+      "cell": {
+        "kind": "tag",
+        "tag": "reasoning",
+        "level": ""
+      },
+      "label": "tag:reasoning (tag level)",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-5.5-opus@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-opus-5-5",
+      "effective_thinking": "xhigh",
+      "temperature_omitted_by_catalog": true,
+      "latency_ms": 1555,
+      "input_tokens": 4,
+      "output_tokens": 5
+    },
+    {
+      "cell": {
+        "kind": "tag",
+        "tag": "meta",
+        "level": ""
+      },
+      "label": "tag:meta (tag level)",
+      "status": "pass",
+      "text_excerpt": "PONG",
+      "resolved_model": "claude-4.5-haiku@anthropic",
+      "resolved_provider": "anthropic",
+      "api_model": "claude-haiku-4-5-20251001",
+      "effective_temperature": 1,
+      "latency_ms": 457,
+      "input_tokens": 3,
+      "output_tokens": 6
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T16:48:09Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

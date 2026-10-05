@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Tooltip } from "../ui/Tooltip";
 import { ArrowUpRight, Play, X } from "lucide-react";
 import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import {
@@ -146,16 +147,17 @@ interface ResumeButtonProps {
 
 function ResumeButton({ daemon, onResume, busy }: ResumeButtonProps) {
   return (
-    <button
+    <Tooltip content={`Resume ${daemon.hostname}`} placement="top" delay={300} wrapperClassName="inline-flex">
+<button
       type="button"
       onClick={() => void onResume(daemon.daemonId)}
       disabled={busy}
-      title={`Resume ${daemon.hostname}`}
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-60"
     >
       <Play className="h-3.5 w-3.5" />
       <span>{busy ? "Resuming…" : `Resume ${daemon.hostname}`}</span>
     </button>
+</Tooltip>
   );
 }
 

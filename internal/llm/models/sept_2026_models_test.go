@@ -43,8 +43,9 @@ func TestClaude55SonnetProviderMappings(t *testing.T) {
 
 	assert.Equal(t, map[string]string{
 		"anthropic":  "claude-sonnet-5-5",
-		"openrouter": "anthropic/claude-sonnet-5-5",
+		"openrouter": "anthropic/claude-sonnet-5.5",
 		"reliant":    "claude-sonnet-5-5",
+		"copilot":    "claude-sonnet-5.5",
 	}, providerAPIModels(t, reg, "claude-5.5-sonnet"))
 
 	assert.Equal(t, map[string]string{
@@ -89,8 +90,8 @@ func TestGPT6NewModelProviderMappings(t *testing.T) {
 
 	for id, want := range map[string]map[string]string{
 		"gpt-6-sol":   {"openai": "gpt-6-sol", "openrouter": "openai/gpt-6-sol"},
-		"gpt-6-terra": {"openai": "gpt-6-terra", "openrouter": "openai/gpt-6-terra"},
-		"gpt-6-luna":  {"openai": "gpt-6-luna", "openrouter": "openai/gpt-6-luna"},
+		"gpt-6-terra": {"openai": "gpt-6-terra"}, // openrouter removed 2026-10-04: not served
+		"gpt-6-luna":  {"openai": "gpt-6-luna", "openrouter": "openai/gpt-6-luna", "copilot": "gpt-6-luna"},
 	} {
 		assert.Equal(t, want, providerAPIModels(t, reg, id), "%s providers", id)
 	}
@@ -149,7 +150,7 @@ func TestSept2026ModelsPinTierWinners(t *testing.T) {
 		{TagFast, []string{"openai"}, "gpt-5.4-mini"},
 		{TagCheap, []string{"openai"}, "gpt-5.4-mini"},
 
-		{TagFlagship, []string{"copilot"}, "claude-5-sonnet"},
+		{TagFlagship, []string{"copilot"}, "claude-5.5-sonnet"}, // 5.5 sits above 5 in flagship and copilot now serves it
 	}
 
 	for _, tt := range tests {

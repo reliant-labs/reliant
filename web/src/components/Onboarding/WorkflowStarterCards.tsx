@@ -9,7 +9,6 @@ import { useEffect, useState } from "react";
 import {
   ArrowRightLeft,
   BarChart3,
-  FileText,
   MessageSquare,
   Palette,
   Sparkles,
@@ -24,7 +23,6 @@ export type WorkflowStarterIntent =
   | "build_app"
   | "landing_page"
   | "pitch_deck"
-  | "blog_post"
   | "custom_workflow"
   | "migrate"
   | "plain_chat";
@@ -83,17 +81,6 @@ const STARTER_OPTIONS: StarterOption[] = [
     workflowId: "builtin://pitch-deck",
     workflowParams: { mode: "auto", ask: false },
     accent: "amber",
-  },
-  {
-    intent: "blog_post",
-    icon: FileText,
-    label: "Write docs or a blog post",
-    description:
-      "Turn source material into structured technical writing with reviewable steps.",
-    workflowId: "builtin://blog-content-pipeline",
-    workflowParams: { mode: "auto", ask: false },
-    selectedPresets: { default: "documentation" },
-    accent: "emerald",
   },
   {
     intent: "custom_workflow",

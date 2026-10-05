@@ -9,6 +9,7 @@
 package attachment
 
 import (
+	"fmt"
 	"path/filepath"
 	"strings"
 )
@@ -23,6 +24,9 @@ const (
 	TypeFileReference AttachmentType = "file_reference"
 	// TypeDocument - binary document files (PDF, etc.) sent natively to LLMs
 	TypeDocument AttachmentType = "document"
+	// TypeVideo - generated video clips. Never sent to a model; served to the
+	// UI with Range support.
+	TypeVideo AttachmentType = "video"
 	// TypeUnsupported - files that cannot be attached
 	TypeUnsupported AttachmentType = "unsupported"
 )
@@ -32,6 +36,30 @@ const (
 // read_attachment tool instead of being injected whole.
 var DocumentExtensions = map[string]bool{
 	".pdf": true,
+}
+
+// VideoExtensions are video containers the app can store and play back.
+var VideoExtensions = map[string]bool{
+	".mp4":  true,
+	".webm": true,
+	".mov":  true,
+}
+
+// MaxGeneratedArtifactBytes caps a tool-generated artifact written straight to
+// the attachments table. Tool inserts bypass the 10MB upload limit, so this is
+// their only bound.
+const MaxGeneratedArtifactBytes = 64 << 20
+
+// CheckGeneratedArtifactSize rejects an empty or over-cap tool-generated
+// artifact before it is written to the attachments table.
+func CheckGeneratedArtifactSize(n int) error {
+	if n <= 0 {
+		return fmt.Errorf("generated artifact is empty")
+	}
+	if n > MaxGeneratedArtifactBytes {
+		return fmt.Errorf("generated artifact is %d bytes, over the %d byte limit", n, MaxGeneratedArtifactBytes)
+	}
+	return nil
 }
 
 // Image extensions supported by Claude API (base64 image blocks)
@@ -216,6 +244,10 @@ func GetAttachmentType(filename string) AttachmentType {
 		return TypeImage
 	}
 
+	if VideoExtensions[ext] {
+		return TypeVideo
+	}
+
 	// Check if it's a binary document (PDF) sent natively / read on demand
 	if DocumentExtensions[ext] {
 		return TypeDocument
@@ -242,6 +274,14 @@ func GetMimeType(ext string) string {
 		return "image/gif"
 	case ".webp":
 		return "image/webp"
+
+	// Video
+	case ".mp4":
+		return "video/mp4"
+	case ".webm":
+		return "video/webm"
+	case ".mov":
+		return "video/quicktime"
 
 	// Text and data
 	case ".txt", ".text":
@@ -306,4 +346,9 @@ func SupportedExtensions() string {
 		exts = append(exts, ext)
 	}
 	return strings.Join(exts, ", ")
+}
+
+// IsVideo checks if the attachment type is a video
+func (t AttachmentType) IsVideo() bool {
+	return t == TypeVideo
 }

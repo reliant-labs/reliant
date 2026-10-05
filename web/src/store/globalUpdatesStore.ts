@@ -15,7 +15,6 @@ import { useChatStore, initGlobalUpdatesStoreRef } from "./chatStore";
 import { ChatState } from "../gen/reliant/v1/chat_pb";
 import type { Chat } from "../types/chat";
 import { useActivityStore, ChatActivity } from "./activityStore";
-import { useThreadActivityStore } from "./threadActivityStore";
 import { BackgroundProcessStatus } from "../gen/reliant/v1/common_pb";
 import { UserUpdateType } from "../gen/reliant/v1/streaming_pb";
 
@@ -28,6 +27,8 @@ import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
+import { DAEMON_LIST_QUERY_KEY } from "../hooks/useDaemonStatus";
+import { useGlobalDataStore } from "./globalDataStore";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat } from "../hooks/chat-queries";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
 import { approvalKeys } from "../hooks/approval-queries";
@@ -38,6 +39,7 @@ import { getNotificationSoundOptions, useNotificationStore } from "./notificatio
 import { triggerRefetch, type RefetchType } from "./refetchStore";
 import { setDaemonLastSeen } from "../api/grpc-client";
 import { toast } from "../lib/toast-manager";
+import { publishDraftUpdate } from "./workflowDraftUpdates";
 
 const LOG_PREFIX = "[🌐 GlobalUpdates]";
 
@@ -186,6 +188,14 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       onChatSnapshot: (updates) => get().handleChatSnapshot(updates),
       onChatPaginationInfo: (pagination) => get().handleChatPaginationInfo(pagination),
       onChatContextUsage: (contextUsage) => get().handleChatContextUsage(contextUsage),
+      // Delta resume: chatStore owns each chat's cached state, so it owns the
+      // cursor describing it and decides whether a reopen may replay.
+      onChatCursorRelease: (chatId, sequence) =>
+        useChatStore.getState().recordChatStreamCursor(chatId, sequence),
+      resolveChatResumeSequence: (chatId) =>
+        useChatStore.getState().resumeChatStreamFrom(chatId),
+      onChatSyncPending: (chatId) =>
+        useChatStore.getState().setChatSyncPending(chatId),
     });
 
     set({ wsService });
@@ -270,8 +280,11 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       chatId: oldChatId.slice(0, 8),
     });
 
-    // Clear thread activity for the old chat
-    useThreadActivityStore.getState().clearThreads(oldChatId);
+    // Thread activity is deliberately NOT cleared here. It is cached chat
+    // state like the messages, and the stream resumes this chat from a cursor
+    // on reopen: the replay re-delivers only threads that CHANGED since that
+    // cursor, so clearing here would drop every one that did not. A chat
+    // switch never cleared it either; evictChat and reset still do.
 
     set({ subscribedChatId: null });
 
@@ -361,6 +374,19 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
         case UserUpdateType.NOTIFICATION:
           handleNotification(update);
           break;
+        case UserUpdateType.WORKFLOW_DRAFT_UPDATED: {
+          const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
+          const draftId = (data?.draft_id as string | undefined) || update.entity_id;
+          if (draftId) {
+            publishDraftUpdate({
+              draftId,
+              slug: (data?.slug as string | undefined) ?? "",
+              version: Number(data?.version ?? 0),
+              ...(data?.deleted === true ? { deleted: true } : {}),
+            });
+          }
+          break;
+        }
         case UserUpdateType.DAEMON_HEARTBEAT: {
           const data = typeof update.data === "string" ? JSON.parse(update.data) : update.data;
           if (data?.last_heartbeat) {
@@ -1179,7 +1205,15 @@ function handleNotification(update: UserUpdate) {
  * Routes to the refetchStore which notifies subscribed components.
  */
 function handleRefetch(update: UserUpdate) {
-  const refetchType = update.data?.type as RefetchType | undefined;
+  const rawType = update.data?.type as string | undefined;
+  if (rawType === "daemon_local_models") {
+    // A daemon's local model inventory changed: the Local models section
+    // reads it from the daemon list, and the picker lists the models.
+    void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+    void useGlobalDataStore.getState().refetchModels();
+    return;
+  }
+  const refetchType = rawType as RefetchType | undefined;
   if (!refetchType) {
     logger.warn(`${LOG_PREFIX} Received refetch event with no type`, { data: update.data });
     return;

@@ -466,6 +466,13 @@ type ModelCapabilities struct {
 	// YAML key: output_modalities
 	// Default: [text]
 	OutputModalities []Modality `yaml:"output_modalities,omitempty" json:"output_modalities,omitempty" mapstructure:"output_modalities"`
+
+	// Video declares what a video-generation model accepts. Nil for every
+	// non-video model. Request validation (ValidateVideoRequest) runs against
+	// this block so the tool needs no per-model branches.
+	//
+	// YAML key: video
+	Video *VideoCapabilities `yaml:"video,omitempty" json:"video,omitempty" mapstructure:"video"`
 }
 
 // ProviderMapping maps a model to a specific provider's API format.
@@ -663,7 +670,6 @@ const (
 	TagFast      = "fast"      // Quick responses
 	TagCheap     = "cheap"     // Lowest cost
 	TagReasoning = "reasoning" // Extended thinking capability
-	TagLocal     = "local"     // Runs locally
 	TagMeta      = "meta"      // For internal operations
 )
 

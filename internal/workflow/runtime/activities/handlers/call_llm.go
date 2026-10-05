@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"net/http"
 
 	"encoding/json"
 	"errors"
@@ -27,9 +28,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/skills/suggest"
+	"github.com/reliant-labs/reliant/internal/tokenauthority"
 
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -126,6 +129,36 @@ type CallLLMActivity struct {
 	configProvider cfgpkg.ConfigProvider
 	driverResolver drivers.DriverResolver
 	mcpBinder      toolexec.MCPContextBinder
+	// localRelay carries local-model HTTP to the daemon that serves it; nil
+	// where no daemon router exists, in which case local models are unavailable.
+	localRelay toolexec.LocalModelRelay
+}
+
+// WithLocalModels wires the daemon relay local models are reached through.
+func (a *CallLLMActivity) WithLocalModels(relay toolexec.LocalModelRelay) *CallLLMActivity {
+	a.localRelay = relay
+	return a
+}
+
+// localModelSpec is what resolving a "<name>@local" selector needs. Without a
+// relay, detected local models and via-machine endpoints report themselves
+// unavailable; endpoints reached directly still work.
+func (a *CallLLMActivity) localModelSpec(preferDaemonID string) *LocalModelSpec {
+	var relay local.TransportFactory
+	if a.localRelay != nil {
+		relay = func(userID, daemonID, endpointID string) http.RoundTripper {
+			return toolexec.NewLocalModelTransport(a.localRelay, userID, daemonID, endpointID)
+		}
+	}
+	return &LocalModelSpec{
+		Directory:      local.NewRepoDirectory(a.repo),
+		Transport:      relay,
+		PreferDaemonID: preferDaemonID,
+		Custom: &local.CustomRoutes{
+			Relay:  relay,
+			Policy: netguard.ForDeployment(tokenauthority.ControlPlaneURL()),
+		},
+	}
 }
 
 // NewCallLLMActivity creates a new CallLLMActivity.
@@ -188,7 +221,41 @@ func explicitCompactionThresholdArg(args *reliantv1.CallLLMArgs) int32 {
 	if explicitCompactionThresholdIsSet(args) {
 		return int32(model.CelIntValue(args.GetCompactionThreshold()))
 	}
+	if ct := model.CelModelSelectorValue(args.GetModel()).GetCompactionThreshold(); ct > 0 {
+		return ct
+	}
 	return DefaultCompactionThreshold
+}
+
+// compactionThresholdIsSet reports whether the threshold comes from the node
+// arg or the model value (as opposed to being derived from the resolved model).
+func compactionThresholdIsSet(args *reliantv1.CallLLMArgs) bool {
+	return explicitCompactionThresholdIsSet(args) ||
+		model.CelModelSelectorValue(args.GetModel()).GetCompactionThreshold() > 0
+}
+
+// explicitSamplingOverrides applies precedence: node arg (author pinned) >
+// model value. A nil temperature / empty level means "use the default".
+func explicitSamplingOverrides(args *reliantv1.CallLLMArgs) (*float64, string) {
+	var temperature *float64
+	var thinkingLevel string
+	if ms := model.CelModelSelectorValue(args.GetModel()); ms != nil {
+		if ms.Temperature != nil {
+			v := ms.GetTemperature()
+			temperature = &v
+		}
+		thinkingLevel = ms.GetThinkingLevel()
+	}
+	if model.CelDoubleIsSet(args.GetTemperature()) && !model.CelDoubleIsExpr(args.GetTemperature()) {
+		v := model.CelDoubleValue(args.GetTemperature())
+		temperature = &v
+	}
+	if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
+		if v := model.CelStringValue(args.GetThinkingLevel()); v != "" {
+			thinkingLevel = v
+		}
+	}
+	return temperature, thinkingLevel
 }
 
 // executeCore contains PURE BUSINESS LOGIC only
@@ -863,15 +930,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if err != nil {
 		return nil, fmt.Errorf("failed to load project config: %w", err)
 	}
-	if err := models.InitGlobalRegistryWithDiscovery(projectCfg.Models, local.DiscoverModels); err != nil {
-		return nil, fmt.Errorf("failed to initialize model registry from project config: %w", err)
-	}
-	if projectCfg.Models != nil && projectCfg.Models.Providers.Local != nil {
-		local.SetLocalConfig(projectCfg.Models.Providers.Local)
-		if err := local.DiscoverAndRegisterModels(projectCfg.Models.Providers.Local.BaseURL); err != nil {
-			activity.GetLogger(ctx).Warn("failed to register local models with driver", "error", err)
-		}
-	}
 
 	// Load worktree path if applicable
 	var worktreePath string
@@ -902,16 +960,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// the model default" — resolveLLMCall (the request-construction path
 	// shared with Compact) layers model defaults and reconciles the thinking
 	// level against model capabilities the same way for every caller.
-	var explicitTemperature *float64
-	// Temperature 0.0 means "not set, use model default"
-	if model.CelDoubleIsSet(args.GetTemperature()) && !model.CelDoubleIsExpr(args.GetTemperature()) && model.CelDoubleValue(args.GetTemperature()) != 0.0 {
-		v := model.CelDoubleValue(args.GetTemperature())
-		explicitTemperature = &v
-	}
-	var explicitThinkingLevel string
-	if model.CelStringIsSet(args.GetThinkingLevel()) && !model.CelStringIsExpr(args.GetThinkingLevel()) {
-		explicitThinkingLevel = model.CelStringValue(args.GetThinkingLevel())
-	}
+	explicitTemperature, explicitThinkingLevel := explicitSamplingOverrides(args)
 	var explicitMaxTokens *int64
 	if model.CelIntIsSet(args.GetMaxTokens()) {
 		v := model.CelIntValue(args.GetMaxTokens())
@@ -922,18 +971,27 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// When a custom driver resolver is injected (e.g., in tests), it skips
 	// registry resolution and probes the resolver for its model.
 	resolved, err := resolveLLMCall(ctx, a.driverResolver, llmCallSpec{
-		UserID:        chat.UserID,
-		SessionID:     chat.ID,
-		Selector:      modelSelector,
-		Temperature:   explicitTemperature,
-		ThinkingLevel: explicitThinkingLevel,
-		MaxTokens:     explicitMaxTokens,
-		WorkingDir:    workingDir,
+		UserID:         chat.UserID,
+		SessionID:      chat.ID,
+		Selector:       modelSelector,
+		Temperature:    explicitTemperature,
+		ThinkingLevel:  explicitThinkingLevel,
+		MaxTokens:      explicitMaxTokens,
+		WorkingDir:     workingDir,
+		TagPrefsReader: a.repo,
+		Local:          a.localModelSpec(worktreeDaemonID),
 	})
 	if err != nil {
 		return nil, err
 	}
 	driver := resolved.Driver
+
+	// Precedence for the compaction threshold: node arg > model value > the
+	// user's tag preference > derived from the model's window (below).
+	if !compactionThresholdIsSet(args) && resolved.TagCompactionThreshold > 0 {
+		effectiveCompactionThreshold = resolved.TagCompactionThreshold
+	}
+	compactionThresholdPinned := compactionThresholdIsSet(args) || resolved.TagCompactionThreshold > 0
 
 	// Capture the concrete model that will serve this completion so the inline
 	// save_message can persist it onto messages.model. This is the resolved
@@ -961,7 +1019,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// provider-effective window is what makes a small-window provider (e.g.
 		// "@codex", which caps GPT-5.x far below its platform window) compact
 		// before it overflows. See models.CompactionThresholdForProvider.
-		if !explicitCompactionThresholdIsSet(args) {
+		if !compactionThresholdPinned {
 			effectiveCompactionThreshold = int32(models.CompactionThresholdForProvider(resolved.Definition, resolved.ProviderDriver))
 		}
 	} else {
@@ -972,7 +1030,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// derive the threshold from the resolved model's context window when it
 		// is known, otherwise the global default stands. An explicit per-node
 		// arg still wins.
-		if !explicitCompactionThresholdIsSet(args) {
+		if !compactionThresholdPinned {
 			effectiveCompactionThreshold = int32(models.DeriveCompactionThreshold(int(resolved.Model.ContextWindow)))
 		}
 	}

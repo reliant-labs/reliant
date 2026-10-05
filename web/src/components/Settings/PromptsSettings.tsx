@@ -11,6 +11,7 @@ interface Prompt {
   category?: string;
 }
 import { Plus, Trash2, Loader2 } from "lucide-react";
+import { SettingsPageHeader } from "./SettingsPageHeader";
 
 interface PromptsSettingsProps {
   projectId?: string;
@@ -137,8 +138,10 @@ export function PromptsSettings({ projectId }: PromptsSettingsProps) {
   return (
     <div className="space-y-4">
       <div data-onboarding="prompts-settings">
-        <h2 className="text-base font-semibold">Prompts</h2>
-        <p className="text-sm text-muted-foreground">Create reusable preambles and instructions to quickly compose better messages.</p>
+        <SettingsPageHeader
+        title="Prompts"
+        description="Save snippets of instructions you type often, like a code-review checklist or a house style, so you can drop them into any message instead of retyping them."
+      />
       </div>
 
       <div className="flex gap-2 items-center">

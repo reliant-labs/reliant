@@ -1523,6 +1523,46 @@ func (m *BackgroundManager) UnsubscribeFromOutput(sub *OutputSubscription) {
 		"subscriberID", sub.SubscriberID)
 }
 
+// ProcessOutcome is a consistent snapshot of one process's lifecycle fields.
+type ProcessOutcome struct {
+	Status   string
+	ExitCode *int
+	EndTime  *time.Time
+}
+
+// ProcessOutcomes reports the lifecycle state of the requested processes, and
+// which of them this manager has no record of.
+//
+// Unlike GetProcess / GetAllProcesses it never refreshes ports: that is an OS
+// scan per process, and a caller asking only "has this ended?" for many ids
+// must not pay for it. Each snapshot is read under the process's own outputMu,
+// the lock the completion, kill and external-death paths write under.
+func (m *BackgroundManager) ProcessOutcomes(processIDs []string) (map[string]ProcessOutcome, []string) {
+	m.mu.RLock()
+	tracked := make(map[string]*BackgroundProcess, len(processIDs))
+	var unknown []string
+	for _, id := range processIDs {
+		if process, ok := m.processes[id]; ok {
+			tracked[id] = process
+		} else {
+			unknown = append(unknown, id)
+		}
+	}
+	m.mu.RUnlock()
+
+	outcomes := make(map[string]ProcessOutcome, len(tracked))
+	for id, process := range tracked {
+		process.outputMu.RLock()
+		outcomes[id] = ProcessOutcome{
+			Status:   process.Status,
+			ExitCode: process.ExitCode,
+			EndTime:  process.EndTime,
+		}
+		process.outputMu.RUnlock()
+	}
+	return outcomes, unknown
+}
+
 // GetProcessStatus returns the current status and completion state of a process
 func (m *BackgroundManager) GetProcessStatus(processID string) (status string, isComplete bool, exitCode *int, err error) {
 	process, err := m.GetProcess(processID)

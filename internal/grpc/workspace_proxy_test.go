@@ -5,6 +5,7 @@ import (
 	"context"
 	"testing"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -91,4 +92,11 @@ func TestPickPackageCommandsService(t *testing.T) {
 	} else if _, ok := got.(*services.PackageCommandsProxyService); !ok {
 		t.Fatalf("router != nil: expected *services.PackageCommandsProxyService, got %T", got)
 	}
+}
+
+func (stubDaemonRouter) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*toolexec.LocalModelHTTPStream, error) {
+	return nil, nil
+}
+func (stubDaemonRouter) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
+	return nil, nil
 }

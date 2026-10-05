@@ -46,6 +46,7 @@ func (s *agentMessageStore) EnqueueAgentMessage(ctx context.Context, msg *core.A
 		Status:       int32(msg.Status),
 		CreatedAt:    msg.CreatedAt,
 		Attachments:  attachments,
+		Synthesized:  msg.Synthesized,
 	})
 }
 
@@ -70,6 +71,7 @@ func (s *agentMessageStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg
 		Status:       int32(msg.Status),
 		CreatedAt:    msg.CreatedAt,
 		Attachments:  attachments,
+		Synthesized:  msg.Synthesized,
 	})
 	if err == sql.ErrNoRows {
 		return false, nil
@@ -78,6 +80,38 @@ func (s *agentMessageStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg
 		return false, err
 	}
 	return true, nil
+}
+
+// EnqueueSpawnReport maps the upsert's three outcomes: a row with inserted =
+// true, a row with inserted = false (superseded a placeholder), or no row
+// (sql.ErrNoRows: a real report already holds the slot).
+func (s *agentMessageStore) EnqueueSpawnReport(ctx context.Context, msg *core.AgentMessage) (core.SpawnReportOutcome, error) {
+	attachments, err := agentMessageAttachmentsToNullRawMessage(msg.Attachments)
+	if err != nil {
+		return 0, err
+	}
+	row, err := s.q.EnqueueSpawnReport(ctx, pgdb.EnqueueSpawnReportParams{
+		ID:           msg.ID,
+		ChatID:       msg.ChatID,
+		FromThreadID: msg.FromThreadID,
+		ToThreadID:   msg.ToThreadID,
+		Kind:         int32(msg.Kind),
+		Body:         msg.Body,
+		ToolCallID:   agentMessagePtrToNullString(msg.ToolCallID),
+		Status:       int32(msg.Status),
+		CreatedAt:    msg.CreatedAt,
+		Attachments:  attachments,
+	})
+	if err == sql.ErrNoRows {
+		return core.SpawnReportAlreadyReported, nil
+	}
+	if err != nil {
+		return 0, err
+	}
+	if row.Inserted {
+		return core.SpawnReportInserted, nil
+	}
+	return core.SpawnReportSuperseded, nil
 }
 
 func (s *agentMessageStore) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*core.AgentMessage, error) {
@@ -209,6 +243,7 @@ func agentMessageFromPG(row pgdb.AgentMessage) *core.AgentMessage {
 		CreatedAt:          row.CreatedAt,
 		DeliveredAt:        agentMessageNullTimeToPtr(row.DeliveredAt),
 		DeliveredMessageID: agentMessageNullStringToPtr(row.DeliveredMessageID),
+		Synthesized:        row.Synthesized,
 	}
 }
 

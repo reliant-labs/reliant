@@ -80,6 +80,9 @@ export interface ToolExecutionStateUpdate {
   // only producer is the stream-abort pass, which cancels tools that had not
   // reported an outcome when their stream ended. See ToolCallState.inferred.
   inferred?: boolean;
+  // For a spawn call, the child workflow (= thread) it started. See
+  // ToolCallState.childWorkflowId.
+  child_workflow_id?: string;
 }
 import { triggerRefetch, type RefetchType } from "../store/refetchStore";
 
@@ -698,6 +701,17 @@ const OLDER_MESSAGES_PAGE_SIZE = 100;
 // bookkeeping that no component renders, so it must not trigger re-renders.
 const olderMessagesInFlight = new Set<string>();
 
+// Per-chat stream resume cursor: the chat update sequence this store's cached
+// state for the chat is current as of, recorded when the stream leaves the
+// chat. Reopening the chat resumes the stream from it (an incremental replay)
+// instead of a full snapshot.
+//
+// The cursor is only as good as the state it describes, so it lives beside
+// that state and dies with it: evictChat, reset and forceResetChatToIdle all
+// drop it, and resumeChatStreamFrom refuses one whose message cache is gone.
+// Module-scoped for the same reason as olderMessagesInFlight: nothing renders
+// it.
+const chatStreamCursors = new Map<string, bigint>();
 
 
 // Helper to check if content blocks indicate a streaming (incomplete) message
@@ -761,6 +775,12 @@ export interface ToolCallState {
   // An inferred cancel therefore yields to a real outcome, while a cancel the
   // server reported outranks a completion racing in behind it.
   inferred?: boolean;
+  // For a spawn call, the workflow it started — and, since a spawned
+  // sub-agent's thread id equals its workflow id, the thread its card
+  // previews. Delivered live on the spawn's tool_call status event, because
+  // the persisted tool-call block predates the spawn and never carries it.
+  // A durable fact: once known it is never cleared by a later status.
+  childWorkflowId?: string;
   error?: string;
   // Unified approval state
   approval?: ToolApprovalRequest;
@@ -895,6 +915,17 @@ interface ChatStoreState {
   // activity goes IDLE — the authoritative "nothing is streaming" signal —
   // so stale delta tails can't leave a phantom message at the end of the chat.
   clearStreamingState: (chatId: string) => void;
+  // Stream resume (see chatStreamCursors). The stream records the cursor of
+  // the chat it is leaving, and asks for one when entering a chat: the
+  // sequence to replay from, or 0n for a full snapshot.
+  recordChatStreamCursor: (chatId: string, sequence: bigint) => void;
+  resumeChatStreamFrom: (chatId: string) => bigint;
+  // The chat whose cached content is on screen while its sync for the current
+  // subscription is still outstanding (null: none). Drives the transcript's
+  // syncing indicator. Never set for a chat with no cached content — the
+  // ordinary loading state covers that.
+  chatSyncPendingId: string | null;
+  setChatSyncPending: (chatId: string | null) => void;
 
   // Chat control methods
   cancelChat: (chatId: string) => Promise<void>;
@@ -1097,6 +1128,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   contextUsage: {}, // Context usage tracking for compaction indicator
   toolResultsByCallId: {}, // Normalized tool results per chat, keyed by tool_call_id
   activeChatId: null,
+  chatSyncPendingId: null,
   hasLoaded: false,
   error: null,
   pendingStatusFetches: {},
@@ -2229,6 +2261,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
                 toolCall.started_at ||
                 toolCall.completed_at ||
                 new Date().toISOString(),
+              child_workflow_id: toolCall.child_workflow_id,
             } as ToolExecutionStateUpdate;
 
             return toolUpdate;
@@ -2801,7 +2834,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // The in-flight streaming placeholder lives ONLY in the
         // streamingMessages slice (written below), never in the persisted
         // messages array. The render layer composes the two at display time
-        // (see ChatContainer / WorkflowBuilderChat). This keeps persisted
+        // (see ChatContainer). This keeps persisted
         // messages as server-truth and the ephemeral placeholder as the sole
         // owner of in-progress content — no double-storage, no
         // streaming-temp bookkeeping in the messages array.
@@ -3205,6 +3238,46 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     });
   },
 
+  recordChatStreamCursor: (chatId: string, sequence: bigint) => {
+    // A cursor without cached state to stand behind it would replay updates
+    // onto an empty list and render a fragment as the whole chat.
+    if (sequence > 0n && hasMessagesCache(chatId)) {
+      chatStreamCursors.set(chatId, sequence);
+    } else {
+      chatStreamCursors.delete(chatId);
+    }
+  },
+
+  resumeChatStreamFrom: (chatId: string) => {
+    const cursor = chatStreamCursors.get(chatId);
+    if (cursor === undefined) return 0n;
+    // Consumed on use: from here the stream owns the cursor, and it is
+    // recorded afresh when the stream leaves the chat. Leaving a stale copy
+    // here would let a later reopen rewind to it.
+    chatStreamCursors.delete(chatId);
+    if (!hasMessagesCache(chatId)) return 0n;
+    // An optimistic user message is local-only: no cursor describes it. A
+    // replay retires it only when the real message arrives, so one stranded
+    // by a failed send would outlive the reopen. A snapshot replaces it.
+    if (
+      getMessagesFromCache(chatId).some((m) =>
+        m.id.startsWith("optimistic-user-"),
+      )
+    ) {
+      return 0n;
+    }
+    return cursor;
+  },
+
+  setChatSyncPending: (chatId: string | null) => {
+    // Only cached content needs the indicator: a chat with nothing on screen
+    // shows its ordinary loading state instead.
+    const next =
+      chatId !== null && getMessagesFromCache(chatId).length > 0 ? chatId : null;
+    if (get().chatSyncPendingId === next) return;
+    set({ chatSyncPendingId: next });
+  },
+
   // Cancel chat - cancels all sessions in the chat
   cancelChat: async (chatId: string) => {
     const projectId = useProjectStore.getState().currentProject?.id;
@@ -3372,6 +3445,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     logger.warn("⚠️ Force resetting chat to idle state (recovery mode):", {
       chatId: chatId.slice(0, 8),
     });
+
+    // The edits below diverge local state from the server's, so it no longer
+    // matches any cursor — the next open must take a snapshot.
+    chatStreamCursors.delete(chatId);
 
     // Clear thread activity in the dedicated store
     useThreadActivityStore.getState().clearThreads(chatId);
@@ -3730,6 +3807,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // delete would otherwise be the only thing clearing this, and an aborted
     // teardown would leave a tombstone that blocks paging if the chat returns.
     olderMessagesInFlight.delete(chatId);
+    // The cursor describes the state being dropped here; without it a reopen
+    // must start from a snapshot.
+    chatStreamCursors.delete(chatId);
     useThreadActivityStore.getState().clearThreads(chatId);
 
     const omit = <T>(record: Record<string, T>): Record<string, T> => {
@@ -3773,6 +3853,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Clear module-scoped set that tracks processed task tool calls
     processedTaskToolCallIds.clear();
     olderMessagesInFlight.clear();
+    chatStreamCursors.clear();
 
     // Drop the homed Chat objects from the React Query caches (the single
     // source of truth) so a logout clears chat data everywhere.
@@ -3793,6 +3874,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       toolResultsByCallId: {},
       toolCallStates: {},
       activeChatId: null,
+      chatSyncPendingId: null,
       hasLoaded: false,
       error: null,
       pendingStatusFetches: {},

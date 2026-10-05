@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 // DynamicInput - Wrapper that enables CEL expression mode for non-string inputs
 
+import { Tooltip } from "../ui/Tooltip";
 import { useState, useRef, useEffect } from "react";
 import type { ReactNode } from "react";
 import { Code, ChevronDown } from "lucide-react";
@@ -235,18 +236,18 @@ export function DynamicInput({
 
           {/* Suggestions dropdown trigger */}
           {suggestions.length > 0 && !disabled && (
-            <button
+            <Tooltip content="Insert parameter" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
               type="button"
               onClick={() => setShowSuggestions(!showSuggestions)}
               className={cn(
                 "absolute right-1 top-1/2 -translate-y-1/2 p-1 rounded",
                 "text-muted-foreground hover:text-foreground hover:bg-muted/50",
                 "transition-colors",
-              )}
-              title="Insert parameter"
-            >
+              )} aria-label="Insert parameter">
               <ChevronDown className="w-4 h-4" />
             </button>
+</Tooltip>
           )}
 
           {/* Suggestions dropdown */}
@@ -275,18 +276,18 @@ export function DynamicInput({
 
         {/* CEL mode toggle (active) - hidden when disabled */}
         {!shouldHideToggle && (
-          <button
+          <Tooltip content="Switch to literal value" placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+<button
             type="button"
             onClick={handleToggle}
-            title="Switch to literal value"
             className={cn(
               "p-1.5 rounded transition-colors flex-shrink-0",
               "bg-amber-100 dark:bg-amber-900/40 text-amber-700 dark:text-amber-400",
               "hover:bg-amber-200 dark:hover:bg-amber-800/50",
-            )}
-          >
+            )} aria-label="Switch to literal value">
             <Code className="w-4 h-4" />
           </button>
+</Tooltip>
         )}
       </div>
     );
@@ -305,17 +306,17 @@ export function DynamicInput({
 
       {/* CEL mode toggle (inactive) - hidden when disabled */}
       {!shouldHideToggle && (
-        <button
+        <Tooltip content="Switch to dynamic expression" placement="bottom" delay={300} wrapperClassName="inline-flex flex-shrink-0">
+<button
           type="button"
           onClick={handleToggle}
-          title="Switch to dynamic expression"
           className={cn(
             "p-1.5 rounded transition-colors flex-shrink-0",
             "text-muted-foreground hover:text-foreground hover:bg-muted/50",
-          )}
-        >
+          )} aria-label="Switch to dynamic expression">
           <Code className="w-4 h-4" />
         </button>
+</Tooltip>
       )}
     </div>
   );

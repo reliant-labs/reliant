@@ -356,14 +356,18 @@ func (c *Client) buildEnvelope(messages []message.Message, prompts []string, too
 		temp := *c.options.Temperature
 		generation.Temperature = &temp
 	}
-	// Thinking budget and the effort suffix are SEPARATE controls that both
-	// travel: the suffix picks the effort variant, the budget (-1) leaves the
-	// amount unbounded, exactly as the capture does.
+	// The effort suffix picks the model variant and thinkingLevel repeats it in
+	// the request. A dynamic thinkingBudget (-1) must NOT be sent: live samples
+	// showed it overrides the level (thought tokens flat across low/high).
 	if effort := strings.ToLower(c.options.ReasoningEffort); effort != "" && effort != "disabled" {
-		generation.ThinkingConfig = &thinkingConfig{
-			IncludeThoughts: true,
-			ThinkingBudget:  unboundedThinkingBudget,
+		thinking := &thinkingConfig{IncludeThoughts: true}
+		if c.requestModelID() != c.options.Model.APIModel {
+			thinking.ThinkingLevel = effort
+		} else {
+			budget := unboundedThinkingBudget
+			thinking.ThinkingBudget = &budget
 		}
+		generation.ThinkingConfig = thinking
 	}
 
 	return &requestEnvelope{
@@ -454,9 +458,12 @@ func usage(resp *generateResp) llm.TokenUsage {
 	}
 	m := resp.UsageMetadata
 	return llm.TokenUsage{
-		TokenCount:           m.TotalTokenCount,
-		InputTokens:          m.PromptTokenCount,
-		OutputTokens:         m.CandidatesTokenCount,
+		TokenCount:  m.TotalTokenCount,
+		InputTokens: m.PromptTokenCount,
+		// Thought tokens are generated and billed as output but reported apart
+		// from candidatesTokenCount.
+		OutputTokens:         m.CandidatesTokenCount + m.ThoughtsTokenCount,
+		ReasoningTokens:      m.ThoughtsTokenCount,
 		CachedInputTokens:    m.CachedContentTokenCount,
 		CacheReadInputTokens: m.CachedContentTokenCount,
 	}

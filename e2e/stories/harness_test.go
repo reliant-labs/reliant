@@ -140,6 +140,7 @@ type Harness struct {
 
 	ChatSvc     *services.ChatService
 	QuestionSvc *services.QuestionService
+	ApprovalSvc *services.ApprovalService
 	Pause       *workflow.PauseService
 
 	// Ctx carries the story's user identity, exactly as the auth interceptor
@@ -248,6 +249,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// it is nil.
 	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
+	approvalSvc := services.NewApprovalService(s.Repo, pause)
 
 	return &Harness{
 		T:           t,
@@ -258,6 +260,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 		LLM:         llmScript,
 		ChatSvc:     chatSvc,
 		QuestionSvc: questionSvc,
+		ApprovalSvc: approvalSvc,
 		Pause:       pause,
 		Ctx:         ctx,
 	}
@@ -492,6 +495,24 @@ func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 		return true, ""
 	})
 	return q
+}
+
+// WaitPendingApproval polls until the chat has exactly one pending approval.
+func (h *Harness) WaitPendingApproval(chatID string) *db.Approval {
+	h.T.Helper()
+	var approval *db.Approval
+	h.eventually("pending approval on chat "+chatID, func() (bool, string) {
+		pending, err := h.Stack.Repo.ListPendingApprovalsByChat(h.Ctx, chatID)
+		if err != nil {
+			return false, fmt.Sprintf("list pending approvals: %v", err)
+		}
+		if len(pending) != 1 {
+			return false, fmt.Sprintf("%d pending approvals", len(pending))
+		}
+		approval = pending[0]
+		return true, ""
+	})
+	return approval
 }
 
 // Messages returns the chat's messages on the root thread, ordinal-ordered,

@@ -367,6 +367,7 @@ export function ChatHeader({
               {/* Menu button - right after title */}
               {!isNewChat && chatId && (
                 <div className="relative flex-shrink-0" ref={menuRef}>
+<Tooltip content="Chat options" placement="bottom" delay={300} wrapperClassName="inline-flex">
                   <button 
                     onClick={() => setIsMenuOpen(!isMenuOpen)}
                     className="p-1 hover:bg-accent rounded transition-colors"
@@ -374,6 +375,7 @@ export function ChatHeader({
                   >
                     <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
                   </button>
+</Tooltip>
                   
                   {/* Dropdown menu */}
                   {isMenuOpen && (

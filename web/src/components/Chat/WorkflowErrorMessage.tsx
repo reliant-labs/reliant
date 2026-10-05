@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Tooltip } from "../ui/Tooltip";
 import { cn } from '../../lib/utils';
 import { ChevronDown, ChevronRight, AlertTriangle, RotateCw, Copy, Check } from 'lucide-react';
 import type { ErrorUpdate } from '../../types/streaming';
@@ -158,10 +159,10 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
       {isExpanded && (
         <div className="p-3 elevation-1 space-y-2">
           <div className="flex justify-end mb-2">
-            <button
+            <Tooltip content={copied ? 'Copied!' : 'Copy error details'} placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
               onClick={handleCopy}
               className="flex items-center gap-1 px-2 py-1 text-xs rounded hover:bg-background/50 transition-colors text-muted-foreground"
-              title={copied ? 'Copied!' : 'Copy error details'}
               aria-label={copied ? 'Copied!' : 'Copy error details'}
             >
               {copied ? (
@@ -176,6 +177,7 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
                 </>
               )}
             </button>
+</Tooltip>
           </div>
 
           <div>

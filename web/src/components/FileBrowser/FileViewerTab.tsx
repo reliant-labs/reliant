@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef, useCallback } from "react";
+import { Tooltip } from "../ui/Tooltip";
 import {
   Save,
   Loader2,
@@ -1068,25 +1069,25 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           </div>
           <div className="flex items-center gap-2">
             {hasChanges && (
-              <button
+              <Tooltip content="Undo all changes and revert to saved version" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                 onClick={handleRevert}
                 className="flex items-center gap-1.5 px-2 py-1.5 rounded hover:bg-muted transition-colors text-muted-foreground hover:text-foreground hover:bg-destructive/10 hover:text-destructive"
-                title="Undo all changes and revert to saved version"
               >
                 <RotateCcw className="w-4 h-4" />
                 <span className="text-xs">Undo</span>
               </button>
+</Tooltip>
             )}
             {!settings.autoSave && hasChanges && (
-              <button
+              <Tooltip content="Save (Cmd+S / Ctrl+S)" placement="bottom" delay={300} wrapperClassName="inline-flex">
+<button
                 onClick={() => void handleSave()}
                 disabled={isSaving}
                 className={cn(
                   "flex items-center gap-1.5 px-3 py-1.5 rounded text-xs font-medium transition-colors",
                   "bg-primary text-primary-foreground hover:bg-primary/90"
-                )}
-                title="Save (Cmd+S / Ctrl+S)"
-              >
+                )} aria-label="Save (Cmd+S / Ctrl+S)">
                 {isSaving ? (
                   <Loader2 className="w-3 h-3 animate-spin" />
                 ) : saveSuccess ? (
@@ -1096,6 +1097,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
                 )}
                 {isSaving ? "Saving..." : saveSuccess ? "Saved!" : "Save"}
               </button>
+</Tooltip>
             )}
             {settings.autoSave && (isSaving || saveSuccess) && (
               <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-muted-foreground">

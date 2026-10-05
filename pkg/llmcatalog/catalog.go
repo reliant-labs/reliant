@@ -82,6 +82,9 @@ var gatewayRoster = []string{
 	"gemini-3.7-flash",
 	"gemini-3-flash-preview",
 	"gemini-2.5-pro",
+	"veo-3.1-generate",
+	"veo-3.1-fast-generate",
+	"veo-3.1-lite-generate",
 }
 
 // GatewayModelIDs returns the catalog IDs of every model the gateway serves,

@@ -1,4 +1,5 @@
 name: landing-page
+title: Landing Page
 apiVersion: "0.0.5"
 description: |
   Build a polished landing page by chaining two get-it-right review loops and

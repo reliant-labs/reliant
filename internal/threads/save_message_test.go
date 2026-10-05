@@ -8,6 +8,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
 // =============================================================================
@@ -571,6 +572,58 @@ func TestSaveMessage_ChatUpdate(t *testing.T) {
 		}
 		if data["thread_token_count"].(float64) != 150 {
 			t.Errorf("expected thread_token_count: %v", data["thread_token_count"])
+		}
+	})
+
+	// The client keeps the compaction indicator current from message updates
+	// (a replay resume sends no snapshot), so the payload's threshold must be
+	// the one the snapshot would report: the serving model's, not the global
+	// floor.
+	t.Run("message update carries the serving model's compaction threshold", func(t *testing.T) {
+		const model = "claude-4.8-opus"
+		result, err := h.svc.SaveMessage(ctx, SaveMessageOpts{
+			ChatID:     h.chatID,
+			Thread:     thread.ID,
+			Role:       int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT),
+			Content:    "hi",
+			TokenCount: 4200,
+			Model:      model,
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		updates, err := h.repo.GetUpdatesSince(ctx, h.chatID, 0, 100)
+		if err != nil {
+			t.Fatalf("failed to get chat updates: %v", err)
+		}
+		var data map[string]interface{}
+		for i := range updates {
+			if updates[i].EntityID == result.MessageID {
+				if err := json.Unmarshal([]byte(updates[i].Data), &data); err != nil {
+					t.Fatalf("failed to parse update data: %v", err)
+				}
+			}
+		}
+		if data == nil {
+			t.Fatal("expected to find chat update for message")
+		}
+
+		want := float64(models.CompactionThresholdForModel(model))
+		if want == float64(DefaultCompactionThreshold) {
+			t.Fatalf("test model %q must have a non-default threshold to discriminate", model)
+		}
+		if data["compaction_threshold"] != want {
+			t.Errorf("compaction_threshold = %v, want %v (the serving model's)", data["compaction_threshold"], want)
+		}
+
+		usage, err := h.repo.GetContextUsage(ctx, h.chatID, thread.ID)
+		if err != nil {
+			t.Fatalf("GetContextUsage: %v", err)
+		}
+		if data["compaction_threshold"] != float64(usage.CompactionThreshold) || data["thread_token_count"] != float64(usage.ThreadTokenCount) {
+			t.Errorf("payload usage (%v/%v) must match what a snapshot would report (%d/%d)",
+				data["thread_token_count"], data["compaction_threshold"], usage.ThreadTokenCount, usage.CompactionThreshold)
 		}
 	})
 

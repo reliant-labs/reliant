@@ -49,11 +49,29 @@ describe("useBuilderTestRun", () => {
     expect(subscribe).toHaveBeenCalledWith("test-chat-1");
   });
 
-  it("hands the stream back to the builder assistant when the test view goes away", () => {
-    const { unmount } = renderHook(() => useBuilderTestRun("test-chat-1", ["a"], "assistant-chat"));
-    unmount();
+  it("hands the stream back to the chat that held it before the test run", () => {
+    // The editor's chat panel (a normal ChatContainer) holds the single
+    // chat-details slot. ChatContainer only re-asserts it when its chat id or
+    // the connection changes, so if the test run doesn't hand the slot back,
+    // the panel goes silent until a reload.
+    useGlobalUpdatesStore.setState({ subscribedChatId: "panel-chat" });
+    const { rerender } = renderHook(({ id }) => useBuilderTestRun(id, ["a"]), {
+      initialProps: { id: "test-chat-1" as string | null },
+    });
+    expect(subscribe).toHaveBeenLastCalledWith("test-chat-1");
+
+    rerender({ id: null });
     expect(unsubscribe).toHaveBeenCalledWith("test-chat-1");
-    expect(subscribe).toHaveBeenLastCalledWith("assistant-chat");
+    expect(subscribe).toHaveBeenLastCalledWith("panel-chat");
+  });
+
+  it("restores nothing when no chat held the stream before the test run", () => {
+    useGlobalUpdatesStore.setState({ subscribedChatId: null });
+    const { rerender } = renderHook(({ id }) => useBuilderTestRun(id, ["a"]), {
+      initialProps: { id: "test-chat-1" as string | null },
+    });
+    rerender({ id: null });
+    expect(subscribe).toHaveBeenCalledTimes(1);
   });
 
   it("reports statuses for the test chat's own nodes by node id", () => {

@@ -78,6 +78,7 @@ CREATE TABLE public.agent_messages (
     delivered_at timestamp with time zone,
     delivered_message_id text,
     attachments jsonb,
+    synthesized boolean DEFAULT false NOT NULL,
     CONSTRAINT agent_messages_delivered_has_time CHECK (((status <> 2) OR (delivered_at IS NOT NULL)))
 );
 
@@ -602,6 +603,7 @@ CREATE TABLE public.daemons (
     last_status_changed_at timestamp with time zone,
     last_oom_killed_at timestamp with time zone,
     oom_kill_count integer DEFAULT 0 NOT NULL,
+    local_models text DEFAULT ''::text NOT NULL,
     CONSTRAINT daemons_lifecycle_phase_check CHECK (((lifecycle_phase IS NULL) OR (lifecycle_phase = ANY (ARRAY['provisioning'::text, 'cloning'::text, 'ready'::text, 'suspending'::text, 'suspended'::text, 'failed'::text]))))
 );
 
@@ -677,6 +679,27 @@ CREATE TABLE public.message_order_counters (
     scope_id text NOT NULL,
     last_assigned bigint NOT NULL,
     CONSTRAINT message_order_counters_kind_check CHECK ((counter_kind = ANY (ARRAY['ordinal'::text, 'seq'::text])))
+);
+
+--
+-- Name: model_endpoints; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.model_endpoints (
+    id text NOT NULL,
+    user_id text NOT NULL,
+    name text NOT NULL,
+    base_url text NOT NULL,
+    route text NOT NULL,
+    daemon_id text,
+    credential_connection_id text,
+    header_names text[] DEFAULT '{}'::text[] NOT NULL,
+    models_json text DEFAULT '[]'::text NOT NULL,
+    probe_json text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone DEFAULT now() NOT NULL,
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    CONSTRAINT model_endpoints_check CHECK (((route = 'via_daemon'::text) = (daemon_id IS NOT NULL))),
+    CONSTRAINT model_endpoints_route_check CHECK ((route = ANY (ARRAY['direct'::text, 'via_daemon'::text])))
 );
 
 --
@@ -938,6 +961,7 @@ CREATE TABLE public.tool_calls (
     completed_at timestamp with time zone,
     created_at timestamp with time zone NOT NULL,
     updated_at timestamp with time zone NOT NULL,
+    daemon_id text,
     CONSTRAINT tool_calls_completed_has_completed_at CHECK (((status <> 3) OR (completed_at IS NOT NULL)))
 );
 
@@ -993,6 +1017,25 @@ CREATE TABLE public.user_updates (
     entity_id text NOT NULL,
     data text NOT NULL,
     created_at timestamp with time zone DEFAULT CURRENT_TIMESTAMP NOT NULL
+);
+
+--
+-- Name: video_generation_jobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.video_generation_jobs (
+    tool_call_id text NOT NULL,
+    user_id text NOT NULL,
+    chat_id text DEFAULT ''::text NOT NULL,
+    driver text NOT NULL,
+    model_id text NOT NULL,
+    api_model text NOT NULL,
+    provider_job text NOT NULL,
+    state text NOT NULL,
+    attachment_id text,
+    error_message text DEFAULT ''::text NOT NULL,
+    created_at timestamp with time zone NOT NULL,
+    updated_at timestamp with time zone NOT NULL
 );
 
 --
@@ -1373,6 +1416,13 @@ ALTER TABLE ONLY public.messages
     ADD CONSTRAINT messages_thread_ordinal_key UNIQUE (thread_id, ordinal);
 
 --
+-- Name: model_endpoints model_endpoints_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.model_endpoints
+    ADD CONSTRAINT model_endpoints_pkey PRIMARY KEY (id);
+
+--
 -- Name: plans plans_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1576,6 +1626,13 @@ ALTER TABLE ONLY public.user_updates
     ADD CONSTRAINT user_updates_user_id_sequence_number_key UNIQUE (user_id, sequence_number);
 
 --
+-- Name: video_generation_jobs video_generation_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.video_generation_jobs
+    ADD CONSTRAINT video_generation_jobs_pkey PRIMARY KEY (tool_call_id);
+
+--
 -- Name: visibility_overrides visibility_overrides_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1753,6 +1810,12 @@ CREATE INDEX idx_chat_updates_created ON public.chat_updates USING btree (create
 CREATE INDEX idx_chat_updates_snapshot_heads ON public.chat_updates USING btree (chat_id, entity_id, sequence_number DESC) WHERE (update_type <> ALL (ARRAY[1, 4, 19]));
 
 --
+-- Name: idx_chat_updates_snapshot_rekeyed; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chat_updates_snapshot_rekeyed ON public.chat_updates USING btree (chat_id, sequence_number) WHERE (update_type = ANY (ARRAY[3, 18]));
+
+--
 -- Name: idx_chats_user_created_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -1907,6 +1970,18 @@ CREATE INDEX idx_messages_context_window_ordinal ON public.messages USING btree 
 --
 
 CREATE INDEX idx_messages_thread_ordinal ON public.messages USING btree (thread_id, ordinal);
+
+--
+-- Name: idx_model_endpoints_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_model_endpoints_user ON public.model_endpoints USING btree (user_id);
+
+--
+-- Name: idx_model_endpoints_user_name; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_model_endpoints_user_name ON public.model_endpoints USING btree (user_id, name);
 
 --
 -- Name: idx_plans_project; Type: INDEX; Schema: public; Owner: -
@@ -2177,6 +2252,12 @@ CREATE UNIQUE INDEX projects_user_remote_url_uniq ON public.projects USING btree
 --
 
 CREATE UNIQUE INDEX settings_user_key_unique ON public.settings USING btree (user_id, key) WHERE (project_id IS NULL);
+
+--
+-- Name: video_generation_jobs_attachment_idx; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX video_generation_jobs_attachment_idx ON public.video_generation_jobs USING btree (attachment_id) WHERE (attachment_id IS NOT NULL);
 
 --
 -- Name: agent_messages agent_messages_chat_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

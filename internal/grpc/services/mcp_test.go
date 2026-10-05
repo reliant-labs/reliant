@@ -931,3 +931,10 @@ func getServerFromList(t *testing.T, svc *MCPService, ctx context.Context, proje
 	t.Fatalf("server %q not found in ListServers response", serverName)
 	return nil
 }
+
+func (r *fakeMCPDaemonRouter) OpenLocalModelHTTP(context.Context, string, string, *reliantv1.LocalModelHTTPRequest) (*toolexec.LocalModelHTTPStream, error) {
+	return nil, nil
+}
+func (r *fakeMCPDaemonRouter) RefreshLocalModels(context.Context, string, string) (*reliantv1.LocalModelInventory, error) {
+	return nil, nil
+}

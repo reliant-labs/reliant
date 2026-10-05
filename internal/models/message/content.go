@@ -173,7 +173,7 @@ type ToolCall struct {
 	// Empty/nil means no validation (non-LLM sources like auditing_agent).
 	AvailablePresets []string `json:"available_presets,omitempty"` // Spawn presets available (for spawn tool only)
 
-	// SpawnWorkflow is the target workflow ref for spawn tool calls (e.g., "builtin://auditing-agent").
+	// SpawnWorkflow is the target workflow ref for spawn tool calls (e.g., "builtin://structured-agent").
 	// Set by call_llm from the SpawnFilterConfig; used by workflow.go to route spawn execution.
 	// Empty means default to "builtin://agent" for backwards compatibility.
 	SpawnWorkflow string `json:"spawn_workflow,omitempty"`

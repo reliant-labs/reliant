@@ -737,141 +737,6 @@ func (q *Queries) ListMessagesInContextWindowRange(ctx context.Context, arg List
 	return items, nil
 }
 
-const listRecentChatWindow = `-- name: ListRecentChatWindow :many
-WITH main_window AS (
-    SELECT mw.seq
-    FROM messages mw
-    WHERE mw.chat_id = $1 AND mw.thread_id = $2
-    ORDER BY mw.seq DESC
-    LIMIT $3
-)
-SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq FROM messages m
-WHERE m.chat_id = $1
-  AND m.seq >= (SELECT COALESCE(MIN(main_window.seq), 0) FROM main_window)
-ORDER BY m.seq DESC
-`
-
-type ListRecentChatWindowParams struct {
-	ChatID   string `json:"chat_id"`
-	ThreadID string `json:"thread_id"`
-	Limit    int32  `json:"limit"`
-}
-
-// The initial chat snapshot's window: the newest N messages ON THE MAIN THREAD,
-// plus every message from any other thread that falls inside that seq range.
-//
-// Bounding the window by the whole chat (ListRecentMessages) is wrong once a
-// chat spawns sub-agents. Spawn threads write far more messages than the main
-// thread and finish later, so they occupy the top of the chat's seq range: in a
-// real 1,470-message chat the newest 200 rows were 200 spawn messages and ZERO
-// main-thread messages. Spawn messages render collapsed inside the tool call
-// that created them rather than in the transcript, so that snapshot painted an
-// empty conversation.
-//
-// The main thread is what the transcript shows, so it is what the window must
-// be measured in. Sibling-thread messages inside the resulting range still come
-// along, because the spawn tool-call preview renders from them.
-func (q *Queries) ListRecentChatWindow(ctx context.Context, arg ListRecentChatWindowParams) ([]Message, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentChatWindow, arg.ChatID, arg.ThreadID, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Message{}
-	for rows.Next() {
-		var i Message
-		if err := rows.Scan(
-			&i.ID,
-			&i.ChatID,
-			&i.Ordinal,
-			&i.ThreadID,
-			&i.ContextWindowID,
-			&i.Role,
-			&i.DisplayStyle,
-			&i.Model,
-			&i.Agent,
-			&i.TokenCount,
-			&i.Cost,
-			&i.WorkflowID,
-			&i.RunID,
-			&i.NodeID,
-			&i.NodePath,
-			&i.ActivityID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Seq,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const listRecentMessages = `-- name: ListRecentMessages :many
-SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
-WHERE chat_id = $1
-ORDER BY seq DESC
-LIMIT $2
-`
-
-type ListRecentMessagesParams struct {
-	ChatID string `json:"chat_id"`
-	Limit  int32  `json:"limit"`
-}
-
-// Most recent N messages for a chat, for the bounded initial chat snapshot.
-// Ordered DESC so the LIMIT keeps the NEWEST rows; callers must reverse to get
-// the ascending order every other consumer expects.
-func (q *Queries) ListRecentMessages(ctx context.Context, arg ListRecentMessagesParams) ([]Message, error) {
-	rows, err := q.db.QueryContext(ctx, listRecentMessages, arg.ChatID, arg.Limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Message{}
-	for rows.Next() {
-		var i Message
-		if err := rows.Scan(
-			&i.ID,
-			&i.ChatID,
-			&i.Ordinal,
-			&i.ThreadID,
-			&i.ContextWindowID,
-			&i.Role,
-			&i.DisplayStyle,
-			&i.Model,
-			&i.Agent,
-			&i.TokenCount,
-			&i.Cost,
-			&i.WorkflowID,
-			&i.RunID,
-			&i.NodeID,
-			&i.NodePath,
-			&i.ActivityID,
-			&i.CreatedAt,
-			&i.UpdatedAt,
-			&i.Seq,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listRecentMessagesByThread = `-- name: ListRecentMessagesByThread :many
 SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages
 WHERE thread_id = $1
@@ -950,6 +815,89 @@ type ListRecentMessagesInContextWindowBeforeSeqParams struct {
 // hasMore check.
 func (q *Queries) ListRecentMessagesInContextWindowBeforeSeq(ctx context.Context, arg ListRecentMessagesInContextWindowBeforeSeqParams) ([]Message, error) {
 	rows, err := q.db.QueryContext(ctx, listRecentMessagesInContextWindowBeforeSeq, arg.ContextWindowID, arg.BeforeSeq, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Message{}
+	for rows.Next() {
+		var i Message
+		if err := rows.Scan(
+			&i.ID,
+			&i.ChatID,
+			&i.Ordinal,
+			&i.ThreadID,
+			&i.ContextWindowID,
+			&i.Role,
+			&i.DisplayStyle,
+			&i.Model,
+			&i.Agent,
+			&i.TokenCount,
+			&i.Cost,
+			&i.WorkflowID,
+			&i.RunID,
+			&i.NodeID,
+			&i.NodePath,
+			&i.ActivityID,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.Seq,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecentTranscriptSiblingMessages = `-- name: ListRecentTranscriptSiblingMessages :many
+SELECT m.id, m.chat_id, m.ordinal, m.thread_id, m.context_window_id, m.role, m.display_style, m.model, m.agent, m.token_count, m.cost, m.workflow_id, m.run_id, m.node_id, m.node_path, m.activity_id, m.created_at, m.updated_at, m.seq FROM messages m
+WHERE m.chat_id = $1
+  AND m.thread_id <> $2
+  AND m.seq >= $3
+  AND m.thread_id NOT IN (
+      SELECT t.id FROM threads t
+      WHERE t.chat_id = $1 AND t.origin = 'spawn'
+  )
+ORDER BY m.seq DESC
+LIMIT $4
+`
+
+type ListRecentTranscriptSiblingMessagesParams struct {
+	ChatID       string `json:"chat_id"`
+	MainThreadID string `json:"main_thread_id"`
+	FromSeq      int64  `json:"from_seq"`
+	RowLimit     int32  `json:"row_limit"`
+}
+
+// The chat snapshot's sibling-thread rows: the newest row_limit messages at or
+// above from_seq that belong to neither the main thread (read separately,
+// through its context-window chain) nor any spawn thread.
+//
+// Spawn threads are excluded outright. A spawn renders as one tool-call card
+// in its parent's transcript, and the card reads its child thread through
+// ListMessages(thread_id) when it is expanded, so spawn rows in the snapshot
+// are never rendered from. They were also most of it: spawn threads out-write
+// the main thread by an order of magnitude, so a chat-wide newest-N carried
+// whichever partial spawn transcripts happened to sit at the top of the seq
+// range (636KB of a 2.3MB snapshot on a real 55k-message chat).
+//
+// What remains are the threads the transcript renders inline (workflow-node
+// and fork threads), bounded so a node-heavy chat cannot balloon the payload.
+// Returned DESC so the LIMIT keeps the newest rows; callers reverse.
+func (q *Queries) ListRecentTranscriptSiblingMessages(ctx context.Context, arg ListRecentTranscriptSiblingMessagesParams) ([]Message, error) {
+	rows, err := q.db.QueryContext(ctx, listRecentTranscriptSiblingMessages,
+		arg.ChatID,
+		arg.MainThreadID,
+		arg.FromSeq,
+		arg.RowLimit,
+	)
 	if err != nil {
 		return nil, err
 	}

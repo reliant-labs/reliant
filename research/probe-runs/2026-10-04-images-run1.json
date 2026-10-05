@@ -1,0 +1,80 @@
+{
+  "outcomes": [
+    {
+      "cell": {
+        "kind": "image",
+        "model": "gpt-image-2.5-flare",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-image-2.5-flare@codex image",
+      "status": "pass",
+      "note": "763914 bytes image/png",
+      "resolved_model": "gpt-image-2.5-flare",
+      "resolved_provider": "codex",
+      "api_model": "gpt-image-2.5-flare",
+      "latency_ms": 15690
+    },
+    {
+      "cell": {
+        "kind": "image",
+        "model": "gpt-image-2.5-sunburst",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-image-2.5-sunburst@codex image",
+      "status": "pass",
+      "note": "719165 bytes image/png",
+      "resolved_model": "gpt-image-2.5-sunburst",
+      "resolved_provider": "codex",
+      "api_model": "gpt-image-2.5-sunburst",
+      "latency_ms": 14135
+    },
+    {
+      "cell": {
+        "kind": "image",
+        "model": "gpt-image-2",
+        "provider": "codex",
+        "level": ""
+      },
+      "label": "gpt-image-2@codex image",
+      "status": "pass",
+      "note": "736191 bytes image/png",
+      "resolved_model": "gpt-image-2",
+      "resolved_provider": "codex",
+      "api_model": "gpt-image-2",
+      "latency_ms": 14184
+    },
+    {
+      "cell": {
+        "kind": "image",
+        "model": "gemini-3.1-flash-image",
+        "provider": "antigravity",
+        "level": ""
+      },
+      "label": "gemini-3.1-flash-image@antigravity image",
+      "status": "pass",
+      "note": "356372 bytes image/jpeg",
+      "resolved_model": "gemini-3.1-flash-image",
+      "resolved_provider": "antigravity",
+      "api_model": "gemini-3.1-flash-image",
+      "latency_ms": 7850
+    }
+  ],
+  "providers": [
+    "anthropic",
+    "antigravity",
+    "codex",
+    "openrouter"
+  ],
+  "run_at": "2026-10-04T16:56:01Z",
+  "uncredentialed": [
+    "copilot",
+    "gemini",
+    "mock",
+    "openai",
+    "reliant",
+    "vertexai",
+    "xai"
+  ]
+}

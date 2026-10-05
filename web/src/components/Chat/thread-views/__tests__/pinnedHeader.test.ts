@@ -30,13 +30,19 @@ const TWO_SECTIONS = buildUserMessageForItem([
   { role: "assistant" },
 ]);
 
+/** The header's bottom edge: a typical one-line pinned header. */
+const LINE = 48;
+
+/** A user-message row: the toolbar band above the bubble, plus the bubble. */
+const USER_ROW_PX = 66;
+
 function rows(...specs: Array<[index: number, top: number, height: number]>): MeasuredRow[] {
   return specs.map(([index, top, height]) => ({ index, top, bottom: top + height }));
 }
 
 function resolve(
   measured: MeasuredRow[],
-  { line = 0, previousPinned = null as number | null, releaseHysteresisPx = 24 } = {},
+  { line = LINE, previousPinned = null as number | null, releaseHysteresisPx = 8 } = {},
 ) {
   return resolvePinnedUserMessage({
     rows: measured,
@@ -49,73 +55,83 @@ function resolve(
 
 describe("resolvePinnedUserMessage", () => {
   it("pins nothing at the top of the transcript", () => {
-    // Every row is below the line; nothing has scrolled away to breadcrumb.
-    expect(resolve(rows([0, 10, 100], [1, 110, 400]))).toBeNull();
+    // Nothing has scrolled away, so there is nothing to breadcrumb.
+    expect(resolve(rows([0, 32, USER_ROW_PX], [1, 98, 400]))).toBeNull();
   });
 
-  it("pins the heading of the section that owns the top of the viewport", () => {
-    // u2 is above the line, its section (a3) fills the viewport.
-    expect(resolve(rows([2, -400, 440], [3, 40, 3000]))).toBe(2);
+  // The reported "it doesn't go away at the top". The first row starts 32px
+  // down (the scroll-back loader's space), which is INSIDE the header band, so
+  // the old top-edge rule could never release it: scrolled all the way up, the
+  // header sat over the very message it named.
+  it("releases the header at the top even though the first row starts inside the header band", () => {
+    expect(resolve(rows([0, 32, USER_ROW_PX], [1, 98, 400]), { previousPinned: 0 })).toBeNull();
   });
 
-  // Defect (a). The old rule dropped the pin the moment the heading became the
-  // first visible row — including when 95% of it was above the fold, which is
-  // exactly when the header earns its place.
-  it("pins a heading that is mostly, but not entirely, scrolled off the top", () => {
-    expect(resolve(rows([2, -420, 440], [3, 20, 3000]))).toBe(2);
+  // A short first message — mobile reserves no toolbar band above the bubble —
+  // ends inside the release band, so geometry alone would keep it pinned.
+  it("releases the header at the top even when the first message is shorter than the header", () => {
+    expect(resolve(rows([0, 32, 20], [1, 52, 400]), { previousPinned: 0 })).toBeNull();
   });
 
-  it("hands off exactly when the next heading's top edge crosses the line", () => {
-    // Still 60px below the line: the previous section still owns the top.
-    expect(resolve(rows([0, -3000, 100], [1, -2900, 2960], [2, 60, 440]))).toBe(0);
-    // Crossed: the new heading takes over.
-    expect(resolve(rows([0, -3120, 100], [1, -3020, 2960], [2, -60, 440]))).toBe(2);
+  it("pins a user message once it has scrolled entirely behind the header", () => {
+    expect(resolve(rows([2, -30, USER_ROW_PX], [3, 36, 3000]))).toBe(2);
   });
 
-  // The line is the header's own bottom edge, not the viewport top — the
-  // header occludes that band, so a heading is "taken over" once it is behind
-  // the header rather than once it is off-screen.
+  // The reported "doesn't swap out naturally". u2's top edge has crossed the
+  // line but its bubble is still on screen just below the header; the old rule
+  // swapped here, printing the same message twice, one above the other.
+  //
+  // Note the answer is u0, not null: while the next message is still visible,
+  // the reader is in u0's section, and the header must never blank mid-chat.
+  it("keeps the previous section's heading while the next user message is still visible", () => {
+    expect(resolve(rows([1, -2900, 2940], [2, 40, USER_ROW_PX], [3, 106, 3000]))).toBe(0);
+  });
+
+  it("hands off at the moment the incoming user message clears the line", () => {
+    // Bottom edge 1px below the line: a sliver is still visible.
+    expect(resolve(rows([1, -2900, 2883], [2, -17, USER_ROW_PX], [3, 49, 3000]))).toBe(0);
+    // Bottom edge 1px above it: entirely behind the header, which takes it over.
+    expect(resolve(rows([1, -2900, 2881], [2, -19, USER_ROW_PX], [3, 47, 3000]))).toBe(2);
+  });
+
+  // The line is the header's bottom edge, not the viewport top — the header
+  // occludes that band, so a message is "taken over" once it is behind the
+  // header rather than once it is off-screen.
   it("measures the crossing against the header's bottom edge", () => {
-    const geometry = rows([0, -3000, 100], [1, -2900, 2960], [2, 40, 440]);
-    // With no header showing, a heading 40px down has not crossed the top.
+    const geometry = rows([1, -2900, 2870], [2, -30, USER_ROW_PX], [3, 36, 3000]);
+    // With no header height at all, a message 36px down has not gone.
     expect(resolve(geometry, { line: 0 })).toBe(0);
-    // With a 72px header, that same heading is behind it, so it takes over.
-    expect(resolve(geometry, { line: 72 })).toBe(2);
+    // With a 48px header, that same message is behind it.
+    expect(resolve(geometry, { line: 48 })).toBe(2);
   });
 
-  // Defect (b), the boundary case. The header's height sets the line, so a
-  // heading resting on the line would otherwise be un-pinned by a sub-pixel
-  // correction and re-pinned by the geometry that restores — a shake.
   it("holds a pin through a sub-pixel wobble around the line", () => {
-    const atLine = rows([2, 0, 440], [3, 440, 3000]);
-    const justBelow = rows([2, 1.5, 440], [3, 441.5, 3000]);
+    const atLine = rows([2, LINE - USER_ROW_PX, USER_ROW_PX], [3, LINE, 3000]);
+    const justBelow = rows([2, LINE - USER_ROW_PX + 1.5, USER_ROW_PX], [3, LINE + 1.5, 3000]);
 
     expect(resolve(atLine, { previousPinned: 2 })).toBe(2);
     // A 1.5px drift below the line must NOT release an established pin.
     expect(resolve(justBelow, { previousPinned: 2 })).toBe(2);
   });
 
-  it("releases the pin and hands back once the previous section owns the top", () => {
-    // Rows are contiguous: u2 has scrolled back down to y=30, so the band
-    // above it belongs to a1, whose section is headed by u0.
-    const handedBack = rows([0, -3000, 100], [1, -2900, 2930], [2, 30, 440]);
-    expect(resolve(handedBack, { previousPinned: 2 })).toBe(0);
-  });
-
   // The asymmetry itself: identical geometry, opposite answers, decided only
-  // by whether this heading is already the one in the header. Entering the
+  // by whether this message is already the one in the header. Entering the
   // pinned state costs strictly less than leaving it, which is what makes the
   // boundary unable to oscillate.
   it("applies the band to releasing a pin but not to engaging one", () => {
-    // u2 rests 1.5px below the line — a sub-pixel correction away from it.
-    const onTheLine = rows([2, 1.5, 440], [3, 441.5, 3000]);
+    const justBelow = rows([1, -2900, 2851.5], [2, LINE - USER_ROW_PX + 1.5, USER_ROW_PX]);
 
-    expect(resolve(onTheLine, { previousPinned: 2 })).toBe(2);
-    expect(resolve(onTheLine, { previousPinned: null })).toBeNull();
+    expect(resolve(justBelow, { previousPinned: 2 })).toBe(2);
+    expect(resolve(justBelow, { previousPinned: null })).toBe(0);
+  });
+
+  it("releases the pin and hands back once the message clears the band", () => {
+    const handedBack = rows([1, -2900, 2891], [2, -9, USER_ROW_PX], [3, 57, 3000]);
+    expect(resolve(handedBack, { previousPinned: 2 })).toBe(0);
   });
 
   it("pins a heading that is scrolled out of the rendered window entirely", () => {
-    // Only the section body is rendered; the heading is above the window, so
+    // Only the section body is rendered; its heading is above the window, so
     // it is off-screen by definition.
     expect(resolve(rows([3, -200, 3000]))).toBe(2);
   });
@@ -139,11 +155,11 @@ describe("resolvePinnedUserMessage", () => {
 
     expect(
       resolvePinnedUserMessage({
-        rows: rows([4, -400, 440], [5, 40, 3000]),
+        rows: rows([4, -30, USER_ROW_PX], [5, 36, 3000]),
         userMessageForItem: after,
-        line: 0,
+        line: LINE,
         previousPinned: null,
-        releaseHysteresisPx: 24,
+        releaseHysteresisPx: 8,
       }),
     ).toBe(4);
   });
