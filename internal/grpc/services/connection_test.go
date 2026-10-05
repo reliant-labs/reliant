@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -26,12 +27,22 @@ import (
 // to a response fails this test until a human reads the name and adds it here,
 // which is the moment to ask "could this carry a secret?". Nothing here can.
 var responseFieldAllowList = map[string]bool{
-	"reliant.v1.ListIntegrationsResponse.integrations": true,
-	"reliant.v1.Integration.id":                        true,
-	"reliant.v1.Integration.display_name":              true,
-	"reliant.v1.Integration.auth_kind":                 true,
-	"reliant.v1.Integration.available":                 true,
-	"reliant.v1.Integration.unavailable_reason":        true,
+	"reliant.v1.ListIntegrationsResponse.integrations":    true,
+	"reliant.v1.Integration.id":                           true,
+	"reliant.v1.Integration.display_name":                 true,
+	"reliant.v1.Integration.methods":                      true,
+	"reliant.v1.Integration.connection_params":            true,
+	"reliant.v1.IntegrationAuthMethod.kind":               true,
+	"reliant.v1.IntegrationAuthMethod.available":          true,
+	"reliant.v1.IntegrationAuthMethod.unavailable_reason": true,
+	// Form labels ("api_key" -> "API key"): catalog text, never a value.
+	"reliant.v1.IntegrationAuthMethod.field_labels":       true,
+	"reliant.v1.IntegrationConnectionParam.name":          true,
+	"reliant.v1.IntegrationConnectionParam.display_name":  true,
+	"reliant.v1.IntegrationConnectionParam.description":   true,
+	"reliant.v1.IntegrationConnectionParam.pattern":       true,
+	"reliant.v1.IntegrationConnectionParam.default_value": true,
+	"reliant.v1.IntegrationConnectionParam.required":      true,
 
 	"reliant.v1.ListConnectionsResponse.connections":       true,
 	"reliant.v1.GetConnectionResponse.connection":          true,
@@ -68,6 +79,10 @@ var responseFieldAllowList = map[string]bool{
 	"reliant.v1.Connection.last_used_at":                   true,
 	"reliant.v1.Connection.created_at":                     true,
 	"reliant.v1.Connection.updated_at":                     true,
+	// Non-secret by declaration: the manifest loader refuses a connection
+	// param whose name reads like a credential, and a secret goes in
+	// connection_secrets through CreateApiKeyConnectionRequest.fields.
+	"reliant.v1.Connection.params": true,
 }
 
 func walkMessage(md protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool, visit func(protoreflect.FieldDescriptor)) {
@@ -116,6 +131,9 @@ func TestConnectionServiceResponsesHaveNoCredentialShapedFields(t *testing.T) {
 	for i := 0; i < sd.Methods().Len(); i++ {
 		walkMessage(sd.Methods().Get(i).Output(), map[protoreflect.FullName]bool{}, func(fd protoreflect.FieldDescriptor) {
 			n := strings.ToLower(string(fd.Name()))
+			if fd.FullName() == "reliant.v1.IntegrationAuthMethod.field_labels" {
+				return // a label map; its keys name form fields, its values are text
+			}
 			for _, bad := range []string{"secret", "password", "api_key", "apikey", "ciphertext", "refresh", "client_secret", "private"} {
 				require.NotContains(t, n, bad, "%s", fd.FullName())
 			}
@@ -171,7 +189,7 @@ func newConnectionFixture(t *testing.T) *connectionFixture {
 	require.NoError(t, err)
 	v := vault.New(raw, vault.NewEnvKeyWrapper(ring))
 
-	providers, err := connections.ProvidersFromEnv(func(string) string { return "" })
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(string) string { return "" })
 	require.NoError(t, err)
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, v, providers, nil)
@@ -209,7 +227,7 @@ func TestConnectionService_RequiresAuthentication(t *testing.T) {
 
 func TestConnectionService_CreateListGetNeverReturnSecret(t *testing.T) {
 	f := newConnectionFixture(t)
-	c := f.createKey(t, "alice", "linear", "work")
+	c := f.createKey(t, "alice", "http", "work")
 	require.Equal(t, reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_API_KEY, c.AuthKind)
 	require.Equal(t, reliantv1.ConnectionStatus_CONNECTION_STATUS_ACTIVE, c.Status)
 	require.True(t, c.IsDefault)
@@ -228,7 +246,7 @@ type fmtStringer interface{ String() string }
 
 func TestConnectionService_OtherUserGetsNotFoundEverywhere(t *testing.T) {
 	f := newConnectionFixture(t)
-	c := f.createKey(t, "alice", "linear", "work")
+	c := f.createKey(t, "alice", "http", "work")
 	bob := asConnUser("bob")
 
 	_, err := f.svc.GetConnection(bob, connect.NewRequest(&reliantv1.GetConnectionRequest{Id: c.Id}))
@@ -260,23 +278,37 @@ func TestConnectionService_OtherUserGetsNotFoundEverywhere(t *testing.T) {
 func TestConnectionService_ErrorCodes(t *testing.T) {
 	f := newConnectionFixture(t)
 	alice := asConnUser("alice")
-	f.createKey(t, "alice", "linear", "work")
+	f.createKey(t, "alice", "http", "work")
 
 	_, err := f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
-		IntegrationId: "linear", Name: "work", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
+		IntegrationId: "http", Name: "work", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{"api_key": "k"},
 	}))
 	requireConnectCode(t, err, connect.CodeAlreadyExists)
 
 	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
-		IntegrationId: "linear", Name: "other", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
+		IntegrationId: "http", Name: "other", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{},
 	}))
 	requireConnectCode(t, err, connect.CodeInvalidArgument)
 
-	// github is an OAuth integration: pasting a key for it is refused.
+	// github declares where its token goes; a per-connection header is refused.
 	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
 		IntegrationId: "github", Name: "n", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
+		Fields: map[string]string{"api_key": "k", "header": "x-api-key"},
+	}))
+	requireConnectCode(t, err, connect.CodeInvalidArgument)
+
+	// github declares no basic method.
+	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+		IntegrationId: "github", Name: "b", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_BASIC,
+		Fields: map[string]string{"username": "u", "password": "p"},
+	}))
+	requireConnectCode(t, err, connect.CodeInvalidArgument)
+
+	// A connection is only for a catalog integration.
+	_, err = f.svc.CreateApiKeyConnection(alice, connect.NewRequest(&reliantv1.CreateApiKeyConnectionRequest{
+		IntegrationId: "linear", Name: "l", Kind: reliantv1.ApiKeyConnectionKind_API_KEY_CONNECTION_KIND_API_KEY,
 		Fields: map[string]string{"api_key": "k"},
 	}))
 	requireConnectCode(t, err, connect.CodeInvalidArgument)
@@ -290,23 +322,40 @@ func TestConnectionService_ErrorCodes(t *testing.T) {
 	requireConnectCode(t, err, connect.CodeFailedPrecondition)
 }
 
+// Every catalog integration that declares auth is listed with each method's
+// availability; an unconfigured method says why, for an operator.
 func TestConnectionService_ListIntegrationsShowsUnavailableWithReason(t *testing.T) {
 	f := newConnectionFixture(t)
 	resp, err := f.svc.ListIntegrations(asConnUser("alice"), connect.NewRequest(&reliantv1.ListIntegrationsRequest{}))
 	require.NoError(t, err)
-	require.Len(t, resp.Msg.Integrations, 1)
-	gh := resp.Msg.Integrations[0]
-	require.Equal(t, "github", gh.Id)
-	require.False(t, gh.Available)
-	require.Contains(t, gh.UnavailableReason, "RELIANT_GITHUB_APP_CLIENT_ID")
-	require.Equal(t, reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_GITHUB_APP_USER, gh.AuthKind)
+	byID := map[string]*reliantv1.Integration{}
+	for _, in := range resp.Msg.Integrations {
+		byID[in.Id] = in
+	}
+	gh := byID["github"]
+	require.NotNil(t, gh)
+	require.Equal(t, "GitHub", gh.DisplayName)
+	kinds := []reliantv1.ConnectionAuthKind{}
+	for _, m := range gh.Methods {
+		kinds = append(kinds, m.Kind)
+	}
+	require.Equal(t, []reliantv1.ConnectionAuthKind{
+		reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_DELEGATED,
+		reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_OAUTH2,
+		reliantv1.ConnectionAuthKind_CONNECTION_AUTH_KIND_API_KEY,
+	}, kinds, "methods in manifest order")
+	require.False(t, gh.Methods[1].Available)
+	require.Contains(t, gh.Methods[1].UnavailableReason, "RELIANT_OAUTH_GITHUB_CLIENT_ID")
+	require.True(t, gh.Methods[2].Available)
+	require.Equal(t, "Personal access token", gh.Methods[2].FieldLabels["api_key"])
+	require.NotNil(t, byID["http"], "the generic HTTP integration takes saved credentials too")
 }
 
 func TestConnectionService_DefaultRenameDeleteEvents(t *testing.T) {
 	f := newConnectionFixture(t)
 	alice := asConnUser("alice")
-	a := f.createKey(t, "alice", "linear", "a")
-	b := f.createKey(t, "alice", "linear", "b")
+	a := f.createKey(t, "alice", "http", "a")
+	b := f.createKey(t, "alice", "http", "b")
 	require.True(t, a.IsDefault)
 	require.False(t, b.IsDefault)
 

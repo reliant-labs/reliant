@@ -3,31 +3,36 @@
 package connections
 
 import (
-	"context"
-	"encoding/json"
 	"fmt"
-	"io"
 	"net/http"
 	"net/url"
-	"strconv"
+	"regexp"
 	"strings"
 	"time"
 
-	"github.com/reliant-labs/reliant/internal/db/core"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
-// Environment variables for the GitHub App (CONNECTIONS_VAULT.md §4.5, §6).
-// Deployment config, declared as forge secret_refs; never stored in the vault.
+// Method kinds an integration offers (manifest.Auth*).
 const (
-	EnvGitHubAppClientID     = "RELIANT_GITHUB_APP_CLIENT_ID"
-	EnvGitHubAppClientSecret = "RELIANT_GITHUB_APP_CLIENT_SECRET"
-
-	// GitHubIntegrationID is the integration id GitHub connections carry.
-	GitHubIntegrationID = "github"
+	MethodOAuth2    = manifest.AuthOAuth2
+	MethodAPIKey    = manifest.AuthAPIKey
+	MethodBasic     = manifest.AuthBasic
+	MethodDelegated = manifest.AuthDelegated
 
 	maxProviderResponse = 1 << 20
 )
+
+// OAuthClientEnv returns the deployment variables an integration's OAuth
+// client is read from: RELIANT_OAUTH_<ID>_CLIENT_ID and _CLIENT_SECRET, where
+// <ID> is the integration id upper-cased. They are deployment config (forge
+// secret refs), never manifest data and never a database row.
+func OAuthClientEnv(integrationID string) (idVar, secretVar string) {
+	base := "RELIANT_OAUTH_" + strings.ToUpper(integrationID)
+	return base + "_CLIENT_ID", base + "_CLIENT_SECRET"
+}
 
 // HTTPDoer is the slice of *http.Client the broker, token source and probes use.
 type HTTPDoer interface {
@@ -52,69 +57,228 @@ type Identity struct {
 	AccountLabel      string
 }
 
-// Provider is one OAuth integration. Every URL is catalog-fixed: it comes from
-// code, never from a request or a database row, so a user cannot point the
-// broker's token exchange at an arbitrary host (§8.4).
+// Provider is one integration a connection can be made to, compiled from its
+// catalog manifest. Every URL is catalog-fixed: it comes from the embedded
+// manifest, never from a request or a database row, so a user cannot point
+// the broker's token exchange at an arbitrary host (§8.4). Connection params
+// can pick a tenant label under the manifest's domain and nothing more.
 type Provider struct {
 	ID          string
 	DisplayName string
-	AuthKind    string
 
-	AuthorizeURL string
-	TokenURL     string
-	// ProbeURL is the identity endpoint, used to label a new connection and by
-	// TestConnection.
-	ProbeURL string
-	Scopes   []string
+	spec *reliantv1.ConnectionSpec
 
+	// OAuth client, from deployment config.
 	ClientID     string
 	ClientSecret vault.Secret
+	clientIDVar  string
+	secretVar    string
 
-	// Extra authorize parameters.
-	AuthorizeExtra url.Values
+	paramPatterns map[string]*regexp.Regexp
 }
 
-// Available reports whether the deployment configured this provider.
-func (p *Provider) Available() bool { return p.ClientID != "" && p.ClientSecret.Len() > 0 }
+// Spec is the integration's connection declaration.
+func (p *Provider) Spec() *reliantv1.ConnectionSpec { return p.spec }
 
-// UnavailableReason explains, for an operator, why Available is false.
-func (p *Provider) UnavailableReason() string {
-	switch {
-	case p.Available():
-		return ""
-	case p.ID == GitHubIntegrationID:
-		return EnvGitHubAppClientID + " and " + EnvGitHubAppClientSecret + " are not set"
-	default:
-		return "client credentials are not configured"
+// Method returns the provider's method of a kind.
+func (p *Provider) Method(kind string) (*reliantv1.AuthMethod, bool) {
+	return manifest.Method(p.spec, kind)
+}
+
+// OAuthAvailable reports whether the provider declares oauth2 and the
+// deployment configured its client.
+func (p *Provider) OAuthAvailable() bool {
+	_, ok := p.Method(MethodOAuth2)
+	return ok && p.ClientID != "" && p.ClientSecret.Len() > 0
+}
+
+// MethodStatus is one method as the catalog lists it.
+type MethodStatus struct {
+	Kind      string
+	Available bool
+	// Reason explains, for an operator, why Available is false.
+	Reason string
+	// FieldLabels names the fields a pasted credential takes, keyed by the
+	// CreateApiKeyConnectionRequest.fields key.
+	FieldLabels map[string]string
+}
+
+// DelegatedAvailable reports whether a delegated broker is usable on this
+// deployment. The api-server never resolves credentials, so it is told what
+// the deployment wires rather than holding brokers itself.
+type DelegatedAvailable func(brokerID string) (ok bool, reason string)
+
+// MethodStatus describes one declared method. A delegated method reads as
+// unavailable here; Service.ListIntegrations consults the deployment.
+func (p *Provider) MethodStatus(kind string) MethodStatus {
+	return p.methodStatus(kind, nil)
+}
+
+func (p *Provider) methodStatus(kind string, delegated DelegatedAvailable) MethodStatus {
+	m, ok := p.Method(kind)
+	if !ok {
+		return MethodStatus{Kind: kind, Reason: fmt.Sprintf("%s does not offer %s", p.DisplayName, kind)}
 	}
-}
-
-func (p *Provider) validate() error {
-	for name, raw := range map[string]string{"authorize_url": p.AuthorizeURL, "token_url": p.TokenURL, "probe_url": p.ProbeURL} {
-		u, err := url.Parse(raw)
-		if err != nil || u.Scheme != "https" || u.Host == "" {
-			return fmt.Errorf("provider %q: %s must be an absolute https URL", p.ID, name)
+	st := MethodStatus{Kind: kind, Available: true}
+	switch kind {
+	case MethodOAuth2:
+		if !p.OAuthAvailable() {
+			st.Available, st.Reason = false, p.clientIDVar+" and "+p.secretVar+" are not set"
+		}
+	case MethodAPIKey:
+		st.FieldLabels = map[string]string{"api_key": orDefault(m.GetApiKey().GetLabel(), "API key")}
+		if openAPIKeyPlacement(m.GetApiKey()) {
+			st.FieldLabels["header"] = "Header"
+		}
+	case MethodBasic:
+		b := m.GetBasic()
+		st.FieldLabels = map[string]string{"password": orDefault(b.GetPasswordLabel(), "Password")}
+		if b.GetUsernameParam() == "" {
+			st.FieldLabels["username"] = orDefault(b.GetUsernameLabel(), "Username")
+		}
+	case MethodDelegated:
+		broker := m.GetDelegated().GetBroker()
+		if delegated == nil {
+			st.Available, st.Reason = false, fmt.Sprintf("delegated broker %q is not configured on this deployment", broker)
+		} else if ok, why := delegated(broker); !ok {
+			st.Available, st.Reason = false, why
 		}
 	}
-	return nil
+	return st
 }
 
-// Registry is the catalog of OAuth providers.
+func orDefault(s, d string) string {
+	if s == "" {
+		return d
+	}
+	return s
+}
+
+// checkParams validates a connection's params against the declaration: every
+// key declared, every value matching its pattern, every param without a
+// default supplied, and every catalog URL still expanding to a host under the
+// catalog's domain. It returns the params with defaults filled in.
+func (p *Provider) checkParams(in map[string]string) (map[string]string, error) {
+	declared := map[string]bool{}
+	for _, cp := range p.spec.GetConnectionParams() {
+		declared[cp.GetName()] = true
+	}
+	for k := range in {
+		if !declared[k] {
+			return nil, newError(CodeInvalidArgument, "%s has no connection param %q", p.DisplayName, k)
+		}
+	}
+	out := map[string]string{}
+	for _, cp := range p.spec.GetConnectionParams() {
+		v := strings.TrimSpace(in[cp.GetName()])
+		if v == "" {
+			v = cp.GetDefaultValue()
+		}
+		if v == "" {
+			return nil, newError(CodeInvalidArgument, "%s needs %s", p.DisplayName, orDefault(cp.GetDisplayName(), cp.GetName()))
+		}
+		if len(v) > 200 || strings.ContainsAny(v, "\x00\r\n") {
+			return nil, newError(CodeInvalidArgument, "connection param %q is not a valid value", cp.GetName())
+		}
+		if re := p.paramPatterns[cp.GetName()]; re != nil && !re.MatchString(v) {
+			return nil, newError(CodeInvalidArgument, "connection param %q does not match %s", cp.GetName(), cp.GetPattern())
+		}
+		out[cp.GetName()] = v
+	}
+	for _, raw := range p.catalogURLs() {
+		if _, err := manifest.ExpandURL(raw, paramVars(out)); err != nil {
+			return nil, newError(CodeInvalidArgument, "%s", err.Error())
+		}
+	}
+	return out, nil
+}
+
+func (p *Provider) catalogURLs() []string {
+	var out []string
+	add := func(u string) {
+		if u != "" {
+			out = append(out, u)
+		}
+	}
+	add(p.spec.GetBaseUrl())
+	if m, ok := p.Method(MethodOAuth2); ok {
+		add(m.GetOauth2().GetAuthorizeUrl())
+		add(m.GetOauth2().GetTokenUrl())
+	}
+	add(p.spec.GetProbe().GetUrl())
+	return out
+}
+
+func paramVars(params map[string]string) map[string]string {
+	out := make(map[string]string, len(params))
+	for k, v := range params {
+		out[manifest.ParamVar+k] = v
+	}
+	return out
+}
+
+// templateVar matches {{ name }} with any inner spacing.
+func templateVar(name string) *regexp.Regexp {
+	return regexp.MustCompile(`\{\{\s*` + regexp.QuoteMeta(name) + `\s*\}\}`)
+}
+
+// endpoint expands one catalog URL for a connection's params (and, for a
+// revoke URL, {{ client_id }}). The loader proved the template https with a
+// fixed domain; this re-checks the expansion.
+func (p *Provider) endpoint(raw string, params map[string]string) (string, error) {
+	if p.ClientID != "" {
+		raw = templateVar("client_id").ReplaceAllLiteralString(raw, url.PathEscape(p.ClientID))
+	}
+	u, err := manifest.ExpandURL(raw, paramVars(params))
+	if err != nil {
+		return "", newError(CodeFailedPrecondition, "%s: %s", p.DisplayName, err.Error())
+	}
+	if u.Scheme != "https" || u.Host == "" || u.User != nil {
+		return "", newError(CodeInternal, "%s: catalog URL is not https", p.DisplayName)
+	}
+	return u.String(), nil
+}
+
+// Registry is the catalog of integrations a connection can be made to.
 type Registry struct {
 	order     []string
 	providers map[string]*Provider
 }
 
-// NewRegistry validates and registers providers. A provider with a non-HTTPS
-// endpoint is rejected outright.
-func NewRegistry(providers ...*Provider) (*Registry, error) {
+// ProvidersFromCatalog compiles every manifest that declares auth into a
+// provider, reading each OAuth client from deployment config
+// (OAuthClientEnv). A provider whose client is unset is still registered,
+// listed with its oauth2 method unavailable; it never fails boot. A manifest
+// that fails validation does: the catalog is embedded, so that is a build
+// defect, and it is re-validated here because a caller may hand in a manifest
+// that never went through the loader.
+func ProvidersFromCatalog(ms []*reliantv1.IntegrationManifest, getenv func(string) string) (*Registry, error) {
 	r := &Registry{providers: map[string]*Provider{}}
-	for _, p := range providers {
-		if err := p.validate(); err != nil {
-			return nil, err
+	for _, m := range ms {
+		if len(m.GetConnection().GetAuth()) == 0 {
+			continue
 		}
-		if _, dup := r.providers[p.ID]; dup {
-			return nil, fmt.Errorf("provider %q registered twice", p.ID)
+		if err := manifest.Validate(m, manifest.TrustCurated); err != nil {
+			return nil, fmt.Errorf("integration %q: %w", m.GetId(), err)
+		}
+		if _, dup := r.providers[m.GetId()]; dup {
+			// Versions of one integration share its connections; the lowest
+			// version that declares auth is the declaration.
+			continue
+		}
+		idVar, secretVar := OAuthClientEnv(m.GetId())
+		p := &Provider{
+			ID: m.GetId(), DisplayName: orDefault(m.GetDisplayName(), m.GetId()), spec: m.GetConnection(),
+			ClientID:      strings.TrimSpace(getenv(idVar)),
+			ClientSecret:  vault.NewSecret([]byte(strings.TrimSpace(getenv(secretVar)))),
+			clientIDVar:   idVar,
+			secretVar:     secretVar,
+			paramPatterns: map[string]*regexp.Regexp{},
+		}
+		for _, cp := range m.GetConnection().GetConnectionParams() {
+			if cp.GetPattern() != "" {
+				p.paramPatterns[cp.GetName()] = regexp.MustCompile("^(?:" + cp.GetPattern() + ")$")
+			}
 		}
 		r.providers[p.ID] = p
 		r.order = append(r.order, p.ID)
@@ -122,7 +286,7 @@ func NewRegistry(providers ...*Provider) (*Registry, error) {
 	return r, nil
 }
 
-// Get returns the provider for an id.
+// Get returns the provider for an integration id.
 func (r *Registry) Get(id string) (*Provider, bool) {
 	if r == nil {
 		return nil, false
@@ -131,7 +295,7 @@ func (r *Registry) Get(id string) (*Provider, bool) {
 	return p, ok
 }
 
-// List returns every registered provider, available or not, in registration order.
+// List returns every provider in catalog order.
 func (r *Registry) List() []*Provider {
 	if r == nil {
 		return nil
@@ -142,72 +306,3 @@ func (r *Registry) List() []*Provider {
 	}
 	return out
 }
-
-// GitHubApp builds the GitHub App user-to-server provider. With empty
-// credentials it is still registered, listed as unavailable.
-func GitHubApp(clientID string, clientSecret vault.Secret) *Provider {
-	return &Provider{
-		ID:           GitHubIntegrationID,
-		DisplayName:  "GitHub",
-		AuthKind:     core.ConnectionAuthGitHubAppUser,
-		AuthorizeURL: "https://github.com/login/oauth/authorize",
-		TokenURL:     "https://github.com/login/oauth/access_token",
-		ProbeURL:     "https://api.github.com/user",
-		// A GitHub App's permissions are fixed on the App itself; the scope
-		// parameter is ignored, so none is sent.
-		ClientID:     clientID,
-		ClientSecret: clientSecret,
-	}
-}
-
-// ProvidersFromEnv builds the registry from deployment config. Unset GitHub
-// credentials leave the provider listed but unavailable; they never fail boot.
-func ProvidersFromEnv(getenv func(string) string) (*Registry, error) {
-	id := strings.TrimSpace(getenv(EnvGitHubAppClientID))
-	secret := strings.TrimSpace(getenv(EnvGitHubAppClientSecret))
-	return NewRegistry(GitHubApp(id, vault.NewSecret([]byte(secret))))
-}
-
-// identify asks the provider who an access token acts as.
-func (p *Provider) identify(ctx context.Context, doer HTTPDoer, accessToken string) (Identity, error) {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, p.ProbeURL, nil)
-	if err != nil {
-		return Identity{}, err
-	}
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Accept", "application/vnd.github+json")
-	req.Header.Set("User-Agent", "reliant-connections")
-	resp, err := doer.Do(req)
-	if err != nil {
-		return Identity{}, &probeError{class: "unreachable"}
-	}
-	defer resp.Body.Close()
-	body, err := io.ReadAll(io.LimitReader(resp.Body, maxProviderResponse))
-	if err != nil {
-		return Identity{}, &probeError{class: "unreachable"}
-	}
-	switch {
-	case resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden:
-		return Identity{}, &probeError{class: "unauthorized"}
-	case resp.StatusCode >= 500:
-		return Identity{}, &probeError{class: "unreachable"}
-	case resp.StatusCode < 200 || resp.StatusCode > 299:
-		return Identity{}, &probeError{class: "unauthorized"}
-	}
-	var who struct {
-		ID    json.Number `json:"id"`
-		Login string      `json:"login"`
-	}
-	if err := json.Unmarshal(body, &who); err != nil || who.ID.String() == "" {
-		return Identity{}, &probeError{class: "unreachable"}
-	}
-	if _, err := strconv.ParseInt(who.ID.String(), 10, 64); err != nil {
-		return Identity{}, &probeError{class: "unreachable"}
-	}
-	return Identity{ExternalAccountID: who.ID.String(), AccountLabel: who.Login}, nil
-}
-
-// probeError carries only a class, never a provider body.
-type probeError struct{ class string }
-
-func (e *probeError) Error() string { return "provider probe failed: " + e.class }

@@ -12,6 +12,7 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -19,9 +20,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/crypto"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/stretchr/testify/require"
 )
@@ -30,6 +33,73 @@ const (
 	clientID     = "Iv1.testclient"
 	clientSecret = "client-secret-canary-0001"
 )
+
+// testCatalog is what every test registry is built from: integrations are
+// manifests, exactly as in production. Its URLs are the real https hosts; the
+// redirectingDoer delivers them to the fake server.
+const testCatalog = `
+id: github
+version: 1
+display_name: GitHub
+connection:
+  base_url: https://api.github.com
+  default_headers: { Accept: application/vnd.github+json }
+  auth:
+    - oauth2:
+        authorize_url: https://github.com/login/oauth/authorize
+        token_url: https://github.com/login/oauth/access_token
+        revoke:
+          method: DELETE
+          url: "https://api.github.com/applications/{{ client_id }}/token"
+          client_auth: basic
+          token_in: json
+          token_param: access_token
+    - api_key: { in: header, name: Authorization, prefix: "Bearer ", label: Personal access token }
+  probe:
+    path: /user
+    external_id: string(response.id)
+    label: response.login
+actions:
+  - id: user.get
+    placement: server
+    params: { type: object }
+    request: { method: GET, path: /user }
+---
+id: svc
+version: 1
+display_name: Svc
+connection:
+  allow_any_public_host: true
+  auth_optional: true
+  auth:
+    - api_key: {}
+    - basic: {}
+actions:
+  - id: request
+    placement: server
+    params: { type: object, properties: { url: { type: string } } }
+    request: { method: GET, url: "{{ params.url }}" }
+`
+
+// testManifests parses the catalog plus any extra documents, a "---" apart.
+func testManifests(t *testing.T, extra ...string) []*reliantv1.IntegrationManifest {
+	t.Helper()
+	var out []*reliantv1.IntegrationManifest
+	for _, doc := range strings.Split(strings.Join(append([]string{testCatalog}, extra...), "\n---\n"), "\n---\n") {
+		if strings.TrimSpace(doc) == "" {
+			continue
+		}
+		m, err := manifest.Parse([]byte(doc), manifest.TrustCurated)
+		require.NoError(t, err)
+		out = append(out, m)
+	}
+	return out
+}
+
+// oauthEnv is the deployment config the registry reads client credentials from.
+func oauthEnv(vars map[string]string) func(string) string {
+	return func(k string) string { return vars[k] }
+}
 
 // fakeGitHub is an httptest TLS server standing in for github.com. No test in
 // this package touches the real network.
@@ -51,6 +121,7 @@ type fakeGitHub struct {
 	accountID     int64
 	seq           atomic.Int64
 	probeAuth     string
+	revoked       []string
 }
 
 func newFakeGitHub(t *testing.T) *fakeGitHub {
@@ -58,6 +129,15 @@ func newFakeGitHub(t *testing.T) *fakeGitHub {
 	g := &fakeGitHub{login: "octocat", accountID: 583231, expiresIn: 28800}
 	mux := http.NewServeMux()
 	mux.HandleFunc("/login/oauth/access_token", g.token)
+	mux.HandleFunc("/applications/", func(w http.ResponseWriter, r *http.Request) {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		user, pass, _ := r.BasicAuth()
+		var body map[string]string
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		g.revoked = append(g.revoked, r.Method+" "+r.URL.Path+" "+user+":"+pass+" "+body["access_token"])
+		w.WriteHeader(http.StatusNoContent)
+	})
 	mux.HandleFunc("/user", func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
 		g.probeAuth = r.Header.Get("Authorization")
@@ -161,7 +241,9 @@ func newEnv(t *testing.T) *env {
 	v := vault.New(raw, vault.NewEnvKeyWrapper(ring))
 
 	gh := newFakeGitHub(t)
-	providers, err := connections.NewRegistry(connections.GitHubApp(clientID, vault.NewSecret([]byte(clientSecret))))
+	providers, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(map[string]string{
+		"RELIANT_OAUTH_GITHUB_CLIENT_ID": clientID, "RELIANT_OAUTH_GITHUB_CLIENT_SECRET": clientSecret,
+	}))
 	require.NoError(t, err)
 	doer := redirectingDoer{target: gh.srv}
 

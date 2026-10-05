@@ -150,7 +150,7 @@ func TestResolver_IntegrationMustMatch(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	linear, err := e.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
-		UserID: "alice", IntegrationID: "linear", Name: "lin", Kind: connections.APIKeyKindAPIKey,
+		UserID: "alice", IntegrationID: "svc", Name: "lin", Kind: connections.APIKeyKindAPIKey,
 		Fields: map[string]string{"api_key": "lin_api_key_value", "header": "bearer"},
 	})
 	require.NoError(t, err)

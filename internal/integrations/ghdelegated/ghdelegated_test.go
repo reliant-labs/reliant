@@ -20,11 +20,13 @@ import (
 	"github.com/reliant-labs/forge/pkg/crypto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/netguard"
@@ -58,6 +60,7 @@ func (f *fakeCP) UserAccessToken(_ context.Context, externalUserID, provider str
 type env struct {
 	t        *testing.T
 	repo     *db.Repo
+	svc      *connections.Service
 	resolver *connections.Resolver
 	cp       *fakeCP
 }
@@ -72,11 +75,14 @@ func newEnv(t *testing.T) *env {
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
 	v := vault.New(raw, vault.NewEnvKeyWrapper(ring))
-	providers, err := connections.NewRegistry()
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(string) string { return "" })
 	require.NoError(t, err)
 	store := repo.Connections()
-	resolver := connections.NewResolver(repo, store, connections.NewTokenSource(store, v, providers, nil))
-	return &env{t: t, repo: repo, resolver: resolver, cp: &fakeCP{tokens: map[string]string{
+	tokens := connections.NewTokenSource(store, v, providers, nil)
+	resolver := connections.NewResolver(repo, store, tokens)
+	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
+	svc := connections.NewService(store, v, providers, tokens, broker, nil)
+	return &env{t: t, repo: repo, svc: svc, resolver: resolver, cp: &fakeCP{tokens: map[string]string{
 		"idp|alice": "ghu_alice_token_9f3c1e",
 		"idp|bob":   "ghu_bob_token_7a2d4b",
 	}}}
@@ -97,15 +103,25 @@ func (e *env) newRun(userID string) string {
 	return id
 }
 
-// source is the hosted composition: the delegated broker for `github`, the
-// saved-connection source for everything else. host pins the credential to
-// the test server instead of api.github.com.
-func (e *env) source(host string) *Source {
-	return NewSource(e.resolver, newBroker(e.cp, host, nil), connauth.New(e.resolver))
+// source is the hosted composition: the broker registered under BrokerID,
+// which the `github` manifest's delegated method names. host pins the
+// credential to the test server instead of api.github.com.
+func (e *env) source(host string) *connauth.Source {
+	brokers := connauth.NewBrokers()
+	require.NoError(e.t, brokers.Register(BrokerID, newBroker(e.cp, host, nil)))
+	return connauth.New(e.resolver).WithBrokers(brokers)
 }
 
-func githubReq(runID string) httpaction.CredentialRequest {
-	return httpaction.CredentialRequest{RunID: runID, IntegrationID: IntegrationID, ServerPlaced: true}
+// githubSpec is the embedded `github` manifest's connection declaration.
+func githubSpec(t *testing.T) *reliantv1.ConnectionSpec {
+	t.Helper()
+	a, err := catalog.MustBuiltin().Resolve("github/user.get@1")
+	require.NoError(t, err)
+	return a.Manifest.GetConnection()
+}
+
+func githubReq(t *testing.T, runID string) httpaction.CredentialRequest {
+	return httpaction.CredentialRequest{RunID: runID, IntegrationID: IntegrationID, Connection: githubSpec(t), ServerPlaced: true}
 }
 
 func applied(t *testing.T, cred httpaction.Credential, rawURL string) string {
@@ -122,11 +138,11 @@ func TestResolvesOnlyForTheRunOwner(t *testing.T) {
 	e := newEnv(t)
 	src := e.source(APIHost)
 
-	aliceCred, err := src.Credential(context.Background(), githubReq(e.newRun("idp|alice")))
+	aliceCred, err := src.Credential(context.Background(), githubReq(t, e.newRun("idp|alice")))
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer ghu_alice_token_9f3c1e", applied(t, aliceCred, "https://api.github.com/user"))
 
-	bobCred, err := src.Credential(context.Background(), githubReq(e.newRun("idp|bob")))
+	bobCred, err := src.Credential(context.Background(), githubReq(t, e.newRun("idp|bob")))
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer ghu_bob_token_7a2d4b", applied(t, bobCred, "https://api.github.com/user"))
 
@@ -134,12 +150,18 @@ func TestResolvesOnlyForTheRunOwner(t *testing.T) {
 		"control-plane is asked for exactly the run owners, by external id")
 }
 
-// A connection id in the request cannot redirect the lookup to another user:
-// the delegated path ignores it, and the owner still comes from the run.
+// Nothing in the request can name another user: a connection id that is
+// really someone's user id resolves as no connection and is refused, and the
+// delegated path reads the owner from the run.
 func TestRequestCannotNameAnotherUser(t *testing.T) {
 	e := newEnv(t)
-	req := githubReq(e.newRun("idp|alice"))
+	req := githubReq(t, e.newRun("idp|alice"))
 	req.ConnectionID = "idp|bob"
+	_, err := e.source(APIHost).Credential(context.Background(), req)
+	require.Error(t, err)
+	assert.Empty(t, e.cp.asked, "bob's token is never fetched")
+
+	req.ConnectionID = ""
 	cred, err := e.source(APIHost).Credential(context.Background(), req)
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer ghu_alice_token_9f3c1e", applied(t, cred, "https://api.github.com/repos/o/r"))
@@ -149,7 +171,7 @@ func TestRequestCannotNameAnotherUser(t *testing.T) {
 // A run that does not exist, or has no owner, resolves for no one.
 func TestUnknownRunResolvesForNoOne(t *testing.T) {
 	e := newEnv(t)
-	_, err := e.source(APIHost).Credential(context.Background(), githubReq(uuid.NewString()))
+	_, err := e.source(APIHost).Credential(context.Background(), githubReq(t, uuid.NewString()))
 	var ce *httpaction.CredentialError
 	require.True(t, errors.As(err, &ce), "got %v", err)
 	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
@@ -159,7 +181,7 @@ func TestUnknownRunResolvesForNoOne(t *testing.T) {
 // A token must never leave the server.
 func TestDaemonPlacedCallIsRefused(t *testing.T) {
 	e := newEnv(t)
-	req := githubReq(e.newRun("idp|alice"))
+	req := githubReq(t, e.newRun("idp|alice"))
 	req.ServerPlaced = false
 	_, err := e.source(APIHost).Credential(context.Background(), req)
 	var ce *httpaction.CredentialError
@@ -170,7 +192,7 @@ func TestDaemonPlacedCallIsRefused(t *testing.T) {
 
 func TestOwnerWithoutGitHub_IsNotConnected(t *testing.T) {
 	e := newEnv(t)
-	_, err := e.source(APIHost).Credential(context.Background(), githubReq(e.newRun("idp|carol")))
+	_, err := e.source(APIHost).Credential(context.Background(), githubReq(t, e.newRun("idp|carol")))
 	var ce *httpaction.CredentialError
 	require.True(t, errors.As(err, &ce))
 	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
@@ -189,7 +211,7 @@ func TestControlPlaneErrorsMapToCredentialCodes(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			e := newEnv(t)
 			e.cp.err = tc.err
-			_, err := e.source(APIHost).Credential(context.Background(), githubReq(e.newRun("idp|alice")))
+			_, err := e.source(APIHost).Credential(context.Background(), githubReq(t, e.newRun("idp|alice")))
 			var ce *httpaction.CredentialError
 			require.True(t, errors.As(err, &ce))
 			assert.Equal(t, tc.want, ce.Code)
@@ -198,33 +220,62 @@ func TestControlPlaneErrorsMapToCredentialCodes(t *testing.T) {
 	}
 }
 
-// Other integrations, and self-hosted `github` (no broker), go to the
-// saved-connection source untouched.
-func TestOtherIntegrationsAndSelfHostedPassThrough(t *testing.T) {
+// The broker is asked only for an integration whose manifest names it, and
+// only when the owner has no saved connection. Self-hosted (no broker
+// registered) `github` is a saved connection or nothing.
+func TestBrokerOnlyForItsIntegrationAndSelfHostedFallsThrough(t *testing.T) {
 	e := newEnv(t)
 	run := e.newRun("idp|alice")
-	next := &recordingSource{}
 
-	hosted := NewSource(e.resolver, newBroker(e.cp, APIHost, nil), next)
-	_, _ = hosted.Credential(context.Background(), httpaction.CredentialRequest{RunID: run, IntegrationID: "http", ConnectionID: "c1", ServerPlaced: true})
-	selfHosted := NewSource(e.resolver, nil, next)
-	_, _ = selfHosted.Credential(context.Background(), githubReq(run))
+	// Another integration (generic http, no delegated method) never reaches CP.
+	_, err := e.source(APIHost).Credential(context.Background(), httpaction.CredentialRequest{
+		RunID: run, IntegrationID: "http", ConnectionID: "c1", ServerPlaced: true,
+		Connection: &reliantv1.ConnectionSpec{AllowAnyPublicHost: true, AuthOptional: true},
+	})
+	require.Error(t, err)
+	assert.Empty(t, e.cp.asked, "control-plane is consulted only for an integration that names its broker")
 
-	assert.Equal(t, []string{"http", "github"}, next.integrations)
-	assert.Empty(t, e.cp.asked, "control-plane is consulted only for hosted github")
+	// Self-hosted: no broker registered, so github without a saved connection
+	// is "no github connection", not a control-plane call.
+	_, err = connauth.New(e.resolver).Credential(context.Background(), githubReq(t, run))
+	var ce *httpaction.CredentialError
+	require.True(t, errors.As(err, &ce))
+	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)
+	assert.Contains(t, ce.Message, "no github connection")
+	assert.Empty(t, e.cp.asked)
 }
 
-type recordingSource struct{ integrations []string }
+// A saved GitHub connection (a pasted token, or reliant's own OAuth app) wins
+// over the delegated authority: an explicit choice the owner made.
+func TestSavedConnectionWinsOverDelegated(t *testing.T) {
+	e := newEnv(t)
+	conn, err := e.svc.CreateAPIKey(context.Background(), connections.CreateAPIKeyParams{
+		UserID: "idp|alice", IntegrationID: "github", Name: "pat", Kind: connections.APIKeyKindAPIKey,
+		Fields: map[string]string{"api_key": "ghp_saved_pat"},
+	})
+	require.NoError(t, err)
+	cred, err := e.source(APIHost).Credential(context.Background(), githubReq(t, e.newRun("idp|alice")))
+	require.NoError(t, err)
+	assert.Equal(t, conn.ID, cred.ConnectionID())
+	assert.Equal(t, "Bearer ghp_saved_pat", applied(t, cred, "https://api.github.com/user"))
+	assert.Empty(t, e.cp.asked)
+}
 
-func (r *recordingSource) Credential(_ context.Context, req httpaction.CredentialRequest) (httpaction.Credential, error) {
-	r.integrations = append(r.integrations, req.IntegrationID)
-	return nil, &httpaction.CredentialError{Code: httpaction.CodeFailedPrecondition, Message: "no connection"}
+// An explicit connection id that does not resolve is an error, never a
+// silent switch to the owner's delegated token.
+func TestExplicitMissingConnectionIsNotRedirectedToBroker(t *testing.T) {
+	e := newEnv(t)
+	req := githubReq(t, e.newRun("idp|alice"))
+	req.ConnectionID = "conn_nope"
+	_, err := e.source(APIHost).Credential(context.Background(), req)
+	require.Error(t, err)
+	assert.Empty(t, e.cp.asked)
 }
 
 // The credential is pinned: it is applied only to https://api.github.com.
 func TestCredentialIsPinnedToAPIGitHubCom(t *testing.T) {
 	e := newEnv(t)
-	cred, err := e.source(APIHost).Credential(context.Background(), githubReq(e.newRun("idp|alice")))
+	cred, err := e.source(APIHost).Credential(context.Background(), githubReq(t, e.newRun("idp|alice")))
 	require.NoError(t, err)
 	for _, bad := range []string{
 		"https://evil.example/user",
@@ -251,7 +302,8 @@ func TestEndToEnd_BearerAppliedPinnedAndScrubbed(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		seen = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		_, _ = fmt.Fprintf(w, `{"login":"alice","echo":%q}`, r.Header.Get("Authorization"))
+		// A hostile upstream reflects the token into a field the action selects.
+		_, _ = fmt.Fprintf(w, `{"login":"alice","id":583231,"name":%q}`, r.Header.Get("Authorization"))
 	}))
 	defer srv.Close()
 	u, _ := url.Parse(srv.URL)
@@ -264,8 +316,7 @@ func TestEndToEnd_BearerAppliedPinnedAndScrubbed(t *testing.T) {
 	g.AllowLoopback = true
 	runner := httpaction.NewRunner(g).WithRootCAs(pool)
 
-	res, err := runner.RunAuthenticated(context.Background(), m, a,
-		map[string]any{httpaction.ConnectionParam: "delegated"}, src,
+	res, err := runner.RunAuthenticated(context.Background(), m, a, map[string]any{}, src,
 		httpaction.CallSite{RunID: e.newRun("idp|alice")})
 	require.NoError(t, err)
 	assert.Equal(t, "Bearer ghu_alice_token_9f3c1e", seen, "the owner's token reached the host as a bearer")
@@ -292,26 +343,26 @@ func TestEndToEnd_ManifestPointingElsewhereGetsNoToken(t *testing.T) {
 	g.AllowLoopback = true
 	runner := httpaction.NewRunner(g).WithRootCAs(pool)
 
-	_, err := runner.RunAuthenticated(context.Background(), m, a,
-		map[string]any{httpaction.ConnectionParam: "delegated"}, src,
+	_, err := runner.RunAuthenticated(context.Background(), m, a, map[string]any{}, src,
 		httpaction.CallSite{RunID: e.newRun("idp|alice")})
 	require.Error(t, err)
 	assert.Empty(t, seen, "the token never reached a host other than api.github.com")
 	assert.NotContains(t, err.Error(), "ghu_alice")
 }
 
-// githubManifest is a minimal `github` integration whose base_url is the test
-// server. The real catalog manifest arrives with the GitHub provider work.
+// githubManifest is the embedded `github` manifest with its base_url pointed
+// at the test server: the real auth declaration, a different host.
 func githubManifest(baseURL string) (*reliantv1.IntegrationManifest, *reliantv1.ActionSpec) {
-	a := &reliantv1.ActionSpec{
-		Id:        "user_get",
-		Placement: "server",
-		Request:   &reliantv1.HttpRequestSpec{Method: "GET", Path: "/user"},
+	a, err := catalog.MustBuiltin().Resolve("github/user.get@1")
+	if err != nil {
+		panic(err)
 	}
-	m := &reliantv1.IntegrationManifest{
-		Id:         IntegrationID,
-		Connection: &reliantv1.ConnectionSpec{Type: "none", BaseUrl: baseURL, OptionalAuthKinds: []string{"api_key"}},
-		Actions:    []*reliantv1.ActionSpec{a},
+	m := proto.Clone(a.Manifest).(*reliantv1.IntegrationManifest)
+	m.Connection.BaseUrl = baseURL
+	for _, act := range m.GetActions() {
+		if act.GetId() == a.Spec.GetId() {
+			return m, act
+		}
 	}
-	return m, a
+	panic("user.get missing")
 }

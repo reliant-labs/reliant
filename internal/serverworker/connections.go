@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/connauth"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
@@ -23,7 +24,7 @@ import (
 // key with the api-server: the worker is the only process that reads secrets,
 // and the only one besides the api-server that writes them (on refresh).
 func newConnectionResolver(repo *db.Repo, keys *vault.Vault) (*connections.Resolver, error) {
-	providers, err := connections.ProvidersFromEnv(os.Getenv)
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
@@ -33,10 +34,11 @@ func newConnectionResolver(repo *db.Repo, keys *vault.Vault) (*connections.Resol
 }
 
 // newIntegrationCredentials is the credential source integration actions
-// authenticate with: saved connections, plus — when a control plane is
-// configured — GitHub tokens delegated by control-plane, the GitHub token
-// authority. Self-hosted, `github` stays a saved connection through reliant's
-// own provider.
+// authenticate with: saved connections, plus the delegated brokers this
+// deployment registers. When a control plane is configured, the GitHub broker
+// is registered under ghdelegated.BrokerID, which the `github` manifest's
+// delegated method names; self-hosted registers none, and `github` is a saved
+// connection (reliant's own OAuth app or a pasted token).
 //
 // A control-plane URL without INTERNAL_SERVICE_SECRET is a boot error, never a
 // silent fall-back to the self-hosted provider: hosted users' GitHub tokens
@@ -48,6 +50,7 @@ func newIntegrationCredentials(resolver *connections.Resolver, getenv func(strin
 	if cpURL == "" {
 		return saved, nil
 	}
+	brokers := connauth.NewBrokers()
 	secret := strings.TrimSpace(getenv("INTERNAL_SERVICE_SECRET"))
 	if secret == "" {
 		return nil, errors.New("integrations: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
@@ -58,7 +61,10 @@ func newIntegrationCredentials(resolver *connections.Resolver, getenv func(strin
 		Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
 	})
 	broker := ghdelegated.NewBroker(client, slog.Default().With("component", "ghdelegated"))
-	return ghdelegated.NewSource(resolver, broker, saved), nil
+	if err := brokers.Register(ghdelegated.BrokerID, broker); err != nil {
+		return nil, fmt.Errorf("integrations: %w", err)
+	}
+	return saved.WithBrokers(brokers), nil
 }
 
 // controlPlaneURLFrom reads the control-plane URL from the same variables, in

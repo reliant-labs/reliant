@@ -58,8 +58,17 @@ func TestAPIKey_RejectsDisallowedHeaderAndBadInput(t *testing.T) {
 			p.Fields = map[string]string{"api_key": "k"}
 			p.IntegrationID = "Has Space"
 		},
-		"oauth integration": func(p *connections.CreateAPIKeyParams) {
+		"integration without basic": func(p *connections.CreateAPIKeyParams) {
+			p.Kind = connections.APIKeyKindBasic
+			p.Fields = map[string]string{"username": "u", "password": "p"}
+			p.IntegrationID = "github"
+		},
+		"unknown integration": func(p *connections.CreateAPIKeyParams) {
 			p.Fields = map[string]string{"api_key": "k"}
+			p.IntegrationID = "nope"
+		},
+		"header choice on a declared placement": func(p *connections.CreateAPIKeyParams) {
+			p.Fields = map[string]string{"api_key": "k", "header": "x-api-key"}
 			p.IntegrationID = "github"
 		},
 		"unspecified kind": func(p *connections.CreateAPIKeyParams) { p.Fields = map[string]string{"api_key": "k"}; p.Kind = 0 },
@@ -97,7 +106,7 @@ func TestAPIKey_BasicRoundTrip(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	conn, err := e.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
-		UserID: "alice", IntegrationID: "jira", Name: "j", Kind: connections.APIKeyKindBasic,
+		UserID: "alice", IntegrationID: "svc", Name: "j", Kind: connections.APIKeyKindBasic,
 		Fields: map[string]string{"username": "me", "password": "p@ss:w0rd"},
 	})
 	require.NoError(t, err)
@@ -123,7 +132,7 @@ func TestAPIKey_TestConnectionOpensSecret(t *testing.T) {
 	r, err := e.svc.Test(ctx, "alice", conn.ID)
 	require.NoError(t, err)
 	require.True(t, r.OK)
-	require.False(t, r.Probed, "a pasted key has no provider probe in v1")
+	require.False(t, r.Probed, "an integration without a probe only proves the stored secret opens")
 }
 
 func TestTestConnection_GitHubProbeRecordsAccountLabel(t *testing.T) {

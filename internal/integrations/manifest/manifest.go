@@ -145,37 +145,13 @@ func Validate(m *reliantv1.IntegrationManifest, trust Trust) error {
 	if len(m.GetTriggers()) > 0 {
 		return fmt.Errorf("triggers are reserved and not yet supported")
 	}
+	if err := validateKeywords("", m.GetKeywords()); err != nil {
+		return err
+	}
 	conn := m.GetConnection()
-	connType := conn.GetType()
-	if connType == "" {
-		connType = ConnectionNone
-	}
-	if connType != ConnectionNone {
-		return fmt.Errorf("connection type %q is reserved; only %q is supported", connType, ConnectionNone)
-	}
-	for _, kind := range conn.GetOptionalAuthKinds() {
-		if kind != "api_key" && kind != "basic" {
-			return fmt.Errorf("connection.optional_auth_kinds: %q must be api_key or basic", kind)
-		}
-	}
-	if conn.GetAllowAnyPublicHost() && trust != TrustCurated {
-		return fmt.Errorf("allow_any_public_host is only valid in curated manifests")
-	}
-	var allowed map[string]bool
-	if conn.GetBaseUrl() != "" {
-		base, err := parseHTTPS(conn.GetBaseUrl())
-		if err != nil {
-			return fmt.Errorf("connection.base_url: %w", err)
-		}
-		allowed = map[string]bool{strings.ToLower(base.Host): true}
-	} else {
-		allowed = map[string]bool{}
-	}
-	for _, h := range conn.GetAllowedHosts() {
-		if h == "" || strings.ContainsAny(h, "/:@ ") {
-			return fmt.Errorf("connection.allowed_hosts: %q must be a bare hostname", h)
-		}
-		allowed[strings.ToLower(h)] = true
+	allowed, _, err := validateConnection(conn, trust)
+	if err != nil {
+		return err
 	}
 	if len(m.GetActions()) == 0 {
 		return fmt.Errorf("at least one action is required")
@@ -238,16 +214,48 @@ func validateAction(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, c
 	if a.GetTool().GetName() != "" && !toolPattern.MatchString(a.GetTool().GetName()) {
 		return fmt.Errorf("tool.name %q must match %s", a.GetTool().GetName(), toolPattern)
 	}
+	if strings.ContainsAny(a.GetSummary(), "\r\n") || len(a.GetSummary()) > 200 {
+		return fmt.Errorf("summary must be one line of at most 200 characters")
+	}
+	if err := validateKeywords("", a.GetKeywords()); err != nil {
+		return err
+	}
 	if a.GetParams() != nil {
 		if t, _ := a.GetParams().AsMap()["type"].(string); t != "object" {
 			return fmt.Errorf("params must be a JSON Schema with type: object")
 		}
+		if err := validateSchema("params", a.GetParams().AsMap()); err != nil {
+			return err
+		}
 	} else if a.GetTool().GetExpose() {
 		return fmt.Errorf("params are required when tool.expose is set")
 	}
+	if s := a.GetOutput().GetSchema(); s != nil {
+		if err := validateSchema("output.schema", s.AsMap()); err != nil {
+			return err
+		}
+	}
+	if a.GetExecutor() != "" {
+		if _, ok := ExecutorName(a); !ok {
+			return fmt.Errorf("executor %q must be go:<name> (%s)", a.GetExecutor(), executorPattern)
+		}
+		if a.GetRequest() != nil {
+			return fmt.Errorf("executor and request are mutually exclusive")
+		}
+		if a.GetParams() == nil {
+			return fmt.Errorf("params are required with an executor: the schema is the executor's contract")
+		}
+		if a.GetPlacement() == PlacementDaemon {
+			return fmt.Errorf("an executor runs on the server; placement must be server or any")
+		}
+		if sel := a.GetOutput().GetSelect(); sel != "" {
+			return fmt.Errorf("output.select applies to an HTTP response; an executor returns its data directly")
+		}
+		return nil
+	}
 	req := a.GetRequest()
 	if req == nil {
-		return fmt.Errorf("request is required")
+		return fmt.Errorf("request is required (or an executor)")
 	}
 	if err := validateRequest(req); err != nil {
 		return err
@@ -395,9 +403,8 @@ func checkHost(req *reliantv1.HttpRequestSpec, conn *reliantv1.ConnectionSpec, a
 		if conn.GetBaseUrl() == "" {
 			return fmt.Errorf("request.path needs connection.base_url")
 		}
-		p := req.GetPath()
-		if !strings.HasPrefix(p, "/") || strings.HasPrefix(p, "//") || strings.Contains(p, "://") || strings.Contains(p, `\`) {
-			return fmt.Errorf("request.path %q must be a path starting with a single /", p)
+		if err := checkPath(req.GetPath()); err != nil {
+			return fmt.Errorf("request.path: %w", err)
 		}
 		return nil
 	}

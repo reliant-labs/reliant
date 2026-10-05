@@ -10,19 +10,12 @@
 // token, applies it as a bearer to exactly one host, and scrubs it from
 // everything the call returns.
 //
-// Self-hosted (no control plane) keeps reliant's own GitHub provider
-// (connections.GitHubApp, RELIANT_GITHUB_APP_CLIENT_ID/SECRET): Source routes
-// the `github` integration here only when a Broker is configured, and to the
-// saved-connection source otherwise.
-//
-// ── PLUGGING INTO THE DELEGATED AUTH TYPE ─────────────────────────────
-//
-// Manifest auth (stream A) adds `connection.type: delegated` naming a broker
-// id that Go registers. Until that registry lands, this package declares the
-// broker contract locally (DelegatedBroker) and Source routes on the
-// integration id. When A's registry exists, *Broker registers under BrokerID
-// and Source's routing collapses into the registry lookup; the broker itself
-// does not change.
+// The `github` manifest declares `delegated: { broker: controlplane-github }`
+// first among its auth methods. The worker registers *Broker under BrokerID
+// with connauth.Brokers when a control plane is configured (hosted); the
+// credential source asks it whenever the run owner has no saved GitHub
+// connection. Self-hosted registers nothing, and the manifest's oauth2 method
+// (RELIANT_OAUTH_GITHUB_CLIENT_ID/SECRET) or a pasted token is used instead.
 package ghdelegated
 
 import (
@@ -51,15 +44,6 @@ const (
 	ConnectionID = "controlplane:github"
 )
 
-// DelegatedBroker turns a run owner into a credential obtained from an
-// external authority. It is the local shape of stream A's delegated-broker
-// contract (see the package doc). ownerUserID is reliant's user id for the
-// run owner — the IdP subject, which is what control-plane calls the EXTERNAL
-// id.
-type DelegatedBroker interface {
-	Credential(ctx context.Context, ownerUserID string) (httpaction.Credential, error)
-}
-
 // tokenSource is what the broker needs from control-plane.
 // *gitcredentialclient.Client satisfies it.
 type tokenSource interface {
@@ -85,8 +69,6 @@ func newBroker(tokens tokenSource, host string, logger *slog.Logger) *Broker {
 	}
 	return &Broker{tokens: tokens, host: strings.ToLower(host), logger: logger}
 }
-
-var _ DelegatedBroker = (*Broker)(nil)
 
 // Credential fetches the owner's token from control-plane, every call. The
 // token is not cached here: control-plane renews it under a lock and is the
@@ -125,6 +107,10 @@ type credential struct {
 }
 
 func (c *credential) ConnectionID() string { return ConnectionID }
+
+// Params is empty: a delegated GitHub credential has no per-connection
+// settings.
+func (c *credential) Params() map[string]string { return nil }
 
 // Apply writes the bearer token, but ONLY to an https request for the pinned
 // host. httpaction pins a credential to the host a call STARTED at; this is

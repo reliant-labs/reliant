@@ -36,7 +36,7 @@ func TestCanaryNeverLeaks(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	conn, err := e.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
-		UserID: "alice", IntegrationID: "linear", Name: "lin", Kind: connections.APIKeyKindAPIKey,
+		UserID: "alice", IntegrationID: "svc", Name: "lin", Kind: connections.APIKeyKindAPIKey,
 		Fields: map[string]string{"api_key": canary, "header": "x-api-key"},
 	})
 	require.NoError(t, err)
@@ -114,7 +114,7 @@ func TestRedactorScrubsBasicAuthEncodings(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	conn, err := e.svc.CreateAPIKey(ctx, connections.CreateAPIKeyParams{
-		UserID: "alice", IntegrationID: "jira", Name: "j", Kind: connections.APIKeyKindBasic,
+		UserID: "alice", IntegrationID: "svc", Name: "j", Kind: connections.APIKeyKindBasic,
 		Fields: map[string]string{"username": "me@example.com", "password": canary},
 	})
 	require.NoError(t, err)

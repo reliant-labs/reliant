@@ -8,8 +8,8 @@ import (
 	"time"
 
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
-	"github.com/reliant-labs/reliant/internal/vault"
 	"github.com/stretchr/testify/require"
 )
 
@@ -153,7 +153,7 @@ func TestOAuth_CompleteStoresConnectionAndSealedTokens(t *testing.T) {
 	require.Equal(t, "work", conn.Name)
 	require.Equal(t, "octocat", *conn.AccountLabel)
 	require.Equal(t, "583231", *conn.ExternalAccountID)
-	require.Equal(t, "github_app_user", conn.AuthKind)
+	require.Equal(t, "oauth2", conn.AuthKind)
 	require.Equal(t, "active", conn.Status)
 	require.NotNil(t, conn.AccessExpiresAt)
 	require.Equal(t, clientID, *conn.OAuthClient)
@@ -213,25 +213,27 @@ func TestOAuth_CannotReconnectSomeoneElsesConnection(t *testing.T) {
 }
 
 func TestOAuth_ProviderWithoutCredentialsIsUnavailableNotFatal(t *testing.T) {
-	reg, err := connections.ProvidersFromEnv(func(string) string { return "" })
+	reg, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(nil))
 	require.NoError(t, err, "unset credentials must not fail boot")
 	p, ok := reg.Get("github")
 	require.True(t, ok)
-	require.False(t, p.Available())
-	require.Contains(t, p.UnavailableReason(), connections.EnvGitHubAppClientID)
-	require.Contains(t, p.UnavailableReason(), connections.EnvGitHubAppClientSecret)
+	require.False(t, p.OAuthAvailable())
+	reason := p.MethodStatus(connections.MethodOAuth2).Reason
+	require.Contains(t, reason, "RELIANT_OAUTH_GITHUB_CLIENT_ID")
+	require.Contains(t, reason, "RELIANT_OAUTH_GITHUB_CLIENT_SECRET")
+	require.True(t, p.MethodStatus(connections.MethodAPIKey).Available, "a pasted token needs no deployment config")
 
-	reg, err = connections.ProvidersFromEnv(func(k string) string {
-		return map[string]string{connections.EnvGitHubAppClientID: "id", connections.EnvGitHubAppClientSecret: "sec"}[k]
-	})
+	reg, err = connections.ProvidersFromCatalog(testManifests(t), oauthEnv(map[string]string{
+		"RELIANT_OAUTH_GITHUB_CLIENT_ID": "id", "RELIANT_OAUTH_GITHUB_CLIENT_SECRET": "sec",
+	}))
 	require.NoError(t, err)
 	p, _ = reg.Get("github")
-	require.True(t, p.Available())
+	require.True(t, p.OAuthAvailable())
 }
 
 func TestOAuth_UnavailableProviderCannotStart(t *testing.T) {
 	e := newEnv(t)
-	reg, err := connections.ProvidersFromEnv(func(string) string { return "" })
+	reg, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(nil))
 	require.NoError(t, err)
 	b := connections.NewBroker(e.store, e.vault, reg, nil, "https://reliant.example")
 	_, err = b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", Binder: "b"})
@@ -240,11 +242,14 @@ func TestOAuth_UnavailableProviderCannotStart(t *testing.T) {
 	require.ErrorIs(t, err, connections.ErrNotFound)
 }
 
+// The loader is the only way into the registry, and it refuses a non-https
+// endpoint; a hand-built spec that skips it is refused by the registry too.
 func TestOAuth_RegistryRejectsNonHTTPSEndpoints(t *testing.T) {
-	p := connections.GitHubApp("id", vault.NewSecret([]byte("s")))
-	p.TokenURL = "http://github.com/login/oauth/access_token"
-	_, err := connections.NewRegistry(p)
+	m := testManifests(t)[0]
+	m.GetConnection().GetAuth()[0].GetOauth2().TokenUrl = "http://github.com/login/oauth/access_token"
+	_, err := connections.ProvidersFromCatalog([]*reliantv1.IntegrationManifest{m}, oauthEnv(nil))
 	require.Error(t, err)
+	require.Contains(t, err.Error(), "token_url")
 }
 
 func TestOAuth_CorruptSealedVerifierFailsWithoutLeakingCode(t *testing.T) {

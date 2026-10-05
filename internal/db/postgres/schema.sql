@@ -548,11 +548,18 @@ CREATE TABLE public.connections (
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
-    CONSTRAINT connections_auth_kind_check CHECK ((auth_kind = ANY (ARRAY['oauth2'::text, 'github_app_user'::text, 'api_key'::text, 'basic'::text, 'none'::text]))),
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    CONSTRAINT connections_auth_kind_check CHECK ((auth_kind = ANY (ARRAY['oauth2'::text, 'api_key'::text, 'basic'::text, 'none'::text]))),
     CONSTRAINT connections_check CHECK ((((owner_kind = 'user'::text) AND (org_id IS NULL)) OR ((owner_kind = 'org'::text) AND (org_id IS NOT NULL)))),
     CONSTRAINT connections_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['user'::text, 'org'::text]))),
     CONSTRAINT connections_status_check CHECK ((status = ANY (ARRAY['active'::text, 'needs_reauth'::text, 'revoked'::text])))
 );
+
+--
+-- Name: COLUMN connections.auth_header; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.connections.auth_header IS 'api_key connections of an integration that does not declare placement: the allow-listed header choice';
 
 --
 -- Name: connector_audit_log; Type: TABLE; Schema: public; Owner: -
@@ -772,7 +779,8 @@ CREATE TABLE public.oauth_flows (
     reconnect_connection_id text,
     connection_name text,
     expires_at timestamp with time zone NOT NULL,
-    consumed_at timestamp with time zone
+    consumed_at timestamp with time zone,
+    params jsonb DEFAULT '{}'::jsonb NOT NULL
 );
 
 --

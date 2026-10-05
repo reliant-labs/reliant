@@ -7,12 +7,14 @@ import (
 	"crypto/sha256"
 	"errors"
 	"log/slog"
+	"net/http"
 	"net/url"
 	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/forge/pkg/oauth2"
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -71,6 +73,7 @@ type StartParams struct {
 	Name          string
 	ReconnectID   string
 	RedirectAfter string
+	Params        map[string]string
 }
 
 // RPCBinder is the binder for flows started and completed over authenticated
@@ -117,15 +120,36 @@ func (b *Broker) redirectURI(providerID string) (string, error) {
 	return b.publicURL + CallbackPath(providerID), nil
 }
 
+// provider returns an integration that offers oauth2 and whose deployment
+// configured its client.
 func (b *Broker) provider(id string) (*Provider, error) {
 	p, ok := b.providers.Get(id)
 	if !ok {
 		return nil, newError(CodeNotFound, "unknown integration %q", id)
 	}
-	if !p.Available() {
-		return nil, newError(CodeFailedPrecondition, "integration %q is not available: %s", id, p.UnavailableReason())
+	if _, ok := p.Method(MethodOAuth2); !ok {
+		return nil, newError(CodeFailedPrecondition, "%s does not connect through a sign-in flow", p.DisplayName)
+	}
+	if st := p.MethodStatus(MethodOAuth2); !st.Available {
+		return nil, newError(CodeFailedPrecondition, "integration %q is not available: %s", id, st.Reason)
 	}
 	return p, nil
+}
+
+// oauthSpec is the provider's oauth2 declaration (provider() checked it exists).
+func oauthSpec(p *Provider) *reliantv1.OAuth2Auth {
+	m, _ := p.Method(MethodOAuth2)
+	return m.GetOauth2()
+}
+
+// authorizeExtra is the manifest's extra authorize parameters. The loader
+// already refused any the flow sets itself.
+func authorizeExtra(o *reliantv1.OAuth2Auth) url.Values {
+	extra := url.Values{}
+	for k, v := range o.GetAuthorizeParams() {
+		extra.Set(k, v)
+	}
+	return extra
 }
 
 // Start records a flow and returns the provider authorization URL.
@@ -145,6 +169,9 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 	if err != nil {
 		return "", err
 	}
+	// A new connection takes its params from the caller; a reconnect keeps the
+	// connection's own, so it cannot be moved to another tenant.
+	params := p.Params
 	if p.ReconnectID != "" {
 		conn, err := b.store.GetConnection(ctx, p.UserID, p.ReconnectID)
 		if err != nil {
@@ -153,6 +180,25 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 		if conn.IntegrationID != prov.ID {
 			return "", newError(CodeInvalidArgument, "that connection belongs to a different integration")
 		}
+		if len(p.Params) > 0 {
+			return "", newError(CodeInvalidArgument, "a reconnect keeps the connection's params")
+		}
+		params = conn.Params
+	}
+	params, err = prov.checkParams(params)
+	if err != nil {
+		return "", err
+	}
+	spec := oauthSpec(prov)
+	if spec.GetScopeSeparator() == "," && len(spec.GetScopes()) > 1 {
+		// forge/pkg/oauth2.AuthRequest always space-joins Scopes and refuses a
+		// "scope" in Extra, so a comma-delimited scope cannot be sent yet.
+		// Refuse rather than send a scope string the provider will misread.
+		return "", newError(CodeFailedPrecondition, "%s needs comma-separated scopes, which this build cannot send yet", prov.DisplayName)
+	}
+	authorizeURL, err := prov.endpoint(spec.GetAuthorizeUrl(), params)
+	if err != nil {
+		return "", err
 	}
 
 	state, err := oauth2.NewState()
@@ -171,18 +217,24 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 	if err := b.store.CreateOAuthFlow(ctx, &core.OAuthFlow{
 		StateHash: hash, UserID: p.UserID, SessionIDHash: binderHash(p.Binder), IntegrationID: prov.ID,
 		PKCEVerifierSealed: sealed, RedirectAfter: redirectAfter, ReconnectConnectionID: p.ReconnectID,
-		ConnectionName: strings.TrimSpace(p.Name), ExpiresAt: b.now().Add(FlowTTL),
+		ConnectionName: strings.TrimSpace(p.Name), Params: params, ExpiresAt: b.now().Add(FlowTTL),
 	}); err != nil {
 		return "", mapStoreErr(err)
 	}
+	challenge := verifier.Challenge()
+	if spec.GetPkce() == string(oauth2.MethodPlain) {
+		if challenge, err = verifier.ChallengeWithMethod(oauth2.MethodPlain); err != nil {
+			return "", &Error{Code: CodeInternal, Message: "deriving pkce challenge", Err: err}
+		}
+	}
 	return oauth2.AuthRequest{
-		Endpoint:    prov.AuthorizeURL,
+		Endpoint:    authorizeURL,
 		ClientID:    prov.ClientID,
 		RedirectURI: redirectURI,
-		Scopes:      prov.Scopes,
+		Scopes:      spec.GetScopes(),
 		State:       state,
-		Challenge:   verifier.Challenge(),
-		Extra:       prov.AuthorizeExtra,
+		Challenge:   challenge,
+		Extra:       authorizeExtra(spec),
 	}.URL()
 }
 
@@ -244,10 +296,14 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 		return nil, &Error{Code: CodeInternal, Message: "stored pkce verifier is invalid", Err: err}
 	}
 
+	tokenURL, err := prov.endpoint(oauthSpec(prov).GetTokenUrl(), flow.Params)
+	if err != nil {
+		return nil, err
+	}
 	var clientSecret string
 	_ = prov.ClientSecret.Use(func(b []byte) error { clientSecret = string(b); return nil })
 	token, err := b.exchanger.Exchange(ctx, oauth2.TokenRequest{
-		Endpoint: prov.TokenURL, ClientID: prov.ClientID, ClientSecret: clientSecret,
+		Endpoint: tokenURL, ClientID: prov.ClientID, ClientSecret: clientSecret,
 		RedirectURI: redirectURI, Code: p.Code, Verifier: verifier,
 	})
 	if err != nil {
@@ -261,7 +317,10 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 		return nil, newError(CodeFailedPrecondition, "%s rejected the authorization", prov.DisplayName)
 	}
 
-	who, err := prov.identify(ctx, b.doer, token.AccessToken)
+	who, err := prov.identify(ctx, b.doer, flow.Params, func(r *http.Request) error {
+		r.Header.Set("Authorization", "Bearer "+token.AccessToken)
+		return nil
+	})
 	if err != nil {
 		return nil, newError(CodeUnavailable, "could not identify the %s account", prov.DisplayName)
 	}
@@ -346,8 +405,8 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 	}
 	conn := &core.Connection{
 		ID: id, OwnerKind: core.ConnectionOwnerUser, UserID: flow.UserID, IntegrationID: prov.ID,
-		AuthKind: prov.AuthKind, Name: name, Scopes: scopes, Status: core.ConnectionStatusActive,
-		AccessExpiresAt: expires,
+		AuthKind: core.ConnectionAuthOAuth2, Name: name, Scopes: scopes, Status: core.ConnectionStatusActive,
+		AccessExpiresAt: expires, Params: flow.Params,
 	}
 	if who.AccountLabel != "" {
 		conn.AccountLabel = &who.AccountLabel

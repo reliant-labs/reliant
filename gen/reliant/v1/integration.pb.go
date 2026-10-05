@@ -47,7 +47,10 @@ type IntegrationManifest struct {
 	Actions     []*ActionSpec   `protobuf:"bytes,8,rep,name=actions,proto3" json:"actions,omitempty"`
 	// Triggers are reserved for a later phase. A manifest that declares any is
 	// rejected at load until trigger support exists.
-	Triggers      []*TriggerSpec `protobuf:"bytes,9,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	Triggers []*TriggerSpec `protobuf:"bytes,9,rep,name=triggers,proto3" json:"triggers,omitempty"`
+	// Keywords are extra search terms for the catalog index: product names and
+	// synonyms ("email" for gmail). Lower-case words, [a-z0-9][a-z0-9_.-]*.
+	Keywords      []string `protobuf:"bytes,10,rep,name=keywords,proto3" json:"keywords,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -145,28 +148,54 @@ func (x *IntegrationManifest) GetTriggers() []*TriggerSpec {
 	return nil
 }
 
+func (x *IntegrationManifest) GetKeywords() []string {
+	if x != nil {
+		return x.Keywords
+	}
+	return nil
+}
+
 // ConnectionSpec says how requests are authenticated and where they may go.
+// Adding a provider is data: the auth methods, the identity probe and the
+// per-connection params below are everything the connections layer needs.
 type ConnectionSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Type is "none" today. "api_key", "oauth2", "oauth_app" and "basic" are
-	// reserved for the connections phase and rejected at load.
-	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
 	// BaseUrl is the https origin (and optional path prefix) request `path`s
 	// resolve against. Every request host must be this host or in allowed_hosts.
+	//
+	// It may interpolate connection params, and nothing else. The leftmost host
+	// label may be exactly {{ connection.params.<name> }} followed by a literal
+	// domain of at least two labels
+	// (https://{{ connection.params.shop }}.myshopify.com), so a user-supplied
+	// value can pick a tenant but never the domain. Path segments may also
+	// interpolate params; they are percent-escaped.
 	BaseUrl        string            `protobuf:"bytes,2,opt,name=base_url,json=baseUrl,proto3" json:"base_url,omitempty"`
 	AllowedHosts   []string          `protobuf:"bytes,3,rep,name=allowed_hosts,json=allowedHosts,proto3" json:"allowed_hosts,omitempty"`
 	DefaultHeaders map[string]string `protobuf:"bytes,4,rep,name=default_headers,json=defaultHeaders,proto3" json:"default_headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// AllowAnyPublicHost lets request.url name any host. It exists for the
-	// generic HTTP integration only; the loader accepts it solely with type
-	// "none", and the runtime still refuses private addresses after DNS.
+	// generic HTTP integration only: it requires auth_optional, and the runtime
+	// still refuses private addresses after DNS and pins a credential to the
+	// host a call started at.
 	AllowAnyPublicHost bool `protobuf:"varint,5,opt,name=allow_any_public_host,json=allowAnyPublicHost,proto3" json:"allow_any_public_host,omitempty"`
-	// OptionalAuthKinds lets a connection of type "none" still accept a saved
-	// credential when the caller names one. Values: "api_key", "basic". The
-	// credential must belong to a connection for THIS integration id, so a token
-	// saved for another service can never be pointed at an arbitrary host.
-	OptionalAuthKinds []string `protobuf:"bytes,6,rep,name=optional_auth_kinds,json=optionalAuthKinds,proto3" json:"optional_auth_kinds,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// Auth lists the ways a user can connect, most preferred first. Empty means
+	// the integration takes no credential. Each kind appears at most once; a
+	// connection records which kind it was made with.
+	Auth []*AuthMethod `protobuf:"bytes,7,rep,name=auth,proto3" json:"auth,omitempty"`
+	// AuthOptional lets an action run with no connection and attach one only
+	// when the caller names it (the generic HTTP integration). Without it every
+	// action needs a connection: the one named, else the owner's default, else
+	// a delegated authority.
+	AuthOptional bool `protobuf:"varint,8,opt,name=auth_optional,json=authOptional,proto3" json:"auth_optional,omitempty"`
+	// ConnectionParams are per-connection, non-secret settings the user supplies
+	// when connecting (a Shopify shop, a Zendesk subdomain). Templates reach
+	// them as connection.params.<name>.
+	ConnectionParams []*ConnectionParam `protobuf:"bytes,9,rep,name=connection_params,json=connectionParams,proto3" json:"connection_params,omitempty"`
+	// Probe asks the provider who a credential acts as. It labels a new OAuth
+	// connection (and is required for oauth2, whose dedupe key is the external
+	// id) and backs TestConnection for every kind.
+	Probe         *IdentityProbe `protobuf:"bytes,10,opt,name=probe,proto3" json:"probe,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConnectionSpec) Reset() {
@@ -199,13 +228,6 @@ func (*ConnectionSpec) Descriptor() ([]byte, []int) {
 	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *ConnectionSpec) GetType() string {
-	if x != nil {
-		return x.Type
-	}
-	return ""
-}
-
 func (x *ConnectionSpec) GetBaseUrl() string {
 	if x != nil {
 		return x.BaseUrl
@@ -234,11 +256,709 @@ func (x *ConnectionSpec) GetAllowAnyPublicHost() bool {
 	return false
 }
 
-func (x *ConnectionSpec) GetOptionalAuthKinds() []string {
+func (x *ConnectionSpec) GetAuth() []*AuthMethod {
 	if x != nil {
-		return x.OptionalAuthKinds
+		return x.Auth
 	}
 	return nil
+}
+
+func (x *ConnectionSpec) GetAuthOptional() bool {
+	if x != nil {
+		return x.AuthOptional
+	}
+	return false
+}
+
+func (x *ConnectionSpec) GetConnectionParams() []*ConnectionParam {
+	if x != nil {
+		return x.ConnectionParams
+	}
+	return nil
+}
+
+func (x *ConnectionSpec) GetProbe() *IdentityProbe {
+	if x != nil {
+		return x.Probe
+	}
+	return nil
+}
+
+// AuthMethod is one way to connect. Exactly one arm is set.
+type AuthMethod struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Method:
+	//
+	//	*AuthMethod_Oauth2
+	//	*AuthMethod_ApiKey
+	//	*AuthMethod_Basic
+	//	*AuthMethod_Delegated
+	Method        isAuthMethod_Method `protobuf_oneof:"method"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AuthMethod) Reset() {
+	*x = AuthMethod{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AuthMethod) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AuthMethod) ProtoMessage() {}
+
+func (x *AuthMethod) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AuthMethod.ProtoReflect.Descriptor instead.
+func (*AuthMethod) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *AuthMethod) GetMethod() isAuthMethod_Method {
+	if x != nil {
+		return x.Method
+	}
+	return nil
+}
+
+func (x *AuthMethod) GetOauth2() *OAuth2Auth {
+	if x != nil {
+		if x, ok := x.Method.(*AuthMethod_Oauth2); ok {
+			return x.Oauth2
+		}
+	}
+	return nil
+}
+
+func (x *AuthMethod) GetApiKey() *ApiKeyAuth {
+	if x != nil {
+		if x, ok := x.Method.(*AuthMethod_ApiKey); ok {
+			return x.ApiKey
+		}
+	}
+	return nil
+}
+
+func (x *AuthMethod) GetBasic() *BasicAuth {
+	if x != nil {
+		if x, ok := x.Method.(*AuthMethod_Basic); ok {
+			return x.Basic
+		}
+	}
+	return nil
+}
+
+func (x *AuthMethod) GetDelegated() *DelegatedAuth {
+	if x != nil {
+		if x, ok := x.Method.(*AuthMethod_Delegated); ok {
+			return x.Delegated
+		}
+	}
+	return nil
+}
+
+type isAuthMethod_Method interface {
+	isAuthMethod_Method()
+}
+
+type AuthMethod_Oauth2 struct {
+	Oauth2 *OAuth2Auth `protobuf:"bytes,1,opt,name=oauth2,proto3,oneof"`
+}
+
+type AuthMethod_ApiKey struct {
+	ApiKey *ApiKeyAuth `protobuf:"bytes,2,opt,name=api_key,json=apiKey,proto3,oneof"`
+}
+
+type AuthMethod_Basic struct {
+	Basic *BasicAuth `protobuf:"bytes,3,opt,name=basic,proto3,oneof"`
+}
+
+type AuthMethod_Delegated struct {
+	Delegated *DelegatedAuth `protobuf:"bytes,4,opt,name=delegated,proto3,oneof"`
+}
+
+func (*AuthMethod_Oauth2) isAuthMethod_Method() {}
+
+func (*AuthMethod_ApiKey) isAuthMethod_Method() {}
+
+func (*AuthMethod_Basic) isAuthMethod_Method() {}
+
+func (*AuthMethod_Delegated) isAuthMethod_Method() {}
+
+// OAuth2Auth is the authorization-code grant with PKCE.
+//
+// The client id and secret are deployment config, read from
+// RELIANT_OAUTH_<ID>_CLIENT_ID and RELIANT_OAUTH_<ID>_CLIENT_SECRET, where <ID>
+// is the integration id upper-cased. They are never in a manifest or the
+// database. A deployment without them lists the method as unavailable.
+type OAuth2Auth struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// AuthorizeUrl and TokenUrl are https, fixed by the catalog. They may
+	// interpolate connection params under the same rule as base_url.
+	AuthorizeUrl string   `protobuf:"bytes,1,opt,name=authorize_url,json=authorizeUrl,proto3" json:"authorize_url,omitempty"`
+	TokenUrl     string   `protobuf:"bytes,2,opt,name=token_url,json=tokenUrl,proto3" json:"token_url,omitempty"`
+	Scopes       []string `protobuf:"bytes,3,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	// ScopeSeparator joins scopes: " " (the default, RFC 6749) or ",".
+	ScopeSeparator string `protobuf:"bytes,4,opt,name=scope_separator,json=scopeSeparator,proto3" json:"scope_separator,omitempty"`
+	// Pkce is the code challenge method: "S256" (the default) or "plain". PKCE
+	// is always sent: RFC 6749 §3.1 has a server ignore parameters it does not
+	// recognise, so sending it never breaks a provider that lacks it.
+	Pkce string `protobuf:"bytes,5,opt,name=pkce,proto3" json:"pkce,omitempty"`
+	// AuthorizeParams are extra authorization request parameters
+	// (access_type: offline). The parameters the flow itself sets are refused.
+	AuthorizeParams map[string]string `protobuf:"bytes,6,rep,name=authorize_params,json=authorizeParams,proto3" json:"authorize_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Revoke, when set, is called best-effort when a connection is deleted.
+	Revoke        *RevokeSpec `protobuf:"bytes,7,opt,name=revoke,proto3" json:"revoke,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *OAuth2Auth) Reset() {
+	*x = OAuth2Auth{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *OAuth2Auth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*OAuth2Auth) ProtoMessage() {}
+
+func (x *OAuth2Auth) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use OAuth2Auth.ProtoReflect.Descriptor instead.
+func (*OAuth2Auth) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *OAuth2Auth) GetAuthorizeUrl() string {
+	if x != nil {
+		return x.AuthorizeUrl
+	}
+	return ""
+}
+
+func (x *OAuth2Auth) GetTokenUrl() string {
+	if x != nil {
+		return x.TokenUrl
+	}
+	return ""
+}
+
+func (x *OAuth2Auth) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+func (x *OAuth2Auth) GetScopeSeparator() string {
+	if x != nil {
+		return x.ScopeSeparator
+	}
+	return ""
+}
+
+func (x *OAuth2Auth) GetPkce() string {
+	if x != nil {
+		return x.Pkce
+	}
+	return ""
+}
+
+func (x *OAuth2Auth) GetAuthorizeParams() map[string]string {
+	if x != nil {
+		return x.AuthorizeParams
+	}
+	return nil
+}
+
+func (x *OAuth2Auth) GetRevoke() *RevokeSpec {
+	if x != nil {
+		return x.Revoke
+	}
+	return nil
+}
+
+// RevokeSpec describes the provider's token revocation call.
+type RevokeSpec struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Method is POST (the default), DELETE or GET.
+	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	// Url is https and catalog-fixed. Besides connection params it may
+	// interpolate {{ client_id }}.
+	Url string `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	// ClientAuth is "none" (the default) or "basic" (client id and secret as
+	// HTTP Basic credentials).
+	ClientAuth string `protobuf:"bytes,3,opt,name=client_auth,json=clientAuth,proto3" json:"client_auth,omitempty"`
+	// TokenIn is where the access token goes: "form" (the default, RFC 7009),
+	// "json", "query" or "bearer".
+	TokenIn string `protobuf:"bytes,4,opt,name=token_in,json=tokenIn,proto3" json:"token_in,omitempty"`
+	// TokenParam names the token field for form, json and query (default
+	// "token").
+	TokenParam    string `protobuf:"bytes,5,opt,name=token_param,json=tokenParam,proto3" json:"token_param,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RevokeSpec) Reset() {
+	*x = RevokeSpec{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RevokeSpec) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RevokeSpec) ProtoMessage() {}
+
+func (x *RevokeSpec) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RevokeSpec.ProtoReflect.Descriptor instead.
+func (*RevokeSpec) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *RevokeSpec) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *RevokeSpec) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *RevokeSpec) GetClientAuth() string {
+	if x != nil {
+		return x.ClientAuth
+	}
+	return ""
+}
+
+func (x *RevokeSpec) GetTokenIn() string {
+	if x != nil {
+		return x.TokenIn
+	}
+	return ""
+}
+
+func (x *RevokeSpec) GetTokenParam() string {
+	if x != nil {
+		return x.TokenParam
+	}
+	return ""
+}
+
+// ApiKeyAuth is a pasted key, placed in a header or a query parameter.
+type ApiKeyAuth struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// In is "header" or "query". Leaving in and name both empty lets the user
+	// choose the header per connection from a fixed list; only an
+	// allow_any_public_host integration may do that, since it knows no API.
+	In string `protobuf:"bytes,1,opt,name=in,proto3" json:"in,omitempty"`
+	// Name is the header or query parameter that carries the key.
+	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	// Prefix is written before the key ("Bearer ", "Token ").
+	Prefix string `protobuf:"bytes,3,opt,name=prefix,proto3" json:"prefix,omitempty"`
+	// Label names the key field in the connect form ("API token").
+	Label         string `protobuf:"bytes,4,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ApiKeyAuth) Reset() {
+	*x = ApiKeyAuth{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ApiKeyAuth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ApiKeyAuth) ProtoMessage() {}
+
+func (x *ApiKeyAuth) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ApiKeyAuth.ProtoReflect.Descriptor instead.
+func (*ApiKeyAuth) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ApiKeyAuth) GetIn() string {
+	if x != nil {
+		return x.In
+	}
+	return ""
+}
+
+func (x *ApiKeyAuth) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ApiKeyAuth) GetPrefix() string {
+	if x != nil {
+		return x.Prefix
+	}
+	return ""
+}
+
+func (x *ApiKeyAuth) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+// BasicAuth is HTTP Basic: a username (often an account id) and a secret.
+type BasicAuth struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	UsernameLabel string                 `protobuf:"bytes,1,opt,name=username_label,json=usernameLabel,proto3" json:"username_label,omitempty"`
+	PasswordLabel string                 `protobuf:"bytes,2,opt,name=password_label,json=passwordLabel,proto3" json:"password_label,omitempty"`
+	// UsernameParam, when set, names a connection param whose value is the
+	// username (an account id the base_url also uses), so the user pastes only
+	// the secret.
+	UsernameParam string `protobuf:"bytes,3,opt,name=username_param,json=usernameParam,proto3" json:"username_param,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BasicAuth) Reset() {
+	*x = BasicAuth{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BasicAuth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BasicAuth) ProtoMessage() {}
+
+func (x *BasicAuth) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BasicAuth.ProtoReflect.Descriptor instead.
+func (*BasicAuth) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *BasicAuth) GetUsernameLabel() string {
+	if x != nil {
+		return x.UsernameLabel
+	}
+	return ""
+}
+
+func (x *BasicAuth) GetPasswordLabel() string {
+	if x != nil {
+		return x.PasswordLabel
+	}
+	return ""
+}
+
+func (x *BasicAuth) GetUsernameParam() string {
+	if x != nil {
+		return x.UsernameParam
+	}
+	return ""
+}
+
+// DelegatedAuth takes the token from an external authority at call time, such
+// as GitHub through the control plane. Broker names a broker that Go code
+// registers with the connections layer; no connection row is stored. A
+// deployment that registered none lists the method as unavailable.
+type DelegatedAuth struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Broker        string                 `protobuf:"bytes,1,opt,name=broker,proto3" json:"broker,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DelegatedAuth) Reset() {
+	*x = DelegatedAuth{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DelegatedAuth) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DelegatedAuth) ProtoMessage() {}
+
+func (x *DelegatedAuth) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DelegatedAuth.ProtoReflect.Descriptor instead.
+func (*DelegatedAuth) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *DelegatedAuth) GetBroker() string {
+	if x != nil {
+		return x.Broker
+	}
+	return ""
+}
+
+// ConnectionParam is one non-secret per-connection setting.
+type ConnectionParam struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Name is [a-z][a-z0-9_]*; templates reach it as connection.params.<name>.
+	Name        string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	DisplayName string `protobuf:"bytes,2,opt,name=display_name,json=displayName,proto3" json:"display_name,omitempty"`
+	Description string `protobuf:"bytes,3,opt,name=description,proto3" json:"description,omitempty"`
+	// Pattern is an RE2 expression every value must match in full.
+	Pattern string `protobuf:"bytes,4,opt,name=pattern,proto3" json:"pattern,omitempty"`
+	// DefaultValue is used when the user supplies none. A param without one is
+	// required.
+	DefaultValue  string `protobuf:"bytes,5,opt,name=default_value,json=defaultValue,proto3" json:"default_value,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ConnectionParam) Reset() {
+	*x = ConnectionParam{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ConnectionParam) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ConnectionParam) ProtoMessage() {}
+
+func (x *ConnectionParam) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ConnectionParam.ProtoReflect.Descriptor instead.
+func (*ConnectionParam) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ConnectionParam) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *ConnectionParam) GetDisplayName() string {
+	if x != nil {
+		return x.DisplayName
+	}
+	return ""
+}
+
+func (x *ConnectionParam) GetDescription() string {
+	if x != nil {
+		return x.Description
+	}
+	return ""
+}
+
+func (x *ConnectionParam) GetPattern() string {
+	if x != nil {
+		return x.Pattern
+	}
+	return ""
+}
+
+func (x *ConnectionParam) GetDefaultValue() string {
+	if x != nil {
+		return x.DefaultValue
+	}
+	return ""
+}
+
+// IdentityProbe is one request that names the account a credential acts as.
+// The connection's default_headers and its credential are applied.
+type IdentityProbe struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Method is GET (the default) or POST.
+	Method string `protobuf:"bytes,1,opt,name=method,proto3" json:"method,omitempty"`
+	// Url is absolute (same template rule as base_url); path is relative to
+	// base_url. Exactly one is set.
+	Url     string            `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+	Path    string            `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	Headers map[string]string `protobuf:"bytes,4,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Ok is CEL over `response` (the parsed body). False means the credential
+	// was refused even though the status was 2xx, as Slack reports it.
+	Ok string `protobuf:"bytes,5,opt,name=ok,proto3" json:"ok,omitempty"`
+	// ExternalId is CEL over `response` yielding the account's stable id.
+	ExternalId string `protobuf:"bytes,6,opt,name=external_id,json=externalId,proto3" json:"external_id,omitempty"`
+	// Label is CEL over `response` yielding a human label (a login, an email).
+	Label         string `protobuf:"bytes,7,opt,name=label,proto3" json:"label,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *IdentityProbe) Reset() {
+	*x = IdentityProbe{}
+	mi := &file_reliant_v1_integration_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *IdentityProbe) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*IdentityProbe) ProtoMessage() {}
+
+func (x *IdentityProbe) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_integration_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use IdentityProbe.ProtoReflect.Descriptor instead.
+func (*IdentityProbe) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *IdentityProbe) GetMethod() string {
+	if x != nil {
+		return x.Method
+	}
+	return ""
+}
+
+func (x *IdentityProbe) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+func (x *IdentityProbe) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *IdentityProbe) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *IdentityProbe) GetOk() string {
+	if x != nil {
+		return x.Ok
+	}
+	return ""
+}
+
+func (x *IdentityProbe) GetExternalId() string {
+	if x != nil {
+		return x.ExternalId
+	}
+	return ""
+}
+
+func (x *IdentityProbe) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -259,16 +979,29 @@ type ActionSpec struct {
 	Mutates bool      `protobuf:"varint,6,opt,name=mutates,proto3" json:"mutates,omitempty"`
 	Tool    *ToolSpec `protobuf:"bytes,7,opt,name=tool,proto3" json:"tool,omitempty"`
 	// Params is a JSON Schema for the action's parameters.
-	Params        *structpb.Struct `protobuf:"bytes,8,opt,name=params,proto3" json:"params,omitempty"`
-	Request       *HttpRequestSpec `protobuf:"bytes,9,opt,name=request,proto3" json:"request,omitempty"`
-	Output        *OutputSpec      `protobuf:"bytes,10,opt,name=output,proto3" json:"output,omitempty"`
+	Params *structpb.Struct `protobuf:"bytes,8,opt,name=params,proto3" json:"params,omitempty"`
+	// Request is the declarative HTTP call. Required unless executor is set.
+	Request *HttpRequestSpec `protobuf:"bytes,9,opt,name=request,proto3" json:"request,omitempty"`
+	Output  *OutputSpec      `protobuf:"bytes,10,opt,name=output,proto3" json:"output,omitempty"`
+	// Executor is empty for the declarative `request`, or "go:<name>": a Go
+	// function registered under <name> with the same params and output
+	// contract. It is the escape hatch for what a declaration cannot express
+	// (MIME assembly, request signing). The params and output schemas stay in
+	// the manifest, so forms and tool definitions never depend on code. It is
+	// manifest-only and never appears in workflow YAML.
+	Executor string `protobuf:"bytes,11,opt,name=executor,proto3" json:"executor,omitempty"`
+	// Summary is one line for search results and pickers; description is the
+	// long form an agent reads.
+	Summary string `protobuf:"bytes,12,opt,name=summary,proto3" json:"summary,omitempty"`
+	// Keywords are extra search terms for the catalog index.
+	Keywords      []string `protobuf:"bytes,13,rep,name=keywords,proto3" json:"keywords,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ActionSpec) Reset() {
 	*x = ActionSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	mi := &file_reliant_v1_integration_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -280,7 +1013,7 @@ func (x *ActionSpec) String() string {
 func (*ActionSpec) ProtoMessage() {}
 
 func (x *ActionSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[2]
+	mi := &file_reliant_v1_integration_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -293,7 +1026,7 @@ func (x *ActionSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionSpec.ProtoReflect.Descriptor instead.
 func (*ActionSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ActionSpec) GetId() string {
@@ -366,6 +1099,27 @@ func (x *ActionSpec) GetOutput() *OutputSpec {
 	return nil
 }
 
+func (x *ActionSpec) GetExecutor() string {
+	if x != nil {
+		return x.Executor
+	}
+	return ""
+}
+
+func (x *ActionSpec) GetSummary() string {
+	if x != nil {
+		return x.Summary
+	}
+	return ""
+}
+
+func (x *ActionSpec) GetKeywords() []string {
+	if x != nil {
+		return x.Keywords
+	}
+	return nil
+}
+
 // ToolSpec controls exposing an action to agents as a tool.
 type ToolSpec struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -380,7 +1134,7 @@ type ToolSpec struct {
 
 func (x *ToolSpec) Reset() {
 	*x = ToolSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	mi := &file_reliant_v1_integration_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -392,7 +1146,7 @@ func (x *ToolSpec) String() string {
 func (*ToolSpec) ProtoMessage() {}
 
 func (x *ToolSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[3]
+	mi := &file_reliant_v1_integration_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -405,7 +1159,7 @@ func (x *ToolSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ToolSpec.ProtoReflect.Descriptor instead.
 func (*ToolSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *ToolSpec) GetExpose() bool {
@@ -467,7 +1221,7 @@ type HttpRequestSpec struct {
 
 func (x *HttpRequestSpec) Reset() {
 	*x = HttpRequestSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	mi := &file_reliant_v1_integration_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -479,7 +1233,7 @@ func (x *HttpRequestSpec) String() string {
 func (*HttpRequestSpec) ProtoMessage() {}
 
 func (x *HttpRequestSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[4]
+	mi := &file_reliant_v1_integration_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -492,7 +1246,7 @@ func (x *HttpRequestSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HttpRequestSpec.ProtoReflect.Descriptor instead.
 func (*HttpRequestSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *HttpRequestSpec) GetMethod() string {
@@ -608,7 +1362,7 @@ type PaginationSpec struct {
 
 func (x *PaginationSpec) Reset() {
 	*x = PaginationSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	mi := &file_reliant_v1_integration_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -620,7 +1374,7 @@ func (x *PaginationSpec) String() string {
 func (*PaginationSpec) ProtoMessage() {}
 
 func (x *PaginationSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[5]
+	mi := &file_reliant_v1_integration_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -633,7 +1387,7 @@ func (x *PaginationSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PaginationSpec.ProtoReflect.Descriptor instead.
 func (*PaginationSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *PaginationSpec) GetStyle() string {
@@ -693,7 +1447,7 @@ type ErrorRule struct {
 
 func (x *ErrorRule) Reset() {
 	*x = ErrorRule{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	mi := &file_reliant_v1_integration_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -705,7 +1459,7 @@ func (x *ErrorRule) String() string {
 func (*ErrorRule) ProtoMessage() {}
 
 func (x *ErrorRule) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[6]
+	mi := &file_reliant_v1_integration_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -718,7 +1472,7 @@ func (x *ErrorRule) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ErrorRule.ProtoReflect.Descriptor instead.
 func (*ErrorRule) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *ErrorRule) GetStatus() int32 {
@@ -772,7 +1526,7 @@ type OutputSpec struct {
 
 func (x *OutputSpec) Reset() {
 	*x = OutputSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[7]
+	mi := &file_reliant_v1_integration_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -784,7 +1538,7 @@ func (x *OutputSpec) String() string {
 func (*OutputSpec) ProtoMessage() {}
 
 func (x *OutputSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[7]
+	mi := &file_reliant_v1_integration_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -797,7 +1551,7 @@ func (x *OutputSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OutputSpec.ProtoReflect.Descriptor instead.
 func (*OutputSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *OutputSpec) GetSelect() string {
@@ -824,7 +1578,7 @@ type TriggerSpec struct {
 
 func (x *TriggerSpec) Reset() {
 	*x = TriggerSpec{}
-	mi := &file_reliant_v1_integration_proto_msgTypes[8]
+	mi := &file_reliant_v1_integration_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -836,7 +1590,7 @@ func (x *TriggerSpec) String() string {
 func (*TriggerSpec) ProtoMessage() {}
 
 func (x *TriggerSpec) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_integration_proto_msgTypes[8]
+	mi := &file_reliant_v1_integration_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -849,7 +1603,7 @@ func (x *TriggerSpec) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TriggerSpec.ProtoReflect.Descriptor instead.
 func (*TriggerSpec) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_integration_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *TriggerSpec) GetId() string {
@@ -864,7 +1618,7 @@ var File_reliant_v1_integration_proto protoreflect.FileDescriptor
 const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\n" +
 	"\x1creliant/v1/integration.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xd7\x02\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xf3\x02\n" +
 	"\x13IntegrationManifest\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x18\n" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12!\n" +
@@ -876,17 +1630,80 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"connection\x18\a \x01(\v2\x1a.reliant.v1.ConnectionSpecR\n" +
 	"connection\x120\n" +
 	"\aactions\x18\b \x03(\v2\x16.reliant.v1.ActionSpecR\aactions\x123\n" +
-	"\btriggers\x18\t \x03(\v2\x17.reliant.v1.TriggerSpecR\btriggers\"\xe3\x02\n" +
-	"\x0eConnectionSpec\x12\x12\n" +
-	"\x04type\x18\x01 \x01(\tR\x04type\x12\x19\n" +
+	"\btriggers\x18\t \x03(\v2\x17.reliant.v1.TriggerSpecR\btriggers\x12\x1a\n" +
+	"\bkeywords\x18\n" +
+	" \x03(\tR\bkeywords\"\x92\x04\n" +
+	"\x0eConnectionSpec\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12#\n" +
 	"\rallowed_hosts\x18\x03 \x03(\tR\fallowedHosts\x12W\n" +
 	"\x0fdefault_headers\x18\x04 \x03(\v2..reliant.v1.ConnectionSpec.DefaultHeadersEntryR\x0edefaultHeaders\x121\n" +
-	"\x15allow_any_public_host\x18\x05 \x01(\bR\x12allowAnyPublicHost\x12.\n" +
-	"\x13optional_auth_kinds\x18\x06 \x03(\tR\x11optionalAuthKinds\x1aA\n" +
+	"\x15allow_any_public_host\x18\x05 \x01(\bR\x12allowAnyPublicHost\x12*\n" +
+	"\x04auth\x18\a \x03(\v2\x16.reliant.v1.AuthMethodR\x04auth\x12#\n" +
+	"\rauth_optional\x18\b \x01(\bR\fauthOptional\x12H\n" +
+	"\x11connection_params\x18\t \x03(\v2\x1b.reliant.v1.ConnectionParamR\x10connectionParams\x12/\n" +
+	"\x05probe\x18\n" +
+	" \x01(\v2\x19.reliant.v1.IdentityProbeR\x05probe\x1aA\n" +
 	"\x13DefaultHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xef\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\x06\x10\aR\x04typeR\x13optional_auth_kinds\"\xe5\x01\n" +
+	"\n" +
+	"AuthMethod\x120\n" +
+	"\x06oauth2\x18\x01 \x01(\v2\x16.reliant.v1.OAuth2AuthH\x00R\x06oauth2\x121\n" +
+	"\aapi_key\x18\x02 \x01(\v2\x16.reliant.v1.ApiKeyAuthH\x00R\x06apiKey\x12-\n" +
+	"\x05basic\x18\x03 \x01(\v2\x15.reliant.v1.BasicAuthH\x00R\x05basic\x129\n" +
+	"\tdelegated\x18\x04 \x01(\v2\x19.reliant.v1.DelegatedAuthH\x00R\tdelegatedB\b\n" +
+	"\x06method\"\xef\x02\n" +
+	"\n" +
+	"OAuth2Auth\x12#\n" +
+	"\rauthorize_url\x18\x01 \x01(\tR\fauthorizeUrl\x12\x1b\n" +
+	"\ttoken_url\x18\x02 \x01(\tR\btokenUrl\x12\x16\n" +
+	"\x06scopes\x18\x03 \x03(\tR\x06scopes\x12'\n" +
+	"\x0fscope_separator\x18\x04 \x01(\tR\x0escopeSeparator\x12\x12\n" +
+	"\x04pkce\x18\x05 \x01(\tR\x04pkce\x12V\n" +
+	"\x10authorize_params\x18\x06 \x03(\v2+.reliant.v1.OAuth2Auth.AuthorizeParamsEntryR\x0fauthorizeParams\x12.\n" +
+	"\x06revoke\x18\a \x01(\v2\x16.reliant.v1.RevokeSpecR\x06revoke\x1aB\n" +
+	"\x14AuthorizeParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x01\n" +
+	"\n" +
+	"RevokeSpec\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12\x1f\n" +
+	"\vclient_auth\x18\x03 \x01(\tR\n" +
+	"clientAuth\x12\x19\n" +
+	"\btoken_in\x18\x04 \x01(\tR\atokenIn\x12\x1f\n" +
+	"\vtoken_param\x18\x05 \x01(\tR\n" +
+	"tokenParam\"^\n" +
+	"\n" +
+	"ApiKeyAuth\x12\x0e\n" +
+	"\x02in\x18\x01 \x01(\tR\x02in\x12\x12\n" +
+	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
+	"\x06prefix\x18\x03 \x01(\tR\x06prefix\x12\x14\n" +
+	"\x05label\x18\x04 \x01(\tR\x05label\"\x80\x01\n" +
+	"\tBasicAuth\x12%\n" +
+	"\x0eusername_label\x18\x01 \x01(\tR\rusernameLabel\x12%\n" +
+	"\x0epassword_label\x18\x02 \x01(\tR\rpasswordLabel\x12%\n" +
+	"\x0eusername_param\x18\x03 \x01(\tR\rusernameParam\"'\n" +
+	"\rDelegatedAuth\x12\x16\n" +
+	"\x06broker\x18\x01 \x01(\tR\x06broker\"\xa9\x01\n" +
+	"\x0fConnectionParam\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\x12!\n" +
+	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
+	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
+	"\apattern\x18\x04 \x01(\tR\apattern\x12#\n" +
+	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\"\x92\x02\n" +
+	"\rIdentityProbe\x12\x16\n" +
+	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
+	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x12@\n" +
+	"\aheaders\x18\x04 \x03(\v2&.reliant.v1.IdentityProbe.HeadersEntryR\aheaders\x12\x0e\n" +
+	"\x02ok\x18\x05 \x01(\tR\x02ok\x12\x1f\n" +
+	"\vexternal_id\x18\x06 \x01(\tR\n" +
+	"externalId\x12\x14\n" +
+	"\x05label\x18\a \x01(\tR\x05label\x1a:\n" +
+	"\fHeadersEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc1\x03\n" +
 	"\n" +
 	"ActionSpec\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
@@ -899,7 +1716,10 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\x06params\x18\b \x01(\v2\x17.google.protobuf.StructR\x06params\x125\n" +
 	"\arequest\x18\t \x01(\v2\x1b.reliant.v1.HttpRequestSpecR\arequest\x12.\n" +
 	"\x06output\x18\n" +
-	" \x01(\v2\x16.reliant.v1.OutputSpecR\x06output\"J\n" +
+	" \x01(\v2\x16.reliant.v1.OutputSpecR\x06output\x12\x1a\n" +
+	"\bexecutor\x18\v \x01(\tR\bexecutor\x12\x18\n" +
+	"\asummary\x18\f \x01(\tR\asummary\x12\x1a\n" +
+	"\bkeywords\x18\r \x03(\tR\bkeywords\"J\n" +
 	"\bToolSpec\x12\x16\n" +
 	"\x06expose\x18\x01 \x01(\bR\x06expose\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -966,43 +1786,63 @@ func file_reliant_v1_integration_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_integration_proto_rawDescData
 }
 
-var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_reliant_v1_integration_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_reliant_v1_integration_proto_goTypes = []any{
 	(*IntegrationManifest)(nil), // 0: reliant.v1.IntegrationManifest
 	(*ConnectionSpec)(nil),      // 1: reliant.v1.ConnectionSpec
-	(*ActionSpec)(nil),          // 2: reliant.v1.ActionSpec
-	(*ToolSpec)(nil),            // 3: reliant.v1.ToolSpec
-	(*HttpRequestSpec)(nil),     // 4: reliant.v1.HttpRequestSpec
-	(*PaginationSpec)(nil),      // 5: reliant.v1.PaginationSpec
-	(*ErrorRule)(nil),           // 6: reliant.v1.ErrorRule
-	(*OutputSpec)(nil),          // 7: reliant.v1.OutputSpec
-	(*TriggerSpec)(nil),         // 8: reliant.v1.TriggerSpec
-	nil,                         // 9: reliant.v1.ConnectionSpec.DefaultHeadersEntry
-	nil,                         // 10: reliant.v1.HttpRequestSpec.QueryEntry
-	nil,                         // 11: reliant.v1.HttpRequestSpec.HeadersEntry
-	(*structpb.Struct)(nil),     // 12: google.protobuf.Struct
-	(*structpb.Value)(nil),      // 13: google.protobuf.Value
+	(*AuthMethod)(nil),          // 2: reliant.v1.AuthMethod
+	(*OAuth2Auth)(nil),          // 3: reliant.v1.OAuth2Auth
+	(*RevokeSpec)(nil),          // 4: reliant.v1.RevokeSpec
+	(*ApiKeyAuth)(nil),          // 5: reliant.v1.ApiKeyAuth
+	(*BasicAuth)(nil),           // 6: reliant.v1.BasicAuth
+	(*DelegatedAuth)(nil),       // 7: reliant.v1.DelegatedAuth
+	(*ConnectionParam)(nil),     // 8: reliant.v1.ConnectionParam
+	(*IdentityProbe)(nil),       // 9: reliant.v1.IdentityProbe
+	(*ActionSpec)(nil),          // 10: reliant.v1.ActionSpec
+	(*ToolSpec)(nil),            // 11: reliant.v1.ToolSpec
+	(*HttpRequestSpec)(nil),     // 12: reliant.v1.HttpRequestSpec
+	(*PaginationSpec)(nil),      // 13: reliant.v1.PaginationSpec
+	(*ErrorRule)(nil),           // 14: reliant.v1.ErrorRule
+	(*OutputSpec)(nil),          // 15: reliant.v1.OutputSpec
+	(*TriggerSpec)(nil),         // 16: reliant.v1.TriggerSpec
+	nil,                         // 17: reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	nil,                         // 18: reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	nil,                         // 19: reliant.v1.IdentityProbe.HeadersEntry
+	nil,                         // 20: reliant.v1.HttpRequestSpec.QueryEntry
+	nil,                         // 21: reliant.v1.HttpRequestSpec.HeadersEntry
+	(*structpb.Struct)(nil),     // 22: google.protobuf.Struct
+	(*structpb.Value)(nil),      // 23: google.protobuf.Value
 }
 var file_reliant_v1_integration_proto_depIdxs = []int32{
 	1,  // 0: reliant.v1.IntegrationManifest.connection:type_name -> reliant.v1.ConnectionSpec
-	2,  // 1: reliant.v1.IntegrationManifest.actions:type_name -> reliant.v1.ActionSpec
-	8,  // 2: reliant.v1.IntegrationManifest.triggers:type_name -> reliant.v1.TriggerSpec
-	9,  // 3: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
-	3,  // 4: reliant.v1.ActionSpec.tool:type_name -> reliant.v1.ToolSpec
-	12, // 5: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
-	4,  // 6: reliant.v1.ActionSpec.request:type_name -> reliant.v1.HttpRequestSpec
-	7,  // 7: reliant.v1.ActionSpec.output:type_name -> reliant.v1.OutputSpec
-	10, // 8: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
-	11, // 9: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
-	13, // 10: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
-	5,  // 11: reliant.v1.HttpRequestSpec.pagination:type_name -> reliant.v1.PaginationSpec
-	6,  // 12: reliant.v1.HttpRequestSpec.errors:type_name -> reliant.v1.ErrorRule
-	12, // 13: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
-	14, // [14:14] is the sub-list for method output_type
-	14, // [14:14] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	10, // 1: reliant.v1.IntegrationManifest.actions:type_name -> reliant.v1.ActionSpec
+	16, // 2: reliant.v1.IntegrationManifest.triggers:type_name -> reliant.v1.TriggerSpec
+	17, // 3: reliant.v1.ConnectionSpec.default_headers:type_name -> reliant.v1.ConnectionSpec.DefaultHeadersEntry
+	2,  // 4: reliant.v1.ConnectionSpec.auth:type_name -> reliant.v1.AuthMethod
+	8,  // 5: reliant.v1.ConnectionSpec.connection_params:type_name -> reliant.v1.ConnectionParam
+	9,  // 6: reliant.v1.ConnectionSpec.probe:type_name -> reliant.v1.IdentityProbe
+	3,  // 7: reliant.v1.AuthMethod.oauth2:type_name -> reliant.v1.OAuth2Auth
+	5,  // 8: reliant.v1.AuthMethod.api_key:type_name -> reliant.v1.ApiKeyAuth
+	6,  // 9: reliant.v1.AuthMethod.basic:type_name -> reliant.v1.BasicAuth
+	7,  // 10: reliant.v1.AuthMethod.delegated:type_name -> reliant.v1.DelegatedAuth
+	18, // 11: reliant.v1.OAuth2Auth.authorize_params:type_name -> reliant.v1.OAuth2Auth.AuthorizeParamsEntry
+	4,  // 12: reliant.v1.OAuth2Auth.revoke:type_name -> reliant.v1.RevokeSpec
+	19, // 13: reliant.v1.IdentityProbe.headers:type_name -> reliant.v1.IdentityProbe.HeadersEntry
+	11, // 14: reliant.v1.ActionSpec.tool:type_name -> reliant.v1.ToolSpec
+	22, // 15: reliant.v1.ActionSpec.params:type_name -> google.protobuf.Struct
+	12, // 16: reliant.v1.ActionSpec.request:type_name -> reliant.v1.HttpRequestSpec
+	15, // 17: reliant.v1.ActionSpec.output:type_name -> reliant.v1.OutputSpec
+	20, // 18: reliant.v1.HttpRequestSpec.query:type_name -> reliant.v1.HttpRequestSpec.QueryEntry
+	21, // 19: reliant.v1.HttpRequestSpec.headers:type_name -> reliant.v1.HttpRequestSpec.HeadersEntry
+	23, // 20: reliant.v1.HttpRequestSpec.body:type_name -> google.protobuf.Value
+	13, // 21: reliant.v1.HttpRequestSpec.pagination:type_name -> reliant.v1.PaginationSpec
+	14, // 22: reliant.v1.HttpRequestSpec.errors:type_name -> reliant.v1.ErrorRule
+	22, // 23: reliant.v1.OutputSpec.schema:type_name -> google.protobuf.Struct
+	24, // [24:24] is the sub-list for method output_type
+	24, // [24:24] is the sub-list for method input_type
+	24, // [24:24] is the sub-list for extension type_name
+	24, // [24:24] is the sub-list for extension extendee
+	0,  // [0:24] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_integration_proto_init() }
@@ -1010,13 +1850,19 @@ func file_reliant_v1_integration_proto_init() {
 	if File_reliant_v1_integration_proto != nil {
 		return
 	}
+	file_reliant_v1_integration_proto_msgTypes[2].OneofWrappers = []any{
+		(*AuthMethod_Oauth2)(nil),
+		(*AuthMethod_ApiKey)(nil),
+		(*AuthMethod_Basic)(nil),
+		(*AuthMethod_Delegated)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_integration_proto_rawDesc), len(file_reliant_v1_integration_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

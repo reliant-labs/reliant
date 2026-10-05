@@ -6,11 +6,12 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"regexp"
 	"strings"
 	"unicode/utf8"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -21,8 +22,6 @@ const (
 	APIKeyKindAPIKey APIKeyKind = iota + 1
 	APIKeyKindBasic
 )
-
-var integrationIDPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9_-]{0,62}$`)
 
 const maxNameLen = 100
 const maxSecretLen = 8 << 10
@@ -49,6 +48,7 @@ type Service struct {
 	tokens    *TokenSource
 	broker    *Broker
 	doer      HTTPDoer
+	delegated DelegatedAvailable
 }
 
 // NewService wires the service.
@@ -59,19 +59,35 @@ func NewService(store serviceStore, v Sealer, providers *Registry, tokens *Token
 	return &Service{store: store, vault: v, providers: providers, tokens: tokens, broker: broker, doer: doer}
 }
 
-// Integration is one entry of the integration catalog.
-type Integration struct {
-	ID, DisplayName, AuthKind string
-	Available                 bool
-	UnavailableReason         string
+// WithDelegated tells the service which delegated brokers this deployment
+// wires, so ListIntegrations reports them available. The api-server holds no
+// brokers (credentials resolve on the worker); it is told by configuration.
+func (s *Service) WithDelegated(fn DelegatedAvailable) *Service {
+	s.delegated = fn
+	return s
 }
 
-// ListIntegrations returns the OAuth providers, available or not.
+// Integration is one entry of the integration catalog.
+type Integration struct {
+	ID, DisplayName string
+	// Methods are the ways to connect, in manifest order (most preferred
+	// first), each with whether this deployment can offer it.
+	Methods []MethodStatus
+	// Params are the non-secret settings a new connection asks for.
+	Params []*reliantv1.ConnectionParam
+}
+
+// ListIntegrations returns every integration that declares auth, with each
+// method's availability. An unconfigured method is listed, with an operator
+// reason, rather than hidden.
 func (s *Service) ListIntegrations() []Integration {
 	var out []Integration
 	for _, p := range s.providers.List() {
-		out = append(out, Integration{ID: p.ID, DisplayName: p.DisplayName, AuthKind: p.AuthKind,
-			Available: p.Available(), UnavailableReason: p.UnavailableReason()})
+		in := Integration{ID: p.ID, DisplayName: p.DisplayName, Params: p.spec.GetConnectionParams()}
+		for _, a := range p.spec.GetAuth() {
+			in.Methods = append(in.Methods, p.methodStatus(manifest.AuthKind(a), s.delegated))
+		}
+		out = append(out, in)
 	}
 	return out
 }
@@ -93,46 +109,74 @@ type CreateAPIKeyParams struct {
 	Name          string
 	Kind          APIKeyKind
 	Fields        map[string]string
+	// Params are the integration's connection_params (not secret).
+	Params map[string]string
 }
 
-// CreateAPIKey saves an api_key or basic connection. The values are sealed and
-// never returned.
+// CreateAPIKey saves an api_key or basic connection for a catalog integration
+// that declares that method. The values are sealed and never returned.
 func (s *Service) CreateAPIKey(ctx context.Context, p CreateAPIKeyParams) (*core.Connection, error) {
-	if !integrationIDPattern.MatchString(p.IntegrationID) {
-		return nil, newError(CodeInvalidArgument, "integration_id must be lowercase letters, digits, '-' or '_'")
-	}
-	if _, oauth := s.providers.Get(p.IntegrationID); oauth {
-		return nil, newError(CodeInvalidArgument, "%q connects through its own sign-in flow, not a pasted key", p.IntegrationID)
+	prov, ok := s.providers.Get(p.IntegrationID)
+	if !ok {
+		return nil, newError(CodeInvalidArgument, "unknown integration %q", p.IntegrationID)
 	}
 	name := strings.TrimSpace(p.Name)
 	if name == "" || utf8.RuneCountInString(name) > maxNameLen {
 		return nil, newError(CodeInvalidArgument, "name is required and at most %d characters", maxNameLen)
 	}
+	params, err := prov.checkParams(p.Params)
+	if err != nil {
+		return nil, err
+	}
 
 	id := uuidConnID()
 	conn := &core.Connection{
 		ID: id, OwnerKind: core.ConnectionOwnerUser, UserID: p.UserID, IntegrationID: p.IntegrationID,
-		Name: name, Status: core.ConnectionStatusActive, Scopes: []string{},
+		Name: name, Status: core.ConnectionStatusActive, Scopes: []string{}, Params: params,
 	}
 	var plain []plainField
 	switch p.Kind {
 	case APIKeyKindAPIKey:
+		m, ok := prov.Method(MethodAPIKey)
+		if !ok {
+			return nil, newError(CodeInvalidArgument, "%s does not accept an API key", prov.DisplayName)
+		}
 		key := p.Fields["api_key"]
-		if key == "" || len(key) > maxSecretLen {
+		if key == "" || len(key) > maxSecretLen || strings.ContainsAny(key, "\x00\r\n") {
 			return nil, newError(CodeInvalidArgument, "fields.api_key is required")
 		}
-		header := p.Fields["header"]
-		if header == "" {
-			header = DefaultAPIKeyHeader
+		if err := onlyFields(p.Fields, "api_key", "header"); err != nil {
+			return nil, err
 		}
-		if !ValidAPIKeyHeader(header) {
-			return nil, newError(CodeInvalidArgument, "fields.header must be one of bearer, x-api-key, api-key, x-auth-token")
+		if openAPIKeyPlacement(m.GetApiKey()) {
+			header := p.Fields["header"]
+			if header == "" {
+				header = DefaultAPIKeyHeader
+			}
+			if !ValidAPIKeyHeader(header) {
+				return nil, newError(CodeInvalidArgument, "fields.header must be one of bearer, x-api-key, api-key, x-auth-token")
+			}
+			conn.AuthHeader = &header
+		} else if p.Fields["header"] != "" {
+			return nil, newError(CodeInvalidArgument, "%s decides where its API key goes; fields.header is not accepted", prov.DisplayName)
 		}
 		conn.AuthKind = core.ConnectionAuthAPIKey
-		conn.AuthHeader = &header
 		plain = []plainField{{core.SecretFieldAPIKey, key}}
 	case APIKeyKindBasic:
+		m, ok := prov.Method(MethodBasic)
+		if !ok {
+			return nil, newError(CodeInvalidArgument, "%s does not accept a username and password", prov.DisplayName)
+		}
 		user, pass := p.Fields["username"], p.Fields["password"]
+		if up := m.GetBasic().GetUsernameParam(); up != "" {
+			if user != "" {
+				return nil, newError(CodeInvalidArgument, "%s takes the username from %s; fields.username is not accepted", prov.DisplayName, up)
+			}
+			user = params[up]
+		}
+		if err := onlyFields(p.Fields, "username", "password"); err != nil {
+			return nil, err
+		}
 		if user == "" || pass == "" || len(user) > maxSecretLen || len(pass) > maxSecretLen {
 			return nil, newError(CodeInvalidArgument, "fields.username and fields.password are required")
 		}
@@ -189,37 +233,16 @@ func (s *Service) Delete(ctx context.Context, userID, id string) error {
 	if err != nil {
 		return mapStoreErr(err)
 	}
-	if prov, ok := s.providers.Get(conn.IntegrationID); ok && prov.Available() && conn.AuthKind == core.ConnectionAuthGitHubAppUser {
-		s.revokeGitHub(ctx, prov, conn)
+	if prov, ok := s.providers.Get(conn.IntegrationID); ok && conn.AuthKind == core.ConnectionAuthOAuth2 {
+		if tok, err := s.tokens.Token(ctx, conn.UserID, conn.ID); err == nil {
+			prov.revoke(ctx, s.doer, conn.Params, tok)
+		}
 	}
 	if err := s.store.DeleteConnection(ctx, userID, id, userEvent(core.ConnectionEventDeleted, userID)); err != nil {
 		return mapStoreErr(err)
 	}
 	s.tokens.Forget(id)
 	return nil
-}
-
-func (s *Service) revokeGitHub(ctx context.Context, prov *Provider, conn *core.Connection) {
-	tok, err := s.tokens.Token(ctx, conn.UserID, conn.ID)
-	if err != nil {
-		return
-	}
-	var clientSecret string
-	_ = prov.ClientSecret.Use(func(b []byte) error { clientSecret = string(b); return nil })
-	_ = tok.Use(func(b []byte) error {
-		body := strings.NewReader(`{"access_token":"` + string(b) + `"}`)
-		req, err := http.NewRequestWithContext(ctx, http.MethodDelete, "https://api.github.com/applications/"+prov.ClientID+"/token", body)
-		if err != nil {
-			return nil
-		}
-		req.SetBasicAuth(prov.ClientID, clientSecret)
-		req.Header.Set("Accept", "application/vnd.github+json")
-		req.Header.Set("Content-Type", "application/json")
-		if resp, err := s.doer.Do(req); err == nil {
-			_ = resp.Body.Close()
-		}
-		return nil
-	})
 }
 
 // TestResult is the outcome of a probe.
@@ -230,10 +253,9 @@ type TestResult struct {
 	ErrorClass   string
 }
 
-// Test runs the per-auth-kind probe. OAuth connections call the provider's
-// identity endpoint with a live (refreshed if need be) token and record the
-// account label; pasted credentials have no provider endpoint in v1, so the
-// probe is that the stored secret opens.
+// Test runs the integration's identity probe with the live (refreshed if need
+// be) credential and records the account label. An integration that declares
+// no probe can only prove that the stored secret opens.
 func (s *Service) Test(ctx context.Context, userID, id string) (*TestResult, error) {
 	conn, err := s.store.GetConnection(ctx, userID, id)
 	if err != nil {
@@ -249,15 +271,16 @@ func (s *Service) Test(ctx context.Context, userID, id string) (*TestResult, err
 		}
 		return nil, err
 	}
-	prov, isOAuth := s.providers.Get(conn.IntegrationID)
-	if !isOAuth || (conn.AuthKind != core.ConnectionAuthOAuth2 && conn.AuthKind != core.ConnectionAuthGitHubAppUser) {
+	prov, ok := s.providers.Get(conn.IntegrationID)
+	if !ok || !prov.HasProbe() {
 		return &TestResult{OK: true}, nil
 	}
-	var who Identity
-	var perr error
-	_ = secret.Use(func(b []byte) error {
-		who, perr = prov.identify(ctx, s.doer, string(b))
-		return nil
+	auth, err := authenticatorFor(prov, conn)
+	if err != nil {
+		return nil, err
+	}
+	who, perr := prov.identify(ctx, s.doer, conn.Params, func(r *http.Request) error {
+		return auth.Apply(r, secret, NewRedactor())
 	})
 	if perr != nil {
 		var pe *probeError
@@ -279,6 +302,21 @@ func (s *Service) Events(ctx context.Context, userID, id string, limit int, befo
 	}
 	evs, err := s.store.ListConnectionEvents(ctx, userID, id, limit, beforeID)
 	return evs, mapStoreErr(err)
+}
+
+// onlyFields refuses a pasted-credential field the method does not take, so a
+// typo is an error rather than a silently dropped value.
+func onlyFields(fields map[string]string, allowed ...string) error {
+	for k := range fields {
+		ok := false
+		for _, a := range allowed {
+			ok = ok || k == a
+		}
+		if !ok {
+			return newError(CodeInvalidArgument, "fields.%s is not accepted", k)
+		}
+	}
+	return nil
 }
 
 // StartOAuth begins an RPC-bound flow.

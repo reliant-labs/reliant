@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -16,7 +17,7 @@ import (
 // schema keeps ciphertext in connection_secrets precisely so that cannot happen.
 const connectionColumns = `id, owner_kind, user_id, org_id, integration_id, auth_kind, name,
 	account_label, external_account_id, scopes, oauth_client, auth_header, status, status_reason,
-	is_default, access_expires_at, last_used_at, created_at, updated_at, deleted_at`
+	is_default, access_expires_at, last_used_at, created_at, updated_at, deleted_at, params`
 
 type connectionStore struct{ db *sql.DB }
 
@@ -31,10 +32,11 @@ func scanConnection(r rowScanner) (*core.Connection, error) {
 		orgID, label, extID, client, header, reason sql.NullString
 		accessExp, lastUsed, deleted                sql.NullTime
 		scopes                                      pq.StringArray
+		params                                      []byte
 	)
 	err := r.Scan(&c.ID, &c.OwnerKind, &c.UserID, &orgID, &c.IntegrationID, &c.AuthKind, &c.Name,
 		&label, &extID, &scopes, &client, &header, &c.Status, &reason,
-		&c.IsDefault, &accessExp, &lastUsed, &c.CreatedAt, &c.UpdatedAt, &deleted)
+		&c.IsDefault, &accessExp, &lastUsed, &c.CreatedAt, &c.UpdatedAt, &deleted, &params)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, core.ErrConnectionNotFound
@@ -48,7 +50,29 @@ func scanConnection(r rowScanner) (*core.Connection, error) {
 		c.Scopes = []string{}
 	}
 	c.AccessExpiresAt, c.LastUsedAt, c.DeletedAt = nullTime(accessExp), nullTime(lastUsed), nullTime(deleted)
+	if c.Params, err = decodeParams(params); err != nil {
+		return nil, fmt.Errorf("connection %s params: %w", c.ID, err)
+	}
 	return &c, nil
+}
+
+// encodeParams stores a param map as jsonb; nil is the empty object.
+func encodeParams(m map[string]string) ([]byte, error) {
+	if m == nil {
+		m = map[string]string{}
+	}
+	return json.Marshal(m)
+}
+
+func decodeParams(raw []byte) (map[string]string, error) {
+	out := map[string]string{}
+	if len(raw) == 0 {
+		return out, nil
+	}
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, err
+	}
+	return out, nil
 }
 
 func nullStr(s sql.NullString) *string {
@@ -162,14 +186,18 @@ func (s *connectionStore) CreateConnection(ctx context.Context, c *core.Connecti
 		if scopes == nil {
 			scopes = pq.StringArray{}
 		}
-		_, err := tx.ExecContext(ctx, `
+		params, err := encodeParams(c.Params)
+		if err != nil {
+			return err
+		}
+		_, err = tx.ExecContext(ctx, `
 			INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name,
 				account_label, external_account_id, scopes, oauth_client, auth_header, status, status_reason,
-				is_default, access_expires_at)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)`,
+				is_default, access_expires_at, params)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
 			c.ID, c.OwnerKind, c.UserID, strPtrArg(c.OrgID), c.IntegrationID, c.AuthKind, c.Name,
 			strPtrArg(c.AccountLabel), strPtrArg(c.ExternalAccountID), scopes, strPtrArg(c.OAuthClient), strPtrArg(c.AuthHeader),
-			c.Status, strPtrArg(c.StatusReason), c.IsDefault, timePtrArg(c.AccessExpiresAt))
+			c.Status, strPtrArg(c.StatusReason), c.IsDefault, timePtrArg(c.AccessExpiresAt), params)
 		if err != nil {
 			if isUniqueViolation(err, "connections_name") {
 				return core.ErrConnectionNameTaken
@@ -459,12 +487,16 @@ func (s *connectionStore) WithSecretsLock(ctx context.Context, userID, id string
 }
 
 func (s *connectionStore) CreateOAuthFlow(ctx context.Context, f *core.OAuthFlow) error {
-	_, err := s.db.ExecContext(ctx, `
+	params, err := encodeParams(f.Params)
+	if err != nil {
+		return err
+	}
+	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO oauth_flows (state_hash, user_id, session_id_hash, integration_id, pkce_verifier_sealed,
-			redirect_after, reconnect_connection_id, connection_name, expires_at)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+			redirect_after, reconnect_connection_id, connection_name, expires_at, params)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
 		f.StateHash, f.UserID, f.SessionIDHash, f.IntegrationID, f.PKCEVerifierSealed,
-		emptyToNil(f.RedirectAfter), emptyToNil(f.ReconnectConnectionID), emptyToNil(f.ConnectionName), f.ExpiresAt)
+		emptyToNil(f.RedirectAfter), emptyToNil(f.ReconnectConnectionID), emptyToNil(f.ConnectionName), f.ExpiresAt, params)
 	return err
 }
 
@@ -472,6 +504,7 @@ func (s *connectionStore) ConsumeOAuthFlow(ctx context.Context, stateHash []byte
 	var (
 		f                          core.OAuthFlow
 		redirect, reconnect, cname sql.NullString
+		params                     []byte
 	)
 	// One statement: the compare-and-swap on consumed_at is what makes the
 	// state single-use even under concurrent replays.
@@ -479,9 +512,9 @@ func (s *connectionStore) ConsumeOAuthFlow(ctx context.Context, stateHash []byte
 		UPDATE oauth_flows SET consumed_at = $2
 		 WHERE state_hash = $1 AND consumed_at IS NULL AND expires_at > $2
 		RETURNING state_hash, user_id, session_id_hash, integration_id, pkce_verifier_sealed,
-		          redirect_after, reconnect_connection_id, connection_name, expires_at`,
+		          redirect_after, reconnect_connection_id, connection_name, expires_at, params`,
 		stateHash, now).Scan(&f.StateHash, &f.UserID, &f.SessionIDHash, &f.IntegrationID, &f.PKCEVerifierSealed,
-		&redirect, &reconnect, &cname, &f.ExpiresAt)
+		&redirect, &reconnect, &cname, &f.ExpiresAt, &params)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, core.ErrOAuthFlowInvalid
@@ -489,6 +522,9 @@ func (s *connectionStore) ConsumeOAuthFlow(ctx context.Context, stateHash []byte
 		return nil, err
 	}
 	f.RedirectAfter, f.ReconnectConnectionID, f.ConnectionName = redirect.String, reconnect.String, cname.String
+	if f.Params, err = decodeParams(params); err != nil {
+		return nil, fmt.Errorf("oauth flow params: %w", err)
+	}
 	return &f, nil
 }
 
