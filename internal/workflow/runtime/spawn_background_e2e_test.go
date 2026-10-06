@@ -81,6 +81,10 @@ type spawnE2EEnv struct {
 	// across the parent and any spawned child), so the turn a stub serves is
 	// determined by that counter rather than by a separate cursor.
 	script []scriptedToolCallsResponse
+
+	// callLLMRuntimes is the RuntimeContext every CallLLM was handed, parent
+	// and spawned children alike, in call order.
+	callLLMRuntimes []types.RuntimeContext
 }
 
 func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script []scriptedToolCallsResponse) *spawnE2EEnv {
@@ -206,10 +210,11 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 	return e
 }
 
-func (e *spawnE2EEnv) callLLMStub(_ types.ActivityInput) (map[string]interface{}, error) {
+func (e *spawnE2EEnv) callLLMStub(input types.ActivityInput) (map[string]interface{}, error) {
 	idx := int(atomic.AddInt32(&e.callLLMCount, 1)) - 1
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.callLLMRuntimes = append(e.callLLMRuntimes, input.Runtime)
 	if idx >= len(e.script) {
 		// Script exhausted: no tool calls, loop ends.
 		return map[string]interface{}{"response_text": "done", "tool_calls": nil}, nil

@@ -75,6 +75,7 @@ Inputs (`CapabilityInputs`):
 | `OwnChildren`, `InheritedChildren` | `spawnHistory` (#500): `ListSpawnChildren` (a spawn row that started a child) and `ListInheritedSpawnChildren` (a branch's ancestors' spawns before the fork point). Best-effort: a read error withholds the grants for that turn only (§4b) | spawn tool_calls rows, read every turn |
 | `ResponseTool` | node `response_tool` | node |
 | `UsableIntegrations` (integration id → bool) | stream B's `usableIntegrations` (handlers/integration_access.go): which connection-gated integrations the declaration reaches the run's owner can use. Fails closed (§4b) | asked of the credential source every turn |
+| `Unattended` | `rtx.Unattended`, which the StepExecutor sets on every call_llm from `runtime.IsUnattended(workflowInputs)` (§3.9) | a workflow input: injected by the launcher, carried by continue-as-new, propagated to every sub-workflow, loop body and spawn |
 
 Rules. Every run-level rule lives in ONE classifier, `exclusion(name)`, which
 the menu, load_tool, its advertised list (`Deferred`), its search
@@ -88,6 +89,7 @@ cannot disagree:
 | needs machine | needs the user's machine (`NeedsMachine`, every MCP tool) on a no-machine run |
 | has machine | exists only for a run without one (`OnlyWithoutMachine` — `request_machine`) on a run that has one |
 | unusable integration | a connection-gated integration the owner cannot use (`WithheldIntegrations`) |
+| unattended | nobody is attending the run, the tool is one `UnattendedWithholding` names, and the declaration did not name it (§3.9) |
 | tier | above the run's tier |
 
 - A name is **reachable** when no exclusion applies.
@@ -105,14 +107,15 @@ cannot disagree:
   a no-machine-only tool, which is handed over directly rather than loaded.
 - **Explain(name)** derives the refusal reason from the set alone (no
   machine, has a machine, unknown, not connected, unusable integration with
-  its reason, tier, "load it first", "not declared").
+  its reason, unattended with its category's reason, tier, "load it first",
+  "not declared").
 
 Output (`Capabilities`, proto `reliant.v1.ToolCapabilities`): `offered`,
 `loadable_all`, `loadable`, `permission`, `no_machine`, `mcp_tools`,
 `spawn_presets`, `withheld_integrations` (integration id → reason, ≤ one entry
-per integration), `bound_params` (§3.8). Names only, sorted — except a bound
-parameter's value when the workflow bound it, which is already in history as
-call_llm's own input.
+per integration), `bound_params` (§3.8), `unattended` and `unattended_opt_in`
+(§3.9). Names only, sorted — except a bound parameter's value when the
+workflow bound it, which is already in history as call_llm's own input.
 
 ### 3.2 call_llm — builds the menu FROM the set and records it
 
@@ -302,6 +305,121 @@ did in a bound tool's own Run.
 - `invoke_tool` nodes run a tool with parameters the workflow author wrote,
   with no model and no capability set, so nothing is bound there.
 
+### 3.9 Who is attending: unattended runs are withheld what outlives them
+
+**The problem** (research/WORKFLOW_EDITOR_UX_REVIEW.md §2 Q2). Runs are
+started by schedules, webhooks, GitHub, Slack, Gmail, Twilio and other
+workflows' runs, and they carry text nobody vetted: an issue body, an email.
+The builtin agent preloads by tag and declares `loadable_tools: ["*"]`, so
+such a run could load `edit_workflow` and rewrite a workflow that has live
+activations. That is a prompt injection that persists itself, because
+activations resolve the workflow by name at fire time. It could also post to
+Slack or send email under the user's name.
+
+**The input.** `CapabilityInputs.Unattended` is `runtime.IsUnattended` of the
+run, which is the definition the rest of the product already uses:
+- **The launcher sets it** for every event kind
+  `core.TriggerEventKind.Unattended` reports (schedule, webhook, integration,
+  workflow_event). `Launch` now forces it from the kind, so a launch path
+  that forgets `Spec.Unattended` fails closed.
+- **A person's turn is attended, even in an automation's chat.** Each reply
+  starts a new root run, and only the launcher writes `unattended` (it is a
+  `RuntimeInjectedInput`, refused from clients; #504's `__launch_run` marks
+  the same boundary).
+- **Propagation is monotone** (`propagateUnattended`). Sub-workflows, loop
+  bodies and spawned sub-agents inherit it, and a node can turn it on for a
+  phase but never off. The StepExecutor copies it onto every call_llm's
+  `RuntimeContext.Unattended`, which is in history as the activity's input.
+
+The set records it as `unattended`. Execution, load_tool and `Explain` need
+nothing else.
+
+**What is withheld.** `UnattendedWithholding` (tools/unattended.go) is one
+list of categories, each a predicate plus a refusal reason:
+
+| Category | Tools | Reason |
+|---|---|---|
+| Workflow authoring | `create_workflow`, `edit_workflow`, `write_workflow`, `write_scenario`, `edit_scenario`, `delete_scenario` | A workflow is standing work. A draft is one write away from complete. Scenarios are a workflow's tests, so rewriting or deleting one hides a change. |
+| Trigger activation | `activate_trigger` | It creates standing work that keeps starting unattended runs. |
+| Other runs | `start_run`, `send_to_run`, `control_run` | start_run's run is attended (`agent.start_run`), so it would get everything withheld here. send_to_run instructs a run that may hold these tools. control_run stops or resumes the user's own work. |
+| Mutating integration actions | every exposed action whose manifest says `mutates: true` (`MutatingIntegrationAction`): today GitHub 5, Slack 4, Gmail 1, Twilio 1 and `http__request` | It puts unvetted text in front of other people under the user's name. Derived from the manifest, so a new integration classifies itself. Read-only actions stay. |
+
+Deliberately **not** withheld:
+- **Reads:** `list_workflows`, `get_workflow`, `list_scenarios`,
+  `view_scenario`, `list_triggers`, `list_runs`, `get_run`,
+  `search_integrations`, `get_integration_schema`, `get_schema`.
+- **`run_scenario`:** it runs the workflow against mocked activities only
+  (scenario/runner), so nothing real executes.
+- **`spawn` and the spawn management tools:** the children inherit the
+  restriction.
+- **Plans, tasks, `worktree`, `metadata_writer` and the file and shell
+  tools:** none of them is reliant standing work. The filesystem is §3.7's
+  non-boundary: on a run with a machine, the shell can still write
+  `.reliant/workflows/*.yaml` (synced as project workflows) or a preset file,
+  so there this is steering, like the tier. On a no-machine run it is a real
+  boundary.
+- **`invoke_tool` nodes:** the author writes the call, so there is no model
+  to steer.
+
+`TestUnattendedWithholding_EveryWritingWorkflowOrRunsToolIsClassified` fails
+when a non-read-only tool tagged `workflow` or `runs` is added without either
+being withheld or being listed as safe.
+
+**The rule.** The exclusion is `unattended` (§3.1): not offered, not loadable,
+not advertised (`Deferred`), not searchable, and refused at execution.
+- The refusal text (`Explain`, and load_tool's `LoadRefusal`) is the
+  category's reason ("unattended runs can't create or change workflows or
+  their test scenarios") plus how to opt in.
+- execute_tools records it as the FAILED row's `error_message`.
+- A load_tool grant from an earlier turn is intersected with the exclusion
+  like any other grant.
+
+**The opt-in: name the tool.** A step that names the tool exactly in
+`preloaded_tools` or `loadable_tools` keeps it unattended. A tag, a glob or
+`"*"` does not count, and a name its own list excludes (`!edit_workflow`)
+names nothing.
+- `ToolAccess.Named` carries the exact names out of `ResolveToolAccess`.
+- The resolver records the withheld ones the step named as
+  `unattended_opt_in`, so execution and load_tool agree with the menu.
+- The tier still applies: naming `activate_trigger` on a mutating node does
+  not reach it.
+- A spawned sub-agent's opt-in is its own preset's declaration, by the same
+  rule.
+
+Why naming, and not a dedicated flag:
+- **What the attack exploits** is the convenience paths (`tag:integration`,
+  `tag:workflow`, `"*"`) that sweep a tool in with nobody deciding. A name is
+  a reviewable decision that the step does that work. A Slack-triggered
+  workflow that posts its answer names `slack__message_post`. A migration
+  that creates drafts names `create_workflow` (migrate.yaml already does).
+- **A flag would be a second statement that has to agree with the first.**
+  A tool named but not flagged would stay withheld, which surprises the
+  author. A tool flagged but not named would do nothing.
+- **The cost:** an author who named a tool for an interactive chat, and
+  later attached a trigger, has opted that trigger in. The name is in the
+  YAML, so that review surface already exists.
+
+**Considered and declined, for simplicity.** The UX review proposed three
+levels (draft authoring allowed, publish and activate behind an approval card,
+all withheld unattended), a per-project policy setting and a per-chat toggle.
+The user chose the simpler rule: unattended runs get none of these tools
+unless the step names them, and attended chats are unchanged. If the levels
+come back, they layer on as more resolver inputs, because the most
+restrictive rule wins:
+- **A project policy** would be one more input, read from the project config
+  row, that can withhold even a named tool.
+- **Approval** needs a per-call gate first. None exists:
+  `Tool.RequiresPermission` has no caller (PERMISSIONS_ASBUILT.md §Q5), so
+  `mutates: true` asks nobody today. The natural seam is workflow-side,
+  beside the spawn/ask_user split in `executeToolsWithSpawnSupport`, reusing
+  `executeApprovalSignalFlow`'s approval card.
+
+**Replay and deploy.**
+- `RuntimeContext.Unattended` and the two set fields are new payload fields,
+  and no command changes.
+- A batch whose call_llm ran before the deploy runs the legacy policy (§4.1)
+  for that one batch. The run's next call_llm resolves with the input.
+
 ## 4. Answers to the open questions
 
 1. **Replay safety.**
@@ -457,3 +575,7 @@ both rules into the resolver and deletes their per-site checks.
 | The rule itself, and a bound tool's own Run agrees with it | `TestApplyBindings_MergesBoundValuesAndRefusesAModelOverride`, `TestBinding_ModelValueForABoundParamIsRefused`, `TestGenerateImage_ModelBindingStillLocks`, `TestGenerateVideo_BoundModelLocksAndIsHiddenFromSchema` |
 | Bound params cross the workflow into execute_tools | `TestToolCapabilitiesLoop/TestBoundParams_ReachExecuteTools` (runtime), `TestCapabilities_ProtoRoundTrip` |
 | Replay of pre-change histories | `TestReplayFixtures` (replaytest), unchanged fixtures |
+| A webhook-fired run is not offered `edit_workflow` or a mutating integration action, cannot load it, and is refused (FAILED, with the reason) if it calls it; a person's turn in that chat is offered both and runs them; a named tool survives unattended; a sub-agent's turn is withheld the same | `TestUnattendedRun_IsNotOfferedLoadedOrRunAuthoringTools`, `TestPersonsTurnInAnAutomationsChat_IsOfferedAuthoringTools`, `TestUnattendedRun_ExplicitlyDeclaredToolStillRuns`, `TestUnattendedSubAgent_IsWithheldAuthoringTools` (handlers: real call_llm → protojson → real load_tool / execute_tools) |
+| The runtime hands every call_llm the fact, a spawned sub-agent's included; a person's turn and a person-started chat are attended | `TestUnattendedCapabilities` (runtime, full DynamicWorkflow with a real spawn) |
+| The launcher makes every unattended event kind's run unattended even when the caller forgot | `TestLaunchUnattendedFollowsTheEventKind` (launch) |
+| The categories, every mutating catalog action withheld and every read-only one kept, the naming rule, the classification drift guard, the set's round trip | `internal/llm/tools/unattended_test.go` |

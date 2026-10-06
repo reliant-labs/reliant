@@ -1604,6 +1604,17 @@ message ToolCapabilities {
   // execute_tools merges them over the model's call, and refuses a call that
   // sets one to a different value. Only tools with a bound parameter appear.
   map<string, ToolBoundParams> bound_params = 9;
+  // Unattended: nobody is attending the run (a trigger fired it, or it is a
+  // sub-workflow or spawned sub-agent of such a run; never a person's turn).
+  // The tools an unattended run is withheld — workflow authoring, trigger
+  // activation, starting/messaging/controlling other runs, and integration
+  // actions that change external state — are neither offered nor loadable,
+  // except those in unattended_opt_in.
+  bool unattended = 10;
+  // UnattendedOptIn are the withheld tools this turn's declaration names
+  // exactly (not through a tag, a glob or "*"), sorted: an unattended run keeps
+  // them. Only set when unattended is.
+  repeated string unattended_opt_in = 11;
 }
 
 // ToolBoundParams are one tool's bound parameters, keyed by parameter name.

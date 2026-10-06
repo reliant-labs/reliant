@@ -5694,9 +5694,20 @@ type ToolCapabilities struct {
 	// by tool name. call_llm removed them from the schema the model was offered;
 	// execute_tools merges them over the model's call, and refuses a call that
 	// sets one to a different value. Only tools with a bound parameter appear.
-	BoundParams   map[string]*ToolBoundParams `protobuf:"bytes,9,rep,name=bound_params,json=boundParams,proto3" json:"bound_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	BoundParams map[string]*ToolBoundParams `protobuf:"bytes,9,rep,name=bound_params,json=boundParams,proto3" json:"bound_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// Unattended: nobody is attending the run (a trigger fired it, or it is a
+	// sub-workflow or spawned sub-agent of such a run; never a person's turn).
+	// The tools an unattended run is withheld — workflow authoring, trigger
+	// activation, starting/messaging/controlling other runs, and integration
+	// actions that change external state — are neither offered nor loadable,
+	// except those in unattended_opt_in.
+	Unattended bool `protobuf:"varint,10,opt,name=unattended,proto3" json:"unattended,omitempty"`
+	// UnattendedOptIn are the withheld tools this turn's declaration names
+	// exactly (not through a tag, a glob or "*"), sorted: an unattended run keeps
+	// them. Only set when unattended is.
+	UnattendedOptIn []string `protobuf:"bytes,11,rep,name=unattended_opt_in,json=unattendedOptIn,proto3" json:"unattended_opt_in,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ToolCapabilities) Reset() {
@@ -5788,6 +5799,20 @@ func (x *ToolCapabilities) GetWithheldIntegrations() map[string]string {
 func (x *ToolCapabilities) GetBoundParams() map[string]*ToolBoundParams {
 	if x != nil {
 		return x.BoundParams
+	}
+	return nil
+}
+
+func (x *ToolCapabilities) GetUnattended() bool {
+	if x != nil {
+		return x.Unattended
+	}
+	return false
+}
+
+func (x *ToolCapabilities) GetUnattendedOptIn() []string {
+	if x != nil {
+		return x.UnattendedOptIn
 	}
 	return nil
 }
@@ -8032,7 +8057,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vstop_reason\x18\x12 \x01(\tR\n" +
 	"stopReason\x12#\n" +
 	"\rfinish_reason\x18\x11 \x01(\tR\ffinishReason\x12@\n" +
-	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesR\fcapabilitiesJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\aabortedR\tstop_kind\"\xd1\x04\n" +
+	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesR\fcapabilitiesJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\aabortedR\tstop_kind\"\x9d\x05\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +
@@ -8045,7 +8070,12 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\tmcp_tools\x18\x06 \x03(\tR\bmcpTools\x12#\n" +
 	"\rspawn_presets\x18\a \x03(\tR\fspawnPresets\x12k\n" +
 	"\x15withheld_integrations\x18\b \x03(\v26.reliant.v1.ToolCapabilities.WithheldIntegrationsEntryR\x14withheldIntegrations\x12P\n" +
-	"\fbound_params\x18\t \x03(\v2-.reliant.v1.ToolCapabilities.BoundParamsEntryR\vboundParams\x1aG\n" +
+	"\fbound_params\x18\t \x03(\v2-.reliant.v1.ToolCapabilities.BoundParamsEntryR\vboundParams\x12\x1e\n" +
+	"\n" +
+	"unattended\x18\n" +
+	" \x01(\bR\n" +
+	"unattended\x12*\n" +
+	"\x11unattended_opt_in\x18\v \x03(\tR\x0funattendedOptIn\x1aG\n" +
 	"\x19WithheldIntegrationsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a[\n" +

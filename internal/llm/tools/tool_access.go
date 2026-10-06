@@ -34,6 +34,13 @@ type ToolAccess struct {
 	// Narrowing what an agent can reach is a real decision and has to be
 	// written down rather than inferred.
 	LoadableAll bool
+
+	// Named is every tool either list spelled out by its exact name, sorted:
+	// not reached through a tag, a glob or "*", and not excluded by the same
+	// list. Naming a tool is a decision about the step, where a tag or "*" is
+	// a convenience — which is why only a name keeps a tool an unattended run
+	// is otherwise not handed (UnattendedWithholding).
+	Named []string
 }
 
 // CanLoad reports whether load_tool may reach a tool.
@@ -78,16 +85,50 @@ func ResolveToolAccess(preloaded []string, loadable []string, mcpToolNames []str
 	access := ToolAccess{
 		Preloaded: ExpandToolFilter(preloaded, mcpToolNames),
 	}
+	named := namedTools(preloaded, func() []string { return access.Preloaded })
 
 	for _, entry := range loadable {
 		if entry == LoadableWildcard {
 			access.LoadableAll = true
+			// "*" reaches everything, but a name beside it is still a name.
+			access.Named = sortedUnique(append(named,
+				namedTools(loadable, func() []string { return ExpandToolFilter(loadable, mcpToolNames) })...))
 			return access
 		}
 	}
 
 	access.Loadable = ExpandToolFilter(loadable, mcpToolNames)
+	access.Named = sortedUnique(append(named, namedTools(loadable, func() []string { return access.Loadable })...))
 	return access
+}
+
+// namedTools are the entries of filter that name one tool exactly and that the
+// filter's own expansion kept — so `!edit_workflow` beside `edit_workflow`
+// names nothing. expanded is called only when filter names something.
+func namedTools(filter []string, expanded func() []string) []string {
+	var candidates []string
+	for _, spec := range filter {
+		switch {
+		case spec == "", strings.HasPrefix(spec, "!"), strings.HasPrefix(spec, "tag:"),
+			strings.HasPrefix(spec, "spawn:"), containsGlobChars(spec):
+			continue
+		}
+		candidates = append(candidates, spec)
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	kept := make(map[string]bool)
+	for _, name := range expanded() {
+		kept[name] = true
+	}
+	var named []string
+	for _, name := range candidates {
+		if kept[name] {
+			named = append(named, name)
+		}
+	}
+	return named
 }
 
 // mcpProbeName is a name shaped like any MCP tool, used to test whether a glob

@@ -74,6 +74,35 @@ func ConnectionGatedIntegration(name string) (integrationID string, gated bool) 
 	return m.GetId(), true
 }
 
+var (
+	mutatingToolsOnce sync.Once
+	mutatingTools     map[string]bool
+)
+
+// MutatingIntegrationAction reports whether name is an integration tool whose
+// manifest action changes external state (`mutates: true`): it posts, sends,
+// creates or updates something outside Reliant. Read from the manifest, so a
+// new integration classifies itself.
+func MutatingIntegrationAction(name string) bool {
+	mutatingToolsOnce.Do(func() {
+		mutatingTools = map[string]bool{}
+		cat, err := catalog.Builtin()
+		if err != nil {
+			// No catalog means no integration tools in the registry either
+			// (integrationToolDefinitions), so there is nothing to classify.
+			return
+		}
+		for _, m := range cat.Manifests() {
+			for _, a := range m.GetActions() {
+				if a.GetTool().GetExpose() && a.GetMutates() {
+					mutatingTools[manifest.ToolName(m, a)] = true
+				}
+			}
+		}
+	})
+	return mutatingTools[name]
+}
+
 // connectionAvailability is the half of a credential source that can say,
 // without resolving a credential for any call, which integrations a run's
 // owner could authenticate now. Declared here, where it is consumed:
