@@ -128,6 +128,7 @@ describe("getEnvironmentStatus", () => {
         last_error: "CrashLoopBackOff",
         deployment_id: "",
         declared_run_state: "unspecified",
+        suspend_reason: "unspecified",
       },
     ]);
     expect(status.currentPromotion).toMatchObject({
