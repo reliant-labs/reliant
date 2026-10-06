@@ -290,7 +290,7 @@ func (*CompleteOnboardingResponse) Descriptor() ([]byte, []int) {
 // it, rather than showing a generic error.
 type AccountDeletionBlocker struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// Machine-readable reason: "paid_subscription" or "wallet_balance".
+	// Machine-readable reason: "paid_subscription".
 	Reason string `protobuf:"bytes,1,opt,name=reason,proto3" json:"reason,omitempty"`
 	// Human-readable sentence the UI may render verbatim.
 	Detail        string `protobuf:"bytes,2,opt,name=detail,proto3" json:"detail,omitempty"`
@@ -342,6 +342,224 @@ func (x *AccountDeletionBlocker) GetDetail() string {
 	return ""
 }
 
+// WalletRefundDestination is money going back to one card.
+type WalletRefundDestination struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty when the card could not be determined; render "your original
+	// payment method" rather than a blank.
+	CardBrand     string `protobuf:"bytes,1,opt,name=card_brand,json=cardBrand,proto3" json:"card_brand,omitempty"`
+	CardLast4     string `protobuf:"bytes,2,opt,name=card_last4,json=cardLast4,proto3" json:"card_last4,omitempty"`
+	AmountCents   int64  `protobuf:"varint,3,opt,name=amount_cents,json=amountCents,proto3" json:"amount_cents,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *WalletRefundDestination) Reset() {
+	*x = WalletRefundDestination{}
+	mi := &file_services_user_v1_user_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *WalletRefundDestination) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*WalletRefundDestination) ProtoMessage() {}
+
+func (x *WalletRefundDestination) ProtoReflect() protoreflect.Message {
+	mi := &file_services_user_v1_user_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use WalletRefundDestination.ProtoReflect.Descriptor instead.
+func (*WalletRefundDestination) Descriptor() ([]byte, []int) {
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *WalletRefundDestination) GetCardBrand() string {
+	if x != nil {
+		return x.CardBrand
+	}
+	return ""
+}
+
+func (x *WalletRefundDestination) GetCardLast4() string {
+	if x != nil {
+		return x.CardLast4
+	}
+	return ""
+}
+
+func (x *WalletRefundDestination) GetAmountCents() int64 {
+	if x != nil {
+		return x.AmountCents
+	}
+	return 0
+}
+
+// AccountDeletionWalletQuote is what deleting the account would do to the
+// caller's prepaid wallet. Every amount is computed by the server — the client
+// renders these numbers and never derives one from another.
+type AccountDeletionWalletQuote struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Refunded automatically, split across destinations (newest payment
+	// first). Includes the processing fee only when includes_processing_fee.
+	RefundCents  int64                      `protobuf:"varint,1,opt,name=refund_cents,json=refundCents,proto3" json:"refund_cents,omitempty"`
+	Destinations []*WalletRefundDestination `protobuf:"bytes,2,rep,name=destinations,proto3" json:"destinations,omitempty"`
+	// Paid credit no card payment can take back automatically. NOT forfeited:
+	// support refunds it by hand after deletion.
+	UnrefundableCents int64 `protobuf:"varint,3,opt,name=unrefundable_cents,json=unrefundableCents,proto3" json:"unrefundable_cents,omitempty"`
+	// Promotional (coupon) credit that deletion forfeits.
+	ForfeitedPromoCents   int64 `protobuf:"varint,4,opt,name=forfeited_promo_cents,json=forfeitedPromoCents,proto3" json:"forfeited_promo_cents,omitempty"`
+	IncludesProcessingFee bool  `protobuf:"varint,5,opt,name=includes_processing_fee,json=includesProcessingFee,proto3" json:"includes_processing_fee,omitempty"`
+	unknownFields         protoimpl.UnknownFields
+	sizeCache             protoimpl.SizeCache
+}
+
+func (x *AccountDeletionWalletQuote) Reset() {
+	*x = AccountDeletionWalletQuote{}
+	mi := &file_services_user_v1_user_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccountDeletionWalletQuote) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountDeletionWalletQuote) ProtoMessage() {}
+
+func (x *AccountDeletionWalletQuote) ProtoReflect() protoreflect.Message {
+	mi := &file_services_user_v1_user_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountDeletionWalletQuote.ProtoReflect.Descriptor instead.
+func (*AccountDeletionWalletQuote) Descriptor() ([]byte, []int) {
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *AccountDeletionWalletQuote) GetRefundCents() int64 {
+	if x != nil {
+		return x.RefundCents
+	}
+	return 0
+}
+
+func (x *AccountDeletionWalletQuote) GetDestinations() []*WalletRefundDestination {
+	if x != nil {
+		return x.Destinations
+	}
+	return nil
+}
+
+func (x *AccountDeletionWalletQuote) GetUnrefundableCents() int64 {
+	if x != nil {
+		return x.UnrefundableCents
+	}
+	return 0
+}
+
+func (x *AccountDeletionWalletQuote) GetForfeitedPromoCents() int64 {
+	if x != nil {
+		return x.ForfeitedPromoCents
+	}
+	return 0
+}
+
+func (x *AccountDeletionWalletQuote) GetIncludesProcessingFee() bool {
+	if x != nil {
+		return x.IncludesProcessingFee
+	}
+	return false
+}
+
+// AccountDeletionWalletSettlement is what deletion did to the wallet.
+type AccountDeletionWalletSettlement struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Accepted by Stripe, to destinations.
+	RefundedCents int64                      `protobuf:"varint,1,opt,name=refunded_cents,json=refundedCents,proto3" json:"refunded_cents,omitempty"`
+	Destinations  []*WalletRefundDestination `protobuf:"bytes,2,rep,name=destinations,proto3" json:"destinations,omitempty"`
+	// Could not be refunded automatically; support will refund it.
+	RefundOwedCents     int64 `protobuf:"varint,3,opt,name=refund_owed_cents,json=refundOwedCents,proto3" json:"refund_owed_cents,omitempty"`
+	ForfeitedPromoCents int64 `protobuf:"varint,4,opt,name=forfeited_promo_cents,json=forfeitedPromoCents,proto3" json:"forfeited_promo_cents,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *AccountDeletionWalletSettlement) Reset() {
+	*x = AccountDeletionWalletSettlement{}
+	mi := &file_services_user_v1_user_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccountDeletionWalletSettlement) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountDeletionWalletSettlement) ProtoMessage() {}
+
+func (x *AccountDeletionWalletSettlement) ProtoReflect() protoreflect.Message {
+	mi := &file_services_user_v1_user_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountDeletionWalletSettlement.ProtoReflect.Descriptor instead.
+func (*AccountDeletionWalletSettlement) Descriptor() ([]byte, []int) {
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *AccountDeletionWalletSettlement) GetRefundedCents() int64 {
+	if x != nil {
+		return x.RefundedCents
+	}
+	return 0
+}
+
+func (x *AccountDeletionWalletSettlement) GetDestinations() []*WalletRefundDestination {
+	if x != nil {
+		return x.Destinations
+	}
+	return nil
+}
+
+func (x *AccountDeletionWalletSettlement) GetRefundOwedCents() int64 {
+	if x != nil {
+		return x.RefundOwedCents
+	}
+	return 0
+}
+
+func (x *AccountDeletionWalletSettlement) GetForfeitedPromoCents() int64 {
+	if x != nil {
+		return x.ForfeitedPromoCents
+	}
+	return 0
+}
+
 type PreviewAccountDeletionRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -350,7 +568,7 @@ type PreviewAccountDeletionRequest struct {
 
 func (x *PreviewAccountDeletionRequest) Reset() {
 	*x = PreviewAccountDeletionRequest{}
-	mi := &file_services_user_v1_user_proto_msgTypes[7]
+	mi := &file_services_user_v1_user_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -362,7 +580,7 @@ func (x *PreviewAccountDeletionRequest) String() string {
 func (*PreviewAccountDeletionRequest) ProtoMessage() {}
 
 func (x *PreviewAccountDeletionRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_user_v1_user_proto_msgTypes[7]
+	mi := &file_services_user_v1_user_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -375,7 +593,7 @@ func (x *PreviewAccountDeletionRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewAccountDeletionRequest.ProtoReflect.Descriptor instead.
 func (*PreviewAccountDeletionRequest) Descriptor() ([]byte, []int) {
-	return file_services_user_v1_user_proto_rawDescGZIP(), []int{7}
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{10}
 }
 
 type PreviewAccountDeletionResponse struct {
@@ -384,14 +602,17 @@ type PreviewAccountDeletionResponse struct {
 	Blockers []*AccountDeletionBlocker `protobuf:"bytes,1,rep,name=blockers,proto3" json:"blockers,omitempty"`
 	// How many active daemons deletion would tear down. Not a blocker — a
 	// running daemon is a resource, not a commitment.
-	DaemonCount   int32 `protobuf:"varint,2,opt,name=daemon_count,json=daemonCount,proto3" json:"daemon_count,omitempty"`
+	DaemonCount int32 `protobuf:"varint,2,opt,name=daemon_count,json=daemonCount,proto3" json:"daemon_count,omitempty"`
+	// What deletion would refund and forfeit. Unset only when the server
+	// cannot settle wallets, in which case deletion itself will refuse.
+	Wallet        *AccountDeletionWalletQuote `protobuf:"bytes,3,opt,name=wallet,proto3" json:"wallet,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreviewAccountDeletionResponse) Reset() {
 	*x = PreviewAccountDeletionResponse{}
-	mi := &file_services_user_v1_user_proto_msgTypes[8]
+	mi := &file_services_user_v1_user_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -403,7 +624,7 @@ func (x *PreviewAccountDeletionResponse) String() string {
 func (*PreviewAccountDeletionResponse) ProtoMessage() {}
 
 func (x *PreviewAccountDeletionResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_user_v1_user_proto_msgTypes[8]
+	mi := &file_services_user_v1_user_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -416,7 +637,7 @@ func (x *PreviewAccountDeletionResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PreviewAccountDeletionResponse.ProtoReflect.Descriptor instead.
 func (*PreviewAccountDeletionResponse) Descriptor() ([]byte, []int) {
-	return file_services_user_v1_user_proto_rawDescGZIP(), []int{8}
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *PreviewAccountDeletionResponse) GetBlockers() []*AccountDeletionBlocker {
@@ -433,6 +654,13 @@ func (x *PreviewAccountDeletionResponse) GetDaemonCount() int32 {
 	return 0
 }
 
+func (x *PreviewAccountDeletionResponse) GetWallet() *AccountDeletionWalletQuote {
+	if x != nil {
+		return x.Wallet
+	}
+	return nil
+}
+
 type DeleteCurrentUserAccountRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -441,7 +669,7 @@ type DeleteCurrentUserAccountRequest struct {
 
 func (x *DeleteCurrentUserAccountRequest) Reset() {
 	*x = DeleteCurrentUserAccountRequest{}
-	mi := &file_services_user_v1_user_proto_msgTypes[9]
+	mi := &file_services_user_v1_user_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -453,7 +681,7 @@ func (x *DeleteCurrentUserAccountRequest) String() string {
 func (*DeleteCurrentUserAccountRequest) ProtoMessage() {}
 
 func (x *DeleteCurrentUserAccountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_services_user_v1_user_proto_msgTypes[9]
+	mi := &file_services_user_v1_user_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -466,21 +694,27 @@ func (x *DeleteCurrentUserAccountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCurrentUserAccountRequest.ProtoReflect.Descriptor instead.
 func (*DeleteCurrentUserAccountRequest) Descriptor() ([]byte, []int) {
-	return file_services_user_v1_user_proto_rawDescGZIP(), []int{9}
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{12}
 }
 
 type DeleteCurrentUserAccountResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Populated when deletion was REFUSED; nothing was destroyed. Empty on
 	// success.
-	Blockers      []*AccountDeletionBlocker `protobuf:"bytes,1,rep,name=blockers,proto3" json:"blockers,omitempty"`
+	Blockers []*AccountDeletionBlocker `protobuf:"bytes,1,rep,name=blockers,proto3" json:"blockers,omitempty"`
+	// Set on success: what happened to the wallet.
+	Wallet *AccountDeletionWalletSettlement `protobuf:"bytes,2,opt,name=wallet,proto3" json:"wallet,omitempty"`
+	// True when the account is deleted but a refund could not be issued
+	// automatically. Support refunds it by hand and the deletion is finalized
+	// then; the user needs to do nothing.
+	RefundPending bool `protobuf:"varint,3,opt,name=refund_pending,json=refundPending,proto3" json:"refund_pending,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeleteCurrentUserAccountResponse) Reset() {
 	*x = DeleteCurrentUserAccountResponse{}
-	mi := &file_services_user_v1_user_proto_msgTypes[10]
+	mi := &file_services_user_v1_user_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -492,7 +726,7 @@ func (x *DeleteCurrentUserAccountResponse) String() string {
 func (*DeleteCurrentUserAccountResponse) ProtoMessage() {}
 
 func (x *DeleteCurrentUserAccountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_services_user_v1_user_proto_msgTypes[10]
+	mi := &file_services_user_v1_user_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -505,7 +739,7 @@ func (x *DeleteCurrentUserAccountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteCurrentUserAccountResponse.ProtoReflect.Descriptor instead.
 func (*DeleteCurrentUserAccountResponse) Descriptor() ([]byte, []int) {
-	return file_services_user_v1_user_proto_rawDescGZIP(), []int{10}
+	return file_services_user_v1_user_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *DeleteCurrentUserAccountResponse) GetBlockers() []*AccountDeletionBlocker {
@@ -513,6 +747,20 @@ func (x *DeleteCurrentUserAccountResponse) GetBlockers() []*AccountDeletionBlock
 		return x.Blockers
 	}
 	return nil
+}
+
+func (x *DeleteCurrentUserAccountResponse) GetWallet() *AccountDeletionWalletSettlement {
+	if x != nil {
+		return x.Wallet
+	}
+	return nil
+}
+
+func (x *DeleteCurrentUserAccountResponse) GetRefundPending() bool {
+	if x != nil {
+		return x.RefundPending
+	}
+	return false
 }
 
 var File_services_user_v1_user_proto protoreflect.FileDescriptor
@@ -534,14 +782,34 @@ const file_services_user_v1_user_proto_rawDesc = "" +
 	"\x1aCompleteOnboardingResponse\"H\n" +
 	"\x16AccountDeletionBlocker\x12\x16\n" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x16\n" +
-	"\x06detail\x18\x02 \x01(\tR\x06detail\"\x1f\n" +
-	"\x1dPreviewAccountDeletionRequest\"\x88\x01\n" +
+	"\x06detail\x18\x02 \x01(\tR\x06detail\"z\n" +
+	"\x17WalletRefundDestination\x12\x1d\n" +
+	"\n" +
+	"card_brand\x18\x01 \x01(\tR\tcardBrand\x12\x1d\n" +
+	"\n" +
+	"card_last4\x18\x02 \x01(\tR\tcardLast4\x12!\n" +
+	"\famount_cents\x18\x03 \x01(\x03R\vamountCents\"\xa8\x02\n" +
+	"\x1aAccountDeletionWalletQuote\x12!\n" +
+	"\frefund_cents\x18\x01 \x01(\x03R\vrefundCents\x12L\n" +
+	"\fdestinations\x18\x02 \x03(\v2(.controlplane.v1.WalletRefundDestinationR\fdestinations\x12-\n" +
+	"\x12unrefundable_cents\x18\x03 \x01(\x03R\x11unrefundableCents\x122\n" +
+	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\x126\n" +
+	"\x17includes_processing_fee\x18\x05 \x01(\bR\x15includesProcessingFee\"\xf6\x01\n" +
+	"\x1fAccountDeletionWalletSettlement\x12%\n" +
+	"\x0erefunded_cents\x18\x01 \x01(\x03R\rrefundedCents\x12L\n" +
+	"\fdestinations\x18\x02 \x03(\v2(.controlplane.v1.WalletRefundDestinationR\fdestinations\x12*\n" +
+	"\x11refund_owed_cents\x18\x03 \x01(\x03R\x0frefundOwedCents\x122\n" +
+	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\"\x1f\n" +
+	"\x1dPreviewAccountDeletionRequest\"\xcd\x01\n" +
 	"\x1ePreviewAccountDeletionResponse\x12C\n" +
 	"\bblockers\x18\x01 \x03(\v2'.controlplane.v1.AccountDeletionBlockerR\bblockers\x12!\n" +
-	"\fdaemon_count\x18\x02 \x01(\x05R\vdaemonCount\"!\n" +
-	"\x1fDeleteCurrentUserAccountRequest\"g\n" +
+	"\fdaemon_count\x18\x02 \x01(\x05R\vdaemonCount\x12C\n" +
+	"\x06wallet\x18\x03 \x01(\v2+.controlplane.v1.AccountDeletionWalletQuoteR\x06wallet\"!\n" +
+	"\x1fDeleteCurrentUserAccountRequest\"\xd8\x01\n" +
 	" DeleteCurrentUserAccountResponse\x12C\n" +
-	"\bblockers\x18\x01 \x03(\v2'.controlplane.v1.AccountDeletionBlockerR\bblockers2\xbb\x04\n" +
+	"\bblockers\x18\x01 \x03(\v2'.controlplane.v1.AccountDeletionBlockerR\bblockers\x12H\n" +
+	"\x06wallet\x18\x02 \x01(\v20.controlplane.v1.AccountDeletionWalletSettlementR\x06wallet\x12%\n" +
+	"\x0erefund_pending\x18\x03 \x01(\bR\rrefundPending2\xbb\x04\n" +
 	"\vUserService\x12a\n" +
 	"\x0eGetCurrentUser\x12&.controlplane.v1.GetCurrentUserRequest\x1a'.controlplane.v1.GetCurrentUserResponse\x12^\n" +
 	"\rUpdateProfile\x12%.controlplane.v1.UpdateProfileRequest\x1a&.controlplane.v1.UpdateProfileResponse\x12m\n" +
@@ -562,7 +830,7 @@ func file_services_user_v1_user_proto_rawDescGZIP() []byte {
 	return file_services_user_v1_user_proto_rawDescData
 }
 
-var file_services_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 11)
+var file_services_user_v1_user_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_services_user_v1_user_proto_goTypes = []any{
 	(*GetCurrentUserRequest)(nil),            // 0: controlplane.v1.GetCurrentUserRequest
 	(*GetCurrentUserResponse)(nil),           // 1: controlplane.v1.GetCurrentUserResponse
@@ -571,34 +839,41 @@ var file_services_user_v1_user_proto_goTypes = []any{
 	(*CompleteOnboardingRequest)(nil),        // 4: controlplane.v1.CompleteOnboardingRequest
 	(*CompleteOnboardingResponse)(nil),       // 5: controlplane.v1.CompleteOnboardingResponse
 	(*AccountDeletionBlocker)(nil),           // 6: controlplane.v1.AccountDeletionBlocker
-	(*PreviewAccountDeletionRequest)(nil),    // 7: controlplane.v1.PreviewAccountDeletionRequest
-	(*PreviewAccountDeletionResponse)(nil),   // 8: controlplane.v1.PreviewAccountDeletionResponse
-	(*DeleteCurrentUserAccountRequest)(nil),  // 9: controlplane.v1.DeleteCurrentUserAccountRequest
-	(*DeleteCurrentUserAccountResponse)(nil), // 10: controlplane.v1.DeleteCurrentUserAccountResponse
-	(*v1.User)(nil),                          // 11: controlplane.v1.User
-	(*structpb.Struct)(nil),                  // 12: google.protobuf.Struct
+	(*WalletRefundDestination)(nil),          // 7: controlplane.v1.WalletRefundDestination
+	(*AccountDeletionWalletQuote)(nil),       // 8: controlplane.v1.AccountDeletionWalletQuote
+	(*AccountDeletionWalletSettlement)(nil),  // 9: controlplane.v1.AccountDeletionWalletSettlement
+	(*PreviewAccountDeletionRequest)(nil),    // 10: controlplane.v1.PreviewAccountDeletionRequest
+	(*PreviewAccountDeletionResponse)(nil),   // 11: controlplane.v1.PreviewAccountDeletionResponse
+	(*DeleteCurrentUserAccountRequest)(nil),  // 12: controlplane.v1.DeleteCurrentUserAccountRequest
+	(*DeleteCurrentUserAccountResponse)(nil), // 13: controlplane.v1.DeleteCurrentUserAccountResponse
+	(*v1.User)(nil),                          // 14: controlplane.v1.User
+	(*structpb.Struct)(nil),                  // 15: google.protobuf.Struct
 }
 var file_services_user_v1_user_proto_depIdxs = []int32{
-	11, // 0: controlplane.v1.GetCurrentUserResponse.user:type_name -> controlplane.v1.User
-	11, // 1: controlplane.v1.UpdateProfileResponse.user:type_name -> controlplane.v1.User
-	12, // 2: controlplane.v1.CompleteOnboardingRequest.onboarding_data:type_name -> google.protobuf.Struct
-	6,  // 3: controlplane.v1.PreviewAccountDeletionResponse.blockers:type_name -> controlplane.v1.AccountDeletionBlocker
-	6,  // 4: controlplane.v1.DeleteCurrentUserAccountResponse.blockers:type_name -> controlplane.v1.AccountDeletionBlocker
-	0,  // 5: controlplane.v1.UserService.GetCurrentUser:input_type -> controlplane.v1.GetCurrentUserRequest
-	2,  // 6: controlplane.v1.UserService.UpdateProfile:input_type -> controlplane.v1.UpdateProfileRequest
-	4,  // 7: controlplane.v1.UserService.CompleteOnboarding:input_type -> controlplane.v1.CompleteOnboardingRequest
-	7,  // 8: controlplane.v1.UserService.PreviewAccountDeletion:input_type -> controlplane.v1.PreviewAccountDeletionRequest
-	9,  // 9: controlplane.v1.UserService.DeleteCurrentUserAccount:input_type -> controlplane.v1.DeleteCurrentUserAccountRequest
-	1,  // 10: controlplane.v1.UserService.GetCurrentUser:output_type -> controlplane.v1.GetCurrentUserResponse
-	3,  // 11: controlplane.v1.UserService.UpdateProfile:output_type -> controlplane.v1.UpdateProfileResponse
-	5,  // 12: controlplane.v1.UserService.CompleteOnboarding:output_type -> controlplane.v1.CompleteOnboardingResponse
-	8,  // 13: controlplane.v1.UserService.PreviewAccountDeletion:output_type -> controlplane.v1.PreviewAccountDeletionResponse
-	10, // 14: controlplane.v1.UserService.DeleteCurrentUserAccount:output_type -> controlplane.v1.DeleteCurrentUserAccountResponse
-	10, // [10:15] is the sub-list for method output_type
-	5,  // [5:10] is the sub-list for method input_type
-	5,  // [5:5] is the sub-list for extension type_name
-	5,  // [5:5] is the sub-list for extension extendee
-	0,  // [0:5] is the sub-list for field type_name
+	14, // 0: controlplane.v1.GetCurrentUserResponse.user:type_name -> controlplane.v1.User
+	14, // 1: controlplane.v1.UpdateProfileResponse.user:type_name -> controlplane.v1.User
+	15, // 2: controlplane.v1.CompleteOnboardingRequest.onboarding_data:type_name -> google.protobuf.Struct
+	7,  // 3: controlplane.v1.AccountDeletionWalletQuote.destinations:type_name -> controlplane.v1.WalletRefundDestination
+	7,  // 4: controlplane.v1.AccountDeletionWalletSettlement.destinations:type_name -> controlplane.v1.WalletRefundDestination
+	6,  // 5: controlplane.v1.PreviewAccountDeletionResponse.blockers:type_name -> controlplane.v1.AccountDeletionBlocker
+	8,  // 6: controlplane.v1.PreviewAccountDeletionResponse.wallet:type_name -> controlplane.v1.AccountDeletionWalletQuote
+	6,  // 7: controlplane.v1.DeleteCurrentUserAccountResponse.blockers:type_name -> controlplane.v1.AccountDeletionBlocker
+	9,  // 8: controlplane.v1.DeleteCurrentUserAccountResponse.wallet:type_name -> controlplane.v1.AccountDeletionWalletSettlement
+	0,  // 9: controlplane.v1.UserService.GetCurrentUser:input_type -> controlplane.v1.GetCurrentUserRequest
+	2,  // 10: controlplane.v1.UserService.UpdateProfile:input_type -> controlplane.v1.UpdateProfileRequest
+	4,  // 11: controlplane.v1.UserService.CompleteOnboarding:input_type -> controlplane.v1.CompleteOnboardingRequest
+	10, // 12: controlplane.v1.UserService.PreviewAccountDeletion:input_type -> controlplane.v1.PreviewAccountDeletionRequest
+	12, // 13: controlplane.v1.UserService.DeleteCurrentUserAccount:input_type -> controlplane.v1.DeleteCurrentUserAccountRequest
+	1,  // 14: controlplane.v1.UserService.GetCurrentUser:output_type -> controlplane.v1.GetCurrentUserResponse
+	3,  // 15: controlplane.v1.UserService.UpdateProfile:output_type -> controlplane.v1.UpdateProfileResponse
+	5,  // 16: controlplane.v1.UserService.CompleteOnboarding:output_type -> controlplane.v1.CompleteOnboardingResponse
+	11, // 17: controlplane.v1.UserService.PreviewAccountDeletion:output_type -> controlplane.v1.PreviewAccountDeletionResponse
+	13, // 18: controlplane.v1.UserService.DeleteCurrentUserAccount:output_type -> controlplane.v1.DeleteCurrentUserAccountResponse
+	14, // [14:19] is the sub-list for method output_type
+	9,  // [9:14] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_services_user_v1_user_proto_init() }
@@ -612,7 +887,7 @@ func file_services_user_v1_user_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_user_v1_user_proto_rawDesc), len(file_services_user_v1_user_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   11,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

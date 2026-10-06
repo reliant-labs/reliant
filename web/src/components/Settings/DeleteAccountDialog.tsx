@@ -4,8 +4,14 @@ import { Modal } from '../ui/Modal'
 import { Button } from '../ui/Button'
 import { Input } from '../ui/Input'
 import { createAccountClient } from '../../api/grpc-client'
-import type { PreviewAccountDeletionResponse } from '../../gen/reliant/v1/account_pb'
+import type {
+  AccountDeletionWalletQuote,
+  DeleteAccountResponse,
+  PreviewAccountDeletionResponse,
+  RefundDestination,
+} from '../../gen/reliant/v1/account_pb'
 import { logger } from '../../lib/logger'
+import { formatCentsAsDollars } from './cloud/billingUtils'
 
 interface DeleteAccountDialogProps {
   isOpen: boolean
@@ -31,6 +37,12 @@ interface DeleteAccountDialogProps {
  *
  * The typed-email confirmation is enforced by the server too; the field here
  * is the speed bump, not the security boundary.
+ *
+ * Money: a wallet balance does not block deletion. The paid part is refunded
+ * to the card that paid for it and promotional credit is forfeited, and the
+ * dialog states both in dollars before the user confirms. Every amount comes
+ * from the server's quote — this component formats numbers, it never derives
+ * one.
  */
 export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccountDialogProps) {
   const [preview, setPreview] = useState<PreviewAccountDeletionResponse | null>(null)
@@ -38,6 +50,9 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
   const [typedConfirmation, setTypedConfirmation] = useState('')
   const [isDeleting, setIsDeleting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Set when the account was deleted but a refund still needs support. The
+  // user is told before they are signed out, rather than left to wonder.
+  const [pendingRefund, setPendingRefund] = useState<DeleteAccountResponse | null>(null)
 
   useEffect(() => {
     if (!isOpen) {
@@ -46,6 +61,7 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
       setPreview(null)
       setTypedConfirmation('')
       setError(null)
+      setPendingRefund(null)
       return
     }
 
@@ -81,7 +97,12 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
     setIsDeleting(true)
     setError(null)
     try {
-      await createAccountClient().deleteAccount({ confirmEmail: typedConfirmation })
+      const resp = await createAccountClient().deleteAccount({ confirmEmail: typedConfirmation })
+      if (resp.refundPending) {
+        setPendingRefund(resp)
+        setIsDeleting(false)
+        return
+      }
       onDeleted()
     } catch (err) {
       logger.error('[DeleteAccount] delete failed', err)
@@ -100,6 +121,25 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
     { label: 'Worktrees', value: preview?.worktreeCount },
     { label: 'Messages', value: preview?.messageCount },
   ]
+
+  if (pendingRefund) {
+    return (
+      <Modal isOpen={isOpen} onClose={onDeleted} title="Account deleted" size="md">
+        <div className="space-y-5 p-1">
+          <p className="text-sm">Your account and its data have been deleted.</p>
+          <p className="text-sm text-muted-foreground">
+            We couldn&apos;t refund {formatCentsAsDollars(pendingRefund.refundOwedCents)} to your
+            card automatically. Our support team will refund it to your original payment method,
+            and your account deletion will be finalized once that&apos;s done. You don&apos;t need
+            to do anything.
+          </p>
+          <div className="flex justify-end pt-1">
+            <Button onClick={onDeleted}>Done</Button>
+          </div>
+        </div>
+      </Modal>
+    )
+  }
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Delete account" size="md">
@@ -143,6 +183,8 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
                 </p>
               )}
             </div>
+
+            {preview.wallet && <WalletSettlementSummary quote={preview.wallet} />}
 
             {preview.retainedElsewhere.length > 0 && (
               <div className="rounded-lg border border-border/40 bg-muted/30 p-3">
@@ -200,5 +242,55 @@ export function DeleteAccountDialog({ isOpen, onClose, onDeleted }: DeleteAccoun
         </div>
       </div>
     </Modal>
+  )
+}
+
+/** "your visa card ending ••••1234", or the original payment method when unknown. */
+function cardPhrase(d: RefundDestination): string {
+  if (!d.cardLast4) return 'your original payment method'
+  return `your card ending ••••${d.cardLast4}`
+}
+
+function refundSentence(quote: AccountDeletionWalletQuote): string {
+  const dests = quote.destinations
+  if (dests.length <= 1) {
+    const to = dests[0] ? cardPhrase(dests[0]) : 'your original payment method'
+    return `We'll refund ${formatCentsAsDollars(quote.refundCents)} to ${to}`
+  }
+  const parts = dests.map((d) => `${formatCentsAsDollars(d.amountCents)} to ${cardPhrase(d)}`)
+  return `We'll refund ${formatCentsAsDollars(quote.refundCents)}: ${parts.join(', ')}`
+}
+
+/**
+ * What happens to the wallet. Phrased as one sentence where it can be —
+ * "We'll refund $X to your card ending ••••1234; $Y of promotional credit
+ * will be forfeited" — because that is the decision the user is weighing.
+ */
+function WalletSettlementSummary({ quote }: { quote: AccountDeletionWalletQuote }) {
+  const refunds = quote.refundCents > 0n
+  const forfeits = quote.forfeitedPromoCents > 0n
+  const owed = quote.unrefundableCents > 0n
+  if (!refunds && !forfeits && !owed) return null
+
+  const forfeitClause = `${formatCentsAsDollars(quote.forfeitedPromoCents)} of promotional credit will be forfeited`
+  let headline: string | null = null
+  if (refunds && forfeits) headline = `${refundSentence(quote)}; ${forfeitClause}.`
+  else if (refunds) headline = `${refundSentence(quote)}.`
+  else if (forfeits) headline = `${forfeitClause.charAt(0).toUpperCase()}${forfeitClause.slice(1)}.`
+
+  return (
+    <div
+      className="rounded-lg border border-border/60 bg-background p-3 space-y-1.5"
+      data-testid="delete-account-wallet"
+    >
+      <h4 className="text-sm font-medium">Your wallet balance</h4>
+      {headline && <p className="text-sm">{headline}</p>}
+      {owed && (
+        <p className="text-xs text-muted-foreground">
+          {formatCentsAsDollars(quote.unrefundableCents)} can&apos;t be refunded to your card
+          automatically. Our support team will refund it to you after your account is deleted.
+        </p>
+      )}
+    </div>
   )
 }

@@ -10,6 +10,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 )
@@ -31,19 +32,36 @@ func newLocalOnlyAccountService(rawDB *sql.DB) *AccountService {
 // stubControlPlane records the deletion call and returns a scripted outcome.
 type stubControlPlane struct {
 	blockers []controlplane.AccountDeletionBlocker
+	result   *controlplane.AccountDeletionResult
 	err      error
 	calls    int
 	lastJWT  string
+
+	quote    *controlplane.AccountDeletionWalletQuote
+	quoteErr error
+}
+
+func (s *stubControlPlane) PreviewAccountDeletionWallet(_ context.Context, jwt string) (*controlplane.AccountDeletionWalletQuote, error) {
+	s.lastJWT = jwt
+	return s.quote, s.quoteErr
 }
 
 func (s *stubControlPlane) MintLLMKey(context.Context, string, string) (controlplane.LLMKey, error) {
 	return controlplane.LLMKey{}, nil
 }
 
-func (s *stubControlPlane) DeleteCurrentUserAccount(_ context.Context, jwt string) ([]controlplane.AccountDeletionBlocker, error) {
+func (s *stubControlPlane) DeleteCurrentUserAccount(_ context.Context, jwt string) (*controlplane.AccountDeletionResult, error) {
 	s.calls++
 	s.lastJWT = jwt
-	return s.blockers, s.err
+	if s.err != nil {
+		return nil, s.err
+	}
+	out := &controlplane.AccountDeletionResult{}
+	if s.result != nil {
+		*out = *s.result
+	}
+	out.Blockers = s.blockers
+	return out, nil
 }
 
 func (s *stubControlPlane) CloneRepoOntoDaemon(context.Context, string, controlplane.CloneRepoRequest) (controlplane.CloneRepoResult, error) {
@@ -151,4 +169,101 @@ func (s *stubControlPlane) MintDaemonResumeToken(context.Context, string, string
 
 func (s *stubControlPlane) RevokeDaemonResumeTokens(context.Context, string, string) error {
 	return nil
+}
+
+// TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote: the dialog's
+// refund/forfeit sentence is rendered from the control plane's quote, so the
+// preview must carry it verbatim (and forward the caller's own JWT for it).
+func TestPreviewAccountDeletion_CarriesControlPlaneWalletQuote(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	cp := &stubControlPlane{quote: &controlplane.AccountDeletionWalletQuote{
+		RefundCents:         2500,
+		Destinations:        []controlplane.RefundDestination{{CardBrand: "visa", CardLast4: "1234", AmountCents: 2500}},
+		ForfeitedPromoCents: 700,
+	}}
+	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+
+	req := connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{})
+	req.Header().Set("Authorization", "Bearer jwt-abc")
+	resp, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"), req)
+	if err != nil {
+		t.Fatalf("PreviewAccountDeletion: %v", err)
+	}
+	w := resp.Msg.GetWallet()
+	if w.GetRefundCents() != 2500 || w.GetForfeitedPromoCents() != 700 ||
+		len(w.GetDestinations()) != 1 || w.GetDestinations()[0].GetCardLast4() != "1234" {
+		t.Fatalf("the quote must be carried verbatim, got %+v", w)
+	}
+	if cp.lastJWT != "jwt-abc" {
+		t.Errorf("the caller's JWT must be forwarded, got %q", cp.lastJWT)
+	}
+	for _, line := range resp.Msg.GetRetainedElsewhere() {
+		if strings.Contains(line, "unspent credit") {
+			t.Errorf("credit no longer blocks deletion; the dialog must not say it does: %q", line)
+		}
+	}
+}
+
+// TestPreviewAccountDeletion_FailsWhenWalletQuoteUnavailable: a preview that
+// silently omitted the money line would read as "nothing happens to your
+// balance". It must fail instead.
+func TestPreviewAccountDeletion_FailsWhenWalletQuoteUnavailable(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	cp := &stubControlPlane{quoteErr: errors.New("control plane unreachable")}
+	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+
+	_, err := svc.PreviewAccountDeletion(accountAuthedCtx("u-q", "owner@example.com"),
+		connect.NewRequest(&reliantv1.PreviewAccountDeletionRequest{}))
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("want Unavailable, got %v", err)
+	}
+}
+
+// TestDeleteAccount_ReportsRefundOutcome: the refund the control plane issued,
+// and a refund still owed by support, reach the client.
+func TestDeleteAccount_ReportsRefundOutcome(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	cp := &stubControlPlane{result: &controlplane.AccountDeletionResult{
+		RefundedCents:       1000,
+		RefundDestinations:  []controlplane.RefundDestination{{CardBrand: "visa", CardLast4: "1234", AmountCents: 1000}},
+		RefundOwedCents:     1500,
+		ForfeitedPromoCents: 200,
+		RefundPending:       true,
+	}}
+	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+
+	resp, err := svc.DeleteAccount(accountAuthedCtx("u-r", "owner@example.com"), deleteReq("owner@example.com"))
+	if err != nil {
+		t.Fatalf("DeleteAccount: %v", err)
+	}
+	m := resp.Msg
+	if m.GetRefundedCents() != 1000 || m.GetRefundOwedCents() != 1500 || !m.GetRefundPending() ||
+		m.GetForfeitedPromoCents() != 200 || len(m.GetRefundDestinations()) != 1 {
+		t.Fatalf("the refund outcome must be carried through, got %+v", m)
+	}
+}
+
+// TestDeleteAccount_UnconfirmedRefundIsRetryableAndPurgesNothing: when the
+// control plane cannot confirm a refund with Stripe it deletes nothing and says
+// Unavailable. Reliant must not purge, and must keep the error retryable.
+func TestDeleteAccount_UnconfirmedRefundIsRetryableAndPurgesNothing(t *testing.T) {
+	_, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	defer cleanup()
+
+	cp := &stubControlPlane{err: connect.NewError(connect.CodeUnavailable, errors.New("refund outcome unknown"))}
+	svc := NewAccountService(rawDB).WithControlPlaneClient(cp)
+
+	_, err := svc.DeleteAccount(accountAuthedCtx("u-u", "owner@example.com"), deleteReq("owner@example.com"))
+	if connect.CodeOf(err) != connect.CodeUnavailable {
+		t.Fatalf("want Unavailable, got %v", err)
+	}
+	if !strings.Contains(err.Error(), "nothing was deleted") {
+		t.Errorf("the user must be told nothing was deleted, got %q", err.Error())
+	}
 }

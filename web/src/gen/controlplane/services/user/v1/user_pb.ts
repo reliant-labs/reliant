@@ -21,7 +21,7 @@ import type { JsonObject, Message } from "@bufbuild/protobuf";
  * Describes the file services/user/v1/user.proto.
  */
 export const file_services_user_v1_user: GenFile = /*@__PURE__*/
-  fileDesc("ChtzZXJ2aWNlcy91c2VyL3YxL3VzZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSIXChVHZXRDdXJyZW50VXNlclJlcXVlc3QiUgoWR2V0Q3VycmVudFVzZXJSZXNwb25zZRIjCgR1c2VyGAEgASgLMhUuY29udHJvbHBsYW5lLnYxLlVzZXJKBAgCEANSDW9yZ2FuaXphdGlvbnMiOAoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSDAoEbmFtZRgBIAEoCRISCgphdmF0YXJfdXJsGAIgASgJIjwKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIjCgR1c2VyGAEgASgLMhUuY29udHJvbHBsYW5lLnYxLlVzZXIiTQoZQ29tcGxldGVPbmJvYXJkaW5nUmVxdWVzdBIwCg9vbmJvYXJkaW5nX2RhdGEYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhwKGkNvbXBsZXRlT25ib2FyZGluZ1Jlc3BvbnNlIjgKFkFjY291bnREZWxldGlvbkJsb2NrZXISDgoGcmVhc29uGAEgASgJEg4KBmRldGFpbBgCIAEoCSIfCh1QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVxdWVzdCJxCh5QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVzcG9uc2USOQoIYmxvY2tlcnMYASADKAsyJy5jb250cm9scGxhbmUudjEuQWNjb3VudERlbGV0aW9uQmxvY2tlchIUCgxkYWVtb25fY291bnQYAiABKAUiIQofRGVsZXRlQ3VycmVudFVzZXJBY2NvdW50UmVxdWVzdCJdCiBEZWxldGVDdXJyZW50VXNlckFjY291bnRSZXNwb25zZRI5CghibG9ja2VycxgBIAMoCzInLmNvbnRyb2xwbGFuZS52MS5BY2NvdW50RGVsZXRpb25CbG9ja2VyMuUECgtVc2VyU2VydmljZRJpCg5HZXRDdXJyZW50VXNlchImLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlcXVlc3QaJy5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZXNwb25zZSIGorsYAggBEmYKDVVwZGF0ZVByb2ZpbGUSJS5jb250cm9scGxhbmUudjEuVXBkYXRlUHJvZmlsZVJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuVXBkYXRlUHJvZmlsZVJlc3BvbnNlIgaiuxgCCAESdQoSQ29tcGxldGVPbmJvYXJkaW5nEiouY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlT25ib2FyZGluZ1JlcXVlc3QaKy5jb250cm9scGxhbmUudjEuQ29tcGxldGVPbmJvYXJkaW5nUmVzcG9uc2UiBqK7GAIIARKBAQoWUHJldmlld0FjY291bnREZWxldGlvbhIuLmNvbnRyb2xwbGFuZS52MS5QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVzcG9uc2UiBqK7GAIIARKHAQoYRGVsZXRlQ3VycmVudFVzZXJBY2NvdW50EjAuY29udHJvbHBsYW5lLnYxLkRlbGV0ZUN1cnJlbnRVc2VyQWNjb3VudFJlcXVlc3QaMS5jb250cm9scGxhbmUudjEuRGVsZXRlQ3VycmVudFVzZXJBY2NvdW50UmVzcG9uc2UiBqK7GAIIAULPAQoTY29tLmNvbnRyb2xwbGFuZS52MUIJVXNlclByb3RvUAFaUGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy91c2VyL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_controlplane_v1_shared, file_forge_v1_forge, file_google_protobuf_struct]);
+  fileDesc("ChtzZXJ2aWNlcy91c2VyL3YxL3VzZXIucHJvdG8SD2NvbnRyb2xwbGFuZS52MSIXChVHZXRDdXJyZW50VXNlclJlcXVlc3QiUgoWR2V0Q3VycmVudFVzZXJSZXNwb25zZRIjCgR1c2VyGAEgASgLMhUuY29udHJvbHBsYW5lLnYxLlVzZXJKBAgCEANSDW9yZ2FuaXphdGlvbnMiOAoUVXBkYXRlUHJvZmlsZVJlcXVlc3QSDAoEbmFtZRgBIAEoCRISCgphdmF0YXJfdXJsGAIgASgJIjwKFVVwZGF0ZVByb2ZpbGVSZXNwb25zZRIjCgR1c2VyGAEgASgLMhUuY29udHJvbHBsYW5lLnYxLlVzZXIiTQoZQ29tcGxldGVPbmJvYXJkaW5nUmVxdWVzdBIwCg9vbmJvYXJkaW5nX2RhdGEYASABKAsyFy5nb29nbGUucHJvdG9idWYuU3RydWN0IhwKGkNvbXBsZXRlT25ib2FyZGluZ1Jlc3BvbnNlIjgKFkFjY291bnREZWxldGlvbkJsb2NrZXISDgoGcmVhc29uGAEgASgJEg4KBmRldGFpbBgCIAEoCSJXChdXYWxsZXRSZWZ1bmREZXN0aW5hdGlvbhISCgpjYXJkX2JyYW5kGAEgASgJEhIKCmNhcmRfbGFzdDQYAiABKAkSFAoMYW1vdW50X2NlbnRzGAMgASgDIs4BChpBY2NvdW50RGVsZXRpb25XYWxsZXRRdW90ZRIUCgxyZWZ1bmRfY2VudHMYASABKAMSPgoMZGVzdGluYXRpb25zGAIgAygLMiguY29udHJvbHBsYW5lLnYxLldhbGxldFJlZnVuZERlc3RpbmF0aW9uEhoKEnVucmVmdW5kYWJsZV9jZW50cxgDIAEoAxIdChVmb3JmZWl0ZWRfcHJvbW9fY2VudHMYBCABKAMSHwoXaW5jbHVkZXNfcHJvY2Vzc2luZ19mZWUYBSABKAgiswEKH0FjY291bnREZWxldGlvbldhbGxldFNldHRsZW1lbnQSFgoOcmVmdW5kZWRfY2VudHMYASABKAMSPgoMZGVzdGluYXRpb25zGAIgAygLMiguY29udHJvbHBsYW5lLnYxLldhbGxldFJlZnVuZERlc3RpbmF0aW9uEhkKEXJlZnVuZF9vd2VkX2NlbnRzGAMgASgDEh0KFWZvcmZlaXRlZF9wcm9tb19jZW50cxgEIAEoAyIfCh1QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVxdWVzdCKuAQoeUHJldmlld0FjY291bnREZWxldGlvblJlc3BvbnNlEjkKCGJsb2NrZXJzGAEgAygLMicuY29udHJvbHBsYW5lLnYxLkFjY291bnREZWxldGlvbkJsb2NrZXISFAoMZGFlbW9uX2NvdW50GAIgASgFEjsKBndhbGxldBgDIAEoCzIrLmNvbnRyb2xwbGFuZS52MS5BY2NvdW50RGVsZXRpb25XYWxsZXRRdW90ZSIhCh9EZWxldGVDdXJyZW50VXNlckFjY291bnRSZXF1ZXN0IrcBCiBEZWxldGVDdXJyZW50VXNlckFjY291bnRSZXNwb25zZRI5CghibG9ja2VycxgBIAMoCzInLmNvbnRyb2xwbGFuZS52MS5BY2NvdW50RGVsZXRpb25CbG9ja2VyEkAKBndhbGxldBgCIAEoCzIwLmNvbnRyb2xwbGFuZS52MS5BY2NvdW50RGVsZXRpb25XYWxsZXRTZXR0bGVtZW50EhYKDnJlZnVuZF9wZW5kaW5nGAMgASgIMuUECgtVc2VyU2VydmljZRJpCg5HZXRDdXJyZW50VXNlchImLmNvbnRyb2xwbGFuZS52MS5HZXRDdXJyZW50VXNlclJlcXVlc3QaJy5jb250cm9scGxhbmUudjEuR2V0Q3VycmVudFVzZXJSZXNwb25zZSIGorsYAggBEmYKDVVwZGF0ZVByb2ZpbGUSJS5jb250cm9scGxhbmUudjEuVXBkYXRlUHJvZmlsZVJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuVXBkYXRlUHJvZmlsZVJlc3BvbnNlIgaiuxgCCAESdQoSQ29tcGxldGVPbmJvYXJkaW5nEiouY29udHJvbHBsYW5lLnYxLkNvbXBsZXRlT25ib2FyZGluZ1JlcXVlc3QaKy5jb250cm9scGxhbmUudjEuQ29tcGxldGVPbmJvYXJkaW5nUmVzcG9uc2UiBqK7GAIIARKBAQoWUHJldmlld0FjY291bnREZWxldGlvbhIuLmNvbnRyb2xwbGFuZS52MS5QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVxdWVzdBovLmNvbnRyb2xwbGFuZS52MS5QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVzcG9uc2UiBqK7GAIIARKHAQoYRGVsZXRlQ3VycmVudFVzZXJBY2NvdW50EjAuY29udHJvbHBsYW5lLnYxLkRlbGV0ZUN1cnJlbnRVc2VyQWNjb3VudFJlcXVlc3QaMS5jb250cm9scGxhbmUudjEuRGVsZXRlQ3VycmVudFVzZXJBY2NvdW50UmVzcG9uc2UiBqK7GAIIAULPAQoTY29tLmNvbnRyb2xwbGFuZS52MUIJVXNlclByb3RvUAFaUGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy91c2VyL3YxO2NvbnRyb2xwbGFuZXYxogIDQ1hYqgIPQ29udHJvbHBsYW5lLlYxygIPQ29udHJvbHBsYW5lXFYx4gIbQ29udHJvbHBsYW5lXFYxXEdQQk1ldGFkYXRh6gIQQ29udHJvbHBsYW5lOjpWMWIGcHJvdG8z", [file_controlplane_v1_shared, file_forge_v1_forge, file_google_protobuf_struct]);
 
 /**
  * @generated from message controlplane.v1.GetCurrentUserRequest
@@ -131,7 +131,7 @@ export const CompleteOnboardingResponseSchema: GenMessage<CompleteOnboardingResp
  */
 export type AccountDeletionBlocker = Message<"controlplane.v1.AccountDeletionBlocker"> & {
   /**
-   * Machine-readable reason: "paid_subscription" or "wallet_balance".
+   * Machine-readable reason: "paid_subscription".
    *
    * @generated from field: string reason = 1;
    */
@@ -153,6 +153,125 @@ export const AccountDeletionBlockerSchema: GenMessage<AccountDeletionBlocker> = 
   messageDesc(file_services_user_v1_user, 6);
 
 /**
+ * WalletRefundDestination is money going back to one card.
+ *
+ * @generated from message controlplane.v1.WalletRefundDestination
+ */
+export type WalletRefundDestination = Message<"controlplane.v1.WalletRefundDestination"> & {
+  /**
+   * Empty when the card could not be determined; render "your original
+   * payment method" rather than a blank.
+   *
+   * @generated from field: string card_brand = 1;
+   */
+  cardBrand: string;
+
+  /**
+   * @generated from field: string card_last4 = 2;
+   */
+  cardLast4: string;
+
+  /**
+   * @generated from field: int64 amount_cents = 3;
+   */
+  amountCents: bigint;
+};
+
+/**
+ * Describes the message controlplane.v1.WalletRefundDestination.
+ * Use `create(WalletRefundDestinationSchema)` to create a new message.
+ */
+export const WalletRefundDestinationSchema: GenMessage<WalletRefundDestination> = /*@__PURE__*/
+  messageDesc(file_services_user_v1_user, 7);
+
+/**
+ * AccountDeletionWalletQuote is what deleting the account would do to the
+ * caller's prepaid wallet. Every amount is computed by the server — the client
+ * renders these numbers and never derives one from another.
+ *
+ * @generated from message controlplane.v1.AccountDeletionWalletQuote
+ */
+export type AccountDeletionWalletQuote = Message<"controlplane.v1.AccountDeletionWalletQuote"> & {
+  /**
+   * Refunded automatically, split across destinations (newest payment
+   * first). Includes the processing fee only when includes_processing_fee.
+   *
+   * @generated from field: int64 refund_cents = 1;
+   */
+  refundCents: bigint;
+
+  /**
+   * @generated from field: repeated controlplane.v1.WalletRefundDestination destinations = 2;
+   */
+  destinations: WalletRefundDestination[];
+
+  /**
+   * Paid credit no card payment can take back automatically. NOT forfeited:
+   * support refunds it by hand after deletion.
+   *
+   * @generated from field: int64 unrefundable_cents = 3;
+   */
+  unrefundableCents: bigint;
+
+  /**
+   * Promotional (coupon) credit that deletion forfeits.
+   *
+   * @generated from field: int64 forfeited_promo_cents = 4;
+   */
+  forfeitedPromoCents: bigint;
+
+  /**
+   * @generated from field: bool includes_processing_fee = 5;
+   */
+  includesProcessingFee: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.AccountDeletionWalletQuote.
+ * Use `create(AccountDeletionWalletQuoteSchema)` to create a new message.
+ */
+export const AccountDeletionWalletQuoteSchema: GenMessage<AccountDeletionWalletQuote> = /*@__PURE__*/
+  messageDesc(file_services_user_v1_user, 8);
+
+/**
+ * AccountDeletionWalletSettlement is what deletion did to the wallet.
+ *
+ * @generated from message controlplane.v1.AccountDeletionWalletSettlement
+ */
+export type AccountDeletionWalletSettlement = Message<"controlplane.v1.AccountDeletionWalletSettlement"> & {
+  /**
+   * Accepted by Stripe, to destinations.
+   *
+   * @generated from field: int64 refunded_cents = 1;
+   */
+  refundedCents: bigint;
+
+  /**
+   * @generated from field: repeated controlplane.v1.WalletRefundDestination destinations = 2;
+   */
+  destinations: WalletRefundDestination[];
+
+  /**
+   * Could not be refunded automatically; support will refund it.
+   *
+   * @generated from field: int64 refund_owed_cents = 3;
+   */
+  refundOwedCents: bigint;
+
+  /**
+   * @generated from field: int64 forfeited_promo_cents = 4;
+   */
+  forfeitedPromoCents: bigint;
+};
+
+/**
+ * Describes the message controlplane.v1.AccountDeletionWalletSettlement.
+ * Use `create(AccountDeletionWalletSettlementSchema)` to create a new message.
+ */
+export const AccountDeletionWalletSettlementSchema: GenMessage<AccountDeletionWalletSettlement> = /*@__PURE__*/
+  messageDesc(file_services_user_v1_user, 9);
+
+/**
  * @generated from message controlplane.v1.PreviewAccountDeletionRequest
  */
 export type PreviewAccountDeletionRequest = Message<"controlplane.v1.PreviewAccountDeletionRequest"> & {
@@ -163,7 +282,7 @@ export type PreviewAccountDeletionRequest = Message<"controlplane.v1.PreviewAcco
  * Use `create(PreviewAccountDeletionRequestSchema)` to create a new message.
  */
 export const PreviewAccountDeletionRequestSchema: GenMessage<PreviewAccountDeletionRequest> = /*@__PURE__*/
-  messageDesc(file_services_user_v1_user, 7);
+  messageDesc(file_services_user_v1_user, 10);
 
 /**
  * @generated from message controlplane.v1.PreviewAccountDeletionResponse
@@ -183,6 +302,14 @@ export type PreviewAccountDeletionResponse = Message<"controlplane.v1.PreviewAcc
    * @generated from field: int32 daemon_count = 2;
    */
   daemonCount: number;
+
+  /**
+   * What deletion would refund and forfeit. Unset only when the server
+   * cannot settle wallets, in which case deletion itself will refuse.
+   *
+   * @generated from field: controlplane.v1.AccountDeletionWalletQuote wallet = 3;
+   */
+  wallet?: AccountDeletionWalletQuote | undefined;
 };
 
 /**
@@ -190,7 +317,7 @@ export type PreviewAccountDeletionResponse = Message<"controlplane.v1.PreviewAcc
  * Use `create(PreviewAccountDeletionResponseSchema)` to create a new message.
  */
 export const PreviewAccountDeletionResponseSchema: GenMessage<PreviewAccountDeletionResponse> = /*@__PURE__*/
-  messageDesc(file_services_user_v1_user, 8);
+  messageDesc(file_services_user_v1_user, 11);
 
 /**
  * @generated from message controlplane.v1.DeleteCurrentUserAccountRequest
@@ -203,7 +330,7 @@ export type DeleteCurrentUserAccountRequest = Message<"controlplane.v1.DeleteCur
  * Use `create(DeleteCurrentUserAccountRequestSchema)` to create a new message.
  */
 export const DeleteCurrentUserAccountRequestSchema: GenMessage<DeleteCurrentUserAccountRequest> = /*@__PURE__*/
-  messageDesc(file_services_user_v1_user, 9);
+  messageDesc(file_services_user_v1_user, 12);
 
 /**
  * @generated from message controlplane.v1.DeleteCurrentUserAccountResponse
@@ -216,6 +343,22 @@ export type DeleteCurrentUserAccountResponse = Message<"controlplane.v1.DeleteCu
    * @generated from field: repeated controlplane.v1.AccountDeletionBlocker blockers = 1;
    */
   blockers: AccountDeletionBlocker[];
+
+  /**
+   * Set on success: what happened to the wallet.
+   *
+   * @generated from field: controlplane.v1.AccountDeletionWalletSettlement wallet = 2;
+   */
+  wallet?: AccountDeletionWalletSettlement | undefined;
+
+  /**
+   * True when the account is deleted but a refund could not be issued
+   * automatically. Support refunds it by hand and the deletion is finalized
+   * then; the user needs to do nothing.
+   *
+   * @generated from field: bool refund_pending = 3;
+   */
+  refundPending: boolean;
 };
 
 /**
@@ -223,7 +366,7 @@ export type DeleteCurrentUserAccountResponse = Message<"controlplane.v1.DeleteCu
  * Use `create(DeleteCurrentUserAccountResponseSchema)` to create a new message.
  */
 export const DeleteCurrentUserAccountResponseSchema: GenMessage<DeleteCurrentUserAccountResponse> = /*@__PURE__*/
-  messageDesc(file_services_user_v1_user, 10);
+  messageDesc(file_services_user_v1_user, 13);
 
 /**
  * @generated from service controlplane.v1.UserService
@@ -266,18 +409,23 @@ export const UserService: GenService<{
   },
   /**
    * DeleteCurrentUserAccount tombstones the caller's control-plane account:
-   * it cancels the free compute plan, tears down active daemons, and scrubs +
-   * tombstones the user row so the auth bridge refuses every subsequent
-   * request from that identity.
+   * it settles the prepaid wallet (paid credit refunded to the card that paid
+   * for it, promotional credit forfeited), cancels the free compute plan,
+   * tears down active daemons, and scrubs + tombstones the user row so the
+   * auth bridge refuses every subsequent request from that identity.
    *
    * The row is NOT removed. Billing records (usage, wallet ledger, invoices)
    * reference it and are retained as financial records; the tombstone is also
    * what makes the lockout work, since the auth bridge recreates a MISSING
    * user row on the deleted user's very next request.
    *
-   * Refuses with FAILED_PRECONDITION while the caller has a paid subscription
-   * or prepaid credit — nothing is destroyed in that case, and the response
-   * names the blocker so the client can link to the remedy.
+   * Refuses while the caller has a paid subscription — nothing is destroyed
+   * in that case, and the response names the blocker so the client can link
+   * to the remedy. A wallet balance never blocks deletion.
+   *
+   * UNAVAILABLE means a refund's outcome could not be confirmed with Stripe:
+   * nothing else was deleted, and retrying is safe (it replays the same
+   * refund rather than issuing another).
    *
    * @generated from rpc controlplane.v1.UserService.DeleteCurrentUserAccount
    */

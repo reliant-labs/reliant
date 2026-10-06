@@ -82,8 +82,13 @@ type PreviewAccountDeletionResponse struct {
 	// UI to render verbatim. Populated while account deletion is scoped to
 	// reliant's own data; see the service doc comment.
 	RetainedElsewhere []string `protobuf:"bytes,7,rep,name=retained_elsewhere,json=retainedElsewhere,proto3" json:"retained_elsewhere,omitempty"`
-	unknownFields     protoimpl.UnknownFields
-	sizeCache         protoimpl.SizeCache
+	// What deletion does to the caller's prepaid wallet, quoted by the control
+	// plane. Unset on a deployment with no control plane (no wallet exists).
+	// Every amount is the server's; the client renders them and never derives
+	// one from another.
+	Wallet        *AccountDeletionWalletQuote `protobuf:"bytes,8,opt,name=wallet,proto3" json:"wallet,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *PreviewAccountDeletionResponse) Reset() {
@@ -165,6 +170,151 @@ func (x *PreviewAccountDeletionResponse) GetRetainedElsewhere() []string {
 	return nil
 }
 
+func (x *PreviewAccountDeletionResponse) GetWallet() *AccountDeletionWalletQuote {
+	if x != nil {
+		return x.Wallet
+	}
+	return nil
+}
+
+// RefundDestination is money going back to one card.
+type RefundDestination struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Empty when the card could not be determined; render "your original
+	// payment method" instead.
+	CardBrand     string `protobuf:"bytes,1,opt,name=card_brand,json=cardBrand,proto3" json:"card_brand,omitempty"`
+	CardLast4     string `protobuf:"bytes,2,opt,name=card_last4,json=cardLast4,proto3" json:"card_last4,omitempty"`
+	AmountCents   int64  `protobuf:"varint,3,opt,name=amount_cents,json=amountCents,proto3" json:"amount_cents,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RefundDestination) Reset() {
+	*x = RefundDestination{}
+	mi := &file_reliant_v1_account_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RefundDestination) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RefundDestination) ProtoMessage() {}
+
+func (x *RefundDestination) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_account_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RefundDestination.ProtoReflect.Descriptor instead.
+func (*RefundDestination) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_account_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *RefundDestination) GetCardBrand() string {
+	if x != nil {
+		return x.CardBrand
+	}
+	return ""
+}
+
+func (x *RefundDestination) GetCardLast4() string {
+	if x != nil {
+		return x.CardLast4
+	}
+	return ""
+}
+
+func (x *RefundDestination) GetAmountCents() int64 {
+	if x != nil {
+		return x.AmountCents
+	}
+	return 0
+}
+
+// AccountDeletionWalletQuote: on deletion the PAID part of the wallet is
+// refunded to the card(s) that paid for it and promotional (coupon) credit is
+// forfeited. A wallet balance never blocks deletion.
+type AccountDeletionWalletQuote struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Refunded automatically, split across destinations.
+	RefundCents  int64                `protobuf:"varint,1,opt,name=refund_cents,json=refundCents,proto3" json:"refund_cents,omitempty"`
+	Destinations []*RefundDestination `protobuf:"bytes,2,rep,name=destinations,proto3" json:"destinations,omitempty"`
+	// Paid credit no card payment can take back automatically (for example a
+	// charge too old to refund). NOT forfeited: support refunds it by hand.
+	UnrefundableCents int64 `protobuf:"varint,3,opt,name=unrefundable_cents,json=unrefundableCents,proto3" json:"unrefundable_cents,omitempty"`
+	// Promotional credit that deletion forfeits.
+	ForfeitedPromoCents int64 `protobuf:"varint,4,opt,name=forfeited_promo_cents,json=forfeitedPromoCents,proto3" json:"forfeited_promo_cents,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
+}
+
+func (x *AccountDeletionWalletQuote) Reset() {
+	*x = AccountDeletionWalletQuote{}
+	mi := &file_reliant_v1_account_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AccountDeletionWalletQuote) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AccountDeletionWalletQuote) ProtoMessage() {}
+
+func (x *AccountDeletionWalletQuote) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_account_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AccountDeletionWalletQuote.ProtoReflect.Descriptor instead.
+func (*AccountDeletionWalletQuote) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_account_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *AccountDeletionWalletQuote) GetRefundCents() int64 {
+	if x != nil {
+		return x.RefundCents
+	}
+	return 0
+}
+
+func (x *AccountDeletionWalletQuote) GetDestinations() []*RefundDestination {
+	if x != nil {
+		return x.Destinations
+	}
+	return nil
+}
+
+func (x *AccountDeletionWalletQuote) GetUnrefundableCents() int64 {
+	if x != nil {
+		return x.UnrefundableCents
+	}
+	return 0
+}
+
+func (x *AccountDeletionWalletQuote) GetForfeitedPromoCents() int64 {
+	if x != nil {
+		return x.ForfeitedPromoCents
+	}
+	return 0
+}
+
 type DeleteAccountRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Must equal the caller's own email (case-insensitive, trimmed). See
@@ -176,7 +326,7 @@ type DeleteAccountRequest struct {
 
 func (x *DeleteAccountRequest) Reset() {
 	*x = DeleteAccountRequest{}
-	mi := &file_reliant_v1_account_proto_msgTypes[2]
+	mi := &file_reliant_v1_account_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -188,7 +338,7 @@ func (x *DeleteAccountRequest) String() string {
 func (*DeleteAccountRequest) ProtoMessage() {}
 
 func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_account_proto_msgTypes[2]
+	mi := &file_reliant_v1_account_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -201,7 +351,7 @@ func (x *DeleteAccountRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAccountRequest.ProtoReflect.Descriptor instead.
 func (*DeleteAccountRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_account_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_account_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *DeleteAccountRequest) GetConfirmEmail() string {
@@ -216,13 +366,22 @@ type DeleteAccountResponse struct {
 	// Total rows deleted across every user-owned table, for the audit log and
 	// for the confirmation the UI shows before signing the user out.
 	DeletedRowCount int64 `protobuf:"varint,1,opt,name=deleted_row_count,json=deletedRowCount,proto3" json:"deleted_row_count,omitempty"`
+	// What happened to the wallet. Unset with no control plane.
+	RefundedCents       int64                `protobuf:"varint,2,opt,name=refunded_cents,json=refundedCents,proto3" json:"refunded_cents,omitempty"`
+	RefundDestinations  []*RefundDestination `protobuf:"bytes,3,rep,name=refund_destinations,json=refundDestinations,proto3" json:"refund_destinations,omitempty"`
+	ForfeitedPromoCents int64                `protobuf:"varint,4,opt,name=forfeited_promo_cents,json=forfeitedPromoCents,proto3" json:"forfeited_promo_cents,omitempty"`
+	// True when the account is deleted but refund_owed_cents could not be
+	// refunded automatically. Support refunds it to the original payment
+	// method and the deletion is finalized then; the user does nothing.
+	RefundPending   bool  `protobuf:"varint,5,opt,name=refund_pending,json=refundPending,proto3" json:"refund_pending,omitempty"`
+	RefundOwedCents int64 `protobuf:"varint,6,opt,name=refund_owed_cents,json=refundOwedCents,proto3" json:"refund_owed_cents,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeleteAccountResponse) Reset() {
 	*x = DeleteAccountResponse{}
-	mi := &file_reliant_v1_account_proto_msgTypes[3]
+	mi := &file_reliant_v1_account_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -234,7 +393,7 @@ func (x *DeleteAccountResponse) String() string {
 func (*DeleteAccountResponse) ProtoMessage() {}
 
 func (x *DeleteAccountResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_account_proto_msgTypes[3]
+	mi := &file_reliant_v1_account_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -247,12 +406,47 @@ func (x *DeleteAccountResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteAccountResponse.ProtoReflect.Descriptor instead.
 func (*DeleteAccountResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_account_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_account_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DeleteAccountResponse) GetDeletedRowCount() int64 {
 	if x != nil {
 		return x.DeletedRowCount
+	}
+	return 0
+}
+
+func (x *DeleteAccountResponse) GetRefundedCents() int64 {
+	if x != nil {
+		return x.RefundedCents
+	}
+	return 0
+}
+
+func (x *DeleteAccountResponse) GetRefundDestinations() []*RefundDestination {
+	if x != nil {
+		return x.RefundDestinations
+	}
+	return nil
+}
+
+func (x *DeleteAccountResponse) GetForfeitedPromoCents() int64 {
+	if x != nil {
+		return x.ForfeitedPromoCents
+	}
+	return 0
+}
+
+func (x *DeleteAccountResponse) GetRefundPending() bool {
+	if x != nil {
+		return x.RefundPending
+	}
+	return false
+}
+
+func (x *DeleteAccountResponse) GetRefundOwedCents() int64 {
+	if x != nil {
+		return x.RefundOwedCents
 	}
 	return 0
 }
@@ -263,7 +457,7 @@ const file_reliant_v1_account_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/account.proto\x12\n" +
 	"reliant.v1\"\x1f\n" +
-	"\x1dPreviewAccountDeletionRequest\"\xbe\x02\n" +
+	"\x1dPreviewAccountDeletionRequest\"\xfe\x02\n" +
 	"\x1ePreviewAccountDeletionResponse\x12#\n" +
 	"\rproject_count\x18\x01 \x01(\x03R\fprojectCount\x12\x1d\n" +
 	"\n" +
@@ -272,11 +466,28 @@ const file_reliant_v1_account_proto_rawDesc = "" +
 	"\rmessage_count\x18\x04 \x01(\x03R\fmessageCount\x128\n" +
 	"\x18has_provider_credentials\x18\x05 \x01(\bR\x16hasProviderCredentials\x12#\n" +
 	"\rconfirm_email\x18\x06 \x01(\tR\fconfirmEmail\x12-\n" +
-	"\x12retained_elsewhere\x18\a \x03(\tR\x11retainedElsewhere\";\n" +
+	"\x12retained_elsewhere\x18\a \x03(\tR\x11retainedElsewhere\x12>\n" +
+	"\x06wallet\x18\b \x01(\v2&.reliant.v1.AccountDeletionWalletQuoteR\x06wallet\"t\n" +
+	"\x11RefundDestination\x12\x1d\n" +
+	"\n" +
+	"card_brand\x18\x01 \x01(\tR\tcardBrand\x12\x1d\n" +
+	"\n" +
+	"card_last4\x18\x02 \x01(\tR\tcardLast4\x12!\n" +
+	"\famount_cents\x18\x03 \x01(\x03R\vamountCents\"\xe5\x01\n" +
+	"\x1aAccountDeletionWalletQuote\x12!\n" +
+	"\frefund_cents\x18\x01 \x01(\x03R\vrefundCents\x12A\n" +
+	"\fdestinations\x18\x02 \x03(\v2\x1d.reliant.v1.RefundDestinationR\fdestinations\x12-\n" +
+	"\x12unrefundable_cents\x18\x03 \x01(\x03R\x11unrefundableCents\x122\n" +
+	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\";\n" +
 	"\x14DeleteAccountRequest\x12#\n" +
-	"\rconfirm_email\x18\x01 \x01(\tR\fconfirmEmail\"C\n" +
+	"\rconfirm_email\x18\x01 \x01(\tR\fconfirmEmail\"\xc1\x02\n" +
 	"\x15DeleteAccountResponse\x12*\n" +
-	"\x11deleted_row_count\x18\x01 \x01(\x03R\x0fdeletedRowCount2\xdb\x01\n" +
+	"\x11deleted_row_count\x18\x01 \x01(\x03R\x0fdeletedRowCount\x12%\n" +
+	"\x0erefunded_cents\x18\x02 \x01(\x03R\rrefundedCents\x12N\n" +
+	"\x13refund_destinations\x18\x03 \x03(\v2\x1d.reliant.v1.RefundDestinationR\x12refundDestinations\x122\n" +
+	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\x12%\n" +
+	"\x0erefund_pending\x18\x05 \x01(\bR\rrefundPending\x12*\n" +
+	"\x11refund_owed_cents\x18\x06 \x01(\x03R\x0frefundOwedCents2\xdb\x01\n" +
 	"\x0eAccountService\x12q\n" +
 	"\x16PreviewAccountDeletion\x12).reliant.v1.PreviewAccountDeletionRequest\x1a*.reliant.v1.PreviewAccountDeletionResponse\"\x00\x12V\n" +
 	"\rDeleteAccount\x12 .reliant.v1.DeleteAccountRequest\x1a!.reliant.v1.DeleteAccountResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
@@ -293,23 +504,28 @@ func file_reliant_v1_account_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_account_proto_rawDescData
 }
 
-var file_reliant_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_reliant_v1_account_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_reliant_v1_account_proto_goTypes = []any{
 	(*PreviewAccountDeletionRequest)(nil),  // 0: reliant.v1.PreviewAccountDeletionRequest
 	(*PreviewAccountDeletionResponse)(nil), // 1: reliant.v1.PreviewAccountDeletionResponse
-	(*DeleteAccountRequest)(nil),           // 2: reliant.v1.DeleteAccountRequest
-	(*DeleteAccountResponse)(nil),          // 3: reliant.v1.DeleteAccountResponse
+	(*RefundDestination)(nil),              // 2: reliant.v1.RefundDestination
+	(*AccountDeletionWalletQuote)(nil),     // 3: reliant.v1.AccountDeletionWalletQuote
+	(*DeleteAccountRequest)(nil),           // 4: reliant.v1.DeleteAccountRequest
+	(*DeleteAccountResponse)(nil),          // 5: reliant.v1.DeleteAccountResponse
 }
 var file_reliant_v1_account_proto_depIdxs = []int32{
-	0, // 0: reliant.v1.AccountService.PreviewAccountDeletion:input_type -> reliant.v1.PreviewAccountDeletionRequest
-	2, // 1: reliant.v1.AccountService.DeleteAccount:input_type -> reliant.v1.DeleteAccountRequest
-	1, // 2: reliant.v1.AccountService.PreviewAccountDeletion:output_type -> reliant.v1.PreviewAccountDeletionResponse
-	3, // 3: reliant.v1.AccountService.DeleteAccount:output_type -> reliant.v1.DeleteAccountResponse
-	2, // [2:4] is the sub-list for method output_type
-	0, // [0:2] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	3, // 0: reliant.v1.PreviewAccountDeletionResponse.wallet:type_name -> reliant.v1.AccountDeletionWalletQuote
+	2, // 1: reliant.v1.AccountDeletionWalletQuote.destinations:type_name -> reliant.v1.RefundDestination
+	2, // 2: reliant.v1.DeleteAccountResponse.refund_destinations:type_name -> reliant.v1.RefundDestination
+	0, // 3: reliant.v1.AccountService.PreviewAccountDeletion:input_type -> reliant.v1.PreviewAccountDeletionRequest
+	4, // 4: reliant.v1.AccountService.DeleteAccount:input_type -> reliant.v1.DeleteAccountRequest
+	1, // 5: reliant.v1.AccountService.PreviewAccountDeletion:output_type -> reliant.v1.PreviewAccountDeletionResponse
+	5, // 6: reliant.v1.AccountService.DeleteAccount:output_type -> reliant.v1.DeleteAccountResponse
+	5, // [5:7] is the sub-list for method output_type
+	3, // [3:5] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_account_proto_init() }
@@ -323,7 +539,7 @@ func file_reliant_v1_account_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_account_proto_rawDesc), len(file_reliant_v1_account_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   4,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
