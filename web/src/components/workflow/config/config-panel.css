@@ -993,3 +993,40 @@
 .cpv2-test-run--docked .config-panel-v2 {
   right: calc(0.75rem + 380px + 0.75rem);
 }
+
+/* --- Validation on the field (WorkflowFindingsContext) ---
+ * Owned by ProtoFieldRenderer's finding lines and the panel's problem list.
+ * The outline is on the field's own control, so it reads at a glance; the
+ * message under it says what is wrong. */
+.cpv2-field--invalid .cpv2-field-input,
+.cpv2-field--invalid .cpv2-field-textarea,
+.cpv2-field--invalid .cpv2-field-select,
+.cpv2-field--invalid .cpv2-cel-field {
+  border-color: hsl(var(--destructive));
+}
+
+.cpv2-field-error {
+  font-size: 0.9286rem;
+  line-height: 1.4;
+  color: hsl(var(--destructive-ink));
+}
+
+.cpv2-field-error--warning {
+  color: hsl(var(--warning-ink));
+}
+
+.cpv2-step-problems {
+  border: 1px solid hsl(var(--warning) / 0.4);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.9286rem;
+  line-height: 1.4;
+  color: hsl(var(--warning-ink));
+  background: hsl(var(--warning) / 0.06);
+}
+
+.cpv2-step-problems--error {
+  border-color: hsl(var(--destructive) / 0.4);
+  color: hsl(var(--destructive-ink));
+  background: hsl(var(--destructive) / 0.06);
+}

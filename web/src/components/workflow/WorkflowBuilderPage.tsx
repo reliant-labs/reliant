@@ -8,6 +8,7 @@ import {
 } from "./WorkflowBuilder";
 import {
   isCompleteSaveRejection,
+  splitFindings,
   type DraftStatus,
 } from "./workflowDraftStatus";
 import { WorkflowParseErrorView } from "./WorkflowParseErrorView";
@@ -103,8 +104,6 @@ export function WorkflowBuilderPage({
   );
   // isReadOnly is true for builtin and project workflows (cannot be saved directly)
   const [isReadOnly, setIsReadOnly] = useState(false);
-  // isNewWorkflow is true when creating a new workflow (to clear stale chat state)
-  const [isNewWorkflow, setIsNewWorkflow] = useState(false);
   // Track workflow source and metadata for info popover
   const [workflowSource, setWorkflowSource] = useState<
     "builtin" | "user" | "project"
@@ -337,7 +336,6 @@ export function WorkflowBuilderPage({
           // like on a builtin demo (e.g. get-it-right). Saves are blocked in
           // handleSave below — nothing actually persists.
           setIsReadOnly((isBuiltinWorkflow || isProjectWorkflow) && !tourMode);
-          setIsNewWorkflow(false);
           setWorkflowSource(
             isBuiltinWorkflow
               ? "builtin"
@@ -372,6 +370,7 @@ export function WorkflowBuilderPage({
   const handleSave = async (
     workflow: Workflow,
     intent?: DraftStatus,
+    opts?: { asCopy?: boolean },
   ): Promise<SaveResult> => {
     if (tourMode) {
       toast.info("Tour mode — changes are not saved", { duration: 4000 });
@@ -384,32 +383,43 @@ export function WorkflowBuilderPage({
 
     try {
       // Pass the expected version for OCC, and draft ID for ID-based updates (allows renames)
-      // No intent keeps the stored status: drafts stay drafts, and a complete
-      // workflow stays complete — so the backend rejects a save that would
-      // make it invalid rather than silently taking it out of service.
+      // No intent keeps the stored status: drafts stay drafts, and a published
+      // workflow stays published — so the backend rejects a save that would
+      // break it rather than silently taking it out of service.
+      // A copy (Duplicate) is a NEW workflow: no draft id, no version, or the
+      // save would rename this one instead.
       const response = await workflowGrpc.saveWorkflow(
         projectId,
         workflow,
-        workflowVersion || undefined,
+        opts?.asCopy ? undefined : workflowVersion || undefined,
         undefined,
-        draftId,
+        opts?.asCopy ? undefined : draftId,
         intent,
       );
 
       if (!response.success) {
         if (isCompleteSaveRejection(response)) {
-          // A complete workflow can't be saved with errors. Nothing was
-          // stored; show the errors inline and offer the way forward.
-          toast.error("Not saved — this workflow is complete, and complete workflows must pass validation.", {
-            duration: 12000,
-            description: "Fix the errors, or save it as a draft (it will stop being runnable until you mark it complete again).",
-            action: {
-              label: "Save as draft",
-              onClick: () => {
-                void saveAsDraftRef.current?.();
+          // Nothing was stored; the problems show on the canvas. Say which
+          // gate refused it and offer the way forward.
+          const publishing = intent === "complete" && draftStatus === "draft";
+          const problems = splitFindings(response.validationErrors).errors.length;
+          toast.error(
+            publishing
+              ? `Not published — fix ${problems} problem${problems === 1 ? "" : "s"} first.`
+              : "Not saved — a published workflow has to work, and these changes have problems.",
+            {
+              duration: 12000,
+              description: publishing
+                ? "Your changes are not saved yet. Save keeps them as a draft."
+                : "Fix them, or unpublish and save (it won't run until you publish it again).",
+              action: {
+                label: publishing ? "Save draft" : "Unpublish and save",
+                onClick: () => {
+                  void saveAsDraftRef.current?.();
+                },
               },
             },
-          });
+          );
           return { success: false, rejected: true, validationErrors: response.validationErrors };
         }
         throw new Error(response.message || "Failed to save workflow");
@@ -465,9 +475,6 @@ export function WorkflowBuilderPage({
       setIsReadOnly(false);
       // Saved workflows are always user-owned
       setWorkflowSource("user");
-
-      // After saving, this is no longer a "new" workflow
-      setIsNewWorkflow(false);
 
       // Update detailed workflows map immediately for optimistic UI
       setDetailedWorkflows((prev) => {
@@ -579,9 +586,10 @@ export function WorkflowBuilderPage({
     return result.success && result.slug ? result.slug : null;
   };
 
-  // "Mark complete" / "Move to draft". Marking complete validates the STORED
-  // definition server-side; the builder only enables it when the canvas is
-  // saved and error-free, but the server is the gate.
+  // Publish / Unpublish of the STORED workflow (wire: complete / draft).
+  // Publishing validates it server-side; the builder enables Publish only
+  // when the canvas has no problems, but the server is the gate. (Publishing
+  // unsaved edits goes through handleSave with intent "complete" instead.)
   const handleSetStatus = async (status: DraftStatus): Promise<StatusChangeResult> => {
     if (!projectId || !draftId) {
       toast.error("Save the workflow first", { duration: 4000 });
@@ -599,13 +607,19 @@ export function WorkflowBuilderPage({
       if (response.success) {
         toast.success(
           status === "complete"
-            ? "Marked complete — this workflow can now be run"
-            : "Moved to draft — it won't run until you mark it complete again",
+            ? "Published — it can run now"
+            : "Unpublished — it won't run until you publish it again",
           { duration: 4000 },
         );
         await refreshWorkflowList();
       } else {
-        toast.error(response.message || "Could not change status", { duration: 8000 });
+        const problems = splitFindings(response.validationErrors).errors.length;
+        toast.error(
+          problems > 0
+            ? `Not published — fix ${problems} problem${problems === 1 ? "" : "s"} first.`
+            : response.message || "Could not change status",
+          { duration: 8000 },
+        );
       }
       return { success: response.success, validationErrors: response.validationErrors };
     } catch (err) {
@@ -742,8 +756,7 @@ export function WorkflowBuilderPage({
         // derived view back to "builder".
         setEditingWorkflow(workflow);
         setIsReadOnly(false);
-        setIsNewWorkflow(false);
-        setWorkflowSource("user");
+          setWorkflowSource("user");
         setDraftId(loadedDraftId);
         setYamlDefinition(fixedYaml);
 
@@ -784,7 +797,6 @@ export function WorkflowBuilderPage({
         initialName={initialWorkflowName}
         onBack={handleBack}
         isBuiltin={isReadOnly}
-        isNewWorkflow={isNewWorkflow}
         source={workflowSource}
         version={workflowVersion}
         chatId={routeChatId}
@@ -796,12 +808,6 @@ export function WorkflowBuilderPage({
         yamlDefinition={yamlDefinition}
         onYamlDefinitionChange={setYamlDefinition}
         drillIntoNodeId={routeDrillIntoNodeId}
-        onNavigateToWorkflow={(workflowName) =>
-          navigate({
-            to: "/workflow/$workflowName",
-            params: { workflowName },
-          })
-        }
       />
     </div>,
   );

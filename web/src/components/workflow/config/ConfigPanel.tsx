@@ -43,6 +43,8 @@ import { JoinStepConfig } from "./JoinStepConfig";
 import { LoopStepConfig } from "./LoopStepConfig";
 import { RouterStepConfig } from "./RouterStepConfig";
 import { NodeOutputsPanel } from "./NodeOutputsPanel";
+import { NodeFindingsScope, useNodeFindings } from "../WorkflowFindingsContext";
+import { humanizeField, type LocatedFinding } from "../workflowFindings";
 import { ConfigPanelTabBar, type ConfigTab } from "./ConfigPanelTabBar";
 
 import { getCatalogClient } from "../../../api/grpc-client";
@@ -175,6 +177,13 @@ export function ConfigPanel({
   useEffect(() => {
     setActiveTab("config");
   }, [step.id]);
+
+  // The canvas's problems with this step. Picking one in the header's
+  // problems list lands here: show the Config tab, where its field is.
+  const { findings: stepFindings, focus: findingFocus } = useNodeFindings(step.id);
+  useEffect(() => {
+    if (findingFocus) setActiveTab("config");
+  }, [findingFocus]);
 
   // Node ID editing state
   const [isEditingId, setIsEditingId] = useState(false);
@@ -417,6 +426,7 @@ export function ConfigPanel({
   );
 
   return (
+    <NodeFindingsScope nodeId={step.id ?? ""}>
     <ConfigurationPanel
       title={isReadOnly ? `${getStepTitle()} (View Only)` : getStepTitle()}
       subtitle={step.id}
@@ -475,6 +485,8 @@ export function ConfigPanel({
           {idError && <p className="cpv2-field-hint !text-destructive-ink">{idError}</p>}
         </div>
       )}
+
+      <StepProblems findings={stepFindings} />
 
       {/* ============ CONFIG TAB ============ */}
       {activeTab === "config" && (
@@ -691,5 +703,39 @@ export function ConfigPanel({
         </>
       )}
     </ConfigurationPanel>
+    </NodeFindingsScope>
+  );
+}
+
+/**
+ * The canvas's problems with this step, at the top of its panel: every one,
+ * including those no single field owns ("not connected", "inside its steps").
+ * A field's own problem also shows under that field.
+ */
+function StepProblems({ findings }: { findings: LocatedFinding[] }) {
+  if (findings.length === 0) return null;
+  const errors = findings.filter((f) => !f.warning).length;
+  return (
+    <div className="cpv2-section" data-testid="step-problems">
+      <div
+        role="status"
+        className={errors > 0 ? "cpv2-step-problems cpv2-step-problems--error" : "cpv2-step-problems"}
+      >
+        <p className="font-medium">
+          {errors > 0
+            ? `${errors} problem${errors === 1 ? "" : "s"} with this step`
+            : `${findings.length} warning${findings.length === 1 ? "" : "s"} for this step`}
+        </p>
+        <ul className="mt-1 space-y-1">
+          {findings.map((finding, index) => (
+            <li key={index}>
+              {humanizeField(finding.field) && <span className="font-medium">{humanizeField(finding.field)}: </span>}
+              {finding.text}
+              {finding.suggestion && <span className="block opacity-80">{finding.suggestion}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }

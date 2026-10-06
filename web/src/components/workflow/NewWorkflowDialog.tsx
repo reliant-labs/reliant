@@ -10,7 +10,7 @@
  * new workflows never look identical in the Library.
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { toast } from "sonner";
 
 import { useCreateWorkflowDraft } from "@/hooks/workflow-library-queries";
@@ -54,15 +54,21 @@ export function NewWorkflowDialog({ open, projectId, onClose, onCreated }: NewWo
   const [startId, setStartId] = useState(NEW_WORKFLOW_STARTS[0]!.id);
   const createDraft = useCreateWorkflowDraft(projectId);
 
+  // One create per submit, even when a double click or Enter-then-click lands
+  // before React has re-rendered the button as disabled.
+  const submittingRef = useRef(false);
   const submit = () => {
-    // isPending covers a second click (or Enter) while the first is in flight.
-    if (createDraft.isPending) return;
+    if (submittingRef.current || createDraft.isPending) return;
+    submittingRef.current = true;
     const start = NEW_WORKFLOW_STARTS.find((s) => s.id === startId) ?? NEW_WORKFLOW_STARTS[0]!;
     createDraft.mutate(
       { title: title.trim(), template: start.template },
       {
         onSuccess: (created) => onCreated({ slug: created.slug, title: created.title, draftId: created.draftId }),
-        onError: (error) => toast.error(error instanceof Error ? error.message : "Could not create the workflow"),
+        onError: (error) => {
+          submittingRef.current = false;
+          toast.error(error instanceof Error ? error.message : "Could not create the workflow");
+        },
       },
     );
   };

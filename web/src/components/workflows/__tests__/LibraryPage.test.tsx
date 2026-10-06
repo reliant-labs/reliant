@@ -28,11 +28,12 @@ const mocks = vi.hoisted(() => ({
   listWorktrees: vi.fn(),
   listDaemons: vi.fn(),
   listProjectDaemons: vi.fn(),
+  deleteWorkflow: vi.fn(),
 }));
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
-    workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow }),
+    workflow: () => ({ listWorkflows: mocks.listWorkflows, getWorkflow: mocks.getWorkflow, deleteWorkflow: mocks.deleteWorkflow }),
     run: () => ({ lastRunPerWorkflow: mocks.lastRunPerWorkflow }),
     trigger: () => ({ listTriggers: mocks.listTriggers }),
     preset: () => ({
@@ -234,5 +235,33 @@ describe("LibraryPage", () => {
     const builtinMenu = await screen.findByRole("menu");
     expect(within(builtinMenu).queryByRole("menuitem", { name: "Delete" })).toBeNull();
     expect(within(builtinMenu).getByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument();
+  });
+
+  it("Delete asks in the app, naming the title, slug and source — never a native confirm", async () => {
+    const nativeConfirm = vi.spyOn(window, "confirm");
+    mocks.deleteWorkflow.mockResolvedValue({});
+    renderLibrary();
+    const draft = await screen.findByTestId("workflow-row-my-draft");
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+
+    const dialog = await screen.findByRole("dialog", { name: "Delete “My Draft”?" });
+    expect(dialog).toHaveTextContent("my-draft");
+    expect(dialog).toHaveTextContent("Mine");
+    expect(dialog).toHaveTextContent("draft");
+    expect(nativeConfirm).not.toHaveBeenCalled();
+    expect(mocks.deleteWorkflow).not.toHaveBeenCalled();
+
+    await userEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    expect(screen.queryByRole("dialog", { name: "Delete “My Draft”?" })).toBeNull();
+    expect(mocks.deleteWorkflow).not.toHaveBeenCalled();
+
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft" }));
+    await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete workflow" }));
+    await waitFor(() =>
+      expect(mocks.deleteWorkflow).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1", name: "my-draft" })),
+    );
+    nativeConfirm.mockRestore();
   });
 });

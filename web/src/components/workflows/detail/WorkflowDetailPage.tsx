@@ -44,6 +44,7 @@ import { WorkflowViewerPanel } from "../../workflow/WorkflowViewerPanel";
 import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
+import { DRAFT_NOT_RUNNABLE } from "../../workflow/workflowDraftStatus";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
 import { ActivateTriggerDialog } from "../../Automations/ActivateTriggerDialog";
@@ -88,7 +89,7 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
     : definition.error
       ? "This workflow's definition has errors, so it cannot run."
       : isDraft
-        ? "Drafts cannot run until they are marked complete."
+        ? `${DRAFT_NOT_RUNNABLE} Open it in the editor to publish it.`
         : // Run… starts the run as a chat, so a workflow whose Chat trigger is
           // off cannot be run from here; its triggers (or a Test run) start it.
           listing?.automationOnly

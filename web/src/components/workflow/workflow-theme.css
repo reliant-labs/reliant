@@ -332,3 +332,12 @@
 .react-flow__edge path[marker-start] {
   z-index: 20 !important;
 }
+/* Validation problems on a step (nodes/problemMarkers.tsx): a ring on the
+   node's own surface, which keeps its border radius, plus the count badge. */
+.react-flow__node.wf-node--has-problems > :first-child {
+  box-shadow: 0 0 0 2px hsl(var(--destructive) / 0.7);
+}
+
+.react-flow__node.wf-node--has-warnings > :first-child {
+  box-shadow: 0 0 0 2px hsl(var(--warning) / 0.6);
+}

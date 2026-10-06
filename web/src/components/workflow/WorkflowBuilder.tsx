@@ -13,7 +13,7 @@ import {
 import type { Connection, Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-theme.css";
-import { nodeTypes } from "./nodes";
+import { nodeTypes as baseNodeTypes } from "./nodes";
 import { edgeTypes } from "./edges";
 import { ConfigPanel } from "./config";
 import { EdgeConfigPanel } from "./EdgeConfigPanel";
@@ -73,18 +73,21 @@ import {
   PencilRuler,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
-import { DraftStatusBadge } from "./DraftStatusBadge";
-import {
-  markCompleteBlockers,
-  splitFindings,
-  type DraftStatus,
-} from "./workflowDraftStatus";
+import { splitFindings, type DraftStatus } from "./workflowDraftStatus";
 import { WorkflowInfoPopover } from "./WorkflowInfoPopover";
-// Auto-save removed - using explicit save only
+import { WorkflowStatusChip } from "./WorkflowStatusChip";
 import {
-  ValidationStatusBadge,
+  findingsByNode,
+  locateFindings,
+  publishBlockers,
+  summarizeWorkflowStatus,
+  type LocatedFinding,
   type ValidationStatus,
-} from "./ValidationStatusBadge";
+} from "./workflowFindings";
+import { WorkflowFindingsProvider, type FindingFocus } from "./WorkflowFindingsContext";
+import { useLiveValidation } from "./hooks/useLiveValidation";
+import { withFindingMarkers, withProblemMarkers } from "./nodes/problemMarkers";
+import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { YamlEditorModal } from "./YamlEditorModal";
 import type { ValidationError } from "../../api/workflow-grpc";
 import { Modal } from "../ui/Modal";
@@ -137,6 +140,9 @@ import {
 } from "../../lib/actionNodeArgs";
 import { actionParamDefaults } from "../../lib/jsonSchemaFields";
 
+// Every node type, able to show its validation problems on the canvas.
+const nodeTypes = withProblemMarkers(baseNodeTypes);
+
 /** Result of a save operation */
 export interface SaveResult {
   success: boolean;
@@ -162,9 +168,10 @@ interface WorkflowBuilderProps {
    * or null when nothing was saved. A save that fails must not start a run.
    */
   onSaveForTestRun?: (workflow: Workflow) => Promise<string | null>;
-  /** Saves the canvas. `intent` overrides the stored status (e.g. "draft"
-   * to take a complete workflow back to work in progress). */
-  onSave?: (workflow: Workflow, intent?: DraftStatus) => void | Promise<void | SaveResult>;
+  /** Saves the canvas. `intent` overrides the stored status ("complete" to
+   * publish it in the same step, "draft" to unpublish it). `asCopy` stores it
+   * as a NEW workflow instead of updating this one (Duplicate). */
+  onSave?: (workflow: Workflow, intent?: DraftStatus, opts?: { asCopy?: boolean }) => void | Promise<void | SaveResult>;
   /** Lifecycle of the stored workflow; builtin/project are "complete". */
   draftStatus?: DraftStatus;
   /** Marks the stored workflow complete (validated server-side) or moves it to draft. */
@@ -177,8 +184,6 @@ interface WorkflowBuilderProps {
   onBack?: () => void;
   /** Whether this workflow is a builtin template (cannot be saved directly) */
   isBuiltin?: boolean;
-  /** Whether this is a new workflow (to clear stale chat state) */
-  isNewWorkflow?: boolean;
   /** Workflow source type - determines if editable */
   source?: "builtin" | "user" | "project";
   /** Current version number for OCC (0 for new/builtin workflows) */
@@ -208,12 +213,6 @@ interface WorkflowBuilderProps {
    * per workflow load via a ref guard.
    */
   drillIntoNodeId?: string;
-  /**
-   * Navigate to a different workflow by name. Used after "Create a Copy"
-   * succeeds so the user lands in the new copy instead of staring at the
-   * source (now stale) URL.
-   */
-  onNavigateToWorkflow?: (workflowName: string) => void;
 }
 
 function WorkflowBuilderInner({
@@ -226,7 +225,6 @@ function WorkflowBuilderInner({
   initialName,
   onBack,
   isBuiltin = false,
-  isNewWorkflow = false,
   source = "user",
   version,
   createdAt,
@@ -239,7 +237,6 @@ function WorkflowBuilderInner({
   yamlDefinition,
   onYamlDefinitionChange,
   drillIntoNodeId,
-  onNavigateToWorkflow,
 }: WorkflowBuilderProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -341,7 +338,10 @@ function WorkflowBuilderInner({
   // indistinguishable from user edits — now they aren't.
   const [hasModifications, setHasModifications] = useState(false);
 
-  // Validation state - tracks backend validation results
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Validation state: findings for the canvas as shown — from the load, the
+  // last save, or (while there are unsaved edits) live validation.
   const [validationStatus, setValidationStatus] =
     useState<ValidationStatus>("unknown");
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
@@ -659,33 +659,26 @@ function WorkflowBuilderInner({
     onBack?.();
   }, [onBack]);
 
-  const deselectNodeAndStartPanel = useCallback((nodeId: string | null) => {
-    setSelectedNodeId(nodeId);
-    if (nodeId === null) {
-      setShowStartPanel(false);
-      setSelectedDeclared(null);
-    }
+  const closeSidePanels = useCallback(() => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setShowSettingsEditor(false);
+    setShowStartPanel(false);
+    setSelectedDeclared(null);
   }, []);
+  const closeTestRunPanel = useCallback(() => setShowTestRunPanel(false), []);
 
-  // Keyboard shortcuts (Ctrl/Cmd+Z undo, +Shift+Z / +Y redo, and Escape
-  // deselect/exit-inline/back) — see ./hooks/useWorkflowKeyboardShortcuts.
+  // Keyboard shortcuts: Ctrl/Cmd+Z undo, +Shift+Z / +Y redo, and Escape,
+  // which closes the innermost open thing and NEVER leaves the builder —
+  // see ./hooks/useWorkflowKeyboardShortcuts.
   useWorkflowKeyboardShortcuts({
     onUndo: handleUndo,
     onRedo: handleRedo,
-    onEscape: handleBackClick,
-    isEditingLoop,
-    exitLoopEdit,
-    isBuiltinWorkflow,
-    // The start panel counts as a selection, so Escape closes it before it
-    // falls back to leaving the builder.
-    hasSelectedNode: !!selectedNodeId || showStartPanel || selectedDeclared !== null,
-    hasSelectedEdge: !!selectedEdgeId,
-    showSettingsEditor,
-    setSelectedNodeId: deselectNodeAndStartPanel,
-    setSelectedEdgeId,
-    setShowSettingsEditor,
-    showTemplateModal,
-    showExitConfirmModal,
+    hasOpenPanel:
+      !!selectedNodeId || !!selectedEdgeId || showSettingsEditor || showStartPanel || selectedDeclared !== null,
+    closePanels: closeSidePanels,
+    hasTestRunPanel: showTestRunPanel,
+    closeTestRunPanel,
   });
 
   // Recompute sibling layout info when the edge topology changes. Keying on
@@ -811,20 +804,51 @@ function WorkflowBuilderInner({
     setSelectedNodeId(node.id);
   }, []);
 
-  // Navigate to a node by ID (used by validation error clicks)
-  const navigateToNode = useCallback(
+  // "Take me to this problem": select its step, open its panel, and ask the
+  // field it is about to scroll into view and take focus. A trigger's
+  // problem opens that trigger's editor.
+  const [findingFocus, setFindingFocus] = useState<FindingFocus | null>(null);
+  // A step as the problems list names it: "Call LLM · summarize".
+  const describeNode = useCallback(
     (nodeId: string) => {
-      if (nodes.some((n) => n.id === nodeId)) {
+      const step = (nodes.find((n) => n.id === nodeId)?.data as FlowNodeData | undefined)?.step as Step | undefined;
+      if (!step?.type) return nodeId;
+      if (isIntegrationActionStep(step)) return `${getActionUses(step) || "Action"} · ${nodeId}`;
+      return `${getNodeDisplayName(step.type)} · ${nodeId}`;
+    },
+    [nodes],
+  );
+  const canSelectFinding = useCallback(
+    (finding: LocatedFinding) =>
+      finding.nodeId !== undefined
+        ? nodes.some((n) => n.id === finding.nodeId)
+        : finding.triggerIndex !== undefined && !isEditingLoop,
+    [nodes, isEditingLoop],
+  );
+  const selectFinding = useCallback(
+    (finding: LocatedFinding) => {
+      if (finding.nodeId && nodes.some((n) => n.id === finding.nodeId)) {
         setShowSettingsEditor(false);
-        setSelectedNodeId(nodeId);
+        setSelectedDeclared(null);
         setSelectedEdgeId(null);
+        setSelectedNodeId(finding.nodeId);
         setChatPanelOpen(false);
+        setFindingFocus((prev) => ({ nodeId: finding.nodeId!, fieldKey: finding.fieldKey, seq: (prev?.seq ?? 0) + 1 }));
+        return;
+      }
+      if (finding.triggerIndex !== undefined) {
+        // The same as picking the trigger on the rail.
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+        setShowSettingsEditor(false);
+        setChatPanelOpen(false);
+        setSelectedDeclared(finding.triggerIndex);
       }
     },
     [nodes],
   );
 
-  const handleSave = useCallback(async (intent?: DraftStatus) => {
+  const handleSave = useCallback(async (intent?: DraftStatus, opts?: { asCopy?: boolean }) => {
     if (isBuiltinWorkflow) {
       toast.error(
         'Use "Create a Copy" to create your own copy of this workflow',
@@ -844,10 +868,10 @@ function WorkflowBuilderInner({
 
     setIsSaving(true);
     try {
-      const result = await onSave?.(builtWorkflow, intent);
+      const result = await onSave?.(builtWorkflow, intent, opts);
 
       // Show the findings for what was just saved (or refused) inline. The
-      // badge counts errors only; warnings ride along in the popover.
+      // chip counts errors only; warnings ride along in the problems list.
       if (result && typeof result === "object") {
         const findings = result.validationErrors || [];
         setValidationErrors(findings);
@@ -864,11 +888,17 @@ function WorkflowBuilderInner({
       setHasModifications(false);
       setSavedTriggersJson(JSON.stringify(builtWorkflow.triggers ?? []));
 
-      const savedAsDraft =
-        result && typeof result === "object" && result.status === "draft";
-      toast.success(savedAsDraft ? "Saved as draft" : "Workflow saved", {
-        duration: 2000,
-      });
+      const savedStatus = result && typeof result === "object" ? result.status : undefined;
+      toast.success(
+        opts?.asCopy
+          ? "Saved as a new workflow"
+          : intent === "complete" && savedStatus === "complete"
+            ? "Saved and published — it can run now"
+            : savedStatus === "draft"
+              ? "Draft saved"
+              : "Saved",
+        { duration: 2500 },
+      );
     } catch (error) {
       console.error("Save failed:", error);
     } finally {
@@ -903,13 +933,26 @@ function WorkflowBuilderInner({
   // A running test paints its node statuses onto the canvas.
   const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
   const testRunStatuses = useBuilderTestRun(testRunChatId, nodeIds);
+  // The canvas's problems, on the steps they are about. Inside a loop or
+  // inline body the canvas is that body, which top-level findings don't map
+  // onto, so markers wait until the user is back on the workflow. Markers go
+  // on last so a step's accessible name ends with its problems.
+  const locatedFindings = useMemo(() => locateFindings(validationErrors), [validationErrors]);
+  const findingsOnCanvas = useMemo(
+    () => (isEditingLoop ? new Map<string, LocatedFinding[]>() : findingsByNode(locatedFindings)),
+    [locatedFindings, isEditingLoop],
+  );
   const displayedNodes = useMemo(
-    () => withNodeAriaLabels(withTestRunStatus(nodes, testRunStatuses), edges, getNodeDisplayName),
-    [nodes, edges, testRunStatuses],
+    () =>
+      withFindingMarkers(
+        withNodeAriaLabels(withTestRunStatus(nodes, testRunStatuses), edges, getNodeDisplayName),
+        findingsOnCanvas,
+      ),
+    [nodes, edges, testRunStatuses, findingsOnCanvas],
   );
 
-  // Offered by a rejected save of a complete workflow: store the canvas as a
-  // draft instead (it stops being runnable until marked complete again).
+  // Offered by a rejected save of a published workflow: store the canvas as a
+  // draft instead (it stops being runnable until it is published again).
   useEffect(() => {
     if (!saveAsDraftRef) return;
     saveAsDraftRef.current = () => handleSave("draft");
@@ -919,14 +962,18 @@ function WorkflowBuilderInner({
   }, [saveAsDraftRef, handleSave]);
 
   const [isChangingStatus, setIsChangingStatus] = useState(false);
-  const markCompleteReasons = useMemo(
+  const findingCounts = useMemo(() => {
+    const { errors, warnings } = splitFindings(validationErrors);
+    return { errors: validationStatus === "invalid" ? errors.length : 0, warnings: warnings.length };
+  }, [validationErrors, validationStatus]);
+  const publishReasons = useMemo(
     () =>
-      markCompleteBlockers({
-        errors: validationStatus === "invalid" ? validationErrors : [],
-        hasUnsavedChanges: hasModifications,
-        isSaving: isChangingStatus,
+      publishBlockers({
+        errorCount: findingCounts.errors,
+        isBusy: isChangingStatus || isSaving,
+        validating: validationStatus === "validating",
       }),
-    [validationStatus, validationErrors, hasModifications, isChangingStatus],
+    [findingCounts.errors, isChangingStatus, isSaving, validationStatus],
   );
 
   const handleSetStatus = useCallback(
@@ -946,6 +993,14 @@ function WorkflowBuilderInner({
     },
     [onSetStatus],
   );
+
+  // Publish: one deliberate act. Unsaved edits are saved and published in
+  // the same request (the server refuses it if they have problems), so the
+  // user never has to Save, wait, then Publish.
+  const handlePublish = useCallback(() => {
+    if (hasModifications) void handleSave("complete");
+    else void handleSetStatus("complete");
+  }, [hasModifications, handleSave, handleSetStatus]);
 
   // Save and exit handler
   const handleSaveAndExit = useCallback(async () => {
@@ -1002,34 +1057,46 @@ function WorkflowBuilderInner({
       return;
     }
 
-    // Update the workflow name - this will make it no longer a "builtin"
-    setWorkflow((w) => ({ ...w, name: normalizedName }));
+    // The copy is its own workflow: a new name, and a title that tells it
+    // apart from the original in every list.
+    const sourceTitle = (workflow.title || workflow.name || "").trim();
+    const copyTitle = sourceTitle ? `Copy of ${sourceTitle}` : normalizedName;
+    setWorkflow((w) => ({ ...w, name: normalizedName, title: copyTitle }));
     setShowTemplateModal(false);
 
-    // Build and save the workflow with the new name
     const builtWorkflow = buildWorkflow();
     builtWorkflow.name = normalizedName;
+    builtWorkflow.title = copyTitle;
 
     try {
-      await onSave?.(builtWorkflow);
+      // asCopy: store a NEW workflow. Saving with this draft's id would
+      // rename the original instead of copying it. The page then moves the
+      // URL to the copy, so a refresh opens the copy, not the source.
+      const result = await onSave?.(builtWorkflow, "draft", { asCopy: true });
+      if (result && typeof result === "object" && !result.success) return;
       setLoadedWorkflowName(normalizedName);
       setHasModifications(false);
-      toast.success(`Created "${normalizedName}" from template`, {
-        duration: 3000,
-      });
-      // Navigate to the new copy so the URL matches the workflow now in view.
-      // Without this, the URL still points at the source workflow and a
-      // refresh would reload the original instead of the user's copy.
-      onNavigateToWorkflow?.(normalizedName);
+      toast.success(`Created "${copyTitle}"`, { duration: 3000 });
     } catch (error) {
-      console.error("Failed to save template:", error);
+      console.error("Failed to save copy:", error);
     }
-  }, [templateName, buildWorkflow, onSave, onNavigateToWorkflow, nodes, edges]);
+  }, [templateName, buildWorkflow, onSave, workflow.title, workflow.name]);
 
   // Derived persistence representation. Re-computed when nodes/edges/workflow
   // change — but consumers should depend on stable structural keys (see
   // CEL context below) rather than this object on every keystroke.
   const currentWorkflow = useMemo(() => buildWorkflow(), [buildWorkflow]);
+
+  // While there are unsaved edits, validate the canvas itself (debounced), so
+  // the status chip and the step markers describe what is on screen. Inside a
+  // loop body the canvas is the body, not the workflow, so it waits.
+  useLiveValidation({
+    projectId: currentProject?.id,
+    workflow: currentWorkflow,
+    enabled: hasModifications && !isBuiltinWorkflow && !isEditingLoop,
+    setStatus: setValidationStatus,
+    setFindings: setValidationErrors,
+  });
 
   // Get list of existing node IDs for validation (used by ConfigPanel to prevent duplicates)
   const existingNodeIds = useMemo(() => nodes.map((node) => node.id), [nodes]);
@@ -1179,7 +1246,7 @@ function WorkflowBuilderInner({
     () => ({
       workflowRef: savedWorkflowName,
       projectId: currentProject?.id ?? "",
-      canAddTrigger: !isNewWorkflow && savedWorkflowName !== "" && !!currentProject?.id,
+      canAddTrigger: savedWorkflowName !== "" && !!currentProject?.id,
       canEditDefinition,
       declared,
       findingsFor,
@@ -1192,7 +1259,7 @@ function WorkflowBuilderInner({
       onEditDeclared: handleEditDeclared,
       onActivateDeclared: setActivatingDeclared,
     }),
-    [savedWorkflowName, currentProject?.id, isNewWorkflow, canEditDefinition, declared, findingsFor, unsavedDeclared, selectedDeclared, workflow.automationOnly, handleSetChatEnabled, handleEditTrigger, handleAddTrigger, handleEditDeclared],
+    [savedWorkflowName, currentProject?.id, canEditDefinition, declared, findingsFor, unsavedDeclared, selectedDeclared, workflow.automationOnly, handleSetChatEnabled, handleEditTrigger, handleAddTrigger, handleEditDeclared],
   );
   // The caller's activations, for the editor's Activations section (the
   // rail reads the same cached list).
@@ -1272,7 +1339,6 @@ function WorkflowBuilderInner({
     ],
   );
 
-  const [isSaving, setIsSaving] = useState(false);
   useWorkflowDraftSync({
     projectId: currentProject?.id,
     draftId,
@@ -1746,36 +1812,31 @@ function WorkflowBuilderInner({
                 </button>
               )
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {isEditingName && !isEditingLoop ? (
+                // The header edits the TITLE, the name people see. The slug
+                // (`name:`, what references and URLs use) is in Workflow info.
                 <input
                   type="text"
-                  value={workflow.name ?? ""}
+                  aria-label="Workflow title"
+                  value={workflow.title ?? ""}
                   onChange={(e) => {
-                    setWorkflow((w) => ({ ...w, name: e.target.value }));
+                    setWorkflow((w) => ({ ...w, title: e.target.value }));
                     setHasModifications(true);
                   }}
                   onBlur={() => {
-                    // Apply normalization on blur
-                    setWorkflow((w) => ({
-                      ...w,
-                      name: normalizeName(w.name ?? ""),
-                    }));
+                    setWorkflow((w) => ({ ...w, title: (w.title ?? "").trim() }));
                     setIsEditingName(false);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      // Apply normalization on Enter
-                      setWorkflow((w) => ({
-                        ...w,
-                        name: normalizeName(w.name ?? ""),
-                      }));
+                    if (e.key === "Enter" || e.key === "Escape") {
+                      setWorkflow((w) => ({ ...w, title: (w.title ?? "").trim() }));
                       setIsEditingName(false);
                     }
                   }}
                   autoFocus
                   className="text-2xl font-bold border-none outline-none focus:ring-0 bg-transparent text-foreground flex-shrink-0"
-                  placeholder="Workflow Name"
+                  placeholder={workflow.name || "Workflow title"}
                   style={{
                     width: "auto",
                     minWidth: "200px",
@@ -1784,25 +1845,40 @@ function WorkflowBuilderInner({
                 />
               ) : (
                 <>
-                  <h1 className="text-2xl font-bold text-foreground">
-                    {workflow.name}
-                  </h1>
+                  <div className="min-w-0">
+                    <h1 className="truncate text-2xl font-bold text-foreground" data-testid="workflow-title">
+                      {workflowDisplayName({ name: workflow.name ?? "", title: workflow.title })}
+                    </h1>
+                    {!isEditingLoop && workflow.name && (
+                      <button
+                        type="button"
+                        onClick={() => setShowInfoPopover(true)}
+                        className="block max-w-[28rem] truncate font-mono text-xs text-muted-foreground hover:text-foreground"
+                        title={isBuiltinWorkflow ? "Workflow slug" : "Workflow slug — change it in Workflow info"}
+                        data-testid="workflow-slug"
+                      >
+                        {workflow.name}
+                      </button>
+                    )}
+                  </div>
                   {/* Hide edit button for builtins and when editing loops */}
                   {!isEditingLoop && !isBuiltinWorkflow && (
                     <button
                       onClick={() => setIsEditingName(true)}
                       className="p-1 hover:bg-muted rounded transition-colors self-center"
-                      title="Edit workflow name"
+                      title="Rename"
+                      aria-label="Rename workflow"
                     >
                       <Pencil className="w-5 h-5 text-muted-foreground" />
                     </button>
                   )}
-                  {/* Info button - shows workflow description and metadata */}
+                  {/* Info button - title, slug, description and metadata */}
                   {!isEditingLoop && (
                     <button
                       onClick={() => setShowInfoPopover(true)}
                       className="p-1 hover:bg-muted rounded transition-colors self-center"
                       title="Workflow info"
+                      aria-label="Workflow info"
                     >
                       <Info className="w-5 h-5 text-muted-foreground" />
                     </button>
@@ -1810,23 +1886,22 @@ function WorkflowBuilderInner({
                 </>
               )}
             </div>
-            {/* Validation Status Badge - show validation state */}
+            {/* One status chip: lifecycle + the canvas's state, live. */}
             {!isEditingLoop && (
-              <ValidationStatusBadge
-                status={validationStatus}
-                errors={validationErrors}
-                onNodeClick={navigateToNode}
+              <WorkflowStatusChip
                 className="ml-2"
-              />
-            )}
-            {!isEditingLoop && !isBuiltinWorkflow && draftStatus === "draft" && (
-              <DraftStatusBadge
-                errorCount={
-                  validationStatus === "invalid"
-                    ? splitFindings(validationErrors).errors.length
-                    : 0
-                }
-                className="ml-2"
+                summary={summarizeWorkflowStatus({
+                  source,
+                  draftStatus,
+                  hasUnsavedChanges: hasModifications && !isBuiltinWorkflow,
+                  validationStatus,
+                  errorCount: findingCounts.errors,
+                  warningCount: findingCounts.warnings,
+                })}
+                findings={locatedFindings}
+                describeNode={describeNode}
+                canSelect={canSelectFinding}
+                onSelect={selectFinding}
               />
             )}
           </div>
@@ -1920,45 +1995,48 @@ function WorkflowBuilderInner({
                   Duplicate
                 </button>
                 {onSetStatus && draftStatus === "complete" && (
-                  <Tooltip content="Take this workflow out of service to make edits that may be invalid along the way. It won't run until you mark it complete again.">
+                  <Tooltip content="Take it out of service, to make edits that may not work along the way. It won't run until you publish it again.">
                     <button
                       onClick={() => void handleSetStatus("draft")}
-                      disabled={isChangingStatus}
+                      disabled={isChangingStatus || isSaving}
                       className={headerButtonClass}
-                      data-testid="workflow-move-to-draft"
+                      data-testid="workflow-unpublish"
                     >
                       <PencilRuler className="w-4 h-4" />
-                      Move to draft
+                      Unpublish
                     </button>
                   </Tooltip>
                 )}
                 <button
                   onClick={() => void handleSave()}
-                  disabled={!hasModifications}
+                  disabled={!hasModifications || isSaving}
                   className={
                     draftStatus === "draft" ? secondaryHeaderButtonClass : primaryHeaderButtonClass
                   }
+                  data-testid="workflow-save"
                 >
-                  {draftStatus === "draft" ? "Save draft" : "Save"}
+                  {isSaving ? "Saving…" : "Save"}
                 </button>
                 {onSetStatus && draftStatus === "draft" && (
                   <Tooltip
                     content={
-                      markCompleteReasons.length > 0
-                        ? `Can't mark complete yet: ${markCompleteReasons.join(" ")}`
-                        : "Validate and make this workflow runnable"
+                      publishReasons.length > 0
+                        ? `Can't publish yet: ${publishReasons.join(" ")}`
+                        : hasModifications
+                          ? "Save your changes and make this workflow runnable"
+                          : "Make this workflow runnable: by chat, Run, and its triggers"
                     }
                   >
                     {/* The wrapper keeps the tooltip working while the button is disabled. */}
                     <span className="inline-flex">
                       <button
-                        onClick={() => void handleSetStatus("complete")}
-                        disabled={markCompleteReasons.length > 0}
+                        onClick={handlePublish}
+                        disabled={publishReasons.length > 0}
                         className={primaryHeaderButtonClass}
-                        data-testid="workflow-mark-complete"
+                        data-testid="workflow-publish"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        Mark complete
+                        Publish
                       </button>
                     </span>
                   </Tooltip>
@@ -2084,6 +2162,7 @@ function WorkflowBuilderInner({
           : 0;
 
         return (
+          <WorkflowFindingsProvider byNode={findingsOnCanvas} focus={findingFocus}>
           <CELCompletionProvider value={celCompletionContext}>
             {/* Config Panel - view-only for builtin workflows. Mutation
                 callbacks (update/delete/rename) come from
@@ -2229,6 +2308,7 @@ function WorkflowBuilderInner({
               />
             )}
           </CELCompletionProvider>
+          </WorkflowFindingsProvider>
         );
       })()}
 
@@ -2356,17 +2436,25 @@ function WorkflowBuilderInner({
       <WorkflowInfoPopover
         isOpen={showInfoPopover}
         onClose={() => setShowInfoPopover(false)}
+        title={workflow.title ?? ""}
+        slug={workflow.name ?? ""}
+        savedSlug={savedWorkflowName}
         description={workflow.description ?? ""}
-        onDescriptionChange={
-          source === "user"
-            ? (desc: string) => {
-                setWorkflow((w) => ({ ...w, description: desc }));
+        onChange={
+          source === "user" && !isBuiltinWorkflow
+            ? (patch) => {
+                setWorkflow((w) => ({
+                  ...w,
+                  ...(patch.title !== undefined && { title: patch.title }),
+                  ...(patch.slug !== undefined && { name: patch.slug }),
+                  ...(patch.description !== undefined && { description: patch.description }),
+                }));
                 setHasModifications(true);
               }
             : undefined
         }
+        normalizeSlug={normalizeName}
         createdAt={createdAt}
-        isEditable={source === "user"}
       />
 
       {/* YAML Editor Modal */}
