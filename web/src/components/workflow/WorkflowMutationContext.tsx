@@ -38,6 +38,7 @@ import {
 import type { SwitchNodeData } from "./nodes/SwitchNode";
 import type { Workflow } from "../../types/workflow";
 import type { DeclaredTrigger } from "../../lib/declaredTriggers";
+import { rewriteNodeReferences, rewriteWorkflowNodeReferences } from "../../lib/nodeReferences";
 
 export interface WorkflowMutations {
   /**
@@ -61,8 +62,10 @@ export interface WorkflowMutations {
 
   /**
    * Rename a node and rewrite every edge that references the old id (source,
-   * target, edge-id substring). Keeps the current selection pointing at the
-   * renamed node. Takes an undo snapshot before mutating.
+   * target, edge-id substring) and every expression that does
+   * (`nodes.<old>` in steps, Switch cases, edge data and the workflow's
+   * outputs; see lib/nodeReferences). Keeps the current selection pointing at
+   * the renamed node. Takes an undo snapshot before mutating.
    */
   renameNode: (oldId: string, newId: string) => void;
 
@@ -236,27 +239,34 @@ export function WorkflowMutationProvider({
         takeSnapshotRef.current(nodesRef.current, edgesRef.current);
         setHasModificationsRef.current(true);
 
+        // Every expression that read the step by its old id (`{{nodes.<old>…}}`
+        // in another step, a Switch case's condition, an edge's data, the
+        // workflow's outputs) reads it by the new one.
         setNodesRef.current((nds) =>
           nds.map((node) => {
-            if (node.id !== oldId) return node;
-            const step = (node.data as { step: Step }).step;
+            const data = rewriteNodeReferences(node.data, oldId, newId);
+            if (node.id !== oldId) return data === node.data ? node : { ...node, data };
+            const step = (data as { step: Step }).step;
             const updatedStep = { ...step, id: newId };
             return {
               ...node,
               id: newId,
               data: {
-                ...node.data,
+                ...data,
                 step: updatedStep,
                 label: newId,
               },
             };
           }),
         );
+        setWorkflowRef.current((workflow) => rewriteWorkflowNodeReferences(workflow, oldId, newId));
 
         setEdgesRef.current((eds) =>
           eds.map((edge) => {
             let updated = false;
-            const newEdge = { ...edge };
+            const data = rewriteNodeReferences(edge.data, oldId, newId);
+            const newEdge = data === edge.data ? { ...edge } : { ...edge, data };
+            if (data !== edge.data) updated = true;
             if (edge.source === oldId) {
               newEdge.source = newId;
               newEdge.id = newEdge.id.replace(

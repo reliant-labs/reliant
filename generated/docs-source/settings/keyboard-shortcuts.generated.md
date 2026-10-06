@@ -141,6 +141,7 @@ Where the **Browser** column is blank the shortcut is the same on both.
 | Desktop | Browser | Action |
 |---------|---------|--------|
 | `Cmd+I` |  | Add Step |
+| `Cmd+Shift+L` |  | Connect Selected Steps |
 
 ## Customizing Shortcuts
 

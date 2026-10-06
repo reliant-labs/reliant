@@ -22,6 +22,8 @@ import { useShortcutsStore } from "../../../store/shortcutsStore";
 
 export interface WorkflowBuilderShortcutHandlers {
   onOpenStepPalette?: () => void;
+  /** Draw an edge between the two selected steps (canvas/SelectionActions). */
+  onConnectSelectedSteps?: () => void;
 }
 
 export function useWorkflowBuilderShortcuts(handlers: WorkflowBuilderShortcutHandlers): void {
@@ -49,10 +51,15 @@ export function useWorkflowBuilderShortcuts(handlers: WorkflowBuilderShortcutHan
   }, [registry]);
 }
 
-/** The palette shortcut as shown to the user ("⌘I"), or "" before shortcuts load. */
-export function useStepPaletteShortcutLabel(): string {
-  const binding = useShortcutsStore((state) => (state.shortcuts.openStepPalette ? state.getEffectiveBinding("openStepPalette") : ""));
+/** A builder shortcut as shown to the user ("⌘I"), or "" before shortcuts load. */
+export function useBuilderShortcutLabel(id: string): string {
+  const binding = useShortcutsStore((state) => (state.shortcuts[id] ? state.getEffectiveBinding(id) : ""));
   if (!binding) return "";
   const { isMac } = detectPlatform();
   return formatBinding(parseBinding(binding, isMac), isMac);
+}
+
+/** The palette shortcut as shown to the user ("⌘I"), or "" before shortcuts load. */
+export function useStepPaletteShortcutLabel(): string {
+  return useBuilderShortcutLabel("openStepPalette");
 }
