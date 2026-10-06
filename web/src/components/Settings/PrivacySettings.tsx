@@ -54,9 +54,9 @@ export function PrivacySettings() {
               <h3 className="text-sm font-medium">Analytics and Usage Data</h3>
             </div>
             <p className="text-xs text-muted-foreground mb-2">
-              Collect anonymous usage statistics and feature analytics to help
-              us understand how the application is used and improve user
-              experience.
+              Send product usage events, tied to your account, so we can see
+              which features are used and improve them. Events record what you
+              did, not what you wrote.
             </p>
           </div>
           <Toggle
