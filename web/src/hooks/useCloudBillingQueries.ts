@@ -293,7 +293,7 @@ export function useCreateComputeSubscriptionIntent() {
 }
 
 /**
- * What a top-up costs: credit, processing fee, and the charged total.
+ * What a top-up costs: credit, service fee, and the charged total.
  *
  * THE FEE IS NEVER COMPUTED HERE. It arrives from the server, which derives it
  * from the same function that builds the Stripe charge — so the number the user

@@ -1252,7 +1252,7 @@ type GetCurrentUserWalletTopupQuoteResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Lands in the wallet. What the user chose.
 	CreditCents int64 `protobuf:"varint,1,opt,name=credit_cents,json=creditCents,proto3" json:"credit_cents,omitempty"`
-	// The processing fee, already rounded to whole cents server-side.
+	// The service fee, already rounded to whole cents server-side.
 	FeeCents int64 `protobuf:"varint,2,opt,name=fee_cents,json=feeCents,proto3" json:"fee_cents,omitempty"`
 	// What the card is charged. Always credit_cents + fee_cents.
 	TotalCents int64 `protobuf:"varint,3,opt,name=total_cents,json=totalCents,proto3" json:"total_cents,omitempty"`

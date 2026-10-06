@@ -163,8 +163,8 @@ type BillingServiceClient interface {
 	// succeeded confirmation reported by the client grants nothing on its own.
 	CreateCurrentUserWalletTopupPaymentIntent(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupPaymentIntentRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupPaymentIntentResponse], error)
 	// GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
-	// Stripe, so the checkout page can disclose the processing fee before asking
-	// for a card.
+	// Stripe, so the checkout page can disclose the top-up service fee, and the
+	// total it makes, before asking for a card.
 	//
 	// THE REASON THIS IS AN RPC AND NOT CLIENT ARITHMETIC: a fee the browser
 	// computes is a number the browser can change, and — more mundanely but more
@@ -707,8 +707,8 @@ type BillingServiceHandler interface {
 	// succeeded confirmation reported by the client grants nothing on its own.
 	CreateCurrentUserWalletTopupPaymentIntent(context.Context, *connect.Request[v1.CreateCurrentUserWalletTopupPaymentIntentRequest]) (*connect.Response[v1.CreateCurrentUserWalletTopupPaymentIntentResponse], error)
 	// GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
-	// Stripe, so the checkout page can disclose the processing fee before asking
-	// for a card.
+	// Stripe, so the checkout page can disclose the top-up service fee, and the
+	// total it makes, before asking for a card.
 	//
 	// THE REASON THIS IS AN RPC AND NOT CLIENT ARITHMETIC: a fee the browser
 	// computes is a number the browser can change, and — more mundanely but more
