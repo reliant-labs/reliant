@@ -47,6 +47,10 @@ type TestDelivery struct {
 	Resource string `json:"resource,omitempty"`
 	// Revoke are access revocations the delivery carries.
 	Revoke []core.IntegrationAccessRevocation `json:"revoke,omitempty"`
+	// Sender is the event's trigger.sender. The body is signed, so it is
+	// what a real provider's attested sender field is; absent, it is a
+	// verified sender named by the account.
+	Sender *core.TriggerSender `json:"sender,omitempty"`
 }
 
 // ID implements Provider.
@@ -87,7 +91,12 @@ func (p *TestProvider) Parse(_ context.Context, req *Request) (*Delivery, error)
 	}
 	out := &Delivery{Revocations: d.Revoke}
 	if d.Type != "" {
+		sender := d.Sender
+		if sender == nil {
+			sender = &core.TriggerSender{Kind: core.TriggerSenderKindWebhook, ID: d.Account, Verified: true}
+		}
 		out.Events = []Event{{
+			Sender:      sender,
 			Type:        d.Type,
 			AccountKey:  d.Account,
 			ResourceKey: d.Resource,

@@ -57,7 +57,18 @@ func (f *fakeCreds) ForTrigger(_ context.Context, triggerID string) (httpaction.
 	return f.cred, nil
 }
 
+// feedSender is the sender a scripted item carries unless it names one.
+var feedSender = &core.TriggerSender{Kind: core.TriggerSenderKindEmail, ID: "ann@example.com", Verified: true}
+
 func (p *scriptedPoller) add(item PollItem) {
+	if item.Sender == nil {
+		item.Sender = feedSender
+	}
+	p.addRaw(item)
+}
+
+// addRaw adds item exactly as given, sender or not.
+func (p *scriptedPoller) addRaw(item PollItem) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.items = append(p.items, item)
@@ -294,10 +305,30 @@ func TestPollBaselineFiresNothingThenANewItemFiresOnce(t *testing.T) {
 	assert.Equal(t, core.TriggerEventKindIntegration, events[0].Kind)
 	data, _ := events[0].Payload["data"].(map[string]any)
 	assert.Equal(t, "hello", data["title"])
+	assert.Equal(t, feedSender, events[0].Sender, "the poller's sender is the event's")
 	assert.Len(t, starter.snapshot(), 2, "the redelivery restarts the same still-pending fire, which is harmless")
 	for _, s := range starter.snapshot() {
 		assert.Equal(t, EventFireWorkflowID(events[0].ID), s.ID)
 	}
+}
+
+// An item the poller could not name a sender for is a poller bug; it is not
+// recorded as an event no "Only from" filter could ever pass.
+func TestPollDropsAnItemWithNoSender(t *testing.T) {
+	repo, trigger, poller, starter, p := newPollEnv(t)
+	ctx := context.Background()
+	_, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+
+	poller.addRaw(PollItem{ID: "anonymous", Type: "item.created"})
+	poller.add(PollItem{ID: "named", Type: "item.created"})
+	out, err := p.Poll(ctx, PollInput{TriggerID: trigger.ID})
+	require.NoError(t, err)
+	assert.Equal(t, 1, out.Accepted)
+	events := repo.eventsFor(trigger.ID)
+	require.Len(t, events, 1)
+	assert.Equal(t, trigger.ID+":named", events[0].DedupeKey)
+	assert.Len(t, starter.snapshot(), 1)
 }
 
 func TestPollAppliesTheTriggersSourceConfig(t *testing.T) {

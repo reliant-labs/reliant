@@ -65,6 +65,9 @@ connection:
     path: /user
     external_id: string(response.id)
     label: response.login
+    # The person, as a webhook's sender.login names them (trigger.sender.id,
+    # which lowercases it the same way "Only from" does).
+    sender_id: response.login
 
 actions:
   - id: user.get

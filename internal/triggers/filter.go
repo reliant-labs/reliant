@@ -4,6 +4,7 @@ package triggers
 import (
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
@@ -25,6 +26,8 @@ type FilterInput struct {
 	EventID    string
 	OccurredAt time.Time
 	Payload    map[string]any
+	// Sender is trigger.sender: who the source says sent the event.
+	Sender *core.TriggerSender
 }
 
 // Root is the `trigger` CEL value for this event: what a filter and an
@@ -35,6 +38,7 @@ func (in FilterInput) Root() map[string]any {
 		TriggerID: in.TriggerID,
 		EventID:   in.EventID,
 		Payload:   in.Payload,
+		Sender:    in.Sender,
 	}
 	if !in.OccurredAt.IsZero() {
 		info.OccurredAt = in.OccurredAt.UTC().Format(time.RFC3339)

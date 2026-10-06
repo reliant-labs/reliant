@@ -311,6 +311,7 @@ CREATE TABLE public.trigger_events (
     chat_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
     run_status text,
+    sender jsonb,
     CONSTRAINT trigger_events_kind_check CHECK ((kind = ANY (ARRAY['chat.start'::text, 'schedule'::text, 'agent.start_run'::text, 'builder.test'::text, 'webhook'::text, 'integration'::text, 'workflow_event'::text]))),
     CONSTRAINT trigger_events_outcome_check CHECK ((outcome = ANY (ARRAY['pending'::text, 'launched'::text, 'skipped'::text, 'failed'::text]))),
     CONSTRAINT trigger_events_run_status_check CHECK (((run_status IS NULL) OR (run_status = ANY (ARRAY['completed'::text, 'failed'::text, 'cancelled'::text]))))
@@ -556,6 +557,7 @@ CREATE TABLE public.connections (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
     params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    sender_id text,
     CONSTRAINT connections_auth_kind_check CHECK ((auth_kind = ANY (ARRAY['oauth2'::text, 'api_key'::text, 'basic'::text, 'none'::text]))),
     CONSTRAINT connections_check CHECK ((((owner_kind = 'user'::text) AND (org_id IS NULL)) OR ((owner_kind = 'org'::text) AND (org_id IS NOT NULL)))),
     CONSTRAINT connections_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['user'::text, 'org'::text]))),

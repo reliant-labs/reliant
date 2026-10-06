@@ -239,6 +239,10 @@ func TestDispatch_FinishedRunLaunchesTheMatchingTriggerWithTheSourceRunInItsPayl
 	assert.Equal(t, "code-review", launchEv.Payload["workflow_name"])
 	assert.Equal(t, "finished", launchEv.Payload["outcome"])
 	assert.Equal(t, "all done", launchEv.Payload["summary"])
+	// Its sender is the workflow whose run finished, from this server's own
+	// outbox: verified.
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindWorkflow, ID: "code-review", DisplayName: "code-review", Verified: true},
+		launchEv.Sender)
 
 	// A retried dispatch launches nothing new.
 	again, err := f.dispatcher.Dispatch(ctx, ev)
@@ -348,6 +352,27 @@ func TestDispatch_CELFilterMissIsRecordedAsSkipped(t *testing.T) {
 	assert.Equal(t, core.TriggerEventSkipped, got.Outcome)
 	assert.Equal(t, "filter did not match", got.Detail)
 	assert.Zero(t, f.starter.count())
+}
+
+// The filter sees trigger.sender exactly as the launched run would: the
+// finishing workflow.
+func TestDispatch_SenderFilterReadsTheFinishingWorkflow(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	fromReview := f.addFilteredTrigger(f.userID, f.projectID, "from-review", "builtin://agent",
+		Source{}, `trigger.sender.verified && trigger.sender.id in ["code-review"]`)
+	fromDeploy := f.addFilteredTrigger(f.userID, f.projectID, "from-deploy", "builtin://agent",
+		Source{}, `trigger.sender.id == "deploy"`)
+
+	results, err := f.dispatcher.Dispatch(ctx, f.finish(f.humanRun("code-review"), core.RunEventFinished))
+	require.NoError(t, err)
+	launchedChat(t, results, fromReview.ID)
+	skipped := resultFor(t, results, fromDeploy.ID)
+	assert.Equal(t, core.TriggerEventSkipped, skipped.Outcome)
+	events, _, err := f.repo.ListTriggerEvents(ctx, core.TriggerEventFilters{UserID: f.userID, TriggerID: fromDeploy.ID, Limit: 10})
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "code-review", events[0].Event.Sender.ID, "a skipped firing records who it was from")
 }
 
 func TestDispatch_NeverFiresAnotherUsersTrigger(t *testing.T) {

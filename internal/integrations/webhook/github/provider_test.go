@@ -72,6 +72,28 @@ func assertRepoEvent(t *testing.T, ev Event, typ string) {
 	assert.Equal(t, "98765", ev.Attributes["installation_id"])
 	assert.Equal(t, "octocat", ev.Attributes["sender"])
 	assert.NotContains(t, ev.Data, "installation", "routing internals stay out of the payload")
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "octocat", DisplayName: "octocat", Verified: true}, ev.Sender)
+}
+
+// trigger.sender is GitHub's `sender`, from a body the provider verified
+// before parsing. Its id is the lowercased login, so an allowlist of
+// "octocat" matches a delivery that writes "OctoCat"; the display name keeps
+// GitHub's casing.
+func TestSenderIsTheDeliverysSenderLogin(t *testing.T) {
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(fixture(t, "issues.opened"), &body))
+	body["sender"] = map[string]any{"login": "OctoCat", "id": 583231, "type": "User"}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	ev := one(t, parseBody(t, "issues", raw))
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "octocat", DisplayName: "OctoCat", Verified: true}, ev.Sender)
+
+	// No sender at all: recorded, and never verified.
+	delete(body, "sender")
+	raw, err = json.Marshal(body)
+	require.NoError(t, err)
+	ev = one(t, parseBody(t, "issues", raw))
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, Verified: false}, ev.Sender)
 }
 
 func TestIssueEvents(t *testing.T) {

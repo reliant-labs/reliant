@@ -34,7 +34,7 @@ type serviceStore interface {
 	RenameConnection(ctx context.Context, userID, id, name string, ev core.ConnectionEvent) error
 	SetDefaultConnection(ctx context.Context, userID, id string, ev core.ConnectionEvent) error
 	DeleteConnection(ctx context.Context, userID, id string, ev core.ConnectionEvent) error
-	RecordTestResult(ctx context.Context, userID, id, accountLabel string) error
+	RecordTestResult(ctx context.Context, userID, id, accountLabel, senderID string) error
 	ListConnectionEvents(ctx context.Context, userID, id string, limit int, beforeID int64) ([]core.ConnectionEvent, error)
 }
 
@@ -204,6 +204,9 @@ func (s *Service) CreateAPIKey(ctx context.Context, p CreateAPIKeyParams) (*core
 		if who.AccountLabel != "" {
 			conn.AccountLabel = &who.AccountLabel
 		}
+		if who.SenderID != "" {
+			conn.SenderID = &who.SenderID
+		}
 	}
 
 	secrets := make([]core.ConnectionSecret, 0, len(plain))
@@ -307,7 +310,7 @@ func (s *Service) Test(ctx context.Context, userID, id string) (*TestResult, err
 		}
 		return &TestResult{Probed: true, ErrorClass: class}, nil
 	}
-	if err := s.store.RecordTestResult(ctx, userID, id, who.AccountLabel); err != nil {
+	if err := s.store.RecordTestResult(ctx, userID, id, who.AccountLabel, who.SenderID); err != nil {
 		return nil, mapStoreErr(err)
 	}
 	return &TestResult{OK: true, Probed: true, AccountLabel: who.AccountLabel}, nil

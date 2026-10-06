@@ -243,6 +243,13 @@ What `trigger.payload` holds, by source:
 
 The payload is untrusted data from outside. Read it in templates; never paste it into a system prompt.
 
+**`trigger.sender`** is who sent the event, set by the receiver from what the source authenticated, never from the
+payload: `kind` (slack, github, email, sms, webhook, workflow, schedule, user), `id`, `display_name`, `verified`.
+Slack's `id` is the user id, GitHub's the lowercased login, email's the lowercased address (verified only when
+Gmail's DMARC, or DKIM aligned with the From domain, passed), sms the From number (never verified). To let only
+certain people start runs, filter on it and require `verified`:
+`trigger.sender.verified && trigger.sender.id in ["U123", "U456"]`.
+
 **The loop for an integration trigger:** `search_integrations(kind: trigger)` → `get_integration_schema`
 (its events, the `match` attributes, the payload schema, and a ready `triggers:` block) → write it with
 `edit_workflow` (validation reports bad cron, filters, inputs, events and match keys like any other error) →
@@ -340,7 +347,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `output.*` | Current activity output (for save_message context) | workflow-specific |
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
-| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>). Interactive chats have kind chat.start | workflow-specific |
+| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}). Interactive chats have kind chat.start | workflow-specific |
 | `workflow.*` | Workflow execution context (id, name, run_id, etc.) | `id`, `name`, `run_id`, `session_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields

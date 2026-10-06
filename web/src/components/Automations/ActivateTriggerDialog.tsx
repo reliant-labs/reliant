@@ -54,6 +54,7 @@ import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegra
 import { useCatalogEntry, useDeclaredTriggerRef } from "@/hooks/connection-queries";
 import { integrationOf, promptOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
 import { TriggerSourceFields } from "../workflow/config/DeclaredTriggerPanel";
+import { OnlyFromControl } from "../workflow/config/OnlyFromControl";
 import { cn } from "@/lib/utils";
 
 export interface ActivateTriggerDialogProps {
@@ -113,6 +114,9 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
   const [message, setMessage] = useState(!declaredPrompt && declared.description ? `${declared.description}.` : "");
   const [enabled, setEnabled] = useState(true);
   const [notify, setNotify] = useState(false);
+  // A personal trigger's own filter ("Only from" writes it); an activation's
+  // is its declaration's.
+  const [filter, setFilter] = useState(personal ? (initialDeclared.filter ?? "") : "");
   const [attempted, setAttempted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -162,6 +166,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
         notifyOnComplete: notify,
         connectionId: connectionId || undefined,
         source: personal ? inlineTriggerSource(declared.source) : { kind: "activation", workflowTrigger: declared.name ?? "" },
+        filter: personal && kind !== "schedule" ? filter : undefined,
       });
       void queryClient.invalidateQueries({ queryKey: triggerKeys.lists() });
       onActivated?.(result.trigger);
@@ -206,6 +211,16 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDe
             <legend className={labelClass}>When it runs</legend>
             <TriggerSourceFields trigger={declared} onChange={setDeclared} catalogRef={catalogRef} />
           </fieldset>
+        )}
+
+        {personal && kind === "integration" && (
+          <OnlyFromControl
+            integration={integration?.integration}
+            filter={filter}
+            onChange={setFilter}
+            connectionId={connectionId || undefined}
+            classes={{ label: labelClass, input: fieldClass, hint: hintClass }}
+          />
         )}
 
         <div>

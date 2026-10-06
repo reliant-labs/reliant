@@ -14,7 +14,7 @@ import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
-import { TRIGGER_CEL_FIELDS, TRIGGER_KINDS } from '../trigger-cel-fields'
+import { TRIGGER_CEL_FIELDS, TRIGGER_KINDS, TRIGGER_SENDER_KINDS } from '../trigger-cel-fields'
 
 const GO_TRIGGER_KINDS = resolve(process.cwd(), '../internal/db/core/trigger.go')
 
@@ -38,5 +38,25 @@ describe('trigger.kind: core.TriggerEventKind, mirrored', () => {
     expect(description).toBe(
       'What started the run: "chat.start", "schedule", "agent.start_run", "builder.test", "webhook", "integration" or "workflow_event".',
     )
+  })
+})
+
+/** Every `TriggerSenderKindX TriggerSenderKind = "x"` constant, in order. */
+function goTriggerSenderKinds(): string[] {
+  const source = readFileSync(GO_TRIGGER_KINDS, 'utf8')
+  return [...source.matchAll(/^\s*TriggerSenderKind\w+\s+TriggerSenderKind\s*=\s*"([^"]+)"/gm)].map((match) => match[1]!)
+}
+
+describe('trigger.sender.kind: core.TriggerSenderKind, mirrored', () => {
+  it('lists exactly the sender kinds Go declares, in the same order', () => {
+    const goKinds = goTriggerSenderKinds()
+    expect(goKinds.length).toBeGreaterThanOrEqual(8)
+    expect([...TRIGGER_SENDER_KINDS]).toEqual(goKinds)
+  })
+
+  it('names every sender kind in trigger.sender.kind', () => {
+    const sender = TRIGGER_CEL_FIELDS.find((field) => field.name === 'sender')
+    const description = sender?.fields?.find((field) => field.name === 'kind')?.description ?? ''
+    for (const kind of TRIGGER_SENDER_KINDS) expect(description).toContain(`"${kind}"`)
   })
 })

@@ -25,8 +25,13 @@ import { renderWithQuery } from "@/test/renderWithQuery";
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 const setTriggerEnabled = vi.fn();
+const listConnections = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { catalog: () => ({ searchCatalog, getCatalogEntry }), trigger: () => ({ setTriggerEnabled }) },
+  grpcClient: {
+    catalog: () => ({ searchCatalog, getCatalogEntry }),
+    trigger: () => ({ setTriggerEnabled }),
+    connection: () => ({ listConnections }),
+  },
   getGRPCBaseURLPublic: () => null,
 }));
 
@@ -36,6 +41,7 @@ import type { Workflow } from "@/types/workflow";
 import type { DeclaredTrigger } from "@/lib/declaredTriggers";
 import type { Trigger } from "@/api/trigger-grpc";
 import { SetTriggerEnabledResponseSchema, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
+import { ConnectionSchema, ConnectionStatus, ListConnectionsResponseSchema } from "@/gen/reliant/v1/connection_pb";
 
 const issueTrigger = {
   name: "new-issue",
@@ -147,6 +153,12 @@ beforeEach(() => {
   getCatalogEntry.mockReset();
   getCatalogEntry.mockResolvedValue(issueEntry());
   searchCatalog.mockResolvedValue(create(SearchCatalogResponseSchema, { entries: [] }));
+  listConnections.mockReset();
+  listConnections.mockResolvedValue(
+    create(ListConnectionsResponseSchema, {
+      connections: [create(ConnectionSchema, { id: "conn_gh", integrationId: "github", name: "work", senderId: "OctoCat", status: ConnectionStatus.ACTIVE, isDefault: true })],
+    }),
+  );
 });
 
 describe("DeclaredTriggerPanel", () => {
@@ -174,6 +186,21 @@ describe("DeclaredTriggerPanel", () => {
     const mapping = inputs.find((el) => el.getAttribute("placeholder") === "{{ trigger.payload.data… }}")!;
     fireEvent.change(mapping, { target: { value: "{{ trigger.payload.data.issue.number }}" } });
     expect(latest()![0]!.inputs).toEqual({ issue_number: "{{ trigger.payload.data.issue.number }}" });
+    expect(screen.getByTestId("dirty")).toHaveTextContent("true");
+  });
+
+  it("'Only from' on the Definition tab writes the declaration's filter, after what is already there", async () => {
+    const user = userEvent.setup();
+    const { latest } = renderPanel([{ ...issueTrigger, filter: "trigger.payload.data.issue.number > 0" } as DeclaredTrigger]);
+
+    await user.click(await screen.findByRole("button", { name: "Add me (octocat)" }));
+    expect(latest()![0]!.filter).toBe(
+      `(trigger.payload.data.issue.number > 0) && trigger.sender.verified && trigger.sender.id in ["octocat"]`,
+    );
+    await user.type(screen.getByLabelText("Add a sender"), "Hubot{Enter}");
+    expect(latest()![0]!.filter).toBe(
+      `(trigger.payload.data.issue.number > 0) && trigger.sender.verified && trigger.sender.id in ["octocat", "hubot"]`,
+    );
     expect(screen.getByTestId("dirty")).toHaveTextContent("true");
   });
 

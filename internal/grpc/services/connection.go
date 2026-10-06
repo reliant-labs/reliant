@@ -130,7 +130,7 @@ func connectionToProto(c *core.Connection) *reliantv1.Connection {
 		Scopes: scopes, Status: connectionStatusToProto(c.Status), StatusReason: derefStr(c.StatusReason),
 		IsDefault: c.IsDefault, AccessExpiresAt: rfc3339Ptr(c.AccessExpiresAt), LastUsedAt: rfc3339Ptr(c.LastUsedAt),
 		CreatedAt: c.CreatedAt.UTC().Format(time.RFC3339), UpdatedAt: c.UpdatedAt.UTC().Format(time.RFC3339),
-		Params: c.Params,
+		Params: c.Params, SenderId: derefStr(c.SenderID),
 	}
 }
 

@@ -107,6 +107,11 @@ message Connection {
   // The connection's non-secret settings (a Shopify shop), as declared by the
   // integration's connection_params.
   map<string, string> params = 15;
+  // The provider's id for the person who made this connection, as that
+  // provider's events name them in trigger.sender.id: a Slack user id, a
+  // GitHub login, a Gmail address. Empty when the integration does not say.
+  // It is what a trigger's "Only from: Me" allowlists.
+  string sender_id = 16;
 }
 
 // Integration is one catalog integration a connection can be made to.

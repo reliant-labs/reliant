@@ -61,6 +61,10 @@ connection:
           - users:read          # users.lookupByEmail
           - users:read.email    # users.lookupByEmail
           - app_mentions:read   # app_mention events
+        # The person who installed the app, as an event's `user` names them
+        # (trigger.sender.id). auth.test, the probe, answers as the bot, so
+        # only the exchange says who this is.
+        sender_id: response.authed_user.id
         # No revoke: Slack issues ONE bot token per app per workspace and hands
         # the same one to every user who installs it there, so revoking it when
         # one user deletes their connection would break every other user's

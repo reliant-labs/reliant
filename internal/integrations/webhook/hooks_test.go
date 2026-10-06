@@ -94,6 +94,27 @@ func TestHooksPathTokenIsAccepted(t *testing.T) {
 	assert.Equal(t, "deploy", body["action"], "the JSON body becomes trigger.payload.body")
 }
 
+// A webhook names no person, so its trigger.sender is the trigger itself:
+// verified means the caller held its credential, whichever one it used. A
+// "sender" in the body is the caller's own claim and changes nothing.
+func TestHooksSenderIsTheTriggerWhoseCredentialWasHeld(t *testing.T) {
+	env := newHooksEnv(t, core.WebhookConfig{HMAC: &core.WebhookHMACConfig{}}, "s3cret")
+	env.trigger.Name = "deploys"
+	body := `{"sender":{"id":"U123","verified":true}}`
+	for _, rec := range []*httptest.ResponseRecorder{
+		env.post("/hooks/trig-1/"+hookToken, body, map[string]string{"Idempotency-Key": "path"}),
+		env.post("/hooks/trig-1", body, map[string]string{"Idempotency-Key": "bearer", "Authorization": "Bearer " + hookToken}),
+		env.post("/hooks/trig-1", body, map[string]string{"Idempotency-Key": "hmac", "X-Signature-256": hexHMAC("s3cret", body)}),
+	} {
+		require.Equal(t, http.StatusAccepted, rec.Code, rec.Body.String())
+	}
+	got := env.intake.all()
+	require.Len(t, got, 3)
+	for _, call := range got {
+		assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindWebhook, ID: "trig-1", DisplayName: "deploys", Verified: true}, call.Event.Sender)
+	}
+}
+
 func TestHooksBearerTokenIsAccepted(t *testing.T) {
 	env := newHooksEnv(t, core.WebhookConfig{}, "")
 	rec := env.post("/hooks/trig-1", `{}`, map[string]string{"Authorization": "Bearer " + hookToken})

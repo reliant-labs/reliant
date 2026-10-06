@@ -423,7 +423,13 @@ type OAuth2Auth struct {
 	// (access_type: offline). The parameters the flow itself sets are refused.
 	AuthorizeParams map[string]string `protobuf:"bytes,6,rep,name=authorize_params,json=authorizeParams,proto3" json:"authorize_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Revoke, when set, is called best-effort when a connection is deleted.
-	Revoke        *RevokeSpec `protobuf:"bytes,7,opt,name=revoke,proto3" json:"revoke,omitempty"`
+	Revoke *RevokeSpec `protobuf:"bytes,7,opt,name=revoke,proto3" json:"revoke,omitempty"`
+	// SenderId is CEL over `response`, the token endpoint's answer with every
+	// token field removed, yielding the id of the person who authorized, as
+	// trigger.sender.id names them (Slack: response.authed_user.id). Set when
+	// only the exchange says who that person is; it takes precedence over the
+	// probe's sender_id.
+	SenderId      string `protobuf:"bytes,8,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -505,6 +511,13 @@ func (x *OAuth2Auth) GetRevoke() *RevokeSpec {
 		return x.Revoke
 	}
 	return nil
+}
+
+func (x *OAuth2Auth) GetSenderId() string {
+	if x != nil {
+		return x.SenderId
+	}
+	return ""
 }
 
 // RevokeSpec describes the provider's token revocation call.
@@ -886,7 +899,14 @@ type IdentityProbe struct {
 	// probed before it is saved and one the provider refuses is not saved.
 	// Leave it unset when events route some other way (GitHub's access
 	// grants) or not at all.
-	RoutesEvents  bool `protobuf:"varint,8,opt,name=routes_events,json=routesEvents,proto3" json:"routes_events,omitempty"`
+	RoutesEvents bool `protobuf:"varint,8,opt,name=routes_events,json=routesEvents,proto3" json:"routes_events,omitempty"`
+	// SenderId is CEL over `response` yielding the provider's id for the PERSON
+	// the credential belongs to, as that provider's own events name them in
+	// trigger.sender.id: a GitHub login, a Gmail address. It is what "Only
+	// from: Me" writes. Leave it unset when the probe answers for something
+	// other than a person (Slack's auth.test names the bot); OAuth2Auth's
+	// sender_id can read it from the token response instead.
+	SenderId      string `protobuf:"bytes,9,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -975,6 +995,13 @@ func (x *IdentityProbe) GetRoutesEvents() bool {
 		return x.RoutesEvents
 	}
 	return false
+}
+
+func (x *IdentityProbe) GetSenderId() string {
+	if x != nil {
+		return x.SenderId
+	}
+	return ""
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as
@@ -1909,7 +1936,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\aapi_key\x18\x02 \x01(\v2\x16.reliant.v1.ApiKeyAuthH\x00R\x06apiKey\x12-\n" +
 	"\x05basic\x18\x03 \x01(\v2\x15.reliant.v1.BasicAuthH\x00R\x05basic\x129\n" +
 	"\tdelegated\x18\x04 \x01(\v2\x19.reliant.v1.DelegatedAuthH\x00R\tdelegatedB\b\n" +
-	"\x06method\"\xef\x02\n" +
+	"\x06method\"\x8c\x03\n" +
 	"\n" +
 	"OAuth2Auth\x12#\n" +
 	"\rauthorize_url\x18\x01 \x01(\tR\fauthorizeUrl\x12\x1b\n" +
@@ -1918,7 +1945,8 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\x0fscope_separator\x18\x04 \x01(\tR\x0escopeSeparator\x12\x12\n" +
 	"\x04pkce\x18\x05 \x01(\tR\x04pkce\x12V\n" +
 	"\x10authorize_params\x18\x06 \x03(\v2+.reliant.v1.OAuth2Auth.AuthorizeParamsEntryR\x0fauthorizeParams\x12.\n" +
-	"\x06revoke\x18\a \x01(\v2\x16.reliant.v1.RevokeSpecR\x06revoke\x1aB\n" +
+	"\x06revoke\x18\a \x01(\v2\x16.reliant.v1.RevokeSpecR\x06revoke\x12\x1b\n" +
+	"\tsender_id\x18\b \x01(\tR\bsenderId\x1aB\n" +
 	"\x14AuthorizeParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x93\x01\n" +
@@ -1948,7 +1976,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\x12\x18\n" +
 	"\apattern\x18\x04 \x01(\tR\apattern\x12#\n" +
-	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\"\xb7\x02\n" +
+	"\rdefault_value\x18\x05 \x01(\tR\fdefaultValue\"\xd4\x02\n" +
 	"\rIdentityProbe\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
@@ -1958,7 +1986,8 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\vexternal_id\x18\x06 \x01(\tR\n" +
 	"externalId\x12\x14\n" +
 	"\x05label\x18\a \x01(\tR\x05label\x12#\n" +
-	"\rroutes_events\x18\b \x01(\bR\froutesEvents\x1a:\n" +
+	"\rroutes_events\x18\b \x01(\bR\froutesEvents\x12\x1b\n" +
+	"\tsender_id\x18\t \x01(\tR\bsenderId\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe2\x03\n" +

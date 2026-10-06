@@ -414,6 +414,24 @@ export function resolveCompletions(
     ]
   }
 
+  // path = ["trigger", "sender"] — a map whose keys are always present
+  const nested = root === TRIGGER_CEL_NAMESPACE && parsed.path.length === 2
+    ? TRIGGER_CEL_FIELDS.find((field) => field.name === parsed.path[1])?.fields
+    : undefined
+  if (nested) {
+    return [
+      ...nested.map((field) => ({
+        label: field.name,
+        kind: 'field' as const,
+        insertText: field.name,
+        detail: field.type,
+        documentation: field.description,
+        sortGroup: 1,
+      })),
+      ...getMemberFunctionCompletions(),
+    ]
+  }
+
   // path = ["inputs"]
   if (root === 'inputs' && parsed.path.length === 1) {
     return getInputParamCompletions(ctx)

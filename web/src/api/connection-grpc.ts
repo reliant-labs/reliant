@@ -44,6 +44,13 @@ export interface Connection {
   name: string;
   /** The provider identity it acts as ("octocat"). */
   accountLabel: string;
+  /**
+   * The provider's id for the person who made it, as that provider's events
+   * name them in `trigger.sender.id` (a Slack user id, a GitHub login, a
+   * Gmail address); "" when the integration does not say. What "Only from:
+   * Me" allowlists.
+   */
+  senderId: string;
   status: ConnectionHealth;
   isDefault: boolean;
 }
@@ -130,6 +137,7 @@ export function connectionFromProto(proto: ProtoConnection): Connection {
     authKind: authKindFromProto(proto.authKind),
     name: proto.name,
     accountLabel: proto.accountLabel,
+    senderId: proto.senderId,
     status: statusFromProto(proto.status),
     isDefault: proto.isDefault,
   };

@@ -118,6 +118,11 @@ func TestFireLaunchesWithTheTriggersIdentityAndPrompt(t *testing.T) {
 	if ev.Payload["manual"] != false {
 		t.Errorf("payload manual = %v, want false", ev.Payload["manual"])
 	}
+	// Nobody outside can send a schedule anything: its sender is its owner.
+	want := core.TriggerSender{Kind: core.TriggerSenderKindSchedule, ID: trigger.UserID, Verified: true}
+	if ev.Sender == nil || *ev.Sender != want {
+		t.Errorf("Event.Sender = %+v, want %+v", ev.Sender, want)
+	}
 
 	// The launcher records the launched event itself, in the chat's
 	// transaction. A row written here too would double-count the fire.

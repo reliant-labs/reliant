@@ -65,9 +65,14 @@ type Connection struct {
 	Name              string
 	AccountLabel      *string
 	ExternalAccountID *string
-	Scopes            []string
-	OAuthClient       *string
-	AuthHeader        *string
+	// SenderID is the provider's id for the person who made the connection,
+	// as that provider's events name them in trigger.sender.id (a Slack user
+	// id, a GitHub login, a Gmail address). Nil when the integration does
+	// not say. Unlike ExternalAccountID it never routes anything.
+	SenderID    *string
+	Scopes      []string
+	OAuthClient *string
+	AuthHeader  *string
 	// Params are the connection's non-secret settings, declared by the
 	// integration's connection_params. Never a secret.
 	Params          map[string]string
@@ -128,9 +133,12 @@ type OAuthFlow struct {
 type ConnectionUpdate struct {
 	AccountLabel      string
 	ExternalAccountID string
-	Scopes            []string
-	OAuthClient       string
-	AccessExpiresAt   *time.Time
+	// SenderID replaces the stored one; empty clears it, because a new
+	// authorization may have been made by a different person.
+	SenderID        string
+	Scopes          []string
+	OAuthClient     string
+	AccessExpiresAt *time.Time
 }
 
 // ConnectionStore persists connections. Every method that takes a userID
@@ -154,7 +162,9 @@ type ConnectionStore interface {
 	SetDefaultConnection(ctx context.Context, userID, id string, ev ConnectionEvent) error
 	// DeleteConnection soft-deletes the row and destroys its ciphertext.
 	DeleteConnection(ctx context.Context, userID, id string, ev ConnectionEvent) error
-	RecordTestResult(ctx context.Context, userID, id, accountLabel string) error
+	// RecordTestResult stores what a successful probe read; an empty value
+	// keeps the stored one.
+	RecordTestResult(ctx context.Context, userID, id, accountLabel, senderID string) error
 	TouchConnectionUsed(ctx context.Context, userID, id string) error
 
 	// GetSecrets returns the sealed fields of a connection the user owns.

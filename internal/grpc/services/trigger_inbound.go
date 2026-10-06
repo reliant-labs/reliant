@@ -320,10 +320,14 @@ func (s *TriggerService) fireInbound(ctx context.Context, trigger *core.Trigger)
 	if s.inbound.Intake == nil {
 		return "", inboundUnavailable(string(trigger.Kind))
 	}
+	requester := auth.MustGetUserID(ctx)
 	res, err := s.inbound.Intake.Accept(ctx, trigger, triggers.InboundEvent{
 		Kind:      trigger.Kind.EventKind(),
 		DedupeKey: trigger.ID + ":manual-" + uuid.NewString(),
-		Payload:   map[string]any{"manual": true, "requested_by": auth.MustGetUserID(ctx)},
+		Payload:   map[string]any{"manual": true, "requested_by": requester},
+		// "Run now" is sent by the signed-in person who pressed it, not by
+		// the trigger's source.
+		Sender: &core.TriggerSender{Kind: core.TriggerSenderKindUser, ID: requester, Verified: true},
 	}, triggers.AcceptOptions{Manual: true})
 	if err != nil {
 		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("record fire: %w", err))

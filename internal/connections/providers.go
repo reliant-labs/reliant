@@ -55,6 +55,9 @@ func NewHTTPClient() *http.Client {
 type Identity struct {
 	ExternalAccountID string
 	AccountLabel      string
+	// SenderID is the person's id as the provider's events name them
+	// (core.Connection.SenderID); empty when the manifest does not say.
+	SenderID string
 }
 
 // Provider is one integration a connection can be made to, compiled from its
