@@ -247,6 +247,53 @@ func TestDispatch_FinishedRunLaunchesTheMatchingTriggerWithTheSourceRunInItsPayl
 	assert.Equal(t, 1, f.starter.count(), "a retried dispatch must not start a second run")
 }
 
+// A workflow-event run is pinned to its trigger's daemon under an unattended
+// launch event: what its preflight needs to wake that daemon with the stored
+// token when nobody is signed in.
+func TestDispatch_LaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	tr := f.addTrigger(f.userID, f.projectID, "on-review-done", "builtin://agent",
+		Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
+
+	results, err := f.dispatcher.Dispatch(ctx, f.finish(f.humanRun("code-review"), core.RunEventFinished))
+	require.NoError(t, err)
+	launched := launchedChat(t, results, tr.ID)
+
+	chat, err := f.repo.GetChat(ctx, launched)
+	require.NoError(t, err)
+	require.NotNil(t, chat.ActiveDaemonID)
+	assert.Equal(t, f.daemonID, *chat.ActiveDaemonID)
+	assert.False(t, chat.NoMachine)
+
+	launchEv, err := f.repo.GetTriggerEventByChatID(ctx, launched)
+	require.NoError(t, err)
+	assert.True(t, launchEv.Kind.Unattended(), "preflight may wake this run's daemon with the stored token")
+}
+
+// A no-machine workflow-event trigger launches a no-machine run, as every other
+// trigger kind does. Before, the dispatcher dropped the choice: the run had no
+// daemon pinned AND was not marked no-machine, so it fell back to the owner's
+// default daemon — the machine its owner chose it should never touch — and
+// preflight would wake it.
+func TestDispatch_NoMachineTriggerLaunchesANoMachineRun(t *testing.T) {
+	f := newFixture(t)
+	ctx := context.Background()
+	tr := f.addTrigger(f.userID, f.projectID, "on-review-done", "builtin://agent",
+		Source{Workflows: []string{"code-review"}, Outcomes: []string{"finished"}})
+	tr.DaemonID, tr.NoMachine = "", true
+	require.NoError(t, f.repo.UpdateTrigger(ctx, tr))
+
+	results, err := f.dispatcher.Dispatch(ctx, f.finish(f.humanRun("code-review"), core.RunEventFinished))
+	require.NoError(t, err)
+	launched := launchedChat(t, results, tr.ID)
+
+	chat, err := f.repo.GetChat(ctx, launched)
+	require.NoError(t, err)
+	assert.True(t, chat.NoMachine, "the run has no machine, so preflight and tool time never resolve or wake one")
+	assert.Nil(t, chat.ActiveDaemonID)
+}
+
 func TestDispatch_WorkflowAndOutcomeMismatchesAreNotRecorded(t *testing.T) {
 	f := newFixture(t)
 	ctx := context.Background()

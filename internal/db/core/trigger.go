@@ -84,6 +84,30 @@ func (k TriggerEventKind) IsInbound() bool {
 	return k == TriggerEventKindWebhook || k == TriggerEventKindIntegration || k == TriggerEventKindWorkflowEvent
 }
 
+// Unattended reports whether a run launched by an event of this kind has no
+// human behind it. Only such a run may wake its machine with the delegated
+// daemon:resume token its trigger holds (see internal/automationcred): nobody
+// is signed in to wake it any other way. An attended run acts as the
+// signed-in user or not at all.
+//
+// A kind missing from eventKindUnattended reads as attended, so a new kind
+// that was never classified can never borrow the token — and a test fails
+// until it is classified.
+func (k TriggerEventKind) Unattended() bool { return eventKindUnattended[k] }
+
+// eventKindUnattended takes a position on every TriggerEventKind.
+var eventKindUnattended = map[TriggerEventKind]bool{
+	// A stored trigger fired: nobody pressed anything.
+	TriggerEventKindSchedule:      true,
+	TriggerEventKindWebhook:       true,
+	TriggerEventKindIntegration:   true,
+	TriggerEventKindWorkflowEvent: true,
+	// A human started it, directly or through an agent working for them.
+	TriggerEventKindChatStart:     false,
+	TriggerEventKindAgentStartRun: false,
+	TriggerEventKindBuilderTest:   false,
+}
+
 // TriggerEventOutcome records what a firing did.
 type TriggerEventOutcome string
 

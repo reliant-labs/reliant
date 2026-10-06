@@ -36,6 +36,7 @@ type enforcingControlPlane struct {
 	token     string
 	daemonID  string
 	suspended bool
+	resolves  int
 	resumes   int
 }
 
@@ -55,6 +56,7 @@ func (c *enforcingControlPlane) authorize(h http.Header, daemonID string) error 
 func (c *enforcingControlPlane) ResolveDaemon(_ context.Context, r *connect.Request[reliantv1.ResolveDaemonRequest]) (*connect.Response[reliantv1.ResolveDaemonResponse], error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.resolves++
 	if err := c.authorize(r.Header(), r.Msg.GetDaemonId()); err != nil {
 		return nil, err
 	}
@@ -93,6 +95,13 @@ type automationHarness struct {
 // database to an in-process NATS server, a fake daemon that answers the tool
 // call, and the binding-enforcing control plane. No user JWT is ever set.
 func newAutomationHarness(t *testing.T, launchKind core.TriggerEventKind) *automationHarness {
+	t.Helper()
+	return newAutomationHarnessWithChat(t, launchKind, nil)
+}
+
+// newAutomationHarnessWithChat is newAutomationHarness with editChat applied to
+// the launched chat before it is stored.
+func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind, editChat func(*db.Chat)) *automationHarness {
 	t.Helper()
 	ctx := context.Background()
 	repo := db.NewTestRepo(t)
@@ -137,8 +146,12 @@ func newAutomationHarness(t *testing.T, launchKind core.TriggerEventKind) *autom
 	projectID, chatID := uuid.NewString(), uuid.NewString()
 	require.NoError(t, repo.CreateProject(ctx, &db.Project{ID: projectID, UserID: userID, Name: "p", Path: "/tmp/p",
 		CreatedAt: time.Now(), UpdatedAt: time.Now()}))
-	require.NoError(t, repo.CreateChat(ctx, &db.Chat{ID: chatID, UserID: userID, Title: "t", ProjectID: projectID,
-		State: db.ChatStateIdle, CreatedAt: time.Now(), UpdatedAt: time.Now()}))
+	chat := &db.Chat{ID: chatID, UserID: userID, Title: "t", ProjectID: projectID,
+		State: db.ChatStateIdle, CreatedAt: time.Now(), UpdatedAt: time.Now()}
+	if editChat != nil {
+		editChat(chat)
+	}
+	require.NoError(t, repo.CreateChat(ctx, chat))
 	created, err := repo.CreateTriggerEvent(ctx, &core.TriggerEvent{
 		ID: uuid.NewString(), UserID: userID, Kind: launchKind, DedupeKey: chatID,
 		OccurredAt: time.Now(), Outcome: core.TriggerEventLaunched, ChatID: &chatID, CreatedAt: time.Now()})
@@ -165,34 +178,78 @@ func (h *automationHarness) preflight(t *testing.T) (PreflightDaemonCheckOutput,
 	return out, nil
 }
 
-// A scheduled fire with no user JWT wakes the suspended daemon its trigger
-// names — once, with the stored token — and the tool call then runs.
-func TestScheduledFireWithoutJWTResumesPinnedDaemonOnce(t *testing.T) {
-	h := newAutomationHarness(t, core.TriggerEventKindSchedule)
+// Every launch a stored trigger makes — a schedule, a webhook delivery, a
+// provider event, another run's outcome — fires with nobody signed in. Each,
+// with no user JWT, wakes the suspended daemon its trigger names, once, with
+// the stored token, and the tool call then runs.
+func TestUnattendedFireWithoutJWTResumesPinnedDaemonOnce(t *testing.T) {
+	for _, kind := range []core.TriggerEventKind{
+		core.TriggerEventKindSchedule,
+		core.TriggerEventKindWebhook,
+		core.TriggerEventKindIntegration,
+		core.TriggerEventKindWorkflowEvent,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			h := newAutomationHarness(t, kind)
 
-	out, err := h.preflight(t)
-	require.NoError(t, err)
-	assert.True(t, out.DaemonAvailable)
+			out, err := h.preflight(t)
+			require.NoError(t, err)
+			assert.True(t, out.DaemonAvailable)
 
-	assert.Equal(t, 1, h.cp.resumes, "the daemon is resumed exactly once")
-	assert.Equal(t, h.daemonID, out.DaemonID)
+			assert.Equal(t, 1, h.cp.resumes, "the daemon is resumed exactly once")
+			assert.Equal(t, h.daemonID, out.DaemonID)
 
-	// The woken daemon now answers a tool call, and that call wakes nothing.
-	_, err = h.router.SendToolRequestSyncWithSelector(context.Background(), h.userID,
-		&toolexec.ToolExecutionRequest{RequestID: "r1", ToolName: "ping"}, &toolexec.DaemonSelector{ID: h.daemonID})
-	require.NoError(t, err)
-	assert.Equal(t, 1, h.cp.resumes, "tool-time traffic never resumes")
-	h.mu.Lock()
-	defer h.mu.Unlock()
-	assert.Equal(t, 1, *h.toolCalls, "the tool call reached the woken daemon")
+			// The woken daemon now answers a tool call, and that call wakes
+			// nothing. Tool time holds no credential at all — the token is
+			// wake-only — so this also shows the run needs none after preflight.
+			_, err = h.router.SendToolRequestSyncWithSelector(context.Background(), h.userID,
+				&toolexec.ToolExecutionRequest{RequestID: "r1", ToolName: "ping"}, &toolexec.DaemonSelector{ID: h.daemonID})
+			require.NoError(t, err)
+			assert.Equal(t, 1, h.cp.resumes, "tool-time traffic never resumes")
+			h.mu.Lock()
+			defer h.mu.Unlock()
+			assert.Equal(t, 1, *h.toolCalls, "the tool call reached the woken daemon")
+		})
+	}
 }
 
-// start_run launches an ATTENDED run pinned to a daemon. It must not borrow the
-// automation token: only trigger-launched runs may.
+// An attended run — a human's first send, an agent's start_run, a builder test
+// — pinned to a daemon must not borrow the automation token: only runs a
+// stored trigger launched may.
 func TestAttendedRunWithoutJWTDoesNotUseAutomationToken(t *testing.T) {
-	h := newAutomationHarness(t, core.TriggerEventKindAgentStartRun)
+	for _, kind := range []core.TriggerEventKind{
+		core.TriggerEventKindChatStart,
+		core.TriggerEventKindAgentStartRun,
+		core.TriggerEventKindBuilderTest,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			h := newAutomationHarness(t, kind)
 
-	_, err := h.preflight(t)
-	require.Error(t, err)
-	assert.Zero(t, h.cp.resumes, "an attended run must not wake the daemon with the stored token")
+			_, err := h.preflight(t)
+			require.Error(t, err)
+			assert.Zero(t, h.cp.resumes, "an attended run must not wake the daemon with the stored token")
+		})
+	}
+}
+
+// Widening the token to every unattended kind must not reach a run with no
+// machine: such a run never resolves or wakes a daemon, token or not.
+func TestNoMachineUnattendedRunNeverWakes(t *testing.T) {
+	for _, kind := range []core.TriggerEventKind{
+		core.TriggerEventKindSchedule,
+		core.TriggerEventKindWebhook,
+		core.TriggerEventKindIntegration,
+		core.TriggerEventKindWorkflowEvent,
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			h := newAutomationHarnessWithChat(t, kind, func(c *db.Chat) { c.NoMachine = true })
+
+			out, err := h.preflight(t)
+			require.NoError(t, err)
+			assert.False(t, out.DaemonAvailable)
+			assert.Empty(t, out.DaemonID)
+			assert.Zero(t, h.cp.resolves, "a no-machine run never asks the control plane for a daemon")
+			assert.Zero(t, h.cp.resumes, "a no-machine run never wakes one")
+		})
+	}
 }

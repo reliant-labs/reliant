@@ -315,6 +315,7 @@ func (d *Dispatcher) buildSpec(trigger *core.Trigger, ev *core.RunEvent, launchE
 		Title:       &title,
 		Workflow:    trigger.Workflow,
 		DaemonID:    trigger.DaemonID,
+		NoMachine:   trigger.NoMachine,
 		Presets:     trigger.Presets,
 		Params:      params,
 		Messages: []launch.SeedMessage{

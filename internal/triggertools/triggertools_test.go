@@ -14,6 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
@@ -74,8 +76,24 @@ type fakeCatalog struct{}
 
 func (fakeCatalog) HasInboundSource(string) bool { return true }
 
+// mintingControlPlane records daemon:resume mints. No other control-plane call
+// is reachable from these tests, so the embedded interface stays nil.
+type mintingControlPlane struct {
+	controlplane.Client
+	mu    sync.Mutex
+	mints []string // daemon ids
+}
+
+func (c *mintingControlPlane) MintDaemonResumeToken(_ context.Context, _, daemonID, _ string) (controlplane.DaemonResumeToken, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.mints = append(c.mints, daemonID)
+	return controlplane.DaemonResumeToken{Plaintext: "rlat_resume_" + daemonID}, nil
+}
+
 type env struct {
 	repo      *db.Repo
+	svc       *services.TriggerService
 	activate  tools.Tool
 	list      tools.Tool
 	backend   *fakeBackend
@@ -106,6 +124,7 @@ func setup(t *testing.T, publicURL string) *env {
 	svc := services.NewTriggerService(repo, e.backend, e.backend).WithInbound(services.InboundOptions{
 		PublicURL: publicURL, Catalog: fakeCatalog{}, Intake: fakeIntake{},
 	})
+	e.svc = svc
 	activator := triggertools.New(svc)
 	e.activate = tools.NewActivateTriggerTool(repo, activator)
 	e.list = tools.NewListTriggersTool(repo, activator)
@@ -146,6 +165,30 @@ func TestActivateTriggerSchedule(t *testing.T) {
 	require.NotNil(t, stored.WorkflowTrigger)
 	assert.Equal(t, "nightly", *stored.WorkflowTrigger)
 	assert.Equal(t, []string{meta.TriggerID}, e.backend.synced)
+}
+
+// activate_trigger is how an agent (or a workflow's declared trigger) becomes a
+// stored automation, and it goes through CreateTrigger like the app does, so a
+// trigger of any kind — not only a schedule — holds the delegated token its
+// unattended runs wake their machine with.
+func TestActivateTriggerMintsTheAutomationTokenForEveryKind(t *testing.T) {
+	for _, declared := range []string{"nightly", "hook"} {
+		t.Run(declared, func(t *testing.T) {
+			e := setup(t, "https://api.example.com")
+			cp := &mintingControlPlane{}
+			e.svc.WithControlPlaneClient(cp)
+			auth.SetUserJWT(e.userID, "jwt-1")
+			t.Cleanup(func() { auth.SetUserJWT(e.userID, "") })
+
+			resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: declared, Message: "Go."})
+			require.False(t, resp.IsError, resp.Content)
+
+			assert.Equal(t, []string{e.daemonID}, cp.mints, "the token is minted for the trigger's daemon")
+			token, err := e.repo.GetProviderAPIKey(context.Background(), e.userID, automationcred.Provider(e.daemonID))
+			require.NoError(t, err)
+			assert.Equal(t, "rlat_resume_"+e.daemonID, token)
+		})
+	}
 }
 
 // A chat with no machine activates a no-machine trigger, as start_run starts a
