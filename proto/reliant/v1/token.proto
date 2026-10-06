@@ -49,6 +49,27 @@ service TokenService {
   // New permissions are clipped to what the caller holds, exactly as a mint
   // is, so editing can never widen past the person's own authority.
   rpc UpdateToken(UpdateTokenRequest) returns (UpdateTokenResponse) {}
+
+  // ExchangeToken trades the CALLING access token for a short-lived one that
+  // carries only control-plane authority — what forge presents to the control
+  // plane for `forge env deploy`, `forge secret`, `forge domain` and friends,
+  // so a user signed in to Reliant never runs `forge login` as well.
+  //
+  // ATTENUATION ONLY. The minted token's scopes are the requested ones that are
+  // exchangeable (deploy:*, secret:*, domain:*) AND held by the calling token:
+  // a token may never grant authority it does not hold, so a credential issued
+  // without deploy permission cannot become one that has it. Same acting user,
+  // same org, same daemon binding, and it expires within an hour (sooner if the
+  // caller does). The caller's own credential is never presented to the
+  // control plane's deploy API, and never copied anywhere.
+  //
+  // audience must be this deployment's control plane: the endpoint comes from
+  // a project's KCL, and a repository is not a trusted party. A mismatch mints
+  // nothing.
+  //
+  // Machine credential only — the exchange needs a credential to attenuate. A
+  // human session signs in with `forge login` or uses the web app.
+  rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {}
 }
 
 enum TokenKind {
@@ -130,4 +151,21 @@ message ScopeList {
 
 message UpdateTokenResponse {
   TokenInfo info = 1;
+}
+
+message ExchangeTokenRequest {
+  // audience is the control-plane origin the minted token will be presented
+  // to, e.g. "https://admin.reliantapi.com". It must be this deployment's
+  // authorization server.
+  string audience = 1;
+  // scopes requested. Empty asks for every exchangeable scope the calling
+  // token holds.
+  repeated string scopes = 2;
+}
+
+message ExchangeTokenResponse {
+  string token = 1;         // Raw rlat_ token — returned once
+  string token_prefix = 2;  // Display identifier, e.g. "rlat_A3f9Kd2p"
+  string expires_at = 3;    // RFC 3339
+  repeated string scopes = 4;  // What was actually granted
 }

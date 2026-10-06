@@ -46,6 +46,9 @@ const (
 	// TokenServiceUpdateTokenProcedure is the fully-qualified name of the TokenService's UpdateToken
 	// RPC.
 	TokenServiceUpdateTokenProcedure = "/reliant.v1.TokenService/UpdateToken"
+	// TokenServiceExchangeTokenProcedure is the fully-qualified name of the TokenService's
+	// ExchangeToken RPC.
+	TokenServiceExchangeTokenProcedure = "/reliant.v1.TokenService/ExchangeToken"
 )
 
 // TokenServiceClient is a client for the reliant.v1.TokenService service.
@@ -74,6 +77,26 @@ type TokenServiceClient interface {
 	// New permissions are clipped to what the caller holds, exactly as a mint
 	// is, so editing can never widen past the person's own authority.
 	UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error)
+	// ExchangeToken trades the CALLING access token for a short-lived one that
+	// carries only control-plane authority — what forge presents to the control
+	// plane for `forge env deploy`, `forge secret`, `forge domain` and friends,
+	// so a user signed in to Reliant never runs `forge login` as well.
+	//
+	// ATTENUATION ONLY. The minted token's scopes are the requested ones that are
+	// exchangeable (deploy:*, secret:*, domain:*) AND held by the calling token:
+	// a token may never grant authority it does not hold, so a credential issued
+	// without deploy permission cannot become one that has it. Same acting user,
+	// same org, same daemon binding, and it expires within an hour (sooner if the
+	// caller does). The caller's own credential is never presented to the
+	// control plane's deploy API, and never copied anywhere.
+	//
+	// audience must be this deployment's control plane: the endpoint comes from
+	// a project's KCL, and a repository is not a trusted party. A mismatch mints
+	// nothing.
+	//
+	// Machine credential only — the exchange needs a credential to attenuate. A
+	// human session signs in with `forge login` or uses the web app.
+	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
 }
 
 // NewTokenServiceClient constructs a client for the reliant.v1.TokenService service. By default, it
@@ -111,15 +134,22 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(tokenServiceMethods.ByName("UpdateToken")),
 			connect.WithClientOptions(opts...),
 		),
+		exchangeToken: connect.NewClient[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse](
+			httpClient,
+			baseURL+TokenServiceExchangeTokenProcedure,
+			connect.WithSchema(tokenServiceMethods.ByName("ExchangeToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // tokenServiceClient implements TokenServiceClient.
 type tokenServiceClient struct {
-	createToken *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
-	listTokens  *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
-	revokeToken *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
-	updateToken *connect.Client[v1.UpdateTokenRequest, v1.UpdateTokenResponse]
+	createToken   *connect.Client[v1.CreateTokenRequest, v1.CreateTokenResponse]
+	listTokens    *connect.Client[v1.ListTokensRequest, v1.ListTokensResponse]
+	revokeToken   *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
+	updateToken   *connect.Client[v1.UpdateTokenRequest, v1.UpdateTokenResponse]
+	exchangeToken *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
 }
 
 // CreateToken calls reliant.v1.TokenService.CreateToken.
@@ -140,6 +170,11 @@ func (c *tokenServiceClient) RevokeToken(ctx context.Context, req *connect.Reque
 // UpdateToken calls reliant.v1.TokenService.UpdateToken.
 func (c *tokenServiceClient) UpdateToken(ctx context.Context, req *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error) {
 	return c.updateToken.CallUnary(ctx, req)
+}
+
+// ExchangeToken calls reliant.v1.TokenService.ExchangeToken.
+func (c *tokenServiceClient) ExchangeToken(ctx context.Context, req *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
+	return c.exchangeToken.CallUnary(ctx, req)
 }
 
 // TokenServiceHandler is an implementation of the reliant.v1.TokenService service.
@@ -168,6 +203,26 @@ type TokenServiceHandler interface {
 	// New permissions are clipped to what the caller holds, exactly as a mint
 	// is, so editing can never widen past the person's own authority.
 	UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error)
+	// ExchangeToken trades the CALLING access token for a short-lived one that
+	// carries only control-plane authority — what forge presents to the control
+	// plane for `forge env deploy`, `forge secret`, `forge domain` and friends,
+	// so a user signed in to Reliant never runs `forge login` as well.
+	//
+	// ATTENUATION ONLY. The minted token's scopes are the requested ones that are
+	// exchangeable (deploy:*, secret:*, domain:*) AND held by the calling token:
+	// a token may never grant authority it does not hold, so a credential issued
+	// without deploy permission cannot become one that has it. Same acting user,
+	// same org, same daemon binding, and it expires within an hour (sooner if the
+	// caller does). The caller's own credential is never presented to the
+	// control plane's deploy API, and never copied anywhere.
+	//
+	// audience must be this deployment's control plane: the endpoint comes from
+	// a project's KCL, and a repository is not a trusted party. A mismatch mints
+	// nothing.
+	//
+	// Machine credential only — the exchange needs a credential to attenuate. A
+	// human session signs in with `forge login` or uses the web app.
+	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
 }
 
 // NewTokenServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -201,6 +256,12 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(tokenServiceMethods.ByName("UpdateToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tokenServiceExchangeTokenHandler := connect.NewUnaryHandler(
+		TokenServiceExchangeTokenProcedure,
+		svc.ExchangeToken,
+		connect.WithSchema(tokenServiceMethods.ByName("ExchangeToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TokenServiceCreateTokenProcedure:
@@ -211,6 +272,8 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 			tokenServiceRevokeTokenHandler.ServeHTTP(w, r)
 		case TokenServiceUpdateTokenProcedure:
 			tokenServiceUpdateTokenHandler.ServeHTTP(w, r)
+		case TokenServiceExchangeTokenProcedure:
+			tokenServiceExchangeTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -234,4 +297,8 @@ func (UnimplementedTokenServiceHandler) RevokeToken(context.Context, *connect.Re
 
 func (UnimplementedTokenServiceHandler) UpdateToken(context.Context, *connect.Request[v1.UpdateTokenRequest]) (*connect.Response[v1.UpdateTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.UpdateToken is not implemented"))
+}
+
+func (UnimplementedTokenServiceHandler) ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.ExchangeToken is not implemented"))
 }

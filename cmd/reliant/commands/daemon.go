@@ -134,11 +134,18 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	logging.Info("Registering daemon via control-plane login", "api_url", apiURL, "instance_id", instanceid.ID())
 
 	cred, err := cliauth.Login{
-		Server:         apiURL,
-		Scopes:         []string{cliauth.ScopeDaemon},
+		Server: apiURL,
+		// daemon:connect, plus forge's control-plane authority as a CEILING
+		// the control plane clips to this user's grants — the same set
+		// control-plane provisions for a managed daemon. forge on this
+		// daemon exchanges it for an hour-long deploy token; without it
+		// there would be nothing to exchange, because a token may never
+		// grant authority it does not hold.
+		Scopes:         append([]string{cliauth.ScopeDaemon}, cliauth.ForgeScopes()...),
 		Name:           "daemon-" + instanceid.Label(),
 		NonInteractive: nonInteractive,
 		Out:            cmd.OutOrStdout(),
+		OpenURL:        loginOpener,
 	}.Run(ctx)
 	if err != nil {
 		return fmt.Errorf("daemon login: %w", err)
@@ -157,21 +164,6 @@ func registerDaemon(ctx context.Context, cmd *cobra.Command, conn *connection, a
 	}
 	if err := auth.WriteDaemonCredentials(creds); err != nil {
 		return fmt.Errorf("saving daemon credentials: %w", err)
-	}
-
-	// ONE LOGIN, and on a daemon it is the load-bearing case. The Deploy
-	// button re-execs this daemon as `reliant forge deploy`, and that
-	// subprocess inherits the daemon's environment and nothing else — so
-	// without this deposit forge on a daemon cannot authenticate at all, and
-	// the only other way in is `forge login`, which needs a browser loopback
-	// a remote pod does not have. The daemon credential carries the deploy,
-	// secret and domain scopes for exactly this (control-plane 00110).
-	//
-	// Best-effort: the daemon is registered and functional either way, and
-	// failing registration over a deploy convenience would be the worse
-	// outcome.
-	if err := cliauth.DepositForForge(cred); err != nil {
-		logging.Warn("could not log forge in to Reliant cloud for this daemon", "error", err)
 	}
 
 	credsPath, _ := auth.DaemonCredentialsFilePath()
@@ -346,7 +338,7 @@ func pollDaemonCredentials(cmd *cobra.Command, conn *connection, account string)
 func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *connection, account, dataDir string, nonInteractive bool) (*auth.DaemonCredentials, error) {
 	creds, err := ensureDaemonCredentials(ctx, cmd, conn, account, nonInteractive)
 	if err == nil {
-		depositDaemonCredsForForge(ctx, conn, creds)
+		shareDaemonSessionWithForge(conn, creds)
 		return creds, nil
 	}
 	if nonInteractive && errors.Is(err, cliauth.ErrInteractiveRequired) {
@@ -355,7 +347,7 @@ func resolveOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *co
 			// This is the Electron path: the credential appeared on disk
 			// because electron/src/daemon-creds.js minted it, so nothing
 			// upstream of here has ever deposited it.
-			depositDaemonCredsForForge(ctx, conn, awaited)
+			shareDaemonSessionWithForge(conn, awaited)
 		}
 		return awaited, awaitErr
 	}
@@ -373,55 +365,45 @@ func registerOrAwaitCredentials(ctx context.Context, cmd *cobra.Command, conn *c
 		if readErr != nil || newCreds == nil {
 			return nil, fmt.Errorf("failed to read credentials after re-registration")
 		}
-		depositDaemonCredsForForge(ctx, conn, newCreds)
+		shareDaemonSessionWithForge(conn, newCreds)
 		return newCreds, nil
 	}
 	if nonInteractive && errors.Is(regErr, cliauth.ErrInteractiveRequired) {
 		awaited, awaitErr := waitForCredentialsNonInteractive(ctx, cmd, conn, account, dataDir)
 		if awaitErr == nil {
-			depositDaemonCredsForForge(ctx, conn, awaited)
+			shareDaemonSessionWithForge(conn, awaited)
 		}
 		return awaited, awaitErr
 	}
 	return nil, fmt.Errorf("re-registration failed: %w", regErr)
 }
 
-// depositDaemonCredsForForge makes "this daemon is signed in to Reliant" mean
-// "forge on this daemon is signed in to Reliant cloud".
+// shareDaemonSessionWithForge makes "this daemon is signed in to Reliant" mean
+// "forge on this daemon is signed in to Reliant cloud" — without forge ever
+// seeing the daemon's credential.
+//
+// It exports $FORGE_CREDENTIAL_HELPER, pinned to THIS daemon's session, into
+// the daemon's own environment. Every first-party child inherits it — an
+// agent's shell, and the Deploy button's `reliant forge deploy` re-exec — so
+// forge there asks `reliant auth forge-credential`, which exchanges this
+// credential at the server for an hour-long deploy token. Confined
+// (connector) children do not inherit it (daemonpolicy's allowlist).
 //
 // ── WHY HERE, AND NOT ONLY IN registerDaemon ──────────────────────────
 //
-// registerDaemon already deposits, but it only RUNS on an interactive
-// registration — and the two populations that matter never reach it. An
-// Electron user's PAT is minted by electron/src/daemon-creds.js, in
-// JavaScript, which writes daemon.json directly and lets the daemon skip
-// registration entirely; a managed daemon's PAT arrives in a mounted
-// Kubernetes Secret. Both then take the "credentials already on disk" branch
-// of ensureDaemonCredentials, which deposited nothing. That is exactly the
-// reported bug: a laptop signed in to prod through the app had only the local
-// dev origin in forge's store.
+// registerDaemon only RUNS on an interactive registration, and the two
+// populations that matter never reach it: an Electron user's PAT is minted by
+// electron/src/daemon-creds.js and written straight to daemon.json, and a
+// managed daemon's PAT arrives in a mounted Kubernetes Secret. Every `daemon
+// start` passes through here with whatever credential it ended up with, so
+// this is where the three mint paths stop mattering.
 //
-// So the deposit belongs where the credential is RESOLVED, not where it
-// happens to be minted. Every `daemon start` passes through here with whatever
-// credential it ended up with, whatever produced it — which is the property
-// that makes the three mint paths stop mattering.
-//
-// Best-effort by design: the daemon is registered and functional either way,
-// and failing a daemon start over a deploy convenience would be the worse
-// outcome. It is also why this takes the daemon's own PAT rather than
-// re-minting — a `forge deploy` re-exec'd by the Deploy button inherits the
-// daemon's environment and nothing else, so this file is its only way in.
-func depositDaemonCredsForForge(ctx context.Context, conn *connection, creds *auth.DaemonCredentials) {
+// Best-effort by design: the daemon is functional either way.
+func shareDaemonSessionWithForge(conn *connection, creds *auth.DaemonCredentials) {
 	if creds == nil || creds.PAT == "" {
 		return
 	}
-	server := creds.ServerURL
-	if server == "" {
-		server = conn.ServerURL
-	}
-	if err := cliauth.DepositTokenForServer(ctx, server, creds.PAT, creds.ExpiresAt); err != nil {
-		logging.Warn("could not log forge in to Reliant cloud for this daemon", "error", err)
-	}
+	offerSessionToForge(conn, creds.ServerURL, creds.Sub)
 }
 
 // persistDaemonCredentials best-effort writes daemon credentials to disk.
@@ -535,7 +517,7 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 
 	// A token pasted from the web UI carries no issuer either, so it needs the
 	// same discovery-based deposit as the other two mint paths.
-	depositDaemonCredsForForge(ctx, conn, creds)
+	shareDaemonSessionWithForge(conn, creds)
 
 	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token accepted (host: %s)\n", instanceid.Label())
 	return creds, nil

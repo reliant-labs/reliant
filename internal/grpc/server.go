@@ -140,6 +140,11 @@ func NewServer(cfg *Config) (*Server, error) {
 		"/reliant.v1.SystemService/DevAuthLoad",
 		"/reliant.v1.SystemService/DevAuthSave",
 		"/reliant.v1.SystemService/DevAuthClear",
+		// ExchangeToken authenticates its own bearer, against the authority
+		// and uncached: it must admit a daemon's session credential, which
+		// this interceptor (reliant:api only) refuses by design. Public here
+		// means "not gated by the interceptor", never unauthenticated.
+		reliantv1connect.TokenServiceExchangeTokenProcedure,
 	}
 	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, publicMethods)
 	if err != nil {
@@ -151,7 +156,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	// self-hosted — never both). The API interceptor introspects through a
 	// CacheTTL-bounded cache; TokenService below mints through the same
 	// authority.
-	authority, err := resolveTokenAuthority(cfg)
+	authority, authorityMode, err := resolveTokenAuthority(cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -206,7 +211,10 @@ func NewServer(cfg *Config) (*Server, error) {
 	modelEndpointService := services.NewModelEndpointService(database, router, nil)
 	// TokenService: the ONE token surface (daemon credentials and API
 	// tokens), a facade over the token authority.
-	tokenService := services.NewTokenService(authority)
+	tokenService := services.NewTokenService(authority, services.TokenControlPlane{
+		Issuer:      os.Getenv(cliauth.AuthorizationServerEnv),
+		ClipsGrants: authorityMode == tokenauthority.ModeControlPlane,
+	})
 	daemonProxyService := services.NewDaemonProxyService(router)
 	toolCallService := services.NewToolCallService(database, cfg.TemporalClient, router)
 
@@ -896,9 +904,11 @@ func securityHeaders(next http.Handler) http.Handler {
 // dictates. A misconfiguration (control-plane URL without its secret, or no
 // database for the self-hosted store) fails server start loudly rather than
 // serving a surface that can mint nothing.
-func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, error) {
+func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, tokenauthority.Mode, error) {
 	if cfg.TokenAuthority != nil {
-		return cfg.TokenAuthority, nil
+		// An injected authority states no mode, so nothing that depends on
+		// control-plane-side clipping is enabled for it.
+		return cfg.TokenAuthority, "", nil
 	}
 	var sqlDB *sql.DB
 	if repo, ok := cfg.Database.(*db.Repo); ok && repo != nil && repo.DB != nil {
@@ -906,8 +916,8 @@ func resolveTokenAuthority(cfg *Config) (tokenauthority.Authority, error) {
 	}
 	authority, mode, err := tokenauthority.New(tokenauthority.DepsFromEnv(sqlDB))
 	if err != nil {
-		return nil, fmt.Errorf("token authority: %w", err)
+		return nil, "", fmt.Errorf("token authority: %w", err)
 	}
 	logging.Info("access-token authority selected", "mode", mode)
-	return authority, nil
+	return authority, mode, nil
 }

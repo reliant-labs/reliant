@@ -297,3 +297,36 @@ func dirOf(path string) string {
 	}
 	return "."
 }
+
+// TestListDaemonCredentials_DefaultAccountFirst: a caller choosing among every
+// stored credential (forge's credential helper outside a daemon) sees each
+// origin's default account first — the same answer a no-account
+// ReadDaemonCredentials gives — and each entry names its account, so it can be
+// read back exactly.
+func TestListDaemonCredentials_DefaultAccountFirst(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+
+	const originA, originB = "http://localhost:8090", "https://api.example.com"
+	mustWrite(t, &DaemonCredentials{PAT: "rlat_b", ServerURL: originB})
+	mustWrite(t, &DaemonCredentials{PAT: "rlat_a_zed", ServerURL: originA, Sub: "zed"})
+	mustWrite(t, &DaemonCredentials{PAT: "rlat_a_amy", ServerURL: originA, Sub: "amy"}) // most recent: the default
+
+	got, err := ListDaemonCredentials()
+	if err != nil {
+		t.Fatal(err)
+	}
+	var pats, subs []string
+	for _, c := range got {
+		pats = append(pats, c.PAT)
+		subs = append(subs, c.Sub)
+	}
+	if want := []string{"rlat_a_amy", "rlat_a_zed", "rlat_b"}; len(pats) != 3 || pats[0] != want[0] || pats[1] != want[1] || pats[2] != want[2] {
+		t.Fatalf("order = %v, want %v (origins sorted, default account first)", pats, want)
+	}
+	if subs[2] != DefaultAccount {
+		t.Errorf("an account-less entry must report the store key %q, got %q", DefaultAccount, subs[2])
+	}
+	if back := mustRead(t, got[1].ServerURL, got[1].Sub); back.PAT != "rlat_a_zed" {
+		t.Errorf("a listed entry must read back exactly; got %q", back.PAT)
+	}
+}

@@ -51,21 +51,12 @@ type Service interface {
 	Lookup(server string) (credentials.Credential, string, error)
 	// Remove forgets the stored credential for server.
 	Remove(server string) (bool, string, error)
-	// DepositForForge writes cred into forge's own credential store for the
-	// control plane that issued it, so being logged in to Reliant means
-	// forge is logged in to Reliant cloud. Keyed by cred.Issuer, under
-	// forge's host-application client id — see forgecred.go.
-	DepositForForge(cred credentials.Credential) error
-	// DepositTokenForServer is DepositForForge for a token that carries no
-	// issuer — Electron's own daemon mint, a managed daemon's mounted
-	// Secret, a pasted --token. It discovers the control plane from
-	// server's RFC 8414 metadata and deposits under that origin. A
-	// self-hosted server, which names no control plane, is a no-op rather
-	// than an error. See depositdaemon.go.
-	DepositTokenForServer(ctx context.Context, server, token string, expiresAt *time.Time) error
-	// WithdrawFromForge removes that deposit on logout and reports whether
-	// one existed. A `forge login` for the same origin is left alone.
-	WithdrawFromForge(issuer string) (bool, error)
+	// RemoveLegacyForgeDeposits deletes the copies of Reliant session tokens
+	// older releases deposited into forge's credentials file (client
+	// `host-app`) and reports how many there were. forge no longer reads
+	// them — it asks `reliant auth forge-credential` instead — so they are
+	// only a second copy of a permanent bearer secret. See forge.go.
+	RemoveLegacyForgeDeposits() (int, error)
 }
 
 // Deps are the adapter's collaborators.
