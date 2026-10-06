@@ -83,7 +83,10 @@ type Spec struct {
 	NoMachine bool
 
 	// Unattended sets inputs.unattended: no human will answer questions or
-	// approvals, so the run must not block on one.
+	// approvals, so the run must not block on one, and it is withheld the
+	// tools tools.UnattendedWithholding names. Launch sets it for every event
+	// kind core.TriggerEventKind.Unattended reports, so a caller can add it
+	// and never remove it.
 	Unattended bool
 	// UserJWT is the caller's JWT, carried on the run's execution context so a
 	// cloud-daemon chat's first run resolves the control-plane daemon the same

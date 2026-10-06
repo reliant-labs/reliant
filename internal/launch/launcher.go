@@ -119,6 +119,15 @@ func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, er
 	if ev.OccurredAt.IsZero() {
 		ev.OccurredAt = time.Now().UTC()
 	}
+	// An event kind with nobody behind it launches an unattended run whatever
+	// the caller set. Unattended decides more than whether the run may ask a
+	// question: an unattended run is withheld the tools that change workflows,
+	// start standing work or act through an integration
+	// (tools.UnattendedWithholding), so a launch path that forgot to set it
+	// must fail closed rather than hand a trigger's payload an attended run.
+	if ev.Kind.Unattended() {
+		spec.Unattended = true
+	}
 	spec.Params = paramsWithMode(spec.Params, spec.Mode)
 
 	if spec.ChatID != "" {

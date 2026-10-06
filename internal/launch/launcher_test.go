@@ -330,6 +330,42 @@ func TestLaunchUnattendedSetsWorkflowInput(t *testing.T) {
 		"the runtime reads unattended off the root run's inputs and propagates it to every spawn")
 }
 
+// The run's unattended flag follows core.TriggerEventKind.Unattended, so a
+// launch path that forgets Spec.Unattended still launches a webhook's run
+// unattended — and so withheld the tools that change workflows — rather than
+// an attended one. Attended kinds are left as the caller set them.
+func TestLaunchUnattendedFollowsTheEventKind(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	for _, tc := range []struct {
+		kind       core.TriggerEventKind
+		unattended bool
+	}{
+		{core.TriggerEventKindWebhook, true},
+		{core.TriggerEventKindIntegration, true},
+		{core.TriggerEventKindSchedule, true},
+		{core.TriggerEventKindWorkflowEvent, true},
+		{core.TriggerEventKindAgentStartRun, false},
+		{core.TriggerEventKindChatStart, false},
+	} {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			starter := &fakeStarter{}
+			launcher, _ := newTestLauncher(t, repo, starter)
+			ev := Event{Kind: tc.kind, DedupeKey: "evt-" + uuid.NewString(), OccurredAt: time.Now().UTC()}
+			if tc.kind == core.TriggerEventKindChatStart {
+				ev = chatStartEvent()
+			}
+			_, err := launcher.Launch(ctx, ev, Spec{
+				OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
+				Params: mockModelParams(t), Messages: userSeed("go"),
+				// Unattended deliberately left unset.
+			})
+			require.NoError(t, err)
+			_, input := starter.rootRun(t)
+			assert.Equal(t, tc.unattended, v2.IsUnattended(input.Inputs))
+		})
+	}
+}
+
 // The interactive path asks for a title; a scheduled one supplies its own and
 // must not pay for an LLM call to re-derive it.
 func TestLaunchGenerateTitleIsOptional(t *testing.T) {

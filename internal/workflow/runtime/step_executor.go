@@ -1072,6 +1072,11 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// callable on the next, whichever worker runs either.
 	if model.NodeType(node) == model.NodeTypeCallLLM {
 		rtx.ToolGrants = e.childTracker.toolGrantsFor(rtx.Thread)
+		// Whether anyone is attending decides which tools the turn may be
+		// handed. Read off this executor's inputs, which every sub-workflow,
+		// loop body and spawned sub-agent inherits unattended into
+		// (propagateUnattended).
+		rtx.Unattended = IsUnattended(e.workflowInputs)
 	}
 
 	// Loop context

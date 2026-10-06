@@ -1088,6 +1088,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			Permission:   permission,
 			NoMachine:    chat.NoMachine,
 			ResponseTool: responseToolName,
+			Unattended:   rtx.Unattended,
 		})
 	} else {
 		toolFilter := model.CelStringListValue(tc.GetPreloadedTools())
@@ -1137,6 +1138,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			CanSpawnChildren: canSpawnChildren,
 			SpawnPresets:     spawnPresets,
 			ResponseTool:     responseToolName,
+			Unattended:       rtx.Unattended,
 		})
 		availableTools = toolsResult.Tools
 		caps = toolsResult.Capabilities
@@ -1955,6 +1957,7 @@ type toolRequest struct {
 	CanSpawnChildren bool
 	SpawnPresets     []string
 	ResponseTool     string
+	Unattended       bool // rtx.Unattended: nobody is attending the run
 }
 
 // availableToolsResult is a turn's resolved capability set and the tools
@@ -2136,6 +2139,7 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		SpawnPresets:       req.SpawnPresets,
 		ResponseTool:       req.ResponseTool,
 		UsableIntegrations: usable,
+		Unattended:         req.Unattended,
 	})
 
 	logInfo("[CallLLM] Tool capabilities resolved",
@@ -2144,6 +2148,8 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		"grants", req.Grants,
 		"permission", caps.Permission,
 		"loadable_all", caps.LoadableAll,
+		"unattended", caps.Unattended,
+		"unattended_opt_in", caps.UnattendedOptIn,
 		"available_mcp_tools", len(mcpToolNames))
 
 	if projectScopedToolsFactory == nil {

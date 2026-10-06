@@ -61,6 +61,15 @@ type Capabilities struct {
 	// offered, and merged over its calls at execution (ExecutionBindings).
 	// Only tools with a bound parameter appear.
 	BoundParams map[string]map[string]BoundParam
+	// Unattended: nobody is attending the run (runtime.IsUnattended). A tool
+	// UnattendedWithholding names is neither offered nor loadable, unless it
+	// is in UnattendedOptIn.
+	Unattended bool
+	// UnattendedOptIn are the tools UnattendedWithholding names that this
+	// turn's declaration names exactly (ToolAccess.Named), sorted: the step's
+	// author decided it does that work, so an unattended run keeps them. Only
+	// populated on an unattended turn.
+	UnattendedOptIn []string
 }
 
 // BoundParam is one bound parameter as a turn's capability set records it.
@@ -120,6 +129,10 @@ type CapabilityInputs struct {
 	// named here is withheld, so a caller that could not ask — or never asked
 	// — offers no tool that would answer with a 401.
 	UsableIntegrations map[string]bool
+	// Unattended is the run's runtime.IsUnattended, carried on the
+	// RuntimeContext: a trigger-fired run, every sub-workflow and spawned
+	// sub-agent of one, and never a person's turn.
+	Unattended bool
 }
 
 // ResolveCapabilities computes a turn's capability set. Pure: no I/O and no
@@ -128,16 +141,26 @@ type CapabilityInputs struct {
 // A name is REACHABLE when nothing about the run excludes it (see exclusion):
 // it is a registry tool or a connected MCP tool, it does not need a machine on
 // a no-machine run, it is not a no-machine-only tool on a run that has one,
-// its integration (if it needs a connection) is one the owner can use, and it
-// is within the tier. What is offered is the reachable preloaded tools, the
-// reachable grants the declaration may load, and the structural tools every
-// agent of this shape is handed.
+// its integration (if it needs a connection) is one the owner can use, an
+// unattended run is not withheld it, and it is within the tier. What is
+// offered is the reachable preloaded tools, the reachable grants the
+// declaration may load, and the structural tools every agent of this shape is
+// handed.
 func ResolveCapabilities(in CapabilityInputs) *Capabilities {
 	caps := &Capabilities{
 		LoadableAll:  in.Access.LoadableAll,
 		Permission:   NormalizePermission(in.Permission),
 		NoMachine:    in.NoMachine,
 		SpawnPresets: sortedUnique(in.SpawnPresets),
+		Unattended:   in.Unattended,
+	}
+	if in.Unattended {
+		for _, name := range in.Access.Named {
+			if UnattendedWithholding(name) != "" {
+				caps.UnattendedOptIn = append(caps.UnattendedOptIn, name)
+			}
+		}
+		caps.UnattendedOptIn = sortedUnique(caps.UnattendedOptIn)
 	}
 	if !caps.LoadableAll {
 		caps.Loadable = sortedUnique(in.Access.Loadable)
@@ -264,6 +287,9 @@ const (
 	// excludedUnusableIntegration: a connection-gated integration the run's
 	// owner cannot use (WithheldIntegrations).
 	excludedUnusableIntegration
+	// excludedUnattended: the run is unattended, the tool is one
+	// UnattendedWithholding names, and the declaration did not name it.
+	excludedUnattended
 	// excludedTier: above the run's tier.
 	excludedTier
 )
@@ -289,6 +315,8 @@ func (c *Capabilities) exclusion(registry map[string]ToolDefinition, name string
 		return excludedHasMachine
 	case c.withheldIntegration(name) != "":
 		return excludedUnusableIntegration
+	case c.withheldUnattended(name) != "":
+		return excludedUnattended
 	case !PermissionAtLeast(c.Permission, MinimumPermissionForTool(name)):
 		return excludedTier
 	}
@@ -301,6 +329,14 @@ func (c *Capabilities) withheldIntegration(name string) string {
 		return c.WithheldIntegrations[id]
 	}
 	return ""
+}
+
+// withheldUnattended is why this unattended run is not handed name, or "".
+func (c *Capabilities) withheldUnattended(name string) string {
+	if !c.Unattended || containsSorted(c.UnattendedOptIn, name) {
+		return ""
+	}
+	return UnattendedWithholding(name)
 }
 
 // RecordOffered replaces Offered with the names actually in the request's tool
@@ -420,6 +456,8 @@ func (c *Capabilities) LoadRefusal(name string) string {
 		return fmt.Sprintf("%s '%s' needs the user's computer, and this run has no machine, so it cannot be loaded.", label, name)
 	case excludedUnusableIntegration:
 		return fmt.Sprintf("Tool '%s' was not loaded: %s.", name, c.withheldIntegration(name))
+	case excludedUnattended:
+		return fmt.Sprintf("Tool '%s' was not loaded: %s. %s", name, c.withheldUnattended(name), unattendedNote)
 	}
 	if !c.declaresLoadable(name) {
 		return fmt.Sprintf("%s '%s' is not loadable in this workflow (see loadable_tools).", label, name)
@@ -455,6 +493,9 @@ func (c *Capabilities) Explain(name string) string {
 		return fmt.Sprintf("MCP tool '%s' is not connected in this environment, so it was not offered and the call was not run.", name)
 	case excludedUnusableIntegration:
 		return fmt.Sprintf("Tool '%s' is not available to this agent, so the call was not run: %s.", name, c.withheldIntegration(name))
+	case excludedUnattended:
+		return fmt.Sprintf("Tool '%s' is not available in this run, so the call was not run: %s. %s Do not attempt it another way; say in your final response what you would have done.",
+			name, c.withheldUnattended(name), unattendedNote)
 	case excludedTier:
 		return fmt.Sprintf("Tool '%s' requires '%s' permission, but the current permission level is '%s', so the call was not run.",
 			name, MinimumPermissionForTool(name), c.Permission)
@@ -525,6 +566,8 @@ func (c *Capabilities) Proto() *reliantv1.ToolCapabilities {
 		SpawnPresets:         c.SpawnPresets,
 		WithheldIntegrations: c.WithheldIntegrations,
 		BoundParams:          boundParamsProto(c.BoundParams),
+		Unattended:           c.Unattended,
+		UnattendedOptIn:      c.UnattendedOptIn,
 	}
 }
 
@@ -609,6 +652,10 @@ func CapabilitiesFromProto(p *reliantv1.ToolCapabilities) *Capabilities {
 		MCPTools:     sortedUnique(p.GetMcpTools()),
 		SpawnPresets: sortedUnique(p.GetSpawnPresets()),
 		BoundParams:  boundParamsFromProto(p.GetBoundParams()),
+		Unattended:   p.GetUnattended(),
+	}
+	if caps.Unattended {
+		caps.UnattendedOptIn = sortedUnique(p.GetUnattendedOptIn())
 	}
 	if len(p.GetWithheldIntegrations()) > 0 {
 		caps.WithheldIntegrations = make(map[string]string, len(p.GetWithheldIntegrations()))
