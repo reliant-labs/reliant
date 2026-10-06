@@ -35,9 +35,15 @@ import (
 // would otherwise inherit the daemon's own working directory and operate on
 // whatever repository happens to be there.
 func IndexCommand(ctx context.Context, dir string, args ...string) (cmd *exec.Cmd, stop func()) {
+	return indexCommand(ctx, dir, osutil.FileHolders, args...)
+}
+
+// indexCommand is IndexCommand with the stranded-lock holder probe as a
+// parameter; see holderProbe.
+func indexCommand(ctx context.Context, dir string, probe holderProbe, args ...string) (cmd *exec.Cmd, stop func()) {
 	// Clear a provably-stranded lock before spawning, so the command does not
 	// fail on a lock whose owner died long ago.
-	EnsureIndexWritable(ctx, dir)
+	ensureIndexWritable(ctx, dir, probe)
 
 	cmd = exec.CommandContext(ctx, "git", args...)
 	cmd.Dir = dir
@@ -53,7 +59,13 @@ func IndexCommand(ctx context.Context, dir string, args ...string) (cmd *exec.Cm
 // This is the form nearly every call site wants; IndexCommand is there for the
 // few that need to set something on the command first.
 func RunIndexCommand(ctx context.Context, dir string, args ...string) ([]byte, error) {
-	cmd, stop := IndexCommand(ctx, dir, args...)
+	return runIndexCommand(ctx, dir, osutil.FileHolders, args...)
+}
+
+// runIndexCommand is RunIndexCommand with the stranded-lock holder probe as a
+// parameter; see holderProbe.
+func runIndexCommand(ctx context.Context, dir string, probe holderProbe, args ...string) ([]byte, error) {
+	cmd, stop := indexCommand(ctx, dir, probe, args...)
 	defer stop()
 
 	output, err := cmd.CombinedOutput()

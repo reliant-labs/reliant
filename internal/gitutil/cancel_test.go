@@ -11,6 +11,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
 // slowStagingRepo builds a repository where `git add` is guaranteed to be
@@ -148,8 +150,9 @@ func TestCancelledIndexWrite_DoesNotStrandLock(t *testing.T) {
 }
 
 // TestRunIndexCommand_RecoversThenSucceeds exercises the cure through the
-// public entry point the call sites use: a lock stranded by an earlier death
-// must not require any user intervention.
+// entry point the call sites use: a lock stranded by an earlier death must not
+// require any user intervention. The holder probe is scripted to "not held",
+// for the reason given at the top of indexlock_test.go.
 func TestRunIndexCommand_RecoversThenSucceeds(t *testing.T) {
 	repo := initRepo(t)
 	lock := lockPath(t, repo)
@@ -163,7 +166,7 @@ func TestRunIndexCommand_RecoversThenSucceeds(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	out, err := RunIndexCommand(context.Background(), repo, "add", "recovered.txt")
+	out, err := runIndexCommand(context.Background(), repo, probeSays(osutil.FileHoldNotHeld), "add", "recovered.txt")
 	if err != nil {
 		t.Fatalf("RunIndexCommand did not recover from a stranded lock: %v\n%s", err, out)
 	}

@@ -3,17 +3,27 @@ package gitutil
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/osutil"
 )
 
 // These tests shell out to real git. A fake would be testing our model of
 // git's locking rather than git's locking, and the entire question here is
 // what git actually does with index.lock.
+//
+// The holder probe is the exception, and is faked everywhere except
+// TestEnsureIndexWritable_LeavesLiveLockAlone. The real one runs lsof, which
+// took up to 8s on a loaded dev host; behind its timeout that reads as
+// Unknown, so a recovery test asserting removal failed whenever the machine
+// was busy. Whether the real probe answers correctly is internal/osutil's to
+// test.
 func requireGit(t *testing.T) {
 	t.Helper()
 	if _, err := exec.LookPath("git"); err != nil {
@@ -78,6 +88,17 @@ func lockPath(t *testing.T, repo string) string {
 	return filepath.Join(gitDir, IndexLockName)
 }
 
+// probeSays is a holder probe that gives answers in order, one per call, and
+// repeats the last once they run out.
+func probeSays(answers ...osutil.FileHoldState) holderProbe {
+	calls := 0
+	return func(context.Context, string) osutil.FileHoldState {
+		answer := answers[min(calls, len(answers)-1)]
+		calls++
+		return answer
+	}
+}
+
 // TestEnsureIndexWritable_RecoversStrandedLock is the cure half: a lock left
 // by a process that no longer exists must be cleared, and the next write must
 // succeed. Without recovery this repository is permanently unwritable.
@@ -105,7 +126,9 @@ func TestEnsureIndexWritable_RecoversStrandedLock(t *testing.T) {
 		t.Fatalf("git add failed for an unexpected reason: %v\n%s", err, out)
 	}
 
-	EnsureIndexWritable(context.Background(), repo)
+	// Nothing holds it — the probe says so rather than lsof, whose answer on
+	// a busy host can be a timeout.
+	ensureIndexWritable(context.Background(), repo, probeSays(osutil.FileHoldNotHeld))
 
 	if _, err := os.Stat(lock); !os.IsNotExist(err) {
 		t.Fatalf("stranded lock still present after EnsureIndexWritable (stat err = %v)", err)
@@ -125,14 +148,29 @@ func TestEnsureIndexWritable_RecoversStrandedLock(t *testing.T) {
 // recovery removed that lock, the running git would fail with "unable to write
 // new index file" and lose its work — verified that this is the actual
 // consequence.
+//
+// This is the one test here that runs the REAL holder probe, because it is the
+// end-to-end pin of the dangerous direction: real git, real lsof. Its verdict
+// does not depend on lsof's speed — a slow probe answers Unknown, which keeps
+// the lock exactly as Held does.
 func TestEnsureIndexWritable_LeavesLiveLockAlone(t *testing.T) {
 	repo := initRepo(t)
 
-	// A clean filter that sleeps: git holds index.lock for its duration.
+	// A clean filter that blocks until the test releases it, so git holds
+	// index.lock for as long as the check takes. A fixed sleep would race the
+	// probe, which on a loaded host can run up to its timeout: if git finished
+	// first it would remove its own lock, and that reads as recovery deleting
+	// a live one.
+	release := filepath.Join(t.TempDir(), "release")
+	releaseGit := func() {
+		if err := os.WriteFile(release, nil, 0o644); err != nil {
+			t.Error(err)
+		}
+	}
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.slow filter=slow\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, repo, "config", "filter.slow.clean", "sleep 4; cat")
+	run(t, repo, "config", "filter.slow.clean", fmt.Sprintf("while [ ! -e '%s' ]; do sleep 0.05; done; cat", release))
 	if err := os.WriteFile(filepath.Join(repo, "big.slow"), []byte("payload\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -142,10 +180,13 @@ func TestEnsureIndexWritable_LeavesLiveLockAlone(t *testing.T) {
 	if err := addCmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = addCmd.Wait() })
+	t.Cleanup(func() {
+		releaseGit() // unblock git on every exit path, or Wait never returns
+		_ = addCmd.Wait()
+	})
 
 	lock := lockPath(t, repo)
-	deadline := time.Now().Add(3 * time.Second)
+	deadline := time.Now().Add(10 * time.Second)
 	for time.Now().Before(deadline) {
 		if _, err := os.Stat(lock); err == nil {
 			break
@@ -168,6 +209,7 @@ func TestEnsureIndexWritable_LeavesLiveLockAlone(t *testing.T) {
 	}
 
 	// And the concurrent git must still succeed.
+	releaseGit()
 	if err := addCmd.Wait(); err != nil {
 		t.Fatalf("concurrent git add failed: %v — its lock was interfered with", err)
 	}
@@ -177,55 +219,70 @@ func TestEnsureIndexWritable_LeavesLiveLockAlone(t *testing.T) {
 	}
 }
 
-// TestClearStrandedIndexLock_HonoursGuards is the table of edge cases,
-// including what the probe cannot detect.
+// TestClearStrandedIndexLock_HonoursGuards is the table of edge cases. The
+// probe's answer is scripted per case, so each row decides held / unheld /
+// unknown exactly rather than inheriting whatever lsof says on this host.
 func TestClearStrandedIndexLock_HonoursGuards(t *testing.T) {
-	requireGit(t)
-
 	tests := []struct {
 		name       string
-		setup      func(t *testing.T, lock string) (holdOpen *os.File)
+		setup      func(t *testing.T, lock string)
+		probe      holderProbe
 		wantRemove bool
 		why        string
 	}{
 		{
 			name: "stranded lock, old, unheld",
-			setup: func(t *testing.T, lock string) *os.File {
+			setup: func(t *testing.T, lock string) {
 				mustWrite(t, lock)
 				ageLock(t, lock)
-				return nil
 			},
+			probe:      probeSays(osutil.FileHoldNotHeld),
 			wantRemove: true,
 			why:        "no live holder and past the age floor: the recoverable case",
 		},
 		{
 			name: "fresh lock is never touched",
-			setup: func(t *testing.T, lock string) *os.File {
+			setup: func(t *testing.T, lock string) {
 				mustWrite(t, lock)
-				return nil
 			},
+			probe:      probeSays(osutil.FileHoldNotHeld),
 			wantRemove: false,
-			why:        "a lock younger than the floor is overwhelmingly a live operation",
+			why:        "a lock younger than the floor is overwhelmingly a live operation, whatever the probe says",
 		},
 		{
-			name: "held open by a live process",
-			setup: func(t *testing.T, lock string) *os.File {
+			name: "held by a live process",
+			setup: func(t *testing.T, lock string) {
 				mustWrite(t, lock)
 				ageLock(t, lock)
-				f, err := os.OpenFile(lock, os.O_RDWR, 0o644)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return f
 			},
+			probe:      probeSays(osutil.FileHoldHeld),
 			wantRemove: false,
 			why:        "an open descriptor is the kernel-backed proof that the holder is alive",
 		},
 		{
-			name: "no lock file at all",
-			setup: func(t *testing.T, lock string) *os.File {
-				return nil
+			name: "probe cannot answer",
+			setup: func(t *testing.T, lock string) {
+				mustWrite(t, lock)
+				ageLock(t, lock)
 			},
+			probe:      probeSays(osutil.FileHoldUnknown),
+			wantRemove: false,
+			why:        "Unknown — a timed-out lsof, or Windows — is not unheld",
+		},
+		{
+			name: "held again at the second look",
+			setup: func(t *testing.T, lock string) {
+				mustWrite(t, lock)
+				ageLock(t, lock)
+			},
+			probe:      probeSays(osutil.FileHoldNotHeld, osutil.FileHoldHeld),
+			wantRemove: false,
+			why:        "an unheld reading must survive the stability delay; one sample can land in git's close-then-rename window",
+		},
+		{
+			name:       "no lock file at all",
+			setup:      func(t *testing.T, lock string) {},
+			probe:      probeSays(osutil.FileHoldNotHeld),
 			wantRemove: false,
 			why:        "nothing to do",
 		},
@@ -234,12 +291,10 @@ func TestClearStrandedIndexLock_HonoursGuards(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			lock := filepath.Join(t.TempDir(), IndexLockName)
-			if f := tc.setup(t, lock); f != nil {
-				defer f.Close()
-			}
+			tc.setup(t, lock)
 			existedBefore := fileExists(lock)
 
-			clearStrandedIndexLock(context.Background(), lock)
+			clearStrandedIndexLock(context.Background(), lock, tc.probe)
 
 			gone := !fileExists(lock)
 			if tc.wantRemove && !gone {

@@ -2,72 +2,34 @@
 package osutil
 
 import (
+	"bufio"
 	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"testing"
-	"time"
 )
 
-// TestFileHolders covers the probe's answers including, deliberately, the
-// cases where the honest answer is "I cannot tell". The tri-state exists
-// because a boolean would force those cases to read as "not held", and a
-// wrong "not held" is what deletes a live lock.
+// TestFileHolders covers the answers that need no probe at all. The
+// tri-state exists because a boolean would force these cases to read as "not
+// held", and a wrong "not held" is what deletes a live lock.
 func TestFileHolders(t *testing.T) {
-	if runtime.GOOS == "windows" {
-		t.Skip("no holder probe on Windows; fileHolders always reports Unknown by design")
-	}
-	if _, err := exec.LookPath("lsof"); err != nil {
-		t.Skip("lsof not available")
-	}
-
 	tests := []struct {
 		name string
-		// setup returns the path to probe and any handle to keep open.
-		setup func(t *testing.T) (path string, keepOpen *os.File)
-		want  FileHoldState
-		why   string
+		path func(t *testing.T) string
+		want FileHoldState
+		why  string
 	}{
 		{
-			name: "file held open by this process",
-			setup: func(t *testing.T) (string, *os.File) {
-				path := filepath.Join(t.TempDir(), "held")
-				f, err := os.Create(path)
-				if err != nil {
-					t.Fatal(err)
-				}
-				return path, f
-			},
-			want: FileHoldHeld,
-			why:  "an open descriptor is the signal the whole design rests on",
-		},
-		{
-			name: "file exists with no holder",
-			setup: func(t *testing.T) (string, *os.File) {
-				path := filepath.Join(t.TempDir(), "unheld")
-				if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
-					t.Fatal(err)
-				}
-				return path, nil
-			},
-			want: FileHoldNotHeld,
-			why:  "the recoverable case: a file nothing has open",
-		},
-		{
 			name: "missing file is Unknown, not NotHeld",
-			setup: func(t *testing.T) (string, *os.File) {
-				return filepath.Join(t.TempDir(), "absent"), nil
-			},
+			path: func(t *testing.T) string { return filepath.Join(t.TempDir(), "absent") },
 			want: FileHoldUnknown,
 			why:  "absence is not evidence about holders; lsof reports it as exit 1 like 'no holders'",
 		},
 		{
 			name: "empty path is Unknown",
-			setup: func(t *testing.T) (string, *os.File) {
-				return "", nil
-			},
+			path: func(t *testing.T) string { return "" },
 			want: FileHoldUnknown,
 			why:  "no question was asked",
 		},
@@ -75,53 +37,70 @@ func TestFileHolders(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			path, keepOpen := tc.setup(t)
-			if keepOpen != nil {
-				defer keepOpen.Close()
-			}
-			if got := FileHolders(context.Background(), path); got != tc.want {
+			if got := FileHolders(context.Background(), tc.path(t)); got != tc.want {
 				t.Fatalf("FileHolders = %v, want %v (%s)", got, tc.want, tc.why)
 			}
 		})
 	}
 }
 
-// TestFileHolders_HeldByAnotherProcess uses a real second process, since the
-// production case is always cross-process and a same-process descriptor could
-// in principle be reported differently.
-func TestFileHolders_HeldByAnotherProcess(t *testing.T) {
+// TestFileHolders_RealLsof is the one test that runs the real lsof, with the
+// production timeout. The verdict logic is pinned against scripted results in
+// file_holders_unix_test.go; what only the real tool can show is that the
+// flags are accepted, that "nobody holds it" really is exit 1 with a clean
+// stderr, and that a descriptor held by ANOTHER process — the production case,
+// since git is always a separate process — is reported.
+//
+// It fails if lsof cannot answer within holderProbeTimeout on this host. That
+// is deliberate: it is the signal that the timeout no longer fits the machines
+// this runs on, which is exactly what made recovery silently inert before.
+func TestFileHolders_RealLsof(t *testing.T) {
 	if runtime.GOOS == "windows" {
-		t.Skip("no holder probe on Windows")
+		t.Skip("no holder probe on Windows; fileHolders always reports Unknown by design")
 	}
 	if _, err := exec.LookPath("lsof"); err != nil {
 		t.Skip("lsof not available")
 	}
 
-	path := filepath.Join(t.TempDir(), "crossproc")
-	if err := os.WriteFile(path, nil, 0o644); err != nil {
-		t.Fatal(err)
-	}
-
-	// A child that holds the file open on fd 3 and waits.
-	cmd := exec.Command("bash", "-c", "exec 3>>"+path+"; sleep 10")
-	if err := cmd.Start(); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
+	t.Run("file with no holder is NotHeld", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "unheld")
+		if err := os.WriteFile(path, []byte("x"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if got := FileHolders(context.Background(), path); got != FileHoldNotHeld {
+			t.Fatalf("FileHolders = %v, want NotHeld for a file nothing has open", got)
+		}
 	})
 
-	// Poll: the child needs a moment to open the descriptor.
-	var got FileHoldState
-	for i := 0; i < 100; i++ {
-		got = FileHolders(context.Background(), path)
-		if got == FileHoldHeld {
-			return
+	t.Run("file held by another process is Held", func(t *testing.T) {
+		path := filepath.Join(t.TempDir(), "crossproc")
+		if err := os.WriteFile(path, nil, 0o644); err != nil {
+			t.Fatal(err)
 		}
-		sleepShort()
-	}
-	t.Fatalf("FileHolders = %v, want Held for a file another process has open", got)
+
+		// A child that opens the file on fd 3, says so, then waits. Reading
+		// its "ready" line is what guarantees the descriptor is open before
+		// the single probe below, so no polling against lsof is needed.
+		cmd := exec.Command("sh", "-c", `exec 3>>"$1"; echo ready; exec sleep 60`, "sh", path)
+		stdout, err := cmd.StdoutPipe()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if err := cmd.Start(); err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() {
+			_ = cmd.Process.Kill()
+			_ = cmd.Wait()
+		})
+		if line, err := bufio.NewReader(stdout).ReadString('\n'); err != nil || line != "ready\n" {
+			t.Fatalf("holder process did not report ready: %q, %v", line, err)
+		}
+
+		if got := FileHolders(context.Background(), path); got != FileHoldHeld {
+			t.Fatalf("FileHolders = %v, want Held for a file another process has open", got)
+		}
+	})
 }
 
 // TestFileHolders_CancelledContextIsUnknown: a probe that could not run must
@@ -154,7 +133,3 @@ func TestFileHoldState_String(t *testing.T) {
 		}
 	}
 }
-
-// sleepShort is the poll interval for tests that wait on another process to
-// open a descriptor.
-func sleepShort() { time.Sleep(20 * time.Millisecond) }
