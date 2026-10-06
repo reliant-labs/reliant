@@ -1,9 +1,13 @@
-import { ALargeSmall, Braces, List } from 'lucide-react'
+import { AlertTriangle, ALargeSmall, Braces, List } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '../../lib/utils'
 import { HelpPopover } from '../ui/HelpPopover'
 import { Toggle } from '../ui/Toggle'
 import { CELInput } from './CELInput'
+import { InsertDataMenu } from './InsertDataMenu'
+import { OptionPicker } from './OptionPicker'
+import { celInsertText } from './MonacoCELEditor'
+import type { CELInsertTarget } from './CELCompletionContext'
 import { ModelDropdown, extractModelId } from './ModelDropdown'
 import { ToolsSelector } from './ToolsSelector'
 import { useFieldFindings } from './WorkflowFindingsContext'
@@ -50,6 +54,20 @@ function describeDefault(value: unknown): string | undefined {
     if (Array.isArray(model.tags) && model.tags.length > 0) return model.tags.join(', ')
   }
   return formatValueForDisplay(value)
+}
+
+/**
+ * Whether a fixed value fails the field's format, for the hint under the
+ * input. A template is checked at run time, and an invalid pattern is no
+ * reason to warn the author.
+ */
+export function failsPattern(pattern: string | undefined, value: string): boolean {
+  if (!pattern || value === '' || DEFAULT_CEL_REGEX.test(value)) return false
+  try {
+    return !new RegExp(pattern, 'u').test(value)
+  } catch {
+    return false
+  }
 }
 
 /** Split the comma-separated form of a list field into its stored entries. */
@@ -105,7 +123,7 @@ export function ProtoFieldRenderer({
   const defaultLabel = describeDefault(schema.defaultValue)
   const literalPlaceholder = schema.placeholder ?? (defaultLabel ? `Default: ${defaultLabel}` : schema.example)
   const celPlaceholder = expressionPlaceholder(schema)
-  const hasPicker = schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools'
+  const hasPicker = schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' || schema.widget === 'picker'
   const normalizedValue = normalizeProtoFieldValue(schema, value)
   const resolvedCelContext = celContext === 'workflow' ? 'default' : celContext
   const isInlineCheckbox = schema.widget === 'checkbox' && typeof normalizedValue !== 'string'
@@ -133,7 +151,7 @@ export function ProtoFieldRenderer({
 
   const supportsModeToggle = !hideCELToggle && schema.celCapable && !schema.celExpressionOnly && (
     (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number') ||
-    ((schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools') && schema.showCelModeToggle)
+    ((schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' || schema.widget === 'picker') && schema.showCelModeToggle)
   )
   const options = useMemo(() => schema.options ?? [], [schema.options])
   const shouldForceCelMode = useMemo(() => {
@@ -145,7 +163,7 @@ export function ProtoFieldRenderer({
       return true
     }
 
-    if (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number' || schema.widget === 'model') {
+    if (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number' || schema.widget === 'model' || schema.widget === 'picker') {
       return false
     }
 
@@ -179,14 +197,48 @@ export function ProtoFieldRenderer({
     onChange(nextValue)
   }
 
+  // Insert data: the expression input's own insertion target, and the plain
+  // input a fixed text value is typed into.
+  const insertRef = useRef<CELInsertTarget | null>(null)
+  const plainInputRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null)
+
   if (!isProtoFieldVisible(schema, context)) {
     return null
   }
 
   const isCelInput = schema.celExpressionOnly || (supportsModeToggle && useCelMode && (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number'))
+  const isBooleanExpression = schema.widget === 'checkbox' && typeof normalizedValue === 'string'
+  const inExpressionMode = isCelInput || (supportsModeToggle && useCelMode) || isBooleanExpression
+  const isFixedText = !inExpressionMode && (schema.widget === 'text' || schema.widget === 'textarea')
+  // Insert data offers what an expression can read. A fixed text value can
+  // take a {{ }} template too, so it gets the picker as well and switches to
+  // Expression on insert; other fixed widgets switch first.
+  const canInsertData = !hideCELToggle && !disabled && !!schema.celCapable && (inExpressionMode || (isFixedText && supportsModeToggle))
+  const insertData = (path: string) => {
+    if (inExpressionMode) {
+      insertRef.current?.insert(path)
+      return
+    }
+    const current = schema.widget === 'textarea' ? displayStringValue : normalizedStringValue
+    const element = plainInputRef.current
+    const start = element?.selectionStart ?? current.length
+    const end = element?.selectionEnd ?? start
+    setUseCelMode(true)
+    emitChange(current.slice(0, start) + celInsertText(current, start, path, false) + current.slice(end))
+  }
+  const formatMismatch = !inExpressionMode && failsPattern(schema.pattern, normalizedStringValue)
+  // A tools value is a comma-separated string from this widget, but a run
+  // form hands an unset input its default as the list it is declared as
+  // (["tag:coding:default"]), which must show as selected, not as nothing.
+  const toolTokens = Array.isArray(value)
+    ? value.map(String).filter(Boolean)
+    : splitStringList(normalizedStringValue)
 
   const labelAction = (
     <div className="ml-auto flex items-center gap-1">
+      {canInsertData && (
+        <InsertDataMenu fieldLabel={schema.label} celContext={resolvedCelContext} onInsert={insertData} />
+      )}
       {!hideCELToggle && schema.celCapable && !supportsModeToggle && (
         <span className="cpv2-cel-toggle active">CEL</span>
       )}
@@ -237,6 +289,7 @@ export function ProtoFieldRenderer({
       pureExpression={schema.celExpressionOnly}
       celContext={resolvedCelContext}
       currentNodeType={currentNodeType}
+      insertRef={insertRef}
     />
   )
 
@@ -262,11 +315,13 @@ export function ProtoFieldRenderer({
           renderCelInput(normalizedStringValue)
         ) : (
           <input
+            ref={(element) => { plainInputRef.current = element }}
             id={inputId}
             value={normalizedStringValue}
             onChange={(event) => onChange(event.target.value)}
             placeholder={literalPlaceholder}
             aria-describedby={hintId}
+            aria-invalid={formatMismatch || undefined}
             disabled={disabled}
             className="cpv2-field-input"
           />
@@ -277,6 +332,7 @@ export function ProtoFieldRenderer({
           renderCelInput(displayStringValue, { multiline: true })
         ) : (
           <textarea
+            ref={(element) => { plainInputRef.current = element }}
             id={inputId}
             value={displayStringValue}
             onChange={(event) => emitChange(event.target.value)}
@@ -310,6 +366,24 @@ export function ProtoFieldRenderer({
             </option>
           ))}
         </select>
+      ))}
+
+      {schema.widget === 'picker' && (supportsModeToggle && useCelMode ? (
+        <div className="border-l-2 border-primary/30 pl-2">
+          {renderCelInput(normalizedStringValue)}
+        </div>
+      ) : (
+        <OptionPicker
+          id={inputId}
+          value={normalizedStringValue}
+          onChange={(next) => onChange(next)}
+          options={options}
+          placeholder={defaultLabel ? `Default: ${defaultLabel}` : `Select ${schema.label.replace(/\s*\*$/, '').toLowerCase()}…`}
+          manualPlaceholder={schema.example ? `e.g. ${schema.example}` : undefined}
+          searchPlaceholder={`Search ${schema.label.replace(/\s*\*$/, '').toLowerCase()}`}
+          disabled={disabled}
+          describedBy={hintId}
+        />
       ))}
 
       {schema.widget === 'model' && (supportsModeToggle && useCelMode ? (
@@ -361,13 +435,13 @@ export function ProtoFieldRenderer({
       ) : (
         <>
           <ToolsSelector
-            value={normalizedStringValue ? normalizedStringValue.split(',').map(s => s.trim()).filter(Boolean) : []}
+            value={toolTokens}
             onChange={(tools) => onChange(tools.join(', '))}
             disabled={disabled}
             hideLabel
           />
           {/* The selector has no empty-state text of its own. */}
-          {!normalizedStringValue && defaultLabel && (
+          {toolTokens.length === 0 && defaultLabel && (
             <p className="cpv2-field-hint !mt-0">Default: {defaultLabel}</p>
           )}
         </>
@@ -399,6 +473,16 @@ export function ProtoFieldRenderer({
             </div>
           </div>
         )
+      )}
+
+      {formatMismatch && (
+        <p className="cpv2-field-hint !mt-0 flex items-start gap-1.5 text-warning-ink">
+          <AlertTriangle className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden />
+          <span>
+            This doesn't look like a {schema.label.replace(/\s*\*$/, '')}
+            {schema.example ? <>. Expected something like <code className="font-mono">{schema.example}</code>.</> : '.'}
+          </span>
+        </p>
       )}
 
       {inlineHint && (

@@ -42,6 +42,7 @@ import type { DeclaredTrigger } from "@/lib/declaredTriggers";
 import type { Trigger } from "@/api/trigger-grpc";
 import { SetTriggerEnabledResponseSchema, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { ConnectionSchema, ConnectionStatus, ListConnectionsResponseSchema } from "@/gen/reliant/v1/connection_pb";
+import { createInput } from "@/lib/inputHelpers";
 
 const issueTrigger = {
   name: "new-issue",
@@ -89,6 +90,7 @@ function Harness({
   unsaved = false,
   readOnly = false,
   activations = [],
+  inputs = { issue_number: { type: "integer" } },
 }: {
   initial: DeclaredTrigger[];
   onWorkflow: (w: Workflow) => void;
@@ -96,8 +98,9 @@ function Harness({
   unsaved?: boolean;
   readOnly?: boolean;
   activations?: Trigger[];
+  inputs?: Record<string, unknown>;
 }) {
-  const [workflow, setWorkflow] = useState<Workflow>({ name: "triage", inputs: { issue_number: { type: "integer" } }, triggers: initial } as Workflow);
+  const [workflow, setWorkflow] = useState<Workflow>({ name: "triage", inputs, triggers: initial } as Workflow);
   const [dirty, setDirty] = useState(false);
   const triggers = (workflow.triggers ?? []) as DeclaredTrigger[];
   return (
@@ -140,10 +143,10 @@ function Harness({
   );
 }
 
-function renderPanel(initial: DeclaredTrigger[], opts: { unsaved?: boolean; readOnly?: boolean; activations?: Trigger[] } = {}) {
+function renderPanel(initial: DeclaredTrigger[], opts: { unsaved?: boolean; readOnly?: boolean; activations?: Trigger[]; inputs?: Record<string, unknown> } = {}) {
   let latest: Workflow | undefined;
   renderWithQuery(
-    <Harness initial={initial} onWorkflow={(w) => (latest = w)} unsaved={opts.unsaved} readOnly={opts.readOnly} activations={opts.activations} />,
+    <Harness initial={initial} onWorkflow={(w) => (latest = w)} unsaved={opts.unsaved} readOnly={opts.readOnly} activations={opts.activations} inputs={opts.inputs} />,
   );
   return { latest: () => latest?.triggers as DeclaredTrigger[] | undefined };
 }
@@ -221,6 +224,41 @@ describe("DeclaredTriggerPanel", () => {
     fireEvent.change(name, { target: { value: "opened" } });
     fireEvent.blur(name);
     expect(latest()![0]!.name).toBe("opened");
+  });
+
+  // The QW8 workflow declares inputs the runtime wires itself (a preset, a
+  // `ui: hidden` thread id). Listing them as "inputs from the event" invited
+  // the author to map an event field into plumbing.
+  it("keeps internal inputs behind a disclosure, and says what each visible input is", async () => {
+    const user = userEvent.setup();
+    renderPanel([issueTrigger], {
+      inputs: {
+        topic: createInput("string", { description: "What to research" }),
+        model: createInput("model", { default: { id: "flagship" } }),
+        agent: createInput("preset"),
+        parent_thread: createInput("string", { ui: "hidden" }),
+      },
+    });
+
+    const topic = await screen.findByLabelText("topic");
+    expect(screen.getByText("What to research")).toBeInTheDocument();
+    expect(topic).toHaveAttribute("placeholder", "{{ trigger.payload.data… }}");
+    expect(screen.getByLabelText("model")).toHaveAttribute("placeholder", "Default: flagship — or {{ trigger.payload.data… }}");
+    expect(screen.queryByLabelText("agent")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("parent_thread")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Show 2 internal inputs" }));
+    expect(screen.getByLabelText("agent")).toBeInTheDocument();
+    expect(screen.getByLabelText("parent_thread")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Hide internal inputs" })).toHaveAttribute("aria-expanded", "true");
+  });
+
+  it("keeps an internal input that is already mapped in view, so it can be removed", async () => {
+    renderPanel([{ ...issueTrigger, inputs: { parent_thread: "{{ trigger.payload.data.thread }}" } } as unknown as DeclaredTrigger], {
+      inputs: { parent_thread: createInput("string", { ui: "hidden" }) },
+    });
+    expect(await screen.findByLabelText("parent_thread")).toHaveValue("{{ trigger.payload.data.thread }}");
+    expect(screen.queryByRole("button", { name: /internal input/ })).not.toBeInTheDocument();
   });
 
   it("blocks activating a trigger with unsaved edits", async () => {

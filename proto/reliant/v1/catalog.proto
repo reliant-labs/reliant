@@ -255,6 +255,21 @@ message NodeInputField {
   // field is repeated), e.g. call_llm's tool_calls[].name. Empty on inputs
   // and on dynamic objects (google.protobuf.Struct), whose keys are unknown.
   repeated NodeInputField children = 18;
+  // Options are the values a picker offers for this field, when the set is
+  // known to the server but is not a fixed enum: the tools a "node_tool"
+  // field may name, from the tool registry. A picker keeps a way to enter a
+  // value by hand, so an option list is a suggestion, not a validation rule.
+  repeated NodeFieldOption options = 19;
+}
+
+// NodeFieldOption is one value a field's picker offers.
+message NodeFieldOption {
+  // Value is what the field stores.
+  string value = 1;
+  // Label is how the picker names it; empty means the value.
+  string label = 2;
+  // Description is one line saying what picking it does.
+  string description = 3;
 }
 
 // NodeInfo represents a workflow node available for the builder

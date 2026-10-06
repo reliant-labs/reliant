@@ -14,20 +14,11 @@ import {
   getStepParallel,
 } from "../../../types/workflow";
 import type { NodeInputField } from "../../../gen/reliant/v1/catalog_pb";
+import { catalogToOutputFields, childPathPrefix, type OutputField } from "../../../lib/nodeOutputFields";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface OutputField {
-  name: string;
-  type: string;
-  description: string;
-  /** Sub-fields for nested/message types */
-  children?: OutputField[];
-  /** Debug and plumbing fields, listed under "Advanced" (FieldMeta visibility_contexts). */
-  advanced?: boolean;
-}
 
 export interface NodeOutputsPanelProps {
   /** The step being configured */
@@ -80,7 +71,7 @@ function OutputFieldRow({
   const celPath = `${celPrefix}.${field.name}`;
   const hasChildren = field.children && field.children.length > 0;
   // A list's children are its items' fields: nodes.x.tool_calls[0].name.
-  const childPrefix = field.type === "array" ? `${celPath}[0]` : celPath;
+  const childPrefix = childPathPrefix(field, celPath);
 
   return (
     <>
@@ -136,26 +127,6 @@ function OutputFieldRow({
 // ---------------------------------------------------------------------------
 // Helpers to build output fields per node type
 // ---------------------------------------------------------------------------
-
-const ADVANCED_CONTEXTS = new Set(["advanced", "debug"]);
-
-/**
- * The catalog's output fields, as the server lists them: message fields with
- * their sub-fields (tool_calls[].name, message.text), and debug plumbing
- * marked advanced (CatalogService.ListNodes; FieldMeta visibility_contexts).
- */
-export function catalogToOutputFields(
-  fields: readonly NodeInputField[] | undefined
-): OutputField[] {
-  if (!fields || fields.length === 0) return [];
-  return fields.map((f) => ({
-    name: f.name,
-    type: f.type,
-    description: f.description,
-    children: f.children && f.children.length > 0 ? catalogToOutputFields(f.children) : undefined,
-    advanced: (f.visibilityContexts ?? []).some((context) => ADVANCED_CONTEXTS.has(context)),
-  }));
-}
 
 function inlineWorkflowOutputFields(step: Step): OutputField[] | null {
   const inline = getStepInline(step);

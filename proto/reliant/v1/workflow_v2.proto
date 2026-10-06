@@ -661,6 +661,7 @@ message InvokeToolArgs {
   CelString tool = 1 [(reliant) = {
     description: "The tool to run, by name. Only tools that allow direct use from a workflow can be named"
     example: "generate_image"
+    ui_hint: "node_tool"
     label: "Tool"
     visibility_contexts: "basic"
     required: true
@@ -1281,11 +1282,18 @@ message Input {
 }
 
 // InputBase contains fields common to all input types.
+//
+// The (reliant) descriptions are what get_schema shows an agent: generated
+// descriptors carry no source comments, so without them these rows were blank.
 message InputBase {
   // Human-readable description shown in UI.
-  string description = 1;
+  string description = 1 [(reliant) = {description: "What the input is for; the Run and activation forms show it under the field"}];
   // UI visibility: "hidden" (runtime-only), "config" (default), "textarea", "model", "slider", "toolbar".
-  string ui = 2;
+  string ui = 2 [(reliant) = {description: "Where the input appears: toolbar (under the chat box), hidden (runtime only), or unset (behind settings). Renderer hints: textarea, model, slider"}];
+  // Example is what a value looks like, written as YAML would hold it
+  // ("fix the flaky login test", "[forge/db, code-review]"). Run and
+  // activation forms show it in an empty input; it is never a default.
+  string example = 3 [(reliant) = {description: "What a value looks like, shown in the empty input on the Run and activation forms. Never used as a value; set default for that"}];
 }
 
 // StringInputConfig configures a string input with optional validation constraints.

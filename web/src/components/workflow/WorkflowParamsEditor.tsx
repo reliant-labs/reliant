@@ -10,6 +10,8 @@ import { formatValueForDisplay } from '../../lib/paramUtils'
 import type { Param } from '../../types/workflow'
 import {
   getInputUI,
+  getInputDescription,
+  getInputExample,
   getInputDefault,
   getInputEnumValues,
   getInputPattern,
@@ -305,6 +307,8 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
         </button>
       </div>
 
+      <ParamDocsFields param={param} onUpdate={onUpdate} />
+
       {/* Type selector */}
       <div>
         <label className="block text-xs font-medium text-foreground mb-1">
@@ -368,6 +372,47 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
 
       {/* Visibility selector */}
       <VisibilitySelect param={param} onUpdate={onUpdate} />
+    </div>
+  )
+}
+
+// ============================================================================
+// DESCRIPTION AND EXAMPLE
+// ============================================================================
+
+// What the Run and Activate forms show for this input: the description under
+// it, and the example in its empty box. Neither changes what runs.
+function ParamDocsFields({ param, onUpdate }: TypeSpecificInputProps) {
+  const descriptionId = useId()
+  const exampleId = useId()
+  return (
+    <div className="space-y-2">
+      <div>
+        <label htmlFor={descriptionId} className="block text-xs font-medium text-foreground mb-1">
+          Description
+        </label>
+        <input
+          id={descriptionId}
+          type="text"
+          value={getInputDescription(param as InputDef) ?? ''}
+          onChange={(e) => onUpdate({ description: e.target.value })}
+          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+          placeholder="What this input is for, shown under it on the Run form"
+        />
+      </div>
+      <div>
+        <label htmlFor={exampleId} className="block text-xs font-medium text-foreground mb-1">
+          Example
+        </label>
+        <input
+          id={exampleId}
+          type="text"
+          value={getInputExample(param as InputDef) ?? ''}
+          onChange={(e) => onUpdate({ example: e.target.value })}
+          className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
+          placeholder="What a value looks like, shown in the empty box"
+        />
+      </div>
     </div>
   )
 }

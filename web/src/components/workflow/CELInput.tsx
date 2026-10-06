@@ -1,7 +1,8 @@
 import { Code } from 'lucide-react';
 import { HelpPopover } from '../ui/HelpPopover';
 import { MonacoCELEditor } from './MonacoCELEditor';
-import { useCELCompletionContext } from './CELCompletionContext';
+import { useCELCompletionContext, type CELInsertTarget } from './CELCompletionContext';
+import type { MutableRefObject } from 'react';
 
 export interface CELInputProps {
   value: string;
@@ -36,6 +37,8 @@ export interface CELInputProps {
   inputParams?: Record<string, { type: string; description?: string }>;
   celContext?: 'default' | 'loop_while' | 'edge_condition' | 'save_message' | 'thread';
   currentNodeType?: string;
+  /** Set to this input's insertion target (MonacoCELEditorProps.insertRef). */
+  insertRef?: MutableRefObject<CELInsertTarget | null>;
 }
 
 /**
@@ -65,6 +68,7 @@ export function CELInput({
   inputParams,
   celContext,
   currentNodeType,
+  insertRef,
 }: CELInputProps) {
   const hasTemplate = value.includes('{{');
   const isCELMode = pureExpression || hasTemplate;
@@ -116,6 +120,7 @@ export function CELInput({
         nodeOutputSchemas={resolvedNodeOutputSchemas}
         triggerPayloadSchema={resolvedTriggerPayloadSchema}
         className={className}
+        insertRef={insertRef}
       />
 
       {helpText && (

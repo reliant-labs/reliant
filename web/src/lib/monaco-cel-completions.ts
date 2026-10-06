@@ -66,7 +66,7 @@ export interface ParsedCELContext {
 // `trigger` is bound wherever the runtime has workflow inputs (see the
 // Namespaces() of each context in internal/workflow/cel/types.go); the thread
 // context is the only one without it.
-const CONTEXT_NAMESPACES: Record<CELCompletionContext['celContext'], string[]> = {
+export const CONTEXT_NAMESPACES: Record<CELCompletionContext['celContext'], string[]> = {
   default: ['inputs', 'trigger', 'workflow', 'nodes', 'iter'],
   loop_while: ['outputs', 'iter', 'inputs', 'trigger'],
   edge_condition: ['inputs', 'trigger', 'workflow', 'nodes', 'iter', 'outputs'],

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useCallback, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useCallback, useState, type MutableRefObject } from 'react';
 import { useMonaco } from '../../lib/monacoManager';
 import { registerCELEditorContext } from '../../lib/monaco-cel-completions';
 import type { CELCompletionContext } from '../../lib/monaco-cel-completions';
@@ -40,9 +40,26 @@ export interface MonacoCELEditorProps {
   nodeOutputSchemas?: CELCompletionContext['nodeOutputSchemas'];
   triggerPayloadSchema?: CELCompletionContext['triggerPayloadSchema'];
   className?: string;
+  /**
+   * Set to this input's own insertion target, so a control beside it (the
+   * field's Insert data picker) can insert a path at its cursor without
+   * going through "the last focused input".
+   */
+  insertRef?: MutableRefObject<CELInsertTarget | null>;
 }
 
 type IStandaloneCodeEditor = ReturnType<Monaco['editor']['create']>;
+
+/** Point `insertRef` at `target` while mounted (and only while it still points there). */
+function useOwnInsertTarget(insertRef: MutableRefObject<CELInsertTarget | null> | undefined, target: CELInsertTarget | null, active = true) {
+  useLayoutEffect(() => {
+    if (!insertRef || !target || !active) return;
+    insertRef.current = target;
+    return () => {
+      if (insertRef.current === target) insertRef.current = null;
+    };
+  }, [insertRef, target, active]);
+}
 
 export function MonacoCELEditor({
   value,
@@ -62,6 +79,7 @@ export function MonacoCELEditor({
   nodeOutputSchemas,
   triggerPayloadSchema,
   className,
+  insertRef,
 }: MonacoCELEditorProps) {
   const monaco = useMonaco();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -83,13 +101,20 @@ export function MonacoCELEditor({
   const pureExpressionRef = useRef(pureExpression);
   pureExpressionRef.current = pureExpression;
   const insertTargetRef = useRef<CELInsertTarget | null>(null);
+  // Until the editor has been focused its selection is the start of the
+  // text, which is not where anyone means to insert: append instead.
+  const everFocusedRef = useRef(false);
   insertTargetRef.current ??= {
     label: placeholder,
     insert: (path: string) => {
       const editor = editorRef.current;
       const model = editor?.getModel();
-      const selection = editor?.getSelection();
+      let selection = editor?.getSelection();
       if (!editor || !model || !selection) return;
+      if (!everFocusedRef.current && model.getValueLength() > 0) {
+        const end = model.getPositionAt(model.getValueLength());
+        selection = selection.setStartPosition(end.lineNumber, end.column).setEndPosition(end.lineNumber, end.column);
+      }
       const offset = model.getOffsetAt(selection.getStartPosition());
       const text = celInsertText(model.getValue(), offset, path, pureExpressionRef.current);
       editor.executeEdits('cel-insert', [{ range: selection, text, forceMoveMarkers: true }]);
@@ -100,6 +125,8 @@ export function MonacoCELEditor({
     const target = insertTargetRef.current!;
     return () => insertRegistry?.clearTarget(target);
   }, [insertRegistry]);
+  // While Monaco is loading the fallback input below owns `insertRef`.
+  useOwnInsertTarget(insertRef, insertTargetRef.current, !!monaco);
 
   // Keep context in a ref so the completion provider callback always sees fresh values
   const contextRef = useRef<CELCompletionContext>({
@@ -223,6 +250,7 @@ export function MonacoCELEditor({
 
     // Focus / blur tracking
     const focusDisposable = editor.onDidFocusEditorText(() => {
+      everFocusedRef.current = true;
       setIsFocused(true);
       insertRegistry?.setTarget(insertTargetRef.current!);
     });
@@ -326,6 +354,7 @@ export function MonacoCELEditor({
         className={className}
         id={id}
         pureExpression={pureExpression}
+        insertRef={insertRef}
       />
     );
   }
@@ -370,9 +399,10 @@ function FallbackInput({
   className,
   id,
   pureExpression = false,
+  insertRef,
 }: Pick<
   MonacoCELEditorProps,
-  'value' | 'onChange' | 'placeholder' | 'multiline' | 'rows' | 'disabled' | 'className' | 'id' | 'pureExpression'
+  'value' | 'onChange' | 'placeholder' | 'multiline' | 'rows' | 'disabled' | 'className' | 'id' | 'pureExpression' | 'insertRef'
 >) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -404,6 +434,7 @@ function FallbackInput({
     const target = targetRef.current!;
     return () => insertRegistry?.clearTarget(target);
   }, [insertRegistry]);
+  useOwnInsertTarget(insertRef, targetRef.current);
   const handleFocus = () => insertRegistry?.setTarget(targetRef.current!);
 
   const classes = cn(

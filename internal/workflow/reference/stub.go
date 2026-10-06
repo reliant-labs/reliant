@@ -395,13 +395,19 @@ func protoKindToSimpleType_inner(fd protoreflect.FieldDescriptor) string {
 	}
 }
 
-// getProtoFieldComment extracts the leading comment from a proto field descriptor.
+// getProtoFieldComment describes a proto field: its leading comment when the
+// descriptor carries source info, else its (reliant) description annotation.
 func getProtoFieldComment(fd protoreflect.FieldDescriptor) string {
-	// Proto field descriptors from source info carry comments, but the
-	// generated descriptor doesn't always have them. Fall back to empty.
+	// Generated descriptors carry no source info, so in the running binary
+	// the annotation is the description that actually reaches get_schema.
 	loc := fd.ParentFile().SourceLocations().ByDescriptor(fd)
 	if loc.LeadingComments != "" {
 		return cleanProtoComment(loc.LeadingComments)
+	}
+	if opts := fd.Options(); opts != nil {
+		if meta, ok := proto.GetExtension(opts, reliantv1.E_Reliant).(*reliantv1.FieldMeta); ok && meta != nil {
+			return meta.GetDescription()
+		}
 	}
 	return ""
 }

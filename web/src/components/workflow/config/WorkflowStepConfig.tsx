@@ -18,11 +18,9 @@ import { ResponseToolsEditor } from "../ResponseToolsEditor";
 import type { ResponseToolDefinition } from "../../../types/workflow";
 import { toJson } from "@bufbuild/protobuf";
 import { ValueSchema } from "@bufbuild/protobuf/wkt";
+import { OptionPicker, type PickerOption } from "../OptionPicker";
 import {
   DrillRow,
-  FieldInput,
-  FieldLabel,
-  FieldSelect,
   ModeGroup,
   ModePill,
   Section,
@@ -67,6 +65,7 @@ export function WorkflowStepConfig({
     Array<{
       name: string;
       filename?: string;
+      title?: string;
       description?: string;
       step_count?: number;
       source?: "builtin" | "user" | "project";
@@ -232,17 +231,23 @@ export function WorkflowStepConfig({
     (wf) => wf.source !== "builtin" && wf.name !== currentWorkflowName,
   );
 
-  const workflowRef = workflowRefValue;
-  const isBuiltin = workflowRef.startsWith("builtin://");
-  const isUserWorkflow = workflowRef.startsWith("workflow://");
-  const isCustomPath = !isBuiltin && !isUserWorkflow && workflowRef !== "";
-
-  const getSelectionType = () => {
-    if (isBuiltin) return workflowRef;
-    if (isUserWorkflow) return workflowRef;
-    if (isCustomPath) return "custom";
-    return "";
-  };
+  // The picker's options: built-ins, then the user's own, each with what it
+  // does. A ref not in the list (a project:// path, an expression) is edited
+  // as text, which is also the picker's "Enter manually".
+  const workflowOptions: PickerOption[] = [
+    ...builtinWorkflows.map((wf) => ({
+      value: wf.name,
+      label: wf.title || wf.name.replace(/^builtin:\/\//, ""),
+      description: wf.description || undefined,
+      group: "Built-in workflows",
+    })),
+    ...userWorkflows.map((wf) => ({
+      value: wf.name,
+      label: wf.title || wf.name.replace(/^workflow:\/\//, ""),
+      description: wf.description || undefined,
+      group: "Your workflows",
+    })),
+  ];
 
   const inlineWorkflow = getStepInline(step);
 
@@ -265,76 +270,31 @@ export function WorkflowStepConfig({
         <>
           <Section>
             <SectionLabel>Workflow</SectionLabel>
-            <FieldLabel>Reference</FieldLabel>
-            {loadingWorkflows ? (
-              <div className="cpv2-field-input text-muted-foreground">
-                Loading workflows...
-              </div>
-            ) : (
-              <FieldSelect
-                value={getSelectionType()}
-                onChange={(e) => {
-                  const nextRef = e.target.value === "custom" ? "" : e.target.value;
-                  // Clear both args AND presets when ref changes — stale presets
-                  // pointing at the old workflow leave the panel showing a chip
-                  // that has no matching preset under the new ref.
-                  onUpdate(
-                    withWorkflowArgs(step, {
-                      ref: celString(nextRef),
-                      args: {},
-                      presets: {},
-                    }) as WorkflowStep,
-                  );
-                }}
-                disabled={isReadOnly}
-              >
-                <option value="">Select a workflow...</option>
-                {builtinWorkflows.length > 0 && (
-                  <optgroup label="Built-in Workflows">
-                    {builtinWorkflows.map((wf) => (
-                      <option key={wf.name} value={wf.name}>
-                        {wf.name.replace(/^builtin:\/\//, '')}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-
-                {userWorkflows.length > 0 && (
-                  <optgroup label="Your Workflows">
-                    {userWorkflows.map((wf) => (
-                      <option key={wf.name} value={wf.name}>
-                        {wf.name.replace(/^workflow:\/\//, '')}
-                      </option>
-                    ))}
-                  </optgroup>
-                )}
-
-                <optgroup label="Other">
-                  <option value="custom">Custom path...</option>
-                </optgroup>
-              </FieldSelect>
-            )}
+            <div className="cpv2-field-label">
+              <label htmlFor={`${step.id}-workflow-ref`}>Reference</label>
+            </div>
+            <OptionPicker
+              id={`${step.id}-workflow-ref`}
+              value={workflowRefValue}
+              options={workflowOptions}
+              loading={loadingWorkflows}
+              onChange={(nextRef) => {
+                // Picking a different workflow clears args AND presets: stale
+                // presets pointing at the old workflow leave the panel showing
+                // a chip with no matching preset under the new ref. Typing a
+                // ref by hand keeps them while it is being typed.
+                const picked = workflowOptions.some((option) => option.value === nextRef);
+                onUpdate(
+                  withWorkflowArgs(step, picked ? { ref: celString(nextRef), args: {}, presets: {} } : { ref: celString(nextRef) }) as WorkflowStep,
+                );
+              }}
+              placeholder="Select a workflow…"
+              searchPlaceholder="Search workflows"
+              manualPlaceholder="project://my-flow, builtin://agent or {{expression}}"
+              emptyMessage="No workflows to pick from. Enter a reference manually."
+              disabled={isReadOnly}
+            />
           </Section>
-
-          {/* Custom path input */}
-          {(getSelectionType() === "custom" || isCustomPath) && (
-            <Section>
-              <FieldLabel>Custom path</FieldLabel>
-              <FieldInput
-                type="text"
-                value={workflowRefValue}
-                onChange={(e) =>
-                  onUpdate(
-                    withWorkflowArgs(step, {
-                      ref: celString(e.target.value),
-                    }) as WorkflowStep,
-                  )
-                }
-                placeholder="Workflow reference or {{expression}}"
-                disabled={isReadOnly}
-              />
-            </Section>
-          )}
 
           {/* Schema-aware inputs */}
           {loadingDef ? (

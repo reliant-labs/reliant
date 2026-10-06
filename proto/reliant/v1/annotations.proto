@@ -16,7 +16,9 @@ message FieldMeta {
   // Pipe-separated enum values (e.g., "none|low|medium|high|xhigh").
   string enum_values = 2;
 
-  // UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar".
+  // UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar",
+  // or "node_tool" (a picker over the tools an invoke_tool node may name; the
+  // catalog fills NodeInputField.options from the tool registry).
   string ui_hint = 3;
 
   // If true, field is internal/runtime-only — not shown in UI or docs.

@@ -32,7 +32,9 @@ type FieldMeta struct {
 	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
 	// Pipe-separated enum values (e.g., "none|low|medium|high|xhigh").
 	EnumValues string `protobuf:"bytes,2,opt,name=enum_values,json=enumValues,proto3" json:"enum_values,omitempty"`
-	// UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar".
+	// UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar",
+	// or "node_tool" (a picker over the tools an invoke_tool node may name; the
+	// catalog fills NodeInputField.options from the tool registry).
 	UiHint string `protobuf:"bytes,3,opt,name=ui_hint,json=uiHint,proto3" json:"ui_hint,omitempty"`
 	// If true, field is internal/runtime-only — not shown in UI or docs.
 	Hidden bool `protobuf:"varint,4,opt,name=hidden,proto3" json:"hidden,omitempty"`
