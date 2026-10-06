@@ -1142,8 +1142,8 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		errorData["error_summary"] = summary
 	}
 	// Scope the error to the thread that produced it. Omitted entirely when
-	// the activity has no thread, so the timeline's "no thread means
-	// chat-scoped" branch still applies rather than matching on "".
+	// the activity has no thread: absent means chat-level work, which the
+	// timeline files under the main thread.
 	if thread := extractThread(input); thread != "" {
 		errorData["thread"] = thread
 	}
@@ -1425,19 +1425,34 @@ func extractInputStringAtDepth(input interface{}, jsonName, goName string, depth
 // extractThread pulls the thread an activity was working on out of its input,
 // so the error event it produces can be scoped to that thread.
 //
-// Without it every activity error is chat-global, and the timeline shows it in
-// EVERY thread of the chat — including spawns that started long after the
-// error and never saw it. Observed: a run of DrainAgentMessages failures
-// rendered at the top of a spawn thread that did not exist when they happened.
-// InterleavedTimeline already scopes an error that carries a thread; nothing
-// was filling the field in.
+// Without it an activity error carries no thread and cannot be shown on the
+// thread that raised it. Observed: runs of DrainAgentMessages and later
+// EnqueueAgentMessage failures rendered at the top of a spawn thread that did
+// not exist when they happened.
+//
+// An input that implements ThreadScopedInput answers for itself; every other
+// input is read by its "thread" field.
 //
 // Returns "" when the input has no thread, which is the honest answer for a
-// genuinely chat-scoped activity. The timeline keeps showing those everywhere
-// rather than guessing a thread — guessing is what produced the wrong-thread
-// render to begin with.
+// genuinely chat-level activity (title generation, the daemon preflight). The
+// timeline files those under the main thread — so an activity that runs on a
+// spawn and reports "" has its failure shown on the wrong thread.
 func extractThread(input interface{}) string {
+	if scoped, ok := input.(ThreadScopedInput); ok {
+		return scoped.ActivityThread()
+	}
 	return extractInputString(input, "thread", "Thread")
+}
+
+// ThreadScopedInput is implemented by an activity input that knows which
+// thread ran it but does not carry it in a field named "thread".
+//
+// The case that needs it holds two threads: EnqueueAgentMessage names
+// from_thread_id and to_thread_id, and only the activity knows it runs on the
+// sender. A field lookup cannot pick between them, and guessing by field name
+// would quietly pick wrong the next time an input grew a second thread.
+type ThreadScopedInput interface {
+	ActivityThread() string
 }
 
 // activityInputInfo holds common fields extracted from activity inputs for tracking.

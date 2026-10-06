@@ -213,6 +213,21 @@ function errorDisplayIdentity(error: ErrorUpdate): string {
 }
 
 /**
+ * The thread an error belongs to. One with no thread was raised by chat-level
+ * work — title generation, the daemon preflight, the main run's own status
+ * writes — and belongs to the MAIN thread, whose id is the chat id. That is
+ * the same default a thread-less message gets (`msg.thread || chatId`).
+ *
+ * It used to mean "visible in every thread". That turned any producer that
+ * forgot to stamp a thread into errors leaking across the chat: observed, six
+ * EnqueueAgentMessage failures from other spawns rendered at the top of a
+ * spawn thread started days after they happened.
+ */
+function errorThread(error: ErrorUpdate): string {
+  return error.thread || error.chat_id;
+}
+
+/**
  * Filter errors to the visible threads and collapse concurrent identical
  * failures into single rows.
  *
@@ -228,10 +243,8 @@ function errorDisplayIdentity(error: ErrorUpdate): string {
  *     happened to that thread; a retry series of one failure is already folded
  *     store-side by id (see applyErrorUpdates).
  *
- * An error with NO thread predates thread scoping. It stays visible everywhere
- * rather than being guessed into a thread, and it is never absorbed into
- * another thread's group — a guess about which threads it covers would be the
- * same mistake in a new place.
+ * An error with no thread is a main-thread error (see errorThread) for both
+ * visibility and grouping.
  */
 export function groupVisibleErrors(
   errors: readonly ErrorUpdate[],
@@ -240,7 +253,7 @@ export function groupVisibleErrors(
     collapseAcrossThreads: boolean;
   },
 ): ErrorGroup[] {
-  const visible = errors.filter((error) => !error.thread || opts.isVisible(error.thread));
+  const visible = errors.filter((error) => opts.isVisible(errorThread(error)));
 
   if (!opts.collapseAcrossThreads) {
     return visible.map((error) => ({ error, errors: [error] }));
@@ -261,30 +274,20 @@ export function groupVisibleErrors(
   }> = [];
 
   for (const error of ordered) {
-    if (!error.thread) {
-      // Legacy, chat-wide: stands alone.
-      groups.push({
-        group: { error, errors: [error] },
-        anchorTime: Number.NaN,
-        identity: "",
-        threads: new Set(),
-      });
-      continue;
-    }
-
+    const thread = errorThread(error);
     const identity = errorDisplayIdentity(error);
     const time = new Date(error.timestamp).getTime();
     const open = groups.find(
       (candidate) =>
         candidate.identity === identity &&
         candidate.group.error.chat_id === error.chat_id &&
-        !candidate.threads.has(error.thread as string) &&
+        !candidate.threads.has(thread) &&
         time - candidate.anchorTime <= CONCURRENT_ERROR_WINDOW_MS,
     );
 
     if (open) {
       open.group.errors.push(error);
-      open.threads.add(error.thread);
+      open.threads.add(thread);
       continue;
     }
 
@@ -292,7 +295,7 @@ export function groupVisibleErrors(
       group: { error, errors: [error] },
       anchorTime: time,
       identity,
-      threads: new Set([error.thread]),
+      threads: new Set([thread]),
     });
   }
 
@@ -829,9 +832,8 @@ export const InterleavedTimeline = memo(function InterleavedTimeline({
     // connected" from the main thread rendered inside EVERY thread of the chat,
     // including spawns that started 12h later and never saw the outage.
     //
-    // An error with no thread predates thread scoping. It stays visible
-    // everywhere rather than being assigned to a thread we'd have to guess —
-    // the guess is what produced the wrong-thread render in the first place.
+    // An error with no thread is a main-thread error, exactly like a message
+    // with no thread (see errorThread).
     //
     // Concurrent identical failures across SEVERAL visible threads collapse to
     // one row carrying a count. They stay separate rows in the store and the

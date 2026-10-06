@@ -122,10 +122,10 @@ func WriteWorkflowError(ctx context.Context, repo db.Repository, input WorkflowE
 		"workflow_id":   input.WorkflowID,
 	}
 
-	// Thread scoping. Omitted when unknown rather than defaulted to the chat id:
-	// a reader must be able to tell "this error belongs to the main thread" from
-	// "nobody said", and silently claiming the former is how a main-thread error
-	// ends up rendered in every spawned thread.
+	// Thread scoping. Omitted when unknown rather than defaulted to the chat id,
+	// so a reader can tell "raised on the main thread" from "nobody said". The
+	// timeline files both under the main thread; a spawn's error must name its
+	// spawn, or it is shown in the main thread instead of its own.
 	if input.Thread != "" {
 		errorData["thread"] = input.Thread
 	}
