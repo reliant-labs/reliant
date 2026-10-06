@@ -126,6 +126,7 @@ describe("getEnvironmentStatus", () => {
         desired_digest: "sha256:aaa",
         drifted: true,
         last_error: "CrashLoopBackOff",
+        suspend_reason: "unspecified",
         deployment_id: "",
         declared_run_state: "unspecified",
       },
