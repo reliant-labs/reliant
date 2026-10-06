@@ -34,27 +34,27 @@ func TestToolCallProtoConversions_RoundTripThoughtSignature(t *testing.T) {
 	assert.Equal(t, `{"file_path":"a.go"}`, back[0].Input)
 }
 
-// A signature must survive alongside the input-envelope metadata, which is
-// encoded into the input field rather than carried as its own proto field.
-func TestToolCallProtoConversions_SignatureSurvivesInputEnvelope(t *testing.T) {
+// A tool call recorded in a history from before the capability set still
+// carries the input envelope call_llm used to wrap spawn calls in. It must
+// still decode — to the bare input — with the signature intact.
+func TestToolCallProtoConversions_LegacyInputEnvelopeStillDecodes(t *testing.T) {
 	t.Parallel()
 
 	const sig = "sig-with-envelope"
-	protoCalls := messageToolCallsToProto([]message.ToolCall{{
-		ID:               "tc2",
+	back := protoToolCallsToMessage([]*reliantv1.ToolCallMsg{{
+		Id:               "tc2",
 		Name:             "spawn",
-		Input:            `{"prompt":"go"}`,
-		SpawnWorkflow:    "builtin://agent",
+		Input:            `{"input":"{\"prompt\":\"go\"}","__reliant_tool_meta__":{"available_presets":["general"]}}`,
 		ThoughtSignature: sig,
 	}})
-	require.Len(t, protoCalls, 1)
-	require.Equal(t, sig, protoCalls[0].GetThoughtSignature())
-
-	back := protoToolCallsToMessage(protoCalls)
 	require.Len(t, back, 1)
 	assert.Equal(t, sig, back[0].ThoughtSignature)
 	assert.Equal(t, `{"prompt":"go"}`, back[0].Input, "the envelope is still decoded")
-	assert.Equal(t, "builtin://agent", back[0].SpawnWorkflow)
+
+	// And nothing writes the envelope any more.
+	protoCalls := messageToolCallsToProto([]message.ToolCall{{ID: "tc3", Name: "spawn", Input: `{"prompt":"go"}`}})
+	require.Len(t, protoCalls, 1)
+	assert.Equal(t, `{"prompt":"go"}`, protoCalls[0].GetInput())
 }
 
 // The proto ToolCallMsg must expose the field at all; without it the whole

@@ -7,551 +7,251 @@ import (
 
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // ============================================================================
-// TOOL PERMISSION ENFORCEMENT TESTS
+// EXECUTION-TIME CAPABILITY ENFORCEMENT
 // ============================================================================
+//
+// execute_tools enforces the capability set of the call_llm turn that produced
+// its calls, carried on ExecuteToolsArgs.capabilities. These pin that check in
+// isolation; capabilities_flow_test.go drives it from a real call_llm turn.
 
-// TestExecuteToolsActivity_PermissionEnforcement tests that tool calls are
-// validated at execution against BOTH the declared tool set and the permission
-// level set by call_llm via LoadedToolsStore.
-func TestExecuteToolsActivity_PermissionEnforcement(t *testing.T) {
-	// A tool the workflow did not preload still EXECUTES here, and that is the
-	// correction rather than a gap.
-	//
-	// An earlier version refused anything outside the preloaded bundle at
-	// execution. That read an omission as a refusal and broke the documented
-	// route to tools deliberately left out of the default bundle for cost —
-	// generate_image among them: load_tool grants one legitimately, and this
-	// then rejected the call.
-	//
-	// Acquisition is where that decision belongs, and load_tool makes it against
-	// loadable_tools. By the time a call reaches execution the tool was either
-	// preloaded or loaded, and both are answers the workflow already gave.
-	t.Run("A loaded tool outside the preloaded bundle still executes", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
+// offeredCaps is a recorded set whose turn offered exactly names, at tier.
+func offeredCaps(permission string, names ...string) *reliantv1.ToolCapabilities {
+	return (&tools.Capabilities{Offered: names, Permission: permission, LoadableAll: true}).Proto()
+}
 
-		ctx := context.Background()
+// newValidationChat creates a chat to execute against.
+func newValidationChat(t *testing.T) (*IdempotencyTestHelper, string) {
+	t.Helper()
+	h := NewIdempotencyTestHelper(t)
+	t.Cleanup(h.Cleanup)
+	ctx := context.Background()
+	userID := uuid.New().String()
+	projectID := uuid.New().String()
+	chatID := uuid.New().String()
+	h.CreateTestProject(ctx, projectID, userID)
+	h.CreateTestChat(ctx, chatID, projectID, userID)
+	return h, chatID
+}
 
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		// Preloaded: view + shell. write is not in the bundle, but the workflow
-		// placed no restriction on what may be loaded.
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, nil))
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
+func TestExecuteToolsActivity_CapabilityEnforcement(t *testing.T) {
+	// A tool outside the preloaded bundle that load_tool granted on an earlier
+	// turn is OFFERED on this one, so it runs. This is the case the old
+	// declared-set check got wrong — it refused generate_image after
+	// load_tool had legitimately granted it — and the reason that check was
+	// removed rather than fixed. "Offered in the request that produced this
+	// call" includes loaded tools by construction.
+	t.Run("A loaded tool outside the preloaded bundle executes", func(t *testing.T) {
+		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:    "call_write",
-					Name:  tools.ToolWrite,
-					Input: `{"file_path": "/tmp/x", "content": "y"}`,
-				},
-			},
-		}
-
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+			ChatID:       chatID,
+			Thread:       "0",
+			Capabilities: offeredCaps(tools.PermissionMutating, tools.ToolView, tools.ShellToolName, tools.ToolGenerateImage),
+			ToolCalls: []message.ToolCall{
+				{ID: "call_image", Name: tools.ToolGenerateImage, Input: `{"prompt": "a cat"}`},
+			},
+		}, &output))
 
-		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
-		assert.False(t, output.ToolResults[0].IsError,
-			"a tool outside the preloaded bundle must still run: %s", output.ToolResults[0].Content)
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_write"))
+		assert.False(t, output.ToolResults[0].IsError, output.ToolResults[0].Content)
+		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_image"))
 	})
 
-	t.Run("Tool inside the declared set runs", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		// A preloaded tool runs normally.
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView, tools.ShellToolName}, nil, nil))
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
+	t.Run("A tool that was not offered is refused and never executed", func(t *testing.T) {
+		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		// view is inside the declared set
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:    "call_view",
-					Name:  "view",
-					Input: `{"file_path": "test.txt"}`,
-				},
-			},
-		}
-
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+			ChatID:       chatID,
+			Thread:       "0",
+			Capabilities: offeredCaps(tools.PermissionMutating, tools.ToolView),
+			ToolCalls: []message.ToolCall{
+				{ID: "call_view", Name: tools.ToolView, Input: `{"file_path": "test.txt"}`},
+				{ID: "call_write", Name: tools.ToolWrite, Input: `{"file_path": "/tmp/x", "content": "y"}`},
+			},
+		}, &output))
 
-		require.NoError(t, err)
-		require.Len(t, output.ToolResults, 1)
-		assert.False(t, output.ToolResults[0].IsError)
+		results := resultsByID(output.ToolResults)
+		assert.False(t, results["call_view"].IsError)
+		assert.True(t, results["call_write"].IsError)
+		assert.Contains(t, results["call_write"].Content, "Tool 'write' was not offered on this turn")
+		assert.Contains(t, results["call_write"].Content, `load_tool(name="write")`,
+			"a loadable tool's refusal says how to get it")
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_view"))
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_write"), "a refused tool must never reach the executor")
 	})
 
-	t.Run("Mutating tool allowed with mutating permission", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
+	// The tier is part of the set: a tool above it is never offered, so a call
+	// to one is refused by the same check, with the tier as the reason.
+	t.Run("A tool above the tier is refused mid-batch", func(t *testing.T) {
+		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:    "call_bash",
-					Name:  "bash",
-					Input: `{"command": "ls"}`,
-				},
+		caps := tools.ResolveCapabilities(tools.CapabilityInputs{
+			Access:     tools.ResolveToolAccess([]string{tools.ToolView, tools.ToolStartRun}, nil, nil),
+			Permission: tools.PermissionMutating,
+		})
+		var output ExecuteToolsOutput
+		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+			ChatID:       chatID,
+			Thread:       "0",
+			Capabilities: caps.Proto(),
+			ToolCalls: []message.ToolCall{
+				{ID: "call_view", Name: tools.ToolView, Input: `{"file_path": "test.txt"}`},
+				{ID: "call_start_run", Name: tools.ToolStartRun, Input: `{"prompt": "x"}`},
 			},
-		}
+		}, &output))
+
+		results := resultsByID(output.ToolResults)
+		assert.False(t, results["call_view"].IsError)
+		assert.True(t, results["call_start_run"].IsError)
+		assert.Contains(t, results["call_start_run"].Content, "requires 'orchestrator' permission")
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_start_run"))
+	})
+
+	// No recorded set: a batch whose call_llm predates the set. It keeps what
+	// a worker restart already produced — no offered check, the base tier.
+	t.Run("With no recorded set an ordinary tool runs", func(t *testing.T) {
+		h, chatID := newValidationChat(t)
+		mockExecutor := newMockToolExecutor()
+		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+			ChatID:    chatID,
+			Thread:    "0",
+			ToolCalls: []message.ToolCall{{ID: "call_bash", Name: "bash", Input: `{"command": "ls"}`}},
+		}, &output))
 
-		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
 		assert.False(t, output.ToolResults[0].IsError)
 		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_bash"))
 	})
 
-	// An unset scope is the worker-restart case: the in-memory store was emptied
-	// while the run was in flight. It must fail CLOSED — falling back to the
-	// lowest live tier rather than granting orchestrator precisely because the
-	// grant was lost. An undeclared scope still allows ordinary tools, so a live
-	// run is not stranded.
-	t.Run("Unset permission falls back to the base tier and still runs ordinary tools", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		// Deliberately set no permission for this scope.
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
+	t.Run("With no recorded set an orchestrator tool is refused at the base tier", func(t *testing.T) {
+		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:    "call_any",
-					Name:  "bash",
-					Input: `{"command": "ls"}`,
-				},
-			},
-		}
-
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+			ChatID:    chatID,
+			Thread:    "0",
+			ToolCalls: []message.ToolCall{{ID: "call_start_run", Name: tools.ToolStartRun, Input: `{"prompt": "x"}`}},
+		}, &output))
 
-		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
-		assert.False(t, output.ToolResults[0].IsError)
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_any"))
-	})
-
-	// The other half of the same case, and the one the old orchestrator default
-	// got wrong: losing the grant must not widen it.
-	//
-	// spawn is what this can be shown with now. With the readonly tier removed,
-	// the base tier IS mutating, so there is no longer a "mutating tool" an
-	// ungranted scope can be denied — the fail-closed default withholds exactly
-	// one capability, and that is the one worth pinning.
-	t.Run("Unset permission denies spawn", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		// Deliberately set no permission for this scope.
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
-		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
-
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:    "call_spawn",
-					Name:  "spawn",
-					Input: `{"preset": "general", "prompt": "x"}`,
-				},
-			},
-		}
-
-		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
-
-		require.NoError(t, err)
-		require.Len(t, output.ToolResults, 1)
-		assert.True(t, output.ToolResults[0].IsError,
-			"spawn must be denied when the scope carries no granted permission")
-		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_spawn"),
-			"a denied tool must never reach the executor")
+		assert.True(t, output.ToolResults[0].IsError)
+		assert.Contains(t, output.ToolResults[0].Content, "requires 'orchestrator' permission")
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_start_run"))
 	})
 }
 
-// TestExecuteToolsActivity_SpawnPresetValidation tests that spawn tool calls
-// are validated against the AvailablePresets list.
-func TestExecuteToolsActivity_SpawnPresetValidation(t *testing.T) {
-	t.Run("Spawn with preset not in AvailablePresets returns error", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
+// A refusal is recorded FAILED with its reason, like every other refusal, so a
+// reload shows a refused call rather than one stuck "executing".
+func TestExecuteTools_RefusesToolNotOfferedThisTurn(t *testing.T) {
+	h, chatID := newValidationChat(t)
+	mockExecutor := newMockToolExecutor()
+	activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
+	toolCallID := "toolu_" + uuid.NewString()
 
-		ctx := context.Background()
+	var output ExecuteToolsOutput
+	require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+		ChatID:       chatID,
+		Thread:       chatID,
+		Capabilities: (&tools.Capabilities{Offered: []string{tools.ToolCreatePlan, tools.ToolView}, Permission: tools.PermissionMutating}).Proto(),
+		// write was offered on an earlier, agent-mode turn and is still in
+		// history; this turn (plan mode) did not offer it.
+		ToolCalls: []message.ToolCall{{ID: toolCallID, Name: tools.ToolWrite, Input: `{"file_path": "/tmp/x", "content": "y"}`}},
+	}, &output))
 
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
+	require.Len(t, output.ToolResults, 1)
+	result := output.ToolResults[0]
+	assert.True(t, result.IsError)
+	assert.Contains(t, result.Content, "was not offered to this agent")
+	assert.Equal(t, 0, mockExecutor.GetExecutionCount(toolCallID))
 
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
+	call, err := h.Repo().GetToolCall(context.Background(), toolCallID)
+	require.NoError(t, err)
+	assert.Equal(t, core.ToolCallStatusFailed, call.Status)
+	require.NotNil(t, call.ErrorMessage)
+	assert.Equal(t, result.Content, *call.ErrorMessage, "the row records why")
+	stored := getToolCallResult(t, h, toolCallID)
+	require.NotNil(t, stored, "a refused call still owes the conversation a result row")
+	assert.True(t, stored.IsError)
+}
 
-		// Orchestrator permission so spawn itself is allowed
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
+// A spawn reaches the activity only when the workflow declined to dispatch it
+// (runtime.withCapabilitiesApplied). It is never executed here.
+func TestExecuteToolsActivity_SpawnRoutedHereIsRefused(t *testing.T) {
+	spawnCaps := (&tools.Capabilities{
+		Offered:      []string{tools.ToolSpawn},
+		Permission:   tools.PermissionMutating,
+		SpawnPresets: []string{"planner", "researcher"},
+	}).Proto()
 
+	t.Run("A preset the spawn tool was not offered with names the offered ones", func(t *testing.T) {
+		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:               "call_spawn",
-					Name:             "spawn",
-					Input:            `{"preset": "hallucinated_preset", "prompt": "do something"}`,
-					AvailablePresets: []string{"researcher", "planner"},
-				},
-			},
-		}
-
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
+		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+			ChatID:       chatID,
+			Thread:       "0",
+			Capabilities: spawnCaps,
+			ToolCalls: []message.ToolCall{
+				{ID: "call_spawn", Name: tools.ToolSpawn, Input: `{"preset": "hallucinated_preset", "prompt": "do something"}`},
+			},
+		}, &output))
 
-		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
 		assert.True(t, output.ToolResults[0].IsError)
-		assert.Contains(t, output.ToolResults[0].Content, "hallucinated_preset")
-		assert.Contains(t, output.ToolResults[0].Content, "not available")
-
+		assert.Contains(t, output.ToolResults[0].Content, "Preset 'hallucinated_preset' is not available")
+		assert.Contains(t, output.ToolResults[0].Content, "planner")
 		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_spawn"))
 	})
 
-	t.Run("Spawn with valid preset executes normally", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
+	t.Run("A spawn that was not offered says so", func(t *testing.T) {
+		h, chatID := newValidationChat(t)
 		mockExecutor := newMockToolExecutor()
 		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
 
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:               "call_spawn_valid",
-					Name:             "spawn",
-					Input:            `{"preset": "researcher", "prompt": "analyze code"}`,
-					AvailablePresets: []string{"researcher", "planner"},
-				},
-			},
-		}
-
 		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
-
-		require.NoError(t, err)
-		require.Len(t, output.ToolResults, 1)
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_spawn_valid"))
-	})
-
-	t.Run("Spawn with empty AvailablePresets skips preset validation", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
-		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
-
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:               "call_spawn_any",
-					Name:             "spawn",
-					Input:            `{"preset": "any_preset", "prompt": "do something"}`,
-					AvailablePresets: nil, // No preset validation
-				},
+		require.NoError(t, h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+			ChatID:       chatID,
+			Thread:       "0",
+			Capabilities: offeredCaps(tools.PermissionMutating, tools.ToolView),
+			ToolCalls: []message.ToolCall{
+				{ID: "call_spawn", Name: tools.ToolSpawn, Input: `{"preset": "planner", "prompt": "x"}`},
 			},
-		}
+		}, &output))
 
-		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
-
-		require.NoError(t, err)
 		require.Len(t, output.ToolResults, 1)
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_spawn_any"))
-	})
-
-	t.Run("Non-spawn tool ignores AvailablePresets", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionOrchestrator)
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
-		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
-
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:               "call_bash",
-					Name:             "bash",
-					Input:            `{"command": "ls"}`,
-					AvailablePresets: []string{"researcher"}, // Should be ignored for bash
-				},
-			},
-		}
-
-		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
-
-		require.NoError(t, err)
-		require.Len(t, output.ToolResults, 1)
-		assert.False(t, output.ToolResults[0].IsError)
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_bash"))
+		assert.True(t, output.ToolResults[0].IsError)
+		assert.Contains(t, output.ToolResults[0].Content, "Spawning sub-agents is not available")
+		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_spawn"))
 	})
 }
 
-// TestExecuteToolsActivity_MixedPermissions tests scenarios with tools
-// requiring different permission levels in the same batch.
-func TestExecuteToolsActivity_MixedPermissions(t *testing.T) {
-	t.Run("Mixed allowed and denied tools", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		// A declared set of view + bash: both run, write is refused. bash is in
-		// the set because with the scoped search tools gone the shell is the
-		// only way to search, so a planning agent needs it. It can still
-		// redirect into a file — which is exactly why this is authorial intent
-		// and not a security boundary; a hard boundary lives below the tool
-		// layer.
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView, "bash"}, nil, nil))
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
-		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
-
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{
-					ID:    "call_view",
-					Name:  tools.ToolView,
-					Input: `{"file_path": "test.txt"}`,
-				},
-				{
-					ID:    "call_write",
-					Name:  tools.ToolWrite,
-					Input: `{"file_path": "/tmp/x", "content": "y"}`,
-				},
-				{
-					ID:    "call_bash",
-					Name:  "bash",
-					Input: `{"command": "ls"}`,
-				},
-			},
-		}
-
-		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
-
-		require.NoError(t, err)
-		require.Len(t, output.ToolResults, 3)
-
-		resultMap := make(map[string]*reliantv1.ToolResultMsg)
-		for _, r := range output.ToolResults {
-			resultMap[r.GetToolCallId()] = r
-		}
-
-		// All three run. view and bash were preloaded; write was not, and that
-		// is no longer a refusal — the preloaded bundle says what the agent is
-		// handed, not what it may use. Acquisition is gated at load_tool
-		// against loadable_tools, and the ladder (below) is what still refuses
-		// at execution.
-		assert.False(t, resultMap["call_view"].IsError)
-		assert.False(t, resultMap["call_bash"].IsError)
-		assert.False(t, resultMap["call_write"].IsError,
-			"write is base-tier and was legitimately acquirable: %s", resultMap["call_write"].Content)
-
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_view"))
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_write"))
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_bash"))
-	})
-
-	// The gate that DOES still refuse at execution, so this file keeps testing a
-	// real denial rather than only the permissive path.
-	t.Run("A tool above the agent's tier is denied mid-batch", func(t *testing.T) {
-		h := NewIdempotencyTestHelper(t)
-		defer h.Cleanup()
-
-		ctx := context.Background()
-
-		userID := uuid.New().String()
-		projectID := uuid.New().String()
-		chatID := uuid.New().String()
-
-		h.CreateTestProject(ctx, projectID, userID)
-		h.CreateTestChat(ctx, chatID, projectID, userID)
-
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chatID, "0"), tools.PermissionMutating)
-		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chatID, "0"),
-			tools.ResolveToolAccess([]string{tools.ToolView}, nil, nil))
-		defer tools.GetLoadedToolsStore().Clear(tools.Scope(chatID, "0"))
-
-		mockExecutor := newMockToolExecutor()
-		activity := NewExecuteToolsActivity(h.Repo(), mockExecutor)
-
-		input := ExecuteToolsInput{
-			ChatID: chatID,
-			Thread: "0",
-			ToolCalls: []ToolCall{
-				{ID: "call_view", Name: tools.ToolView, Input: `{"file_path": "test.txt"}`},
-				{ID: "call_spawn", Name: "spawn", Input: `{"preset": "general", "prompt": "x"}`},
-			},
-		}
-
-		var output ExecuteToolsOutput
-		err := h.ExecuteActivity(activity.Execute, input, &output)
-
-		require.NoError(t, err)
-		require.Len(t, output.ToolResults, 2)
-
-		results := make(map[string]*reliantv1.ToolResultMsg)
-		for _, r := range output.ToolResults {
-			results[r.GetToolCallId()] = r
-		}
-
-		assert.False(t, results["call_view"].IsError)
-		assert.True(t, results["call_spawn"].IsError,
-			"spawn is orchestrator-tier and must be refused for a mutating agent")
-		assert.Equal(t, 1, mockExecutor.GetExecutionCount("call_view"))
-		assert.Equal(t, 0, mockExecutor.GetExecutionCount("call_spawn"),
-			"a denied tool must never reach the executor")
-	})
+func resultsByID(results []*reliantv1.ToolResultMsg) map[string]*reliantv1.ToolResultMsg {
+	byID := make(map[string]*reliantv1.ToolResultMsg, len(results))
+	for _, r := range results {
+		byID[r.GetToolCallId()] = r
+	}
+	return byID
 }

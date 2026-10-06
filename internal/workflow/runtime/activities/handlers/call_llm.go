@@ -900,9 +900,6 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"thread", thread)
 		permission = rtx.ParentPermission
 	}
-	if chat != nil {
-		tools.GetLoadedToolsStore().SetPermission(tools.Scope(chat.ID, thread), permission)
-	}
 
 	// Model must be provided via workflow inputs
 	if !model.CelModelSelectorIsSet(args.GetModel()) {
@@ -1060,10 +1057,19 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		"thinkingLevel", resolved.ThinkingLevel,
 		"engaged", resolved.Model.CanReason)
 
-	// Get available tools (filtered by tools_config)
+	// The node's structured-output tool, if any. It is part of what the model
+	// is offered, so the capability set names it too.
+	responseToolName := ""
+	if rt := args.GetResponseTool(); rt != nil {
+		responseToolName = model.CelStringValue(rt.GetName())
+	}
+
+	// Get available tools (filtered by tools_config). caps is this turn's
+	// capability set: the tool array below is built FROM it, and it is
+	// recorded in the output so execute_tools enforces exactly what the model
+	// was shown (research/TOOL_CAPABILITIES.md).
 	var availableTools []tools.Tool
-	var spawnPresets []string            // Track spawn presets for tool call validation
-	var toolsResult toolsWithSpawnResult // Hoisted for deferred tools announcement
+	var caps *tools.Capabilities
 	if tc == nil {
 		// No tools_config is the same statement as an empty one: this node's
 		// model calls nothing. Formerly a `toolsEnabled` boolean said this,
@@ -1076,6 +1082,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// tool rendering and an agent that stopped early, naming neither tools
 		// nor the gate. One source of truth now: the list.
 		availableTools = []tools.Tool{}
+		caps = tools.ResolveCapabilities(tools.CapabilityInputs{
+			Permission:   permission,
+			NoMachine:    chat.NoMachine,
+			ResponseTool: responseToolName,
+		})
 	} else {
 		toolFilter := model.CelStringListValue(tc.GetPreloadedTools())
 		// spawn_send is only meaningful to an agent that has a counterpart to
@@ -1093,12 +1104,40 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// means nothing: reaching the whole registry is spelled ["*"].
 		loadable := model.CelStringListValue(tc.GetLoadableTools())
 
+		// Spawn configs from tools_config.spawn. Workflows at max spawn depth
+		// get none, to prevent unbounded recursion. Parsed before resolution
+		// because the presets are a resolver input: any preset at all is what
+		// offers the spawn tool.
+		var spawnConfigs []tools.SpawnFilterConfig
+		var spawnPresets []string
+		if !spawnDisabled {
+			for _, entry := range model.CelStringListValue(tc.GetSpawn()) {
+				if spawnConfig := tools.ParseSpawnEntry(entry); spawnConfig != nil {
+					spawnConfigs = append(spawnConfigs, *spawnConfig)
+					spawnPresets = append(spawnPresets, spawnConfig.Presets...)
+				}
+			}
+		} else {
+			activity.GetLogger(ctx).Info("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
+		}
+
 		// MCP discovery runs on the run's daemon, resolved the way
 		// ExecuteTools resolves it: node/workflow selector over the worktree's
 		// owning daemon over default resolution.
 		toolCtx := toolexec.WithDaemonSelector(ctx, toolDaemonSelector(worktreeDaemonID, rtx.DaemonSelector))
-		toolsResult = a.getAvailableToolsWithSpawn(toolCtx, chat, workingDir, worktreeDaemonID, projectCfg, toolFilter, loadable, thread, mailboxReachable, canSpawnChildren)
+		toolsResult := a.getAvailableTools(toolCtx, chat, workingDir, worktreeDaemonID, projectCfg, toolRequest{
+			Preloaded:        toolFilter,
+			Loadable:         loadable,
+			Permission:       permission,
+			Thread:           thread,
+			Grants:           rtx.ToolGrants,
+			MailboxReachable: mailboxReachable,
+			CanSpawnChildren: canSpawnChildren,
+			SpawnPresets:     spawnPresets,
+			ResponseTool:     responseToolName,
+		})
 		availableTools = toolsResult.Tools
+		caps = toolsResult.Capabilities
 
 		// Emit warning to chat if MCP servers failed to load
 		if len(toolsResult.FailedMCPServers) > 0 {
@@ -1109,27 +1148,13 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			}, nil)
 		}
 
-		// Add spawn tools from tools_config.spawn
-		// Workflows at max spawn depth should NOT have access to spawn tool to prevent unbounded recursion
-		if !spawnDisabled {
-			// Parse spawn configs from the dedicated spawn field
-			spawnEntries := model.CelStringListValue(tc.GetSpawn())
-			for _, entry := range spawnEntries {
-				spawnConfig := tools.ParseSpawnEntry(entry)
-				if spawnConfig == nil {
-					continue
-				}
-				spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, *spawnConfig)
-				if spawnTool != nil {
-					availableTools = append(availableTools, spawnTool)
-					spawnPresets = append(spawnPresets, spawnConfig.Presets...)
-					activity.GetLogger(ctx).Info("[CallLLM] Added spawn tool from tools_config",
-						"workflow", spawnConfig.Workflow,
-						"presets", spawnConfig.Presets)
-				}
+		for _, spawnConfig := range spawnConfigs {
+			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, spawnConfig); spawnTool != nil {
+				availableTools = append(availableTools, spawnTool)
+				activity.GetLogger(ctx).Info("[CallLLM] Added spawn tool from tools_config",
+					"workflow", spawnConfig.Workflow,
+					"presets", spawnConfig.Presets)
 			}
-		} else {
-			activity.GetLogger(ctx).Info("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
 		}
 
 		// Bind configured parameters onto the tools before the driver ever
@@ -1166,6 +1191,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		activity.GetLogger(ctx).Debug("[CallLLM] Added response tool", "name", rtName)
 	}
 
+	// The tool array is final. Record exactly what it carries as this turn's
+	// offered set: a factory that declined to build a tool is not offered,
+	// and the spawn and response tools appended above are. Recorded before
+	// the system prompts, which say what this turn may do from the same set.
+	caps.RecordOffered(toolNames(availableTools))
+
 	// Generate system prompts
 	// Always include base prompts for the driver (claude-code requires specific prompts for sk-ant-oat keys)
 
@@ -1182,18 +1213,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		celStringValuePtr(args.GetSystemPrompt()),
 	)
 	if chat.NoMachine {
-		systemPrompts = append(systemPrompts, noMachineNotes(availableTools, projectGitHubRepos(project, repos),
-			githubReadable(availableTools, tools.Scope(chat.ID, thread)))...)
+		systemPrompts = append(systemPrompts, noMachineNotes(caps, projectGitHubRepos(project, repos))...)
 	}
 
 	// Set deferred tools on the load_tool so its description advertises them
 	if len(availableTools) > 0 {
-		currentToolNames := make([]string, len(availableTools))
-		for i, t := range availableTools {
-			currentToolNames[i] = t.Name()
-		}
-		deferred := tools.DeferredToolNames(tools.Scope(chat.ID, thread), permission, currentToolNames, toolsResult.AllMCPToolNames)
-		if len(deferred) > 0 {
+		if deferred := caps.Deferred(); len(deferred) > 0 {
 			for _, t := range availableTools {
 				if u, ok := t.(interface{ Unwrap() any }); ok {
 					if inner, ok := u.Unwrap().(tools.DeferredToolsAware); ok {
@@ -1798,18 +1823,11 @@ streamLoop:
 		a.reportContentFreeTurn(ctx, chat.ID, thread, rtx, streamState.finishReason, contentFreeExplanation)
 	}
 
-	// Attach spawn presets to spawn tool calls for preset validation in ExecuteTools.
-	// Tool-level permission enforcement is handled by execute_tools using the permission
-	// level stored in LoadedToolsStore (set above), not by checking tool name lists.
-	if len(spawnPresets) > 0 {
-		for i := range toolCalls {
-			if toolCalls[i].Name == "spawn" {
-				toolCalls[i].AvailablePresets = spawnPresets
-			}
-		}
-	}
-
 	output := &reliantv1.CallLLMOutput{
+		// What this turn may call and load. Recorded in history so the
+		// execute_tools that runs these tool calls — on whichever worker —
+		// enforces exactly what the model was shown, spawn presets included.
+		Capabilities:       caps.Proto(),
 		ResponseText:       responseText,
 		ToolCalls:          messageToolCallsToProto(toolCalls),
 		TokenCount:         int32(streamState.tokenCount),
@@ -1911,12 +1929,38 @@ streamLoop:
 	return output, nil
 }
 
-// toolsWithSpawnResult holds the result of getAvailableToolsWithSpawn
-type toolsWithSpawnResult struct {
+// toolRequest is what one turn's tool resolution is decided from, besides the
+// chat, its project and its daemon: the node's declaration and the runtime
+// facts the workflow handed this activity.
+type toolRequest struct {
+	Preloaded        []string // tools_config.preloaded_tools
+	Loadable         []string // tools_config.loadable_tools
+	Permission       string   // resolved tier, already capped to the parent's
+	Thread           string   // the run the tools would execute in; integration availability is asked for it
+	Grants           []string // load_tool grants recorded for this thread (rtx.ToolGrants)
+	MailboxReachable bool
+	CanSpawnChildren bool
+	SpawnPresets     []string
+	ResponseTool     string
+}
+
+// availableToolsResult is a turn's resolved capability set and the tools
+// instantiated from it.
+type availableToolsResult struct {
 	Tools            []tools.Tool
-	SpawnConfigs     []tools.SpawnFilterConfig
+	Capabilities     *tools.Capabilities
 	FailedMCPServers []string // Names of MCP servers that failed to load
-	AllMCPToolNames  []string // All available MCP tool names (for deferred loading announcement)
+}
+
+// toolNames is the name of every tool in a request's tool array.
+func toolNames(toolsList []tools.Tool) []string {
+	names := make([]string, 0, len(toolsList))
+	for _, t := range toolsList {
+		if t != nil {
+			names = append(names, t.Name())
+		}
+	}
+	return names
 }
 
 func scopedToolsFactoryForProject(baseFactory *tools.ToolsFactory, scopePath string) *tools.ToolsFactory {
@@ -1959,40 +2003,17 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 	return nil
 }
 
-// getAvailableToolsWithSpawn returns available tools and spawn configurations from the filter.
-// Spawn configs are extracted from spawn:workflow(presets) syntax in the filter.
-// Dynamically loaded tools (via load_tool) are automatically included.
-func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, toolFilter []string, loadableFilter []string, thread string, mailboxReachable bool, canSpawnChildren bool) toolsWithSpawnResult {
-	if a.toolsFactory == nil {
-		return toolsWithSpawnResult{}
-	}
-
-	projectScopedToolsFactory := scopedToolsFactoryForProject(a.toolsFactory, scopePath)
-	if projectScopedToolsFactory == nil {
-		return toolsWithSpawnResult{}
-	}
-
-	// The shell tool's description must match the shell that will RUN the
-	// command — the daemon's, which is routinely a different OS from this
-	// worker's. Resolved from the daemon record here, at request time, because
-	// this is where tool instances are constructed and the last point at which
-	// the chat (and therefore its daemon) is still in scope.
-	shellPlatform := resolveShellPlatform(ctx, a.repo, chat, worktreeDaemonID)
-	projectScopedToolsFactory = projectScopedToolsFactory.WithShellPlatform(shellPlatform)
-	slog.Debug("[CallLLM] Resolved shell platform for tool descriptions",
-		"chatID", chat.ID, "platform", string(shellPlatform))
-
-	// Inject skills loaded via the project config so the skill tool never
-	// touches the filesystem on the server side.
-	if projectCfg != nil && len(projectCfg.Skills) > 0 {
-		slog.Debug("[CallLLM] Injecting skills into tools factory", "skillCount", len(projectCfg.Skills))
-		projectScopedToolsFactory = projectScopedToolsFactory.WithSkills(projectCfg.Skills)
-		// Also store skills in the global store so the executor can access them
-		// when creating skill tool instances (the executor uses a different factory).
-		tools.GetLoadedToolsStore().SetSkills(tools.Scope(chat.ID, thread), projectCfg.Skills)
-	} else {
-		slog.Debug("[CallLLM] No skills available", "projectCfgNil", projectCfg == nil)
-	}
+// getAvailableTools resolves this turn's capability set and instantiates the
+// tools it offers: registry tools, connected MCP tools, and the structural
+// tools (load_tool, spawn_status, spawn_send, spawn_stop). The caller appends
+// the spawn and response tools, which the set already names.
+//
+// The set is computed by tools.ResolveCapabilities from durable inputs only —
+// the node's declaration, the chat row, the grants the workflow recorded for
+// this thread, and a re-discovery of MCP — so nothing here depends on which
+// worker ran an earlier turn.
+func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, req toolRequest) availableToolsResult {
+	noMachine := chat != nil && chat.NoMachine
 
 	logInfo := func(msg string, keyvals ...interface{}) {
 		if !activity.IsActivity(ctx) {
@@ -2013,6 +2034,30 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		activity.GetLogger(ctx).Debug(msg, keyvals...)
 	}
 
+	projectScopedToolsFactory := scopedToolsFactoryForProject(a.toolsFactory, scopePath)
+	if projectScopedToolsFactory != nil {
+		// The shell tool's description must match the shell that will RUN
+		// the command — the daemon's, which is routinely a different OS from
+		// this worker's. Resolved from the daemon record here, at request
+		// time, because this is where tool instances are constructed and the
+		// last point at which the chat (and therefore its daemon) is still in
+		// scope.
+		shellPlatform := resolveShellPlatform(ctx, a.repo, chat, worktreeDaemonID)
+		projectScopedToolsFactory = projectScopedToolsFactory.WithShellPlatform(shellPlatform)
+		slog.Debug("[CallLLM] Resolved shell platform for tool descriptions",
+			"chatID", chat.ID, "platform", string(shellPlatform))
+
+		// Inject skills loaded via the project config so the skill tool never
+		// touches the filesystem on the server side. execute_tools reads the
+		// same config row for the skill tool it runs.
+		if projectCfg != nil && len(projectCfg.Skills) > 0 {
+			slog.Debug("[CallLLM] Injecting skills into tools factory", "skillCount", len(projectCfg.Skills))
+			projectScopedToolsFactory = projectScopedToolsFactory.WithSkills(projectCfg.Skills)
+		} else {
+			slog.Debug("[CallLLM] No skills available", "projectCfgNil", projectCfg == nil)
+		}
+	}
+
 	// Ensure MCP servers for this project are loaded before getting MCP tools.
 	// Execution-time MCP binding for actual tool runs happens at the executor boundary.
 	var failedMCPServers []string
@@ -2022,9 +2067,8 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	//
 	// A run with no machine has no MCP servers to ask: every user-configured
 	// server runs on the daemon.
-	noMachine := chat != nil && chat.NoMachine
 	var toolRuntime tools.MCPRuntime
-	if !noMachine && tools.FilterReachesMCP(toolFilter, loadableFilter) {
+	if projectScopedToolsFactory != nil && !noMachine && tools.FilterReachesMCP(req.Preloaded, req.Loadable) {
 		toolRuntime = a.mcpRuntimeFromContext(ctx)
 	}
 	if toolRuntime != nil {
@@ -2037,231 +2081,90 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		}
 	}
 
-	// Get MCP tool names for filter expansion
-	mcpTools := projectScopedToolsFactory.GetMCPTools(toolRuntime)
-	mcpToolNames := make([]string, len(mcpTools))
-	for i, t := range mcpTools {
-		mcpToolNames[i] = t.Name()
+	var mcpTools []tools.Tool
+	if projectScopedToolsFactory != nil {
+		mcpTools = projectScopedToolsFactory.GetMCPTools(toolRuntime)
 	}
+	mcpToolNames := toolNames(mcpTools)
 
-	// Record the connected MCP tools (name + description) so load_tool can
-	// search them by keyword and verify availability before loading — enabling
-	// progressive discovery of MCP tools (e.g. chrome-devtools) that aren't in
-	// the static built-in registry.
-	if chat != nil {
-		mcpToolInfos := make([]tools.MCPToolInfo, 0, len(mcpTools))
-		for _, t := range mcpTools {
-			mcpToolInfos = append(mcpToolInfos, tools.MCPToolInfo{
-				Name:        t.Name(),
-				Description: t.Description(),
-			})
-		}
-		tools.GetLoadedToolsStore().SetAvailableMCPTools(tools.Scope(chat.ID, thread), mcpToolInfos)
-	}
-
-	// Expand tool filter with spawn support
-	filterResult := tools.ExpandToolFilterWithSpawn(toolFilter, mcpToolNames)
-
-	// Record the expansion as this scope's allow-set BEFORE anything is added to
-	// it, so the declaration is what the author wrote rather than what the agent
-	// has since accumulated. Previously this expansion was used to build one
-	// request's tool array and then discarded, which is why `tools:` could not
-	// refuse anything load_tool chose to add.
-	//
-	// The two universally-granted tools are admitted explicitly. Both are handed
-	// to every tool-enabled agent AFTER this expansion (see below), so a
-	// loadable list that never named them would otherwise make the agent unable
-	// to use the very tool it discovers with — load_tool would refuse its own
-	// name.
-	//
-	// Resolved once, here, and read in two places: recorded as the scope's
-	// allow-set below, and consulted further down to decide whether load_tool
-	// is worth offering at all. That second read must see the AUTHOR'S
-	// declaration, which is why it cannot come from the struct after the two
-	// tools above are admitted into it — post-admission, a node that declared
-	// no loadable reach has a non-empty Loadable list and would look like it
-	// wanted discovery.
-	access := tools.ResolveToolAccess(toolFilter, loadableFilter, mcpToolNames)
-	declaredAnyLoadable := access.LoadableAll || len(access.Loadable) > 0
+	// The node's declaration: what it is handed, and what load_tool may
+	// reach. A run with no machine has its whole reach narrowed to tools that
+	// run without one, so neither this turn nor a later load can offer one
+	// that cannot run — withoutMachineTools is also where a no-machine-only
+	// tool is preloaded.
+	access := tools.ResolveToolAccess(req.Preloaded, req.Loadable, mcpToolNames)
 	if noMachine {
-		// The run's whole reach — what it is handed AND what load_tool may
-		// add — is narrowed to tools that run without a machine, so neither
-		// this turn nor a later load can offer one that cannot run.
 		access = withoutMachineTools(access)
-		filterResult.ToolNames = noMachineMenu(filterResult.ToolNames, access)
-	}
-	// Integration tools that need a connection reach only an owner who has one.
-	if chat != nil {
-		access, filterResult.ToolNames = withUsableIntegrations(ctx, projectScopedToolsFactory, chat, thread, access, filterResult.ToolNames, mcpToolNames)
 	}
 
+	// Integration tools that need a connection reach only an owner who has
+	// one: ask which of the integrations this declaration can reach the
+	// owner can use. The resolver withholds the rest.
+	var usable map[string]bool
 	if chat != nil {
-		scoped := access
-		if !scoped.LoadableAll {
-			scoped.Loadable = append(scoped.Loadable, tools.ToolLoadTool, tools.ToolSpawnStatus, tools.ToolSpawnSend, tools.ToolSpawnStop)
-		}
-		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chat.ID, thread), scoped)
+		usable = usableIntegrations(ctx, projectScopedToolsFactory, chat, req.Thread, access)
 	}
 
-	// Include dynamically loaded tools (via load_tool). Intersected against what
-	// this scope may load rather than appended past it, so a grant recorded
-	// before the workflow narrowed cannot outlive the narrowing.
-	if chat != nil {
-		scopeKey := tools.Scope(chat.ID, thread)
-		store := tools.GetLoadedToolsStore()
-		var admitted []string
-		for _, name := range store.Get(scopeKey) {
-			if store.CanLoadTool(scopeKey, name) {
-				admitted = append(admitted, name)
-			}
-		}
-		if len(admitted) > 0 {
-			filterResult.ToolNames = append(filterResult.ToolNames, admitted...)
-			logDebug("[CallLLM] Including dynamically loaded tools",
-				"chatID", chat.ID,
-				"loadedTools", admitted)
-		}
-	}
+	// Whether this thread has sub-agents — its own, or inherited by branching
+	// — decides which spawn management tools it is offered. Read from the
+	// database so the answer is the same on every worker.
+	ownChildren, inheritedChildren := a.spawnHistory(ctx, chat, req.Thread)
 
-	// Log expanded MCP tools specifically for debugging tag:mcp filtering
-	var expandedMCPTools []string
-	for _, name := range filterResult.ToolNames {
-		if strings.HasPrefix(name, "mcp__") {
-			expandedMCPTools = append(expandedMCPTools, name)
-		}
-	}
-	logInfo("[CallLLM] Tool filter expansion",
-		"input_filter", toolFilter,
-		"expanded_total", len(filterResult.ToolNames),
-		"expanded_mcp_count", len(expandedMCPTools),
-		"expanded_mcp_tools", expandedMCPTools,
-		"spawnConfigs", len(filterResult.SpawnConfigs),
+	caps := tools.ResolveCapabilities(tools.CapabilityInputs{
+		Access:             access,
+		Permission:         req.Permission,
+		NoMachine:          noMachine,
+		Grants:             req.Grants,
+		MCPTools:           mcpToolNames,
+		MailboxReachable:   req.MailboxReachable,
+		CanSpawnChildren:   req.CanSpawnChildren,
+		OwnChildren:        ownChildren,
+		InheritedChildren:  inheritedChildren,
+		SpawnPresets:       req.SpawnPresets,
+		ResponseTool:       req.ResponseTool,
+		UsableIntegrations: usable,
+	})
+
+	logInfo("[CallLLM] Tool capabilities resolved",
+		"input_filter", req.Preloaded,
+		"offered", len(caps.Offered),
+		"grants", req.Grants,
+		"permission", caps.Permission,
+		"loadable_all", caps.LoadableAll,
 		"available_mcp_tools", len(mcpToolNames))
 
-	// Build filter set for O(1) lookup
-	filterSet := make(map[string]bool, len(filterResult.ToolNames))
-	for _, name := range filterResult.ToolNames {
-		filterSet[name] = true
+	if projectScopedToolsFactory == nil {
+		return availableToolsResult{Capabilities: caps, FailedMCPServers: failedMCPServers}
 	}
 
-	// Build tools list from registry
-	registry := tools.GetToolRegistry()
-	toolsList := make([]tools.Tool, 0, len(filterResult.ToolNames))
-
-	for _, def := range registry {
-		if filterSet[def.Name] {
-			tool := def.Factory(projectScopedToolsFactory)
-			if tool != nil {
-				toolsList = append(toolsList, tool)
-				delete(filterSet, def.Name) // Mark as found
-			}
+	// Instantiate exactly what the set offers.
+	toolsList := make([]tools.Tool, 0, len(caps.Offered))
+	built := make(map[string]bool, len(caps.Offered))
+	for _, def := range tools.GetToolRegistry() {
+		if !caps.Offers(def.Name) || built[def.Name] {
+			continue
+		}
+		if tool := def.Factory(projectScopedToolsFactory); tool != nil {
+			toolsList = append(toolsList, tool)
+			built[def.Name] = true
 		}
 	}
-
-	// Add MCP tools that match the filter
 	for _, mcpTool := range mcpTools {
-		if filterSet[mcpTool.Name()] {
+		if caps.Offers(mcpTool.Name()) && !built[mcpTool.Name()] {
 			toolsList = append(toolsList, mcpTool)
-			delete(filterSet, mcpTool.Name()) // Mark as found
+			built[mcpTool.Name()] = true
 		}
 	}
 
-	// Warn about tools in filter that weren't found
-	if len(filterSet) > 0 {
-		unfound := make([]string, 0, len(filterSet))
-		for name := range filterSet {
-			unfound = append(unfound, name)
-		}
-		logWarn("[CallLLM] Tools in filter not found",
-			"tools", unfound)
-	}
-
-	// load_tool is offered when, and only when, this node declared something
-	// for it to reach. A workflow that lists `loadable_tools` wants discovery —
-	// including restrictive presets whose preloaded bundle is deliberately
-	// small, and MCP tools no list could name ahead of time
-	// (mcp__chrome-devtools__* and friends). A workflow that declared no
-	// loadable tools wants exactly what it preloaded, and handing it a
-	// discovery tool with an empty reach is a schema the model has to read and
-	// can never use.
-	//
-	// It used to be appended unconditionally, on the reasoning that load_tool
-	// is read-only and each load is permission-gated per target, so granting it
-	// everywhere escalates nothing. True in itself — but it made the tool list
-	// something a workflow could not fully state, and paired with a loadable
-	// default of "everything" it meant declaring a couple of tools silently
-	// granted reach to the whole registry.
-	if declaredAnyLoadable {
-		loadToolPresent := false
-		for _, t := range toolsList {
-			if t.Name() == tools.ToolLoadTool {
-				loadToolPresent = true
-				break
-			}
-		}
-		if !loadToolPresent {
-			toolsList = append(toolsList, projectScopedToolsFactory.LoadTool())
+	// The spawn and response tools are built by the caller.
+	var unbuilt []string
+	for _, name := range caps.Offered {
+		if !built[name] && name != tools.ToolSpawn && name != req.ResponseTool {
+			unbuilt = append(unbuilt, name)
 		}
 	}
-
-	// spawn_send must reach a depth-1 sub-agent talking back to its parent
-	// (spec §4.4), but the "spawn" virtual tool it travels alongside is gated
-	// off entirely at max spawn depth and a sub-agent's own preset filter was
-	// never written with a mailbox tool in mind. So grant it the way load_tool
-	// is granted above — except only where there is actually a counterpart to
-	// message (mailboxReachable), since a root agent that cannot spawn has
-	// nobody to send to. It remains subject to the same permission gate every
-	// other tool goes through in execute_tools (MinimumPermissionForTool is
-	// PermissionMutating for spawn_send, so a readonly/plan-mode agent still
-	// cannot use it even though the schema is offered).
-	//
-	// A thread that has actually spawned is granted the three management
-	// tools on top of that, whatever its config says now: it has children to
-	// check on, message and stop. spawn_status rides ONLY on this — it is the
-	// read side, worthless before the first spawn and needed on the very next
-	// turn after it, which is exactly when an orchestrator used to have to stop
-	// and load_tool it by hand. A branch that inherited sub-agents gets
-	// spawn_status alone: it may look at them, never control them.
-	ownChildren, inheritedChildren := a.spawnHistory(ctx, chat, thread)
-	hasTool := func(name string) bool {
-		for _, t := range toolsList {
-			if t.Name() == name {
-				return true
-			}
-		}
-		return false
-	}
-	if (ownChildren || inheritedChildren) && !hasTool(tools.ToolSpawnStatus) {
-		toolsList = append(toolsList, projectScopedToolsFactory.SpawnStatus())
-	}
-	if (mailboxReachable || ownChildren) && !hasTool(tools.ToolSpawnSend) {
-		toolsList = append(toolsList, projectScopedToolsFactory.SpawnSend())
-	}
-
-	// spawn_stop travels with the "spawn" virtual tool for the same reason
-	// spawn_send travels with the mailbox: it is granted here rather than
-	// through a preset's tool filter, because a preset author configuring
-	// children was never asked to also remember the tool that stops them.
-	//
-	// Gated on canSpawnChildren rather than mailboxReachable, which is a
-	// strictly tighter condition: spawn_stop refuses anything that is not the
-	// caller's own direct child, so an agent that cannot spawn has nothing it
-	// could ever legally name. Offering it there would be a schema the model
-	// can only misuse.
-	if (canSpawnChildren || ownChildren) && !hasTool(tools.ToolSpawnStop) {
-		toolsList = append(toolsList, projectScopedToolsFactory.SpawnStop())
-	}
-
-	// Last pass over the assembled list, after the universally granted tools
-	// were appended: nothing that needs a machine reaches a no-machine model.
-	if noMachine {
-		kept := toolsList[:0]
-		for _, t := range toolsList {
-			if !tools.NeedsMachine(t.Name()) {
-				kept = append(kept, t)
-			}
-		}
-		toolsList = kept
+	if len(unbuilt) > 0 {
+		logWarn("[CallLLM] Offered tools could not be built", "tools", unbuilt)
 	}
 
 	sort.Slice(toolsList, func(i, j int) bool {
@@ -2270,13 +2173,12 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 
 	logDebug("[CallLLM] Available tools",
 		"count", len(toolsList),
-		"hasCustomFilter", len(toolFilter) > 0)
+		"hasCustomFilter", len(req.Preloaded) > 0)
 
-	return toolsWithSpawnResult{
+	return availableToolsResult{
 		Tools:            toolsList,
-		SpawnConfigs:     filterResult.SpawnConfigs,
+		Capabilities:     caps,
 		FailedMCPServers: failedMCPServers,
-		AllMCPToolNames:  mcpToolNames,
 	}
 }
 
@@ -2286,8 +2188,11 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 //
 // Read from the database rather than remembered in-process, so the answer
 // survives a worker restart and does not depend on which worker ran the spawn.
-// Best-effort: a failed read only withholds a convenience grant (load_tool
-// still reaches these tools), so it is logged rather than failing the turn.
+// These are capability inputs (tools.CapabilityInputs.OwnChildren and
+// InheritedChildren), so the tools they grant are in the turn's recorded set
+// and execute_tools accepts their calls. Best-effort: a failed read withholds
+// those grants for this turn only — the next turn reads again — so it is
+// logged rather than failing the turn.
 func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, thread string) (ownChildren, inheritedChildren bool) {
 	if a.repo == nil || chat == nil || thread == "" {
 		return false, false

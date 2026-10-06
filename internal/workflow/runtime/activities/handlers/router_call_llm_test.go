@@ -193,9 +193,7 @@ func TestCallLLM_ResponseTool_PopulatesResponseData(t *testing.T) {
 	// ToolCalls should still contain the original tool call
 	require.Len(t, output.ToolCalls, 1, "ToolCalls should still contain the response tool call")
 	assert.Equal(t, "routing_decision", output.ToolCalls[0].Name)
-	// Proto-encoded Input may be wrapped in a metadata envelope; verify the raw JSON is recoverable.
-	decodedInput, _ := decodeToolCallInputFromProto(output.ToolCalls[0].Input)
-	assert.Equal(t, routingJSON, decodedInput)
+	assert.Equal(t, routingJSON, output.ToolCalls[0].Input, "a tool call's input is carried unwrapped")
 }
 
 func TestCallLLM_ResponseTool_NoResponseToolConfigured(t *testing.T) {

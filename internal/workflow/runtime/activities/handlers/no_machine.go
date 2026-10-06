@@ -24,10 +24,12 @@ func withoutMachineToolNames(names []string) []string {
 	return kept
 }
 
-// withoutMachineTools narrows a scope's access the same way. "Load anything"
-// becomes "load anything that runs without a machine", which is an explicit
-// list: the registry is the universe load_tool searches, and MCP is excluded
-// wholesale because every user-configured server is daemon-placed.
+// withoutMachineTools narrows a run's declaration the same way. The
+// capability resolver enforces the no-machine rule per name on its own —
+// machine tools and MCP are never reachable on a no-machine run, so "load
+// anything" stays exactly that and is not expanded into a list — and this
+// narrows the explicit lists so the recorded set does not carry names that
+// can never apply.
 //
 // A run that was given any tools is also handed request_machine, the one tool
 // that exists only here (research/NO_MACHINE_CHATS.md §3): a node that wanted
@@ -35,31 +37,15 @@ func withoutMachineToolNames(names []string) []string {
 // machine. A node given no tools at all (a title or summary call) stays
 // without any.
 func withoutMachineTools(access tools.ToolAccess) tools.ToolAccess {
-	narrowed := tools.ToolAccess{Preloaded: withoutMachineToolNames(access.Preloaded)}
-	if access.LoadableAll {
-		for _, def := range tools.GetToolRegistry() {
-			if !tools.NeedsMachine(def.Name) && !tools.OnlyWithoutMachine(def.Name) {
-				narrowed.Loadable = append(narrowed.Loadable, def.Name)
-			}
-		}
-	} else {
-		narrowed.Loadable = withoutMachineToolNames(access.Loadable)
+	narrowed := tools.ToolAccess{
+		Preloaded:   withoutMachineToolNames(access.Preloaded),
+		Loadable:    withoutMachineToolNames(access.Loadable),
+		LoadableAll: access.LoadableAll,
 	}
 	if len(access.Preloaded) > 0 || access.LoadableAll || len(access.Loadable) > 0 {
 		narrowed.Preloaded = withRequestMachine(narrowed.Preloaded)
 	}
 	return narrowed
-}
-
-// noMachineMenu is the tool list a no-machine run is handed this turn: names
-// narrowed to tools that run without a machine, plus request_machine when the
-// narrowed access (withoutMachineTools) preloads it.
-func noMachineMenu(names []string, narrowed tools.ToolAccess) []string {
-	menu := withoutMachineToolNames(names)
-	if slices.Contains(narrowed.Preloaded, tools.ToolRequestMachine) {
-		menu = withRequestMachine(menu)
-	}
-	return menu
 }
 
 func withRequestMachine(names []string) []string {
@@ -88,16 +74,16 @@ const (
 
 // noMachineNotes are the system notes a no-machine turn gets: why its tools
 // are what they are, then — for a project on GitHub — where its code is and
-// how to read it (noMachineRepoNote). Both point at request_machine only when
-// this turn was offered it, so the two never disagree about what to do when
-// the task needs the user's computer.
-func noMachineNotes(offered []tools.Tool, repos []githubRepo, githubIsReadable bool) []string {
-	canRequest := slices.ContainsFunc(offered, func(t tools.Tool) bool { return t.Name() == tools.ToolRequestMachine })
+// how to read it (noMachineRepoNote). Both are read from the turn's capability
+// set, so they point at request_machine only when this turn was offered it,
+// and say GitHub is readable only when the set lets the turn read it.
+func noMachineNotes(caps *tools.Capabilities, repos []githubRepo) []string {
+	canRequest := caps.Offers(tools.ToolRequestMachine)
 	notes := []string{noMachineSystemNoteWithoutRequest}
 	if canRequest {
 		notes[0] = noMachineSystemNote
 	}
-	if note := noMachineRepoNote(repos, githubIsReadable, canRequest); note != "" {
+	if note := noMachineRepoNote(repos, githubReadable(caps), canRequest); note != "" {
 		notes = append(notes, note)
 	}
 	return notes

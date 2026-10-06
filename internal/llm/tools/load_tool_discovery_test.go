@@ -2,7 +2,6 @@
 package tools
 
 import (
-	"context"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -10,23 +9,13 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// scopeWithAccess records a workflow's declared access and returns a tool
-// context bound to the same scope.
-func scopeWithAccess(t *testing.T, name string, preloaded, loadable []string) (*rctx.ToolContext, string) {
+// scopeWithAccess is a tool context for a turn whose node declared the given
+// preloaded and loadable sets, resolved the way call_llm resolves them, and
+// that set itself.
+func scopeWithAccess(t *testing.T, preloaded, loadable []string) (*rctx.ToolContext, *Capabilities) {
 	t.Helper()
-
-	chatID := name
-	const thread = "0"
-	scopeKey := Scope(chatID, thread)
-
-	store := GetLoadedToolsStore()
-	store.Clear(scopeKey)
-	store.SetPermission(scopeKey, PermissionMutating)
-	store.SetToolAccess(scopeKey, ResolveToolAccess(preloaded, loadable, nil))
-	t.Cleanup(func() { store.Clear(scopeKey) })
-
-	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
-	return rctx.NewToolContext(context.Background(), chatID, thread, nil, worktree), scopeKey
+	caps := declaredCaps(PermissionMutating, preloaded, loadable, nil)
+	return toolCtxWithCaps(t, caps), caps
 }
 
 // TestDefaultAgentCanStillLoadGenerateImage is the regression that shipped.
@@ -47,8 +36,7 @@ func TestDefaultAgentCanStillLoadGenerateImage(t *testing.T) {
 		"precondition: generate_image is deliberately not in tag:coding:default")
 
 	// The default agent declares no loadable_tools, which means unrestricted.
-	ctx, _ := scopeWithAccess(t, "default-agent-"+t.Name(),
-		[]string{"tag:coding:default"}, []string{LoadableWildcard})
+	ctx, _ := scopeWithAccess(t, []string{"tag:coding:default"}, []string{LoadableWildcard})
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolGenerateImage})
@@ -71,7 +59,7 @@ func TestDefaultAgentCanStillLoadGenerateImage(t *testing.T) {
 func TestUndeclaredLoadableMeansNothing(t *testing.T) {
 	t.Parallel()
 
-	ctx, _ := scopeWithAccess(t, "undeclared-"+t.Name(), []string{ToolView}, nil)
+	ctx, _ := scopeWithAccess(t, []string{ToolView}, nil)
 
 	tool := &loadToolTool{}
 	for _, name := range []string{ToolWrite, ToolEdit, ToolGenerateImage} {
@@ -87,8 +75,7 @@ func TestUndeclaredLoadableMeansNothing(t *testing.T) {
 func TestWildcardLoadableMeansEverything(t *testing.T) {
 	t.Parallel()
 
-	ctx, _ := scopeWithAccess(t, "wildcard-"+t.Name(),
-		[]string{ToolView}, []string{LoadableWildcard})
+	ctx, _ := scopeWithAccess(t, []string{ToolView}, []string{LoadableWildcard})
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolGenerateImage})
@@ -101,8 +88,7 @@ func TestWildcardLoadableMeansEverything(t *testing.T) {
 func TestDeclaredLoadableRestricts(t *testing.T) {
 	t.Parallel()
 
-	ctx, _ := scopeWithAccess(t, "restricted-"+t.Name(),
-		[]string{ToolView}, []string{ToolEdit})
+	ctx, _ := scopeWithAccess(t, []string{ToolView}, []string{ToolEdit})
 
 	tool := &loadToolTool{}
 
@@ -137,7 +123,7 @@ func TestAbsentAndEmptyLoadableAgree(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			ctx, _ := scopeWithAccess(t, tc.name+"-"+t.Name(), []string{ToolView}, tc.loadable)
+			ctx, _ := scopeWithAccess(t, []string{ToolView}, tc.loadable)
 
 			tool := &loadToolTool{}
 			resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
@@ -154,8 +140,7 @@ func TestAbsentAndEmptyLoadableAgree(t *testing.T) {
 func TestPreloadedToolIsAlwaysLoadable(t *testing.T) {
 	t.Parallel()
 
-	ctx, _ := scopeWithAccess(t, "preloaded-"+t.Name(),
-		[]string{ToolWrite}, []string{ToolEdit})
+	ctx, _ := scopeWithAccess(t, []string{ToolWrite}, []string{ToolEdit})
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
@@ -172,10 +157,9 @@ func TestPreloadedToolIsAlwaysLoadable(t *testing.T) {
 func TestDiscoveryMatchesEnforcement(t *testing.T) {
 	t.Parallel()
 
-	ctx, scopeKey := scopeWithAccess(t, "discovery-"+t.Name(),
-		[]string{ToolView}, []string{ToolEdit, ToolLoadTool})
+	ctx, caps := scopeWithAccess(t, []string{ToolView}, []string{ToolEdit, ToolLoadTool})
 
-	advertised := DeferredToolNames(scopeKey, PermissionMutating, []string{ToolView, ToolLoadTool}, nil)
+	advertised := caps.Deferred()
 	require.NotEmpty(t, advertised, "precondition: something must be advertised")
 
 	tool := &loadToolTool{}
@@ -193,10 +177,9 @@ func TestDiscoveryMatchesEnforcement(t *testing.T) {
 func TestDiscoveryUnrestrictedAdvertisesBeyondThePreloadedSet(t *testing.T) {
 	t.Parallel()
 
-	_, scopeKey := scopeWithAccess(t, "wide-discovery-"+t.Name(),
-		[]string{ToolView}, []string{LoadableWildcard})
+	_, caps := scopeWithAccess(t, []string{ToolView}, []string{LoadableWildcard})
 
-	advertised := DeferredToolNames(scopeKey, PermissionMutating, []string{ToolView}, nil)
+	advertised := caps.Deferred()
 	assert.Contains(t, advertised, ToolGenerateImage,
 		"an unrestricted scope must advertise tools outside the preloaded bundle")
 }

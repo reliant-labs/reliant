@@ -34,6 +34,9 @@ type ExecuteToolsInput struct {
 	ExpectedResponseTools []string                          `json:"-"`
 	ResponseToolSchemas   map[string]map[string]interface{} `json:"-"`
 	CompactionThreshold   int64                             `json:"-"`
+	// Capabilities is the producing call_llm turn's capability set, as the
+	// runtime copies it onto the node. nil is a batch with no recorded set.
+	Capabilities *reliantv1.ToolCapabilities `json:"-"`
 }
 
 // V3 returns the ActivityInput for Temporal's test framework.
@@ -44,7 +47,7 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 		protoToolCalls = append(protoToolCalls, &reliantv1.ToolCallMsg{
 			Id:    tc.ID,
 			Name:  tc.Name,
-			Input: encodeToolCallInputForProto(tc),
+			Input: tc.Input,
 		})
 	}
 
@@ -69,6 +72,7 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 					ResolvedToolCalls:     protoToolCalls,
 					ExpectedResponseTools: t.ExpectedResponseTools,
 					CompactionThreshold:   compactionThreshold,
+					Capabilities:          t.Capabilities,
 				},
 			},
 		},
@@ -119,7 +123,7 @@ func (t *SaveMessageInput) V3() ActivityInput {
 		protoToolCalls = append(protoToolCalls, &reliantv1.ToolCallMsg{
 			Id:    tc.ID,
 			Name:  tc.Name,
-			Input: encodeToolCallInputForProto(tc),
+			Input: tc.Input,
 		})
 	}
 

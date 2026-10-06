@@ -104,9 +104,10 @@ var serverSafeTools = map[string]struct{}{
 }
 
 // noMachineOnlyTools are tools that exist only for a run with no machine, and
-// are never offered to any other. A filter cannot grant one (ExpandToolFilter
-// drops it), load_tool will not load or advertise one, and the no-machine
-// narrowing in call_llm hands it over directly.
+// are never offered to any other. The no-machine narrowing in call_llm hands
+// one over directly; the capability resolver (capabilities.go, exclusion)
+// keeps it from every run that has a machine however a filter names it, and
+// never lets load_tool grant, advertise or list one.
 var noMachineOnlyTools = map[string]struct{}{
 	// Asking for a machine is meaningless on one.
 	ToolRequestMachine: {},

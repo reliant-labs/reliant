@@ -19,14 +19,20 @@ package tools
 // than not offering it: callers reasonably read "readonly" as "cannot write".
 // What that tier was really expressing — "this agent should not be handed write
 // tools" — is now said directly by a workflow's `tools:` filter, which is
-// enforced (see LoadedToolsStore.IsToolAllowed). A real read-only mode needs OS
-// containment and will be reintroduced on that footing.
+// enforced: a call to a tool outside the turn's capability set is refused at
+// execution (capabilities.go). A real read-only mode needs OS containment and
+// will be reintroduced on that footing.
+//
+// The tier is part of a turn's capability set: a tool above it is neither
+// offered nor loadable, so execution needs no separate tier check.
 const (
 	// PermissionMutating is the default: every tool except those reserved for
 	// orchestrators.
 	PermissionMutating = "mutating"
 
-	// PermissionOrchestrator additionally allows spawning sub-agents.
+	// PermissionOrchestrator additionally allows creating standing work
+	// (start_run, control_run, send_to_run, activate_trigger). Spawning
+	// sub-agents is NOT gated here — see MinimumPermissionForTool.
 	PermissionOrchestrator = "orchestrator"
 )
 
@@ -121,6 +127,14 @@ func InitialToolsForPermission(permission string) []string {
 func MinimumPermissionForTool(toolName string) string {
 	// Explicit orchestrator-only tools.
 	//
+	// spawn is deliberately NOT here. It is granted by the node's `spawn:`
+	// declaration (and the spawn depth), which is the statement that this
+	// agent delegates; the builtin agent declares it at the mutating tier.
+	// It used to be listed, but spawn runs workflow-side and never reached a
+	// tier check, so the entry gated nothing — and a resolver that applies
+	// the tier to the menu would have read it as "take spawn away from every
+	// agent".
+	//
 	// spawn_status, spawn_send and spawn_stop are deliberately NOT here. An
 	// agent that already holds a handle to a sub-agent it spawned needs no
 	// extra privilege to look at that sub-agent, talk to it, or stop it, and
@@ -128,7 +142,7 @@ func MinimumPermissionForTool(toolName string) string {
 	// warning on a tool the model was correctly reaching for. spawn_stop in
 	// particular has to work at depth 1: a spawning agent is itself a child,
 	// so an orchestrator gate would mean nobody could stop their own children.
-	if toolName == "spawn" || toolName == ToolAgent {
+	if toolName == ToolAgent {
 		return PermissionOrchestrator
 	}
 

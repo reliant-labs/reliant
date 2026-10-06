@@ -133,7 +133,8 @@ const (
 	ToolAskUser = "ask_user"
 
 	// ToolRequestMachine offers the user a machine from a chat that has none.
-	// Offered only in a run with no machine (OnlyWithoutMachine).
+	// Reachable only in a run with no machine (OnlyWithoutMachine; enforced by
+	// the capability resolver).
 	ToolRequestMachine = "request_machine"
 )
 
@@ -466,13 +467,9 @@ func ExpandToolFilter(filter []string, mcpToolNames []string) []string {
 		}
 	}
 
-	// Convert to slice. A tool offered only to a run with no machine is never
-	// granted by a filter, whatever names it: the no-machine path adds it.
+	// Convert to slice
 	result := make([]string, 0, len(included))
 	for name := range included {
-		if OnlyWithoutMachine(name) {
-			continue
-		}
 		result = append(result, name)
 	}
 
@@ -682,9 +679,10 @@ func GetToolRegistry() []ToolDefinition {
 		// ask_user is a schema-only tool — execution is intercepted by the workflow
 		// runtime (splitProtoToolCalls → executeAskUserInline), not the normal tool path.
 		{ToolAskUser, (*ToolsFactory).AskUser, nil, PlacementServer},
-		// request_machine has no tags and is never granted by a filter: a run
-		// with no machine is handed it directly (handlers/no_machine.go), and
-		// no other run can reach it. See OnlyWithoutMachine.
+		// request_machine has no tags: a run with no machine is handed it
+		// directly (handlers/no_machine.go), and the capability resolver
+		// excludes it from every other run however a filter names it. See
+		// OnlyWithoutMachine.
 		{ToolRequestMachine, (*ToolsFactory).RequestMachine, nil, PlacementServer},
 
 		// Scenario tools

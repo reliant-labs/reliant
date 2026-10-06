@@ -260,6 +260,9 @@ func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID str
 	}
 	if childTracker != nil {
 		resume.Spawns = childTracker.spawnHandoffs()
+		// load_tool grants are workflow state; without this a tool an agent
+		// loaded would silently stop being offered at the handoff.
+		resume.ToolGrants = childTracker.toolGrantsHandoff()
 	}
 	return workflow.NewContinueAsNewError(ctx, DynamicWorkflow, WorkflowInput{
 		ChatID:       input.ChatID,
