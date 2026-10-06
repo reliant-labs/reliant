@@ -4182,12 +4182,19 @@ func (*Input_GroupInput) isInput_Config() {}
 func (*Input_PresetInput) isInput_Config() {}
 
 // InputBase contains fields common to all input types.
+//
+// The (reliant) descriptions are what get_schema shows an agent: generated
+// descriptors carry no source comments, so without them these rows were blank.
 type InputBase struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Human-readable description shown in UI.
 	Description string `protobuf:"bytes,1,opt,name=description,proto3" json:"description,omitempty"`
 	// UI visibility: "hidden" (runtime-only), "config" (default), "textarea", "model", "slider", "toolbar".
-	Ui            string `protobuf:"bytes,2,opt,name=ui,proto3" json:"ui,omitempty"`
+	Ui string `protobuf:"bytes,2,opt,name=ui,proto3" json:"ui,omitempty"`
+	// Example is what a value looks like, written as YAML would hold it
+	// ("fix the flaky login test", "[forge/db, code-review]"). Run and
+	// activation forms show it in an empty input; it is never a default.
+	Example       string `protobuf:"bytes,3,opt,name=example,proto3" json:"example,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4232,6 +4239,13 @@ func (x *InputBase) GetDescription() string {
 func (x *InputBase) GetUi() string {
 	if x != nil {
 		return x.Ui
+	}
+	return ""
+}
+
+func (x *InputBase) GetExample() string {
+	if x != nil {
+		return x.Example
 	}
 	return ""
 }
@@ -7723,10 +7737,10 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x15RefusedToolCallsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:o\x8a\xb5\x18k\n" +
-	"\rexecute_tools\x12\x12Run LLM Tool Calls\x1a5Run the tool calls an upstream Call LLM step returned*\aagentic2\x06Wrench\"\xf0\x04\n" +
-	"\x0eInvokeToolArgs\x12\xa8\x01\n" +
-	"\x04tool\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB}\x82\xb5\x18y\n" +
-	"WThe tool to run, by name. Only tools that allow direct use from a workflow can be namedJ\x04ToolZ\x05basicp\x01\x82\x01\x0egenerate_imageR\x04tool\x12\xf0\x01\n" +
+	"\rexecute_tools\x12\x12Run LLM Tool Calls\x1a5Run the tool calls an upstream Call LLM step returned*\aagentic2\x06Wrench\"\xfd\x04\n" +
+	"\x0eInvokeToolArgs\x12\xb5\x01\n" +
+	"\x04tool\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\x89\x01\x82\xb5\x18\x84\x01\n" +
+	"WThe tool to run, by name. Only tools that allow direct use from a workflow can be named\x1a\tnode_toolJ\x04ToolZ\x05basicp\x01\x82\x01\x0egenerate_imageR\x04tool\x12\xf0\x01\n" +
 	"\x06params\x18\x02 \x03(\v2&.reliant.v1.InvokeToolArgs.ParamsEntryB\xaf\x01\x82\xb5\x18\xaa\x01\n" +
 	"XThe tool's parameters, keyed as in its schema. Values may be literals or {{ }} templatesJ\n" +
 	"ParametersZ\x05basic\x82\x01,{\"prompt\": \"A watercolor fox in fresh snow\"}\x8a\x01\vJSON objectR\x06params\x1aQ\n" +
@@ -7941,10 +7955,14 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vgroup_input\x18\x16 \x01(\v2\x1c.reliant.v1.GroupInputConfigH\x00R\n" +
 	"groupInput\x12B\n" +
 	"\fpreset_input\x18\x17 \x01(\v2\x1d.reliant.v1.PresetInputConfigH\x00R\vpresetInputB\b\n" +
-	"\x06config\"=\n" +
-	"\tInputBase\x12 \n" +
-	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x0e\n" +
-	"\x02ui\x18\x02 \x01(\tR\x02ui\"\xe9\x01\n" +
+	"\x06config\"\xd0\x03\n" +
+	"\tInputBase\x12s\n" +
+	"\vdescription\x18\x01 \x01(\tBQ\x82\xb5\x18M\n" +
+	"KWhat the input is for; the Run and activation forms show it under the fieldR\vdescription\x12\xaa\x01\n" +
+	"\x02ui\x18\x02 \x01(\tB\x99\x01\x82\xb5\x18\x94\x01\n" +
+	"\x91\x01Where the input appears: toolbar (under the chat box), hidden (runtime only), or unset (behind settings). Renderer hints: textarea, model, sliderR\x02ui\x12\xa0\x01\n" +
+	"\aexample\x18\x03 \x01(\tB\x85\x01\x82\xb5\x18\x80\x01\n" +
+	"~What a value looks like, shown in the empty input on the Run and activation forms. Never used as a value; set default for thatR\aexample\"\xe9\x01\n" +
 	"\x11StringInputConfig\x12)\n" +
 	"\x04base\x18\x01 \x01(\v2\x15.reliant.v1.InputBaseR\x04base\x12\x1d\n" +
 	"\adefault\x18\x02 \x01(\tH\x00R\adefault\x88\x01\x01\x12\x18\n" +

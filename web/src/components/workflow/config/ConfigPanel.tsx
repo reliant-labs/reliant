@@ -38,6 +38,7 @@ import { ActionStepConfig } from "./ActionStepConfig";
 import { IntegrationActionConfig } from "./IntegrationActionConfig";
 import { getActionUses, isIntegrationActionStep } from "../../../lib/actionNodeArgs";
 import { useCatalogEntry } from "../../../hooks/connection-queries";
+import { CELCurrentNodeProvider } from "../CELCompletionContext";
 import { WorkflowStepConfig } from "./WorkflowStepConfig";
 import { JoinStepConfig } from "./JoinStepConfig";
 import { LoopStepConfig } from "./LoopStepConfig";
@@ -427,6 +428,8 @@ export function ConfigPanel({
 
   return (
     <NodeFindingsScope nodeId={step.id ?? ""}>
+      {/* Insert data offers the outputs of the steps before this one. */}
+      <CELCurrentNodeProvider value={step.id ?? null}>
     <ConfigurationPanel
       title={isReadOnly ? `${getStepTitle()} (View Only)` : getStepTitle()}
       subtitle={step.id}
@@ -703,6 +706,7 @@ export function ConfigPanel({
         </>
       )}
     </ConfigurationPanel>
+      </CELCurrentNodeProvider>
     </NodeFindingsScope>
   );
 }

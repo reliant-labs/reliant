@@ -600,6 +600,51 @@ func outputFieldsToProto(fields []schema.InputFieldInfo) []*reliantv1.NodeInputF
 	return out
 }
 
+// uiHintNodeTool marks a field that names a tool an invoke_tool node may run
+// ((reliant).ui_hint in workflow_v2.proto). ListNodes fills its options.
+const uiHintNodeTool = "node_tool"
+
+// nodeToolOptions are the tools an invoke_tool node may name — the ones that
+// opted in to node exposure — with the first sentence of each tool's own
+// description, for the editor's tool picker.
+func (s *CatalogService) nodeToolOptions() []*reliantv1.NodeFieldOption {
+	registry := map[string]tools.ToolDefinition{}
+	for _, def := range tools.GetToolRegistry() {
+		registry[def.Name] = def
+	}
+	// A description is static text, so a bare factory (a service built
+	// without one) is enough to read it.
+	factory := s.toolsFactory
+	if factory == nil {
+		factory = tools.NewToolsFactory(nil)
+	}
+	exposed := tools.NodeExposedTools()
+	options := make([]*reliantv1.NodeFieldOption, 0, len(exposed))
+	for _, exposure := range exposed {
+		option := &reliantv1.NodeFieldOption{Value: exposure.Tool}
+		if def, ok := registry[exposure.Tool]; ok {
+			if tool := def.Factory(factory); tool != nil {
+				option.Description = firstSentence(tool.Description())
+			}
+		}
+		options = append(options, option)
+	}
+	return options
+}
+
+// firstSentence is the text up to the first sentence end (or line break), for
+// a one-line picker description of a long agent-facing tool description.
+func firstSentence(text string) string {
+	text = strings.TrimSpace(text)
+	if i := strings.IndexAny(text, "\n"); i >= 0 {
+		text = text[:i]
+	}
+	if i := strings.Index(text, ". "); i >= 0 {
+		return text[:i+1]
+	}
+	return text
+}
+
 // ListNodes returns all workflow nodes available for the builder
 func (s *CatalogService) ListNodes(
 	ctx context.Context,
@@ -659,6 +704,9 @@ func (s *CatalogService) ListNodes(
 			}
 			if field.CleanupSemantics != nil {
 				protoField.CleanupSemantics = field.CleanupSemantics
+			}
+			if field.UIHint == uiHintNodeTool {
+				protoField.Options = s.nodeToolOptions()
 			}
 
 			inputFields = append(inputFields, protoField)

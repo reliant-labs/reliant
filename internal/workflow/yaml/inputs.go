@@ -118,12 +118,13 @@ func unmarshalInput(node *yaml.Node) (*reliantv1.Input, error) {
 	return input, nil
 }
 
-// unmarshalInputBase extracts description and ui from a mapping node.
+// unmarshalInputBase extracts description, ui and example from a mapping node.
 func unmarshalInputBase(node *yaml.Node) *reliantv1.InputBase {
 	base := &reliantv1.InputBase{}
 	base.Description = getYAMLFieldString(node, "description")
 	base.Ui = getYAMLFieldString(node, "ui")
-	if base.Description == "" && base.Ui == "" {
+	base.Example = getYAMLFieldString(node, "example")
+	if base.Description == "" && base.Ui == "" && base.Example == "" {
 		return nil
 	}
 	return base
@@ -726,6 +727,9 @@ func marshalInputBase(m *yaml.Node, base *reliantv1.InputBase) {
 	}
 	if base.Ui != "" {
 		m.Content = append(m.Content, scalarNode("ui", ""), scalarNode(base.Ui, ""))
+	}
+	if base.Example != "" {
+		m.Content = append(m.Content, scalarNode("example", ""), scalarNode(base.Example, ""))
 	}
 }
 

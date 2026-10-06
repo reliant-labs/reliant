@@ -68,6 +68,24 @@ export class CELInsertRegistry {
 
 const CELInsertCtx = createContext<CELInsertRegistry | null>(null);
 
+// ---------------------------------------------------------------------------
+// Current step
+// ---------------------------------------------------------------------------
+
+/**
+ * The step whose config panel a field belongs to. The Insert data picker
+ * offers the outputs of the steps that run before it, so it needs to know
+ * which step "this one" is; outside a step panel (a trigger, a run form) it is
+ * null and no step outputs are offered.
+ */
+const CELCurrentNodeCtx = createContext<string | null>(null);
+
+export const CELCurrentNodeProvider = CELCurrentNodeCtx.Provider;
+
+export function useCELCurrentNode(): string | null {
+  return useContext(CELCurrentNodeCtx);
+}
+
 export function CELCompletionProvider({ value, children }: { value: CELCompletionContextValue; children: ReactNode }) {
   // One registry per provider, stable for its lifetime. It lives outside the
   // completion value so a focus change never re-renders every config panel.

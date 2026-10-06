@@ -28,6 +28,11 @@ import {
   setInputMin,
   setInputMax,
   createInput,
+  getInputExample,
+  setInputExample,
+  applyInputUpdates,
+  changeInputType,
+  isInternalInput,
 } from "../inputHelpers";
 
 // ---------------------------------------------------------------------------
@@ -338,3 +343,46 @@ describe("createInput", () => {
   });
 });
 
+
+// ---------------------------------------------------------------------------
+// example — what a value looks like, shown in the Run form's empty box
+// ---------------------------------------------------------------------------
+
+describe("example", () => {
+  it("reads and writes the example on the input's base", () => {
+    const input = setInputExample(createInput("string", { description: "Slack channel" }), "C0123ABCDEF");
+    expect(getInputExample(input)).toBe("C0123ABCDEF");
+    // The rest of the base is kept.
+    expect(getInputDescription(input)).toBe("Slack channel");
+  });
+
+  it("is undefined when unset", () => {
+    expect(getInputExample(createInput("string"))).toBeUndefined();
+  });
+
+  it("is set by createInput and the params editor's update path", () => {
+    expect(getInputExample(createInput("integer", { example: "42" }))).toBe("42");
+    const updated = applyInputUpdates(createInput("string"), { description: "Repo", example: "acme/app" });
+    expect(getInputExample(updated)).toBe("acme/app");
+    expect(getInputDescription(updated)).toBe("Repo");
+  });
+
+  it("survives a change of type, as the description does", () => {
+    const changed = changeInputType(createInput("string", { description: "Count", example: "3" }), "integer");
+    expect(changed.config.case).toBe("integerInput");
+    expect(getInputExample(changed)).toBe("3");
+    expect(getInputDescription(changed)).toBe("Count");
+  });
+});
+
+describe("isInternalInput", () => {
+  it("is true for hidden inputs and the ones a workflow wires itself", () => {
+    expect(isInternalInput(createInput("string", { ui: "hidden" }))).toBe(true);
+    expect(isInternalInput(createInput("preset"))).toBe(true);
+  });
+
+  it("is false for inputs a person or an event fills", () => {
+    expect(isInternalInput(createInput("string"))).toBe(false);
+    expect(isInternalInput(createInput("model", { ui: "toolbar" }))).toBe(false);
+  });
+});

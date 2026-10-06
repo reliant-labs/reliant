@@ -145,6 +145,7 @@ export function actionParamFields(paramsSchema: JsonSchema | undefined, order: r
         example,
         placeholder: example === undefined ? fallbackPlaceholder(valueKind) : undefined,
         typeHint: Array.isArray(property.enum) && property.enum.length > 0 ? undefined : typeHintFor(property, valueKind),
+        pattern: valueKind === "string" && typeof property.pattern === "string" ? property.pattern : undefined,
         celCapable: true,
         defaultValue: property.default,
         minValue: property.minimum,

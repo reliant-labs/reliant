@@ -1,10 +1,12 @@
 import type { NodeInputField } from '../gen/reliant/v1/catalog_pb'
 import type { ProtoFieldSchema } from '../types/workflowFieldSchema'
 import { formatValueForDisplay } from './paramUtils'
+import { formatInputDefault } from './inputDefaultDisplay'
 import type { InputDef } from './inputHelpers'
 import {
   getInputDescription,
   getInputDefault,
+  getInputExample,
   getInputEnumValues,
   getInputMin,
   getInputMax,
@@ -62,6 +64,23 @@ export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema 
     defaultValue: field.defaultValue || undefined,
     minValue: field.minValue,
     maxValue: field.maxValue,
+  }
+
+  // A field whose values the server lists (the tools Run Tool may name) →
+  // a searchable picker, with manual entry and the Expression toggle kept.
+  if ((field.options && field.options.length > 0) || field.uiHint === 'node_tool') {
+    return {
+      ...base,
+      widget: 'picker',
+      valueKind: 'string',
+      celCapable: true,
+      showCelModeToggle: true,
+      options: (field.options ?? []).map((option) => ({
+        value: option.value,
+        label: option.label || option.value,
+        description: option.description || undefined,
+      })),
+    }
   }
 
   // Enum fields → select widget with CEL toggle
@@ -194,8 +213,10 @@ export function inputDefToSchema(name: string, input: InputDef): ProtoFieldSchem
   // The description is printed under the input; the ? popover adds only the
   // default and range.
   const helpParts: string[] = []
-  if (defaultVal !== undefined && defaultVal !== null && defaultVal !== '') {
-    helpParts.push(`Default: ${formatValueForDisplay(defaultVal)}`)
+  // In words ("flagship (any provider)"), never the selector's JSON.
+  const defaultText = defaultVal === '' ? undefined : formatInputDefault(defaultVal)
+  if (defaultText) {
+    helpParts.push(`Default: ${defaultText}`)
   }
   if (min !== undefined && max !== undefined) {
     helpParts.push(`Range: ${min} – ${max}`)
@@ -211,6 +232,7 @@ export function inputDefToSchema(name: string, input: InputDef): ProtoFieldSchem
     label,
     description: description || undefined,
     helpText,
+    example: getInputExample(input),
     defaultValue: defaultVal,
     minValue: min,
     maxValue: max,

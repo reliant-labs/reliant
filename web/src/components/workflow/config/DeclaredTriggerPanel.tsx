@@ -64,6 +64,8 @@ import type { Trigger } from "../../../api/trigger-grpc";
 import type { JsonSchema } from "../../../lib/jsonSchema";
 import { useCatalogEntry, useDeclaredTriggerRef } from "../../../hooks/connection-queries";
 import type { Workflow } from "../../../types/workflow";
+import { getInputDefault, getInputDescription, isInternalInput, type InputDef } from "../../../lib/inputHelpers";
+import { formatInputDefault } from "../../../lib/inputDefaultDisplay";
 
 export interface DeclaredTriggerPanelProps {
   index: number;
@@ -522,33 +524,58 @@ function WorkflowEventSection({ trigger, onChange, disabled, findings }: { trigg
 
 function InputsSection({ trigger, inputs, onChange, disabled, findings }: { trigger: DeclaredTrigger; inputs: Workflow["inputs"]; onChange: (t: DeclaredTrigger) => void; disabled: boolean; findings: TriggerFinding[] }) {
   const ids = useId();
+  const [showInternal, setShowInternal] = useState(false);
   const mapped = (trigger.inputs ?? {}) as Record<string, string>;
   const declared = Object.keys(inputs ?? {});
+  // Hidden inputs (ui: hidden) and the ones a workflow wires itself (presets)
+  // are not for an event to fill, so they wait behind a disclosure. One that
+  // is already mapped stays visible, so it can be seen and removed.
+  const internal = declared.filter((name) => isInternalInput(inputs![name] as InputDef) && !(name in mapped));
+  const shown = showInternal ? declared : declared.filter((name) => !internal.includes(name));
   // A mapping for an input the workflow no longer declares stays visible, so it can be removed.
-  const names = [...new Set([...declared, ...Object.keys(mapped)])];
+  const names = [...new Set([...shown, ...Object.keys(mapped)])];
   return (
     <Section>
       <SectionLabel>Inputs from the event</SectionLabel>
-      {names.length === 0 ? (
+      {declared.length === 0 && names.length === 0 ? (
         <p className="cpv2-field-hint !mt-0 italic">This workflow declares no inputs to fill.</p>
       ) : (
         <SectionFields>
-          {names.map((name) => (
-            <div key={name}>
-              <div className="cpv2-field-label">
-                <label htmlFor={`${ids}-in-${name}`} className="font-mono">{name}</label>
-                {!declared.includes(name) && <span className="text-2xs text-warning-ink">not a declared input</span>}
+          {names.map((name) => {
+            const input = inputs?.[name] as InputDef | undefined;
+            const description = input ? getInputDescription(input) : undefined;
+            const defaultLabel = input ? describeInputDefault(getInputDefault(input)) : undefined;
+            return (
+              <div key={name}>
+                <div className="cpv2-field-label">
+                  <span className="flex items-center gap-1.5">
+                    <label htmlFor={`${ids}-in-${name}`} className="font-mono">{name}</label>
+                    {input?.type && <span className="cpv2-field-type">{input.type}</span>}
+                  </span>
+                  {!declared.includes(name) && <span className="text-2xs text-warning-ink">not a declared input</span>}
+                </div>
+                <CELInput
+                  id={`${ids}-in-${name}`}
+                  value={mapped[name] ?? ""}
+                  onChange={(value) => onChange(withInput(trigger, name, value))}
+                  disabled={disabled}
+                  hideCELHint
+                  placeholder={defaultLabel ? `Default: ${defaultLabel} — or {{ trigger.payload.data… }}` : "{{ trigger.payload.data… }}"}
+                />
+                {description && <p className="cpv2-field-hint !mt-1">{description}</p>}
               </div>
-              <CELInput
-                id={`${ids}-in-${name}`}
-                value={mapped[name] ?? ""}
-                onChange={(value) => onChange(withInput(trigger, name, value))}
-                disabled={disabled}
-                hideCELHint
-                placeholder="{{ trigger.payload.data… }}"
-              />
-            </div>
-          ))}
+            );
+          })}
+          {internal.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setShowInternal((open) => !open)}
+              aria-expanded={showInternal}
+              className="self-start text-xs font-medium text-primary hover:underline"
+            >
+              {showInternal ? "Hide internal inputs" : `Show ${internal.length} internal input${internal.length === 1 ? "" : "s"}`}
+            </button>
+          )}
           <p className="cpv2-field-hint">
             Set from each event; an activation can't override a mapped input. Leave empty to let the activation (or the input's default) provide it.
           </p>
@@ -557,6 +584,13 @@ function InputsSection({ trigger, inputs, onChange, disabled, findings }: { trig
       <FindingList findings={findings} />
     </Section>
   );
+}
+
+/** A declared default as words for a placeholder, or undefined when there is none. */
+function describeInputDefault(value: unknown): string | undefined {
+  const text = value === "" ? undefined : formatInputDefault(value);
+  if (!text) return undefined;
+  return text.length > 40 ? `${text.slice(0, 40)}…` : text;
 }
 
 function ActivationsSection({ trigger, activations, canActivate, unsaved, onActivate, onEditActivation }: DeclaredTriggerPanelProps) {

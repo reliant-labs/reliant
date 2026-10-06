@@ -39,7 +39,9 @@ export type FieldMeta = Message<"reliant.v1.FieldMeta"> & {
   enumValues: string;
 
   /**
-   * UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar".
+   * UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar",
+   * or "node_tool" (a picker over the tools an invoke_tool node may name; the
+   * catalog fills NodeInputField.options from the tool registry).
    *
    * @generated from field: string ui_hint = 3;
    */
