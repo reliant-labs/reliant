@@ -217,7 +217,12 @@ type Connection struct {
 	UpdatedAt       string `protobuf:"bytes,14,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
 	// The connection's non-secret settings (a Shopify shop), as declared by the
 	// integration's connection_params.
-	Params        map[string]string `protobuf:"bytes,15,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	Params map[string]string `protobuf:"bytes,15,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// The provider's id for the person who made this connection, as that
+	// provider's events name them in trigger.sender.id: a Slack user id, a
+	// GitHub login, a Gmail address. Empty when the integration does not say.
+	// It is what a trigger's "Only from: Me" allowlists.
+	SenderId      string `protobuf:"bytes,16,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -355,6 +360,13 @@ func (x *Connection) GetParams() map[string]string {
 		return x.Params
 	}
 	return nil
+}
+
+func (x *Connection) GetSenderId() string {
+	if x != nil {
+		return x.SenderId
+	}
+	return ""
 }
 
 // Integration is one catalog integration a connection can be made to.
@@ -1797,7 +1809,7 @@ var File_reliant_v1_connection_proto protoreflect.FileDescriptor
 const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\n" +
 	"\x1breliant/v1/connection.proto\x12\n" +
-	"reliant.v1\"\xfe\x04\n" +
+	"reliant.v1\"\x9b\x05\n" +
 	"\n" +
 	"Connection\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12%\n" +
@@ -1819,7 +1831,8 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"created_at\x18\r \x01(\tR\tcreatedAt\x12\x1d\n" +
 	"\n" +
 	"updated_at\x18\x0e \x01(\tR\tupdatedAt\x12:\n" +
-	"\x06params\x18\x0f \x03(\v2\".reliant.v1.Connection.ParamsEntryR\x06params\x1a9\n" +
+	"\x06params\x18\x0f \x03(\v2\".reliant.v1.Connection.ParamsEntryR\x06params\x12\x1b\n" +
+	"\tsender_id\x18\x10 \x01(\tR\bsenderId\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x02\n" +

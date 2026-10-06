@@ -165,6 +165,11 @@ export interface Trigger {
   /** The connection an integration trigger listens through. */
   connectionId?: string;
   /**
+   * The CEL filter an event must pass. An activation's is its declaration's,
+   * shown here as the server last projected it and never sent back.
+   */
+  filter?: string;
+  /**
    * Webhook triggers: the URL to POST to. A bare `/hooks/<id>` path when the
    * server has no PUBLIC_URL; see webhookUrlForDisplay.
    */
@@ -231,6 +236,12 @@ export interface TriggerDefinitionInput {
    * means the owner's default for the integration.
    */
   connectionId?: string;
+  /**
+   * An inline event source's CEL filter. Replaced on update, so an edit sends
+   * the stored one back; never set for an activation, whose filter is its
+   * declaration's (the server refuses one).
+   */
+  filter?: string;
 }
 
 // ============================================
@@ -352,6 +363,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     source: sourceFromProto(proto.source, proto.workflowTrigger || undefined),
     workflowTrigger: proto.workflowTrigger || undefined,
     connectionId: proto.connectionId || undefined,
+    filter: proto.filter || undefined,
     webhookUrl: proto.webhookUrl || undefined,
   };
 }
@@ -378,6 +390,7 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     noMachine: input.noMachine ?? false,
     notifyOnComplete: input.notifyOnComplete,
     connectionId: input.connectionId || undefined,
+    filter: input.source.kind === "activation" ? "" : (input.filter ?? "").trim(),
   });
   // Assigned rather than passed to create(): a passthrough arm is the decoded
   // message the server sent, and goes back as that same object.
@@ -469,6 +482,8 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     notifyOnComplete: trigger.notifyOnComplete,
     source: trigger.source,
     connectionId: trigger.connectionId,
+    // An activation's filter is its declaration's: not the row's to send.
+    filter: trigger.source.kind === "activation" ? undefined : trigger.filter,
   };
 }
 

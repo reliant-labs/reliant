@@ -100,8 +100,9 @@ func (f *fakeSlack) token(w http.ResponseWriter, r *http.Request) {
 			"bot_user_id": "U0BOT", "app_id": "A0APP",
 			"team":       map[string]any{"id": team, "name": name},
 			"enterprise": nil, "is_enterprise_install": false,
-			// The user half of the install. Reliant acts as the bot, so none of
-			// this may be stored or used.
+			// The user half of the install. Reliant acts as the bot, so its
+			// tokens may never be stored or used; only the id is kept, as who
+			// connected the workspace (the connection's sender_id).
 			"authed_user": map[string]any{
 				"id": "U0HUMAN", "scope": "search:read", "access_token": "xoxp-user-DECOY-" + n, "token_type": "user",
 			},
@@ -241,6 +242,25 @@ func TestSlackOAuth_ExchangeKeepsTheBotTokenAndRecordsTheTeam(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, res.OK)
 	require.Zero(t, f.refreshCalls.Load())
+}
+
+// "Only from: Me" on a Slack trigger needs the Slack user id of the person
+// who connected the workspace. auth.test answers as the bot, so the id comes
+// from the exchange's authed_user, and survives a re-probe that cannot see it.
+func TestSlackOAuth_RecordsTheInstallingUserAsTheSender(t *testing.T) {
+	e, _ := slackEnv(t)
+	ctx := context.Background()
+	conn := e.connectSlack("alice").Connection
+	require.NotNil(t, conn.SenderID)
+	require.Equal(t, "U0HUMAN", *conn.SenderID, "the person, not the bot (U0BOT)")
+
+	_, err := e.svc.Test(ctx, "alice", conn.ID)
+	require.NoError(t, err)
+	got, err := e.svc.Get(ctx, "alice", conn.ID)
+	require.NoError(t, err)
+	require.NotNil(t, got.SenderID)
+	require.Equal(t, "U0HUMAN", *got.SenderID, "a re-probe that names no sender keeps the stored one")
+	require.Zero(t, e.count(`SELECT count(*) FROM connections WHERE id=$1 AND sender_id LIKE 'xox%'`, conn.ID))
 }
 
 // With token rotation on, Slack issues a 12-hour token plus a refresh token.

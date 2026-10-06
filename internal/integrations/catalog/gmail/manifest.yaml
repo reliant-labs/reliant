@@ -79,6 +79,9 @@ connection:
     path: /profile
     external_id: response.emailAddress
     label: response.emailAddress
+    # The mailbox's own address: what a message from its owner carries as
+    # trigger.sender.id.
+    sender_id: response.emailAddress
 
 actions:
   - id: message.send

@@ -247,6 +247,7 @@ type Connection struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 	DeletedAt       sql.NullTime    `json:"deleted_at"`
 	Params          json.RawMessage `json:"params"`
+	SenderID        sql.NullString  `json:"sender_id"`
 }
 
 type ConnectionEvent struct {

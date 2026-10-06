@@ -557,6 +557,7 @@ CREATE TABLE public.connections (
     updated_at timestamp with time zone DEFAULT now() NOT NULL,
     deleted_at timestamp with time zone,
     params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    sender_id text,
     CONSTRAINT connections_auth_kind_check CHECK ((auth_kind = ANY (ARRAY['oauth2'::text, 'api_key'::text, 'basic'::text, 'none'::text]))),
     CONSTRAINT connections_check CHECK ((((owner_kind = 'user'::text) AND (org_id IS NULL)) OR ((owner_kind = 'org'::text) AND (org_id IS NOT NULL)))),
     CONSTRAINT connections_owner_kind_check CHECK ((owner_kind = ANY (ARRAY['user'::text, 'org'::text]))),

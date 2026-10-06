@@ -86,6 +86,8 @@ A trigger can be narrowed by equality on these attributes:
 | `channel` | `sms` / `whatsapp` | Derived from the `whatsapp:` prefix. |
 | `num_media` | `"0"` | How many media items, as a string. |
 
+`trigger.sender` is the `From` number with `kind: "sms"` (WhatsApp included), and its `verified` is always `false`. Twilio's signature proves Twilio delivered the message, not who sent it: SMS caller ID can be spoofed before the message reaches Twilio. So a filter such as `trigger.sender.id == "+15551230000"`, or a `from` match, narrows which messages start a run but does not authenticate the sender. Don't give a texted run anything you wouldn't give a stranger.
+
 To reply, use `twilio/message.send@1` with `to` set to the incoming `from` and `from` set to the incoming `to`.
 
 ### Point your numbers at Reliant

@@ -426,6 +426,11 @@ func validateOAuth2(o *reliantv1.OAuth2Auth, params map[string]bool) error {
 	default:
 		return fmt.Errorf("pkce %q must be S256 or plain", o.GetPkce())
 	}
+	if expr := o.GetSenderId(); expr != "" {
+		if err := tmpl.ValidateExpr(expr); err != nil {
+			return fmt.Errorf("sender_id: %w", err)
+		}
+	}
 	for k, v := range o.GetAuthorizeParams() {
 		if reservedAuthorizeParams[k] {
 			return fmt.Errorf("authorize_params: %q is set by the flow itself", k)
@@ -534,7 +539,7 @@ func validateProbe(p *reliantv1.IdentityProbe, conn *reliantv1.ConnectionSpec, p
 	if p.GetExternalId() == "" {
 		return fmt.Errorf("connection.probe.external_id is required")
 	}
-	for name, expr := range map[string]string{"ok": p.GetOk(), "external_id": p.GetExternalId(), "label": p.GetLabel()} {
+	for name, expr := range map[string]string{"ok": p.GetOk(), "external_id": p.GetExternalId(), "label": p.GetLabel(), "sender_id": p.GetSenderId()} {
 		if expr == "" {
 			continue
 		}

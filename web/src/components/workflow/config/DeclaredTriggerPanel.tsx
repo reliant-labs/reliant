@@ -32,6 +32,7 @@ import { ConfigPanelTabBar } from "./ConfigPanelTabBar";
 import { Toggle } from "../../ui/Toggle";
 import { useSetTriggerEnabled } from "../../../hooks/trigger-queries";
 import { CELInput } from "../CELInput";
+import { OnlyFromControl } from "./OnlyFromControl";
 import { CELCompletionProvider, useCELCompletionContext } from "../CELCompletionContext";
 import { useWorkflowMutations } from "../WorkflowMutationContext";
 import { IntegrationLogo } from "../../icons/IntegrationLogo";
@@ -237,6 +238,16 @@ export function DeclaredTriggerPanel(props: DeclaredTriggerPanelProps) {
 
         {canFilter(trigger) && (
           <Section>
+            {kind === "integration" && (
+              <div className="mb-3">
+                <OnlyFromControl
+                  integration={integration?.integration}
+                  filter={trigger.filter ?? ""}
+                  onChange={(value) => update(withFilter(trigger, value))}
+                  disabled={isReadOnly}
+                />
+              </div>
+            )}
             <SectionLabel>Filter</SectionLabel>
             <CELInput
               id={`${ids}-filter`}

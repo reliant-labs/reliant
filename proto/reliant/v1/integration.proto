@@ -112,6 +112,12 @@ message OAuth2Auth {
   map<string, string> authorize_params = 6;
   // Revoke, when set, is called best-effort when a connection is deleted.
   RevokeSpec revoke = 7;
+  // SenderId is CEL over `response`, the token endpoint's answer with every
+  // token field removed, yielding the id of the person who authorized, as
+  // trigger.sender.id names them (Slack: response.authed_user.id). Set when
+  // only the exchange says who that person is; it takes precedence over the
+  // probe's sender_id.
+  string sender_id = 8;
 }
 
 // RevokeSpec describes the provider's token revocation call.
@@ -202,6 +208,13 @@ message IdentityProbe {
   // Leave it unset when events route some other way (GitHub's access
   // grants) or not at all.
   bool routes_events = 8;
+  // SenderId is CEL over `response` yielding the provider's id for the PERSON
+  // the credential belongs to, as that provider's own events name them in
+  // trigger.sender.id: a GitHub login, a Gmail address. It is what "Only
+  // from: Me" writes. Leave it unset when the probe answers for something
+  // other than a person (Slack's auth.test names the bot); OAuth2Auth's
+  // sender_id can read it from the token response instead.
+  string sender_id = 9;
 }
 
 // ActionSpec is one operation: usable as a workflow node and, optionally, as

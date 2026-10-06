@@ -21,6 +21,8 @@ import {
   type CreateTriggerRequest,
 } from "@/gen/reliant/v1/trigger_pb";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ConnectionSchema, ConnectionStatus, ListConnectionsResponseSchema } from "@/gen/reliant/v1/connection_pb";
+import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { triageWorkflowResponse, presetsResponse, worktreesResponse, WORKFLOW_LIST } from "@/components/workflow/run/__tests__/runFormFixtures";
 import { renderAtRoute } from "./automationTestUtils";
@@ -34,9 +36,14 @@ const getDefaultPresetsBatch = vi.fn();
 const listWorktrees = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
+const listConnections = vi.fn();
+const searchCatalog = vi.fn();
+const getCatalogEntry = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
+    connection: () => ({ listConnections }),
+    catalog: () => ({ searchCatalog, getCatalogEntry }),
     trigger: () => ({ createTrigger, rotateWebhookToken }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
@@ -255,5 +262,40 @@ describe("ActivateTriggerDialog", () => {
     expect(definition.source.value).toMatchObject({ cron: ["0 9 * * 1-5"], timezone: "UTC" });
     expect(definition.message).toBe("Review yesterday's PRs");
     await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("in personal mode, 'Only from' writes the new row's own filter", async () => {
+    const user = userEvent.setup();
+    listConnections.mockResolvedValue(
+      create(ListConnectionsResponseSchema, {
+        connections: [create(ConnectionSchema, { id: "conn_slack", integrationId: "slack", name: "Acme", senderId: "U0ME", status: ConnectionStatus.ACTIVE, isDefault: true })],
+      }),
+    );
+    searchCatalog.mockResolvedValue(create(SearchCatalogResponseSchema, { entries: [] }));
+    getCatalogEntry.mockRejectedValue(new Error("not in this test's catalog"));
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-4", name: "Agent · mention" }) }));
+    renderAtRoute(
+      <ActivateTriggerDialog
+        open
+        mode="personal"
+        onClose={vi.fn()}
+        workflowRef="builtin://agent"
+        workflowTitle="Agent"
+        declared={{ name: "mention", filter: "", inputs: {}, source: { case: "integration", value: { integration: "slack", events: ["app_mention"], match: {} } } } as unknown as DeclaredTrigger}
+        defaultProjectId="proj-1"
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Add me (U0ME)" }));
+    await user.type(screen.getByLabelText("Add a sender"), "U0TEAMMATE{Enter}");
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Answer the mention" } });
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "slack" } });
+    await user.click(screen.getByRole("button", { name: "Add trigger" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.source.case).toBe("integration");
+    expect(definition.filter).toBe('trigger.sender.verified && trigger.sender.id in ["U0ME", "U0TEAMMATE"]');
   });
 });
