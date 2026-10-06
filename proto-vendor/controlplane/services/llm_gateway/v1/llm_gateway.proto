@@ -10,6 +10,7 @@ package controlplane.v1;
 
 import "controlplane/v1/shared.proto";
 import "forge/v1/forge.proto";
+import "buf/validate/validate.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/llm_gateway/v1;llm_gatewayv1";
 
@@ -53,7 +54,7 @@ message CreateLLMKeyResponse {
 }
 
 message ListLLMKeysRequest {
-  string org_id = 1;
+  string org_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListLLMKeysResponse {
@@ -115,7 +116,7 @@ message GetLLMSpendResponse {
 }
 
 message ListAvailableModelsRequest {
-  string org_id = 1;
+  string org_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListAvailableModelsResponse {

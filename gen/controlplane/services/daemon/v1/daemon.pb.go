@@ -299,8 +299,8 @@ func (x *GetDaemonResponse) GetWorkspaceBaseDomain() string {
 
 type ListDaemonsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	DaemonType    v1.DaemonType          `protobuf:"varint,1,opt,name=daemon_type,json=daemonType,proto3,enum=controlplane.v1.DaemonType" json:"daemon_type,omitempty"`
-	Status        v1.DaemonStatus        `protobuf:"varint,2,opt,name=status,proto3,enum=controlplane.v1.DaemonStatus" json:"status,omitempty"`
+	DaemonType    *v1.DaemonType         `protobuf:"varint,1,opt,name=daemon_type,json=daemonType,proto3,enum=controlplane.v1.DaemonType,oneof" json:"daemon_type,omitempty"`
+	Status        *v1.DaemonStatus       `protobuf:"varint,2,opt,name=status,proto3,enum=controlplane.v1.DaemonStatus,oneof" json:"status,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -336,15 +336,15 @@ func (*ListDaemonsRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListDaemonsRequest) GetDaemonType() v1.DaemonType {
-	if x != nil {
-		return x.DaemonType
+	if x != nil && x.DaemonType != nil {
+		return *x.DaemonType
 	}
 	return v1.DaemonType(0)
 }
 
 func (x *ListDaemonsRequest) GetStatus() v1.DaemonStatus {
-	if x != nil {
-		return x.Status
+	if x != nil && x.Status != nil {
+		return *x.Status
 	}
 	return v1.DaemonStatus(0)
 }
@@ -1183,11 +1183,13 @@ const file_services_daemon_v1_daemon_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\"x\n" +
 	"\x11GetDaemonResponse\x12/\n" +
 	"\x06daemon\x18\x01 \x01(\v2\x17.controlplane.v1.DaemonR\x06daemon\x122\n" +
-	"\x15workspace_base_domain\x18\x02 \x01(\tR\x13workspaceBaseDomain\"\x89\x01\n" +
-	"\x12ListDaemonsRequest\x12<\n" +
-	"\vdaemon_type\x18\x01 \x01(\x0e2\x1b.controlplane.v1.DaemonTypeR\n" +
-	"daemonType\x125\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x1d.controlplane.v1.DaemonStatusR\x06status\"H\n" +
+	"\x15workspace_base_domain\x18\x02 \x01(\tR\x13workspaceBaseDomain\"\xae\x01\n" +
+	"\x12ListDaemonsRequest\x12A\n" +
+	"\vdaemon_type\x18\x01 \x01(\x0e2\x1b.controlplane.v1.DaemonTypeH\x00R\n" +
+	"daemonType\x88\x01\x01\x12:\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1d.controlplane.v1.DaemonStatusH\x01R\x06status\x88\x01\x01B\x0e\n" +
+	"\f_daemon_typeB\t\n" +
+	"\a_status\"H\n" +
 	"\x13ListDaemonsResponse\x121\n" +
 	"\adaemons\x18\x01 \x03(\v2\x17.controlplane.v1.DaemonR\adaemons\"\xa8\x01\n" +
 	"\x13UpdateDaemonRequest\x12\x1b\n" +
@@ -1340,6 +1342,7 @@ func file_services_daemon_v1_daemon_proto_init() {
 	if File_services_daemon_v1_daemon_proto != nil {
 		return
 	}
+	file_services_daemon_v1_daemon_proto_msgTypes[4].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
