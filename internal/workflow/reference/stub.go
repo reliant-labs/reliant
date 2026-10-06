@@ -230,17 +230,16 @@ func populateCELNamespaces() {
 	// Static namespace: workflow — fields from model.WorkflowContext
 	CELNamespaces = append(CELNamespaces, CELNamespace{
 		Name:        "workflow",
-		Description: "Workflow execution context (id, name, run_id, etc.)",
+		Description: "Workflow execution context (id, name, path, etc.)",
 		IsDynamic:   false,
 		Fields: []CELField{
 			{Name: "id", Type: "string", Description: "Workflow execution ID (unique per run)"},
 			{Name: "name", Type: "string", Description: "Workflow definition name"},
 			{Name: "run_id", Type: "string", Description: "Workflow run ID (Temporal run ID)"},
-			{Name: "session_id", Type: "string", Description: "Session ID for the workflow"},
-			{Name: "path", Type: "string", Description: "Working directory path"},
-			{Name: "worktree_path", Type: "string", Description: "Git worktree path (if in a worktree)"},
-			{Name: "branch", Type: "string", Description: "Current git branch (empty if not in git repo)"},
-			{Name: "mode", Type: "string", Description: "Execution mode (auto, manual, plan)"},
+			{Name: "path", Type: "string", Description: "Absolute working directory of the current scope: the chat's worktree or project, or a sub-workflow's project.path. Reading it in a run with no project directory is an error, not \"\"; test with has(workflow.path)"},
+			{Name: "worktree_path", Type: "string", Description: "The chat's worktree, when the current scope runs in it (empty in the project's main checkout)"},
+			{Name: "branch", Type: "string", Description: "That worktree's git branch (empty in the project's main checkout, whose branch is not tracked; test with has(workflow.branch))"},
+			{Name: "mode", Type: "string", Description: "Execution mode (auto, manual, plan), from inputs.mode"},
 		},
 	})
 

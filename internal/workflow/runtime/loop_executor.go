@@ -1071,7 +1071,7 @@ func (e *InlineLoopExecutor) bodyScope() *LoopScope {
 // celWorkflow is the `workflow` namespace for this loop's own expressions
 // (items, key, while, presets).
 func (e *InlineLoopExecutor) celWorkflow() *model.WorkflowContext {
-	return workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, e.workflowInputs))
+	return workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, e.workflowInputs, e.execContext))
 }
 
 // enclosingIter is the `iter` of the loop ENCLOSING this one — the scope this
@@ -1184,7 +1184,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 	// Create state machine for sub-workflow
 	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
-		WithLoopScope(e.bodyScope)
+		WithLoopScope(e.bodyScope).
+		WithExecContext(e.execContext)
 
 	// Create step executor for this iteration
 	// Derive iteration-specific execution context
@@ -1295,7 +1296,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			// Check node condition - if false, skip execution
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				e.ctx, step.Node, iterNodeOutputs, iterInputs,
-				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
+				e.workflowID, e.chatID, e.workflowIdentity(), e.execContext, e.logger,
 				e.bodyScope(),
 				e.nodePath(),
 			)
@@ -1644,7 +1645,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			)
 
 			// Build workflow context for output evaluation
-			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs)
+			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs, e.execContext)
 
 			// Evaluate sub-workflow outputs
 			outputs, err := EvaluateDeclaredOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext, e.subWorkflow, e.logger)

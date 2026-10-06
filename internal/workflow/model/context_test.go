@@ -29,7 +29,6 @@ func TestWorkflowContext(t *testing.T) {
 		Branch:       "main",
 		Mode:         "default",
 		RunID:        "run-123",
-		SessionID:    "session-456",
 		WorktreePath: "/path/to/worktree",
 	}
 	if wc.ID != "wf-1" {

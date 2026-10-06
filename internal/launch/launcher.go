@@ -895,8 +895,8 @@ func (l *Launcher) buildInputs(
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
 	// Use worktree path if chat is in a worktree, otherwise project path
-	workingPath := l.GetEffectiveWorkingPath(ctx, chat)
-	initialData := l.BuildWorkflowInputs(ctx, userID, workingPath, chat.ProjectID, workflowName, presets, params)
+	checkout := l.GetEffectiveCheckout(ctx, chat)
+	initialData := l.BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, presets, params)
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
 	if validationErrors := l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {

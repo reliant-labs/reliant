@@ -17,7 +17,6 @@ const (
 	workflowContextKeyPath         = "path"
 	workflowContextKeyBranch       = "branch"
 	workflowContextKeyRunID        = "run_id"
-	workflowContextKeySessionID    = "session_id"
 	workflowContextKeyWorktreePath = "worktree_path"
 )
 
@@ -46,9 +45,6 @@ func workflowContextToTyped(m map[string]interface{}) *model.WorkflowContext {
 	}
 	if runID, ok := m[workflowContextKeyRunID].(string); ok {
 		wc.RunID = runID
-	}
-	if sessionID, ok := m[workflowContextKeySessionID].(string); ok {
-		wc.SessionID = sessionID
 	}
 	if worktreePath, ok := m[workflowContextKeyWorktreePath].(string); ok {
 		wc.WorktreePath = worktreePath

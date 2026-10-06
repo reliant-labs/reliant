@@ -651,20 +651,20 @@ func ExecuteSaveMessageForNode(
 		}
 	}
 	return executeSaveMessageInline(ctx, node, output,
-		buildSaveMessageWorkflowContext(workflowID, workflowName, chatID, inputs, thread),
+		buildSaveMessageWorkflowContext(workflowID, workflowName, chatID, inputs, thread, execContext),
 		chatID, workflowID, loopNodeID, loopIteration, iterCtx, "")
 }
 
 // buildSaveMessageWorkflowContext is the workflow context a save_message sees:
 // buildWorkflowContext with inputs.thread set to the executing thread. The
 // inputs map is copied, never mutated — it is shared with the rest of the run.
-func buildSaveMessageWorkflowContext(workflowID, workflowName, chatID string, inputs map[string]interface{}, thread string) map[string]interface{} {
+func buildSaveMessageWorkflowContext(workflowID, workflowName, chatID string, inputs map[string]interface{}, thread string, execCtx *ExecutionContext) map[string]interface{} {
 	if thread != "" {
 		withThread := copyMap(inputs)
 		withThread["thread"] = thread
 		inputs = withThread
 	}
-	return buildWorkflowContext(workflowID, workflowName, chatID, inputs)
+	return buildWorkflowContext(workflowID, workflowName, chatID, inputs, execCtx)
 }
 
 // executeSaveMessageInline performs a save_message from the workflow: resolve

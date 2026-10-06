@@ -384,7 +384,7 @@ func TestBuildWorkflowContext_ThreadAccessibility(t *testing.T) {
 			"mode":   "auto",
 		}
 
-		ctx := buildWorkflowContext("wf-id", "test-workflow", "chat-id", inputs)
+		ctx := buildWorkflowContext("wf-id", "test-workflow", "chat-id", inputs, nil)
 
 		// Check inputs are accessible
 		inputsMap, ok := ctx["inputs"].(map[string]interface{})
@@ -404,7 +404,7 @@ func TestBuildWorkflowContext_ThreadAccessibility(t *testing.T) {
 	})
 
 	t.Run("nil inputs creates empty map", func(t *testing.T) {
-		ctx := buildWorkflowContext("wf-id", "test-workflow", "chat-id", nil)
+		ctx := buildWorkflowContext("wf-id", "test-workflow", "chat-id", nil, nil)
 
 		// Verify inputs exists as empty map
 		inputsMap, ok := ctx["inputs"].(map[string]interface{})

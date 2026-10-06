@@ -4,7 +4,7 @@
 # 1. improve_prompt refines the task spec
 # 2. Parallel loop creates 3 worktrees and runs 3 implementation agents
 # 3. Reviewer picks candidate 2 with use_winner strategy
-# 4. apply_winner runs rsync to copy winning implementation
+# 4. apply_winner applies the winning implementation's changes with git apply
 # 5. complete saves final summary
 #
 # The implementations node is a parallel loop with inline sub-workflow.
@@ -105,11 +105,11 @@ events:
       tool_results: []
       thread_token_count: 100
 
-  # Step 4: apply_winner rsync
+  # Step 4: apply_winner (git apply)
   - node: apply_winner
     output:
       exit_code: 0
-      stdout: "sent 1234 bytes  received 56 bytes\n"
+      stdout: "Applied candidate #2 to the project. Review with: git status && git diff\n"
       stderr: ""
 
 expect:

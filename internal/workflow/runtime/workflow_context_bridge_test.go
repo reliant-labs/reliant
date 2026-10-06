@@ -17,7 +17,6 @@ func TestWorkflowContextToTyped(t *testing.T) {
 			workflowContextKeyBranch:       "feature/test",
 			workflowContextKeyMode:         "auto",
 			workflowContextKeyRunID:        "run-456",
-			workflowContextKeySessionID:    "session-789",
 			workflowContextKeyWorktreePath: "/tmp/worktree",
 			workflowContextKeyChatID:       "chat-abc", // intentionally ignored by typed model
 			workflowContextKeyInputs: map[string]interface{}{
@@ -33,7 +32,6 @@ func TestWorkflowContextToTyped(t *testing.T) {
 		assert.Equal(t, "feature/test", typed.Branch)
 		assert.Equal(t, "auto", typed.Mode)
 		assert.Equal(t, "run-456", typed.RunID)
-		assert.Equal(t, "session-789", typed.SessionID)
 		assert.Equal(t, "/tmp/worktree", typed.WorktreePath)
 	})
 
@@ -46,7 +44,6 @@ func TestWorkflowContextToTyped(t *testing.T) {
 		assert.Equal(t, "", typed.Branch)
 		assert.Equal(t, "", typed.Mode)
 		assert.Equal(t, "", typed.RunID)
-		assert.Equal(t, "", typed.SessionID)
 		assert.Equal(t, "", typed.WorktreePath)
 	})
 
@@ -58,7 +55,6 @@ func TestWorkflowContextToTyped(t *testing.T) {
 			workflowContextKeyBranch:       map[string]interface{}{"x": "y"},
 			workflowContextKeyMode:         1.23,
 			workflowContextKeyRunID:        nil,
-			workflowContextKeySessionID:    999,
 			workflowContextKeyWorktreePath: false,
 		}
 
@@ -70,7 +66,6 @@ func TestWorkflowContextToTyped(t *testing.T) {
 		assert.Equal(t, "", typed.Branch)
 		assert.Equal(t, "", typed.Mode)
 		assert.Equal(t, "", typed.RunID)
-		assert.Equal(t, "", typed.SessionID)
 		assert.Equal(t, "", typed.WorktreePath)
 	})
 }

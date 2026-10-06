@@ -197,6 +197,11 @@ func EvaluateNodeConfig(
 		return nil, fmt.Errorf("ResolveCELFields returned %T, expected *reliantv1.Node", resolvedMsg)
 	}
 
+	// A shell command never runs with an interpolated value missing.
+	if err := requireRunCommandValues(node, builder); err != nil {
+		return nil, err
+	}
+
 	// Post-resolution: populate typed repeated fields from resolved CelString literals.
 	// For example, ExecuteToolsArgs.ToolCalls (CelString) resolves to a JSON array string;
 	// we parse it into ExecuteToolsArgs.ResolvedToolCalls ([]*ToolCallMsg).

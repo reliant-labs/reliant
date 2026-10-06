@@ -38,6 +38,10 @@ type ProcessInput struct {
 	// read 0 on every iteration and `outputs.x` failed "no such key".
 	Iter        *model.IterContext
 	LoopOutputs map[string]interface{}
+	// Workflow is the scope's workflow namespace — its environment (path,
+	// branch, worktree_path, mode, run_id) as every other evaluation site in
+	// the scope sees it. ID and Name are taken from the event. Nil means none.
+	Workflow *model.WorkflowContext
 }
 
 // WorkflowProcessorState tracks pure state-machine state between calls.
@@ -133,16 +137,18 @@ func (p *WorkflowProcessor) matchEdgeTargets(
 		return edge.GetDefault(), nil
 	}
 
+	workflowCtx := model.WorkflowContext{}
+	if input.Workflow != nil {
+		workflowCtx = *input.Workflow
+	}
+	workflowCtx.ID = event.WorkflowID
+	workflowCtx.Name = event.WorkflowName
 	edgeContext := &wfcel.EdgeEvalContext{
-		Nodes:  input.NodeOutputs,
-		Inputs: input.WorkflowInputs,
-		Workflow: &model.WorkflowContext{
-			ID:     event.WorkflowID,
-			Name:   event.WorkflowName,
-			Branch: branchFromInputs(input.WorkflowInputs),
-		},
-		Iter:    input.Iter,
-		Outputs: input.LoopOutputs,
+		Nodes:    input.NodeOutputs,
+		Inputs:   input.WorkflowInputs,
+		Workflow: &workflowCtx,
+		Iter:     input.Iter,
+		Outputs:  input.LoopOutputs,
 	}
 
 	for _, edgeCase := range edge.GetCases() {
@@ -160,12 +166,4 @@ func (p *WorkflowProcessor) matchEdgeTargets(
 	}
 
 	return edge.GetDefault(), nil
-}
-
-func branchFromInputs(workflowInputs map[string]interface{}) string {
-	if workflowInputs == nil {
-		return ""
-	}
-	branch, _ := workflowInputs["current_branch"].(string)
-	return branch
 }

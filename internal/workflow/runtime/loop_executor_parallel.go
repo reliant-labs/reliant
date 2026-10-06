@@ -320,7 +320,8 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 	// body's `outputs` is the empty map.
 	parallelScope := loopBodyScope(&model.IterContext{Iteration: index, Index: index, Item: resolvedItem, Key: key}, nil)
 	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
-		WithLoopScope(func() *LoopScope { return parallelScope })
+		WithLoopScope(func() *LoopScope { return parallelScope }).
+		WithExecContext(e.execContext)
 
 	// Unique activity ID prefix for this iteration (prevents collision)
 	activityPrefix := fmt.Sprintf("%spar-%s-iter%d-", e.activityIDPrefix, e.loopID, index)
@@ -406,7 +407,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 			// Check node condition
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				gCtx, step.Node, iterNodeOutputs, iterInputs,
-				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
+				e.workflowID, e.chatID, e.workflowIdentity(), e.execContext, e.logger,
 				parallelScope,
 				e.nodePath(),
 			)
@@ -646,7 +647,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 		// Check completion
 		if len(runningSteps) == 0 && len(events) == 0 {
-			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs)
+			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs, e.execContext)
 			outputs, err := EvaluateDeclaredOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext, e.subWorkflow, e.logger)
 			if err != nil {
 				result.Error = fmt.Errorf("failed to evaluate sub-workflow outputs: %w", err)

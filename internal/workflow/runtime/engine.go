@@ -261,6 +261,7 @@ func skipNodeIfConditionFalse(
 	workflowID string,
 	chatID string,
 	workflowName string,
+	execCtx *ExecutionContext,
 	logger log.Logger,
 	scope *LoopScope,
 	nodePathPrefix string,
@@ -270,7 +271,7 @@ func skipNodeIfConditionFalse(
 		return false, nil, nil
 	}
 
-	workflowContext := buildWorkflowContext(workflowID, workflowName, chatID, workflowInputs)
+	workflowContext := buildWorkflowContext(workflowID, workflowName, chatID, workflowInputs, execCtx)
 	shouldExecute, err := evaluateNodeCondition(node, nodeOutputs, workflowInputs, workflowContext, scope)
 	if err != nil {
 		return false, nil, fmt.Errorf("node condition evaluation failed for %s: %w", node.GetId(), err)
@@ -339,12 +340,22 @@ type SimplifiedStateMachine struct {
 	// nil outside a loop body. A func, not a value, because a sequential
 	// loop's iteration counter and previous outputs move after construction.
 	scope func() *LoopScope
+	// execCtx is the routed scope's execution context; edge conditions see
+	// the same workflow.path/branch/mode its nodes do. Nil means none.
+	execCtx *ExecutionContext
 }
 
 // WithLoopScope makes edge case conditions routed by this machine see the loop
 // body's `iter` and `outputs` — the same LoopScope its node conditions get.
 func (sm *SimplifiedStateMachine) WithLoopScope(scope func() *LoopScope) *SimplifiedStateMachine {
 	sm.scope = scope
+	return sm
+}
+
+// WithExecContext gives edge conditions routed by this machine the scope's
+// workflow environment (workflow.path and friends; see addScopeEnvironment).
+func (sm *SimplifiedStateMachine) WithExecContext(execCtx *ExecutionContext) *SimplifiedStateMachine {
+	sm.execCtx = execCtx
 	return sm
 }
 
@@ -369,6 +380,7 @@ func (sm *SimplifiedStateMachine) FindTriggeredNodes(events []*core.WorkflowEven
 		WorkflowInputs: workflowInputs,
 		Iter:           scope.iter(),
 		LoopOutputs:    scope.outputs(),
+		Workflow:       workflowContextToTyped(buildWorkflowContext("", "", "", workflowInputs, sm.execCtx)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("process workflow events: %w", err)

@@ -315,7 +315,7 @@ func TestStructuredAgentOutputCEL(t *testing.T) {
 				"response_tool_name": tt.responseToolName,
 			}
 
-			workflowContext := buildWorkflowContext("test-wf-id", "structured-agent", "test-chat", inputs)
+			workflowContext := buildWorkflowContext("test-wf-id", "structured-agent", "test-chat", inputs, nil)
 			outputs, err := EvaluateWorkflowOutputs(
 				inlineWf.GetOutputs(),
 				tt.nodeOutputs,

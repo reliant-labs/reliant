@@ -348,7 +348,7 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
 | `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}). Interactive chats have kind chat.start | workflow-specific |
-| `workflow.*` | Workflow execution context (id, name, run_id, etc.) | `id`, `name`, `run_id`, `session_id`, `path`, `worktree_path`, `branch`, `mode` |
+| `workflow.*` | Workflow execution context (id, name, path, etc.) | `id`, `name`, `run_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields
 
@@ -360,14 +360,13 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `workflow.branch` | `string` | Current git branch (empty if not in git repo) |
+| `workflow.branch` | `string` | That worktree's git branch (empty in the project's main checkout, whose branch is not tracked; test with has(workflow.branch)) |
 | `workflow.id` | `string` | Workflow execution ID (unique per run) |
-| `workflow.mode` | `string` | Execution mode (auto, manual, plan) |
+| `workflow.mode` | `string` | Execution mode (auto, manual, plan), from inputs.mode |
 | `workflow.name` | `string` | Workflow definition name |
-| `workflow.path` | `string` | Working directory path |
+| `workflow.path` | `string` | Absolute working directory of the current scope: the chat's worktree or project, or a sub-workflow's project.path. Reading it in a run with no project directory is an error, not ""; test with has(workflow.path) |
 | `workflow.run_id` | `string` | Workflow run ID (Temporal run ID) |
-| `workflow.session_id` | `string` | Session ID for the workflow |
-| `workflow.worktree_path` | `string` | Git worktree path (if in a worktree) |
+| `workflow.worktree_path` | `string` | The chat's worktree, when the current scope runs in it (empty in the project's main checkout) |
 
 ### Key functions
 
@@ -442,7 +441,7 @@ condition: "nodes.check.exit_code == 0"
 | `get-it-right` | Get It Right — for complex brownfield codebases where LLMs paper-mache code on top. The insight: sometimes you need to try and fail to truly understand the codebase. |
 | `landing-page` | Build a polished landing page by chaining two get-it-right review loops and ending in a plain handoff agent that serves the page and hands the user a URL. |
 | `migrate` | Guided migration workflow for importing useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant. |
-| `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner copies via rsync, synthesize merges best parts. |
+| `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner applies the winner's changes to the project with git apply, synthesize merges best parts. |
 | `pitch-deck` | Generate an investor pitch deck from a company website with competitive research and founder interview. Includes parallel per-slide write+review pipeline and visual review via puppeteer screenshots + image attachments. |
 | `scope-conversation` | Reusable scoping conversation sub-workflow. |
 | `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns once the model is done (stop_reason), this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |

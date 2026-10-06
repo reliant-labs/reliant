@@ -621,7 +621,7 @@ func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[strin
 		"stepID", node.GetId(),
 	)
 
-	workflowContext := buildSaveMessageWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.GetThread())
+	workflowContext := buildSaveMessageWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.GetThread(), e.execContext)
 	saveOutput, err := executeSaveMessageInline(
 		e.ctx,
 		node,
@@ -652,7 +652,7 @@ func (e *StepExecutor) nodeScope() *wfcel.NodeResolutionContext {
 	scope := &wfcel.NodeResolutionContext{
 		Inputs:   e.workflowInputs,
 		Nodes:    e.nodeOutputs,
-		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)),
+		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)),
 		Outputs:  e.loopOutputs,
 	}
 	if e.loopNodeID != "" {
@@ -1221,7 +1221,7 @@ func (e *StepExecutor) saveMessageRequest(node *reliantv1.Node) *types.SaveMessa
 	if config == nil {
 		return nil
 	}
-	workflowContext := buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)
+	workflowContext := buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)
 	req := &types.SaveMessageRequest{
 		Config:    config,
 		Inputs:    e.saveMessageInputs(node),
