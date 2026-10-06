@@ -18,7 +18,15 @@ params:
   skills:
     - forge-libraries
   # tag:coding:default plus the component library (the charter requires a unit to search
-  # for a component before hand-rolling one).
+  # for a component before hand-rolling one), plus prove_test, which turns "show
+  # the new test fails before the fix and passes after" into one call. In the
+  # roofers dogfood run all three implementation units skipped that check when
+  # it meant patching old code back in by hand.
+  #
+  # prove_test puts a unit's OLD code on disk for one test run, which its
+  # siblings in this shared tree can see. That is the same exposure the manual
+  # check had, minus the risk of a botched restore; the tool's own description
+  # tells the unit to keep the command narrow so the window stays short.
   #
   # `load_tool` returns "available on your NEXT turn", so a tool an agent is
   # certain to need costs it a whole turn to acquire — and a leaf that has to pay
@@ -49,5 +57,6 @@ params:
   tools:
     - tag:coding:default
     - component_library
+    - prove_test
   spawn_presets:
     - researcher

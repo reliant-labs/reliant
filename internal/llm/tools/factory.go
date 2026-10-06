@@ -257,6 +257,11 @@ func (f *ToolsFactory) ShellWait() Tool {
 	return NewShellWaitTool()
 }
 
+// Test tools
+func (f *ToolsFactory) ProveTest() Tool {
+	return NewProveTestTool()
+}
+
 // Network tools
 func (f *ToolsFactory) Fetch() Tool {
 	return NewFetchTool()
