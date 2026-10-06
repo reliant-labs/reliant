@@ -96,6 +96,9 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 		return NewTextErrorResponse(err.Error()), nil
 	}
 	if relationship == spawnRelationshipNone {
+		if inherited := findInheritedSpawnChild(rctx, s.repo, threadID, params.AgentID); inherited != nil {
+			return NewTextErrorResponse(inheritedSpawnRefusal("message", inherited, params.AgentID)), nil
+		}
 		return NewTextErrorResponse(fmt.Sprintf(
 			"agent_id %q is neither a sub-agent you spawned nor your own parent. "+
 				"spawn_send is parent\u2194child only in v1 — messaging a sibling or unrelated agent is not supported. "+

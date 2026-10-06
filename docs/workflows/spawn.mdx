@@ -34,6 +34,14 @@ When an agent calls the spawn tool:
 
 The parent agent can then use this result to inform its next steps. While a child is running, the parent can call `spawn_status` to check on it (passing `wait: true` to block until it finishes, when the parent truly cannot proceed without the answer) or `spawn_send` to give it new instructions mid-flight.
 
+Once an agent has spawned at least one child, `spawn_status`, `spawn_send` and `spawn_stop` are on its tool list from its next turn on — there is nothing to load by hand. Before its first spawn, `spawn_status` is left off, so an agent that never fans out does not pay for its schema on every request.
+
+### Branching a chat that has sub-agents
+
+Branching a conversation copies its transcript, including the spawn calls, but not ownership of the agents those calls started. The original conversation keeps running, keeps receiving their results, and stays the only one that can wait on, message, or stop them.
+
+In the branch, `spawn_status` lists those agents under **Inherited from … (read-only)**, and `spawn_status(agent_id=…)` without `wait` shows each one's status and latest answer. `spawn_send`, `spawn_stop` and `spawn_status(wait: true)` on an inherited agent are refused with an error naming the conversation that owns it. Agents the original spawns after the branch point are not visible in the branch at all.
+
 ```mermaid
 sequenceDiagram
     participant P as Parent Agent

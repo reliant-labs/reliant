@@ -199,6 +199,10 @@ type Repository interface {
 	// this cannot return another thread's children), joined to each child's
 	// live workflow/thread state. Backs spawn_status's listing mode.
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*SpawnChild, error)
+	// ListInheritedSpawnChildren returns the sub-agents threadID can see but
+	// does not own: those spawned, before the branch point, by a conversation
+	// threadID's chat was branched from. The original still owns them.
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*InheritedSpawnChild, error)
 	// ListLiveBackgroundSpawns returns every background spawn issued anywhere
 	// in a root execution that has not reported back — the spawns a coarse
 	// fresh restart of that root must relaunch.

@@ -267,27 +267,30 @@ SELECT
     w.state AS workflow_state,
     w.stop_reason AS workflow_stop_reason,
     w.completed_at AS workflow_completed_at,
-    t.title AS thread_title
+    t.title AS thread_title,
+    m.ordinal AS issuing_message_ordinal
 FROM tool_calls tc
 LEFT JOIN workflows w ON w.id = tc.child_workflow_id
 LEFT JOIN threads t ON t.id = w.thread
+LEFT JOIN messages m ON m.id = tc.message_id
 WHERE tc.tool_name = 'spawn'
   AND tc.thread_id = $1
 ORDER BY tc.requested_at ASC
 `
 
 type ListSpawnChildrenForThreadRow struct {
-	ToolCallID          string         `json:"tool_call_id"`
-	ToolCallStatus      int32          `json:"tool_call_status"`
-	ToolInput           []byte         `json:"tool_input"`
-	RequestedAt         time.Time      `json:"requested_at"`
-	CompletedAt         sql.NullTime   `json:"completed_at"`
-	ChildWorkflowID     sql.NullString `json:"child_workflow_id"`
-	ChildThreadID       sql.NullString `json:"child_thread_id"`
-	WorkflowState       sql.NullInt32  `json:"workflow_state"`
-	WorkflowStopReason  sql.NullInt32  `json:"workflow_stop_reason"`
-	WorkflowCompletedAt sql.NullTime   `json:"workflow_completed_at"`
-	ThreadTitle         sql.NullString `json:"thread_title"`
+	ToolCallID            string         `json:"tool_call_id"`
+	ToolCallStatus        int32          `json:"tool_call_status"`
+	ToolInput             []byte         `json:"tool_input"`
+	RequestedAt           time.Time      `json:"requested_at"`
+	CompletedAt           sql.NullTime   `json:"completed_at"`
+	ChildWorkflowID       sql.NullString `json:"child_workflow_id"`
+	ChildThreadID         sql.NullString `json:"child_thread_id"`
+	WorkflowState         sql.NullInt32  `json:"workflow_state"`
+	WorkflowStopReason    sql.NullInt32  `json:"workflow_stop_reason"`
+	WorkflowCompletedAt   sql.NullTime   `json:"workflow_completed_at"`
+	ThreadTitle           sql.NullString `json:"thread_title"`
+	IssuingMessageOrdinal sql.NullInt64  `json:"issuing_message_ordinal"`
 }
 
 // Every spawn call a thread has issued, joined to the child's live workflow
@@ -315,6 +318,14 @@ type ListSpawnChildrenForThreadRow struct {
 // resumed spawn they differ and both are needed: the thread is what a cancel
 // signal names, while the workflow row id is what a status reconcile must
 // CAS. Deriving either from the other is not possible — see spawn_stop.
+//
+// issuing_message_ordinal places the spawn in the parent's transcript. A chat
+// BRANCHED from the parent inherits the parent's history only up to its fork
+// point, so this is what decides which of the parent's spawns the branch
+// inherited (ListInheritedSpawnChildren). messages.ordinal is per-thread, and
+// the issuing message is always in tc.thread_id, so it compares directly with
+// the fork point's ordinal. NULL when the call was recorded before its
+// assistant message was finalized.
 func (q *Queries) ListSpawnChildrenForThread(ctx context.Context, threadID sql.NullString) ([]ListSpawnChildrenForThreadRow, error) {
 	rows, err := q.db.QueryContext(ctx, listSpawnChildrenForThread, threadID)
 	if err != nil {
@@ -336,6 +347,7 @@ func (q *Queries) ListSpawnChildrenForThread(ctx context.Context, threadID sql.N
 			&i.WorkflowStopReason,
 			&i.WorkflowCompletedAt,
 			&i.ThreadTitle,
+			&i.IssuingMessageOrdinal,
 		); err != nil {
 			return nil, err
 		}
