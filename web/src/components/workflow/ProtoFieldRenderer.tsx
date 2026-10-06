@@ -122,7 +122,12 @@ export function ProtoFieldRenderer({
   useEffect(() => {
     if (focusSeq === null || !fieldRef.current) return
     fieldRef.current.scrollIntoView?.({ block: 'center' })
-    const control = fieldRef.current.querySelector<HTMLElement>('input, textarea, select, button, [contenteditable="true"]')
+    // The value control itself, not the Fixed/Expression toggle beside it.
+    const root = fieldRef.current
+    const control =
+      root.querySelector<HTMLElement>(`#${CSS.escape(inputId)}`) ??
+      root.querySelector<HTMLElement>('input, textarea, select, [contenteditable="true"]') ??
+      root.querySelector<HTMLElement>('button:not([aria-pressed])')
     control?.focus({ preventScroll: true })
   }, [focusSeq])
 

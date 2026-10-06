@@ -164,6 +164,7 @@ export function HelpPopover({
       {isOpen && position && createPortal(
         <div
           ref={popoverRef}
+          data-escape-layer
           className="fixed z-50"
           style={{ top: position.top, left: position.left }}
         >

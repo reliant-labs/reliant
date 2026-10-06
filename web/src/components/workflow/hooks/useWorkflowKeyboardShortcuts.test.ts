@@ -6,6 +6,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { fireEvent, renderHook } from "@testing-library/react";
 
+import { useEscapeLayer } from "../../../hooks/useEscapeLayer";
 import { useWorkflowKeyboardShortcuts, type UseWorkflowKeyboardShortcutsArgs } from "./useWorkflowKeyboardShortcuts";
 
 function setup(overrides: Partial<UseWorkflowKeyboardShortcutsArgs> & Record<string, unknown> = {}) {
@@ -65,6 +66,19 @@ describe("Escape in the workflow builder", () => {
       expect(args.closePanels, markup).not.toHaveBeenCalled();
       expect(onEscape, markup).not.toHaveBeenCalled();
     }
+  });
+
+  it("closes an open dropdown in the panel first, and only the dropdown", () => {
+    const closeDropdown = vi.fn();
+    const { result } = renderHook(() => useEscapeLayer(true, closeDropdown));
+    const popup = document.createElement("div");
+    for (const [name, value] of Object.entries(result.current)) popup.setAttribute(name, value);
+    document.body.appendChild(popup);
+    const args = setup({ hasOpenPanel: true });
+
+    pressEscape();
+    expect(closeDropdown).toHaveBeenCalledTimes(1);
+    expect(args.closePanels).not.toHaveBeenCalled();
   });
 
   it("leaves Escape to the field being typed in", () => {

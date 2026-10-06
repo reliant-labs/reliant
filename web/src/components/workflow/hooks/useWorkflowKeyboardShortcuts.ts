@@ -29,21 +29,7 @@
 
 import { useEffect } from "react";
 
-/** Elements that own Escape while they are open. */
-export const ESCAPE_LAYER_SELECTOR = [
-  '[aria-modal="true"]',
-  '[role="dialog"]',
-  '[role="alertdialog"]',
-  '[role="menu"]',
-  '[role="listbox"]',
-  '[data-dropdown-open="true"]',
-  "[data-escape-layer]",
-].join(", ");
-
-/** Whether an overlay that handles its own Escape is open. */
-export function hasOpenEscapeLayer(root: ParentNode = document): boolean {
-  return root.querySelector(ESCAPE_LAYER_SELECTOR) !== null;
-}
+import { hasOpenEscapeLayer } from "../../../hooks/useEscapeLayer";
 
 function isTextEntry(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false;

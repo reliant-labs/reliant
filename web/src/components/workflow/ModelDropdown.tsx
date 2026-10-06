@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from 'react'
+import { useCallback, useState, useRef, useEffect } from 'react'
+import { useEscapeLayer } from '../../hooks/useEscapeLayer'
 import { ChevronDown, Check, Loader2 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useModels, useGlobalDataStore } from '../../store/globalDataStore'
@@ -43,6 +44,10 @@ export function ModelDropdown({
     const modelBaseId = m.id.split('@')[0]
     return modelBaseId === currentId
   })
+
+  // Escape closes the list (and only the list: see useEscapeLayer).
+  const closeList = useCallback(() => setIsOpen(false), [])
+  const escapeLayer = useEscapeLayer(isOpen, closeList)
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -96,7 +101,7 @@ export function ModelDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-[1000] rounded-[6px] border border-border bg-card shadow-lg overflow-hidden">
+        <div {...escapeLayer} className="absolute top-full left-0 right-0 mt-1 z-[1000] rounded-[6px] border border-border bg-card shadow-lg overflow-hidden">
           <div className="py-1 max-h-64 overflow-y-auto">
             {providers.map((provider) => (
               <div key={provider}>
