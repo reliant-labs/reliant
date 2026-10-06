@@ -100,7 +100,7 @@ func forgeArgvUnderTest(t *testing.T) map[string][]string {
 // forge root, prefixed exactly as runForgeSelfExec prefixes them.
 func parseAgainstEmbeddedForge(args []string) (string, error) {
 	root := forgecli.NewRootCmd()
-	full := append([]string{"--silence-experimental"}, args...)
+	full := args
 	cmd, rest, err := root.Find(full)
 	if err != nil {
 		return "", err
@@ -138,7 +138,7 @@ func leadingVerbs(args []string) []string {
 	// actually resolve to a command, which is what the caller compares.
 	for len(verbs) > 1 {
 		root := forgecli.NewRootCmd()
-		if cmd, _, err := root.Find(append([]string{"--silence-experimental"}, verbs...)); err == nil && cmd.CommandPath() == "forge "+strings.Join(verbs, " ") {
+		if cmd, _, err := root.Find(verbs); err == nil && cmd.CommandPath() == "forge "+strings.Join(verbs, " ") {
 			break
 		}
 		verbs = verbs[:len(verbs)-1]

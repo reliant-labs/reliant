@@ -140,7 +140,7 @@ func TestForgeEnvShapeArgvParsesAgainstEmbeddedForge(t *testing.T) {
 	// alone would make the skip never fire and the test fail on the one
 	// condition that is not a defect.
 	root := forgecli.NewRootCmd()
-	resolved, _, findErr := root.Find(append([]string{"--silence-experimental"}, "env", "shape"))
+	resolved, _, findErr := root.Find([]string{"env", "shape"})
 	if findErr != nil || resolved.CommandPath() != "forge env shape" {
 		t.Skip("the pinned forge has no `env shape` yet (F-DECL); this test enforces itself once reliant's forge pin carries it")
 	}
