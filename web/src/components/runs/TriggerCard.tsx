@@ -25,6 +25,7 @@ import { isUnattendedLaunchKind, launchKindDisplay } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
+import { formatClock, launchContextOf } from "./launchContext";
 import { LaunchKindIcon } from "./LaunchKindIcon";
 
 interface TriggerCardProps {
@@ -88,12 +89,6 @@ export function lateBy(scheduledFor?: string, firedAt?: string): string | undefi
   return rest ? `${hours} h ${rest} min` : `${hours} h`;
 }
 
-function formatClock(iso: string): string {
-  const time = Date.parse(iso);
-  if (Number.isNaN(time)) return iso;
-  return new Date(time).toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
-}
-
 export function TriggerCard({
   launchKind,
   triggerId,
@@ -125,6 +120,13 @@ export function TriggerCard({
     );
   const start = event?.start;
   const late = event?.manual ? undefined : lateBy(event?.scheduledFor, event?.firedAt);
+  // Every other kind reads its line from the vocabulary, naming the automation
+  // (live, or as it was when it fired) so the link lands on the name.
+  const display = launchKindDisplay(launchKind, {
+    ...launchContextOf(event),
+    triggerName: triggerName ?? event?.triggerName,
+  });
+  const parts = display.automationParts;
 
   return (
     <CardInset padding="sm" className="px-3 text-xs text-muted-foreground" data-testid="trigger-card">
@@ -164,8 +166,14 @@ export function TriggerCard({
                 <code className="font-mono">start_run</code>
               </span>
             </>
+          ) : parts ? (
+            <>
+              {parts.lead}
+              {automation}
+              {parts.trail}
+            </>
           ) : (
-            launchKindDisplay(launchKind, { triggerName }).startedByLine
+            display.startedByLine
           )}
         </span>
         {late && <span data-testid="trigger-card-late">· Fired {late} late (catch-up)</span>}

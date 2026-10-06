@@ -712,7 +712,15 @@ func triggerEventFromPG(row pgdb.TriggerEvent) (*core.TriggerEvent, error) {
 		OutcomeDetail: row.OutcomeDetail,
 		ChatID:        triggerNullStringToPtr(row.ChatID),
 		CreatedAt:     row.CreatedAt,
+		RunStatus:     row.RunStatus.String,
 	}, nil
+}
+
+func (s *triggerStore) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
+	if _, err := s.q.SetLaunchEventRunStatus(ctx, pgdb.SetLaunchEventRunStatusParams{RunStatus: status, ChatID: chatID}); err != nil {
+		return fmt.Errorf("failed to record launch event run status: %w", err)
+	}
+	return nil
 }
 
 // triggerMapToJSON always produces a jsonb OBJECT, never a JSON null: a nil Go

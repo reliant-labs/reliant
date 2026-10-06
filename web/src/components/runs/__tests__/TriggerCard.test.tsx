@@ -161,6 +161,70 @@ describe("TriggerCard", () => {
     },
   );
 
+  // The card names what fired a non-schedule automation run too, and links it.
+  it.each([
+    {
+      launchKind: "webhook",
+      event: { kind: "webhook", triggerId: "trig-2", occurredAt: "2026-10-06T14:02:00", manual: false },
+      line: /Started by webhook On push at \d\d:\d\d/,
+    },
+    {
+      launchKind: "integration",
+      event: {
+        kind: "integration",
+        triggerId: "trig-2",
+        occurredAt: "",
+        manual: false,
+        integration: "github",
+        providerEvent: "pull_request.opened",
+      },
+      line: /Started by On push on github: pull_request\.opened/,
+    },
+    {
+      launchKind: "workflow_event",
+      event: {
+        kind: "workflow_event",
+        triggerId: "trig-2",
+        occurredAt: "",
+        manual: false,
+        sourceWorkflow: "code-review",
+        sourceOutcome: "blocked",
+      },
+      line: /Started by On push when Code Review was blocked/,
+    },
+  ] satisfies { launchKind: string; event: LaunchEvent; line: RegExp }[])(
+    "a $launchKind-launched run names its automation, linked, and what the source did",
+    async ({ launchKind, event, line }) => {
+      renderRunsAt(
+        <TriggerCard launchKind={launchKind} triggerId="trig-2" triggerName="On push" event={event} />,
+        "/workflows/runs/chat-1",
+      );
+      const card = await screen.findByTestId("trigger-card");
+      expect(card.textContent).toMatch(line);
+      expect(screen.getByRole("link", { name: "On push" })).toHaveAttribute("href", "/workflows/automations/trig-2");
+    },
+  );
+
+  it("a workflow-event run whose automation was deleted keeps the name it fired under", async () => {
+    renderRunsAt(
+      <TriggerCard
+        launchKind="workflow_event"
+        event={{
+          kind: "workflow_event",
+          occurredAt: "",
+          manual: false,
+          triggerName: "After review",
+          sourceWorkflow: "code-review",
+          sourceOutcome: "finished",
+        }}
+      />,
+      "/workflows/runs/chat-1",
+    );
+    const card = await screen.findByTestId("trigger-card");
+    expect(card).toHaveTextContent("Started by After review (since deleted) when Code Review finished");
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
   it("a builder test run is not called unattended", async () => {
     renderRunsAt(<TriggerCard launchKind="builder.test" />, "/workflows/runs/chat-1");
     const card = await screen.findByTestId("trigger-card");

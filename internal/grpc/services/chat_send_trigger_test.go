@@ -81,6 +81,11 @@ func TestSendMessage_RestartOfCompletedChatCarriesLaunchTrigger(t *testing.T) {
 	assert.Equal(t, triggerID, trigger.TriggerID)
 	assert.Equal(t, "evt-restart", trigger.EventID)
 	assert.Equal(t, "nightly", trigger.Payload["trigger_name"])
+	// But the run is the person's, not the schedule's: only a launch marks
+	// its run, which is what keeps the trigger's notify and streak policy
+	// off this one.
+	assert.NotContains(t, temporal.inputs[0].Inputs, v2.InputKeyLaunchRun)
+	assert.NotContains(t, temporal.inputs[0].Inputs, v2.InputKeyUnattended)
 }
 
 func mustChatProject(t *testing.T, ctx context.Context, repo *db.Repo, chatID string) string {

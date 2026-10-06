@@ -136,7 +136,17 @@ func WithSource(health *reliantv1.TriggerHealth, reg *core.TriggerRegistration, 
 // resolveFiring reduces one firing to a result, with a description when it is
 // a failure. A launched run that ended FAILED is a failure: the launch worked
 // and the automation still did not.
+//
+// The run is the one the trigger FIRED. Once that run has ended its result is
+// recorded on the event (RunStatus) and wins over the chat's live state, which
+// a person replying in the chat moves on to their own turns: their failure is
+// not the automation failing, and their success does not end its streak. The
+// live state is read only while the fired run is still going, or for an event
+// recorded before RunStatus existed.
 func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
+	if f.Event.Outcome == core.TriggerEventLaunched && f.Event.RunStatus != "" {
+		return resolveRecordedRun(f)
+	}
 	switch f.Event.Outcome {
 	case core.TriggerEventSkipped:
 		if f.Event.Kind.IsInbound() {
@@ -165,6 +175,20 @@ func resolveFiring(f *core.TriggerEventWithRun) (firingResult, string) {
 		case core.RunDisplayCompleted:
 			return resultSuccess, ""
 		}
+	}
+	return resultUnresolved, ""
+}
+
+// resolveRecordedRun reads a launched firing whose fired run has ended.
+func resolveRecordedRun(f *core.TriggerEventWithRun) (firingResult, string) {
+	switch f.Event.RunStatus {
+	case core.TriggerRunCompleted:
+		return resultSuccess, ""
+	case core.TriggerRunFailed:
+		if f.Run == nil || f.Run.Title == "" {
+			return resultFailure, "the launched run failed"
+		}
+		return resultFailure, fmt.Sprintf("the launched run %q failed", f.Run.Title)
 	}
 	return resultUnresolved, ""
 }

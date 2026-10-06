@@ -16,6 +16,54 @@ import type { Message } from "@/types/chat";
 import { buildListRunsRequest, firstPromptOf, launchEventFromProto } from "../run-grpc";
 
 describe("launchEventFromProto", () => {
+  it.each([
+    [TriggerEventKind.BUILDER_TEST, "builder.test"],
+    [TriggerEventKind.WEBHOOK, "webhook"],
+    [TriggerEventKind.INTEGRATION, "integration"],
+    [TriggerEventKind.WORKFLOW_EVENT, "workflow_event"],
+  ])("names kind %s as %s, not as an unknown kind", (kind, name) => {
+    expect(launchEventFromProto(create(TriggerEventSchema, { kind })).kind).toBe(name);
+  });
+
+  it("reads a provider event's integration and event type", () => {
+    const event = launchEventFromProto(
+      create(TriggerEventSchema, {
+        kind: TriggerEventKind.INTEGRATION,
+        payload: { integration: "github", event: "issues.opened", account: "acme", data: { number: 412 } },
+      }),
+    );
+    expect(event.integration).toBe("github");
+    expect(event.providerEvent).toBe("issues.opened");
+    expect(event.sourceWorkflow).toBeUndefined();
+  });
+
+  it("reads a workflow event's source run", () => {
+    const event = launchEventFromProto(
+      create(TriggerEventSchema, {
+        kind: TriggerEventKind.WORKFLOW_EVENT,
+        payload: { workflow_name: "code-review", outcome: "failed", trigger_name: "After review", run_id: "c-1" },
+      }),
+    );
+    expect(event.sourceWorkflow).toBe("code-review");
+    expect(event.sourceOutcome).toBe("failed");
+    expect(event.triggerName).toBe("After review");
+  });
+
+  // A webhook's payload is whatever its sender posted: keys that mean
+  // something for another kind must not be read off it.
+  it("reads no source fields off a webhook delivery", () => {
+    const event = launchEventFromProto(
+      create(TriggerEventSchema, {
+        kind: TriggerEventKind.WEBHOOK,
+        payload: { body: { ok: true }, event: "push", integration: "x", workflow_name: "y", outcome: "z" },
+      }),
+    );
+    expect(event).toMatchObject({ kind: "webhook" });
+    expect(event.providerEvent).toBeUndefined();
+    expect(event.integration).toBeUndefined();
+    expect(event.sourceWorkflow).toBeUndefined();
+  });
+
   it("reads a schedule launch: slot, automation name, manual flag and the start", () => {
     const event = launchEventFromProto(
       create(TriggerEventSchema, {

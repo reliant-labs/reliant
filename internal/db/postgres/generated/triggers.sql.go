@@ -189,7 +189,7 @@ func (q *Queries) DeleteTriggerRegistration(ctx context.Context, triggerID strin
 }
 
 const getLatestTriggerEvent = `-- name: GetLatestTriggerEvent :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status FROM trigger_events
 WHERE
     trigger_id = $1::text
     AND ($2::text IS NULL OR outcome = $2::text)
@@ -220,6 +220,7 @@ func (q *Queries) GetLatestTriggerEvent(ctx context.Context, arg GetLatestTrigge
 		&i.OutcomeDetail,
 		&i.ChatID,
 		&i.CreatedAt,
+		&i.RunStatus,
 	)
 	return i, err
 }
@@ -277,7 +278,7 @@ func (q *Queries) GetTrigger(ctx context.Context, id string) (GetTriggerRow, err
 }
 
 const getTriggerEventByChat = `-- name: GetTriggerEventByChat :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status FROM trigger_events
 WHERE kind = $1 AND chat_id = $2
 ORDER BY occurred_at, id
 LIMIT 1
@@ -305,12 +306,13 @@ func (q *Queries) GetTriggerEventByChat(ctx context.Context, arg GetTriggerEvent
 		&i.OutcomeDetail,
 		&i.ChatID,
 		&i.CreatedAt,
+		&i.RunStatus,
 	)
 	return i, err
 }
 
 const getTriggerEventByChatID = `-- name: GetTriggerEventByChatID :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status FROM trigger_events
 WHERE chat_id = $1
 ORDER BY created_at ASC, id ASC
 LIMIT 1
@@ -333,12 +335,13 @@ func (q *Queries) GetTriggerEventByChatID(ctx context.Context, chatID sql.NullSt
 		&i.OutcomeDetail,
 		&i.ChatID,
 		&i.CreatedAt,
+		&i.RunStatus,
 	)
 	return i, err
 }
 
 const getTriggerEventByDedupe = `-- name: GetTriggerEventByDedupe :one
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events WHERE kind = $1 AND dedupe_key = $2
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status FROM trigger_events WHERE kind = $1 AND dedupe_key = $2
 `
 
 type GetTriggerEventByDedupeParams struct {
@@ -361,6 +364,7 @@ func (q *Queries) GetTriggerEventByDedupe(ctx context.Context, arg GetTriggerEve
 		&i.OutcomeDetail,
 		&i.ChatID,
 		&i.CreatedAt,
+		&i.RunStatus,
 	)
 	return i, err
 }
@@ -512,11 +516,11 @@ const listFiringsSinceLastSuccess = `-- name: ListFiringsSinceLastSuccess :many
 WITH last_success AS (
     SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
     FROM trigger_events e
-    JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+    LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
     WHERE e.user_id = $2::text
         AND e.trigger_id = ANY($3::text[])
         AND e.outcome = 'launched'
-        AND c.display_state = 5
+        AND (e.run_status = 'completed' OR (e.run_status IS NULL AND c.display_state = 5))
     ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
 ), ranked AS (
     SELECT
@@ -529,7 +533,7 @@ WITH last_success AS (
         AND (s.id IS NULL OR (e.occurred_at, e.id) > (s.occurred_at, s.id))
 )
 SELECT
-    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at,
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status,
     c.id AS run_chat_id,
     c.title AS run_title,
     rw.state AS run_root_state,
@@ -564,6 +568,10 @@ type ListFiringsSinceLastSuccessRow struct {
 // the failure episode: Go reads its length and its oldest failure from it, so
 // the episode is not truncated at the 10-firing health window. Same run
 // columns and display-state table as ListRecentTriggerFirings.
+//
+// "Completed" is the run the trigger fired (run_status), not whatever turn
+// the chat is on now — the same rule triggers.resolveFiring applies — so a
+// person's later reply in the chat neither ends nor extends the episode.
 func (q *Queries) ListFiringsSinceLastSuccess(ctx context.Context, arg ListFiringsSinceLastSuccessParams) ([]ListFiringsSinceLastSuccessRow, error) {
 	rows, err := q.db.QueryContext(ctx, listFiringsSinceLastSuccess, arg.PerTrigger, arg.UserID, pq.Array(arg.TriggerIds))
 	if err != nil {
@@ -585,6 +593,7 @@ func (q *Queries) ListFiringsSinceLastSuccess(ctx context.Context, arg ListFirin
 			&i.TriggerEvent.OutcomeDetail,
 			&i.TriggerEvent.ChatID,
 			&i.TriggerEvent.CreatedAt,
+			&i.TriggerEvent.RunStatus,
 			&i.RunChatID,
 			&i.RunTitle,
 			&i.RunRootState,
@@ -690,7 +699,7 @@ WITH ranked AS (
         AND e.trigger_id = ANY($3::text[])
 )
 SELECT
-    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at,
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status,
     c.id AS run_chat_id,
     c.title AS run_title,
     rw.state AS run_root_state,
@@ -745,6 +754,7 @@ func (q *Queries) ListRecentTriggerFirings(ctx context.Context, arg ListRecentTr
 			&i.TriggerEvent.OutcomeDetail,
 			&i.TriggerEvent.ChatID,
 			&i.TriggerEvent.CreatedAt,
+			&i.TriggerEvent.RunStatus,
 			&i.RunChatID,
 			&i.RunTitle,
 			&i.RunRootState,
@@ -765,7 +775,7 @@ func (q *Queries) ListRecentTriggerFirings(ctx context.Context, arg ListRecentTr
 }
 
 const listStalePendingTriggerEvents = `-- name: ListStalePendingTriggerEvents :many
-SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at FROM trigger_events
+SELECT id, trigger_id, user_id, kind, dedupe_key, occurred_at, payload, outcome, outcome_detail, chat_id, created_at, run_status FROM trigger_events
 WHERE outcome = 'pending' AND created_at < $1::timestamptz
 ORDER BY created_at
 LIMIT $2
@@ -800,6 +810,7 @@ func (q *Queries) ListStalePendingTriggerEvents(ctx context.Context, arg ListSta
 			&i.OutcomeDetail,
 			&i.ChatID,
 			&i.CreatedAt,
+			&i.RunStatus,
 		); err != nil {
 			return nil, err
 		}
@@ -816,7 +827,7 @@ func (q *Queries) ListStalePendingTriggerEvents(ctx context.Context, arg ListSta
 
 const listTriggerEvents = `-- name: ListTriggerEvents :many
 SELECT
-    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at,
+    e.id, e.trigger_id, e.user_id, e.kind, e.dedupe_key, e.occurred_at, e.payload, e.outcome, e.outcome_detail, e.chat_id, e.created_at, e.run_status,
     c.id AS run_chat_id,
     c.title AS run_title,
     rw.state AS run_root_state,
@@ -887,6 +898,7 @@ func (q *Queries) ListTriggerEvents(ctx context.Context, arg ListTriggerEventsPa
 			&i.TriggerEvent.OutcomeDetail,
 			&i.TriggerEvent.ChatID,
 			&i.TriggerEvent.CreatedAt,
+			&i.TriggerEvent.RunStatus,
 			&i.RunChatID,
 			&i.RunTitle,
 			&i.RunRootState,
@@ -1103,6 +1115,31 @@ func (q *Queries) LockTrigger(ctx context.Context, id string) (string, error) {
 	var id_2 string
 	err := row.Scan(&id_2)
 	return id_2, err
+}
+
+const setLaunchEventRunStatus = `-- name: SetLaunchEventRunStatus :execrows
+UPDATE trigger_events SET run_status = $1::text
+WHERE id = (
+    SELECT l.id FROM trigger_events l
+    WHERE l.chat_id = $2::text
+    ORDER BY l.created_at ASC, l.id ASC
+    LIMIT 1
+)
+`
+
+type SetLaunchEventRunStatusParams struct {
+	RunStatus string `json:"run_status"`
+	ChatID    string `json:"chat_id"`
+}
+
+// Records how the run a trigger fired ended, on the chat's launch event (the
+// same earliest-event rule as GetTriggerEventByChatID).
+func (q *Queries) SetLaunchEventRunStatus(ctx context.Context, arg SetLaunchEventRunStatusParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setLaunchEventRunStatus, arg.RunStatus, arg.ChatID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const setTriggerEnabled = `-- name: SetTriggerEnabled :execrows

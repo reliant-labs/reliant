@@ -93,12 +93,34 @@ func (f *streakFixture) launch(kind core.TriggerEventKind, status db.WorkflowSta
 	return chatID
 }
 
-// finish reports the root's terminal status through the activity and returns
-// the chat's unread flag and the notify reason.
+// finish reports the terminal status of the chat's launch run — the run its
+// launch started — through the activity and returns the chat's unread flag and
+// the notify reason.
 func (f *streakFixture) finish(chatID, status string) (bool, string) {
 	f.t.Helper()
+	return f.report(chatID, status, true)
+}
+
+// reply runs a turn a person started by replying in chatID — a fresh run of
+// the same root workflow, without the launch mark — to the terminal status,
+// and returns the chat's unread flag and the notify reason.
+func (f *streakFixture) reply(chatID, status string) (bool, string) {
+	f.t.Helper()
 	ctx := context.Background()
-	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: status, Thread: chatID}
+	require.NoError(f.t, f.h.Repo().UpdateChatUnread(ctx, chatID, false, "opened"))
+	in := WorkflowStatusInput{ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: "started", Thread: chatID}
+	var out WorkflowStatusOutput
+	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, in, &out))
+	return f.report(chatID, status, false)
+}
+
+func (f *streakFixture) report(chatID, status string, launchRun bool) (bool, string) {
+	f.t.Helper()
+	ctx := context.Background()
+	in := WorkflowStatusInput{
+		ChatID: chatID, WorkflowID: chatID, WorkflowName: "builtin://agent", Status: status, Thread: chatID,
+		LaunchRun: launchRun,
+	}
 	var out WorkflowStatusOutput
 	require.NoError(f.t, f.h.ExecuteActivity(NewWorkflowStatusActivity(f.h.Repo()).Execute, in, &out))
 	chat, err := f.h.Repo().GetChat(ctx, chatID)
@@ -217,6 +239,84 @@ func TestWorkflowStatus_NotifyOnCompleteOptIn(t *testing.T) {
 			})
 		}
 	}
+}
+
+// adopt takes the run into the owner's chats, as replying from the run page does.
+func (f *streakFixture) adopt(chatID string) {
+	f.t.Helper()
+	owned, err := f.h.Repo().SetChatAdopted(context.Background(), chatID, f.userID, true)
+	require.NoError(f.t, err)
+	require.True(f.t, owned)
+}
+
+// A person replying in a chat a trigger launched is waiting on their own turn,
+// whatever the trigger's policy says: the reply's finish notifies the way a
+// chat's does, and its failure always notifies — the streak is the trigger's.
+func TestWorkflowStatus_APersonsReplyInAnAutomationsChatIsAttended(t *testing.T) {
+	for _, kind := range []core.TriggerKind{core.TriggerKindSchedule, core.TriggerKindWebhook} {
+		t.Run(string(kind), func(t *testing.T) {
+			f := newStreakFixtureOfKind(t, kind, false) // opted out of completions
+			ev := kind.EventKind()
+
+			// The trigger's own runs: a failure streak two long.
+			f.finish(f.launch(ev, db.Active()), "failed")
+			chatID := f.launch(ev, db.Active())
+			unread, _ := f.finish(chatID, "failed")
+			require.False(t, unread, "the trigger's second failure is collapsed into its streak")
+			f.adopt(chatID)
+
+			unread, reason := f.reply(chatID, "completed")
+			assert.True(t, unread, "a person's reply notifies when it completes, like a chat")
+			assert.Equal(t, "workflow_completed", reason)
+
+			unread, reason = f.reply(chatID, "failed")
+			assert.True(t, unread, "a person's failed reply notifies, mid-streak")
+			assert.Equal(t, "workflow_failed", reason)
+		})
+	}
+}
+
+// The runs a trigger fires still follow its policy, and a person's turns in its
+// chats can neither end its failure streak nor start one.
+func TestWorkflowStatus_APersonsReplyNeitherEndsNorJoinsTheTriggersStreak(t *testing.T) {
+	for _, kind := range []core.TriggerKind{core.TriggerKindSchedule, core.TriggerKindWebhook} {
+		t.Run(string(kind)+"/a successful reply does not end the streak", func(t *testing.T) {
+			f := newStreakFixtureOfKind(t, kind, false)
+			ev := kind.EventKind()
+			failed := f.launch(ev, db.Active())
+			f.finish(failed, "failed")
+			f.adopt(failed)
+			f.reply(failed, "completed")
+
+			unread, _ := f.finish(f.launch(ev, db.Active()), "failed")
+			assert.False(t, unread, "the trigger's next failure is still mid-streak: the person's success was not the automation's")
+		})
+		t.Run(string(kind)+"/a failed reply does not start one", func(t *testing.T) {
+			f := newStreakFixtureOfKind(t, kind, false)
+			ev := kind.EventKind()
+			ok := f.launch(ev, db.Active())
+			f.finish(ok, "completed")
+			f.adopt(ok)
+			f.reply(ok, "failed")
+
+			unread, reason := f.finish(f.launch(ev, db.Active()), "failed")
+			assert.True(t, unread, "the trigger's first failure after its own success notifies, whatever a person's turn did since")
+			assert.Equal(t, "workflow_failed", reason)
+		})
+	}
+}
+
+// The agent that started a run gets its result, so its finish is silent; a
+// person who then replies in that run is waiting on their own turn.
+func TestWorkflowStatus_APersonsReplyInAnAgentsRunNotifies(t *testing.T) {
+	f := newStreakFixture(t, false)
+	chatID := f.launch(core.TriggerEventKindAgentStartRun, db.Active())
+	unread, _ := f.finish(chatID, "completed")
+	require.False(t, unread, "the agent's own run reports to the agent")
+
+	unread, reason := f.reply(chatID, "completed")
+	assert.True(t, unread, "a person's reply notifies")
+	assert.Equal(t, "workflow_completed", reason)
 }
 
 // Someone waiting on an attended run is told, whatever trigger its launch

@@ -210,7 +210,7 @@ export interface LaunchStart {
  * an older row may lack any of them.
  */
 export interface LaunchEvent {
-  /** "chat.start", "schedule" or "agent.start_run"; empty for a kind this client does not know. */
+  /** The launch kind ("chat.start", "schedule", "webhook", …); empty for a kind this client does not know. */
   kind: string;
   /** Unset for ad hoc kinds, and once the automation is deleted. */
   triggerId?: string;
@@ -227,12 +227,26 @@ export interface LaunchEvent {
   manual: boolean;
   /** The chat whose agent started this run. */
   parentChatId?: string;
+  /** A provider event's integration ("github"). */
+  integration?: string;
+  /** A provider event's type ("issues.opened"). */
+  providerEvent?: string;
+  /** A workflow event's source run: its workflow. */
+  sourceWorkflow?: string;
+  /** A workflow event's source run: its outcome ("finished", "failed", "blocked"). */
+  sourceOutcome?: string;
 }
 
-const LAUNCH_EVENT_KINDS: Partial<Record<TriggerEventKind, string>> = {
+/** Every kind, so a kind added to the proto has to be named here to compile. */
+const LAUNCH_EVENT_KINDS: Record<TriggerEventKind, string> = {
+  [TriggerEventKind.UNSPECIFIED]: "",
   [TriggerEventKind.CHAT_START]: "chat.start",
   [TriggerEventKind.SCHEDULE]: "schedule",
   [TriggerEventKind.AGENT_START_RUN]: "agent.start_run",
+  [TriggerEventKind.BUILDER_TEST]: "builder.test",
+  [TriggerEventKind.WEBHOOK]: "webhook",
+  [TriggerEventKind.INTEGRATION]: "integration",
+  [TriggerEventKind.WORKFLOW_EVENT]: "workflow_event",
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -255,8 +269,13 @@ function stringRecord(value: unknown): Record<string, string> {
 export function launchEventFromProto(event: ProtoTriggerEvent): LaunchEvent {
   const payload: Record<string, unknown> = isRecord(event.payload) ? event.payload : {};
   const start = isRecord(payload.start) ? payload.start : undefined;
+  const kind = LAUNCH_EVENT_KINDS[event.kind] ?? "";
+  // Read by kind: each source owns its payload's keys, and a webhook's are
+  // whatever the sender posted.
+  const integration = kind === "integration";
+  const workflowEvent = kind === "workflow_event";
   return {
-    kind: LAUNCH_EVENT_KINDS[event.kind] ?? "",
+    kind,
     triggerId: event.triggerId || undefined,
     occurredAt: event.occurredAt,
     start: start
@@ -272,6 +291,10 @@ export function launchEventFromProto(event: ProtoTriggerEvent): LaunchEvent {
     triggerName: optionalString(payload.trigger_name),
     manual: payload.manual === true,
     parentChatId: optionalString(payload.parent_chat_id),
+    integration: integration ? optionalString(payload.integration) : undefined,
+    providerEvent: integration ? optionalString(payload.event) : undefined,
+    sourceWorkflow: workflowEvent ? optionalString(payload.workflow_name) : undefined,
+    sourceOutcome: workflowEvent ? optionalString(payload.outcome) : undefined,
   };
 }
 

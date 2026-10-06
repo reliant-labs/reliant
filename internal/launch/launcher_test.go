@@ -715,6 +715,33 @@ func TestLaunchCarriesTheTriggerOnWorkflowInput(t *testing.T) {
 	assert.Equal(t, "chat.start", input.Trigger.Kind)
 }
 
+// Every launch marks the run it starts, whatever kind of launch: a reply's
+// run later in the same chat is the only kind of root run without the mark,
+// and that is how notification policy tells a person's turn from the launch's.
+func TestLaunchMarksTheRunItStarts(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	for _, tc := range []struct {
+		name string
+		ev   Event
+		spec Spec
+	}{
+		{"chat.start", chatStartEvent(), Spec{}},
+		{"schedule", Event{Kind: core.TriggerEventKindSchedule, DedupeKey: "fire-" + uuid.NewString(), OccurredAt: time.Now().UTC()}, Spec{Unattended: true}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			starter := &fakeStarter{}
+			launcher, _ := newTestLauncher(t, repo, starter)
+			spec := tc.spec
+			spec.OwnerUserID, spec.ProjectID, spec.Workflow = launchTestUserID, projectID, "builtin://agent"
+			spec.Params, spec.Messages = mockModelParams(t), userSeed("go")
+			_, err := launcher.Launch(ctx, tc.ev, spec)
+			require.NoError(t, err)
+			_, input := starter.rootRun(t)
+			assert.Equal(t, true, input.Inputs[v2.InputKeyLaunchRun])
+		})
+	}
+}
+
 // A chat's launch event is found by chat id, which is how restarts rebuild it.
 func TestLoadChatTriggerReturnsTheLaunchEvent(t *testing.T) {
 	repo, ctx, projectID, _ := launchFixture(t)

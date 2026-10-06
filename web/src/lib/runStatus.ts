@@ -250,11 +250,15 @@ export type LaunchKind =
   | "agent.start_run"
   | "builder.test"
   | "webhook"
-  | "integration";
+  | "integration"
+  | "workflow_event";
 
 /** What the "Started by" line can name. Every field is optional. */
 export interface LaunchContext {
-  /** The automation's name, for schedule launches. */
+  /**
+   * The automation that fired the run, for every kind a stored automation
+   * fires: a schedule, a webhook, a provider event, a workflow event.
+   */
   triggerName?: string;
   /** A "Run now" fire of a schedule (payload `manual: true`). */
   manual?: boolean;
@@ -262,14 +266,27 @@ export interface LaunchContext {
   scheduledFor?: string;
   /** The chat the starting agent was in, for agent.start_run. */
   parentChatTitle?: string;
-  /** The webhook's name. */
-  webhookName?: string;
-  /** When the launch happened, already formatted ("14:02"). */
+  /** When a webhook delivery arrived, already formatted ("14:02"). */
   at?: string;
-  /** Integration provider ("GitHub", "Linear"). */
+  /** The integration a provider event came through ("github"). */
   providerName?: string;
-  /** What happened at the provider ("issue #412 opened by @alice"). */
-  providerDetail?: string;
+  /** The provider event's type ("issues.opened"). */
+  providerEvent?: string;
+  /** For a workflow event: the workflow of the run whose outcome fired it, as a display name. */
+  sourceWorkflow?: string;
+  /** For a workflow event: that run's outcome ("finished", "failed", "blocked"). */
+  sourceOutcome?: string;
+}
+
+/**
+ * A "Started by" line split around the automation's name, so a surface can
+ * render the name as a link without re-deriving the sentence:
+ * `lead + automation + trail` is exactly the line.
+ */
+export interface StartedByParts {
+  lead: string;
+  automation: string;
+  trail: string;
 }
 
 export interface LaunchKindDisplay {
@@ -277,6 +294,27 @@ export interface LaunchKindDisplay {
   kind: string;
   shortLabel: string;
   startedByLine: string;
+  /** Set whenever the line names the automation that fired the run. */
+  automationParts?: StartedByParts;
+}
+
+/** A line naming the automation, with the parts that let a surface link it. */
+function naming(lead: string, automation: string, trail = ""): Pick<LaunchKindDisplay, "startedByLine" | "automationParts"> {
+  return { startedByLine: `${lead}${automation}${trail}`, automationParts: { lead, automation, trail } };
+}
+
+/** A source run's outcome as the end of "when <workflow> …". */
+const SOURCE_OUTCOME_WORDS: Record<string, string> = {
+  finished: "finished",
+  failed: "failed",
+  blocked: "was blocked",
+};
+
+/** " when code-review finished", or "" when the source run is unknown. */
+function sourceRunPhrase(context: LaunchContext): string {
+  if (!context.sourceWorkflow) return "";
+  const outcome = context.sourceOutcome ? (SOURCE_OUTCOME_WORDS[context.sourceOutcome] ?? context.sourceOutcome) : "ended";
+  return ` when ${context.sourceWorkflow} ${outcome}`;
 }
 
 /**
@@ -310,14 +348,14 @@ export function launchKindDisplay(
         return {
           kind,
           shortLabel: "Run now",
-          startedByLine: name ? `Started by Run now on ${name}` : "Started by Run now",
+          ...(name ? naming("Started by Run now on ", name) : { startedByLine: "Started by Run now" }),
         };
       }
-      const who = name ? `Started by schedule ${name}` : "Started by a schedule";
+      const slot = context.scheduledFor ? ` for ${context.scheduledFor}` : "";
       return {
         kind,
         shortLabel: "Schedule",
-        startedByLine: context.scheduledFor ? `${who} for ${context.scheduledFor}` : who,
+        ...(name ? naming("Started by schedule ", name, slot) : { startedByLine: `Started by a schedule${slot}` }),
       };
     }
     case "agent.start_run":
@@ -331,17 +369,35 @@ export function launchKindDisplay(
     case "builder.test":
       return { kind, shortLabel: "Test", startedByLine: "Test run from the builder" };
     case "webhook": {
-      const who = context.webhookName ? `Started by webhook ${context.webhookName}` : "Started by a webhook";
-      return { kind, shortLabel: "Webhook", startedByLine: context.at ? `${who} at ${context.at}` : who };
-    }
-    case "integration": {
-      const provider = context.providerName || "Integration";
+      // A webhook trigger's name is the webhook's name.
+      const at = context.at ? ` at ${context.at}` : "";
       return {
         kind,
-        shortLabel: provider,
-        startedByLine: context.providerDetail
-          ? `Started by ${provider}: ${context.providerDetail}`
-          : `Started by ${provider}`,
+        shortLabel: "Webhook",
+        ...(context.triggerName
+          ? naming("Started by webhook ", context.triggerName, at)
+          : { startedByLine: `Started by a webhook${at}` }),
+      };
+    }
+    case "integration": {
+      const provider = context.providerName;
+      const source = provider ? (context.providerEvent ? `${provider}: ${context.providerEvent}` : provider) : "";
+      return {
+        kind,
+        shortLabel: provider || "Integration",
+        ...(context.triggerName
+          ? naming("Started by ", context.triggerName, source ? ` on ${source}` : "")
+          : { startedByLine: source ? `Started by ${source}` : "Started by an integration" }),
+      };
+    }
+    case "workflow_event": {
+      const phrase = sourceRunPhrase(context);
+      return {
+        kind,
+        shortLabel: "Workflow event",
+        ...(context.triggerName
+          ? naming("Started by ", context.triggerName, phrase)
+          : { startedByLine: phrase ? `Started${phrase}` : "Started by a workflow event" }),
       };
     }
     default:

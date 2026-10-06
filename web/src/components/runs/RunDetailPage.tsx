@@ -99,6 +99,7 @@ function LoadedRun({ initialChat }: { initialChat: Chat }) {
         <RunHeader
           chat={chat}
           triggerName={triggerName}
+          event={launch.event}
           parent={launch.parent}
           projectName={projectName}
           busy={control.isPending || adopt.isPending || rerun.busy}

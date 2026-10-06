@@ -42,6 +42,38 @@ func TestEventDrivenSkipsDoNotDegradeHealth(t *testing.T) {
 	assert.Equal(t, resultUnresolved, result, "a pending event has not resolved either way")
 }
 
+// Once the run a trigger fired has ended, its recorded result is the firing's,
+// whatever a person has done in the chat since: their turn is not the
+// automation's. Until then the chat's live state is all there is.
+func TestResolveFiring_TheFiredRunsRecordedResultWinsOverThePersonsLaterTurn(t *testing.T) {
+	recorded := func(runStatus string, live core.RunDisplayState) *core.TriggerEventWithRun {
+		f := launched(live)
+		f.Event.RunStatus = runStatus
+		return f
+	}
+	for _, tc := range []struct {
+		name string
+		f    *core.TriggerEventWithRun
+		want firingResult
+	}{
+		{"fired run failed, person's reply completed", recorded(core.TriggerRunFailed, core.RunDisplayCompleted), resultFailure},
+		{"fired run completed, person's reply failed", recorded(core.TriggerRunCompleted, core.RunDisplayFailed), resultSuccess},
+		{"fired run completed, person's reply running", recorded(core.TriggerRunCompleted, core.RunDisplayRunning), resultSuccess},
+		{"fired run cancelled", recorded(core.TriggerRunCancelled, core.RunDisplayCompleted), resultUnresolved},
+		{"fired run still going: live state", launched(core.RunDisplayFailed), resultFailure},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, _ := resolveFiring(tc.f)
+			assert.Equal(t, tc.want, got)
+		})
+	}
+	// A recorded failure whose chat has since been deleted is still a failure.
+	gone := &core.TriggerEventWithRun{Event: &core.TriggerEvent{Outcome: core.TriggerEventLaunched, RunStatus: core.TriggerRunFailed}}
+	got, detail := resolveFiring(gone)
+	assert.Equal(t, resultFailure, got)
+	assert.Equal(t, "the launched run failed", detail)
+}
+
 // Firings are listed newest first, as the store returns them.
 func TestComputeHealth(t *testing.T) {
 	const (
