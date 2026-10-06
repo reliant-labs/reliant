@@ -252,6 +252,13 @@ export interface ForgeHostedWorkload {
   drifted?: boolean;
   /** The control plane's last error for this workload, if any. */
   last_error?: string;
+  /**
+   * Why the workload is suspended, from the tier CR's Suspended condition:
+   * owner | no_compute_plan | billing_lapsed. Absent or "unspecified" means
+   * not suspended OR a control plane that reports no reason (older) — the run
+   * state vocabulary then falls back to inferring it.
+   */
+  suspend_reason?: string;
 }
 
 // ── Destination ─────────────────────────────────────────────────────────────

@@ -121,6 +121,20 @@ enum DeployObservedState {
   DEPLOY_OBSERVED_STATE_DELETED = 6;
 }
 
+// DeploySuspendReason is WHY a suspended deployment is stopped, read off the
+// tier CR's Suspended condition. UNSPECIFIED means not suspended OR a control
+// plane / operator that reports no reason — clients fall back to inference.
+enum DeploySuspendReason {
+  DEPLOY_SUSPEND_REASON_UNSPECIFIED = 0;
+  // The owner stopped it (condition reason UserSuspended). They can resume it.
+  DEPLOY_SUSPEND_REASON_OWNER = 1;
+  // The org has no compute plan (NoComputePlan). Fix: subscribe to a plan.
+  DEPLOY_SUSPEND_REASON_NO_COMPUTE_PLAN = 2;
+  // The compute subscription lapsed past grace (BillingLapsed). Fix: settle
+  // the invoice.
+  DEPLOY_SUSPEND_REASON_BILLING_LAPSED = 3;
+}
+
 // DeployVerdict is forge's deploystate verdict: whether what was OBSERVED is
 // what was DECLARED, and for long enough to trust. It is computed on read from
 // the observation, the stability clock (stable_since), the declared digest and
@@ -570,6 +584,9 @@ message DeployObservedStateDetail {
   // "backups are not configured" as the same thing would be the dangerous
   // conflation.
   DeployBackupStatus backup = 9;
+
+  // Why the deployment is suspended; UNSPECIFIED when it is not.
+  DeploySuspendReason suspend_reason = 10;
 }
 
 // DeployBackupStatus is what a hosted user needs to answer one question:

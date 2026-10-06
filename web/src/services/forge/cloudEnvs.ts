@@ -38,6 +38,7 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import {
   DeployEnvironmentKind,
   DeployObservedState,
+  DeploySuspendReason,
   DeployRunState,
   DeployPromotionKind,
   DeployTier,
@@ -216,6 +217,13 @@ function observedStateOf(state: DeployObservedState | undefined): string {
   return (DeployObservedState[state] ?? "unknown").toLowerCase();
 }
 
+function suspendReasonOf(reason: DeploySuspendReason | undefined): string {
+  if (reason === DeploySuspendReason.OWNER) return "owner";
+  if (reason === DeploySuspendReason.NO_COMPUTE_PLAN) return "no_compute_plan";
+  if (reason === DeploySuspendReason.BILLING_LAPSED) return "billing_lapsed";
+  return "unspecified";
+}
+
 function tierOf(tier: DeployTier): string {
   if (tier === DeployTier.UNSPECIFIED) return "";
   return (DeployTier[tier] ?? "").toLowerCase();
@@ -259,6 +267,7 @@ function toWorkload(msg: DeploymentStatus): ForgeHostedWorkload {
     desired_digest: msg.desiredDigest,
     drifted: msg.drifted === true,
     last_error: observed?.lastError ?? "",
+    suspend_reason: suspendReasonOf(observed?.suspendReason),
     deployment_id: deployment?.id ?? "",
     declared_run_state: runStateOf(deployment?.runState),
   };
