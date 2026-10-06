@@ -81,23 +81,56 @@ func TestOAuth_DifferentSessionIsRejectedAndBurnsState(t *testing.T) {
 	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
 }
 
+// brokerClock pins the broker's clock to a value the test moves by hand.
+//
+// Flow expiry is decided by the broker's clock alone: Start stamps
+// expires_at = now + FlowTTL, and Complete hands now to ConsumeOAuthFlow.
+// These tests used to manufacture "expired" with Postgres's now() instead,
+// which compares two independent clocks — the database server's and this
+// process's — with only a one-second margin between them.
+//
+// Truncated to microseconds, the precision timestamptz stores, so an instant
+// the test computes is exactly the instant the database compares.
+func brokerClock(t *testing.T, e *env) *time.Time {
+	t.Helper()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	connections.SetBrokerClock(e.broker, func() time.Time { return now })
+	return &now
+}
+
 func TestOAuth_ExpiredStateIsRejected(t *testing.T) {
 	e := newEnv(t)
+	now := brokerClock(t, e)
 	state := startFlow(t, e, connections.StartParams{})
-	_, err := e.raw.Exec(`UPDATE oauth_flows SET expires_at = now() - interval '1 second'`)
-	require.NoError(t, err)
-	_, err = e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c", Binder: "binder-1"})
+
+	// Exactly at expiry: the flow is valid strictly before expires_at.
+	*now = now.Add(connections.FlowTTL)
+	_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c", Binder: "binder-1"})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 	require.Contains(t, err.Error(), "expired")
 	require.Zero(t, e.gh.tokenCalls.Load())
 }
 
+// The other side of the boundary, so the rejection above is known to be the
+// TTL and not something else about a flow completed late.
+func TestOAuth_StateIsAcceptedUntilItExpires(t *testing.T) {
+	e := newEnv(t)
+	now := brokerClock(t, e)
+	state := startFlow(t, e, connections.StartParams{})
+
+	*now = now.Add(connections.FlowTTL - time.Microsecond)
+	_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c", Binder: "binder-1"})
+	require.NoError(t, err)
+	require.Equal(t, 1, int(e.gh.tokenCalls.Load()))
+}
+
 func TestOAuth_FlowExpiresInTenMinutes(t *testing.T) {
 	e := newEnv(t)
+	now := brokerClock(t, e)
 	startFlow(t, e, connections.StartParams{})
-	var secs float64
-	require.NoError(t, e.raw.QueryRow(`SELECT extract(epoch FROM expires_at - now()) FROM oauth_flows`).Scan(&secs))
-	require.InDelta(t, (10 * time.Minute).Seconds(), secs, 15)
+	var expiresAt time.Time
+	require.NoError(t, e.raw.QueryRow(`SELECT expires_at FROM oauth_flows`).Scan(&expiresAt))
+	require.True(t, expiresAt.Equal(now.Add(10*time.Minute)), "expires_at %s, want %s", expiresAt, now.Add(10*time.Minute))
 }
 
 func TestOAuth_UnknownStateIsRejected(t *testing.T) {
