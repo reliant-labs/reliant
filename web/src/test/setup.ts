@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
 
 // Web Storage polyfill.
 //
@@ -58,6 +58,69 @@ function shouldSuppressConsoleError(firstArg: unknown): boolean {
 vi.spyOn(console, 'error').mockImplementation((...args: unknown[]) => {
   if (shouldSuppressConsoleError(args[0])) return
   originalConsoleError(...args)
+})
+
+// ─── Unit tests are offline, and a test does not outlive its RPCs ───────────
+//
+// jsdom's origin is http://localhost:3000, so an RPC a test did not mock used
+// to leave the process for real — connection refused in CI, and whatever dev
+// server happened to own :3000 locally. It settled on network time, and the
+// transport's interceptors log when it does ("Request failed", "401
+// received", "No auth token available", and — once the file's mocks were
+// gone — "[auth] Error getting session"). Sixteen files did this, through
+// unmocked list/get calls fired by the components they render, and some of
+// those calls had not even reached fetch when their file ended.
+//
+// A console call that lands while Vitest is closing a worker's RPC channel is
+// rejected as `EnvironmentTeardownError: Closing rpc while "onUserConsoleLog"
+// was pending`. The run exits 1 with every test green, blaming whichever file
+// happened to be finishing. Both halves below are needed:
+//
+//   1. fetch refuses immediately. That is what CI's refused connection already
+//      looked like to the code under test, so no test's behaviour changes; it
+//      only stops depending on the network's clock, or on a dev server. A test
+//      that needs a response mocks its client or stubs fetch, replacing this.
+//   2. Every call made through a real Connect transport is tracked, and each
+//      test waits for its calls to settle. The request path does real async
+//      work before fetch (the auth interceptor imports supabase lazily), so an
+//      immediate refusal alone still let a call finish after its file did.
+//      Waiting here, after Testing Library has unmounted the tree, means every
+//      log a call makes lands inside the test that made it.
+const rpcs = vi.hoisted(() => ({ inFlight: new Set<Promise<unknown>>() }))
+
+vi.mock('@connectrpc/connect-web', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@connectrpc/connect-web')>()
+  const track = <T,>(call: Promise<T>): Promise<T> => {
+    rpcs.inFlight.add(call)
+    const settled = () => {
+      rpcs.inFlight.delete(call)
+    }
+    call.then(settled, settled)
+    return call
+  }
+  return {
+    ...actual,
+    createConnectTransport: (...args: Parameters<typeof actual.createConnectTransport>) => {
+      const transport = actual.createConnectTransport(...args)
+      return {
+        ...transport,
+        unary: (...call: Parameters<typeof transport.unary>) => track(transport.unary(...call)),
+        stream: (...call: Parameters<typeof transport.stream>) => track(transport.stream(...call)),
+      }
+    },
+  }
+})
+
+globalThis.fetch = ((input: RequestInfo | URL) => {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  return Promise.reject(new TypeError(`fetch failed: unit tests are offline (${url})`))
+}) as typeof fetch
+
+afterEach(async () => {
+  // A call that settles can start another (a retry, a follow-up refetch).
+  while (rpcs.inFlight.size > 0) {
+    await Promise.allSettled([...rpcs.inFlight])
+  }
 })
 
 // Stub supabase so that importing grpc-client (which eagerly calls createClient)

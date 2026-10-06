@@ -253,11 +253,15 @@ export const QuickFileOpen = forwardRef<QuickFileOpenRef, QuickFileOpenProps>(({
       }
     };
 
-    setTimeout(() => {
+    // Delayed so the click that opened the picker does not close it. Cleared on
+    // cleanup: a picker gone within the delay must not attach a listener after
+    // the removal below has already run.
+    const attachTimer = setTimeout(() => {
       document.addEventListener("mousedown", handleClickOutside);
     }, 100);
 
     return () => {
+      clearTimeout(attachTimer);
       document.removeEventListener("mousedown", handleClickOutside);
     };
   }, [isOpen, setIsOpen]);
