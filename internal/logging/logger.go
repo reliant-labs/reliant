@@ -7,7 +7,9 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
+	"github.com/reliant-labs/reliant/internal/runenv"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
@@ -56,17 +58,87 @@ func Error(msg string, args ...any) {
 	slog.Error(msg, args...)
 }
 
-// SetupWithTrace configures the logging system with optional trace logging
-func SetupWithTrace(defaultLevel slog.Level, enableTrace bool) {
-	TraceEnabled = enableTrace
-	// Configure logging output
-	// Configure logger with custom writer (in-memory)
-	var handler slog.Handler = slog.NewTextHandler(DefaultOutput, &slog.HandlerOptions{
-		Level: defaultLevel,
-	})
+// logFormatEnv selects the line format: "json" writes one JSON object per line,
+// which is what a log pipeline indexes; "text" writes key=value, which is what
+// a person greps. It is the variable forge's config block already sets, with
+// the same two values.
+const logFormatEnv = "LOG_FORMAT"
+
+// resolveLogFormat reads LOG_FORMAT. Text is the default, so dev logs — and
+// every grep written against them — only change when a deploy asks for JSON.
+// recognised is false for a value that is set but is neither, so the caller can
+// say so once a logger exists to say it with.
+func resolveLogFormat() (asJSON, recognised bool) {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv(logFormatEnv))) {
+	case "", "text":
+		return false, true
+	case "json":
+		return true, true
+	default:
+		return false, false
+	}
+}
+
+// install is the one place the process logger is built. Every Setup* variant
+// differs only in where lines are written, so they all come here: the format
+// is chosen once, and the Sentry and metrics bridges wrap it the same way
+// whichever format it is.
+//
+// It is also where prod's INFO floor is enforced, so no caller can build a
+// DEBUG logger in prod: GetLogLevel already caps what it returns, and install
+// caps whatever it is handed as well. When either cap refused a DEBUG request
+// it logs one WARN saying so, through the handler it just built.
+//
+// The Sentry handler lazily checks the global reporter, so it's safe to create
+// before Sentry is initialised — it will be a no-op until then.
+func install(output io.Writer, level slog.Level) {
+	requested := level
+	level = capLevel(level)
+
+	opts := &slog.HandlerOptions{Level: level}
+	asJSON, recognised := resolveLogFormat()
+
+	var handler slog.Handler
+	if asJSON {
+		handler = slog.NewJSONHandler(output, opts)
+	} else {
+		handler = slog.NewTextHandler(output, opts)
+	}
 	handler = newSentryHandler(handler)
 	handler = newMetricsHandler(handler)
 	slog.SetDefault(slog.New(handler))
+
+	if !recognised {
+		slog.Warn("Unrecognised LOG_FORMAT, logging as text", "log_format", os.Getenv(logFormatEnv), "allowed", "json,text")
+	}
+	warnRefusedDebug(requested, level)
+}
+
+// warnRefusedDebug reports, once per logger install, that prod refused a DEBUG
+// request. An environment variable is named when one asked; otherwise the
+// request was a caller passing a DEBUG level to a Setup function.
+func warnRefusedDebug(requested, effective slog.Level) {
+	if !runenv.IsProd() {
+		return
+	}
+	source := debugRequest()
+	if source == "" && requested >= slog.LevelInfo {
+		return
+	}
+	if source == "" {
+		source = "caller level " + requested.String()
+	}
+	slog.Warn("DEBUG logging requested but ignored: environment is prod",
+		"requested_by", source,
+		"environment", string(runenv.Prod),
+		"effective_level", effective.String(),
+	)
+}
+
+// SetupWithTrace configures the logging system with optional trace logging
+func SetupWithTrace(defaultLevel slog.Level, enableTrace bool) {
+	TraceEnabled = enableTrace
+	install(DefaultOutput, defaultLevel)
 }
 
 // Setup configures the logging system (trace disabled by default)
@@ -121,15 +193,7 @@ func SetupWithRotation(defaultLevel slog.Level, enableTrace bool, config *Rotati
 	// Update the default output
 	DefaultOutput = output
 
-	// Configure logger with the output, wrapped with Sentry bridge.
-	// The Sentry handler lazily checks the global reporter, so it's safe to
-	// create before Sentry is initialised — it will be a no-op until then.
-	var handler slog.Handler = slog.NewTextHandler(output, &slog.HandlerOptions{
-		Level: defaultLevel,
-	})
-	handler = newSentryHandler(handler)
-	handler = newMetricsHandler(handler)
-	slog.SetDefault(slog.New(handler))
+	install(output, defaultLevel)
 }
 
 // SetupFileOnly configures logging to write to the rotating file ONLY, leaving
@@ -181,12 +245,7 @@ func SetupFileOnly(defaultLevel slog.Level, config *RotationConfig) {
 
 	DefaultOutput = activeLogger
 
-	var handler slog.Handler = slog.NewTextHandler(activeLogger, &slog.HandlerOptions{
-		Level: defaultLevel,
-	})
-	handler = newSentryHandler(handler)
-	handler = newMetricsHandler(handler)
-	slog.SetDefault(slog.New(handler))
+	install(activeLogger, defaultLevel)
 }
 
 // Close closes the active log file (should be called on shutdown)

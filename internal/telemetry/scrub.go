@@ -60,7 +60,7 @@ var metadataKeys = map[string]bool{
 	"url": true, "baseurl": true, "route": true, "from": true, "to": true,
 	"grpcservice": true, "grpcmethod": true, "grpccode": true,
 	"durationms": true, "attempt": true, "attemptnumber": true,
-	"logsource": true, "funnelevent": true, "funnelstep": true,
+	"logsource": true, "loggroup": true, "funnelevent": true, "funnelstep": true,
 }
 
 // urlKeys may carry a query string or fragment (OAuth codes, signed URLs).
@@ -230,10 +230,21 @@ func scrubValue(key string, value interface{}) (interface{}, bool) {
 }
 
 func scrubString(key, value string) (string, bool) {
-	norm := normalizeKey(key)
-	if messageKeys[norm] {
+	if messageKeys[normalizeKey(key)] {
 		return boundMessage(value), true
 	}
+	return TagValue(key, value)
+}
+
+// TagValue reports whether a field may be sent to Sentry as a tag, and the
+// value to send. Only identifiers (chat_id, tool_call_id, ...) and the small
+// enums in metadataKeys qualify, and only when the value has the shape of one.
+//
+// It is exported so logging's slog bridge picks tags with this same allowlist
+// at the source, rather than promoting every short attribute and relying on
+// BeforeSend to take the content back out. One list, so the two cannot drift.
+func TagValue(key, value string) (string, bool) {
+	norm := normalizeKey(key)
 	if !isIdentifierKey(key) && !metadataKeys[norm] {
 		return "", false
 	}

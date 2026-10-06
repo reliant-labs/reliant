@@ -273,8 +273,7 @@ func Run(ctx context.Context, opts Options) error {
 	analytics.SetPrivacyChecker(repo)
 
 	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
-	telemetry.SetReporter(telemetry.NewReporterFromEnv(
-		config.IsDevelopmentEnvironment() || config.IsTestEnvironment()))
+	telemetry.SetReporter(telemetry.NewReporterFromEnv())
 
 	// -----------------------------------------------------------------
 	// 10. Tool execution routing via NATS

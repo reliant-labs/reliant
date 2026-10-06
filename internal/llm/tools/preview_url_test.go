@@ -4,8 +4,8 @@ package tools
 import (
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/stretchr/testify/require"
 )
 
@@ -44,16 +44,16 @@ func TestProxyPreviewURL(t *testing.T) {
 	// Dev/test: path-based proxy URL on the local proxy host.
 	require.Equal(t,
 		"http://localhost:28080/proxy/daemon-123/3000/",
-		proxyPreviewURL(config.EnvironmentDev, "daemon-123", 3000))
+		proxyPreviewURL(runenv.Dev, "daemon-123", 3000))
 
 	// Prod (and other non-dev): subdomain-based workspace URL.
 	require.Equal(t,
 		"https://3000-daemon-123.workspaces.reliantapi.com",
-		proxyPreviewURL(config.EnvironmentProd, "daemon-123", 3000))
+		proxyPreviewURL(runenv.Prod, "daemon-123", 3000))
 
 	// No daemon identity (fully-local) → no proxy URL.
-	require.Equal(t, "", proxyPreviewURL(config.EnvironmentProd, "", 3000))
-	require.Equal(t, "", proxyPreviewURL(config.EnvironmentDev, "daemon-123", 0))
+	require.Equal(t, "", proxyPreviewURL(runenv.Prod, "", 3000))
+	require.Equal(t, "", proxyPreviewURL(runenv.Dev, "daemon-123", 0))
 }
 
 func TestPreviewURLsForProcess(t *testing.T) {

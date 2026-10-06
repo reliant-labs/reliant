@@ -14,10 +14,10 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/features/providers"
 	"github.com/reliant-labs/reliant/internal/features/types"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runenv"
 )
 
 var (
@@ -83,7 +83,7 @@ func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.Sett
 	}
 
 	// Fall back to environment variables for development only
-	if config.IsDevelopmentEnvironment() && os.Getenv("STATSIG_SERVER_SECRET_KEY") != "" {
+	if runenv.IsDev() && os.Getenv("STATSIG_SERVER_SECRET_KEY") != "" {
 		statsigKey = os.Getenv("STATSIG_SERVER_SECRET_KEY")
 		if os.Getenv("STATSIG_ENVIRONMENT") != "" {
 			statsigEnv = os.Getenv("STATSIG_ENVIRONMENT")
@@ -92,7 +92,7 @@ func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.Sett
 
 	// Initialize Statsig provider if configured (highest priority)
 	// Statsig is disabled in non-production environments to avoid polluting experiments
-	if statsigKey != "" && config.IsProductionEnvironment() {
+	if statsigKey != "" && runenv.IsProd() {
 		statsigProvider := providers.NewStatsigProvider(900)
 
 		// Determine if it's a client key
@@ -124,7 +124,7 @@ func InitializeFeatureFlagsWithSettings(ctx context.Context, settings types.Sett
 	}
 
 	// Environment variable provider (medium priority) - for development only
-	if config.IsDevelopmentEnvironment() {
+	if runenv.IsDev() {
 		envProvider := providers.NewEnvironmentProvider(600)
 		if err := envProvider.Initialize(ctx, nil); err != nil {
 			logging.Warn("Failed to initialize environment provider", "error", err)

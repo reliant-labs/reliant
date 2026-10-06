@@ -258,3 +258,34 @@ func TestBeforeSendTransactionStripsUserContent(t *testing.T) {
 	assert.Equal(t, chatID, got.Spans[0].Data["chat_id"])
 	assert.Equal(t, threadID, got.Spans[0].Tags["thread_id"])
 }
+
+// TagValue is the allowlist logging's slog bridge uses to pick tags at the
+// source. Message keys are kept by the event scrubber as bounded text, but
+// they are prose, so they are never tags.
+func TestTagValue(t *testing.T) {
+	for _, tc := range []struct {
+		key, value string
+		want       bool
+	}{
+		{"chat_id", chatID, true},
+		{"toolCallId", toolCallID, true},
+		{"provider", "anthropic", true},
+		{"status", "failed", true},
+		{"log_group", "worker.activity", true},
+		{"url", "https://api.example.com/v1?code=" + oauthCode, true},
+		{"command", "ls", false},
+		{"file_path", "/tmp/x.go", false},
+		{"prompt", "hi", false},
+		{"error", "boom", false},
+		{"message", "boom", false},
+		{"status", "failed because of " + shellCommand, false},
+	} {
+		t.Run(tc.key+"="+tc.value, func(t *testing.T) {
+			got, ok := TagValue(tc.key, tc.value)
+			assert.Equal(t, tc.want, ok)
+			if ok {
+				assert.NotContains(t, got, oauthCode, "a kept URL loses its query string")
+			}
+		})
+	}
+}
