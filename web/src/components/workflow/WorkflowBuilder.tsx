@@ -1743,14 +1743,32 @@ function WorkflowBuilderInner({
           <div className="bg-primary/10 border-b border-primary/30 px-4 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Lock className="w-4 h-4 text-primary shrink-0" />
-              <span className="text-primary text-sm font-semibold">
-                View Only
-              </span>
-              <span className="text-primary/60 text-sm">—</span>
-              <span className="text-primary/90 text-sm">
-                This is a {source === "project" ? "project" : "built-in"} template. Click <strong className="text-primary">"Create a Copy"</strong> to create an
-                editable copy.
-              </span>
+              {source === "project" ? (
+                // A project workflow is a file in the repo, versioned and shared
+                // with the team. It is edited where it lives, not copied.
+                <>
+                  <span className="text-primary text-sm font-semibold">
+                    In your repo
+                  </span>
+                  <span className="text-primary/60 text-sm">—</span>
+                  <span className="text-primary/90 text-sm">
+                    Defined in this project's{" "}
+                    <code className="font-mono text-xs text-primary">.reliant/workflows/</code>.
+                    Edit the YAML file there to change it for everyone on the repo.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-primary text-sm font-semibold">
+                    View Only
+                  </span>
+                  <span className="text-primary/60 text-sm">—</span>
+                  <span className="text-primary/90 text-sm">
+                    This is a built-in workflow. Click <strong className="text-primary">"Create a Copy"</strong> to create an
+                    editable copy.
+                  </span>
+                </>
+              )}
             </div>
             <a
               href="https://docs.reliantlabs.io/workflows"

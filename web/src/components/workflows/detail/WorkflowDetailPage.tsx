@@ -46,6 +46,10 @@ import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { useWorkflowDefinition } from "../../workflow/useWorkflowDefinition";
 import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
+import { ActivateTriggerDialog } from "../../Automations/ActivateTriggerDialog";
+import { declaredTriggers, describeDeclaredSource, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { declaredRailLines } from "@/lib/triggerRail";
+import { describeSchedule } from "@/lib/cronText";
 import { workflowsUsing } from "./workflowUsedBy";
 
 /** How many runs the Recent runs card shows; "View all" opens the Runs tab. */
@@ -140,7 +144,12 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
             onRun={runBlockedReason ? undefined : () => setRunning(true)}
             onSchedule={() => setCreatingAutomation(true)}
           />
-          <AutomationsCard projectId={projectId} workflowRef={workflowRef} />
+          <AutomationsCard
+            projectId={projectId}
+            workflowRef={workflowRef}
+            workflowTitle={listing?.title}
+            declared={definition.workflowDef ? declaredTriggers(definition.workflowDef) : []}
+          />
           <DefinitionCard
             projectId={projectId}
             workflowRef={workflowRef}
@@ -279,8 +288,25 @@ function RecentRunsCard({
   );
 }
 
-/** The automations that run this workflow. "New automation" is the page header's. */
-function AutomationsCard({ projectId, workflowRef }: { projectId: string; workflowRef: string }) {
+/**
+ * The automations that run this workflow. "New automation" is the page header's.
+ *
+ * A workflow can also DECLARE its triggers in its own YAML (`triggers:`). A
+ * declaration does nothing until someone activates it, so one that nobody has
+ * activated is listed here as such, with Activate — saying "nothing runs this
+ * workflow" beside a YAML that plainly declares a schedule reads as a bug.
+ */
+function AutomationsCard({
+  projectId,
+  workflowRef,
+  workflowTitle,
+  declared,
+}: {
+  projectId: string;
+  workflowRef: string;
+  workflowTitle?: string;
+  declared: DeclaredTrigger[];
+}) {
   const triggers = useTriggers(projectId);
   const usingThis = useMemo<Trigger[]>(
     () =>
@@ -289,6 +315,14 @@ function AutomationsCard({ projectId, workflowRef }: { projectId: string; workfl
       ),
     [triggers.data, workflowRef],
   );
+  const inactiveDeclared = useMemo(
+    () =>
+      declaredRailLines(declared, triggers.data ?? [], workflowRef)
+        .lines.filter((line) => line.state === "inactive")
+        .map((line) => line.declared),
+    [declared, triggers.data, workflowRef],
+  );
+  const [activating, setActivating] = useState<DeclaredTrigger | null>(null);
 
   return (
     <section aria-label="Automations">
@@ -298,16 +332,50 @@ function AutomationsCard({ projectId, workflowRef }: { projectId: string; workfl
         </div>
         {triggers.isLoading ? (
           <p className="px-4 py-3 text-sm text-muted-foreground" aria-busy="true">Loading automations…</p>
-        ) : usingThis.length === 0 ? (
+        ) : usingThis.length === 0 && inactiveDeclared.length === 0 ? (
           <p className="px-4 py-3 text-sm text-muted-foreground">Nothing runs this workflow on its own.</p>
         ) : (
-          <ul aria-label="Automations using this workflow" className="divide-y divide-border/60" data-testid="workflow-detail-automations">
-            {usingThis.map((trigger) => (
-              <AutomationRow key={trigger.id} trigger={trigger} />
-            ))}
-          </ul>
+          <>
+            {usingThis.length > 0 && (
+              <ul aria-label="Automations using this workflow" className="divide-y divide-border/60" data-testid="workflow-detail-automations">
+                {usingThis.map((trigger) => (
+                  <AutomationRow key={trigger.id} trigger={trigger} />
+                ))}
+              </ul>
+            )}
+            {inactiveDeclared.length > 0 && (
+              <ul
+                aria-label="Triggers declared in this workflow"
+                className={`divide-y divide-border/60 ${usingThis.length > 0 ? "border-t border-border/60" : ""}`}
+                data-testid="workflow-detail-declared-triggers"
+              >
+                {inactiveDeclared.map((trigger) => (
+                  <li key={trigger.name} className="flex items-center justify-between gap-3 px-4 py-2.5">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm text-foreground">{describeDeclaredSource(trigger, describeSchedule)}</p>
+                      <p className="text-xs text-muted-foreground">Declared in the workflow · not active</p>
+                    </div>
+                    <Button variant="outline" size="sm" onClick={() => setActivating(trigger)}>
+                      Activate
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </>
         )}
       </Card>
+      {activating && (
+        <ActivateTriggerDialog
+          open
+          onClose={() => setActivating(null)}
+          workflowRef={workflowRef}
+          workflowTitle={workflowTitle}
+          declared={activating}
+          defaultProjectId={projectId}
+          onActivated={() => setActivating(null)}
+        />
+      )}
     </section>
   );
 }

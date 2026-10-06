@@ -42,6 +42,14 @@ export interface AuthTokenProvider {
    * would otherwise stampede the refresh endpoint.
    */
   hasSession(): Promise<boolean>;
+
+  /**
+   * Exchange the session for a fresh access token after the backend rejected
+   * the current one. Returns the new token, or null when the session cannot
+   * be refreshed (a long-lived API key, a revoked refresh token, no session).
+   * Called at most once per burst of rejections — see `unauthInterceptor`.
+   */
+  refresh(): Promise<string | null>;
 }
 
 /** Key under which `ApiKeyLogin` stores a long-lived API key. */
@@ -96,6 +104,20 @@ export const browserAuthTokenProvider: AuthTokenProvider = {
     } catch {
       // Fall through as "no session"; nothing to clear.
       return false;
+    }
+  },
+
+  async refresh() {
+    // An API key is not a session: there is nothing to refresh it with, and a
+    // rejected key stays rejected.
+    if (readApiKey()) return null;
+    try {
+      const { supabase } = await import("../lib/supabase");
+      const { data, error } = await supabase.auth.refreshSession();
+      if (error) return null;
+      return data.session?.access_token ?? null;
+    } catch {
+      return null;
     }
   },
 };
