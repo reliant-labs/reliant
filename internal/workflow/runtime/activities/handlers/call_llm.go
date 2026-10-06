@@ -402,15 +402,18 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	//     rings the thread-wake doorbell (notifyThreadWake). The gate counts it
 	//     from the turn's start the same way, so it re-enters a thread that
 	//     still has live spawns whether it landed mid-turn or after the thread
-	//     parked. A thread with nothing live exits instead; an idle thread's
-	//     queue is absorbed by the user's next send.
+	//     parked. A thread with NOTHING live exits without a turn for it (a
+	//     known gap, pinned by TestLateUserMessageE2E): the row waits for the
+	//     user's next send, whose run's first CallLLM drains it, unless the
+	//     reconciler resolves it first (below) — the finished run has stamped
+	//     the thread terminal.
 	//   - A row that outlives every turn is marked undeliverable by the
 	//     reconciler's resolveOrphanedAgentMessages rather than sitting queued
 	//     forever.
 	//
-	// A message that misses this probe is therefore late, not silently lost —
-	// whereas the old "assume yes" answer traded that for a chat that could
-	// not advance at all.
+	// A message that misses this probe is therefore late or reported
+	// undelivered, never silently lost — whereas the old "assume yes" answer
+	// traded that for a chat that could not advance at all.
 	probeCtx, cancelProbe := context.WithTimeout(context.WithoutCancel(ctx), pendingInboxProbeTimeout)
 	output.PendingInbox = a.hasQueuedAgentMessages(probeCtx, thread)
 	cancelProbe()
