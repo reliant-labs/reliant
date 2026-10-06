@@ -866,6 +866,12 @@ function WorkflowBuilderInner({
 
     const builtWorkflow = buildWorkflow();
 
+    // The page hands the saved workflow back as initialWorkflow; claim its
+    // name as loaded FIRST, so that hand-back (a rename changes the name) is
+    // not mistaken for a different workflow and reloaded over the canvas —
+    // which would drop any edit made while the save was in flight.
+    const previousLoadedName = loadedWorkflowName;
+    setLoadedWorkflowName(builtWorkflow.name);
     setIsSaving(true);
     try {
       const result = await onSave?.(builtWorkflow, intent, opts);
@@ -878,13 +884,13 @@ function WorkflowBuilderInner({
         setValidationStatus(
           splitFindings(findings).errors.length === 0 ? "valid" : "invalid",
         );
-        if (result.rejected) {
+        if (result.rejected || !result.success) {
           // Nothing was stored: keep the edits dirty so they aren't lost.
+          setLoadedWorkflowName(previousLoadedName);
           return;
         }
       }
 
-      setLoadedWorkflowName(builtWorkflow.name);
       setHasModifications(false);
       setSavedTriggersJson(JSON.stringify(builtWorkflow.triggers ?? []));
 
@@ -901,10 +907,11 @@ function WorkflowBuilderInner({
       );
     } catch (error) {
       console.error("Save failed:", error);
+      setLoadedWorkflowName(previousLoadedName);
     } finally {
       setIsSaving(false);
     }
-  }, [buildWorkflow, onSave, workflow.name, isBuiltinWorkflow, nodes, edges]);
+  }, [buildWorkflow, onSave, workflow.name, isBuiltinWorkflow, loadedWorkflowName]);
 
   // Save-then-run for the Test run panel. Nothing runs unless the draft was
   // stored: an unnamed canvas, a rejected save and a failed save all end here.
@@ -1068,19 +1075,24 @@ function WorkflowBuilderInner({
     builtWorkflow.name = normalizedName;
     builtWorkflow.title = copyTitle;
 
+    const previousLoadedName = loadedWorkflowName;
     try {
       // asCopy: store a NEW workflow. Saving with this draft's id would
       // rename the original instead of copying it. The page then moves the
       // URL to the copy, so a refresh opens the copy, not the source.
-      const result = await onSave?.(builtWorkflow, "draft", { asCopy: true });
-      if (result && typeof result === "object" && !result.success) return;
       setLoadedWorkflowName(normalizedName);
+      const result = await onSave?.(builtWorkflow, "draft", { asCopy: true });
+      if (result && typeof result === "object" && !result.success) {
+        setLoadedWorkflowName(previousLoadedName);
+        return;
+      }
       setHasModifications(false);
       toast.success(`Created "${copyTitle}"`, { duration: 3000 });
     } catch (error) {
       console.error("Failed to save copy:", error);
+      setLoadedWorkflowName(previousLoadedName);
     }
-  }, [templateName, buildWorkflow, onSave, workflow.title, workflow.name]);
+  }, [templateName, buildWorkflow, onSave, workflow.title, workflow.name, loadedWorkflowName]);
 
   // Derived persistence representation. Re-computed when nodes/edges/workflow
   // change — but consumers should depend on stable structural keys (see
