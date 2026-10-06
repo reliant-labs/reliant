@@ -99,7 +99,8 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 	// docs/incidents/2026-10-04-spawn-report-collision.md.
 	//
 	// The slot is (chat, tool call id). A slot held by a DIFFERENT spawn -- a
-	// provider reused the id in this chat -- is an error, not "already
+	// provider reused the id in this chat, or (until the contract migration
+	// drops the chat-blind index) in another chat -- is an error, not "already
 	// reported": the parent will not receive this report, and the failed
 	// activity is what says so (the spawn goroutine logs it and the run
 	// history keeps it).

@@ -11,9 +11,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -80,9 +83,28 @@ func (s *agentMessageStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, reportedInAnotherChat(err, msg)
 	}
 	return true, nil
+}
+
+// globalSpawnReportSlot is the chat-blind unique index the previous release
+// arbitrates on. It stays until the contract migration drops it, so that
+// release keeps working against this schema.
+const globalSpawnReportSlot = "idx_agent_messages_one_terminal_report_per_spawn"
+
+// reportedInAnotherChat names what a unique violation on the chat-blind slot
+// means: another chat already reported under this tool call id. The writes
+// arbitrate on (chat_id, tool_call_id), so a conflict there is handled by the
+// statement; only the global slot can still refuse a report, and that is a
+// lost report, said as such rather than as a bare 23505.
+func reportedInAnotherChat(err error, msg *core.AgentMessage) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == globalSpawnReportSlot {
+		return fmt.Errorf("%w: chat %q, tool call %q was already reported in another chat; the chat-blind %s holds it until the contract migration",
+			core.ErrSpawnReportSlotTaken, msg.ChatID, agentMessagePtrToNullString(msg.ToolCallID).String, globalSpawnReportSlot)
+	}
+	return err
 }
 
 // requireSlotHeldBySameSpawn is called when a terminal report could not take
@@ -135,7 +157,7 @@ func (s *agentMessageStore) EnqueueSpawnReport(ctx context.Context, msg *core.Ag
 		return core.SpawnReportAlreadyReported, nil
 	}
 	if err != nil {
-		return 0, err
+		return 0, reportedInAnotherChat(err, msg)
 	}
 	if row.Inserted {
 		return core.SpawnReportInserted, nil

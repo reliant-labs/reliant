@@ -153,6 +153,11 @@ const (
 // slot. The second is an error rather than "already reported": treating it as
 // a retry is exactly how a sub-agent's result used to disappear without a
 // trace.
+//
+// Until the contract migration drops the chat-blind
+// idx_agent_messages_one_terminal_report_per_spawn (kept so the previous
+// release still works against the schema), a report under an id ANOTHER chat
+// already reported under is refused the same way.
 var ErrSpawnReportSlotTaken = errors.New("another spawn already reported under this tool call id")
 
 // AgentMessageStore is the shared contract for mailbox persistence across
@@ -163,9 +168,8 @@ type AgentMessageStore interface {
 	// be false; ToolCallID required). A spawn's slot is (ChatID, ToolCallID):
 	// the call inserts, supersedes a synthesized placeholder for the same
 	// spawn, or reports SpawnReportAlreadyReported without error when this
-	// spawn already reported -- so it never trips
-	// idx_agent_messages_one_terminal_report_per_spawn. A slot held by a
-	// different spawn fails with ErrSpawnReportSlotTaken. See
+	// spawn already reported. A slot held by a different spawn fails with
+	// ErrSpawnReportSlotTaken. See
 	// docs/incidents/2026-10-04-spawn-report-collision.md.
 	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
 	// EnqueueAgentMessageIfAbsent is the reconciler's placeholder write: it
@@ -173,7 +177,7 @@ type AgentMessageStore interface {
 	// Kind: Completion, Cancelled, or Failed) unless a terminal report for
 	// the same spawn -- (ChatID, ToolCallID) -- already exists, enforced by a
 	// DB constraint so the check-and-insert is atomic under concurrent
-	// callers (see idx_agent_messages_one_terminal_report_per_spawn). Returns
+	// callers (see idx_agent_messages_one_terminal_report_per_chat_spawn). Returns
 	// inserted = true when this call's row landed, false when this spawn's
 	// report already existed (the ordinary outcome the second of two racing
 	// callers sees, not an error), and ErrSpawnReportSlotTaken when the slot

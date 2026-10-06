@@ -124,7 +124,7 @@ WHERE m.status = 1
 
 -- name: EnqueueAgentMessageIfAbsent :one
 -- The stranded-background-spawn sweep's write half (spec §7.1). ON CONFLICT
--- against idx_agent_messages_one_terminal_report_per_spawn is what makes this
+-- against idx_agent_messages_one_terminal_report_per_chat_spawn is what makes this
 -- safe under concurrency: two reconciler passes racing each other, or a
 -- sweep racing the detached spawn goroutine's own (delayed) report, both
 -- attempt this same INSERT, and Postgres serializes them at the row lock --
@@ -177,7 +177,12 @@ RETURNING id;
 -- inserted from superseded.
 --
 -- The slot is (chat_id, tool_call_id), not tool_call_id: the id is the model
--- provider's, so two chats can each have a spawn under it.
+-- provider's, so two chats can each have a spawn under it. Until the contract
+-- migration drops the chat-blind idx_agent_messages_one_terminal_report_per_spawn
+-- (the previous release arbitrates on it), a report under an id another chat
+-- already reported under fails on that index with 23505, which the store
+-- reports as core.ErrSpawnReportSlotTaken. The same holds for the placeholder
+-- write above.
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
     status, created_at, attachments, synthesized
