@@ -14,6 +14,7 @@ import {
   getComputeEligibility,
   ComputeIneligibleReason,
 } from '@/services/controlPlane/billing';
+import { isAlreadyResumedError } from '@/lib/daemon-resume';
 import { gitService } from '@/services/controlPlane/git';
 import { onboardingService } from '@/services/controlPlane/onboarding';
 import type { OnboardingUser } from '@/services/controlPlane/onboarding';
@@ -226,7 +227,14 @@ export function useResumeDaemon(
 ) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (daemonId: string) => resumeDaemon(daemonId),
+    mutationFn: async (daemonId: string) => {
+      try {
+        await resumeDaemon(daemonId);
+      } catch (err) {
+        // Already running/resuming is the goal state; refresh instead of erroring.
+        if (!isAlreadyResumedError(err)) throw err;
+      }
+    },
     onSuccess: async (_data, vars) => {
       queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
       await callbacks.onSuccess?.(vars);
