@@ -137,8 +137,8 @@ jq -r '.events[] | select(.eventType=="EVENT_TYPE_ACTIVITY_TASK_SCHEDULED")
 
 `newHarness` writes a `project_configs` row under a non-seed daemon id, standing
 in for the daemon's config push. Without it `Config.SnapshotSynced` stays false,
-and a node that preloads skills (the `implementer` preset requests
-`code-search`) treats the empty catalog as *not yet known* and therefore
+and a node that preloads skills (the spawn scenario's `general` child requests
+`general-agent`) treats the empty catalog as *not yet known* and therefore
 RETRYABLE — so `CallLLM` retries to its limit and the workflow fails. The
 generator has no daemon, so an empty snapshot from a real-looking daemon is the
 truthful answer: a daemon has reported, and this project genuinely has no skills.
@@ -154,7 +154,14 @@ scenarios (verified by generating twice and diffing), with one known benign
 exception: in `router_dispatch.json` a fire-and-forget `SaveMessage`
 activity's STARTED/COMPLETED events race workflow completion, so they may or
 may not appear at the tail of the history. The workflow's command sequence is
-identical either way and both variants replay cleanly. Whitespace/key-order
+identical either way and both variants replay cleanly. `spawn.json` is the
+other exception, and there the command order itself varies: the parent's
+exit-candidate turn races the child's only turn (see
+`TestGenerateFixture_Spawn`), so the two threads' activities interleave
+differently from one generation to the next. Every interleaving replays
+cleanly against the same code — 24 independent generations were replayed to
+check — so a reordered `spawn.json` diff is not a change by itself; compare its
+activity mix instead. Whitespace/key-order
 of the JSON is normalized at export. Review regeneration diffs by event-type
 sequence, e.g.:
 
