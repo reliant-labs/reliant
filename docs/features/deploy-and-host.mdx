@@ -1,6 +1,6 @@
 ---
 title: "Deploy & host your app"
-description: "Publish a forge project on Reliant hosting — what runs where, the free static tier, what needs billing, what a queued deploy means, and how to host somewhere else"
+description: "Publish a forge project on Reliant hosting — what runs where, billing, what a queued deploy means, and how to host somewhere else"
 ---
 
 A new forge project is set up to deploy to Reliant's own hosting. Its `staging` and `prod` environments already point there, so publishing is one command from the project directory, with no cluster, registry or DNS to arrange first:
@@ -20,9 +20,9 @@ Your app's database is a **managed Postgres**: a dedicated database the platform
 
 Because the frontend is served as static files, a hosted frontend must be a static export. New forge frontends are scaffolded that way by default. A frontend that needs a server at request time (server actions, middleware) ships as a workload instead.
 
-## The free tier and billing
+## Billing
 
-One static site per organization is free, with no billing needed. Everything else, meaning any hosted service, worker or job, the managed database, or a second static site, needs an active Reliant Compute plan. Set one up under **Settings → Billing**; plan details and prices are shown there. Compute plans are bought per user and attach to that user's first organization, so the person who sets one up is whoever can manage billing for the organization.
+Everything Reliant hosts needs an active Reliant Compute plan: every hosted service, worker and job, the managed database, and every static site. Set one up under **Settings → Billing**; plan details and prices are shown there. Compute plans are bought per user and attach to that user's first organization, so the person who sets one up is whoever can manage billing for the organization.
 
 You do not have to set up billing before your first deploy. If the organization has no plan, the deploy is **queued, not refused**. Reliant builds and records the release as usual, then holds it. Nothing is running yet, and nothing needs to be re-run: once billing is set up, the hold is released automatically and the deploy goes live. In the meantime:
 
