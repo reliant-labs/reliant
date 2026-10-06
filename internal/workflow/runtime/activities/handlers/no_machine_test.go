@@ -187,6 +187,45 @@ func TestCallLLM_RequestMachineIsOfferedOnlyToARunWithNoMachine(t *testing.T) {
 		"load_tool must not advertise it on a machine")
 }
 
+// The no-machine note and the GitHub repository note agree on what to do when
+// the task needs the user's computer: both point at request_machine when the
+// turn was offered it, and neither names it when it was not.
+func TestNoMachineNotes_NameRequestMachineOnlyWhenOffered(t *testing.T) {
+	repos := []githubRepo{{Owner: "acme", Name: "widgets"}}
+	offered := []tools.Tool{tools.NewRequestMachineTool()}
+
+	with := noMachineNotes(offered, repos, false)
+	require.Len(t, with, 2)
+	assert.Equal(t, noMachineSystemNote, with[0])
+	assert.Contains(t, with[1], "call request_machine")
+
+	without := noMachineNotes(nil, repos, false)
+	require.Len(t, without, 2)
+	assert.Equal(t, noMachineSystemNoteWithoutRequest, without[0])
+	for _, note := range without {
+		assert.NotContains(t, note, "request_machine", "never name a tool the turn does not have")
+	}
+
+	assert.Len(t, noMachineNotes(offered, nil, false), 1, "no GitHub remote, no repository note")
+}
+
+// End to end: a no-machine turn in a project on GitHub, with GitHub not
+// connected, is told both that it has no machine and that the code cannot be
+// read from here, and both notes send it to request_machine.
+func TestCallLLM_NoMachineNotesComposeAroundRequestMachine(t *testing.T) {
+	f := setupIntegrationFixture(t, true, &ownerConnections{usable: map[string]bool{}})
+	f.setProjectRemote(t, "https://github.com/acme/widgets.git")
+
+	offered := f.offeredTools(t, []string{"tag:web"}, []string{"*"})
+	require.Contains(t, offered, tools.ToolRequestMachine)
+
+	prompt := f.systemPrompt()
+	assert.Contains(t, prompt, noMachineSystemNote)
+	assert.Contains(t, prompt, "No GitHub tools are available")
+	assert.Contains(t, prompt, "if the task needs it, call request_machine")
+	assert.NotContains(t, prompt, "if the task needs it, say so")
+}
+
 // A node given no tools at all (a title or a summary call) is not handed one.
 func TestCallLLM_NoMachineNodeWithNoToolsIsHandedNone(t *testing.T) {
 	f := setupNoMachineFixture(t, true)

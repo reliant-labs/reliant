@@ -71,9 +71,34 @@ func withRequestMachine(names []string) []string {
 
 // noMachineSystemNote tells the model why its tools are what they are, so it
 // does not narrate a shell command it wishes it had or keep asking for files.
-const noMachineSystemNote = "This run has no machine: it runs on Reliant's servers only. There is no " +
-	"checkout, filesystem, shell or local MCP server, and the tools you have are the complete set — " +
-	"web access, integrations, planning and Reliant's own run and workflow tools. Do not ask for or " +
-	"refer to local files. If part of the task genuinely needs the user's computer, call " +
-	"request_machine with a one-sentence reason instead of attempting it or describing a workaround: " +
-	"the user is offered a \"Connect a machine\" button. Then stop and wait for them."
+// It names request_machine, so it is the note for a turn that was offered it;
+// noMachineSystemNoteWithoutRequest is the same note for a turn that was not
+// (a node given no tools), which must not name a tool it does not have.
+const (
+	noMachineSystemNotePrefix = "This run has no machine: it runs on Reliant's servers only. There is no " +
+		"checkout, filesystem, shell or local MCP server, and the tools you have are the complete set — " +
+		"web access, integrations, planning and Reliant's own run and workflow tools. Do not ask for or " +
+		"refer to local files. "
+	noMachineSystemNote = noMachineSystemNotePrefix + "If part of the task genuinely needs the user's computer, call " +
+		"request_machine with a one-sentence reason instead of attempting it or describing a workaround: " +
+		"the user is offered a \"Connect a machine\" button. Then stop and wait for them."
+	noMachineSystemNoteWithoutRequest = noMachineSystemNotePrefix + "If part of the task genuinely needs the " +
+		"user's computer, say so in your response instead of attempting it."
+)
+
+// noMachineNotes are the system notes a no-machine turn gets: why its tools
+// are what they are, then — for a project on GitHub — where its code is and
+// how to read it (noMachineRepoNote). Both point at request_machine only when
+// this turn was offered it, so the two never disagree about what to do when
+// the task needs the user's computer.
+func noMachineNotes(offered []tools.Tool, repos []githubRepo, githubIsReadable bool) []string {
+	canRequest := slices.ContainsFunc(offered, func(t tools.Tool) bool { return t.Name() == tools.ToolRequestMachine })
+	notes := []string{noMachineSystemNoteWithoutRequest}
+	if canRequest {
+		notes[0] = noMachineSystemNote
+	}
+	if note := noMachineRepoNote(repos, githubIsReadable, canRequest); note != "" {
+		notes = append(notes, note)
+	}
+	return notes
+}

@@ -213,6 +213,13 @@ with the reason.
     resolver should take `OnlyWithoutMachine` as an exclusion input (offered iff
     `chat.no_machine`) and the guards can then go.
 - `noMachineSystemNote` names the tool and tells the model to stop after it.
+  The notes compose with stream B's repository note through `noMachineNotes`
+  (`handlers/no_machine.go`): both point at `request_machine` only when the turn
+  was offered it, so they never disagree about what to do when the task needs
+  the user's computer. When GitHub cannot be read from here, B's note says to
+  call `request_machine` (a machine has the checkout) instead of "say so"; a
+  turn without the tool (a node given no tools) gets the original wording and
+  never hears the tool's name.
 - `go generate ./internal/llm/tools` regenerated the tool catalog.
 
 ### 6.3 Web
