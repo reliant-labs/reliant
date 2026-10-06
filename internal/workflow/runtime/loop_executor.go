@@ -125,7 +125,28 @@ type InlineLoopExecutor struct {
 	// thread's (relaunched) background spawns before taking a turn: the
 	// predecessor was parked there, not about to call the LLM.
 	awaitSpawnsFirst bool
+
+	// turnBaseline is the thread's detached-spawn counters as they stood
+	// just before the current iteration ran — before its call_llm read the
+	// mailbox. The loop-exit gate measures progress from here, not from the
+	// moment it is reached; see awaitLiveDetachedSpawnsOrHandoff. Nil until
+	// the first iteration, and consumed by the gate.
+	turnBaseline *detachedSpawnBaseline
 }
+
+// detachedSpawnBaseline is a snapshot of a thread's two monotonic
+// "something for you to react to" counters (ChildWorkflowTracker's
+// detachedCompletions and threadWakes).
+type detachedSpawnBaseline struct {
+	completions int
+	wakes       int
+}
+
+// gateMeasuresFromTurnStartChangeID gates the loop-exit gate measuring child
+// progress from the start of the turn rather than from the gate
+// (workflow.GetVersion): histories recorded before the fix must replay the
+// exit they took.
+const gateMeasuresFromTurnStartChangeID = "detached-spawn-gate-turn-baseline"
 
 // threadForError is the thread this loop's failures belong to, or "" when the
 // loop has no execution context to read one from.
@@ -335,9 +356,10 @@ func (e *InlineLoopExecutor) GetThread() string {
 // no background spawns costs nothing extra.
 //
 // Returns true if the loop should re-enter (at least one detached spawn for
-// THIS thread finished since the loop started waiting, so its mailbox result
-// may now be there to react to) or false if there is nothing left to wait on
-// (no live detached spawns for this thread).
+// THIS thread finished since the turn that just ended began — while it ran
+// or while this waits — so its mailbox result may now be there to react to)
+// or false if there is nothing left to wait on (no live detached spawns for
+// this thread, and none that finished during the turn).
 //
 // The wait is UNBOUNDED by design. It previously carried a 4-minute ceiling
 // borrowed from shell_wait, on the theory that a wedged child must not park the
@@ -382,8 +404,30 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 		return false, nil
 	}
 	thread := e.GetThread()
-	if thread == "" || !e.childTracker.hasLiveDetachedSpawns(thread) {
+	if thread == "" {
 		return false, nil
+	}
+	startCompletions, startWakes := e.gateBaseline(thread)
+
+	if !e.childTracker.hasLiveDetachedSpawns(thread) {
+		// Nothing left to wait on — but a spawn that finished DURING the turn
+		// that just ended still earns one more. Its report may have been
+		// enqueued after that turn read its mailbox, and then nothing has
+		// delivered it: exiting here would end the run with the agent's result
+		// unread. That window is real, not theoretical: the child's tail is
+		// several activities long (report, child status, tool-call status), and
+		// the parent's own post-turn bookkeeping gives it room to finish before
+		// the parent arrives. Measuring from the gate — the old behavior — saw
+		// no progress, because the completion had already happened, and exited.
+		// See TestBackground_SpawnFinishingMidTurnStillGetsATurn.
+		//
+		// If the report did make it into that turn after all, the extra turn
+		// drains nothing and call_llm yields without calling the provider.
+		//
+		// Cancellation still wins: re-entering would only reach the boundary
+		// check that stops the thread.
+		finishedDuringTurn := e.childTracker.detachedCompletionCount(thread) > startCompletions
+		return finishedDuringTurn && !e.pauseCtrl.IsCancelled(), nil
 	}
 
 	// A cancel that arrives while this thread is parked must be observed
@@ -434,8 +478,6 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 		return handoffErr != nil
 	}
 
-	startCompletions := e.childTracker.detachedCompletionCount(thread)
-	startWakes := e.childTracker.threadWakeCount(thread)
 	threadInterrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, thread)
 	startInterruptEpoch := threadInterrupt.Epoch()
 	if err := workflow.Await(e.ctx, func() bool {
@@ -488,6 +530,34 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 	return threadInterrupt.InterruptedSince(startInterruptEpoch) ||
 		e.childTracker.detachedCompletionCount(thread) > startCompletions ||
 		e.childTracker.threadWakeCount(thread) > startWakes, nil
+}
+
+// gateBaseline returns the completion and wake counts the loop-exit gate
+// measures progress from, consuming the turn's snapshot.
+//
+// That is the counts as they stood when the turn that just ended began, not
+// when the gate is reached. The turn read the mailbox and history near its
+// start, so a child that finished, or a wake (mailbox row, user message) that
+// arrived, after that point is something the turn could not have seen — and
+// it must count as a reason to take another turn whether it landed before
+// the gate or after. Only the "after" half used to count: a completion that
+// beat the parent to the gate was lost (the run exited with the report
+// unread), and a wake that did was missed until some child finished.
+//
+// With no turn behind it — the resume-time wait before the first iteration,
+// or a caller outside the loop — the baseline is simply "now".
+func (e *InlineLoopExecutor) gateBaseline(thread string) (completions, wakes int) {
+	completions = e.childTracker.detachedCompletionCount(thread)
+	wakes = e.childTracker.threadWakeCount(thread)
+	turn := e.turnBaseline
+	e.turnBaseline = nil
+	if turn == nil || (turn.completions == completions && turn.wakes == wakes) {
+		return completions, wakes
+	}
+	if workflow.GetVersion(e.ctx, gateMeasuresFromTurnStartChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return completions, wakes
+	}
+	return turn.completions, turn.wakes
 }
 
 // parkSpawn records a background spawn as parked at iteration for the
@@ -880,6 +950,17 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 			e.childTracker.refreshHandoffRequest(e.ctx)
 			if e.childTracker.handoffRequested {
 				return nil, e.parkSpawn(spawnRec, e.iteration, false)
+			}
+		}
+
+		// What this turn is about to be able to see. A spawn that finishes
+		// after this point may report after the turn has read its mailbox;
+		// the loop-exit gate uses this to give such a report a turn.
+		if e.childTracker != nil {
+			thread := e.GetThread()
+			e.turnBaseline = &detachedSpawnBaseline{
+				completions: e.childTracker.detachedCompletionCount(thread),
+				wakes:       e.childTracker.threadWakeCount(thread),
 			}
 		}
 
