@@ -189,9 +189,15 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			// The gateway authenticates only rlat_ access tokens (401 otherwise), so a
 			// legacy-shaped key is not a usable credential. Never log the key.
 			if driverID == "reliant" && !IsReliantLLMKey(apiKey) {
-				logging.Warn("Skipping reliant provider key: not an rlat_ access token; user must reconnect",
-					"user_id", userID, "reason", "legacy_reliant_key_format")
-				continue
+				healed, configured, healErr := HealReliantKey(ctx, userID)
+				if healErr == nil && IsReliantLLMKey(healed) {
+					apiKey = healed
+				} else {
+					logging.Warn("Skipping reliant provider key: not an rlat_ access token and it could not be healed",
+						"user_id", userID, "reason", "legacy_reliant_key_format",
+						"heal_configured", configured, "error", healErr)
+					continue
+				}
 			}
 			config := models.DriverConfig{
 				DriverID: models.DriverID(driverID),

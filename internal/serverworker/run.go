@@ -186,6 +186,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InstallReliantKeyHealer(ctx, repo, tokenauthority.ControlPlaneURL(), strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")), 0)
 
 	// -----------------------------------------------------------------
 	// 5. Temporal client

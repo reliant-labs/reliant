@@ -280,6 +280,8 @@ type Repository interface {
 	SetProviderAPIKey(ctx context.Context, userID string, provider, apiKey string) error
 	DeleteProviderAPIKey(ctx context.Context, userID string, provider string) error
 	GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error)
+	ListUserIDsWithProviderKey(ctx context.Context, provider string) ([]string, error)
+	LockProviderKey(ctx context.Context, userID, provider string) (func(), error)
 
 	GetCodexAuthTokens(ctx context.Context, userID string) (*core.CodexAuthTokens, error)
 	SetCodexAuthTokens(ctx context.Context, userID string, tokens core.CodexAuthTokens) error

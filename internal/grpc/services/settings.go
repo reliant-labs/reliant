@@ -1814,10 +1814,18 @@ func (s *SettingsService) GetConfigHealth(
 	// the process-global collector.
 	if userID, ok := auth.GetUserIDFromContext(ctx); ok {
 		if stale, err := drivers.HasStaleReliantKey(ctx, s.database, userID); err == nil && stale {
-			errors = append(errors, validation.NewError(validation.CategoryConfig,
-				"Your Reliant LLM key is in a legacy format the gateway rejects, so Reliant models are unavailable. Reconnect your Reliant account (re-sync) to replace the key.").
-				Source("provider:reliant").
-				Build())
+			// Heal first: the message is only true if the replacement failed.
+			if _, configured, healErr := drivers.HealReliantKey(ctx, userID); healErr != nil {
+				errors = append(errors, validation.NewError(validation.CategoryConfig,
+					"Your Reliant LLM key is in a legacy format the gateway rejects, so Reliant models are unavailable, and automatic replacement failed: "+healErr.Error()+". Reconnect your Reliant account (re-sync) to replace the key.").
+					Source("provider:reliant").
+					Build())
+			} else if !configured {
+				errors = append(errors, validation.NewError(validation.CategoryConfig,
+					"Your Reliant LLM key is in a legacy format the gateway rejects, so Reliant models are unavailable, and this deployment cannot replace it automatically. Reconnect your Reliant account (re-sync) to replace the key.").
+					Source("provider:reliant").
+					Build())
+			}
 		}
 	}
 

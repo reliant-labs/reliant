@@ -4792,3 +4792,22 @@ func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
 	}
 	return s.ValidateAPIKeysSealedConstraint(ctx)
 }
+
+// ListUserIDsWithProviderKey returns every user holding a stored key for
+// provider, without opening (decrypting) any of them.
+func (r *Repo) ListUserIDsWithProviderKey(ctx context.Context, provider string) ([]string, error) {
+	rows, err := r.DB.QueryContext(ctx, "SELECT user_id FROM api_keys WHERE provider = $1 ORDER BY user_id", provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
+}
