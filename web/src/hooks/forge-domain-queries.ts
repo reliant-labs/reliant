@@ -79,9 +79,11 @@ export interface DomainsState {
  * the same reason: a user without a control plane, or without the org role
  * that may read domains, has not hit a fault.
  */
-export function useForgeDomains() {
+export function useForgeDomains({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery<DomainsState>({
     queryKey: domainKeys.list(),
+    // An environment page asks only while a tab that shows domains is open.
+    enabled,
     queryFn: async () => {
       if (!hasControlPlane()) {
         return { availability: "no-control-plane" as const, domains: [], detail: "" };
