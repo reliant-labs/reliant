@@ -16,7 +16,7 @@ import (
 
 func newTokenSvc() (*TokenService, *tokenauthority.Memory) {
 	authority := tokenauthority.NewMemory()
-	return NewTokenService(authority), authority
+	return NewTokenService(authority, TokenControlPlane{}), authority
 }
 
 // tokenAuthCtx returns a context carrying an interactive-session identity, as

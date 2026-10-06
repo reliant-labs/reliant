@@ -59,6 +59,9 @@ type fakeControlPlane struct {
 	secret     string
 	store      *tokenauthority.Memory
 	introspect atomic.Int64
+	// grants is each user's org permissions, which UpdateForUser clips an
+	// edited scope set to (control-plane's org_member_grants). nil: no clip.
+	grants map[string]fat.Set
 }
 
 type wireResource struct {
@@ -153,6 +156,33 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 				"createdAt": i.CreatedAt, "expiresAt": i.ExpiresAt, "lastUsedAt": i.LastUsedAt})
 		}
 		out = map[string]any{"tokens": tokens}
+	case "UpdateForUser":
+		var in struct {
+			UserID  string  `json:"userId"`
+			TokenID string  `json:"tokenId"`
+			Name    *string `json:"name"`
+			Scopes  *struct {
+				Scopes []string `json:"scopes"`
+			} `json:"scopes"`
+		}
+		_ = json.Unmarshal(raw, &in)
+		var scopes fat.Set
+		if in.Scopes != nil {
+			set, serr := fat.NewSet(in.Scopes.Scopes)
+			if serr != nil {
+				writeConnectError(w, http.StatusBadRequest, "invalid_argument", serr.Error())
+				return
+			}
+			scopes = cp.clipToGrants(in.UserID, set)
+		}
+		info, uerr := cp.store.UpdateForUser(ctx, in.UserID, in.TokenID, in.Name, scopes)
+		if uerr != nil {
+			writeConnectError(w, http.StatusBadRequest, "invalid_argument", uerr.Error())
+			return
+		}
+		out = map[string]any{"token": map[string]any{"id": info.ID, "name": info.Name, "displayPrefix": info.DisplayPrefix,
+			"scopes": info.Scopes, "resource": wireOf(info.Resource), "ephemeral": info.Ephemeral,
+			"createdAt": info.CreatedAt, "expiresAt": info.ExpiresAt, "lastUsedAt": info.LastUsedAt}}
 	case "RevokeForUser":
 		var in struct {
 			UserID  string `json:"userId"`
@@ -176,6 +206,28 @@ func (cp *fakeControlPlane) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(out)
+}
+
+// clipToGrants is control-plane's UpdateForUser rule: an org-administration
+// scope survives only if the user holds it as a grant; session scopes pass.
+// A nil grants map grants everything (no clipping configured).
+func (cp *fakeControlPlane) clipToGrants(userID string, requested fat.Set) fat.Set {
+	if cp.grants == nil {
+		return requested
+	}
+	held := cp.grants[userID]
+	out := fat.Set{}
+	for s := range requested {
+		switch s {
+		case fat.ScopeDaemonConnect, fat.ScopeReliantAPI, fat.ScopeLLMInvoke:
+			out[s] = struct{}{}
+		default:
+			if held.Has(s) {
+				out[s] = struct{}{}
+			}
+		}
+	}
+	return out
 }
 
 // authorized verifies the internal-service bearer the way control-plane's
@@ -226,14 +278,16 @@ func (s *sessionSigner) sign(t *testing.T, userID string) string {
 
 // serveTokenService mounts reliant's TokenService behind the REAL API auth
 // interceptor, with the authority's introspector wired exactly as NewServer
-// wires it (cached).
-func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string) string {
+// wires it (cached) — ExchangeToken included among the interceptor's public
+// methods, as NewServer lists it.
+func serveTokenService(t *testing.T, authority tokenauthority.Authority, jwtPubPEM string, cp services.TokenControlPlane) string {
 	t.Helper()
-	authInterceptor, err := interceptors.NewAuthInterceptor(jwtPubPEM, "", nil)
+	authInterceptor, err := interceptors.NewAuthInterceptor(jwtPubPEM, "",
+		[]string{reliantv1connect.TokenServiceExchangeTokenProcedure})
 	require.NoError(t, err)
 	authInterceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(authority))
 	mux := http.NewServeMux()
-	path, handler := reliantv1connect.NewTokenServiceHandler(services.NewTokenService(authority),
+	path, handler := reliantv1connect.NewTokenServiceHandler(services.NewTokenService(authority, cp),
 		connect.WithInterceptors(authInterceptor))
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
@@ -295,7 +349,7 @@ func TestDaemonCredential_HostedEndToEnd(t *testing.T) {
 	require.Equal(t, tokenauthority.ModeControlPlane, mode)
 
 	signer := newSessionSigner(t)
-	apiURL := serveTokenService(t, authority, signer.pubPEM)
+	apiURL := serveTokenService(t, authority, signer.pubPEM, services.TokenControlPlane{})
 	gatewayURL := serveGateway(t, authority)
 
 	tokens := func(bearer string) reliantv1connect.TokenServiceClient {
@@ -380,7 +434,7 @@ func TestDaemonCredential_SelfHostedEndToEnd(t *testing.T) {
 	require.Equal(t, tokenauthority.ModeLocal, mode)
 
 	signer := newSessionSigner(t)
-	apiURL := serveTokenService(t, authority, signer.pubPEM)
+	apiURL := serveTokenService(t, authority, signer.pubPEM, services.TokenControlPlane{})
 	gatewayURL := serveGateway(t, authority)
 	tokens := reliantv1connect.NewTokenServiceClient(&http.Client{Transport: bearerTransport(signer.sign(t, userID))}, apiURL)
 
