@@ -11,8 +11,9 @@ import (
 	enumspb "go.temporal.io/api/enums/v1"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // exhaustedErrorOfType returns the error a workflow REALLY observes when an
@@ -26,7 +27,7 @@ import (
 func exhaustedErrorOfType(t *testing.T, errType, msg string) error {
 	t.Helper()
 
-	var ts testsuite.WorkflowTestSuite
+	var ts temporaltest.WorkflowTestSuite
 	env := ts.NewTestWorkflowEnvironment()
 
 	failing := func(context.Context) error {

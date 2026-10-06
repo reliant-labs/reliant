@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -300,7 +301,7 @@ nodes:
 
 func TestDynamicWorkflow_FreshStart_ChecksNodeEntryCheckpoints(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeSeqYAML)
 
@@ -316,7 +317,7 @@ func TestDynamicWorkflow_FreshStart_ChecksNodeEntryCheckpoints(t *testing.T) {
 
 func TestDynamicWorkflow_Resume_EntersAtCheckpointNode(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeSeqYAML)
 
@@ -330,7 +331,7 @@ func TestDynamicWorkflow_Resume_EntersAtCheckpointNode(t *testing.T) {
 
 func TestDynamicWorkflow_Resume_YAMLOverrideWins(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	yamlWithOverride := resumeSeqYAML + "resume_node: final\n"
 	rec := setupResumeEnv(t, env, yamlWithOverride)
@@ -344,7 +345,7 @@ func TestDynamicWorkflow_Resume_YAMLOverrideWins(t *testing.T) {
 
 func TestDynamicWorkflow_Resume_EmptyCheckpointFallsBackToGraphStart(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeSeqYAML)
 
@@ -358,7 +359,7 @@ func TestDynamicWorkflow_Resume_EmptyCheckpointFallsBackToGraphStart(t *testing.
 
 func TestDynamicWorkflow_FreshLoop_ChecksIterationCheckpoints(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeLoopYAML)
 
@@ -375,7 +376,7 @@ func TestDynamicWorkflow_FreshLoop_ChecksIterationCheckpoints(t *testing.T) {
 
 func TestDynamicWorkflow_ResumeLoop_ReentersAtCheckpointedIteration(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeLoopYAML)
 
@@ -444,7 +445,7 @@ func workIterations(rec *resumeEnvRecorder) []int {
 // table that tried to describe the nesting was the wrong answer to it.
 func TestDynamicWorkflow_NestedLoop_FlatCheckpointOmitsNestedIteration(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeNestedLoopYAML)
 
@@ -470,7 +471,7 @@ func TestDynamicWorkflow_NestedLoop_FlatCheckpointOmitsNestedIteration(t *testin
 // motivated the fix.
 func TestDynamicWorkflow_NestedLoop_CoarseResumeRestartsNestedAtZero(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeNestedLoopYAML)
 
@@ -509,7 +510,7 @@ nodes:
 
 func TestDynamicWorkflow_GenericNestedLoop_FlatCheckpointOmitsInnerIteration(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, resumeGenericNestedLoopYAML)
 

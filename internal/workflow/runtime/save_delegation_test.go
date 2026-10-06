@@ -13,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -36,7 +37,7 @@ type delegationHarness struct {
 
 func newDelegationHarness(t *testing.T) *delegationHarness {
 	t.Helper()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	h := &delegationHarness{env: suite.NewTestWorkflowEnvironment(), writer: &recordingMessageWriter{}}
 	h.env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	registerFinalizeCapture(h.env)

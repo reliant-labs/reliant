@@ -10,10 +10,10 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/handlers"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 // agentMessageStatusOf reads a single mailbox row's status and delivery time
@@ -71,7 +71,7 @@ func TestSendAgentMessage_ThreadExitsBeforeNextBoundary(t *testing.T) {
 	// the single writer of terminal threads.status for every exit path
 	// (completion, failure, cancellation, expiry).
 	threadStatus := handlers.NewThreadStatusActivity(repo)
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(threadStatus.Execute)
 	_, err = env.ExecuteActivity(threadStatus.Execute, handlers.ThreadStatusInput{
@@ -123,7 +123,7 @@ func TestThreadStatus_ResolvesMailboxOnEveryTerminalPath(t *testing.T) {
 			require.True(t, resp.Msg.Success)
 
 			threadStatus := handlers.NewThreadStatusActivity(repo)
-			suite := &testsuite.WorkflowTestSuite{}
+			suite := &temporaltest.WorkflowTestSuite{}
 			env := suite.NewTestActivityEnvironment()
 			env.RegisterActivity(threadStatus.Execute)
 			_, err = env.ExecuteActivity(threadStatus.Execute, handlers.ThreadStatusInput{
@@ -160,7 +160,7 @@ func TestThreadStatus_LeavesQueueAloneWhileThreadRuns(t *testing.T) {
 	require.True(t, resp.Msg.Success)
 
 	threadStatus := handlers.NewThreadStatusActivity(repo)
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(threadStatus.Execute)
 	_, err = env.ExecuteActivity(threadStatus.Execute, handlers.ThreadStatusInput{

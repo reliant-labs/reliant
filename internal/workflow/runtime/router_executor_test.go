@@ -9,11 +9,11 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/preset"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -139,7 +139,7 @@ func TestRouterWorkflowIdentity(t *testing.T) {
 
 func TestNodeRoutingCallLLMUsesExecutionContextThread(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	var capturedThread string
@@ -199,7 +199,7 @@ func TestNodeRoutingCallLLMUsesExecutionContextThread(t *testing.T) {
 
 func TestDynamicWorkflowNodeRoutingPassesThreadToCallLLM(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	workflowBytes, err := protojson.Marshal(&reliantv1.Workflow{
@@ -458,7 +458,7 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 	}
 
 	t.Run("saves inject message when prompt is non-empty", func(t *testing.T) {
-		var suite testsuite.WorkflowTestSuite
+		var suite temporaltest.WorkflowTestSuite
 		env := suite.NewTestWorkflowEnvironment()
 
 		// Track SaveMessage calls.
@@ -591,7 +591,7 @@ func TestExecuteSelectedWorkflow_SavesInjectMessage(t *testing.T) {
 	})
 
 	t.Run("skips inject message when prompt is empty", func(t *testing.T) {
-		var suite testsuite.WorkflowTestSuite
+		var suite temporaltest.WorkflowTestSuite
 		env := suite.NewTestWorkflowEnvironment()
 
 		var (

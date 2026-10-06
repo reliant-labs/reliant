@@ -7,11 +7,11 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
@@ -40,7 +40,7 @@ func approvalWorkflowBytes(t *testing.T) []byte {
 
 func runApprovalWorkflow(t *testing.T, inputs map[string]interface{}) ([]string, WorkflowResult, time.Duration) {
 	t.Helper()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	workflowBytes := approvalWorkflowBytes(t)
 

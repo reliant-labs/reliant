@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/webhook"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
@@ -79,7 +80,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 	declarations := triggers.LaunchWorkflows{Repo: repo}
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)), taskQueue, nil)
-	w := worker.New(temporalClient, taskQueue, worker.Options{})
+	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{Name: triggers.FireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).WithWorkflows(declarations).Fire,
 		activity.RegisterOptions{Name: triggers.FireActivityName})

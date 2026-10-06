@@ -13,10 +13,10 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/client"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 )
 
@@ -105,7 +105,7 @@ func TestRelay_AlreadyStartedIsSuccess(t *testing.T) {
 }
 
 func TestDispatchWorkflowRunsTheActivityForItsEvent(t *testing.T) {
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(RunEventDispatchWorkflow, workflow.RegisterOptions{Name: DispatchWorkflowName})
 	var got DispatchInput

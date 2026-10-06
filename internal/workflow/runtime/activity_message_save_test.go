@@ -15,6 +15,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -92,7 +93,7 @@ func newWrapperHarness(
 	configure ...func(*ActivityRegistry),
 ) *wrapperHarness {
 	t.Helper()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	h := &wrapperHarness{
 		env:    suite.NewTestActivityEnvironment(),
 		repo:   &wrapperTestRepo{},
@@ -188,7 +189,7 @@ func TestWrapperSave_WritesMessageAndStripsThinking(t *testing.T) {
 // on a dead context, fail, and surface as a chat error on a user's own pause.
 func TestWrapperSave_CancelledActivityDoesNotSave(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	repo := &wrapperTestRepo{}

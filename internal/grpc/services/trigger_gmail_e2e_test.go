@@ -45,6 +45,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/netguard"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/vault"
@@ -144,7 +145,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	// --- the worker: poll workflow + activity, event fire, launcher -------
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)), taskQueue, nil)
-	w := worker.New(temporalClient, taskQueue, worker.Options{})
+	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerPollWorkflow, workflow.RegisterOptions{Name: triggers.PollWorkflowName})
 	w.RegisterActivityWithOptions(
 		triggers.NewTriggerPoller(gmailPollRepo{Repo: repo, conns: store}, registry, intake, source).Poll,

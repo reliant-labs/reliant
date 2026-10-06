@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 // These tests drive the activities that create runs, not the store, because
@@ -54,7 +54,7 @@ func TestCreateWorkflowWithThread_SpawnedRunTakesParentOwner(t *testing.T) {
 	require.NoError(t, err)
 
 	activity := NewCreateWorkflowWithThreadActivity(svc, h.Repo())
-	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
 	childID := uuid.NewString()
@@ -81,7 +81,7 @@ func TestCreateWorkflowWithThread_RootRunTakesChatOwner(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, "chat-user")
 
 	activity := NewCreateWorkflowWithThreadActivity(threads.NewService(h.Repo()), h.Repo())
-	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
 	runID := uuid.NewString()

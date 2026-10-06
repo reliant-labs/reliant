@@ -8,7 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // mockRunExecutor captures all commands sent and returns configured responses.
@@ -70,7 +71,7 @@ func TestRunStep_LogFile_WritesOutput(t *testing.T) {
 
 	activity := NewExecuteRunStepActivity(repo, nil, mock)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -119,7 +120,7 @@ func TestRunStep_LogFile_Empty_NoFileWrite(t *testing.T) {
 
 	activity := NewExecuteRunStepActivity(repo, nil, mock)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -155,7 +156,7 @@ func TestRunStep_LogFile_ExitCodePreserved(t *testing.T) {
 
 	activity := NewExecuteRunStepActivity(repo, nil, mock)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -191,7 +192,7 @@ func TestRunStep_LogFile_RelativePath(t *testing.T) {
 
 	activity := NewExecuteRunStepActivity(repo, nil, mock)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -231,7 +232,7 @@ func TestRunStep_LogFile_WriteFailure_GracefulDegradation(t *testing.T) {
 	// that the overall step still succeeds.
 	activity := NewExecuteRunStepActivity(repo, nil, mock)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 

@@ -14,6 +14,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -261,7 +262,7 @@ func rootDrainWorkflowInput(chatID, thread string) WorkflowInput {
 
 type RootThreadMailboxDrainSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestRootThreadMailboxDrainE2E(t *testing.T) {

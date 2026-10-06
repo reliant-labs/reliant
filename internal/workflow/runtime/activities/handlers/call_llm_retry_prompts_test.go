@@ -12,7 +12,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -20,6 +19,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // flakyConnectionDriver fails the first stream the way a dropped HTTP/2
@@ -111,7 +111,7 @@ func TestCallLLM_RetryAfterDroppedConnection_SendsIdenticalPrompts(t *testing.T)
 		nil,
 	)
 
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(callLLMWithRetries)
 	env.RegisterActivityWithOptions(callLLM.Execute, activity.RegisterOptions{Name: "CallLLM"})

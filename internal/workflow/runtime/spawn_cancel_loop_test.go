@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -55,7 +55,7 @@ edges: []
 // loop stops instead of executing turns.
 func TestSpawnCancel_LoopStopsWhenThreadCancelled(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	wf, err := wfyaml.ParseWorkflow([]byte(spawnCancelLoopYAML))

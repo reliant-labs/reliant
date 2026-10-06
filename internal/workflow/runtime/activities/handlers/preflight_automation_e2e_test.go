@@ -16,7 +16,6 @@ import (
 	"github.com/nats-io/nats.go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -24,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -166,7 +166,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 
 func (h *automationHarness) preflight(t *testing.T) (PreflightDaemonCheckOutput, error) {
 	t.Helper()
-	env := (&testsuite.WorkflowTestSuite{}).NewTestActivityEnvironment()
+	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(h.activity.Execute)
 	val, err := env.ExecuteActivity(h.activity.Execute, PreflightDaemonCheckInput{
 		ChatID: h.chatID, DaemonSelector: &toolexec.DaemonSelector{ID: h.daemonID}})

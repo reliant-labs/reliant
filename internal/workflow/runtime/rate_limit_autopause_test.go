@@ -17,6 +17,8 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // =============================================================================
@@ -27,7 +29,7 @@ import (
 // correctly distinguishes between successful completion, error failure, and cancellation.
 type HandleWorkflowCompletionSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestHandleWorkflowCompletion(t *testing.T) {
@@ -123,7 +125,7 @@ func (s *HandleWorkflowCompletionSuite) TestCancellationNotifiesCancelled() {
 
 type StepExecutorRetrySuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestStepExecutorRetry(t *testing.T) {
@@ -376,7 +378,7 @@ func TestStepEvent_RetryExhausted_ApplicationErrorIsExhausted(t *testing.T) {
 
 type RateLimitAutoPauseSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestRateLimitAutoPause(t *testing.T) {

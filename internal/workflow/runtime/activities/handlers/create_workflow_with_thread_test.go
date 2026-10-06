@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
@@ -51,7 +51,7 @@ func TestCreateWorkflowWithThread_NewThread(t *testing.T) {
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
 
 	// Use Temporal test suite to provide proper activity context
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -136,7 +136,7 @@ func TestCreateWorkflowWithThread_ForkedThread(t *testing.T) {
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
 
 	// Use Temporal test suite
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -228,7 +228,7 @@ func TestCreateWorkflowWithThread_ChildWorkflow(t *testing.T) {
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
 
 	// Use Temporal test suite
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -271,7 +271,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowID(t *testing.T) {
 	threadsService := threads.NewService(repo)
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -293,7 +293,7 @@ func TestCreateWorkflowWithThread_MissingWorkflowName(t *testing.T) {
 	threadsService := threads.NewService(repo)
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -315,7 +315,7 @@ func TestCreateWorkflowWithThread_MissingChatID(t *testing.T) {
 	threadsService := threads.NewService(repo)
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -387,7 +387,7 @@ func TestCreateWorkflowWithThread_AnnouncesSpawnThreadAtCreation(t *testing.T) {
 	require.NoError(t, err)
 
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -465,7 +465,7 @@ func TestCreateWorkflowWithThread_DoesNotAnnounceRootThread(t *testing.T) {
 
 	threadsService := threads.NewService(repo)
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -519,7 +519,7 @@ func TestCreateWorkflowWithThread_DefaultThreadID(t *testing.T) {
 	threadsService := threads.NewService(repo)
 	activity := NewCreateWorkflowWithThreadActivity(threadsService, repo)
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 

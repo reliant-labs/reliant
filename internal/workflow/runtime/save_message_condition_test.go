@@ -9,11 +9,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -124,7 +124,7 @@ func TestSaveMessageCondition_AuditingAgentThroughWrapper(t *testing.T) {
 			t.Parallel()
 			responseData, err := structpb.NewStruct(auditOutput(tc.guidance)["response_data"].(map[string]interface{}))
 			require.NoError(t, err)
-			var suite testsuite.WorkflowTestSuite
+			var suite temporaltest.WorkflowTestSuite
 			env := suite.NewTestActivityEnvironment()
 			env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 			writer := &recordingMessageWriter{}

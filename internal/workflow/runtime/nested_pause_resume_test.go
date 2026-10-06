@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -175,7 +176,7 @@ func nestedPauseInput(chatID string) WorkflowInput {
 // re-enter the node that dispatched it.
 func TestNestedPause_ResumesInPlaceWithoutReEnteringTheNode(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	// Cancel the FIRST `work` dispatch, as a pause would.
@@ -219,7 +220,7 @@ func TestNestedPause_ResumesInPlaceWithoutReEnteringTheNode(t *testing.T) {
 // root. If it is ever removed, the failure mode is a spin, not a wrong answer.
 func TestNestedPause_GenuineCancelStillUnwinds(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	// Never cancel a dispatch artificially: the real workflow cancellation

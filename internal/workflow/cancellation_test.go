@@ -8,17 +8,17 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/rctx"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 )
 
 // CancellationTestSuite tests activity cancellation behavior in Temporal
 type CancellationTestSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestCancellationSuite(t *testing.T) {

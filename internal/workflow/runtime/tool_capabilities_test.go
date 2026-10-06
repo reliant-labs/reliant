@@ -19,6 +19,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
@@ -174,7 +175,7 @@ func continueAsNewGrantsWorkflow(ctx workflow.Context, input WorkflowInput) (*Wo
 
 type ToolGrantsContinueAsNewSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestContinueAsNew_CarriesToolGrants(t *testing.T) {
@@ -304,7 +305,7 @@ func scriptedTurn(caps map[string]interface{}, calls ...map[string]interface{}) 
 
 type ToolCapabilitiesLoopSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestToolCapabilitiesLoop(t *testing.T) {

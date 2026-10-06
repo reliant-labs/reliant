@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // Does a re-dispatched step re-use its assistant message id, or mint a new one?
@@ -32,7 +33,7 @@ import (
 // called again after a CanceledError, which issues a NEW SideEffect command.
 func TestPreallocatedMessageID_FreshPerDispatch(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	// Mint an id twice in the same execution, exactly as two successive

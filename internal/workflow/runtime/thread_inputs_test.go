@@ -6,10 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -112,7 +112,7 @@ func TestChildWorkflowTracker_SharedPointerMutation(t *testing.T) {
 
 type ThreadInputsSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestThreadInputsSuite(t *testing.T) {

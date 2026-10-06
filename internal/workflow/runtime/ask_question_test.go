@@ -7,17 +7,17 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 )
 
 func TestDynamicWorkflowAskQuestionDoesNotScheduleUnregisteredActivity(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	metadata := `{"questions":[{"question":"Proceed?","options":["Continue"]}]}`

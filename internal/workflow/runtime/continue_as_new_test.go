@@ -9,8 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // =========================================================================
@@ -174,7 +175,7 @@ func continueAsNewCarryWorkflow(ctx workflow.Context, input WorkflowInput) (*Wor
 
 type ContinueAsNewInputTestSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestContinueAsNewInput(t *testing.T) {
@@ -290,7 +291,7 @@ func classifyErrWorkflow(ctx workflow.Context) ([]bool, error) {
 
 type ContinueAsNewClassifyTestSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestContinueAsNewClassify(t *testing.T) {
@@ -367,7 +368,7 @@ func TestNestedLoopHasNoContinueAsNewCheck(t *testing.T) {
 
 type ContinueAsNewCompletionTestSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestContinueAsNewCompletion(t *testing.T) {

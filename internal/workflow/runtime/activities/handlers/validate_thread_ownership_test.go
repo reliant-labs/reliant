@@ -8,9 +8,9 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
@@ -56,7 +56,7 @@ func TestValidateThreadOwnership_ValidOwnership(t *testing.T) {
 	activity := NewValidateThreadOwnershipActivity(repo)
 
 	// Use Temporal test suite to provide proper activity context
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -128,7 +128,7 @@ func TestValidateThreadOwnership_InvalidOwnership(t *testing.T) {
 	activity := NewValidateThreadOwnershipActivity(repo)
 
 	// Use Temporal test suite to provide proper activity context
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -153,7 +153,7 @@ func TestValidateThreadOwnership_ThreadNotFound(t *testing.T) {
 	activity := NewValidateThreadOwnershipActivity(repo)
 
 	// Use Temporal test suite to provide proper activity context
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -223,7 +223,7 @@ func TestValidateThreadOwnership_SubAgentThread(t *testing.T) {
 	activity := NewValidateThreadOwnershipActivity(repo)
 
 	// Use Temporal test suite to provide proper activity context
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 

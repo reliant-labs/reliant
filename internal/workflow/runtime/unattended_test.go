@@ -9,6 +9,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -114,7 +115,7 @@ func runAskQuestionWorkflow(
 ) ([]string, WorkflowResult) {
 	t.Helper()
 
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	workflowBytes := askQuestionWorkflowBytes(t)
@@ -267,7 +268,7 @@ func askUserToolWorkflowBytes(t *testing.T) []byte {
 // call cannot park an unattended run.
 func TestUnattendedAskUserToolReturnsUnansweredWithoutAQuestionRow(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	workflowBytes := askUserToolWorkflowBytes(t)
@@ -319,7 +320,7 @@ func TestUnattendedAskUserToolReturnsUnansweredWithoutAQuestionRow(t *testing.T)
 // Regression guard for the tool path.
 func TestInteractiveAskUserToolStillCreatesAQuestion(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	workflowBytes := askUserToolWorkflowBytes(t)

@@ -13,6 +13,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // The pieces are individually tested above; this proves they are wired to each
@@ -46,7 +47,7 @@ func TestScheduleFiresThroughToTheLauncher(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 
 	const taskQueue = "triggers-e2e-queue"
-	w := worker.New(c, taskQueue, worker.Options{})
+	w := worker.New(c, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(TriggerFireWorkflow, workflow.RegisterOptions{Name: FireWorkflowName})
 	w.RegisterActivityWithOptions(NewFirer(repo, launcher).Fire, activity.RegisterOptions{Name: FireActivityName})
 	if err := w.Start(); err != nil {
@@ -117,7 +118,7 @@ func TestManualFireReachesTheLauncher(t *testing.T) {
 	repo.triggers[trigger.ID] = trigger
 
 	const taskQueue = "triggers-manual-queue"
-	w := worker.New(c, taskQueue, worker.Options{})
+	w := worker.New(c, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(TriggerFireWorkflow, workflow.RegisterOptions{Name: FireWorkflowName})
 	w.RegisterActivityWithOptions(NewFirer(repo, launcher).Fire, activity.RegisterOptions{Name: FireActivityName})
 	if err := w.Start(); err != nil {

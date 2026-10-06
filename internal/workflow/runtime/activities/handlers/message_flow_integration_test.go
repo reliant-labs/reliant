@@ -11,11 +11,11 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 // ============================================================================
@@ -84,7 +84,7 @@ func TestMessageFlowIntegration(t *testing.T) {
 	defer repo.Close()
 
 	// Create Temporal test environment
-	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite := &temporaltest.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	// Create test data
@@ -592,7 +592,7 @@ func TestMessageFlowIntegration_ErrorHandling(t *testing.T) {
 	// configures shared cache mode to avoid "no such table" errors.
 	repo := db.NewTestRepo(t)
 	defer repo.Close()
-	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite := &temporaltest.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	userID := uuid.New().String()

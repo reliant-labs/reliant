@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
@@ -13,7 +14,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -153,7 +153,7 @@ func stepExecutorInterruptSettlesWorkflow(ctx workflow.Context) (interruptSettle
 }
 
 func TestStepExecutor_InterruptedCallLLMSurfacesCancellation(t *testing.T) {
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	saved := &interruptSettlementResult{}
 

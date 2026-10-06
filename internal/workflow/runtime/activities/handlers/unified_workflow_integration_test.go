@@ -14,10 +14,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 // ============================================================================
@@ -120,7 +120,7 @@ func TestUnifiedWorkflow_SaveUserMessage_CallLLM(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID)
 
 	// Create test environment
-	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite := &temporaltest.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	// STEP 1: SaveMessage creates user message
@@ -224,7 +224,7 @@ func TestUnifiedWorkflow_ExecuteTools_SaveToolResults(t *testing.T) {
 	contextWindowID := h.CreateTestThreadAndContextWindow(ctx, chatID, chatID)
 
 	// Create test environment
-	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite := &temporaltest.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	// STEP 0: Create user message (ordinal 0)
@@ -446,7 +446,7 @@ func TestUnifiedWorkflow_EndToEnd(t *testing.T) {
 	h.CreateTestChat(ctx, chatID, projectID, userID) // Also creates thread with ID = chatID
 
 	// Create test environment
-	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite := &temporaltest.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	// STEP 1: User sends message
@@ -650,7 +650,7 @@ func TestUnifiedWorkflow_DataFlowThroughOutputs(t *testing.T) {
 	// Create thread and context window
 	contextWindowID := h.CreateTestThreadAndContextWindow(ctx, chatID, thread)
 
-	testSuite := &testsuite.WorkflowTestSuite{}
+	testSuite := &temporaltest.WorkflowTestSuite{}
 	env := testSuite.NewTestActivityEnvironment()
 
 	// This test verifies that outputs from one activity can be used as inputs to the next

@@ -8,8 +8,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // Stopping an agent records a cancellation under its thread id. A later
@@ -56,7 +57,7 @@ func resumeAfterStopWorkflow(ctx workflow.Context) (resumeProbe, error) {
 
 func TestSpawnResumeAfterStop(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	for name, fn := range map[string]interface{}{
 		"ExecuteTools":             stubExecuteTools,

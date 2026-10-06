@@ -6,8 +6,9 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 type threadInterruptIsolationResult struct {
@@ -54,7 +55,7 @@ func threadInterruptIsolationWorkflow(rootThread, spawnThread string) func(workf
 }
 
 func TestThreadInterrupt_RootAndInlineSpawnContextsAreIsolated(t *testing.T) {
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	const rootThread = "thread-root"
@@ -104,7 +105,7 @@ func parkedInterruptWorkflow(thread string, tracker *ChildWorkflowTracker) func(
 
 func TestThreadInterrupt_WakesParkedDetachedWaitAndForcesNextTurn(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	tracker := &ChildWorkflowTracker{}
 	tracker.registerDetachedSpawn(&detachedSpawnRecord{
@@ -131,7 +132,7 @@ func TestThreadInterrupt_WakesParkedDetachedWaitAndForcesNextTurn(t *testing.T) 
 
 func TestThreadInterrupt_ParkedWaitIgnoresOtherThreads(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	tracker := &ChildWorkflowTracker{}
 	tracker.registerDetachedSpawn(&detachedSpawnRecord{
