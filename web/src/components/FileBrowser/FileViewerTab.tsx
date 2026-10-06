@@ -894,6 +894,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         <DaemonWaitState
           state={daemonWait.state}
           variant="panel"
+          secondary
           onRetry={daemonWait.retryNow}
         />
       );
