@@ -24,7 +24,7 @@ func (s *toolCallStore) UpsertToolCall(ctx context.Context, call *core.ToolCall)
 	if call == nil {
 		return fmt.Errorf("tool call cannot be nil")
 	}
-	return s.q.UpsertToolCall(ctx, pgdb.UpsertToolCallParams{
+	written, err := s.q.UpsertToolCall(ctx, pgdb.UpsertToolCallParams{
 		ID:                  call.ID,
 		ChatID:              call.ChatID,
 		ThreadID:            toolCallPtrToNullString(call.ThreadID),
@@ -42,20 +42,54 @@ func (s *toolCallStore) UpsertToolCall(ctx context.Context, call *core.ToolCall)
 		CreatedAt:           call.CreatedAt,
 		UpdatedAt:           call.UpdatedAt,
 	})
+	if err != nil {
+		return err
+	}
+	if written == 0 {
+		// The only way the upsert writes nothing: the id is held by another
+		// chat's call (see the query).
+		return fmt.Errorf("%w: id %q, writing for chat %q", core.ErrToolCallIDInAnotherChat, call.ID, call.ChatID)
+	}
+	return nil
 }
 
-func (s *toolCallStore) UpsertToolCallResult(ctx context.Context, result *core.ToolCallResult) error {
+func (s *toolCallStore) UpsertToolCallResult(ctx context.Context, chatID string, result *core.ToolCallResult) error {
 	if result == nil {
 		return fmt.Errorf("tool call result cannot be nil")
 	}
-	return s.q.UpsertToolCallResult(ctx, pgdb.UpsertToolCallResultParams{
+	written, err := s.q.UpsertToolCallResult(ctx, pgdb.UpsertToolCallResultParams{
 		ToolCallID: result.ToolCallID,
 		MessageID:  toolCallPtrToNullString(result.MessageID),
 		Content:    result.Content,
 		IsError:    result.IsError,
 		CreatedAt:  result.CreatedAt,
 		UpdatedAt:  result.UpdatedAt,
+		ChatID:     chatID,
 	})
+	if err != nil {
+		return err
+	}
+	if written == 0 {
+		// No call with this id in chatID: either another chat's call holds
+		// the id, or no call was recorded at all (which the foreign key
+		// rejected before the guard existed).
+		return fmt.Errorf("%w: no call %q recorded for chat %q", core.ErrToolCallIDInAnotherChat, result.ToolCallID, chatID)
+	}
+	return nil
+}
+
+func (s *toolCallStore) GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*core.ToolCallResult, error) {
+	row, err := s.q.GetToolCallResultForMessage(ctx, pgdb.GetToolCallResultForMessageParams{
+		ToolCallID: toolCallID,
+		MessageID:  sql.NullString{String: messageID, Valid: messageID != ""},
+	})
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get tool call result for message: %w", err)
+	}
+	return toolCallResultFromPG(row), nil
 }
 
 func (s *toolCallStore) GetToolCall(ctx context.Context, id string) (*core.ToolCall, error) {

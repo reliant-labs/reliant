@@ -165,12 +165,20 @@ type Repository interface {
 	// Tool Calls
 	// Upserts rather than creates: the callers are Temporal activities, which
 	// retry, so a repeated write of the same call must converge on one row.
+	//
+	// A tool call id is the model provider's and can repeat across chats, so
+	// both writes are chat-scoped: a row another chat's call recorded is never
+	// replaced, and the write fails with core.ErrToolCallIDInAnotherChat.
 	UpsertToolCall(ctx context.Context, call *ToolCall) error
-	UpsertToolCallResult(ctx context.Context, result *ToolCallResult) error
+	UpsertToolCallResult(ctx context.Context, chatID string, result *ToolCallResult) error
 	GetToolCall(ctx context.Context, id string) (*ToolCall, error)
 	// GetToolCallResult reads the recorded result for a single call, or nil
 	// if none was ever written.
 	GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error)
+	// GetToolCallResultForMessage reads the result of the call that
+	// assistant message messageID carries, or nil: the lookup to use when
+	// the caller has the message and not the chat's word for whose call it is.
+	GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error)
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
 	// Batch reads for the message read path — one query per page of messages,
 	// not one per message.

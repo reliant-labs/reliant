@@ -91,7 +91,7 @@ func TestTerminalIdempotency_CancelledRowIsNotReExecuted(t *testing.T) {
 		CreatedAt:   completedAt,
 		UpdatedAt:   completedAt,
 	}))
-	require.NoError(t, f.h.Repo().UpsertToolCallResult(ctx, &core.ToolCallResult{
+	require.NoError(t, f.h.Repo().UpsertToolCallResult(ctx, f.chatID, &core.ToolCallResult{
 		ToolCallID: toolCallID,
 		Content:    "Tool execution cancelled by user",
 		IsError:    true,

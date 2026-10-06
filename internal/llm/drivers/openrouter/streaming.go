@@ -141,6 +141,8 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 		var allToolCalls []message.ToolCall
 		var streamUsage llm.TokenUsage
 		var reasoning reasoningAccumulator
+		// The upstream's ids may be missing or repeated; see llm.ToolCallIDs.
+		var ids llm.ToolCallIDs
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -211,10 +213,12 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 								// Get or create the tool call at this index
 								currentToolCall := toolCallsByIndex[index]
 								if currentToolCall == nil {
-									// New tool call at this index
+									// New tool call at this index. Its id is
+									// fixed here, before tool_use_start
+									// announces it.
 									toolCallID, _ := toolCallMap["id"].(string)
 									currentToolCall = &message.ToolCall{
-										ID: toolCallID,
+										ID: ids.Assign(toolCallID),
 									}
 									toolCallsByIndex[index] = currentToolCall
 
@@ -414,6 +418,11 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 		// Track reasoning_details for Gemini thought signatures
 		reasoningByID := make(map[string]ReasoningDetail)
 		var reasoning reasoningAccumulator
+		// The upstream's ids may be missing or repeated (see
+		// llm.ToolCallIDs). reasoning_details are keyed by the id the
+		// upstream SENT, so keep that per assigned id.
+		var ids llm.ToolCallIDs
+		upstreamID := make(map[string]string)
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -509,8 +518,9 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 								if currentToolCall == nil {
 									toolCallID, _ := toolCallMap["id"].(string)
 									currentToolCall = &message.ToolCall{
-										ID: toolCallID,
+										ID: ids.Assign(toolCallID),
 									}
+									upstreamID[currentToolCall.ID] = toolCallID
 									toolCallsByIndex[index] = currentToolCall
 
 									if function, ok := toolCallMap["function"].(map[string]interface{}); ok {
@@ -562,7 +572,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 								toolCall.Finished = true
 
 								// Associate reasoning_details (thought signature) with tool call
-								if rd, ok := reasoningByID[toolCall.ID]; ok {
+								if rd, ok := reasoningByID[upstreamID[toolCall.ID]]; ok {
 									if rd.Type == "reasoning.encrypted" && rd.Data != "" {
 										toolCall.ThoughtSignature = rd.Data
 										logging.Debug("OpenRouter Gemini stream associated thought signature",

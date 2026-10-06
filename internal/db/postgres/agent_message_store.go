@@ -74,6 +74,9 @@ func (s *agentMessageStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg
 		Synthesized:  msg.Synthesized,
 	})
 	if err == sql.ErrNoRows {
+		if err := s.requireSlotHeldBySameSpawn(ctx, msg); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 	if err != nil {
@@ -82,9 +85,32 @@ func (s *agentMessageStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg
 	return true, nil
 }
 
+// requireSlotHeldBySameSpawn is called when a terminal report could not take
+// msg's slot. The report holding it is either this spawn's (a retry, or the
+// sweep racing the live report: nothing to do) or a different spawn's that
+// reused the tool call id in the same chat, whose report cannot be stored. The
+// latter must surface: answering "already reported" is how a sub-agent's
+// result used to vanish without a trace.
+func (s *agentMessageStore) requireSlotHeldBySameSpawn(ctx context.Context, msg *core.AgentMessage) error {
+	held, err := s.q.GetTerminalSpawnReport(ctx, pgdb.GetTerminalSpawnReportParams{
+		ChatID:     msg.ChatID,
+		ToolCallID: agentMessagePtrToNullString(msg.ToolCallID),
+	})
+	if err != nil {
+		return fmt.Errorf("read the report holding spawn slot %v: %w", agentMessagePtrToNullString(msg.ToolCallID).String, err)
+	}
+	if held.FromThreadID != msg.FromThreadID || held.ToThreadID != msg.ToThreadID {
+		return fmt.Errorf("%w: chat %q, tool call %q is held by the report from thread %q to %q; this one is from %q to %q",
+			core.ErrSpawnReportSlotTaken, msg.ChatID, held.ToolCallID.String,
+			held.FromThreadID, held.ToThreadID, msg.FromThreadID, msg.ToThreadID)
+	}
+	return nil
+}
+
 // EnqueueSpawnReport maps the upsert's three outcomes: a row with inserted =
 // true, a row with inserted = false (superseded a placeholder), or no row
-// (sql.ErrNoRows: a real report already holds the slot).
+// (sql.ErrNoRows: a report already holds the slot -- this spawn's, which is a
+// retry, or another spawn's, which is ErrSpawnReportSlotTaken).
 func (s *agentMessageStore) EnqueueSpawnReport(ctx context.Context, msg *core.AgentMessage) (core.SpawnReportOutcome, error) {
 	attachments, err := agentMessageAttachmentsToNullRawMessage(msg.Attachments)
 	if err != nil {
@@ -103,6 +129,9 @@ func (s *agentMessageStore) EnqueueSpawnReport(ctx context.Context, msg *core.Ag
 		Attachments:  attachments,
 	})
 	if err == sql.ErrNoRows {
+		if err := s.requireSlotHeldBySameSpawn(ctx, msg); err != nil {
+			return 0, err
+		}
 		return core.SpawnReportAlreadyReported, nil
 	}
 	if err != nil {

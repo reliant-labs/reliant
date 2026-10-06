@@ -160,7 +160,7 @@ INSERT INTO agent_messages (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 )
-ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO NOTHING
+ON CONFLICT (chat_id, tool_call_id) WHERE kind IN (2, 3, 4) DO NOTHING
 RETURNING id
 `
 
@@ -221,9 +221,8 @@ INSERT INTO agent_messages (
 ) VALUES (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false
 )
-ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO UPDATE SET
+ON CONFLICT (chat_id, tool_call_id) WHERE kind IN (2, 3, 4) DO UPDATE SET
     id = EXCLUDED.id,
-    chat_id = EXCLUDED.chat_id,
     from_thread_id = EXCLUDED.from_thread_id,
     to_thread_id = EXCLUDED.to_thread_id,
     kind = EXCLUDED.kind,
@@ -235,6 +234,8 @@ ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO UPDATE SET
     delivered_message_id = NULL,
     synthesized = false
 WHERE agent_messages.synthesized
+  AND agent_messages.from_thread_id = EXCLUDED.from_thread_id
+  AND agent_messages.to_thread_id = EXCLUDED.to_thread_id
 RETURNING id, (xmax = 0) AS inserted
 `
 
@@ -275,9 +276,15 @@ type EnqueueSpawnReportRow struct {
 // references agent_messages.id, so the change is safe.
 //
 // WHERE agent_messages.synthesized is what protects a real report: against one,
-// the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows =
-// already reported, an idempotent no-op). xmax = 0 is true only for a fresh
-// insert, distinguishing inserted from superseded.
+// the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows: the
+// slot is held, and the caller reads it with GetTerminalSpawnReport to tell a
+// retry from a different spawn). The thread predicates keep a placeholder for
+// one spawn from being superseded by a different spawn that reused its id in
+// the same chat. xmax = 0 is true only for a fresh insert, distinguishing
+// inserted from superseded.
+//
+// The slot is (chat_id, tool_call_id), not tool_call_id: the id is the model
+// provider's, so two chats can each have a spawn under it.
 func (q *Queries) EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReportParams) (EnqueueSpawnReportRow, error) {
 	row := q.db.QueryRowContext(ctx, enqueueSpawnReport,
 		arg.ID,
@@ -293,6 +300,40 @@ func (q *Queries) EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReport
 	)
 	var i EnqueueSpawnReportRow
 	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
+}
+
+const getTerminalSpawnReport = `-- name: GetTerminalSpawnReport :one
+SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized FROM agent_messages
+WHERE chat_id = $1 AND tool_call_id = $2 AND kind IN (2, 3, 4)
+`
+
+type GetTerminalSpawnReportParams struct {
+	ChatID     string         `json:"chat_id"`
+	ToolCallID sql.NullString `json:"tool_call_id"`
+}
+
+// The report holding one spawn's slot, read when a write to the slot was
+// refused: the same sender is a retry (idempotent), a different one is a
+// second spawn under the same id, whose report cannot be stored.
+func (q *Queries) GetTerminalSpawnReport(ctx context.Context, arg GetTerminalSpawnReportParams) (AgentMessage, error) {
+	row := q.db.QueryRowContext(ctx, getTerminalSpawnReport, arg.ChatID, arg.ToolCallID)
+	var i AgentMessage
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.FromThreadID,
+		&i.ToThreadID,
+		&i.Kind,
+		&i.Body,
+		&i.ToolCallID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.DeliveredAt,
+		&i.DeliveredMessageID,
+		&i.Attachments,
+		&i.Synthesized,
+	)
 	return i, err
 }
 

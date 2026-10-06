@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
+	"go.temporal.io/sdk/temporal"
 )
 
 // EnqueueAgentMessageInput is the input for the EnqueueAgentMessage activity.
@@ -95,8 +97,21 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 	// would die on idx_agent_messages_one_terminal_report_per_spawn (23505),
 	// leaving the real outcome lost. See
 	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	//
+	// The slot is (chat, tool call id). A slot held by a DIFFERENT spawn -- a
+	// provider reused the id in this chat -- is an error, not "already
+	// reported": the parent will not receive this report, and the failed
+	// activity is what says so (the spawn goroutine logs it and the run
+	// history keeps it).
 	if input.ToolCallID != "" && isTerminalSpawnReportKind(kind) {
 		outcome, err := a.repo.EnqueueSpawnReport(ctx, msg)
+		if errors.Is(err, core.ErrSpawnReportSlotTaken) {
+			logging.Error("[EnqueueAgentMessage] another spawn already reported under this tool call id; this report cannot be delivered",
+				"chat_id", input.ChatID, "tool_call_id", input.ToolCallID,
+				"from_thread_id", input.FromThreadID, "to_thread_id", input.ToThreadID, "error", err)
+			return EnqueueAgentMessageOutput{}, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("spawn report not delivered: %v", err), "SpawnReportSlotTaken", err)
+		}
 		if err != nil {
 			return EnqueueAgentMessageOutput{}, fmt.Errorf("failed to enqueue spawn report: %w", err)
 		}

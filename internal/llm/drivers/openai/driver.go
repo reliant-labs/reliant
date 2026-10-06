@@ -554,17 +554,20 @@ func (o *OpenaiClient) toolCalls(completion openai.ChatCompletion) []message.Too
 	var toolCalls []message.ToolCall
 
 	if len(completion.Choices) > 0 && len(completion.Choices[0].Message.ToolCalls) > 0 {
+		// This Chat Completions path also serves OpenRouter's upstreams, whose
+		// ids may be missing or repeated (see llm.ToolCallIDs). OpenAI's own
+		// ids are unique and pass through unchanged.
+		var ids llm.ToolCallIDs
 		for _, call := range completion.Choices[0].Message.ToolCalls {
-			// Skip empty or invalid tool calls
-			if call.ID == "" || call.Function.Name == "" {
-				logging.Warn("Skipping empty/invalid tool call",
-					"id", call.ID,
-					"name", call.Function.Name)
+			// Skip tool calls that name no tool
+			if call.Function.Name == "" {
+				logging.Warn("Skipping tool call with no tool name",
+					"id", call.ID)
 				continue
 			}
 
 			toolCall := message.ToolCall{
-				ID:       call.ID,
+				ID:       ids.Assign(call.ID),
 				Name:     call.Function.Name,
 				Input:    call.Function.Arguments,
 				Type:     "function",

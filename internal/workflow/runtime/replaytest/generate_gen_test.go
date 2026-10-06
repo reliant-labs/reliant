@@ -113,14 +113,12 @@ func TestGenerateFixture_StructuredAgentLoop(t *testing.T) {
 // ran only because presets were not checked against the declaration, and
 // stopped exporting ("consumed 2 of 4 scripted turns") once they were.
 func TestGenerateFixture_Spawn(t *testing.T) {
-	const spawnCallID = "call-spawn-1"
+	spawnCall := ToolCall("call-spawn-1", "spawn", `{"preset":"general","prompt":"Echo something for the parent."}`)
 	script := NewScriptedLLM(
 		// Turn 1: parent delegates to a sub-agent via the spawn tool.
 		Turn{
-			Text: "I'll delegate this to a sub-agent.",
-			ToolCalls: []message.ToolCall{
-				ToolCall(spawnCallID, "spawn", `{"preset":"general","prompt":"Echo something for the parent."}`),
-			},
+			Text:      "I'll delegate this to a sub-agent.",
+			ToolCalls: []message.ToolCall{spawnCall},
 		},
 		// Turns 2-3: race between the parent's exit-candidate turn and the
 		// spawned child's only turn — neither has tool calls, so either
@@ -145,7 +143,7 @@ func TestGenerateFixture_Spawn(t *testing.T) {
 	// Checked before ExportHistory so a refused spawn fails with the refusal
 	// itself. Left to the turn count, it reads as an auxiliary request having
 	// stolen a turn, which is not what happened.
-	h.RequireToolCallStatus(spawnCallID, core.ToolCallStatusCompleted)
+	h.RequireToolCallStatus(spawnCall.ID, core.ToolCallStatusCompleted)
 
 	h.ExportHistory(workflowID, "spawn")
 }

@@ -3,8 +3,10 @@ package db
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 // UpsertToolCallStatus records a tool call status transition without losing
@@ -49,12 +51,25 @@ import (
 // The blast radius is fixed at the source, but the door stays shut here too --
 // this is the last point before the row is overwritten, and no legitimate
 // writer needs to make a finished call cancelled.
+//
+// The existing row must be THIS chat's. A tool call id is the model
+// provider's, and a provider can hand two chats the same one; inheriting from
+// another chat's row is how a call used to acquire that chat's thread and
+// message, and the terminal door above would have let another chat's finished
+// call decide this one's status. Such a write is refused with
+// core.ErrToolCallIDInAnotherChat, and UpsertToolCall refuses it again at the
+// database, where no concurrent first write can slip past the read.
 func UpsertToolCallStatus(ctx context.Context, repo Repository, call *core.ToolCall) error {
 	if call == nil {
 		return nil
 	}
 
 	if existing, err := repo.GetToolCall(ctx, call.ID); err == nil && existing != nil {
+		if existing.ChatID != call.ChatID {
+			logging.Warn("[ToolCallStatus] Tool call id is already used by another chat's call; not recording this chat's status",
+				"tool_call_id", call.ID, "chat_id", call.ChatID, "holding_chat_id", existing.ChatID, "status", call.Status)
+			return fmt.Errorf("%w: id %q, writing for chat %q", core.ErrToolCallIDInAnotherChat, call.ID, call.ChatID)
+		}
 		if existing.Status.IsTerminal() && !call.Status.IsTerminal() {
 			return nil
 		}
@@ -108,14 +123,20 @@ func resolveToolCallMessage(ctx context.Context, repo Repository, call *core.Too
 	if err != nil || block == nil || block.MessageID == "" {
 		return
 	}
+	// The lookup is by tool call id alone, so the block can be another chat's
+	// call under the same provider-chosen id. Link only a message in this
+	// call's chat: a call pointing at another chat's message is shown in that
+	// chat's transcript.
+	msg, err := repo.GetMessage(ctx, block.MessageID)
+	if err != nil || msg == nil || msg.ChatID != call.ChatID {
+		return
+	}
 	call.MessageID = &block.MessageID
 
 	// The message's thread is the call's thread. Same reasoning: the writers
 	// that lack a message usually lack the thread too.
-	if call.ThreadID == nil || *call.ThreadID == "" {
-		if msg, err := repo.GetMessage(ctx, block.MessageID); err == nil && msg != nil && msg.ThreadID != "" {
-			call.ThreadID = &msg.ThreadID
-		}
+	if (call.ThreadID == nil || *call.ThreadID == "") && msg.ThreadID != "" {
+		call.ThreadID = &msg.ThreadID
 	}
 }
 

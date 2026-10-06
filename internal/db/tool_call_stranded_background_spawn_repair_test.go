@@ -33,7 +33,7 @@ func seedBackgroundSpawnToolCall(
 		CreatedAt:       now,
 		UpdatedAt:       now,
 	}))
-	require.NoError(t, repo.UpsertToolCallResult(ctx, &ToolCallResult{
+	require.NoError(t, repo.UpsertToolCallResult(ctx, chatID, &ToolCallResult{
 		ToolCallID: toolCallID,
 		Content:    "Spawned as agent_id: " + childWorkflowID + " (status: running)",
 		CreatedAt:  now,

@@ -269,9 +269,15 @@ type Querier interface {
 	// references agent_messages.id, so the change is safe.
 	//
 	// WHERE agent_messages.synthesized is what protects a real report: against one,
-	// the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows =
-	// already reported, an idempotent no-op). xmax = 0 is true only for a fresh
-	// insert, distinguishing inserted from superseded.
+	// the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows: the
+	// slot is held, and the caller reads it with GetTerminalSpawnReport to tell a
+	// retry from a different spawn). The thread predicates keep a placeholder for
+	// one spawn from being superseded by a different spawn that reused its id in
+	// the same chat. xmax = 0 is true only for a fresh insert, distinguishing
+	// inserted from superseded.
+	//
+	// The slot is (chat_id, tool_call_id), not tool_call_id: the id is the model
+	// provider's, so two chats can each have a spawn under it.
 	EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReportParams) (EnqueueSpawnReportRow, error)
 	// Releases the lease and records the outcome. refreshed_at moves only on
 	// success; last_error is cleared on success.
@@ -468,6 +474,10 @@ type Querier interface {
 	GetStepExecutionsForChat(ctx context.Context, arg GetStepExecutionsForChatParams) ([]GetStepExecutionsForChatRow, error)
 	GetTask(ctx context.Context, id string) (Task, error)
 	GetTaskDependency(ctx context.Context, id string) (TaskDependency, error)
+	// The report holding one spawn's slot, read when a write to the slot was
+	// refused: the same sender is a retry (idempotent), a different one is a
+	// second spawn under the same id, whose report cannot be stored.
+	GetTerminalSpawnReport(ctx context.Context, arg GetTerminalSpawnReportParams) (AgentMessage, error)
 	GetThread(ctx context.Context, id string) (Thread, error)
 	GetThreadByWorkflow(ctx context.Context, workflowID sql.NullString) (Thread, error)
 	// Get the token count from the most recent message with token data at or before maxSeq.
@@ -489,6 +499,12 @@ type Querier interface {
 	GetThreadWithParent(ctx context.Context, id string) (GetThreadWithParentRow, error)
 	GetToolCall(ctx context.Context, id string) (ToolCall, error)
 	GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error)
+	// The result of the call one assistant message carries. History recovery
+	// reads this rather than GetToolCallResult: an id alone can name another
+	// chat's call, but a call's message is its own, and message ids are ours.
+	// Branched chats included — an inherited message keeps its id, and so does
+	// the call record pointing at it.
+	GetToolCallResultForMessage(ctx context.Context, arg GetToolCallResultForMessageParams) (ToolCallResult, error)
 	// Joins the display names so a trigger can be shown without a second lookup.
 	// LEFT JOINs: a daemon id is not a foreign key, and an absent name must not
 	// hide the trigger.
@@ -1256,8 +1272,22 @@ type Querier interface {
 	// Activities that create/update a tool call retry on failure, so the write
 	// must be idempotent: a retry re-sending the same id updates the row in
 	// place instead of erroring on the primary key.
-	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) error
-	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) error
+	//
+	// Only in place for the SAME chat. The id is the model provider's, and a
+	// provider can hand two chats the same one; the row belongs to whichever chat
+	// recorded it first. A write for another chat updates nothing (0 rows), which
+	// the store reports as core.ErrToolCallIDInAnotherChat. chat_id was never in
+	// the SET list, so before this guard such a write produced a row that still
+	// claimed the first chat while carrying the second chat's thread, input and
+	// status.
+	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) (int64, error)
+	// A result belongs to its call (the foreign key), and so to the call's chat.
+	// The EXISTS is what makes the writer prove it is that chat: a result written
+	// for chat B under an id chat A's call holds would otherwise satisfy the
+	// foreign key against A's call and replace A's result. Writes nothing (0 rows)
+	// when the call is not this chat's or does not exist; the store reports both
+	// as core.ErrToolCallIDInAnotherChat.
+	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) (int64, error)
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error

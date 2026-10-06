@@ -37,10 +37,20 @@ type Turn struct {
 	TokenCount int64 // reported usage; drives compaction edges. Defaults to 50.
 }
 
-// ToolCall is a convenience constructor for a scripted tool call.
-func ToolCall(id, name, inputJSON string) message.ToolCall {
+// ToolCall is a convenience constructor for a scripted tool call. Its id is
+// label plus a per-call suffix, unique to this run.
+//
+// Every scenario in a generator process shares one database, and reliant keys a
+// call's record and result by its id. When the ids were fixed strings, the
+// second scenario to script "call-bash-1" was answered with the FIRST
+// scenario's recorded output instead of running (execute_tools treats a
+// terminal record under the same id as a re-dispatch), so
+// structured_agent_loop.json and compaction.json pinned a shell call that never
+// ran, and -count=2 failed outright. Read the id back from the returned call
+// when a scenario needs it.
+func ToolCall(label, name, inputJSON string) message.ToolCall {
 	return message.ToolCall{
-		ID:       id,
+		ID:       label + "-" + shortID(),
 		Name:     name,
 		Input:    inputJSON,
 		Type:     "function",
