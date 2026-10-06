@@ -79,7 +79,7 @@ func TestDeclaredTriggerActivationsFireEndToEnd(t *testing.T) {
 
 	declarations := triggers.LaunchWorkflows{Repo: repo}
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
-		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)), taskQueue, nil)
+		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)), taskQueue)
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow, workflow.RegisterOptions{Name: triggers.FireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).WithWorkflows(declarations).Fire,

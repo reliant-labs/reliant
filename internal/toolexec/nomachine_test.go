@@ -17,10 +17,12 @@ import (
 
 // The transport is the last line: a no-machine run's tool menu and its
 // execution refusal sit above it, so a marked context arriving here means one
-// of those was bypassed. The router must still not RESOLVE a daemon — resolving
-// is what can resume a suspended one through the control plane.
+// of those was bypassed. The router must still not RESOLVE a daemon, and above
+// all must not resume one through the control plane.
 func TestNoMachineContextNeverResolvesOrResumesADaemon(t *testing.T) {
-	router, reg := newSuspendedRouter(t)
+	auth.SetUserJWT("u", "jwt")
+	t.Cleanup(func() { auth.SetUserJWT("u", "") })
+	router, resumer := newSuspendedRouter(t, "u")
 	ctx := nomachine.With(context.Background())
 
 	_, err := router.SendToolRequestSync(ctx, "u", &ToolExecutionRequest{RequestID: "r", ToolName: "bash"})
@@ -35,7 +37,7 @@ func TestNoMachineContextNeverResolvesOrResumesADaemon(t *testing.T) {
 	_, err = router.EnsureAwake(ctx, "u", pinned)
 	require.ErrorIs(t, err, nomachine.ErrNoMachine)
 
-	assert.Zero(t, reg.resumes.Load(), "a run with no machine must never resume one")
+	assert.Empty(t, resumer.calls, "a run with no machine must never resume one")
 }
 
 // The refusal is not an offline signal. The breaker pauses a run after three

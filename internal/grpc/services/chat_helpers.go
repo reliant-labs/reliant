@@ -212,17 +212,6 @@ func launchErrorToConnect(err error) error {
 	return connect.NewError(connect.CodeInternal, err)
 }
 
-// inputMessageFromSeed converts a launch seed message back into the wire type.
-// SendMessage's own save path still speaks InputMessage, so a seed produced by
-// launch (the greenfield guidance) has to come back across the boundary.
-func inputMessageFromSeed(seed launch.SeedMessage) *reliantv1.InputMessage {
-	return &reliantv1.InputMessage{
-		Role:         seed.Role,
-		Content:      seed.Content,
-		DisplayStyle: seed.DisplayStyle,
-	}
-}
-
 // seedMessagesFromInput converts wire InputMessages into launch seed messages.
 // launch holds no proto request types, so the translation is the handler's.
 func seedMessagesFromInput(messages []*reliantv1.InputMessage) []launch.SeedMessage {

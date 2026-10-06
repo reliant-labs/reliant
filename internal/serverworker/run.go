@@ -17,7 +17,6 @@ import (
 
 	"go.temporal.io/sdk/client"
 
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/agentruns"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/automationcred"
@@ -280,11 +279,11 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	daemonRouterOpts := []toolexec.NATSRouterOption{toolexec.WithDatabase(repo)}
 	if cpURL := controlplane.BaseURLFromEnv(); cpURL != "" {
-		// See serverapi/run.go for why this matters: without it a
-		// still-provisioning cloud daemon is indistinguishable from "no
-		// daemon at all".
+		// Daemon records come from repo; the control plane is wired only to
+		// resume a suspended managed machine (see serverapi's
+		// daemonRouterOptions).
 		daemonRouterOpts = append(daemonRouterOpts,
-			toolexec.WithControlPlaneClient(reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, cpURL)),
+			toolexec.WithDaemonResumer(controlplane.NewDaemonClient(cpURL)),
 			// The worker alone may fall back to a trigger's delegated
 			// token: an unattended fire has no user JWT.
 			toolexec.WithControlPlaneCredentials(automationcred.NewResolver(repo)))
@@ -300,7 +299,7 @@ func Run(ctx context.Context, opts Options) error {
 	// streaming hub they depend on, rather than with the other tool options.
 	pauseService := v2workflow.NewPauseService(temporalClient, repo)
 	runLifecycle := runs.NewService(repo, temporalClient, pauseService)
-	runLauncher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient, runLifecycle, v2workflow.SharedTaskQueue, remoteExecutor.DaemonRouter())
+	runLauncher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient, runLifecycle, v2workflow.SharedTaskQueue)
 	agentRuns := agentruns.New(runLauncher, services.NewRunService(repo,
 		services.NewChatService(repo, temporalClient, pauseService, v2workflow.SharedTaskQueue, streamingHub, router)))
 

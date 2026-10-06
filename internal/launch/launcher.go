@@ -41,36 +41,27 @@ type RunRecorder interface {
 	RecordRun(ctx context.Context, chatID, workflowID, runID string)
 }
 
-// DaemonProber is the slice of toolexec.DaemonRouter the greenfield probe uses.
-// It reaches the user's filesystem, which neither the api-server nor the worker
-// can see themselves. Optional: a nil prober skips the probe.
-type DaemonProber interface {
-	SendDaemonCommand(ctx context.Context, userID string, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
-}
-
 // Launcher turns an (Event, Spec) into a running session. See the package doc.
+//
+// It never talks to a daemon. Anything that needs the user's machine — the
+// greenfield probe included — happens inside the run, so a launch costs a
+// transaction and a Temporal start whether the machine is up, asleep or gone.
 type Launcher struct {
 	repo      Store
 	temporal  TemporalStarter
 	runs      RunRecorder
 	threads   ThreadCreator
 	taskQueue string
-	prober    DaemonProber
 }
 
 // NewLauncher builds a launcher over the store, the thread creator, Temporal and the task
 // queue runs execute on.
-//
-// prober may be nil, which skips the greenfield probe — the api-server has a
-// daemon router, a scheduled fire on the worker does not, and neither is worth
-// a second constructor.
 func NewLauncher(
 	repo Store,
 	threadCreator ThreadCreator,
 	temporal TemporalStarter,
 	runRecorder RunRecorder,
 	taskQueue string,
-	prober DaemonProber,
 ) *Launcher {
 	return &Launcher{
 		repo:      repo,
@@ -78,7 +69,6 @@ func NewLauncher(
 		runs:      runRecorder,
 		threads:   threadCreator,
 		taskQueue: taskQueue,
-		prober:    prober,
 	}
 }
 
@@ -282,18 +272,6 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		return nil, err
 	}
 
-	// A brand-new chat is a first turn by construction, so no message count is
-	// needed here. When the project directory holds no code the stack is still
-	// open, and the model gets that observation plus the criteria for
-	// proposing forge ahead of the user's first message. No-op when the
-	// project already holds code or the daemon is unreachable.
-	systemMessages := seed.systemMessages
-	if spec.GreenfieldProbe {
-		if guidance := l.GreenfieldGuidanceForChat(ctx, userID, chat); guidance != nil {
-			systemMessages = append([]SeedMessage{*guidance}, systemMessages...)
-		}
-	}
-
 	// Root workflow + thread, created atomically with the chat below.
 	//
 	// OwnerUserID is recorded on the run itself rather than left to be read off
@@ -402,7 +380,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 			return fmt.Errorf("failed to create workflow and thread: %w", err)
 		}
 
-		if err := l.saveSeedMessages(txCtx, chatID, workflowID, systemMessages, seed, spec.Attachments); err != nil {
+		if err := l.saveSeedMessages(txCtx, chatID, workflowID, seed.systemMessages, seed, spec.Attachments); err != nil {
 			return err
 		}
 
@@ -630,8 +608,9 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		}
 
 		// The branch's thread was forked by BranchChat; the seed messages
-		// append to it. No greenfield probe: a branch is not a first turn of
-		// new work.
+		// append to it. Whether the run probes for greenfield is the
+		// caller's Spec.GreenfieldProbe, which a branch's first send leaves
+		// off: a branch is not a first turn of new work.
 		return l.saveSeedMessages(txCtx, cur.ID, workflowID, seed.systemMessages, seed, spec.Attachments)
 	}); err != nil {
 		if errors.Is(err, ErrNotPending) {
@@ -834,8 +813,7 @@ func recordedParams(row *core.TriggerEvent) (map[string]*structpb.Value, error) 
 }
 
 // seedFingerprint identifies what a start was asked to say: its messages, in
-// order, and its attachments. The greenfield guidance the launcher may prepend
-// is derived, not requested, so it is not part of it.
+// order, and its attachments.
 func seedFingerprint(messages []SeedMessage, attachments []string) string {
 	hash := sha256.New()
 	for _, message := range messages {
@@ -1017,8 +995,23 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		Inputs:       initialData,
 		ExecContext:  execContext,
 		Trigger:      p.trigger,
+		// The run asks the daemon whether the directory holds code, before
+		// its first LLM call (runtime.runGreenfieldProbe) — not this
+		// request, which must not wait on a machine that may be asleep. A
+		// run with no machine has no directory to ask about.
+		GreenfieldProbe: p.spec.GreenfieldProbe && !chat.NoMachine,
 	}
 
+	// The title start rides alongside the root start rather than after it.
+	// Both follow the commit, so the chat row GenerateTitleWorkflow reads
+	// already exists, and neither needs the other's result: serially they
+	// were two Temporal round trips on every launch. Joined before returning
+	// so it never outlives the request's context.
+	titleStarted := l.startTitleGeneration(ctx, p)
+	defer func() { <-titleStarted }()
+
+	// The root start stays synchronous. Returning before Temporal accepted
+	// it would hand the caller a committed chat that may never run.
 	workflowRun, err := l.temporal.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
 		logging.Error("Failed to start workflow", "error", err, "chatID", chatID)
@@ -1037,24 +1030,6 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		logging.Warn("Failed to mark launched workflow active", "error", err, "chatID", chatID)
 	}
 
-	// Start GenerateTitle workflow
-	if p.generateTitle {
-		generateTitleOptions := client.StartWorkflowOptions{
-			ID:                       fmt.Sprintf("generate-title-%s", chatID),
-			TaskQueue:                l.taskQueue,
-			WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
-		}
-		generateTitleInput := map[string]interface{}{
-			"chat_id":       chatID,
-			"first_message": p.userContent,
-		}
-		_, titleErr := l.temporal.ExecuteWorkflow(ctx, generateTitleOptions, "GenerateTitleWorkflow", generateTitleInput)
-		if titleErr != nil {
-			logging.Error("Failed to start title generation workflow", "error", titleErr, "chatID", chatID)
-			// Don't fail the request for title generation failure
-		}
-	}
-
 	// Fetch created chat
 	startedChat, err := l.repo.GetChat(ctx, chatID)
 	if err != nil {
@@ -1068,6 +1043,40 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 		RunID:      runID,
 		EventID:    p.eventID,
 	}, nil
+}
+
+// startTitleGeneration starts GenerateTitleWorkflow in the background when the
+// launch asked for it, and returns a channel closed once that start has
+// returned. Best-effort: a failed or panicking start is logged and never fails
+// the launch.
+func (l *Launcher) startTitleGeneration(ctx context.Context, p startParams) <-chan struct{} {
+	done := make(chan struct{})
+	if !p.generateTitle {
+		close(done)
+		return done
+	}
+	chatID := p.chat.ID
+	go func() {
+		defer close(done)
+		defer func() {
+			if r := recover(); r != nil {
+				logging.Error("Title generation start panicked", "panic", r, "chatID", chatID)
+			}
+		}()
+		options := client.StartWorkflowOptions{
+			ID:                       fmt.Sprintf("generate-title-%s", chatID),
+			TaskQueue:                l.taskQueue,
+			WorkflowExecutionTimeout: workflow.WorkflowExecutionTimeout,
+		}
+		input := map[string]interface{}{
+			"chat_id":       chatID,
+			"first_message": p.userContent,
+		}
+		if _, err := l.temporal.ExecuteWorkflow(ctx, options, "GenerateTitleWorkflow", input); err != nil {
+			logging.Error("Failed to start title generation workflow", "error", err, "chatID", chatID)
+		}
+	}()
+	return done
 }
 
 // splitSeedMessages separates user and system messages from the seed messages.

@@ -325,3 +325,28 @@ func TestGenerateFixture_Compaction(t *testing.T) {
 
 	h.ExportHistory(workflowID, "compaction")
 }
+
+// TestGenerateFixture_GreenfieldProbe pins a chat's first turn on the
+// greenfield-probe path: StartChat starts the run with
+// WorkflowInput.GreenfieldProbe, and the run schedules the GreenfieldProbe
+// activity after its status bookkeeping and before its first CallLLM. The
+// hermetic worker has no daemon router, so the probe settles as
+// skipped_no_daemon_router — the command sequence is the same one a real
+// daemon's answer produces, which is what replay pins.
+func TestGenerateFixture_GreenfieldProbe(t *testing.T) {
+	script := NewScriptedLLM(
+		Turn{Text: "Here is how I would build that landing page."},
+	)
+	h := newHarness(t, script)
+
+	created := h.StartChat("builtin://agent", "Build me a landing page", map[string]any{
+		"mode": "auto",
+	})
+	workflowID := created.WorkflowId
+
+	h.WaitTemporalWorkflowDone(workflowID)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	assert.False(t, h.LLM.Exhausted())
+
+	h.ExportHistory(workflowID, "greenfield_probe")
+}

@@ -120,7 +120,7 @@ func newFireFixture(t *testing.T, mutate func(*core.Trigger, *core.ScheduleConfi
 	require.NoError(t, repo.CreateTrigger(ctx, trigger))
 
 	starter := &flakyStarter{}
-	launcher := launch.NewLauncher(repo, threads.NewService(repo), starter, noopRunRecorder{}, "test-queue", nil)
+	launcher := launch.NewLauncher(repo, threads.NewService(repo), starter, noopRunRecorder{}, "test-queue")
 	return &fireFixture{repo: repo, starter: starter, firer: NewFirer(repo, launcher), trigger: trigger}
 }
 

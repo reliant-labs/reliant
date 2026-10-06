@@ -117,6 +117,18 @@ type daemonClient struct {
 	// affordance in the UI). Only set for pod-hosted daemons — nil for
 	// local daemons, and all accessors are nil-safe.
 	portWatcher *netports.Watcher
+
+	// buildSnapshot overrides buildProjectSnapshot. Nil in production; tests
+	// set it to stand in for discovery that takes seconds on a real project.
+	buildSnapshot func(projectPath string) (*reliantv1.ProjectConfigSnapshot, error)
+}
+
+// projectSnapshot builds the config snapshot for projectPath.
+func (d *daemonClient) projectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot, error) {
+	if d.buildSnapshot != nil {
+		return d.buildSnapshot(projectPath)
+	}
+	return buildProjectSnapshot(projectPath)
 }
 
 type StartOptions struct {
@@ -829,11 +841,34 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			if m.RegistrationAck.UserId != "" {
 				d.userID = m.RegistrationAck.UserId
 			}
-			for _, projectPath := range m.RegistrationAck.RequestedProjectPaths {
-				if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
-					logging.Warn(logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
-				}
+			// Watchers start here, in stream order, so a later
+			// Watch/UnwatchProjectConfigs for the same path cannot be
+			// overtaken. Starting one is cheap: its first snapshot is built
+			// on its own goroutine.
+			requested := m.RegistrationAck.RequestedProjectPaths
+			for _, projectPath := range requested {
 				d.startProjectWatcher(ctx, projectPath, true)
+			}
+			// The load responses are NOT built here. Each is a full config
+			// snapshot — skill discovery included, 4.9s cold for one
+			// multi-repo project — and the ack names every project the user
+			// has. Built inline, they held this receive loop for the whole
+			// run, so no command behind the ack was dispatched until all of
+			// them finished: everything sent just after a reconnect waited
+			// on discovery it had nothing to do with. Same fix, same reason
+			// as LoadProjectConfigs below. One goroutine, sequential, so a
+			// reconnect does not start a discovery per project at once.
+			if len(requested) > 0 {
+				go func(paths []string) {
+					for _, projectPath := range paths {
+						if ctx.Err() != nil {
+							return // session over; the next ack asks again
+						}
+						if err := d.sendLoadProjectConfigResponse(projectPath, uuid.New().String()); err != nil {
+							logging.Warn(logPrefix+" Failed responding to registration requested project load", "projectPath", projectPath, "error", err)
+						}
+					}
+				}(requested)
 			}
 		}
 		return nil
@@ -988,8 +1023,9 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	// speaks this protocol cannot skip it by construction.
 	policy := daemonpolicy.FromProto(req.GetPolicy())
 	if err := policy.Check(req.CommandType, req.Payload); err != nil {
-		logging.Warn(logPrefix+" daemon command denied by connector policy",
+		logging.Warn(logPrefix+" daemon command handled",
 			"commandType", req.CommandType, "requestID", req.RequestId,
+			"elapsed", "0s", "outcome", "denied",
 			"grantID", policy.GrantIDForLog(), "error", err)
 		d.sendCommandFailure(req, err)
 		return
@@ -1008,9 +1044,8 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	// incident was worktree.git_changes hanging on a git remote), and the
 	// stream response is only sent on completion — without this nothing is
 	// logged anywhere while a command hangs.
-	const slowCommandThreshold = 10 * time.Second
 	start := time.Now()
-	watchdog := time.AfterFunc(slowCommandThreshold, func() {
+	watchdog := time.AfterFunc(slowDaemonCommandThreshold, func() {
 		logging.Warn(logPrefix+" daemon command still running",
 			"commandType", req.CommandType, "requestID", req.RequestId)
 	})
@@ -1018,12 +1053,7 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	resultPayload, err := defaultRegistry.Handle(ctx, req.CommandType, req.Payload)
 
 	watchdog.Stop()
-	if elapsed := time.Since(start); elapsed >= slowCommandThreshold {
-		logging.Warn(logPrefix+" daemon command completed slowly",
-			"commandType", req.CommandType, "requestID", req.RequestId,
-			"elapsed", elapsed.Round(time.Millisecond).String(),
-			"failed", err != nil)
-	}
+	logDaemonCommandHandled(req, time.Since(start), err, d.sendBacklog())
 
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_DaemonCommandResponse{
@@ -1050,6 +1080,49 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	// arrives (see handleServerMessage), mirroring the process-output subscribe
 	// flow. Until then the PTY buffers its initial shell prompt, so the prompt
 	// cannot be drained before a subscriber's interest chain is established.
+}
+
+// slowDaemonCommandThreshold is when a command's watchdog fires, and when its
+// completion line is raised from Info to Warn.
+const slowDaemonCommandThreshold = 10 * time.Second
+
+// logDaemonCommandHandled writes the one line every handled daemon command
+// gets: which command, how long its handler ran, and how it ended.
+//
+// Without it a slow round trip could not be split between the daemon and
+// everything in front of it. A 780ms greenfield probe on 2026-10-05 left no
+// trace on the daemon at all — only commands slower than 10s were logged — so
+// "the daemon queued it", "the scan was slow" and "the gateway sat on the
+// reply" were indistinguishable. sendBacklog is the number of messages already
+// queued for the gateway stream when the response joined it: a fast handler
+// with a large backlog means the reply waited on the wire, not on the work.
+//
+// Payloads are never logged — they carry file contents and credentials.
+func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.Duration, err error, sendBacklog int) {
+	outcome := "ok"
+	if err != nil {
+		outcome = "error"
+	}
+	args := []any{
+		"commandType", req.GetCommandType(),
+		"requestID", req.GetRequestId(),
+		"elapsed", elapsed.Round(100 * time.Microsecond).String(),
+		"outcome", outcome,
+		"sendBacklog", sendBacklog,
+	}
+	if err != nil {
+		args = append(args, "error", err)
+	}
+	if elapsed >= slowDaemonCommandThreshold {
+		logging.Warn(logPrefix+" daemon command handled", args...)
+		return
+	}
+	logging.Info(logPrefix+" daemon command handled", args...)
+}
+
+// sendBacklog reports how many messages are waiting for the stream writer.
+func (d *daemonClient) sendBacklog() int {
+	return len(d.sendCh)
 }
 
 // filesystemMutatingCommands are daemon commands that create or remove a
@@ -1524,7 +1597,7 @@ func pathLooksLikeGitRepo(projectPath string) bool {
 }
 
 func (d *daemonClient) sendLoadProjectConfigResponse(projectPath, requestID string) error {
-	snapshot, err := buildProjectSnapshot(projectPath)
+	snapshot, err := d.projectSnapshot(projectPath)
 	resp := &reliantv1.LoadProjectConfigsResponse{
 		RequestId: requestID,
 		Snapshot:  snapshot,
@@ -1631,7 +1704,7 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 	var lastVersion string
 
 	sendSnapshotDelta := func() {
-		snapshot, err := buildProjectSnapshot(projectPath)
+		snapshot, err := d.projectSnapshot(projectPath)
 		if err != nil || snapshot == nil {
 			if err != nil {
 				logging.Warn(logPrefix+" Failed to build project snapshot for watcher", "projectPath", projectPath, "error", err)

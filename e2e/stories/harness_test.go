@@ -241,7 +241,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM, opts ...HarnessOption) *Ha
 	// greenfield probe.
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
 	triggerLauncher := launch.NewLauncher(s.Repo, threads.NewService(s.Repo), s.Temporal,
-		runs.NewService(s.Repo, s.Temporal, pause), taskQueue, nil)
+		runs.NewService(s.Repo, s.Temporal, pause), taskQueue)
 
 	handle, _, err := workersetup.StartWorker(&workersetup.Config{
 		TemporalClient:  s.Temporal,

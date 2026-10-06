@@ -59,7 +59,6 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 		temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
 		taskQueue,
-		nil, // no daemon prober: triggers never request a greenfield probe
 	)
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
@@ -205,7 +204,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
-		taskQueue, nil)
+		taskQueue)
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
@@ -296,7 +295,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
-		taskQueue, nil)
+		taskQueue)
 
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,

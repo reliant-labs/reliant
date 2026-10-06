@@ -119,6 +119,10 @@ func (f *fakeRepo) EmitQuestionUpdate(_ context.Context, _ string, update db.Que
 	return nil
 }
 
+func (f *fakeRepo) LockChatRunControl(context.Context, string) (func(), error) {
+	return func() {}, nil
+}
+
 type fakeTemporal struct {
 	status enumspb.WorkflowExecutionStatus
 	runID  string

@@ -29,7 +29,7 @@ func newWebhookFixture(t *testing.T, filter string) (*fireFixture, *EventFirer, 
 	// newFireFixture stored a schedule config; a webhook trigger has none.
 	f.trigger.Config = json.RawMessage(`{}`)
 	require.NoError(t, f.repo.UpdateTrigger(context.Background(), f.trigger))
-	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), f.starter, noopRunRecorder{}, "test-queue", nil)
+	launcher := launch.NewLauncher(f.repo, threads.NewService(f.repo), f.starter, noopRunRecorder{}, "test-queue")
 	starter := &recordingStarter{}
 	return f, NewEventFirer(f.repo, launcher), NewIntake(f.repo, starter, "test-queue"), starter
 }
@@ -93,7 +93,7 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			f.trigger.Config = json.RawMessage(`{}`)
 			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
 			runs := &recordingStarter{}
-			firer := NewEventFirer(f.repo, launch.NewLauncher(f.repo, threads.NewService(f.repo), runs, noopRunRecorder{}, "test-queue", nil))
+			firer := NewEventFirer(f.repo, launch.NewLauncher(f.repo, threads.NewService(f.repo), runs, noopRunRecorder{}, "test-queue"))
 			fires := &recordingStarter{}
 			intake := NewIntake(f.repo, fires, "test-queue")
 

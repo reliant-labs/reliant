@@ -61,6 +61,16 @@ type WorkflowInput struct {
 	// ghost recovery) re-supplies it. The runtime exposes it to CEL as the
 	// `trigger` namespace.
 	Trigger *TriggerInfo
+	// GreenfieldProbe asks this run to find out, before its first LLM call,
+	// whether the chat's working directory holds any code, and to seed the
+	// greenfield stack guidance when it does not (runGreenfieldProbe). Only
+	// the start of a chat's FIRST turn sets it. Nothing that re-supplies an
+	// input — continue-as-new, ghost recovery, a resume — carries it, so a
+	// chat is probed at most once.
+	//
+	// omitempty keeps every run that does not probe byte-identical to a start
+	// recorded before this field existed.
+	GreenfieldProbe bool `json:"GreenfieldProbe,omitempty"`
 }
 
 // ResumeInput carries the position checkpoint of the interrupted predecessor
@@ -934,6 +944,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 	notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts)
+
+	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
+	// guidance it may seed is in the thread when the first LLM call reads it,
+	// and after preflight so a daemon preflight just woke can answer it.
+	if input.GreenfieldProbe {
+		runGreenfieldProbe(ctx, input, execCtx, workflowID, thread)
+	}
 
 	// STEP 6.9: Resume-at-position. When this run resumes an interrupted
 	// (failed/terminated) predecessor, enter directly at the resolved resume

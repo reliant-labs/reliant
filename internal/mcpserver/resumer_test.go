@@ -4,6 +4,7 @@ package mcpserver
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -11,16 +12,15 @@ import (
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/require"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	cpdaemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
+	"github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 )
 
-// stubRegistry is the control plane's side of
-// reliant.v1.DaemonRegistryService, which is what it actually exposes for
-// resume (translating onto its own DaemonService internally).
-type stubRegistry struct {
-	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
+// stubDaemonService is the control plane's controlplane.v1.DaemonService —
+// the route it actually serves for resume.
+type stubDaemonService struct {
+	controlplanev1connect.UnimplementedDaemonServiceHandler
 
 	resumed   bool
 	errMsg    string
@@ -29,27 +29,33 @@ type stubRegistry struct {
 	callCount int
 }
 
-func (s *stubRegistry) ResumeDaemon(
+func (s *stubDaemonService) ResumeDaemon(
 	_ context.Context,
-	req *connect.Request[reliantv1.ResumeDaemonRequest],
-) (*connect.Response[reliantv1.ResumeDaemonResponse], error) {
+	req *connect.Request[cpdaemonv1.ResumeDaemonRequest],
+) (*connect.Response[cpdaemonv1.ResumeDaemonResponse], error) {
 	s.callCount++
 	s.gotAuth = req.Header().Get("Authorization")
 	s.gotID = req.Msg.GetDaemonId()
-	return connect.NewResponse(&reliantv1.ResumeDaemonResponse{
-		Resumed:      s.resumed,
-		ErrorMessage: s.errMsg,
-	}), nil
+	if !s.resumed {
+		// What control-plane's svcdaemon.ResumeDaemon does for a refusal.
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New(s.errMsg))
+	}
+	return connect.NewResponse(&cpdaemonv1.ResumeDaemonResponse{}), nil
 }
 
 // resumeRecorder serves a real Connect handler, so the client's wire format
-// and headers are exercised rather than approximated.
-func resumeRecorder(t *testing.T, resumed bool, errMsg string) (*httptest.Server, *stubRegistry) {
+// and headers are exercised rather than approximated. Every other path 404s,
+// as on control-plane's admin-server, and is recorded.
+func resumeRecorder(t *testing.T, resumed bool, errMsg string) (*httptest.Server, *stubDaemonService) {
 	t.Helper()
-	stub := &stubRegistry{resumed: resumed, errMsg: errMsg}
+	stub := &stubDaemonService{resumed: resumed, errMsg: errMsg}
 
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewDaemonRegistryServiceHandler(stub))
+	mux.Handle(controlplanev1connect.NewDaemonServiceHandler(stub))
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		t.Errorf("resumer called %s, which the control plane does not serve", r.URL.Path)
+		http.NotFound(w, r)
+	})
 	srv := httptest.NewServer(mux)
 	t.Cleanup(srv.Close)
 	return srv, stub
