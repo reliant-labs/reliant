@@ -257,6 +257,13 @@ type ChildWorkflowTracker struct {
 	// completions.
 	threadWakes map[string]int
 
+	// turnStartWakes is threadWakes[thread] as it stood when the thread last
+	// began a loop turn (recordTurnStart). A wake past it arrived after that
+	// turn read its mailbox and history, so no turn has seen what it rang
+	// for. A thread that has not taken a turn in this execution reads as 0:
+	// every wake it got is unseen. See wakeSinceLastTurn.
+	turnStartWakes map[string]int
+
 	// ── Continue-as-new handoff (continue_as_new.go) ──────────────────────
 
 	// handoffCapable is true while a top-level loop that can emit
@@ -377,6 +384,23 @@ func (t *ChildWorkflowTracker) notifyThreadWake(thread string) {
 // compare against the live value to detect a new arrival.
 func (t *ChildWorkflowTracker) threadWakeCount(thread string) int {
 	return t.threadWakes[thread]
+}
+
+// recordTurnStart marks that thread is beginning a loop turn, whose call_llm
+// drains the mailbox and reads history: every wake counted so far is one that
+// turn can see.
+func (t *ChildWorkflowTracker) recordTurnStart(thread string) {
+	if t.turnStartWakes == nil {
+		t.turnStartWakes = make(map[string]int)
+	}
+	t.turnStartWakes[thread] = t.threadWakes[thread]
+}
+
+// wakeSinceLastTurn reports whether thread has been woken since it last began
+// a turn: a user message or mailbox row that no turn of this execution has
+// read.
+func (t *ChildWorkflowTracker) wakeSinceLastTurn(thread string) bool {
+	return t.threadWakes[thread] > t.turnStartWakes[thread]
 }
 
 // listLiveDetachedSpawns returns every background spawn currently in flight,
@@ -616,7 +640,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	defer func() {
 		// Read at exit, off the final inputs map (ApplyDefaults replaces it).
 		launchRun := IsLaunchRun(input.Inputs)
-		handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, launchRun, childTracker)
+		// A root run woken after its last turn hands off to a fresh run
+		// instead of completing (see late_wake.go). Assigning the named
+		// return is what turns this completion into that continue-as-new.
+		lateWake := func() error { return continueAsNewForLateWake(ctx, input, thread, childTracker) }
+		if handoff := handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, launchRun, childTracker, lateWake); handoff != nil {
+			result, retErr = nil, handoff
+		}
 	}()
 
 	// STEP 5: Load workflow definition (YAML and JSON)
@@ -4704,7 +4734,12 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 // launchRun says whether this run is the chat's launch run (IsLaunchRun) or one
 // a person's reply started; it rides on every terminal notification, because
 // who is waiting on the run decides whether its finish notifies.
-func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, launchRun bool, childTracker *ChildWorkflowTracker) {
+//
+// lateWake runs last on a ROOT run's normal completion, after its "completed"
+// bookkeeping; a non-nil error it returns (a continue-as-new for input that
+// arrived after the run's last turn, see late_wake.go) is handed back for the
+// workflow to return in place of completing. Nil disables it.
+func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, launchRun bool, childTracker *ChildWorkflowTracker, lateWake func() error) error {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a disconnected context that will survive cancellation
@@ -4727,7 +4762,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Notify UI that workflow was cancelled and update workflow record
 		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread,
 			&workflowStatusOpts{LaunchRun: launchRun})
-		return
+		return nil
 	}
 
 	// Check for panic/error recovery
@@ -4757,7 +4792,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 			"chatID", chatID,
 			"historyLength", workflow.GetInfo(ctx).GetCurrentHistoryLength(),
 		)
-		return
+		return nil
 	}
 
 	// Check if the workflow returned an error
@@ -4771,7 +4806,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Notify UI that workflow failed and update workflow record
 		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
 			&workflowStatusOpts{Error: failureText(retErr), LaunchRun: launchRun})
-		return
+		return nil
 	}
 
 	// Normal completion - don't run cleanup for successful completions
@@ -4802,6 +4837,14 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// — and the verdict travels beside it so no surface has to guess.
 	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
 		&workflowStatusOpts{Outcome: runOutcome, LaunchRun: launchRun})
+
+	// Last, so a wake that landed during the bookkeeping above counts too.
+	// Child runs are never signalled — every wake addresses the chat's root
+	// execution — so only a root run asks.
+	if parentWorkflowID == "" && lateWake != nil {
+		return lateWake()
+	}
+	return nil
 }
 
 // terminalDrainDetachedSpawns is spec §6.7's belt-and-braces: the loop-exit
