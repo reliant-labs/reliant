@@ -43,16 +43,18 @@ const SignalName = "thread_wake"
 type Reason string
 
 const (
-	// ReasonMailbox is a row queued into agent_messages — spawn_send, or a
-	// human addressing a sub-agent through SendAgentMessage. The message
-	// body lives in the mailbox and is delivered by the drain.
+	// ReasonMailbox is a row queued into agent_messages — spawn_send, a
+	// human addressing a thread through SendAgentMessage, or a SendMessage
+	// to a thread whose run is live (queued rather than written into
+	// history, so it cannot land before the reply of a turn in flight). The
+	// message body lives in the mailbox and is delivered by the drain.
 	ReasonMailbox Reason = "mailbox"
 
 	// ReasonUserMessage is a user message saved to `messages` on a thread
-	// whose run is live. Nothing is queued in the mailbox for this one: the
-	// message is already in history, and the wake is the whole point — a
-	// spinning loop would have re-read history on its own, a parked one
-	// never gets there.
+	// that is about to take a turn: a paused run SendMessage just resumed.
+	// Nothing is queued in the mailbox for this one: the message is already
+	// in history, and the wake is what releases a loop parked on its
+	// background spawns, which resuming alone does not.
 	ReasonUserMessage Reason = "user_message"
 )
 
