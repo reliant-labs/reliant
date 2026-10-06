@@ -1,9 +1,9 @@
 ---
 title: "Architecture Overview"
-description: "High-level architecture of Reliant's distributed deployment"
+description: "High-level architecture of the Reliant cloud service"
 ---
 
-Reliant is an AI-powered software engineering platform that orchestrates multi-step, multi-agent workflows. Each workflow coordinates LLM inference with local tool operations—shell commands, file edits, MCP servers, terminal sessions—through a durable execution engine that survives crashes and restarts.
+Reliant is a cloud service: the desktop and web apps connect to Reliant's API, worker and gateway servers on Google Cloud, and an account is required. It orchestrates multi-step, multi-agent workflows. Each workflow coordinates LLM inference with tool operations on a daemon—shell commands, file edits, MCP servers, terminal sessions—through a durable execution engine that survives crashes and restarts.
 
 ## Core Components
 
@@ -19,9 +19,9 @@ Every Reliant deployment consists of these components:
 
 **Temporal Workers** — Execute the actual workflow activities: calling LLM providers (Anthropic, OpenAI, etc.), routing tool execution requests to the daemon, persisting messages and state to the database, and publishing streaming updates to the frontend.
 
-**Tools Daemon** — A local process that provides direct access to the user's machine. It executes shell commands, performs file operations, manages MCP server lifecycles, and hosts terminal sessions. It runs as a separate `reliant daemon` process that connects to the cloud via a bidirectional gRPC stream.
+**Tools Daemon** — A process that provides direct access to the machine it runs on: the user's own machine, any machine they own, or a managed cloud machine. It executes shell commands, performs file operations, manages MCP server lifecycles, and hosts terminal sessions. It runs as a separate `reliant daemon` process that connects to the cloud via a bidirectional gRPC stream.
 
-**Database** — Stores chats, messages, content blocks, workflows, projects, and worktree associations. Postgres for all deployments.
+**Database** — Stores chats, messages, content blocks, workflows, projects, and worktree associations. Postgres is the only supported database.
 
 **Streaming Layer** — Delivers real-time updates (new messages, tool outputs, workflow state changes) from workers to the frontend via NATS.
 
@@ -33,7 +33,7 @@ Three separate process types split the workload:
 - **`reliant server worker`** — Temporal workflow worker. Executes activities (LLM calls, tool routing). Runs as N replicas for horizontal scaling.
 - **`reliant server gateway`** — Manages bidirectional gRPC streams to `reliant daemon` processes. Routes tool execution requests from API servers and workers to the correct daemon via NATS. Runs as a small number of stateful replicas.
 
-Users run `reliant daemon start` on their local machine, which establishes a persistent gRPC stream to the gateway. Tool execution requests flow through NATS (`NATSDaemonRouter`) to the gateway, which forwards them to the appropriate daemon stream. Streaming updates propagate through `NATSUpdateHub` so all API server replicas can push events to their connected frontends.
+Users run `reliant daemon start` on any machine they own, which establishes a persistent gRPC stream to the gateway. Tool execution requests flow through NATS (`NATSDaemonRouter`) to the gateway, which forwards them to the appropriate daemon stream. Streaming updates propagate through `NATSUpdateHub` so all API server replicas can push events to their connected frontends.
 
 ## Architecture Summary
 

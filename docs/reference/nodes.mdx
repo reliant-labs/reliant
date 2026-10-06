@@ -80,7 +80,7 @@ Run an integration action (for example an HTTP request)
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `uses` | string | No | - | Which integration action to run, as integration/action@major |
-| `with` | map | No | - | Action parameters, keyed as in the action's schema. Values may be literals or {`{ }`} templates |
+| `with` | map | No | - | Action parameters, keyed as in the action's schema. Values may be literals or \{`{ }`\} templates |
 | `connection` | string | No | - | Id of the saved connection to authenticate with. Leave it empty to use your default connection |
 
 ### Outputs
@@ -312,7 +312,7 @@ Run one tool you pick, with parameters you set; no LLM involved
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `tool` | string | No | - | The tool to run, by name. Only tools that allow direct use from a workflow can be named |
-| `params` | map | No | - | The tool's parameters, keyed as in its schema. Values may be literals or {`{ }`} templates |
+| `params` | map | No | - | The tool's parameters, keyed as in its schema. Values may be literals or \{`{ }`\} templates |
 
 ### Outputs
 

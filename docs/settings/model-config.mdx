@@ -240,6 +240,8 @@ Common base URLs:
 
 The URL should include `/v1` if the server requires it, but should not include trailing slashes or endpoint paths like `/chat/completions`.
 
+Reliant's servers make all model calls, so a local model is reached through a daemon running on the machine that can see the model server (usually your own machine, via `reliant daemon start`). The prompt and reply are relayed through our servers and stored in your chat like any other; see [Privacy & Security](/help/privacy#local-models).
+
 ### Running Ollama
 
 If you do not have Ollama installed, get it from [ollama.ai](https://ollama.ai). After installation:

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -151,6 +152,35 @@ func updateDescription(release Release) string {
 	return formatDate(release.Date)
 }
 
+// placeholderTokenRe matches a whitespace-delimited token containing a
+// <placeholder>, e.g. http://127.0.0.1:<random-port>/auth/callback.
+var placeholderTokenRe = regexp.MustCompile(`[^\s` + "`" + `]*<[A-Za-z0-9_.:-]+>[^\s` + "`" + `]*`)
+
+// mdxProse makes release-note prose safe for MDX: tokens containing a
+// <placeholder> become one inline-code span (so URLs aren't split by the
+// autolinker), remaining < > { } are backslash-escaped, and existing code
+// spans are left alone. Release YAML stays plain, readable text.
+func mdxProse(value string) string {
+	escaper := strings.NewReplacer("<", "\\<", ">", "\\>", "{", "\\{", "}", "\\}")
+	parts := strings.Split(value, "`")
+	for i := 0; i < len(parts); i += 2 {
+		seg := parts[i]
+		var out strings.Builder
+		last := 0
+		for _, loc := range placeholderTokenRe.FindAllStringIndex(seg, -1) {
+			token := seg[loc[0]:loc[1]]
+			trimmed := strings.TrimRight(token, ".,;:)")
+			out.WriteString(escaper.Replace(seg[last:loc[0]]))
+			out.WriteString("`" + trimmed + "`")
+			out.WriteString(escaper.Replace(token[len(trimmed):]))
+			last = loc[1]
+		}
+		out.WriteString(escaper.Replace(seg[last:]))
+		parts[i] = out.String()
+	}
+	return strings.Join(parts, "`")
+}
+
 func jsxString(value string) string {
 	return strconv.Quote(strings.TrimSpace(value))
 }
@@ -168,14 +198,14 @@ func writeItemList(sb *strings.Builder, items []ReleaseItem, depth int) bool {
 		sb.WriteString("- ")
 		if title != "" {
 			sb.WriteString("**")
-			sb.WriteString(title)
+			sb.WriteString(mdxProse(title))
 			sb.WriteString("**")
 		}
 		if desc != "" {
 			if title != "" {
 				sb.WriteString(" ")
 			}
-			sb.WriteString(desc)
+			sb.WriteString(mdxProse(desc))
 		}
 		sb.WriteString("\n")
 		wrote = true
@@ -212,14 +242,14 @@ func generateMDX(releases []Release) string {
 		wroteBody := false
 		if title := strings.TrimSpace(release.Title); title != "" {
 			sb.WriteString("### ")
-			sb.WriteString(title)
+			sb.WriteString(mdxProse(title))
 			sb.WriteString("\n\n")
 			wroteBody = true
 		}
 
 		if len(release.Sections) > 0 {
 			if summary := strings.TrimSpace(release.Summary); summary != "" {
-				sb.WriteString(summary)
+				sb.WriteString(mdxProse(summary))
 				sb.WriteString("\n\n")
 				wroteBody = true
 			}
@@ -227,7 +257,7 @@ func generateMDX(releases []Release) string {
 				sectionTitle := strings.TrimSpace(section.Title)
 				if sectionTitle != "" {
 					sb.WriteString("#### ")
-					sb.WriteString(sectionTitle)
+					sb.WriteString(mdxProse(sectionTitle))
 					sb.WriteString("\n\n")
 					wroteBody = true
 				}

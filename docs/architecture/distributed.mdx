@@ -1,6 +1,6 @@
 ---
-title: "Distributed Mode"
-description: "Running Reliant as separate cloud-scalable server components"
+title: "Server Components"
+description: "The API server, worker and gateway that make up the Reliant cloud service"
 ---
 
 ## Overview
@@ -45,8 +45,8 @@ When the API server needs to execute a tool on a developer's machine, it publish
 | `--health-port` | `HEALTH_PORT` | `8081` | Health/readiness endpoint port |
 | `--pprof-port` | `PPROF_PORT` | `6060` | pprof debug server port |
 | `--bind-address` | `BIND_ADDRESS` | `0.0.0.0` | Network interface to bind to |
-| `--db-driver` | `DATABASE_DRIVER` | `postgres` | Database driver (`sqlite` or `postgres`) |
-| `--db-url` | `DATABASE_URL` | — | Postgres connection string (required when driver is `postgres`) |
+| `--db-driver` | `DATABASE_DRIVER` | `postgres` | Database driver (`postgres` is the only supported value) |
+| `--db-url` | `DATABASE_URL` | — | Postgres connection string |
 | `--data-dir` | `DATA_DIR` | `./data` | Directory for logs, certs, and local data |
 | `--temporal-host` | `TEMPORAL_HOST` | `localhost` | Temporal server hostname |
 | `--temporal-port` | `TEMPORAL_PORT` | `7233` | Temporal server port |

@@ -3,13 +3,13 @@ title: "Remote Daemons"
 description: "Connecting remote daemons, managed cloud daemons, and daemon selection behavior"
 ---
 
-The tools daemon is the component that executes tools — shell commands, file operations, MCP servers — on a machine with access to your code. In [monolith mode](/architecture/monolith), the daemon runs in-process and there's nothing to configure. In [distributed mode](/architecture/distributed), the daemon runs as a separate process and connects to the server infrastructure through a gateway.
+The tools daemon is the component that executes tools — shell commands, file operations, MCP servers — on a machine with access to your code. The daemon runs as a separate process, on your own machine, on any machine you own, or on a managed cloud machine, and connects to Reliant's servers through a gateway (see [Architecture](/architecture/distributed)).
 
 This page covers how to connect remote daemons, how managed cloud daemons work, and how Reliant selects a daemon when you have more than one.
 
 ## Connecting a Remote Daemon
 
-A remote daemon runs on your local machine and connects outbound to a Reliant gateway. This is the standard setup for distributed mode — your code stays on your machine, and the daemon dials out to the gateway over a persistent gRPC stream.
+A remote daemon runs on a machine you own and connects outbound to a Reliant gateway over a persistent gRPC stream. Your repository stays on that machine, but whatever the agent reads or a command prints is sent to Reliant's servers, stored with your chat, and sent to your model provider (see [Privacy & Security](/help/privacy)).
 
 ### Registration
 
