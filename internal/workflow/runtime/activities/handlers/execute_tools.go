@@ -753,7 +753,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	// on the result the model is already reading — telling agents this in a
 	// description ahead of time has been measured at zero uptake, twice.
 	if !isError {
-		result.Content += maybeCodeContextNudge(toolName, tec.toolInput, tec.thread)
+		result.Content += maybeCodeContextNudge(toolName, tec.toolInput, durableContent, tec.thread)
 	}
 
 	status := core.ToolCallStatusCompleted

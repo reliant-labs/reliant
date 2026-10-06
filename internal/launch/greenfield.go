@@ -51,8 +51,14 @@ import (
 //
 // Once the project adopts forge, forge.yaml appears and the daemon's
 // projectMemoryWithForgeFramework injects the real framework memory on every
-// turn. That is the post-adoption path; this is the pre-adoption one, and the
-// two never overlap because a forge project is never code-free.
+// turn, and every agent that preloads skills also gets forge's start-here
+// skill (handlers.withForgeStartHere). That is the post-adoption path; this is
+// the pre-adoption one, and the two never overlap because a forge project is
+// never code-free.
+//
+// Both are keyed on forge.yaml at the project ROOT, so the guidance asks for
+// `project new --in-place`. The default `project new <name>` nests the app in
+// a subdirectory, where neither the memory nor the preload ever finds it.
 
 // greenfieldProbeTimeoutMs bounds the daemon roundtrip. This runs on the send
 // path, so it is latency the user feels on their first message; the probe is a
@@ -194,6 +200,13 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("deployed to a cluster they operate or hosted on Reliant's infrastructure with ")
 	b.WriteString("managed secrets, build-once releases and promotion. Run ")
 	b.WriteString("`reliant forge skill load forge` before starting.\n\n")
+
+	b.WriteString("Build it IN this directory: `reliant forge project new --in-place --mod <module>` ")
+	b.WriteString("(add `--name <product>` when the directory is not named after the product), not ")
+	b.WriteString("`project new <name>`, which nests the app one level down. The harness recognizes a ")
+	b.WriteString("forge project by forge.yaml at the project root — that is what gives every later ")
+	b.WriteString("turn, and every sub-agent, forge's framework memory and its start-here skill — and ")
+	b.WriteString("--in-place keeps files already here rather than overwriting them.\n\n")
 
 	b.WriteString("A landing page, marketing site, docs site or other static site is a forge case ")
 	b.WriteString("too, not an exception: one static frontend and no backend, hosted on Reliant's ")

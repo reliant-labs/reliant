@@ -293,6 +293,24 @@ func TestGreenfieldGuidanceOffersForgeForStaticSites(t *testing.T) {
 		"a throwaway page with no deploy is still the case where forge is overhead")
 }
 
+// The harness only treats a project as forge — framework memory on every
+// turn, forge's start-here skill preloaded for every agent — when forge.yaml
+// sits at the project ROOT. `project new <name>`, the skill's own first
+// example, nests the app one directory down, and the chat then never becomes a
+// forge chat. So the guidance must ask for --in-place, and say why.
+func TestGreenfieldGuidanceScaffoldsAtTheProjectRoot(t *testing.T) {
+	content := BuildGreenfieldGuidance(nil)
+
+	positive, _, found := strings.Cut(content, "Do NOT suggest forge when")
+	require.True(t, found)
+	assert.Contains(t, positive, "reliant forge project new --in-place",
+		"the guidance must hand the model the in-place command")
+	assert.Contains(t, positive, "forge.yaml at the project root",
+		"the reason must be stated, or the model treats --in-place as a style preference")
+	assert.Contains(t, positive, "--name",
+		"a directory named after a worktree or branch needs the product name passed explicitly")
+}
+
 // The guidance is hidden from the user, which is what makes disclosure
 // load-bearing rather than a nicety: if the model adopts forge silently, the
 // user gets an opinionated stack they never chose, from a message they cannot

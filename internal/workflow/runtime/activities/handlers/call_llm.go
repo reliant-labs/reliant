@@ -1275,6 +1275,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// instead of looking like the agent simply chose to load the same skills by
 	// hand.
 	requestedSkills := model.CelStringListValue(args.GetSkills())
+	// In a forge project, an agent that preloads skills also gets forge's own
+	// start-here skill — see withForgeStartHere for the rule and why.
+	var harnessSkills []string
+	if projectCfg != nil {
+		requestedSkills, harnessSkills = withForgeStartHere(requestedSkills, projectCfg.Skills)
+	}
 	// The skills whose bodies this call actually seeded. Read again further
 	// down by injectSkillSuggestions, which must not tell the model to load
 	// what the seed just told it not to.
@@ -1308,6 +1314,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"requested", len(requestedSkills),
 			"injected", len(injectedSkills),
 			"skills", requestedSkills,
+			"harnessAdded", harnessSkills,
 			"catalogSize", catalogSize)
 		// Oversize skills degrade every turn that preloads them, so they are
 		// surfaced as a warning rather than folded into the info line.
@@ -3259,7 +3266,7 @@ func preloadSkillMissError(snapshotSynced bool, catalogSize int, requested, miss
 // identical to the bytes the agent would get by loading it by hand — only the
 // envelope around them differs, and it differs on purpose.
 //
-// Skills are deduped by resolved skill name (two paths that resolve to the same
+// Skills are deduped by resolved skill path (two paths that resolve to the same
 // skill inject once); empty-body / unresolvable paths are skipped.
 //
 // Each body is passed through tools.DeliverSkillContent — the SAME renderer the
@@ -3327,16 +3334,20 @@ func buildSeededSkillMessages(projectCfg *cfgpkg.Config, skillPaths []string) (m
 	b.WriteString(preloadedSkillsPreamble)
 
 	for _, path := range skillPaths {
-		name, body, ok := tools.LoadSkillForInjection(projectCfg.Skills, path)
+		skill, body, ok := tools.LoadSkillForInjection(projectCfg.Skills, path)
 		if !ok {
 			missingPaths = append(missingPaths, path)
 			continue
 		}
-		if seen[name] {
-			// Two paths resolving to the same skill inject once. Not missing.
+		// Keyed by the resolved skill's path, not its name: two paths
+		// resolving to the same skill inject once (not missing), while two
+		// different skills sharing a name — the `forge` namespace map and
+		// forge's start-here at `forge/forge` — must both arrive.
+		if seen[skill.SkillPath] {
 			continue
 		}
-		seen[name] = true
+		seen[skill.SkillPath] = true
+		name := skill.Name
 		injectedNames = append(injectedNames, name)
 
 		capped, wasTruncated := tools.DeliverSkillContent(path, body)

@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"runtime/debug"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,69 @@ func TestVersionIsNeverABranchName(t *testing.T) {
 				"such as 0.0.0-dev-<sha> (branch push). See the `stamp` step in "+
 				".github/workflows/build-images.yml.", Version)
 		}
+	}
+}
+
+// TestApplyBuildInfoReadsTheToolchainStamp pins where a binary built without
+// -ldflags gets its identity: the module version and the VCS stamp the Go
+// toolchain embeds. Before this, a `go install`ed reliant printed
+// `commit: unknown` while its own version string ended in `+dirty`.
+func TestApplyBuildInfoReadsTheToolchainStamp(t *testing.T) {
+	vcs := func(revision, modified string) []debug.BuildSetting {
+		return []debug.BuildSetting{
+			{Key: "vcs", Value: "git"},
+			{Key: "vcs.revision", Value: revision},
+			{Key: "vcs.modified", Value: modified},
+		}
+	}
+	for _, tc := range []struct {
+		name                 string
+		ldVersion, ldCommit  string // what -ldflags stamped ("unknown" = nothing)
+		info                 debug.BuildInfo
+		wantVersion, wantCmt string
+		wantDirty            string
+	}{
+		{
+			name:      "go install from a dirty checkout",
+			ldVersion: "unknown", ldCommit: "unknown",
+			info: debug.BuildInfo{
+				Main:     debug.Module{Version: "v1.7.17-0.20260930090302-898d6af5ef74+dirty"},
+				Settings: vcs("898d6af5ef74c0ffee00c0ffee00c0ffee00c0ff", "true"),
+			},
+			wantVersion: "v1.7.17-0.20260930090302-898d6af5ef74+dirty", wantCmt: "898d6af5ef74", wantDirty: DirtyTrue,
+		},
+		{
+			name:      "go build from a clean checkout",
+			ldVersion: "unknown", ldCommit: "unknown",
+			info:        debug.BuildInfo{Main: debug.Module{Version: "(devel)"}, Settings: vcs("0123456789abcdef", "false")},
+			wantVersion: "unknown", wantCmt: "0123456789ab", wantDirty: DirtyFalse,
+		},
+		{
+			name:      "release build: -ldflags wins over the module graph",
+			ldVersion: "v1.8.0", ldCommit: "abc1234",
+			info:        debug.BuildInfo{Main: debug.Module{Version: "v1.8.0-0.20261001000000-ffffffffffff"}, Settings: vcs("ffffffffffffffff", "false")},
+			wantVersion: "v1.8.0", wantCmt: "abc1234", wantDirty: DirtyFalse,
+		},
+		{
+			name:      "-buildvcs=false: nothing to read",
+			ldVersion: "v1.8.0", ldCommit: "abc1234",
+			info:        debug.BuildInfo{Main: debug.Module{Version: "(devel)"}},
+			wantVersion: "v1.8.0", wantCmt: "abc1234", wantDirty: DirtyUnknown,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			oldV, oldC, oldD := Version, Commit, dirty
+			t.Cleanup(func() { Version, Commit, dirty = oldV, oldC, oldD })
+			Version, Commit, dirty = tc.ldVersion, tc.ldCommit, DirtyUnknown
+
+			applyBuildInfo(&tc.info)
+
+			got := Get()
+			if got.Version != tc.wantVersion || got.Commit != tc.wantCmt || got.Dirty != tc.wantDirty {
+				t.Errorf("got version=%q commit=%q dirty=%q, want %q %q %q",
+					got.Version, got.Commit, got.Dirty, tc.wantVersion, tc.wantCmt, tc.wantDirty)
+			}
+		})
 	}
 }
 
