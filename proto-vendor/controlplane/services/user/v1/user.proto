@@ -111,8 +111,6 @@ message AccountDeletionWalletQuote {
   int64 unrefundable_cents = 3;
   // Promotional (coupon) credit that deletion forfeits.
   int64 forfeited_promo_cents = 4;
-  reserved 5; // was: bool includes_processing_fee (renamed: the top-up fee is a service fee)
-  reserved "includes_processing_fee";
   bool includes_service_fee = 6;
 }
 

@@ -788,13 +788,13 @@ const file_services_user_v1_user_proto_rawDesc = "" +
 	"card_brand\x18\x01 \x01(\tR\tcardBrand\x12\x1d\n" +
 	"\n" +
 	"card_last4\x18\x02 \x01(\tR\tcardLast4\x12!\n" +
-	"\famount_cents\x18\x03 \x01(\x03R\vamountCents\"\xc1\x02\n" +
+	"\famount_cents\x18\x03 \x01(\x03R\vamountCents\"\xa2\x02\n" +
 	"\x1aAccountDeletionWalletQuote\x12!\n" +
 	"\frefund_cents\x18\x01 \x01(\x03R\vrefundCents\x12L\n" +
 	"\fdestinations\x18\x02 \x03(\v2(.controlplane.v1.WalletRefundDestinationR\fdestinations\x12-\n" +
 	"\x12unrefundable_cents\x18\x03 \x01(\x03R\x11unrefundableCents\x122\n" +
 	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\x120\n" +
-	"\x14includes_service_fee\x18\x06 \x01(\bR\x12includesServiceFeeJ\x04\b\x05\x10\x06R\x17includes_processing_fee\"\xf6\x01\n" +
+	"\x14includes_service_fee\x18\x06 \x01(\bR\x12includesServiceFee\"\xf6\x01\n" +
 	"\x1fAccountDeletionWalletSettlement\x12%\n" +
 	"\x0erefunded_cents\x18\x01 \x01(\x03R\rrefundedCents\x12L\n" +
 	"\fdestinations\x18\x02 \x03(\v2(.controlplane.v1.WalletRefundDestinationR\fdestinations\x12*\n" +
