@@ -31,10 +31,11 @@ func preloadTestCatalog() []cfgpkg.StoredSkill {
 func TestLoadSkillForInjection_ExactFoldAndBody(t *testing.T) {
 	skills := preloadTestCatalog()
 
-	// Exact match returns the resolved leaf name and the skill body.
-	name, body, ok := tools.LoadSkillForInjection(skills, "forge/db")
+	// Exact match returns the resolved skill and its body.
+	skill, body, ok := tools.LoadSkillForInjection(skills, "forge/db")
 	require.True(t, ok)
-	require.Equal(t, "db", name)
+	require.Equal(t, "db", skill.Name)
+	require.Equal(t, "forge/db", skill.SkillPath)
 	require.Contains(t, body, "DB body")
 
 	// Case-insensitive / whitespace-tolerant match — the injection resolver must

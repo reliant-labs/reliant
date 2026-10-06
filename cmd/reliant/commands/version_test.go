@@ -76,9 +76,51 @@ func TestVersionCmdJSONReportsInjectedBuildInfo(t *testing.T) {
 func TestVersionCmdShortPrintsOnlyVersion(t *testing.T) {
 	withBuildInfo(t, "7.8.9", "cafe123", "2026-03-03")
 
-	// --short writes to stdout via fmt.Println rather than the command's
-	// output writer, so assert on the exported accessor the command reads.
-	if got := version.Get().Version; got != "7.8.9" {
-		t.Errorf("version.Get().Version = %q, want %q", got, "7.8.9")
+	if got := runVersion(t, "--short"); got != "7.8.9\n" {
+		t.Errorf("version --short = %q, want %q", got, "7.8.9\n")
+	}
+}
+
+// `reliant --version` was an unknown flag, so the one spelling every CLI user
+// tries first failed. It must print exactly what `reliant version` prints.
+func TestRootVersionFlagPrintsTheVersionBlock(t *testing.T) {
+	withBuildInfo(t, "1.2.3", "abc1234", "2026-01-01")
+
+	var out bytes.Buffer
+	root := NewRootCmd()
+	root.SetOut(&out)
+	root.SetErr(&out)
+	root.SetArgs([]string{"--version"})
+	if err := root.Execute(); err != nil {
+		t.Fatalf("reliant --version: %v\n%s", err, out.String())
+	}
+	if want := runVersion(t); out.String() != want {
+		t.Errorf("reliant --version and reliant version disagree\n--version:\n%s\nversion:\n%s", out.String(), want)
+	}
+
+	// -v is --verbose; the version flag must not have taken it.
+	if f := root.Flags().ShorthandLookup("v"); f == nil || f.Name != "verbose" {
+		t.Errorf("-v no longer means --verbose: %v", f)
+	}
+}
+
+// The commit line says whether the tree was clean, dirty, or not stamped at
+// all — the difference between "this binary is HEAD" and "this binary is HEAD
+// plus whatever was uncommitted that day".
+func TestVersionTextReportsDirtyState(t *testing.T) {
+	for _, tc := range []struct {
+		dirty string
+		want  string
+	}{
+		{version.DirtyTrue, "commit:  898d6af5ef74 (dirty: uncommitted changes at build time)\n"},
+		{version.DirtyFalse, "commit:  898d6af5ef74 (clean)\n"},
+		{version.DirtyUnknown, "commit:  898d6af5ef74\n"},
+	} {
+		t.Run(tc.dirty, func(t *testing.T) {
+			got := versionText(version.BuildInfo{Version: "v1", Commit: "898d6af5ef74", Dirty: tc.dirty})
+			if !strings.Contains(got, tc.want) {
+				t.Errorf("versionText with Dirty=%s:\n%s\nwant a line %q", tc.dirty, got, tc.want)
+			}
+		})
 	}
 }
