@@ -275,7 +275,7 @@ func TestPauseWorkflow_FailedWorkflow_ReconcilesCorrectStatus(t *testing.T) {
 	// The thread cascade must travel with the workflow cascade and carry the
 	// SAME status. Threads are not a workflows row, so a terminal repair that
 	// only cascaded workflows left the thread at running forever — 288 rows
-	// measured live (docs/incidents/2026-08-12-spawn-history-cap.md).
+	// measured live (dev-docs/incidents/2026-08-12-spawn-history-cap.md).
 	assert.Equal(t, db.StopReasonFailed, repo.cascadedReason)
 	assert.Equal(t, db.StopReasonFailed, repo.cascadedThreadReason,
 		"a thread under a failed run is failed, not completed — the thread cascade must inherit the run's actual status")

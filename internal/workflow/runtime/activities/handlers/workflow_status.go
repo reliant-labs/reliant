@@ -557,7 +557,7 @@ func (a *WorkflowStatusActivity) trackWorkflow(ctx context.Context, input Workfl
 			return err
 		}
 		// Threads are not a workflows row and need their own cascade call —
-		// see docs/incidents/2026-08-12-spawn-history-cap.md. This is
+		// see dev-docs/incidents/2026-08-12-spawn-history-cap.md. This is
 		// defense-in-depth alongside ThreadStatusActivity's own "completed"
 		// call: a worker that dies between the two activities otherwise
 		// leaves the descendant's thread stuck at running forever.

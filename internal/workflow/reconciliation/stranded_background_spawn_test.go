@@ -165,7 +165,7 @@ func TestRepairStrandedBackgroundSpawns_IdempotentAcrossPasses(t *testing.T) {
 }
 
 // TestRepairStrandedBackgroundSpawns_DeadParentGetsUndeliveredReport is the
-// regression for the incident on chat 0dc5167e (docs/incidents/
+// regression for the incident on chat 0dc5167e (dev-docs/incidents/
 // 2026-08-12-spawn-history-cap.md, Gap 2): Temporal terminated the parent for
 // exceeding its history-count cap, which killed both of its detached spawn
 // goroutines mid-flight, and this repair then wrote two reports addressed to

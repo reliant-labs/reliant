@@ -153,7 +153,7 @@ RETURNING id;
 -- A REAL terminal spawn report. Unlike EnqueueAgentMessageIfAbsent (the
 -- reconciler's placeholder write, DO NOTHING), a real report replaces a
 -- placeholder the reconciler synthesized for the same tool_call_id -- see
--- docs/incidents/2026-10-04-spawn-report-collision.md.
+-- dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 --
 -- It is re-queued even if the placeholder was already delivered: the parent
 -- was told "result lost, go check spawn_status" and should also receive the

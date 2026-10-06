@@ -36,7 +36,7 @@ type CascadeTerminalStatusToThreadSubtreeParams struct {
 // exit (terminate, reap, a status write that races past the thread's own
 // "completed" activity call) leaves the thread at running (2) forever, with
 // completed_at NULL. Measured on the live DB (see
-// docs/incidents/2026-08-12-spawn-history-cap.md): 288 threads stranded at
+// dev-docs/incidents/2026-08-12-spawn-history-cap.md): 288 threads stranded at
 // status=2 under an already-terminal workflow -- 174 whose workflow completed,
 // 64 cancelled, 50 failed.
 //
@@ -417,7 +417,7 @@ WHERE t.workflow_id = w.id
 // completed/failed/cancelled arms) must call this too, and a forgotten one
 // strands the thread forever: nothing else ever revisits a threads row, and
 // the 288-row measurement in
-// docs/incidents/2026-08-12-spawn-history-cap.md is exactly what that
+// dev-docs/incidents/2026-08-12-spawn-history-cap.md is exactly what that
 // omission looks like at scale -- 174 completed, 64 cancelled, 50 failed
 // workflows, each with a thread still reporting running.
 //

@@ -125,7 +125,7 @@ type AgentMessage struct {
 	// reconciler fabricated because the real one never arrived. A real report
 	// for the same ToolCallID supersedes it (EnqueueSpawnReport); a real report
 	// is never overwritten. The column is the contract -- never infer this from
-	// Body. See docs/incidents/2026-10-04-spawn-report-collision.md.
+	// Body. See dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	Synthesized bool
 }
 
@@ -170,7 +170,7 @@ type AgentMessageStore interface {
 	// spawn, or reports SpawnReportAlreadyReported without error when this
 	// spawn already reported. A slot held by a different spawn fails with
 	// ErrSpawnReportSlotTaken. See
-	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
 	// EnqueueAgentMessageIfAbsent is the reconciler's placeholder write: it
 	// inserts msg (which must carry a terminal

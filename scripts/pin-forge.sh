@@ -26,7 +26,7 @@
 #
 # ── This is a MODE, and it ends at launch ────────────────────────────────
 #
-# At launch we go back to tag pins. docs/pinning.md records the mode, why,
+# At launch we go back to tag pins. dev-docs/pinning.md records the mode, why,
 # and the exact command to reverse it. Read that before "fixing" a
 # pseudo-version you find in go.mod.
 #
@@ -112,7 +112,7 @@ if [ "${after_forge}" != "${target}" ]; then
     *)
       echo "error: ${FORGE_MOD} resolved to ${after_forge}, which is neither the requested ref (${source_desc}) nor a pseudo-version containing ${short}." >&2
       echo "       Minimum version selection kept a higher version from the module graph." >&2
-      echo "       A pseudo-version can sort BELOW an existing release tag — see docs/pinning.md." >&2
+      echo "       A pseudo-version can sort BELOW an existing release tag — see dev-docs/pinning.md." >&2
       exit 1
       ;;
   esac
@@ -132,4 +132,4 @@ echo "pinned forge -> ${source_desc} (${sha})"
 printf '  %-40s %s -> %s\n' "${FORGE_MOD}" "${before_forge:-<absent>}" "${after_forge}"
 echo
 echo "Files changed: go.mod, go.sum. Review and commit them yourself —"
-echo "this script deliberately does not commit (see docs/pinning.md)."
+echo "this script deliberately does not commit (see dev-docs/pinning.md)."

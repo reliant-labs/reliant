@@ -82,7 +82,7 @@ report() {
   else
     echo "  ${label}: ${version} [${shape}] — ${behind} commits behind ${repo}@main  (>= ${THRESHOLD})"
     if [ "${GITHUB_MODE}" = "1" ]; then
-      echo "::warning file=go.mod::${label} is ${behind} commits behind ${repo}@main (pinned ${version}). Pre-launch we pin by commit, so nothing about this version string looks stale on its own. Run 'make pin-forge' to move it, or ignore this if the older pin is deliberate. See docs/pinning.md."
+      echo "::warning file=go.mod::${label} is ${behind} commits behind ${repo}@main (pinned ${version}). Pre-launch we pin by commit, so nothing about this version string looks stale on its own. Run 'make pin-forge' to move it, or ignore this if the older pin is deliberate. See dev-docs/pinning.md."
     fi
   fi
 }

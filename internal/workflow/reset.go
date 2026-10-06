@@ -28,7 +28,7 @@ import (
 // already finished by this instant stays finished (its completion is in the
 // replayed history). Nothing in Temporal's response carries that distinction;
 // only the reset point's timestamp does. See
-// docs/incidents/2026-09-29-reconciler-false-wedge.md, "Collateral:
+// dev-docs/incidents/2026-09-29-reconciler-false-wedge.md, "Collateral:
 // sub-agents".
 type ResetResult struct {
 	NewRunID       string

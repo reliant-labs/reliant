@@ -264,7 +264,7 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 	assert.Equal(t, "test-task-queue", call.options.TaskQueue)
 	// Temporal's 10s default times out replaying a large history, which is
 	// what stretched a background spawn's report window to minutes — see
-	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	assert.Equal(t, workflow.DynamicWorkflowTaskTimeout, call.options.WorkflowTaskTimeout)
 	assert.Equal(t, chatID, input.ChatID)
 	assert.Equal(t, "builtin://agent", input.WorkflowName)

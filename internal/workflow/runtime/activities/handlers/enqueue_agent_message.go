@@ -96,7 +96,7 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 	// already have synthesized a placeholder for this spawn, and a plain INSERT
 	// would die on idx_agent_messages_one_terminal_report_per_chat_spawn (23505),
 	// leaving the real outcome lost. See
-	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	//
 	// The slot is (chat, tool call id). A slot held by a DIFFERENT spawn -- a
 	// provider reused the id in this chat, or (until the contract migration

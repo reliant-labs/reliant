@@ -13,7 +13,7 @@ import (
 
 // TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep is the second-order
 // effect the incident briefing calls out as mattering more than the cosmetics
-// (docs/incidents/2026-08-12-spawn-history-cap.md, "Gap 2"):
+// (dev-docs/incidents/2026-08-12-spawn-history-cap.md, "Gap 2"):
 //
 // ListThreadsWithOrphanedAgentMessages -- the sweep that resolves a dead
 // thread's still-queued mailbox rows -- only matches threads already in a

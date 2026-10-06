@@ -335,7 +335,7 @@ type Repository interface {
 	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 	// EnqueueSpawnReport writes a real terminal spawn report, superseding a
 	// reconciler placeholder for the same tool call. See
-	// core.AgentMessageStore and docs/incidents/2026-10-04-spawn-report-collision.md.
+	// core.AgentMessageStore and dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
 	// EnqueueAgentMessageIfAbsent is the conditional insert the stranded-
 	// background-spawn reconciler sweep uses so two concurrent passes cannot
@@ -568,7 +568,7 @@ type Repository interface {
 	// history). Without this call the chat resumes with live agents whose
 	// rows read failed, and the reconciler's stranded-spawn sweep then
 	// writes false "the parent had already exited" reports against them.
-	// Measured: six of each, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	// Measured: six of each, dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 	//
 	// `at` is the reset point's event time; it is what separates work the
 	// new run will redo from work it will only replay. Paused rows are out
@@ -630,7 +630,7 @@ type Repository interface {
 	// ending abnormally (terminate, reap, any write path that forgets this
 	// call) leaves its thread at running (2) forever. Measured on the live
 	// DB: 288 threads stranded this way (see
-	// docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
 	// own orphaned mailboxes invisible to ListThreadsWithOrphanedAgentMessages
 	// (it only matches threads already in a terminal status).
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason WorkflowStopReason) error

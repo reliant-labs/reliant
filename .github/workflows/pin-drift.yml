@@ -7,7 +7,7 @@
 # Pre-launch we pin forge by COMMIT rather than by tag, because a tagged
 # release costs three tags, three CI cycles and three merges (plus up to ~20
 # minutes of module-proxy lag) before a one-line fix reaches prod — the only
-# environment where our bugs actually appear. See docs/development/pinning.md.
+# environment where our bugs actually appear. See dev-docs/pinning.md.
 #
 # That trade has exactly one real cost, and this workflow is the thing that
 # pays it. A commit pin has NO VERSION NUMBER TO NOTICE IS STALE. `v0.1.11`
