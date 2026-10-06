@@ -22,16 +22,18 @@ import (
 // written at 20:30:32.786 ("Agent a6825dec… is STILL RUNNING after 5.6s") but
 // whose TOOL message never was. The parent then had no idea its spawn was alive.
 
-// toolResultRepo is a db.Repository that only implements GetToolCallResult.
-// Embedding the interface means every other method panics if called, which is
-// the point: this test asserts recovery consults exactly one thing.
+// toolResultRepo is a db.Repository that only implements
+// GetToolCallResultForMessage. Embedding the interface means every other
+// method panics if called, which is the point: this test asserts recovery
+// consults exactly one thing. Results here are recorded for whichever message
+// asks; tool_call_id_isolation_test.go covers the message scoping itself.
 type toolResultRepo struct {
 	db.Repository
 	results map[string]*db.ToolCallResult
 	calls   int
 }
 
-func (r *toolResultRepo) GetToolCallResult(_ context.Context, toolCallID string) (*db.ToolCallResult, error) {
+func (r *toolResultRepo) GetToolCallResultForMessage(_ context.Context, toolCallID, _ string) (*db.ToolCallResult, error) {
 	r.calls++
 	return r.results[toolCallID], nil
 }

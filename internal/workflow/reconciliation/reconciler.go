@@ -10,6 +10,7 @@ package reconciliation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -1851,7 +1852,7 @@ func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *pa
 	repaired := 0
 	for _, call := range stranded {
 		now := time.Now().UTC()
-		if err := r.repo.UpsertToolCallResult(ctx, &db.ToolCallResult{
+		if err := r.repo.UpsertToolCallResult(ctx, call.ChatID, &db.ToolCallResult{
 			ToolCallID: call.ID,
 			Content:    handlers.InterruptedToolResultContent,
 			IsError:    true,
@@ -1925,7 +1926,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 //
 // Idempotent and safe under concurrency: the insert goes through
 // EnqueueAgentMessageIfAbsent, which is backed by
-// idx_agent_messages_one_terminal_report_per_spawn (a real DB constraint,
+// idx_agent_messages_one_terminal_report_per_chat_spawn (a real DB constraint,
 // not a check-then-insert in this code) — see the migration and query
 // comments for the full reasoning. inserted=false here is the everyday
 // "someone already reported this" outcome, not a failure, so it is neither
@@ -2040,6 +2041,16 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			CreatedAt:    time.Now().UTC(),
 			Synthesized:  true,
 		})
+		if errors.Is(err, core.ErrSpawnReportSlotTaken) {
+			// Another spawn in this chat reported under the same
+			// provider-chosen id, so this one's outcome has nowhere to go.
+			// Said once, loudly, and the call is still closed: leaving it
+			// backgrounded would only repeat this every pass.
+			logging.Error("[Reconciler] Stranded background spawn's report slot is held by another spawn; its outcome cannot be delivered",
+				"chatID", call.ChatID, "toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)
+			r.closeStrandedBackgroundSpawnCall(ctx, call)
+			continue
+		}
 		if err != nil {
 			logging.Error("[Reconciler] Failed to enqueue stranded background spawn completion",
 				"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)

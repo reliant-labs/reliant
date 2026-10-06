@@ -284,7 +284,8 @@ func isBlocklessAssistant(m *message.Message) bool {
 // This runs BEFORE repairMessageHistory so that recovered results win over the
 // "unknown outcome" placeholder that repair would otherwise synthesize. A call
 // with no durable row is left alone — repair's placeholder is the right answer
-// for a tool that genuinely never reported.
+// for a tool that genuinely never reported. So is a result whose call record
+// does not point at this assistant message: that result is another call's.
 func recoverPersistedToolResults(ctx context.Context, repo db.Repository, msgs []message.Message) []message.Message {
 	if len(msgs) == 0 || repo == nil {
 		return msgs
@@ -310,11 +311,16 @@ func recoverPersistedToolResults(ctx context.Context, repo db.Repository, msgs [
 		}
 
 		var parts []message.ContentPart
+		assistantMessageID := msgs[i].ID
 		for _, tc := range msgs[i].ToolCalls() {
 			if answered[tc.ID] {
 				continue
 			}
-			row, err := repo.GetToolCallResult(ctx, tc.ID)
+			// The result recorded for the call THIS message carries, not
+			// merely one recorded under its id: the id is the provider's and
+			// can name another chat's call, whose output the model must
+			// never be handed as this call's.
+			row, err := repo.GetToolCallResultForMessage(ctx, tc.ID, assistantMessageID)
 			if err != nil || row == nil || row.Content == "" {
 				// No durable result — leave it for repairMessageHistory, which
 				// synthesizes the "outcome unknown" placeholder.

@@ -226,7 +226,7 @@ func (s *Service) recordToolCallCancelled(ctx context.Context, call *db.ToolCall
 		if err := s.repo.UpsertToolCall(txCtx, &updated); err != nil {
 			return err
 		}
-		return s.repo.UpsertToolCallResult(txCtx, &db.ToolCallResult{
+		return s.repo.UpsertToolCallResult(txCtx, call.ChatID, &db.ToolCallResult{
 			ToolCallID: call.ID,
 			Content:    CancelledToolResultContent,
 			IsError:    true,

@@ -1009,16 +1009,20 @@ func (c *ReliantClient) toolCalls(completion openai.ChatCompletion) []message.To
 	var toolCalls []message.ToolCall
 
 	if len(completion.Choices) > 0 && len(completion.Choices[0].Message.ToolCalls) > 0 {
+		// The id is ours (see llm.NewToolCallID): the gateway relays the
+		// upstream provider's, which may repeat across responses. The one part
+		// of it the next request needs is a Gemini thought signature LiteLLM
+		// appends to it, and that is carried over onto ours. Streamed deltas
+		// were accumulated by index, so nothing else needs the gateway's id.
 		for _, call := range completion.Choices[0].Message.ToolCalls {
-			if call.ID == "" || call.Function.Name == "" {
-				logging.Warn("Skipping empty/invalid tool call",
-					"id", call.ID,
-					"name", call.Function.Name)
+			if call.Function.Name == "" {
+				logging.Warn("Skipping tool call with no tool name",
+					"id", call.ID)
 				continue
 			}
 
 			toolCall := message.ToolCall{
-				ID:       call.ID,
+				ID:       llm.NewToolCallIDKeepingThoughtSignature(call.ID),
 				Name:     call.Function.Name,
 				Input:    call.Function.Arguments,
 				Type:     "function",

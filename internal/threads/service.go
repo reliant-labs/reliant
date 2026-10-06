@@ -82,7 +82,7 @@ type Repository interface {
 	// UpsertToolCall / UpsertToolCallResult let a cancel record its outcome
 	// durably at the moment the user asks for it -- see cancelToolCalls.
 	UpsertToolCall(ctx context.Context, call *db.ToolCall) error
-	UpsertToolCallResult(ctx context.Context, result *db.ToolCallResult) error
+	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 
 	// Attachment operations
 	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)

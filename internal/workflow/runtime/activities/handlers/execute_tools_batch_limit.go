@@ -41,7 +41,7 @@ func totalToolResultContentBytes(results []message.ToolResult) int {
 	return total
 }
 
-func (a *ExecuteToolsActivity) capToolResultBatch(ctx context.Context, results []message.ToolResult, compactionThreshold int32) ([]message.ToolResult, int, bool) {
+func (a *ExecuteToolsActivity) capToolResultBatch(ctx context.Context, chatID string, results []message.ToolResult, compactionThreshold int32) ([]message.ToolResult, int, bool) {
 	originalTotal := totalToolResultContentBytes(results)
 	limit := toolResultBatchLimitBytes(compactionThreshold)
 	if originalTotal <= limit || len(results) == 0 {
@@ -88,14 +88,14 @@ func (a *ExecuteToolsActivity) capToolResultBatch(ctx context.Context, results [
 
 	for i := range capped {
 		if capped[i].Content != results[i].Content {
-			a.persistCappedToolResult(ctx, capped[i])
+			a.persistCappedToolResult(ctx, chatID, capped[i])
 		}
 	}
 
 	return capped, totalToolResultContentBytes(capped), true
 }
 
-func (a *ExecuteToolsActivity) persistCappedToolResult(ctx context.Context, result message.ToolResult) {
+func (a *ExecuteToolsActivity) persistCappedToolResult(ctx context.Context, chatID string, result message.ToolResult) {
 	if result.ToolCallID == "" {
 		return
 	}
@@ -103,10 +103,12 @@ func (a *ExecuteToolsActivity) persistCappedToolResult(ctx context.Context, resu
 	readCtx, cancel := detachedForTerminalWrite(ctx)
 	defer cancel()
 	call, err := a.repo.GetToolCall(readCtx, result.ToolCallID)
-	if err != nil || call == nil || !call.Status.IsTerminal() {
+	// Only this chat's call: another chat's under the same provider-chosen id
+	// is not this batch's to rewrite (and the write would be refused anyway).
+	if err != nil || call == nil || call.ChatID != chatID || !call.Status.IsTerminal() {
 		return
 	}
-	a.upsertToolCallResult(ctx, result.ToolCallID, result.Content, result.IsError)
+	a.upsertToolCallResult(ctx, chatID, result.ToolCallID, result.Content, result.IsError)
 }
 
 func batchDetailedTruncationNotice(result message.ToolResult, originalTotal, limit int, compactionThreshold int32) string {

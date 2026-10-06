@@ -2037,6 +2037,12 @@ CREATE INDEX connections_user ON public.connections USING btree (user_id) WHERE 
 CREATE INDEX idx_agent_messages_inbox ON public.agent_messages USING btree (to_thread_id, created_at) WHERE (status = 1);
 
 --
+-- Name: idx_agent_messages_one_terminal_report_per_chat_spawn; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX idx_agent_messages_one_terminal_report_per_chat_spawn ON public.agent_messages USING btree (chat_id, tool_call_id) WHERE (kind = ANY (ARRAY[2, 3, 4]));
+
+--
 -- Name: idx_agent_messages_one_terminal_report_per_spawn; Type: INDEX; Schema: public; Owner: -
 --
 

@@ -81,7 +81,7 @@ func TestListStrandedSpawnToolCalls(t *testing.T) {
 	insertTestWorkflowWithParent(t, repo, settledChild, chatID, nil, Completed())
 	insertTestSpawnToolCall(t, repo, "tc-settled", chatID, chatID, &settledChild, core.ToolCallStatusCompleted)
 	now := time.Now().UTC()
-	if err := repo.UpsertToolCallResult(ctx, &ToolCallResult{
+	if err := repo.UpsertToolCallResult(ctx, chatID, &ToolCallResult{
 		ToolCallID: "tc-settled",
 		Content:    "the sub-agent's real answer",
 		CreatedAt:  now,

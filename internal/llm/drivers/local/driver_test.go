@@ -175,7 +175,8 @@ func TestStreamToolCallRoundTrip(t *testing.T) {
 		t.Fatalf("complete = %+v", got.complete)
 	}
 	tc := got.complete.ToolCalls[0]
-	if tc.ID != "call_1zprp9v2" || tc.Name != "get_secret_word" || !tc.Finished {
+	// The id is ours, never the server's (see tool_call_id_test.go).
+	if !mintedToolCallID.MatchString(tc.ID) || tc.Name != "get_secret_word" || !tc.Finished {
 		t.Errorf("tool call = %+v", tc)
 	}
 	if got.complete.FinishReason != message.FinishReasonToolUse {

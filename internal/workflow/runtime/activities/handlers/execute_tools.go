@@ -169,6 +169,33 @@ func (tec *toolExecutionContext) getChatID() string {
 	return tec.chatID
 }
 
+// threadID is the thread the call runs on, as the record's optional column.
+func (tec *toolExecutionContext) threadID() *string {
+	if tec.thread == "" {
+		return nil
+	}
+	thread := tec.thread
+	return &thread
+}
+
+// toolCallIsThisThreads reports whether a recorded call is the one chatID's
+// thread is dispatching, rather than another call that happens to share its
+// provider-chosen id. A record that never learned its thread is compared on
+// the chat alone.
+func toolCallIsThisThreads(call *core.ToolCall, chatID, thread string) bool {
+	if call.ChatID != chatID {
+		return false
+	}
+	return call.ThreadID == nil || *call.ThreadID == "" || thread == "" || *call.ThreadID == thread
+}
+
+func ptrValue(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}
+
 // ============================================================================
 // ACTIVITY IMPLEMENTATION
 // ============================================================================
@@ -423,7 +450,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	// tool_result blocks. Per-tool limits are not enough when one LLM turn asks
 	// for several large but individually-valid reads.
 	compactionThreshold := resolvedExecuteToolsCompactionThreshold(protoArgs)
-	results, totalResultChars, batchTruncated := a.capToolResultBatch(ctx, results, compactionThreshold)
+	results, totalResultChars, batchTruncated := a.capToolResultBatch(ctx, rtx.ChatID, results, compactionThreshold)
 	if batchTruncated {
 		activity.GetLogger(ctx).Warn("[ExecuteTools] Tool result batch exceeded budget and was truncated",
 			"totalResultChars", totalResultChars,
@@ -505,7 +532,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// Idempotency: a call that already reached a terminal status in a prior
 	// dispatch of this same tool_call_id must not run again -- see
 	// checkPriorTerminalResult.
-	if result, ok := a.checkPriorTerminalResult(ctx, toolCallID, toolName); ok {
+	if result, ok := a.checkPriorTerminalResult(ctx, chatID, thread, toolCallID, toolName); ok {
 		return result
 	}
 
@@ -534,7 +561,7 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 			"tool_name", toolName,
 			"attempt", attemptNumber)
 		result := a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil)
-		a.recordInterruptedRetry(ctx, chatID, toolCallID, toolName, result.Content)
+		a.recordInterruptedRetry(ctx, chatID, thread, toolCallID, toolName, result.Content)
 		return result
 	}
 
@@ -650,9 +677,28 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 //
 // A call with no row, or a non-terminal (Pending/Executing) row, executes
 // normally -- this must not break ordinary retries.
-func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, toolCallID, toolName string) (message.ToolResult, bool) {
+//
+// "This same tool_call_id" means this chat's and this thread's. The id is the
+// model provider's, not ours: a provider can repeat one across chats (a local
+// server numbering calls call_0 in every conversation), or a spawned thread
+// can reuse its parent's. Matching on the id alone answered such a call with
+// ANOTHER call's recorded output -- another chat's, as readily as this one's --
+// without running it. A row from elsewhere is a different call, so it is
+// treated as no prior result. A row that never learned its thread (written
+// before execute_tools recorded one) is compared on the chat alone.
+func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, chatID, thread, toolCallID, toolName string) (message.ToolResult, bool) {
 	call, err := a.repo.GetToolCall(ctx, toolCallID)
 	if err != nil || call == nil || !call.Status.IsTerminal() {
+		return message.ToolResult{}, false
+	}
+	if !toolCallIsThisThreads(call, chatID, thread) {
+		activity.GetLogger(ctx).Warn("[ExecuteTools] Tool call id already used by a call in another chat or thread; executing this one",
+			"tool_call_id", toolCallID,
+			"tool_name", toolName,
+			"chat_id", chatID,
+			"thread", thread,
+			"recorded_chat_id", call.ChatID,
+			"recorded_thread", ptrValue(call.ThreadID))
 		return message.ToolResult{}, false
 	}
 
@@ -880,7 +926,7 @@ func (a *ExecuteToolsActivity) upsertTerminalToolCall(
 			return nil
 		}
 		now := time.Now()
-		return a.repo.UpsertToolCallResult(txCtx, &core.ToolCallResult{
+		return a.repo.UpsertToolCallResult(txCtx, tec.getChatID(), &core.ToolCallResult{
 			ToolCallID: tec.toolCallID,
 			Content:    res.content,
 			IsError:    res.isError,
@@ -1106,18 +1152,19 @@ func backgroundProcessIDFromMetadata(metadata string) string {
 // outcome; writing Failed here would report a live dev server as dead.
 // UpsertToolCallStatus already refuses to walk a terminal row backwards, so a
 // call attempt 1 finished keeps its real outcome.
-func (a *ExecuteToolsActivity) recordInterruptedRetry(ctx context.Context, chatID, toolCallID, toolName, content string) {
+func (a *ExecuteToolsActivity) recordInterruptedRetry(ctx context.Context, chatID, thread, toolCallID, toolName, content string) {
 	if a.repo == nil || chatID == "" || toolCallID == "" {
 		return
 	}
 	if existing, err := a.repo.GetToolCall(ctx, toolCallID); err == nil && existing != nil &&
-		existing.Status == core.ToolCallStatusBackgrounded {
+		existing.ChatID == chatID && existing.Status == core.ToolCallStatusBackgrounded {
 		return
 	}
 
 	completedAt := time.Now()
 	a.upsertTerminalToolCall(ctx, &toolExecutionContext{
 		chatID:     chatID,
+		thread:     thread,
 		toolName:   toolName,
 		toolCallID: toolCallID,
 	}, core.ToolCallStatusFailed, toolCallUpsertOpts{
@@ -1163,6 +1210,7 @@ func (a *ExecuteToolsActivity) upsertToolCall(ctx context.Context, tec *toolExec
 	call := &core.ToolCall{
 		ID:          tec.toolCallID,
 		ChatID:      tec.getChatID(),
+		ThreadID:    tec.threadID(),
 		ToolName:    tec.toolName,
 		Input:       toolInputToJSON(tec.toolInput),
 		Status:      status,
@@ -1199,6 +1247,7 @@ func (a *ExecuteToolsActivity) upsertToolCallTx(ctx context.Context, tec *toolEx
 	call := &core.ToolCall{
 		ID:          tec.toolCallID,
 		ChatID:      tec.getChatID(),
+		ThreadID:    tec.threadID(),
 		ToolName:    tec.toolName,
 		Input:       toolInputToJSON(tec.toolInput),
 		Status:      status,
@@ -1217,7 +1266,7 @@ func (a *ExecuteToolsActivity) upsertToolCallTx(ctx context.Context, tec *toolEx
 // upsertToolCallResult persists the durable tool_call_results row. Content is
 // the same string placed in the tool_result content block the LLM sees --
 // the durable record and the live conversation must agree.
-func (a *ExecuteToolsActivity) upsertToolCallResult(ctx context.Context, toolCallID, content string, isError bool) {
+func (a *ExecuteToolsActivity) upsertToolCallResult(ctx context.Context, chatID, toolCallID, content string, isError bool) {
 	// A result is only ever written alongside a terminal status, so it needs the
 	// same survival guarantee: a row whose status committed but whose result did
 	// not reads as "finished with no output".
@@ -1233,7 +1282,7 @@ func (a *ExecuteToolsActivity) upsertToolCallResult(ctx context.Context, toolCal
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	if err := a.repo.UpsertToolCallResult(ctx, result); err != nil {
+	if err := a.repo.UpsertToolCallResult(ctx, chatID, result); err != nil {
 		activity.GetLogger(ctx).Error("[TOOL_STATUS] Failed to persist tool call result",
 			"error", err,
 			"tool_call_id", toolCallID)

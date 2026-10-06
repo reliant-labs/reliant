@@ -275,7 +275,7 @@ func TestInterrupt_CancelWhilePendingNeverDispatches(t *testing.T) {
 		ToolName: "spawn_status", Status: core.ToolCallStatusCancelled,
 		RequestedAt: now, CompletedAt: &completedAt, CreatedAt: now, UpdatedAt: completedAt,
 	}))
-	require.NoError(t, f.h.Repo().UpsertToolCallResult(ctx, &db.ToolCallResult{
+	require.NoError(t, f.h.Repo().UpsertToolCallResult(ctx, f.chatID, &db.ToolCallResult{
 		ToolCallID: toolCallID, Content: "Tool execution cancelled by user",
 		IsError: true, CreatedAt: completedAt, UpdatedAt: completedAt,
 	}))

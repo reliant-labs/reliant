@@ -11,9 +11,12 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
@@ -74,17 +77,62 @@ func (s *agentMessageStore) EnqueueAgentMessageIfAbsent(ctx context.Context, msg
 		Synthesized:  msg.Synthesized,
 	})
 	if err == sql.ErrNoRows {
+		if err := s.requireSlotHeldBySameSpawn(ctx, msg); err != nil {
+			return false, err
+		}
 		return false, nil
 	}
 	if err != nil {
-		return false, err
+		return false, reportedInAnotherChat(err, msg)
 	}
 	return true, nil
 }
 
+// globalSpawnReportSlot is the chat-blind unique index the previous release
+// arbitrates on. It stays until the contract migration drops it, so that
+// release keeps working against this schema.
+const globalSpawnReportSlot = "idx_agent_messages_one_terminal_report_per_spawn"
+
+// reportedInAnotherChat names what a unique violation on the chat-blind slot
+// means: another chat already reported under this tool call id. The writes
+// arbitrate on (chat_id, tool_call_id), so a conflict there is handled by the
+// statement; only the global slot can still refuse a report, and that is a
+// lost report, said as such rather than as a bare 23505.
+func reportedInAnotherChat(err error, msg *core.AgentMessage) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == globalSpawnReportSlot {
+		return fmt.Errorf("%w: chat %q, tool call %q was already reported in another chat; the chat-blind %s holds it until the contract migration",
+			core.ErrSpawnReportSlotTaken, msg.ChatID, agentMessagePtrToNullString(msg.ToolCallID).String, globalSpawnReportSlot)
+	}
+	return err
+}
+
+// requireSlotHeldBySameSpawn is called when a terminal report could not take
+// msg's slot. The report holding it is either this spawn's (a retry, or the
+// sweep racing the live report: nothing to do) or a different spawn's that
+// reused the tool call id in the same chat, whose report cannot be stored. The
+// latter must surface: answering "already reported" is how a sub-agent's
+// result used to vanish without a trace.
+func (s *agentMessageStore) requireSlotHeldBySameSpawn(ctx context.Context, msg *core.AgentMessage) error {
+	held, err := s.q.GetTerminalSpawnReport(ctx, pgdb.GetTerminalSpawnReportParams{
+		ChatID:     msg.ChatID,
+		ToolCallID: agentMessagePtrToNullString(msg.ToolCallID),
+	})
+	if err != nil {
+		return fmt.Errorf("read the report holding spawn slot %v: %w", agentMessagePtrToNullString(msg.ToolCallID).String, err)
+	}
+	if held.FromThreadID != msg.FromThreadID || held.ToThreadID != msg.ToThreadID {
+		return fmt.Errorf("%w: chat %q, tool call %q is held by the report from thread %q to %q; this one is from %q to %q",
+			core.ErrSpawnReportSlotTaken, msg.ChatID, held.ToolCallID.String,
+			held.FromThreadID, held.ToThreadID, msg.FromThreadID, msg.ToThreadID)
+	}
+	return nil
+}
+
 // EnqueueSpawnReport maps the upsert's three outcomes: a row with inserted =
 // true, a row with inserted = false (superseded a placeholder), or no row
-// (sql.ErrNoRows: a real report already holds the slot).
+// (sql.ErrNoRows: a report already holds the slot -- this spawn's, which is a
+// retry, or another spawn's, which is ErrSpawnReportSlotTaken).
 func (s *agentMessageStore) EnqueueSpawnReport(ctx context.Context, msg *core.AgentMessage) (core.SpawnReportOutcome, error) {
 	attachments, err := agentMessageAttachmentsToNullRawMessage(msg.Attachments)
 	if err != nil {
@@ -103,10 +151,13 @@ func (s *agentMessageStore) EnqueueSpawnReport(ctx context.Context, msg *core.Ag
 		Attachments:  attachments,
 	})
 	if err == sql.ErrNoRows {
+		if err := s.requireSlotHeldBySameSpawn(ctx, msg); err != nil {
+			return 0, err
+		}
 		return core.SpawnReportAlreadyReported, nil
 	}
 	if err != nil {
-		return 0, err
+		return 0, reportedInAnotherChat(err, msg)
 	}
 	if row.Inserted {
 		return core.SpawnReportInserted, nil

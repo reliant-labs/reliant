@@ -317,11 +317,17 @@ func (c *LocalClient) StreamResponse(ctx context.Context, prompts []string, mess
 			if !finishSeen {
 				finishReason = message.FinishReasonUnknown
 			}
+			// A call is a call once it names a tool. Its id is ours (see
+			// llm.NewToolCallID): the server's may be missing, or repeated
+			// within or across responses. Deltas were accumulated by index, so
+			// nothing in this response needed the server's id.
 			finished := toolCalls[:0:0]
 			for _, tc := range toolCalls {
-				if tc.ID == "" || tc.Name == "" {
+				if tc.Name == "" {
 					continue
 				}
+				tc.ID = llm.NewToolCallID()
+				tc.Type = "function"
 				tc.Finished = true
 				finished = append(finished, tc)
 			}

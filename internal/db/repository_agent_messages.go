@@ -65,7 +65,7 @@ func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 // EnqueueSpawnReport): msg.Kind must
 // be a terminal kind (Completion, Cancelled, or Failed), and msg.ToolCallID
 // must be set — those are exactly the rows the unique constraint
-// (idx_agent_messages_one_terminal_report_per_spawn) applies to.
+// (idx_agent_messages_one_terminal_report_per_chat_spawn) applies to.
 func (r *Repo) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessage) (bool, error) {
 	if msg == nil {
 		return false, fmt.Errorf("agent message cannot be nil")

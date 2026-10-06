@@ -9,6 +9,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -138,30 +139,49 @@ const (
 	// and re-queued, even if it had already been delivered, so the parent
 	// receives the actual outcome.
 	SpawnReportSuperseded
-	// SpawnReportAlreadyReported: a real report already existed; nothing changed.
+	// SpawnReportAlreadyReported: this spawn's real report already existed
+	// (a retry); nothing changed.
 	SpawnReportAlreadyReported
 )
+
+// ErrSpawnReportSlotTaken is returned when a terminal report is written for a
+// spawn whose slot -- (ChatID, ToolCallID) -- already holds the report of a
+// DIFFERENT spawn: another child, or another parent, under the same id.
+//
+// The tool call id is the model provider's, so a provider that repeats ids
+// can give two spawns in one chat the same one. Only one report fits the
+// slot. The second is an error rather than "already reported": treating it as
+// a retry is exactly how a sub-agent's result used to disappear without a
+// trace.
+//
+// Until the contract migration drops the chat-blind
+// idx_agent_messages_one_terminal_report_per_spawn (kept so the previous
+// release still works against the schema), a report under an id ANOTHER chat
+// already reported under is refused the same way.
+var ErrSpawnReportSlotTaken = errors.New("another spawn already reported under this tool call id")
 
 // AgentMessageStore is the shared contract for mailbox persistence across
 // drivers.
 type AgentMessageStore interface {
 	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 	// EnqueueSpawnReport writes a REAL terminal spawn report (Synthesized must
-	// be false; ToolCallID required). It inserts, supersedes a synthesized
-	// placeholder for the same ToolCallID, or reports SpawnReportAlreadyReported
-	// without error when a real report exists -- so it never trips
-	// idx_agent_messages_one_terminal_report_per_spawn. See
+	// be false; ToolCallID required). A spawn's slot is (ChatID, ToolCallID):
+	// the call inserts, supersedes a synthesized placeholder for the same
+	// spawn, or reports SpawnReportAlreadyReported without error when this
+	// spawn already reported. A slot held by a different spawn fails with
+	// ErrSpawnReportSlotTaken. See
 	// docs/incidents/2026-10-04-spawn-report-collision.md.
 	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
 	// EnqueueAgentMessageIfAbsent is the reconciler's placeholder write: it
 	// inserts msg (which must carry a terminal
 	// Kind: Completion, Cancelled, or Failed) unless a terminal report for
-	// the same ToolCallID already exists, enforced by a DB constraint so the
-	// check-and-insert is atomic under concurrent callers (see
-	// idx_agent_messages_one_terminal_report_per_spawn). Returns inserted =
-	// true when this call's row landed, false when a report already existed
-	// (the ordinary outcome the second of two racing callers sees, not an
-	// error).
+	// the same spawn -- (ChatID, ToolCallID) -- already exists, enforced by a
+	// DB constraint so the check-and-insert is atomic under concurrent
+	// callers (see idx_agent_messages_one_terminal_report_per_chat_spawn). Returns
+	// inserted = true when this call's row landed, false when this spawn's
+	// report already existed (the ordinary outcome the second of two racing
+	// callers sees, not an error), and ErrSpawnReportSlotTaken when the slot
+	// holds a different spawn's report.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessage) (inserted bool, err error)
 	// ListQueuedAgentMessagesForThread returns queued messages for a
 	// recipient thread, ordered by created_at ascending -- delivery order

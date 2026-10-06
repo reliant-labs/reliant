@@ -189,10 +189,21 @@ func (t *generateVideoTool) Execute(tc *rctx.ToolContext, params GenerateVideoPa
 
 	// A job already recorded under this tool call id means this is a
 	// re-dispatch (the worker died mid-render). Resume it: Poll, never Submit.
+	//
+	// Only this chat's job. The id is the model provider's and can repeat
+	// across chats; resuming another chat's job under it would hand this chat
+	// that chat's clip. Such a job is not this call's, and this call renders
+	// its own -- recording it then fails on the id (said in the result) rather
+	// than claiming the other chat's row.
 	if toolCallID != "" {
 		prior, err := t.jobs.GetByToolCall(tc.Context, toolCallID)
 		if err != nil {
 			return NewTextErrorResponse(fmt.Sprintf("Could not check for an earlier render of this call: %v", err)), nil
+		}
+		if prior != nil && prior.ChatID != tc.ChatID {
+			logging.Warn("[GenerateVideo] A video job under this tool call id belongs to another chat; not resuming it",
+				"tool_call_id", toolCallID, "chat_id", tc.ChatID, "job_chat_id", prior.ChatID)
+			prior = nil
 		}
 		if prior != nil {
 			return t.resume(tc, userID, prior, params)
