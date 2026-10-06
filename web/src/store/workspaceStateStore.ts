@@ -318,6 +318,56 @@ function getWorktreeKey(worktreeId: string | null): string {
 }
 
 // ============================================================================
+// Deprecated Storage Cleanup
+// ============================================================================
+
+/**
+ * Keys from deprecated stores that should be removed.
+ *
+ * Declared BEFORE the store: persist rehydrates synchronously from
+ * localStorage while `create()` runs, and onRehydrateStorage calls
+ * cleanupDeprecatedStorage() right then. Declared after it (as it used to be),
+ * this const was still in its temporal dead zone at that moment, so every load
+ * threw "Cannot access 'DEPRECATED_STORAGE_KEYS' before initialization", logged
+ * "Post-rehydrate step failed", and never removed a key.
+ */
+const DEPRECATED_STORAGE_KEYS = [
+  "tab-store", // Old tab system - replaced by workspaceStateStore
+  "viewer-storage", // Old viewer persistence - now in workspaceStateStore
+];
+
+/**
+ * Clean up localStorage keys from deprecated systems.
+ * Called during rehydration to ensure old data doesn't accumulate.
+ */
+function cleanupDeprecatedStorage(): void {
+  if (typeof window === "undefined") return;
+
+  // Merely *reading* window.localStorage can throw a SecurityError in
+  // restricted-storage contexts (sandboxed iframe, blocked cookies, some
+  // privacy modes). Guard the access itself, not just the per-key ops below.
+  let store: Storage;
+  try {
+    if (!window.localStorage) return;
+    store = window.localStorage;
+  } catch {
+    return;
+  }
+
+  for (const key of DEPRECATED_STORAGE_KEYS) {
+    try {
+      const existing = store.getItem(key);
+      if (existing) {
+        logger.info(`[WorkspaceState] Removing deprecated storage: ${key}`);
+        store.removeItem(key);
+      }
+    } catch (e) {
+      logger.warn(`[WorkspaceState] Failed to remove deprecated key ${key}:`, e);
+    }
+  }
+}
+
+// ============================================================================
 // Store Implementation
 // ============================================================================
 
@@ -1020,47 +1070,6 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
     }
   )
 );
-
-// ============================================================================
-// Deprecated Storage Cleanup
-// ============================================================================
-
-/** Keys from deprecated stores that should be removed */
-const DEPRECATED_STORAGE_KEYS = [
-  "tab-store", // Old tab system - replaced by workspaceStateStore
-  "viewer-storage", // Old viewer persistence - now in workspaceStateStore
-];
-
-/**
- * Clean up localStorage keys from deprecated systems.
- * Called during rehydration to ensure old data doesn't accumulate.
- */
-function cleanupDeprecatedStorage(): void {
-  if (typeof window === "undefined") return;
-
-  // Merely *reading* window.localStorage can throw a SecurityError in
-  // restricted-storage contexts (sandboxed iframe, blocked cookies, some
-  // privacy modes). Guard the access itself, not just the per-key ops below.
-  let store: Storage;
-  try {
-    if (!window.localStorage) return;
-    store = window.localStorage;
-  } catch {
-    return;
-  }
-
-  for (const key of DEPRECATED_STORAGE_KEYS) {
-    try {
-      const existing = store.getItem(key);
-      if (existing) {
-        logger.info(`[WorkspaceState] Removing deprecated storage: ${key}`);
-        store.removeItem(key);
-      }
-    } catch (e) {
-      logger.warn(`[WorkspaceState] Failed to remove deprecated key ${key}:`, e);
-    }
-  }
-}
 
 // ============================================================================
 // Selector Hooks for Common Patterns
