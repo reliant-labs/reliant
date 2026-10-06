@@ -1,5 +1,5 @@
 import { logger } from "../../lib/logger";
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, type ReactNode } from "react";
 import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
 import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only — also subscribed via selector below
 import { useWorktreeStore } from "../../store/worktreeStore";
@@ -25,7 +25,7 @@ import {
 import { DaemonWaitState } from "../DaemonWaitState";
 import { MachinePicker } from "./MachinePicker";
 import { capabilities } from "@/services/controlPlane/capabilities";
-import { ChatInput } from "./ChatInput";
+import { ChatInput, type ComposerPrefill } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { WorkflowStarterCards } from "../Onboarding/WorkflowStarterCards";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
@@ -50,12 +50,21 @@ interface NewChatViewProps {
   onNavigateToWorktrees?: () => void;
   isFocused?: boolean; // NEW: Whether this pane has focus
   onChatCreated?: (chatId: string) => void; // Optional: Callback when chat is created (for command center)
+  /**
+   * Shown instead of the workflow starter cards, by a host whose chat is
+   * about one thing (the workflow editor): the cards would each start a
+   * different workflow. Told whether the chat will run with no machine.
+   */
+  emptyState?: (context: { noMachine: boolean }) => ReactNode;
+  composerPrefill?: ComposerPrefill;
 }
 
 export function NewChatView({
   tabId: _tabId,
   isFocused = true, // Default to focused
   onChatCreated,
+  emptyState,
+  composerPrefill,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
   const [showConnectDaemonModal, setShowConnectDaemonModal] = useState(false);
@@ -317,17 +326,21 @@ export function NewChatView({
   return (
     <div className="flex flex-col h-full min-h-0 bg-background">
       {/* Welcome Content */}
-      <div className="relative flex-1 min-h-0 px-8 overflow-y-auto">
+      <div className={cn("relative flex-1 min-h-0 overflow-y-auto", emptyState ? "px-4" : "px-8")}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,hsl(var(--muted)_/_0.16),transparent_62%)]" />
 
         <div className="relative z-10 min-h-full w-full max-w-5xl mx-auto grid grid-rows-[auto_1fr_auto]">
-          <div className="flex items-center justify-center pt-8">
+          <div className={cn("flex items-center justify-center", emptyState ? "pt-4" : "pt-8")}>
             <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center gap-3">
               <ResumeDaemonPill placement="inline" />
 
-              <div className="inline-flex h-10 w-10 items-center justify-center">
-                <ReliantIcon className="h-10 w-10" />
-              </div>
+              {/* A host with its own empty state is a panel with its own
+                  header, and needs the room. */}
+              {!emptyState && (
+                <div className="inline-flex h-10 w-10 items-center justify-center">
+                  <ReliantIcon className="h-10 w-10" />
+                </div>
+              )}
 
               {/* Workspace controls */}
               <div
@@ -469,12 +482,17 @@ export function NewChatView({
 
           {/* Starter cards — pick a workflow to seed the next chat. Shown on
               every new-chat view (except when the blocking first-run modal is
-              up) so landing-page / pitch-deck / blog stay reachable, not just
-              on the first-ever chat. */}
-          {showInlineCards && (
-            <div className="w-full px-4 py-4 md:py-5">
-              <WorkflowStarterCards />
-            </div>
+              up, or the host has its own empty state) so landing-page /
+              pitch-deck / blog stay reachable, not just on the first-ever
+              chat. */}
+          {emptyState ? (
+            <div className="w-full py-3">{emptyState({ noMachine })}</div>
+          ) : (
+            showInlineCards && (
+              <div className="w-full px-4 py-4 md:py-5">
+                <WorkflowStarterCards />
+              </div>
+            )
           )}
 
         </div>
@@ -532,6 +550,7 @@ export function NewChatView({
             onSend={handleCreateAndSend}
             disabled={isCreating || !machineReady}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
+            prefill={composerPrefill}
           />
         </div>
       ) : (

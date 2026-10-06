@@ -78,6 +78,38 @@ export function useChatInputState({
   // Computed values — read chat from React Query cache
   const { data: currentChat } = useChat(chatId);
 
+  const saveDraft = useCallback((value: string) => {
+    const projectId = useProjectStore.getState().currentProject?.id;
+    const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
+
+    if (projectId) {
+      // For new chats, use project-level draft (persists across worktree switches)
+      if (isNewChat) {
+        if (value.trim()) {
+          useWorkspaceStateStore.getState().setNewChatDraft(projectId, value);
+        } else {
+          useWorkspaceStateStore.getState().clearNewChatDraft(projectId);
+        }
+      } else {
+        // For existing chats, use worktree-level draft
+        if (value.trim()) {
+          useWorkspaceStateStore.getState().setChatDraft(
+            projectId,
+            worktreeId,
+            draftKey,
+            value
+          );
+        } else {
+          useWorkspaceStateStore.getState().clearChatDraft(
+            projectId,
+            worktreeId,
+            draftKey
+          );
+        }
+      }
+    }
+  }, [draftKey, isNewChat]);
+
   // Debounced draft save - wraps setInput to persist drafts
   const setInput = useCallback((value: string | ((prev: string) => string)) => {
     setInputRaw((prev) => {
@@ -88,41 +120,23 @@ export function useChatInputState({
         clearTimeout(draftSaveTimeoutRef.current);
       }
       
-      draftSaveTimeoutRef.current = setTimeout(() => {
-        const projectId = useProjectStore.getState().currentProject?.id;
-        const worktreeId = useWorktreeStore.getState().currentWorktree?.id ?? null;
-        
-        if (projectId) {
-          // For new chats, use project-level draft (persists across worktree switches)
-          if (isNewChat) {
-            if (newValue.trim()) {
-              useWorkspaceStateStore.getState().setNewChatDraft(projectId, newValue);
-            } else {
-              useWorkspaceStateStore.getState().clearNewChatDraft(projectId);
-            }
-          } else {
-            // For existing chats, use worktree-level draft
-            if (newValue.trim()) {
-              useWorkspaceStateStore.getState().setChatDraft(
-                projectId,
-                worktreeId,
-                draftKey,
-                newValue
-              );
-            } else {
-              useWorkspaceStateStore.getState().clearChatDraft(
-                projectId,
-                worktreeId,
-                draftKey
-              );
-            }
-          }
-        }
-      }, 300);
+      draftSaveTimeoutRef.current = setTimeout(() => saveDraft(newValue), 300);
       
       return newValue;
     });
-  }, [draftKey, isNewChat]);
+  }, [saveDraft]);
+
+  // Replace the input with text the host supplied, saved as the draft at once
+  // rather than after the debounce: the draft effect below re-reads the draft
+  // whenever the worktree changes, and must not read the one this replaced.
+  const replaceInput = useCallback((value: string) => {
+    if (draftSaveTimeoutRef.current) {
+      clearTimeout(draftSaveTimeoutRef.current);
+      draftSaveTimeoutRef.current = null;
+    }
+    saveDraft(value);
+    setInputRaw(value);
+  }, [saveDraft]);
   
   // Clean up debounce timer on unmount
   useEffect(() => {
@@ -242,6 +256,7 @@ export function useChatInputState({
     // State
     input,
     setInput,
+    replaceInput,
 
     // Workflow selection
     selectedWorkflow,
