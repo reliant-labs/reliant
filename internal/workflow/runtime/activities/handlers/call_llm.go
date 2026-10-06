@@ -2098,7 +2098,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	if chat != nil {
 		scoped := access
 		if !scoped.LoadableAll {
-			scoped.Loadable = append(scoped.Loadable, tools.ToolLoadTool, tools.ToolSpawnSend, tools.ToolSpawnStop)
+			scoped.Loadable = append(scoped.Loadable, tools.ToolLoadTool, tools.ToolSpawnStatus, tools.ToolSpawnSend, tools.ToolSpawnStop)
 		}
 		tools.GetLoadedToolsStore().SetToolAccess(tools.Scope(chat.ID, thread), scoped)
 	}
@@ -2214,17 +2214,28 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// other tool goes through in execute_tools (MinimumPermissionForTool is
 	// PermissionMutating for spawn_send, so a readonly/plan-mode agent still
 	// cannot use it even though the schema is offered).
-	if mailboxReachable {
-		spawnSendPresent := false
+	//
+	// A thread that has actually spawned is granted the three management
+	// tools on top of that, whatever its config says now: it has children to
+	// check on, message and stop. spawn_status rides ONLY on this — it is the
+	// read side, worthless before the first spawn and needed on the very next
+	// turn after it, which is exactly when an orchestrator used to have to stop
+	// and load_tool it by hand. A branch that inherited sub-agents gets
+	// spawn_status alone: it may look at them, never control them.
+	ownChildren, inheritedChildren := a.spawnHistory(ctx, chat, thread)
+	hasTool := func(name string) bool {
 		for _, t := range toolsList {
-			if t.Name() == tools.ToolSpawnSend {
-				spawnSendPresent = true
-				break
+			if t.Name() == name {
+				return true
 			}
 		}
-		if !spawnSendPresent {
-			toolsList = append(toolsList, projectScopedToolsFactory.SpawnSend())
-		}
+		return false
+	}
+	if (ownChildren || inheritedChildren) && !hasTool(tools.ToolSpawnStatus) {
+		toolsList = append(toolsList, projectScopedToolsFactory.SpawnStatus())
+	}
+	if (mailboxReachable || ownChildren) && !hasTool(tools.ToolSpawnSend) {
+		toolsList = append(toolsList, projectScopedToolsFactory.SpawnSend())
 	}
 
 	// spawn_stop travels with the "spawn" virtual tool for the same reason
@@ -2237,17 +2248,8 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 	// caller's own direct child, so an agent that cannot spawn has nothing it
 	// could ever legally name. Offering it there would be a schema the model
 	// can only misuse.
-	if canSpawnChildren {
-		spawnStopPresent := false
-		for _, t := range toolsList {
-			if t.Name() == tools.ToolSpawnStop {
-				spawnStopPresent = true
-				break
-			}
-		}
-		if !spawnStopPresent {
-			toolsList = append(toolsList, projectScopedToolsFactory.SpawnStop())
-		}
+	if (canSpawnChildren || ownChildren) && !hasTool(tools.ToolSpawnStop) {
+		toolsList = append(toolsList, projectScopedToolsFactory.SpawnStop())
 	}
 
 	// Last pass over the assembled list, after the universally granted tools
@@ -2276,6 +2278,39 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		FailedMCPServers: failedMCPServers,
 		AllMCPToolNames:  mcpToolNames,
 	}
+}
+
+// spawnHistory reports whether thread has sub-agents of its own — a spawn
+// call that actually started a child — and whether it inherited any by being
+// a branch of the conversation that spawned them.
+//
+// Read from the database rather than remembered in-process, so the answer
+// survives a worker restart and does not depend on which worker ran the spawn.
+// Best-effort: a failed read only withholds a convenience grant (load_tool
+// still reaches these tools), so it is logged rather than failing the turn.
+func (a *CallLLMActivity) spawnHistory(ctx context.Context, chat *db.Chat, thread string) (ownChildren, inheritedChildren bool) {
+	if a.repo == nil || chat == nil || thread == "" {
+		return false, false
+	}
+	children, err := a.repo.ListSpawnChildren(ctx, thread)
+	if err != nil {
+		logging.Warn("[CallLLM] Could not read spawn history; spawn management tools not auto-granted",
+			"chatID", chat.ID, "thread", thread, "error", err)
+		return false, false
+	}
+	for _, child := range children {
+		if child.ChildThreadID != nil {
+			ownChildren = true
+			break
+		}
+	}
+	inherited, err := a.repo.ListInheritedSpawnChildren(ctx, thread)
+	if err != nil {
+		logging.Warn("[CallLLM] Could not read inherited sub-agents",
+			"chatID", chat.ID, "thread", thread, "error", err)
+		return ownChildren, false
+	}
+	return ownChildren, len(inherited) > 0
 }
 
 // getSpawnToolFromFilterConfig creates a spawn tool from a SpawnFilterConfig.

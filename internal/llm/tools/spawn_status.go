@@ -24,6 +24,9 @@ type SpawnAgentInfo struct {
 	GatedOnAgent bool   `json:"gated,omitempty"`
 	GateReason   string `json:"gate_reason,omitempty"`
 	GateUnknown  bool   `json:"gate_unknown,omitempty"`
+	// InheritedFrom is the owning thread when this agent was inherited
+	// through a branch rather than spawned by the caller. Read-only.
+	InheritedFrom string `json:"inherited_from,omitempty"`
 }
 
 type SpawnStatusParams struct {
@@ -39,9 +42,13 @@ type SpawnStatusParams struct {
 }
 
 type SpawnStatusResponseMetadata struct {
-	// Populated in listing mode (no agent_id).
-	TotalAgents   int `json:"total_agents,omitempty"`
-	RunningAgents int `json:"running_agents,omitempty"`
+	// Populated in listing mode (no agent_id). Total/Running count the
+	// caller's own children; Inherited* count those it can see read-only
+	// because its chat was branched from their owner.
+	TotalAgents            int `json:"total_agents,omitempty"`
+	RunningAgents          int `json:"running_agents,omitempty"`
+	InheritedAgents        int `json:"inherited_agents,omitempty"`
+	InheritedRunningAgents int `json:"inherited_running_agents,omitempty"`
 
 	// Populated in single-agent mode (agent_id set).
 	AgentID   string `json:"agent_id,omitempty"`
@@ -86,6 +93,11 @@ const (
 WORKSPACE SCOPING:
 - Only shows/waits on agents YOU spawned (your direct children), never a
   sibling's or another thread's sub-agents.
+- Exception: if this chat was BRANCHED from a conversation that had already
+  spawned agents, those are listed too, marked "Inherited … (read-only)". You
+  can inspect them (agent_id without wait), but they still belong to the
+  original conversation: their results are delivered there, and only it can
+  wait on, message, or stop them.
 
 TWO MODES:
 1. LISTING (omit agent_id): returns every sub-agent you spawned — agent_id,
@@ -142,141 +154,213 @@ func (s *spawnStatusTool) Execute(rctx *rctx.ToolContext, params SpawnStatusPara
 }
 
 // listChildren returns every sub-agent the caller has spawned, with
-// best-effort gating signals.
+// best-effort gating signals — followed by any it INHERITED by being a branch
+// of the conversation that spawned them, listed read-only.
 func (s *spawnStatusTool) listChildren(rctx *rctx.ToolContext, threadID string) (ToolResponse, error) {
 	children, err := s.repo.ListSpawnChildren(rctx.Context, threadID)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list spawned agents: %v", err)), nil
 	}
-	if len(children) == 0 {
+	// Inheritance is advisory context for a branch, never a reason to fail
+	// the listing of the caller's own children.
+	inherited, inhErr := s.repo.ListInheritedSpawnChildren(rctx.Context, threadID)
+	if inhErr != nil {
+		inherited = nil
+	}
+	if len(children) == 0 && len(inherited) == 0 {
 		return NewTextResponse("No sub-agents spawned from this thread."), nil
 	}
 
-	// Best-effort gating signal: pending questions and approvals, keyed by
-	// thread. Neither call failing (nor approvals.thread_id being NULL on a
-	// row) should block the listing — gating is advisory, not load-bearing.
-	pendingQuestions, qErr := s.repo.PendingQuestionsByThread(rctx.Context, rctx.ChatID)
-	if qErr != nil {
-		pendingQuestions = nil
-	}
-	pendingApprovalThreads := map[string]bool{}
-	approvalSignalAvailable := true
-	if approvals, aErr := s.repo.ListPendingApprovalsByChat(rctx.Context, rctx.ChatID); aErr == nil {
-		for _, a := range approvals {
-			if a.ThreadID != nil && *a.ThreadID != "" {
-				pendingApprovalThreads[*a.ThreadID] = true
-			}
-		}
-	} else {
-		approvalSignalAvailable = false
-	}
-
-	lastActivity, laErr := s.repo.LastThreadActivityByChat(rctx.Context, rctx.ChatID)
-	if laErr != nil {
-		lastActivity = nil
-	}
-
 	now := time.Now()
+	signalsByChat := map[string]*spawnSignals{}
+	signalsFor := func(chatID string) *spawnSignals {
+		if signals, ok := signalsByChat[chatID]; ok {
+			return signals
+		}
+		signals := s.loadSignals(rctx, chatID)
+		signalsByChat[chatID] = signals
+		return signals
+	}
+
 	infos := make([]SpawnAgentInfo, 0, len(children))
 	runningCount := 0
-
 	for _, child := range children {
-		info := SpawnAgentInfo{
-			Status: toolCallStatusLabel(child.ToolCallStatus),
-		}
-
-		preset, title := spawnInputPresetAndTitle(child.ToolInput)
-		info.Preset = preset
-		info.Title = title
-
-		if child.ChildThreadID != nil {
-			info.AgentID = *child.ChildThreadID
-		}
-		if child.ThreadTitle != nil && *child.ThreadTitle != "" {
-			info.Title = *child.ThreadTitle
-		}
-		if info.AgentID == "" {
-			// Child rows have not landed yet (dispatch race) — the tool
-			// call itself is the only identifier available so far.
-			info.AgentID = child.ToolCallID
-			info.Status = "starting"
-		}
-
-		elapsedEnd := now
-		if child.CompletedAt != nil {
-			elapsedEnd = *child.CompletedAt
-		} else if child.WorkflowCompleted != nil {
-			elapsedEnd = *child.WorkflowCompleted
-		}
-		info.ElapsedMs = elapsedEnd.Sub(child.RequestedAt).Milliseconds()
-		if info.ElapsedMs < 0 {
-			info.ElapsedMs = 0
-		}
-
-		isRunning := child.WorkflowStatus != nil && child.WorkflowStatus.Live()
-		if isRunning {
+		info, running := s.describeChild(rctx, child, signalsFor(rctx.ChatID), now)
+		if running {
 			runningCount++
-			if info.Status != "starting" {
-				info.Status = "running"
-			}
-		} else if child.WorkflowStatus != nil {
-			info.Status = child.WorkflowStatus.Label()
 		}
-
-		if info.AgentID != "" {
-			if last, ok := lastActivity[info.AgentID]; ok {
-				info.LastActivity = last.Format(time.RFC3339)
-				info.TurnCount = 0 // populated below via CountMessagesInThread
-			}
-			if count, cErr := s.repo.CountMessagesInThread(rctx.Context, info.AgentID); cErr == nil {
-				info.TurnCount = count
-			}
-			if q, ok := pendingQuestions[info.AgentID]; ok && q != nil {
-				info.GatedOnAgent = true
-				info.GateReason = "pending question"
-			} else if pendingApprovalThreads[info.AgentID] {
-				info.GatedOnAgent = true
-				info.GateReason = "pending approval"
-			}
-		}
-		if !approvalSignalAvailable {
-			info.GateUnknown = true
-		}
-
 		infos = append(infos, info)
 	}
 
 	var sb strings.Builder
 	fmt.Fprintf(&sb, "=== Sub-Agents (%d) ===\n\n", len(infos))
-	for i, info := range infos {
-		if i > 0 {
-			sb.WriteString("\n---\n\n")
-		}
-		fmt.Fprintf(&sb, "agent_id: %s\n", info.AgentID)
-		if info.Title != "" {
-			fmt.Fprintf(&sb, "Title: %s\n", info.Title)
-		}
-		if info.Preset != "" {
-			fmt.Fprintf(&sb, "Preset: %s\n", info.Preset)
-		}
-		fmt.Fprintf(&sb, "Status: %s\n", info.Status)
-		fmt.Fprintf(&sb, "Elapsed: %s\n", formatDuration(time.Duration(info.ElapsedMs)*time.Millisecond))
-		if info.LastActivity != "" {
-			fmt.Fprintf(&sb, "Last activity: %s\n", info.LastActivity)
-		}
-		fmt.Fprintf(&sb, "Turns: %d\n", info.TurnCount)
-		if info.GatedOnAgent {
-			fmt.Fprintf(&sb, "Gated: %s\n", info.GateReason)
-		} else if info.GateUnknown {
-			sb.WriteString("Gated: unknown (gating signal unavailable)\n")
-		}
+	if len(infos) == 0 {
+		sb.WriteString("None spawned from this thread.\n")
 	}
+	writeSpawnAgentInfos(&sb, infos)
 
 	metadata := SpawnStatusResponseMetadata{
 		TotalAgents:   len(infos),
 		RunningAgents: runningCount,
 	}
+
+	// Grouped by owning conversation, nearest first — the order
+	// ListInheritedSpawnChildren returns them in.
+	for start := 0; start < len(inherited); {
+		end := start
+		for end < len(inherited) && inherited[end].SourceThreadID == inherited[start].SourceThreadID {
+			end++
+		}
+		group := inherited[start:end]
+		groupInfos := make([]SpawnAgentInfo, 0, len(group))
+		for _, child := range group {
+			info, running := s.describeChild(rctx, &child.SpawnChild, signalsFor(child.SourceChatID), now)
+			info.InheritedFrom = child.SourceThreadID
+			if running {
+				metadata.InheritedRunningAgents++
+			}
+			groupInfos = append(groupInfos, info)
+		}
+		metadata.InheritedAgents += len(groupInfos)
+
+		fmt.Fprintf(&sb, "\n=== Inherited from %s (read-only, %d) ===\n\n", inheritedSourceLabel(group[0]), len(groupInfos))
+		fmt.Fprintf(&sb,
+			"This chat was branched from that conversation after it spawned these agents. They still belong to its thread %s: "+
+				"their results are delivered there, not here, and only it can wait on, message, or stop them. "+
+				"spawn_status(agent_id=...) without wait shows their progress and latest answer.\n\n",
+			group[0].SourceThreadID)
+		writeSpawnAgentInfos(&sb, groupInfos)
+		start = end
+	}
+
 	return WithResponseMetadata(NewTextResponse(sb.String()), metadata), nil
+}
+
+// spawnSignals is the best-effort per-chat context a listing decorates each
+// agent with. Gating is keyed by chat, and an inherited agent lives in the
+// conversation it was spawned in, not the caller's.
+type spawnSignals struct {
+	pendingQuestions        map[string]*db.Question
+	pendingApprovalThreads  map[string]bool
+	approvalSignalAvailable bool
+	lastActivity            map[string]time.Time
+}
+
+// loadSignals reads the gating and activity signals for one chat. Neither
+// call failing (nor approvals.thread_id being NULL on a row) should block the
+// listing — gating is advisory, not load-bearing.
+func (s *spawnStatusTool) loadSignals(rctx *rctx.ToolContext, chatID string) *spawnSignals {
+	signals := &spawnSignals{
+		pendingApprovalThreads:  map[string]bool{},
+		approvalSignalAvailable: true,
+	}
+	if questions, qErr := s.repo.PendingQuestionsByThread(rctx.Context, chatID); qErr == nil {
+		signals.pendingQuestions = questions
+	}
+	if approvals, aErr := s.repo.ListPendingApprovalsByChat(rctx.Context, chatID); aErr == nil {
+		for _, a := range approvals {
+			if a.ThreadID != nil && *a.ThreadID != "" {
+				signals.pendingApprovalThreads[*a.ThreadID] = true
+			}
+		}
+	} else {
+		signals.approvalSignalAvailable = false
+	}
+	if lastActivity, laErr := s.repo.LastThreadActivityByChat(rctx.Context, chatID); laErr == nil {
+		signals.lastActivity = lastActivity
+	}
+	return signals
+}
+
+// describeChild renders one spawn call as a listing entry, and reports
+// whether the agent is still running.
+func (s *spawnStatusTool) describeChild(rctx *rctx.ToolContext, child *db.SpawnChild, signals *spawnSignals, now time.Time) (SpawnAgentInfo, bool) {
+	info := SpawnAgentInfo{
+		Status: toolCallStatusLabel(child.ToolCallStatus),
+	}
+
+	preset, title := spawnInputPresetAndTitle(child.ToolInput)
+	info.Preset = preset
+	info.Title = title
+
+	if child.ChildThreadID != nil {
+		info.AgentID = *child.ChildThreadID
+	}
+	if child.ThreadTitle != nil && *child.ThreadTitle != "" {
+		info.Title = *child.ThreadTitle
+	}
+	if info.AgentID == "" {
+		// Child rows have not landed yet (dispatch race) — the tool
+		// call itself is the only identifier available so far.
+		info.AgentID = child.ToolCallID
+		info.Status = "starting"
+	}
+
+	elapsedEnd := now
+	if child.CompletedAt != nil {
+		elapsedEnd = *child.CompletedAt
+	} else if child.WorkflowCompleted != nil {
+		elapsedEnd = *child.WorkflowCompleted
+	}
+	info.ElapsedMs = elapsedEnd.Sub(child.RequestedAt).Milliseconds()
+	if info.ElapsedMs < 0 {
+		info.ElapsedMs = 0
+	}
+
+	isRunning := child.WorkflowStatus != nil && child.WorkflowStatus.Live()
+	if isRunning {
+		if info.Status != "starting" {
+			info.Status = "running"
+		}
+	} else if child.WorkflowStatus != nil {
+		info.Status = child.WorkflowStatus.Label()
+	}
+
+	if info.AgentID != "" {
+		if last, ok := signals.lastActivity[info.AgentID]; ok {
+			info.LastActivity = last.Format(time.RFC3339)
+		}
+		if count, cErr := s.repo.CountMessagesInThread(rctx.Context, info.AgentID); cErr == nil {
+			info.TurnCount = count
+		}
+		if q, ok := signals.pendingQuestions[info.AgentID]; ok && q != nil {
+			info.GatedOnAgent = true
+			info.GateReason = "pending question"
+		} else if signals.pendingApprovalThreads[info.AgentID] {
+			info.GatedOnAgent = true
+			info.GateReason = "pending approval"
+		}
+	}
+	if !signals.approvalSignalAvailable {
+		info.GateUnknown = true
+	}
+	return info, isRunning
+}
+
+func writeSpawnAgentInfos(sb *strings.Builder, infos []SpawnAgentInfo) {
+	for i, info := range infos {
+		if i > 0 {
+			sb.WriteString("\n---\n\n")
+		}
+		fmt.Fprintf(sb, "agent_id: %s\n", info.AgentID)
+		if info.Title != "" {
+			fmt.Fprintf(sb, "Title: %s\n", info.Title)
+		}
+		if info.Preset != "" {
+			fmt.Fprintf(sb, "Preset: %s\n", info.Preset)
+		}
+		fmt.Fprintf(sb, "Status: %s\n", info.Status)
+		fmt.Fprintf(sb, "Elapsed: %s\n", formatDuration(time.Duration(info.ElapsedMs)*time.Millisecond))
+		if info.LastActivity != "" {
+			fmt.Fprintf(sb, "Last activity: %s\n", info.LastActivity)
+		}
+		fmt.Fprintf(sb, "Turns: %d\n", info.TurnCount)
+		if info.GatedOnAgent {
+			fmt.Fprintf(sb, "Gated: %s\n", info.GateReason)
+		} else if info.GateUnknown {
+			sb.WriteString("Gated: unknown (gating signal unavailable)\n")
+		}
+	}
 }
 
 // singleAgent reports one agent's status and last assistant message, with an
@@ -285,8 +369,25 @@ func (s *spawnStatusTool) singleAgent(rctx *rctx.ToolContext, threadID string, p
 	// Verify ownership BEFORE committing to any wait — a wait on a
 	// nonexistent or not-owned agent must fail fast, not park for the full
 	// budget only to report "not found".
+	//
+	// An agent this chat inherited through a branch may be INSPECTED —
+	// status and latest answer — but not waited on. Waiting is how an
+	// orchestrator collects a result to act on, and the original
+	// conversation, which still receives that result, is its one owner.
+	var inherited *db.InheritedSpawnChild
 	if err := verifyIsOwnChild(rctx, s.repo, threadID, params.AgentID); err != nil {
-		return NewTextErrorResponse(err.Error()), nil
+		inherited = findInheritedSpawnChild(rctx, s.repo, threadID, params.AgentID)
+		if inherited == nil {
+			return NewTextErrorResponse(err.Error()), nil
+		}
+		if params.Wait {
+			return NewTextErrorResponse(inheritedSpawnRefusal("wait on", inherited, params.AgentID)), nil
+		}
+		resp, err := s.lastMessageSnapshot(rctx, params, 0)
+		if err == nil && !resp.IsError {
+			resp.Content = inheritedReadOnlyNote(inherited) + resp.Content
+		}
+		return resp, err
 	}
 
 	if params.Wait {

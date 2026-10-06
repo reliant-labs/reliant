@@ -759,6 +759,14 @@ type Querier interface {
 	// resumed spawn they differ and both are needed: the thread is what a cancel
 	// signal names, while the workflow row id is what a status reconcile must
 	// CAS. Deriving either from the other is not possible — see spawn_stop.
+	//
+	// issuing_message_ordinal places the spawn in the parent's transcript. A chat
+	// BRANCHED from the parent inherits the parent's history only up to its fork
+	// point, so this is what decides which of the parent's spawns the branch
+	// inherited (ListInheritedSpawnChildren). messages.ordinal is per-thread, and
+	// the issuing message is always in tc.thread_id, so it compares directly with
+	// the fork point's ordinal. NULL when the call was recorded before its
+	// assistant message was finalized.
 	ListSpawnChildrenForThread(ctx context.Context, threadID sql.NullString) ([]ListSpawnChildrenForThreadRow, error)
 	// The spawn tool call behind each child thread in one chat, for the reconnect
 	// snapshot: it is what the background-work pill's cancel button addresses, and

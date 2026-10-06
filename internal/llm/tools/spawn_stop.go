@@ -106,6 +106,9 @@ func (s *spawnStopTool) Execute(rctx *rctx.ToolContext, params SpawnStopParams) 
 		return NewTextErrorResponse(err.Error()), nil
 	}
 	if ref.ToolCallID == "" {
+		if inherited := findInheritedSpawnChild(rctx, s.repo, threadID, params.AgentID); inherited != nil {
+			return NewTextErrorResponse(inheritedSpawnRefusal("stop", inherited, params.AgentID)), nil
+		}
 		return NewTextErrorResponse(fmt.Sprintf(
 			"agent_id %q is not a sub-agent you spawned. spawn_stop can only stop your own direct children — "+
 				"not your parent, not a sibling, and not an unrelated agent. "+
