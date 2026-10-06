@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/account.proto.
  */
 export const file_reliant_v1_account: GenFile = /*@__PURE__*/
-  fileDesc("ChhyZWxpYW50L3YxL2FjY291bnQucHJvdG8SCnJlbGlhbnQudjEiHwodUHJldmlld0FjY291bnREZWxldGlvblJlcXVlc3QizwEKHlByZXZpZXdBY2NvdW50RGVsZXRpb25SZXNwb25zZRIVCg1wcm9qZWN0X2NvdW50GAEgASgDEhIKCmNoYXRfY291bnQYAiABKAMSFgoOd29ya3RyZWVfY291bnQYAyABKAMSFQoNbWVzc2FnZV9jb3VudBgEIAEoAxIgChhoYXNfcHJvdmlkZXJfY3JlZGVudGlhbHMYBSABKAgSFQoNY29uZmlybV9lbWFpbBgGIAEoCRIaChJyZXRhaW5lZF9lbHNld2hlcmUYByADKAkiLQoURGVsZXRlQWNjb3VudFJlcXVlc3QSFQoNY29uZmlybV9lbWFpbBgBIAEoCSIyChVEZWxldGVBY2NvdW50UmVzcG9uc2USGQoRZGVsZXRlZF9yb3dfY291bnQYASABKAMy2wEKDkFjY291bnRTZXJ2aWNlEnEKFlByZXZpZXdBY2NvdW50RGVsZXRpb24SKS5yZWxpYW50LnYxLlByZXZpZXdBY2NvdW50RGVsZXRpb25SZXF1ZXN0GioucmVsaWFudC52MS5QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVzcG9uc2UiABJWCg1EZWxldGVBY2NvdW50EiAucmVsaWFudC52MS5EZWxldGVBY2NvdW50UmVxdWVzdBohLnJlbGlhbnQudjEuRGVsZXRlQWNjb3VudFJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
+  fileDesc("ChhyZWxpYW50L3YxL2FjY291bnQucHJvdG8SCnJlbGlhbnQudjEiHwodUHJldmlld0FjY291bnREZWxldGlvblJlcXVlc3QihwIKHlByZXZpZXdBY2NvdW50RGVsZXRpb25SZXNwb25zZRIVCg1wcm9qZWN0X2NvdW50GAEgASgDEhIKCmNoYXRfY291bnQYAiABKAMSFgoOd29ya3RyZWVfY291bnQYAyABKAMSFQoNbWVzc2FnZV9jb3VudBgEIAEoAxIgChhoYXNfcHJvdmlkZXJfY3JlZGVudGlhbHMYBSABKAgSFQoNY29uZmlybV9lbWFpbBgGIAEoCRIaChJyZXRhaW5lZF9lbHNld2hlcmUYByADKAkSNgoGd2FsbGV0GAggASgLMiYucmVsaWFudC52MS5BY2NvdW50RGVsZXRpb25XYWxsZXRRdW90ZSJRChFSZWZ1bmREZXN0aW5hdGlvbhISCgpjYXJkX2JyYW5kGAEgASgJEhIKCmNhcmRfbGFzdDQYAiABKAkSFAoMYW1vdW50X2NlbnRzGAMgASgDIqIBChpBY2NvdW50RGVsZXRpb25XYWxsZXRRdW90ZRIUCgxyZWZ1bmRfY2VudHMYASABKAMSMwoMZGVzdGluYXRpb25zGAIgAygLMh0ucmVsaWFudC52MS5SZWZ1bmREZXN0aW5hdGlvbhIaChJ1bnJlZnVuZGFibGVfY2VudHMYAyABKAMSHQoVZm9yZmVpdGVkX3Byb21vX2NlbnRzGAQgASgDIi0KFERlbGV0ZUFjY291bnRSZXF1ZXN0EhUKDWNvbmZpcm1fZW1haWwYASABKAki2AEKFURlbGV0ZUFjY291bnRSZXNwb25zZRIZChFkZWxldGVkX3Jvd19jb3VudBgBIAEoAxIWCg5yZWZ1bmRlZF9jZW50cxgCIAEoAxI6ChNyZWZ1bmRfZGVzdGluYXRpb25zGAMgAygLMh0ucmVsaWFudC52MS5SZWZ1bmREZXN0aW5hdGlvbhIdChVmb3JmZWl0ZWRfcHJvbW9fY2VudHMYBCABKAMSFgoOcmVmdW5kX3BlbmRpbmcYBSABKAgSGQoRcmVmdW5kX293ZWRfY2VudHMYBiABKAMy2wEKDkFjY291bnRTZXJ2aWNlEnEKFlByZXZpZXdBY2NvdW50RGVsZXRpb24SKS5yZWxpYW50LnYxLlByZXZpZXdBY2NvdW50RGVsZXRpb25SZXF1ZXN0GioucmVsaWFudC52MS5QcmV2aWV3QWNjb3VudERlbGV0aW9uUmVzcG9uc2UiABJWCg1EZWxldGVBY2NvdW50EiAucmVsaWFudC52MS5EZWxldGVBY2NvdW50UmVxdWVzdBohLnJlbGlhbnQudjEuRGVsZXRlQWNjb3VudFJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
 
 /**
  * @generated from message reliant.v1.PreviewAccountDeletionRequest
@@ -84,6 +84,16 @@ export type PreviewAccountDeletionResponse = Message<"reliant.v1.PreviewAccountD
    * @generated from field: repeated string retained_elsewhere = 7;
    */
   retainedElsewhere: string[];
+
+  /**
+   * What deletion does to the caller's prepaid wallet, quoted by the control
+   * plane. Unset on a deployment with no control plane (no wallet exists).
+   * Every amount is the server's; the client renders them and never derives
+   * one from another.
+   *
+   * @generated from field: reliant.v1.AccountDeletionWalletQuote wallet = 8;
+   */
+  wallet?: AccountDeletionWalletQuote | undefined;
 };
 
 /**
@@ -92,6 +102,81 @@ export type PreviewAccountDeletionResponse = Message<"reliant.v1.PreviewAccountD
  */
 export const PreviewAccountDeletionResponseSchema: GenMessage<PreviewAccountDeletionResponse> = /*@__PURE__*/
   messageDesc(file_reliant_v1_account, 1);
+
+/**
+ * RefundDestination is money going back to one card.
+ *
+ * @generated from message reliant.v1.RefundDestination
+ */
+export type RefundDestination = Message<"reliant.v1.RefundDestination"> & {
+  /**
+   * Empty when the card could not be determined; render "your original
+   * payment method" instead.
+   *
+   * @generated from field: string card_brand = 1;
+   */
+  cardBrand: string;
+
+  /**
+   * @generated from field: string card_last4 = 2;
+   */
+  cardLast4: string;
+
+  /**
+   * @generated from field: int64 amount_cents = 3;
+   */
+  amountCents: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.RefundDestination.
+ * Use `create(RefundDestinationSchema)` to create a new message.
+ */
+export const RefundDestinationSchema: GenMessage<RefundDestination> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_account, 2);
+
+/**
+ * AccountDeletionWalletQuote: on deletion the PAID part of the wallet is
+ * refunded to the card(s) that paid for it and promotional (coupon) credit is
+ * forfeited. A wallet balance never blocks deletion.
+ *
+ * @generated from message reliant.v1.AccountDeletionWalletQuote
+ */
+export type AccountDeletionWalletQuote = Message<"reliant.v1.AccountDeletionWalletQuote"> & {
+  /**
+   * Refunded automatically, split across destinations.
+   *
+   * @generated from field: int64 refund_cents = 1;
+   */
+  refundCents: bigint;
+
+  /**
+   * @generated from field: repeated reliant.v1.RefundDestination destinations = 2;
+   */
+  destinations: RefundDestination[];
+
+  /**
+   * Paid credit no card payment can take back automatically (for example a
+   * charge too old to refund). NOT forfeited: support refunds it by hand.
+   *
+   * @generated from field: int64 unrefundable_cents = 3;
+   */
+  unrefundableCents: bigint;
+
+  /**
+   * Promotional credit that deletion forfeits.
+   *
+   * @generated from field: int64 forfeited_promo_cents = 4;
+   */
+  forfeitedPromoCents: bigint;
+};
+
+/**
+ * Describes the message reliant.v1.AccountDeletionWalletQuote.
+ * Use `create(AccountDeletionWalletQuoteSchema)` to create a new message.
+ */
+export const AccountDeletionWalletQuoteSchema: GenMessage<AccountDeletionWalletQuote> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_account, 3);
 
 /**
  * @generated from message reliant.v1.DeleteAccountRequest
@@ -111,7 +196,7 @@ export type DeleteAccountRequest = Message<"reliant.v1.DeleteAccountRequest"> & 
  * Use `create(DeleteAccountRequestSchema)` to create a new message.
  */
 export const DeleteAccountRequestSchema: GenMessage<DeleteAccountRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_account, 2);
+  messageDesc(file_reliant_v1_account, 4);
 
 /**
  * @generated from message reliant.v1.DeleteAccountResponse
@@ -124,6 +209,37 @@ export type DeleteAccountResponse = Message<"reliant.v1.DeleteAccountResponse"> 
    * @generated from field: int64 deleted_row_count = 1;
    */
   deletedRowCount: bigint;
+
+  /**
+   * What happened to the wallet. Unset with no control plane.
+   *
+   * @generated from field: int64 refunded_cents = 2;
+   */
+  refundedCents: bigint;
+
+  /**
+   * @generated from field: repeated reliant.v1.RefundDestination refund_destinations = 3;
+   */
+  refundDestinations: RefundDestination[];
+
+  /**
+   * @generated from field: int64 forfeited_promo_cents = 4;
+   */
+  forfeitedPromoCents: bigint;
+
+  /**
+   * True when the account is deleted but refund_owed_cents could not be
+   * refunded automatically. Support refunds it to the original payment
+   * method and the deletion is finalized then; the user does nothing.
+   *
+   * @generated from field: bool refund_pending = 5;
+   */
+  refundPending: boolean;
+
+  /**
+   * @generated from field: int64 refund_owed_cents = 6;
+   */
+  refundOwedCents: bigint;
 };
 
 /**
@@ -131,7 +247,7 @@ export type DeleteAccountResponse = Message<"reliant.v1.DeleteAccountResponse"> 
  * Use `create(DeleteAccountResponseSchema)` to create a new message.
  */
 export const DeleteAccountResponseSchema: GenMessage<DeleteAccountResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_account, 3);
+  messageDesc(file_reliant_v1_account, 5);
 
 /**
  * AccountService is the user's escape hatch: it removes everything reliant

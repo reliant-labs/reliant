@@ -122,6 +122,80 @@ describe('DeleteAccountDialog', () => {
     expect(screen.queryByLabelText(/to confirm/i)).not.toBeInTheDocument()
   })
 
+  it('states the refund and the forfeiture from the server quote', async () => {
+    mocks.previewAccountDeletion.mockResolvedValue({
+      ...previewWithEmail,
+      wallet: {
+        refundCents: 2500n,
+        destinations: [{ cardBrand: 'visa', cardLast4: '1234', amountCents: 2500n }],
+        unrefundableCents: 0n,
+        forfeitedPromoCents: 700n,
+      },
+    })
+    renderDialog()
+
+    expect(
+      await screen.findByText(
+        "We'll refund $25.00 to your card ending ••••1234; $7.00 of promotional credit will be forfeited."
+      )
+    ).toBeInTheDocument()
+  })
+
+  it('splits a refund across cards and names paid credit support will refund', async () => {
+    mocks.previewAccountDeletion.mockResolvedValue({
+      ...previewWithEmail,
+      wallet: {
+        refundCents: 3000n,
+        destinations: [
+          { cardBrand: 'visa', cardLast4: '1234', amountCents: 2000n },
+          { cardBrand: '', cardLast4: '', amountCents: 1000n },
+        ],
+        unrefundableCents: 500n,
+        forfeitedPromoCents: 0n,
+      },
+    })
+    renderDialog()
+
+    expect(
+      await screen.findByText(
+        "We'll refund $30.00: $20.00 to your card ending ••••1234, $10.00 to your original payment method."
+      )
+    ).toBeInTheDocument()
+    expect(screen.getByText(/\$5\.00 can't be refunded to your card automatically/)).toBeInTheDocument()
+    expect(screen.queryByText(/forfeited/)).not.toBeInTheDocument()
+  })
+
+  it('shows no wallet section when there is nothing to settle', async () => {
+    mocks.previewAccountDeletion.mockResolvedValue({
+      ...previewWithEmail,
+      wallet: { refundCents: 0n, destinations: [], unrefundableCents: 0n, forfeitedPromoCents: 0n },
+    })
+    renderDialog()
+    await screen.findByText('47')
+    expect(screen.queryByTestId('delete-account-wallet')).not.toBeInTheDocument()
+  })
+
+  it('tells the user when support still owes a refund, before signing out', async () => {
+    const user = userEvent.setup()
+    mocks.deleteAccount.mockResolvedValue({
+      deletedRowCount: 10n,
+      refundPending: true,
+      refundOwedCents: 1500n,
+    })
+    const { onDeleted } = renderDialog()
+
+    const input = await screen.findByLabelText(/to confirm/i)
+    await user.type(input, 'owner@example.com')
+    await user.click(screen.getByRole('button', { name: /delete my account/i }))
+
+    expect(await screen.findByText(/couldn't refund \$15\.00 to your card automatically/)).toBeInTheDocument()
+    expect(screen.getByText(/finalized once that's done/)).toBeInTheDocument()
+    expect(onDeleted).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: /done/i }))
+    expect(onDeleted).toHaveBeenCalledOnce()
+  })
+
   it('reports a failure without claiming anything was deleted', async () => {
     const user = userEvent.setup()
     mocks.deleteAccount.mockRejectedValue(new Error('account deletion failed; nothing was deleted'))

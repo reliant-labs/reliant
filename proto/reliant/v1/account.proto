@@ -65,6 +65,35 @@ message PreviewAccountDeletionResponse {
   // UI to render verbatim. Populated while account deletion is scoped to
   // reliant's own data; see the service doc comment.
   repeated string retained_elsewhere = 7;
+
+  // What deletion does to the caller's prepaid wallet, quoted by the control
+  // plane. Unset on a deployment with no control plane (no wallet exists).
+  // Every amount is the server's; the client renders them and never derives
+  // one from another.
+  AccountDeletionWalletQuote wallet = 8;
+}
+
+// RefundDestination is money going back to one card.
+message RefundDestination {
+  // Empty when the card could not be determined; render "your original
+  // payment method" instead.
+  string card_brand = 1;
+  string card_last4 = 2;
+  int64 amount_cents = 3;
+}
+
+// AccountDeletionWalletQuote: on deletion the PAID part of the wallet is
+// refunded to the card(s) that paid for it and promotional (coupon) credit is
+// forfeited. A wallet balance never blocks deletion.
+message AccountDeletionWalletQuote {
+  // Refunded automatically, split across destinations.
+  int64 refund_cents = 1;
+  repeated RefundDestination destinations = 2;
+  // Paid credit no card payment can take back automatically (for example a
+  // charge too old to refund). NOT forfeited: support refunds it by hand.
+  int64 unrefundable_cents = 3;
+  // Promotional credit that deletion forfeits.
+  int64 forfeited_promo_cents = 4;
 }
 
 message DeleteAccountRequest {
@@ -77,4 +106,15 @@ message DeleteAccountResponse {
   // Total rows deleted across every user-owned table, for the audit log and
   // for the confirmation the UI shows before signing the user out.
   int64 deleted_row_count = 1;
+
+  // What happened to the wallet. Unset with no control plane.
+  int64 refunded_cents = 2;
+  repeated RefundDestination refund_destinations = 3;
+  int64 forfeited_promo_cents = 4;
+
+  // True when the account is deleted but refund_owed_cents could not be
+  // refunded automatically. Support refunds it to the original payment
+  // method and the deletion is finalized then; the user does nothing.
+  bool refund_pending = 5;
+  int64 refund_owed_cents = 6;
 }
