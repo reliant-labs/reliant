@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
@@ -102,13 +103,23 @@ func TestGenerateFixture_StructuredAgentLoop(t *testing.T) {
 // one more call_llm turn after that to react to it. Four scripted turns
 // total: parent-turn-1 (spawn call) + {parent-exit-candidate, child's-turn}
 // in either order + parent's final turn (after mailbox delivery).
+//
+// The spawn must name a preset the parent was OFFERED. builtin://agent offers
+// spawn with its spawn_presets input, which defaults to general, researcher
+// and code_reviewer, and the turn's capability set refuses a spawn naming any
+// other preset at execution (#495). A refused spawn dispatches no child, so the
+// child's turn and the parent's reaction to it never happen. This scenario
+// used to name `implementer`, which builtin://agent has never declared; that
+// ran only because presets were not checked against the declaration, and
+// stopped exporting ("consumed 2 of 4 scripted turns") once they were.
 func TestGenerateFixture_Spawn(t *testing.T) {
+	const spawnCallID = "call-spawn-1"
 	script := NewScriptedLLM(
 		// Turn 1: parent delegates to a sub-agent via the spawn tool.
 		Turn{
 			Text: "I'll delegate this to a sub-agent.",
 			ToolCalls: []message.ToolCall{
-				ToolCall("call-spawn-1", "spawn", `{"preset":"implementer","prompt":"Echo something for the parent."}`),
+				ToolCall(spawnCallID, "spawn", `{"preset":"general","prompt":"Echo something for the parent."}`),
 			},
 		},
 		// Turns 2-3: race between the parent's exit-candidate turn and the
@@ -130,6 +141,11 @@ func TestGenerateFixture_Spawn(t *testing.T) {
 	h.WaitTemporalWorkflowDone(workflowID)
 	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted(), "spawn must not over-consume the script")
+
+	// Checked before ExportHistory so a refused spawn fails with the refusal
+	// itself. Left to the turn count, it reads as an auxiliary request having
+	// stolen a turn, which is not what happened.
+	h.RequireToolCallStatus(spawnCallID, core.ToolCallStatusCompleted)
 
 	h.ExportHistory(workflowID, "spawn")
 }
