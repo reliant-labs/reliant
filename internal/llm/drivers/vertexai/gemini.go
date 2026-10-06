@@ -342,8 +342,8 @@ func (c *VertexAIClient) convertGeminiResponse(resp *genai.GenerateContentRespon
 //
 // The id must be unique across every call in every chat, because that is how
 // reliant keys a call once it is made: tool_calls and tool_call_results by id
-// alone, and a background spawn's report by tool_call_id across all chats
-// (idx_agent_messages_one_terminal_report_per_spawn). It used to be the
+// alone, and a background spawn's report by tool_call_id within its chat
+// (idx_agent_messages_one_terminal_report_per_chat_spawn). It used to be the
 // function NAME, so every call to a tool shared one id. A second spawn's
 // report was then "already reported" and dropped, and a second call to any
 // tool whose first call had finished was answered with that call's recorded

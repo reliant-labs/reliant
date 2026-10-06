@@ -2043,12 +2043,6 @@ CREATE INDEX idx_agent_messages_inbox ON public.agent_messages USING btree (to_t
 CREATE UNIQUE INDEX idx_agent_messages_one_terminal_report_per_chat_spawn ON public.agent_messages USING btree (chat_id, tool_call_id) WHERE (kind = ANY (ARRAY[2, 3, 4]));
 
 --
--- Name: idx_agent_messages_one_terminal_report_per_spawn; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX idx_agent_messages_one_terminal_report_per_spawn ON public.agent_messages USING btree (tool_call_id) WHERE (kind = ANY (ARRAY[2, 3, 4]));
-
---
 -- Name: idx_antigravity_auth_tokens_user; Type: INDEX; Schema: public; Owner: -
 --
 

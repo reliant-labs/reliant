@@ -153,11 +153,6 @@ const (
 // slot. The second is an error rather than "already reported": treating it as
 // a retry is exactly how a sub-agent's result used to disappear without a
 // trace.
-//
-// Until the contract migration drops the chat-blind
-// idx_agent_messages_one_terminal_report_per_spawn (kept so the previous
-// release still works against the schema), a report under an id ANOTHER chat
-// already reported under is refused the same way.
 var ErrSpawnReportSlotTaken = errors.New("another spawn already reported under this tool call id")
 
 // AgentMessageStore is the shared contract for mailbox persistence across

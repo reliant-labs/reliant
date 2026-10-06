@@ -202,15 +202,10 @@ func (c *isolationChats) spawnReportFor(t *testing.T, chatID, child, parent, too
 }
 
 // Chat A's spawn and chat B's spawn both carry tool_call_id "spawn" (what the
-// Vertex Gemini driver emitted before #560). The report slot was keyed by
-// tool_call_id alone, so B's report found A's in it and was dropped as
-// "already reported" with no error.
-//
-// While the expand step keeps the chat-blind index for the previous release,
-// B's report still cannot be stored -- but it must fail, loudly, and leave
-// A's report alone. The contract step, which drops that index, delivers it
-// (TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent there).
-func TestRepro_SpawnReportWithAReusedToolCallIDIsNeverDroppedSilently(t *testing.T) {
+// Vertex Gemini driver emitted before #560). B's child reports; B's parent
+// must receive it. The report slot was keyed by tool_call_id alone, so B's
+// report found A's in it and was dropped as "already reported" with no error.
+func TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent(t *testing.T) {
 	c := newIsolationChats(t)
 	ctx := context.Background()
 	chatA, chatB := c.chat(t), c.chat(t)
@@ -219,9 +214,12 @@ func TestRepro_SpawnReportWithAReusedToolCallIDIsNeverDroppedSilently(t *testing
 	c.thread(t, chatB, childB, &chatB)
 
 	require.NoError(t, c.spawnReportFor(t, chatA, childA, chatA, "spawn", "chat A's child: result A"))
-	err := c.spawnReportFor(t, chatB, childB, chatB, "spawn", "chat B's child: result B")
-	require.Error(t, err, "chat B's report must not be dropped as \"already reported\"")
-	require.ErrorContains(t, err, core.ErrSpawnReportSlotTaken.Error())
+	require.NoError(t, c.spawnReportFor(t, chatB, childB, chatB, "spawn", "chat B's child: result B"))
+
+	queuedB, err := c.h.Repo().ListQueuedAgentMessagesForThread(ctx, chatB)
+	require.NoError(t, err)
+	require.Len(t, queuedB, 1, "chat B's parent has no report in its mailbox: chat B's child's result was dropped")
+	require.Equal(t, "chat B's child: result B", queuedB[0].Body)
 
 	queuedA, err := c.h.Repo().ListQueuedAgentMessagesForThread(ctx, chatA)
 	require.NoError(t, err)

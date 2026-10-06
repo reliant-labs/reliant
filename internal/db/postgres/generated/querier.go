@@ -277,12 +277,7 @@ type Querier interface {
 	// inserted from superseded.
 	//
 	// The slot is (chat_id, tool_call_id), not tool_call_id: the id is the model
-	// provider's, so two chats can each have a spawn under it. Until the contract
-	// migration drops the chat-blind idx_agent_messages_one_terminal_report_per_spawn
-	// (the previous release arbitrates on it), a report under an id another chat
-	// already reported under fails on that index with 23505, which the store
-	// reports as core.ErrSpawnReportSlotTaken. The same holds for the placeholder
-	// write above.
+	// provider's, so two chats can each have a spawn under it.
 	EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReportParams) (EnqueueSpawnReportRow, error)
 	// Releases the lease and records the outcome. refreshed_at moves only on
 	// success; last_error is cleared on success.
