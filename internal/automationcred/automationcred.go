@@ -30,9 +30,10 @@ type keyStore interface {
 
 type allowedKey struct{}
 
-// Allow marks ctx as belonging to a trigger-launched run. Only such a context
-// may fall back to the stored token: a run an agent started with start_run is
-// attended and must keep acting as the signed-in user.
+// Allow marks ctx as belonging to an unattended run, one whose launch event
+// kind reports core.TriggerEventKind.Unattended. Only such a context may fall
+// back to the stored token: a run an agent started with start_run is attended
+// and must keep acting as the signed-in user.
 func Allow(ctx context.Context) context.Context { return context.WithValue(ctx, allowedKey{}, true) }
 
 func allowed(ctx context.Context) bool { v, _ := ctx.Value(allowedKey{}).(bool); return v }
