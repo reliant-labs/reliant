@@ -2,10 +2,12 @@ import { describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 
 const newChatViewMounts = vi.fn();
+const newChatViewProps = vi.fn();
 vi.mock("../../Chat/NewChatView", async () => {
   const React = await import("react");
   return {
-    NewChatView: () => {
+    NewChatView: (props: { composerPrefill?: { text: string } }) => {
+      newChatViewProps(props);
       React.useEffect(() => {
         newChatViewMounts();
       }, []);
@@ -45,6 +47,9 @@ function renderPanel(chatId?: string) {
   return render(panel(chatId));
 }
 
+/** The text the composer was last told to show. */
+const composerPrefill = () => newChatViewProps.mock.lastCall?.[0]?.composerPrefill?.text;
+
 describe("WorkflowEditorChatPanel", () => {
   it("renders the new-chat view when there is no chat param", () => {
     renderPanel(undefined);
@@ -52,12 +57,10 @@ describe("WorkflowEditorChatPanel", () => {
     expect(screen.queryByTestId("chat-container")).toBeNull();
   });
 
-  it("prefills the composer draft with a visible workflow reference", () => {
+  it("prefills the composer with a visible workflow reference", () => {
     useWorkspaceStateStore.getState().clearNewChatDraft("p1");
     renderPanel(undefined);
-    expect(useWorkspaceStateStore.getState().getNewChatDraft("p1")).toBe(
-      workflowReferencePrefill("swift-fox-a1b2"),
-    );
+    expect(composerPrefill()).toBe(workflowReferencePrefill("swift-fox-a1b2"));
   });
 
   it("renders the chat container for the chat in the search param", () => {
@@ -66,7 +69,7 @@ describe("WorkflowEditorChatPanel", () => {
     expect(screen.queryByTestId("new-chat-view")).toBeNull();
   });
 
-  it("waits for the workflow slug, then mounts the composer with the reference in the draft", () => {
+  it("waits for the workflow slug, then mounts the composer with the reference", () => {
     useWorkspaceStateStore.getState().clearNewChatDraft("p1");
     newChatViewMounts.mockClear();
     const { rerender } = render(panel(undefined, null));
@@ -76,23 +79,27 @@ describe("WorkflowEditorChatPanel", () => {
     rerender(panel(undefined, "swift-fox-a1b2"));
     expect(screen.getByTestId("new-chat-view")).toBeTruthy();
     expect(newChatViewMounts).toHaveBeenCalledTimes(1);
-    expect(useWorkspaceStateStore.getState().getNewChatDraft("p1")).toBe(
-      workflowReferencePrefill("swift-fox-a1b2"),
-    );
+    expect(composerPrefill()).toBe(workflowReferencePrefill("swift-fox-a1b2"));
   });
 
-  it("re-mounts the composer when the slug changes so it re-reads the draft", () => {
+  it("re-mounts the composer with the new reference when the slug changes", () => {
     useWorkspaceStateStore.getState().clearNewChatDraft("p1");
     newChatViewMounts.mockClear();
     const { rerender } = render(panel(undefined, "first-a1"));
+    // The composer saves what it shows as the draft.
+    useWorkspaceStateStore.getState().setNewChatDraft("p1", workflowReferencePrefill("first-a1"));
     rerender(panel(undefined, "second-b2"));
     expect(newChatViewMounts).toHaveBeenCalledTimes(2);
-    expect(useWorkspaceStateStore.getState().getNewChatDraft("p1")).toBe(workflowReferencePrefill("second-b2"));
+    expect(composerPrefill()).toBe(workflowReferencePrefill("second-b2"));
+    // The stale reference is not left behind for the app's new-chat screen.
+    expect(useWorkspaceStateStore.getState().getNewChatDraft("p1")).toBe("");
   });
 
   it("keeps a draft the user typed", () => {
     useWorkspaceStateStore.getState().setNewChatDraft("p1", "my own words");
+    newChatViewProps.mockClear();
     renderPanel(undefined);
+    expect(composerPrefill()).toBeUndefined();
     expect(useWorkspaceStateStore.getState().getNewChatDraft("p1")).toBe("my own words");
   });
 

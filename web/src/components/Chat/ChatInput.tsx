@@ -108,6 +108,17 @@ export function buildWorkflowInputsFromProto(
  *  Rapid edits within this window coalesce into a single updateWorkflowParams call. */
 const PARAM_SYNC_DEBOUNCE_MS = 500;
 
+/**
+ * Text a host puts in the composer: what the chat is about, or a suggested
+ * prompt the user picked. It replaces what is there, once per `id`, so the
+ * same suggestion can be picked twice and a re-render never overwrites what
+ * the user typed since.
+ */
+export interface ComposerPrefill {
+  text: string;
+  id: number;
+}
+
 interface ChatInputProps {
   onSend: (
     message: string,
@@ -134,6 +145,7 @@ interface ChatInputProps {
   // Discuss mode
   isDiscussMode?: boolean;
   onToggleDiscuss?: () => void;
+  prefill?: ComposerPrefill;
 }
 
 const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
@@ -151,6 +163,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       workflowExecution,
       isDiscussMode,
       onToggleDiscuss,
+      prefill,
     },
     ref
   ) {
@@ -255,6 +268,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     const {
       input,
       setInput,
+      replaceInput,
       selectedWorkflow,
       setSelectedWorkflow,
       isPendingChat,
@@ -263,6 +277,22 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       chatId,
       tabId: tabId ?? undefined,
     });
+
+    // Declared after useChatInputState, so on mount this runs after the
+    // draft is read and the prefill wins. The focus waits a frame for the new
+    // value to reach the textarea, so the caret lands after it.
+    const appliedPrefillId = useRef<number | undefined>(undefined);
+    useEffect(() => {
+      if (!prefill || appliedPrefillId.current === prefill.id) return;
+      appliedPrefillId.current = prefill.id;
+      replaceInput(prefill.text);
+      requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      });
+    }, [prefill, replaceInput]);
 
     // Question (ask_user) state
     const pendingQuestionQuery = usePendingQuestion(chatId || undefined);
