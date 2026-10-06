@@ -3,6 +3,7 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -418,7 +419,14 @@ func TestLoadTool_SearchByTagName_ReturnsAllWorkflowTools(t *testing.T) {
 	for _, name := range workflowTagToolNames() {
 		assert.Contains(t, resp.Content, "**"+name+"**")
 	}
-	assert.Contains(t, resp.Content, "Found 20 tools")
+	// Plus anything NAMED for workflows without the tag (github__workflow_dispatch).
+	matches := 0
+	for _, def := range GetToolRegistry() {
+		if def.hasTag(TagWorkflow) || strings.Contains(def.Name, "workflow") {
+			matches++
+		}
+	}
+	assert.Contains(t, resp.Content, fmt.Sprintf("Found %d tools", matches))
 }
 
 func TestLoadTool_TagWithNoRegistryTools_SaysSo(t *testing.T) {

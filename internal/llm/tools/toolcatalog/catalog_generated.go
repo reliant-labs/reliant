@@ -242,6 +242,186 @@ var generatedToolParams = map[string]ToolParams{
 		Bindable:   map[string]struct{}{},
 		Unbindable: map[string]string{},
 	},
+	"github__code_search": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"page":       {},
+			"per_page":   {},
+			"q":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__issue_comment": {
+		Bindable: map[string]struct{}{
+			"body":         {},
+			"connection":   {},
+			"issue_number": {},
+			"owner":        {},
+			"repo":         {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__issue_create": {
+		Bindable: map[string]struct{}{
+			"assignees":  {},
+			"body":       {},
+			"connection": {},
+			"labels":     {},
+			"owner":      {},
+			"repo":       {},
+			"title":      {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__issue_get": {
+		Bindable: map[string]struct{}{
+			"connection":   {},
+			"issue_number": {},
+			"owner":        {},
+			"repo":         {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__issue_update": {
+		Bindable: map[string]struct{}{
+			"assignees":    {},
+			"body":         {},
+			"connection":   {},
+			"issue_number": {},
+			"labels":       {},
+			"owner":        {},
+			"repo":         {},
+			"state":        {},
+			"state_reason": {},
+			"title":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_get": {
+		Bindable: map[string]struct{}{
+			"connection":  {},
+			"owner":       {},
+			"pull_number": {},
+			"repo":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_list_files": {
+		Bindable: map[string]struct{}{
+			"connection":  {},
+			"owner":       {},
+			"pull_number": {},
+			"repo":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__pr_review_create": {
+		Bindable: map[string]struct{}{
+			"body":        {},
+			"commit_id":   {},
+			"connection":  {},
+			"event":       {},
+			"owner":       {},
+			"pull_number": {},
+			"repo":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__repo_get": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"owner":      {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__repo_get_content": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"owner":      {},
+			"path":       {},
+			"ref":        {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__repo_get_tree": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"owner":      {},
+			"path":       {},
+			"ref":        {},
+			"repo":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__repo_list_for_user": {
+		Bindable: map[string]struct{}{
+			"affiliation": {},
+			"connection":  {},
+			"direction":   {},
+			"sort":        {},
+			"visibility":  {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__user_get": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"github__workflow_dispatch": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"inputs":     {},
+			"owner":      {},
+			"ref":        {},
+			"repo":       {},
+			"workflow":   {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"gmail__label_list": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"gmail__message_get": {
+		Bindable: map[string]struct{}{
+			"connection":     {},
+			"format":         {},
+			"id":             {},
+			"max_body_chars": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"gmail__message_list": {
+		Bindable: map[string]struct{}{
+			"connection":         {},
+			"include_spam_trash": {},
+			"label_ids":          {},
+			"page_size":          {},
+			"q":                  {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"gmail__message_send": {
+		Bindable: map[string]struct{}{
+			"bcc":         {},
+			"cc":          {},
+			"connection":  {},
+			"html":        {},
+			"in_reply_to": {},
+			"references":  {},
+			"subject":     {},
+			"text":        {},
+			"thread_id":   {},
+			"to":          {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"http__request": {
 		Bindable: map[string]struct{}{
 			"body":       {},
@@ -436,6 +616,73 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"slack__conversations_history": {
+		Bindable: map[string]struct{}{
+			"channel":    {},
+			"connection": {},
+			"latest":     {},
+			"limit":      {},
+			"oldest":     {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"slack__conversations_list": {
+		Bindable: map[string]struct{}{
+			"connection":       {},
+			"exclude_archived": {},
+			"types":            {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"slack__message_post": {
+		Bindable: map[string]struct{}{
+			"blocks":          {},
+			"channel":         {},
+			"connection":      {},
+			"reply_broadcast": {},
+			"text":            {},
+			"thread_ts":       {},
+			"unfurl_links":    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"slack__message_reply": {
+		Bindable: map[string]struct{}{
+			"blocks":          {},
+			"channel":         {},
+			"connection":      {},
+			"reply_broadcast": {},
+			"text":            {},
+			"thread_ts":       {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"slack__message_update": {
+		Bindable: map[string]struct{}{
+			"blocks":     {},
+			"channel":    {},
+			"connection": {},
+			"text":       {},
+			"ts":         {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"slack__reaction_add": {
+		Bindable: map[string]struct{}{
+			"channel":    {},
+			"connection": {},
+			"name":       {},
+			"timestamp":  {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"slack__user_lookup_by_email": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"email":      {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"sourcegraph": {
 		Bindable: map[string]struct{}{
 			"context_window": {},
@@ -478,6 +725,46 @@ var generatedToolParams = map[string]ToolParams{
 			"project_id": {},
 			"title":      {},
 			"workflow":   {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"twilio__message_get": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"sid":        {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"twilio__message_list": {
+		Bindable: map[string]struct{}{
+			"connection":       {},
+			"date_sent":        {},
+			"date_sent_after":  {},
+			"date_sent_before": {},
+			"from":             {},
+			"page_size":        {},
+			"to":               {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"twilio__message_send": {
+		Bindable: map[string]struct{}{
+			"body":                  {},
+			"connection":            {},
+			"content_sid":           {},
+			"content_variables":     {},
+			"from":                  {},
+			"media_url":             {},
+			"messaging_service_sid": {},
+			"status_callback":       {},
+			"to":                    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"twilio__phone_number_list": {
+		Bindable: map[string]struct{}{
+			"connection":   {},
+			"phone_number": {},
 		},
 		Unbindable: map[string]string{},
 	},
