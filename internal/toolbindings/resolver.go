@@ -28,6 +28,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
 	"strings"
 
@@ -252,6 +253,58 @@ func EncodeBindings(bindings tools.Bindings) (string, error) {
 		return "", fmt.Errorf("encoding tool bindings: %w", err)
 	}
 	return string(encoded), nil
+}
+
+// Recorded is what a turn's capability set carries for the bindings Apply put
+// on its tool array: for each bound tool, every configured parameter that took
+// effect, with its value — except one whose value is the run owner's global
+// setting, recorded by name only (tools.BoundParam.Global) and re-read at
+// execution.
+//
+// A configured binding that did not take effect — the tool cannot be bound,
+// or the parameter is not one it has — was never hidden from the model, so it
+// is not recorded: Apply left that parameter open. A tool's own declared
+// defaults are not recorded either. The executor's fresh tool declares the
+// same defaults and applies them itself.
+func Recorded(toolsList []tools.Tool, scopes Scopes) map[string]map[string]tools.BoundParam {
+	recorded := map[string]map[string]tools.BoundParam{}
+	for _, tool := range toolsList {
+		if tool == nil {
+			continue
+		}
+		configured := scopes.For(tool.Name())
+		bindable, ok := tool.(tools.BindableTool)
+		if len(configured) == 0 || !ok {
+			continue
+		}
+		applied := bindable.Bindings()
+		params := map[string]tools.BoundParam{}
+		for name, value := range configured {
+			if effective, ok := applied[name]; !ok || !reflect.DeepEqual(effective, value) {
+				continue
+			}
+			if scopes.fromGlobal(tool.Name(), name) {
+				params[name] = tools.BoundParam{Global: true}
+			} else {
+				params[name] = tools.BoundParam{Value: value}
+			}
+		}
+		if len(params) > 0 {
+			recorded[tool.Name()] = params
+		}
+	}
+	return recorded
+}
+
+// fromGlobal reports whether the global setting is the scope that decided
+// param's value: it binds it, and nothing more specific does.
+func (s Scopes) fromGlobal(toolName, param string) bool {
+	if _, ok := s.Global[toolName][param]; !ok {
+		return false
+	}
+	_, workflow := s.Workflow[toolName][param]
+	_, preset := s.Preset[toolName][param]
+	return !workflow && !preset
 }
 
 // Apply layers the resolved bindings onto each tool and returns the bound

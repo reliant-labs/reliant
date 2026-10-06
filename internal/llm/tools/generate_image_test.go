@@ -421,18 +421,22 @@ func TestGenerateImage_ModelBindingStillLocks(t *testing.T) {
 	assert.NotContains(t, names, "model")
 	assert.Contains(t, names, "prompt")
 
-	resp, err := configured.Run(generateImageCtx(t), ToolCall{
+	refused, err := configured.Run(generateImageCtx(t), ToolCall{
 		ID:    "c1",
 		Input: `{"prompt":"a red bicycle","model":{"id":"some-model-the-agent-guessed"}}`,
 	})
 	require.NoError(t, err)
-	require.False(t, resp.IsError, "unexpected error response: %s", resp.Content)
+	assert.True(t, refused.IsError, "an agent-supplied model is refused, not honored")
+	assert.Equal(t, 0, recorder.calls)
 
+	resp, err := configured.Run(generateImageCtx(t), ToolCall{ID: "c2", Input: `{"prompt":"a red bicycle"}`})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, "unexpected error response: %s", resp.Content)
 	require.Equal(t, 1, recorder.calls)
 	assert.Equal(t, models.ModelSelector{
 		Tags:      []string{ImageGenTag},
 		Providers: []string{"codex"},
-	}, recorder.selector, "the bound selector must win over an agent-supplied model")
+	}, recorder.selector, "the bound selector reaches the generator")
 }
 
 // TestGenerateImage_EndToEndThroughRealClient runs the tool against a real

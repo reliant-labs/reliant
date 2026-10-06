@@ -177,10 +177,15 @@ func TestGenerateVideo_BoundModelLocksAndIsHiddenFromSchema(t *testing.T) {
 	assert.NotContains(t, names, "model", "a bound param is removed from the LLM schema")
 	assert.Contains(t, names, "quality")
 
-	resp, err := locked.Run(videoCtx(t, "tc-q4"), ToolCall{ID: "c", Input: `{"prompt":"x","quality":"cinematic","model":"veo-3.1-generate"}`})
+	refused, err := locked.Run(videoCtx(t, "tc-q4"), ToolCall{ID: "c", Input: `{"prompt":"x","quality":"cinematic","model":"veo-3.1-generate"}`})
+	require.NoError(t, err)
+	assert.True(t, refused.IsError, "agent input for the bound model is refused, not honored")
+	assert.Empty(t, recorder.seen)
+
+	resp, err := locked.Run(videoCtx(t, "tc-q5"), ToolCall{ID: "c2", Input: `{"prompt":"x","quality":"cinematic"}`})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
-	assert.Equal(t, models.ModelSelector{ID: "veo-3.1-lite-generate"}, recorder.seen[0], "the human's binding wins over agent input")
+	assert.Equal(t, models.ModelSelector{ID: "veo-3.1-lite-generate"}, recorder.seen[0], "the human's binding is what runs")
 
 	qualityLocked, err := BindTool(NewToolWrapper[GenerateVideoParams, ToolResponse](tool), Bindings{"quality": LiteralBinding("fast")})
 	require.NoError(t, err)

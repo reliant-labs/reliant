@@ -409,9 +409,13 @@ func (t *ToolWrapper[P, O]) RequiresPermission(rctx *rctxpkg.ToolContext, call T
 	// Permission is decided on the parameters the tool will actually run
 	// with, so bound values are merged in first. A binding that turns a
 	// dangerous call into a safe one (or the reverse) has to be visible here.
-	input := stripBoundKeys(call.Input, t.bindings)
+	input := call.Input
 	if resolved, err := resolveBindings(t.bindings, t.resolver, rctx); err == nil {
-		if merged, mergeErr := applyBindingsToInput(input, resolved); mergeErr == nil {
+		checked, checkErr := checkBoundKeys(t.tool.Name(), input, resolved)
+		if checkErr != nil {
+			return false, checkErr
+		}
+		if merged, mergeErr := applyBindingsToInput(checked, resolved); mergeErr == nil {
 			input = merged
 		}
 	}
@@ -430,14 +434,25 @@ func (t *ToolWrapper[P, O]) RequiresPermission(rctx *rctxpkg.ToolContext, call T
 func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolResponse, error) {
 	toolName := t.tool.Name()
 
+	// Bound values are resolved first, because a call that sets a bound
+	// parameter to anything else is refused before validation
+	// (checkBoundKeys), and one that repeats the bound value has the key
+	// dropped: the parameter is not in the model-facing schema, so it would
+	// trip additionalProperties:false. The values are merged in after
+	// validation, below.
+	resolvedBindings, err := resolveBindings(t.bindings, t.resolver, rctx)
+	if err != nil {
+		logging.Warn("Tool binding resolution failed", "tool", toolName, "error", err)
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	callInput, err := checkBoundKeys(toolName, call.Input, resolvedBindings)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+
 	// Normalize input:
 	// 1) Fix Claude API bug with stringified values
 	// 2) Accept OpenAI-compatible encoding for maps (kv array) and convert back to objects
-	// A bound parameter is not in the schema, so a model that emits one
-	// anyway would trip additionalProperties:false. Drop it instead: the
-	// human's value is authoritative and is merged in below regardless.
-	callInput := stripBoundKeys(call.Input, t.bindings)
-
 	schema := t.ParamSchema()
 	normalizedInput := unwrapStringifiedValues(callInput, schema)
 	normalizedInput = coerceKVArrayMaps(normalizedInput)
@@ -460,11 +475,6 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 	// validating against it would reject them. Before, because the decoder
 	// uses DisallowUnknownFields against the FULL params struct, which does
 	// contain them — that is what carries a bound value into the tool.
-	resolvedBindings, err := resolveBindings(t.bindings, t.resolver, rctx)
-	if err != nil {
-		logging.Warn("Tool binding resolution failed", "tool", toolName, "error", err)
-		return NewTextErrorResponse(err.Error()), nil
-	}
 	normalizedInput, err = applyBindingsToInput(normalizedInput, resolvedBindings)
 	if err != nil {
 		logging.Warn("Tool binding merge failed", "tool", toolName, "error", err)

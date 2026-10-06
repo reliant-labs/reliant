@@ -342,6 +342,38 @@ func (s *ToolCapabilitiesLoopSuite) TestToolGrants_ThreadedFromExecuteToolsIntoN
 	s.Equal([]string{"sourcegraph"}, e.grantsSeen[2], "and stays for the rest of the run")
 }
 
+// The bound parameters call_llm recorded travel with the set into that turn's
+// execute_tools, which merges them over the model's calls. A literal arrives
+// as its value; a global setting's parameter arrives as a name only.
+func (s *ToolCapabilitiesLoopSuite) TestBoundParams_ReachExecuteTools() {
+	env := s.NewTestWorkflowEnvironment()
+	caps := map[string]interface{}{
+		"offered":    []interface{}{"shell"},
+		"permission": "mutating",
+		"bound_params": map[string]interface{}{
+			"shell": map[string]interface{}{"params": map[string]interface{}{
+				"timeout":     map[string]interface{}{"literal": 30000},
+				"description": map[string]interface{}{"global": true},
+			}},
+		},
+	}
+	e := &capsAgentEnv{turns: []map[string]interface{}{
+		scriptedTurn(caps, map[string]interface{}{"id": "tc-shell", "name": "shell", "input": `{"command":"ls"}`}),
+	}}
+	newCapsAgentEnv(s.T(), env, e)
+
+	env.ExecuteWorkflow(DynamicWorkflow, rootDrainWorkflowInput("chat-caps-bound", "wf-chat-caps-bound"))
+	s.Require().True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+
+	s.Require().Len(e.capsSeen, 1)
+	params := e.capsSeen[0].GetBoundParams()["shell"].GetParams()
+	s.Require().Len(params, 2)
+	s.Equal(float64(30000), params["timeout"].GetLiteral().GetNumberValue())
+	s.True(params["description"].GetGlobal())
+	s.Nil(params["description"].GetLiteral(), "a global setting's value is not in history")
+}
+
 // A spawn the turn did not offer is not dispatched: it goes to the
 // ExecuteTools activity, which refuses it like any other call.
 func (s *ToolCapabilitiesLoopSuite) TestSpawnNotOffered_IsRefusedByTheActivityNotDispatched() {

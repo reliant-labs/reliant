@@ -1520,6 +1520,32 @@ message ToolCapabilities {
   // by integration, not tool, so it stays small however many actions a
   // manifest exposes.
   map<string, string> withheld_integrations = 8;
+  // BoundParams are the parameters a human bound on each offered tool, keyed
+  // by tool name. call_llm removed them from the schema the model was offered;
+  // execute_tools merges them over the model's call, and refuses a call that
+  // sets one to a different value. Only tools with a bound parameter appear.
+  map<string, ToolBoundParams> bound_params = 9;
+}
+
+// ToolBoundParams are one tool's bound parameters, keyed by parameter name.
+message ToolBoundParams {
+  map<string, BoundParam> params = 1;
+}
+
+// BoundParam is one bound parameter as a turn's capability set records it.
+message BoundParam {
+  oneof value {
+    // Literal is a constant, from the workflow's tools_config.tools or the
+    // tool's own default. Already in workflow history as call_llm's input.
+    google.protobuf.Value literal = 1;
+    // Expr is an expression evaluated at call time.
+    string expr = 2;
+    // Global marks a parameter bound by the run owner's global setting. Only
+    // the name is recorded: execute_tools re-reads the value from the setting,
+    // because a binding can carry a secret and a setting is not otherwise in
+    // workflow history.
+    bool global = 3;
+  }
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.

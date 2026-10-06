@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -96,6 +97,50 @@ func applyToolBindings(ctx context.Context, toolsList []tools.Tool, scopes toolb
 		logger.Debug("[CallLLM] Applied tool bindings", "tools", names)
 	}
 	return bound
+}
+
+// boundToolInput is the input a call is dispatched with: the model's own,
+// with the bound parameters the turn's capability set recorded for the tool
+// merged in (tools.ApplyBindings). When the call may not run it returns the
+// reason instead, written for the model:
+//   - it set a bound parameter to a value other than the bound one;
+//   - a parameter bound by the run owner's global setting is no longer bound
+//     by it, or the setting could not be read.
+//
+// A globally bound value is read here, from the setting, because the set
+// records it by name only (tools.BoundParam.Global). A setting that cannot be
+// read refuses the call rather than running it open: the model was not shown
+// the parameter, so the call has no value of its own there.
+//
+// A batch with no recorded set (a run that predates it) binds nothing, as
+// before.
+func (a *ExecuteToolsActivity) boundToolInput(ctx context.Context, caps *tools.Capabilities, tec *toolExecutionContext) (string, string) {
+	if !caps.Binds(tec.toolName) {
+		return tec.toolInput, ""
+	}
+	var global tools.Bindings
+	if caps.BindsFromGlobalSetting(tec.toolName) {
+		byTool, err := toolbindings.LoadGlobal(ctx, a.repo, tec.chat.UserID)
+		global = byTool[tec.toolName]
+		if err != nil {
+			bindingLogger(ctx).Warn("[ExecuteTools] Global tool bindings could not be read",
+				"tool", tec.toolName, "userID", tec.chat.UserID, "error", err)
+			if len(global) == 0 {
+				return "", fmt.Sprintf("A setting that fixes a parameter of '%s' could not be read, so the call was not run.", tec.toolName)
+			}
+		}
+	}
+	bindings, err := caps.ExecutionBindings(tec.toolName, global)
+	if err != nil {
+		return "", err.Error()
+	}
+	input, err := tools.ApplyBindings(tec.toolName, tec.toolInput, bindings)
+	if err != nil {
+		return "", err.Error()
+	}
+	bindingLogger(ctx).Debug("[ExecuteTools] Applied bound parameters",
+		"tool", tec.toolName, "toolCallID", tec.toolCallID, "params", bindings.Names())
+	return input, ""
 }
 
 // workflowScopeBindings extracts the bindings a workflow's YAML declares for

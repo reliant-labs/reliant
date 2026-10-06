@@ -94,8 +94,11 @@ func (a *InvokeToolActivity) Execute(ctx context.Context, input ActivityInput) (
 
 	activityInfo := activity.GetInfo(ctx)
 
+	// No capability set: the node's author wrote every parameter, and no
+	// model was offered a schema with some of them bound away.
 	result := a.executeTools.executeSingleTool(
 		ctx,
+		nil,
 		rtx.ChatID,
 		rtx.Thread,
 		toolName,

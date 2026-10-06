@@ -110,7 +110,9 @@ cannot disagree:
 Output (`Capabilities`, proto `reliant.v1.ToolCapabilities`): `offered`,
 `loadable_all`, `loadable`, `permission`, `no_machine`, `mcp_tools`,
 `spawn_presets`, `withheld_integrations` (integration id → reason, ≤ one entry
-per integration). Names only, sorted.
+per integration), `bound_params` (§3.8). Names only, sorted — except a bound
+parameter's value when the workflow bound it, which is already in history as
+call_llm's own input.
 
 ### 3.2 call_llm — builds the menu FROM the set and records it
 
@@ -119,6 +121,8 @@ factories, connected MCP tools, the structural tools), call_llm appends the
 spawn and response tools, applies bindings, and then **re-records `Offered`
 as the names actually in the request's tool array** — so "offered" means
 literally what the model was sent, even if a factory declined to build a tool.
+From the same array it records `bound_params`: what the bound instances hid
+from the schema (§3.8).
 The set goes out as `CallLLMOutput.capabilities` (field 19) and so into
 history. load_tool's "Additional tools available" list is `caps.Deferred()`.
 
@@ -198,6 +202,106 @@ already flows, and history is already the durable per-turn record.
 granted at every tier, so this stays steering there. For no-machine runs it is
 a real boundary, because the server has no route to the machine.
 
+### 3.8 Bound parameters take effect at execution
+
+A bound parameter (`tools_config.tools` in the workflow, or the run owner's
+`tool.bindings.<tool>` setting — `internal/toolbindings`) is removed from the
+schema the model is offered. Until this change, that was the only thing it
+did. Only the tool instance call_llm built to produce the schema was bound,
+and execute_tools ran every call on a fresh tool from the factory (on the
+worker, or on the daemon), so:
+- the bound value never reached the tool;
+- a model that sent the hidden parameter anyway had its own value honored.
+
+A workflow that pinned `http__request`'s `url` pinned nothing.
+
+**The flow now.**
+1. **call_llm records what it hid.** `toolbindings.Recorded` reads the final
+   tool array: each configured parameter whose binding took effect on its
+   bound instance (`BindableTool.Bindings()`). The result goes into the set as
+   `bound_params` (tool → parameter → `BoundParam`).
+   - Not recorded: a binding that failed, because Apply left that parameter
+     open; and a tool's own declared default, because the executor's fresh
+     tool declares and applies the same default itself.
+   - MCP tools and the schema-only spawn/ask_user tools cannot be bound
+     (`ErrBindingsUnsupported`), so nothing for them is ever recorded.
+2. **The runtime carries it.** The set travels into execute_tools unchanged
+   (§3.3).
+3. **execute_tools merges before dispatch.** `boundToolInput` in
+   handlers/tool_bindings.go runs `tools.ApplyBindings` on the model's input.
+   The result goes only into the `ToolRequest`, so every executor receives a
+   complete input:
+   - `RemoteExecutor.executeOnServer` → `LocalToolExecutor`;
+   - `executeOnDaemon` → the daemon's own `LocalToolExecutor`.
+
+   Each builds an unbound tool whose full schema includes the bound
+   parameters. **Nothing is asked of the daemon, so a daemon of any version
+   applies bindings.** The tool_calls row and the transcript keep the
+   model's own input.
+
+**Carried, or re-resolved at execution?** Both, split by where the value
+already lives:
+- **Workflow-scope values are carried in the set.** They are part of the
+  evaluated node, which is already in history as call_llm's activity input.
+  Carrying them again exposes nothing new. Re-resolving them would need
+  call_llm's node at execute_tools, which it is never handed — the
+  second-resolution-path problem §4.1 already rejected.
+- **A global setting's parameter is recorded by name only**
+  (`BoundParam.global`). execute_tools re-reads the setting
+  (`toolbindings.LoadGlobal`, one query, only when the call's tool has such a
+  parameter). A binding can carry a secret: the natural place to put an
+  `Authorization` header is `http__request`'s `headers`. Settings are not
+  otherwise in workflow history, which is retained, shown in the Temporal UI,
+  and checked into `replaytest/fixtures`.
+
+  If the re-read setting no longer binds a recorded parameter, or cannot be
+  read, the call is refused rather than run open. The model was not shown the
+  parameter, so its call has no value there. A changed value is applied: it
+  is still the owner's pin. Sealing values with the vault instead was
+  rejected: it adds a vault dependency to both activities for data that is
+  plaintext in its own store anyway.
+
+Payload: only bound tools appear, and a turn with no bindings adds nothing.
+Workflow values are the same bytes call_llm's input already carries; the
+claim-check codec covers anything large.
+
+**A model value for a bound parameter is refused, not overridden.**
+`checkBoundKeys` is the one rule for every path:
+- a value different from the bound one fails the call with a
+  `*BoundParamSetError`, recorded FAILED, naming the parameters and never
+  their bound values;
+- a model that repeats the bound value (compared as JSON, so 7 and 7.0 match)
+  has the redundant key dropped and runs.
+
+The rule is shared by execute_tools (`ApplyBindings`), a bound ToolWrapper's
+own `Run`/`RequiresPermission`, and `integrationTool.Run`.
+
+Silent override was the previous documented rule, and it is the wrong one.
+The model never saw the parameter, so a value for it is a hallucination or an
+injected instruction, and the rest of the call was written around that value:
+`body` composed for the host the model named, posted to the one the workflow
+pinned. Running it silently executes a call nobody wrote, then reports it to
+the model as the call it made. A refusal costs one turn, tells the model
+exactly what to drop, and leaves an injected redirect visible as a FAILED row.
+
+**Expression bindings** (`{"expr": ...}`, writable through a setting) still
+have no evaluator anywhere. At execution they fail the call, exactly as they
+did in a bound tool's own Run.
+
+**Replay and deploy:**
+- `bound_params` is a new payload field, and the merge happens inside the
+  activity, so no workflow command changes.
+- A batch whose call_llm ran before the deploy carries no `bound_params` and
+  runs unbound, as before. The next call_llm records them.
+
+**Not tool-parameter bindings:**
+- `internal/mcpserver`'s `Bindings` are OAuth client → connector-grant
+  bindings (`connectorgrant.ClientBinding`). That server exposes daemon
+  commands from its own catalog to third-party MCP clients, never offers a
+  schema with parameters bound away, and so does not have this defect.
+- `invoke_tool` nodes run a tool with parameters the workflow author wrote,
+  with no model and no capability set, so nothing is bound there.
+
 ## 4. Answers to the open questions
 
 1. **Replay safety.**
@@ -240,11 +344,10 @@ a real boundary, because the server has no route to the machine.
      and are ignored now; call_llm no longer calls it.
    - Response tools: appended by call_llm, so they are in `offered`, and
      execute_tools' inline response-tool path runs after the offered check.
-   - Bindings change parameters, never names, so they do not touch the set.
-     (Separate defect, not fixed here: bound values are only merged by the
-     bound tool instance call_llm builds for the schema; execute_tools builds
-     a fresh tool from the factory, so a workflow/global binding is hidden
-     from the model but not applied at execution.)
+   - Bindings change parameters, never names, so they do not touch the
+     offered names. The set does carry what they bound (`bound_params`), so
+     execution applies the values. That was fixed after this landed (§3.8);
+     before it, a binding was hidden from the model and never applied.
    - MCP late binding (`toolexec/mcp_binder.go`): the set records the MCP names
      connected at call_llm time; execution still binds the runtime late. A
      server that disappears in between fails in the executor as before.
@@ -349,4 +452,8 @@ both rules into the resolver and deletes their per-site checks.
 | Grants cross continue-as-new | `TestContinueAsNew_CarriesToolGrants`, `TestToolCapabilitiesLoop/TestContinueAsNewSuccessor_SeedsGrantsIntoItsFirstCallLLM` (runtime) |
 | The resolver, including B's fail-closed integrations and A's only-without-a-machine rule | `internal/llm/tools/capabilities_test.go` (`TestResolveCapabilities_UnusableIntegrationsAreWithheld`, `TestResolveCapabilities_RequestMachineOnlyWithoutAMachine`), `TestUnusableIntegrationsAreWithheldByTheResolver` (handlers) |
 | Spawn management tools granted by spawn history (#500) are in the recorded set and accepted at execution; a branch's inherited sub-agents grant spawn_status only | `TestCapabilities_SpawnHistoryGrantsAreAcceptedAtExecution` (handlers), `TestResolveCapabilities_SpawnManagementToolsFollowTheThreadsSubAgents`, #500's `TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned` and `TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable` |
+| A bound value is applied at execution, a model value for a bound parameter is refused (repeating the bound value is not), an unbound parameter is untouched — on the daemon path and the local path | `TestBoundParameters_TakeEffectOnTheDaemonPath`, `TestBoundParameters_TakeEffectOnTheLocalPath`, `TestUnboundTool_RunsWithTheModelsInputUnchanged` (handlers: real call_llm → protojson → real execute_tools on the real RemoteExecutor; the daemon side decodes with its own fresh tool) |
+| A global setting's bound value stays out of history, is re-read at execution, and a removed setting refuses the call | `TestGlobalBoundParameters_AreReadAtExecutionNotCarriedInHistory` (handlers), `TestRecorded_RecordsWhatTookEffectAndKeepsSettingValuesOut` (toolbindings), `TestCapabilities_ExecutionBindings` |
+| The rule itself, and a bound tool's own Run agrees with it | `TestApplyBindings_MergesBoundValuesAndRefusesAModelOverride`, `TestBinding_ModelValueForABoundParamIsRefused`, `TestGenerateImage_ModelBindingStillLocks`, `TestGenerateVideo_BoundModelLocksAndIsHiddenFromSchema` |
+| Bound params cross the workflow into execute_tools | `TestToolCapabilitiesLoop/TestBoundParams_ReachExecuteTools` (runtime), `TestCapabilities_ProtoRoundTrip` |
 | Replay of pre-change histories | `TestReplayFixtures` (replaytest), unchanged fixtures |
