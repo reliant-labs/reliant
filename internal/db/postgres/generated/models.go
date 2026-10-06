@@ -47,15 +47,15 @@ type AgentMessage struct {
 }
 
 type AntigravityAuthToken struct {
-	ID           string         `json:"id"`
-	UserID       string         `json:"user_id"`
-	AccessToken  string         `json:"access_token"`
-	RefreshToken sql.NullString `json:"refresh_token"`
-	ExpiresAt    sql.NullTime   `json:"expires_at"`
-	IDToken      sql.NullString `json:"id_token"`
-	Scope        sql.NullString `json:"scope"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	ExpiresAt          sql.NullTime   `json:"expires_at"`
+	Scope              sql.NullString `json:"scope"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	AccessTokenSealed  []byte         `json:"access_token_sealed"`
+	RefreshTokenSealed []byte         `json:"refresh_token_sealed"`
+	IDTokenSealed      []byte         `json:"id_token_sealed"`
 }
 
 type ApiKey struct {
@@ -191,29 +191,29 @@ type ChatsWithActivity struct {
 }
 
 type ClaudeAuthToken struct {
-	ID               string         `json:"id"`
-	UserID           string         `json:"user_id"`
-	AccessToken      string         `json:"access_token"`
-	RefreshToken     sql.NullString `json:"refresh_token"`
-	ExpiresAt        sql.NullTime   `json:"expires_at"`
-	AccountUuid      sql.NullString `json:"account_uuid"`
-	AccountEmail     sql.NullString `json:"account_email"`
-	OrganizationUuid sql.NullString `json:"organization_uuid"`
-	OrganizationName sql.NullString `json:"organization_name"`
-	Scope            sql.NullString `json:"scope"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	ExpiresAt          sql.NullTime   `json:"expires_at"`
+	AccountUuid        sql.NullString `json:"account_uuid"`
+	AccountEmail       sql.NullString `json:"account_email"`
+	OrganizationUuid   sql.NullString `json:"organization_uuid"`
+	OrganizationName   sql.NullString `json:"organization_name"`
+	Scope              sql.NullString `json:"scope"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	AccessTokenSealed  []byte         `json:"access_token_sealed"`
+	RefreshTokenSealed []byte         `json:"refresh_token_sealed"`
 }
 
 type CodexAuthToken struct {
-	ID           string         `json:"id"`
-	UserID       string         `json:"user_id"`
-	AccessToken  string         `json:"access_token"`
-	RefreshToken sql.NullString `json:"refresh_token"`
-	IDToken      sql.NullString `json:"id_token"`
-	AccountID    sql.NullString `json:"account_id"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	AccountID          sql.NullString `json:"account_id"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	AccessTokenSealed  []byte         `json:"access_token_sealed"`
+	RefreshTokenSealed []byte         `json:"refresh_token_sealed"`
+	IDTokenSealed      []byte         `json:"id_token_sealed"`
 }
 
 type CommandFavorite struct {
@@ -323,13 +323,13 @@ type ContextWindow struct {
 }
 
 type CopilotAuthToken struct {
-	ID                 string         `json:"id"`
-	UserID             string         `json:"user_id"`
-	GithubAccessToken  string         `json:"github_access_token"`
-	GithubRefreshToken sql.NullString `json:"github_refresh_token"`
-	Tier               sql.NullString `json:"tier"`
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	ID                       string         `json:"id"`
+	UserID                   string         `json:"user_id"`
+	Tier                     sql.NullString `json:"tier"`
+	CreatedAt                time.Time      `json:"created_at"`
+	UpdatedAt                time.Time      `json:"updated_at"`
+	GithubAccessTokenSealed  []byte         `json:"github_access_token_sealed"`
+	GithubRefreshTokenSealed []byte         `json:"github_refresh_token_sealed"`
 }
 
 type Daemon struct {

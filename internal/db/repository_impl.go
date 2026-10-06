@@ -4748,15 +4748,16 @@ func generateID() string {
 
 // apiKeySealing is the optional sealing surface of the api_keys store.
 type apiKeySealing interface {
-	SetSealer(postgresstore.APIKeySealer)
+	SetSealer(postgresstore.CredentialSealer)
 	BackfillAPIKeys(ctx context.Context, batch int) (int, error)
 	CountUnsealedAPIKeys(ctx context.Context) (int64, error)
 	ValidateAPIKeysSealedConstraint(ctx context.Context) error
 }
 
-// EnableAPIKeySealing gives the api_keys store its vault; without one provider
-// keys cannot be read or written. Call once at boot, before serving.
-func (r *Repo) EnableAPIKeySealing(sealer postgresstore.APIKeySealer) error {
+// EnableCredentialSealing gives the settings store its vault; without one,
+// provider API keys and provider sign-in tokens (Claude, Codex, Copilot,
+// Antigravity) cannot be read or written. Call once at boot, before serving.
+func (r *Repo) EnableCredentialSealing(sealer postgresstore.CredentialSealer) error {
 	s, ok := r.settings.(apiKeySealing)
 	if !ok {
 		return fmt.Errorf("settings store does not support api key sealing")
@@ -4766,7 +4767,7 @@ func (r *Repo) EnableAPIKeySealing(sealer postgresstore.APIKeySealer) error {
 }
 
 // BackfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
-// number of rows sealed. Requires EnableAPIKeySealing.
+// number of rows sealed. Requires EnableCredentialSealing.
 func (r *Repo) BackfillAPIKeys(ctx context.Context, batch int) (int, error) {
 	s, ok := r.settings.(apiKeySealing)
 	if !ok {

@@ -92,6 +92,9 @@ func rewindToRenumberWindow(t *testing.T, raw *sql.DB) {
 		_, err := raw.Exec(stmt)
 		require.NoError(t, err)
 	}
+	// 20261006124843_seal_provider_oauth_tokens drops the plaintext token
+	// columns, which a second run cannot do again.
+	unsealProviderTokenTables(t, raw)
 
 	_, err = raw.Exec(
 		fmt.Sprintf(`DELETE FROM %s WHERE version_id > $1`, goose.TableName()), //nolint:gosec // goose.TableName is a compile-time constant
