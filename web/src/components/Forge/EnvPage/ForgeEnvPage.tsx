@@ -9,7 +9,8 @@
  * on screen. The tabs now follow what a reader asks (envTabs.ts), and the
  * boundary is held per tab instead:
  *
- *   Overview · Releases · Secrets   the control plane only (design §8.0,
+ *   Overview · Releases · Activity
+ *   Secrets · Domains               the control plane only (design §8.0,
  *                                   O-14). Render with the daemon asleep.
  *   Running                         what `forge env up` runs on the daemon's
  *                                   machine — a LOCAL env's first question.
@@ -40,6 +41,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
 
 import { cn } from "@/lib/utils";
+import { useForgeDomains } from "@/hooks/forge-domain-queries";
 import {
   useCloudEnvStatus,
   useCloudPromotions,
@@ -60,15 +62,18 @@ import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
 import { EnvLifecycleControls } from "./EnvLifecycleControls";
 import { EnvPageHeader } from "./EnvPageHeader";
+import { envHeadline } from "./envHeadline";
 import {
+  ActivityTab,
   ChangesTab,
   ChecksTab,
+  DomainsTab,
   OverviewTab,
   ReleasesTab,
   RunningTab,
   SecretsTab,
 } from "./EnvTabPanels";
-import { resolveTab, tabParam, tabsFor, type EnvTab } from "./envTabs";
+import { resolveTab, tabNeedsDaemon, tabParam, tabsFor, type EnvTab } from "./envTabs";
 
 export function ForgeEnvPage() {
   const navigate = useNavigate();
@@ -98,12 +103,15 @@ export function ForgeEnvPage() {
     !!liveEnvFromPersisted && liveEnvFromPersisted.kind !== "local" && liveEnvFromPersisted.kind !== "unknown";
   const askDaemonForIdentity = backendSettled && !backendKnowsDeployed;
 
-  const [requestedTab, setRequestedTab] = useState<EnvTab | null>(null);
-  // The tab the reader asked for — a click (state) wins over the URL, which a
-  // replace-navigation updates a beat later.
+  // The tab the reader clicked, and the URL it was clicked FROM. A click wins
+  // over the URL only until the URL moves — the navigation lands a beat later
+  // and then agrees with it, and a Back/Forward moves the URL somewhere else,
+  // which must win. Comparing against the URL at click time, rather than
+  // clearing state in an effect, is what lets Back work without a flicker.
+  const [clicked, setClicked] = useState<{ tab: EnvTab; fromUrl: string | undefined } | null>(null);
+  const requestedTab = clicked && clicked.fromUrl === tabSearch ? clicked.tab : null;
   const askedTab = requestedTab ?? tabSearch;
-  const tabWantsDaemon =
-    askedTab === "changes" || askedTab === "checks" || askedTab === "running" || askedTab === "preview";
+  const tabWantsDaemon = tabNeedsDaemon(askedTab);
 
   // A header action is a request for the daemon too: Promote and Deploy are
   // planned by forge on the user's checkout.
@@ -151,17 +159,27 @@ export function ForgeEnvPage() {
   const [promoteOpen, setPromoteOpen] = useState(false);
   const [deployOpen, setDeployOpen] = useState(false);
 
+  // The org's domains — a control-plane read, asked only while a tab that
+  // shows them is open, and only for an env the platform could bind one to.
+  const domainsShown = !!liveEnv && (tab === "overview" || tab === "domains");
+  const domains = useForgeDomains({ enabled: domainsShown });
+
+  // A tab change is a history entry: people link each other to a tab, and
+  // Back should step back through the tabs they opened.
   const selectTab = useCallback(
     (next: EnvTab) => {
-      setRequestedTab(next);
+      setClicked({ tab: next, fromUrl: tabSearch });
       void navigate({
         to: ".",
         search: (prev: Record<string, unknown>) => ({ ...prev, tab: tabParam(next, lifecycle) }),
-        replace: true,
       });
     },
-    [navigate, lifecycle]
+    [navigate, lifecycle, tabSearch]
   );
+
+  const openDomainsScreen = useCallback(() => {
+    void navigate({ to: "/forge/domains", search: { project: projectId ?? undefined } });
+  }, [navigate, projectId]);
 
   const selectSecret = useCallback(
     (name: string | null) => {
@@ -211,6 +229,7 @@ export function ForgeEnvPage() {
   }, [pendingAction, daemon, promoteReason, daemonReason, latestRelease]);
 
   const tabs = tabsFor(lifecycle);
+  const headline = liveEnv && lifecycle !== "local" ? envHeadline(liveEnv, cloudStatus.data) : null;
   const identityLoading = !backendSettled || (askDaemonForIdentity && envStatus.isLoading && !envStatus.data && !liveEnv);
 
   return (
@@ -230,6 +249,7 @@ export function ForgeEnvPage() {
         lifecycle={lifecycle}
         live={liveEnv}
         forgeRelease={forgeEnv?.release ?? null}
+        headline={headline}
         promote={
           lifecycle === "local"
             ? null
@@ -255,7 +275,24 @@ export function ForgeEnvPage() {
           read access, a build with no control plane, an outage. Said once. */}
       <CloudNotice availability={live.data?.availability} detail={live.data?.detail} />
 
-      <div className="flex items-center gap-1 border-b border-border" role="tablist" aria-label={`${envName} views`}>
+      {/* Scrolls sideways rather than wrapping at a narrow width: a wrapped
+          tab row reads as two rows of unrelated controls. */}
+      <div
+        className="flex items-center gap-1 overflow-x-auto border-b border-border"
+        role="tablist"
+        aria-label={`${envName} views`}
+        onKeyDown={(event) => {
+          // Arrow keys move between tabs (WAI-ARIA tabs pattern).
+          if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") return;
+          const index = tabs.findIndex((spec) => spec.id === tab);
+          const step = event.key === "ArrowRight" ? 1 : -1;
+          const next = tabs[(index + step + tabs.length) % tabs.length];
+          if (!next) return;
+          event.preventDefault();
+          selectTab(next.id);
+          document.getElementById(`env-tab-button-${next.id}`)?.focus();
+        }}
+      >
         {tabs.map((spec) => (
           <TabButton key={spec.id} active={tab === spec.id} id={spec.id} onSelect={selectTab}>
             {spec.label}
@@ -277,12 +314,14 @@ export function ForgeEnvPage() {
             status={cloudStatus.data}
             statusLoading={cloudStatus.isLoading}
             statusError={cloudStatus.error as Error | null}
-            promotions={promotions.data}
             forgeEnv={forgeEnv}
             daemon={daemon}
             projectId={projectId}
             forgeProject={projectName.name}
-            onOpenReleases={() => selectTab("releases")}
+            domains={domains.data}
+            domainsLoading={domains.isLoading}
+            onOpenDomains={() => selectTab("domains")}
+            onManageDomains={openDomainsScreen}
           />
         ) : tab === "running" ? (
           <RunningTab
@@ -302,10 +341,24 @@ export function ForgeEnvPage() {
           <ReleasesTab
             live={liveEnv}
             promotions={promotions.data}
-            convergences={convergences.data}
             isLoading={promotions.isLoading}
             error={promotions.error as Error | null}
             forgeEnv={forgeEnv}
+          />
+        ) : tab === "activity" ? (
+          <ActivityTab
+            live={liveEnv}
+            promotions={promotions.data}
+            convergences={convergences.data}
+            isLoading={promotions.isLoading}
+            error={promotions.error as Error | null}
+          />
+        ) : tab === "domains" ? (
+          <DomainsTab
+            live={liveEnv}
+            domains={domains.data}
+            domainsLoading={domains.isLoading}
+            onManageDomains={openDomainsScreen}
           />
         ) : tab === "secrets" ? (
           <SecretsTab
@@ -389,9 +442,10 @@ function TabButton({
       aria-selected={active}
       aria-controls={`env-tab-${id}`}
       data-testid={`env-tab-${id}`}
+      tabIndex={active ? 0 : -1}
       onClick={() => onSelect(id)}
       className={cn(
-        "-mb-px rounded-sm border-b-2 px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+        "-mb-px shrink-0 whitespace-nowrap rounded-sm border-b-2 px-3 py-2 text-sm transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-ring",
         active
           ? "border-primary font-medium text-foreground"
           : "border-transparent text-muted-foreground hover:text-foreground"

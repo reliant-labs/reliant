@@ -43,7 +43,7 @@ import { fileURLToPath } from "node:url";
 import type { LiveConvergence, LiveEnv } from "@/services/forge/live";
 
 import { LiveState } from "../LiveState";
-import { LiveReleases } from "../LiveReleases";
+import { LiveActivity } from "../LiveActivity";
 import { OverviewTab, type OverviewTabProps } from "../EnvTabPanels";
 
 // ── Fixtures: one per state of the observed half ────────────────────────────
@@ -277,10 +277,10 @@ const OBSERVED_FAIL: LiveConvergence = {
   observedAt: "2026-10-01T14:40:00.000Z",
 };
 
-describe("the releases timeline merges intent and observations", () => {
+describe("the activity timeline merges intent and observations", () => {
   it("orders both kinds newest first in one list", () => {
     render(
-      <LiveReleases
+      <LiveActivity
         env={CONVERGED}
         promotions={[PROMOTION]}
         convergences={[OBSERVED_OK, OBSERVED_FAIL]}
@@ -289,15 +289,15 @@ describe("the releases timeline merges intent and observations", () => {
       />
     );
     const entries = Array.from(
-      screen.getByTestId("live-releases").querySelectorAll("li")
+      screen.getByTestId("live-activity").querySelectorAll("li")
     ).map((li) => li.getAttribute("data-testid"));
     // 14:40 failure, then 14:04 confirmation, then the 14:02 promotion.
-    expect(entries).toEqual(["convergence-conv-2", "convergence-conv-1", "promotion-promo-1"]);
+    expect(entries).toEqual(["convergence-conv-2", "convergence-conv-1", "activity-promotion-promo-1"]);
   });
 
   it("marks the two kinds distinctly, with observations as the secondary one", () => {
     render(
-      <LiveReleases
+      <LiveActivity
         env={CONVERGED}
         promotions={[PROMOTION]}
         convergences={[OBSERVED_OK]}
@@ -305,7 +305,7 @@ describe("the releases timeline merges intent and observations", () => {
         error={null}
       />
     );
-    expect(screen.getByTestId("promotion-promo-1")).toHaveAttribute("data-entry", "promotion");
+    expect(screen.getByTestId("activity-promotion-promo-1")).toHaveAttribute("data-entry", "promotion");
 
     const observation = screen.getByTestId("convergence-conv-1");
     expect(observation).toHaveAttribute("data-entry", "observation");
@@ -316,7 +316,7 @@ describe("the releases timeline merges intent and observations", () => {
 
   it("carries the platform's own words for a failed observation", () => {
     render(
-      <LiveReleases
+      <LiveActivity
         env={FAILED}
         promotions={[PROMOTION]}
         convergences={[OBSERVED_FAIL]}
@@ -338,7 +338,7 @@ describe("the releases timeline merges intent and observations", () => {
    */
   it("shows only the promotions when nothing has been observed", () => {
     render(
-      <LiveReleases
+      <LiveActivity
         env={NOT_REPORTED}
         promotions={[PROMOTION]}
         convergences={[]}
@@ -346,15 +346,15 @@ describe("the releases timeline merges intent and observations", () => {
         error={null}
       />
     );
-    expect(screen.getByTestId("promotion-promo-1")).toBeInTheDocument();
-    expect(screen.getByTestId("live-releases").querySelectorAll("li")).toHaveLength(1);
+    expect(screen.getByTestId("activity-promotion-promo-1")).toBeInTheDocument();
+    expect(screen.getByTestId("live-activity").querySelectorAll("li")).toHaveLength(1);
   });
 
   it("sorts an undated entry last rather than to the top", () => {
     // An undated row claiming the newest position would displace the one entry
     // a reader looks for first. "We don't know when" is not "just now".
     render(
-      <LiveReleases
+      <LiveActivity
         env={CONVERGED}
         promotions={[PROMOTION]}
         convergences={[{ ...OBSERVED_OK, observedAt: undefined }]}
@@ -363,14 +363,14 @@ describe("the releases timeline merges intent and observations", () => {
       />
     );
     const entries = Array.from(
-      screen.getByTestId("live-releases").querySelectorAll("li")
+      screen.getByTestId("live-activity").querySelectorAll("li")
     ).map((li) => li.getAttribute("data-testid"));
-    expect(entries).toEqual(["promotion-promo-1", "convergence-conv-1"]);
+    expect(entries).toEqual(["activity-promotion-promo-1", "convergence-conv-1"]);
   });
 
-  it("still says never promoted when there is no history at all", () => {
+  it("says nothing has happened when there is no history at all", () => {
     render(
-      <LiveReleases
+      <LiveActivity
         env={NEVER_PROMOTED}
         promotions={[]}
         convergences={[]}
@@ -378,7 +378,7 @@ describe("the releases timeline merges intent and observations", () => {
         error={null}
       />
     );
-    expect(screen.getByTestId("live-releases-declared")).toBeInTheDocument();
+    expect(screen.getByTestId("live-activity-empty")).toBeInTheDocument();
   });
 });
 
@@ -392,13 +392,15 @@ function sectionProps(env: LiveEnv | null, overrides: Partial<OverviewTabProps> 
     status: undefined,
     statusLoading: false,
     statusError: null,
-    promotions: [],
     forgeEnv: null,
     // Offline: an unregistered env must still render, and say what it lacks.
     daemon: "offline",
     projectId: "proj-1",
     forgeProject: "hounders",
-    onOpenReleases: () => {},
+    domains: { availability: "available", domains: [], detail: "" },
+    domainsLoading: false,
+    onOpenDomains: () => {},
+    onManageDomains: () => {},
     ...overrides,
   } satisfies OverviewTabProps;
 }

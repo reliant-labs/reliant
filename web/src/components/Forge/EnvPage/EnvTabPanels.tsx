@@ -17,6 +17,7 @@ import { Play, RefreshCw, Rocket } from "lucide-react";
 import Card, { CardHeader } from "@/components/forge-ui/card";
 import SkeletonLoader from "@/components/forge-ui/skeleton_loader";
 import { Button } from "@/components/ui/Button";
+import type { DomainsState } from "@/hooks/forge-domain-queries";
 import {
   useForgeAudit,
   useForgeCheckouts,
@@ -36,6 +37,8 @@ import { EnvDiffCard } from "../Preview/EnvDiffCard";
 import { RegisterEnvPanel } from "../Preview/RegisterEnvPanel";
 import { DevStackPanel } from "../Status/DevStackPanel";
 import { DaemonNeeded } from "./DaemonNeeded";
+import { EnvDomains } from "./EnvDomains";
+import { LiveActivity } from "./LiveActivity";
 import { LiveReleases } from "./LiveReleases";
 import { LiveSecretsSection } from "./LiveSecretsSection";
 import { LiveState } from "./LiveState";
@@ -83,13 +86,16 @@ export interface OverviewTabProps {
   status: CloudEnvStatus | undefined;
   statusLoading: boolean;
   statusError: Error | null;
-  promotions: CloudPromotion[] | undefined;
   /** forge's own ledger row for this env, when the daemon answered. */
   forgeEnv: ForgeTopologyEnv | null;
   daemon: DaemonSide;
   projectId: string | null;
   forgeProject: string | null;
-  onOpenReleases: () => void;
+  /** The org's domains; this tab shows the ones bound here. */
+  domains: DomainsState | undefined;
+  domainsLoading: boolean;
+  onOpenDomains: () => void;
+  onManageDomains: () => void;
 }
 
 export function OverviewTab(props: OverviewTabProps) {
@@ -132,7 +138,6 @@ export function OverviewTab(props: OverviewTabProps) {
     );
   }
 
-  const recent = (props.promotions ?? []).slice(0, 3);
   return (
     <div className="space-y-4" data-testid="live-section" data-kind={live.kind}>
       {registered && (
@@ -184,35 +189,29 @@ export function OverviewTab(props: OverviewTabProps) {
         <LiveWorkloads env={live} status={props.status} isLoading={props.statusLoading} error={props.statusError} />
       </Panel>
 
-      <Panel
-        title="Recent releases"
-        actions={
-          (props.promotions?.length ?? 0) > 0 ? (
-            <Button variant="ghost" size="sm" onClick={props.onOpenReleases} data-testid="open-releases">
-              All releases
+      {/* A summary of what serves this env; the Domains tab has the full
+          list. Omitted for an env the platform does not run — no domain can
+          bind there, and an always-empty panel is noise. */}
+      {isPlacedKind(live.kind) && (
+        <Panel
+          title="Domains"
+          actions={
+            <Button variant="ghost" size="sm" onClick={props.onOpenDomains} data-testid="open-domains">
+              All domains
             </Button>
-          ) : undefined
-        }
-        testId="env-recent-releases"
-        flush={recent.length > 0}
-      >
-        {recent.length === 0 ? (
-          <p className="text-sm text-muted-foreground">Nothing promoted yet.</p>
-        ) : (
-          <ul className="divide-y divide-border/60">
-            {recent.map((promotion, index) => (
-              <li key={promotion.id} className="flex items-center gap-3 px-4 py-2 text-sm">
-                <span className="font-mono text-foreground">{promotion.releaseVersion || "—"}</span>
-                {index === 0 && <span className="text-2xs uppercase tracking-wide text-primary">current</span>}
-                <span className="ml-auto text-xs text-muted-foreground">
-                  {promotion.createdAt ? formatTimestamp(promotion.createdAt) : ""}
-                  {promotion.promotedByActor ? ` · ${promotion.promotedByActor}` : ""}
-                </span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </Panel>
+          }
+          testId="env-overview-domains"
+        >
+          <EnvDomains
+            environmentId={live.id}
+            placed
+            state={props.domains}
+            isLoading={props.domainsLoading}
+            limit={3}
+            onManage={props.onManageDomains}
+          />
+        </Panel>
+      )}
     </div>
   );
 }
@@ -257,14 +256,12 @@ function ForgeLedgerFacts({ env }: { env: ForgeTopologyEnv }) {
 export function ReleasesTab({
   live,
   promotions,
-  convergences,
   isLoading,
   error,
   forgeEnv,
 }: {
   live: LiveEnv | null;
   promotions: CloudPromotion[] | undefined;
-  convergences: LiveConvergence[] | undefined;
   isLoading: boolean;
   error: Error | null;
   forgeEnv: ForgeTopologyEnv | null;
@@ -280,12 +277,83 @@ export function ReleasesTab({
   }
   return (
     <Panel
-      title="Release history"
-      description="Every promotion, newest first, with what Reliant observed after each. Promotion writes a pointer; deploying moves bytes."
+      title="Releases"
+      description="Every release promoted to this environment, newest first. Promotion writes a pointer; deploying moves bytes."
       testId="section-releases"
       flush
     >
-      <LiveReleases env={live} promotions={promotions} convergences={convergences} isLoading={isLoading} error={error} />
+      <LiveReleases env={live} promotions={promotions} isLoading={isLoading} error={error} />
+    </Panel>
+  );
+}
+
+// ── Activity ────────────────────────────────────────────────────────────────
+
+export function ActivityTab({
+  live,
+  promotions,
+  convergences,
+  isLoading,
+  error,
+}: {
+  live: LiveEnv | null;
+  promotions: CloudPromotion[] | undefined;
+  convergences: LiveConvergence[] | undefined;
+  isLoading: boolean;
+  error: Error | null;
+}) {
+  if (!live) {
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="activity-unregistered">
+        Reliant has no record of this environment, so it has no activity here. Register it from Overview.
+      </p>
+    );
+  }
+  return (
+    <Panel
+      title="Activity"
+      description="What happened here, newest first: each promotion, and what Reliant observed on the cluster after it."
+      testId="section-activity"
+      flush
+    >
+      <LiveActivity env={live} promotions={promotions} convergences={convergences} isLoading={isLoading} error={error} />
+    </Panel>
+  );
+}
+
+// ── Domains ─────────────────────────────────────────────────────────────────
+
+export function DomainsTab({
+  live,
+  domains,
+  domainsLoading,
+  onManageDomains,
+}: {
+  live: LiveEnv | null;
+  domains: DomainsState | undefined;
+  domainsLoading: boolean;
+  onManageDomains: () => void;
+}) {
+  if (!live) {
+    return (
+      <p className="text-sm text-muted-foreground" data-testid="domains-unregistered">
+        Reliant has no record of this environment, so no domain can point at it yet. Register it from Overview.
+      </p>
+    );
+  }
+  return (
+    <Panel
+      title="Custom domains"
+      description="Hostnames that serve this environment. Domains belong to your organization and are added, moved and removed on the Domains screen."
+      testId="section-domains"
+    >
+      <EnvDomains
+        environmentId={live.id}
+        placed={isPlacedKind(live.kind)}
+        state={domains}
+        isLoading={domainsLoading}
+        onManage={onManageDomains}
+      />
     </Panel>
   );
 }
