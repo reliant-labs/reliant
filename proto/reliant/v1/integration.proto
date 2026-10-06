@@ -237,6 +237,11 @@ message ActionSpec {
   string summary = 12;
   // Keywords are extra search terms for the catalog index.
   repeated string keywords = 13;
+  // ParamOrder is params.properties' keys in the order the manifest declares
+  // them, which is the order a form lists them in (a Struct keeps no order).
+  // The loader fills it from the YAML; a manifest that sets it is a load
+  // error, so the declaration is the one place the order lives.
+  repeated string param_order = 14;
 }
 
 // ToolSpec controls exposing an action to agents as a tool.
@@ -279,12 +284,29 @@ message HttpRequestSpec {
   string headers_expr = 11;
   string query_expr = 12;
   string body_expr = 13;
-  // BodyFormat is how the rendered body is encoded: "json" (the default) or
-  // "form" (application/x-www-form-urlencoded, as Twilio and Stripe take). A
-  // form body must render to an object whose values are scalars or lists of
-  // scalars; a list repeats its key (MediaUrl=a&MediaUrl=b) and a null value
-  // leaves the key out.
+  // BodyFormat is how the rendered body is encoded: "json" (the default),
+  // "form" (application/x-www-form-urlencoded, as Twilio and Stripe take) or
+  // "text" (sent verbatim). A form body must render to an object whose values
+  // are scalars or lists of scalars; a list repeats its key
+  // (MediaUrl=a&MediaUrl=b) and a null value leaves the key out. A text body
+  // must render to a string or scalar. The Content-Type follows the format
+  // unless a header sets one. A template may be used, for a caller-chosen
+  // encoding (the generic HTTP action).
   string body_format = 14;
+  // TimeoutExpr is CEL over `params` yielding the request timeout in seconds,
+  // 1..120. It overrides timeout_seconds, for a caller-chosen timeout.
+  string timeout_expr = 15;
+  // ResponseFormat is how a response body is read: "auto" (the default:
+  // parsed when it is JSON, otherwise only the raw text is kept), "json" (a
+  // 2xx body that is not JSON fails the action instead of yielding a null)
+  // or "text" (never parsed; `response` is null and `raw` is the body). A
+  // template may be used.
+  string response_format = 16;
+  // Redirects is "follow" (the default: up to 5 hops, each held to the same
+  // host rules and credential pinning as the first request) or "return": a
+  // 3xx is the action's result, status and Location header included, rather
+  // than followed or treated as a failure. A template may be used.
+  string redirects = 17;
 }
 
 // PaginationSpec follows pages and concatenates each page's selected list.

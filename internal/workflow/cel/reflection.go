@@ -33,8 +33,10 @@ type FieldInfo struct {
 	MaxValue *float64
 	// Label is a short human-readable field label from the (reliant) annotation.
 	Label string
-	// Placeholder is optional helper text for text-like controls from the (reliant) annotation.
-	Placeholder *string
+	// Example is what a value looks like (a literal or a {{ }} expression), from (reliant).example.
+	Example string
+	// TypeHint names the kind of value when the proto type undersells it, from (reliant).type_hint.
+	TypeHint string
 	// VisibilityContexts are optional UI visibility contexts from the (reliant) annotation.
 	VisibilityContexts []string
 	// CleanupSemantics is an optional cleanup behavior hint from the (reliant) annotation.
@@ -109,6 +111,8 @@ func ExtractFieldInfo(md protoreflect.MessageDescriptor) []FieldInfo {
 			info.Category = meta.GetCategory()
 			info.DefaultValue = meta.GetDefaultValue()
 			info.Label = meta.GetLabel()
+			info.Example = meta.GetExample()
+			info.TypeHint = meta.GetTypeHint()
 			info.VisibilityContexts = append(info.VisibilityContexts, meta.GetVisibilityContexts()...)
 			if meta.MinValue != nil {
 				v := meta.GetMinValue()
@@ -117,10 +121,6 @@ func ExtractFieldInfo(md protoreflect.MessageDescriptor) []FieldInfo {
 			if meta.MaxValue != nil {
 				v := meta.GetMaxValue()
 				info.MaxValue = &v
-			}
-			if meta.Placeholder != nil {
-				v := meta.GetPlaceholder()
-				info.Placeholder = &v
 			}
 			if meta.CleanupSemantics != nil {
 				v := meta.GetCleanupSemantics()

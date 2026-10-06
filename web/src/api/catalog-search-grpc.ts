@@ -57,6 +57,8 @@ export interface CatalogEntry {
   summary: CatalogEntrySummary;
   description: string;
   paramsSchema?: JsonSchema;
+  /** The params in the manifest's declared order (paramsSchema's keys arrive unordered). */
+  paramOrder: string[];
   outputSchema?: JsonSchema;
   payloadSchema?: JsonSchema;
   connection: {
@@ -154,6 +156,7 @@ export function catalogEntryFromProto(proto: ProtoCatalogEntry): CatalogEntry {
     summary: catalogSummaryFromProto(proto.summary),
     description: proto.description,
     paramsSchema: asJsonSchema(proto.paramsSchema),
+    paramOrder: [...(proto.paramOrder ?? [])],
     outputSchema: asJsonSchema(proto.outputSchema),
     payloadSchema: asJsonSchema(proto.payloadSchema),
     connection: {

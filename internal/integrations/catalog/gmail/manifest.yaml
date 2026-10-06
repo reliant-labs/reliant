@@ -103,44 +103,62 @@ actions:
       additionalProperties: false
       required: [to, subject]
       properties:
-        to: &addresses
+        to:
           type: array
           minItems: 1
           maxItems: 100
           items: { type: string, minLength: 3, maxLength: 320 }
-          description: Recipient addresses, as "ann@example.com" or "Ann <ann@example.com>".
+          title: To
+          description: Recipient addresses, each "ann@example.com" or "Ann <ann@example.com>".
+          examples: [["ann@example.com", "Bo Chen <bo@example.com>"]]
         cc:
           type: array
           maxItems: 100
           items: { type: string, minLength: 3, maxLength: 320 }
-          description: Cc addresses.
+          title: Cc
+          description: Addresses to copy, shown to every recipient.
+          examples: [["team@example.com"]]
         bcc:
           type: array
           maxItems: 100
           items: { type: string, minLength: 3, maxLength: 320 }
-          description: Bcc addresses. They are delivered to but never shown to the other recipients.
+          title: Bcc
+          description: Addresses that receive the email but are never shown to the other recipients.
+          examples: [["archive@example.com"]]
         subject:
           type: string
           maxLength: 998
-          description: The subject line.
+          title: Subject
+          description: The subject line. For a reply, keep the original subject ("Re:" is added if missing).
+          examples: ["Your invoice for October"]
         text:
           type: string
-          description: The plain-text body. Give text, html or both (a client shows the HTML when it can).
+          title: Plain-text body
+          description: The body as plain text. Give text, HTML or both; clients show the HTML when they can.
+          examples: ["Hi Ann,\n\nYour invoice for October is attached.\n\nThanks,\nBo"]
         html:
           type: string
-          description: The HTML body.
+          title: HTML body
+          description: The body as HTML.
+          examples: ["<p>Hi Ann,</p><p>Your invoice for October is attached.</p>"]
         thread_id:
           type: string
           pattern: "^[0-9a-f]{1,32}$"
-          description: For a reply, the thread_id of the message replied to.
+          title: Thread ID
+          description: To reply in a thread, the thread_id of the message you are replying to (from Get email or Search email).
+          examples: ["18c2f4a1b9e3d7f0"]
         in_reply_to:
           type: string
           maxLength: 998
-          description: For a reply, the Message-ID header of the message replied to (e.g. <CAF...@mail.gmail.com>).
+          title: In-Reply-To (Message-ID)
+          description: To reply, the Message-ID header of the message you are replying to; Get email returns it as message_id.
+          examples: ["<CAF8x3vQ7n2@mail.gmail.com>"]
         references:
           type: string
           maxLength: 8000
-          description: For a reply, the References chain (space-separated Message-IDs). Defaults to in_reply_to.
+          title: References
+          description: For a reply in a long thread, the thread's Message-IDs separated by spaces. Defaults to In-Reply-To.
+          examples: ["<CAF8x3vQ7n2@mail.gmail.com> <CAF9y4wR8o3@mail.gmail.com>"]
         connection: &connection
           type: string
           description: Id of a saved Gmail connection to use. Omit to use your default Gmail connection.
@@ -173,22 +191,29 @@ actions:
         q:
           type: string
           maxLength: 2000
-          description: Gmail search syntax, as typed in Gmail's search box.
+          title: Search
+          description: A Gmail search, written exactly as you would type it in Gmail's search box.
+          examples: ["from:ann@example.com is:unread newer_than:2d"]
         label_ids:
           type: array
           maxItems: 20
           items: { type: string, pattern: "^[A-Za-z0-9_-]{1,64}$" }
-          description: Only messages carrying ALL of these label ids.
+          title: Label IDs
+          description: Only messages with ALL of these labels. System labels are names (INBOX, UNREAD); your own are ids from List labels.
+          examples: [["INBOX", "UNREAD"]]
         include_spam_trash:
           type: boolean
           default: false
-          description: Include messages in Spam and Trash.
+          title: Include Spam and Trash
+          description: Also search messages in Spam and Trash.
         page_size:
           type: integer
           minimum: 1
           maximum: 500
           default: 100
-          description: Messages per page (Gmail allows up to 500).
+          title: Page size
+          description: How many messages to fetch per page, 1 to 500.
+          examples: [50]
         connection: *connection
     request:
       method: GET
@@ -276,18 +301,23 @@ actions:
         id:
           type: string
           pattern: "^[0-9a-f]{1,32}$"
-          description: The message id (from Search email or a trigger's message_id).
+          title: Message ID
+          description: The Gmail id of the message (not its Message-ID header), from Search email or a trigger's message_id.
+          examples: ["18c2f4a1b9e3d7f0"]
         format:
           type: string
           enum: [full, metadata]
           default: full
-          description: full decodes the body; metadata is headers, labels and snippet only.
+          title: Detail
+          description: full decodes the body; metadata returns only headers, labels and the snippet.
         max_body_chars:
           type: integer
           minimum: 1
           maximum: 200000
           default: 20000
-          description: Truncate the decoded text and html bodies to this many characters.
+          title: Max body length
+          description: Cut the decoded text and HTML bodies to this many characters.
+          examples: [5000]
         connection: *connection
     output:
       schema:

@@ -49,7 +49,8 @@ type InputFieldInfo struct {
 	Min                *float64 // Minimum value for numeric fields from reliant:"min=..."
 	Max                *float64 // Maximum value for numeric fields from reliant:"max=..."
 	Label              string   // Short UI label from proto metadata
-	Placeholder        *string  // Optional helper text for text-like controls
+	Example            string   // What a value looks like (a literal or a {{ }} expression)
+	TypeHint           string   // The kind of value, when the type undersells it ("list of tool calls")
 	VisibilityContexts []string // Optional UI visibility contexts (basic/advanced/debug)
 	CleanupSemantics   *string  // Optional cleanup behavior hint for clients
 	IsCEL              bool     // True if this field supports CEL expressions (CelX wrapper)
@@ -299,7 +300,8 @@ func extractInputFieldsFromProto(md protoreflect.MessageDescriptor) []InputField
 			Min:                f.MinValue,
 			Max:                f.MaxValue,
 			Label:              f.Label,
-			Placeholder:        f.Placeholder,
+			Example:            f.Example,
+			TypeHint:           f.TypeHint,
 			VisibilityContexts: append([]string(nil), f.VisibilityContexts...),
 			CleanupSemantics:   f.CleanupSemantics,
 			IsCEL:              f.IsCEL || f.IsDirect,

@@ -13,9 +13,23 @@ export type ProtoFieldContext = Record<string, unknown>
 export interface ProtoFieldSchema {
   key: string
   label: string
+  /** What the field is for, printed under the input. */
   description?: string
+  /**
+   * More detail behind the label's ? (a default, a range). Printed under the
+   * input instead when there is no description; never shown twice.
+   */
   helpText?: string
+  /** The empty input's text. Defaults to `example`; set it only to override. */
   placeholder?: string
+  /**
+   * What a value looks like, as the author types it: a literal ("SM0123…")
+   * or an expression ("{{nodes.call_llm.tool_calls}}"). The empty input shows
+   * it, and an expression example is also what `{}` mode shows.
+   */
+  example?: string
+  /** The kind of value in a few words ("list of tool calls"), beside the label. */
+  typeHint?: string
   widget: ProtoFieldWidget
   /** For 'number' widget: true = integer (step=1, parseInt), false = float (step=any, parseFloat) */
   isInteger?: boolean

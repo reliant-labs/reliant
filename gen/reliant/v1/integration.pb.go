@@ -1010,7 +1010,12 @@ type ActionSpec struct {
 	// long form an agent reads.
 	Summary string `protobuf:"bytes,12,opt,name=summary,proto3" json:"summary,omitempty"`
 	// Keywords are extra search terms for the catalog index.
-	Keywords      []string `protobuf:"bytes,13,rep,name=keywords,proto3" json:"keywords,omitempty"`
+	Keywords []string `protobuf:"bytes,13,rep,name=keywords,proto3" json:"keywords,omitempty"`
+	// ParamOrder is params.properties' keys in the order the manifest declares
+	// them, which is the order a form lists them in (a Struct keeps no order).
+	// The loader fills it from the YAML; a manifest that sets it is a load
+	// error, so the declaration is the one place the order lives.
+	ParamOrder    []string `protobuf:"bytes,14,rep,name=param_order,json=paramOrder,proto3" json:"param_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1136,6 +1141,13 @@ func (x *ActionSpec) GetKeywords() []string {
 	return nil
 }
 
+func (x *ActionSpec) GetParamOrder() []string {
+	if x != nil {
+		return x.ParamOrder
+	}
+	return nil
+}
+
 // ToolSpec controls exposing an action to agents as a tool.
 type ToolSpec struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
@@ -1231,12 +1243,29 @@ type HttpRequestSpec struct {
 	HeadersExpr string `protobuf:"bytes,11,opt,name=headers_expr,json=headersExpr,proto3" json:"headers_expr,omitempty"`
 	QueryExpr   string `protobuf:"bytes,12,opt,name=query_expr,json=queryExpr,proto3" json:"query_expr,omitempty"`
 	BodyExpr    string `protobuf:"bytes,13,opt,name=body_expr,json=bodyExpr,proto3" json:"body_expr,omitempty"`
-	// BodyFormat is how the rendered body is encoded: "json" (the default) or
-	// "form" (application/x-www-form-urlencoded, as Twilio and Stripe take). A
-	// form body must render to an object whose values are scalars or lists of
-	// scalars; a list repeats its key (MediaUrl=a&MediaUrl=b) and a null value
-	// leaves the key out.
-	BodyFormat    string `protobuf:"bytes,14,opt,name=body_format,json=bodyFormat,proto3" json:"body_format,omitempty"`
+	// BodyFormat is how the rendered body is encoded: "json" (the default),
+	// "form" (application/x-www-form-urlencoded, as Twilio and Stripe take) or
+	// "text" (sent verbatim). A form body must render to an object whose values
+	// are scalars or lists of scalars; a list repeats its key
+	// (MediaUrl=a&MediaUrl=b) and a null value leaves the key out. A text body
+	// must render to a string or scalar. The Content-Type follows the format
+	// unless a header sets one. A template may be used, for a caller-chosen
+	// encoding (the generic HTTP action).
+	BodyFormat string `protobuf:"bytes,14,opt,name=body_format,json=bodyFormat,proto3" json:"body_format,omitempty"`
+	// TimeoutExpr is CEL over `params` yielding the request timeout in seconds,
+	// 1..120. It overrides timeout_seconds, for a caller-chosen timeout.
+	TimeoutExpr string `protobuf:"bytes,15,opt,name=timeout_expr,json=timeoutExpr,proto3" json:"timeout_expr,omitempty"`
+	// ResponseFormat is how a response body is read: "auto" (the default:
+	// parsed when it is JSON, otherwise only the raw text is kept), "json" (a
+	// 2xx body that is not JSON fails the action instead of yielding a null)
+	// or "text" (never parsed; `response` is null and `raw` is the body). A
+	// template may be used.
+	ResponseFormat string `protobuf:"bytes,16,opt,name=response_format,json=responseFormat,proto3" json:"response_format,omitempty"`
+	// Redirects is "follow" (the default: up to 5 hops, each held to the same
+	// host rules and credential pinning as the first request) or "return": a
+	// 3xx is the action's result, status and Location header included, rather
+	// than followed or treated as a failure. A template may be used.
+	Redirects     string `protobuf:"bytes,17,opt,name=redirects,proto3" json:"redirects,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1365,6 +1394,27 @@ func (x *HttpRequestSpec) GetBodyExpr() string {
 func (x *HttpRequestSpec) GetBodyFormat() string {
 	if x != nil {
 		return x.BodyFormat
+	}
+	return ""
+}
+
+func (x *HttpRequestSpec) GetTimeoutExpr() string {
+	if x != nil {
+		return x.TimeoutExpr
+	}
+	return ""
+}
+
+func (x *HttpRequestSpec) GetResponseFormat() string {
+	if x != nil {
+		return x.ResponseFormat
+	}
+	return ""
+}
+
+func (x *HttpRequestSpec) GetRedirects() string {
+	if x != nil {
+		return x.Redirects
 	}
 	return ""
 }
@@ -1911,7 +1961,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\rroutes_events\x18\b \x01(\bR\froutesEvents\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc1\x03\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe2\x03\n" +
 	"\n" +
 	"ActionSpec\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
@@ -1927,11 +1977,13 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	" \x01(\v2\x16.reliant.v1.OutputSpecR\x06output\x12\x1a\n" +
 	"\bexecutor\x18\v \x01(\tR\bexecutor\x12\x18\n" +
 	"\asummary\x18\f \x01(\tR\asummary\x12\x1a\n" +
-	"\bkeywords\x18\r \x03(\tR\bkeywords\"J\n" +
+	"\bkeywords\x18\r \x03(\tR\bkeywords\x12\x1f\n" +
+	"\vparam_order\x18\x0e \x03(\tR\n" +
+	"paramOrder\"J\n" +
 	"\bToolSpec\x12\x16\n" +
 	"\x06expose\x18\x01 \x01(\bR\x06expose\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
-	"\x04tags\x18\x03 \x03(\tR\x04tags\"\xb5\x05\n" +
+	"\x04tags\x18\x03 \x03(\tR\x04tags\"\x9f\x06\n" +
 	"\x0fHttpRequestSpec\x12\x16\n" +
 	"\x06method\x18\x01 \x01(\tR\x06method\x12\x10\n" +
 	"\x03url\x18\x02 \x01(\tR\x03url\x12\x12\n" +
@@ -1951,7 +2003,10 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"query_expr\x18\f \x01(\tR\tqueryExpr\x12\x1b\n" +
 	"\tbody_expr\x18\r \x01(\tR\bbodyExpr\x12\x1f\n" +
 	"\vbody_format\x18\x0e \x01(\tR\n" +
-	"bodyFormat\x1a8\n" +
+	"bodyFormat\x12!\n" +
+	"\ftimeout_expr\x18\x0f \x01(\tR\vtimeoutExpr\x12'\n" +
+	"\x0fresponse_format\x18\x10 \x01(\tR\x0eresponseFormat\x12\x1c\n" +
+	"\tredirects\x18\x11 \x01(\tR\tredirects\x1a8\n" +
 	"\n" +
 	"QueryEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +

@@ -96,30 +96,40 @@ actions:
         channel: &channel
           type: string
           pattern: "^[CGD][A-Z0-9]{2,}$"
+          title: Channel ID
           description: >-
-            The conversation ID (C… public channel, G… private channel, D…
-            direct message), not its #name. List them with conversations.list.
+            The conversation's ID, not its #name: C… for a public channel, G…
+            private, D… a direct message. List channels returns them.
+          examples: ["C0123ABCDEF"]
         text: &text
           type: string
           minLength: 1
           maxLength: 40000
+          title: Message text
           description: >-
-            Message text in Slack mrkdwn. Required unless blocks is given; with
+            The message in Slack mrkdwn. Required unless blocks is given; with
             blocks it is the notification fallback.
+          examples: ["Deploy *v2.4.0* finished :white_check_mark:"]
         blocks: &blocks
           type: array
           maxItems: 50
           items: { type: object }
-          description: Block Kit blocks (layout objects with a "type").
+          title: Blocks
+          description: Block Kit layout blocks, a list of objects each with a "type".
+          examples: [[{ "type": "section", "text": { "type": "mrkdwn", "text": "*Deploy finished*" } }]]
         thread_ts: &thread_ts
           type: string
           pattern: "^[0-9]+\\.[0-9]+$"
-          description: The ts of a thread's parent message, to post as a reply in that thread.
+          title: Thread timestamp
+          description: To post as a reply, the ts of the thread's parent message (a message's ts is its id).
+          examples: ["1712345678.123456"]
         reply_broadcast:
           type: boolean
-          description: With thread_ts, also show the reply in the channel.
+          title: Also send to channel
+          description: With a thread timestamp, also show the reply in the channel.
         unfurl_links:
           type: boolean
+          title: Unfurl links
           description: Expand link previews. Slack's default applies when omitted.
         connection: &connection
           type: string
@@ -223,11 +233,14 @@ actions:
         thread_ts:
           type: string
           pattern: "^[0-9]+\\.[0-9]+$"
-          description: The ts of the message to reply to (its thread's parent).
+          title: Thread timestamp
+          description: The ts of the message to reply to (the thread's parent), from Post message or a trigger's ts.
+          examples: ["1712345678.123456"]
         text: *text
         blocks: *blocks
         reply_broadcast:
           type: boolean
+          title: Also send to channel
           description: Also show the reply in the channel.
         connection: *connection
     request:
@@ -270,7 +283,9 @@ actions:
         ts:
           type: string
           pattern: "^[0-9]+\\.[0-9]+$"
-          description: The ts of the message to edit.
+          title: Message timestamp
+          description: The ts of the message to edit (a message's ts is its id), as returned by Post message.
+          examples: ["1712345678.123456"]
         text: *text
         blocks: *blocks
         connection: *connection
@@ -317,12 +332,16 @@ actions:
         timestamp:
           type: string
           pattern: "^[0-9]+\\.[0-9]+$"
-          description: The ts of the message to react to.
+          title: Message timestamp
+          description: The ts of the message to react to (a message's ts is its id).
+          examples: ["1712345678.123456"]
         name:
           type: string
           pattern: "^[a-z0-9_+'-]+(::skin-tone-[2-6])?$"
           maxLength: 100
-          description: The emoji name, without colons.
+          title: Emoji name
+          description: The emoji's name without colons, as in :white_check_mark:.
+          examples: ["white_check_mark"]
         connection: *connection
     request:
       method: POST
@@ -358,7 +377,9 @@ actions:
           type: string
           format: email
           maxLength: 320
-          description: The member's email address.
+          title: Email
+          description: The email address of the workspace member to find.
+          examples: ["ann@example.com"]
         connection: *connection
     request:
       method: GET
@@ -410,10 +431,13 @@ actions:
           type: string
           pattern: "^(public_channel|private_channel|mpim|im)(,(public_channel|private_channel|mpim|im))*$"
           default: public_channel,private_channel
-          description: Comma-separated conversation types to include.
+          title: Conversation types
+          description: Which kinds to include, comma-separated, from public_channel, private_channel, mpim (group DM) and im (DM).
+          examples: ["public_channel,private_channel"]
         exclude_archived:
           type: boolean
           default: true
+          title: Skip archived
           description: Leave out archived channels.
         connection: *connection
     request:
@@ -477,17 +501,23 @@ actions:
         oldest:
           type: string
           pattern: "^[0-9]+(\\.[0-9]+)?$"
-          description: Only messages after this ts.
+          title: After timestamp
+          description: Only messages after this point, as a Slack ts or Unix seconds.
+          examples: ["1712345678.123456"]
         latest:
           type: string
           pattern: "^[0-9]+(\\.[0-9]+)?$"
-          description: Only messages before this ts.
+          title: Before timestamp
+          description: Only messages before this point, as a Slack ts or Unix seconds.
+          examples: ["1712349999"]
         limit:
           type: integer
           minimum: 1
           maximum: 200
           default: 100
-          description: Messages per page.
+          title: Page size
+          description: How many messages to fetch per page, 1 to 200. Up to 5 pages are read.
+          examples: [50]
         connection: *connection
     request:
       method: GET

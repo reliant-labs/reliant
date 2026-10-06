@@ -412,16 +412,17 @@ message CallLLMArgs {
 
   // Model specifies which LLM to use via tags or explicit ID.
   CelModelSelector model = 1 [(reliant) = {
-    description: "Model selector using tags (e.g. flagship) or explicit ID"
+    description: "A model tag (flagship, fast, cheap) or an explicit model ID"
     label: "Model"
-    placeholder: "e.g. flagship, fast, cheap, or explicit model ID"
+    example: "flagship"
     visibility_contexts: "basic"
     required: true
     category: "Model"
   }];
   // Temperature controls randomness (0.0 = deterministic, 1.0 = creative).
   CelDouble temperature = 2 [(reliant) = {
-    description: "Temperature (0-1) controls randomness"
+    description: "How varied replies are: 0 is the most repeatable, higher is more creative (0 to 2)"
+    example: "0.2"
     default_value: "0.7"
     min_value: 0
     max_value: 2
@@ -450,10 +451,10 @@ message CallLLMArgs {
   }];
   // SystemPrompt sets the system message for this LLM call.
   CelString system_prompt = 5 [(reliant) = {
-    description: "System message for this LLM call"
+    description: "Optional instructions for how the model should behave on this call"
     ui_hint: "textarea"
     label: "System prompt"
-    placeholder: "Optional instructions for model behavior"
+    example: "You are a careful code reviewer. Reply with a bulleted list of issues."
     visibility_contexts: "advanced"
     cleanup_semantics: "trim"
     category: "Prompt"
@@ -492,7 +493,9 @@ message CallLLMArgs {
   // pays the skill token cost only when it needs it. The seeded messages are
   // ephemeral — re-seeded each turn, never persisted.
   CelStringList skills = 14 [(reliant) = {
-    description: "Namespaced skill paths to preload for this call (seeded as skill tool-interactions)"
+    description: "Skills to preload into this call, by path, so the model starts with their instructions"
+    example: "[forge/db, code-review]"
+    type_hint: "list of skill paths"
     label: "Skills"
     visibility_contexts: "advanced"
     category: "Prompt"
@@ -594,7 +597,12 @@ message ExecuteToolsArgs {
 
   // ToolCalls is a CEL expression evaluating to tool calls.
   // Typically: "{{nodes.call_llm.tool_calls}}"
-  CelString tool_calls = 1 [(reliant) = {description: "CEL expression for tool calls to execute"}];
+  CelString tool_calls = 1 [(reliant) = {
+    description: "The tool calls to run: wire in the tool_calls output of the Call LLM step that requested them"
+    example: "{{nodes.call_llm.tool_calls}}"
+    type_hint: "list of tool calls"
+    label: "Tool calls"
+  }];
   // ResolvedToolCalls is populated at runtime after CEL evaluation.
   repeated ToolCallMsg resolved_tool_calls = 2 [(reliant) = {hidden: true}];
   // ExpectedResponseTools filters which response tools to execute.
@@ -646,7 +654,8 @@ message InvokeToolArgs {
   // that declares node exposure; naming any other tool is an error rather than
   // a silent no-op.
   CelString tool = 1 [(reliant) = {
-    description: "Which tool to invoke"
+    description: "The tool to run, by name. Only tools that allow direct use from a workflow can be named"
+    example: "generate_image"
     label: "Tool"
     visibility_contexts: "basic"
     required: true
@@ -660,7 +669,9 @@ message InvokeToolArgs {
   // A parameter bound by configuration must NOT appear here — a binding exists
   // precisely so the value is not restated per call site.
   map<string, google.protobuf.Value> params = 2 [(reliant) = {
-    description: "Tool parameters, keyed as in the tool's schema"
+    description: "The tool's parameters, keyed as in its schema. Values may be literals or {{ }} templates"
+    example: "{\"prompt\": \"A watercolor fox in fresh snow\"}"
+    type_hint: "JSON object"
     label: "Parameters"
     visibility_contexts: "basic"
   }];
@@ -689,6 +700,7 @@ message ActionArgs {
   // "http/request@1". The major version pins the manifest.
   CelString uses = 1 [(reliant) = {
     description: "Which integration action to run, as integration/action@major"
+    example: "http/request@1"
     label: "Action"
     visibility_contexts: "basic"
     required: true
@@ -698,7 +710,9 @@ message ActionArgs {
   // Values may be literals or {{expr}} templates resolved before the activity
   // runs.
   map<string, google.protobuf.Value> with = 2 [(reliant) = {
-    description: "Action parameters, keyed as in the action's schema"
+    description: "Action parameters, keyed as in the action's schema. Values may be literals or {{ }} templates"
+    example: "{\"url\": \"https://api.example.com/v1/orders\", \"method\": \"GET\"}"
+    type_hint: "JSON object"
     label: "Parameters"
     visibility_contexts: "basic"
   }];
@@ -707,7 +721,8 @@ message ActionArgs {
   // the reference travels in the node; the secret is resolved on the worker at
   // call time and never enters workflow history. Omitted: no authentication.
   CelString connection = 3 [(reliant) = {
-    description: "Saved connection id to authenticate this action with"
+    description: "Id of the saved connection to authenticate with. Leave it empty to use your default connection"
+    example: "conn_3f2a9c1e7b4d4e0f9a6c2b8d1e5f7a90"
     label: "Connection"
     visibility_contexts: "basic"
   }];
@@ -741,7 +756,7 @@ message CompactArgs {
   CelModelSelector model = 2 [(reliant) = {
     description: "Model used to summarize the conversation (defaults to the built-in summarization tier)"
     label: "Model"
-    placeholder: "e.g. flagship, fast, cheap, or explicit model ID"
+    example: "flagship"
     category: "Model"
   }];
 }
@@ -761,9 +776,16 @@ message ApprovalArgs {
   };
 
   // Title is the approval dialog title.
-  CelString title = 1 [(reliant) = {description: "Approval dialog title"}];
+  CelString title = 1 [(reliant) = {
+    description: "What the approver is asked to decide, shown as the approval's title"
+    example: "Deploy {{inputs.version}} to production?"
+  }];
   // Timeout is how long to wait for approval (e.g. "30m", "1h").
-  CelString timeout = 3 [(reliant) = {description: "How long to wait for approval"}];
+  CelString timeout = 3 [(reliant) = {
+    description: "How long to wait for a decision before the step times out"
+    example: "30m"
+    type_hint: "duration"
+  }];
 
   // Reserved field numbers for removed fields.
   reserved 2; // description (removed: never rendered in UI)
@@ -786,7 +808,11 @@ message AskQuestionArgs {
   };
 
   // Metadata is a JSON string containing the question definition.
-  CelString metadata = 1 [(reliant) = {description: "JSON metadata with question text and options"}];
+  CelString metadata = 1 [(reliant) = {
+    description: "The questions to ask, as JSON: a questions list, each with question text and its options"
+    example: "{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}"
+    type_hint: "JSON"
+  }];
 }
 
 // SaveMessageNodeArgs configures a save_message node — saves a message to a thread.
@@ -811,11 +837,16 @@ message SaveMessageNodeArgs {
   }];
   // Content is a CEL expression for the message content.
   CelString content = 2 [(reliant) = {
-    description: "Message content"
+    description: "The message text, usually a template over an earlier step's output"
+    example: "{{nodes.call_llm.response_text}}"
     ui_hint: "textarea"
   }];
   // ToolCalls is a CEL expression for tool calls.
-  CelString tool_calls = 3 [(reliant) = {description: "Tool calls from LLM response"}];
+  CelString tool_calls = 3 [(reliant) = {
+    description: "Tool calls to save with an assistant message: the tool_calls a Call LLM step returned"
+    example: "{{nodes.call_llm.tool_calls}}"
+    type_hint: "list of tool calls"
+  }];
   // ToolResults is a CEL expression for tool results.
   CelString tool_results = 4 [(reliant) = {
     description: "Tool execution results"
@@ -877,17 +908,27 @@ message CreateWorktreeArgs {
   };
 
   // Name identifies this worktree.
-  CelString name = 1 [(reliant) = {description: "Worktree name, used in path"}];
+  CelString name = 1 [(reliant) = {
+    description: "A short name for the worktree; it becomes part of the worktree's folder path"
+    example: "fix-login-redirect"
+  }];
   // Branch is the branch name to create/checkout. Auto-generated if omitted.
   CelString branch = 2 [(reliant) = {
     description: "Branch name to create"
     hidden: true
   }];
   // BaseBranch is the branch to branch from. Defaults to repo's default branch.
-  CelString base_branch = 3 [(reliant) = {description: "Base branch to branch from"}];
+  CelString base_branch = 3 [(reliant) = {
+    description: "The branch to start from. Empty uses the repository's default branch"
+    example: "main"
+  }];
   // CopyFiles lists exact paths, relative to the project root, to copy into
   // the new workspace. Never searched for: ".env" is only the root .env.
-  repeated string copy_files = 4 [(reliant) = {description: "Exact paths from the project root to copy into the workspace (e.g. .env, web/node_modules)"}];
+  repeated string copy_files = 4 [(reliant) = {
+    description: "Exact paths from the project root to copy into the new worktree, such as untracked config"
+    example: "[.env, web/node_modules]"
+    type_hint: "list of paths"
+  }];
   // Force deletes existing worktree/branch if they exist.
   CelBool force = 5 [(reliant) = {description: "Force creation by deleting existing worktree"}];
 }
@@ -912,7 +953,8 @@ message RunArgs {
 
   // Command is the shell command to execute. Required.
   CelString command = 1 [(reliant) = {
-    description: "Shell command to execute"
+    description: "The shell command to run in the project directory"
+    example: "npm test -- --run"
     required: true
   }];
   // Env sets environment variables for the command.
@@ -948,14 +990,25 @@ message SubWorkflowArgs {
   };
 
   // Ref is a workflow reference string (e.g., "builtin://agent", "project://my-flow").
-  CelString ref = 1 [(reliant) = {description: "Workflow reference (builtin://name or project://name)"}];
+  CelString ref = 1 [(reliant) = {
+    description: "The workflow to run: builtin://<name> for a built-in, project://<name> for one in this project"
+    example: "builtin://agent"
+  }];
   // Inline defines the workflow inline rather than referencing an external one.
   Workflow inline = 2;
   // Args passes input values to the sub-workflow. Keys must match declared inputs.
-  map<string, google.protobuf.Value> args = 3 [(reliant) = {description: "Input values for the sub-workflow"}];
+  map<string, google.protobuf.Value> args = 3 [(reliant) = {
+    description: "Values for the sub-workflow's inputs, keyed by input name"
+    example: "{\"prompt\": \"{{inputs.prompt}}\"}"
+    type_hint: "JSON object"
+  }];
   // Presets applies preset configurations to sub-workflow inputs.
   // Format: map[group_name]preset_name. Use "default" for ungrouped inputs.
-  map<string, string> presets = 4 [(reliant) = {description: "Preset configurations for sub-workflow inputs"}];
+  map<string, string> presets = 4 [(reliant) = {
+    description: "A preset to apply per input group, as group: preset. Use default for ungrouped inputs"
+    example: "{\"default\": \"general\"}"
+    type_hint: "JSON object"
+  }];
   // Project configures the working directory for this sub-workflow.
   ProjectConfig project = 5 [(reliant) = {
     description: "Working directory override for sub-workflow"
@@ -966,7 +1019,11 @@ message SubWorkflowArgs {
   // Passthrough forwards specified input names from the parent workflow to the child.
   // For each name, if inputs.X exists in the parent, it is passed as an arg to the child.
   // Explicit args override passthrough values.
-  repeated string passthrough = 7 [(reliant) = {description: "Input names to forward from parent to child workflow"}];
+  repeated string passthrough = 7 [(reliant) = {
+    description: "Inputs of this workflow to hand to the sub-workflow under the same name"
+    example: "[prompt, model]"
+    type_hint: "list of input names"
+  }];
 }
 
 // LoopArgs configures a loop node — repeats a sub-workflow while a condition is true.
@@ -1026,12 +1083,19 @@ message LoopArgs {
   // For lists: iter.item is the element, iter.index is the position.
   // For maps: iter.key is the map key, iter.item is the map value, iter.index is the position.
   // Required when parallel is true. Can also be used with sequential loops.
-  CelString items = 9 [(reliant) = {description: "CEL expression evaluating to a list or map to iterate over"}];
+  CelString items = 9 [(reliant) = {
+    description: "What to iterate over: an expression yielding a list or map. Each iteration sees it as iter.item"
+    example: "{{nodes.plan.response.tasks}}"
+    type_hint: "list or map"
+  }];
   // Key is a CEL expression evaluated per iteration to produce the output map key.
   // Has access to iter.item, iter.index, iter.key.
   // Defaults to string(iter.index) if not specified.
   // Only used when parallel is true.
-  string key = 10 [(reliant) = {description: "CEL expression for output map key per iteration"}];
+  string key = 10 [(reliant) = {
+    description: "For parallel loops, each iteration's key in _results. Defaults to the iteration's index"
+    example: "{{iter.item.id}}"
+  }];
   // OnFailure controls behavior when a parallel iteration fails.
   // Values: "continue" (default, others keep running), "fail_fast" (cancel remaining),
   //   "fail_all" (wait for all, then fail if any failed).
@@ -1046,7 +1110,11 @@ message LoopArgs {
   // Passthrough forwards specified input names from the parent workflow to the loop body.
   // For each name, if inputs.X exists in the parent, it is passed as an arg to the child.
   // Explicit args override passthrough values.
-  repeated string passthrough = 13 [(reliant) = {description: "Input names to forward from parent to child workflow"}];
+  repeated string passthrough = 13 [(reliant) = {
+    description: "Inputs of this workflow to hand to the loop body under the same name"
+    example: "[prompt, model]"
+    type_hint: "list of input names"
+  }];
 }
 
 // JoinArgs configures a join node — synchronizes parallel branches.
@@ -1113,15 +1181,24 @@ message RouterArgs {
   reserved 2, 5;
   reserved "prompt", "include_history";
   // SystemPrompt overrides the default routing system prompt.
-  CelString system_prompt = 3 [(reliant) = {description: "Custom system prompt for the routing LLM"}];
+  CelString system_prompt = 3 [(reliant) = {
+    description: "Instructions for the routing model, replacing the default routing prompt"
+    example: "Route bug reports to triage and feature requests to plan. If unsure, choose triage."
+  }];
   // Model selects which LLM to use for the routing decision.
-  CelModelSelector model = 4 [(reliant) = {description: "Model for routing decision (defaults to fast model)"}];
+  CelModelSelector model = 4 [(reliant) = {
+    description: "The model that makes the routing decision (defaults to a fast model)"
+    example: "fast"
+  }];
   // Thread configures how the selected child workflow relates to conversation threads.
   // Only applies to workflow routing mode.
   ThreadConfig thread = 6 [(reliant) = {description: "Thread mode for the selected workflow: inherit, new, or fork"}];
   // Fallback is the preset/node to use if routing fails. Empty = error on failure.
   // In workflow routing mode, this is a preset name. In node routing mode, this is a node ID.
-  string fallback = 7 [(reliant) = {description: "Fallback preset or node ID if routing decision fails"}];
+  string fallback = 7 [(reliant) = {
+    description: "Where to go if the routing decision fails: a preset name (workflow routing) or a node id (node routing)"
+    example: "general"
+  }];
   // Project configures the working directory for the selected sub-workflow.
   // Only applies to workflow routing mode.
   ProjectConfig project = 8 [(reliant) = {
@@ -1132,7 +1209,9 @@ message RouterArgs {
   // to a CEL expression evaluated against the router's execution context.
   // Only applies to workflow routing mode.
   map<string, string> outputs = 9 [(reliant) = {
-    description: "Declared output mappings (name → CEL expression)"
+    description: "Named outputs for this step, each an expression over the chosen workflow's outputs"
+    example: "{\"summary\": \"{{outputs.message}}\"}"
+    type_hint: "JSON object"
     visibility_contexts: "advanced"
   }];
   // Nodes lists candidate nodes within the current workflow to route to.

@@ -171,28 +171,40 @@ actions:
         owner: &owner
           type: string
           pattern: "^[A-Za-z0-9][A-Za-z0-9-]{0,38}$"
-          description: The account (user or organization) that owns the repository.
+          title: Repository owner
+          description: The user or organization that owns the repository, the first part of owner/repo.
+          examples: ["octocat"]
         repo: &repo
           type: string
           # Letters, digits, ., -, _ with at least one that is not a dot.
           pattern: "^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
           maxLength: 100
-          description: The repository name, without the owner or .git.
+          title: Repository name
+          description: The repository's name without the owner or .git, the second part of owner/repo.
+          examples: ["hello-world"]
         title:
           type: string
           minLength: 1
-          description: The issue title.
+          title: Title
+          description: The issue's title.
+          examples: ["Login page loops back to sign-in after SSO"]
         body:
           type: string
-          description: The issue body, in GitHub-flavored markdown.
+          title: Body
+          description: The issue's description, in GitHub-flavored markdown.
+          examples: ["Steps to reproduce:\n1. Sign in with SSO\n2. Land back on /login"]
         labels:
           type: array
           items: { type: string }
-          description: Label names to apply.
+          title: Labels
+          description: Label names to apply; labels that do not exist yet are created.
+          examples: [["bug", "needs-triage"]]
         assignees:
           type: array
           items: { type: string }
-          description: Logins to assign.
+          title: Assignees
+          description: GitHub usernames to assign, without the @.
+          examples: [["octocat"]]
         connection: &connection
           type: string
           description: >-
@@ -244,7 +256,9 @@ actions:
         issue_number: &issue_number
           type: integer
           minimum: 1
-          description: The issue (or pull request) number.
+          title: Issue number
+          description: The issue's number as shown after the # (a pull request's number works too).
+          examples: [42]
         connection: *connection
     request:
       method: GET
@@ -313,7 +327,9 @@ actions:
         body:
           type: string
           minLength: 1
-          description: The comment, in GitHub-flavored markdown.
+          title: Comment
+          description: The comment to post, in GitHub-flavored markdown.
+          examples: ["Thanks! Reproduced on main; a fix is in #57."]
         connection: *connection
     request:
       method: POST
@@ -360,26 +376,36 @@ actions:
         title:
           type: string
           minLength: 1
-          description: The new title.
+          title: New title
+          description: Replaces the issue's title. Omit to keep it.
+          examples: ["Login page loops back to sign-in after SSO"]
         body:
           type: string
-          description: The new body, in GitHub-flavored markdown.
+          title: New body
+          description: Replaces the issue's description, in GitHub-flavored markdown. Omit to keep it.
+          examples: ["Fixed in #57; closing."]
         state:
           type: string
           enum: [open, closed]
+          title: State
           description: Open or close the issue.
         state_reason:
           type: string
           enum: [completed, not_planned, reopened]
-          description: Why the state changed; sent only with state.
+          title: State reason
+          description: Why the state changed; only sent along with State.
         labels:
           type: array
           items: { type: string }
-          description: The complete new set of label names (replaces the current set).
+          title: Labels
+          description: The complete new set of label names. It replaces the current labels, so include any to keep.
+          examples: [["bug", "fixed"]]
         assignees:
           type: array
           items: { type: string }
-          description: The complete new set of assignee logins (replaces the current set).
+          title: Assignees
+          description: The complete new set of GitHub usernames to assign. It replaces the current assignees.
+          examples: [["octocat"]]
         connection: *connection
     request:
       method: PATCH
@@ -443,7 +469,9 @@ actions:
         pull_number: &pull_number
           type: integer
           minimum: 1
-          description: The pull request number.
+          title: Pull request number
+          description: The pull request's number as shown after the #.
+          examples: [57]
         connection: *connection
     request:
       method: GET
@@ -595,15 +623,20 @@ actions:
           type: string
           enum: [COMMENT, APPROVE, REQUEST_CHANGES]
           default: COMMENT
-          description: The review verdict.
+          title: Verdict
+          description: COMMENT leaves feedback, APPROVE approves, REQUEST_CHANGES blocks merging until resolved.
         body:
           type: string
           minLength: 1
-          description: The review summary, in GitHub-flavored markdown. Required unless event is APPROVE.
+          title: Review summary
+          description: The review's top-level comment, in GitHub-flavored markdown. Required unless the verdict is APPROVE.
+          examples: ["Looks good overall; one question about the retry loop in client.go."]
         commit_id:
           type: string
           pattern: "^[0-9a-f]{7,64}$"
-          description: The commit SHA being reviewed. Defaults to the pull request's latest commit.
+          title: Commit SHA
+          description: The commit being reviewed. Defaults to the pull request's latest commit.
+          examples: ["6dcb09b5b57875f334f61aebed695e2e4193db5e"]
         connection: *connection
     # "body is required for COMMENT and REQUEST_CHANGES" is GitHub's rule, and
     # its 422 names the field; an if/then here would not survive as a tool
@@ -655,21 +688,26 @@ actions:
         visibility:
           type: string
           enum: [all, public, private]
+          title: Visibility
           description: Only repositories with this visibility.
         affiliation:
           type: string
           pattern: "^(owner|collaborator|organization_member)(,(owner|collaborator|organization_member))*$"
+          title: Your relationship
           description: >-
-            Comma-separated subset of owner, collaborator,
-            organization_member. Defaults to all three.
+            Which of your repositories to list, comma-separated: owner,
+            collaborator, organization_member. Defaults to all three.
+          examples: ["owner,collaborator"]
         sort:
           type: string
           enum: [created, updated, pushed, full_name]
-          description: Sort order key. Defaults to full_name.
+          title: Sort by
+          description: What to sort by. Defaults to full_name.
         direction:
           type: string
           enum: [asc, desc]
-          description: Defaults to asc for full_name, otherwise desc.
+          title: Direction
+          description: Sort direction. Defaults to asc for full_name, otherwise desc.
         connection: *connection
     request:
       method: GET
@@ -813,14 +851,18 @@ actions:
           type: string
           pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
           maxLength: 4096
+          title: Path
           description: >-
-            The path from the repository root, such as src/main.go or docs.
-            No leading slash. Omit for the root.
+            A file or directory from the repository root, with no leading
+            slash. Omit for the root.
+          examples: ["src/main.go"]
         ref: &git_ref
           type: string
           pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
           maxLength: 255
-          description: A branch, tag or commit SHA. Defaults to the repository's default branch.
+          title: Branch, tag or commit
+          description: Which version to read. Defaults to the repository's default branch.
+          examples: ["main"]
         connection: *connection
     request:
       method: GET
@@ -907,7 +949,9 @@ actions:
           type: string
           pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
           maxLength: 4096
-          description: Only entries under this directory, such as internal/llm. Omit for the whole repository.
+          title: Directory
+          description: Only entries under this directory, from the repository root. Omit for the whole repository.
+          examples: ["internal/llm"]
         connection: *connection
     request:
       method: GET
@@ -968,20 +1012,26 @@ actions:
           type: string
           minLength: 1
           maxLength: 256
+          title: Search
           description: >-
-            Search terms plus qualifiers, such as "ParseDuration repo:golang/go".
+            Search terms plus GitHub qualifiers (repo:, org:, language:, path:).
             At least one search term is required besides the qualifiers.
+          examples: ["ParseDuration repo:golang/go"]
         per_page:
           type: integer
           minimum: 1
           maximum: 100
           default: 30
-          description: Results per page.
+          title: Results per page
+          description: How many matches to return, 1 to 100.
+          examples: [10]
         page:
           type: integer
           minimum: 1
           default: 1
-          description: The page of results. GitHub returns at most the first 1,000.
+          title: Page
+          description: Which page of results, from 1. GitHub returns at most the first 1,000 matches.
+          examples: [2]
         connection: *connection
     request:
       method: GET
@@ -1051,16 +1101,22 @@ actions:
           type: string
           pattern: "^[A-Za-z0-9._-]*[A-Za-z0-9_-][A-Za-z0-9._-]*$"
           maxLength: 255
-          description: The workflow file name (for example deploy.yml) or numeric id.
+          title: Workflow file
+          description: The workflow's file name under .github/workflows, or its numeric id.
+          examples: ["deploy.yml"]
         ref:
           type: string
           minLength: 1
+          title: Branch or tag
           description: The branch or tag to run the workflow on.
+          examples: ["main"]
         inputs:
           type: object
           maxProperties: 25
           additionalProperties: { type: string }
-          description: The workflow's declared inputs, as strings.
+          title: Workflow inputs
+          description: Values for the workflow's declared workflow_dispatch inputs, all as strings.
+          examples: [{ "environment": "staging", "dry_run": "true" }]
         connection: *connection
     request:
       method: POST

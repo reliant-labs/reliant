@@ -10,6 +10,7 @@ import (
 	"net/url"
 	"path"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 
@@ -38,7 +39,28 @@ const (
 	// Request body encodings (HttpRequestSpec.body_format).
 	BodyFormatJSON = "json"
 	BodyFormatForm = "form"
+	BodyFormatText = "text"
+
+	// How a response body is read (HttpRequestSpec.response_format).
+	ResponseFormatAuto = "auto"
+	ResponseFormatJSON = "json"
+	ResponseFormatText = "text"
+
+	// What a 3xx does (HttpRequestSpec.redirects).
+	RedirectsFollow = "follow"
+	RedirectsReturn = "return"
 )
+
+// The values each templatable enum-like request field may take, the first
+// being the default an empty value means.
+var (
+	BodyFormats     = []string{BodyFormatJSON, BodyFormatForm, BodyFormatText}
+	ResponseFormats = []string{ResponseFormatAuto, ResponseFormatJSON, ResponseFormatText}
+	RedirectModes   = []string{RedirectsFollow, RedirectsReturn}
+)
+
+// MaxTimeoutSeconds bounds request.timeout_seconds and request.timeout_expr.
+const MaxTimeoutSeconds = 120
 
 var (
 	idPattern     = regexp.MustCompile(`^[a-z][a-z0-9_]*$`)
@@ -61,10 +83,71 @@ func Parse(data []byte, trust Trust) (*reliantv1.IntegrationManifest, error) {
 	if err := (protojson.UnmarshalOptions{DiscardUnknown: false}).Unmarshal(asJSON, m); err != nil {
 		return nil, fmt.Errorf("manifest: %w", err)
 	}
+	if err := fillParamOrder(data, m); err != nil {
+		return nil, fmt.Errorf("manifest %q: %w", m.GetId(), err)
+	}
 	if err := Validate(m, trust); err != nil {
 		return nil, fmt.Errorf("manifest %q: %w", m.GetId(), err)
 	}
 	return m, nil
+}
+
+// fillParamOrder records each action's params.properties keys in the order the
+// YAML declares them. Decoding into maps (and then a Struct) loses it, and the
+// declared order is the one a form should list params in: an author puts
+// Channel and Text before Blocks for a reason.
+func fillParamOrder(data []byte, m *reliantv1.IntegrationManifest) error {
+	var root yaml.Node
+	if err := yaml.Unmarshal(data, &root); err != nil {
+		return fmt.Errorf("manifest yaml: %w", err)
+	}
+	actions := yamlChild(yamlDocument(&root), "actions")
+	for i, a := range m.GetActions() {
+		if len(a.GetParamOrder()) > 0 {
+			return fmt.Errorf("action %q: param_order is derived from the order of params.properties; do not set it", a.GetId())
+		}
+		if actions == nil || actions.Kind != yaml.SequenceNode || i >= len(actions.Content) {
+			continue
+		}
+		props := yamlChild(yamlChild(resolveAlias(actions.Content[i]), "params"), "properties")
+		if props == nil || props.Kind != yaml.MappingNode {
+			continue
+		}
+		for j := 0; j+1 < len(props.Content); j += 2 {
+			if key := props.Content[j].Value; key != "<<" {
+				a.ParamOrder = append(a.ParamOrder, key)
+			}
+		}
+	}
+	return nil
+}
+
+func yamlDocument(n *yaml.Node) *yaml.Node {
+	if n.Kind == yaml.DocumentNode && len(n.Content) > 0 {
+		return resolveAlias(n.Content[0])
+	}
+	return resolveAlias(n)
+}
+
+// yamlChild is the value under key in a mapping node, or nil.
+func yamlChild(n *yaml.Node, key string) *yaml.Node {
+	n = resolveAlias(n)
+	if n == nil || n.Kind != yaml.MappingNode {
+		return nil
+	}
+	for i := 0; i+1 < len(n.Content); i += 2 {
+		if n.Content[i].Value == key {
+			return resolveAlias(n.Content[i+1])
+		}
+	}
+	return nil
+}
+
+func resolveAlias(n *yaml.Node) *yaml.Node {
+	for n != nil && n.Kind == yaml.AliasNode {
+		n = n.Alias
+	}
+	return n
 }
 
 // normalize turns yaml.v3's map[string]any / map[any]any into JSON-encodable maps.
@@ -272,6 +355,27 @@ func validateAction(m *reliantv1.IntegrationManifest, a *reliantv1.ActionSpec, c
 	return validateOutput(a.GetOutput(), req.GetPagination())
 }
 
+// validateEnumTemplate checks an enum-like request field at load time: a
+// template is checked for syntax (its value is checked per call, by
+// CheckEnum), a literal must be one of allowed. Empty means the default.
+func validateEnumTemplate(name, value string, allowed []string) error {
+	if tmpl.HasExpr(value) {
+		if err := tmpl.Validate(value); err != nil {
+			return fmt.Errorf("%s: %w", name, err)
+		}
+		return nil
+	}
+	return CheckEnum(name, value, allowed)
+}
+
+// CheckEnum reports whether value is empty (the default) or one of allowed.
+func CheckEnum(name, value string, allowed []string) error {
+	if value == "" || slices.Contains(allowed, value) {
+		return nil
+	}
+	return fmt.Errorf("%s %q must be one of %s", name, value, strings.Join(allowed, ", "))
+}
+
 func validateRequest(req *reliantv1.HttpRequestSpec) error {
 	if (req.GetUrl() == "") == (req.GetPath() == "") {
 		return fmt.Errorf("request needs exactly one of url or path")
@@ -284,8 +388,8 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 	} else if !methods[method] {
 		return fmt.Errorf("request.method %q must be one of GET, POST, PUT, PATCH, DELETE", method)
 	}
-	if req.GetTimeoutSeconds() < 0 || req.GetTimeoutSeconds() > 120 {
-		return fmt.Errorf("request.timeout_seconds must be 0..120")
+	if req.GetTimeoutSeconds() < 0 || req.GetTimeoutSeconds() > MaxTimeoutSeconds {
+		return fmt.Errorf("request.timeout_seconds must be 0..%d", MaxTimeoutSeconds)
 	}
 	if req.GetMaxResponseBytes() < 0 || req.GetMaxResponseBytes() > 10<<20 {
 		return fmt.Errorf("request.max_response_bytes must be 0..10485760")
@@ -305,7 +409,7 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 			return fmt.Errorf("request.headers.%s: %w", k, err)
 		}
 	}
-	for name, expr := range map[string]string{"headers_expr": req.GetHeadersExpr(), "query_expr": req.GetQueryExpr(), "body_expr": req.GetBodyExpr()} {
+	for name, expr := range map[string]string{"headers_expr": req.GetHeadersExpr(), "query_expr": req.GetQueryExpr(), "body_expr": req.GetBodyExpr(), "timeout_expr": req.GetTimeoutExpr()} {
 		if expr == "" {
 			continue
 		}
@@ -316,10 +420,17 @@ func validateRequest(req *reliantv1.HttpRequestSpec) error {
 	if req.GetBody() != nil && req.GetBodyExpr() != "" {
 		return fmt.Errorf("request.body and request.body_expr are mutually exclusive")
 	}
-	switch req.GetBodyFormat() {
-	case "", BodyFormatJSON, BodyFormatForm:
-	default:
-		return fmt.Errorf("request.body_format %q must be %s or %s", req.GetBodyFormat(), BodyFormatJSON, BodyFormatForm)
+	for _, field := range []struct {
+		name, value string
+		allowed     []string
+	}{
+		{"body_format", req.GetBodyFormat(), BodyFormats},
+		{"response_format", req.GetResponseFormat(), ResponseFormats},
+		{"redirects", req.GetRedirects(), RedirectModes},
+	} {
+		if err := validateEnumTemplate("request."+field.name, field.value, field.allowed); err != nil {
+			return err
+		}
 	}
 	if req.GetBody() != nil {
 		if err := validateBodyTemplates(req.GetBody().AsInterface()); err != nil {

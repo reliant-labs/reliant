@@ -237,6 +237,7 @@ func CatalogEntryToProto(e *catalogindex.Entry, connected bool) (*reliantv1.Cata
 		ToolName:    e.ToolName(),
 	}
 	if e.Kind == catalogindex.KindAction {
+		out.ParamOrder = e.Action.GetParamOrder()
 		params, output := e.Schemas()
 		var err error
 		if out.ParamsSchema, err = structpb.NewStruct(params); err != nil {

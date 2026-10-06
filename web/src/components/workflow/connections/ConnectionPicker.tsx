@@ -6,7 +6,9 @@
  *   - "Use my default" (the stored value is empty: the run owner's default
  *     connection for the integration, resolved at call time), or one of the
  *     caller's connections by id.
- *   - "Connect…" when there is none yet.
+ *   - "Connect…" when there is none yet, or, when this deployment offers no
+ *     way to connect at all, a plain "can't be connected here yet" instead of
+ *     a button that leads nowhere.
  *   - A delegated integration (hosted GitHub) has no connection to pick:
  *     "Uses your connected GitHub account", with a link to Settings.
  *   - No connection required: nothing to render.
@@ -32,7 +34,7 @@ export interface ConnectionPickerProps {
   disabled?: boolean;
 }
 
-export type ConnectionPickerState = "none_required" | "delegated" | "unconnected" | "connected";
+export type ConnectionPickerState = "none_required" | "delegated" | "unconnected" | "unavailable" | "connected";
 
 /** What the picker should show for an entry and the caller's connections. */
 export function connectionPickerState(entry: CatalogEntry, connections: readonly Connection[]): ConnectionPickerState {
@@ -42,7 +44,10 @@ export function connectionPickerState(entry: CatalogEntry, connections: readonly
   // Delegated wins only when it is what serves this deployment.
   if (methods.some((m) => m.kind === "delegated" && m.available)) return "delegated";
   if (!entry.connection.required && methods.length === 0) return "none_required";
-  return entry.connection.required || entry.summary.connectionRequired ? "unconnected" : "none_required";
+  if (!(entry.connection.required || entry.summary.connectionRequired)) return "none_required";
+  // A Connect button that can only open "nothing is set up here" is a dead end.
+  const connectable = methods.filter((m) => m.kind !== "none");
+  return connectable.length > 0 && connectable.every((m) => !m.available) ? "unavailable" : "unconnected";
 }
 
 function connectionLabel(connection: Connection): string {
@@ -88,6 +93,11 @@ export function ConnectionPicker({ entry, value, onChange, onConnect, disabled =
           <a href="/settings/git-connections" className="text-xs font-medium text-primary hover:underline">
             Manage in Settings
           </a>
+        </CardInset>
+      ) : state === "unavailable" ? (
+        <CardInset className="text-sm">
+          <p className="text-foreground">{integration.displayName} can't be connected on this deployment yet.</p>
+          <p className="cpv2-field-hint !mt-0">None of its sign-in methods are set up here, so this step won't run until one is.</p>
         </CardInset>
       ) : state === "unconnected" ? (
         <CardInset className="flex items-center justify-between gap-3">

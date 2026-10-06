@@ -80,8 +80,8 @@ Run an integration action (for example an HTTP request)
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `uses` | string | No | - | Which integration action to run, as integration/action@major |
-| `with` | map | No | - | Action parameters, keyed as in the action's schema |
-| `connection` | string | No | - | Saved connection id to authenticate this action with |
+| `with` | map | No | - | Action parameters, keyed as in the action's schema. Values may be literals or {{ }} templates |
+| `connection` | string | No | - | Id of the saved connection to authenticate with. Leave it empty to use your default connection |
 
 ### Outputs
 
@@ -105,10 +105,10 @@ Invoke an agent or sub-workflow
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `ref` | string | No | - | Workflow reference (builtin://name or project://name) |
-| `args` | map | No | - | Input values for the sub-workflow |
-| `presets` | map | No | - | Preset configurations for sub-workflow inputs |
-| `passthrough` | string | No | - | Input names to forward from parent to child workflow |
+| `ref` | string | No | - | The workflow to run: builtin://<name> for a built-in, project://<name> for one in this project |
+| `args` | map | No | - | Values for the sub-workflow's inputs, keyed by input name |
+| `presets` | map | No | - | A preset to apply per input group, as group: preset. Use default for ungrouped inputs |
+| `passthrough` | string | No | - | Inputs of this workflow to hand to the sub-workflow under the same name |
 
 ---
 
@@ -120,7 +120,7 @@ Pause workflow execution to ask the user a question
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `metadata` | string | No | - | JSON metadata with question text and options |
+| `metadata` | string | No | - | The questions to ask, as JSON: a questions list, each with question text and its options |
 
 ### Outputs
 
@@ -139,11 +139,11 @@ Send a prompt to a language model and get a response
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `model` | model | No | - | Model selector using tags (e.g. flagship) or explicit ID |
-| `temperature` | number | No | 0.7 | Temperature (0-1) controls randomness (range: 0-2) |
+| `model` | model | No | - | A model tag (flagship, fast, cheap) or an explicit model ID |
+| `temperature` | number | No | 0.7 | How varied replies are: 0 is the most repeatable, higher is more creative (0 to 2) (range: 0-2) |
 | `thinking_level` | string | No | none | Extended thinking level for complex reasoning (enum: none\|low\|medium\|high\|xhigh) |
-| `system_prompt` | string | No | - | System message for this LLM call |
-| `skills` | array | No | - | Namespaced skill paths to preload for this call (seeded as skill tool-interactions) |
+| `system_prompt` | string | No | - | Optional instructions for how the model should behave on this call |
+| `skills` | array | No | - | Skills to preload into this call, by path, so the model starts with their instructions |
 
 ### Outputs
 
@@ -184,9 +184,9 @@ Create a git worktree for isolated development
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `name` | string | No | - | Worktree name, used in path |
-| `base_branch` | string | No | - | Base branch to branch from |
-| `copy_files` | string | No | - | Exact paths from the project root to copy into the workspace (e.g. .env, web/node_modules) |
+| `name` | string | No | - | A short name for the worktree; it becomes part of the worktree's folder path |
+| `base_branch` | string | No | - | The branch to start from. Empty uses the repository's default branch |
+| `copy_files` | string | No | - | Exact paths from the project root to copy into the new worktree, such as untracked config |
 | `force` | boolean | No | - | Force creation by deleting existing worktree |
 
 ### Outputs
@@ -219,10 +219,10 @@ Execute a sub-workflow in a loop with conditions
 |-------|------|----------|---------|-------------|
 | `while` | boolean | No | - | CEL condition: loop continues while true |
 | `parallel` | boolean | No | - | Execute all iterations concurrently |
-| `items` | string | No | - | CEL expression evaluating to a list or map to iterate over |
-| `key` | string | No | - | CEL expression for output map key per iteration |
+| `items` | string | No | - | What to iterate over: an expression yielding a list or map. Each iteration sees it as iter.item |
+| `key` | string | No | - | For parallel loops, each iteration's key in _results. Defaults to the iteration's index |
 | `on_failure` | string | No | - | Failure policy for parallel iterations (enum: continue\|fail_fast\|fail_all) |
-| `passthrough` | string | No | - | Input names to forward from parent to child workflow |
+| `passthrough` | string | No | - | Inputs of this workflow to hand to the loop body under the same name |
 
 ### Outputs
 
@@ -244,10 +244,10 @@ Route to a workflow or node based on LLM classification
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `system_prompt` | string | No | - | Custom system prompt for the routing LLM |
-| `model` | model | No | - | Model for routing decision (defaults to fast model) |
-| `fallback` | string | No | - | Fallback preset or node ID if routing decision fails |
-| `outputs` | map | No | - | Declared output mappings (name → CEL expression) |
+| `system_prompt` | string | No | - | Instructions for the routing model, replacing the default routing prompt |
+| `model` | model | No | - | The model that makes the routing decision (defaults to a fast model) |
+| `fallback` | string | No | - | Where to go if the routing decision fails: a preset name (workflow routing) or a node id (node routing) |
+| `outputs` | map | No | - | Named outputs for this step, each an expression over the chosen workflow's outputs |
 
 ### Outputs
 
@@ -269,7 +269,7 @@ Execute a shell command
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `command` | string | No | - | Shell command to execute |
+| `command` | string | No | - | The shell command to run in the project directory |
 
 ### Outputs
 
@@ -291,7 +291,7 @@ Run the tool calls an upstream Call LLM step returned
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `tool_calls` | string | No | - | CEL expression for tool calls to execute |
+| `tool_calls` | string | No | - | The tool calls to run: wire in the tool_calls output of the Call LLM step that requested them |
 
 ### Outputs
 
@@ -311,8 +311,8 @@ Run one tool you pick, with parameters you set; no LLM involved
 
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
-| `tool` | string | No | - | Which tool to invoke |
-| `params` | map | No | - | Tool parameters, keyed as in the tool's schema |
+| `tool` | string | No | - | The tool to run, by name. Only tools that allow direct use from a workflow can be named |
+| `params` | map | No | - | The tool's parameters, keyed as in its schema. Values may be literals or {{ }} templates |
 
 ### Outputs
 
@@ -334,8 +334,8 @@ Save a message to the conversation thread
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `role` | string | No | - | Message role (enum: user\|assistant\|system\|tool) |
-| `content` | string | No | - | Message content |
-| `tool_calls` | string | No | - | Tool calls from LLM response |
+| `content` | string | No | - | The message text, usually a template over an earlier step's output |
+| `tool_calls` | string | No | - | Tool calls to save with an assistant message: the tool_calls a Call LLM step returned |
 | `display_style` | string | No | - | UI display style hint (enum: info\|warning\|success\|hidden) |
 
 ### Outputs

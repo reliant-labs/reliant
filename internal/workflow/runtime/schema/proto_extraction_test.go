@@ -2,6 +2,7 @@
 package schema
 
 import (
+	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -123,8 +124,8 @@ func TestExtractInputFieldsFromProto_CallLLMArgs(t *testing.T) {
 	if modelField.Label != "Model" {
 		t.Errorf("model label: want %q, got %q", "Model", modelField.Label)
 	}
-	if modelField.Placeholder == nil || *modelField.Placeholder != "e.g. flagship, fast, cheap, or explicit model ID" {
-		t.Errorf("model placeholder mismatch: got %v", modelField.Placeholder)
+	if modelField.Example != "flagship" {
+		t.Errorf("model example mismatch: got %q", modelField.Example)
 	}
 	if len(modelField.VisibilityContexts) != 1 || modelField.VisibilityContexts[0] != "basic" {
 		t.Errorf("model visibility_contexts: want [basic], got %v", modelField.VisibilityContexts)
@@ -134,8 +135,8 @@ func TestExtractInputFieldsFromProto_CallLLMArgs(t *testing.T) {
 	if !ok {
 		t.Fatal("Expected 'system_prompt' field")
 	}
-	if systemPrompt.Placeholder == nil || *systemPrompt.Placeholder != "Optional instructions for model behavior" {
-		t.Errorf("system_prompt placeholder mismatch: got %v", systemPrompt.Placeholder)
+	if !strings.HasPrefix(systemPrompt.Example, "You are a careful code reviewer.") {
+		t.Errorf("system_prompt example mismatch: got %q", systemPrompt.Example)
 	}
 
 	// Verify hidden fields are excluded from extractInputFieldsFromProto

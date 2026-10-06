@@ -81,41 +81,57 @@ actions:
         to:
           type: string
           pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$"
-          description: The recipient, E.164 (+15551234567), or whatsapp:+15551234567 for WhatsApp.
+          title: To
+          description: The recipient's phone number in E.164 form, or whatsapp:+… for WhatsApp.
+          examples: ["+15551234567", "whatsapp:+15551234567"]
         from:
           type: string
           pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$|^[A-Za-z0-9 ]{1,11}$"
+          title: From
           description: >-
-            Your Twilio sender: an E.164 number, whatsapp:+1… for a WhatsApp
+            One of your Twilio numbers (E.164), whatsapp:+… for a WhatsApp
             sender, or an alphanumeric sender ID where supported. Give this or
-            messaging_service_sid.
+            a Messaging Service SID.
+          examples: ["+15557654321"]
         messaging_service_sid:
           type: string
           pattern: "^MG[0-9a-fA-F]{32}$"
-          description: A Messaging Service (MG…) to send from instead of a single number.
+          title: Messaging Service SID
+          description: The MG… id of a Messaging Service to send from instead of one number, from the Twilio Console.
+          examples: ["MG0123456789abcdef0123456789abcdef"]
         body:
           type: string
           minLength: 1
           maxLength: 1600
-          description: The message text, up to 1600 characters.
+          title: Message text
+          description: The text to send, up to 1600 characters.
+          examples: ["Your order #1042 has shipped and arrives Thursday."]
         media_url:
           type: array
           maxItems: 10
           items: { type: string, format: uri, pattern: "^https?://" }
-          description: Public URLs of media to attach (MMS / WhatsApp media), up to 10.
+          title: Media URLs
+          description: Public URLs of images or files to attach (MMS or WhatsApp media), up to 10.
+          examples: [["https://example.com/receipts/1042.png"]]
         content_sid:
           type: string
           pattern: "^HX[0-9a-fA-F]{32}$"
-          description: An approved content template (HX…), required for WhatsApp outside the 24-hour window.
+          title: Content template SID
+          description: The HX… id of an approved content template, required for WhatsApp outside the 24-hour window.
+          examples: ["HX0123456789abcdef0123456789abcdef"]
         content_variables:
           type: string
           maxLength: 16000
-          description: 'The template''s variables as a JSON object string, e.g. {"1":"Ada"}.'
+          title: Template variables
+          description: The content template's variables, as a JSON object string keyed by placeholder number.
+          examples: ['{"1":"Ada","2":"Thursday"}']
         status_callback:
           type: string
           format: uri
           pattern: "^https://"
-          description: An https URL Twilio POSTs delivery status changes to.
+          title: Status callback URL
+          description: An https URL Twilio POSTs each delivery status change to.
+          examples: ["https://example.com/hooks/twilio-status"]
         connection: &connection
           type: string
           description: >-
@@ -290,10 +306,14 @@ actions:
       additionalProperties: false
       required: [sid]
       properties:
+        # The MESSAGE's sid. The account's SID comes from the connection; a
+        # bare "Sid" label read as asking for it twice.
         sid:
           type: string
           pattern: "^(SM|MM)[0-9a-fA-F]{32}$"
-          description: The message SID (SM… or MM…).
+          title: Message SID
+          description: The SM… (or MM…) id of the message, returned by Send message or listed by List messages.
+          examples: ["SM0123456789abcdef0123456789abcdef"]
         connection: *connection
     request:
       method: GET
@@ -335,29 +355,41 @@ actions:
         to:
           type: string
           pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$"
-          description: Only messages sent to this address.
+          title: To
+          description: Only messages sent to this number (E.164, or whatsapp:+… for WhatsApp).
+          examples: ["+15551234567"]
         from:
           type: string
           pattern: "^(whatsapp:)?\\+[1-9][0-9]{6,14}$|^[A-Za-z0-9 ]{1,11}$"
-          description: Only messages sent from this address.
+          title: From
+          description: Only messages sent from this number or sender ID.
+          examples: ["+15557654321"]
         date_sent:
           type: string
           pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-          description: Only messages sent on this date (YYYY-MM-DD, UTC).
+          title: Sent on
+          description: Only messages sent on this date, YYYY-MM-DD in UTC.
+          examples: ["2026-10-06"]
         date_sent_before:
           type: string
           pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-          description: Only messages sent on or before this date (YYYY-MM-DD).
+          title: Sent on or before
+          description: Only messages sent on or before this date, YYYY-MM-DD.
+          examples: ["2026-10-06"]
         date_sent_after:
           type: string
           pattern: "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
-          description: Only messages sent on or after this date (YYYY-MM-DD).
+          title: Sent on or after
+          description: Only messages sent on or after this date, YYYY-MM-DD.
+          examples: ["2026-10-01"]
         page_size:
           type: integer
           minimum: 1
           maximum: 1000
           default: 50
-          description: Messages per page.
+          title: Page size
+          description: How many messages to fetch per page, 1 to 1000. Up to 5 pages are read.
+          examples: [100]
         connection: *connection
     request:
       method: GET
@@ -426,7 +458,9 @@ actions:
         phone_number:
           type: string
           pattern: "^[+0-9]{1,16}$"
-          description: Only numbers containing these digits.
+          title: Number contains
+          description: Only your numbers containing these digits, such as an area code.
+          examples: ["415"]
         connection: *connection
     request:
       method: GET
