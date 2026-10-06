@@ -85,7 +85,12 @@ type wrapperHarness struct {
 	writer *recordingMessageWriter
 }
 
-func newWrapperHarness(t *testing.T, name string, fn func(context.Context, types.ActivityInput) (*reliantv1.CallLLMOutput, error)) *wrapperHarness {
+func newWrapperHarness(
+	t *testing.T,
+	name string,
+	fn func(context.Context, types.ActivityInput) (*reliantv1.CallLLMOutput, error),
+	configure ...func(*ActivityRegistry),
+) *wrapperHarness {
 	t.Helper()
 	var suite testsuite.WorkflowTestSuite
 	h := &wrapperHarness{
@@ -96,8 +101,19 @@ func newWrapperHarness(t *testing.T, name string, fn func(context.Context, types
 	h.env.SetDataConverter(rtemporal.NewFlexibleDataConverter())
 	registry := NewActivityRegistry(h.repo)
 	registry.SetMessageWriter(h.writer)
+	for _, c := range configure {
+		c(registry)
+	}
 	registerWrapped(h.env, registry, name, fn)
 	return h
+}
+
+// withMessageWriteRetry gives one harness's wrapper its own write-retry
+// policy. Per registry, so parallel tests never share it.
+func withMessageWriteRetry(budget, backoff time.Duration) func(*ActivityRegistry) {
+	return func(r *ActivityRegistry) {
+		r.messageWriteRetry = messageWriteRetry{budget: budget, backoff: backoff}
+	}
 }
 
 func (h *wrapperHarness) run(t *testing.T, name string, input types.ActivityInput) (map[string]interface{}, error) {
@@ -253,13 +269,9 @@ func TestWrapperSave_Skips(t *testing.T) {
 
 func TestWrapperSave_WriteErrorRetriedThenSucceeds(t *testing.T) {
 	t.Parallel()
-	restore := messageWriteBackoff
-	messageWriteBackoff = time.Millisecond
-	t.Cleanup(func() { messageWriteBackoff = restore })
-
 	h := newWrapperHarness(t, "CallLLM", func(context.Context, types.ActivityInput) (*reliantv1.CallLLMOutput, error) {
 		return thinkingCallLLMOutput(), nil
-	})
+	}, withMessageWriteRetry(messageWriteBudget, time.Millisecond))
 	h.writer.failures = 2
 	h.writer.failErr = errors.New("connection reset by peer")
 
@@ -270,14 +282,11 @@ func TestWrapperSave_WriteErrorRetriedThenSucceeds(t *testing.T) {
 }
 
 func TestWrapperSave_WriteErrorSurfacesAfterBudget(t *testing.T) {
-	// Not parallel: shrinks the package-level retry budget.
-	restoreBackoff := messageWriteBackoff
-	messageWriteBackoff = time.Millisecond
-	t.Cleanup(func() { messageWriteBackoff = restoreBackoff })
-
+	t.Parallel()
+	const budget = 100 * time.Millisecond
 	h := newWrapperHarness(t, "CallLLM", func(context.Context, types.ActivityInput) (*reliantv1.CallLLMOutput, error) {
 		return thinkingCallLLMOutput(), nil
-	})
+	}, withMessageWriteRetry(budget, time.Millisecond))
 	h.writer.failures = 1 << 30
 	h.writer.failErr = errors.New("connection reset by peer")
 
@@ -286,7 +295,7 @@ func TestWrapperSave_WriteErrorSurfacesAfterBudget(t *testing.T) {
 	require.Error(t, err, "a message that could not be written must fail the activity")
 	assert.Contains(t, err.Error(), "connection reset by peer")
 	assert.Greater(t, h.writer.calls, 1, "the write is retried before giving up")
-	assert.Less(t, time.Since(start), messageWriteBudget+5*time.Second)
+	assert.Less(t, time.Since(start), budget+5*time.Second, "the budget bounds the retrying")
 }
 
 func TestWrapperSave_ResolutionErrorIsNonRetryable(t *testing.T) {
