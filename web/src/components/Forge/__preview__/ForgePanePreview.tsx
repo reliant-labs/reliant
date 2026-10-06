@@ -203,7 +203,7 @@ function liveEnvironments(scenario: Scenario) {
     },
     {
       // A HOSTED env with forge's long timestamp-plus-sha versions — the
-      // shape of hounders' prod, whose release rows wrapped and overlapped.
+      // shape of a real tenant's prod, whose release rows wrapped and overlapped.
       environment: {
         id: "env-hosted",
         name: "hosted",
@@ -231,8 +231,8 @@ const HOSTED_PROMOTIONS = [
     promotedByActor: "sean",
     createdAt: ts("2026-10-05T20:27:11Z"),
     resolvedArtifacts: {
-      "us-central1-docker.pkg.dev/example/hounders/hounders-web": "sha256:1f9bf6721d7d0123456789abcdef",
-      "us-central1-docker.pkg.dev/example/hounders/hounders-api": "sha256:9c0ffee1234567890abcdef0123",
+      "us-central1-docker.pkg.dev/example/shop/shop-web": "sha256:1f9bf6721d7d0123456789abcdef",
+      "us-central1-docker.pkg.dev/example/shop/shop-api": "sha256:9c0ffee1234567890abcdef0123",
     },
   },
   {
@@ -241,27 +241,27 @@ const HOSTED_PROMOTIONS = [
     kind: "promote",
     promotedByActor: "ci",
     createdAt: ts("2026-10-04T21:17:48Z"),
-    resolvedArtifacts: { "us-central1-docker.pkg.dev/example/hounders/hounders-web": "sha256:0a1b2c3d4e5f0123456789" },
+    resolvedArtifacts: { "us-central1-docker.pkg.dev/example/shop/shop-web": "sha256:0a1b2c3d4e5f0123456789" },
   },
 ];
 
 const HOSTED_CONVERGENCES = [
   { id: "conv-h3", state: "converged", reason: "ReconciliationSucceeded", cluster: "hosted-us-central1", observedAt: ts("2026-10-05T20:31:02Z") },
-  { id: "conv-h2", state: "failed", reason: "HealthCheckFailed", message: "deployment hounders-web not ready", cluster: "hosted-us-central1", observedAt: ts("2026-10-05T20:28:40Z") },
+  { id: "conv-h2", state: "failed", reason: "HealthCheckFailed", message: "deployment shop-web not ready", cluster: "hosted-us-central1", observedAt: ts("2026-10-05T20:28:40Z") },
 ];
 
 const DOMAINS = [
   {
     id: "dom-1",
-    hostname: "hounders.example.com",
+    hostname: "example.com",
     state: "DEPLOY_CUSTOM_DOMAIN_STATE_LIVE",
-    binding: { id: "bind-1", domainId: "dom-1", environmentId: "env-hosted", target: "hounders-web" },
+    binding: { id: "bind-1", domainId: "dom-1", environmentId: "env-hosted", target: "shop-web" },
   },
   {
     id: "dom-2",
-    hostname: "www.hounders.example.com",
+    hostname: "www.example.com",
     state: "DEPLOY_CUSTOM_DOMAIN_STATE_VERIFYING",
-    binding: { id: "bind-2", domainId: "dom-2", environmentId: "env-hosted", redirectTo: "hounders.example.com" },
+    binding: { id: "bind-2", domainId: "dom-2", environmentId: "env-hosted", redirectTo: "example.com" },
   },
 ];
 

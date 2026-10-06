@@ -36,14 +36,20 @@ vi.mock("@tanstack/react-router", () => ({
 
 vi.mock("@/store/projectStore", () => ({
   useProjectStore: (selector: (s: unknown) => unknown) =>
-    selector({ currentProject: { id: "proj-1", name: "hounders" } }),
+    selector({ currentProject: { id: "proj-1", name: "shop" } }),
 }));
 
-// No daemon and no cloud env list in this test — the page must render the
+// By default no daemon and no cloud env list — the page must render the
 // org's domains regardless, which is the property that matters: a domain is
-// not a project's, so a sleeping daemon cannot blank this screen.
+// not a project's, so a sleeping daemon cannot blank this screen. The target
+// test below fills these in.
+const envState = vi.hoisted(() => ({
+  envs: [] as unknown[],
+  statuses: new Map<string, unknown>(),
+}));
 vi.mock("@/hooks/forge-queries", () => ({
-  useForgeEnvironments: () => ({ envs: [] }),
+  useForgeEnvironments: () => ({ envs: envState.envs }),
+  useCloudEnvStatuses: () => envState.statuses,
 }));
 
 /** Every request the stub transport received, so the wire shape is assertable. */
@@ -52,14 +58,14 @@ const calls: { rpc: string; req: unknown }[] = [];
 /** The apex domain exactly as control-plane's GetDomain returns it. */
 const PENDING_APEX = {
   id: "dom-1",
-  hostname: "hounders.club",
+  hostname: "example.com",
   state: DeployCustomDomainState.PENDING_DNS,
   source: DomainSource.EXTERNAL,
   requiredRecords: [
-    { type: "A", name: "hounders.club", value: "34.63.203.181" },
+    { type: "A", name: "example.com", value: "34.63.203.181" },
     {
       type: "TXT",
-      name: "_reliant-challenge.hounders.club",
+      name: "_reliant-challenge.example.com",
       value: "reliant-verify-8f3a91c2e7b04d56",
     },
   ],
@@ -104,6 +110,8 @@ function renderPage() {
 
 beforeEach(() => {
   calls.length = 0;
+  envState.envs = [];
+  envState.statuses = new Map();
   vi.mocked(getControlPlaneClient).mockImplementation(((service: never) =>
     createClient(service, transport)) as never);
 });
@@ -113,7 +121,7 @@ describe("the Domains page, through the real service layer", () => {
     renderPage();
 
     await waitFor(() => {
-      expect(screen.getByTestId("domain-row-hounders.club")).toBeInTheDocument();
+      expect(screen.getByTestId("domain-row-example.com")).toBeInTheDocument();
     });
     expect(calls.map((c) => c.rpc)).toContain("ListDomains");
     expect(screen.getByTestId("domain-state-pending-dns")).toBeInTheDocument();
@@ -125,7 +133,7 @@ describe("the Domains page, through the real service layer", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("domain-row-hounders.club")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("domain-row-example.com")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { expanded: false }));
 
     const table = await screen.findByTestId("dns-records-table");
@@ -137,9 +145,9 @@ describe("the Domains page, through the real service layer", () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("domain-row-hounders.club")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("domain-row-example.com")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { name: /add domain/i }));
-    await user.type(await screen.findByLabelText(/hostname/i), "api.hounders.club");
+    await user.type(await screen.findByLabelText(/hostname/i), "api.example.com");
     // The dialog's own submit, not the page header's.
     const dialog = screen.getByRole("dialog");
     await user.click(
@@ -151,15 +159,58 @@ describe("the Domains page, through the real service layer", () => {
     await waitFor(() => {
       const created = calls.find((c) => c.rpc === "CreateDomain");
       expect(created).toBeDefined();
-      expect((created!.req as { hostname: string }).hostname).toBe("api.hounders.club");
+      expect((created!.req as { hostname: string }).hostname).toBe("api.example.com");
     });
+  });
+
+  it("offers as targets what the control plane runs that can serve HTTP — no daemon needed", async () => {
+    // A cloud env the daemon never described: only the control plane knows it.
+    envState.envs = [
+      {
+        name: "prod",
+        where: "cloud",
+        forge: null,
+        cloud: { id: "env-prod", name: "prod", project: "shop", kind: "persistent" },
+      },
+    ];
+    envState.statuses = new Map([
+      [
+        "env-prod",
+        {
+          isLoading: false,
+          error: null,
+          data: {
+            verdict: "converged",
+            currentPromotion: null,
+            workloads: [
+              { name: "web", tier: "static" },
+              { name: "api", tier: "backend", url: "https://api-abc.reliant.run" },
+              { name: "jobs", tier: "backend" },
+              { name: "db", tier: "database" },
+            ],
+          },
+        },
+      ],
+    ]);
+    const user = userEvent.setup();
+    renderPage();
+
+    await waitFor(() => expect(screen.getByTestId("domain-row-example.com")).toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: /add domain/i }));
+
+    const target = await screen.findByLabelText(/^target$/i);
+    expect(Array.from(target.querySelectorAll("option")).map((o) => o.textContent)).toEqual([
+      "Choose a service or static site…",
+      "api — service",
+      "web — static site",
+    ]);
   });
 
   it("sends the domain id to VerifyDomain when the user checks DNS", async () => {
     const user = userEvent.setup();
     renderPage();
 
-    await waitFor(() => expect(screen.getByTestId("domain-row-hounders.club")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByTestId("domain-row-example.com")).toBeInTheDocument());
     await user.click(screen.getByRole("button", { expanded: false }));
     await user.click(await screen.findByRole("button", { name: /check dns now/i }));
 

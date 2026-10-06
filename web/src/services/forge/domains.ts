@@ -43,6 +43,8 @@ import { DomainService } from "@/gen/controlplane/services/domain/v1/domain_pb";
 import { getControlPlaneClient } from "@/services/controlPlane/client";
 import { CONTROL_PLANE_API_URL } from "@/services/controlPlane/config";
 
+import { workloadLink, type ForgeHostedWorkload } from "./topology";
+
 // ── Domain types ────────────────────────────────────────────────────────────
 
 /**
@@ -86,7 +88,7 @@ export type DnsRecordCheck = "ok" | "failed" | "unchecked";
 export interface DomainDnsRecord {
   /** 'A', 'CNAME' or 'TXT'. */
   type: string;
-  /** Fully qualified: 'hounders.club', '_reliant-challenge.hounders.club'. */
+  /** Fully qualified: 'example.com', '_reliant-challenge.example.com'. */
   name: string;
   /** An IP for A, the ingress host for CNAME, the ownership token for TXT. */
   value: string;
@@ -254,6 +256,61 @@ export function bindingSummary(binding: DomainBinding | null): string {
   if (binding.redirectTo) return `Redirects to ${binding.redirectTo}`;
   return binding.target;
 }
+
+// ── Bind targets ────────────────────────────────────────────────────────────
+
+/** What a domain can be pointed at inside an environment. */
+export type DomainTargetKind = "service" | "static-site";
+
+export interface DomainTarget {
+  /** The workload or static-site NAME — what a binding is written against. */
+  name: string;
+  kind: DomainTargetKind;
+}
+
+/**
+ * domainTargetsOf narrows an environment's workloads to the ones a custom
+ * domain can actually serve, so the picker never offers a dead end.
+ *
+ * A STATIC SITE always qualifies: the edge serves its bucket directly and
+ * needs nothing from a deployment.
+ *
+ * A WORKLOAD qualifies only when it is exposed, and the evidence is its
+ * platform URL. The control plane routes a custom domain by reusing the
+ * coordinates of the workload's PLATFORM hostname (control-plane
+ * internal/domaintargets/locator.go), and the operator allocates one only for
+ * a workload with an exposed port. A worker or job has no URL and a database
+ * does not speak HTTP — binding a domain to either would sit in "target not
+ * ready" forever.
+ *
+ * The tier is read in both spellings: the control plane says `backend`, forge
+ * says `workload`, and they name the same tier. An unreported tier with a URL
+ * is still something that answers HTTP, so it is offered as a service.
+ */
+export function domainTargetsOf(workloads: readonly ForgeHostedWorkload[]): DomainTarget[] {
+  const byName = new Map<string, DomainTarget>();
+  for (const workload of workloads) {
+    const name = (workload.name ?? "").trim();
+    if (name === "" || byName.has(name)) continue;
+    if ((workload.observed_state ?? "").trim().toLowerCase() === "deleted") continue;
+    const tier = (workload.tier ?? "").trim().toLowerCase();
+    if (tier === "static") {
+      byName.set(name, { name, kind: "static-site" });
+    } else if (
+      (tier === "backend" || tier === "workload" || tier === "") &&
+      workloadLink(workload) !== ""
+    ) {
+      byName.set(name, { name, kind: "service" });
+    }
+  }
+  return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+/** How a target's kind reads in a picker: "web — static site". */
+export const DOMAIN_TARGET_KIND_LABELS: Record<DomainTargetKind, string> = {
+  service: "service",
+  "static-site": "static site",
+};
 
 // ── Availability ────────────────────────────────────────────────────────────
 

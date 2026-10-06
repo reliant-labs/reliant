@@ -6,7 +6,7 @@
  * The control plane models these as two resources for good reasons — a
  * domain outlives any deployment, and a binding is one write that can move it
  * between environments — but that is a statement about LIFETIMES, not about
- * how the work arrives. Someone adding `hounders.club` already knows it is
+ * how the work arrives. Someone adding `example.com` already knows it is
  * for their web workload. Splitting it into "add, then come back and bind"
  * would leave the common case half-finished on screen, in the exact state
  * (claimed, unbound) that serves nothing.
@@ -22,19 +22,36 @@
  * bindable in any state, serving only when live. That is what lets a tenant
  * wire the whole thing up in one sitting and have it start serving by itself.
  *
+ * ── THE TARGET IS PICKED, NEVER TYPED ───────────────────────────────────────
+ *
+ * The options are exactly what the environment runs that can answer HTTP —
+ * services with an exposed port and static sites (domainTargetsOf). A typed
+ * name is a typo the server cannot catch until the domain is live and
+ * dialing nothing, so an environment with nothing to serve gets an empty
+ * state that says what to deploy, not a free-text box. Parking the domain and
+ * redirecting it stay available, because neither needs a target.
+ *
  * ── REDIRECT IS A TARGET KIND, NOT A SEPARATE FLOW ──────────────────────────
  *
- * `www.hounders.club` → `hounders.club` is the single most common second
+ * `www.example.com` → `example.com` is the single most common second
  * domain anyone adds. Making it a mode of the same picker rather than a
  * different dialog keeps it one decision ("what should this serve?") instead
  * of a fork the user has to find.
+ *
+ * ── THE SAME DIALOG RE-BINDS ────────────────────────────────────────────────
+ *
+ * Given `hostname`, the name is fixed and shown rather than asked for, the
+ * current binding is pre-selected, and "nothing yet" is not offered — taking
+ * a domain off the air is the detail view's "Stop serving", a separate and
+ * deliberate action.
  */
 
-import { useEffect, useId, useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import { AlertTriangle } from "lucide-react";
 
 import Modal from "@/components/forge-ui/modal";
 import { cn } from "@/lib/utils";
+import { DOMAIN_TARGET_KIND_LABELS, type DomainTarget } from "@/services/forge/domains";
 
 /** One environment the domain can be bound into, with the targets inside it. */
 export interface DomainTargetEnv {
@@ -42,8 +59,17 @@ export interface DomainTargetEnv {
   name: string;
   /** The control plane's id — what a binding is actually written against. */
   environmentId: string;
-  /** Workload and static-site names declared or deployed in this environment. */
-  targets: string[];
+  /** What in this environment can serve a domain: exposed services and static sites. */
+  targets: DomainTarget[];
+  /** The target list has not been read yet — distinct from "this env serves nothing". */
+  targetsLoading?: boolean;
+}
+
+/** A binding as the dialog pre-selects it when re-binding. */
+export interface DomainBindingDraft {
+  environmentId: string;
+  target?: string;
+  redirectTo?: string;
 }
 
 export interface AddDomainDialogProps {
@@ -53,6 +79,10 @@ export interface AddDomainDialogProps {
   envs: DomainTargetEnv[];
   /** Hostnames the org already holds, so a duplicate is refused before the round trip. */
   takenHostnames: string[];
+  /** Re-binding an existing domain: the hostname is fixed and not asked for. */
+  hostname?: string;
+  /** The domain's current binding, pre-selected when re-binding. */
+  current?: DomainBindingDraft | null;
   onSubmit: (args: {
     hostname: string;
     environmentId?: string;
@@ -79,6 +109,8 @@ export function AddDomainDialog({
   onClose,
   envs,
   takenHostnames,
+  hostname: fixedHostname,
+  current,
   onSubmit,
   isSubmitting,
   error,
@@ -88,47 +120,62 @@ export function AddDomainDialog({
   const targetId = useId();
   const redirectId = useId();
 
+  const rebinding = fixedHostname !== undefined;
+
   const [hostname, setHostname] = useState("");
-  const [mode, setMode] = useState<TargetMode>("workload");
-  const [environmentId, setEnvironmentId] = useState("");
-  const [target, setTarget] = useState("");
-  const [redirectTo, setRedirectTo] = useState("");
+  const [mode, setMode] = useState<TargetMode>(current?.redirectTo ? "redirect" : "workload");
+  const [environmentId, setEnvironmentId] = useState(current?.environmentId ?? "");
+  const [target, setTarget] = useState(current?.target ?? "");
+  const [redirectTo, setRedirectTo] = useState(current?.redirectTo ?? "");
   const [touched, setTouched] = useState(false);
 
-  // Reset on open so a second use never inherits the first's answers — a
-  // stale hostname in this form would be claimed against the wrong name.
-  useEffect(() => {
-    if (!open) return;
-    setHostname("");
-    setMode(envs.length > 0 ? "workload" : "none");
-    setEnvironmentId(envs[0]?.environmentId ?? "");
-    setTarget("");
-    setRedirectTo("");
-    setTouched(false);
-  }, [open, envs]);
+  // Reset each time the dialog OPENS, so a second use never inherits the
+  // first's answers — a stale hostname here would be claimed against the
+  // wrong name. Keyed on the open transition alone, not on `envs`: the
+  // target lists are re-read while the dialog is up, and a reset on every
+  // refetch would wipe a half-filled form.
+  const [openedFor, setOpenedFor] = useState(open);
+  if (open !== openedFor) {
+    setOpenedFor(open);
+    if (open) {
+      setHostname("");
+      setMode(current?.redirectTo ? "redirect" : "workload");
+      setEnvironmentId(current?.environmentId ?? "");
+      setTarget(current?.target ?? "");
+      setRedirectTo(current?.redirectTo ?? "");
+      setTouched(false);
+    }
+  }
 
+  // Derived rather than stored, so environments that arrive after the dialog
+  // opened are picked up without a reset.
   const selectedEnv = useMemo(
-    () => envs.find((env) => env.environmentId === environmentId) ?? null,
+    () => envs.find((env) => env.environmentId === environmentId) ?? envs[0] ?? null,
     [envs, environmentId]
   );
+  const effectiveEnvId = selectedEnv?.environmentId ?? "";
+  const effectiveMode: TargetMode = envs.length === 0 && !rebinding ? "none" : mode;
+  const targets = selectedEnv?.targets ?? [];
+  const targetValid = targets.some((option) => option.name === target);
 
-  const normalized = hostname.trim().toLowerCase().replace(/\.$/, "");
-  const duplicate = takenHostnames.includes(normalized);
+  const normalized = (fixedHostname ?? hostname).trim().toLowerCase().replace(/\.$/, "");
+  const duplicate = !rebinding && takenHostnames.includes(normalized);
   const malformed = normalized.length > 0 && !HOSTNAME_PATTERN.test(normalized);
-  const selfRedirect = mode === "redirect" && redirectTo.trim().toLowerCase() === normalized;
+  const selfRedirect =
+    effectiveMode === "redirect" && redirectTo.trim().toLowerCase() === normalized;
 
   const hostnameProblem = duplicate
     ? "Your organization already holds this domain."
     : malformed
-      ? "That does not look like a hostname. Use the name on its own, with no scheme or path — for example hounders.club."
+      ? "That does not look like a hostname. Use the name on its own, with no scheme or path — for example app.example.com."
       : selfRedirect
         ? "A domain cannot redirect to itself."
         : null;
 
   const bindReady =
-    mode === "none" ||
-    (mode === "workload" && !!environmentId && !!target) ||
-    (mode === "redirect" && !!environmentId && !!redirectTo.trim());
+    (effectiveMode === "none" && !rebinding) ||
+    (effectiveMode === "workload" && !!effectiveEnvId && targetValid) ||
+    (effectiveMode === "redirect" && !!effectiveEnvId && !!redirectTo.trim());
 
   const canSubmit = !!normalized && !hostnameProblem && bindReady && !isSubmitting;
 
@@ -137,9 +184,9 @@ export function AddDomainDialog({
     if (!canSubmit) return;
     void onSubmit({
       hostname: normalized,
-      environmentId: mode === "none" ? undefined : environmentId,
-      target: mode === "workload" ? target : undefined,
-      redirectTo: mode === "redirect" ? redirectTo.trim().toLowerCase() : undefined,
+      environmentId: effectiveMode === "none" ? undefined : effectiveEnvId,
+      target: effectiveMode === "workload" ? target : undefined,
+      redirectTo: effectiveMode === "redirect" ? redirectTo.trim().toLowerCase() : undefined,
     });
   };
 
@@ -150,8 +197,12 @@ export function AddDomainDialog({
     <Modal
       open={open}
       onClose={onClose}
-      title="Add a custom domain"
-      description="Claim a hostname for your organization and choose what it should serve. You will get the DNS records to publish next."
+      title={rebinding ? `Change what ${fixedHostname} serves` : "Add a custom domain"}
+      description={
+        rebinding
+          ? "Point the domain at another target or environment. Its verification and certificate carry over, so there is no DNS to redo."
+          : "Claim a hostname for your organization and choose what it should serve. You will get the DNS records to publish next."
+      }
       size="lg"
       footer={
         <div className="flex items-center justify-end gap-2">
@@ -168,7 +219,13 @@ export function AddDomainDialog({
             disabled={!canSubmit}
             className="rounded-lg bg-primary px-3 py-1.5 text-sm font-medium text-primary-foreground transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
-            {isSubmitting ? "Adding…" : "Add domain"}
+            {rebinding
+              ? isSubmitting
+                ? "Saving…"
+                : "Save target"
+              : isSubmitting
+                ? "Adding…"
+                : "Add domain"}
           </button>
         </div>
       }
@@ -180,60 +237,65 @@ export function AddDomainDialog({
           submit();
         }}
       >
-        <div className="flex flex-col gap-1.5">
-          <label htmlFor={hostnameId} className="text-sm font-medium text-foreground">
-            Hostname
-          </label>
-          <input
-            id={hostnameId}
-            value={hostname}
-            onChange={(event) => setHostname(event.target.value)}
-            onBlur={() => setTouched(true)}
-            placeholder="hounders.club"
-            autoComplete="off"
-            spellCheck={false}
-            className={cn(fieldClass, touched && hostnameProblem && "border-destructive")}
-          />
-          {touched && hostnameProblem ? (
-            <p className="text-xs text-destructive-ink">{hostnameProblem}</p>
-          ) : (
-            <p className="text-xs text-muted-foreground">
-              An apex (hounders.club) and its www are two separate domains. Add both, and bind the
-              www one as a redirect.
-            </p>
-          )}
-        </div>
+        {!rebinding && (
+          <div className="flex flex-col gap-1.5">
+            <label htmlFor={hostnameId} className="text-sm font-medium text-foreground">
+              Hostname
+            </label>
+            <input
+              id={hostnameId}
+              value={hostname}
+              onChange={(event) => setHostname(event.target.value)}
+              onBlur={() => setTouched(true)}
+              placeholder="app.example.com"
+              autoComplete="off"
+              spellCheck={false}
+              className={cn(fieldClass, touched && hostnameProblem && "border-destructive")}
+            />
+            {touched && hostnameProblem ? (
+              <p className="text-xs text-destructive-ink">{hostnameProblem}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                An apex (example.com) and its www are two separate domains. Add both, and bind the
+                www one as a redirect.
+              </p>
+            )}
+          </div>
+        )}
 
         <fieldset className="flex flex-col gap-3">
           <legend className="text-sm font-medium text-foreground">What should it serve?</legend>
           <div className="flex flex-wrap gap-4 text-sm">
             <ModeRadio
-              checked={mode === "workload"}
+              checked={effectiveMode === "workload"}
               onChange={() => setMode("workload")}
               disabled={envs.length === 0}
               label="A workload or site"
             />
             <ModeRadio
-              checked={mode === "redirect"}
+              checked={effectiveMode === "redirect"}
               onChange={() => setMode("redirect")}
               disabled={envs.length === 0}
               label="Redirect to another domain"
             />
-            <ModeRadio
-              checked={mode === "none"}
-              onChange={() => setMode("none")}
-              label="Nothing yet"
-            />
+            {!rebinding && (
+              <ModeRadio
+                checked={effectiveMode === "none"}
+                onChange={() => setMode("none")}
+                label="Nothing yet"
+              />
+            )}
           </div>
 
           {envs.length === 0 && (
             <p className="text-xs text-muted-foreground">
               None of this project&apos;s environments are run by Reliant cloud, so there is nothing
-              to bind to yet. You can still claim the domain and bind it after your first deploy.
+              to bind to yet.
+              {!rebinding && " You can still claim the domain and bind it after your first deploy."}
             </p>
           )}
 
-          {mode !== "none" && envs.length > 0 && (
+          {effectiveMode !== "none" && envs.length > 0 && (
             <div className="flex flex-col gap-3 rounded-lg border border-border/60 bg-background p-3">
               <div className="flex flex-col gap-1.5">
                 <label htmlFor={envId} className="text-xs font-medium text-foreground">
@@ -241,7 +303,7 @@ export function AddDomainDialog({
                 </label>
                 <select
                   id={envId}
-                  value={environmentId}
+                  value={effectiveEnvId}
                   onChange={(event) => {
                     setEnvironmentId(event.target.value);
                     setTarget("");
@@ -256,44 +318,15 @@ export function AddDomainDialog({
                 </select>
               </div>
 
-              {mode === "workload" ? (
-                <div className="flex flex-col gap-1.5">
-                  <label htmlFor={targetId} className="text-xs font-medium text-foreground">
-                    Target
-                  </label>
-                  {selectedEnv && selectedEnv.targets.length > 0 ? (
-                    <select
-                      id={targetId}
-                      value={target}
-                      onChange={(event) => setTarget(event.target.value)}
-                      className={fieldClass}
-                    >
-                      <option value="">Choose a workload or site…</option>
-                      {selectedEnv.targets.map((name) => (
-                        <option key={name} value={name}>
-                          {name}
-                        </option>
-                      ))}
-                    </select>
-                  ) : (
-                    /* A free-text fallback rather than a dead end: a binding
-                       names a target that need not exist yet, so an env with
-                       nothing deployed must still be bindable. */
-                    <input
-                      id={targetId}
-                      value={target}
-                      onChange={(event) => setTarget(event.target.value)}
-                      placeholder="web"
-                      autoComplete="off"
-                      spellCheck={false}
-                      className={fieldClass}
-                    />
-                  )}
-                  <p className="text-2xs text-muted-foreground">
-                    The workload or static site&apos;s name, as your project declares it. It does not
-                    have to be deployed yet — the domain waits for it.
-                  </p>
-                </div>
+              {effectiveMode === "workload" ? (
+                <TargetPicker
+                  id={targetId}
+                  env={selectedEnv}
+                  value={target}
+                  onChange={setTarget}
+                  canPark={!rebinding}
+                  className={fieldClass}
+                />
               ) : (
                 <div className="flex flex-col gap-1.5">
                   <label htmlFor={redirectId} className="text-xs font-medium text-foreground">
@@ -303,7 +336,7 @@ export function AddDomainDialog({
                     id={redirectId}
                     value={redirectTo}
                     onChange={(event) => setRedirectTo(event.target.value)}
-                    placeholder="hounders.club"
+                    placeholder="example.com"
                     autoComplete="off"
                     spellCheck={false}
                     className={fieldClass}
@@ -330,6 +363,82 @@ export function AddDomainDialog({
         )}
       </form>
     </Modal>
+  );
+}
+
+/**
+ * The target select, or — for an environment with nothing that serves HTTP —
+ * an empty state that says what would fix it. Never a text box: see the
+ * header comment.
+ */
+function TargetPicker({
+  id,
+  env,
+  value,
+  onChange,
+  canPark,
+  className,
+}: {
+  id: string;
+  env: DomainTargetEnv | null;
+  value: string;
+  onChange: (target: string) => void;
+  canPark: boolean;
+  className: string;
+}) {
+  const targets = env?.targets ?? [];
+
+  if (targets.length === 0) {
+    return (
+      <div className="flex flex-col gap-1.5">
+        <span className="text-xs font-medium text-foreground">Target</span>
+        {env?.targetsLoading ? (
+          <p className="text-xs text-muted-foreground" data-testid="domain-targets-loading">
+            Reading what {env.name} runs…
+          </p>
+        ) : (
+          <div
+            className="rounded-lg border border-dashed border-border px-3 py-2.5"
+            data-testid="domain-targets-empty"
+          >
+            <p className="text-xs text-foreground">
+              Nothing in {env?.name ?? "this environment"} serves HTTP yet.
+            </p>
+            <p className="mt-1 text-2xs text-muted-foreground">
+              Deploy a workload with an exposed port or a static site, and it will be listed here.
+              {canPark
+                ? " Until then you can redirect this domain, or choose “Nothing yet” and bind it later."
+                : " Until then you can redirect this domain instead."}
+            </p>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-xs font-medium text-foreground">
+        Target
+      </label>
+      <select
+        id={id}
+        value={targets.some((option) => option.name === value) ? value : ""}
+        onChange={(event) => onChange(event.target.value)}
+        className={className}
+      >
+        <option value="">Choose a service or static site…</option>
+        {targets.map((option) => (
+          <option key={option.name} value={option.name}>
+            {option.name} — {DOMAIN_TARGET_KIND_LABELS[option.kind]}
+          </option>
+        ))}
+      </select>
+      <p className="text-2xs text-muted-foreground">
+        Services with an exposed port and static sites deployed to {env?.name}. A domain cannot
+        point at a worker, a job or a database — none of them answer HTTP.
+      </p>
+    </div>
   );
 }
 

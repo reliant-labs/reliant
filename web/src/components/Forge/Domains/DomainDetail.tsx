@@ -14,7 +14,7 @@
  * ── WHY THE ERROR IS QUOTED VERBATIM ────────────────────────────────────────
  *
  * `last_error` is written by the control plane in terms a tenant can act on
- * ("no TXT record found at _reliant-challenge.hounders.club"). Rewriting it
+ * ("no TXT record found at _reliant-challenge.example.com"). Rewriting it
  * into our own vocabulary would be the second place that sentence is
  * authored, and the copy here would drift from what the checker actually
  * complained about. So the error is shown as-is, under a heading that frames
