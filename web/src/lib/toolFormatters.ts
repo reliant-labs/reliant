@@ -1021,6 +1021,15 @@ export function isGenerateVideoTool(toolName: string): boolean {
   return baseName === 'generate_video';
 }
 
+/**
+ * request_machine: a chat with no machine asking the user to connect one
+ * (research/NO_MACHINE_CHATS.md §3). Rendered as an inline card with the
+ * model's reason and a "Connect a machine" button, not as a tool row.
+ */
+export function isRequestMachineTool(toolName: string): boolean {
+  return toolName.toLowerCase() === 'request_machine';
+}
+
 export const SPAWN_TOOLS = ['spawn'] as const;
 
 /**

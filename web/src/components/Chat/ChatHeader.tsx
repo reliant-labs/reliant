@@ -23,6 +23,7 @@ import {
 } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { useChat, useDeleteChat, useRenameChat } from "../../hooks/chat-queries";
+import { NoMachinePill } from "./NoMachine";
 import { useMessages } from "../../hooks/message-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { Tooltip } from "../ui/Tooltip";
@@ -444,6 +445,10 @@ export function ChatHeader({
                 </div>
               )}
               
+              {/* A chat with no machine says so where the user looks first, and
+                  the pill is the way to connect one (NO_MACHINE_CHATS.md §2.4). */}
+              {!isNewChat && chatId && chat?.noMachine && <NoMachinePill chatId={chatId} />}
+
               {/* Spacer to push time to the right */}
               <div className="flex-1" />
 

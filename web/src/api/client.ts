@@ -254,6 +254,8 @@ export const api = {
         messages: request.messages,
         title: request.title,
         worktree_id: request.worktree_id,
+        daemon_id: request.daemon_id,
+        no_machine: request.no_machine,
         workflow: request.workflow,
         attachments: request.attachments,
         workflow_params: request.workflow_params,
@@ -344,16 +346,21 @@ export const api = {
 
     branch: async (
       id: string,
-      request: BranchChatRequest & { worktreeId?: string }
+      request: BranchChatRequest & { worktreeId?: string; noMachine?: boolean }
     ) => {
       const result = await chatGrpc.branch(id, {
         messageId: request.messageId,
         title: request.title,
         worktreeId: request.worktreeId,
+        noMachine: request.noMachine,
       });
       return {
         chat: result.chat,
       };
+    },
+
+    setDaemon: async (id: string, daemonId: string) => {
+      return chatGrpc.setDaemon(id, daemonId);
     },
 
     dismiss: async (id: string) => {

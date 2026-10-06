@@ -221,6 +221,9 @@ type ChatServiceClient interface {
 	// SetChatDaemon sets the active daemon for a chat session.
 	// The selected daemon is used as the default for tool execution in this chat.
 	// Set daemon_id to empty string to clear and revert to default resolution.
+	// Setting a daemon on a chat with no machine ("Connect a machine") clears
+	// no_machine in the same write; the next turn is offered the full tool set.
+	// The reverse never happens: clearing the daemon leaves no_machine false.
 	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
 }
 
@@ -710,6 +713,9 @@ type ChatServiceHandler interface {
 	// SetChatDaemon sets the active daemon for a chat session.
 	// The selected daemon is used as the default for tool execution in this chat.
 	// Set daemon_id to empty string to clear and revert to default resolution.
+	// Setting a daemon on a chat with no machine ("Connect a machine") clears
+	// no_machine in the same write; the next turn is offered the full tool set.
+	// The reverse never happens: clearing the daemon leaves no_machine false.
 	SetChatDaemon(context.Context, *connect.Request[v1.SetChatDaemonRequest]) (*connect.Response[v1.SetChatDaemonResponse], error)
 }
 

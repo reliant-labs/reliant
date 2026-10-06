@@ -521,6 +521,7 @@ func (q *Queries) UpdateChat(ctx context.Context, arg UpdateChatParams) error {
 const updateChatActiveDaemon = `-- name: UpdateChatActiveDaemon :exec
 UPDATE chats SET
     active_daemon_id = $1,
+    no_machine = no_machine AND $1::text IS NULL,
     updated_at = NOW()
 WHERE id = $2
 `
@@ -530,6 +531,9 @@ type UpdateChatActiveDaemonParams struct {
 	ID             string         `json:"id"`
 }
 
+// Pinning a daemon puts the chat on a machine, so it ends no-machine in the same
+// write (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
+// no_machine: a chat that has had a machine does not become one without.
 func (q *Queries) UpdateChatActiveDaemon(ctx context.Context, arg UpdateChatActiveDaemonParams) error {
 	_, err := q.db.ExecContext(ctx, updateChatActiveDaemon, arg.ActiveDaemonID, arg.ID)
 	return err

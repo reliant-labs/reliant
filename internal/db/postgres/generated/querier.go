@@ -1163,6 +1163,9 @@ type Querier interface {
 	// Update the status of an approval
 	UpdateApprovalStatus(ctx context.Context, arg UpdateApprovalStatusParams) error
 	UpdateChat(ctx context.Context, arg UpdateChatParams) error
+	// Pinning a daemon puts the chat on a machine, so it ends no-machine in the same
+	// write (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
+	// no_machine: a chat that has had a machine does not become one without.
 	UpdateChatActiveDaemon(ctx context.Context, arg UpdateChatActiveDaemonParams) error
 	UpdateChatSelectedPresets(ctx context.Context, arg UpdateChatSelectedPresetsParams) error
 	UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error

@@ -243,7 +243,8 @@ CREATE TABLE public.chats (
     active_daemon_id text,
     adopted_at timestamp with time zone,
     daemon_blocked_at timestamp with time zone,
-    no_machine boolean DEFAULT false NOT NULL
+    no_machine boolean DEFAULT false NOT NULL,
+    CONSTRAINT chats_no_machine_has_no_daemon_check CHECK (((NOT no_machine) OR (active_daemon_id IS NULL)))
 );
 
 --

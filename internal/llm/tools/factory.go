@@ -474,6 +474,12 @@ func (f *ToolsFactory) RunScenario() Tool {
 	return NewRunScenarioTool(f.opts.Repo, f.opts.ScenarioRunner)
 }
 
+// RequestMachine returns request_machine, the no-machine run's way to offer
+// the user a machine.
+func (f *ToolsFactory) RequestMachine() Tool {
+	return NewRequestMachineTool()
+}
+
 // GetToolByName returns a tool by name using the given execution-time MCP runtime.
 func (f *ToolsFactory) GetToolByName(name string, runtime MCPRuntime) Tool {
 	// SPECIAL CASE: agent tool is schema-only and workflow-native

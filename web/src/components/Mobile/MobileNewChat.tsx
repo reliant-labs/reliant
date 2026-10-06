@@ -2,9 +2,14 @@
  * `/m/new` — start a chat.
  *
  * Deliberately the narrow slice of `NewChatView`: a project header, a
- * workflow picker, one message box. Attachments, workflow params, daemon
- * selection, presets, branching and worktree selection are all `false` for
- * this surface, and the point of that list is that none of them appear here.
+ * workflow picker, where the chat runs, one message box. Attachments, workflow
+ * params, presets, branching and worktree selection are all `false` for this
+ * surface, and the point of that list is that none of them appear here.
+ *
+ * Where it runs (research/NO_MACHINE_CHATS.md §2.5): one of the user's
+ * machines, or No machine — preselected when none of their machines is awake,
+ * because waking one from a phone should be a choice. Picking an asleep
+ * machine wakes it.
  *
  * Creation itself goes through `chatStore.startChat` — the same call the
  * desktop composer makes. That is not laziness: `startChat` also seeds the
@@ -53,6 +58,17 @@ import { trackEvent } from "../../lib/analytics";
 import { cn } from "../../lib/utils";
 import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
 import { MobileSelectRow } from "./MobileSettingsRow";
+import { useDaemonList } from "@/hooks/useOnboardingQueries";
+import { useCapability } from "@/lib/surfaceContext";
+import {
+  DEFAULT_MACHINE,
+  NO_MACHINE,
+  NO_MACHINE_COMPOSER_HINT,
+  chatMachineOptions,
+  defaultChatMachine,
+  isAwakeMachine,
+  startOptionsForMachine,
+} from "@/lib/chatMachine";
 
 // Workflow refs arrive in two shapes — bare names from ListWorkflows ("agent")
 // and URIs from preferences ("builtin://agent"). Every comparison has to
@@ -126,6 +142,25 @@ export function MobileNewChat() {
   }, [workflows, userDefaultWorkflow, isWorkflowHidden]);
 
   const effectiveWorkflow = selectedWorkflow || userDefaultWorkflow;
+
+  const canPickMachine = useCapability("chatDaemonSelection");
+  const { data: daemons = [], isLoading: daemonsLoading } = useDaemonList();
+  const [selectedMachine, setSelectedMachine] = useState<string | null>(null);
+  const machine =
+    selectedMachine ?? defaultChatMachine({ daemons, loading: daemonsLoading, surface: "mobile" }) ?? DEFAULT_MACHINE;
+  const noMachine = machine === NO_MACHINE;
+  // DEFAULT_MACHINE sends no daemon (the server picks); show the awake
+  // machine it will land on.
+  const awake = daemons.find(isAwakeMachine);
+  const machineRowValue = machine === DEFAULT_MACHINE ? (awake?.daemonId ?? "") : machine;
+  const machineRowOptions = [
+    ...chatMachineOptions(daemons).map((option) => ({
+      value: option.value,
+      label: option.label,
+      description: option.statusLabel === "suspended" ? "suspended · wakes when you send" : option.statusLabel,
+    })),
+    { value: NO_MACHINE, label: "No machine", description: "Web & integrations · can't read or change files" },
+  ];
   const canSend = message.trim().length > 0 && !isCreating && !!currentProject;
 
   const handleSend = async () => {
@@ -135,14 +170,27 @@ export function MobileNewChat() {
     setIsCreating(true);
     setError("");
     try {
+      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(machine);
+      // A chat with no machine runs in the main checkout: a branch workspace
+      // is a checkout on one machine.
+      const worktreeId = noMachine ? mainWorktree?.id : targetWorktree?.id;
       const chat = await useChatStore
         .getState()
-        .startChat(targetWorktree?.id, content, undefined, undefined, effectiveWorkflow);
+        .startChat(
+          worktreeId,
+          content,
+          undefined,
+          undefined,
+          effectiveWorkflow,
+          undefined,
+          daemonId || startNoMachine ? { daemonId, noMachine: startNoMachine } : undefined,
+        );
 
       trackEvent("chat_created", {
         has_attachments: false,
         workflow: effectiveWorkflow,
         surface: "mobile",
+        no_machine: noMachine,
       });
 
       // Mirror the desktop path: the chat screen renders ChatContainer, which
@@ -197,7 +245,21 @@ export function MobileNewChat() {
               }))}
               onChange={setSelectedWorkflow}
             />
+            {canPickMachine && !daemonsLoading && (
+              <MobileSelectRow
+                label="Runs on"
+                value={machineRowValue}
+                sheetTitle="Where this chat runs"
+                options={machineRowOptions}
+                onChange={setSelectedMachine}
+              />
+            )}
           </MobileCardGroup>
+        )}
+        {noMachine && (
+          <p role="note" className="mt-3 px-1 text-xs text-muted-foreground">
+            {NO_MACHINE_COMPOSER_HINT}
+          </p>
         )}
       </div>
 

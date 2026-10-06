@@ -92,7 +92,9 @@ vi.mock("../../../store/chatParamsStore", () => ({
 
 vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({
-    activeDaemon: { id: "d1" },
+    activeDaemon: { daemonId: "d1", hostname: "laptop", status: 1 },
+    // One connected machine (DaemonStatus.ACTIVE = 1): the chat defaults to it.
+    daemons: [{ daemonId: "d1", hostname: "laptop", status: 1 }],
     loading: false,
     refresh: vi.fn(),
   }),

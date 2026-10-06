@@ -486,6 +486,14 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 	return nil
 }
 
+// ValidateNoMachine reports whether workflowName can run in a chat with no
+// machine, by the same rule a no-machine launch applies. It lets a caller that
+// creates a no-machine chat without launching it (a "Continue without machine"
+// branch) refuse up front rather than leave a chat whose first send must fail.
+func (l *Launcher) ValidateNoMachine(ctx context.Context, userID, workflowName, projectID string) error {
+	return l.validateNoMachine(ctx, userID, workflowName, projectID, "")
+}
+
 // validateNoMachine refuses a no-machine launch of a workflow with a node that
 // cannot run without one. Only HARD reasons refuse here: an attended chat
 // whose agent was given tag:coding:default still starts, and is simply offered

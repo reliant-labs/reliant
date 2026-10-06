@@ -99,6 +99,24 @@ var serverSafeTools = map[string]struct{}{
 	// reads and writes only.
 	ToolSearchIntegrations: {}, ToolGetIntegrationSchema: {},
 	ToolActivateTrigger: {}, ToolListTriggers: {},
+	// Returns a fixed text; the offer is the rendered call itself.
+	ToolRequestMachine: {},
+}
+
+// noMachineOnlyTools are tools that exist only for a run with no machine, and
+// are never offered to any other. A filter cannot grant one (ExpandToolFilter
+// drops it), load_tool will not load or advertise one, and the no-machine
+// narrowing in call_llm hands it over directly.
+var noMachineOnlyTools = map[string]struct{}{
+	// Asking for a machine is meaningless on one.
+	ToolRequestMachine: {},
+}
+
+// OnlyWithoutMachine reports whether a tool is offered only to a run with no
+// machine (see noMachineOnlyTools).
+func OnlyWithoutMachine(name string) bool {
+	_, ok := noMachineOnlyTools[strings.TrimSpace(name)]
+	return ok
 }
 
 func (d ToolDefinition) hasTag(tag ToolTag) bool {

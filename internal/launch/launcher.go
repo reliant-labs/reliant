@@ -244,6 +244,16 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	if err != nil {
 		return nil, err
 	}
+	// A branch worktree's checkout lives on one machine (worktree.DaemonID
+	// routes its tools there), so a chat with no machine cannot run in one,
+	// and connecting it to a different machine later would split the two.
+	// The main checkout carries no daemon and is where every no-machine chat
+	// binds (research/NO_MACHINE_CHATS.md).
+	if spec.NoMachine && spec.WorktreeID != nil && *spec.WorktreeID != "" {
+		if wt, wtErr := l.repo.GetWorktree(ctx, *worktreeID); wtErr == nil && wt != nil && !wt.IsMain && wt.DaemonID != nil && *wt.DaemonID != "" {
+			return nil, &ValidationError{Reason: "this worktree's checkout lives on a machine, so a chat with no machine cannot run in it: omit worktree_id"}
+		}
+	}
 	chat.WorktreeID = worktreeID
 	if spec.DaemonID != "" {
 		chat.ActiveDaemonID = &spec.DaemonID
@@ -517,11 +527,15 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	if !pending {
 		return nil, ErrNotPending
 	}
-	// A pending chat is a branch, and a branch's worktree is a checkout on
-	// one machine: it cannot start without that machine.
-	if spec.NoMachine {
+	// A pending chat is a branch. A machine branch's worktree is a checkout on
+	// one machine, so it cannot start without that machine. A branch made with
+	// no machine (BranchChatRequest.no_machine) recorded that on its row and
+	// starts like any no-machine chat; naming a daemon at its first send pins
+	// one below, which ends no-machine in the same write.
+	if spec.NoMachine && !chat.NoMachine {
 		return nil, &ValidationError{Reason: "a branched chat runs on its worktree's machine, so it cannot start with no machine"}
 	}
+	noMachine := chat.NoMachine && spec.DaemonID == ""
 
 	project, err := l.repo.GetProjectWithUserCheck(ctx, chat.ProjectID, userID)
 	if err != nil {
@@ -534,6 +548,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	workflowName, _, _ := effectiveStart(chat, spec)
 	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
 		return nil, err
+	}
+	if noMachine {
+		if err := l.validateNoMachine(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+			return nil, err
+		}
 	}
 	if err := ValidateWorkflowParamStructure(spec.Params); err != nil {
 		return nil, &ValidationError{Reason: err.Error()}

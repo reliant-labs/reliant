@@ -51,10 +51,14 @@ UPDATE chats SET
 WHERE id = $2;
 
 -- name: UpdateChatActiveDaemon :exec
+-- Pinning a daemon puts the chat on a machine, so it ends no-machine in the same
+-- write (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
+-- no_machine: a chat that has had a machine does not become one without.
 UPDATE chats SET
-    active_daemon_id = $1,
+    active_daemon_id = sqlc.narg('active_daemon_id'),
+    no_machine = no_machine AND sqlc.narg('active_daemon_id')::text IS NULL,
     updated_at = NOW()
-WHERE id = $2;
+WHERE id = sqlc.arg('id');
 
 -- name: DeleteChat :exec
 DELETE FROM chats WHERE id = $1;

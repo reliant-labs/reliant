@@ -15,6 +15,7 @@ import { GenericToolRenderer } from './GenericToolRenderer';
 import { SpawnToolRenderer } from './SpawnToolRenderer';
 import { RunToolRenderer } from './RunToolRenderer';
 import { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
+import { RequestMachineToolRenderer } from './RequestMachineToolRenderer';
 import {
   isShellTool,
   isFileTool,
@@ -26,6 +27,7 @@ import {
   isSpawnTool,
   isRunLinkTool,
   isGenerateVideoTool,
+  isRequestMachineTool,
 } from '../../../lib/toolFormatters';
 
 export type { ToolRenderContext, ToolResultData };
@@ -78,6 +80,10 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
     return <GenerateVideoToolRenderer ctx={ctx} />;
   }
 
+  if (isRequestMachineTool(toolName)) {
+    return <RequestMachineToolRenderer ctx={ctx} />;
+  }
+
   // Default to generic renderer
   return <GenericToolRenderer ctx={ctx} />;
 }
@@ -95,3 +101,4 @@ export { GenericToolRenderer } from './GenericToolRenderer';
 export { SpawnToolRenderer } from './SpawnToolRenderer';
 export { RunToolRenderer } from './RunToolRenderer';
 export { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
+export { RequestMachineToolRenderer, RequestMachineCard, requestMachineReason } from './RequestMachineToolRenderer';

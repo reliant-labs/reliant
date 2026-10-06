@@ -269,7 +269,8 @@ func DeferredToolNames(scopeKey string, permission string, initialToolNames []st
 
 	var deferred []string
 	for _, def := range registry {
-		if loaded[def.Name] {
+		// Never something to load: a run with no machine is handed it.
+		if loaded[def.Name] || OnlyWithoutMachine(def.Name) {
 			continue
 		}
 		// Only include tools the agent's permission level allows
@@ -308,6 +309,9 @@ func SearchTools(query string, permission string, mcpTools []MCPToolInfo) []Tool
 
 	var results []ToolSearchResult
 	for _, def := range registry {
+		if OnlyWithoutMachine(def.Name) {
+			continue // never loadable; see DeferredToolNames
+		}
 		name := strings.ToLower(def.Name)
 		matched := strings.Contains(name, q)
 		for _, tag := range def.Tags {

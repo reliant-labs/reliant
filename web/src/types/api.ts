@@ -10,6 +10,8 @@ export interface StartChatRequest {
   messages: InputMessage[];   // Required - at least one user message
   attachments?: string[];     // Optional - attachment IDs for first message
   worktree_id?: string;       // Optional - using snake_case
+  daemon_id?: string;         // Optional - the machine to run on; omit for default resolution
+  no_machine?: boolean;       // Optional - no machine by design (web & integrations only)
   workflow_params?: Record<string, unknown>;  // Workflow inputs: model, mode, etc.
   selectedPresets?: Record<string, string>;   // Preset selections per target ("" = workflow-level, "Agent A" = group)
 }
