@@ -218,6 +218,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InstallReliantKeyHealer(ctx, repo, tokenauthority.ControlPlaneURL(), strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")), time.Hour)
 
 	// Claim-check store for large Temporal payloads. The worker shares the
 	// same table; both processes must use it or neither can read the other's
