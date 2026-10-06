@@ -116,7 +116,10 @@ type OAuthFlow struct {
 	ConnectionName        string
 	// Params are the connection params the user supplied when starting a new
 	// connection; a reconnect keeps the connection's own.
-	Params    map[string]string
+	Params map[string]string
+	// ReturnTo is the absolute URL the provider's redirect is relayed to, so
+	// the client that started the flow can finish it.
+	ReturnTo  string
 	ExpiresAt time.Time
 }
 
@@ -162,6 +165,9 @@ type ConnectionStore interface {
 	WithSecretsLock(ctx context.Context, userID, id string, fn func(SecretsTx) error) error
 
 	CreateOAuthFlow(ctx context.Context, f *OAuthFlow) error
+	// PeekOAuthFlow returns an unexpired, unconsumed flow without consuming
+	// it; anything else is ErrOAuthFlowInvalid.
+	PeekOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*OAuthFlow, error)
 	// ConsumeOAuthFlow atomically marks an unexpired, unconsumed flow consumed
 	// and returns it; anything else is ErrOAuthFlowInvalid.
 	ConsumeOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*OAuthFlow, error)

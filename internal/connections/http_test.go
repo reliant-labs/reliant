@@ -4,165 +4,173 @@ package connections_test
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"strings"
 	"testing"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/stretchr/testify/require"
 )
 
-// asUser stands in for the auth middleware: it puts userID on the context the
-// way RequireAuth does for a verified token.
-func asUser(userID string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if userID == "" {
-				http.Error(w, "unauthorized", http.StatusUnauthorized)
-				return
-			}
-			next.ServeHTTP(w, r.WithContext(context.WithValue(r.Context(), auth.UserIDContextKey, userID)))
-		})
-	}
-}
-
-func newMux(e *env, userID string) *http.ServeMux {
+func newMux(e *env) *http.ServeMux {
 	mux := http.NewServeMux()
-	connections.NewOAuthHTTP(e.broker, asUser(userID), "https://reliant.example").Register(func(p string, h http.Handler) { mux.Handle(p, h) })
+	connections.NewOAuthHTTP(e.broker).Register(func(p string, h http.Handler) { mux.Handle(p, h) })
 	return mux
 }
 
-func do(mux http.Handler, method, target string, cookies ...*http.Cookie) *httptest.ResponseRecorder {
-	req := httptest.NewRequest(method, target, nil)
-	for _, c := range cookies {
-		req.AddCookie(c)
-	}
+// do sends a cookie-less request, which is what the callback receives in
+// production: the web app is a different site from the API, and on the
+// desktop the consent ran in the system browser, so no cookie of ours is ever
+// there.
+func do(mux http.Handler, method, target string) *httptest.ResponseRecorder {
 	rec := httptest.NewRecorder()
-	mux.ServeHTTP(rec, req)
+	mux.ServeHTTP(rec, httptest.NewRequest(method, target, nil))
 	return rec
 }
 
-func TestHTTP_StartRequiresAuth(t *testing.T) {
-	e := newEnv(t)
-	rec := do(newMux(e, ""), http.MethodGet, "/integrations/oauth/github/start")
-	require.Equal(t, http.StatusUnauthorized, rec.Code)
-	require.Zero(t, e.count(`SELECT count(*) FROM oauth_flows`))
-}
-
-func TestHTTP_FullFlowWithCookieBinding(t *testing.T) {
-	e := newEnv(t)
-	mux := newMux(e, "alice")
-
-	start := do(mux, http.MethodGet, "/integrations/oauth/github/start?name=work&redirect_after=/settings/connections")
-	require.Equal(t, http.StatusFound, start.Code)
-	loc, err := url.Parse(start.Header().Get("Location"))
+func startAlice(t *testing.T, e *env, p connections.StartParams) string {
+	t.Helper()
+	p.UserID, p.IntegrationID = "alice", "github"
+	if p.ClientOrigin == "" && p.LoopbackRedirect == "" {
+		p.ClientOrigin = testAppOrigin
+	}
+	authURL, err := e.svc.StartOAuth(context.Background(), p)
 	require.NoError(t, err)
-	require.Equal(t, "github.com", loc.Host)
-	state := loc.Query().Get("state")
+	return mustQuery(t, authURL, "state")
+}
 
-	var binder *http.Cookie
-	for _, c := range start.Result().Cookies() {
-		if c.Name == "__Host-reliant_oauth_github" {
-			binder = c
-		}
-	}
-	require.NotNil(t, binder, "https deployments bind with a __Host- cookie")
-	require.True(t, binder.HttpOnly)
-	require.True(t, binder.Secure)
-	require.Equal(t, http.SameSiteLaxMode, binder.SameSite)
-	require.Equal(t, "/", binder.Path)
-	require.Empty(t, binder.Domain, "__Host- cookies must not set Domain")
+// The whole browser flow, with no cookie anywhere: the callback relays the
+// code to the web app's callback route on the app's own origin (absolute, and
+// a different site from the API), and the signed-in app finishes it.
+func TestHTTP_CrossSiteFlowCompletesWithoutCookies(t *testing.T) {
+	e := newEnv(t)
+	mux := newMux(e)
+	state := startAlice(t, e, connections.StartParams{Name: "work", RedirectAfter: "/workflow/builder?x=1"})
 
-	cb := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+state, binder)
+	cb := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+url.QueryEscape(state))
 	require.Equal(t, http.StatusFound, cb.Code)
-	landing, _ := url.Parse(cb.Header().Get("Location"))
-	require.Equal(t, "/settings/connections", landing.Path)
-	require.NotEmpty(t, landing.Query().Get("connection"))
-	require.Empty(t, landing.Query().Get("connection_error"))
-	require.NotContains(t, cb.Header().Get("Location"), "abc")
-	require.NotContains(t, cb.Header().Get("Location"), state)
+	require.Empty(t, cb.Result().Cookies(), "the flow must not depend on a cookie")
+	require.Equal(t, "no-referrer", cb.Header().Get("Referrer-Policy"))
+	require.Equal(t, "no-store", cb.Header().Get("Cache-Control"))
+
+	landing, err := url.Parse(cb.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "https", landing.Scheme)
+	require.Equal(t, "app.reliant.example", landing.Host, "the browser lands on the app, not the API")
+	require.Equal(t, connections.AppCallbackPath, landing.Path)
+	require.Equal(t, "abc", landing.Query().Get("code"))
+	require.Equal(t, state, landing.Query().Get("state"))
+	require.Equal(t, "/workflow/builder?x=1", landing.Query().Get("redirect_after"))
+
+	require.Zero(t, e.gh.tokenCalls.Load(), "the callback relays; it exchanges nothing")
+	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
+
+	done, err := e.svc.CompleteOAuth(context.Background(), "alice", landing.Query().Get("state"), landing.Query().Get("code"))
+	require.NoError(t, err)
+	require.Equal(t, "work", done.Connection.Name)
+	require.Equal(t, "/workflow/builder?x=1", done.RedirectAfter)
 	require.Equal(t, 1, e.count(`SELECT count(*) FROM connections WHERE user_id='alice'`))
-
-	// The callback clears the binder.
-	var cleared bool
-	for _, c := range cb.Result().Cookies() {
-		if c.Name == binder.Name && c.MaxAge < 0 {
-			cleared = true
-		}
-	}
-	require.True(t, cleared)
 }
 
-func TestHTTP_CallbackWithoutCookieIsRejected(t *testing.T) {
+// The desktop app's consent runs in the system browser; the callback relays
+// to the app's loopback receiver, which only ever reaches the user's machine.
+func TestHTTP_CallbackRelaysToDesktopLoopback(t *testing.T) {
 	e := newEnv(t)
-	mux := newMux(e, "alice")
-	start := do(mux, http.MethodGet, "/integrations/oauth/github/start")
-	state := mustQuery(t, start.Header().Get("Location"), "state")
+	state := startAlice(t, e, connections.StartParams{LoopbackRedirect: "http://127.0.0.1:49152/callback"})
 
-	cb := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+state) // attacker's browser: no cookie
+	cb := do(newMux(e), http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+url.QueryEscape(state))
 	require.Equal(t, http.StatusFound, cb.Code)
-	require.Contains(t, cb.Header().Get("Location"), "connection_error=session")
-	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
-	require.Zero(t, e.gh.tokenCalls.Load())
+	landing, err := url.Parse(cb.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:49152/callback", landing.Scheme+"://"+landing.Host+landing.Path)
+	require.Equal(t, "abc", landing.Query().Get("code"))
+
+	_, err = e.svc.CompleteOAuth(context.Background(), "alice", state, "abc")
+	require.NoError(t, err)
 }
 
-func TestHTTP_CallbackWithAnotherBrowsersCookieIsRejected(t *testing.T) {
+// A relayed code is useless to anyone but the user who started the flow. This
+// is the attack the old cookie guarded against, now closed by the user binding:
+// the victim's code reaches the attacker (or the attacker's reaches the
+// victim's session), and finishing it as the wrong user fails and burns it.
+func TestHTTP_RelayedCodeCannotBeFinishedByAnotherUser(t *testing.T) {
 	e := newEnv(t)
-	mux := newMux(e, "alice")
-	start := do(mux, http.MethodGet, "/integrations/oauth/github/start")
-	state := mustQuery(t, start.Header().Get("Location"), "state")
-	other := do(mux, http.MethodGet, "/integrations/oauth/github/start") // attacker starts their own flow
-	var attackerCookie *http.Cookie
-	for _, c := range other.Result().Cookies() {
-		attackerCookie = c
-	}
-	cb := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+state, attackerCookie)
-	require.Contains(t, cb.Header().Get("Location"), "connection_error=")
-	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
+	state := startAlice(t, e, connections.StartParams{})
+	cb := do(newMux(e), http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+url.QueryEscape(state))
+	landing, _ := url.Parse(cb.Header().Get("Location"))
+
+	_, err := e.svc.CompleteOAuth(context.Background(), "mallory", landing.Query().Get("state"), landing.Query().Get("code"))
+	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 	require.Zero(t, e.gh.tokenCalls.Load())
+
+	_, err = e.svc.CompleteOAuth(context.Background(), "alice", state, "abc")
+	require.ErrorIs(t, err, connections.ErrFailedPrecondition, "the attempt burned the flow")
+	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
+}
+
+// With no flow there is nowhere safe to send the browser, so the callback
+// answers with a page and never redirects.
+func TestHTTP_CallbackForUnknownOrExpiredStateRendersAPage(t *testing.T) {
+	e := newEnv(t)
+	mux := newMux(e)
+	for _, target := range []string{
+		"/integrations/oauth/github/callback?code=abc&state=never-issued",
+		"/integrations/oauth/github/callback?code=abc",
+	} {
+		rec := do(mux, http.MethodGet, target)
+		require.Equal(t, http.StatusBadRequest, rec.Code, target)
+		require.Empty(t, rec.Header().Get("Location"), target)
+		require.Contains(t, rec.Header().Get("Content-Type"), "text/html")
+	}
+
+	state := startAlice(t, e, connections.StartParams{})
+	_, err := e.raw.Exec(`UPDATE oauth_flows SET expires_at = now() - interval '1 second'`)
+	require.NoError(t, err)
+	rec := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=<script>x</script>&state="+url.QueryEscape(state))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, rec.Header().Get("Location"))
+	body, _ := io.ReadAll(rec.Body)
+	require.Contains(t, string(body), "expired")
+	require.NotContains(t, string(body), "<script>", "nothing from the request is echoed")
+}
+
+func TestHTTP_CallbackForAnotherIntegrationIsRefused(t *testing.T) {
+	e := newEnv(t)
+	state := startAlice(t, e, connections.StartParams{})
+	rec := do(newMux(e), http.MethodGet, "/integrations/oauth/slack/callback?code=abc&state="+url.QueryEscape(state))
+	require.Equal(t, http.StatusBadRequest, rec.Code)
+	require.Empty(t, rec.Header().Get("Location"))
 }
 
 func TestHTTP_ProviderErrorBurnsStateAndNeverEchoes(t *testing.T) {
 	e := newEnv(t)
-	mux := newMux(e, "alice")
-	start := do(mux, http.MethodGet, "/integrations/oauth/github/start?redirect_after=/back")
-	state := mustQuery(t, start.Header().Get("Location"), "state")
-	cookie := start.Result().Cookies()[0]
+	mux := newMux(e)
+	state := startAlice(t, e, connections.StartParams{RedirectAfter: "/back"})
 
-	cb := do(mux, http.MethodGet, "/integrations/oauth/github/callback?error=access_denied&error_description=<script>&state="+state, cookie)
-	loc := cb.Header().Get("Location")
-	require.True(t, strings.HasPrefix(loc, "/back?"), loc)
-	require.Contains(t, loc, "connection_error=denied")
-	require.NotContains(t, loc, "script")
+	cb := do(mux, http.MethodGet, "/integrations/oauth/github/callback?error=access_denied&error_description=<script>&state="+url.QueryEscape(state))
+	require.Equal(t, http.StatusFound, cb.Code)
+	landing, err := url.Parse(cb.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, testAppOrigin+connections.AppCallbackPath, landing.Scheme+"://"+landing.Host+landing.Path)
+	require.Equal(t, "denied", landing.Query().Get("error"))
+	require.Equal(t, "/back", landing.Query().Get("redirect_after"))
+	require.Empty(t, landing.Query().Get("code"))
+	require.NotContains(t, cb.Header().Get("Location"), "script")
 
-	again := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+state, cookie)
-	require.Contains(t, again.Header().Get("Location"), "connection_error=")
+	again := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=abc&state="+url.QueryEscape(state))
+	require.Equal(t, http.StatusBadRequest, again.Code, "a refused flow cannot be replayed")
+	_, err = e.svc.CompleteOAuth(context.Background(), "alice", state, "abc")
+	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
 }
 
-func TestHTTP_StartRejectsExternalRedirectAfter(t *testing.T) {
+// A flow starts only through the authenticated StartOAuth RPC. There is no
+// browser start route to reach with a cross-site fetch or a forged link.
+func TestHTTP_ThereIsNoStartRoute(t *testing.T) {
 	e := newEnv(t)
-	rec := do(newMux(e, "alice"), http.MethodGet, "/integrations/oauth/github/start?redirect_after=https://evil.example/")
-	require.Equal(t, http.StatusBadRequest, rec.Code)
-	require.Zero(t, e.count(`SELECT count(*) FROM oauth_flows`))
-}
-
-func TestHTTP_UnknownProvider(t *testing.T) {
-	e := newEnv(t)
-	rec := do(newMux(e, "alice"), http.MethodGet, "/integrations/oauth/nope/start")
+	rec := do(newMux(e), http.MethodGet, "/integrations/oauth/github/start?mode=json&redirect_after=/")
 	require.Equal(t, http.StatusNotFound, rec.Code)
-}
-
-func TestHTTP_PlainHTTPDeploymentUsesPlainCookie(t *testing.T) {
-	e := newEnv(t)
-	mux := http.NewServeMux()
-	connections.NewOAuthHTTP(e.broker, asUser("alice"), "http://localhost:8080").Register(func(p string, h http.Handler) { mux.Handle(p, h) })
-	rec := do(mux, http.MethodGet, "/integrations/oauth/github/start")
-	require.Equal(t, http.StatusFound, rec.Code)
-	c := rec.Result().Cookies()[0]
-	require.Equal(t, "reliant_oauth_github", c.Name, "__Host- requires Secure, which a plain-http deployment cannot set")
-	require.False(t, c.Secure)
+	require.Zero(t, e.count(`SELECT count(*) FROM oauth_flows`))
 }

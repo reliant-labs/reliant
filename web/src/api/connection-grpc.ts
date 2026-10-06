@@ -5,25 +5,28 @@
  * to integrations (research/CONNECTIONS_VAULT.md). Metadata only — no RPC
  * here ever returns a secret.
  *
- * OAuth in a browser goes through `/integrations/oauth/{provider}/start`, not
- * the StartOAuth RPC: the HTTP route also sets the cookie that binds the
- * callback to this browser. A navigation cannot carry the Authorization
- * header, so the app fetches the route with `mode=json` (which sets the
- * cookie) and then navigates to the returned provider URL.
+ * OAuth is two authenticated RPCs with the provider in between. StartOAuth
+ * binds the flow to the signed-in user and returns the provider URL; the
+ * provider redirects to the API, which relays the code back to this client
+ * (the web app's `/connections/oauth/callback`, or the desktop app's loopback
+ * receiver); CompleteOAuth finishes it. Nothing depends on a cookie: the app
+ * and the API are different sites, so none would survive. The whole client
+ * flow is lib/connection-oauth.ts.
  */
 
 import { create } from "@bufbuild/protobuf";
 import { ConnectError } from "@connectrpc/connect";
 
-import { grpcClient, getGRPCBaseURLPublic } from "./grpc-client";
-import { getAuthTokenProvider } from "./authProvider";
+import { grpcClient } from "./grpc-client";
 import {
   ApiKeyConnectionKind,
+  CompleteOAuthRequestSchema,
   ConnectionAuthKind,
   ConnectionStatus,
   CreateApiKeyConnectionRequestSchema,
   ListConnectionsRequestSchema,
   ListIntegrationsRequestSchema,
+  StartOAuthRequestSchema,
   type Connection as ProtoConnection,
   type Integration as ProtoIntegration,
   type IntegrationAuthMethod as ProtoAuthMethod,
@@ -148,11 +151,6 @@ export function connectionErrorMessage(error: unknown): string {
   return String(error);
 }
 
-/** Where the browser OAuth routes live: the api-server origin the RPCs use. */
-function apiOrigin(): string {
-  return getGRPCBaseURLPublic() ?? window.location.origin;
-}
-
 export const connectionGrpc = {
   async list(integrationId?: string): Promise<Connection[]> {
     const response = await grpcClient
@@ -187,30 +185,36 @@ export const connectionGrpc = {
   },
 
   /**
-   * Begin a browser OAuth flow and return the provider URL to navigate to.
-   * `redirectAfter` is the relative path the callback lands on; it receives
-   * `?connection=<id>` or `?connection_error=<class>`.
+   * Begin an OAuth flow for the signed-in user and return the provider URL to
+   * send them to. Without `loopbackRedirect` the code is relayed back to this
+   * web app's origin (the browser's Origin header, which the server checks
+   * against the origins it serves); a desktop app passes its loopback
+   * receiver. `redirectAfter` is the relative path to land on afterwards.
    */
-  async startBrowserOAuth(input: {
+  async startOAuth(input: {
     integrationId: string;
     name?: string;
     redirectAfter: string;
+    params?: Record<string, string>;
+    loopbackRedirect?: string;
   }): Promise<string> {
-    const url = new URL(`/integrations/oauth/${encodeURIComponent(input.integrationId)}/start`, apiOrigin());
-    url.searchParams.set("mode", "json");
-    url.searchParams.set("redirect_after", input.redirectAfter);
-    if (input.name) url.searchParams.set("name", input.name);
-    const token = await getAuthTokenProvider().getToken();
-    const response = await fetch(url, {
-      credentials: "include",
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!response.ok) {
-      const text = (await response.text()).trim();
-      throw new Error(text || `Could not start the connection (${response.status})`);
-    }
-    const body = (await response.json()) as { authorize_url?: string };
-    if (!body.authorize_url) throw new Error("The server did not return an authorization URL");
-    return body.authorize_url;
+    const response = await grpcClient.connection().startOAuth(
+      create(StartOAuthRequestSchema, {
+        integrationId: input.integrationId,
+        name: input.name ?? "",
+        redirectAfter: input.redirectAfter,
+        params: input.params ?? {},
+        loopbackRedirect: input.loopbackRedirect ?? "",
+      }),
+    );
+    if (!response.authorizeUrl) throw new Error("The server did not return an authorization URL");
+    return response.authorizeUrl;
+  },
+
+  /** Finish a flow with the code and state the API relayed back. */
+  async completeOAuth(input: { state: string; code: string }): Promise<{ connection: Connection; redirectAfter: string }> {
+    const response = await grpcClient.connection().completeOAuth(create(CompleteOAuthRequestSchema, input));
+    if (!response.connection) throw new Error("No connection in response");
+    return { connection: connectionFromProto(response.connection), redirectAfter: response.redirectAfter };
   },
 };

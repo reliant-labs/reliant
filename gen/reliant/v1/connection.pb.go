@@ -976,9 +976,13 @@ type StartOAuthRequest struct {
 	RedirectAfter string `protobuf:"bytes,4,opt,name=redirect_after,json=redirectAfter,proto3" json:"redirect_after,omitempty"`
 	// Values for the integration's connection_params (a new connection only;
 	// a reconnect keeps the connection's own). Not secret.
-	Params        map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Params map[string]string `protobuf:"bytes,5,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// A desktop app's loopback receiver (http://127.0.0.1:<port>/<path>), where
+	// the callback relays the code because consent runs in the system browser.
+	// Empty for a web app, whose request Origin decides instead.
+	LoopbackRedirect string `protobuf:"bytes,6,opt,name=loopback_redirect,json=loopbackRedirect,proto3" json:"loopback_redirect,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *StartOAuthRequest) Reset() {
@@ -1044,6 +1048,13 @@ func (x *StartOAuthRequest) GetParams() map[string]string {
 		return x.Params
 	}
 	return nil
+}
+
+func (x *StartOAuthRequest) GetLoopbackRedirect() string {
+	if x != nil {
+		return x.LoopbackRedirect
+	}
+	return ""
 }
 
 type StartOAuthResponse struct {
@@ -1860,13 +1871,14 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x1eCreateApiKeyConnectionResponse\x126\n" +
 	"\n" +
 	"connection\x18\x01 \x01(\v2\x16.reliant.v1.ConnectionR\n" +
-	"connection\"\x96\x02\n" +
+	"connection\"\xc3\x02\n" +
 	"\x11StartOAuthRequest\x12%\n" +
 	"\x0eintegration_id\x18\x01 \x01(\tR\rintegrationId\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
 	"\freconnect_id\x18\x03 \x01(\tR\vreconnectId\x12%\n" +
 	"\x0eredirect_after\x18\x04 \x01(\tR\rredirectAfter\x12A\n" +
-	"\x06params\x18\x05 \x03(\v2).reliant.v1.StartOAuthRequest.ParamsEntryR\x06params\x1a9\n" +
+	"\x06params\x18\x05 \x03(\v2).reliant.v1.StartOAuthRequest.ParamsEntryR\x06params\x12+\n" +
+	"\x11loopback_redirect\x18\x06 \x01(\tR\x10loopbackRedirect\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"9\n" +

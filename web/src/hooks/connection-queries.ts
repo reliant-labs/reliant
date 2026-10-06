@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { useMemo } from "react";
-import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 
 import { connectionGrpc, type Connection } from "../api/connection-grpc";
 import { catalogSearchGrpc } from "../api/catalog-search-grpc";
@@ -33,15 +33,20 @@ export function useCatalogEntry(ref: string | undefined) {
   });
 }
 
+/** Refetch everything a new or changed connection shows up in. */
+export function invalidateConnectionQueries(queryClient: QueryClient) {
+  void queryClient.invalidateQueries({ queryKey: connectionKeys.all });
+  // A new connection changes `connected` on every search result for it.
+  void queryClient.invalidateQueries({ queryKey: ["catalogSearch"] });
+  void queryClient.invalidateQueries({ queryKey: ["catalogEntry"] });
+}
+
 export function useCreateApiKeyConnection() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: connectionGrpc.createApiKey,
     onSuccess: (connection: Connection) => {
-      void queryClient.invalidateQueries({ queryKey: connectionKeys.all });
-      // A new connection changes `connected` on every search result for it.
-      void queryClient.invalidateQueries({ queryKey: ["catalogSearch"] });
-      void queryClient.invalidateQueries({ queryKey: ["catalogEntry"] });
+      invalidateConnectionQueries(queryClient);
       return connection;
     },
   });

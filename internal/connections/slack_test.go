@@ -164,7 +164,7 @@ func slackEnv(t *testing.T) (*env, *fakeSlack) {
 	doer := hostRouter{"slack.com": f.srv, "": e.gh.srv}
 	e.providers = providers
 	e.tokens = connections.NewTokenSource(e.store, e.vault, providers, doer)
-	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example")
+	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	e.svc = connections.NewService(e.store, e.vault, providers, e.tokens, e.broker, doer)
 	e.resolver = connections.NewResolver(e.repo, e.store, e.tokens)
 	return e, f
@@ -173,7 +173,7 @@ func slackEnv(t *testing.T) (*env, *fakeSlack) {
 func (e *env) connectSlack(userID string) *connections.Completion {
 	e.t.Helper()
 	ctx := context.Background()
-	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "slack"})
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "slack", ClientOrigin: testAppOrigin})
 	require.NoError(e.t, err)
 	done, err := e.svc.CompleteOAuth(ctx, userID, mustQuery(e.t, authURL, "state"), "slack-code")
 	require.NoError(e.t, err)
@@ -182,7 +182,7 @@ func (e *env) connectSlack(userID string) *connections.Completion {
 
 func TestSlackOAuth_AuthorizeURLCarriesCommaJoinedBotScopes(t *testing.T) {
 	e, _ := slackEnv(t)
-	authURL, err := e.svc.StartOAuth(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "slack"})
+	authURL, err := e.svc.StartOAuth(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "slack", ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 	u, err := url.Parse(authURL)
 	require.NoError(t, err)
@@ -296,7 +296,7 @@ func TestSlackOAuth_RefusedExchangeStoresNothing(t *testing.T) {
 	e, f := slackEnv(t)
 	f.exchangeError = "invalid_code"
 	ctx := context.Background()
-	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "slack"})
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "slack", ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 	_, err = e.svc.CompleteOAuth(ctx, "alice", mustQuery(t, authURL, "state"), "stale-code")
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)

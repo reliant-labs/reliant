@@ -365,22 +365,14 @@ func onlyFields(fields map[string]string, allowed ...string) error {
 	return nil
 }
 
-// StartOAuth begins an RPC-bound flow.
+// StartOAuth begins a flow bound to p.UserID and returns the provider URL to
+// send the user to.
 func (s *Service) StartOAuth(ctx context.Context, p StartParams) (string, error) {
-	if p.Binder == "" {
-		p.Binder = RPCBinder(p.UserID)
-	}
 	return s.broker.Start(ctx, p)
 }
 
-// CompleteOAuth finishes an RPC-bound flow.
+// CompleteOAuth finishes a flow with the code the callback relayed. Only the
+// user who started it can.
 func (s *Service) CompleteOAuth(ctx context.Context, userID, state, code string) (*Completion, error) {
-	c, err := s.broker.Complete(ctx, CompleteParams{State: state, Code: code, Binder: RPCBinder(userID)})
-	if err != nil {
-		return nil, err
-	}
-	if c.Connection.UserID != userID {
-		return nil, newError(CodeFailedPrecondition, "this authorization was started by a different user")
-	}
-	return c, nil
+	return s.broker.Complete(ctx, CompleteParams{State: state, Code: code, UserID: userID})
 }

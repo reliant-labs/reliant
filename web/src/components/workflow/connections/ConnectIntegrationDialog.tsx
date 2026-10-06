@@ -4,8 +4,11 @@
  * "Connect GitHub…": make a connection to an integration without leaving the
  * builder. Offers the integration's methods most-preferred first:
  *
- *   - oauth2      start the browser flow; the provider redirects back to the
- *                 builder with `?connection=<id>`.
+ *   - oauth2      sign in at the provider (lib/connection-oauth.ts). On the
+ *                 web the page goes to the provider and comes back to the
+ *                 builder with `?connection=<id>`; on the desktop consent
+ *                 runs in the system browser while this dialog waits, then
+ *                 hands back the connection.
  *   - api_key /   paste the credential (write-only: it is sealed server-side
  *     basic       and never comes back).
  *   - delegated   nothing to connect: the deployment provides it.
@@ -14,15 +17,17 @@
  * operator can see what to configure.
  */
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useRef, useState, type FormEvent } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ExternalLink, KeyRound, Loader2 } from "lucide-react";
 
 import { Modal } from "../../ui/Modal";
 import { Button } from "../../ui/Button";
 import { CardInset } from "../../forge-ui/card";
-import { connectionErrorMessage, connectionGrpc, type AuthMethod } from "../../../api/connection-grpc";
-import { useCatalogEntry, useCreateApiKeyConnection } from "../../../hooks/connection-queries";
+import { connectionErrorMessage, type AuthMethod } from "../../../api/connection-grpc";
+import { invalidateConnectionQueries, useCatalogEntry, useCreateApiKeyConnection } from "../../../hooks/connection-queries";
 import type { Connection } from "../../../api/connection-grpc";
+import { ConnectionOAuthCancelled, connectWithOAuth, connectsThroughSystemBrowser } from "../../../lib/connection-oauth";
 import { IntegrationIcon } from "../palette/IntegrationIcon";
 
 export interface ConnectIntegrationTarget {
@@ -77,21 +82,45 @@ function ConnectBody({
   const [error, setError] = useState<string | null>(null);
   const [redirecting, setRedirecting] = useState(false);
   const createKey = useCreateApiKeyConnection();
+  const queryClient = useQueryClient();
+  const inSystemBrowser = connectsThroughSystemBrowser();
+  // A desktop flow waits on a loopback receiver; closing the dialog releases it.
+  const pendingOAuth = useRef<AbortController | null>(null);
+  useEffect(() => () => pendingOAuth.current?.abort(), []);
 
   const startOAuth = async () => {
     setError(null);
     setRedirecting(true);
+    const controller = new AbortController();
+    pendingOAuth.current = controller;
     try {
-      const url = await connectionGrpc.startBrowserOAuth({
-        integrationId: target.integrationId,
-        name: name.trim() || undefined,
-        redirectAfter: redirectAfter ?? currentPath(),
-      });
-      window.location.assign(url);
+      const outcome = await connectWithOAuth(
+        {
+          integrationId: target.integrationId,
+          name: name.trim() || undefined,
+          redirectAfter: redirectAfter ?? currentPath(),
+          params: paramValues,
+        },
+        controller.signal,
+      );
+      if (outcome.kind === "connected") {
+        invalidateConnectionQueries(queryClient);
+        onConnected?.(outcome.connection);
+        onClose();
+      }
     } catch (err) {
+      if (err instanceof ConnectionOAuthCancelled) return;
       setRedirecting(false);
       setError(connectionErrorMessage(err));
+    } finally {
+      if (pendingOAuth.current === controller) pendingOAuth.current = null;
     }
+  };
+
+  const cancelOAuth = () => {
+    pendingOAuth.current?.abort();
+    pendingOAuth.current = null;
+    setRedirecting(false);
   };
 
   const submitKey = async (event: FormEvent) => {
@@ -240,6 +269,13 @@ function ConnectBody({
                 </>
               )}
 
+              {active.kind === "oauth2" && redirecting && inSystemBrowser && (
+                <p role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+                  Finish signing in to {target.displayName} in your browser. This will update when you're done.
+                </p>
+              )}
+
               {error && (
                 <p role="alert" className="text-sm text-destructive-ink">
                   {error}
@@ -247,10 +283,16 @@ function ConnectBody({
               )}
 
               <div className="flex justify-end gap-2 border-t border-border pt-4">
-                <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={redirecting && inSystemBrowser ? cancelOAuth : onClose}
+                >
+                  Cancel
+                </Button>
                 {active.kind === "oauth2" ? (
                   <Button type="submit" variant="primary" disabled={redirecting}>
-                    {redirecting ? "Opening…" : `Continue to ${target.displayName}`}
+                    {redirecting ? (inSystemBrowser ? "Waiting for browser…" : "Opening…") : `Continue to ${target.displayName}`}
                     <ExternalLink className="ml-1.5 h-3.5 w-3.5" aria-hidden />
                   </Button>
                 ) : (

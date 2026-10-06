@@ -102,7 +102,7 @@ func TestCanaryNeverLeaksFromOAuthPaths(t *testing.T) {
 	require.NoError(t, err)
 
 	state := startFlow(t, e, connections.StartParams{})
-	_, err = e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "AUTHCODE-" + canary, Binder: "binder-1"})
+	_, err = e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "AUTHCODE-" + canary, UserID: "alice"})
 	require.NoError(t, err)
 
 	require.NotContains(t, logs.String(), canary)
@@ -141,7 +141,7 @@ func TestCanaryNeverLeaksFromFailedExchange(t *testing.T) {
 	e := newEnv(t)
 	e.gh.exchangeFail = true
 	state := startFlow(t, e, connections.StartParams{})
-	_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "AUTHCODE-" + canary, Binder: "binder-1"})
+	_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "AUTHCODE-" + canary, UserID: "alice"})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 	require.NotContains(t, err.Error(), canary)
 	require.NotContains(t, err.Error(), "incorrect", "the provider's error description is not surfaced")

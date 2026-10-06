@@ -127,7 +127,7 @@ func acmeEnv(t *testing.T, env map[string]string) (*env, *fakeAcme) {
 	doer := hostRouter{"acme.example.com": f.srv, "": e.gh.srv}
 	e.providers = providers
 	e.tokens = connections.NewTokenSource(e.store, e.vault, providers, doer)
-	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example")
+	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	e.svc = connections.NewService(e.store, e.vault, providers, e.tokens, e.broker, doer)
 	e.resolver = connections.NewResolver(e.repo, e.store, e.tokens)
 	return e, f
@@ -162,7 +162,7 @@ func TestManifestOAuth_FullFlowAtTheTenantHost(t *testing.T) {
 	ctx := context.Background()
 
 	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{
-		UserID: "alice", IntegrationID: "acme", Params: map[string]string{"tenant": "blue"},
+		UserID: "alice", IntegrationID: "acme", Params: map[string]string{"tenant": "blue"}, ClientOrigin: testAppOrigin,
 	})
 	require.NoError(t, err)
 	u, err := url.Parse(authURL)
@@ -242,14 +242,14 @@ func TestManifestOAuth_CommaScopesAreSentCommaJoined(t *testing.T) {
 	b := connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example")
 	ctx := context.Background()
 
-	authURL, err := b.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", Binder: "b", Params: map[string]string{"tenant": "blue"}})
+	authURL, err := b.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", ClientOrigin: "https://reliant.example", Params: map[string]string{"tenant": "blue"}})
 	require.NoError(t, err)
 	u, err := url.Parse(authURL)
 	require.NoError(t, err)
 	require.Equal(t, "records.read,records.write", u.Query().Get("scope"))
 	require.Contains(t, u.RawQuery, "scope=records.read%2Crecords.write", "one scope parameter, comma-joined")
 
-	done, err := b.Complete(ctx, connections.CompleteParams{State: u.Query().Get("state"), Code: "c", Binder: "b"})
+	done, err := b.Complete(ctx, connections.CompleteParams{State: u.Query().Get("state"), Code: "c", UserID: "alice"})
 	require.NoError(t, err)
 	e.expireAccessToken(done.Connection.ID)
 	_, err = tokens.Token(ctx, "alice", done.Connection.ID)
@@ -266,7 +266,7 @@ func TestManifestOAuth_CommaScopesAreSentCommaJoined(t *testing.T) {
 func TestManifestOAuth_SpaceScopedRefreshOmitsScope(t *testing.T) {
 	e, f := acmeEnv(t, acmeCreds)
 	ctx := context.Background()
-	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", Params: map[string]string{"tenant": "blue"}})
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", Params: map[string]string{"tenant": "blue"}, ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 	done, err := e.svc.CompleteOAuth(ctx, "alice", mustQuery(t, authURL, "state"), "c")
 	require.NoError(t, err)
@@ -292,7 +292,7 @@ func TestManifestOAuth_ParamsAreValidated(t *testing.T) {
 		"off pattern":     {"tenant": "UPPER_case"},
 		"undeclared":      {"tenant": "blue", "region": "eu"},
 	} {
-		_, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", Params: params})
+		_, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "acme", Params: params, ClientOrigin: testAppOrigin})
 		require.ErrorIs(t, err, connections.ErrInvalidArgument, name)
 	}
 	require.Zero(t, e.count(`SELECT count(*) FROM oauth_flows`))
@@ -320,7 +320,7 @@ func TestManifestOAuth_UnconfiguredIsListedUnavailable(t *testing.T) {
 	require.Equal(t, map[string]string{"password": "Secret"}, acme.Methods[2].FieldLabels, "the username comes from the tenant param")
 	require.Len(t, acme.Params, 1)
 
-	_, err := e.svc.StartOAuth(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "acme", Params: map[string]string{"tenant": "blue"}})
+	_, err := e.svc.StartOAuth(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "acme", Params: map[string]string{"tenant": "blue"}, ClientOrigin: testAppOrigin})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 	require.Contains(t, err.Error(), "RELIANT_OAUTH_ACME_CLIENT_ID")
 }

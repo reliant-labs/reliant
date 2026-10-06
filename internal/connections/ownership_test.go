@@ -76,6 +76,6 @@ func TestOwnership_NameUniquePerUserNotGlobal(t *testing.T) {
 	e.connect("bob", "work") // same name, different user: fine
 
 	e.gh.accountID, e.gh.login = 8, "alice2"
-	_, err := e.svc.StartOAuth(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", Name: "work"})
+	_, err := e.svc.StartOAuth(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", Name: "work", ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 }

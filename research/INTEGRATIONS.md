@@ -297,9 +297,14 @@ acting into our workspace", which is the reverse direction.
 
 ### 4.2 OAuth broker and storage
 
-- **Broker** in the api-server: `/integrations/oauth/{provider}/start` and
-  `/callback`.
-  - PKCE plus a state nonce bound to the user session.
+- **Broker** in the api-server: the `StartOAuth` / `CompleteOAuth` RPCs and
+  the provider-facing `/integrations/oauth/{provider}/callback`.
+  - PKCE plus a single-use state bound to the user who started the flow.
+  - The callback only relays the code back to the client that started the
+    flow (the web app's `/connections/oauth/callback` on an origin the
+    deployment serves, or the desktop app's loopback receiver), which finishes
+    it with `CompleteOAuth` as that user. No cookie is involved: the app and
+    the API are different sites.
   - The token exchange happens server-side.
   - Refresh is done by a worker-side `TokenSource` with single-flight per
     connection, which sets `needs_reauth` on `invalid_grant`.

@@ -82,13 +82,15 @@ type ConnectionServiceClient interface {
 	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error)
 	// CreateApiKeyConnection saves a pasted API key or basic credential.
 	CreateApiKeyConnection(context.Context, *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error)
-	// StartOAuth begins an authorization-code flow and returns the provider URL
-	// to send the user to. For a browser, prefer navigating to
-	// /integrations/oauth/{provider}/start, which also binds the flow to the
-	// browser with a cookie; this RPC binds it to the authenticated caller.
+	// StartOAuth begins an authorization-code flow bound to the caller and
+	// returns the provider URL to send the user to. The provider redirects to
+	// this server's /integrations/oauth/{provider}/callback, which relays the
+	// code back to the client: a web app's /connections/oauth/callback route on
+	// the request's Origin (which must be one this deployment serves), or a
+	// desktop app's loopback_redirect.
 	StartOAuth(context.Context, *connect.Request[v1.StartOAuthRequest]) (*connect.Response[v1.StartOAuthResponse], error)
-	// CompleteOAuth finishes a flow begun with StartOAuth, for clients that
-	// receive the provider redirect themselves (Electron, deep links).
+	// CompleteOAuth finishes a flow with the code and state the callback
+	// relayed. Only the user who started the flow can finish it.
 	CompleteOAuth(context.Context, *connect.Request[v1.CompleteOAuthRequest]) (*connect.Response[v1.CompleteOAuthResponse], error)
 	// TestConnection runs the integration's probe against the live credential
 	// and records the account label it identifies.
@@ -266,13 +268,15 @@ type ConnectionServiceHandler interface {
 	GetConnection(context.Context, *connect.Request[v1.GetConnectionRequest]) (*connect.Response[v1.GetConnectionResponse], error)
 	// CreateApiKeyConnection saves a pasted API key or basic credential.
 	CreateApiKeyConnection(context.Context, *connect.Request[v1.CreateApiKeyConnectionRequest]) (*connect.Response[v1.CreateApiKeyConnectionResponse], error)
-	// StartOAuth begins an authorization-code flow and returns the provider URL
-	// to send the user to. For a browser, prefer navigating to
-	// /integrations/oauth/{provider}/start, which also binds the flow to the
-	// browser with a cookie; this RPC binds it to the authenticated caller.
+	// StartOAuth begins an authorization-code flow bound to the caller and
+	// returns the provider URL to send the user to. The provider redirects to
+	// this server's /integrations/oauth/{provider}/callback, which relays the
+	// code back to the client: a web app's /connections/oauth/callback route on
+	// the request's Origin (which must be one this deployment serves), or a
+	// desktop app's loopback_redirect.
 	StartOAuth(context.Context, *connect.Request[v1.StartOAuthRequest]) (*connect.Response[v1.StartOAuthResponse], error)
-	// CompleteOAuth finishes a flow begun with StartOAuth, for clients that
-	// receive the provider redirect themselves (Electron, deep links).
+	// CompleteOAuth finishes a flow with the code and state the callback
+	// relayed. Only the user who started the flow can finish it.
 	CompleteOAuth(context.Context, *connect.Request[v1.CompleteOAuthRequest]) (*connect.Response[v1.CompleteOAuthResponse], error)
 	// TestConnection runs the integration's probe against the live credential
 	// and records the account label it identifies.

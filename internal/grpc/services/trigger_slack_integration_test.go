@@ -90,7 +90,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
 	connectSlack := func(userID, team string) *core.Connection {
 		slack.team = team
-		authURL, err := conns.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "slack"})
+		authURL, err := conns.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "slack", ClientOrigin: "https://reliant.example"})
 		require.NoError(t, err)
 		u, _ := url.Parse(authURL)
 		require.Contains(t, u.Query().Get("scope"), "chat:write,", "comma-joined bot scopes")

@@ -2491,13 +2491,43 @@ ipcMain.handle("oauth:provider-login-start", async (_event, authorizeUrlTemplate
   }
 });
 
+// Integration connection (Slack, Gmail, …) loopback receiver.
+//
+// The API owns the provider's redirect URI and client secret, so the provider
+// redirects THERE; the API then relays the code to this receiver, because the
+// consent ran in the system browser and only this app holds the signed-in
+// session that may finish the flow (CompleteOAuth). Nothing is opened here:
+// the renderer needs the receiver's address to start the flow, and only then
+// has the authorize URL to open.
+const connectionReceiverFlows = new Set();
+
+ipcMain.handle("oauth:connection-receiver-start", async () => {
+  try {
+    const { flowId, redirectUri } = await oauthProviderLogin.startRedirectReceiver();
+    connectionReceiverFlows.add(flowId);
+    return { success: true, flowId, redirectUri };
+  } catch (error) {
+    log.error("[IPC] Failed to start the connection OAuth receiver:", error);
+    return { success: false, error: error.message };
+  }
+});
+
 ipcMain.handle("oauth:provider-login-wait", async (_event, flowId) => {
   try {
     const result = await oauthProviderLogin.waitForProviderLogin(flowId);
+    // The user is in the browser; bring them back to where the connection
+    // finishes.
+    if (connectionReceiverFlows.has(flowId) && mainWindow && !mainWindow.isDestroyed()) {
+      if (mainWindow.isMinimized()) mainWindow.restore();
+      mainWindow.show();
+      mainWindow.focus();
+    }
     return { success: true, ...result };
   } catch (error) {
     log.warn("[IPC] Provider OAuth login did not complete:", error.message);
     return { success: false, error: error.message };
+  } finally {
+    connectionReceiverFlows.delete(flowId);
   }
 });
 

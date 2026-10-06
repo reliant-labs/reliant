@@ -62,6 +62,7 @@ describe('shouldRedirectToMobile', () => {
       '/auth/callback',
       '/auth/github/callback',
       '/oauth/consent',
+      '/connections/oauth/callback',
       '/onboarding',
       '/reset-password',
       '/verify-email',

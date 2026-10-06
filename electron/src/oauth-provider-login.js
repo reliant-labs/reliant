@@ -1,6 +1,7 @@
 /**
  * Loopback receiver for PROVIDER sign-in (Claude Code, Codex) in the desktop
- * app.
+ * app, and for integration connections (Slack, Gmail, …), whose code Reliant's
+ * API relays here — see startRedirectReceiver.
  *
  * ── The bug this replaces ─────────────────────────────────────────────
  *
@@ -117,6 +118,16 @@ function settle(flow, error, result) {
   flow.reaper = reaper;
 }
 
+/** What the browser tab shows once the redirect has landed. */
+const PROVIDER_LOGIN_PAGES = {
+  success: ['Signed in', 'You can close this tab and return to Reliant.'],
+  failure: 'Sign-in failed',
+};
+const CONNECT_PAGES = {
+  success: ['Almost done', 'Return to Reliant to finish connecting. You can close this tab.'],
+  failure: 'Connection not completed',
+};
+
 /**
  * Start a loopback listener for a provider sign-in and return immediately.
  *
@@ -128,9 +139,41 @@ function settle(flow, error, result) {
  *   `{redirect_uri}` placeholder.
  * @returns {Promise<{flowId: string, redirectUri: string, authorizeUrl: string}>}
  */
-function startProviderLogin(authorizeUrlTemplate) {
-  const contract = inferCallbackContract(authorizeUrlTemplate);
+async function startProviderLogin(authorizeUrlTemplate) {
+  const { flowId, redirectUri } = await listen(
+    inferCallbackContract(authorizeUrlTemplate),
+    PROVIDER_LOGIN_PAGES,
+  );
+  const authorizeUrl = authorizeUrlTemplate.replace(
+    '{redirect_uri}',
+    encodeURIComponent(redirectUri),
+  );
+  return { flowId, redirectUri, authorizeUrl };
+}
 
+/**
+ * Start a loopback receiver for an integration connection (Slack, Gmail, …)
+ * and return immediately, WITHOUT opening anything.
+ *
+ * Unlike a provider sign-in, the provider never sees this address: it
+ * redirects to Reliant's API, which owns the registered redirect URI and the
+ * client secret, and the API relays the code here. That is why the receiver
+ * comes first — the API must be told where to relay before it can build the
+ * authorize URL — and why the renderer, not this module, opens the browser.
+ *
+ * The advertised host is the literal loopback address it binds: no provider
+ * allow-lists this URI, so nothing requires the `localhost` spelling.
+ *
+ * @returns {Promise<{flowId: string, redirectUri: string}>}
+ */
+function startRedirectReceiver() {
+  return listen(
+    { redirectHost: LISTEN_HOST, callbackPath: '/callback', fixedPort: 0 },
+    CONNECT_PAGES,
+  );
+}
+
+function listen(contract, pages) {
   return new Promise((resolve, reject) => {
     const server = http.createServer((req, res) => {
       let url;
@@ -151,8 +194,8 @@ function startProviderLogin(authorizeUrlTemplate) {
       const description = (url.searchParams.get('error_description') || '').trim();
 
       res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8' });
-      res.end(page(code ? 'Signed in' : 'Sign-in failed', code
-        ? 'You can close this tab and return to Reliant.'
+      res.end(page(code ? pages.success[0] : pages.failure, code
+        ? pages.success[1]
         : [oauthError, description].filter(Boolean).join(': ') ||
             'No authorization code was returned. You can close this tab and try again.'));
 
@@ -199,10 +242,6 @@ function startProviderLogin(authorizeUrlTemplate) {
       // Bind 127.0.0.1, ADVERTISE localhost: providers allow-list the latter
       // spelling, and a listener on the former is what actually receives it.
       const redirectUri = `http://${contract.redirectHost}:${port}${contract.callbackPath}`;
-      const authorizeUrl = authorizeUrlTemplate.replace(
-        '{redirect_uri}',
-        encodeURIComponent(redirectUri),
-      );
 
       const flowId = String(nextFlowId++);
       server.__flowId = flowId;
@@ -233,7 +272,7 @@ function startProviderLogin(authorizeUrlTemplate) {
       flows.set(flowId, flow);
       log.info('[OAuthProviderLogin] Listening for the OAuth redirect on', redirectUri);
 
-      resolve({ flowId, redirectUri, authorizeUrl });
+      resolve({ flowId, redirectUri });
     });
   });
 }
@@ -297,6 +336,7 @@ function page(title, body) {
 module.exports = {
   FLOW_TIMEOUT_MS,
   startProviderLogin,
+  startRedirectReceiver,
   waitForProviderLogin,
   cancelProviderLogin,
   // Flows still holding a bound port. Settled flows are excluded: they have

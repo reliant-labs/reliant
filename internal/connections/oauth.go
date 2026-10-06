@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -27,6 +28,10 @@ func CallbackPath(providerID string) string {
 	return "/integrations/oauth/" + providerID + "/callback"
 }
 
+// AppCallbackPath is the web app route a browser flow is relayed to. The app
+// finishes the flow there, signed in, with CompleteOAuth.
+const AppCallbackPath = "/connections/oauth/callback"
+
 // brokerStore is what the broker needs from persistence.
 type brokerStore interface {
 	CreateConnection(ctx context.Context, c *core.Connection, secrets []core.ConnectionSecret, ev core.ConnectionEvent) error
@@ -34,19 +39,37 @@ type brokerStore interface {
 	GetConnection(ctx context.Context, userID, id string) (*core.Connection, error)
 	FindByExternalAccount(ctx context.Context, userID, integrationID, externalAccountID string) (*core.Connection, error)
 	CreateOAuthFlow(ctx context.Context, f *core.OAuthFlow) error
+	PeekOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error)
 	ConsumeOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error)
 }
 
 // Broker runs the server side of the authorization-code + PKCE flow. State is
 // a row, not a signed token: a signed state cannot be made single-use.
+//
+// A flow is bound to the user who started it, and only that user, signed in,
+// can finish it. The provider redirects to this server (the redirect URI the
+// provider has registered), but the browser that arrives there carries no
+// credential for it: the web app is a different site, so no cookie of ours
+// survives the round trip, and on the desktop the consent ran in the system
+// browser, not the app. So the callback finishes nothing. It relays the code
+// to the client that started the flow — the web app's AppCallbackPath on an
+// origin this deployment serves, or a desktop app's loopback receiver — and
+// that client calls CompleteOAuth with the user's session.
+//
+// That is also the login-CSRF defence. A code delivered to someone else's
+// session fails the user check, and the relay only ever lands somewhere the
+// flow's own user is signed in or on that user's own machine, so a flow
+// started by one account cannot be finished, by consent in another person's
+// browser, into it.
 type Broker struct {
-	store     brokerStore
-	vault     Sealer
-	providers *Registry
-	doer      HTTPDoer
-	publicURL string
-	now       func() time.Time
-	exchanger *oauth2.Exchanger
+	store      brokerStore
+	vault      Sealer
+	providers  *Registry
+	doer       HTTPDoer
+	publicURL  string
+	appOrigins map[string]bool
+	now        func() time.Time
+	exchanger  *oauth2.Exchanger
 }
 
 // NewBroker builds the broker. publicURL is this server's externally reachable
@@ -55,30 +78,52 @@ func NewBroker(store brokerStore, v Sealer, providers *Registry, doer HTTPDoer, 
 	if doer == nil {
 		doer = NewHTTPClient()
 	}
-	return &Broker{
+	b := &Broker{
 		store: store, vault: v, providers: providers, doer: doer,
-		publicURL: strings.TrimRight(publicURL, "/"), now: time.Now,
+		publicURL: strings.TrimRight(publicURL, "/"), appOrigins: map[string]bool{}, now: time.Now,
 		exchanger: &oauth2.Exchanger{Client: doer, UserAgent: "reliant-connections"},
 	}
+	if origin, ok := canonicalOrigin(b.publicURL); ok {
+		b.appOrigins[origin] = true
+	}
+	return b
+}
+
+// WithAppOrigins adds the origins the web app is served from (the
+// deployment's CORS allow-list), which a browser flow may be relayed back to.
+// Anything that is not an http(s) origin — "*", app://bundle — is ignored: a
+// wildcard is not an allow-list, and a desktop flow relays to its loopback
+// receiver instead.
+func (b *Broker) WithAppOrigins(origins []string) *Broker {
+	for _, o := range origins {
+		if origin, ok := canonicalOrigin(o); ok {
+			b.appOrigins[origin] = true
+		}
+	}
+	return b
 }
 
 // StartParams describes one authorization.
 type StartParams struct {
 	UserID        string
 	IntegrationID string
-	// Binder ties the flow to the party that started it: a random value held
-	// in a __Host- cookie for the browser path, or the caller's identity for
-	// the authenticated-RPC path. Only its hash is stored.
-	Binder        string
 	Name          string
 	ReconnectID   string
 	RedirectAfter string
 	Params        map[string]string
+	// ClientOrigin is the Origin of the web app that started the flow (the
+	// request's Origin header, which page script cannot set). The provider's
+	// redirect is relayed to its AppCallbackPath, so it must be an origin
+	// this deployment serves.
+	ClientOrigin string
+	// LoopbackRedirect is a desktop app's loopback receiver
+	// (http://127.0.0.1:<port>/...). When set, the redirect is relayed there
+	// instead of to ClientOrigin.
+	LoopbackRedirect string
 }
 
-// RPCBinder is the binder for flows started and completed over authenticated
-// RPC. Cookie-bound and RPC-bound flows cannot be completed through each other.
-func RPCBinder(userID string) string { return "rpc:" + userID }
+// userBinder is what a flow is bound to: the user who started it.
+func userBinder(userID string) string { return "user:" + userID }
 
 func binderHash(binder string) []byte {
 	sum := sha256.Sum256([]byte("oauth-session\x00" + binder))
@@ -111,6 +156,64 @@ func SafeRedirectAfter(raw string) (string, bool) {
 		return "", false
 	}
 	return raw, true
+}
+
+// canonicalOrigin reduces an http(s) origin (or a URL, of which only the
+// origin is kept) to scheme://host[:port], lower-cased and without a default
+// port, so an allow-list match is an exact string compare.
+func canonicalOrigin(raw string) (string, bool) {
+	u, err := url.Parse(strings.TrimSpace(raw))
+	if err != nil || u.User != nil || u.Hostname() == "" {
+		return "", false
+	}
+	scheme := strings.ToLower(u.Scheme)
+	if scheme != "http" && scheme != "https" {
+		return "", false
+	}
+	host, port := strings.ToLower(u.Hostname()), u.Port()
+	if (scheme == "http" && port == "80") || (scheme == "https" && port == "443") {
+		port = ""
+	}
+	if strings.Contains(host, ":") {
+		host = "[" + host + "]"
+	}
+	if port != "" {
+		host += ":" + port
+	}
+	return scheme + "://" + host, true
+}
+
+// isLoopbackHost reports whether host names this machine. A relay to it can
+// only reach the user's own machine, never a third party.
+func isLoopbackHost(host string) bool {
+	if strings.EqualFold(host, "localhost") {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
+}
+
+// returnTo resolves where a flow's provider redirect is relayed. It is never
+// an arbitrary client-supplied URL: either a loopback receiver, which can only
+// reach the user's own machine, or the app's callback route on an origin this
+// deployment serves (or a loopback origin, which is a local web app).
+func (b *Broker) returnTo(p StartParams) (string, error) {
+	if p.LoopbackRedirect != "" {
+		u, err := url.Parse(p.LoopbackRedirect)
+		if err != nil || u.Scheme != "http" || !isLoopbackHost(u.Hostname()) || u.Port() == "" ||
+			u.User != nil || u.RawQuery != "" || u.Fragment != "" {
+			return "", newError(CodeInvalidArgument, "loopback_redirect must be an http URL on a loopback address with a port")
+		}
+		return u.String(), nil
+	}
+	origin, ok := canonicalOrigin(p.ClientOrigin)
+	if !ok {
+		return "", newError(CodeInvalidArgument, "a browser sign-in must be started from the web app: the request carried no usable Origin")
+	}
+	if u, _ := url.Parse(origin); !b.appOrigins[origin] && !isLoopbackHost(u.Hostname()) {
+		return "", newError(CodeFailedPrecondition, "%s is not an origin this deployment serves the app from (CORS_ALLOWED_ORIGINS)", origin)
+	}
+	return origin + AppCallbackPath, nil
 }
 
 func (b *Broker) redirectURI(providerID string) (string, error) {
@@ -158,12 +261,16 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	if p.UserID == "" || p.Binder == "" {
-		return "", newError(CodeInvalidArgument, "an authenticated user and session binder are required")
+	if p.UserID == "" {
+		return "", newError(CodeInvalidArgument, "an authenticated user is required")
 	}
 	redirectAfter, ok := SafeRedirectAfter(p.RedirectAfter)
 	if !ok {
 		return "", newError(CodeInvalidArgument, "redirect_after must be a relative path")
+	}
+	returnTo, err := b.returnTo(p)
+	if err != nil {
+		return "", err
 	}
 	redirectURI, err := b.redirectURI(prov.ID)
 	if err != nil {
@@ -209,9 +316,9 @@ func (b *Broker) Start(ctx context.Context, p StartParams) (string, error) {
 		return "", &Error{Code: CodeInternal, Message: "sealing pkce verifier", Err: err}
 	}
 	if err := b.store.CreateOAuthFlow(ctx, &core.OAuthFlow{
-		StateHash: hash, UserID: p.UserID, SessionIDHash: binderHash(p.Binder), IntegrationID: prov.ID,
+		StateHash: hash, UserID: p.UserID, SessionIDHash: binderHash(userBinder(p.UserID)), IntegrationID: prov.ID,
 		PKCEVerifierSealed: sealed, RedirectAfter: redirectAfter, ReconnectConnectionID: p.ReconnectID,
-		ConnectionName: strings.TrimSpace(p.Name), Params: params, ExpiresAt: b.now().Add(FlowTTL),
+		ConnectionName: strings.TrimSpace(p.Name), Params: params, ReturnTo: returnTo, ExpiresAt: b.now().Add(FlowTTL),
 	}); err != nil {
 		return "", mapStoreErr(err)
 	}
@@ -243,12 +350,14 @@ func scopeSeparator(o *reliantv1.OAuth2Auth) string {
 	return ""
 }
 
-// CompleteParams is one callback.
+// CompleteParams is one relayed callback, finished by the signed-in client.
 type CompleteParams struct {
+	// ProviderID, when set, must be the flow's integration.
 	ProviderID string
 	State      string
 	Code       string
-	Binder     string
+	// UserID is the authenticated caller finishing the flow.
+	UserID string
 }
 
 // Completion is what a finished flow produced.
@@ -266,18 +375,18 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 	if p.State == "" || p.Code == "" {
 		return nil, newError(CodeInvalidArgument, "state and code are required")
 	}
+	if p.UserID == "" {
+		return nil, newError(CodeInvalidArgument, "an authenticated user is required")
+	}
 	hash := stateHash(p.State)
 	flow, err := b.store.ConsumeOAuthFlow(ctx, hash, b.now())
 	if err != nil {
-		if errors.Is(err, core.ErrOAuthFlowInvalid) {
-			return nil, newError(CodeFailedPrecondition, "this authorization link is invalid, expired or was already used")
-		}
-		return nil, mapStoreErr(err)
+		return nil, flowErr(err)
 	}
-	// Login-CSRF defence: the callback must come from the party that started
-	// the flow, not merely from someone holding a valid state.
-	if !constantTimeEqual(flow.SessionIDHash, binderHash(p.Binder)) {
-		return nil, newError(CodeFailedPrecondition, "this authorization was started in a different session")
+	// Login-CSRF defence: the flow must be finished by the user who started
+	// it, not merely by someone holding a valid state and code.
+	if !constantTimeEqual(flow.SessionIDHash, binderHash(userBinder(p.UserID))) {
+		return nil, newError(CodeFailedPrecondition, "this authorization was started by a different account")
 	}
 	if p.ProviderID != "" && p.ProviderID != flow.IntegrationID {
 		return nil, newError(CodeFailedPrecondition, "this authorization was started for a different integration")
@@ -449,15 +558,73 @@ func constantTimeEqual(a, b []byte) bool {
 	return v == 0
 }
 
-// Abandon burns a flow the provider reported as refused (access_denied), so
-// its state cannot be replayed afterwards. It returns the flow's landing path.
-func (b *Broker) Abandon(ctx context.Context, state, binder string) string {
-	if state == "" {
-		return ""
+func flowErr(err error) error {
+	if errors.Is(err, core.ErrOAuthFlowInvalid) {
+		return newError(CodeFailedPrecondition, "this authorization link is invalid, expired or was already used")
 	}
-	flow, err := b.store.ConsumeOAuthFlow(ctx, stateHash(state), b.now())
-	if err != nil || !constantTimeEqual(flow.SessionIDHash, binderHash(binder)) {
-		return ""
+	return mapStoreErr(err)
+}
+
+// RelayParams is the provider's redirect to the callback, as received.
+type RelayParams struct {
+	ProviderID string
+	State      string
+	Code       string
+	// Error is the provider's error parameter (access_denied, ...). Only
+	// whether it is set is used; its text is never passed on.
+	Error string
+}
+
+// Relay answers the provider's redirect with the absolute URL to send the
+// browser on to: the flow's return target, carrying either the code and
+// state for the client to finish with CompleteOAuth, or an error class. The
+// flow's relative redirect_after rides along so the client knows where to
+// land afterwards.
+//
+// A successful redirect leaves the flow for CompleteOAuth to consume. A
+// refusal, or a redirect without a code, burns it here: nothing will finish
+// it, and its state must not stay usable.
+func (b *Broker) Relay(ctx context.Context, p RelayParams) (string, error) {
+	if p.State == "" {
+		return "", newError(CodeInvalidArgument, "the provider sent no state")
 	}
-	return flow.RedirectAfter
+	failed := p.Error != "" || p.Code == ""
+	hash := stateHash(p.State)
+	var (
+		flow *core.OAuthFlow
+		err  error
+	)
+	if failed {
+		flow, err = b.store.ConsumeOAuthFlow(ctx, hash, b.now())
+	} else {
+		flow, err = b.store.PeekOAuthFlow(ctx, hash, b.now())
+	}
+	if err != nil {
+		return "", flowErr(err)
+	}
+	if p.ProviderID != flow.IntegrationID {
+		return "", newError(CodeFailedPrecondition, "this authorization was started for a different integration")
+	}
+	if flow.ReturnTo == "" {
+		return "", newError(CodeFailedPrecondition, "this authorization has nowhere to return to; start it again")
+	}
+	u, err := url.Parse(flow.ReturnTo)
+	if err != nil {
+		return "", &Error{Code: CodeInternal, Message: "stored return target is invalid", Err: err}
+	}
+	q := u.Query()
+	switch {
+	case p.Error != "":
+		q.Set("error", "denied")
+	case p.Code == "":
+		q.Set("error", "invalid")
+	default:
+		q.Set("code", p.Code)
+		q.Set("state", p.State)
+	}
+	if flow.RedirectAfter != "" {
+		q.Set("redirect_after", flow.RedirectAfter)
+	}
+	u.RawQuery = q.Encode()
+	return u.String(), nil
 }

@@ -104,7 +104,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 
 	connectGmail := func(userID, email string) *core.Connection {
 		google.nextEmail = email
-		authURL, err := conns.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "gmail"})
+		authURL, err := conns.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "gmail", ClientOrigin: "https://reliant.example"})
 		require.NoError(t, err)
 		u, err := url.Parse(authURL)
 		require.NoError(t, err)

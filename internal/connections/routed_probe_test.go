@@ -87,7 +87,7 @@ func texterEnv(t *testing.T) (*env, *fakeTexter) {
 	doer := hostRouter{"texter.example.com": f.srv, "": e.gh.srv}
 	e.providers = providers
 	e.tokens = connections.NewTokenSource(e.store, e.vault, providers, doer)
-	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example")
+	e.broker = connections.NewBroker(e.store, e.vault, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	e.svc = connections.NewService(e.store, e.vault, providers, e.tokens, e.broker, doer)
 	e.resolver = connections.NewResolver(e.repo, e.store, e.tokens)
 	return e, f

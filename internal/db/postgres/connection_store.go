@@ -493,39 +493,51 @@ func (s *connectionStore) CreateOAuthFlow(ctx context.Context, f *core.OAuthFlow
 	}
 	_, err = s.db.ExecContext(ctx, `
 		INSERT INTO oauth_flows (state_hash, user_id, session_id_hash, integration_id, pkce_verifier_sealed,
-			redirect_after, reconnect_connection_id, connection_name, expires_at, params)
-		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+			redirect_after, reconnect_connection_id, connection_name, expires_at, params, return_to)
+		VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
 		f.StateHash, f.UserID, f.SessionIDHash, f.IntegrationID, f.PKCEVerifierSealed,
-		emptyToNil(f.RedirectAfter), emptyToNil(f.ReconnectConnectionID), emptyToNil(f.ConnectionName), f.ExpiresAt, params)
+		emptyToNil(f.RedirectAfter), emptyToNil(f.ReconnectConnectionID), emptyToNil(f.ConnectionName), f.ExpiresAt, params,
+		emptyToNil(f.ReturnTo))
 	return err
 }
 
-func (s *connectionStore) ConsumeOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error) {
+const oauthFlowColumns = `state_hash, user_id, session_id_hash, integration_id, pkce_verifier_sealed,
+	redirect_after, reconnect_connection_id, connection_name, expires_at, params, return_to`
+
+func scanOAuthFlow(row *sql.Row) (*core.OAuthFlow, error) {
 	var (
-		f                          core.OAuthFlow
-		redirect, reconnect, cname sql.NullString
-		params                     []byte
+		f                                    core.OAuthFlow
+		redirect, reconnect, cname, returnTo sql.NullString
+		params                               []byte
 	)
-	// One statement: the compare-and-swap on consumed_at is what makes the
-	// state single-use even under concurrent replays.
-	err := s.db.QueryRowContext(ctx, `
-		UPDATE oauth_flows SET consumed_at = $2
-		 WHERE state_hash = $1 AND consumed_at IS NULL AND expires_at > $2
-		RETURNING state_hash, user_id, session_id_hash, integration_id, pkce_verifier_sealed,
-		          redirect_after, reconnect_connection_id, connection_name, expires_at, params`,
-		stateHash, now).Scan(&f.StateHash, &f.UserID, &f.SessionIDHash, &f.IntegrationID, &f.PKCEVerifierSealed,
-		&redirect, &reconnect, &cname, &f.ExpiresAt, &params)
+	err := row.Scan(&f.StateHash, &f.UserID, &f.SessionIDHash, &f.IntegrationID, &f.PKCEVerifierSealed,
+		&redirect, &reconnect, &cname, &f.ExpiresAt, &params, &returnTo)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, core.ErrOAuthFlowInvalid
 		}
 		return nil, err
 	}
-	f.RedirectAfter, f.ReconnectConnectionID, f.ConnectionName = redirect.String, reconnect.String, cname.String
+	f.RedirectAfter, f.ReconnectConnectionID, f.ConnectionName, f.ReturnTo = redirect.String, reconnect.String, cname.String, returnTo.String
 	if f.Params, err = decodeParams(params); err != nil {
 		return nil, fmt.Errorf("oauth flow params: %w", err)
 	}
 	return &f, nil
+}
+
+func (s *connectionStore) PeekOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error) {
+	return scanOAuthFlow(s.db.QueryRowContext(ctx, `
+		SELECT `+oauthFlowColumns+` FROM oauth_flows
+		 WHERE state_hash = $1 AND consumed_at IS NULL AND expires_at > $2`, stateHash, now))
+}
+
+func (s *connectionStore) ConsumeOAuthFlow(ctx context.Context, stateHash []byte, now time.Time) (*core.OAuthFlow, error) {
+	// One statement: the compare-and-swap on consumed_at is what makes the
+	// state single-use even under concurrent replays.
+	return scanOAuthFlow(s.db.QueryRowContext(ctx, `
+		UPDATE oauth_flows SET consumed_at = $2
+		 WHERE state_hash = $1 AND consumed_at IS NULL AND expires_at > $2
+		RETURNING `+oauthFlowColumns, stateHash, now))
 }
 
 func (s *connectionStore) AppendConnectionEvent(ctx context.Context, ev core.ConnectionEvent) error {
