@@ -473,7 +473,7 @@ describe("ComputeStep — every size says what it gives you", () => {
    * The cloud CTA must be GONE while the user's own computer is selected.
    *
    * This is what buys back the distance the bottom-anchored panel costs, and
-   * on its own it fixes a worse problem: "Use a Reliant machine" was a primary
+   * on its own it fixes a worse problem: the hosted-machine CTA was a primary
    * button sitting under a visibly selected free row, offering to undo the
    * selection the user had just made. It was also the only primary button on
    * the step, so it read as the way forward — and clicking it discarded the
@@ -483,7 +483,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     renderStep();
 
     expect(
-      screen.getByRole("button", { name: /use a reliant machine/i }),
+      screen.getByRole("button", { name: /^continue with /i }),
     ).toBeInTheDocument();
 
     fireEvent.click(
@@ -491,7 +491,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     );
 
     expect(
-      screen.queryByRole("button", { name: /use a reliant machine/i }),
+      screen.queryByRole("button", { name: /^continue with /i }),
     ).toBeNull();
   });
 
@@ -513,7 +513,7 @@ describe("ComputeStep — every size says what it gives you", () => {
     fireEvent.click(screen.getByRole("button", { name: /^Medium / }));
 
     expect(
-      screen.getByRole("button", { name: /use a reliant machine/i }),
+      screen.getByRole("button", { name: /^continue with /i }),
     ).toBeInTheDocument();
     expect(screen.queryByTestId("self-hosted-connect")).toBeNull();
   });

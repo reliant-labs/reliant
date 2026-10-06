@@ -155,6 +155,7 @@ export function PlanTileRow({
   selected,
   covered,
   current,
+  showFacts = "always",
   onSelect,
 }: {
   plan: ComputePlanOption;
@@ -162,8 +163,18 @@ export function PlanTileRow({
   covered?: boolean;
   /** The user already subscribes to this plan — see PlanTiles' currentPlanId. */
   current?: boolean;
+  /**
+   * When to print the cost breakdown line (burn rate, overage, disk,
+   * suspended fee). "always" suits a page about plans. "selected" suits a
+   * picker: the breakdown wraps to two lines and doubles every row's height,
+   * and every figure in it scales with the size the row already names, so a
+   * user comparing machines reads the spec and the price, then sees the full
+   * breakdown for the one they pick.
+   */
+  showFacts?: "always" | "selected";
   onSelect: () => void;
 }) {
+  const factsVisible = showFacts === "always" || selected || current;
   return (
     <button
       type="button"
@@ -224,7 +235,7 @@ export function PlanTileRow({
             disk, and the fee while suspended — so keeping a machine's cost is
             visible before it is created. All from the server's price list;
             absent when the server sent none. */}
-        {plan.facts && (
+        {plan.facts && factsVisible && (
           <span className="block text-xs text-muted-foreground" data-testid="plan-row-size-facts">
             {plan.facts.burnRateLabel} · {plan.facts.hourlyPriceLabel} · {plan.facts.diskLabel}
             {plan.facts.suspendedFeeLabel && <> · {plan.facts.suspendedFeeLabel} while suspended</>}
