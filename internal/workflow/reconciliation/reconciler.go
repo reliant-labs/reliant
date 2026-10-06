@@ -22,6 +22,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
@@ -2209,19 +2210,28 @@ func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead
 // A message is delivered only by CallLLM, which drains the thread's mailbox
 // before it reads history. A human (SendAgentMessage) or peer agent
 // (spawn_send) can queue into a thread that is genuinely running and whose
-// loop then exits before another CallLLM — an inherent race that no enqueue-time
-// liveness check can close, because the thread really was live at enqueue
-// time. The live path now resolves the mailbox as the thread goes terminal
-// (ThreadStatusActivity.resolveMailbox); this is the backstop for the rows
-// that predate it and for the case where the process dies between writing the
-// thread's terminal status and resolving its mailbox.
-//
-// Nothing else revisits these rows. The drain only runs for a thread taking a
-// step, and a terminal thread takes none — so a stranded row is not merely
-// late, it is permanently unreachable. Observed on real data: two human
+// loop then exits before another CallLLM. Observed on real data: two human
 // messages queued at 00:06:31 and 00:06:51 into a thread that completed at
 // 00:06:56, still queued with delivered_at NULL, with the user told both
 // would be read at the agent's next turn.
+//
+// For the chat's ROOT thread that race is now closed where it happens, not
+// here. Every enqueue rings the thread-wake doorbell; the run gives a wake
+// that landed after its last turn a turn of its own (the loop-exit gate) or
+// continues as a fresh run for it (late_wake.go); and a doorbell that reaches
+// no run makes the sender re-send the text as a message, which starts one.
+// Those runs do the delivering. What is left for this sweep is the
+// genuinely unreachable: a sub-agent that finished with mail in its box (the
+// live path, ThreadStatusActivity.resolveMailbox, resolves those as the
+// thread goes terminal; this catches what it missed), rows older than that
+// path, and runs that died without their bookkeeping.
+//
+// Which is why it must not touch a thread whose run is still open. A root
+// run that delivers a late row has stamped the thread terminal ("completed")
+// first, and keeps it so until its successor starts and revives it; the row
+// is in flight across exactly that gap, under the same workflow ID. So a
+// thread whose owning workflow Temporal reports RUNNING is skipped, and so is
+// one Temporal cannot answer for — see mailboxMayStillBeDelivered.
 //
 // Deliberately mirrors repairStrandedSpawnToolCalls and
 // repairStrandedBackgroundSpawns: same backstop role, same durable evidence,
@@ -2247,6 +2257,9 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 
 	resolved := 0
 	for _, threadID := range threadIDs {
+		if r.mailboxMayStillBeDelivered(ctx, threadID) {
+			continue
+		}
 		rows, err := r.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
 		if err != nil {
 			logging.Error("[Reconciler] Failed to resolve orphaned agent messages",
@@ -2271,6 +2284,38 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 		)
 	}
 	return resolved, nil
+}
+
+// mailboxMayStillBeDelivered reports whether a terminal thread's queued rows
+// could yet be drained, because the workflow that owns the thread is still
+// open in Temporal: finishing, or continued as a fresh run that has not yet
+// revived the thread. Fails closed — a workflow Temporal cannot answer for is
+// treated as open, and the thread is revisited next pass. Only a workflow
+// Temporal does not have, or reports closed, is final.
+func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID string) bool {
+	if r.tempClient == nil {
+		return false
+	}
+	ownerID := threadID
+	if thread, err := r.repo.GetThread(ctx, threadID); err == nil && thread != nil && thread.WorkflowID != nil && *thread.WorkflowID != "" {
+		ownerID = *thread.WorkflowID
+	}
+	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, ownerID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) || strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+			return false
+		}
+		logging.Warn("[Reconciler] Could not ask Temporal whether a thread's run is still open; leaving its mailbox for the next pass",
+			"threadID", threadID, "workflowID", ownerID, "error", err)
+		return true
+	}
+	if desc.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		logging.Info("[Reconciler] Leaving a terminal thread's queued mail: its run is still open and may deliver it",
+			"threadID", threadID, "workflowID", ownerID)
+		return true
+	}
+	return false
 }
 
 // ReconcileRunningWorkflows reconciles all workflows with status running OR
