@@ -142,8 +142,17 @@ var AllToolNames = []string{
 	ToolListWorkflows, ToolGetWorkflow, ToolGetWorkflowSuggestions, ToolListPresets, ToolGetPreset, ToolGetSchema, ToolGetCELRef,
 	// Integration discovery
 	ToolSearchIntegrations, ToolGetIntegrationSchema,
-	// Integration manifests (generated from internal/integrations/catalog)
+	// Integration manifests: every exposed action in internal/integrations/catalog.
+	// TestIntegrationToolNamesAreKnownToTheValidator fails on one missing here.
 	"http__request",
+	"github__user_get", "github__issue_create", "github__issue_get", "github__issue_comment",
+	"github__issue_update", "github__pr_get", "github__pr_list_files", "github__pr_review_create",
+	"github__repo_list_for_user", "github__repo_get", "github__repo_get_content", "github__repo_get_tree",
+	"github__code_search", "github__workflow_dispatch",
+	"gmail__message_send", "gmail__message_list", "gmail__message_get", "gmail__label_list",
+	"slack__message_post", "slack__message_reply", "slack__message_update", "slack__reaction_add",
+	"slack__user_lookup_by_email", "slack__conversations_list", "slack__conversations_history",
+	"twilio__message_send", "twilio__message_get", "twilio__message_list", "twilio__phone_number_list",
 	// Scenarios
 	ToolListScenarios, ToolViewScenario, ToolEditScenario, ToolWriteScenario, ToolDeleteScenario, ToolRunScenario,
 }

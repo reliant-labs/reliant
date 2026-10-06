@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"sync"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
@@ -32,6 +33,7 @@ type forCaller interface {
 	ForCall(ctx context.Context, call connections.CallSite, ref connections.Ref) (*connections.Resolved, error)
 	ForTrigger(ctx context.Context, site connections.TriggerSite) (*connections.Resolved, error)
 	OwnerOf(ctx context.Context, runID string) (string, error)
+	Usable(ctx context.Context, call connections.CallSite, refs []connections.Ref) (map[connections.Ref]error, error)
 }
 
 // DelegatedBroker turns a run owner into a credential obtained from an
@@ -151,11 +153,75 @@ func (s *Source) Credential(ctx context.Context, req httpaction.CredentialReques
 	// An explicit connection id that did not resolve is NOT redirected to the
 	// broker: the caller named a connection, and it does not exist for them.
 	if req.ConnectionID == "" && isNoConnection(err) {
-		if broker, ok := s.delegatedBroker(req); ok {
+		if broker, ok := s.delegatedBroker(req.Connection); ok {
 			return s.delegated(ctx, req, broker)
 		}
 	}
 	return nil, mapError(err)
+}
+
+// UsableIntegrations reports which of the integrations a call from this run
+// could find a credential for now, walking Credential's order for a call that
+// names no connection: the owner's default saved connection, else — only when
+// there is none at all — the integration's delegated authority. integrations
+// maps each id to its connection spec, which says whether a delegated broker
+// backs it.
+//
+// It is what decides whether an integration's tools are offered to the run,
+// so it must agree with what a call will meet:
+//
+//   - A saved connection is checked without reading its secret or recording a
+//     use (connections.Resolver.Usable). One that needs re-auth is not usable,
+//     and does NOT fall back to the broker, as Credential does not.
+//   - A delegated authority is asked for the owner's credential, which is then
+//     dropped: "has one" and "would hand one out" are the same question there
+//     (for GitHub, control-plane says not connected, or answers). A failure to
+//     ask is not usable: an absent tool is better than one that fails.
+//
+// The owner is read from the run record, never supplied. An owner that cannot
+// be read (an unknown run, a run with none) makes nothing usable, and is
+// returned as the error for the caller to log.
+func (s *Source) UsableIntegrations(ctx context.Context, runID string, integrations map[string]*reliantv1.ConnectionSpec) (map[string]bool, error) {
+	usable := map[string]bool{}
+	if s == nil || s.resolver == nil || len(integrations) == 0 {
+		return usable, nil
+	}
+	refs := make([]connections.Ref, 0, len(integrations))
+	for id := range integrations {
+		refs = append(refs, connections.Ref{IntegrationID: id})
+	}
+	results, err := s.resolver.Usable(ctx, connections.CallSite{RunID: runID, Placement: connections.PlacementServer}, refs)
+	if err != nil {
+		return usable, mapError(err)
+	}
+	var (
+		owner    string
+		ownerErr error
+	)
+	for _, ref := range refs {
+		err := results[ref]
+		if err == nil {
+			usable[ref.IntegrationID] = true
+			continue
+		}
+		if !isNoConnection(err) {
+			continue
+		}
+		broker, ok := s.delegatedBroker(integrations[ref.IntegrationID])
+		if !ok {
+			continue
+		}
+		if owner == "" && ownerErr == nil {
+			owner, ownerErr = s.resolver.OwnerOf(ctx, runID)
+		}
+		if ownerErr != nil {
+			continue
+		}
+		if cred, err := broker.Credential(ctx, owner); err == nil && cred != nil {
+			usable[ref.IntegrationID] = true
+		}
+	}
+	return usable, nil
 }
 
 // ForTrigger resolves the credential a polled trigger authenticates with. It
@@ -177,10 +243,10 @@ func (s *Source) ForTrigger(ctx context.Context, triggerID string) (httpaction.C
 	return credential{r: resolved}, nil
 }
 
-// delegatedBroker returns the registered broker the integration's manifest
-// names, if any.
-func (s *Source) delegatedBroker(req httpaction.CredentialRequest) (DelegatedBroker, bool) {
-	m, ok := manifest.Method(req.Connection, manifest.AuthDelegated)
+// delegatedBroker returns the registered broker the integration's connection
+// spec names, if any.
+func (s *Source) delegatedBroker(conn *reliantv1.ConnectionSpec) (DelegatedBroker, bool) {
+	m, ok := manifest.Method(conn, manifest.AuthDelegated)
 	if !ok {
 		return nil, false
 	}

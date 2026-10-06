@@ -335,9 +335,10 @@ message ErrorRule {
 // OutputSpec selects what part of the response becomes the node's data.
 message OutputSpec {
   // Select is "$" (whole parsed body; the default), "$raw" (raw body text as
-  // {"body": "..."}) or CEL over `response`, `status` and `headers`. With
-  // pagination, select is evaluated per page, must yield a list, and the
-  // lists are concatenated into {"items": [...]}.
+  // {"body": "..."}) or CEL over `response`, `status`, `headers` and the
+  // action's validated `params`. With pagination, select is evaluated per
+  // page, must yield a list, and the lists are concatenated into
+  // {"items": [...]}.
   string select = 1;
   // Schema is a JSON Schema for `data`.
   google.protobuf.Struct schema = 2;

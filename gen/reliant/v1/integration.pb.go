@@ -1575,9 +1575,10 @@ func (x *ErrorRule) GetWhen() string {
 type OutputSpec struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Select is "$" (whole parsed body; the default), "$raw" (raw body text as
-	// {"body": "..."}) or CEL over `response`, `status` and `headers`. With
-	// pagination, select is evaluated per page, must yield a list, and the
-	// lists are concatenated into {"items": [...]}.
+	// {"body": "..."}) or CEL over `response`, `status`, `headers` and the
+	// action's validated `params`. With pagination, select is evaluated per
+	// page, must yield a list, and the lists are concatenated into
+	// {"items": [...]}.
 	Select string `protobuf:"bytes,1,opt,name=select,proto3" json:"select,omitempty"`
 	// Schema is a JSON Schema for `data`.
 	Schema        *structpb.Struct `protobuf:"bytes,2,opt,name=schema,proto3" json:"schema,omitempty"`
