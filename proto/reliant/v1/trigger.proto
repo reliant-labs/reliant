@@ -340,6 +340,12 @@ message WorkflowTrigger {
   // `trigger`, e.g. issue: "{{ trigger.payload.data.issue.number }}".
   map<string, string> inputs = 4;
 
+  // The prompt each run it starts begins from: a template over `trigger`,
+  // e.g. "Triage issue #{{ trigger.payload.data.issue.number }}". An
+  // activation's own message overrides it; an activation with no message
+  // uses it. Empty means every activation writes its own.
+  string prompt = 5;
+
   // What makes it fire.
   oneof source {
     ScheduleSource schedule = 20;

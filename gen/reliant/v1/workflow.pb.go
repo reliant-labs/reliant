@@ -112,7 +112,13 @@ type WorkflowListItem struct {
 	// and agent tool lists that reach machine tools. Empty means it can run
 	// with no machine. A run's own inputs can change the tool reasons (the
 	// builtin agent's `tools`), so a trigger write re-checks with them.
-	NeedsMachine  []string `protobuf:"bytes,20,rep,name=needs_machine,json=needsMachine,proto3" json:"needs_machine,omitempty"`
+	NeedsMachine []string `protobuf:"bytes,20,rep,name=needs_machine,json=needsMachine,proto3" json:"needs_machine,omitempty"`
+	// The definition's `automation_only`: a chat cannot start this workflow, so
+	// chat pickers must not offer it (Workflow.automation_only).
+	AutomationOnly bool `protobuf:"varint,21,opt,name=automation_only,json=automationOnly,proto3" json:"automation_only,omitempty"`
+	// The definition's declared `triggers:` (its WHEN), so a list can show the
+	// ones the caller has not activated yet.
+	Triggers      []*WorkflowTrigger `protobuf:"bytes,22,rep,name=triggers,proto3" json:"triggers,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -262,6 +268,20 @@ func (x *WorkflowListItem) GetTitle() string {
 func (x *WorkflowListItem) GetNeedsMachine() []string {
 	if x != nil {
 		return x.NeedsMachine
+	}
+	return nil
+}
+
+func (x *WorkflowListItem) GetAutomationOnly() bool {
+	if x != nil {
+		return x.AutomationOnly
+	}
+	return false
+}
+
+func (x *WorkflowListItem) GetTriggers() []*WorkflowTrigger {
+	if x != nil {
+		return x.Triggers
 	}
 	return nil
 }
@@ -3404,7 +3424,7 @@ var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x1creliant/v1/workflow_v2.proto\"\x8a\a\n" +
+	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xec\a\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -3425,7 +3445,9 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x06status\x18\x11 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12H\n" +
 	"\x11validation_errors\x18\x12 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x10validationErrors\x12\x14\n" +
 	"\x05title\x18\x13 \x01(\tR\x05title\x12#\n" +
-	"\rneeds_machine\x18\x14 \x03(\tR\fneedsMachine\x1aL\n" +
+	"\rneeds_machine\x18\x14 \x03(\tR\fneedsMachine\x12'\n" +
+	"\x0fautomation_only\x18\x15 \x01(\bR\x0eautomationOnly\x127\n" +
+	"\btriggers\x18\x16 \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
@@ -3826,9 +3848,10 @@ var file_reliant_v1_workflow_proto_goTypes = []any{
 	nil,                                   // 47: reliant.v1.WorkflowListItem.OutputsEntry
 	(*Node)(nil),                          // 48: reliant.v1.Node
 	(*Edge)(nil),                          // 49: reliant.v1.Edge
-	(*Workflow)(nil),                      // 50: reliant.v1.Workflow
-	(ConfigScope)(0),                      // 51: reliant.v1.ConfigScope
-	(*Input)(nil),                         // 52: reliant.v1.Input
+	(*WorkflowTrigger)(nil),               // 50: reliant.v1.WorkflowTrigger
+	(*Workflow)(nil),                      // 51: reliant.v1.Workflow
+	(ConfigScope)(0),                      // 52: reliant.v1.ConfigScope
+	(*Input)(nil),                         // 53: reliant.v1.Input
 }
 var file_reliant_v1_workflow_proto_depIdxs = []int32{
 	48, // 0: reliant.v1.WorkflowListItem.nodes:type_name -> reliant.v1.Node
@@ -3837,88 +3860,89 @@ var file_reliant_v1_workflow_proto_depIdxs = []int32{
 	47, // 3: reliant.v1.WorkflowListItem.outputs:type_name -> reliant.v1.WorkflowListItem.OutputsEntry
 	0,  // 4: reliant.v1.WorkflowListItem.status:type_name -> reliant.v1.WorkflowDraftStatus
 	3,  // 5: reliant.v1.WorkflowListItem.validation_errors:type_name -> reliant.v1.ValidationError
-	2,  // 6: reliant.v1.ValidationError.highlights:type_name -> reliant.v1.HighlightSpan
-	1,  // 7: reliant.v1.ListWorkflowsResponse.workflows:type_name -> reliant.v1.WorkflowListItem
-	6,  // 8: reliant.v1.ListWorkflowsResponse.invalid_workflows:type_name -> reliant.v1.InvalidWorkflow
-	50, // 9: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	0,  // 10: reliant.v1.GetWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	3,  // 11: reliant.v1.GetWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	50, // 12: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
-	3,  // 13: reliant.v1.ValidateWorkflowResponse.errors:type_name -> reliant.v1.ValidationError
-	50, // 14: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
-	51, // 15: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
-	0,  // 16: reliant.v1.SaveWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	50, // 17: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	3,  // 18: reliant.v1.SaveWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	0,  // 19: reliant.v1.SaveWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	51, // 20: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
-	0,  // 21: reliant.v1.ImportWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	50, // 22: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	3,  // 23: reliant.v1.ImportWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	0,  // 24: reliant.v1.ImportWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	50, // 25: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	1,  // 26: reliant.v1.SetWorkflowVisibilityResponse.workflow:type_name -> reliant.v1.WorkflowListItem
-	50, // 27: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	23, // 28: reliant.v1.ScenarioDefinition.events:type_name -> reliant.v1.SimulatedEvent
-	24, // 29: reliant.v1.ScenarioDefinition.expect:type_name -> reliant.v1.ScenarioExpectation
-	26, // 30: reliant.v1.ExecutionDetails.error:type_name -> reliant.v1.ErrorDetails
-	27, // 31: reliant.v1.ScenarioResult.execution:type_name -> reliant.v1.ExecutionDetails
-	24, // 32: reliant.v1.ScenarioResult.expected:type_name -> reliant.v1.ScenarioExpectation
-	23, // 33: reliant.v1.Scenario.events:type_name -> reliant.v1.SimulatedEvent
-	24, // 34: reliant.v1.Scenario.expect:type_name -> reliant.v1.ScenarioExpectation
-	28, // 35: reliant.v1.Scenario.last_run_result:type_name -> reliant.v1.ScenarioResult
-	29, // 36: reliant.v1.ListScenariosResponse.scenarios:type_name -> reliant.v1.Scenario
-	25, // 37: reliant.v1.CreateScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	29, // 38: reliant.v1.CreateScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	28, // 39: reliant.v1.CreateScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	25, // 40: reliant.v1.RunScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	28, // 41: reliant.v1.RunScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	29, // 42: reliant.v1.UploadScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	0,  // 43: reliant.v1.CreateWorkflowDraftRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 44: reliant.v1.CreateWorkflowDraftResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 45: reliant.v1.SetWorkflowStatusRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 46: reliant.v1.SetWorkflowStatusResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	3,  // 47: reliant.v1.SetWorkflowStatusResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	52, // 48: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
-	4,  // 49: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
-	13, // 50: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
-	7,  // 51: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
-	9,  // 52: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
-	11, // 53: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
-	15, // 54: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
-	17, // 55: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
-	19, // 56: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
-	21, // 57: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
-	42, // 58: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
-	44, // 59: reliant.v1.WorkflowService.SetWorkflowStatus:input_type -> reliant.v1.SetWorkflowStatusRequest
-	30, // 60: reliant.v1.ScenarioService.ListScenarios:input_type -> reliant.v1.ListScenariosRequest
-	32, // 61: reliant.v1.ScenarioService.CreateScenario:input_type -> reliant.v1.CreateScenarioRequest
-	34, // 62: reliant.v1.ScenarioService.RunScenario:input_type -> reliant.v1.RunScenarioRequest
-	36, // 63: reliant.v1.ScenarioService.DeleteScenario:input_type -> reliant.v1.DeleteScenarioRequest
-	38, // 64: reliant.v1.ScenarioService.UploadScenario:input_type -> reliant.v1.UploadScenarioRequest
-	40, // 65: reliant.v1.ScenarioService.ExportScenario:input_type -> reliant.v1.ExportScenarioRequest
-	5,  // 66: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
-	14, // 67: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
-	8,  // 68: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
-	10, // 69: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
-	12, // 70: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
-	16, // 71: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
-	18, // 72: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
-	20, // 73: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
-	22, // 74: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
-	43, // 75: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
-	45, // 76: reliant.v1.WorkflowService.SetWorkflowStatus:output_type -> reliant.v1.SetWorkflowStatusResponse
-	31, // 77: reliant.v1.ScenarioService.ListScenarios:output_type -> reliant.v1.ListScenariosResponse
-	33, // 78: reliant.v1.ScenarioService.CreateScenario:output_type -> reliant.v1.CreateScenarioResponse
-	35, // 79: reliant.v1.ScenarioService.RunScenario:output_type -> reliant.v1.RunScenarioResponse
-	37, // 80: reliant.v1.ScenarioService.DeleteScenario:output_type -> reliant.v1.DeleteScenarioResponse
-	39, // 81: reliant.v1.ScenarioService.UploadScenario:output_type -> reliant.v1.UploadScenarioResponse
-	41, // 82: reliant.v1.ScenarioService.ExportScenario:output_type -> reliant.v1.ExportScenarioResponse
-	66, // [66:83] is the sub-list for method output_type
-	49, // [49:66] is the sub-list for method input_type
-	49, // [49:49] is the sub-list for extension type_name
-	49, // [49:49] is the sub-list for extension extendee
-	0,  // [0:49] is the sub-list for field type_name
+	50, // 6: reliant.v1.WorkflowListItem.triggers:type_name -> reliant.v1.WorkflowTrigger
+	2,  // 7: reliant.v1.ValidationError.highlights:type_name -> reliant.v1.HighlightSpan
+	1,  // 8: reliant.v1.ListWorkflowsResponse.workflows:type_name -> reliant.v1.WorkflowListItem
+	6,  // 9: reliant.v1.ListWorkflowsResponse.invalid_workflows:type_name -> reliant.v1.InvalidWorkflow
+	51, // 10: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	0,  // 11: reliant.v1.GetWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	3,  // 12: reliant.v1.GetWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	51, // 13: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	3,  // 14: reliant.v1.ValidateWorkflowResponse.errors:type_name -> reliant.v1.ValidationError
+	51, // 15: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	52, // 16: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	0,  // 17: reliant.v1.SaveWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	51, // 18: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	3,  // 19: reliant.v1.SaveWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	0,  // 20: reliant.v1.SaveWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	52, // 21: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	0,  // 22: reliant.v1.ImportWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	51, // 23: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	3,  // 24: reliant.v1.ImportWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	0,  // 25: reliant.v1.ImportWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	51, // 26: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	1,  // 27: reliant.v1.SetWorkflowVisibilityResponse.workflow:type_name -> reliant.v1.WorkflowListItem
+	51, // 28: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	23, // 29: reliant.v1.ScenarioDefinition.events:type_name -> reliant.v1.SimulatedEvent
+	24, // 30: reliant.v1.ScenarioDefinition.expect:type_name -> reliant.v1.ScenarioExpectation
+	26, // 31: reliant.v1.ExecutionDetails.error:type_name -> reliant.v1.ErrorDetails
+	27, // 32: reliant.v1.ScenarioResult.execution:type_name -> reliant.v1.ExecutionDetails
+	24, // 33: reliant.v1.ScenarioResult.expected:type_name -> reliant.v1.ScenarioExpectation
+	23, // 34: reliant.v1.Scenario.events:type_name -> reliant.v1.SimulatedEvent
+	24, // 35: reliant.v1.Scenario.expect:type_name -> reliant.v1.ScenarioExpectation
+	28, // 36: reliant.v1.Scenario.last_run_result:type_name -> reliant.v1.ScenarioResult
+	29, // 37: reliant.v1.ListScenariosResponse.scenarios:type_name -> reliant.v1.Scenario
+	25, // 38: reliant.v1.CreateScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
+	29, // 39: reliant.v1.CreateScenarioResponse.scenario:type_name -> reliant.v1.Scenario
+	28, // 40: reliant.v1.CreateScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
+	25, // 41: reliant.v1.RunScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
+	28, // 42: reliant.v1.RunScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
+	29, // 43: reliant.v1.UploadScenarioResponse.scenario:type_name -> reliant.v1.Scenario
+	0,  // 44: reliant.v1.CreateWorkflowDraftRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 45: reliant.v1.CreateWorkflowDraftResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 46: reliant.v1.SetWorkflowStatusRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 47: reliant.v1.SetWorkflowStatusResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	3,  // 48: reliant.v1.SetWorkflowStatusResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	53, // 49: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
+	4,  // 50: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
+	13, // 51: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
+	7,  // 52: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
+	9,  // 53: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
+	11, // 54: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
+	15, // 55: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
+	17, // 56: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
+	19, // 57: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
+	21, // 58: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
+	42, // 59: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
+	44, // 60: reliant.v1.WorkflowService.SetWorkflowStatus:input_type -> reliant.v1.SetWorkflowStatusRequest
+	30, // 61: reliant.v1.ScenarioService.ListScenarios:input_type -> reliant.v1.ListScenariosRequest
+	32, // 62: reliant.v1.ScenarioService.CreateScenario:input_type -> reliant.v1.CreateScenarioRequest
+	34, // 63: reliant.v1.ScenarioService.RunScenario:input_type -> reliant.v1.RunScenarioRequest
+	36, // 64: reliant.v1.ScenarioService.DeleteScenario:input_type -> reliant.v1.DeleteScenarioRequest
+	38, // 65: reliant.v1.ScenarioService.UploadScenario:input_type -> reliant.v1.UploadScenarioRequest
+	40, // 66: reliant.v1.ScenarioService.ExportScenario:input_type -> reliant.v1.ExportScenarioRequest
+	5,  // 67: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
+	14, // 68: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
+	8,  // 69: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
+	10, // 70: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
+	12, // 71: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
+	16, // 72: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
+	18, // 73: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
+	20, // 74: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
+	22, // 75: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
+	43, // 76: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
+	45, // 77: reliant.v1.WorkflowService.SetWorkflowStatus:output_type -> reliant.v1.SetWorkflowStatusResponse
+	31, // 78: reliant.v1.ScenarioService.ListScenarios:output_type -> reliant.v1.ListScenariosResponse
+	33, // 79: reliant.v1.ScenarioService.CreateScenario:output_type -> reliant.v1.CreateScenarioResponse
+	35, // 80: reliant.v1.ScenarioService.RunScenario:output_type -> reliant.v1.RunScenarioResponse
+	37, // 81: reliant.v1.ScenarioService.DeleteScenario:output_type -> reliant.v1.DeleteScenarioResponse
+	39, // 82: reliant.v1.ScenarioService.UploadScenario:output_type -> reliant.v1.UploadScenarioResponse
+	41, // 83: reliant.v1.ScenarioService.ExportScenario:output_type -> reliant.v1.ExportScenarioResponse
+	67, // [67:84] is the sub-list for method output_type
+	50, // [50:67] is the sub-list for method input_type
+	50, // [50:50] is the sub-list for extension type_name
+	50, // [50:50] is the sub-list for extension extendee
+	0,  // [0:50] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_proto_init() }
@@ -3927,6 +3951,7 @@ func file_reliant_v1_workflow_proto_init() {
 		return
 	}
 	file_reliant_v1_common_proto_init()
+	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_workflow_v2_proto_init()
 	file_reliant_v1_workflow_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[3].OneofWrappers = []any{}

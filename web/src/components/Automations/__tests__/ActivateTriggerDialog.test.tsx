@@ -203,4 +203,57 @@ describe("ActivateTriggerDialog", () => {
     await user.click(screen.getByRole("button", { name: "Activate" }));
     expect(await screen.findByText(/does not declare a trigger named "nightly"/)).toHaveAttribute("role", "alert");
   });
+
+  it("needs no prompt when the declared trigger has one: empty follows the workflow's", async () => {
+    const user = userEvent.setup();
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-2", name: "Triage · nightly", workflowTrigger: "nightly" }) }));
+    const { onClose } = render({ ...scheduleDeclared, prompt: "Summarise everything before {{ trigger.scheduled_for }}." } as DeclaredTrigger);
+
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    const prompt = screen.getByLabelText("Prompt");
+    expect(prompt).toHaveValue("");
+    expect(prompt).toHaveAttribute("placeholder", "Summarise everything before {{ trigger.scheduled_for }}.");
+    await user.click(screen.getByRole("button", { name: "Activate" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.message).toBe("");
+    expect(definition.source).toEqual({ case: "workflowTrigger", value: "nightly" });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("in personal mode (a built-in), creates a row with the picked source INLINE, not a declaration", async () => {
+    const user = userEvent.setup();
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-3", name: "Agent · schedule" }) }));
+    const onClose = vi.fn();
+    renderAtRoute(
+      <ActivateTriggerDialog
+        open
+        mode="personal"
+        onClose={onClose}
+        workflowRef="builtin://agent"
+        workflowTitle="Agent"
+        declared={{ name: "schedule", filter: "", inputs: {}, source: { case: "schedule", value: { cron: ["0 9 * * 1-5"], timezone: "UTC" } } } as unknown as DeclaredTrigger}
+        defaultProjectId="proj-1"
+      />,
+    );
+
+    expect(await screen.findByRole("form", { name: "Add a personal trigger" })).toBeInTheDocument();
+    // The source is editable here: there is no declaration to hold it.
+    expect(screen.getByText("When it runs")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Review yesterday's PRs" } });
+    // A personal trigger maps no inputs from an event, so the workflow's
+    // required ones are the activator's to fill.
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "daily" } });
+    await user.click(screen.getByRole("button", { name: "Add trigger" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.workflow).toBe("builtin://agent");
+    expect(definition.source.case).toBe("schedule");
+    expect(definition.source.value).toMatchObject({ cron: ["0 9 * * 1-5"], timezone: "UTC" });
+    expect(definition.message).toBe("Review yesterday's PRs");
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
 });

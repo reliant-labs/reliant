@@ -24,8 +24,9 @@ import { renderWithQuery } from "@/test/renderWithQuery";
 
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
+const setTriggerEnabled = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { catalog: () => ({ searchCatalog, getCatalogEntry }) },
+  grpcClient: { catalog: () => ({ searchCatalog, getCatalogEntry }), trigger: () => ({ setTriggerEnabled }) },
   getGRPCBaseURLPublic: () => null,
 }));
 
@@ -33,6 +34,8 @@ import { DeclaredTriggerPanel } from "../DeclaredTriggerPanel";
 import { WorkflowMutationProvider } from "../../WorkflowMutationContext";
 import type { Workflow } from "@/types/workflow";
 import type { DeclaredTrigger } from "@/lib/declaredTriggers";
+import type { Trigger } from "@/api/trigger-grpc";
+import { SetTriggerEnabledResponseSchema, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 
 const issueTrigger = {
   name: "new-issue",
@@ -73,7 +76,21 @@ function issueEntry() {
 }
 
 /** The real mutation provider over real workflow state, as the builder mounts it. */
-function Harness({ initial, onWorkflow, index = 0, unsaved = false }: { initial: DeclaredTrigger[]; onWorkflow: (w: Workflow) => void; index?: number; unsaved?: boolean }) {
+function Harness({
+  initial,
+  onWorkflow,
+  index = 0,
+  unsaved = false,
+  readOnly = false,
+  activations = [],
+}: {
+  initial: DeclaredTrigger[];
+  onWorkflow: (w: Workflow) => void;
+  index?: number;
+  unsaved?: boolean;
+  readOnly?: boolean;
+  activations?: Trigger[];
+}) {
   const [workflow, setWorkflow] = useState<Workflow>({ name: "triage", inputs: { issue_number: { type: "integer" } }, triggers: initial } as Workflow);
   const [dirty, setDirty] = useState(false);
   const triggers = (workflow.triggers ?? []) as DeclaredTrigger[];
@@ -104,8 +121,8 @@ function Harness({ initial, onWorkflow, index = 0, unsaved = false }: { initial:
           inputs={workflow.inputs}
           catalogRef={triggers[index]!.source?.case === "integration" ? "github/issue.opened@1" : undefined}
           findings={index === 0 && triggers[0]!.source?.case === "schedule" ? [{ field: "schedule.cron", message: '"0 25 * * *" is not a valid cron expression' }] : []}
-          activations={[]}
-          isReadOnly={false}
+          activations={activations}
+          isReadOnly={readOnly}
           canActivate
           unsaved={unsaved}
           onClose={() => undefined}
@@ -117,9 +134,11 @@ function Harness({ initial, onWorkflow, index = 0, unsaved = false }: { initial:
   );
 }
 
-function renderPanel(initial: DeclaredTrigger[], opts: { unsaved?: boolean } = {}) {
+function renderPanel(initial: DeclaredTrigger[], opts: { unsaved?: boolean; readOnly?: boolean; activations?: Trigger[] } = {}) {
   let latest: Workflow | undefined;
-  renderWithQuery(<Harness initial={initial} onWorkflow={(w) => (latest = w)} unsaved={opts.unsaved} />);
+  renderWithQuery(
+    <Harness initial={initial} onWorkflow={(w) => (latest = w)} unsaved={opts.unsaved} readOnly={opts.readOnly} activations={opts.activations} />,
+  );
   return { latest: () => latest?.triggers as DeclaredTrigger[] | undefined };
 }
 
@@ -178,7 +197,9 @@ describe("DeclaredTriggerPanel", () => {
   });
 
   it("blocks activating a trigger with unsaved edits", async () => {
+    const user = userEvent.setup();
     renderPanel([issueTrigger], { unsaved: true });
+    await user.click(await screen.findByRole("button", { name: "Activations" }));
     expect(await screen.findByRole("button", { name: "Activate" })).toBeDisabled();
     expect(screen.getByText(/Save the workflow first/)).toBeInTheDocument();
   });
@@ -188,5 +209,38 @@ describe("DeclaredTriggerPanel", () => {
     const { latest } = renderPanel([issueTrigger, scheduleTrigger]);
     await user.click(await screen.findByRole("button", { name: /Remove trigger/ }));
     expect(latest()!.map((t) => t.name)).toEqual(["nightly"]);
+  });
+
+  it("writes the prompt template into the definition", async () => {
+    const { latest } = renderPanel([issueTrigger]);
+    await screen.findByRole("group", { name: "Events" });
+    const prompt = screen.getAllByRole("textbox").find((el) => el.getAttribute("placeholder")?.startsWith("Triage issue #"))!;
+    fireEvent.change(prompt, { target: { value: "Triage #{{ trigger.payload.data.issue.number }}" } });
+    expect(latest()![0]!).toMatchObject({ prompt: "Triage #{{ trigger.payload.data.issue.number }}" });
+  });
+
+  it("on a built-in, opens on your activations and keeps the definition read-only", async () => {
+    const user = userEvent.setup();
+    const activation = {
+      id: "a-1",
+      name: "Agent · nightly",
+      enabled: true,
+      projectName: "Reliant",
+      noMachine: true,
+      health: { status: "healthy", consecutiveFailures: 0, consecutiveSkips: 0, lastFailureDetail: "" },
+      source: { kind: "activation", workflowTrigger: "nightly" },
+    } as unknown as Trigger;
+    setTriggerEnabled.mockResolvedValue(create(SetTriggerEnabledResponseSchema, { trigger: create(TriggerSchema, { id: "a-1", enabled: false }) }));
+    renderPanel([scheduleTrigger], { readOnly: true, activations: [activation] });
+
+    const list = await screen.findByRole("list", { name: "Activations of nightly" });
+    expect(within(list).getByText("Reliant · No machine")).toBeInTheDocument();
+    await user.click(within(list).getByRole("switch", { name: "Agent · nightly enabled" }));
+    expect(setTriggerEnabled).toHaveBeenCalledWith(expect.objectContaining({ id: "a-1", enabled: false }));
+    expect(screen.queryByRole("button", { name: /Remove trigger/ })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Definition" }));
+    expect(screen.getByText(/Built-in: this definition can't change/)).toBeInTheDocument();
+    expect(screen.getByLabelText("Name")).toBeDisabled();
   });
 });

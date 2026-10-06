@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "reliant/v1/common.proto";
+import "reliant/v1/trigger.proto";
 import "reliant/v1/workflow_v2.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -111,6 +112,12 @@ message WorkflowListItem {
   // with no machine. A run's own inputs can change the tool reasons (the
   // builtin agent's `tools`), so a trigger write re-checks with them.
   repeated string needs_machine = 20;
+  // The definition's `automation_only`: a chat cannot start this workflow, so
+  // chat pickers must not offer it (Workflow.automation_only).
+  bool automation_only = 21;
+  // The definition's declared `triggers:` (its WHEN), so a list can show the
+  // ones the caller has not activated yet.
+  repeated WorkflowTrigger triggers = 22;
 }
 
 // ============================================

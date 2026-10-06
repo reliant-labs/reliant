@@ -132,6 +132,13 @@ export interface WorkflowResponse {
    * that as unknown, never as "runs without one".
    */
   needsMachine?: string[];
+  /**
+   * The definition's Chat trigger is off (`automation_only`): a chat cannot
+   * start it, so every chat picker leaves it out (see isChatLaunchable).
+   */
+  automationOnly?: boolean;
+  /** The definition's declared `triggers:` (its WHEN). */
+  triggers?: ProtoWorkflowListItem["triggers"];
 }
 
 export interface InvalidWorkflow {
@@ -220,7 +227,20 @@ function listItemToResponse(proto: ProtoWorkflowListItem): WorkflowResponse {
     hasPresetGroups: proto.hasPresetGroups || false,
     draftId: proto.draftId || undefined,
     needsMachine: [...(proto.needsMachine || [])],
+    automationOnly: proto.automationOnly || false,
+    triggers: [...(proto.triggers || [])],
   };
+}
+
+/**
+ * Whether a chat can start this workflow: its Chat trigger is on. The one
+ * rule every chat picker (composer, slash menu, new-chat views) filters by,
+ * read from the server's list item so they all agree. The server refuses a
+ * chat start of any other workflow, so a picker that skipped this would only
+ * offer an error.
+ */
+export function isChatLaunchable(workflow: { automationOnly?: boolean; automation_only?: boolean }): boolean {
+  return !(workflow.automationOnly ?? workflow.automation_only ?? false);
 }
 
 // ============================================

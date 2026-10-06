@@ -7337,9 +7337,14 @@ type Workflow struct {
 	// It stays fully runnable and referenceable — this is for building blocks
 	// other workflows `ref:` (structured-agent, scope-conversation), not for
 	// retiring a workflow. Delete a workflow to retire it.
-	Hidden        bool `protobuf:"varint,17,opt,name=hidden,proto3" json:"hidden,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Hidden bool `protobuf:"varint,17,opt,name=hidden,proto3" json:"hidden,omitempty"`
+	// AutomationOnly turns off the workflow's Chat trigger: nobody can start it
+	// from a chat, and chat pickers do not offer it. Only its `triggers:` (and a
+	// builder test run) start it. Unset, the default, means a chat can start it
+	// like any other workflow.
+	AutomationOnly bool `protobuf:"varint,18,opt,name=automation_only,json=automationOnly,proto3" json:"automation_only,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Workflow) Reset() {
@@ -7480,6 +7485,13 @@ func (x *Workflow) GetTitle() string {
 func (x *Workflow) GetHidden() bool {
 	if x != nil {
 		return x.Hidden
+	}
+	return false
+}
+
+func (x *Workflow) GetAutomationOnly() bool {
+	if x != nil {
+		return x.AutomationOnly
 	}
 	return false
 }
@@ -8206,7 +8218,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\x8f\x06\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xb8\x06\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -8226,7 +8238,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rtransition_to\x18\x0e \x01(\tR\ftransitionTo\x127\n" +
 	"\btriggers\x18\x0f \x03(\v2\x1b.reliant.v1.WorkflowTriggerR\btriggers\x12\x14\n" +
 	"\x05title\x18\x10 \x01(\tR\x05title\x12\x16\n" +
-	"\x06hidden\x18\x11 \x01(\bR\x06hidden\x1aL\n" +
+	"\x06hidden\x18\x11 \x01(\bR\x06hidden\x12'\n" +
+	"\x0fautomation_only\x18\x12 \x01(\bR\x0eautomationOnly\x1aL\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12'\n" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +

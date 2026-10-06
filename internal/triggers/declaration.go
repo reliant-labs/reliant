@@ -56,6 +56,9 @@ type Declaration struct {
 	Filter string
 	// Inputs maps workflow input names to templates over `trigger`.
 	Inputs map[string]string
+	// Prompt is the declaration's prompt template over `trigger`; empty when
+	// every activation writes its own (see SeedPrompt).
+	Prompt string
 }
 
 // WorkflowResolver loads the workflow a run of a ref executes, as run start
@@ -131,6 +134,10 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 	if errs := triggerspec.CompileInputs(wt.GetInputs()); len(errs) > 0 {
 		return nil, broken("the declaration's " + errs[0].Error())
 	}
+	prompt := strings.TrimSpace(wt.GetPrompt())
+	if err := triggerspec.CompilePrompt(prompt); err != nil {
+		return nil, broken("the declaration's " + err.Error())
+	}
 
 	// What this activation was created for and cannot follow: a webhook's
 	// token, an integration's connection, a schedule's Temporal schedule all
@@ -144,7 +151,22 @@ func DeclarationIn(wf *reliantv1.Workflow, t *core.Trigger) (*Declaration, error
 			return nil, broken(fmt.Sprintf("it now listens to %s, and this activation's connection is for %s; activate it again", src.Integration, prev.Integration))
 		}
 	}
-	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs()}, nil
+	return &Declaration{Name: name, Source: src, Filter: filter, Inputs: wt.GetInputs(), Prompt: prompt}, nil
+}
+
+// SeedPrompt is the prompt a run t launches starts from: the activation's own
+// message when it has one (an override), otherwise its declaration's prompt
+// template rendered against the `trigger` root. An ad hoc trigger (decl nil)
+// always has its own.
+func SeedPrompt(t *core.Trigger, decl *Declaration, root map[string]any) (string, error) {
+	if own := strings.TrimSpace(t.Message); own != "" || decl == nil || decl.Prompt == "" {
+		return t.Message, nil
+	}
+	rendered, err := triggerspec.RenderPrompt(decl.Prompt, root)
+	if err != nil {
+		return "", fmt.Errorf("the declared trigger's %w", err)
+	}
+	return rendered, nil
 }
 
 // FindDeclaredTrigger returns the trigger wf declares under name, or nil.

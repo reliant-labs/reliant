@@ -20,7 +20,7 @@
  * renaming a webhook trigger cannot turn it into an empty schedule.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { grpcClient } from "./grpc-client";
@@ -40,6 +40,9 @@ import {
   TriggerHealthStatus,
   TriggerOverlapPolicy,
   UpdateTriggerRequestSchema,
+  IntegrationSourceSchema,
+  WebhookSourceSchema,
+  WorkflowEventSourceSchema,
   type ScheduleSource as ProtoScheduleSource,
   type Trigger as ProtoTrigger,
   type TriggerDefinition as ProtoTriggerDefinition,
@@ -408,6 +411,43 @@ function sourceToProto(source: TriggerSource): ProtoTriggerDefinition["source"] 
       throw new Error(
         "This automation's trigger was set up in a newer version of Reliant. Reload the app to edit it.",
       );
+  }
+}
+
+/**
+ * The inline source for a trigger row that carries its own WHEN — a personal
+ * trigger on a workflow whose definition can't gain a declaration (a
+ * built-in). The palette builds the same declaration shape for both models,
+ * so one editor serves both; this is where the personal one becomes a row's
+ * source. Webhook, integration and workflow-event arms are built as real
+ * messages, because the update carries them back verbatim.
+ */
+export function inlineTriggerSource(source: { case?: string; value?: unknown } | undefined): TriggerSource {
+  const value = (source?.value ?? {}) as Record<string, unknown>;
+  switch (source?.case) {
+    case "schedule": {
+      const schedule = value as { cron?: string[]; interval?: string; timezone?: string };
+      return {
+        kind: "schedule",
+        schedule: {
+          cron: [...(schedule.cron ?? [])].filter((c) => c.trim() !== ""),
+          interval: schedule.interval || undefined,
+          timezone: schedule.timezone || "UTC",
+          overlap: "skip",
+        },
+      };
+    }
+    case "webhook":
+      return { kind: "passthrough", arm: { case: "webhook", value: create(WebhookSourceSchema, value as MessageInitShape<typeof WebhookSourceSchema>) } };
+    case "integration":
+      return { kind: "passthrough", arm: { case: "integration", value: create(IntegrationSourceSchema, value as MessageInitShape<typeof IntegrationSourceSchema>) } };
+    case "workflowEvent":
+      return {
+        kind: "passthrough",
+        arm: { case: "workflowEvent", value: create(WorkflowEventSourceSchema, value as MessageInitShape<typeof WorkflowEventSourceSchema>) },
+      };
+    default:
+      return { kind: "unknown" };
   }
 }
 

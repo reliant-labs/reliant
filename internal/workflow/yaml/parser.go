@@ -70,6 +70,8 @@ func unmarshalWorkflow(node *yaml.Node) (*reliantv1.Workflow, error) {
 			wf.Title = val.Value
 		case "hidden":
 			err = val.Decode(&wf.Hidden)
+		case "automation_only", "automationOnly":
+			err = val.Decode(&wf.AutomationOnly)
 		case "description":
 			var desc string
 			if err := val.Decode(&desc); err == nil {
@@ -385,6 +387,12 @@ func marshalWorkflow(wf *reliantv1.Workflow) (*yaml.Node, error) {
 	// hidden — emitted only when true; false is the default and noise.
 	if wf.Hidden {
 		m.Content = append(m.Content, scalarNode("hidden", ""), scalarNode("true", "!!bool"))
+	}
+
+	// automation_only — the Chat trigger turned off. Emitted only when true:
+	// a chat starting the workflow is the default.
+	if wf.AutomationOnly {
+		m.Content = append(m.Content, scalarNode("automation_only", ""), scalarNode("true", "!!bool"))
 	}
 
 	// apiVersion

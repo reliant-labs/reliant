@@ -12,7 +12,14 @@
  *
  * It creates a trigger row with the `workflow_trigger` arm. Inputs the
  * declaration maps are listed read-only and never sent as params: the server
- * refuses them, because the event would overwrite them on every fire.
+ * refuses them, because the event would overwrite them on every fire. When
+ * the declaration has a prompt template the prompt here is optional: empty
+ * follows the workflow's, anything written overrides it.
+ *
+ * `personal` is the same dialog for a workflow whose definition can't gain a
+ * declaration (a built-in): the trigger picked from the palette becomes the
+ * row's own inline source, edited here, so "Add trigger" is one flow on
+ * every workflow.
  *
  * A webhook trigger's URL and token come back from the create, once; they
  * are shown here with copy, and can be rotated later from the same screen.
@@ -30,6 +37,7 @@ import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useProjectDaemonInstalls, triggerKeys } from "@/hooks/trigger-queries";
 import { useQueryClient } from "@tanstack/react-query";
 import {
+  inlineTriggerSource,
   triggerErrorMessage,
   triggerGrpc,
   webhookUrlForDisplay,
@@ -44,7 +52,8 @@ import { buildDaemonChoices, defaultDaemonId } from "./daemonChoices";
 import { ConnectionPicker } from "../workflow/connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../workflow/connections/ConnectIntegrationDialog";
 import { useCatalogEntry, useDeclaredTriggerRef } from "@/hooks/connection-queries";
-import { integrationOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { integrationOf, promptOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { TriggerSourceFields } from "../workflow/config/DeclaredTriggerPanel";
 import { cn } from "@/lib/utils";
 
 export interface ActivateTriggerDialogProps {
@@ -58,6 +67,11 @@ export interface ActivateTriggerDialogProps {
   catalogRef?: string;
   defaultProjectId?: string;
   onActivated?: (trigger: Trigger) => void;
+  /**
+   * `activate` (default) activates `declared` by name. `personal` creates a
+   * row with `declared`'s source inline, editable here.
+   */
+  mode?: "activate" | "personal";
 }
 
 const NO_MACHINE = "__no_machine__";
@@ -72,7 +86,11 @@ export function ActivateTriggerDialog(props: ActivateTriggerDialogProps) {
   return <ActivateBody {...props} />;
 }
 
-function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRef, defaultProjectId, onActivated }: ActivateTriggerDialogProps) {
+function ActivateBody({ onClose, workflowRef, workflowTitle, declared: initialDeclared, catalogRef, defaultProjectId, onActivated, mode = "activate" }: ActivateTriggerDialogProps) {
+  const personal = mode === "personal";
+  // A personal trigger's source is edited here; an activation's is the
+  // workflow's and only shown.
+  const [declared, setDeclared] = useState(initialDeclared);
   const ids = useId();
   const fieldId = (name: string) => `${ids}-${name}`;
   const queryClient = useQueryClient();
@@ -80,7 +98,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
   const kind = sourceCase(declared);
   const integration = integrationOf(declared);
-  const mappedInputs = Object.keys(declared.inputs ?? {});
+  const mappedInputs = personal ? [] : Object.keys(declared.inputs ?? {});
+  const declaredPrompt = personal ? "" : promptOf(declared).trim();
 
   const [name, setName] = useState(`${workflowTitle || workflowRef} · ${declared.name}`);
   const [projectId, setProjectId] = useState(defaultProjectId ?? currentProjectId ?? projects[0]?.id ?? "");
@@ -90,7 +109,8 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
   const [machineChosen, setMachineChosen] = useState(false);
   const [connectionId, setConnectionId] = useState("");
   const [connectOpen, setConnectOpen] = useState(false);
-  const [message, setMessage] = useState(declared.description ? `${declared.description}.` : "");
+  // With a declared prompt, empty is the choice to follow it.
+  const [message, setMessage] = useState(!declaredPrompt && declared.description ? `${declared.description}.` : "");
   const [enabled, setEnabled] = useState(true);
   const [notify, setNotify] = useState(false);
   const [attempted, setAttempted] = useState(false);
@@ -117,7 +137,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
   if (!name.trim()) errors.name = "Name the activation.";
   if (!projectId) errors.project = "Choose a project.";
   if (!machine) errors.machine = daemons.length === 0 ? "Connect a machine first, or choose No machine." : "Choose where its runs execute.";
-  if (!message.trim()) errors.message = "Write the prompt each run starts from.";
+  if (!message.trim() && !declaredPrompt) errors.message = "Write the prompt each run starts from.";
   if (inputsStatus?.loading) errors.inputs = "Wait for this workflow's inputs to load.";
   else if (inputsStatus?.missingRequired.length) errors.inputs = `Fill in: ${inputsStatus.missingRequired.join(", ")}.`;
 
@@ -141,7 +161,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
         noMachine: machine === NO_MACHINE,
         notifyOnComplete: notify,
         connectionId: connectionId || undefined,
-        source: { kind: "activation", workflowTrigger: declared.name ?? "" },
+        source: personal ? inlineTriggerSource(declared.source) : { kind: "activation", workflowTrigger: declared.name ?? "" },
       });
       void queryClient.invalidateQueries({ queryKey: triggerKeys.lists() });
       onActivated?.(result.trigger);
@@ -157,16 +177,36 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
   const show = (key: string) => attempted && errors[key];
 
   return (
-    <Modal isOpen onClose={onClose} size="lg" title={`Activate “${declared.name}”`}>
-      <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label={`Activate ${declared.name}`}>
+    <Modal isOpen onClose={onClose} size="lg" title={personal ? `Add a trigger to ${workflowTitle || workflowRef}` : `Activate “${declared.name}”`}>
+      <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label={personal ? "Add a personal trigger" : `Activate ${declared.name}`}>
         <CardInset className="text-sm">
-          <p className="text-foreground">
-            Runs <span className="font-medium">{workflowTitle || workflowRef}</span> when its <span className="font-mono">{declared.name}</span> trigger fires.
-          </p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            When it fires, its filter and its input mapping come from the workflow. Choose where the runs execute and as whom.
-          </p>
+          {personal ? (
+            <>
+              <p className="text-foreground">
+                Runs <span className="font-medium">{workflowTitle || workflowRef}</span> when this fires.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                It's personal: it isn't part of the workflow, so it works on a built-in without changing it, and only you see it.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="text-foreground">
+                Runs <span className="font-medium">{workflowTitle || workflowRef}</span> when its <span className="font-mono">{declared.name}</span> trigger fires.
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                When it fires, its filter and its input mapping come from the workflow. Choose where the runs execute and as whom.
+              </p>
+            </>
+          )}
         </CardInset>
+
+        {personal && (
+          <fieldset className="space-y-2">
+            <legend className={labelClass}>When it runs</legend>
+            <TriggerSourceFields trigger={declared} onChange={setDeclared} catalogRef={catalogRef} />
+          </fieldset>
+        )}
 
         <div>
           <label htmlFor={fieldId("name")} className={labelClass}>Name</label>
@@ -240,10 +280,14 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
             rows={3}
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Triage the new issue: label it, and ask for a repro if one is missing."
+            placeholder={declaredPrompt || "Triage the new issue: label it, and ask for a repro if one is missing."}
             aria-invalid={!!show("message")}
           />
-          <p className={hintClass}>Each run starts from this message. Nobody will be watching, so say everything the agent needs.</p>
+          <p className={hintClass}>
+            {declaredPrompt
+              ? "Empty uses the workflow's prompt (the grey text); anything you write overrides it."
+              : "Each run starts from this message. Nobody will be watching, so say everything the agent needs."}
+          </p>
           {show("message") && <p className={errorTextClass}>{errors.message}</p>}
         </div>
 
@@ -297,7 +341,7 @@ function ActivateBody({ onClose, workflowRef, workflowTitle, declared, catalogRe
 
         <div className="flex justify-end gap-2 border-t border-border pt-4">
           <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" variant="primary" loading={saving}>Activate</Button>
+          <Button type="submit" variant="primary" loading={saving}>{personal ? "Add trigger" : "Activate"}</Button>
         </div>
       </form>
 

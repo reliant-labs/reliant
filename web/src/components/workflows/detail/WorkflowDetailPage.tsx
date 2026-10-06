@@ -89,7 +89,11 @@ export function WorkflowDetail({ projectId, workflowRef }: { projectId: string; 
       ? "This workflow's definition has errors, so it cannot run."
       : isDraft
         ? "Drafts cannot run until they are marked complete."
-        : null;
+        : // Run… starts the run as a chat, so a workflow whose Chat trigger is
+          // off cannot be run from here; its triggers (or a Test run) start it.
+          listing?.automationOnly
+          ? "Its Chat trigger is off, so only its triggers start it. Turn Chat on in the builder to run it from here."
+          : null;
   const openBuilder = () =>
     void navigate({ to: "/workflow/$workflowName", params: { workflowName: workflowRef } });
   const libraryHref = project ? `${WORKFLOWS_LIBRARY_PATH}?project=${encodeURIComponent(project)}` : WORKFLOWS_LIBRARY_PATH;

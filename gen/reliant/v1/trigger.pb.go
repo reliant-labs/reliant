@@ -913,6 +913,11 @@ type WorkflowTrigger struct {
 	// Workflow inputs set from the event: input name to a template over
 	// `trigger`, e.g. issue: "{{ trigger.payload.data.issue.number }}".
 	Inputs map[string]string `protobuf:"bytes,4,rep,name=inputs,proto3" json:"inputs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	// The prompt each run it starts begins from: a template over `trigger`,
+	// e.g. "Triage issue #{{ trigger.payload.data.issue.number }}". An
+	// activation's own message overrides it; an activation with no message
+	// uses it. Empty means every activation writes its own.
+	Prompt string `protobuf:"bytes,5,opt,name=prompt,proto3" json:"prompt,omitempty"`
 	// What makes it fire.
 	//
 	// Types that are valid to be assigned to Source:
@@ -982,6 +987,13 @@ func (x *WorkflowTrigger) GetInputs() map[string]string {
 		return x.Inputs
 	}
 	return nil
+}
+
+func (x *WorkflowTrigger) GetPrompt() string {
+	if x != nil {
+		return x.Prompt
+	}
+	return ""
 }
 
 func (x *WorkflowTrigger) GetSource() isWorkflowTrigger_Source {
@@ -2916,12 +2928,13 @@ const file_reliant_v1_trigger_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"O\n" +
 	"\x13WorkflowEventSource\x12\x1c\n" +
 	"\tworkflows\x18\x01 \x03(\tR\tworkflows\x12\x1a\n" +
-	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xe3\x03\n" +
+	"\boutcomes\x18\x02 \x03(\tR\boutcomes\"\xfb\x03\n" +
 	"\x0fWorkflowTrigger\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x16\n" +
 	"\x06filter\x18\x03 \x01(\tR\x06filter\x12?\n" +
-	"\x06inputs\x18\x04 \x03(\v2'.reliant.v1.WorkflowTrigger.InputsEntryR\x06inputs\x128\n" +
+	"\x06inputs\x18\x04 \x03(\v2'.reliant.v1.WorkflowTrigger.InputsEntryR\x06inputs\x12\x16\n" +
+	"\x06prompt\x18\x05 \x01(\tR\x06prompt\x128\n" +
 	"\bschedule\x18\x14 \x01(\v2\x1a.reliant.v1.ScheduleSourceH\x00R\bschedule\x125\n" +
 	"\awebhook\x18\x15 \x01(\v2\x19.reliant.v1.WebhookSourceH\x00R\awebhook\x12A\n" +
 	"\vintegration\x18\x16 \x01(\v2\x1d.reliant.v1.IntegrationSourceH\x00R\vintegration\x12H\n" +

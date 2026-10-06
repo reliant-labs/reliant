@@ -158,6 +158,15 @@ describe("WorkflowDetailPage", () => {
     expect(screen.queryByText("Nothing runs this workflow on its own.")).toBeNull();
   });
 
+  it("a workflow whose Chat trigger is off cannot be run from here, and says why", async () => {
+    const library = libraryResponse();
+    library.workflows[1] = { ...library.workflows[1]!, automationOnly: true } as (typeof library.workflows)[number];
+    mocks.listWorkflows.mockResolvedValue(library);
+    renderDetail();
+    expect(await screen.findByText(/Its Chat trigger is off/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
+  });
+
   it("shows the presets that fit it, and its inputs", async () => {
     renderDetail();
     const presets = await screen.findByRole("list", { name: "Presets for this workflow" });

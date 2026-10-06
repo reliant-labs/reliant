@@ -1,9 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Edit one of the workflow's declared triggers (its `triggers:` entry; the
- * WHEN, research/INTEGRATIONS_V1_BRIEF.md §3a):
+ * One trigger card's panel, in two tabs that match its two owners
+ * (research/WORKFLOW_EDITOR_UX_REVIEW.md §2 Q1):
  *
+ * Definition — the WHEN, saved in the workflow's `triggers:` entry
+ * (research/INTEGRATIONS_V1_BRIEF.md §3a). Read-only on a built-in.
  *   - Source: a schedule (the Automations presets), a webhook (optional HMAC),
  *     an integration event (events + match, from the catalog entry's events
  *     and attributes) or another workflow's outcome.
@@ -11,16 +13,24 @@
  *     findings beside it. Not offered for a schedule, which has no event.
  *   - Inputs: each workflow input ← a template over `trigger.payload`, with
  *     completion from the trigger's payload_schema.
- *   - Activations: the caller's rows activating it, and "Activate".
+ *   - Prompt: the template each run starts from; an activation may override it.
  *
- * Every edit is a whole-trigger update through WorkflowMutationContext, so
- * the definition the builder saves is the canonical one.
+ * Activations — the AS WHOM / WHERE: the caller's rows activating it (project,
+ * machine, connection, enabled) and "Activate". Always editable, built-ins
+ * included, because it never changes the definition.
+ *
+ * Every definition edit is a whole-trigger update through
+ * WorkflowMutationContext, so the definition the builder saves is the
+ * canonical one.
  */
 
 import { useId, useMemo, useState } from "react";
 import { AlertTriangle, Plus, Webhook, Zap } from "lucide-react";
 
 import { ConfigurationPanel } from "../ConfigurationPanel";
+import { ConfigPanelTabBar } from "./ConfigPanelTabBar";
+import { Toggle } from "../../ui/Toggle";
+import { useSetTriggerEnabled } from "../../../hooks/trigger-queries";
 import { CELInput } from "../CELInput";
 import { CELCompletionProvider, useCELCompletionContext } from "../CELCompletionContext";
 import { useWorkflowMutations } from "../WorkflowMutationContext";
@@ -35,12 +45,14 @@ import {
   canFilter,
   findingFieldLabel,
   integrationOf,
+  promptOf,
   scheduleOf,
   sourceCase,
   triggerNameError,
   withFilter,
   withInput,
   withIntegration,
+  withPrompt,
   withSchedule,
   withWorkflowEvent,
   workflowEventOf,
@@ -72,6 +84,8 @@ export interface DeclaredTriggerPanelProps {
   bottomOffset?: number;
   topOffset?: number;
 }
+
+type PanelTab = "definition" | "activations";
 
 const OUTCOMES = ["finished", "failed", "blocked"] as const;
 
@@ -109,6 +123,9 @@ export function DeclaredTriggerPanel(props: DeclaredTriggerPanelProps) {
   const entryQuery = useCatalogEntry(catalogRef);
   const payloadSchema = entryQuery.data?.payloadSchema;
 
+  // A built-in's definition is read-only; what its viewer can change is
+  // their own activations, so that tab opens first there.
+  const [tab, setTab] = useState<PanelTab>(isReadOnly ? "activations" : "definition");
   const [nameDraft, setNameDraft] = useState(trigger.name ?? "");
   const nameError = triggerNameError(nameDraft, allTriggers, index);
 
@@ -135,8 +152,28 @@ export function DeclaredTriggerPanel(props: DeclaredTriggerPanelProps) {
       deleteLabel="Remove trigger"
       bottomOffset={bottomOffset}
       topOffset={topOffset}
+      tabBar={
+        <ConfigPanelTabBar
+          tabs={[
+            { id: "definition", label: "Definition", hasBadge: findings.length > 0 },
+            { id: "activations", label: props.activations.length ? `Activations (${props.activations.length})` : "Activations" },
+          ]}
+          activeTab={tab}
+          onTabChange={(next) => setTab(next as PanelTab)}
+        />
+      }
     >
+      {tab === "activations" ? (
+        <ActivationsSection {...props} />
+      ) : (
       <TriggerPayloadCompletion schema={payloadSchema}>
+        {isReadOnly && (
+          <Section>
+            <p className="cpv2-field-hint !mt-0">
+              Built-in: this definition can't change. Your activations of it are on the Activations tab.
+            </p>
+          </Section>
+        )}
         <Section>
           <div className="cpv2-field-label">
             <label htmlFor={`${ids}-name`}>Name</label>
@@ -220,9 +257,50 @@ export function DeclaredTriggerPanel(props: DeclaredTriggerPanelProps) {
 
         <InputsSection trigger={trigger} inputs={inputs} onChange={update} disabled={isReadOnly} findings={findingsFor(findings, "inputs")} />
 
-        <ActivationsSection {...props} />
+        <Section>
+          <SectionLabel>Prompt</SectionLabel>
+          <CELInput
+            id={`${ids}-prompt`}
+            value={promptOf(trigger)}
+            onChange={(value) => update(withPrompt(trigger, value))}
+            disabled={isReadOnly}
+            multiline
+            rows={3}
+            hideCELHint
+            placeholder="Triage issue #{{ trigger.payload.data.issue.number }}: label it and ask for a repro if one is missing."
+          />
+          <p className="cpv2-field-hint">
+            Each run it starts begins from this. Use <code className="font-mono">{"{{ trigger.payload… }}"}</code> to put the event in
+            it. An activation can write its own prompt instead; leave this empty to make every activation write one.
+          </p>
+          <FindingList findings={findingsFor(findings, "prompt")} />
+        </Section>
       </TriggerPayloadCompletion>
+      )}
     </ConfigurationPanel>
+  );
+}
+
+/**
+ * The source fields for a trigger's kind (schedule, webhook, integration,
+ * workflow outcome), for an editor outside this panel: a personal trigger on
+ * a built-in has a source but no declaration to hold it.
+ */
+export function TriggerSourceFields({ trigger, onChange, catalogRef }: { trigger: DeclaredTrigger; onChange: (t: DeclaredTrigger) => void; catalogRef?: string }) {
+  const kind = sourceCase(trigger);
+  const integration = integrationOf(trigger);
+  const resolvedRef = useDeclaredTriggerRef(integration?.integration, integration?.events ?? [], catalogRef);
+  return (
+    <div className="cpv2-scope">
+      {kind === "schedule" && <ScheduleSection trigger={trigger} onChange={onChange} disabled={false} findings={[]} />}
+      {kind === "webhook" && (
+        <p className="cpv2-field-hint !mt-0">Fires on a POST to its own URL. The URL and token are shown once it is created.</p>
+      )}
+      {kind === "integration" && integration && (
+        <IntegrationSection trigger={trigger} source={integration} catalogRef={resolvedRef} onChange={onChange} disabled={false} findings={[]} />
+      )}
+      {kind === "workflowEvent" && <WorkflowEventSection trigger={trigger} onChange={onChange} disabled={false} findings={[]} />}
+    </div>
   );
 }
 
@@ -471,9 +549,10 @@ function InputsSection({ trigger, inputs, onChange, disabled, findings }: { trig
 }
 
 function ActivationsSection({ trigger, activations, canActivate, unsaved, onActivate, onEditActivation }: DeclaredTriggerPanelProps) {
+  const setEnabled = useSetTriggerEnabled();
   return (
     <Section>
-      <SectionLabel>Activations</SectionLabel>
+      <SectionLabel>Your activations</SectionLabel>
       {activations.length === 0 ? (
         <p className="cpv2-field-hint !mt-0">
           Declaring a trigger doesn't fire anything. Activate it to choose the project, machine and connection its runs use.
@@ -481,20 +560,28 @@ function ActivationsSection({ trigger, activations, canActivate, unsaved, onActi
       ) : (
         <ul className="divide-y divide-border/60 rounded-md border border-border/60 bg-background" aria-label={`Activations of ${trigger.name}`}>
           {activations.map((activation) => (
-            <li key={activation.id}>
+            <li key={activation.id} className="flex items-center gap-2 px-2.5 py-2">
               <button
                 type="button"
                 onClick={() => onEditActivation(activation)}
-                className="flex w-full items-center gap-2 px-2.5 py-2 text-left text-xs hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={`Edit activation ${activation.name}`}
+                className="min-w-0 flex-1 rounded-sm text-left text-xs hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate font-medium text-foreground">{activation.name}</span>
-                  <span className="block truncate text-muted-foreground">
-                    {activation.projectName ?? "Deleted project"} · {activation.daemonName ?? "machine"}
-                  </span>
+                <span className="block truncate font-medium text-foreground">{activation.name}</span>
+                <span className="block truncate text-foreground">
+                  {activation.projectName ?? "Deleted project"} · {activation.noMachine ? "No machine" : (activation.daemonName ?? "machine")}
+                  {activation.connectionId ? " · own connection" : ""}
                 </span>
-                <HealthIndicator health={automationHealth(activation)} />
+                <span className="mt-0.5 block">
+                  <HealthIndicator health={automationHealth(activation)} />
+                </span>
               </button>
+              <Toggle
+                checked={activation.enabled}
+                onChange={(enabled) => setEnabled.mutate({ id: activation.id, enabled })}
+                srLabel={`${activation.name} enabled`}
+                className="h-5 w-9 flex-shrink-0 scale-90"
+              />
             </li>
           ))}
         </ul>

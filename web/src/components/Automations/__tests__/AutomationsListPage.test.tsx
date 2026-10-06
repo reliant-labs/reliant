@@ -60,7 +60,7 @@ vi.mock("@/store/projectStore", () => {
   });
   const useProjectStore = Object.assign(
     (selector?: (s: ReturnType<typeof snapshot>) => unknown) => {
-      projectStoreSelector();
+      projectStoreSelector(selector);
       return selector ? selector(snapshot()) : snapshot();
     },
     { getState: snapshot },
@@ -150,7 +150,13 @@ describe("AutomationsListPage", () => {
     const row = await screen.findByTestId("automation-row-trig-1");
     // On the very first render with data, not after some store fills in.
     expect(within(row).getByText("Reliant · MacBook")).toBeInTheDocument();
-    expect(projectStoreSelector).not.toHaveBeenCalled();
+    // The page reads the store for the CURRENT project only (whose library
+    // it lists not-yet-active triggers from), never for a row's names: the
+    // store's project list is empty here, so a name taken from it would be
+    // blank.
+    for (const [selector] of projectStoreSelector.mock.calls) {
+      expect(String(selector)).not.toMatch(/projects\b/);
+    }
     expect(listDaemons).not.toHaveBeenCalled();
   });
 
