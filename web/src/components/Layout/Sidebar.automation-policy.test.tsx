@@ -84,6 +84,18 @@ vi.mock("../../hooks/trigger-queries", () => ({
   useTriggerName: (triggerId?: string) => (triggerId === "trg-nightly" ? "Nightly triage" : undefined),
 }));
 
+// The Inbox nav item reads its own counts; nothing is waiting here.
+vi.mock("../../hooks/inbox-queries", async () => {
+  const actual = await vi.importActual<typeof import("../../hooks/inbox-queries")>(
+    "../../hooks/inbox-queries",
+  );
+  return {
+    ...actual,
+    useInboxCounts: () => ({ data: { blockingCount: 0, hasInformational: false }, isError: false }),
+    useInboxProjectId: () => undefined,
+  };
+});
+
 vi.mock("../../hooks/message-queries", () => ({
   useMarkUnread: () => ({ mutate: vi.fn() }),
 }));

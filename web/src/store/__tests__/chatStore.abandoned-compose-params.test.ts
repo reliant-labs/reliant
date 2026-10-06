@@ -1,4 +1,4 @@
-import { describe, expect, it, beforeEach } from "vitest";
+import { describe, expect, it, beforeEach, vi } from "vitest";
 import { useChatStore } from "../chatStore";
 import { useChatParamsStore } from "../chatParamsStore";
 import { clearAllMessagesCache } from "../../hooks/message-queries";
@@ -15,6 +15,13 @@ import { clearAllMessagesCache } from "../../hooks/message-queries";
 // clearing too eagerly would throw away params the user is still editing (the
 // standing NOTE in NewChatView documents that failure mode — the view remounts
 // between chat-creation attempts, so its lifecycle cannot express "abandoned").
+
+// selectChat also loads the chat's plan in the background. These chats have
+// none; unmocked, that was a real RPC that settled after the test.
+vi.mock("../../api/plan-grpc", async () => {
+  const actual = await vi.importActual<typeof import("../../api/plan-grpc")>("../../api/plan-grpc");
+  return { ...actual, planGrpc: { ...actual.planGrpc, getByChatId: vi.fn(async () => null) } };
+});
 
 const EXISTING_CHAT = { id: "c-existing" } as never;
 const CREATED_CHAT = { id: "c-created" } as never;

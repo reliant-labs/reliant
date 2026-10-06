@@ -26,7 +26,7 @@
  * the defect. A real QueryClient, the real `useCompleteOnboarding`, the real
  * `useCurrentUser` reading back the same cache entry, and a stand-in terminal
  * step that finishes in the real order. Only the transport underneath
- * (`onboardingService`, `listDaemons`) is faked.
+ * (`onboardingService`, and the daemon registry's `listDaemons`) is faked.
  */
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, waitFor } from "@testing-library/react";
@@ -67,6 +67,22 @@ vi.mock("@/services/controlPlane/daemon", () => ({
   suspendDaemon: vi.fn(),
   deleteDaemon: vi.fn(),
 }));
+
+// useDaemonList reads the reliant daemon registry, not the control-plane
+// daemon service above (docs/design/one-daemon-list.md). Faked at the same
+// transport layer: the user has no machine yet.
+vi.mock("@/api/grpc-client", async () => {
+  const actual = await vi.importActual<typeof import("@/api/grpc-client")>("@/api/grpc-client");
+  return {
+    ...actual,
+    grpcClient: new Proxy(actual.grpcClient, {
+      get(target, prop) {
+        if (prop === "daemonRegistry") return () => ({ listDaemons: async () => ({ daemons: [] }) });
+        return Reflect.get(target, prop);
+      },
+    }),
+  };
+});
 
 vi.mock("@/services/controlPlane/billing", () => ({
   getComputeEligibility: async () => ({ eligible: false }),

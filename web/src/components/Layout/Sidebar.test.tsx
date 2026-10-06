@@ -66,6 +66,14 @@ vi.mock("../../hooks/inbox-queries", () => ({
   useInboxProjectId: () => undefined,
 }));
 
+// The automation pill polls live runs; there are none here.
+vi.mock("../../hooks/run-queries", async () => {
+  const actual = await vi.importActual<typeof import("../../hooks/run-queries")>(
+    "../../hooks/run-queries",
+  );
+  return { ...actual, useLiveRuns: () => ({ data: undefined }) };
+});
+
 vi.mock("../../hooks/message-queries", () => ({
   useMarkUnread: () => ({ mutateAsync: vi.fn() }),
 }));

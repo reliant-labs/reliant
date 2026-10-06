@@ -1,5 +1,5 @@
 import '@testing-library/jest-dom'
-import { vi } from 'vitest'
+import { afterEach, vi } from 'vitest'
 
 // Web Storage polyfill.
 //
@@ -120,3 +120,47 @@ WebSocketMock.CLOSING = 2
 WebSocketMock.CLOSED = 3
 
 global.WebSocket = WebSocketMock as unknown as typeof WebSocket
+// ── Unit tests do not reach the network ────────────────────────────────────
+//
+// jsdom's origin is http://localhost:3000 and the gRPC transport targets
+// window.location.origin, so an RPC a test did not mock used to go to whatever
+// listened on :3000 — on a developer's machine, the live dev stack; in CI,
+// nothing — and settle whenever that answer came back. Usually that was AFTER
+// the test, often after the whole file, and the transport logs every failed
+// RPC. A log that landed while vitest was closing the worker's RPC channel
+// failed the entire run with
+//
+//   EnvironmentTeardownError: [vitest-worker]: Closing rpc while
+//   "onUserConsoleLog" was pending
+//
+// blaming whichever file happened to be tearing down (ChatPresenter.*,
+// Sidebar.*, …), with every test green. A log that landed a little earlier
+// printed under no test at all ("stderr | Object.warn (logger.ts)").
+//
+// So the network is not there. fetch rejects at once, naming the request, and
+// the test that made it fails: a test owns its I/O and mocks it (the hook, the
+// *-grpc module, or fetch itself with vi.spyOn/vi.stubGlobal, which replace
+// this stub for that test).
+const unmockedRequests: string[] = []
+
+function describeRequest(input: RequestInfo | URL, init?: RequestInit): string {
+  const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url
+  const method = init?.method ?? (typeof input === 'object' && 'method' in input ? input.method : 'GET')
+  return `${method} ${url}`
+}
+
+globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+  const request = describeRequest(input, init)
+  unmockedRequests.push(request)
+  return Promise.reject(new TypeError(`Unit tests have no network: unmocked request ${request}`))
+}) as typeof fetch
+
+afterEach(() => {
+  if (unmockedRequests.length === 0) return
+  const requests = [...new Set(unmockedRequests.splice(0))]
+  throw new Error(
+    `This test made ${requests.length === 1 ? 'a real network request' : 'real network requests'}, ` +
+      `which unit tests cannot (see "Unit tests do not reach the network" in src/test/setup.ts). ` +
+      `Mock the hook or API module that sent it:\n  ${requests.join('\n  ')}`,
+  )
+})
