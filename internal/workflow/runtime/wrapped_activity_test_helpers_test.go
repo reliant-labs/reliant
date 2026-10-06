@@ -19,8 +19,9 @@ import (
 type wrapperTestRepo struct {
 	db.Repository
 
-	mu    sync.Mutex
-	steps []*db.StepExecution
+	mu     sync.Mutex
+	steps  []*db.StepExecution
+	events []*db.NodeExecutionState
 }
 
 func (r *wrapperTestRepo) GetWorkflow(context.Context, string) (*db.Workflow, error) {
@@ -36,8 +37,17 @@ func (r *wrapperTestRepo) CreateStepExecution(_ context.Context, exec *db.StepEx
 	return nil
 }
 
-func (r *wrapperTestRepo) EmitNodeExecutionEvent(context.Context, string, *db.NodeExecutionState) error {
+func (r *wrapperTestRepo) EmitNodeExecutionEvent(_ context.Context, _ string, state *db.NodeExecutionState) error {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.events = append(r.events, state)
 	return nil
+}
+
+func (r *wrapperTestRepo) nodeEvents() []*db.NodeExecutionState {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return append([]*db.NodeExecutionState(nil), r.events...)
 }
 
 func (r *wrapperTestRepo) CreateChatUpdate(context.Context, string, reliantv1.ChatUpdateType, string, string) error {

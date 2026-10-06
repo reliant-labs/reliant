@@ -16,6 +16,8 @@ import {
   Controls,
   ReactFlowProvider,
   useReactFlow,
+  useNodesInitialized,
+  useStore,
   applyNodeChanges,
   type BackgroundVariant,
 } from '@xyflow/react'
@@ -26,18 +28,36 @@ import { nodeTypes } from './nodes'
 import { edgeTypes } from './edges'
 import { workflowToFlowElements, mergeExpandedLoops, type FlowNodeData, type ExpandedLoopConfig } from '../../lib/workflow-flow'
 import type { Workflow, LoopStep, Step } from '../../types/workflow'
-import { getStepRef, getStepInline } from '../../types/workflow'
+import { getStepRef, getStepInline, getStepParallel } from '../../types/workflow'
 import type { WorkflowExecution, StepExecution } from '../Chat/ExecutionSidebar/types'
 import { X, ArrowRightToLine, ArrowLeftToLine, ArrowDownToLine, ArrowUpToLine, Pencil, PanelBottom } from 'lucide-react'
 import { NodeDetailsPanel } from './NodeDetailsPanel'
 import { ActivityLog, type ActivityEvent } from './ActivityLog'
-import { useExtendedExecutionStatus, findStepExecutionsForNode, findChildWorkflow, findLoopIterations, findLoopIterationSteps, type LoopIterationInfo } from './hooks/useExecutionStatus'
+import {
+  useExtendedExecutionStatus,
+  findStepExecutionsForNode,
+  findChildWorkflow,
+  findLoopIterations,
+  findLoopIterationSteps,
+  findLoopChildStepExecutions,
+  buildLoopChildStatus,
+  type LoopChildStatus,
+  type LoopIterationInfo,
+} from './hooks/useExecutionStatus'
+import {
+  FOCUS_MIN_ZOOM,
+  OVERVIEW_MIN_ZOOM,
+  frameBounds,
+  isInView,
+  runningFocusNodeIds,
+} from './viewerViewport'
 import { useExpandedLoops } from './hooks/useExpandedLoops'
 import { WorkflowNodeCallbacksProvider } from './WorkflowNodeCallbacksContext'
 import { useNavigate } from '@tanstack/react-router'
 import { useProjectStore } from '../../store/projectStore'
 import { useWorktreeStore } from '../../store/worktreeStore'
 import { workflowGrpc } from '../../api/workflow-grpc'
+import { cn } from '../../lib/utils'
 
 interface WorkflowViewerProps {
   /** The workflow definition to visualize */
@@ -109,7 +129,7 @@ function WorkflowViewerInner({
   onToggleViewerMode,
   onExpandedChange,
 }: WorkflowViewerProps) {
-  const { fitView, getNodes } = useReactFlow()
+  const { getNodes, getNodesBounds, getViewport, setViewport } = useReactFlow()
   const navigate = useNavigate()
   const currentProject = useProjectStore((state) => state.currentProject)
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree)
@@ -145,7 +165,12 @@ function WorkflowViewerInner({
   // Build execution status map using the extended hook (includes loop info).
   // Node STATUS is authoritative from the node_execution stream (via chatId);
   // loop STRUCTURE stays tree-derived from `execution`.
-  const { statusMap: executionStatus, loopInfo } = useExtendedExecutionStatus(execution, workflowNodeIds, chatId)
+  const {
+    statusMap: executionStatus,
+    loopInfo,
+    loopScoped,
+    latestSequence,
+  } = useExtendedExecutionStatus(execution, workflowNodeIds, chatId)
   
   
   // Get loop iteration steps for expanded loops
@@ -238,178 +263,93 @@ function WorkflowViewerInner({
   )
   
   
+  // Live state of every expanded loop's body, per iteration: step rows for
+  // what finished, the loop-scoped stream for what is running now.
+  const loopChildStatusById = useMemo(() => {
+    const result = new Map<string, LoopChildStatus>()
+    for (const [nodeId, loopState] of expandedLoopsHook.expandedLoops) {
+      if (!loopState.subWorkflow) continue
+      const loopStep = workflow.nodes?.find((node) => node.id === nodeId) as LoopStep | undefined
+      const parallel = loopStep ? getStepParallel(loopStep) : undefined
+      result.set(
+        nodeId,
+        buildLoopChildStatus({
+          workflowId: execution?.id,
+          loopNodeId: nodeId,
+          childNodeIds:
+            loopState.subWorkflow.nodes?.map((s) => s.id).filter((id): id is string => !!id) ?? [],
+          iterations: allLoopIterationSteps[nodeId] || [],
+          loopScoped,
+          loopIsRunning: executionStatus[nodeId] === 'running',
+          latestSequence,
+          parallel: parallel === true || typeof parallel === 'string',
+        }),
+      )
+    }
+    return result
+  }, [
+    expandedLoopsHook.expandedLoops,
+    workflow.nodes,
+    execution?.id,
+    allLoopIterationSteps,
+    loopScoped,
+    executionStatus,
+    latestSequence,
+  ])
+
+  // Follow the run into each new iteration as it starts — the stream knows a
+  // new iteration began long before its first step row is written.
+  const { followLatestIterations } = expandedLoopsHook
+  const latestIterationByLoop = useMemo(() => {
+    const latest: Record<string, number> = {}
+    for (const [nodeId, status] of loopChildStatusById) {
+      if (status.latestIteration !== undefined) latest[nodeId] = status.latestIteration
+    }
+    return latest
+  }, [loopChildStatusById])
+  useEffect(() => {
+    followLatestIterations(latestIterationByLoop)
+  }, [followLatestIterations, latestIterationByLoop])
+
   // Build expanded loop configs for merging
   const expandedLoopConfigs = useMemo((): ExpandedLoopConfig[] => {
     const configs: ExpandedLoopConfig[] = []
-    
+
     for (const [nodeId, loopState] of expandedLoopsHook.expandedLoops) {
       if (!loopState.subWorkflow) continue
-      
-      // Get iteration info for this loop
-      // iterationSteps is an array of LoopIterationInfo, each with an .iteration property
-      const iterationSteps = allLoopIterationSteps[nodeId] || []
+
+      const live = loopChildStatusById.get(nodeId)
       const selectedIter = loopState.selectedIteration
-      
-      // If loop is running, prefer the currently running iteration for highlighting
-      const currentLoopInfo = loopInfo[nodeId]
-      const currentRunningIter = currentLoopInfo?.currentIteration
-      const isLoopRunning = executionStatus[nodeId] === 'running'
-      
-      // Use running iteration if loop is running and we have one, otherwise use selected
-      const iterToUse = (isLoopRunning && currentRunningIter !== undefined) ? currentRunningIter : selectedIter
-      
-      // Find the iteration data by iteration number (not array index)
-      // The iterToUse is 0-indexed in our UI
-      const selectedIterData = iterationSteps.find(iter => iter.iteration === iterToUse)
-      const selectedIterSteps = selectedIterData?.steps || []
-      
-      // Build child execution status from selected iteration's steps
-      // Get the sub-workflow node IDs for matching (filter out undefined)
-      const subWorkflowStepIds = new Set(
-        (loopState.subWorkflow.nodes?.map(s => s.id).filter((id): id is string => !!id)) || []
-      )
-      
-      const childExecutionStatus: Record<string, import('../../lib/workflow-flow').NodeExecutionStatus> = {}
+      const loopIsRunning = executionStatus[nodeId] === 'running'
 
-      for (const step of selectedIterSteps) {
-        // The stepId in step execution should match sub-workflow step IDs directly
-        // But it might have suffixes like -save, _0, etc.
-        let matchedNodeId: string | null = null
-        
-        // Try exact match first
-        if (subWorkflowStepIds.has(step.stepId)) {
-          matchedNodeId = step.stepId
-        } else {
-          // Try to find a matching prefix (more aggressive matching)
-          for (const subStepId of subWorkflowStepIds) {
-            // Check various patterns: prefix with -, _, or exact match
-            if (step.stepId.startsWith(subStepId + '-') || 
-                step.stepId.startsWith(subStepId + '_') ||
-                step.stepId === subStepId ||
-                // Also try reverse: subStepId might be a prefix of stepId
-                subStepId.startsWith(step.stepId + '-') ||
-                subStepId.startsWith(step.stepId + '_')) {
-              matchedNodeId = subStepId
-              break
-            }
-          }
-          
-          // If still no match, try base name extraction
-          if (!matchedNodeId) {
-            const baseName = step.stepId.split('-')[0].split('_')[0]
-            if (subWorkflowStepIds.has(baseName)) {
-              matchedNodeId = baseName
-            }
-          }
-          
-          // If still no match, try removing common suffixes
-          if (!matchedNodeId) {
-            // Try removing common suffixes like -save, -result, etc.
-            const withoutSuffix = step.stepId.replace(/-(save|result|output|input)$/i, '')
-            if (subWorkflowStepIds.has(withoutSuffix)) {
-              matchedNodeId = withoutSuffix
-            }
-          }
-          
-          // If still no match, try fuzzy matching - check if any part of stepId matches
-          if (!matchedNodeId) {
-            const stepIdParts = step.stepId.split(/[-_]/)
-            for (const part of stepIdParts) {
-              if (subWorkflowStepIds.has(part)) {
-                matchedNodeId = part
-                break
-              }
-            }
-          }
-          
-          // Last resort: try substring matching (stepId contains nodeId or vice versa)
-          if (!matchedNodeId) {
-            for (const subStepId of subWorkflowStepIds) {
-              if (step.stepId.includes(subStepId) || subStepId.includes(step.stepId)) {
-                matchedNodeId = subStepId
-                break
-              }
-            }
-          }
-        }
-        
-        if (matchedNodeId) {
-          const currentStatus = childExecutionStatus[matchedNodeId]
-          const newStatus = step.status as import('../../lib/workflow-flow').NodeExecutionStatus
-          
-          // Priority: running > failed > completed > pending
-          if (!currentStatus) {
-            childExecutionStatus[matchedNodeId] = newStatus
-          } else if (newStatus === 'running') {
-            childExecutionStatus[matchedNodeId] = 'running'
-          } else if (newStatus === 'failed' && currentStatus !== 'running') {
-            childExecutionStatus[matchedNodeId] = 'failed'
-          }
-          // Keep completed if nothing higher priority
-        }
+      const childExecutionStatus: Record<string, import('../../lib/workflow-flow').NodeExecutionStatus> = {
+        ...(live?.byIteration.get(selectedIter) ?? {}),
+        // The sub-workflow's start node has always "run" once an iteration exists.
+        workflow: 'completed',
       }
 
-      // Also mark 'workflow' as completed for the sub-workflow start node
-      childExecutionStatus['workflow'] = 'completed'
-      
-      // Get iteration statuses for display
-      // Build an array where index i corresponds to iteration number i
-      // Find the max iteration number to size the array
-      const maxIterNum = iterationSteps.reduce((max, iter) => Math.max(max, iter.iteration), -1)
-      const iterationStatuses: import('../../lib/workflow-flow').NodeExecutionStatus[] = []
-      
-      for (let i = 0; i <= maxIterNum; i++) {
-        const iterData = iterationSteps.find(iter => iter.iteration === i)
-        if (iterData) {
-          if (iterData.steps.some(s => s.status === 'failed')) {
-            iterationStatuses.push('failed')
-          } else if (iterData.steps.some(s => s.status === 'running')) {
-            iterationStatuses.push('running')
-          } else if (iterData.steps.every(s => s.status === 'completed')) {
-            iterationStatuses.push('completed')
-          } else {
-            iterationStatuses.push('pending')
-          }
-        } else {
-          iterationStatuses.push('pending')
-        }
-      }
-      
-      // Calculate total iterations - use max of:
-      // 1. Size of iterationStatuses array (maxIterNum + 1)
-      // 2. Completed iterations from loopInfo
-      // 3. Current iteration + 1 if loop is running
-      const totalIterLoopInfo = loopInfo[nodeId]
-      const reportedIterations = totalIterLoopInfo?.completedIterations || 0
-      const currentIteration = totalIterLoopInfo?.currentIteration
-      
-      // If loop is running and we have a current iteration, that's our count
-      const runningCount = currentIteration !== undefined ? currentIteration + 1 : 0
-      const totalIters = Math.max(
-        iterationStatuses.length,  // Based on actual iteration data
-        reportedIterations, 
-        runningCount, 
-        executionStatus[nodeId] === 'running' ? 1 : 0
-      )
-      
+      const iterationStatuses = live?.iterationStatuses ?? []
+      const reportedIterations = loopInfo[nodeId]?.completedIterations || 0
+      const totalIters = Math.max(iterationStatuses.length, reportedIterations, loopIsRunning ? 1 : 0)
+
       configs.push({
         loopNodeId: nodeId,
         subWorkflow: loopState.subWorkflow,
         childExecutionStatus,
-        loopIsRunning: executionStatus[nodeId] === 'running',
+        loopIsRunning,
         selectedIteration: selectedIter,
         totalIterations: totalIters,
-        iterationStatuses: iterationStatuses.length > 0 ? iterationStatuses : 
-          // If no iteration data yet but loop is running, show one pending tab
-          (executionStatus[nodeId] === 'running' ? ['running' as const] : []),
+        iterationStatuses: iterationStatuses.length > 0 ? iterationStatuses :
+          // If no iteration data yet but loop is running, show one running tab
+          (loopIsRunning ? ['running' as const] : []),
       })
     }
-    
+
     return configs
   }, [
     expandedLoopsHook.expandedLoops,
-    allLoopIterationSteps, 
-    executionStatus, 
+    loopChildStatusById,
+    executionStatus,
     loopInfo
   ])
   
@@ -643,13 +583,6 @@ function WorkflowViewerInner({
     }
   }, [expandedLoopsHook])
   
-  // Refit view when loops are expanded/collapsed (but NOT when viewer is expanded)
-  useEffect(() => {
-    if (expandedLoopConfigs.length > 0 && !isExpanded) {
-      setTimeout(() => fitView({ padding: 0.2 }), 100)
-    }
-  }, [expandedLoopConfigs.length, fitView, isExpanded])
-
   // Handle node click - open details panel
   const handleNodeClick = useCallback(
     (_event: React.MouseEvent, node: Node<FlowNodeData>) => {
@@ -668,6 +601,25 @@ function WorkflowViewerInner({
         return
       }
       
+      // A node inside an expanded loop is drawn as "<loop>:<node>" and its
+      // steps are recorded against that loop and an iteration — show the
+      // iteration the loop is displaying.
+      if (node.parentId && node.id.startsWith(`${node.parentId}:`)) {
+        const loopState = expandedLoopsHook.expandedLoops.get(node.parentId)
+        const childNodeIds =
+          loopState?.subWorkflow?.nodes?.map((s) => s.id).filter((id): id is string => !!id) ?? []
+        const stepExecutions = findLoopChildStepExecutions(
+          execution,
+          node.parentId.split(':').pop()!,
+          node.id.slice(node.parentId.length + 1),
+          childNodeIds,
+          loopState?.selectedIteration,
+        )
+        setSelectedNode({ nodeId: node.id, nodeData: node.data, stepExecutions })
+        onNodeClick?.(node.id, stepExecutions[0])
+        return
+      }
+
       const stepExecutions = findStepExecutionsForNode(execution, node.id, workflowNodeIds)
       const childWorkflow = findChildWorkflow(execution, node.id)
       const loopIterations = findLoopIterations(execution, node.id)
@@ -750,12 +702,55 @@ function WorkflowViewerInner({
     [nodes, execution, workflowNodeIds]
   )
 
-  // Fit view on mount and when nodes change (but NOT when expanded - let user control zoom/pan)
-  const handleInit = useCallback(() => {
-    if (!isExpanded) {
-      setTimeout(() => fitView({ padding: 0.2 }), 100)
+  // --- Camera -------------------------------------------------------------
+  // Frame the graph so it can be READ (see viewerViewport.ts): the running
+  // step while a run is live, otherwise the graph from its start. Re-framed
+  // when the layout or pane size changes, and scrolled to a newly running step
+  // only if it is off screen. Once the user pans or zooms, the camera is
+  // theirs until a different workflow or run is shown.
+  const nodesInitialized = useNodesInitialized()
+  const paneWidth = useStore((state) => state.width)
+  const paneHeight = useStore((state) => state.height)
+  const userMovedViewportRef = useRef(false)
+  const lastLayoutKeyRef = useRef<string | null>(null)
+  const focusKey = useMemo(() => runningFocusNodeIds(nodes).join('|'), [nodes])
+  const layoutKey = `${workflowKey}|${nodes.length}|${paneWidth}x${paneHeight}`
+
+  useEffect(() => {
+    userMovedViewportRef.current = false
+    lastLayoutKeyRef.current = null
+  }, [workflowKey])
+
+  useEffect(() => {
+    if (!nodesInitialized || paneWidth === 0 || paneHeight === 0) return
+    if (userMovedViewportRef.current) return
+    const pane = { width: paneWidth, height: paneHeight }
+    const focusIds = focusKey ? focusKey.split('|') : []
+    const isFirstFrame = lastLayoutKeyRef.current === null
+
+    if (lastLayoutKeyRef.current !== layoutKey) {
+      lastLayoutKeyRef.current = layoutKey
+      const viewport = focusIds.length > 0
+        ? frameBounds(getNodesBounds(focusIds), pane, { minZoom: FOCUS_MIN_ZOOM })
+        : frameBounds(getNodesBounds(getNodes()), pane, { minZoom: OVERVIEW_MIN_ZOOM })
+      void setViewport(viewport, { duration: isFirstFrame ? 0 : 200 })
+      return
     }
-  }, [fitView, isExpanded])
+
+    if (focusIds.length === 0) return
+    const target = getNodesBounds(focusIds)
+    const current = getViewport()
+    if (current.zoom >= FOCUS_MIN_ZOOM && isInView(target, current, pane)) return
+    void setViewport(frameBounds(target, pane, { minZoom: FOCUS_MIN_ZOOM }), { duration: 400 })
+  }, [nodesInitialized, paneWidth, paneHeight, focusKey, layoutKey, getNodes, getNodesBounds, getViewport, setViewport])
+
+  const handleUserMove = useCallback((event: MouseEvent | TouchEvent | null) => {
+    // Programmatic moves (setViewport above) carry no event.
+    if (event) userMovedViewportRef.current = true
+  }, [])
+  const handleUserZoomControl = useCallback(() => {
+    userMovedViewportRef.current = true
+  }, [])
 
   const displayTitle = title || workflow.name || 'Workflow'
 
@@ -778,15 +773,16 @@ function WorkflowViewerInner({
             <div className="flex items-center gap-2">
               <h3 className="text-sm font-medium text-foreground">{displayTitle}</h3>
               {execution && (
-                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
+                <span className={cn(
+                  'text-xs px-2 py-0.5 rounded-full font-medium',
                   execution.status === 'running'
-                    ? 'bg-blue-100 text-blue-700'
+                    ? 'bg-info/15 text-info'
                     : execution.status === 'completed'
-                      ? 'bg-emerald-100 text-emerald-700'
+                      ? 'bg-success/15 text-success-ink'
                       : execution.status === 'failed'
-                        ? 'bg-red-100 text-red-700'
-                        : 'bg-gray-100 text-gray-700'
-                }`}>
+                        ? 'bg-destructive/15 text-destructive-ink'
+                        : 'bg-muted text-muted-foreground',
+                )}>
                   {execution.status}
                 </span>
               )}
@@ -872,11 +868,10 @@ function WorkflowViewerInner({
             edges={edges}
             nodeTypes={nodeTypes}
             edgeTypes={edgeTypes}
-            onInit={handleInit}
             onNodeClick={handleNodeClick}
             onPaneClick={handleCloseDetails}
             onNodesChange={handleNodesChange}
-            fitView={!isExpanded}
+            onMoveStart={handleUserMove}
             fitViewOptions={{ padding: 0.2 }}
             nodesDraggable={true}
             nodesConnectable={false}
@@ -896,7 +891,14 @@ function WorkflowViewerInner({
               size={2.5}
               variant={"dots" as BackgroundVariant}
             />
-            {!compact && <Controls showInteractive={false} />}
+            {!compact && (
+              <Controls
+                showInteractive={false}
+                onZoomIn={handleUserZoomControl}
+                onZoomOut={handleUserZoomControl}
+                onFitView={handleUserZoomControl}
+              />
+            )}
           </ReactFlow>
           
           {/* Node Details Panel - positioned absolutely over the canvas */}
@@ -921,19 +923,19 @@ function WorkflowViewerInner({
         {!hideLegend && (
         <div className="flex items-center gap-4 px-3 py-2 border-t border-border bg-muted/30 text-xs">
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded border-2 border-gray-300 bg-white" />
+            <div className="w-3 h-3 rounded border-2 border-border bg-background" />
             <span className="text-muted-foreground">Pending</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded border-2 border-blue-500 bg-blue-50 animate-pulse" />
+            <div className="w-3 h-3 rounded border-2 border-info bg-info/15 animate-pulse" />
             <span className="text-muted-foreground">Running</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded border-2 border-emerald-500 bg-emerald-50" />
+            <div className="w-3 h-3 rounded border-2 border-success bg-success/15" />
             <span className="text-muted-foreground">Completed</span>
           </div>
           <div className="flex items-center gap-1.5">
-            <div className="w-3 h-3 rounded border-2 border-red-500 bg-red-50" />
+            <div className="w-3 h-3 rounded border-2 border-destructive bg-destructive/15" />
             <span className="text-muted-foreground">Failed</span>
           </div>
         </div>

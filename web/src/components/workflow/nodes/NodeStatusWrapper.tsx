@@ -27,97 +27,97 @@ import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 const THEME_COLORS = {
   green: {
     defaultBorder: 'border-green-300',
-    selectedBorder: 'border-green-500 shadow-lg ring-2 ring-green-200',
+    selectedBorder: 'border-green-500 shadow-lg ring-2 ring-green-500/30',
     bgVar: '--node-green-bg',
   },
   indigo: {
     defaultBorder: 'border-indigo-300',
-    selectedBorder: 'border-indigo-500 shadow-lg ring-2 ring-indigo-200',
+    selectedBorder: 'border-indigo-500 shadow-lg ring-2 ring-indigo-500/30',
     bgVar: '--node-indigo-bg',
   },
   blue: {
     defaultBorder: 'border-blue-300',
-    selectedBorder: 'border-blue-500 shadow-lg ring-2 ring-blue-200',
+    selectedBorder: 'border-blue-500 shadow-lg ring-2 ring-blue-500/30',
     bgVar: '--node-blue-bg',
   },
   teal: {
     defaultBorder: 'border-teal-300',
-    selectedBorder: 'border-teal-600 shadow-lg ring-2 ring-teal-200',
+    selectedBorder: 'border-teal-600 shadow-lg ring-2 ring-teal-500/30',
     bgVar: '--node-teal-bg',
   },
   amber: {
     defaultBorder: 'border-amber-300',
-    selectedBorder: 'border-amber-600 shadow-lg ring-2 ring-amber-200',
+    selectedBorder: 'border-amber-600 shadow-lg ring-2 ring-amber-500/30',
     bgVar: '--node-amber-bg',
   },
   pink: {
     defaultBorder: 'border-pink-300',
-    selectedBorder: 'border-pink-600 shadow-lg ring-2 ring-pink-200',
+    selectedBorder: 'border-pink-600 shadow-lg ring-2 ring-pink-500/30',
     bgVar: '--node-pink-bg',
   },
   rose: {
     defaultBorder: 'border-rose-300',
-    selectedBorder: 'border-rose-500 shadow-lg ring-2 ring-rose-200',
+    selectedBorder: 'border-rose-500 shadow-lg ring-2 ring-rose-500/30',
     bgVar: '--node-rose-bg',
   },
   fuchsia: {
     defaultBorder: 'border-fuchsia-300',
-    selectedBorder: 'border-fuchsia-500 shadow-lg ring-2 ring-fuchsia-200',
+    selectedBorder: 'border-fuchsia-500 shadow-lg ring-2 ring-fuchsia-500/30',
     bgVar: '--node-fuchsia-bg',
   },
   purple: {
     defaultBorder: 'border-purple-300',
-    selectedBorder: 'border-purple-600 shadow-lg ring-2 ring-purple-200',
+    selectedBorder: 'border-purple-600 shadow-lg ring-2 ring-purple-500/30',
     bgVar: '--node-purple-bg',
   },
   orange: {
     defaultBorder: 'border-orange-400',
-    selectedBorder: 'border-orange-500 shadow-lg ring-2 ring-orange-200',
+    selectedBorder: 'border-orange-500 shadow-lg ring-2 ring-orange-500/30',
     bgVar: '--node-orange-bg',
   },
   emerald: {
     defaultBorder: 'border-emerald-400',
-    selectedBorder: 'border-emerald-500 shadow-lg ring-2 ring-emerald-200',
+    selectedBorder: 'border-emerald-500 shadow-lg ring-2 ring-emerald-500/30',
     bgVar: '--node-emerald-bg',
   },
   red: {
     defaultBorder: 'border-red-300',
-    selectedBorder: 'border-red-500 shadow-lg ring-2 ring-red-200',
+    selectedBorder: 'border-red-500 shadow-lg ring-2 ring-red-500/30',
     bgVar: '--node-red-bg',
   },
   yellow: {
     defaultBorder: 'border-yellow-300',
-    selectedBorder: 'border-yellow-500 shadow-lg ring-2 ring-yellow-200',
+    selectedBorder: 'border-yellow-500 shadow-lg ring-2 ring-yellow-500/30',
     bgVar: '--node-yellow-bg',
   },
   sky: {
     defaultBorder: 'border-sky-300',
-    selectedBorder: 'border-sky-500 shadow-lg ring-2 ring-sky-200',
+    selectedBorder: 'border-sky-500 shadow-lg ring-2 ring-sky-500/30',
     bgVar: '--node-sky-bg',
   },
   cyan: {
     defaultBorder: 'border-cyan-300',
-    selectedBorder: 'border-cyan-500 shadow-lg ring-2 ring-cyan-200',
+    selectedBorder: 'border-cyan-500 shadow-lg ring-2 ring-cyan-500/30',
     bgVar: '--node-cyan-bg',
   },
   violet: {
     defaultBorder: 'border-violet-300',
-    selectedBorder: 'border-violet-500 shadow-lg ring-2 ring-violet-200',
+    selectedBorder: 'border-violet-500 shadow-lg ring-2 ring-violet-500/30',
     bgVar: '--node-violet-bg',
   },
   slate: {
     defaultBorder: 'border-slate-400',
-    selectedBorder: 'border-slate-500 shadow-lg ring-2 ring-slate-200',
+    selectedBorder: 'border-slate-500 shadow-lg ring-2 ring-slate-500/30',
     bgVar: '--node-slate-bg',
   },
   neutral: {
     defaultBorder: 'border-border',
-    selectedBorder: 'border-gray-500 shadow-lg ring-2 ring-gray-200',
+    selectedBorder: 'border-foreground/50 shadow-lg ring-2 ring-ring/30',
     bgVar: null, // Uses bg-background class
   },
   primary: {
     defaultBorder: 'border-primary/30',
-    selectedBorder: 'border-primary shadow-lg ring-2 ring-primary/20',
+    selectedBorder: 'border-primary shadow-lg ring-2 ring-primary/30',
     bgVar: '--node-primary-bg',
   },
 } as const
@@ -125,26 +125,28 @@ const THEME_COLORS = {
 export type NodeTheme = keyof typeof THEME_COLORS
 
 // Execution status styling - overrides theme colors when status is set
-// Running and failed are prominent; completed is subtle to reduce visual noise
+// Running and failed are prominent; completed is subtle to reduce visual noise.
+// Semantic status tokens, and rings at an alpha of the status colour: a light
+// pastel ring (sky-300, red-300) is a bright halo on a pure-black canvas.
 const STATUS_STYLES = {
   running: {
-    border: 'border-sky-500 border-[3px]',
+    border: 'border-info border-[3px]',
     bgVar: '--node-status-running-bg',
     animate: 'animate-pulse-border',
-    ring: 'ring-2 ring-sky-300',
+    ring: 'ring-2 ring-info/40',
   },
   completed: {
     // Subtle completed state - don't compete with active nodes
-    border: 'border-slate-300',
+    border: 'border-success/40',
     bgVar: null, // Use default background, just slightly muted
     animate: '',
     ring: '',
   },
   failed: {
-    border: 'border-red-600 border-[3px]',
+    border: 'border-destructive border-[3px]',
     bgVar: '--node-status-failed-bg',
     animate: '',
-    ring: 'ring-2 ring-red-300',
+    ring: 'ring-2 ring-destructive/40',
   },
   pending: null, // Use theme defaults
 } as const

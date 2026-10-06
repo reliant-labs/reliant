@@ -608,7 +608,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	startTime := time.Now()
 
 	// Emit node execution "started" event for UI streaming
-	w.emitNodeExecutionEvent(ctx, "started", false, stepID, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
+	w.emitNodeExecutionEvent(ctx, "started", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
 
 	// Start heartbeat goroutine for fast cancellation detection.
 	// See activityHeartbeatInterval / activityHeartbeatTimeout for the cadence
@@ -720,7 +720,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			endTime := time.Now()
 			duration := endTime.Sub(startTime).Milliseconds()
 			errMsg := panicErr.Error()
-			w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &duration, nil, &errMsg)
+			w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &duration, nil, &errMsg)
 
 			// Re-panic to propagate to Temporal
 			panic(r)
@@ -843,7 +843,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 
 		// Emit node execution "failed" event for UI streaming
 		errMsg := execErr.Error()
-		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
+		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 
 		return zeroOutput, execErr
 	}
@@ -874,7 +874,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, saveErr, maxAttempts)
 		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, saveErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
 		errMsg := saveErr.Error()
-		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
+		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 		return zeroOutput, saveErr
 	}
 
@@ -913,7 +913,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	}
 	// `skipped` is stamped on the output by the activity that records the skip,
 	// so this reads the output rather than matching on an activity name.
-	w.emitNodeExecutionEvent(ctx, "completed", model.IsSkippedOutput(resultMap), stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, exitCode, nil)
+	w.emitNodeExecutionEvent(ctx, "completed", model.IsSkippedOutput(resultMap), stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, exitCode, nil)
 
 	return result, nil
 }
@@ -1220,6 +1220,9 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 	// for a reviewer that never ran.
 	skipped bool,
 	nodeID string,
+	// scope is where in the graph this node ran: its enclosing loop and
+	// iteration, and its dotted node path.
+	scope activityInputInfo,
 	nodeType string,
 	chatID string,
 	workflowID string,
@@ -1286,6 +1289,21 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 	}
 	if errorMessage != nil {
 		nodeState.ErrorMessage = errorMessage
+	}
+	// A node inside a loop runs once per iteration under the same node id, so
+	// the event names the loop and the iteration it belongs to. Without them
+	// iteration 2's "started" is indistinguishable from a late replay of
+	// iteration 1's, which is why the viewer never showed a loop body running.
+	if scope.LoopNodeID != "" {
+		loopNodeID, iteration := scope.LoopNodeID, scope.LoopIteration
+		nodeState.ParentNodeID = &loopNodeID
+		nodeState.Iteration = &iteration
+	}
+	// The node path attributes an activity deep inside a sub-workflow (a
+	// reviewer's call_llm, say) to the loop-body node that contains it, which
+	// is the node the diagram draws.
+	if scope.NodePath != "" {
+		nodeState.Metadata = map[string]string{"node_path": scope.NodePath}
 	}
 
 	// Use a background context with timeout for the DB write
@@ -1447,6 +1465,11 @@ type activityInputInfo struct {
 	WorkflowID    string
 	LoopNodeID    string // The loop node that spawned this activity (if any)
 	LoopIteration int    // The iteration index within the loop (0-indexed, -1 if not in loop)
+	// NodePath is the node's fully-qualified dotted graph position
+	// ("attempt.review.agent_loop.call_llm"), when the input carries one. It
+	// is what lets a consumer of the node event attribute an activity deep in
+	// a sub-workflow to the loop-body node that contains it.
+	NodePath string
 }
 
 // extractActivityInputInfo extracts common fields from a typed input using JSON.
@@ -1504,6 +1527,20 @@ func extractActivityInputInfo(input interface{}) activityInputInfo {
 		case int64:
 			info.LoopIteration = int(v)
 		}
+	}
+	// types.RuntimeContext marshals loop_iteration with omitempty, so a v3
+	// input in a loop's FIRST iteration arrives with a loop_node_id and no
+	// loop_iteration at all. Read literally that is the "not in a loop" -1,
+	// and every iteration-0 step row and node event was filed under -1: the
+	// workflow viewer could not find iteration 0's steps, and the timeline's
+	// "-save" sibling join (which matches loop_iteration exactly) dropped
+	// them. A loop node id is the authoritative "in a loop" signal, so an
+	// absent iteration beside it can only mean 0.
+	if info.LoopNodeID != "" && info.LoopIteration < 0 {
+		info.LoopIteration = 0
+	}
+	if nodePath, ok := m["node_path"].(string); ok {
+		info.NodePath = nodePath
 	}
 	return info
 }
