@@ -40,11 +40,11 @@ Tools are organized by tags for filtering:
 ## Categories
 
 - [Planning & Task Management](#planning--task-management) (10 tools)
-- [File Operations](#file-operations) (7 tools)
+- [File Operations](#file-operations) (8 tools)
 - [Information Retrieval](#information-retrieval) (6 tools)
-- [Workflow Management](#workflow-management) (18 tools)
+- [Workflow Management](#workflow-management) (20 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (17 tools)
+- [Other Tools](#other-tools) (47 tools)
 
 ---
 
@@ -405,6 +405,7 @@ _Tools for reading, writing, and modifying files._
 | [`edit`](#edit) | file, coding:default | Make a precise text replacement in a single file, or create/delete file content. One edit per call. |
 | [`find_replace`](#find_replace) | file, coding:default | Performs find and replace operations across multiple files matching a glob pattern. |
 | [`move_code`](#move_code) | file | Move or copy a block of code from one location to another, within the same file or across files. |
+| [`prove_test`](#prove_test) | execution, file | Prove a regression test actually tests your fix: one call runs the test with the |
 | [`read_attachment`](#read_attachment) | file, readonly, coding:plan, coding:default | Read the contents of a file the user attached to the conversation. |
 | [`save_attachment`](#save_attachment) | file, coding:default | Write an already-stored attachment to a file on disk. |
 | [`view`](#view) | file, readonly, coding:plan, coding:default | File viewing tool that reads and displays the contents of files with line numbers, allowing you t... |
@@ -653,6 +654,55 @@ BEST PRACTICES:
 - For same-file moves, be aware that line numbers shift after the operation
 - Add blank lines in the extracted code if needed for proper spacing
 - Check for any imports/dependencies that might need to be added to target file
+
+---
+
+### prove_test
+
+**Tags:** `execution`, `file`
+
+Prove a regression test actually tests your fix: one call runs the test with the
+fix reverted (it must FAIL) and again with the fix in place (it must PASS). This
+replaces patching the old code back in by hand — and never use git stash for it.
+
+WHEN TO USE:
+- After writing a fix and a test for it, before reporting the work done.
+  "Confirm a new test fails before the fix and passes after" is exactly this call.
+- When you are not sure a test exercises the code you changed.
+
+HOW IT WORKS:
+1. Snapshots the exact bytes and mode of every file in files.
+2. Writes each file's baseline version (default: git HEAD; any git revision works).
+   A file that does not exist at baseline is removed for the run; a file your fix
+   deleted is put back.
+3. Runs command and expects a NON-ZERO exit.
+4. Restores your files — always, including on timeout, cancellation or a crash —
+   and verifies them byte for byte.
+5. Runs command again and expects exit 0.
+
+PARAMETERS THAT MATTER:
+- files: the IMPLEMENTATION files of the fix. NOT the test file — the test must
+  stay in place for both runs.
+- command: as narrow as possible — one package, one test
+  ('go test -run TestX ./pkg/foo', 'npx vitest run src/x.test.ts'). It runs twice.
+
+VERDICTS:
+- proven: fails without the fix, passes with it.
+- passes_without_fix: the test does not exercise the change. Strengthen it.
+- fails_with_fix: the fix does not make the test pass.
+- baseline_does_not_compile: the before-run failed to BUILD (typical when the fix
+  adds a symbol the test calls). That is NOT proof; report it as such.
+- conflict: another writer changed a named file mid-run. Their content was kept
+  and yours preserved; the result says where.
+- restore_failed / inconclusive: see the result text.
+
+SHARED CHECKOUTS — READ THIS:
+While the before-run executes, the named files hold their OLD content on disk.
+Anything else building or testing in the same working tree during that window
+sees the old code. The window is one run of command, which is why it should be
+narrow. Two prove_test calls on the same file wait for each other, and if another
+agent edits a named file meanwhile, prove_test keeps their edit instead of
+overwriting it.
 
 ---
 
@@ -1281,6 +1331,7 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 
 | Tool | Tags | Description |
 |------|------|-------------|
+| [`activate_trigger`](#activate_trigger) | workflow | Activate a trigger a workflow declares, for the user you are working for, so the workflow starts ... |
 | [`create_workflow`](#create_workflow) | workflow | Create a new workflow. |
 | [`delete_scenario`](#delete_scenario) | workflow | Delete a test scenario. |
 | [`edit_scenario`](#edit_scenario) | workflow | Make precise text replacements in a scenario's YAML definition. |
@@ -1293,12 +1344,31 @@ _Tools for managing and inspecting workflows, presets, and scenarios._
 | [`get_workflow_suggestions`](#get_workflow_suggestions) | workflow, readonly | Returns static design suggestions for building workflows. |
 | [`list_presets`](#list_presets) | workflow, readonly | Lists available presets for agent nodes. |
 | [`list_scenarios`](#list_scenarios) | workflow, readonly | List all test scenarios for the current workflow. |
+| [`list_triggers`](#list_triggers) | workflow, readonly | List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integra... |
 | [`list_workflows`](#list_workflows) | workflow, readonly | Lists all available workflows (builtin, project, and user-created). |
 | [`run_scenario`](#run_scenario) | workflow | Run an existing test scenario by name. |
 | [`search_integrations`](#search_integrations) | workflow, readonly | Search the integration catalog for actions a workflow can run (and trigger types that can start o... |
 | [`view_scenario`](#view_scenario) | workflow, readonly | View a specific test scenario's full definition. |
 | [`write_scenario`](#write_scenario) | workflow | Create or update a test scenario with YAML content. |
 | [`write_workflow`](#write_workflow) | workflow | Replace an existing workflow draft with YAML content. |
+
+### activate_trigger
+
+**Tags:** `workflow`
+
+Activate a trigger a workflow declares, for the user you are working for, so the workflow starts running on it.
+
+A workflow's YAML says WHEN it runs, in its triggers: block (a schedule, a webhook, an integration event, or another workflow's run finishing/failing/blocking). Declaring one fires nothing. Activating it says AS WHOM and WHERE: the user, a project, the daemon whose tools the runs use, and for an integration trigger the connection it listens through.
+
+The declaration stays the source of truth: its source, filter and inputs are re-read from the workflow every time it fires, so editing the workflow's triggers: block changes this activation too. If the declaration is removed or renamed, the activation reports BROKEN health (see list_triggers) and fires nothing until it is restored.
+
+Runs it starts are unattended: nobody answers questions or approvals.
+
+RETURNS the trigger id; for a webhook trigger, its URL and token (the token is shown ONCE — give it to the user now).
+
+Before activating, check the workflow validates (get_workflow) and, for an integration trigger, that the user has a connection for it.
+
+---
 
 ### create_workflow
 
@@ -1570,6 +1640,16 @@ Use this to see what scenarios exist and their current state.
 
 Pass id (required): the workflow UUID, slug, or name, as returned by
 create_workflow or list_workflows.
+
+---
+
+### list_triggers
+
+**Tags:** `workflow`, `readonly`
+
+List the user's triggers: what starts runs without anyone typing — schedules, webhooks, integration events and workflow events — with each one's health.
+
+Narrow by workflow to see a workflow's activations. Health is HEALTHY, DEGRADED, FAILING (its runs keep failing), UNKNOWN (has not fired) or BROKEN (it activates a declared trigger the workflow no longer has, or one changed in a way it cannot follow — the detail says which; fix the workflow or activate it again).
 
 ---
 
@@ -1963,16 +2043,46 @@ _Miscellaneous tools and utilities._
 | [`generate_image`](#generate_image) | media | Generate an image from a text description. |
 | [`generate_video`](#generate_video) | media | Generate a short video clip from a text description. |
 | [`get_run`](#get_run) | runs, readonly | Check on one top-level run: its state, title, workflow, when it was created and last active, and ... |
+| [`github__code_search`](#github__code_search) | integration | Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:own... |
+| [`github__issue_comment`](#github__issue_comment) | integration | Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share... |
+| [`github__issue_create`](#github__issue_create) | integration | Open an issue in owner/repo with a title and optional markdown body, labels and assignees. Labels... |
+| [`github__issue_get`](#github__issue_get) | integration | Return one issue: title, body, state, author, labels, assignees and timestamps. Pull requests are... |
+| [`github__issue_update`](#github__issue_update) | integration | Edit an issue (or a pull request's issue fields). Only the fields you pass change; pass at least ... |
+| [`github__pr_get`](#github__pr_get) | integration | Return one pull request: title, body, state, draft and merged flags, the head and base refs (bran... |
+| [`github__pr_list_files`](#github__pr_list_files) | integration | List the files a pull request changes: filename, status (added, modified, removed, renamed, ...),... |
+| [`github__pr_review_create`](#github__pr_review_create) | integration | Submit a review on a pull request with a verdict: COMMENT (the default), APPROVE, or REQUEST_CHAN... |
+| [`github__repo_get`](#github__repo_get) | integration | Return one repository: full name, description, visibility, default branch, primary language, topi... |
+| [`github__repo_get_content`](#github__repo_get_content) | integration | Read one path in a repository through GitHub, with no checkout. For a file, content is its text. ... |
+| [`github__repo_get_tree`](#github__repo_get_tree) | integration | List the repository's files recursively from its git tree, with no checkout: each entry's full pa... |
+| [`github__repo_list_for_user`](#github__repo_list_for_user) | integration | List the repositories the connected user can access (owned, collaborator, and through organizatio... |
+| [`github__user_get`](#github__user_get) | integration | Return the GitHub user the connection authenticates as: login, id, name and profile URL. |
+| [`github__workflow_dispatch`](#github__workflow_dispatch) | integration | Start a GitHub Actions workflow run on a branch or tag. The workflow file must declare `on: workf... |
+| [`gmail__label_list`](#gmail__label_list) | integration | List the mailbox's labels: system labels (INBOX, SENT, UNREAD, STARRED, IMPORTANT, CATEGORY_*) an... |
+| [`gmail__message_get`](#gmail__message_get) | integration | Read a message by id. format full (the default) decodes the body into text (and html when the mes... |
+| [`gmail__message_list`](#gmail__message_list) | integration | List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann i... |
+| [`gmail__message_send`](#gmail__message_send) | integration | Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, ... |
 | [`http__request`](#http__request) | integration | Send an HTTP request to a public http(s) URL and return the status, headers and body. Private, lo... |
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`request_machine`](#request_machine) | - | Offer the user the choice to connect a machine, when the task genuinely needs their computer. |
 | [`send_to_run`](#send_to_run) | runs | Send a message to another top-level run that is still going, as if the user had typed it into tha... |
 | [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
+| [`slack__conversations_history`](#slack__conversations_history) | integration | Read messages from a channel the bot is a member of, newest first, optionally between oldest and ... |
+| [`slack__conversations_list`](#slack__conversations_list) | integration | List the workspace's conversations: public channels, and private channels the bot is a member of.... |
+| [`slack__message_post`](#slack__message_post) | integration | Post a message as the Reliant bot to a channel or DM by its ID. Give text, Block Kit blocks, or b... |
+| [`slack__message_reply`](#slack__message_reply) | integration | Post a reply in the thread of an existing message, identified by its channel and ts (a reply to a... |
+| [`slack__message_update`](#slack__message_update) | integration | Replace the text and/or blocks of a message the Reliant bot posted, identified by channel and ts.... |
+| [`slack__reaction_add`](#slack__reaction_add) | integration | Add an emoji reaction, as the bot, to the message at channel + ts. Name the emoji without colons ... |
+| [`slack__user_lookup_by_email`](#slack__user_lookup_by_email) | integration | Look up a member of the workspace by email address and return their user ID (for mentions as <@ID... |
 | [`spawn_send`](#spawn_send) | - | Send a message to a running sub-agent you spawned, or to your own parent agent. |
 | [`spawn_status`](#spawn_status) | readonly | Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and o... |
 | [`spawn_stop`](#spawn_stop) | - | Stop a sub-agent you spawned, when its work is no longer needed. |
 | [`start_run`](#start_run) | runs | Start a NEW top-level run — a separate chat the user can open and watch — and return immediat... |
+| [`twilio__message_get`](#twilio__message_get) | integration | Fetch a message by its SID: its current status (queued → sent → delivered, or failed/undelive... |
+| [`twilio__message_list`](#twilio__message_list) | integration | List the account's messages, newest first, optionally only those to or from one address (E.164, o... |
+| [`twilio__message_send`](#twilio__message_send) | integration | Send a message from one of your Twilio senders. For SMS give E.164 numbers (+15551234567); for Wh... |
+| [`twilio__phone_number_list`](#twilio__phone_number_list) | integration | List the phone numbers the account owns, with what each can do (sms, mms, voice) and where its in... |
 | [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
 
 ### ask_user
@@ -2146,6 +2256,150 @@ Only runs the user owns can be inspected. To check on a sub-agent you spawned, u
 
 ---
 
+### github__code_search
+
+**Tags:** `integration`
+
+Search file contents with GitHub's code search syntax. Scope the query with a qualifier, repo:owner/name, org:name or user:name; without one it searches every repository the connection can see. language:, path: and extension: narrow it further, for example "ParseDuration repo:golang/go language:go". Only default branches are indexed, files over 384 KB are not, and GitHub allows about ten code searches a minute, so prefer one precise query over many broad ones.
+
+---
+
+### github__issue_comment
+
+**Tags:** `integration`
+
+Post a markdown comment on an issue, or on a pull request's conversation tab (pull requests share the issue comments API; pass the PR number as issue_number). For a review with a verdict, use pr.review.create.
+
+---
+
+### github__issue_create
+
+**Tags:** `integration`
+
+Open an issue in owner/repo with a title and optional markdown body, labels and assignees. Labels that do not exist are created; an assignee without access to the repository fails validation. Returns the issue number and URL.
+
+---
+
+### github__issue_get
+
+**Tags:** `integration`
+
+Return one issue: title, body, state, author, labels, assignees and timestamps. Pull requests are issues too; is_pull_request says which.
+
+---
+
+### github__issue_update
+
+**Tags:** `integration`
+
+Edit an issue (or a pull request's issue fields). Only the fields you pass change; pass at least one. labels and assignees REPLACE the current set; pass an empty list to clear them. Close with state closed and an optional state_reason.
+
+---
+
+### github__pr_get
+
+**Tags:** `integration`
+
+Return one pull request: title, body, state, draft and merged flags, the head and base refs (branch, sha, repository) and mergeability. mergeable is null while GitHub is still computing it; read again shortly. mergeable_state is GitHub's summary (clean, dirty, blocked, behind, unstable, unknown, ...).
+
+---
+
+### github__pr_list_files
+
+**Tags:** `integration`
+
+List the files a pull request changes: filename, status (added, modified, removed, renamed, ...), line counts and the unified diff hunk (patch). patch is null for binary files and very large diffs. Follows GitHub's pagination up to 1000 files; GitHub itself caps the list at 3000.
+
+---
+
+### github__pr_review_create
+
+**Tags:** `integration`
+
+Submit a review on a pull request with a verdict: COMMENT (the default), APPROVE, or REQUEST_CHANGES. body is required for COMMENT and REQUEST_CHANGES. The review is submitted immediately, never left pending. Pass commit_id to pin the review to the commit you read (pr.get head.sha); otherwise GitHub uses the latest commit.
+
+---
+
+### github__repo_get
+
+**Tags:** `integration`
+
+Return one repository: full name, description, visibility, default branch, primary language, topics, and whether the connection can push. Read default_branch before browsing code on a branch nobody named.
+
+---
+
+### github__repo_get_content
+
+**Tags:** `integration`
+
+Read one path in a repository through GitHub, with no checkout. For a file, content is its text. A binary file has binary true and no content; a file over 1 MB has too_large true and no content. For a directory, entries lists what it holds, one level deep (repo.get_tree lists everything). Omit path for the repository root and ref for the default branch. Results longer than about 30,000 characters are cut short.
+
+---
+
+### github__repo_get_tree
+
+**Tags:** `integration`
+
+List the repository's files recursively from its git tree, with no checkout: each entry's full path, type (blob is a file, tree a directory, commit a submodule) and size. Pass path to list only one directory, which a large repository needs: results longer than about 30,000 characters are cut short. truncated is true when the tree is larger than GitHub returns at once (100,000 entries). Omit ref for the default branch.
+
+---
+
+### github__repo_list_for_user
+
+**Tags:** `integration`
+
+List the repositories the connected user can access (owned, collaborator, and through organization membership), following pagination up to 1000. With the hosted GitHub App, actions still only reach repositories the App is installed on. can_push says whether the user can write.
+
+---
+
+### github__user_get
+
+**Tags:** `integration`
+
+Return the GitHub user the connection authenticates as: login, id, name and profile URL.
+
+---
+
+### github__workflow_dispatch
+
+**Tags:** `integration`
+
+Start a GitHub Actions workflow run on a branch or tag. The workflow file must declare `on: workflow_dispatch`, and inputs must match its declared inputs (at most 25, all passed as strings). workflow is the workflow file name (deploy.yml) or its numeric id. Returns the run id and URL when GitHub reports them.
+
+---
+
+### gmail__label_list
+
+**Tags:** `integration`
+
+List the mailbox's labels: system labels (INBOX, SENT, UNREAD, STARRED, IMPORTANT, CATEGORY_*) and the user's own, with the id Search email's label_ids and a trigger's label_ids attribute use.
+
+---
+
+### gmail__message_get
+
+**Tags:** `integration`
+
+Read a message by id. format full (the default) decodes the body into text (and html when the message has an HTML part) and lists attachments by name; metadata returns only headers, labels and the snippet, which is cheaper and avoids pulling a large body. Headers are flattened into from, to, cc, subject, date and message_id (the Message-ID a reply's in_reply_to takes).
+
+---
+
+### gmail__message_list
+
+**Tags:** `integration`
+
+List message ids in the mailbox, newest first, matching q (Gmail's search box syntax: "from:ann is:unread newer_than:2d", "subject:invoice has:attachment") and/or labels (all must match; INBOX, UNREAD, STARRED, or a label id from List labels). Returns ids and thread ids only; read a message with Get email. Follows Gmail's paging up to max_results.
+
+---
+
+### gmail__message_send
+
+**Tags:** `integration`
+
+Send an email as the connected Google account. Give to (and optionally cc and bcc) as addresses, a subject, and a body as plain text, HTML or both. To reply, pass the original message's thread_id and its Message-ID header as in_reply_to (and references when the thread has several), and keep its subject ("Re: " is added if missing): Gmail only threads a reply whose headers and subject match. Returns the sent message's id and thread_id.
+
+---
+
 ### http__request
 
 **Tags:** `integration`
@@ -2185,6 +2439,16 @@ Loaded tools become available immediately on the next turn.
 ### metadata_writer
 
 Writes and updates project metadata YAML file
+
+---
+
+### request_machine
+
+Offer the user the choice to connect a machine, when the task genuinely needs their computer.
+
+This chat has no machine: there is no checkout, filesystem, shell or local MCP server. Call this when part of the task cannot be done without one — editing or running code in their project, reading local files, running a command. The user sees your reason with a "Connect a machine" button. Connecting moves this chat onto that machine, and your next turn has the full tool set.
+
+It returns at once. After calling it, stop: end your turn with a short note of what you will do once a machine is connected, and wait for the user. Do not call it again in the same turn, and do not call it for work the tools you already have can do (web access, integrations, planning).
 
 ---
 
@@ -2241,6 +2505,62 @@ Examples:
 
 ---
 
+### slack__conversations_history
+
+**Tags:** `integration`
+
+Read messages from a channel the bot is a member of, newest first, optionally between oldest and latest (ts values). limit bounds the page size; up to max_pages pages are followed. Thread replies are not included, only the thread's parent with its reply_count.
+
+---
+
+### slack__conversations_list
+
+**Tags:** `integration`
+
+List the workspace's conversations: public channels, and private channels the bot is a member of. Returns each channel's ID (what every other action takes), name, and whether the bot is a member — it can only post to and read channels it is in. Follows Slack's cursor pagination.
+
+---
+
+### slack__message_post
+
+**Tags:** `integration`
+
+Post a message as the Reliant bot to a channel or DM by its ID. Give text, Block Kit blocks, or both (text is then the notification fallback). Set thread_ts to post inside a thread. The bot must be a member of the channel. Returns the message's ts, which identifies it for updates, replies and reactions.
+
+---
+
+### slack__message_reply
+
+**Tags:** `integration`
+
+Post a reply in the thread of an existing message, identified by its channel and ts (a reply to a reply goes to the same thread). Set reply_broadcast to also show it in the channel.
+
+---
+
+### slack__message_update
+
+**Tags:** `integration`
+
+Replace the text and/or blocks of a message the Reliant bot posted, identified by channel and ts. A bot can only edit its own messages (cant_update_message otherwise).
+
+---
+
+### slack__reaction_add
+
+**Tags:** `integration`
+
+Add an emoji reaction, as the bot, to the message at channel + ts. Name the emoji without colons ("thumbsup", "white_check_mark"). Reacting twice with one emoji fails with already_reacted.
+
+---
+
+### slack__user_lookup_by_email
+
+**Tags:** `integration`
+
+Look up a member of the workspace by email address and return their user ID (for mentions as <@ID> and DMs), names and timezone. An address with no member is users_not_found.
+
+---
+
 ### spawn_send
 
 Send a message to a running sub-agent you spawned, or to your own parent agent.
@@ -2270,6 +2590,11 @@ Check on the sub-agents you (the calling thread) have spawned — list them all,
 WORKSPACE SCOPING:
 - Only shows/waits on agents YOU spawned (your direct children), never a
   sibling's or another thread's sub-agents.
+- Exception: if this chat was BRANCHED from a conversation that had already
+  spawned agents, those are listed too, marked "Inherited … (read-only)". You
+  can inspect them (agent_id without wait), but they still belong to the
+  original conversation: their results are delivered there, and only it can
+  wait on, message, or stop them.
 
 TWO MODES:
 1. LISTING (omit agent_id): returns every sub-agent you spawned — agent_id,
@@ -2339,6 +2664,38 @@ RETURNS the new chat id (also its run id for list_runs, get_run, control_run and
 Calling this again with the same tool call (a retry) attaches to the run already started instead of starting a second one.
 
 LIMITS: an agent-started run may start further runs, but only 3 levels deep, and the user may have at most 10 agent-started runs live at once. Past either limit this fails; finish or cancel something first.
+
+---
+
+### twilio__message_get
+
+**Tags:** `integration`
+
+Fetch a message by its SID: its current status (queued → sent → delivered, or failed/undelivered with error_code), body, addresses and price. Use it to check whether a message you sent was delivered.
+
+---
+
+### twilio__message_list
+
+**Tags:** `integration`
+
+List the account's messages, newest first, optionally only those to or from one address (E.164, or whatsapp:+… for WhatsApp) or sent on, before or after a date (YYYY-MM-DD). page_size bounds each page; up to max_pages pages are followed.
+
+---
+
+### twilio__message_send
+
+**Tags:** `integration`
+
+Send a message from one of your Twilio senders. For SMS give E.164 numbers (+15551234567); for WhatsApp prefix BOTH to and from with "whatsapp:". Send from a number (from) or a Messaging Service (messaging_service_sid). Give body text, media_url, or both. WhatsApp only allows free-form text within 24 hours of the person's last message; outside that window send an approved template with content_sid (and content_variables) instead of body. Returns the message sid and its initial status (queued or accepted); delivery happens after.
+
+---
+
+### twilio__phone_number_list
+
+**Tags:** `integration`
+
+List the phone numbers the account owns, with what each can do (sms, mms, voice) and where its incoming messages are sent today (sms_url). Each number whose messages should start a workflow needs its "A message comes in" webhook set to Reliant's Twilio URL (shown on the trigger). WhatsApp senders are managed separately and are not listed here.
 
 ---
 

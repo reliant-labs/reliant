@@ -22,15 +22,15 @@ For usage information and examples, see the [Presets Guide](/docs/workflows/pres
 | `debug` | `tags:flagship` | `view`, `tag:shell`, `code_context` | Debugging orchestrator that coordinates research and testing to isolate bugs ... |
 | `documentation` | `tags:moderate` | `view`, `write`, `edit`, `tag:shell`, `fetch` | Documentation specialist creating comprehensive, narrative-driven technical d... |
 | `forge` | `tags:flagship` | `tag:coding:default` (+13 more) | Balanced general-purpose agent for Forge app generation workflows with full t... |
-| `forge_implementer` | `tags:moderate` | `tag:coding:default`, `component_library` | Implementation specialist for a single seam of a Forge app — same tier as `... |
+| `forge_implementer` | `tags:moderate` | `tag:coding:default` (+2 more) | Implementation specialist for a single seam of a Forge app — same tier as `... |
 | `general` | `tags:flagship` | `tag:coding:default` (+2 more) | Balanced general-purpose agent with full tool access including file modificat... |
 | `git` | `tags:fast` | `tag:shell`, `view` | Git specialist for commits, branching, and version control operations - loads... |
-| `implementer` | `tags:flagship` | `tag:coding:default` | Implementation specialist for well-specified code changes — follows detaile... |
+| `implementer` | `tags:moderate` | `tag:coding:default`, `prove_test` | Implementation specialist for well-specified code changes — follows detaile... |
 | `migrate` | `tags:flagship` | `tag:coding:default` | Guided migration assistant for moving from Claude Code, Cursor, Codex, or Win... |
 | `planner` | `tags:flagship` | `view`, `tag:shell`, `code_context`, `create_plan` | Strategic planner who orchestrates research and synthesizes actionable implem... |
 | `refactor` | `tags:moderate` | `view` (+6 more) | Code refactoring specialist who reorganizes and improves code structure while... |
 | `researcher` | `tags:flagship` | `tag:shell`, `tag:web`, `view`, `code_context` | Research and analysis specialist conducting comprehensive investigations of t... |
-| `tester` | `tags:moderate` | `view` (+4 more) | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
+| `tester` | `tags:moderate` | `view` (+5 more) | Testing specialist who creates test harnesses, writes comprehensive tests, an... |
 | `ux` | `tags:flagship` | `fetch` (+19 more) | User experience specialist focused on improving UI/UX design, accessibility, ... |
 | `workflow_builder` | `tags:flagship` | `tag:workflow` (+4 more) | Specialized assistant for building and modifying Reliant workflows |
 
@@ -96,7 +96,7 @@ Implementation specialist for a single seam of a Forge app — same tier as `imp
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `tag:coding:default`, `component_library` |
+| **Tools** | `tag:coding:default`, `component_library`, `prove_test` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -132,9 +132,9 @@ Implementation specialist for well-specified code changes — follows detailed i
 
 | Parameter | Value |
 |-----------|-------|
-| **Model** | `tags:flagship` |
+| **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `tag:coding:default` |
+| **Tools** | `tag:coding:default`, `prove_test` |
 | **Spawn Presets** | `researcher` |
 
 ---
@@ -198,7 +198,7 @@ Testing specialist who creates test harnesses, writes comprehensive tests, and i
 |-----------|-------|
 | **Model** | `tags:moderate` |
 | **Tag** | `agent` |
-| **Tools** | `view`, `write`, `edit`, `tag:shell`, `code_context` |
+| **Tools** | `view`, `write`, `edit`, `tag:shell`, `code_context`, `prove_test` |
 | **Spawn Presets** | `researcher` |
 
 ---

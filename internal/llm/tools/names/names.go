@@ -23,6 +23,9 @@ const (
 	ToolShellWait   = "shell_wait"
 	ToolShellKill   = "shell_kill"
 
+	// Test tools
+	ToolProveTest = "prove_test"
+
 	// Network tools
 	ToolFetch     = "fetch"
 	ToolWebSearch = "websearch"
@@ -118,6 +121,7 @@ const (
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
+	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,
 	ToolListTasks, ToolAddTask, ToolUpdateTask, ToolCreateSubtask,

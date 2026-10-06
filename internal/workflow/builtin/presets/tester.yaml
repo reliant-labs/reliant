@@ -12,5 +12,6 @@ params:
   - edit
   - tag:shell
   - code_context  # find the callers a new test must cover
+  - prove_test    # show a regression test fails without the fix and passes with it
   model:
     tags: [moderate]

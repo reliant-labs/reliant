@@ -9,7 +9,14 @@ params:
     tags: [moderate]
   skills:
     - code-search
+  # prove_test is named here rather than left to load_tool. An implementer's
+  # job ends with "the regression test fails before the fix and passes
+  # after", and a tool that must first be discovered and loaded (a whole
+  # turn) does not get used: in the roofers dogfood run every implementation
+  # agent skipped that check. It is not in tag:coding:default because it puts
+  # old code on disk for one test run — see the registry entry.
   tools:
     - tag:coding:default
+    - prove_test
   spawn_presets:
     - researcher

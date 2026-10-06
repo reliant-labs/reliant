@@ -503,6 +503,17 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"prove_test": {
+		Bindable: map[string]struct{}{
+			"baseline":   {},
+			"command":    {},
+			"files":      {},
+			"repo":       {},
+			"tail_lines": {},
+			"timeout":    {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"read_attachment": {
 		Bindable: map[string]struct{}{
 			"attachment_id": {},

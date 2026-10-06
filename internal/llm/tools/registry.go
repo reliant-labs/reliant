@@ -28,6 +28,9 @@ const (
 	ToolShellWait   = "shell_wait"
 	ToolShellKill   = "shell_kill"
 
+	// Test tools
+	ToolProveTest = ProveTestToolName
+
 	// Network tools
 	ToolFetch     = "fetch"
 	ToolWebSearch = "websearch"
@@ -560,6 +563,20 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolShellOutput, (*ToolsFactory).ShellOutput, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementDaemon},
 		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementDaemon},
 		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, PlacementDaemon},
+
+		// prove_test reverts the fix, runs a test expecting failure, restores,
+		// and runs it again expecting success. Daemon-located because the
+		// snapshot, swap and restore must happen in the process on the machine
+		// that holds the files: a restore that crossed the network could be
+		// lost with the connection, leaving the user's fix replaced by the old
+		// code.
+		//
+		// Deliberately NOT TagCodingDefault. For the length of one test run it
+		// puts OLD code on disk in a working tree other agents may be building
+		// in, so an agent should reach for it on purpose. The presets whose job
+		// is writing a fix and its test (implementer, forge_implementer,
+		// tester) name it directly; everyone else can load it.
+		{ToolProveTest, (*ToolsFactory).ProveTest, []ToolTag{TagExecution, TagFile}, PlacementDaemon},
 
 		// Network tools. Both are pure net/http plus HTML parsing — no filesystem,
 		// no subprocess — so they carry no daemon requirement. They were daemon-routed
