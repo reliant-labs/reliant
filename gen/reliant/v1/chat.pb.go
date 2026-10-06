@@ -728,8 +728,10 @@ type Chat struct {
 	// When the user adopted this run into their chats (AdoptChat). Unset when not
 	// adopted. Origin (launch_kind, trigger_id) is never rewritten by adoption.
 	AdoptedAt *string `protobuf:"bytes,35,opt,name=adopted_at,json=adoptedAt,proto3,oneof" json:"adopted_at,omitempty"`
-	// This chat has no machine by design (StartChatRequest.no_machine, or a
-	// no-machine trigger). Its runs are offered only server-side tools.
+	// This chat has no machine by design (StartChatRequest.no_machine, a
+	// no-machine trigger, or BranchChatRequest.no_machine). Its runs are offered
+	// only server-side tools. One-way: SetChatDaemon with a daemon clears it, and
+	// nothing sets it on a chat that already has a machine.
 	NoMachine     bool `protobuf:"varint,36,opt,name=no_machine,json=noMachine,proto3" json:"no_machine,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -4335,8 +4337,16 @@ type BranchChatRequest struct {
 	Title            *string                 `protobuf:"bytes,3,opt,name=title,proto3,oneof" json:"title,omitempty"`                                               // Optional title for the new branch
 	WorktreeId       *string                 `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"`                   // Optional worktree ID to assign to the branched chat
 	WorkspaceContext *WorkspaceBranchContext `protobuf:"bytes,5,opt,name=workspace_context,json=workspaceContext,proto3,oneof" json:"workspace_context,omitempty"` // Context about workspace branching
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// no_machine branches into a chat with no machine by design ("Continue
+	// without machine"): it carries the conversation, binds to the project's
+	// main worktree rather than a machine-bound one, pins no daemon, and never
+	// wakes one. The source chat is left as it is. Mutually exclusive with
+	// worktree_id and workspace_context, which both name a machine's checkout.
+	// A branch of a chat that already has no machine stays without one unless
+	// it names a worktree.
+	NoMachine     *bool `protobuf:"varint,8,opt,name=no_machine,json=noMachine,proto3,oneof" json:"no_machine,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *BranchChatRequest) Reset() {
@@ -4402,6 +4412,13 @@ func (x *BranchChatRequest) GetWorkspaceContext() *WorkspaceBranchContext {
 		return x.WorkspaceContext
 	}
 	return nil
+}
+
+func (x *BranchChatRequest) GetNoMachine() bool {
+	if x != nil && x.NoMachine != nil {
+		return *x.NoMachine
+	}
+	return false
 }
 
 // BranchChatResponse returns the created branch chat
@@ -6169,7 +6186,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x12source_worktree_id\x18\x01 \x01(\tH\x00R\x10sourceWorktreeId\x88\x01\x01\x12!\n" +
 	"\ffiles_copied\x18\x02 \x03(\tR\vfilesCopied\x12,\n" +
 	"\x12copy_files_enabled\x18\x03 \x01(\bR\x10copyFilesEnabledB\x15\n" +
-	"\x13_source_worktree_id\"\x9e\x02\n" +
+	"\x13_source_worktree_id\"\xd1\x02\n" +
 	"\x11BranchChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1d\n" +
 	"\n" +
@@ -6177,10 +6194,13 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x05title\x18\x03 \x01(\tH\x00R\x05title\x88\x01\x01\x12$\n" +
 	"\vworktree_id\x18\x04 \x01(\tH\x01R\n" +
 	"worktreeId\x88\x01\x01\x12T\n" +
-	"\x11workspace_context\x18\x05 \x01(\v2\".reliant.v1.WorkspaceBranchContextH\x02R\x10workspaceContext\x88\x01\x01B\b\n" +
+	"\x11workspace_context\x18\x05 \x01(\v2\".reliant.v1.WorkspaceBranchContextH\x02R\x10workspaceContext\x88\x01\x01\x12\"\n" +
+	"\n" +
+	"no_machine\x18\b \x01(\bH\x03R\tnoMachine\x88\x01\x01B\b\n" +
 	"\x06_titleB\x0e\n" +
 	"\f_worktree_idB\x14\n" +
-	"\x12_workspace_contextJ\x04\b\x02\x10\x03J\x04\b\x06\x10\a\":\n" +
+	"\x12_workspace_contextB\r\n" +
+	"\v_no_machineJ\x04\b\x02\x10\x03J\x04\b\x06\x10\a\":\n" +
 	"\x12BranchChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\"\xbf\x01\n" +
 	"\n" +

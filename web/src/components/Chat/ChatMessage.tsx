@@ -17,7 +17,8 @@ import { tabSwitchProfiler } from "../../lib/tabSwitchProfiler";
 import { ToolExecution, type ToolResultData } from "./ToolExecution";
 import { ToolExecutionGroup } from "./ToolExecutionGroup";
 import { ToolExecutionCollapsibleGroup } from "./ToolExecutionCollapsibleGroup";
-import { isReadOnlyTool } from "../../lib/toolFormatters";
+import { isReadOnlyTool, isRequestMachineTool } from "../../lib/toolFormatters";
+import { RequestMachineCard, requestMachineReason } from "./tool-renderers/RequestMachineToolRenderer";
 import { MarkdownRenderer } from "./MarkdownRenderer";
 import { ErrorMessage } from "./ErrorMessage";
 import { MessageAttachments } from "./MessageAttachments";
@@ -1061,10 +1062,30 @@ function ChatMessageComponent({
                 }
 
                 // Tool run — show during streaming too (preparing state).
-                if (hideToolExecutions) return null;
-                const runExecutions = segment.executions
+                const allRunExecutions = segment.executions
                   .map((exec) => enhancedById.get(exec.call.id))
                   .filter((e): e is EnhancedToolExecution => e !== undefined);
+                // request_machine is a question to the user, not a record of
+                // work: it renders as its own card, outside the tool rows and
+                // even when tool rows are hidden (NO_MACHINE_CHATS.md §3).
+                const machineRequests = allRunExecutions.filter((exec) =>
+                  isRequestMachineTool(exec.call.name),
+                );
+                const machineRequestCards = machineRequests.map((exec) => (
+                  <RequestMachineCard
+                    key={`${message.id}-seg-${segIdx}-request-machine-${exec.call.id}`}
+                    chatId={chatId || undefined}
+                    reason={requestMachineReason(exec.call.input)}
+                  />
+                ));
+                if (hideToolExecutions) {
+                  return machineRequestCards.length > 0 ? (
+                    <Fragment key={`${message.id}-seg-${segIdx}`}>{machineRequestCards}</Fragment>
+                  ) : null;
+                }
+                const runExecutions = allRunExecutions.filter(
+                  (exec) => !isRequestMachineTool(exec.call.name),
+                );
                 // Images the tools in this run generated. Rendered AFTER the
                 // tool card and OUTSIDE it: the card explains how the image was
                 // made (and is collapsed by default), the image is the result.
@@ -1083,6 +1104,7 @@ function ChatMessageComponent({
                 return (
                   <Fragment key={`${message.id}-seg-${segIdx}`}>
                     {renderToolRun(runExecutions, `${message.id}-seg-${segIdx}`)}
+                    {machineRequestCards}
                     {runImages.length > 0 && (
                       <MessageGeneratedImages attachments={runImages} />
                     )}

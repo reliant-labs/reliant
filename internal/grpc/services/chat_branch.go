@@ -29,6 +29,13 @@ func (s *ChatService) BranchChat(
 	if req.Msg.MessageId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message_id is required"))
 	}
+	// A worktree is a checkout on one machine, so a branch with no machine
+	// cannot name one, nor the workspace switch that describes copying into it.
+	requestedWorktree := req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != ""
+	if req.Msg.GetNoMachine() && (requestedWorktree || req.Msg.WorkspaceContext != nil) {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("no_machine and worktree_id/workspace_context are mutually exclusive: a worktree lives on a machine"))
+	}
 
 	// Get the message directly by ID - simple and unambiguous
 	branchPointMsg, err := s.database.GetMessage(ctx, req.Msg.MessageId)
@@ -140,13 +147,32 @@ func (s *ChatService) BranchChat(
 
 	// Determine worktree ID - use provided one or inherit from the requesting chat
 	worktreeID := sourceChat.WorktreeID
+	// The chat the user branched from: the source chat, unless the branch
+	// point is a message it inherited from an earlier chat.
+	fromChat := sourceChat
 	// If the requesting chat differs from the source chat (branching from an inherited message),
 	// use the requesting chat's worktree as the default instead of the message's original chat's worktree.
 	if req.Msg.ChatId != "" && req.Msg.ChatId != sourceChatID {
 		requestingChat, err := s.database.GetChat(ctx, req.Msg.ChatId)
 		if err == nil && requestingChat.UserID == userID {
 			worktreeID = requestingChat.WorktreeID
+			fromChat = requestingChat
 		}
+	}
+
+	// A branch with no machine ("Continue without machine",
+	// research/NO_MACHINE_CHATS.md) carries the conversation and nothing
+	// machine-bound: it binds to the project's main worktree, as every
+	// no-machine chat does (the chat list groups by worktree), and pins no
+	// daemon. A branch of a chat that already has no machine stays without one
+	// unless it names a worktree, which is a machine's checkout.
+	noMachine := req.Msg.GetNoMachine() || (fromChat.NoMachine && !requestedWorktree)
+	if noMachine {
+		mainWorktreeID, err := s.launcher().ResolveChatWorktreeID(ctx, sourceChat.ProjectID, nil)
+		if err != nil {
+			return nil, launchErrorToConnect(err)
+		}
+		worktreeID = mainWorktreeID
 	}
 	var targetWorktree *db.Worktree // Store for system message creation
 	if req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != "" {
@@ -169,7 +195,7 @@ func (s *ChatService) BranchChat(
 	// "branch chat didn't work" bug). Derived from the resolved worktree so the
 	// session daemon is set from the first message, not lazily on interaction.
 	var activeDaemonID *string
-	if worktreeID != nil && *worktreeID != "" {
+	if worktreeID != nil && *worktreeID != "" && !noMachine {
 		if wt, err := s.database.GetWorktree(ctx, *worktreeID); err == nil && wt != nil && wt.DaemonID != nil && *wt.DaemonID != "" {
 			activeDaemonID = wt.DaemonID
 		}
@@ -193,6 +219,7 @@ func (s *ChatService) BranchChat(
 		State:          db.ChatStateIdle,
 		WorkflowID:     &branchWorkflowID, // Root workflow ID = chat ID for UI identification
 		ActiveDaemonID: activeDaemonID,    // Pin to the worktree's owning daemon
+		NoMachine:      noMachine,
 		CreatedAt:      time.Now().UTC(),
 		UpdatedAt:      time.Now().UTC(),
 		LastActive:     time.Now().UTC(),
@@ -206,6 +233,13 @@ func (s *ChatService) BranchChat(
 	} else {
 		// Source chat has no workflow, use user's default preference
 		workflowName = s.launcher().ResolveDefaultWorkflow(ctx, userID, "")
+	}
+	// Refuse now a workflow that cannot run without a machine, rather than
+	// leave a branch whose first send is bound to fail.
+	if noMachine {
+		if err := s.launcher().ValidateNoMachine(ctx, userID, workflowName, sourceChat.ProjectID); err != nil {
+			return nil, launchErrorToConnect(err)
+		}
 	}
 
 	// Create root workflow - fork metadata lives in the Thread record, not here
@@ -234,6 +268,7 @@ func (s *ChatService) BranchChat(
 		"workflow":    branchChat.WorkflowName,
 		"state":       string(branchChat.State),
 		"created_at":  branchChat.CreatedAt.Format(time.RFC3339),
+		"no_machine":  branchChat.NoMachine,
 	}
 	chatCreatedJSON, marshalErr := json.Marshal(chatCreatedData)
 	if marshalErr != nil {

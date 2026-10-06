@@ -819,6 +819,9 @@ function handleChatConfigChanged(update: UserUpdate) {
     workflow_name?: string | null;
     state?: string;
     title?: string;
+    // SetChatDaemon: "Connect a machine" clears no_machine in the same write.
+    active_daemon_id?: string;
+    no_machine?: boolean;
     updated_at: string;
   };
 
@@ -839,6 +842,12 @@ function handleChatConfigChanged(update: UserUpdate) {
   }
   if (data.state !== undefined) {
     patch.state = parseChatState(data.state);
+  }
+  if (data.no_machine !== undefined) {
+    patch.noMachine = data.no_machine;
+  }
+  if (data.active_daemon_id !== undefined) {
+    patch.activeDaemonId = data.active_daemon_id || undefined;
   }
   // applyChatPatch also updates the Zustand map — ChatInput preset restore
   // reads workflowName/selectedPresets from the Zustand map, not React Query.

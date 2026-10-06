@@ -1182,10 +1182,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		celStringValuePtr(args.GetSystemPrompt()),
 	)
 	if chat.NoMachine {
-		systemPrompts = append(systemPrompts, noMachineSystemNote)
-		if note := noMachineRepoNote(projectGitHubRepos(project, repos), githubReadable(availableTools, tools.Scope(chat.ID, thread))); note != "" {
-			systemPrompts = append(systemPrompts, note)
-		}
+		systemPrompts = append(systemPrompts, noMachineNotes(availableTools, projectGitHubRepos(project, repos),
+			githubReadable(availableTools, tools.Scope(chat.ID, thread)))...)
 	}
 
 	// Set deferred tools on the load_tool so its description advertises them
@@ -2090,7 +2088,7 @@ func (a *CallLLMActivity) getAvailableToolsWithSpawn(ctx context.Context, chat *
 		// add — is narrowed to tools that run without a machine, so neither
 		// this turn nor a later load can offer one that cannot run.
 		access = withoutMachineTools(access)
-		filterResult.ToolNames = withoutMachineToolNames(filterResult.ToolNames)
+		filterResult.ToolNames = noMachineMenu(filterResult.ToolNames, access)
 	}
 	// Integration tools that need a connection reach only an owner who has one.
 	if chat != nil {

@@ -165,6 +165,93 @@ func TestCallLLM_NoMachineRunIsOfferedOnlyToolsThatRunWithoutAMachine(t *testing
 	assert.True(t, tools.GetLoadedToolsStore().CanLoadTool(scope, tools.ToolGenerateImage))
 }
 
+// request_machine (research/NO_MACHINE_CHATS.md §3) is how a no-machine run
+// asks for the user's computer. It is handed to a no-machine run that was given
+// any tools, and never reaches a run on a machine — not by naming it, not by a
+// glob, not through load_tool's reach or its advertised list.
+func TestCallLLM_RequestMachineIsOfferedOnlyToARunWithNoMachine(t *testing.T) {
+	f := setupNoMachineFixture(t, true)
+	assert.Contains(t, f.offeredTools(t, []string{"tag:coding:default"}, nil), tools.ToolRequestMachine)
+	// A node whose only tools need a machine is exactly the one that may need
+	// to ask for one.
+	assert.Equal(t, []string{tools.ToolRequestMachine}, f.offeredTools(t, []string{tools.ShellToolName, tools.ToolEdit}, nil))
+
+	ordinary := setupNoMachineFixture(t, false)
+	onMachine := ordinary.offeredTools(t,
+		[]string{"tag:coding:default", tools.ToolRequestMachine, "request_*"}, []string{"*"})
+	assert.Contains(t, onMachine, tools.ShellToolName, "control: the machine run is offered its tools")
+	assert.NotContains(t, onMachine, tools.ToolRequestMachine, "a run on a machine is never offered request_machine")
+
+	scope := tools.Scope(ordinary.chat.ID, ordinary.chat.ID)
+	assert.NotContains(t, tools.DeferredToolNames(scope, tools.PermissionOrchestrator, onMachine, nil), tools.ToolRequestMachine,
+		"load_tool must not advertise it on a machine")
+}
+
+// The no-machine note and the GitHub repository note agree on what to do when
+// the task needs the user's computer: both point at request_machine when the
+// turn was offered it, and neither names it when it was not.
+func TestNoMachineNotes_NameRequestMachineOnlyWhenOffered(t *testing.T) {
+	repos := []githubRepo{{Owner: "acme", Name: "widgets"}}
+	offered := []tools.Tool{tools.NewRequestMachineTool()}
+
+	with := noMachineNotes(offered, repos, false)
+	require.Len(t, with, 2)
+	assert.Equal(t, noMachineSystemNote, with[0])
+	assert.Contains(t, with[1], "call request_machine")
+
+	without := noMachineNotes(nil, repos, false)
+	require.Len(t, without, 2)
+	assert.Equal(t, noMachineSystemNoteWithoutRequest, without[0])
+	for _, note := range without {
+		assert.NotContains(t, note, "request_machine", "never name a tool the turn does not have")
+	}
+
+	assert.Len(t, noMachineNotes(offered, nil, false), 1, "no GitHub remote, no repository note")
+}
+
+// End to end: a no-machine turn in a project on GitHub, with GitHub not
+// connected, is told both that it has no machine and that the code cannot be
+// read from here, and both notes send it to request_machine.
+func TestCallLLM_NoMachineNotesComposeAroundRequestMachine(t *testing.T) {
+	f := setupIntegrationFixture(t, true, &ownerConnections{usable: map[string]bool{}})
+	f.setProjectRemote(t, "https://github.com/acme/widgets.git")
+
+	offered := f.offeredTools(t, []string{"tag:web"}, []string{"*"})
+	require.Contains(t, offered, tools.ToolRequestMachine)
+
+	prompt := f.systemPrompt()
+	assert.Contains(t, prompt, noMachineSystemNote)
+	assert.Contains(t, prompt, "No GitHub tools are available")
+	assert.Contains(t, prompt, "if the task needs it, call request_machine")
+	assert.NotContains(t, prompt, "if the task needs it, say so")
+}
+
+// A node given no tools at all (a title or a summary call) is not handed one.
+func TestCallLLM_NoMachineNodeWithNoToolsIsHandedNone(t *testing.T) {
+	f := setupNoMachineFixture(t, true)
+	assert.Empty(t, f.offeredTools(t, []string{}, nil))
+}
+
+// "Connect a machine" (SetChatDaemon → UpdateChatActiveDaemon) takes effect on
+// the running workflow's next turn: call_llm re-reads the chat row every turn,
+// so the same chat is offered the machine tools and no longer request_machine.
+func TestCallLLM_ConnectingAMachineGivesTheNextTurnTheFullToolSet(t *testing.T) {
+	f := setupNoMachineFixture(t, true)
+	preloaded := []string{"tag:coding:default"}
+
+	before := f.offeredTools(t, preloaded, nil)
+	assert.NotContains(t, before, tools.ShellToolName)
+	assert.Contains(t, before, tools.ToolRequestMachine)
+
+	daemonID := "daemon-connected"
+	require.NoError(t, f.h.Repo().UpdateChatActiveDaemon(context.Background(), f.chat.ID, &daemonID))
+
+	after := f.offeredTools(t, preloaded, nil)
+	assert.Contains(t, after, tools.ShellToolName, "the next turn has the machine's tools")
+	assert.Contains(t, after, tools.ToolView)
+	assert.NotContains(t, after, tools.ToolRequestMachine)
+}
+
 // A machine tool named anyway (from history, or a hallucination) is refused
 // before it reaches the executor, and the refusal is not a daemon-offline
 // signal: the breaker that pauses a run after three "no daemon connected"

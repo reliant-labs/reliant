@@ -46,8 +46,10 @@ func TestSetChatDaemon_SetAndClear(t *testing.T) {
 
 	service := &ChatService{database: repo}
 
-	// Set daemon
+	// Set daemon. It must be one the caller owns: SetChatDaemon validates the
+	// choice the way StartChat does (TestSetChatDaemonRejectsADaemonTheCallerDoesNotOwn).
 	daemonID := uuid.NewString()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: "test-user"}))
 	resp, err := service.SetChatDaemon(ctx, connect.NewRequest(&reliantv1.SetChatDaemonRequest{
 		ChatId:   chatID,
 		DaemonId: daemonID,

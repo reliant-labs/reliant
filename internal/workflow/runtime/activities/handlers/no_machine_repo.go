@@ -121,8 +121,10 @@ func githubReadable(offered []tools.Tool, scope string) bool {
 }
 
 // noMachineRepoNote is the no-machine note's addendum for a project on GitHub,
-// or "" when the project has no GitHub remote.
-func noMachineRepoNote(repos []githubRepo, readable bool) string {
+// or "" when the project has no GitHub remote. canRequestMachine says whether
+// the turn was offered request_machine: when the code cannot be read from here,
+// a machine (which has the checkout) is the way to it.
+func noMachineRepoNote(repos []githubRepo, readable, canRequestMachine bool) string {
 	if len(repos) == 0 {
 		return ""
 	}
@@ -140,8 +142,12 @@ func noMachineRepoNote(repos []githubRepo, readable bool) string {
 		where = "This project's code is on GitHub: " + strings.Join(parts, ", ")
 	}
 	if !readable {
-		return where + ". No GitHub tools are available to this run (GitHub may not be connected), so you " +
-			"cannot read that code from here; if the task needs it, say so."
+		unreadable := where + ". No GitHub tools are available to this run (GitHub may not be connected), so you " +
+			"cannot read that code from here; "
+		if canRequestMachine {
+			return unreadable + "if the task needs it, call request_machine: a machine has the checkout."
+		}
+		return unreadable + "if the task needs it, say so."
 	}
 	uses := make([]string, len(githubReadTools))
 	for i, t := range githubReadTools {

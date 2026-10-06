@@ -518,6 +518,12 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"request_machine": {
+		Bindable: map[string]struct{}{
+			"reason": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"run_scenario": {
 		Bindable: map[string]struct{}{
 			"id":   {},

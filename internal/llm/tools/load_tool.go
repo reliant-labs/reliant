@@ -174,6 +174,13 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 			"Tool '%s' not found in the registry. Use load_tool with query to search for available tools.", name))
 	}
 
+	// A tool offered only to a run with no machine is handed to that run
+	// directly, never loaded, so it cannot outlive the run's no-machine state.
+	if OnlyWithoutMachine(name) {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"Tool '%s' is not loadable: a chat with no machine already has it, and a chat on a machine never does.", name))
+	}
+
 	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
 	store := GetLoadedToolsStore()
 

@@ -61,9 +61,9 @@ func TestProjectGitHubRepos(t *testing.T) {
 }
 
 func TestNoMachineRepoNote(t *testing.T) {
-	assert.Empty(t, noMachineRepoNote(nil, true), "a project with no GitHub remote adds nothing")
+	assert.Empty(t, noMachineRepoNote(nil, true, true), "a project with no GitHub remote adds nothing")
 
-	one := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "widgets"}}, true)
+	one := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "widgets"}}, true, true)
 	assert.Contains(t, one, "github.com/acme/widgets")
 	for _, name := range []string{"github__repo_get", "github__repo_get_tree", "github__repo_get_content", "github__code_search"} {
 		assert.Contains(t, one, name)
@@ -71,13 +71,20 @@ func TestNoMachineRepoNote(t *testing.T) {
 	assert.Contains(t, one, "repo:acme/widgets")
 	assert.Contains(t, one, "load_tool")
 
-	many := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "platform"}, {Owner: "acme", Name: "forge", Dir: "forge"}}, true)
+	many := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "platform"}, {Owner: "acme", Name: "forge", Dir: "forge"}}, true, true)
 	assert.Contains(t, many, "github.com/acme/platform, github.com/acme/forge (forge/)")
 
-	unreadable := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "widgets"}}, false)
+	unreadable := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "widgets"}}, false, false)
 	assert.Contains(t, unreadable, "github.com/acme/widgets")
 	assert.Contains(t, unreadable, "No GitHub tools are available")
 	assert.NotContains(t, unreadable, "github__", "never name tools the run does not have")
+	assert.NotContains(t, unreadable, "request_machine", "never name tools the run does not have")
+
+	// Offered request_machine, the unreadable case points at it: a machine has
+	// the checkout, so it is the way to code GitHub cannot reach from here.
+	withRequest := noMachineRepoNote([]githubRepo{{Owner: "acme", Name: "widgets"}}, false, true)
+	assert.Contains(t, withRequest, "call request_machine")
+	assert.NotContains(t, withRequest, "say so")
 }
 
 func (f *integrationFixture) setProjectRemote(t *testing.T, remote string) {

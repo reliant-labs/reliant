@@ -871,6 +871,9 @@ interface ChatStoreState {
     workflowParams?: Record<string, unknown>,
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
+    // Where it runs: a machine (daemonId), no machine by design (noMachine),
+    // or neither for default resolution. See lib/chatMachine.ts.
+    machine?: { daemonId?: string; noMachine?: boolean },
   ) => Promise<Chat>;
   // First send of an existing PENDING chat (e.g. a branch): StartChat with chatId.
   startExistingChat: (
@@ -948,6 +951,11 @@ interface ChatStoreState {
   // Branch chat
   _navigateToBranchedChat: (newChat: Chat, worktreeId?: string) => void;
   branchChat: (chatId: string, messageId: string) => Promise<void>;
+  // "Continue without machine": a no-machine branch that carries the
+  // conversation and leaves the original chat as it is. Navigates to it.
+  branchChatWithoutMachine: (chatId: string, messageId: string) => Promise<Chat>;
+  // "Connect a machine": pins the chat to a machine, which ends no-machine.
+  connectChatToMachine: (chatId: string, daemonId: string) => Promise<Chat>;
   branchChatToWorktree: (
     chatId: string,
     messageId: string,
@@ -1216,6 +1224,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     workflowParams?: Record<string, unknown>,
     workflow?: string | null,
     selectedPresets?: Record<string, string>,
+    machine?: { daemonId?: string; noMachine?: boolean },
   ) => {
     const projectId = useProjectStore.getState().currentProject?.id;
     if (!projectId) {
@@ -1235,6 +1244,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         : [],
       attachments: attachmentIds,
       worktree_id: worktreeId,
+      daemon_id: machine?.daemonId,
+      no_machine: machine?.noMachine,
       workflow: effectiveWorkflow,
       workflow_params:
         Object.keys(effectiveWorkflowParams).length > 0
@@ -3565,6 +3576,41 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
       throw error;
     }
+  },
+
+  branchChatWithoutMachine: async (chatId: string, messageId: string) => {
+    const { chat: newChat } = await api.chatsV2.branch(chatId, {
+      messageId,
+      noMachine: true,
+    });
+    seedChatDetail(newChat);
+    upsertChatInListCache(newChat.projectId, newChat);
+    get().initChatState(newChat);
+
+    // Same params as the source: the conversation continues, minus the machine.
+    const sourceParams = useChatParamsStore.getState().getChatParams(chatId);
+    if (Object.keys(sourceParams).length > 0) {
+      useChatParamsStore.getState().setChatParams(newChat.id, sourceParams);
+    }
+
+    get().selectChat(newChat);
+    get()._navigateToBranchedChat(newChat, newChat.worktreeId);
+    trackEvent("chat_branched_without_machine", {});
+    return newChat;
+  },
+
+  connectChatToMachine: async (chatId: string, daemonId: string) => {
+    const updated = await api.chatsV2.setDaemon(chatId, daemonId);
+    // The response is the connected chat (no_machine cleared). Install it now
+    // rather than waiting on chat_config_changed, so the pill, the composer
+    // hint and the request_machine card all flip on this render.
+    seedChatDetail(updated);
+    patchChatCaches(updated.projectId, chatId, {
+      noMachine: updated.noMachine,
+      activeDaemonId: updated.activeDaemonId,
+    });
+    trackEvent("chat_connected_machine", {});
+    return updated;
   },
 
   branchChatToWorktree: async (
