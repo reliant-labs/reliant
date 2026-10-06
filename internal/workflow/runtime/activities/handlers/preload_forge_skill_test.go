@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/skills/catalog"
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 )
@@ -127,18 +128,7 @@ func TestBuildSeededSkillMessages_SameNameDifferentSkillsBothArrive(t *testing.T
 // (catalog.DiscoverAll with full definitions, as buildSkillsIndex), and the CLI is the real forge
 // command tree mounted the way reliant mounts it (`reliant forge`).
 func TestForgeStartHerePreload_IsWhatTheCLIPrints(t *testing.T) {
-	t.Setenv("HOME", t.TempDir()) // no ~/.forge or ~/.reliant skills
-	dir := t.TempDir()
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("name: roofers\n"), 0o644))
-
-	snap := catalog.DiscoverAll(catalog.DiscoverInput{ProjectPath: dir, LoadFullDefinitions: true})
-	stored := make([]cfgpkg.StoredSkill, 0, len(snap.Definitions))
-	for _, d := range snap.Definitions {
-		stored = append(stored, cfgpkg.StoredSkill{
-			SkillPath: d.SkillPath, Name: d.Name, Description: d.Description, Scope: string(d.Scope),
-			Body: d.Body, HasChildren: d.HasChildren, Source: d.Source,
-		})
-	}
+	dir, stored := discoverForgeProjectCatalog(t)
 
 	requested, added := withForgeStartHere([]string{"general-agent"}, stored)
 	require.Equal(t, []string{forgeStartHereSkill}, added, "a forge project root must get the start-here skill")
@@ -164,6 +154,54 @@ func TestForgeStartHerePreload_IsWhatTheCLIPrints(t *testing.T) {
 	// And it is byte-stable turn over turn, so the prompt cache keeps it.
 	again, _, _, _ := buildSeededSkillMessages(&cfgpkg.Config{Skills: stored}, requested)
 	require.Equal(t, seed, again[0].Content().Text)
+}
+
+// Every skill forge ships whose rendered body fits the delivery budget must
+// arrive whole, whether preloaded or loaded by hand. forge guards each body's
+// size where the content lives (TestShippedSkillsFitDeliveryBudget), but it
+// cannot see the sub-skill and related-skill lists reliant appends, which grow
+// with the catalog rather than the skill. This test runs against the forge
+// linked into this binary, so a pin bump that adds skills is checked by the
+// exact sizes it ships.
+func TestForgeSkills_ABodyThatFitsArrivesWhole(t *testing.T) {
+	_, stored := discoverForgeProjectCatalog(t)
+
+	checked := 0
+	for _, s := range stored {
+		if s.Scope != string(skillscore.ScopeForge) || strings.TrimSpace(s.Body) == "" {
+			continue
+		}
+		if _, bodyAloneTruncated := tools.DeliverSkillContent(s.SkillPath, s.Body); bodyAloneTruncated {
+			continue // over budget on its own: a publishing defect forge's guard owns
+		}
+		_, body, ok := tools.LoadSkillForInjection(stored, s.SkillPath)
+		require.True(t, ok, "%s must resolve", s.SkillPath)
+		_, truncated := tools.DeliverSkillContent(s.SkillPath, body)
+		require.False(t, truncated, "%s: the body fits the budget, so the navigation reliant appends must not window it", s.SkillPath)
+		checked++
+	}
+	require.Greater(t, checked, 10, "the linked forge must contribute its shipped skills to the catalog")
+}
+
+// discoverForgeProjectCatalog builds the skill catalog for a fresh forge
+// project with the same discovery the daemon runs (catalog.DiscoverAll with
+// full definitions, as buildSkillsIndex), from the forge linked into this
+// binary. It returns the project dir and the catalog.
+func discoverForgeProjectCatalog(t *testing.T) (string, []cfgpkg.StoredSkill) {
+	t.Helper()
+	t.Setenv("HOME", t.TempDir()) // no ~/.forge or ~/.reliant skills
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "forge.yaml"), []byte("name: roofers\n"), 0o644))
+
+	snap := catalog.DiscoverAll(catalog.DiscoverInput{ProjectPath: dir, LoadFullDefinitions: true})
+	stored := make([]cfgpkg.StoredSkill, 0, len(snap.Definitions))
+	for _, d := range snap.Definitions {
+		stored = append(stored, cfgpkg.StoredSkill{
+			SkillPath: d.SkillPath, Name: d.Name, Description: d.Description, Scope: string(d.Scope),
+			Body: d.Body, HasChildren: d.HasChildren, Source: d.Source,
+		})
+	}
+	return dir, stored
 }
 
 // runEmbeddedForge runs forge's real command tree mounted under a parent the
