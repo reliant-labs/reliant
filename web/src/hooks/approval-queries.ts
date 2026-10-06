@@ -47,17 +47,23 @@ export function patchApprovalsCache(
 }
 
 /**
- * Insert or replace a single approval in the cache (by id), from a stream event.
+ * Insert a single approval into the cache, or merge it over the cached one
+ * with the same id, from a stream event. Merged rather than replaced: a
+ * resolution event carries the new status but not what the approval asked
+ * about (its title, a tool approval's params), and must not erase them.
  */
 export function upsertApprovalInCache(
   chatId: string,
   approval: ToolApprovalRequest,
 ): void {
+  const defined = Object.fromEntries(
+    Object.entries(approval).filter(([, value]) => value !== undefined),
+  ) as Partial<ToolApprovalRequest>;
   patchApprovalsCache(chatId, (prev) => {
     const idx = prev.findIndex((a) => a.id === approval.id);
     if (idx >= 0) {
       const next = [...prev];
-      next[idx] = approval;
+      next[idx] = { ...prev[idx], ...defined };
       return next;
     }
     return [...prev, approval];

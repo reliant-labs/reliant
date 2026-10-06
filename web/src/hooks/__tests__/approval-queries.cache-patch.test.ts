@@ -46,6 +46,16 @@ describe("approval cache patching", () => {
     expect(list?.[0].status).toBe(ApprovalStatus.APPROVED);
   });
 
+  it("keeps what an approval asked about when a resolution event lands", () => {
+    upsertApprovalInCache("c1", approval({ id: "a1", title: "Post message in #general?", params: { channel: "#general" } }));
+    upsertApprovalInCache("c1", approval({ id: "a1", status: ApprovalStatus.APPROVED, created_at: undefined as never }));
+    const [merged] = queryClient.getQueryData<ToolApprovalRequest[]>(approvalKeys.list("c1")) ?? [];
+    expect(merged.status).toBe(ApprovalStatus.APPROVED);
+    expect(merged.title).toBe("Post message in #general?");
+    expect(merged.params).toEqual({ channel: "#general" });
+    expect(merged.created_at).toBe(now);
+  });
+
   it("patchApprovalsCache seeds an absent cache rather than dropping the event", () => {
     patchApprovalsCache("c1", (prev) => [...prev, approval({ id: "a2" })]);
     const list = queryClient.getQueryData<ToolApprovalRequest[]>(

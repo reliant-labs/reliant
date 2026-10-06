@@ -34,6 +34,7 @@ fixtures make that class of change fail at **test time** instead.
 | `pause_resume.json` | `builtin://agent` (`ask: true`) | Signal machinery: `signal.question.*` blocking, `signal.pause` delivered while blocked, question resolution with feedback, park on the epoch-broadcast pause `Await`, `signal.resume`, second turn, second question, completion. |
 | `compaction.json` | `builtin://agent` (tiny `compaction_threshold`) | Compaction edge: token count exceeds threshold after execute_tools → compact node (summary LLM request, new context window) → post-compaction turn → completion. |
 | `spawn.json` | `builtin://agent` | Spawn: a spawn tool call dispatches the child agent detached (`dispatchSpawnBackground`), settling immediately with a handle; the parent's loop blocks without spinning (`InlineLoopExecutor.awaitLiveDetachedSpawns`) until the detached child's completion lands in its mailbox, then reacts to it on its next turn. |
+| `action_approval.json` | `builtin://agent` (`tools: [http__request]`) | Action approval gate: an attended turn calls a mutating integration action, so the batch first raises an approval (`ApprovalCreate`, a timer, `signal.approval.*`); it is denied, and `ExecuteTools` refuses the call (`refused_tool_calls`) before the next turn completes the run. |
 
 ## When `TestReplayFixtures` fails
 

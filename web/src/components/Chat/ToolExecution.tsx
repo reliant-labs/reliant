@@ -41,7 +41,7 @@ import { openFile, classifyPath } from "../../lib/fileOpener";
 import { toast } from "../../lib/toast-manager";
 import { useTasksForChat, type TaskItem } from "../../hooks/task-queries";
 import { shouldToolBeCollapsed, TOOL_COLLAPSE_SETTINGS_EVENT } from "../Settings/ToolCallSettings";
-import { ApprovalStatus } from "../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, ApprovalType } from "../../gen/reliant/v1/approval_pb";
 import {
   ContentBlockType,
   ToolCallStatus,
@@ -434,7 +434,10 @@ function ToolExecutionComponent({
 
   // Approval logic - if backend created a pending approval, we need to show UI for it
   const needsApproval = approval?.status === ApprovalStatus.PENDING;
-  const shouldShowApprovalUI = needsApproval;
+  // An integration action asking first is answered on its ActionApprovalCard
+  // above the composer (Allow once / Always allow / Deny); the row only says
+  // it is awaiting approval, so there is one place to decide.
+  const shouldShowApprovalUI = needsApproval && approval?.approval_type !== ApprovalType.TOOL;
 
   // Task tool state
   const { data: chatTasks } = useTasksForChat(isTaskToolFlag ? chatId : null);

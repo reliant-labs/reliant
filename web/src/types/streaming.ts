@@ -33,6 +33,13 @@ export interface ToolApprovalUpdate {
   created_at: string;
   responded_at?: string;
   action_taken?: string;
+  // A tool approval's call, as ApprovalCreate broadcasts it.
+  tool_name?: string;
+  tool_call_id?: string;
+  /** The call's parameters, as JSON. */
+  input?: string;
+  integration_name?: string;
+  integration_icon?: string;
 }
 
 // RouterDecisionInfo carries routing decision metadata from a router node.

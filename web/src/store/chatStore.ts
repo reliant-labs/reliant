@@ -12,7 +12,8 @@ import {
   StreamingState,
   ChatState,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, ApprovalType } from "../gen/reliant/v1/approval_pb";
+import { parseApprovalParams } from "../api/approval-grpc";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
@@ -166,6 +167,26 @@ function toApprovalStatus(
     default:
       return ApprovalStatus.PENDING;
   }
+}
+
+/**
+ * What a streamed approval carries for the action approval card. Only the
+ * fields the update actually has: a status-only update (approved, denied) is
+ * merged over the cached approval and must not blank the card's content.
+ */
+function toolApprovalFields(update: ToolApprovalUpdate): Partial<ToolApprovalRequest> {
+  const fields: Partial<ToolApprovalRequest> = {};
+  if (update.title) fields.title = update.title;
+  // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
+  const kind: unknown = update.approval_type;
+  if (kind === "tool" || kind === ApprovalType.TOOL) fields.approval_type = ApprovalType.TOOL;
+  else if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approval_type = ApprovalType.WORKFLOW_STEP;
+  if (update.tool_name) fields.tool_name = update.tool_name;
+  if (update.tool_call_id) fields.tool_call_id = update.tool_call_id;
+  if (update.input) fields.params = parseApprovalParams(update.input);
+  if (update.integration_name) fields.integration_name = update.integration_name;
+  if (update.integration_icon) fields.integration_icon = update.integration_icon;
+  return fields;
 }
 
 // ============================================================================
@@ -3109,6 +3130,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             created_at: approvalUpdate.created_at,
             responded_at: approvalUpdate.responded_at,
             action_taken: approvalUpdate.action_taken, // Which action was clicked
+            ...toolApprovalFields(approvalUpdate),
           };
           upsertApprovalInCache(chatId, approval);
         });

@@ -230,6 +230,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	caps := tools.CapabilitiesFromProto(protoArgs.GetCapabilities())
 	ctx = tools.WithCapabilities(ctx, caps)
 
+	// Calls the workflow decided must not run: a mutating integration action
+	// the person attending did not approve. Each is answered with its reason.
+	refusedByWorkflow := protoArgs.GetRefusedToolCalls()
+
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
 	for _, name := range expectedResponseTools {
@@ -316,6 +320,14 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 								Content:    "incomplete tool call: missing name or id",
 								IsError:    true,
 							},
+						}
+						return
+					}
+
+					if reason := refusedByWorkflow[toolCallID]; reason != "" {
+						resultsChan <- toolCallResult{
+							index:  job.index,
+							result: a.refuseToolCall(ctx, rtx, toolCall, reason),
 						}
 						return
 					}
