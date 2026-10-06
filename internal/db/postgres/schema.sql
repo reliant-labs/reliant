@@ -89,13 +89,13 @@ CREATE TABLE public.agent_messages (
 CREATE TABLE public.antigravity_auth_tokens (
     id text NOT NULL,
     user_id text NOT NULL,
-    access_token text NOT NULL,
-    refresh_token text,
     expires_at timestamp with time zone,
-    id_token text,
     scope text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    access_token_sealed bytea NOT NULL,
+    refresh_token_sealed bytea NOT NULL,
+    id_token_sealed bytea NOT NULL
 );
 
 --
@@ -441,8 +441,6 @@ CREATE VIEW public.chats_with_activity AS
 CREATE TABLE public.claude_auth_tokens (
     id text NOT NULL,
     user_id text NOT NULL,
-    access_token text NOT NULL,
-    refresh_token text,
     expires_at timestamp with time zone,
     account_uuid text,
     account_email text,
@@ -450,7 +448,9 @@ CREATE TABLE public.claude_auth_tokens (
     organization_name text,
     scope text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    access_token_sealed bytea NOT NULL,
+    refresh_token_sealed bytea NOT NULL
 );
 
 --
@@ -460,12 +460,12 @@ CREATE TABLE public.claude_auth_tokens (
 CREATE TABLE public.codex_auth_tokens (
     id text NOT NULL,
     user_id text NOT NULL,
-    access_token text NOT NULL,
-    refresh_token text,
-    id_token text,
     account_id text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    access_token_sealed bytea NOT NULL,
+    refresh_token_sealed bytea NOT NULL,
+    id_token_sealed bytea NOT NULL
 );
 
 --
@@ -645,11 +645,11 @@ CREATE TABLE public.context_windows (
 CREATE TABLE public.copilot_auth_tokens (
     id text NOT NULL,
     user_id text NOT NULL,
-    github_access_token text NOT NULL,
-    github_refresh_token text,
     tier text,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
-    updated_at timestamp with time zone DEFAULT now() NOT NULL
+    updated_at timestamp with time zone DEFAULT now() NOT NULL,
+    github_access_token_sealed bytea NOT NULL,
+    github_refresh_token_sealed bytea NOT NULL
 );
 
 --

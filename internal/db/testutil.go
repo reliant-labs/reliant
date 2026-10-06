@@ -141,7 +141,8 @@ func setupTestRepo(t *testing.T) (*Repo, *sql.DB, func()) {
 	}
 
 	repo := NewRepoWithDriver(db, DriverPostgres)
-	// Provider keys exist only sealed, so every test repo gets a throwaway vault.
+	// Provider keys and sign-in tokens exist only sealed, so every test repo
+	// gets a throwaway vault.
 	keyBytes := make([]byte, 32)
 	if _, err := rand.Read(keyBytes); err != nil {
 		t.Fatalf("generate test vault key: %v", err)
@@ -150,7 +151,7 @@ func setupTestRepo(t *testing.T) (*Repo, *sql.DB, func()) {
 	if err != nil {
 		t.Fatalf("parse test vault key: %v", err)
 	}
-	if err := repo.EnableAPIKeySealing(vault.New(db, vault.NewEnvKeyWrapper(ring))); err != nil {
+	if err := repo.EnableCredentialSealing(vault.New(db, vault.NewEnvKeyWrapper(ring))); err != nil {
 		t.Fatalf("enable api key sealing: %v", err)
 	}
 	cleanup := func() {

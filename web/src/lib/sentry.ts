@@ -1,6 +1,7 @@
 import * as Sentry from "@sentry/react";
 import { getPrivacySettings } from "../store/privacyStore";
 import { isDev } from "./constants";
+import { scrubBreadcrumb, scrubEvent, scrubRecordingEvent } from "./sentryScrub";
 
 // Regex to detect prerelease versions (RC, alpha, beta)
 const PRERELEASE_REGEX = /-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|-alpha\.|alpha[0-9]+/i;
@@ -98,21 +99,34 @@ export async function initSentry() {
     integrations: [
       Sentry.browserTracingIntegration(),
       Sentry.replayIntegration({
-        // Show UI text and layout in replays for funnel analysis.
-        // User inputs stay masked. Sensitive displayed text (API keys, error
-        // messages with tokens) is protected via data-sentry-mask attributes.
-        maskAllText: false,
+        // Replays record layout and interaction, never what is on screen:
+        // chats, code, diffs and terminal output are the product here, so all
+        // text and inputs are masked and media is blocked. Canvas recording
+        // (replayCanvasIntegration) is deliberately absent — the terminal
+        // draws to a canvas, and text masking cannot reach canvas pixels.
+        maskAllText: true,
         maskAllInputs: true,
-        blockAllMedia: false,
+        blockAllMedia: true,
+        // No request/response bodies or headers for any URL, and no query
+        // strings on the URLs the recording does keep.
+        networkDetailAllowUrls: [],
+        networkCaptureBodies: false,
+        beforeAddRecordingEvent: scrubRecordingEvent,
       }),
-      ...(import.meta.env.VITE_SENTRY_REPLAY_CANVAS === "true"
-        ? [Sentry.replayCanvasIntegration()]
-        : []),
     ],
     tracesSampleRate: parseFloat(import.meta.env.VITE_SENTRY_TRACES_SAMPLE_RATE) || (isPrerelease ? 1.0 : 0.1),
     replaysSessionSampleRate: replaySessionRate,
     replaysOnErrorSampleRate: parseFloat(import.meta.env.VITE_SENTRY_REPLAYS_ERROR_SAMPLE_RATE) || 1.0,
     tracePropagationTargets: ["localhost", /^\//],
+    // Every payload passes the policy in sentryScrub.ts: identifiers, types
+    // and stacks leave the app; user content does not. beforeBreadcrumb runs
+    // before Replay sees a breadcrumb, so replays inherit the same scrubbing.
+    beforeBreadcrumb(breadcrumb) {
+      return scrubBreadcrumb(breadcrumb);
+    },
+    beforeSendTransaction(event) {
+      return scrubEvent(event);
+    },
     beforeSend(event, hint) {
       // Check privacy settings before sending
       const { crashReportingEnabled } = getPrivacySettings();
@@ -125,10 +139,8 @@ export async function initSentry() {
         return null;
       }
 
-      if (isDev) {
-        console.error("Sentry Event:", event, hint);
-      }
-      return event;
+      // Noise filtering above reads the raw exception; scrub only what is sent.
+      return scrubEvent(event);
     },
   });
 
@@ -190,7 +202,8 @@ function shouldDropEvent(event: Sentry.ErrorEvent, hint: Sentry.EventHint): bool
 export function setSentryUser(user: { id: string; email?: string } | null) {
   if (isDev) return;
   if (user) {
-    Sentry.setUser({ id: user.id, email: user.email });
+    // The id is enough to find a user's events; the email is not sent.
+    Sentry.setUser({ id: user.id });
   } else {
     Sentry.setUser(null);
   }

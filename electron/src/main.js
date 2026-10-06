@@ -87,6 +87,7 @@ const {
 } = require("./backend-auth");
 const windowStateClient = require("./window-state-client");
 const Sentry = require("@sentry/electron/main");
+const { sentryMainOptions } = require("./sentry-scrub");
 const { StatsigClient } = require("@statsig/js-client");
 const { autoUpdater } = require("electron-updater");
 const electronLog = require("electron-log");
@@ -372,22 +373,15 @@ function initializeSentry() {
       // Set environment based on release type for filtering in Sentry dashboard
       const sentryEnvironment = isPrerelease ? "prerelease" : "production";
 
-      Sentry.init({
+      // sentryMainOptions enforces the same privacy policy as the renderer and
+      // the backend: identifiers, types and stacks leave the app; user
+      // content (console arguments, error payloads, emails, IPs) does not.
+      Sentry.init(sentryMainOptions({
         dsn: process.env.SENTRY_DSN,
         environment: sentryEnvironment,
         release: `reliant@${currentVersion}`,
-        beforeSend(event, hint) {
-          // Double-check privacy settings before sending
-          if (!getCrashReportingEnabled()) {
-            return null;
-          }
-          // Filter out sensitive information if needed
-          if (event.user) {
-            delete event.user.ip_address;
-          }
-          return event;
-        },
-      });
+        isEnabled: getCrashReportingEnabled,
+      }));
       sentryInitialized = true;
       log.info(`[Sentry] Initialized (environment: ${sentryEnvironment}, release: reliant@${currentVersion})`);
     } catch (error) {

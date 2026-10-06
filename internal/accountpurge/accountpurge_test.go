@@ -90,17 +90,19 @@ func seedUser(t *testing.T, rawDB *sql.DB, userID string) {
 	// Every provider token table, not just Claude's. A credential table that
 	// is seeded but never asserted on is indistinguishable from one the purge
 	// forgot, which is precisely the bug these tables keep reintroducing.
-	exec(`INSERT INTO claude_auth_tokens (id, user_id, access_token, refresh_token, expires_at, created_at, updated_at)
-	      VALUES ($1,$2,'at','rt',$3,$3,$3)`, id("cat"), userID, now)
+	// The token columns are vault ciphertext; the purge never opens them, so
+	// placeholder bytes stand in for real sealed values.
+	exec(`INSERT INTO claude_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, expires_at, created_at, updated_at)
+	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,$3,$3,$3)`, id("cat"), userID, now)
 
-	exec(`INSERT INTO codex_auth_tokens (id, user_id, access_token, refresh_token, created_at, updated_at)
-	      VALUES ($1,$2,'at','rt',$3,$3)`, id("codextok"), userID, now)
+	exec(`INSERT INTO codex_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, id_token_sealed, created_at, updated_at)
+	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,'\x00'::bytea,$3,$3)`, id("codextok"), userID, now)
 
-	exec(`INSERT INTO copilot_auth_tokens (id, user_id, github_access_token, created_at, updated_at)
-	      VALUES ($1,$2,'gho_at',$3,$3)`, id("copilottok"), userID, now)
+	exec(`INSERT INTO copilot_auth_tokens (id, user_id, github_access_token_sealed, github_refresh_token_sealed, created_at, updated_at)
+	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,$3,$3)`, id("copilottok"), userID, now)
 
-	exec(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token, refresh_token, expires_at, created_at, updated_at)
-	      VALUES ($1,$2,'ya29.at','rt',$3,$3,$3)`, id("agytok"), userID, now)
+	exec(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, id_token_sealed, expires_at, created_at, updated_at)
+	      VALUES ($1,$2,'\x00'::bytea,'\x00'::bytea,'\x00'::bytea,$3,$3,$3)`, id("agytok"), userID, now)
 
 	exec(`INSERT INTO settings (id, user_id, key, value, value_type, created_at, updated_at)
 	      VALUES ($1,$2,'theme','dark','string',$3,$3)`, id("set"), userID, now)
