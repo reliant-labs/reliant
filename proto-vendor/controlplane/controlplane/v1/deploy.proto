@@ -445,6 +445,12 @@ message DeployEnvironment {
   // from six weeks ago is still a shape, but a plan computed against it is
   // worth less than one computed against this morning's.
   google.protobuf.Timestamp declared_at = 22;
+
+  // READ-ONLY and DERIVED: what this environment's queued deploy is waiting
+  // on. Non-empty means the CURRENT promotion was accepted and recorded and is
+  // held (see DeployHold) — "waiting on billing". Empty means nothing is
+  // queued.
+  repeated DeployHold holds = 23;
 }
 
 // DeployEnvironmentSpec is THE WRITABLE HALF of an environment — the whole of
@@ -1131,6 +1137,64 @@ enum DeployRolloutPhase {
   // A workload cannot be observed. Its own outcome, never folded into success
   // or failure: "we cannot see it" is not permission.
   DEPLOY_ROLLOUT_PHASE_UNKNOWN = 7;
+  // The promotion was ACCEPTED and RECORDED and is waiting on a human action
+  // before anything applies it — today, billing (DeployRollout.holds says
+  // which and what to do). It proceeds on its own when the hold clears.
+  //
+  // Not in flight: a newer promote supersedes a held one without
+  // supersede_in_flight. Not a failure and not a timeout: nothing is wrong
+  // with the release. A client that does not know this value reads it as
+  // UNSPECIFIED, never as SUCCEEDED.
+  DEPLOY_ROLLOUT_PHASE_HELD = 8;
+}
+
+// DeployHoldKind names the human action a queued deploy is waiting on.
+//
+// A CLIENT MUST RENDER AN UNKNOWN KIND, not drop it: every hold carries its own
+// reason, fix and action_url, so a kind added later is still a complete
+// sentence and a working link on a client that has never heard of it.
+enum DeployHoldKind {
+  DEPLOY_HOLD_KIND_UNSPECIFIED = 0;
+  // The deploy runs something that needs an active Reliant Compute plan — a
+  // hosted workload, a managed database, or static sites beyond the free
+  // tier — and the organization has none.
+  DEPLOY_HOLD_KIND_BILLING = 1;
+}
+
+// DeployHold is one reason an ACCEPTED deploy has not started.
+//
+// QUEUE, DON'T REFUSE. A hosted deploy that needs billing the organization has
+// not set up is no longer refused: its release, bundle and promotion are
+// recorded as for any deploy, and the promotion carries a hold. The control
+// plane applies it — with no further command from anyone — the moment the
+// hold clears, driven by the billing-state change itself. A newer deploy to
+// the same environment supersedes a held one.
+//
+// What is still REFUSED, and why it is not held: a plan too small for the
+// request (usually a config fix), an undeterminable plan (retry), and a met
+// spend limit (it also clears unattended at the next billing period).
+message DeployHold {
+  DeployHoldKind kind = 1;
+  // The promotion that is waiting. An open hold is always on its
+  // environment's CURRENT promotion.
+  string promotion_id = 2;
+  // One sentence stating the real quantity, e.g. "this runs compute (1
+  // workload, 1 database) and the organization has no active compute plan".
+  string reason = 3;
+  // The literal next step for a human. It says that nothing needs re-running.
+  string fix = 4;
+  // Absolute URL into the Reliant web app where the hold is resolved: the
+  // environment's page, which carries the call to action and handles a
+  // caller who cannot take it. Empty when this control plane has no app URL
+  // configured; the fix still names the place in words.
+  string action_url = 5;
+  // Whether the CALLER may take the action itself (billing: an org admin,
+  // signed in as a person). False for a member, and always false for a
+  // machine credential — a token cannot set up billing. A client shows
+  // "ask an org admin" plus the copyable action_url then.
+  bool caller_can_resolve = 6;
+  // When the deploy was accepted and started waiting.
+  google.protobuf.Timestamp held_since = 7;
 }
 
 // DeployWorkloadRollout is one workload's progress toward one promotion's pin.
@@ -1200,6 +1264,8 @@ message DeployRollout {
   bool converges_promotions = 8;
   // One human line explaining the phase.
   string reason = 9;
+  // Set exactly when phase is HELD: what this promotion is waiting on.
+  repeated DeployHold holds = 10;
 }
 
 // DeployRunStage is one step in a run's timeline, as assembled from the
