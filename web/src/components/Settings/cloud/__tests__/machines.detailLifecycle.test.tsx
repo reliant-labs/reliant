@@ -206,15 +206,16 @@ describe('machine detail — lifecycle actions', () => {
     expect(screen.queryByRole('button', { name: /^restart$/i })).not.toBeInTheDocument()
   })
 
-  // ResumeDaemon refuses anything that is not SUSPENDED, so this button can
-  // only ever produce an error. It is disabled and says why instead.
-  it('disables Resume on a FAILED machine and explains why', async () => {
+  // A FAILED machine cannot be resumed (ResumeDaemon wants SUSPENDED), but it
+  // CAN be suspended, which is the user's way out of a wedged start.
+  it('offers Suspend on a FAILED machine, hides Resume, and explains the retry', async () => {
     showMachine(cloudDaemon({ status: FAILED, lifecyclePhase: 6 }))
     renderDetail()
 
-    const resume = await screen.findByRole('button', { name: /^resume$/i })
-    expect(resume).toBeDisabled()
-    expect(resume).toHaveAttribute('title', expect.stringMatching(/failed/i))
+    const suspend = await screen.findByRole('button', { name: /^suspend$/i })
+    expect(suspend).toBeEnabled()
+    expect(screen.queryByRole('button', { name: /^resume$/i })).not.toBeInTheDocument()
+    expect(screen.getByTestId('machine-recovery-hint')).toHaveTextContent(/suspend.*resume/i)
   })
 
   it('shows no lifecycle buttons for a self-hosted machine, and says why', async () => {

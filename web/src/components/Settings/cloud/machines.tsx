@@ -1512,6 +1512,11 @@ function EnvironmentDetail({
             ) : (
               <ErrorNote message={daemonFailureReason(daemon) ?? undefined} />
             ))}
+          {lifecyclePlan(daemon, null).recoveryHint && (
+            <p className="mb-4 text-sm text-muted-foreground" data-testid="machine-recovery-hint">
+              {lifecyclePlan(daemon, null).recoveryHint}
+            </p>
+          )}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <Card>
