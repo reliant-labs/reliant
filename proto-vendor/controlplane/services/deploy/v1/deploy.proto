@@ -1295,15 +1295,12 @@ message DeployCapacityDemand {
   int32 workloads = 4;
   int32 databases = 5;
   int32 builds = 6;
-  // Static sites this environment would hold. The server adds the org's
-  // sites in OTHER environments, because the free tier is per org.
+  // Static sites this environment would hold.
   int32 static_sites = 7;
-  int64 static_storage_gib = 8;
 }
 
 message CheckDeployCapacityRequest {
-  // The environment being deployed to. Its OTHER sites are excluded from the
-  // org-wide static count so a redeploy does not count itself twice.
+  // The environment being deployed to.
   string environment_id = 1;
   DeployCapacityDemand demand = 2;
 }
@@ -1312,10 +1309,9 @@ message CheckDeployCapacityRequest {
 enum DeployCapacityCode {
   DEPLOY_CAPACITY_CODE_UNSPECIFIED = 0;
   DEPLOY_CAPACITY_CODE_OK = 1;
-  // The deploy runs compute and the org has no active compute plan.
+  // The deploy runs something — compute or a static site — and the org has
+  // no active compute plan.
   DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN = 2;
-  // No plan, static sites only, beyond the free tier.
-  DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED = 3;
   // A plan exists and the demand does not fit its compute ceiling.
   DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING = 4;
   // The org's spend cap has been reached.
