@@ -50,7 +50,7 @@ A local daemon connects outbound to our gateway; it doesn't open any inbound por
 | Memories (`reliant.md`), workflows and presets | Yes, as files where the daemon runs | Yes, copies with your project settings | Yes. Memories and workflow prompts are part of what the model sees |
 | Project details: paths, repo URLs, branch names | Yes | Yes | Often, because they appear in prompts and tool output |
 | Model API keys and provider logins | No | Yes, encrypted at the application layer | Only to authenticate with that provider |
-| Integration credentials (GitHub, Gmail, Slack, Twilio) | No | Yes | No. The results of integration actions are sent, like any other tool output |
+| Integration credentials (GitHub, Gmail, Slack, Twilio) | No | Yes, encrypted at the application layer | No. The results of integration actions are sent, like any other tool output |
 | Secrets in your files or command output | Yes | **Yes, if the agent reads or prints them** | **Yes, if the agent reads or prints them** |
 | Analytics and crash reports | No | Sent to Statsig and Sentry (on by default; see [Telemetry](#telemetry)) | No |
 
@@ -94,7 +94,7 @@ If you add your own API key, or sign in with a provider subscription (Claude, Co
 
 ### Reliant AI
 
-If you use the optional Reliant AI provider, requests go through our own proxy (LiteLLM) to **Google Vertex AI**. Vertex AI may cache inputs and outputs in memory for up to 24 hours to speed up repeated requests, and this caching is currently on.
+If you use the optional Reliant AI provider, requests go through our own proxy (LiteLLM) to **Google Vertex AI**. Vertex AI may cache inputs and outputs in memory for up to 24 hours to speed up repeated requests, and this caching is currently on. Google doesn't use this data to train its models. We use Vertex AI's global endpoint, so a request can be processed in any Google region, not only the US.
 
 Whichever provider you use, the conversation is also stored in your chat history on our servers.
 
@@ -105,11 +105,11 @@ Both kinds of telemetry are **on by default**. To turn them off, go to **Setting
 | Toggle | Sent to | What's included |
 | --- | --- | --- |
 | **Analytics and Usage Data** | Statsig | Product-usage events, tied to a device ID and your account ID. |
-| **Crash and Error Reporting** | Sentry | Crash and error reports. Error reports are scrubbed of prompts, tool input and output, and file contents. Web session replays mask all on-screen text and block media. |
+| **Crash and Error Reporting** | Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. Request bodies, console output and custom data are removed, and error messages are cut to one short line with known credential formats redacted. That short line can still contain a fragment of text. Web session replays mask all on-screen text and form inputs, and block images, media and canvas. |
 
 Crash reports contain error details and stack traces; we don't upload memory dumps.
 
-Our server logs don't contain your content.
+Our server logs record identifiers, counts, durations and status codes, not the content of your prompts, chats, tool inputs or outputs, or files. File paths can appear in error logs for file operations. Server logs are kept for 30 days.
 
 ## Deleting your data
 
@@ -132,7 +132,8 @@ You can delete your account in the app's account settings, or email support@reli
 | Chats, messages, tool outputs, attachments | Until you delete them |
 | Workflow run history | 7 days after the run ends |
 | Large stored workflow payloads | 30 days |
-| Database backups | Nightly; the 7 most recent are kept |
+| Database backups | Nightly; the 7 most recent are kept. Manual backups taken before maintenance are kept separately |
+| Server logs | 30 days |
 
 The [Privacy Policy](https://reliantlabs.io/privacy) has the complete list.
 
@@ -163,7 +164,7 @@ Remove-Item -Recurse -Force "$env:APPDATA\reliant"
 
 ## Security practices
 
-**Code modifications.** Reliant shows you exactly what changes will be made before applying them. In manual approval mode, every edit requires your confirmation.
+**Code modifications.** In manual approval mode, Reliant shows each edit before applying it and waits for your confirmation. In auto modes, edits are applied directly and shown in the conversation as they happen.
 
 **Tool execution.** Shell commands and file operations are logged in the conversation, visible in the UI before execution, and controllable via approval modes.
 
