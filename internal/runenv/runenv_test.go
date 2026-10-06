@@ -1,14 +1,14 @@
 // Copyright (c) 2025 Reliant Labs
-package config
+package runenv
 
 import "testing"
 
 // TestRemovedEnvironmentsDoNotBypassAuth is the regression guard for the trap
 // that removing the staging/preprod enum values could have introduced.
 //
-// Before this change GetEnvironment had `case "staging"` / `case "preprod"`
-// arms alongside a `default: return EnvironmentDev`, and
-// IsDevelopmentEnvironment treated dev, staging and preprod alike as the
+// Before this change Get had `case "staging"` / `case "preprod"`
+// arms alongside a `default: return Dev`, and
+// IsDev treated dev, staging and preprod alike as the
 // auth-bypass tier. Deleting only the two case arms would have left those
 // values falling through to the permissive default — the NAME would be gone
 // while the dangerous BEHAVIOUR survived, with no enum left to explain it. A
@@ -22,11 +22,11 @@ func TestRemovedEnvironmentsDoNotBypassAuth(t *testing.T) {
 			t.Setenv("RELIANT_ENV", name)
 			t.Setenv("NODE_ENV", "")
 
-			if got := GetEnvironment(); got != EnvironmentProd {
-				t.Errorf("GetEnvironment() = %q, want %q: a removed environment name must fail closed, not fall through to the permissive tier", got, EnvironmentProd)
+			if got := Get(); got != Prod {
+				t.Errorf("Get() = %q, want %q: a removed environment name must fail closed, not fall through to the permissive tier", got, Prod)
 			}
-			if IsDevelopmentEnvironment() {
-				t.Error("IsDevelopmentEnvironment() = true: RELIANT_ENV=" + name + " still resolves to the auth-bypassing tier, which is the exact regression this deletion had to avoid")
+			if IsDev() {
+				t.Error("IsDev() = true: RELIANT_ENV=" + name + " still resolves to the auth-bypassing tier, which is the exact regression this deletion had to avoid")
 			}
 		})
 	}
@@ -42,11 +42,11 @@ func TestUnrecognisedEnvironmentFailsClosed(t *testing.T) {
 			t.Setenv("RELIANT_ENV", name)
 			t.Setenv("NODE_ENV", "")
 
-			if got := GetEnvironment(); got != EnvironmentProd {
-				t.Errorf("GetEnvironment() = %q, want %q", got, EnvironmentProd)
+			if got := Get(); got != Prod {
+				t.Errorf("Get() = %q, want %q", got, Prod)
 			}
-			if IsDevelopmentEnvironment() {
-				t.Errorf("IsDevelopmentEnvironment() = true for unrecognised RELIANT_ENV=%q", name)
+			if IsDev() {
+				t.Errorf("IsDev() = true for unrecognised RELIANT_ENV=%q", name)
 			}
 		})
 	}
@@ -64,14 +64,14 @@ func TestRecognisedEnvironments(t *testing.T) {
 		want       Environment
 		wantDev    bool
 	}{
-		{"dev", EnvironmentDev, true},
-		{"development", EnvironmentDev, true},
-		{"local", EnvironmentDev, true},
-		{"e2e", EnvironmentDev, true},
-		{"test", EnvironmentTest, false},
-		{"testing", EnvironmentTest, false},
-		{"prod", EnvironmentProd, false},
-		{"production", EnvironmentProd, false},
+		{"dev", Dev, true},
+		{"development", Dev, true},
+		{"local", Dev, true},
+		{"e2e", Dev, true},
+		{"test", Test, false},
+		{"testing", Test, false},
+		{"prod", Prod, false},
+		{"production", Prod, false},
 	}
 
 	for _, tc := range cases {
@@ -79,11 +79,11 @@ func TestRecognisedEnvironments(t *testing.T) {
 			t.Setenv("RELIANT_ENV", tc.reliantEnv)
 			t.Setenv("NODE_ENV", "")
 
-			if got := GetEnvironment(); got != tc.want {
-				t.Errorf("GetEnvironment() = %q, want %q", got, tc.want)
+			if got := Get(); got != tc.want {
+				t.Errorf("Get() = %q, want %q", got, tc.want)
 			}
-			if got := IsDevelopmentEnvironment(); got != tc.wantDev {
-				t.Errorf("IsDevelopmentEnvironment() = %v, want %v", got, tc.wantDev)
+			if got := IsDev(); got != tc.wantDev {
+				t.Errorf("IsDev() = %v, want %v", got, tc.wantDev)
 			}
 		})
 	}
@@ -96,7 +96,7 @@ func TestNodeEnvFallback(t *testing.T) {
 	t.Run("development", func(t *testing.T) {
 		t.Setenv("RELIANT_ENV", "")
 		t.Setenv("NODE_ENV", "development")
-		if !IsDevelopmentEnvironment() {
+		if !IsDev() {
 			t.Error("NODE_ENV=development should select the dev tier when RELIANT_ENV is unset")
 		}
 	})
@@ -104,15 +104,15 @@ func TestNodeEnvFallback(t *testing.T) {
 	t.Run("both unset defaults to prod", func(t *testing.T) {
 		t.Setenv("RELIANT_ENV", "")
 		t.Setenv("NODE_ENV", "")
-		if got := GetEnvironment(); got != EnvironmentProd {
-			t.Errorf("GetEnvironment() = %q with no env vars set, want %q", got, EnvironmentProd)
+		if got := Get(); got != Prod {
+			t.Errorf("Get() = %q with no env vars set, want %q", got, Prod)
 		}
 	})
 
 	t.Run("RELIANT_ENV wins over NODE_ENV", func(t *testing.T) {
 		t.Setenv("RELIANT_ENV", "prod")
 		t.Setenv("NODE_ENV", "development")
-		if IsDevelopmentEnvironment() {
+		if IsDev() {
 			t.Error("RELIANT_ENV=prod must win over NODE_ENV=development")
 		}
 	})

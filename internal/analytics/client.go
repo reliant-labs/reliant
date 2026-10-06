@@ -16,8 +16,8 @@ import (
 
 	"github.com/denisbrodbeck/machineid"
 	"github.com/google/uuid"
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
@@ -100,8 +100,8 @@ func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled 
 	}
 
 	// Disable Statsig analytics in non-production environments
-	if !config.IsProductionEnvironment() {
-		logging.Info("[Analytics] Statsig analytics disabled in non-production environment", "env", config.GetEnvironment())
+	if !runenv.IsProd() {
+		logging.Info("[Analytics] Statsig analytics disabled in non-production environment", "env", runenv.Get())
 		return NewNoopClient()
 	}
 
@@ -301,10 +301,10 @@ func (c *Client) TrackWithUserInfo(userInfo UserInfo, eventType EventType, metad
 
 func (c *Client) addStandardMetadata(userInfo UserInfo, metadata map[string]interface{}) {
 	envTier := "development"
-	switch config.GetEnvironment() {
-	case config.EnvironmentProd:
+	switch runenv.Get() {
+	case runenv.Prod:
 		envTier = "production"
-	case config.EnvironmentTest:
+	case runenv.Test:
 		envTier = "test"
 	}
 

@@ -20,7 +20,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/certs"
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
@@ -330,8 +329,7 @@ func Run(ctx context.Context, opts Options) error {
 	analytics.SetPrivacyChecker(repo)
 
 	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
-	telemetry.SetReporter(telemetry.NewReporterFromEnv(
-		config.IsDevelopmentEnvironment() || config.IsTestEnvironment()))
+	telemetry.SetReporter(telemetry.NewReporterFromEnv())
 
 	// TLS certificates
 	tlsCertFile := opts.TLSCertFile
