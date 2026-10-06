@@ -13,6 +13,7 @@ package github_test
 import (
 	"context"
 	"crypto/x509"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -558,6 +559,282 @@ func TestRepoListForUserFilters(t *testing.T) {
 	assert.Equal(t, "affiliation=owner%2Corganization_member&direction=asc&per_page=100&visibility=private", sortedQuery(f.only().Query))
 }
 
+func TestRepoGet(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app", jsonReply(200, `{
+	  "id": 1296269, "node_id": "R_1", "name": "app", "full_name": "acme/app", "private": true,
+	  "owner": {"login": "acme", "id": 1, "type": "Organization"},
+	  "html_url": "https://github.com/acme/app", "description": "The app.", "fork": false,
+	  "language": "Go", "topics": ["cli", "agents"], "visibility": "private", "default_branch": "trunk",
+	  "archived": false, "pushed_at": "2026-01-01T00:00:00Z", "stargazers_count": 80,
+	  "permissions": {"admin": false, "push": true, "pull": true}}`))
+	out := data(t, f.run("repo.get", map[string]any{"owner": "acme", "repo": "app"}))
+
+	req := f.only()
+	assert.Equal(t, "GET", req.Method)
+	assert.Equal(t, "/repos/acme/app", req.Path)
+	assertGitHubHeaders(t, req)
+
+	assert.Equal(t, map[string]any{
+		"id": 1296269.0, "full_name": "acme/app", "name": "app", "owner": "acme",
+		"description": "The app.", "private": true, "visibility": "private", "default_branch": "trunk",
+		"language": "Go", "topics": []any{"cli", "agents"}, "archived": false, "fork": false,
+		"html_url": "https://github.com/acme/app", "pushed_at": "2026-01-01T00:00:00Z", "can_push": true,
+	}, out)
+}
+
+// contentJSON is a contents-API file object: content base64 in 60-column
+// lines, as GitHub wraps it.
+func contentJSON(t *testing.T, path, encoding string, raw []byte) string {
+	t.Helper()
+	b64 := base64.StdEncoding.EncodeToString(raw)
+	var wrapped strings.Builder
+	for len(b64) > 60 {
+		wrapped.WriteString(b64[:60] + "\n")
+		b64 = b64[60:]
+	}
+	wrapped.WriteString(b64 + "\n")
+	content := wrapped.String()
+	if encoding == "none" {
+		content = ""
+	}
+	name := path[strings.LastIndex(path, "/")+1:]
+	b, err := json.Marshal(map[string]any{
+		"type": "file", "encoding": encoding, "size": len(raw), "name": name, "path": path,
+		"content": content, "sha": "3d21ec53a331a6f037a91c368710b99387d012c1",
+		"url":          "https://api.github.com/repos/acme/app/contents/" + path,
+		"html_url":     "https://github.com/acme/app/blob/dev/" + path,
+		"download_url": "https://raw.githubusercontent.com/acme/app/dev/" + path,
+		"_links":       map[string]any{"self": "https://api.github.com/repos/acme/app/contents/" + path},
+	})
+	require.NoError(t, err)
+	return string(b)
+}
+
+// A file's content comes back as its text: the base64 GitHub wraps it in is
+// decoded, and a nested path reaches GitHub as one escaped segment.
+func TestRepoGetContentReadsAFileAsText(t *testing.T) {
+	source := strings.Repeat("package main\n\nfunc main() { println(\"héllo\") }\n", 4)
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/src/main.go", jsonReply(200, contentJSON(t, "src/main.go", "base64", []byte(source))))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "src/main.go", "ref": "dev"}))
+
+	req := f.only()
+	assert.Equal(t, "GET", req.Method)
+	assert.Equal(t, "/repos/acme/app/contents/src%2Fmain.go", req.Path, "the path is one escaped segment; GitHub decodes %2F")
+	assert.Equal(t, "ref=dev", req.Query)
+	assertGitHubHeaders(t, req)
+
+	assert.Equal(t, map[string]any{
+		"type": "file", "path": "src/main.go", "name": "main.go",
+		"sha": "3d21ec53a331a6f037a91c368710b99387d012c1", "size": float64(len(source)),
+		"html_url": "https://github.com/acme/app/blob/dev/src/main.go",
+		"content":  source, "binary": false, "too_large": false,
+		"target": nil, "submodule_git_url": nil,
+	}, out)
+}
+
+// A binary file is reported as such, with no content, rather than failing.
+func TestRepoGetContentReportsABinaryFile(t *testing.T) {
+	png := []byte{0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n', 0, 0, 0, 0x0d, 'I', 'H', 'D', 'R'}
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/logo.png", jsonReply(200, contentJSON(t, "logo.png", "base64", png)))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "logo.png"}))
+	assert.Equal(t, true, out["binary"])
+	assert.Nil(t, out["content"])
+	assert.Empty(t, f.only().Query, "no ref means the default branch")
+}
+
+// GitHub serves files over 1 MB through the contents API without their
+// bytes (encoding "none"); the result says so instead of returning "".
+func TestRepoGetContentReportsAFileTooLargeToServe(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/data.csv", jsonReply(200, contentJSON(t, "data.csv", "none", []byte("big"))))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "data.csv"}))
+	assert.Equal(t, true, out["too_large"])
+	assert.Equal(t, false, out["binary"])
+	assert.Nil(t, out["content"])
+}
+
+// An empty file is text: content "" rather than null.
+func TestRepoGetContentReadsAnEmptyFile(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/.keep", jsonReply(200, contentJSON(t, ".keep", "base64", nil)))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": ".keep"}))
+	assert.Equal(t, "", out["content"])
+	assert.Equal(t, false, out["binary"])
+}
+
+// A directory (the root, when path is omitted) lists its entries.
+func TestRepoGetContentListsADirectory(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/", jsonReply(200, `[
+	  {"type":"file","size":625,"name":"README.md","path":"README.md","sha":"a1","url":"u","html_url":"h","download_url":"d"},
+	  {"type":"dir","size":0,"name":"src","path":"src","sha":"b2","url":"u","html_url":"h","download_url":null},
+	  {"type":"symlink","size":9,"name":"latest","path":"latest","sha":"c3","url":"u","html_url":"h","download_url":"d"}]`))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app"}))
+
+	assert.Equal(t, "/repos/acme/app/contents/", f.only().Path)
+	assert.Equal(t, map[string]any{
+		"type": "dir", "path": "",
+		"entries": []any{
+			map[string]any{"name": "README.md", "path": "README.md", "type": "file", "size": 625.0},
+			map[string]any{"name": "src", "path": "src", "type": "dir", "size": 0.0},
+			map[string]any{"name": "latest", "path": "latest", "type": "symlink", "size": 9.0},
+		},
+	}, out)
+}
+
+// A symlink whose target is outside the repository is described, not read.
+func TestRepoGetContentDescribesASymlink(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/contents/latest", jsonReply(200,
+		`{"type":"symlink","target":"/etc/hosts","size":10,"name":"latest","path":"latest","sha":"c3","url":"u","html_url":"h","download_url":"d"}`))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": "latest"}))
+	assert.Equal(t, "symlink", out["type"])
+	assert.Equal(t, "/etc/hosts", out["target"])
+	assert.Nil(t, out["content"])
+	assert.Equal(t, false, out["binary"])
+}
+
+// path and a tree's ref become URL path text, so a dot segment or an empty
+// one is refused before any request; dots inside a name are fine.
+func TestCodeReadingPathsRejectTraversal(t *testing.T) {
+	f := newFake(t)
+	for _, path := range []string{"..", ".", "../secrets", "src/../../user", "src/./x", "/etc/passwd", "src//x", "src/"} {
+		_, err := f.try("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": path})
+		assert.Error(t, err, "path %q", path)
+	}
+	for _, ref := range []string{"..", "a/../b", "/main"} {
+		_, err := f.try("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": ref})
+		assert.Error(t, err, "ref %q", ref)
+	}
+	assert.Empty(t, f.requests())
+
+	f.on("GET", "/repos/acme/app/contents/.github/workflows/ci.yml",
+		jsonReply(200, contentJSON(t, ".github/workflows/ci.yml", "base64", []byte("on: push\n"))))
+	out := data(t, f.run("repo.get_content", map[string]any{"owner": "acme", "repo": "app", "path": ".github/workflows/ci.yml"}))
+	assert.Equal(t, "on: push\n", out["content"], "a dot-led name is legitimate")
+}
+
+const treeJSON = `{
+  "sha": "9fb037999f264ba9a7fc6274d15fa3ae2ab98312",
+  "url": "https://api.github.com/repos/acme/app/git/trees/9fb03",
+  "tree": [
+    {"path": "README.md", "mode": "100644", "type": "blob", "size": 30, "sha": "a1", "url": "u"},
+    {"path": "internal", "mode": "040000", "type": "tree", "sha": "b2", "url": "u"},
+    {"path": "internal/llm", "mode": "040000", "type": "tree", "sha": "c3", "url": "u"},
+    {"path": "internal/llm/tools.go", "mode": "100644", "type": "blob", "size": 1200, "sha": "d4", "url": "u"},
+    {"path": "internalize.md", "mode": "100644", "type": "blob", "size": 7, "sha": "e5", "url": "u"},
+    {"path": "vendor/lib", "mode": "160000", "type": "commit", "sha": "f6"}
+  ],
+  "truncated": false
+}`
+
+func TestRepoGetTreeListsEveryPathOnTheDefaultBranch(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/HEAD", jsonReply(200, treeJSON))
+	out := data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app"}))
+
+	req := f.only()
+	assert.Equal(t, "/repos/acme/app/git/trees/HEAD", req.Path, "no ref is the default branch")
+	assert.Equal(t, "recursive=1", req.Query)
+	assertGitHubHeaders(t, req)
+
+	assert.Equal(t, "9fb037999f264ba9a7fc6274d15fa3ae2ab98312", out["sha"])
+	assert.Equal(t, false, out["truncated"])
+	assert.Equal(t, []any{
+		map[string]any{"path": "README.md", "type": "blob", "size": 30.0},
+		map[string]any{"path": "internal", "type": "tree", "size": nil},
+		map[string]any{"path": "internal/llm", "type": "tree", "size": nil},
+		map[string]any{"path": "internal/llm/tools.go", "type": "blob", "size": 1200.0},
+		map[string]any{"path": "internalize.md", "type": "blob", "size": 7.0},
+		map[string]any{"path": "vendor/lib", "type": "commit", "size": nil},
+	}, out["entries"])
+}
+
+// path asks GitHub for that subtree only (the tree-ish <ref>:<path>) and puts
+// the directory back in front of each entry. A branch with a slash is part of
+// one escaped segment.
+func TestRepoGetTreeOfOneDirectoryOnABranch(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/feature/retries:internal", jsonReply(200, `{
+	  "sha": "b2", "url": "u", "truncated": false,
+	  "tree": [
+	    {"path": "llm", "mode": "040000", "type": "tree", "sha": "c3", "url": "u"},
+	    {"path": "llm/tools.go", "mode": "100644", "type": "blob", "size": 1200, "sha": "d4", "url": "u"}]}`))
+	out := data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "ref": "feature/retries", "path": "internal"}))
+
+	req := f.only()
+	assert.Equal(t, "/repos/acme/app/git/trees/feature%2Fretries:internal", req.Path)
+	assert.Equal(t, "recursive=1", req.Query)
+	assert.Equal(t, []any{
+		map[string]any{"path": "internal/llm", "type": "tree", "size": nil},
+		map[string]any{"path": "internal/llm/tools.go", "type": "blob", "size": 1200.0},
+	}, out["entries"])
+}
+
+// With no ref, a directory is read from the default branch.
+func TestRepoGetTreeOfOneDirectoryOnTheDefaultBranch(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/repos/acme/app/git/trees/HEAD:internal/llm", jsonReply(200,
+		`{"sha":"c3","url":"u","truncated":false,"tree":[{"path":"tools.go","mode":"100644","type":"blob","size":1200,"sha":"d4","url":"u"}]}`))
+	out := data(t, f.run("repo.get_tree", map[string]any{"owner": "acme", "repo": "app", "path": "internal/llm"}))
+	assert.Equal(t, "/repos/acme/app/git/trees/HEAD:internal%2Fllm", f.only().Path)
+	assert.Equal(t, []any{map[string]any{"path": "internal/llm/tools.go", "type": "blob", "size": 1200.0}}, out["entries"])
+}
+
+func TestCodeSearchReturnsFilesAndMatchedFragments(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/search/code", jsonReply(200, `{
+	  "total_count": 2, "incomplete_results": false,
+	  "items": [
+	    {"name": "duration.go", "path": "src/time/duration.go", "sha": "a1", "score": 1,
+	     "url": "u", "git_url": "g", "html_url": "https://github.com/golang/go/blob/abc/src/time/duration.go",
+	     "repository": {"id": 1, "full_name": "golang/go", "name": "go", "owner": {"login": "golang"}},
+	     "text_matches": [
+	       {"object_type": "FileContent", "property": "content", "fragment": "func ParseDuration(s string) (Duration, error) {",
+	        "matches": [{"text": "ParseDuration", "indices": [5, 18]}]},
+	       {"object_type": "FileContent", "property": "content", "fragment": "// ParseDuration parses a duration string.", "matches": []}]},
+	    {"name": "flag.go", "path": "src/flag/flag.go", "sha": "b2", "score": 0.5,
+	     "url": "u", "git_url": "g", "html_url": "https://github.com/golang/go/blob/abc/src/flag/flag.go",
+	     "repository": {"id": 1, "full_name": "golang/go", "name": "go", "owner": {"login": "golang"}}}]}`))
+	out := data(t, f.run("code.search", map[string]any{"q": "ParseDuration repo:golang/go language:go"}))
+
+	req := f.only()
+	assert.Equal(t, "GET", req.Method)
+	assert.Equal(t, "/search/code", req.Path)
+	assert.Equal(t, "page=1&per_page=30&q=ParseDuration+repo%3Agolang%2Fgo+language%3Ago", sortedQuery(req.Query))
+	assert.Equal(t, "application/vnd.github.text-match+json", req.Header.Get("Accept"), "asks for the matched fragments")
+	assert.Equal(t, apiVersion, req.Header.Get("X-GitHub-Api-Version"))
+	assert.Equal(t, "Bearer "+token, req.Header.Get("Authorization"))
+
+	assert.Equal(t, map[string]any{
+		"total_count": 2.0, "incomplete_results": false,
+		"items": []any{
+			map[string]any{"repository": "golang/go", "path": "src/time/duration.go", "name": "duration.go", "sha": "a1",
+				"html_url":  "https://github.com/golang/go/blob/abc/src/time/duration.go",
+				"fragments": []any{"func ParseDuration(s string) (Duration, error) {", "// ParseDuration parses a duration string."}},
+			map[string]any{"repository": "golang/go", "path": "src/flag/flag.go", "name": "flag.go", "sha": "b2",
+				"html_url": "https://github.com/golang/go/blob/abc/src/flag/flag.go", "fragments": []any{}},
+		},
+	}, out)
+}
+
+func TestCodeSearchPaging(t *testing.T) {
+	f := newFake(t)
+	f.on("GET", "/search/code", jsonReply(200, `{"total_count": 0, "incomplete_results": true, "items": []}`))
+	out := data(t, f.run("code.search", map[string]any{"q": "x org:acme", "per_page": 100, "page": 3}))
+	assert.Equal(t, "page=3&per_page=100&q=x+org%3Aacme", sortedQuery(f.only().Query))
+	assert.Equal(t, true, out["incomplete_results"])
+
+	_, err := f.try("code.search", map[string]any{"q": ""})
+	assert.Error(t, err, "an empty query is refused before any request")
+	_, err = f.try("code.search", map[string]any{"q": "x", "per_page": 101})
+	assert.Error(t, err)
+	assert.Len(t, f.requests(), 1)
+}
+
 func TestWorkflowDispatch(t *testing.T) {
 	f := newFake(t)
 	f.on("POST", "/repos/acme/app/actions/workflows/deploy.yml/dispatches", jsonReply(200,
@@ -623,6 +900,10 @@ var minimal = map[string]map[string]any{
 	"pr.list_files":      {"owner": "acme", "repo": "app", "pull_number": 1},
 	"pr.review.create":   {"owner": "acme", "repo": "app", "pull_number": 1, "event": "APPROVE"},
 	"repo.list_for_user": {},
+	"repo.get":           {"owner": "acme", "repo": "app"},
+	"repo.get_content":   {"owner": "acme", "repo": "app", "path": "README.md"},
+	"repo.get_tree":      {"owner": "acme", "repo": "app"},
+	"code.search":        {"q": "retry repo:acme/app"},
 	"workflow.dispatch":  {"owner": "acme", "repo": "app", "workflow": "ci.yml", "ref": "main"},
 }
 

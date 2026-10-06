@@ -86,6 +86,36 @@ func TestRendersRequestFromParams(t *testing.T) {
 	}
 }
 
+// output.select sees the validated params — defaults applied — so an action
+// can shape its output by what was asked, on every page of a paginated one.
+func TestSelectSeesTheParams(t *testing.T) {
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`[{"path": "a/x"}, {"path": "b/y"}]`))
+	}))
+	defer srv.Close()
+	m, a := mustParse(t, manifestFor(srv.URL, `    params:
+      type: object
+      properties:
+        dir: { type: string }
+        tag: { type: string, default: "t" }
+    request: { method: GET, path: /x }
+    output:
+      select: >-
+        {"tag": params.tag,
+         "paths": response.filter(e, e.path.startsWith(params.dir + '/')).map(e, e.path)}
+`))
+	r := newRunner()
+	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
+	res, err := r.Run(context.Background(), m, a, map[string]any{"dir": "b"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.IsError || res.Data["tag"] != "t" || len(res.Data["paths"].([]any)) != 1 || res.Data["paths"].([]any)[0] != "b/y" {
+		t.Fatalf("select must see params (with defaults): %#v", res.Data)
+	}
+}
+
 func TestResponseSelection(t *testing.T) {
 	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.Header().Set("Content-Type", "application/json")

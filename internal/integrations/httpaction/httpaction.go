@@ -283,7 +283,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		if pg == nil {
 			break
 		}
-		selected, err := selectOutput(a.GetOutput(), pgResp)
+		selected, err := selectOutput(a.GetOutput(), pgResp, params)
 		if err != nil {
 			return nil, err
 		}
@@ -313,7 +313,7 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		data := map[string]any{"items": items}
 		return success(last, data), nil
 	}
-	selected, err := selectOutput(a.GetOutput(), last)
+	selected, err := selectOutput(a.GetOutput(), last, params)
 	if err != nil {
 		return nil, err
 	}
@@ -623,7 +623,11 @@ func responseVars(p *page) map[string]any {
 	return map[string]any{"response": p.parsed, "raw": string(p.raw), "status": int64(p.status), "headers": hdrs}
 }
 
-func selectOutput(o *reliantv1.OutputSpec, p *page) (any, error) {
+// selectOutput shapes a response into the action's data. A select expression
+// sees the validated params as well as the response, so the output can be
+// shaped by what was asked (keep only the entries under the directory the
+// caller named).
+func selectOutput(o *reliantv1.OutputSpec, p *page, params map[string]any) (any, error) {
 	switch sel := o.GetSelect(); sel {
 	case "", "$":
 		if p.parsed == nil {
@@ -633,7 +637,9 @@ func selectOutput(o *reliantv1.OutputSpec, p *page) (any, error) {
 	case "$raw":
 		return map[string]any{"body": string(p.raw)}, nil
 	default:
-		v, err := tmpl.EvalExpr(sel, responseVars(p))
+		vars := responseVars(p)
+		vars["params"] = params
+		v, err := tmpl.EvalExpr(sel, vars)
 		if err != nil {
 			return nil, fmt.Errorf("output.select: %w", err)
 		}
