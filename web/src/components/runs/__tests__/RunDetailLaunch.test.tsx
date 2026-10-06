@@ -335,6 +335,28 @@ describe("run detail: launch event", () => {
     expect(rpc.startChat).not.toHaveBeenCalled();
   });
 
+  // FireTrigger fires every kind of automation, so a webhook's run offers the
+  // same "Run automation now" a schedule's does.
+  it("Run automation now fires a webhook-launched run's automation too", async () => {
+    const user = userEvent.setup();
+    useChat(protoChat({ launchKind: "webhook" }));
+    rpc.getLaunchEvent.mockResolvedValue(create(GetLaunchEventResponseSchema, {}));
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
+
+    await user.click(await screen.findByRole("button", { name: "Run automation now" }));
+    await waitFor(() => expect(rpc.fireTrigger).toHaveBeenCalledTimes(1));
+    expect(rpc.fireTrigger.mock.calls[0]![0]).toMatchObject({ id: "trig-1" });
+  });
+
+  it("an attended run offers no Run automation now", async () => {
+    useChat(protoChat({ launchKind: "chat.start", triggerId: undefined }));
+    rpc.getLaunchEvent.mockResolvedValue(create(GetLaunchEventResponseSchema, {}));
+    renderRunsAt(<RunDetail chatId="chat-1" />, "/workflows/runs/chat-1");
+
+    await screen.findByTestId("transcript");
+    expect(screen.queryByRole("button", { name: "Run automation now" })).not.toBeInTheDocument();
+  });
+
   it("an old chat with no launch event renders without errors and offers no re-run", async () => {
     const consoleError = vi.spyOn(console, "error");
     useChat(protoChat());

@@ -618,7 +618,7 @@ type Querier interface {
 	//   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
 	//                    id and the block's start, so a later block is a new item
-	ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error)
+	ListInboxPending(ctx context.Context, arg ListInboxPendingParams) ([]ListInboxPendingRow, error)
 	// The users with at least one enabled trigger of an integration: whose
 	// access the periodic refresher keeps fresh.
 	ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error)

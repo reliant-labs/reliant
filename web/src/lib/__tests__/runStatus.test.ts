@@ -15,6 +15,7 @@ import {
 } from "../../gen/reliant/v1/chat_pb";
 import {
   isLiveRunStatus,
+  isUnattendedLaunchKind,
   launchKindDisplay,
   runStatus,
   runStatusFromActivity,
@@ -308,5 +309,25 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
       shortLabel: "future.kind",
       startedByLine: "Started by future.kind",
     });
+  });
+});
+
+describe("isUnattendedLaunchKind: core.TriggerEventKind.Unattended, mirrored", () => {
+  it.each([
+    ["schedule", true],
+    ["webhook", true],
+    ["integration", true],
+    ["workflow_event", true],
+    ["chat.start", false],
+    ["agent.start_run", false],
+    ["builder.test", false],
+  ])("%s → %s", (kind, unattended) => {
+    expect(isUnattendedLaunchKind(kind)).toBe(unattended);
+  });
+
+  it("reads a missing or unknown kind as attended", () => {
+    expect(isUnattendedLaunchKind(null)).toBe(false);
+    expect(isUnattendedLaunchKind(undefined)).toBe(false);
+    expect(isUnattendedLaunchKind("future.kind")).toBe(false);
   });
 });

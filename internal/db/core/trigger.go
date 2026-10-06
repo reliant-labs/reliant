@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 )
 
@@ -85,15 +86,36 @@ func (k TriggerEventKind) IsInbound() bool {
 }
 
 // Unattended reports whether a run launched by an event of this kind has no
-// human behind it. Only such a run may wake its machine with the delegated
-// daemon:resume token its trigger holds (see internal/automationcred): nobody
-// is signed in to wake it any other way. An attended run acts as the
-// signed-in user or not at all.
+// human behind it, so its trigger stands in for its owner. Two things follow:
+//
+//   - Only such a run may wake its machine with the delegated daemon:resume
+//     token its trigger holds (see internal/automationcred): nobody is signed
+//     in to wake it any other way. An attended run acts as the signed-in user
+//     or not at all.
+//   - Only such a run's finish is governed by its trigger's notification
+//     policy (NotifyOnComplete, one notification per failure streak): nobody
+//     is waiting on it. An attended run notifies whoever is.
+//
+// Both also need the run's own trigger — its token, its row — which is the
+// launch event's trigger id, not something a kind can promise.
 //
 // A kind missing from eventKindUnattended reads as attended, so a new kind
-// that was never classified can never borrow the token — and a test fails
-// until it is classified.
+// that was never classified can never borrow the token or go quiet — and a
+// test fails until it is classified.
 func (k TriggerEventKind) Unattended() bool { return eventKindUnattended[k] }
+
+// UnattendedEventKinds lists, sorted, the kinds Unattended reports true for:
+// the same rule, for a query that has to apply it in SQL.
+func UnattendedEventKinds() []string {
+	kinds := make([]string, 0, len(eventKindUnattended))
+	for kind, unattended := range eventKindUnattended {
+		if unattended {
+			kinds = append(kinds, string(kind))
+		}
+	}
+	sort.Strings(kinds)
+	return kinds
+}
 
 // eventKindUnattended takes a position on every TriggerEventKind.
 var eventKindUnattended = map[TriggerEventKind]bool{

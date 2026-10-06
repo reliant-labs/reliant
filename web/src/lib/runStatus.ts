@@ -279,6 +279,22 @@ export interface LaunchKindDisplay {
   startedByLine: string;
 }
 
+/**
+ * Launch kinds a stored automation fires with nobody behind the run: a
+ * schedule, a webhook delivery, a provider event, another run's outcome. Such a
+ * run had its questions and approvals answered automatically. The server's
+ * rule is `core.TriggerEventKind.Unattended` (internal/db/core/trigger.go),
+ * which also decides the run's credentials and notifications; keep the two in
+ * step. Anything not listed — a chat, a builder test, an agent's start_run, a
+ * kind this client does not know — reads as attended.
+ */
+const UNATTENDED_LAUNCH_KINDS: ReadonlySet<string> = new Set(["schedule", "webhook", "integration", "workflow_event"]);
+
+/** Whether a run of this launch kind ran with nobody behind it. */
+export function isUnattendedLaunchKind(launchKind: string | null | undefined): boolean {
+  return UNATTENDED_LAUNCH_KINDS.has(launchKind ?? "");
+}
+
 /** The launch-kind vocabulary (WORKFLOW_UI.md §0, "Launch-kind vocabulary"). */
 export function launchKindDisplay(
   launchKind: string | null | undefined,

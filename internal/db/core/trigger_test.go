@@ -6,6 +6,7 @@ import (
 	"go/parser"
 	"go/token"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"strings"
 	"testing"
@@ -58,6 +59,24 @@ func TestTriggerEventKindUnattended_EveryDeclaredKindIsClassified(t *testing.T) 
 	if len(eventKindUnattended) != len(declared) {
 		t.Errorf("eventKindUnattended classifies %d kinds but %d are declared; remove entries for kinds that no longer exist",
 			len(eventKindUnattended), len(declared))
+	}
+}
+
+// UnattendedEventKinds is the rule Unattended applies, for SQL: exactly the
+// declared kinds it reports true for, and no others.
+func TestUnattendedEventKinds_MatchesUnattended(t *testing.T) {
+	t.Parallel()
+
+	want := []string{}
+	for _, value := range declaredStringConsts(t, "TriggerEventKind") {
+		if TriggerEventKind(value).Unattended() {
+			want = append(want, value)
+		}
+	}
+	sort.Strings(want)
+	got := UnattendedEventKinds()
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("UnattendedEventKinds() = %v, want %v", got, want)
 	}
 }
 
