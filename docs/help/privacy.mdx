@@ -49,9 +49,10 @@ A local daemon connects outbound to our gateway; it doesn't open any inbound por
 | Attachments you upload | No | Yes | Yes, when included in the conversation |
 | Memories (`reliant.md`), workflows and presets | Yes, as files where the daemon runs | Yes, copies with your project settings | Yes. Memories and workflow prompts are part of what the model sees |
 | Project details: paths, repo URLs, branch names | Yes | Yes | Often, because they appear in prompts and tool output |
-| Model API keys and provider logins | No | Yes, encrypted at the application layer | Only to authenticate with that provider |
+| Model API keys and provider logins | No | Yes, encrypted at the application layer. The connected account's email is stored, without that extra encryption, so we can show you which account is connected | Only to authenticate with that provider |
 | Integration credentials (GitHub, Gmail, Slack, Twilio) | No | Yes, encrypted at the application layer | No. The results of integration actions are sent, like any other tool output |
 | Secrets in your files or command output | Yes | **Yes, if the agent reads or prints them** | **Yes, if the agent reads or prints them** |
+| Your Reliant sign-in tokens (desktop) | Yes, in storage encrypted by your OS | No | No |
 | Analytics and crash reports | No | Sent to Statsig and Sentry (on by default; see [Telemetry](#telemetry)) | No |
 
 <Warning>
@@ -65,7 +66,7 @@ Secrets get no special handling. If the agent opens a `.env` file, prints an env
 | Where your code lives | Your disk | A persistent disk in Google Cloud (us-central1), inside its own lightweight VM (Kata Containers) |
 | What reaches our servers | Whatever the agent reads or a command prints | The same, plus the entire contents of the machine's disk |
 | Where commands run | Your machine | Our infrastructure |
-| When it's deleted | Whenever you choose | When you delete the machine |
+| When it's deleted | Whenever you choose | When you delete the machine. We may also delete a suspended machine's disk if you have no compute subscription (only after at least 14 days and two emails, the second at least 3 days before deletion), or if it stays suspended for at least 60 days (after an email warning) |
 
 See [Remote Daemons](/features/remote-daemons) for how to run a daemon on your own machines.
 
@@ -77,6 +78,7 @@ You can point Reliant at a model server running on your own hardware (Ollama, LM
 
 - **Integrations** you connect (GitHub, Gmail, Slack, Twilio, custom HTTP): what the agent sends goes to that service under your account.
 - **MCP servers** you configure get the tool calls the agent makes to them.
+- **Web search and fetch:** a web search sends the agent's query to a search provider (currently DuckDuckGo), and fetching a page sends a request to that site. These requests may come from our servers or from your daemon.
 
 ## Your model provider and training
 
@@ -94,7 +96,12 @@ If you add your own API key, or sign in with a provider subscription (Claude, Co
 
 ### Reliant AI
 
-If you use the optional Reliant AI provider, requests go through our own proxy (LiteLLM) to **Google Vertex AI**. Vertex AI may cache inputs and outputs in memory for up to 24 hours to speed up repeated requests, and this caching is currently on. Google doesn't use this data to train its models. We use Vertex AI's global endpoint, so a request can be processed in any Google region, not only the US.
+If you use the optional Reliant AI provider:
+
+- Requests go through a proxy we run ourselves (LiteLLM) to **Google Vertex AI**. The proxy records the model, token counts and cost, for billing.
+- Google Cloud's terms don't allow Google to use these requests to train or fine-tune AI models without our permission, and we haven't given it.
+- To respond faster, Google may hold inputs and outputs in memory for up to 24 hours. Google may also log prompts for a limited time to detect abuse, as [Google describes](https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention).
+- We use Vertex AI's global endpoint, so a request can be processed in any Google region, not only the US.
 
 Whichever provider you use, the conversation is also stored in your chat history on our servers.
 
@@ -104,12 +111,19 @@ Both kinds of telemetry are **on by default**. To turn them off, go to **Setting
 
 | Toggle | Sent to | What's included |
 | --- | --- | --- |
-| **Analytics and Usage Data** | Statsig | Product-usage events, tied to a device ID and your account ID. |
-| **Crash and Error Reporting** | Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. Request bodies, console output and custom data are removed, and error messages are cut to one short line with known credential formats redacted. That short line can still contain a fragment of text. Web session replays mask all on-screen text and form inputs, and block images, media and canvas. |
+| **Analytics and Usage Data** | Statsig | Product-usage events such as message sent, model call completed (model, token counts, latency) and project opened, tied to a device ID, your account ID and a session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text. |
+| **Crash and Error Reporting** | Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Request bodies, console output and custom data are removed, and error messages are cut to one short line with known credential formats redacted. That short line can still contain a fragment of text. Web session replays mask all on-screen text and form inputs, and block images, media and canvas. |
 
 Crash reports contain error details and stack traces; we don't upload memory dumps.
 
-Our server logs record identifiers, counts, durations and status codes, not the content of your prompts, chats, tool inputs or outputs, or files. File paths can appear in error logs for file operations. Server logs are kept for 30 days.
+Turning off analytics also stops the analytics events our servers record about your account. The switches don't cover:
+
+- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. File paths can appear in error logs for file operations. Server logs and metrics are kept for 30 days.
+- **Server-side error reports**, which go to Sentry with the same shortening and credential redaction.
+- **Billing usage records:** the model, token count and cost of each request, which we need to bill you.
+- **Update checks:** the desktop app checks `downloads.reliantlabs.io` for updates, which sends your IP address and app version. Updates download only after you agree.
+
+This docs site is hosted by Mintlify, which may collect usage analytics about it under [its privacy policy](https://www.mintlify.com/legal/privacy). Our marketing site, reliantlabs.io, has its own cookie choices under **Your privacy choices** in its footer; they don't apply to this docs site.
 
 ## Deleting your data
 
@@ -119,11 +133,20 @@ Deleting a chat **archives** it. Deleting the archived chat **permanently delete
 
 ### Cloud machines
 
-Delete the machine to delete its disk and everything on it.
+Go to **Settings → Machines** and delete the machine. This deletes its disk and everything on it.
+
+### Credentials and integrations
+
+You can remove API keys and provider logins, and disconnect integrations, in the app's settings at any time. For Gmail, we also revoke the token with Google. Data an integration already pulled into a chat stays there until you delete the chat.
 
 ### Your account
 
-You can delete your account in the app's account settings, or email support@reliantlabs.io. Deletion is blocked while a paid subscription is active, so cancel your subscription first. A wallet balance doesn't block deletion: when you delete your account, we refund the remaining paid balance to your original payment method, and promotional credit, such as credit from coupons, is forfeited. The confirmation screen shows both amounts before you confirm. If a refund can't go back to your card automatically, our support team refunds it for you.
+Go to **Settings → Account → Delete account**, or email support@reliantlabs.io.
+
+- **Before you can delete:** deletion is blocked while a paid subscription is active, so cancel it in the billing settings first. A wallet balance doesn't block deletion.
+- **Your wallet balance:** Wallet top-ups include a 5% fee; coupon credits carry none. When you delete your account, we refund the face value of your unused paid credit to the card you paid with (the top-up fee isn't refunded), and promotional credit, such as credit from coupons, is forfeited. Promotional credit counts as spent before paid credit, so a coupon can't be turned into cash. The confirmation screen shows both amounts before you confirm. Card refunds usually take 5–10 business days to appear. If a refund can't go back to your card automatically, our support team refunds it for you.
+- **What's deleted:** your sign-in identity, chats and everything in them, projects, workflows, settings, credentials and cloud machines. If you host apps with us, delete them first, or ask support to remove them.
+- **What we keep:** invoices, usage records, subscription and wallet history, records of any refund made at deletion, and records at Stripe, as the law requires. We remove or replace your account identifiers in them where we can.
 
 ### How long we keep things
 
@@ -132,10 +155,15 @@ You can delete your account in the app's account settings, or email support@reli
 | Chats, messages, tool outputs, attachments | Until you delete them |
 | Workflow run history | 7 days after the run ends |
 | Large stored workflow payloads | 30 days |
-| Database backups | Nightly; the 7 most recent are kept. Manual backups taken before maintenance are kept separately |
-| Server logs | 30 days |
+| Credentials | Until you remove or disconnect them |
+| Cloud machine disks | Until you delete the machine, except as described in [Local daemon vs. cloud machine](#local-daemon-vs-cloud-machine) |
+| Hosted app databases | Until you delete them. **They are not backed up** |
+| Database backups | Nightly backups are kept for 7 days. Backups taken on demand, for example before maintenance, are deleted when they're no longer needed |
+| Server logs and metrics | 30 days |
+| Crash, error and analytics data (Sentry, Statsig) | According to each vendor's retention settings for our account |
+| Billing records, including refunds made at deletion | As long as tax and accounting law requires, typically 7 years |
 
-The [Privacy Policy](https://reliantlabs.io/privacy) has the complete list.
+The [Privacy Policy](https://reliantlabs.io/privacy#retention) has the complete list.
 
 ### Clearing local app data
 
@@ -164,6 +192,8 @@ Remove-Item -Recurse -Force "$env:APPDATA\reliant"
 
 ## Security practices
 
+**Credentials.** API keys, provider sign-in tokens and integration credentials are encrypted at the application layer, with a key specific to your account, before they're written to our database.
+
 **Code modifications.** In manual approval mode, Reliant shows each edit before applying it and waits for your confirmation. In auto modes, edits are applied directly and shown in the conversation as they happen.
 
 **Tool execution.** Shell commands and file operations are logged in the conversation, visible in the UI before execution, and controllable via approval modes.
@@ -171,5 +201,6 @@ Remove-Item -Recurse -Force "$env:APPDATA\reliant"
 ## More detail
 
 - [Privacy Policy](https://reliantlabs.io/privacy): the full legal version, including your rights under GDPR and CCPA
-- **Need a DPA?** Email support@reliantlabs.io.
+- [Subprocessors](https://reliantlabs.io/subprocessors): every company that processes data for us, and what each one processes
+- **Need a data processing agreement?** Email support@reliantlabs.io.
 - **Security issues:** email [security@reliantlabs.io](mailto:security@reliantlabs.io).

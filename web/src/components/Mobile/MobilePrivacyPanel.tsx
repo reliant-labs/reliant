@@ -29,7 +29,7 @@ export function MobilePrivacyPanel() {
       />
       <MobileToggleRow
         label="Analytics and usage data"
-        description="Collect anonymous usage statistics to help improve the app."
+        description="Send product usage events, tied to your account, to help improve the app."
         checked={analyticsEnabled}
         onChange={setAnalytics}
       />
