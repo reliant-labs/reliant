@@ -1926,7 +1926,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 //
 // Idempotent and safe under concurrency: the insert goes through
 // EnqueueAgentMessageIfAbsent, which is backed by
-// idx_agent_messages_one_terminal_report_per_spawn (a real DB constraint,
+// idx_agent_messages_one_terminal_report_per_chat_spawn (a real DB constraint,
 // not a check-then-insert in this code) — see the migration and query
 // comments for the full reasoning. inserted=false here is the everyday
 // "someone already reported this" outcome, not a failure, so it is neither

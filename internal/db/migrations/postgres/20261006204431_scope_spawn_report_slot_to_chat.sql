@@ -22,6 +22,8 @@
 -- then such a report is delivered.
 --
 -- agent_messages holds one terminal row per spawn, so the build is short.
-CREATE UNIQUE INDEX idx_agent_messages_one_terminal_report_per_chat_spawn
+-- IF NOT EXISTS so a replay is a no-op (TestRenumberWindowDatabaseMigratesOnPlainStartup
+-- re-runs every migration after its window against a migrated schema).
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_messages_one_terminal_report_per_chat_spawn
     ON agent_messages (chat_id, tool_call_id)
     WHERE kind IN (2, 3, 4);

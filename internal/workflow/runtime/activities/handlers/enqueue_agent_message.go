@@ -94,7 +94,7 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 
 	// Terminal spawn reports go through EnqueueSpawnReport: a reconciler may
 	// already have synthesized a placeholder for this spawn, and a plain INSERT
-	// would die on idx_agent_messages_one_terminal_report_per_spawn (23505),
+	// would die on idx_agent_messages_one_terminal_report_per_chat_spawn (23505),
 	// leaving the real outcome lost. See
 	// docs/incidents/2026-10-04-spawn-report-collision.md.
 	//

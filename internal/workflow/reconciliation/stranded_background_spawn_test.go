@@ -300,7 +300,7 @@ func TestRepairStrandedBackgroundSpawns_ClosesToolCallWhenReportAlreadyExists(t 
 
 // TestRepairStrandedBackgroundSpawns_UndeliverableIsIdempotent runs the
 // undeliverable path twice. The unique index
-// (idx_agent_messages_one_terminal_report_per_spawn) makes the second insert
+// (idx_agent_messages_one_terminal_report_per_chat_spawn) makes the second insert
 // a no-op, and UpsertToolCallStatus refuses to walk an already-terminal row
 // backwards, so a second pass must add no rows and count no second anomaly.
 // This is what makes the fix safe against ordering with the sibling
