@@ -11,7 +11,7 @@
   ·
   <a href="https://docs.reliantlabs.io/docs/">Docs</a>
   ·
-  <a href="https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A">Slack</a>
+  <a href="https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA">Slack</a>
 </p>
 
 Reliant is a desktop AI coding assistant that goes beyond chat. Interact with your codebase through natural conversation, then extend that interaction with programmable workflows that automate complex, multi-step development tasks.
@@ -122,7 +122,7 @@ You can also configure Reliant to point to your own ChatGPT compatible provider.
 
 ## Community
 
-- [Slack](https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A) — Get help and share workflows
+- [Slack](https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA) — Get help and share workflows
 - [GitHub Issues](https://github.com/reliant-labs/reliant/issues) — Report bugs and request features
 - [Documentation](https://docs.reliantlabs.io) — Guides and reference
 
