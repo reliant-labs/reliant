@@ -78,7 +78,30 @@ describe('reduceNodeExecutions (stream-derived node status)', () => {
     expect(reduceNodeExecutions([])).toEqual({
       statusByKey: {},
       iterationByKey: {},
+      loopScoped: [],
+      latestSequenceByWorkflow: {},
     })
+  })
+
+  it('keeps each loop iteration of a node apart', () => {
+    // lint runs once per iteration under the same node id. Keyed by node id
+    // alone, iteration 1's "started" can never un-complete iteration 0's, so
+    // the loop body could never be shown running again.
+    const inLoop = (iteration: number) => ({
+      parent_node_id: 'attempt',
+      iteration,
+      metadata: { node_path: 'attempt.lint' },
+    })
+    const { loopScoped, latestSequenceByWorkflow } = reduceNodeExecutions([
+      liveEvent('lint', NodeExecutionEventType.STARTED, 1, inLoop(0)),
+      liveEvent('lint', NodeExecutionEventType.COMPLETED, 2, inLoop(0)),
+      liveEvent('lint', NodeExecutionEventType.STARTED, 3, inLoop(1)),
+    ])
+
+    const byIteration = Object.fromEntries(loopScoped.map((e) => [e.iteration, e]))
+    expect(byIteration[0]).toMatchObject({ loopNodeId: 'attempt', nodePath: 'attempt.lint', status: 'completed', sequence: 2 })
+    expect(byIteration[1]).toMatchObject({ loopNodeId: 'attempt', status: 'running', sequence: 3 })
+    expect(latestSequenceByWorkflow[WF]).toBe(3)
   })
 
   it('live path: started -> running, completed -> completed, failed -> failed', () => {

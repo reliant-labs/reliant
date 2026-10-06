@@ -48,6 +48,36 @@ export interface StreamNodeIteration {
 }
 
 /**
+ * One execution of a node that ran inside a loop iteration.
+ *
+ * A loop body runs once per iteration under the SAME node ids, so
+ * `${workflowId}:${nodeId}` cannot tell iteration 2's `lint` from iteration
+ * 1's — and the terminal guard below would (correctly, per key) refuse to let
+ * iteration 2's "started" un-complete iteration 1's. The server therefore
+ * stamps every event of an activity inside a loop with that loop
+ * (`parent_node_id`), the iteration (`iteration`) and the node's dotted graph
+ * position (`metadata.node_path`), and these are reduced per
+ * (workflow, loop, iteration, node) instead.
+ */
+export interface LoopScopedNodeExecution {
+  workflowId: string
+  nodeId: string
+  /** The loop the node ran in. */
+  loopNodeId: string
+  /** The iteration of that loop. */
+  iteration: number
+  /**
+   * Dotted graph position, e.g. "attempt.review.agent_loop.call_llm" — how an
+   * activity deep inside a sub-workflow is traced back to the loop-body node
+   * the diagram draws. Absent on events written before the server sent it.
+   */
+  nodePath?: string
+  status: StreamNodeStatus
+  /** sequence_number of the event that decided `status`. */
+  sequence: number
+}
+
+/**
  * Reduced, authoritative view of the node_execution stream for one chat.
  * Both maps are keyed by `${workflowId}:${nodeId}`.
  */
@@ -56,6 +86,14 @@ export interface NodeExecutionStatusResult {
   statusByKey: Record<string, StreamNodeStatus>
   /** Iteration info keyed by `${workflowId}:${nodeId}` (present only when carried). */
   iterationByKey: Record<string, StreamNodeIteration>
+  /** Executions of nodes inside loops, one per (workflow, loop, iteration, node). */
+  loopScoped: LoopScopedNodeExecution[]
+  /**
+   * The newest node event's sequence_number, per workflow. An execution whose
+   * deciding event is the newest one is what the run did LAST — between two
+   * activities, that is the node the run is still in.
+   */
+  latestSequenceByWorkflow: Record<string, number>
 }
 
 const EMPTY_UPDATES: NodeExecutionUpdate[] = []
@@ -133,6 +171,42 @@ interface Candidate {
 }
 
 /**
+ * Fold one event into `best[key]` under the terminal guard: a terminal status
+ * beats a non-terminal one regardless of order, and between equals the higher
+ * sequence_number wins. Returns true when the event became the winner.
+ */
+function foldCandidate(
+  best: Map<string, Candidate>,
+  key: string,
+  status: StreamNodeStatus,
+  seq: number,
+): boolean {
+  const terminal = isTerminal(status)
+  const prev = best.get(key)
+  if (
+    !prev ||
+    (!prev.terminal && terminal) ||
+    (prev.terminal === terminal && seq >= prev.seq)
+  ) {
+    best.set(key, { status, seq, terminal })
+    return true
+  }
+  return false
+}
+
+/** The loop scope an event carries, when it ran inside a loop. */
+function loopScopeOf(
+  update: NodeExecutionUpdate,
+): { loopNodeId: string; iteration: number } | undefined {
+  const loopNodeId = update.parent_node_id
+  const iteration = update.iteration
+  if (!loopNodeId || typeof iteration !== 'number' || iteration < 0) {
+    return undefined
+  }
+  return { loopNodeId, iteration }
+}
+
+/**
  * Fold a chat's node_execution events into an authoritative status map.
  *
  * INVARIANTS:
@@ -152,11 +226,33 @@ export function reduceNodeExecutions(
   const best = new Map<string, Candidate>()
   const iterationByKey: Record<string, StreamNodeIteration> = {}
   const iterationSeq = new Map<string, number>()
+  const scopedBest = new Map<string, Candidate>()
+  const scopedInfo = new Map<string, Omit<LoopScopedNodeExecution, 'status' | 'sequence'>>()
+  const latestSequenceByWorkflow: Record<string, number> = {}
 
   for (const update of updates) {
     if (!update.node_id) continue
     const key = nodeExecutionKey(update.workflow_id, update.node_id)
     const seq = update.sequence_number ?? 0
+    if (seq > (latestSequenceByWorkflow[update.workflow_id] ?? -1)) {
+      latestSequenceByWorkflow[update.workflow_id] = seq
+    }
+
+    const scope = loopScopeOf(update)
+    const scopedStatus = scope ? normalizeEventStatus(update) : undefined
+    if (scope && scopedStatus) {
+      const scopedKey = `${update.workflow_id}\u0000${scope.loopNodeId}\u0000${scope.iteration}\u0000${update.node_id}`
+      if (foldCandidate(scopedBest, scopedKey, scopedStatus, seq) || !scopedInfo.has(scopedKey)) {
+        const nodePath = update.metadata?.node_path
+        scopedInfo.set(scopedKey, {
+          workflowId: update.workflow_id,
+          nodeId: update.node_id,
+          loopNodeId: scope.loopNodeId,
+          iteration: scope.iteration,
+          ...(nodePath ? { nodePath } : {}),
+        })
+      }
+    }
 
     // Capture iteration info from the latest-by-sequence event that carries it.
     if (update.iteration !== undefined || update.max_iterations !== undefined) {
@@ -197,7 +293,14 @@ export function reduceNodeExecutions(
     statusByKey[key] = candidate.status
   }
 
-  return { statusByKey, iterationByKey }
+  const loopScoped: LoopScopedNodeExecution[] = []
+  for (const [key, candidate] of scopedBest) {
+    const info = scopedInfo.get(key)
+    if (!info) continue
+    loopScoped.push({ ...info, status: candidate.status, sequence: candidate.seq })
+  }
+
+  return { statusByKey, iterationByKey, loopScoped, latestSequenceByWorkflow }
 }
 
 /**
