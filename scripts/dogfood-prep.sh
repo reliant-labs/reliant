@@ -263,7 +263,7 @@ select_dogfood_daemon_data_dir
 echo
 echo "── env ──────────────────────────────────────────────────────────────────"
 if [ -d "$CONTROL_PLANE_DIR" ]; then
-  env_out="$(cd "$CONTROL_PLANE_DIR" && forge env status "$DOGFOOD_ENV" --silence-experimental 2>&1)" || true
+  env_out="$(cd "$CONTROL_PLANE_DIR" && forge env status "$DOGFOOD_ENV" 2>&1)" || true
   printf '%s\n' "$env_out"
 
   # GATE on it, do not merely print it. `forge env status` is a REPORT: it exits
