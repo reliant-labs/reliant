@@ -141,6 +141,39 @@ global.WebSocket = WebSocketMock as unknown as typeof WebSocket
 // the test that made it fails: a test owns its I/O and mocks it (the hook, the
 // *-grpc module, or fetch itself with vi.spyOn/vi.stubGlobal, which replace
 // this stub for that test).
+//
+// "The test that made it" needs one more piece: an RPC does real async work
+// BEFORE it reaches fetch (the auth interceptor imports supabase lazily), so a
+// call a test started could reach fetch only after that test's afterEach had
+// checked — or after the whole file, unflagged, logging into teardown exactly
+// as before. Observed: a Sidebar test's ListRuns reached fetch after its
+// file's last hook. So every call made through a real Connect transport is
+// tracked, and the check below first waits for the test's calls to settle.
+const rpcs = vi.hoisted(() => ({ inFlight: new Set<Promise<unknown>>() }))
+
+vi.mock('@connectrpc/connect-web', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@connectrpc/connect-web')>()
+  const track = <T,>(call: Promise<T>): Promise<T> => {
+    rpcs.inFlight.add(call)
+    const settled = () => {
+      rpcs.inFlight.delete(call)
+    }
+    call.then(settled, settled)
+    return call
+  }
+  return {
+    ...actual,
+    createConnectTransport: (...args: Parameters<typeof actual.createConnectTransport>) => {
+      const transport = actual.createConnectTransport(...args)
+      return {
+        ...transport,
+        unary: (...call: Parameters<typeof transport.unary>) => track(transport.unary(...call)),
+        stream: (...call: Parameters<typeof transport.stream>) => track(transport.stream(...call)),
+      }
+    },
+  }
+})
+
 const unmockedRequests: string[] = []
 
 function describeRequest(input: RequestInfo | URL, init?: RequestInit): string {
@@ -155,7 +188,11 @@ globalThis.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
   return Promise.reject(new TypeError(`Unit tests have no network: unmocked request ${request}`))
 }) as typeof fetch
 
-afterEach(() => {
+afterEach(async () => {
+  // A call that settles can start another (a retry, a follow-up refetch).
+  while (rpcs.inFlight.size > 0) {
+    await Promise.allSettled([...rpcs.inFlight])
+  }
   if (unmockedRequests.length === 0) return
   const requests = [...new Set(unmockedRequests.splice(0))]
   throw new Error(

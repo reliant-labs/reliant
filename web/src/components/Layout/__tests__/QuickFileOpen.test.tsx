@@ -107,6 +107,31 @@ describe("QuickFileOpen bounded fetch", () => {
   });
 });
 
+describe("QuickFileOpen click-outside listener", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  // The listener is attached on a 100ms delay, so the click that opened the
+  // picker does not immediately close it. A picker that closed (or unmounted)
+  // inside that window used to attach it anyway, after cleanup had already
+  // run: a document listener nothing would ever remove. In tests the same
+  // timer fired after jsdom was torn down — "ReferenceError: document is not
+  // defined", reported as an unhandled error against whichever file was
+  // finishing.
+  it("does not attach the listener after the picker is gone", () => {
+    vi.useFakeTimers();
+    apiMocks.getFileTree.mockResolvedValue([]);
+    const addListener = vi.spyOn(document, "addEventListener");
+
+    const { unmount } = render(<QuickFileOpen isOpen />);
+    unmount();
+    vi.advanceTimersByTime(100);
+
+    expect(addListener.mock.calls.filter(([type]) => type === "mousedown")).toEqual([]);
+  });
+});
+
 describe("collectFiles", () => {
   it("flattens files in order and skips directory nodes", () => {
     const { files, truncated } = collectFiles([

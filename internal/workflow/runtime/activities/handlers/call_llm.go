@@ -380,16 +380,40 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	// cancelled would strand exactly the message the user just sent. Bounded so
 	// a dead pool cannot hold the unwind open.
 	//
-	// The residual race is a message queued microseconds AFTER this SELECT.
-	// That window cannot be closed here — any check has an after. It is closed
-	// on the other side instead, and was already: the enqueue rings the
-	// doorbell signal (notifyThreadWake) which wakes a parked thread,
-	// an idle thread's queue is absorbed by the user's next send, and a row
-	// that outlives every turn is marked undeliverable by the reconciler's
-	// resolveOrphanedAgentMessages rather than sitting queued forever. A
-	// missed-by-a-microsecond message is therefore late, never lost — whereas
-	// the old "assume yes" answer traded that for a chat that could not
-	// advance at all.
+	// The residual race is a message queued AFTER this SELECT. That window
+	// cannot be closed here — any check has an after — so it is closed by what
+	// runs after this turn, and which mechanism closes it depends on who
+	// queued the row:
+	//
+	//   - A background spawn's report rings no doorbell. It is written by
+	//     EnqueueAgentMessage from the spawn's detached goroutine, inside this
+	//     same workflow, and this thread is not parked when that happens — it
+	//     is mid-turn, or on its way to the loop-exit gate. What delivers it is
+	//     that gate (awaitLiveDetachedSpawnsOrHandoff in loop_executor.go): the
+	//     spawn's completion is counted in the workflow, and the gate measures
+	//     from the START of this turn rather than from when it is reached. A
+	//     spawn that finished after this probe — before the thread got to the
+	//     gate, or while it waits there — therefore buys one more turn, and
+	//     that turn's drain delivers the report. Measured from the gate, a
+	//     child that had already left the live set looked like no progress and
+	//     the run ended with its report unread; see
+	//     TestSpawnReportUnreadE2E/TestReportLandingAfterTheLastProbeIsStillDelivered.
+	//   - A row queued from outside the workflow (SendAgentMessage, spawn_send)
+	//     rings the thread-wake doorbell (notifyThreadWake). The gate counts it
+	//     from the turn's start the same way, so it re-enters a thread that
+	//     still has live spawns whether it landed mid-turn or after the thread
+	//     parked. A thread with NOTHING live exits without a turn for it (a
+	//     known gap, pinned by TestLateUserMessageE2E): the row waits for the
+	//     user's next send, whose run's first CallLLM drains it, unless the
+	//     reconciler resolves it first (below) — the finished run has stamped
+	//     the thread terminal.
+	//   - A row that outlives every turn is marked undeliverable by the
+	//     reconciler's resolveOrphanedAgentMessages rather than sitting queued
+	//     forever.
+	//
+	// A message that misses this probe is therefore late or reported
+	// undelivered, never silently lost — whereas the old "assume yes" answer
+	// traded that for a chat that could not advance at all.
 	probeCtx, cancelProbe := context.WithTimeout(context.WithoutCancel(ctx), pendingInboxProbeTimeout)
 	output.PendingInbox = a.hasQueuedAgentMessages(probeCtx, thread)
 	cancelProbe()
