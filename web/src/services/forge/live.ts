@@ -83,9 +83,11 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
   DeployEnvironmentKind,
+  DeployHoldKind,
   DeployRolloutPhase,
   type DeployConvergence,
   type DeployEnvironment,
+  type DeployHold,
   type DeployLiveEnvironment,
   type DeploySourceProvenance,
 } from "@/gen/controlplane/controlplane/v1/deploy_pb";
@@ -159,8 +161,14 @@ export function isPlacedKind(kind: LiveEnvKind): boolean {
 
 // ── Rollout phase ───────────────────────────────────────────────────────────
 
+/**
+ * `held` is a QUEUED deploy: accepted and recorded, and waiting on something
+ * only a person can provide (see LiveHold). Nothing is rolling out, and
+ * nothing is wrong with the release.
+ */
 export type LivePhase =
   | "unspecified"
+  | "held"
   | "pending"
   | "progressing"
   | "stabilizing"
@@ -171,6 +179,8 @@ export type LivePhase =
 
 function phaseOf(phase: DeployRolloutPhase): LivePhase {
   switch (phase) {
+    case DeployRolloutPhase.HELD:
+      return "held";
     case DeployRolloutPhase.PENDING:
       return "pending";
     case DeployRolloutPhase.PROGRESSING:
@@ -206,6 +216,11 @@ function phaseOf(phase: DeployRolloutPhase): LivePhase {
  *                  plane's observer is off by default — and a normal state,
  *                  not a fault.
  *
+ *   queued         the intent is HELD (a queued deploy): nothing was asked to
+ *                  converge yet, so there is nothing to observe about it.
+ *                  Whatever the readings say describes the release still
+ *                  running, not this one.
+ *
  * `unknown` and `not-reported` are both absences and are kept apart because
  * they call for different sentences: one is "our readings went stale", which
  * is a problem, and the other is "nothing has reported yet", which is Tuesday.
@@ -215,6 +230,7 @@ export type LiveConvergenceState =
   | "converged"
   | "converging"
   | "failed"
+  | "queued"
   | "unknown"
   | "not-reported";
 
@@ -263,6 +279,9 @@ function driftStateOf(state: string): LiveDriftState {
  * at the wrong revision, and the two need opposite responses from a reader.
  */
 function observedOf(drift: LiveDrift, phase: LivePhase): LiveConvergenceState {
+  // A HELD intent has not started, so no reading can be about it. The drift
+  // verdict is still true of what runs, and the State panel keeps it.
+  if (phase === "held") return "queued";
   switch (drift.state) {
     case "in_sync":
       return "converged";
@@ -273,6 +292,16 @@ function observedOf(drift: LiveDrift, phase: LivePhase): LiveConvergenceState {
     default:
       return "not-reported";
   }
+}
+
+/**
+ * The observed half with its time. A QUEUED intent carries none: the reading's
+ * time is when the release still running was last seen, and printed beside
+ * "Queued" it would read as when the queue was observed.
+ */
+function observedReading(drift: LiveDrift, phase: LivePhase): LiveObserved {
+  const state = observedOf(drift, phase);
+  return state === "queued" ? { state } : { state, observedAt: drift.observedAt };
 }
 
 /**
@@ -515,6 +544,73 @@ function shapeKindOf(kind: string): LiveEnvKind {
   }
 }
 
+// ── Queued deploys ──────────────────────────────────────────────────────────
+
+/**
+ * WHAT A QUEUED DEPLOY IS WAITING ON.
+ *
+ * The control plane accepts a deploy that needs something only a person can
+ * provide — today, billing for the compute or database it runs — instead of
+ * refusing it. The release and the promotion are recorded like any other, the
+ * promotion carries a hold, and the platform rolls it out ON ITS OWN the
+ * moment the hold clears. Nobody re-runs anything.
+ *
+ * Every word here is the control plane's: what holds, why (`reason`, which
+ * states the real quantity), the next step (`fix`), and where to take it
+ * (`actionUrl`, this environment's page). The web decides only how to say it
+ * to the person looking — and `callerCanResolve` is the control plane's answer
+ * to whether that person can act (an org admin) or must ask someone who can.
+ */
+export type LiveHoldKind = "billing" | "unknown";
+
+export interface LiveHold {
+  kind: LiveHoldKind;
+  /** The waiting promotion — always the environment's current one. */
+  promotionId: string;
+  reason: string;
+  fix: string;
+  /** Absolute link to this environment's page. Empty when the control plane has no app URL. */
+  actionUrl: string;
+  callerCanResolve: boolean;
+  /** When the deploy was accepted and started waiting. */
+  heldSince?: string;
+}
+
+function holdKindOf(kind: DeployHoldKind): LiveHoldKind {
+  return kind === DeployHoldKind.BILLING ? "billing" : "unknown";
+}
+
+function toLiveHold(msg: DeployHold): LiveHold {
+  return {
+    kind: holdKindOf(msg.kind),
+    promotionId: msg.promotionId,
+    reason: msg.reason,
+    fix: msg.fix,
+    actionUrl: msg.actionUrl,
+    callerCanResolve: msg.callerCanResolve === true,
+    heldSince: toISO(msg.heldSince),
+  };
+}
+
+/** True when the environment's current deploy is queued on a person. */
+export function isQueued(env: Pick<LiveEnv, "holds">): boolean {
+  return env.holds.length > 0;
+}
+
+/**
+ * What a queued deploy waits on, as the end of "Waiting on …": "billing", or
+ * the kinds joined. A kind this build does not know is still a wait, and is
+ * named as one rather than dropped.
+ */
+export function queuedOnLabel(holds: LiveHold[]): string {
+  const labels: string[] = [];
+  for (const hold of holds) {
+    const label = hold.kind === "billing" ? "billing" : "an action";
+    if (!labels.includes(label)) labels.push(label);
+  }
+  return labels.length > 0 ? labels.join(" and ") : "an action";
+}
+
 // ── One environment ─────────────────────────────────────────────────────────
 
 /**
@@ -585,6 +681,12 @@ export interface LiveEnv {
    * overview row and the releases timeline cannot word it three ways.
    */
   provenance: string;
+
+  /**
+   * What the current deploy is QUEUED on (phase `held`). Empty when nothing
+   * is queued — the ordinary case. See LiveHold.
+   */
+  holds: LiveHold[];
 }
 
 /** Declared by a render, and nothing promoted to it yet. A normal state. */
@@ -662,7 +764,7 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
     promotedByUserId: promotion?.promotedByUserId ?? "",
 
     phase,
-    observed: { state: observedOf(drift, phase), observedAt: drift.observedAt },
+    observed: observedReading(drift, phase),
     drift,
     driftDetail: driftMsg?.detail ?? "",
 
@@ -673,6 +775,8 @@ export function toLiveEnv(msg: DeployLiveEnvironment): LiveEnv | null {
       // arrive in Phase B and replace this argument, not the line's shape.
       config: declaredBy,
     }),
+
+    holds: (environment.holds ?? []).map(toLiveHold),
   };
 }
 
@@ -715,6 +819,8 @@ export function observedLine(observed: LiveObserved): string {
       return "Still rolling out";
     case "failed":
       return "Couldn't finish rolling out";
+    case "queued":
+      return "Queued — not rolling out yet";
     case "unknown":
       return "Can't confirm what's running";
     default:

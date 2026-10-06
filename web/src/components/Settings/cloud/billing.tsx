@@ -158,7 +158,7 @@ export function BillingSection() {
     tab?: BillingTab;
     checkout?: "success" | "cancelled";
     planId?: string;
-    from?: "onboarding";
+    from?: "onboarding" | "forge";
     returnTo?: string;
   };
   // An inbound `?tab=invoices` is a real link somebody has; it resolves to the
@@ -200,6 +200,9 @@ export function BillingSection() {
           at all. It is a property of HOW THEY ARRIVED, not of any purchase. */}
       {search.from === "onboarding" && (
         <BackToSetup returnTo={search.returnTo} />
+      )}
+      {search.from === "forge" && (
+        <BackToEnvironment returnTo={search.returnTo} />
       )}
 
       {search.checkout && (
@@ -361,10 +364,7 @@ function CheckoutReturnBanner({
 function BackToSetup({ returnTo }: { returnTo?: string }) {
   const navigate = useNavigate();
 
-  const safeReturnTo =
-    returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//")
-      ? returnTo
-      : undefined;
+  const safeReturnTo = sameOriginPath(returnTo);
 
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3">
@@ -391,6 +391,57 @@ function BackToSetup({ returnTo }: { returnTo?: string }) {
       </Button>
     </div>
   );
+}
+
+/**
+ * The way back to an environment whose deploy is QUEUED on billing — the
+ * forge counterpart of BackToSetup, and for the same reason: it is a property
+ * of how the user arrived, so it renders whether or not they have bought
+ * anything yet.
+ *
+ * Buying a plan is the whole remedy. The control plane releases the queued
+ * deploy on its own once the plan is active, so the copy says there is nothing
+ * to re-run, and the page this returns to is where it can be watched going
+ * out. `returnTo` is guarded like BackToSetup's; anything else falls back to
+ * the deployments overview.
+ */
+function BackToEnvironment({ returnTo }: { returnTo?: string }) {
+  const navigate = useNavigate();
+  const safeReturnTo = sameOriginPath(returnTo);
+
+  return (
+    <div
+      className="flex items-center justify-between gap-3 rounded-md border border-border bg-card px-4 py-3"
+      data-testid="billing-back-to-environment"
+    >
+      <p className="text-sm text-muted-foreground">
+        You came here from a deploy that&apos;s waiting on billing. Once a plan
+        is active it goes out on its own — nothing to re-run.
+      </p>
+      <Button
+        size="sm"
+        variant="outline"
+        onClick={() => {
+          if (safeReturnTo) {
+            void navigate({ href: safeReturnTo });
+            return;
+          }
+          void navigate({ to: "/forge", search: {} });
+        }}
+      >
+        <ArrowLeft className="h-4 w-4" />
+        Back to environment
+      </Button>
+    </div>
+  );
+}
+
+/**
+ * `returnTo` comes off the address bar: a same-origin relative path only,
+ * never protocol-relative (`//evil.com`). Undefined for anything else.
+ */
+function sameOriginPath(returnTo: string | undefined): string | undefined {
+  return returnTo && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : undefined;
 }
 
 // ── Shared bits ─────────────────────────────────────────────────────────

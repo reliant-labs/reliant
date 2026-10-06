@@ -32,6 +32,7 @@ import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
+import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -209,6 +210,10 @@ function RootShell() {
       <ContextualTipsLayer />
       <GitHubSyncStatus />
       <OnboardingWizard />
+      {/* A deploy this session saw queued on billing goes out while the user
+          is usually elsewhere (billing, a chat): the watch lives here, and
+          loads its forge code only while it has something to watch. */}
+      <QueuedDeployWatch pathname={pathname} />
     </SurfaceProvider>
   );
 }

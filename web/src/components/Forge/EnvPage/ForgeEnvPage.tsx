@@ -50,7 +50,8 @@ import {
   useLiveConvergences,
   useLiveView,
 } from "@/hooks/forge-queries";
-import { daemonSideOf, resolveForgeProjectName } from "@/services/forge/environments";
+import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { daemonSideOf, resolveForgeProjectName, type ForgeProjectName } from "@/services/forge/environments";
 import { isPlacedKind } from "@/services/forge/live";
 import { lifecycleOf } from "@/services/forge/roster";
 import { isLocalLifecycle } from "@/services/forge/status";
@@ -58,11 +59,13 @@ import { environments } from "@/services/forge/topology";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
+import { forgeScopeOf } from "../forgeScope";
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
 import { EnvLifecycleControls } from "./EnvLifecycleControls";
 import { EnvPageHeader } from "./EnvPageHeader";
 import { envHeadline } from "./envHeadline";
+import { QueuedDeployBanner } from "./QueuedDeployBanner";
 import {
   ActivityTab,
   ChangesTab,
@@ -80,17 +83,24 @@ export function ForgeEnvPage() {
   const { env: envName } = useParams({ from: "/_authenticated/_forge/forge/env/$env" });
   const {
     project: projectParam,
+    forgeProject: forgeProjectParam,
     secret: secretParam,
     tab: tabSearch,
   } = useSearch({ from: "/_authenticated/_forge/forge/env/$env" });
   const currentProject = useProjectStore((state) => state.currentProject);
-  const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectParam ?? currentProject?.id));
-  const projectId = projectParam ?? currentProject?.id ?? null;
+  // A control-plane link can name the FORGE project with no Reliant project
+  // here declaring it; then there is no project id, and so no daemon to ask
+  // (forgeScope.ts).
+  const scope = forgeScopeOf({ project: projectParam, forgeProject: forgeProjectParam }, currentProject?.id);
+  const projectId = scope.projectId;
+  const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
 
   // ── THE BACKEND: the record of this environment. ──
   // The join key is the forge project name Reliant persisted on the project
-  // row, so this needs no daemon.
-  const persistedOnly = resolveForgeProjectName(persistedName, undefined);
+  // row (or the one the link named), so this needs no daemon.
+  const persistedOnly: ForgeProjectName = scope.forgeProject
+    ? { name: scope.forgeProject, source: "project" }
+    : resolveForgeProjectName(persistedName, undefined);
   const liveFirst = useLiveView(persistedOnly.name);
   const liveEnvFromPersisted = useMemo(
     () => (liveFirst.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
@@ -126,7 +136,7 @@ export function ForgeEnvPage() {
   const daemon = daemonSideOf(topology.data, topology.error);
 
   // A topology report can name the project when nothing was persisted yet.
-  const projectName = resolveForgeProjectName(persistedName, topology.data);
+  const projectName = scope.forgeProject ? persistedOnly : resolveForgeProjectName(persistedName, topology.data);
   const live = useLiveView(projectName.name);
   const liveEnv = useMemo(
     () => (live.data?.envs ?? []).find((candidate) => candidate.name === envName) ?? null,
@@ -154,6 +164,9 @@ export function ForgeEnvPage() {
   const cloudStatus = useCloudEnvStatus(placedId);
   const promotions = useCloudPromotions(liveEnv?.id ?? null);
   const convergences = useLiveConvergences(liveEnv?.id ?? null);
+
+  // Billing, with this page as the way back (and its project in the URL).
+  const goToBilling = useGoToBilling("forge");
 
   const [checkoutPath, setCheckoutPath] = useState("");
   const [promoteOpen, setPromoteOpen] = useState(false);
@@ -270,6 +283,17 @@ export function ForgeEnvPage() {
               }
         }
       />
+
+      {/* A QUEUED deploy: accepted, recorded, waiting on a person. Above the
+          tabs because it is true of every one of them, and it is the one
+          thing on this page that will not change until someone acts. */}
+      {liveEnv && (
+        <QueuedDeployBanner
+          release={liveEnv.release}
+          holds={liveEnv.holds}
+          onSetUpBilling={goToBilling}
+        />
+      )}
 
       {/* The control plane could not answer at all — a role without deploy
           read access, a build with no control plane, an outage. Said once. */}

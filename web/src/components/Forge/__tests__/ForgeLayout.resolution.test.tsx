@@ -39,11 +39,12 @@ interface TestProject {
   id: string;
   name: string;
   path: string;
+  forge_project_name?: string;
 }
 
 const PROJECTS: TestProject[] = [
-  { id: "project-a", name: "Alpha", path: "/src/alpha" },
-  { id: "project-b", name: "Beta", path: "/src/beta" },
+  { id: "project-a", name: "Alpha", path: "/src/alpha", forge_project_name: "alpha" },
+  { id: "project-b", name: "Beta", path: "/src/beta", forge_project_name: "barkshop" },
 ];
 
 /** Mutable state backing the mocked store, reset per test. */
@@ -112,16 +113,24 @@ vi.mock("../../../hooks/useTitleBarChrome", () => ({
 
 // The layout lists environments in the sidebar from the shared roster. Its
 // data layer is covered on its own (services/forge/__tests__/roster.test.ts);
-// here it only has to name two envs.
+// here it only has to name two envs — and record the scope it was asked for.
+const roster = vi.hoisted(() => ({
+  calls: [] as unknown[][],
+  prodLive: null as unknown,
+}));
+
 vi.mock("@/hooks/forge-queries", () => ({
-  useForgeRoster: () => ({
-    envs: [
-      { name: "dev", lifecycle: "local", source: "backend", live: null, forge: null },
-      { name: "prod", lifecycle: "deployed", source: "backend", live: null, forge: null },
-    ],
-    isLoading: false,
-    resolvingName: false,
-  }),
+  useForgeRoster: (...args: unknown[]) => {
+    roster.calls.push(args);
+    return {
+      envs: [
+        { name: "dev", lifecycle: "local", source: "backend", live: null, forge: null },
+        { name: "prod", lifecycle: "deployed", source: "backend", live: roster.prodLive, forge: null },
+      ],
+      isLoading: false,
+      resolvingName: false,
+    };
+  },
 }));
 
 import { ForgeLayout } from "../ForgeLayout";
@@ -149,7 +158,7 @@ function renderAt(initialEntry: string) {
   const overviewRoute = createRoute({
     getParentRoute: () => forgeLayoutRoute,
     path: "/forge",
-    validateSearch: z.object({ project: z.string().optional() }),
+    validateSearch: z.object({ project: z.string().optional(), forgeProject: z.string().optional() }),
     component: function OverviewProbe() {
       return <div data-testid="overview-screen">overview</div>;
     },
@@ -160,6 +169,7 @@ function renderAt(initialEntry: string) {
     path: "/forge/env/$env",
     validateSearch: z.object({
       project: z.string().optional(),
+      forgeProject: z.string().optional(),
       secret: z.string().optional(),
     }),
     component: () => <div data-testid="env-screen">env</div>,
@@ -189,6 +199,8 @@ beforeEach(() => {
   state.projects = [];
   state.currentProject = null;
   state.lastProjectId = null;
+  roster.calls.length = 0;
+  roster.prodLive = null;
   vi.clearAllMocks();
 });
 
@@ -296,5 +308,63 @@ describe("cross-screen navigation", () => {
       expect(router.state.location.pathname).toBe("/forge");
     });
     expect(router.state.location.search).toMatchObject({ project: "project-a" });
+  });
+});
+
+/**
+ * A link the CONTROL PLANE wrote — a queued deploy's action URL — names the
+ * FORGE project, the only name the control plane knows:
+ * /forge/env/<env>?forgeProject=<name>.
+ */
+describe("a control-plane link", () => {
+  it("opens the Reliant project that declares the forge project, even over the current one", async () => {
+    state.currentProject = PROJECTS[0]!; // Alpha is open; the link is about Beta's "barkshop".
+    const router = renderAt("/forge/env/prod?forgeProject=barkshop");
+
+    await waitFor(() => {
+      expect(selectProject).toHaveBeenCalledWith(expect.objectContaining({ id: "project-b" }));
+    });
+    await waitFor(() => {
+      expect(router.state.location.search).toMatchObject({ project: "project-b" });
+    });
+    expect(router.state.location.search).not.toHaveProperty("forgeProject");
+    expect(screen.getByTestId("env-screen")).toBeTruthy();
+  });
+
+  /**
+   * The person a link was sent to may never have opened the project here. The
+   * page reads the control plane by the link's name rather than showing a
+   * picker — and the roster is asked for THAT project with no Reliant
+   * project, so no daemon answers for some other checkout's `prod`.
+   */
+  it("keeps the forge project when no Reliant project declares it, and shows no picker", async () => {
+    const router = renderAt("/forge/env/prod?forgeProject=elsewhere");
+
+    await screen.findByTestId("env-screen");
+    expect(screen.queryByTestId("forge-project-picker")).toBeNull();
+    expect(router.state.location.search).toMatchObject({ forgeProject: "elsewhere" });
+    expect(roster.calls.at(-1)).toEqual([null, "elsewhere"]);
+  });
+
+  it("marks an environment whose deploy is queued in the nav", async () => {
+    roster.prodLive = {
+      holds: [
+        {
+          kind: "billing",
+          promotionId: "promo-2",
+          reason: "",
+          fix: "",
+          actionUrl: "",
+          callerCanResolve: false,
+        },
+      ],
+    };
+    state.lastProjectId = "project-a";
+    renderAt("/forge");
+
+    const mark = await screen.findByTestId("forge-nav-queued-prod");
+    expect(mark).toHaveTextContent("Queued");
+    expect(mark).toHaveTextContent("waiting on billing");
+    expect(screen.queryByTestId("forge-nav-queued-dev")).toBeNull();
   });
 });

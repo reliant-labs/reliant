@@ -71,7 +71,7 @@ describe("runStateOf falls back to inference when the reason is unspecified", ()
 });
 
 describe("envHeadline with a reported suspend reason", () => {
-  const live = { observed: { state: "converged" } } as unknown as LiveEnv;
+  const live = { observed: { state: "converged" }, holds: [] } as unknown as LiveEnv;
   const status = (w: ForgeHostedWorkload[]): CloudEnvStatus => ({ verdict: "converged", workloads: w, currentPromotion: null });
 
   it("shows the exact billing fix as a problem", () => {

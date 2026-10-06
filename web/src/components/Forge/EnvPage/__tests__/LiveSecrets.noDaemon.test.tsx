@@ -115,6 +115,7 @@ const BUILT: LiveEnv = {
   promotedByUserId: "",
   phase: "succeeded",
   provenance: "",
+  holds: [],
   declaredShape: {
     kind: "persistent",
     workloads: [{ name: "api", runtime: "hosted", cluster: "" }],

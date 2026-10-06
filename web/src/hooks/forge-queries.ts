@@ -332,23 +332,38 @@ export function useCloudEnvironments(forgeProject: string | null | undefined) {
  */
 export function useLiveView(forgeProject: string | null | undefined) {
   const enabled = !!forgeProject && hasLiveControlPlane();
-  return useQuery<{ availability: LiveAvailability; envs: LiveEnv[]; detail: string }>({
-    queryKey: forgeKeys.liveView(forgeProject ?? ""),
-    queryFn: async () => {
+  return useQuery<LiveViewResult>({ ...liveViewQuery(forgeProject ?? ""), enabled });
+}
+
+export interface LiveViewResult {
+  availability: LiveAvailability;
+  envs: LiveEnv[];
+  detail: string;
+}
+
+/**
+ * The Live query's key and fetch, shared by useLiveView and by the queued-
+ * deploy watcher (QueuedDeployNotifier), which polls the SAME cache entry
+ * while a deploy this session saw queued is on its way out — so a page that
+ * is open settles with it, and neither issues a second request.
+ */
+export function liveViewQuery(forgeProject: string) {
+  return {
+    queryKey: forgeKeys.liveView(forgeProject),
+    queryFn: async (): Promise<LiveViewResult> => {
       try {
         return {
           availability: "available" as const,
-          envs: await getLiveView(forgeProject as string),
+          envs: await getLiveView(forgeProject),
           detail: "",
         };
       } catch (err) {
         return { availability: liveAvailabilityFromError(err), envs: [], detail: liveErrorDetail(err) };
       }
     },
-    enabled,
     staleTime: 15_000,
     retry: false,
-  });
+  };
 }
 
 /**
@@ -532,10 +547,15 @@ export function useForgeEnvironments(projectId: string | null | undefined): Forg
  * row itself carries the declared lifecycle (forge >= f219804d), so a fresh
  * load already labels envs correctly without either.
  */
-export function useForgeRoster(projectId: string | null | undefined) {
+export function useForgeRoster(projectId: string | null | undefined, forgeProject?: string | null) {
   const persistedName = useProjectStore((state) => persistedForgeProjectName(state, projectId));
   const topology = useForgeTopology(projectId);
-  const projectName = resolveForgeProjectName(persistedName, topology.data);
+  // A forge project the URL names directly (see components/Forge/forgeScope)
+  // is the control plane's own key: nothing to resolve, and no daemon to ask
+  // (the caller passes no project id then).
+  const projectName: ForgeProjectName = forgeProject
+    ? { name: forgeProject, source: "project" }
+    : resolveForgeProjectName(persistedName, topology.data);
   const live = useLiveView(projectName.name);
 
   // SUBSCRIBE to each declared env's cached status without ever fetching one
