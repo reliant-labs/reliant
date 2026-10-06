@@ -143,7 +143,7 @@ func (s *TokenService) ExchangeToken(
 		return nil, connect.NewError(connect.CodePermissionDenied, fmt.Errorf(
 			"this Reliant credential cannot authorize %s: it holds %s. "+
 				"Sign in again with `reliant auth login` (it asks for deploy, secret and domain permission), "+
-				"or grant this credential those permissions in Reliant → Settings → Tokens",
+				"or grant this credential those permissions in Reliant → Settings → Access Tokens",
 			fat.JoinScopes(requested), describeScopes(subject.Scopes)))
 	}
 

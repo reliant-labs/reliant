@@ -12,6 +12,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/cliauth"
+	"github.com/reliant-labs/reliant/internal/forgecred"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -30,6 +31,7 @@ forge (see 'reliant auth login --help'), keyed by the server it is for.`,
 	cmd.AddCommand(newAuthLogoutCmd())
 	cmd.AddCommand(newAuthServeCmd())
 	cmd.AddCommand(newAuthTokenCmd())
+	cmd.AddCommand(newAuthForgeCredentialCmd())
 
 	return cmd
 }
@@ -53,12 +55,19 @@ The server names its authorization server (the control plane) at
 /.well-known/oauth-authorization-server. Your browser opens there; you sign
 in with your normal Reliant account and approve; a one-time code comes back
 to a temporary listener on a loopback port, and is exchanged for an rlat_
-access token (90 days, scope reliant:api).
+access token (90 days, scope reliant:api, plus the deploy, secret and domain
+permissions your organization grants you — see below).
 
 The token is stored in the credentials file shared with forge
 (` + credentialsPathForHelp() + `), under this server. There is no "current"
 server: a later command against another --server finds no login there and
 says so, rather than sending this token somewhere it was not issued for.
+
+FORGE NEEDS NO SEPARATE LOGIN. 'reliant forge …' (and every shell a Reliant
+agent runs) asks 'reliant auth forge-credential' for a control-plane token,
+which exchanges this login — or the daemon's credential — for one that holds
+only deploy/secret/domain authority, for at most an hour. This login never
+leaves this machine's Reliant files.
 
 For CI, skip login and set RELIANT_TOKEN.`,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -67,8 +76,14 @@ For CI, skip login and set RELIANT_TOKEN.`,
 				return err
 			}
 			cred, err := cliauth.Login{
-				Server:  target.ServerURL,
-				Scopes:  []string{cliauth.ScopeAPI},
+				Server: target.ServerURL,
+				// ONE LOGIN: the forge scopes ride along as a CEILING the
+				// control plane clips to your grants, so forge can later
+				// exchange this login for a short-lived deploy token instead
+				// of asking for a second browser login. A token may never
+				// grant authority it does not hold, so without them there
+				// would be nothing to exchange.
+				Scopes:  append([]string{cliauth.ScopeAPI}, cliauth.ForgeScopes()...),
 				Name:    cliLoginName(),
 				Out:     cmd.OutOrStdout(),
 				OpenURL: loginOpener,
@@ -80,15 +95,13 @@ For CI, skip login and set RELIANT_TOKEN.`,
 			if err != nil {
 				return fmt.Errorf("saving credentials: %w", err)
 			}
-			// ONE LOGIN: deposit the same token into forge's own store, so
-			// `forge deploy` authenticates as this user with no second
-			// browser login. Keyed by the issuer (the control plane), which
-			// is a different origin from the API server in prod. Best-effort
-			// on purpose — the Reliant login SUCCEEDED, and failing it here
-			// would turn a forge convenience into an auth outage.
-			if err := cliauth.DepositForForge(cred); err != nil {
-				logging.Warn("could not log forge in to Reliant cloud", "error", err)
+			// A fresh login means fresh exchanges: drop tokens cached from
+			// the previous one, and the copies older releases deposited
+			// into forge's file.
+			if err := newForgeCredentialService(cmd, forgecred.Pin{}).ForgetServer(target.ServerURL); err != nil {
+				logging.Warn("could not clear cached forge tokens", "error", err)
 			}
+			retireLegacyForgeDeposits()
 			out := cmd.OutOrStdout()
 			fmt.Fprintf(out, "Logged in to %s\n", target.describeServer())
 			fmt.Fprintf(out, "  Token:       %s… (%s)\n", cred.TokenPrefix, strings.Join(cred.Scopes, " "))
@@ -184,25 +197,19 @@ valid server-side until it expires or you revoke it in the web app.`,
 			if err != nil {
 				return err
 			}
-			// Read the credential BEFORE removing it: its Issuer is the key
-			// forge's deposit was written under, and after Remove there is
-			// nothing left to learn it from.
-			issuer := ""
-			if cred, _, lookupErr := cliauth.Lookup(target.ServerURL); lookupErr == nil {
-				issuer = cred.Issuer
-			}
 			existed, path, err := cliauth.Remove(target.ServerURL)
 			if err != nil {
 				return err
 			}
-			// Logging out of Reliant logs forge out of Reliant cloud. A
-			// credential the user created with `forge login` is a separate
-			// entry and is left alone.
-			if issuer != "" {
-				if _, err := cliauth.WithdrawFromForge(issuer); err != nil {
-					logging.Warn("could not log forge out of Reliant cloud", "error", err)
-				}
+			// Logging out of Reliant logs forge out of Reliant cloud: the
+			// short-lived tokens exchanged from this server's sessions are
+			// forgotten, so none outlives the sign-out on this machine. A
+			// credential the user created with `forge login` is forge's own
+			// and is left alone.
+			if err := newForgeCredentialService(cmd, forgecred.Pin{}).ForgetServer(target.ServerURL); err != nil {
+				logging.Warn("could not clear cached forge tokens", "error", err)
 			}
+			retireLegacyForgeDeposits()
 			if !existed {
 				fmt.Fprintf(cmd.OutOrStdout(), "Not logged in to %s (nothing in %s)\n", target.ServerURL, path)
 				return nil

@@ -125,7 +125,8 @@ func TestAuthLogin_WritesTheSharedFile(t *testing.T) {
 		t.Fatalf("auth login: %v\n%s", err, out)
 	}
 	req := cp.lastRequest()
-	if req.Get("client_id") != cliauth.ClientID || req.Get("scope") != cliauth.ScopeAPI || req.Get("code_challenge_method") != "S256" {
+	wantScope := strings.Join(append([]string{cliauth.ScopeAPI}, cliauth.ForgeScopes()...), " ")
+	if req.Get("client_id") != cliauth.ClientID || req.Get("scope") != wantScope || req.Get("code_challenge_method") != "S256" {
 		t.Errorf("authorize request: %v", req)
 	}
 	got, err := credentials.Lookup(path, cp.srv.URL, cliauth.ClientID)
