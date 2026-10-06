@@ -337,6 +337,21 @@ func (t *skillTool) loadSkillWindowed(params SkillParams) (ToolResponse, error) 
 // related-skill and suggested-tools pointers. It applies no window and no size
 // cap — see loadSkillWindowed for the delivery layer, and LoadSkillForInjection
 // for the preload path that depends on these exact bytes.
+//
+// The two skill lists are navigation, and their size is set by the CATALOG,
+// not by the skill's author: every skill added to a namespace lengthens the
+// related list of every sibling. Appended in full, they could push a body that
+// fits the delivery budget on its own past it, so a skill got windowed because
+// someone else added an unrelated skill. That is how forge's start-here skill
+// (21.4KB, inside the budget) stopped arriving whole: the list of its forge/
+// siblings added 2.7KB.
+//
+// So navigation never evicts the body. When the full lists do not fit beside
+// it, they collapse to a one-line pointer naming the list call that prints
+// them: the related list first, then the sub-skills (the more specific
+// navigation), then both are dropped. A body over budget on its own keeps its
+// full navigation. It is windowed whatever happens, and its lists stay
+// reachable in the tail.
 func (t *skillTool) loadSkill(path string) (ToolResponse, error) {
 	normalizedPath := strings.ToLower(strings.TrimSpace(path))
 
@@ -357,41 +372,108 @@ func (t *skillTool) loadSkill(path string) (ToolResponse, error) {
 		return NewTextErrorResponse(fmt.Sprintf("skill not found: %s\n\nUse action='list' to see available skills.", path)), nil
 	}
 
-	var sb strings.Builder
-	sb.WriteString(def.Body)
-
-	// Show sub-skills if this skill's path is also a populated namespace.
-	if children := namespaceMembers(t.skills, def.SkillPath); len(children) > 0 {
-		sort.Slice(children, func(i, j int) bool {
-			return children[i].SkillPath < children[j].SkillPath
-		})
-		sb.WriteString("\n\n---\nSub-skills available (use skill tool with action=list or action=load):\n")
-		for _, child := range children {
-			fmt.Fprintf(&sb, "- %s: %s", child.SkillPath, truncateDescription(child.Description, 80))
-			if hasChildren(t.skills, child.SkillPath) {
-				sb.WriteString(" (has sub-skills)")
-			}
-			sb.WriteString("\n")
-		}
-	}
-
-	// Find sibling skills (same parent path).
+	// Sub-skills, when this skill's path is also a populated namespace.
+	children := namespaceMembers(t.skills, def.SkillPath)
+	sort.Slice(children, func(i, j int) bool {
+		return children[i].SkillPath < children[j].SkillPath
+	})
 	siblings := findSiblingSkills(t.skills, *def)
-	if len(siblings) > 0 {
-		sb.WriteString("\n---\nRelated skills available (use skill tool to load):\n")
-		for _, s := range siblings {
-			fmt.Fprintf(&sb, "- %s: %s\n", s.SkillPath, truncateDescription(s.Description, 80))
+
+	subs := t.subSkillsSection(children)
+	related := relatedSkillsSection(siblings)
+	suggested := suggestedToolsSection(def.AllowedTools)
+
+	content := def.Body + subs + related + suggested
+	if fitsWhole(path, content) {
+		return NewTextResponse(content), nil
+	}
+	collapsedSubs := collapsedSubSkillsSection(def.SkillPath, len(children))
+	collapsedRelated := collapsedRelatedSection(def.SkillPath, len(siblings))
+	for _, candidate := range []string{
+		def.Body + subs + collapsedRelated + suggested,
+		def.Body + collapsedSubs + collapsedRelated + suggested,
+		def.Body + suggested,
+	} {
+		if fitsWhole(path, candidate) {
+			return NewTextResponse(candidate), nil
 		}
 	}
+	return NewTextResponse(content), nil
+}
 
-	// Append allowed tools suggestion.
-	if len(def.AllowedTools) > 0 {
-		sb.WriteString("\n---\nThis skill suggests loading these tools: ")
-		sb.WriteString(strings.Join(def.AllowedTools, ", "))
+// fitsWhole reports whether content is delivered without windowing, by the
+// renderer both delivery paths share.
+func fitsWhole(path, content string) bool {
+	_, truncated := DeliverSkillContent(path, content)
+	return !truncated
+}
+
+// subSkillsSection lists the skills directly under this one.
+func (t *skillTool) subSkillsSection(children []config.StoredSkill) string {
+	if len(children) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n\n---\nSub-skills available (use skill tool with action=list or action=load):\n")
+	for _, child := range children {
+		fmt.Fprintf(&sb, "- %s: %s", child.SkillPath, truncateDescription(child.Description, 80))
+		if hasChildren(t.skills, child.SkillPath) {
+			sb.WriteString(" (has sub-skills)")
+		}
 		sb.WriteString("\n")
 	}
+	return sb.String()
+}
 
-	return NewTextResponse(sb.String()), nil
+// relatedSkillsSection lists the skills that share this one's parent path.
+func relatedSkillsSection(siblings []config.StoredSkill) string {
+	if len(siblings) == 0 {
+		return ""
+	}
+	var sb strings.Builder
+	sb.WriteString("\n---\nRelated skills available (use skill tool to load):\n")
+	for _, s := range siblings {
+		fmt.Fprintf(&sb, "- %s: %s\n", s.SkillPath, truncateDescription(s.Description, 80))
+	}
+	return sb.String()
+}
+
+// suggestedToolsSection names the tools the skill's author asked for. It is the
+// author's own content, so it is never collapsed.
+func suggestedToolsSection(allowedTools []string) string {
+	if len(allowedTools) == 0 {
+		return ""
+	}
+	return "\n---\nThis skill suggests loading these tools: " + strings.Join(allowedTools, ", ") + "\n"
+}
+
+// collapsedSubSkillsSection stands in for a sub-skill list that does not fit
+// beside the body. Naming the call keeps the children one step away rather
+// than undiscoverable.
+func collapsedSubSkillsSection(skillPath string, n int) string {
+	if n == 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n\n---\n%d %s under this one: skill(action=%q, path=%q)\n",
+		n, pluralSkills("sub-skill", n), "list", skillPath)
+}
+
+// collapsedRelatedSection stands in for a related-skill list that does not fit
+// beside the body. The list call on the parent namespace prints the siblings.
+func collapsedRelatedSection(skillPath string, n int) string {
+	idx := strings.LastIndex(skillPath, "/")
+	if n == 0 || idx <= 0 {
+		return ""
+	}
+	return fmt.Sprintf("\n---\n%d other %s beside this one: skill(action=%q, path=%q)\n",
+		n, pluralSkills("skill", n), "list", skillPath[:idx])
+}
+
+func pluralSkills(noun string, n int) string {
+	if n == 1 {
+		return noun
+	}
+	return noun + "s"
 }
 
 // LoadSkillForInjection resolves a skill path against the given skills using the
