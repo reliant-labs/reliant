@@ -194,9 +194,12 @@ func (a *WorkflowStatusActivity) Execute(ctx context.Context, input WorkflowStat
 // predates trigger events) always notifies: they asked, the answer is ready.
 // So does a builder test run ("builder.test"): a human pressed Run and is
 // waiting on it, usually with the builder in another window.
-// A run nobody started by typing (a schedule, an agent's start_run) does not,
-// because an hourly automation would otherwise notify 24 times a day; its
-// result is recorded in the run history instead (WORKFLOW_UI.md §6.4).
+// A run nobody started by typing does not, because an hourly automation would
+// otherwise notify 24 times a day; its result is recorded in the run history
+// instead (WORKFLOW_UI.md §6.4). For an agent's start_run the calling agent
+// gets the result. For a run its trigger launched with nobody behind it — a
+// schedule, a webhook, a provider event, another run's outcome, alike — the
+// trigger's NotifyOnComplete decides (automationTrigger).
 //
 // Failures stay on. A run that completed into a declared `failure` outcome
 // still notifies whatever launched it. Runs that need input are not affected
@@ -214,33 +217,49 @@ func (a *WorkflowStatusActivity) completionNotifies(ctx context.Context, input W
 	if isInteractiveLaunchKind(chat.LaunchKind) {
 		return true
 	}
-	// An unattended schedule run stays silent unless its automation opted in.
-	if chat.LaunchKind == string(core.TriggerEventKindSchedule) && chat.TriggerID != nil {
-		trigger, err := a.repo.GetTrigger(ctx, *chat.TriggerID)
+	// An unattended automation run stays silent unless its automation opted in.
+	if triggerID := automationTrigger(chat); triggerID != "" {
+		trigger, err := a.repo.GetTrigger(ctx, triggerID)
 		return err == nil && trigger != nil && trigger.NotifyOnComplete
 	}
 	return false
 }
 
 // failureNotifies reports whether a ROOT failure should mark the chat unread.
-// Every failure does, except a repeat: when a schedule-launched run fails and
-// the firing right before it in the same trigger also failed (with no success
-// between), the Inbox item for that automation just counts one more, and a
-// second OS notification would be the "hourly job pages you 24 times a day"
-// problem. The first failure of a streak notifies; a success ends the streak.
-// Interactive chats and agent-started runs always notify.
+// Every failure does, except a repeat: when an unattended automation run fails
+// and the firing right before it in the same trigger also failed (with no
+// success between), the Inbox item for that automation just counts one more,
+// and a second OS notification would be the "hourly job pages you 24 times a
+// day" problem. The first failure of a streak notifies; a success ends the
+// streak. Interactive chats and agent-started runs always notify.
 func (a *WorkflowStatusActivity) failureNotifies(ctx context.Context, input WorkflowStatusInput) bool {
 	chat, err := a.repo.GetChat(ctx, input.ChatID)
-	if err != nil || chat == nil || chat.LaunchKind != string(core.TriggerEventKindSchedule) || chat.TriggerID == nil {
+	if err != nil || chat == nil {
 		return true
 	}
-	firings, err := a.repo.FiringsSinceLastSuccess(ctx, chat.UserID, []string{*chat.TriggerID}, triggers.EpisodeFirings)
+	triggerID := automationTrigger(chat)
+	if triggerID == "" {
+		return true
+	}
+	firings, err := a.repo.FiringsSinceLastSuccess(ctx, chat.UserID, []string{triggerID}, triggers.EpisodeFirings)
 	if err != nil {
 		logging.Warn("[WorkflowStatus] Could not read trigger firings; notifying", "chat_id", input.ChatID, "error", err)
 		return true
 	}
-	prior, found := triggers.PriorFailureStreak(firings[*chat.TriggerID], input.ChatID)
+	prior, found := triggers.PriorFailureStreak(firings[triggerID], input.ChatID)
 	return !found || prior.Count == 0
+}
+
+// automationTrigger is the id of the trigger whose notification policy governs
+// this run's finish, or "" when nothing stands in for a person: the run's
+// launch kind must be unattended (core.TriggerEventKind.Unattended) — someone
+// waiting on an attended run is told, whatever trigger it names — and the
+// launch must name its trigger, which a deleted trigger no longer does.
+func automationTrigger(chat *db.Chat) string {
+	if chat.TriggerID == nil || !core.TriggerEventKind(chat.LaunchKind).Unattended() {
+		return ""
+	}
+	return *chat.TriggerID
 }
 
 // isInteractiveLaunchKind reports whether a chat's launch kind means a human

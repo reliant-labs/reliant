@@ -246,10 +246,16 @@ func TestListInbox_LaunchFailedDismissalAndNewerFailureReappears(t *testing.T) {
 // given status, so the trigger has a success (or a failed run) to read.
 func (f *inboxFixture) launched(t *testing.T, eventID, chatID, triggerID string, at time.Time, status db.WorkflowStatus) {
 	t.Helper()
+	f.launchedAs(t, core.TriggerEventKindSchedule, eventID, chatID, triggerID, at, status)
+}
+
+// launchedAs is launched with the launch event of the given kind.
+func (f *inboxFixture) launchedAs(t *testing.T, kind core.TriggerEventKind, eventID, chatID, triggerID string, at time.Time, status db.WorkflowStatus) {
+	t.Helper()
 	f.seed(t, chatID, "wf", status, at)
 	tid := triggerID
 	created, err := f.repo.CreateTriggerEvent(f.ctx, &core.TriggerEvent{
-		ID: eventID, TriggerID: &tid, UserID: f.userID, Kind: core.TriggerEventKindSchedule,
+		ID: eventID, TriggerID: &tid, UserID: f.userID, Kind: kind,
 		DedupeKey: "dd-" + eventID, OccurredAt: at.UTC().Truncate(time.Microsecond),
 		Payload: map[string]any{}, Outcome: core.TriggerEventLaunched, ChatID: &chatID,
 		CreatedAt: time.Now().UTC().Truncate(time.Microsecond),
@@ -342,6 +348,39 @@ func TestListInbox_RunFinishedOnlyForOptedInAutomationAndClearsWhenOpened(t *tes
 
 	require.NoError(t, f.repo.UpdateChatUnread(f.ctx, "chat-on", false, "opened"))
 	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED), "opening the chat clears it")
+}
+
+// The Run finished item follows the same rule as the unread write: every
+// unattended automation run of an opted-in trigger is listed, whatever kind of
+// trigger launched it, and an attended run is not, whatever trigger it names.
+func TestListInbox_RunFinishedForEveryUnattendedKindAndNoAttendedOne(t *testing.T) {
+	f := newInboxFixture(t)
+	f.notifyingTrigger(t, "trg-k", true)
+	at := time.Now().UTC().Add(-time.Hour)
+	listed := map[core.TriggerEventKind]bool{
+		core.TriggerEventKindSchedule:      true,
+		core.TriggerEventKindWebhook:       true,
+		core.TriggerEventKindIntegration:   true,
+		core.TriggerEventKindWorkflowEvent: true,
+		core.TriggerEventKindChatStart:     false,
+		core.TriggerEventKindAgentStartRun: false,
+		core.TriggerEventKindBuilderTest:   false,
+	}
+	i := 0
+	for kind := range listed {
+		chatID := "chat-" + string(kind)
+		f.launchedAs(t, kind, "ev-"+string(kind), chatID, "trg-k", at.Add(time.Duration(i)*time.Minute), db.Completed())
+		require.NoError(t, f.repo.UpdateChatUnread(f.ctx, chatID, true, "workflow_completed"))
+		i++
+	}
+
+	got := map[string]bool{}
+	for _, item := range inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_RUN_FINISHED) {
+		got[item.ChatId] = true
+	}
+	for kind, want := range listed {
+		assert.Equal(t, want, got["chat-"+string(kind)], "Run finished for a %s-launched run", kind)
+	}
 }
 
 func TestListInbox_RunFinishedCanBeDismissedAndExcludesFailedAndRunning(t *testing.T) {

@@ -99,7 +99,8 @@ export function RunRow({ run, projectName, className }: RunRowProps) {
       <div className="col-start-2 row-start-2 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground md:col-start-auto md:row-start-auto">
         <span className="sr-only">Started by: </span>
         <LaunchKindIcon kind={launch.kind} />
-        {run.launchKind === "schedule" && run.triggerId && run.triggerName ? (
+        {/* Any automation's run names and links it; only automations set a trigger. */}
+        {run.triggerId && run.triggerName ? (
           <Link
             to="/workflows/automations/$triggerId"
             params={{ triggerId: run.triggerId }}

@@ -21,7 +21,7 @@ import { Link } from "@tanstack/react-router";
 import { ChevronDown } from "lucide-react";
 
 import type { LaunchEvent } from "@/api/run-grpc";
-import { launchKindDisplay } from "@/lib/runStatus";
+import { isUnattendedLaunchKind, launchKindDisplay } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
@@ -111,7 +111,7 @@ export function TriggerCard({
   // absence observable to tests without rendering anything a user sees.
   if (kind === "chat.start") return <span hidden data-testid="trigger-card-absent" />;
 
-  const unattended = kind === "schedule";
+  const unattended = isUnattendedLaunchKind(kind);
   // The live automation links; one deleted since keeps the name it fired under.
   const automation =
     triggerId && triggerName ? (

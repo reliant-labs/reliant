@@ -148,6 +148,25 @@ describe("TriggerCard", () => {
     expect(card).not.toHaveTextContent("answered automatically");
   });
 
+  // Every automation runs with nobody behind it, not only a schedule.
+  it.each(["webhook", "integration", "workflow_event"])(
+    "a %s-launched run is called unattended",
+    async (launchKind) => {
+      renderRunsAt(
+        <TriggerCard launchKind={launchKind} triggerId="trig-1" triggerName="On push" />,
+        "/workflows/runs/chat-1",
+      );
+      const card = await screen.findByTestId("trigger-card");
+      expect(card).toHaveTextContent("Unattended: questions and approvals were answered automatically");
+    },
+  );
+
+  it("a builder test run is not called unattended", async () => {
+    renderRunsAt(<TriggerCard launchKind="builder.test" />, "/workflows/runs/chat-1");
+    const card = await screen.findByTestId("trigger-card");
+    expect(card).not.toHaveTextContent("answered automatically");
+  });
+
   it("an agent run whose parent is gone still says an agent started it", async () => {
     renderRunsAt(<TriggerCard launchKind="agent.start_run" />, "/workflows/runs/chat-1");
     const card = await screen.findByTestId("trigger-card");

@@ -158,7 +158,10 @@ SELECT * FROM (
     -- A completed, still-unread run of an automation that opted in to
     -- "Notify me when it finishes". Unread is the clear condition: opening the
     -- chat marks it read. A run that declared a failure outcome is a failure,
-    -- not a finish.
+    -- not a finish. Every unattended launch kind counts — the caller passes
+    -- core.UnattendedEventKinds(), the rule the unread write follows — so a
+    -- webhook, provider-event or workflow-event automation is listed exactly
+    -- as a schedule is.
     SELECT
         6,
         c.id,
@@ -178,7 +181,7 @@ SELECT * FROM (
     JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
-    WHERE c.launch_kind = 'schedule'
+    WHERE c.launch_kind = ANY(sqlc.arg('unattended_kinds')::text[])
       AND t.notify_on_complete
       AND c.display_state = 5
       AND c.unread = 1

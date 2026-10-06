@@ -48,7 +48,9 @@ export function useRerun(chat: Chat, event: LaunchEvent | null | undefined, trig
   const promptText = recordedPrompt ?? guessedPrompt.data ?? undefined;
   const fire = useFireTrigger();
 
-  const automationId = chat.launchKind === "schedule" ? chat.triggerId : undefined;
+  // Every kind of automation can be run now (FireTrigger fires each one), and
+  // only a run an automation launched names a trigger.
+  const automationId = chat.triggerId || undefined;
   const onRunAutomationNow = automationId
     ? () =>
         fire.mutate(automationId, {

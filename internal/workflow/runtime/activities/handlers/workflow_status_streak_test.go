@@ -29,6 +29,12 @@ type streakFixture struct {
 
 func newStreakFixture(t *testing.T, notifyOnComplete bool) *streakFixture {
 	t.Helper()
+	return newStreakFixtureOfKind(t, core.TriggerKindSchedule, notifyOnComplete)
+}
+
+// newStreakFixtureOfKind is newStreakFixture for a stored trigger of any kind.
+func newStreakFixtureOfKind(t *testing.T, kind core.TriggerKind, notifyOnComplete bool) *streakFixture {
+	t.Helper()
 	h := NewIdempotencyTestHelper(t)
 	t.Cleanup(h.Cleanup)
 	ctx := context.Background()
@@ -37,15 +43,24 @@ func newStreakFixture(t *testing.T, notifyOnComplete bool) *streakFixture {
 		triggerID: uuid.NewString(), clock: time.Now().UTC().Add(-24 * time.Hour).Truncate(time.Microsecond),
 	}
 	h.CreateTestProject(ctx, f.projectID, f.userID)
-	cfg, _ := json.Marshal(core.ScheduleConfig{Interval: "1h"})
+	cfg := json.RawMessage(`{}`)
+	if kind == core.TriggerKindSchedule {
+		cfg, _ = json.Marshal(core.ScheduleConfig{Interval: "1h"})
+	}
 	require.NoError(t, h.Repo().CreateTrigger(ctx, &core.Trigger{
 		ID: f.triggerID, UserID: f.userID, ProjectID: f.projectID, Name: "hourly",
-		Kind: core.TriggerKindSchedule, Enabled: true, Workflow: "wf", DaemonID: "d1",
+		Kind: kind, Enabled: true, Workflow: "wf", DaemonID: "d1",
 		Presets: map[string]string{}, Params: map[string]any{}, Config: cfg,
 		NotifyOnComplete: notifyOnComplete,
 		CreatedAt:        f.clock, UpdatedAt: f.clock,
 	}))
 	return f
+}
+
+// storedTriggerKinds are the kinds of stored trigger. Each fires unattended,
+// so each one's runs are governed by the trigger's notification policy.
+var storedTriggerKinds = []core.TriggerKind{
+	core.TriggerKindSchedule, core.TriggerKindWebhook, core.TriggerKindIntegration, core.TriggerKindWorkflowEvent,
 }
 
 // launch creates a scheduled run (chat + root workflow + launched event) in the
@@ -104,29 +119,36 @@ func (f *streakFixture) finish(chatID, status string) (bool, string) {
 	return chat.Unread, reason
 }
 
-func TestWorkflowStatus_ScheduleFailureNotifiesOncePerStreak(t *testing.T) {
-	f := newStreakFixture(t, false)
+// Every kind of automation pages once per failure streak, not only a schedule:
+// a webhook that fails on each delivery is the same 24-pages-a-day problem.
+func TestWorkflowStatus_AutomationFailureNotifiesOncePerStreak(t *testing.T) {
+	for _, kind := range storedTriggerKinds {
+		t.Run(string(kind), func(t *testing.T) {
+			f := newStreakFixtureOfKind(t, kind, false)
+			ev := kind.EventKind()
 
-	first := f.launch(core.TriggerEventKindSchedule, db.Active())
-	unread, reason := f.finish(first, "failed")
-	assert.True(t, unread, "the first failure of a streak notifies")
-	assert.Equal(t, "workflow_failed", reason)
+			first := f.launch(ev, db.Active())
+			unread, reason := f.finish(first, "failed")
+			assert.True(t, unread, "the first failure of a streak notifies")
+			assert.Equal(t, "workflow_failed", reason)
 
-	second := f.launch(core.TriggerEventKindSchedule, db.Active())
-	unread, _ = f.finish(second, "failed")
-	assert.False(t, unread, "a consecutive failure of the same automation does not notify again")
+			second := f.launch(ev, db.Active())
+			unread, _ = f.finish(second, "failed")
+			assert.False(t, unread, "a consecutive failure of the same automation does not notify again")
 
-	third := f.launch(core.TriggerEventKindSchedule, db.Active())
-	unread, _ = f.finish(third, "failed")
-	assert.False(t, unread, "nor does the third")
+			third := f.launch(ev, db.Active())
+			unread, _ = f.finish(third, "failed")
+			assert.False(t, unread, "nor does the third")
 
-	ok := f.launch(core.TriggerEventKindSchedule, db.Active())
-	f.finish(ok, "completed")
+			ok := f.launch(ev, db.Active())
+			f.finish(ok, "completed")
 
-	afterSuccess := f.launch(core.TriggerEventKindSchedule, db.Active())
-	unread, reason = f.finish(afterSuccess, "failed")
-	assert.True(t, unread, "a success ends the streak, so the next failure notifies again")
-	assert.Equal(t, "workflow_failed", reason)
+			afterSuccess := f.launch(ev, db.Active())
+			unread, reason = f.finish(afterSuccess, "failed")
+			assert.True(t, unread, "a success ends the streak, so the next failure notifies again")
+			assert.Equal(t, "workflow_failed", reason)
+		})
+	}
 }
 
 func TestWorkflowStatus_StreakIsPerAutomation(t *testing.T) {
@@ -173,22 +195,56 @@ func TestWorkflowStatus_InteractiveFailureAlwaysNotifiesAfterScheduleFailures(t 
 	}
 }
 
+// "Notify me when it finishes" is offered on every automation, and honoured on
+// every one: a webhook's or provider event's run is no less worth hearing about.
 func TestWorkflowStatus_NotifyOnCompleteOptIn(t *testing.T) {
+	for _, kind := range storedTriggerKinds {
+		for _, tc := range []struct {
+			name       string
+			optIn      bool
+			wantUnread bool
+		}{
+			{"opted in notifies on completion", true, true},
+			{"not opted in stays silent", false, false},
+		} {
+			t.Run(string(kind)+"/"+tc.name, func(t *testing.T) {
+				f := newStreakFixtureOfKind(t, kind, tc.optIn)
+				unread, reason := f.finish(f.launch(kind.EventKind(), db.Active()), "completed")
+				assert.Equal(t, tc.wantUnread, unread)
+				if tc.wantUnread {
+					assert.Equal(t, "workflow_completed", reason)
+				}
+			})
+		}
+	}
+}
+
+// Someone waiting on an attended run is told, whatever trigger its launch
+// names: a human's chat or builder test always notifies, an agent's start_run
+// reports to the agent and never repeats-silences a failure. The trigger's
+// policy — here opted OUT of completions, with a failure streak already
+// running — speaks only for runs nobody is behind.
+func TestWorkflowStatus_AttendedRunIgnoresTheTriggersPolicy(t *testing.T) {
 	for _, tc := range []struct {
-		name       string
-		optIn      bool
-		wantUnread bool
+		kind           core.TriggerEventKind
+		wantCompletion bool
 	}{
-		{"opted in notifies on completion", true, true},
-		{"not opted in stays silent", false, false},
+		{core.TriggerEventKindChatStart, true},
+		{core.TriggerEventKindBuilderTest, true},
+		{core.TriggerEventKindAgentStartRun, false},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			f := newStreakFixture(t, tc.optIn)
-			unread, reason := f.finish(f.launch(core.TriggerEventKindSchedule, db.Active()), "completed")
-			assert.Equal(t, tc.wantUnread, unread)
-			if tc.wantUnread {
-				assert.Equal(t, "workflow_completed", reason)
-			}
+		t.Run(string(tc.kind), func(t *testing.T) {
+			f := newStreakFixture(t, false)
+			f.finish(f.launch(core.TriggerEventKindSchedule, db.Active()), "failed")
+			f.finish(f.launch(core.TriggerEventKindSchedule, db.Active()), "failed")
+
+			// Failure first: a completed run would end the streak.
+			unread, reason := f.finish(f.launch(tc.kind, db.Active()), "failed")
+			assert.True(t, unread, "an attended failure always notifies, mid-streak or not")
+			assert.Equal(t, "workflow_failed", reason)
+
+			unread, _ = f.finish(f.launch(tc.kind, db.Active()), "completed")
+			assert.Equal(t, tc.wantCompletion, unread, "completion follows who is waiting, not NotifyOnComplete")
 		})
 	}
 }
