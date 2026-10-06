@@ -67,13 +67,27 @@ const (
 // re-supplied by the next activity tick from the gateway publisher; durable
 // replay of stale state on restart is worse than starting cold.
 type Derivation struct {
-	nc   *nats.Conn
-	repo DerivationRepository
+	nc     *nats.Conn
+	repo   DerivationRepository
+	notify LifecycleNotifier
 }
+
+// LifecycleNotifier is told when a lifecycle event changed a daemon's registry
+// row, so the owner's web clients can refetch the daemon list instead of
+// polling it. userID is whatever the event carried and may be empty — the
+// control-plane's string-typed publisher does not know the owner — so the
+// implementation resolves it.
+type LifecycleNotifier func(ctx context.Context, userID, daemonID string)
 
 // NewDerivation constructs the consumer.
 func NewDerivation(nc *nats.Conn, repo DerivationRepository) *Derivation {
 	return &Derivation{nc: nc, repo: repo}
+}
+
+// NotifyLifecycleApplied registers the callback onLifecycle runs after a
+// lifecycle event actually changed a row. Call before Start.
+func (d *Derivation) NotifyLifecycleApplied(n LifecycleNotifier) {
+	d.notify = n
 }
 
 // Start subscribes to SubjectWildcard and blocks until ctx is cancelled.
@@ -224,6 +238,13 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt Event) error {
 	if !updated {
 		logging.Debug(logPrefix+" lifecycle event did not apply (stale or daemon not registered)",
 			"daemonID", evt.DaemonID, "phase", string(evt.Phase), "at", evt.At)
+		return nil
+	}
+	// Only on an applied event. Every gateway replica consumes every event,
+	// and the newest-wins guard lets exactly one of them apply it, so this
+	// fires once per transition rather than once per replica.
+	if d.notify != nil {
+		d.notify(ctx, evt.UserID, evt.DaemonID)
 	}
 	return nil
 }

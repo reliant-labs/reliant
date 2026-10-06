@@ -3,12 +3,14 @@ package db
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -168,4 +170,70 @@ func TestCountQueuedAgentMessagesForThread_OnlyCountsQueued(t *testing.T) {
 	count, err = repo.CountQueuedAgentMessagesForThread(ctx, childThreadID)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), count, "a delivered row must not be counted as queued")
+}
+
+// agentMailboxRefetches counts the chat-scoped "agent_mailbox" refetches the
+// chat's update stream carries.
+func agentMailboxRefetches(t *testing.T, repo *Repo, ctx context.Context, chatID string) int {
+	t.Helper()
+	updates, err := repo.GetUpdatesSince(ctx, chatID, 0, 1000)
+	require.NoError(t, err)
+	n := 0
+	for _, u := range updates {
+		if u.UpdateType != UpdateTypeRefetch {
+			continue
+		}
+		var data RefetchData
+		require.NoError(t, json.Unmarshal(u.Data, &data))
+		if data.Type == RefetchAgentMailbox {
+			n++
+		}
+	}
+	return n
+}
+
+// Every enqueue announces itself on the chat's update stream, so the pending-
+// queue strip re-reads the mailbox on the event instead of polling it every
+// few seconds. Enqueue paths that wrote nothing stay silent.
+func TestEnqueueAgentMessage_AnnouncesMailboxChange(t *testing.T) {
+	repo, cleanup := SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx := context.Background()
+	chatID, parentThreadID, childThreadID := seedAgentMessageThreads(t, repo, ctx)
+	now := time.Now().UTC()
+
+	require.Equal(t, 0, agentMailboxRefetches(t, repo, ctx, chatID))
+
+	// A peer/human message.
+	enqueueTestAgentMessage(t, repo, ctx, uuid.New().String(), chatID, childThreadID, parentThreadID, "hello", now)
+	assert.Equal(t, 1, agentMailboxRefetches(t, repo, ctx, chatID))
+
+	// A spawn's terminal report.
+	toolCallID := "call-" + uuid.New().String()
+	report := &AgentMessage{
+		ID: uuid.New().String(), ChatID: chatID, FromThreadID: childThreadID, ToThreadID: parentThreadID,
+		Kind: core.AgentMessageKindCompletion, Body: "done", ToolCallID: &toolCallID,
+		Status: core.AgentMessageStatusQueued, CreatedAt: now,
+	}
+	outcome, err := repo.EnqueueSpawnReport(ctx, report)
+	require.NoError(t, err)
+	require.Equal(t, core.SpawnReportInserted, outcome)
+	assert.Equal(t, 2, agentMailboxRefetches(t, repo, ctx, chatID))
+
+	// The same report again changes nothing, so it announces nothing.
+	report.ID = uuid.New().String()
+	outcome, err = repo.EnqueueSpawnReport(ctx, report)
+	require.NoError(t, err)
+	require.Equal(t, core.SpawnReportAlreadyReported, outcome)
+	assert.Equal(t, 2, agentMailboxRefetches(t, repo, ctx, chatID))
+
+	// Nor does a reconciler placeholder for a spawn that already reported.
+	inserted, err := repo.EnqueueAgentMessageIfAbsent(ctx, &AgentMessage{
+		ID: uuid.New().String(), ChatID: chatID, FromThreadID: childThreadID, ToThreadID: parentThreadID,
+		Kind: core.AgentMessageKindFailed, Body: "synthesized", ToolCallID: &toolCallID, Synthesized: true,
+		Status: core.AgentMessageStatusQueued, CreatedAt: now,
+	})
+	require.NoError(t, err)
+	require.False(t, inserted)
+	assert.Equal(t, 2, agentMailboxRefetches(t, repo, ctx, chatID))
 }

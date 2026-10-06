@@ -1,8 +1,11 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { ConnectError, Code } from '@connectrpc/connect';
-import { create } from '@bufbuild/protobuf';
-import { grpcClient } from '@/api/grpc-client';
-import { ListDaemonsRequestSchema } from '@/gen/reliant/v1/daemon_registry_pb';
+import {
+  DAEMON_LIST_FALLBACK_POLL_MS,
+  DAEMON_LIST_QUERY_KEY,
+  fetchDaemonList,
+  invalidateDaemonList,
+} from '@/hooks/useDaemonStatus';
 import {
   createDaemon,
   resumeDaemon,
@@ -150,28 +153,30 @@ export function useCloudEligibility() {
   };
 }
 
-// `false` disables polling for this observer — the mobile daemon list passes
-// it while the tab is hidden so a backgrounded phone stops spending battery
-// and quota on a screen nobody is looking at.
+// The daemon list, as the raw query result (undefined until the registry has
+// answered, unlike useDaemonStatus's placeholder []).
+//
+// It is the SAME cache entry useDaemonStatus reads — one key, one fetcher — so
+// a screen that mounts both costs one request. It used to have a key of its
+// own, which made the OOM banner, the resume pill and the wake status a second
+// ListDaemons stream running beside the first.
+//
+// `refetchInterval` lets a caller poll faster for a while (the resume pill
+// does while a machine wakes); `false` keeps this observer from adding a timer
+// of its own, which the mobile list passes while the tab is hidden. With no
+// option, the shared fallback poll applies.
 export function useDaemonList(options?: { refetchInterval?: number | false }) {
   return useQuery({
-    queryKey: ['onboarding', 'daemons'],
+    queryKey: DAEMON_LIST_QUERY_KEY,
     // The registry, not control-plane: one list that knows both whether a
     // machine has attached and what it is doing. See
     // docs/design/one-daemon-list.md. The MUTATIONS below stay on the
     // control-plane transport — create/resume/suspend/delete are genuine
     // control-plane commands, and only the list moved.
-    queryFn: async () => {
-      const resp = await grpcClient
-        .daemonRegistry()
-        .listDaemons(create(ListDaemonsRequestSchema));
-      return resp.daemons;
-    },
-    staleTime: 10_000,
-    // Observers share one cache entry; TanStack polls at the smallest
-    // interval among mounted consumers, so passing this from one component
-    // (e.g. OomKillBanner) doesn't change the others' behavior otherwise.
-    refetchInterval: options?.refetchInterval,
+    queryFn: fetchDaemonList,
+    staleTime: DAEMON_LIST_FALLBACK_POLL_MS,
+    refetchInterval: options?.refetchInterval ?? DAEMON_LIST_FALLBACK_POLL_MS,
+    refetchIntervalInBackground: false,
   });
 }
 
@@ -179,7 +184,7 @@ export function useDaemonList(options?: { refetchInterval?: number | false }) {
  * TanStack-Query mutation for `controlplane.v1.DaemonService.CreateDaemon`.
  *
  * Default behavior:
- *   - On success: invalidates `['onboarding', 'daemons']` so the picker
+ *   - On success: invalidates the daemon list so the picker
  *     and the resume pill see the new row without a page refresh; then
  *     calls the caller's `onSuccess` (if any).
  *   - On error: if it's a reasoned quota error (ResourceExhausted +
@@ -201,7 +206,7 @@ export function useCreateDaemon(
   return useMutation({
     mutationFn: (args: CreateDaemonArgs) => createDaemon(args),
     onSuccess: async (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
+      invalidateDaemonList(queryClient);
       await callbacks.onSuccess?.(vars);
     },
     onError: async (err, vars) => {
@@ -236,7 +241,7 @@ export function useResumeDaemon(
       }
     },
     onSuccess: async (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
+      invalidateDaemonList(queryClient);
       await callbacks.onSuccess?.(vars);
     },
     onError: async (err, vars) => {
@@ -255,7 +260,7 @@ export function useSuspendDaemon(
   return useMutation({
     mutationFn: (daemonId: string) => suspendDaemon(daemonId),
     onSuccess: async (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
+      invalidateDaemonList(queryClient);
       await callbacks.onSuccess?.(vars);
     },
     onError: async (err, vars) => {
@@ -274,7 +279,7 @@ export function useDeleteDaemon(
   return useMutation({
     mutationFn: (daemonId: string) => deleteDaemon(daemonId),
     onSuccess: async (_data, vars) => {
-      queryClient.invalidateQueries({ queryKey: ['onboarding', 'daemons'] });
+      invalidateDaemonList(queryClient);
       await callbacks.onSuccess?.(vars);
     },
     onError: async (err, vars) => {

@@ -1,17 +1,14 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Loader2, Plus } from "lucide-react";
-import { useMutation, useQuery } from "@tanstack/react-query";
-import { create } from "@bufbuild/protobuf";
+import { useMutation } from "@tanstack/react-query";
 
 import StatusDot from "@/components/forge-ui/status_dot";
 import Badge from "@/components/forge-ui/badge";
-import { grpcClient } from "@/api/grpc-client";
 import {
   DaemonStatus,
-  ListDaemonsRequestSchema,
   type DaemonInfo as CloudDaemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
-import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
+import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { deleteDaemon } from "@/services/controlPlane/daemon";
 import { toast } from "@/lib/toast-manager";
@@ -121,22 +118,15 @@ export function NoActiveMachinePanel() {
 
   // One list, from the registry — the service that knows both whether a
   // machine has actually attached AND what it is doing (see
-  // docs/design/one-daemon-list.md).
-  const {
-    data: cloudDaemons,
-    isLoading,
-    refetch,
-  } = useQuery<CloudDaemon[]>({
-    queryKey: ["projectPicker", "cloudDaemons"],
-    queryFn: async () => {
-      const resp = await grpcClient.daemonRegistry().listDaemons(create(ListDaemonsRequestSchema));
-      return resp.daemons.filter((d) => isCloudDaemon(d.daemonType));
-    },
-    enabled: hasCloud,
-    refetchInterval: 8_000,
-    refetchIntervalInBackground: false,
-    staleTime: 5_000,
-  });
+  // docs/design/one-daemon-list.md). It is the shared daemon list, not a copy
+  // polled every 8s: a machine waking up reaches it as a lifecycle event and
+  // then an attach, and both are pushed.
+  const { data: allDaemons, isLoading: listLoading, refetch } = useDaemonList();
+  const cloudDaemons = useMemo<CloudDaemon[] | undefined>(
+    () => allDaemons?.filter((d) => isCloudDaemon(d.daemonType)),
+    [allDaemons],
+  );
+  const isLoading = hasCloud && listLoading;
 
   // The hook owns the ResourceExhausted-with-reason suppression (the global
   // upgradeInterceptor already opened the modal); only non-reasoned errors
