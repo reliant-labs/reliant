@@ -64,6 +64,7 @@
           {
             "group": "Deployment",
             "pages": [
+              "features/deploy-and-host",
               "features/secrets",
               "features/custom-domains"
             ]
