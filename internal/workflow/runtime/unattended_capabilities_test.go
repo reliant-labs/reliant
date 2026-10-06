@@ -5,7 +5,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/suite"
-	"go.temporal.io/sdk/testsuite"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // Whether anyone is attending a run reaches every call_llm it makes, the
@@ -17,7 +18,7 @@ import (
 
 type UnattendedCapabilitiesSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestUnattendedCapabilities(t *testing.T) {
