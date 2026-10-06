@@ -263,9 +263,10 @@ func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireReques
 
 	// The same root the run will see as `trigger`: what a schedule's inputs
 	// and prompt can read is its slot (trigger.scheduled_for) and name.
+	ev := f.buildEvent(trigger, req)
 	root := FilterInput{
 		Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
-		OccurredAt: req.ScheduledAt, Payload: f.buildEvent(trigger, req).Payload,
+		OccurredAt: req.ScheduledAt, Payload: ev.Payload, Sender: ev.Sender,
 	}.Root()
 	values := trigger.Params
 	if decl != nil && len(decl.Inputs) > 0 {
@@ -349,7 +350,14 @@ func (f *Firer) buildEvent(trigger *core.Trigger, req FireRequest) launch.Event 
 			"trigger_name": trigger.Name,
 			"manual":       req.Manual,
 		},
+		Sender: scheduleSender(trigger),
 	}
+}
+
+// scheduleSender is a schedule's trigger.sender: its owner, who set it up.
+// Nobody outside can send a schedule an event, so it is verified.
+func scheduleSender(trigger *core.Trigger) *core.TriggerSender {
+	return &core.TriggerSender{Kind: core.TriggerSenderKindSchedule, ID: trigger.UserID, Verified: true}
 }
 
 func (f *Firer) recordSkip(ctx context.Context, trigger *core.Trigger, req FireRequest, reason string) (*FireOutput, error) {
@@ -374,6 +382,7 @@ func (f *Firer) recordOutcome(
 		DedupeKey:     req.FireWorkflowID,
 		OccurredAt:    req.ScheduledAt,
 		Payload:       f.buildEvent(trigger, req).Payload,
+		Sender:        scheduleSender(trigger),
 		Outcome:       outcome,
 		OutcomeDetail: detail,
 	}

@@ -744,18 +744,19 @@ type Trigger struct {
 }
 
 type TriggerEvent struct {
-	ID            string          `json:"id"`
-	TriggerID     sql.NullString  `json:"trigger_id"`
-	UserID        string          `json:"user_id"`
-	Kind          string          `json:"kind"`
-	DedupeKey     string          `json:"dedupe_key"`
-	OccurredAt    time.Time       `json:"occurred_at"`
-	Payload       json.RawMessage `json:"payload"`
-	Outcome       string          `json:"outcome"`
-	OutcomeDetail string          `json:"outcome_detail"`
-	ChatID        sql.NullString  `json:"chat_id"`
-	CreatedAt     time.Time       `json:"created_at"`
-	RunStatus     sql.NullString  `json:"run_status"`
+	ID            string                `json:"id"`
+	TriggerID     sql.NullString        `json:"trigger_id"`
+	UserID        string                `json:"user_id"`
+	Kind          string                `json:"kind"`
+	DedupeKey     string                `json:"dedupe_key"`
+	OccurredAt    time.Time             `json:"occurred_at"`
+	Payload       json.RawMessage       `json:"payload"`
+	Outcome       string                `json:"outcome"`
+	OutcomeDetail string                `json:"outcome_detail"`
+	ChatID        sql.NullString        `json:"chat_id"`
+	CreatedAt     time.Time             `json:"created_at"`
+	RunStatus     sql.NullString        `json:"run_status"`
+	Sender        pqtype.NullRawMessage `json:"sender"`
 }
 
 type TriggerRegistration struct {

@@ -243,6 +243,40 @@ func TestSlackParsesAReaction(t *testing.T) {
 	assert.Equal(t, "1700000000.000100", ev.Data["item"].(map[string]any)["ts"])
 }
 
+// trigger.sender is the event's own `user` — the poster, the mentioner, the
+// reactor — from a body whose signature Verify checked, so it is verified.
+// It is never the envelope's authorizations (the bot) or an item_user.
+func TestSlackSenderIsTheEventsUser(t *testing.T) {
+	for name, tc := range map[string]struct {
+		event string
+		want  core.TriggerSender
+	}{
+		"message": {
+			event: `{"type":"message","channel":"C0GEN","user":"U0ADA","text":"x","ts":"1.1","channel_type":"channel",
+			  "user_profile":{"display_name":"ada","real_name":"Ada Lovelace"}}`,
+			want: core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: "U0ADA", DisplayName: "ada", Verified: true},
+		},
+		"app_mention": {
+			event: `{"type":"app_mention","user":"U0ADA","text":"<@U0BOT> hi","ts":"1.1","channel":"C0GEN"}`,
+			want:  core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: "U0ADA", Verified: true},
+		},
+		"reaction_added": {
+			event: `{"type":"reaction_added","user":"U0ADA","reaction":"eyes","item_user":"U0BOB","item":{"type":"message","channel":"C0GEN","ts":"1.1"}}`,
+			want:  core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: "U0ADA", Verified: true},
+		},
+		"no user": {
+			event: `{"type":"message","channel":"C0GEN","text":"x","ts":"1.1","channel_type":"channel"}`,
+			want:  core.TriggerSender{Kind: core.TriggerSenderKindSlack, Verified: false},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			ev := parseOne(t, envelope("T0ACME", "Ev-sender-"+name, tc.event))
+			require.NotNil(t, ev.Sender)
+			assert.Equal(t, tc.want, *ev.Sender)
+		})
+	}
+}
+
 // Event types no Slack trigger listens to (and envelopes that are not
 // events) are acked without recording anything.
 func TestSlackIgnoresOtherEvents(t *testing.T) {

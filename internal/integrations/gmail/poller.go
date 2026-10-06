@@ -199,7 +199,7 @@ type pendingMessage struct {
 // item reads one new message's metadata. A message deleted between the
 // history record and this read (404) is skipped: there is nothing to fire on.
 func (p *Poller) item(ctx context.Context, c *api, pm pendingMessage) (triggers.PollItem, bool, error) {
-	q := url.Values{"format": {"metadata"}, "metadataHeaders": metadataHeaders}
+	q := url.Values{"format": {"metadata"}, "metadataHeaders": pollHeaders}
 	var m apiMessage
 	if err := c.do(ctx, http.MethodGet, "/messages/"+url.PathEscape(pm.id), q, nil, &m); err != nil {
 		var ae *apiError
@@ -221,6 +221,10 @@ func (p *Poller) item(ctx context.Context, c *api, pm pendingMessage) (triggers.
 		return triggers.PollItem{}, false, nil
 	}
 	f := flatten(&m)
+	var headers []apiHeader
+	if m.Payload != nil {
+		headers = m.Payload.Headers
+	}
 	occurred := p.now().UTC()
 	if t, err := time.Parse(time.RFC3339, str(f["internal_date"])); err == nil {
 		occurred = t
@@ -238,9 +242,15 @@ func (p *Poller) item(ctx context.Context, c *api, pm pendingMessage) (triggers.
 			"from": str(f["from"]), "to": str(f["to"]), "subject": str(f["subject"]),
 			"label_ids": strings.Join(m.LabelIDs, ","), "thread_id": m.ThreadID,
 		},
-		Data: data,
+		Data:   data,
+		Sender: emailSender(headers),
 	}, true, nil
 }
+
+// pollHeaders are the metadata headers a new message is read with: the
+// flattened ones, plus Gmail's Authentication-Results, which decides whether
+// its From is a verified sender (emailSender).
+var pollHeaders = append(append([]string(nil), metadataHeaders...), authResultsHeader)
 
 // position is the mailbox's current history id.
 func (p *Poller) position(ctx context.Context, c *api) (string, error) {

@@ -38,6 +38,9 @@ type Event struct {
 	DedupeKey  string         // unique within Kind
 	OccurredAt time.Time      // when the source says it happened (scheduled time for a schedule)
 	Payload    map[string]any // recorded verbatim on the event row
+	// Sender is trigger.sender, as the source authenticated it. Nil for a
+	// start a person made themselves.
+	Sender *core.TriggerSender
 }
 
 // SeedMessage is one message written to the root thread before the run starts.

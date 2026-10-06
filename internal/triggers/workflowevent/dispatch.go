@@ -269,23 +269,32 @@ func (d *Dispatcher) buildEvent(trigger *core.Trigger, ev *core.RunEvent, lineag
 		DedupeKey:  dedupeKey(trigger.ID, ev.ID),
 		OccurredAt: ev.OccurredAt,
 		Payload:    payload,
+		Sender:     runSender(ev),
 	}
 }
 
-// triggerRoot is the `trigger` CEL value a run launched from ev sees, built
-// the same way the runtime builds it (runtime.TriggerInfo.CELValue).
-func triggerRoot(ev launch.Event) map[string]any {
-	name, _ := ev.Payload["trigger_name"].(string)
-	occurred := ev.OccurredAt.UTC().Format(time.RFC3339)
-	return map[string]any{
-		"kind":          string(ev.Kind),
-		"trigger_id":    ev.TriggerID,
-		"event_id":      "",
-		"occurred_at":   occurred,
-		"scheduled_for": occurred,
-		"name":          name,
-		"payload":       ev.Payload,
+// runSender is a workflow event's trigger.sender: the workflow whose run
+// reached the outcome (the run itself is trigger.payload.chat_id). The event
+// comes from this server's own outbox, scoped to the trigger's owner, so it
+// is verified.
+func runSender(ev *core.RunEvent) *core.TriggerSender {
+	id := ev.WorkflowName
+	if id == "" {
+		id = ev.ChatID
 	}
+	return &core.TriggerSender{Kind: core.TriggerSenderKindWorkflow, ID: id, DisplayName: ev.WorkflowName, Verified: true}
+}
+
+// triggerRoot is the `trigger` CEL value a run launched from ev sees, built
+// by the same code the runtime uses (runtime.TriggerInfo.CELValue).
+func triggerRoot(ev launch.Event) map[string]any {
+	return triggers.FilterInput{
+		Kind:       string(ev.Kind),
+		TriggerID:  ev.TriggerID,
+		OccurredAt: ev.OccurredAt,
+		Payload:    ev.Payload,
+		Sender:     ev.Sender,
+	}.Root()
 }
 
 // buildSpec is what a workflow-event run is: owned by the trigger's user,
@@ -359,6 +368,7 @@ func (d *Dispatcher) record(
 		DedupeKey:     launchEv.DedupeKey,
 		OccurredAt:    ev.OccurredAt,
 		Payload:       launchEv.Payload,
+		Sender:        launchEv.Sender,
 		Outcome:       outcome,
 		OutcomeDetail: detail,
 		CreatedAt:     d.now().UTC(),

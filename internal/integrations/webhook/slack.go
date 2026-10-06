@@ -13,6 +13,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 // Slack's Events API: one app-level Request URL,
@@ -149,7 +151,29 @@ func (p *SlackProvider) Parse(_ context.Context, req *Request) (*Delivery, error
 		OccurredAt: occurred,
 		Attributes: attrs,
 		Data:       slackData(event, env),
+		Sender:     slackSender(event),
 	}}}, nil
+}
+
+// slackSender is a Slack event's trigger.sender: the event's `user`, the
+// Slack user id of whoever posted, mentioned or reacted. Slack wrote it into
+// a body Verify checked the signature of, so it is verified. The id is
+// scoped to the team the trigger's connection already routes on.
+//
+// The display name is the user_profile Slack attaches to some message
+// events; most carry none, and it is never a basis for authorizing.
+func slackSender(event map[string]any) *core.TriggerSender {
+	id, _ := event["user"].(string)
+	sender := &core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: id, Verified: id != ""}
+	if profile, ok := event["user_profile"].(map[string]any); ok {
+		for _, key := range []string{"display_name", "real_name", "name"} {
+			if name, _ := profile[key].(string); name != "" {
+				sender.DisplayName = name
+				break
+			}
+		}
+	}
+	return sender
 }
 
 // slackClassify names an inner event's trigger type and routing attributes,

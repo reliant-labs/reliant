@@ -94,6 +94,11 @@ type PollItem struct {
 	Attributes map[string]string
 	// Data is untrusted and becomes trigger.payload.data.
 	Data map[string]any
+	// Sender is trigger.sender, normalized by the poller from what the
+	// provider attests (Gmail: the From address, verified only when its
+	// DMARC or aligned DKIM passed). Required: an item without one is not
+	// delivered.
+	Sender *core.TriggerSender
 }
 
 // Pollers looks up an integration's poller. The webhook Registry satisfies it.
@@ -250,6 +255,12 @@ func (p *TriggerPoller) Poll(ctx context.Context, in PollInput) (*PollOutput, er
 			if item.ID == "" || !IntegrationEventMatches(cfg, item.Type, item.Attributes) {
 				continue
 			}
+			if item.Sender == nil {
+				// A poller bug, not the item's: say so instead of recording an
+				// event no "Only from" filter could ever pass.
+				logging.Warn("polled item has no sender; dropped", "trigger_id", trigger.ID, "integration", cfg.Integration, "item_id", item.ID)
+				continue
+			}
 			if _, err := p.intake.Accept(ctx, trigger, pollEvent(trigger, cfg.Integration, conn, item), AcceptOptions{}); err != nil {
 				// Do not advance: the next poll re-lists, and what was
 				// already recorded dedupes.
@@ -340,6 +351,7 @@ func pollEvent(trigger *core.Trigger, integration string, conn *core.Connection,
 			"attributes":  attrs,
 			"data":        item.Data,
 		},
+		Sender: item.Sender,
 	}
 }
 

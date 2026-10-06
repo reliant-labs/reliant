@@ -326,10 +326,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		Prompt:      seed.userContent,
 	})
 	if pending != nil {
-		// The adopted row keeps its identity and the time the source says
-		// the event happened; only its payload gains the start record.
+		// The adopted row keeps its identity, the time the source says the
+		// event happened and the sender intake recorded; only its payload
+		// gains the start record.
 		eventRow.ID = pending.ID
 		eventRow.OccurredAt = pending.OccurredAt
+		eventRow.Sender = pending.Sender
 	}
 
 	// The event row is inserted before the chat, so the (kind, dedupe_key)
@@ -871,6 +873,7 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 		DedupeKey:  ev.DedupeKey,
 		OccurredAt: ev.OccurredAt,
 		Payload:    payload,
+		Sender:     ev.Sender,
 		Outcome:    core.TriggerEventLaunched,
 		ChatID:     &chatID,
 	}
@@ -1100,6 +1103,7 @@ func TriggerInfoFromEvent(row *core.TriggerEvent) *v2.TriggerInfo {
 		EventID:    row.ID,
 		OccurredAt: row.OccurredAt.UTC().Format(time.RFC3339),
 		Payload:    row.Payload,
+		Sender:     row.Sender,
 	}
 	if row.TriggerID != nil {
 		info.TriggerID = *row.TriggerID

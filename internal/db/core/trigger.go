@@ -346,6 +346,45 @@ type TriggerEvent struct {
 	// chat going with turns of their own; the trigger's health, streak and
 	// overlap rules are about its own run, so they read this, not the chat.
 	RunStatus string
+	// Sender is who or what the event came from, as the source authenticated
+	// it: set once at intake and never from the payload. Nil for a start a
+	// person made themselves (a chat, a builder test).
+	Sender *TriggerSender
+}
+
+// TriggerSenderKind is what kind of party sent the event that fired a
+// trigger. It is trigger.sender.kind.
+type TriggerSenderKind string
+
+// The sender kinds. A test in web/ mirrors this list.
+const (
+	TriggerSenderKindSlack    TriggerSenderKind = "slack"
+	TriggerSenderKindGitHub   TriggerSenderKind = "github"
+	TriggerSenderKindEmail    TriggerSenderKind = "email"
+	TriggerSenderKindSMS      TriggerSenderKind = "sms"
+	TriggerSenderKindWebhook  TriggerSenderKind = "webhook"
+	TriggerSenderKindWorkflow TriggerSenderKind = "workflow"
+	TriggerSenderKindSchedule TriggerSenderKind = "schedule"
+	// TriggerSenderKindUser is a Reliant user acting directly: "Run now".
+	TriggerSenderKindUser TriggerSenderKind = "user"
+)
+
+// TriggerSender is the normalized sender of a trigger event: trigger.sender.
+//
+// Each source sets it at intake from what IT authenticated, never from a field
+// the sender controls when a verified one exists. Verified says the source
+// attests ID: a signed Slack or GitHub delivery, a Gmail message whose DMARC
+// passed, a webhook caller holding the token. An unverified sender (an SMS
+// From, a spoofable email From) is still recorded, so a filter can read it,
+// but an allowlist must require verified to mean anything.
+type TriggerSender struct {
+	Kind TriggerSenderKind `json:"kind"`
+	// ID is the provider's own identifier for the sender: a Slack user id,
+	// a GitHub login, an email address, an E.164 number, a trigger id.
+	ID string `json:"id"`
+	// DisplayName is for people; never authorize on it.
+	DisplayName string `json:"display_name,omitempty"`
+	Verified    bool   `json:"verified"`
 }
 
 // How a trigger's own run ended (TriggerEvent.RunStatus).

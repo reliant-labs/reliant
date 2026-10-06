@@ -6,6 +6,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 )
 
@@ -34,6 +35,31 @@ func TestTriggerNamespaceResolvesInNodeTemplates(t *testing.T) {
 		require.NoError(t, err, template)
 		assert.Equal(t, want, got, template)
 	}
+}
+
+func TestTriggerSenderResolvesInNodeTemplates(t *testing.T) {
+	info := &TriggerInfo{
+		Kind: "integration", TriggerID: "trg-1",
+		Sender: &core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: "U123", DisplayName: "ada", Verified: true},
+	}
+	scope := &wfcel.NodeResolutionContext{Inputs: map[string]interface{}{wfcel.TriggerInputKey: info.CELValue()}, Nodes: map[string]interface{}{}}
+	for template, want := range map[string]any{
+		"{{trigger.sender.id}}":           "U123",
+		"{{trigger.sender.kind}}":         "slack",
+		"{{trigger.sender.display_name}}": "ada",
+		"{{trigger.sender.verified}}":     true,
+	} {
+		got, err := wfcel.EvaluateTemplate(template, scope)
+		require.NoError(t, err, template)
+		assert.Equal(t, want, got, template)
+	}
+}
+
+// A start with no sender (a chat) still has every sender key, so a template
+// reading one renders blank and a filter requiring verified is false.
+func TestTriggerSenderIsEmptyAndUnverifiedWithoutOne(t *testing.T) {
+	info := &TriggerInfo{Kind: "chat.start"}
+	assert.Equal(t, map[string]interface{}{"kind": "", "id": "", "display_name": "", "verified": false}, info.CELValue()["sender"])
 }
 
 func TestTriggerNamespaceDefaultsForInputlessScopes(t *testing.T) {

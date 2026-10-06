@@ -198,9 +198,9 @@ SELECT * FROM triggers WHERE workflow_trigger IS NOT NULL ORDER BY id;
 -- race (1) or a prior firing already exists (0).
 INSERT INTO trigger_events (
     id, trigger_id, user_id, kind, dedupe_key, occurred_at,
-    payload, outcome, outcome_detail, chat_id, created_at
+    payload, outcome, outcome_detail, chat_id, created_at, sender
 ) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12
 )
 ON CONFLICT (kind, dedupe_key) DO NOTHING;
 

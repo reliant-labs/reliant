@@ -49,6 +49,10 @@ type InboundEvent struct {
 	// Payload is recorded verbatim on the row and becomes trigger.payload.
 	// It is untrusted input: callers size-cap it and strip secrets first.
 	Payload map[string]any
+	// Sender is trigger.sender, normalized by the receiver from what the
+	// source authenticated (core.TriggerSender). Required: an event nobody
+	// sent cannot be filtered by who sent it.
+	Sender *core.TriggerSender
 }
 
 // AcceptOptions modify Accept.
@@ -119,6 +123,12 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 	if ev.DedupeKey == "" {
 		return nil, errors.New("triggers: an inbound event needs a dedupe key")
 	}
+	if ev.Sender == nil {
+		// Every receiver knows who authenticated its request; one that
+		// forgot to say would record an event an allowlist can never pass,
+		// with no hint why.
+		return nil, errors.New("triggers: an inbound event needs a sender")
+	}
 	occurredAt := ev.OccurredAt
 	if occurredAt.IsZero() {
 		occurredAt = in.now().UTC()
@@ -149,6 +159,7 @@ func (in *Intake) Accept(ctx context.Context, trigger *core.Trigger, ev InboundE
 		DedupeKey:     ev.DedupeKey,
 		OccurredAt:    occurredAt,
 		Payload:       ev.Payload,
+		Sender:        ev.Sender,
 		Outcome:       outcome,
 		OutcomeDetail: detail,
 		CreatedAt:     in.now().UTC(),
@@ -193,7 +204,7 @@ func (in *Intake) applyFilter(expr string, trigger *core.Trigger, ev InboundEven
 		return core.TriggerEventFailed, "the trigger's filter does not compile: " + err.Error()
 	}
 	hit, err := filter.Match(FilterInput{
-		Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload,
+		Kind: string(ev.Kind), TriggerID: trigger.ID, OccurredAt: occurredAt, Payload: ev.Payload, Sender: ev.Sender,
 	})
 	if err != nil {
 		return core.TriggerEventFailed, fmt.Sprintf(

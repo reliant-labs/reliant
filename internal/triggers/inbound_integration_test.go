@@ -79,6 +79,7 @@ func TestInboundDeliveryLaunchesOnceAndAdoptsTheReceiversRow(t *testing.T) {
 	body, _ := stored.Payload["body"].(map[string]any)
 	assert.Equal(t, "main", body["ref"], "the event payload survives the adoption")
 	assert.NotNil(t, stored.Payload["start"], "and gains the launch's start record")
+	assert.Equal(t, ev.Sender, stored.Sender, "the sender intake recorded survives the adoption")
 }
 
 // An inbound launch — a webhook delivery or a provider event — gives its run
@@ -120,6 +121,10 @@ func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testi
 			require.NotNil(t, root, "the run's root workflow was started")
 			assert.Equal(t, f.trigger.DaemonID, root.Inputs["session_daemon_id"],
 				"the runtime hands this daemon to preflight as its selector")
+			require.NotNil(t, root.Trigger)
+			assert.Equal(t, ev.Sender, root.Trigger.Sender, "the run sees the recorded sender as trigger.sender")
+			assert.Equal(t, map[string]any{"kind": "webhook", "id": f.trigger.ID, "display_name": "", "verified": true},
+				root.Trigger.CELValue()["sender"])
 
 			launchEv, err := f.repo.GetTriggerEventByChatID(ctx, out.ChatID)
 			require.NoError(t, err)

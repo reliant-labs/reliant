@@ -179,6 +179,13 @@ type Event struct {
 	// Data is the provider's payload, untrusted, recorded on the event and
 	// visible as trigger.payload.data.
 	Data map[string]any
+	// Sender is trigger.sender: who the provider says sent the event, taken
+	// from the request Verify (or VerifyWith) authenticated. Parse runs only
+	// after verification, so a provider sets it there, in one place, from
+	// the provider-attested field — never from one the sender can choose
+	// when an attested one exists. Required: an event without one is
+	// dropped.
+	Sender *core.TriggerSender
 }
 
 // ErrUnauthorized marks a request that failed verification.
