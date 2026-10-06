@@ -248,3 +248,35 @@ func TestApplyDaemonLifecycle_RejectsIncompleteUpdates(t *testing.T) {
 		t.Error("a zero ChangedAt was accepted; the ordering guard would be defeated")
 	}
 }
+
+// A NULL mirror must accept a lifecycle event whatever its timestamp: the
+// ordering guard protects a phase that exists, and there is none to protect.
+func TestApplyDaemonLifecycle_WritesWhenPhaseNullRegardlessOfTimestamp(t *testing.T) {
+	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "lifecycle-nullphase-user"
+	const daemonID = "lifecycle-nullphase-daemon"
+	t.Cleanup(func() { _, _ = rawDB.Exec(`DELETE FROM daemons WHERE user_id = $1`, userID) })
+	seedLifecycleDaemon(t, repo, daemonID, userID)
+
+	newer := time.Now().UTC().Truncate(time.Millisecond)
+	if _, err := rawDB.Exec(`UPDATE daemons SET lifecycle_phase = NULL, last_status_changed_at = $1 WHERE id = $2`, newer, daemonID); err != nil {
+		t.Fatalf("seed null phase: %v", err)
+	}
+
+	updated, err := repo.ApplyDaemonLifecycle(ctx, DaemonLifecycleUpdate{
+		DaemonID: daemonID, Phase: "suspended", ChangedAt: newer.Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("apply: %v", err)
+	}
+	if !updated {
+		t.Fatal("event was dropped although lifecycle_phase is NULL")
+	}
+	got, err := repo.GetDaemon(ctx, daemonID)
+	if err != nil || got.LifecyclePhase == nil || *got.LifecyclePhase != "suspended" {
+		t.Fatalf("lifecycle_phase not written: %v %v", got, err)
+	}
+}
