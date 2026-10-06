@@ -1601,6 +1601,13 @@ message DeployConvergence {
   // pass reads several objects and then records what it found.
   google.protobuf.Timestamp observed_at = 10;
   google.protobuf.Timestamp created_at = 11;
+
+  // When this reading was most recently RE-CONFIRMED. observed_at is when the
+  // state BEGAN (the transition this row records); the observer re-reads every
+  // couple of minutes and, when nothing changed, advances this instead of
+  // appending a row. "Running X · confirmed 30s ago" is this field. Never
+  // earlier than observed_at; equal to it for a row that was never re-confirmed.
+  google.protobuf.Timestamp last_observed_at = 12;
 }
 
 // DeployLocalSession is one `forge env up` worktree, present in Live.
