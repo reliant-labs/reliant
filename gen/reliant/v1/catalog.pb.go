@@ -1025,7 +1025,11 @@ type NodeInputField struct {
 	Example string `protobuf:"bytes,16,opt,name=example,proto3" json:"example,omitempty"`
 	// The kind of value in a few words ("list of tool calls"), when the type
 	// undersells it. FieldMeta.type_hint.
-	TypeHint      string `protobuf:"bytes,17,opt,name=type_hint,json=typeHint,proto3" json:"type_hint,omitempty"`
+	TypeHint string `protobuf:"bytes,17,opt,name=type_hint,json=typeHint,proto3" json:"type_hint,omitempty"`
+	// Sub-fields of a message-typed OUTPUT field (or of its items, when the
+	// field is repeated), e.g. call_llm's tool_calls[].name. Empty on inputs
+	// and on dynamic objects (google.protobuf.Struct), whose keys are unknown.
+	Children      []*NodeInputField `protobuf:"bytes,18,rep,name=children,proto3" json:"children,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1170,6 +1174,13 @@ func (x *NodeInputField) GetTypeHint() string {
 		return x.TypeHint
 	}
 	return ""
+}
+
+func (x *NodeInputField) GetChildren() []*NodeInputField {
+	if x != nil {
+		return x.Children
+	}
+	return nil
 }
 
 // NodeInfo represents a workflow node available for the builder
@@ -2886,7 +2897,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x10ListToolsRequest\"U\n" +
 	"\x11ListToolsResponse\x12*\n" +
 	"\x05tools\x18\x01 \x03(\v2\x14.reliant.v1.ToolInfoR\x05tools\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xc1\x04\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\xf9\x04\n" +
 	"\x0eNodeInputField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12 \n" +
@@ -2905,7 +2916,8 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x06is_cel\x18\x0e \x01(\bR\x05isCel\x12\x1a\n" +
 	"\bcategory\x18\x0f \x01(\tR\bcategory\x12\x18\n" +
 	"\aexample\x18\x10 \x01(\tR\aexample\x12\x1b\n" +
-	"\ttype_hint\x18\x11 \x01(\tR\btypeHintB\f\n" +
+	"\ttype_hint\x18\x11 \x01(\tR\btypeHint\x126\n" +
+	"\bchildren\x18\x12 \x03(\v2\x1a.reliant.v1.NodeInputFieldR\bchildrenB\f\n" +
 	"\n" +
 	"_min_valueB\f\n" +
 	"\n" +
@@ -3120,58 +3132,59 @@ var file_reliant_v1_catalog_proto_depIdxs = []int32{
 	1,  // 3: reliant.v1.ListModelsByProviderResponse.models:type_name -> reliant.v1.ModelInfo
 	8,  // 4: reliant.v1.ListAvailableModelsResponse.models:type_name -> reliant.v1.AvailableModelInfo
 	11, // 5: reliant.v1.ListToolsResponse.tools:type_name -> reliant.v1.ToolInfo
-	14, // 6: reliant.v1.NodeInfo.input_fields:type_name -> reliant.v1.NodeInputField
-	14, // 7: reliant.v1.NodeInfo.output_fields:type_name -> reliant.v1.NodeInputField
-	15, // 8: reliant.v1.ListNodesResponse.nodes:type_name -> reliant.v1.NodeInfo
-	16, // 9: reliant.v1.ListNodesResponse.categories:type_name -> reliant.v1.NodeCategory
-	20, // 10: reliant.v1.CELNamespaceInfo.fields:type_name -> reliant.v1.CELFieldInfo
-	20, // 11: reliant.v1.CELNodeOutputSchema.fields:type_name -> reliant.v1.CELFieldInfo
-	20, // 12: reliant.v1.CELHelperTypeInfo.fields:type_name -> reliant.v1.CELFieldInfo
-	21, // 13: reliant.v1.GetCELCompletionsResponse.namespaces:type_name -> reliant.v1.CELNamespaceInfo
-	22, // 14: reliant.v1.GetCELCompletionsResponse.functions:type_name -> reliant.v1.CELFunctionInfo
-	23, // 15: reliant.v1.GetCELCompletionsResponse.node_output_schemas:type_name -> reliant.v1.CELNodeOutputSchema
-	24, // 16: reliant.v1.GetCELCompletionsResponse.helper_types:type_name -> reliant.v1.CELHelperTypeInfo
-	0,  // 17: reliant.v1.CatalogEntrySummary.kind:type_name -> reliant.v1.CatalogEntryKind
-	26, // 18: reliant.v1.CatalogEntrySummary.integration:type_name -> reliant.v1.CatalogIntegration
-	38, // 19: reliant.v1.CatalogEntrySummary.auth_kinds:type_name -> reliant.v1.ConnectionAuthKind
-	0,  // 20: reliant.v1.SearchCatalogRequest.kinds:type_name -> reliant.v1.CatalogEntryKind
-	27, // 21: reliant.v1.SearchCatalogResponse.entries:type_name -> reliant.v1.CatalogEntrySummary
-	28, // 22: reliant.v1.SearchCatalogResponse.category_facets:type_name -> reliant.v1.CatalogFacet
-	0,  // 23: reliant.v1.ListCatalogIntegrationsRequest.kinds:type_name -> reliant.v1.CatalogEntryKind
-	26, // 24: reliant.v1.CatalogIntegrationListing.integration:type_name -> reliant.v1.CatalogIntegration
-	32, // 25: reliant.v1.ListCatalogIntegrationsResponse.integrations:type_name -> reliant.v1.CatalogIntegrationListing
-	28, // 26: reliant.v1.ListCatalogIntegrationsResponse.category_facets:type_name -> reliant.v1.CatalogFacet
-	36, // 27: reliant.v1.GetCatalogEntryResponse.entry:type_name -> reliant.v1.CatalogEntry
-	27, // 28: reliant.v1.CatalogEntry.summary:type_name -> reliant.v1.CatalogEntrySummary
-	39, // 29: reliant.v1.CatalogEntry.params_schema:type_name -> google.protobuf.Struct
-	39, // 30: reliant.v1.CatalogEntry.output_schema:type_name -> google.protobuf.Struct
-	39, // 31: reliant.v1.CatalogEntry.payload_schema:type_name -> google.protobuf.Struct
-	37, // 32: reliant.v1.CatalogEntry.connection:type_name -> reliant.v1.CatalogConnectionRequirement
-	40, // 33: reliant.v1.CatalogConnectionRequirement.methods:type_name -> reliant.v1.IntegrationAuthMethod
-	41, // 34: reliant.v1.CatalogConnectionRequirement.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
-	3,  // 35: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
-	6,  // 36: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
-	9,  // 37: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
-	12, // 38: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
-	17, // 39: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
-	19, // 40: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
-	29, // 41: reliant.v1.CatalogService.SearchCatalog:input_type -> reliant.v1.SearchCatalogRequest
-	34, // 42: reliant.v1.CatalogService.GetCatalogEntry:input_type -> reliant.v1.GetCatalogEntryRequest
-	31, // 43: reliant.v1.CatalogService.ListCatalogIntegrations:input_type -> reliant.v1.ListCatalogIntegrationsRequest
-	4,  // 44: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
-	7,  // 45: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
-	10, // 46: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
-	13, // 47: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
-	18, // 48: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
-	25, // 49: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
-	30, // 50: reliant.v1.CatalogService.SearchCatalog:output_type -> reliant.v1.SearchCatalogResponse
-	35, // 51: reliant.v1.CatalogService.GetCatalogEntry:output_type -> reliant.v1.GetCatalogEntryResponse
-	33, // 52: reliant.v1.CatalogService.ListCatalogIntegrations:output_type -> reliant.v1.ListCatalogIntegrationsResponse
-	44, // [44:53] is the sub-list for method output_type
-	35, // [35:44] is the sub-list for method input_type
-	35, // [35:35] is the sub-list for extension type_name
-	35, // [35:35] is the sub-list for extension extendee
-	0,  // [0:35] is the sub-list for field type_name
+	14, // 6: reliant.v1.NodeInputField.children:type_name -> reliant.v1.NodeInputField
+	14, // 7: reliant.v1.NodeInfo.input_fields:type_name -> reliant.v1.NodeInputField
+	14, // 8: reliant.v1.NodeInfo.output_fields:type_name -> reliant.v1.NodeInputField
+	15, // 9: reliant.v1.ListNodesResponse.nodes:type_name -> reliant.v1.NodeInfo
+	16, // 10: reliant.v1.ListNodesResponse.categories:type_name -> reliant.v1.NodeCategory
+	20, // 11: reliant.v1.CELNamespaceInfo.fields:type_name -> reliant.v1.CELFieldInfo
+	20, // 12: reliant.v1.CELNodeOutputSchema.fields:type_name -> reliant.v1.CELFieldInfo
+	20, // 13: reliant.v1.CELHelperTypeInfo.fields:type_name -> reliant.v1.CELFieldInfo
+	21, // 14: reliant.v1.GetCELCompletionsResponse.namespaces:type_name -> reliant.v1.CELNamespaceInfo
+	22, // 15: reliant.v1.GetCELCompletionsResponse.functions:type_name -> reliant.v1.CELFunctionInfo
+	23, // 16: reliant.v1.GetCELCompletionsResponse.node_output_schemas:type_name -> reliant.v1.CELNodeOutputSchema
+	24, // 17: reliant.v1.GetCELCompletionsResponse.helper_types:type_name -> reliant.v1.CELHelperTypeInfo
+	0,  // 18: reliant.v1.CatalogEntrySummary.kind:type_name -> reliant.v1.CatalogEntryKind
+	26, // 19: reliant.v1.CatalogEntrySummary.integration:type_name -> reliant.v1.CatalogIntegration
+	38, // 20: reliant.v1.CatalogEntrySummary.auth_kinds:type_name -> reliant.v1.ConnectionAuthKind
+	0,  // 21: reliant.v1.SearchCatalogRequest.kinds:type_name -> reliant.v1.CatalogEntryKind
+	27, // 22: reliant.v1.SearchCatalogResponse.entries:type_name -> reliant.v1.CatalogEntrySummary
+	28, // 23: reliant.v1.SearchCatalogResponse.category_facets:type_name -> reliant.v1.CatalogFacet
+	0,  // 24: reliant.v1.ListCatalogIntegrationsRequest.kinds:type_name -> reliant.v1.CatalogEntryKind
+	26, // 25: reliant.v1.CatalogIntegrationListing.integration:type_name -> reliant.v1.CatalogIntegration
+	32, // 26: reliant.v1.ListCatalogIntegrationsResponse.integrations:type_name -> reliant.v1.CatalogIntegrationListing
+	28, // 27: reliant.v1.ListCatalogIntegrationsResponse.category_facets:type_name -> reliant.v1.CatalogFacet
+	36, // 28: reliant.v1.GetCatalogEntryResponse.entry:type_name -> reliant.v1.CatalogEntry
+	27, // 29: reliant.v1.CatalogEntry.summary:type_name -> reliant.v1.CatalogEntrySummary
+	39, // 30: reliant.v1.CatalogEntry.params_schema:type_name -> google.protobuf.Struct
+	39, // 31: reliant.v1.CatalogEntry.output_schema:type_name -> google.protobuf.Struct
+	39, // 32: reliant.v1.CatalogEntry.payload_schema:type_name -> google.protobuf.Struct
+	37, // 33: reliant.v1.CatalogEntry.connection:type_name -> reliant.v1.CatalogConnectionRequirement
+	40, // 34: reliant.v1.CatalogConnectionRequirement.methods:type_name -> reliant.v1.IntegrationAuthMethod
+	41, // 35: reliant.v1.CatalogConnectionRequirement.connection_params:type_name -> reliant.v1.IntegrationConnectionParam
+	3,  // 36: reliant.v1.CatalogService.ListModels:input_type -> reliant.v1.ListModelsRequest
+	6,  // 37: reliant.v1.CatalogService.ListModelsByProvider:input_type -> reliant.v1.ListModelsByProviderRequest
+	9,  // 38: reliant.v1.CatalogService.ListAvailableModels:input_type -> reliant.v1.ListAvailableModelsRequest
+	12, // 39: reliant.v1.CatalogService.ListTools:input_type -> reliant.v1.ListToolsRequest
+	17, // 40: reliant.v1.CatalogService.ListNodes:input_type -> reliant.v1.ListNodesRequest
+	19, // 41: reliant.v1.CatalogService.GetCELCompletions:input_type -> reliant.v1.GetCELCompletionsRequest
+	29, // 42: reliant.v1.CatalogService.SearchCatalog:input_type -> reliant.v1.SearchCatalogRequest
+	34, // 43: reliant.v1.CatalogService.GetCatalogEntry:input_type -> reliant.v1.GetCatalogEntryRequest
+	31, // 44: reliant.v1.CatalogService.ListCatalogIntegrations:input_type -> reliant.v1.ListCatalogIntegrationsRequest
+	4,  // 45: reliant.v1.CatalogService.ListModels:output_type -> reliant.v1.ListModelsResponse
+	7,  // 46: reliant.v1.CatalogService.ListModelsByProvider:output_type -> reliant.v1.ListModelsByProviderResponse
+	10, // 47: reliant.v1.CatalogService.ListAvailableModels:output_type -> reliant.v1.ListAvailableModelsResponse
+	13, // 48: reliant.v1.CatalogService.ListTools:output_type -> reliant.v1.ListToolsResponse
+	18, // 49: reliant.v1.CatalogService.ListNodes:output_type -> reliant.v1.ListNodesResponse
+	25, // 50: reliant.v1.CatalogService.GetCELCompletions:output_type -> reliant.v1.GetCELCompletionsResponse
+	30, // 51: reliant.v1.CatalogService.SearchCatalog:output_type -> reliant.v1.SearchCatalogResponse
+	35, // 52: reliant.v1.CatalogService.GetCatalogEntry:output_type -> reliant.v1.GetCatalogEntryResponse
+	33, // 53: reliant.v1.CatalogService.ListCatalogIntegrations:output_type -> reliant.v1.ListCatalogIntegrationsResponse
+	45, // [45:54] is the sub-list for method output_type
+	36, // [36:45] is the sub-list for method input_type
+	36, // [36:36] is the sub-list for extension type_name
+	36, // [36:36] is the sub-list for extension extendee
+	0,  // [0:36] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_catalog_proto_init() }

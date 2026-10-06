@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Check, Layers, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
@@ -49,6 +50,8 @@ export function InlinePresetPicker({
   className = "",
 }: InlinePresetPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Escape closes the list, and only the list (useEscapeLayer).
+  const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
@@ -187,6 +190,7 @@ export function InlinePresetPicker({
       {/* Dropdown */}
       {isOpen && canInteract && (
         <div
+          {...escapeLayer}
           className={cn(
             "absolute bottom-full left-0 mb-1 min-w-48 rounded-lg border border-border bg-[var(--chat-dropdown-bg)] shadow-lg z-[1000]",
             "max-h-64 overflow-y-auto"

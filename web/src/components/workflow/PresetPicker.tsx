@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { createPortal } from "react-dom";
 import { Layers, ChevronDown, Check, MoreVertical, Star, Edit, Trash2, Save, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -59,6 +60,8 @@ export function PresetPicker({
   saveTooltip = "Save as preset",
 }: PresetPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Escape closes the list, and only the list (useEscapeLayer).
+  const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
   const [defaultPresetName, setDefaultPresetName] = useState<string | null>(null);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -208,6 +211,7 @@ export function PresetPicker({
   const dropdownContent = isOpen && canInteract && dropdownPosition && (
     <div
       ref={dropdownRef}
+      {...escapeLayer}
       className="fixed z-[9999] rounded-md border border-border bg-card shadow-lg"
       style={{
         top: dropdownPosition.top,

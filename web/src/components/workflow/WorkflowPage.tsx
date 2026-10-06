@@ -3,7 +3,7 @@
  * render is the Workflows Library now, at /workflows/library.)
  *
  * Reads its inputs from the URL (route params and search):
- *   /workflow/new              → new blank workflow (isNew={true})
+ *   /workflow/new              → the New workflow dialog (isNew={true})
  *   /workflow/$workflowName    → load named workflow (incl. builtin://...)
  *   ?drill=<nodeId>            → one-shot: drill into a loop on load (tour)
  *   ?chat=<chatId>             → the chat shown in the editor's chat panel
@@ -20,6 +20,7 @@ import {
   useSearch,
 } from "@tanstack/react-router";
 import { useCallback } from "react";
+import { useRouteProjectResolution } from "../../hooks/useRouteProjectResolution";
 import { getParentRouteNavigateOptions } from "../../lib/routeParent";
 import { WorkflowBuilderPage } from "./WorkflowBuilderPage";
 
@@ -38,6 +39,10 @@ export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
   // the UI doesn't show "View Only / Create a Copy" prompts; saves are no-op'd
   // in WorkflowBuilderPage so nothing actually persists.
   const tourMode = search.tour === "workflow-builder";
+
+  // These routes never mount ModernApp, the app's other project restorer, so
+  // a cold load (refresh, pasted link) resolves the project here.
+  const { resolved: projectResolved } = useRouteProjectResolution({ reflectInUrl: true });
 
   // Decode any URL-encoded characters in the workflow name (e.g. builtin://
   // becomes builtin%3A%2F%2F in the URL).
@@ -71,6 +76,7 @@ export function WorkflowPage({ isNew = false }: WorkflowPageProps) {
     <WorkflowBuilderPage
       routeWorkflowName={workflowName}
       routeIsNew={isNew}
+      projectResolved={projectResolved}
       routeDrillIntoNodeId={search.drill}
       routeChatId={search.chat}
       onChatIdChange={onChatIdChange}

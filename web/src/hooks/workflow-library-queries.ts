@@ -82,6 +82,15 @@ export function useSetWorkflowVisibility(projectId: string) {
   });
 }
 
+/** "New workflow": one draft per call, so callers run it only on a user action. */
+export function useCreateWorkflowDraft(projectId: string) {
+  const refresh = useRefreshWorkflows(projectId);
+  return useMutation({
+    mutationFn: (opts: { title: string; template?: string }) => workflowGrpc.createWorkflowDraft(projectId, opts),
+    onSuccess: refresh,
+  });
+}
+
 export function useImportWorkflow(projectId: string) {
   const refresh = useRefreshWorkflows(projectId);
   return useMutation({

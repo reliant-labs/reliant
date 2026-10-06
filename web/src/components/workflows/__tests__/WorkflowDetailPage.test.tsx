@@ -209,7 +209,7 @@ describe("WorkflowDetailPage", () => {
     renderDetail("my-draft");
     await screen.findByRole("heading", { level: 1, name: "My Draft" });
     expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
-    expect(screen.getByText("Drafts cannot run until they are marked complete.")).toBeInTheDocument();
+    expect(screen.getByText("Drafts can't run until they are published. Open it in the editor to publish it.")).toBeInTheDocument();
   });
 
   it("Used by lists the workflows that call this one through ref:, from the loaded library", async () => {

@@ -3333,8 +3333,7 @@ type LoopArgs struct {
 	Key string `protobuf:"bytes,10,opt,name=key,proto3" json:"key,omitempty"`
 	// OnFailure controls behavior when a parallel iteration fails.
 	// Values: "continue" (default, others keep running), "fail_fast" (cancel remaining),
-	//
-	//	"fail_all" (wait for all, then fail if any failed).
+	//   "fail_all" (wait for all, then fail if any failed).
 	OnFailure string `protobuf:"bytes,11,opt,name=on_failure,json=onFailure,proto3" json:"on_failure,omitempty"`
 	// Thread configures how parallel iterations relate to conversation threads.
 	// Each parallel iteration creates its own thread. Defaults to mode: new.
@@ -5417,9 +5416,11 @@ type CallLLMOutput struct {
 	// Thinking is persisted with the assistant message by the worker-side
 	// save_message and then stripped from the result the workflow receives:
 	// signatures are large, and nothing in a workflow reads them.
-	Thinking           *ThinkingOutput `protobuf:"bytes,5,opt,name=thinking,proto3" json:"thinking,omitempty"`
-	UpstreamRequestId  string          `protobuf:"bytes,6,opt,name=upstream_request_id,json=upstreamRequestId,proto3" json:"upstream_request_id,omitempty"`    // Provider request correlation ID (e.g. x-oai-request-id)
-	UpstreamProxymanId string          `protobuf:"bytes,7,opt,name=upstream_proxyman_id,json=upstreamProxymanId,proto3" json:"upstream_proxyman_id,omitempty"` // Proxyman flow correlation ID (e.g. x-proxyman-id)
+	Thinking *ThinkingOutput `protobuf:"bytes,5,opt,name=thinking,proto3" json:"thinking,omitempty"`
+	// Correlation ids for debugging a provider call. "advanced" keeps them out
+	// of the builder's Outputs list unless the author asks for them.
+	UpstreamRequestId  string `protobuf:"bytes,6,opt,name=upstream_request_id,json=upstreamRequestId,proto3" json:"upstream_request_id,omitempty"`    // Provider request correlation ID (e.g. x-oai-request-id)
+	UpstreamProxymanId string `protobuf:"bytes,7,opt,name=upstream_proxyman_id,json=upstreamProxymanId,proto3" json:"upstream_proxyman_id,omitempty"` // Proxyman flow correlation ID (e.g. x-proxyman-id)
 	// Structured data from a response_tool call. When the node is configured with a
 	// response_tool and the LLM returns a tool call to it, CallLLM parses the tool
 	// call input JSON and stores it here. Consumers can read this directly instead
@@ -5464,16 +5465,16 @@ type CallLLMOutput struct {
 	// reads to decide whether the model has more to do. Closed vocabulary,
 	// derived once in Go (internal/workflow/stopreason), first match wins:
 	//
-	//	interrupted  our stream was cut short mid-flight; the work is unfinished
-	//	tool_use     the model requested tools; their results are new input
-	//	refused      the safety system declined (refusal / content_filter)
-	//	truncated    it ran out of output room mid-turn (max_tokens)
-	//	incomplete   the provider paused the turn and expects it handed back —
-	//	             Anthropic pause_turn, OpenAI Responses end_turn:false or
-	//	             incomplete:interrupted — and the turn produced text
-	//	error        a provider/transport failure, a pause that produced
-	//	             nothing, or any reason this vocabulary does not recognize
-	//	done         the model finished on its own terms
+	//   interrupted  our stream was cut short mid-flight; the work is unfinished
+	//   tool_use     the model requested tools; their results are new input
+	//   refused      the safety system declined (refusal / content_filter)
+	//   truncated    it ran out of output room mid-turn (max_tokens)
+	//   incomplete   the provider paused the turn and expects it handed back —
+	//                Anthropic pause_turn, OpenAI Responses end_turn:false or
+	//                incomplete:interrupted — and the turn produced text
+	//   error        a provider/transport failure, a pause that produced
+	//                nothing, or any reason this vocabulary does not recognize
+	//   done         the model finished on its own terms
 	//
 	// A provider adding a stop reason maps into one of these rather than
 	// becoming an eighth value, so a condition written against them cannot
@@ -8046,7 +8047,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\x93\x06\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\x93\a\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -8054,22 +8055,30 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"tool_calls\x18\x03 \x03(\v2\x17.reliant.v1.ToolCallMsgR\ttoolCalls\x12\x1f\n" +
 	"\vtoken_count\x18\x04 \x01(\x05R\n" +
 	"tokenCount\x12>\n" +
-	"\bthinking\x18\x05 \x01(\v2\x1a.reliant.v1.ThinkingOutputB\x06\x82\xb5\x18\x02x\x01R\bthinking\x12.\n" +
-	"\x13upstream_request_id\x18\x06 \x01(\tR\x11upstreamRequestId\x120\n" +
-	"\x14upstream_proxyman_id\x18\a \x01(\tR\x12upstreamProxymanId\x12<\n" +
+	"\bthinking\x18\x05 \x01(\v2\x1a.reliant.v1.ThinkingOutputB\x06\x82\xb5\x18\x02x\x01R\bthinking\x12>\n" +
+	"\x13upstream_request_id\x18\x06 \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\x11upstreamRequestId\x12@\n" +
+	"\x14upstream_proxyman_id\x18\a \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\x12upstreamProxymanId\x12<\n" +
 	"\rresponse_data\x18\b \x01(\v2\x17.google.protobuf.StructR\fresponseData\x12\x12\n" +
-	"\x04cost\x18\t \x01(\x01R\x04cost\x121\n" +
+	"\x04cost\x18\t \x01(\x01R\x04cost\x12A\n" +
 	"\x14compaction_threshold\x18\n" +
-	" \x01(\x05R\x13compactionThreshold\x12\x14\n" +
-	"\x05model\x18\v \x01(\tR\x05model\x12#\n" +
-	"\rpending_inbox\x18\x0e \x01(\bR\fpendingInbox\x12\x1d\n" +
+	" \x01(\x05B\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\x13compactionThreshold\x12\x14\n" +
+	"\x05model\x18\v \x01(\tR\x05model\x123\n" +
+	"\rpending_inbox\x18\x0e \x01(\bB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\fpendingInbox\x12-\n" +
 	"\n" +
-	"message_id\x18\f \x01(\tR\tmessageId\x12&\n" +
-	"\x0flast_stream_seq\x18\r \x01(\x03R\rlastStreamSeq\x12\x1f\n" +
+	"message_id\x18\f \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\tmessageId\x126\n" +
+	"\x0flast_stream_seq\x18\r \x01(\x03B\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\rlastStreamSeq\x12\x1f\n" +
 	"\vstop_reason\x18\x12 \x01(\tR\n" +
-	"stopReason\x12#\n" +
-	"\rfinish_reason\x18\x11 \x01(\tR\ffinishReason\x12@\n" +
-	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesR\fcapabilitiesJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\aabortedR\tstop_kind\"\x9d\x05\n" +
+	"stopReason\x123\n" +
+	"\rfinish_reason\x18\x11 \x01(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\ffinishReason\x12P\n" +
+	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\fcapabilitiesJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\aabortedR\tstop_kind\"\x9d\x05\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +
@@ -8104,14 +8113,15 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\aliteral\x18\x01 \x01(\v2\x16.google.protobuf.ValueH\x00R\aliteral\x12\x14\n" +
 	"\x04expr\x18\x02 \x01(\tH\x00R\x04expr\x12\x18\n" +
 	"\x06global\x18\x03 \x01(\bH\x00R\x06globalB\a\n" +
-	"\x05value\"\xc6\x02\n" +
+	"\x05value\"\xd6\x02\n" +
 	"\x12ExecuteToolsOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12<\n" +
 	"\ftool_results\x18\x02 \x03(\v2\x19.reliant.v1.ToolResultMsgR\vtoolResults\x12,\n" +
 	"\x12thread_token_count\x18\x03 \x01(\x05R\x10threadTokenCount\x12,\n" +
 	"\x12total_result_chars\x18\x04 \x01(\x05R\x10totalResultChars\x12<\n" +
-	"\rresponse_data\x18\x05 \x01(\v2\x17.google.protobuf.StructR\fresponseData\x12#\n" +
-	"\rgranted_tools\x18\x06 \x03(\tR\fgrantedTools\"\xaf\x01\n" +
+	"\rresponse_data\x18\x05 \x01(\v2\x17.google.protobuf.StructR\fresponseData\x123\n" +
+	"\rgranted_tools\x18\x06 \x03(\tB\x0e\x82\xb5\x18\n" +
+	"Z\badvancedR\fgrantedTools\"\xaf\x01\n" +
 	"\x10InvokeToolOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x02 \x01(\bR\aisError\x12%\n" +

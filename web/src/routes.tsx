@@ -497,8 +497,9 @@ const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLay
 })
 
 // The workflow BUILDER keeps its own full-screen chrome (WorkflowHeader):
-// /workflow/new                → new blank workflow (static segment, takes
-//                                precedence over the dynamic one below)
+// /workflow/new                → the New workflow dialog; Create makes the
+//                                draft (static segment, takes precedence over
+//                                the dynamic one below)
 // /workflow/$workflowName      → opens a named workflow. workflowName is the
 //                                full identifier — e.g. `builtin://get-it-right`
 //                                or a user workflow's name. URL-encoding is

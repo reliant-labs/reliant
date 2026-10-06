@@ -141,6 +141,23 @@ message ValidationError {
   string case_to = 6;    // Case target (identifies which case in the edge)
   string condition = 7;  // The problematic condition
   repeated HighlightSpan highlights = 8; // Character positions to highlight
+  // Where the finding is, structured, so an editor can put it on the step and
+  // field it is about instead of parsing `message`.
+  //
+  // node_id is the TOP-LEVEL node the finding is in: the node itself, the
+  // node an inline body or loop body belongs to, or an edge's source. Empty
+  // for workflow-level findings (entry, inputs, triggers).
+  string node_id = 9;
+  // field is the location within that node, dot-separated ("model",
+  // "with.channel", "system_prompt", "thread.inject.content"; for a finding
+  // inside an inline body it starts "inline.nodes.[i](id)"). Empty when the
+  // finding is about the node as a whole.
+  string field = 10;
+  // detail is the finding alone: `message` without its location prefix and
+  // without the "(suggestion)" suffix, which `suggestion` carries.
+  string detail = 11;
+  // path is the full dot-joined location, as `message` prints it.
+  string path = 12;
 }
 
 // ============================================
@@ -536,13 +553,22 @@ message CreateWorkflowDraftRequest {
   // Intent; UNSPECIFIED and DRAFT create a draft. COMPLETE validates the
   // starting template first.
   WorkflowDraftStatus status = 2;
+  // Display title. The slug (and `name:`) is derived from it and made unique
+  // among the caller's workflows. Empty: "Untitled workflow", numbered so it
+  // is unique too.
+  string title = 3;
+  // What to start from. Empty: a blank workflow (no steps). A builtin ref
+  // ("builtin://agent") copies that built-in's graph, with this draft's own
+  // name and title and an empty description.
+  string template = 4;
 }
 
 message CreateWorkflowDraftResponse {
   string draft_id = 1;                // UUID of the created draft
   string slug = 2;                    // Generated slug for the draft
-  string name = 3;                    // Generated display name (e.g., "swift-fox-a1b2")
+  string name = 3;                    // The workflow's `name:` (equal to the slug)
   WorkflowDraftStatus status = 4;     // Status the workflow was created with
+  string title = 5;                   // The title it was created with
 }
 
 message SetWorkflowStatusRequest {

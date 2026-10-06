@@ -1,11 +1,12 @@
 import { ALargeSmall, Braces, List } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '../../lib/utils'
 import { HelpPopover } from '../ui/HelpPopover'
 import { Toggle } from '../ui/Toggle'
 import { CELInput } from './CELInput'
 import { ModelDropdown, extractModelId } from './ModelDropdown'
 import { ToolsSelector } from './ToolsSelector'
+import { useFieldFindings } from './WorkflowFindingsContext'
 import type { ModelValue } from './ModelDropdown'
 import type { ProtoFieldContext, ProtoFieldSchema } from '../../types/workflowFieldSchema'
 import { isProtoFieldVisible, normalizeProtoFieldValue } from '../../types/workflowFieldSchema'
@@ -114,6 +115,21 @@ export function ProtoFieldRenderer({
   const numberStringValue = normalizeCelNumberString(value)
   const inputId = schema.key.replace(/\./g, '-')
   const hintId = inlineHint ? `${inputId}-hint` : undefined
+  const { findings: fieldFindings, focusSeq } = useFieldFindings(schema.key)
+  const fieldErrors = fieldFindings.filter((finding) => !finding.warning)
+  const fieldRef = useRef<HTMLDivElement>(null)
+  // Picking this field's problem in the problems list brings it into view.
+  useEffect(() => {
+    if (focusSeq === null || !fieldRef.current) return
+    fieldRef.current.scrollIntoView?.({ block: 'center' })
+    // The value control itself, not the Fixed/Expression toggle beside it.
+    const root = fieldRef.current
+    const control =
+      root.querySelector<HTMLElement>(`#${CSS.escape(inputId)}`) ??
+      root.querySelector<HTMLElement>('input, textarea, select, [contenteditable="true"]') ??
+      root.querySelector<HTMLElement>('button:not([aria-pressed])')
+    control?.focus({ preventScroll: true })
+  }, [focusSeq, inputId])
 
   const supportsModeToggle = !hideCELToggle && schema.celCapable && !schema.celExpressionOnly && (
     (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number') ||
@@ -225,7 +241,11 @@ export function ProtoFieldRenderer({
   )
 
   return (
-    <div className={cn('space-y-1.5', className)}>
+    <div
+      ref={fieldRef}
+      className={cn('space-y-1.5', fieldErrors.length > 0 && 'cpv2-field--invalid', className)}
+      data-field-key={schema.key}
+    >
       {!isInlineCheckbox && (
         <div className="cpv2-field-label">
           <span className="flex items-center gap-1.5">
@@ -386,6 +406,18 @@ export function ProtoFieldRenderer({
           {inlineHint}
         </p>
       )}
+
+      {/* Validation of the canvas, on the field it is about (WorkflowFindingsContext). */}
+      {fieldFindings.map((finding, index) => (
+        <p
+          key={index}
+          role={finding.warning ? undefined : 'alert'}
+          className={cn('cpv2-field-error !mt-0', finding.warning && 'cpv2-field-error--warning')}
+        >
+          {finding.text}
+          {finding.suggestion && <span className="block opacity-80">{finding.suggestion}</span>}
+        </p>
+      ))}
     </div>
   )
 }

@@ -90,6 +90,7 @@ Run an integration action (for example an HTTP request)
 | `content` | string | - |
 | `is_error` | boolean | - |
 | `status_code` | integer | - |
+| `data` | object | - |
 | `uses` | string | - |
 | `retryable` | boolean | - |
 | `connection_id` | string | - |
@@ -109,6 +110,12 @@ Invoke an agent or sub-workflow
 | `args` | map | No | - | Values for the sub-workflow's inputs, keyed by input name |
 | `presets` | map | No | - | A preset to apply per input group, as group: preset. Use default for ungrouped inputs |
 | `passthrough` | string | No | - | Inputs of this workflow to hand to the sub-workflow under the same name |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `outputs` | object | - |
 
 ---
 
@@ -149,10 +156,20 @@ Send a prompt to a language model and get a response
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `message` | object | - |
+| `message.id` | string |  |
+| `message.role` | string |  |
+| `message.text` | string |  |
+| `message.phase` | string |  |
 | `response_text` | string | - |
+| `tool_calls` | array | - |
+| `tool_calls[].id` | string |  |
+| `tool_calls[].name` | string |  |
+| `tool_calls[].input` | string |  |
 | `token_count` | integer | - |
 | `upstream_request_id` | string | - |
 | `upstream_proxyman_id` | string | - |
+| `response_data` | object | - |
 | `cost` | number | - |
 | `compaction_threshold` | integer | - |
 | `model` | string | - |
@@ -161,6 +178,7 @@ Send a prompt to a language model and get a response
 | `last_stream_seq` | integer | - |
 | `stop_reason` | string | - |
 | `finish_reason` | string | - |
+| `capabilities` | object | - |
 
 ---
 
@@ -173,6 +191,16 @@ Compact conversation context to reduce token usage
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `model` | model | No | - | Model used to summarize the conversation (defaults to the built-in summarization tier) |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `message` | object | - |
+| `message.id` | string |  |
+| `message.role` | string |  |
+| `message.text` | string |  |
+| `message.phase` | string |  |
 
 ---
 
@@ -207,6 +235,12 @@ Create a git worktree for isolated development
 
 Wait for parallel branches to complete before continuing
 
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `sources` | array | - |
+
 ---
 
 ## Loop
@@ -229,6 +263,7 @@ Execute a sub-workflow in a loop with conditions
 | Field | Type | Description |
 |-------|------|-------------|
 | `iterations` | integer | - |
+| `outputs` | object | - |
 | `results` | map | - |
 | `completed` | integer | - |
 | `failed` | integer | - |
@@ -257,6 +292,7 @@ Route to a workflow or node based on LLM classification
 | `selected_preset` | string | - |
 | `prompt` | string | - |
 | `reasoning` | string | - |
+| `outputs` | object | - |
 | `selected_node` | string | - |
 
 ---
@@ -297,9 +333,21 @@ Run the tool calls an upstream Call LLM step returned
 
 | Field | Type | Description |
 |-------|------|-------------|
+| `message` | object | - |
+| `message.id` | string |  |
+| `message.role` | string |  |
+| `message.text` | string |  |
+| `message.phase` | string |  |
+| `tool_results` | array | - |
+| `tool_results[].tool_call_id` | string |  |
+| `tool_results[].name` | string |  |
+| `tool_results[].content` | string |  |
+| `tool_results[].is_error` | bool |  |
+| `tool_results[].attachment_ids` | string |  |
 | `thread_token_count` | integer | - |
 | `total_result_chars` | integer | - |
-| `granted_tools` | string | - |
+| `response_data` | object | - |
+| `granted_tools` | array | - |
 
 ---
 
@@ -320,7 +368,8 @@ Run one tool you pick, with parameters you set; no LLM involved
 |-------|------|-------------|
 | `content` | string | - |
 | `is_error` | boolean | - |
-| `attachment_ids` | string | - |
+| `attachment_ids` | array | - |
+| `data` | object | - |
 | `tool` | string | - |
 
 ---

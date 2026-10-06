@@ -42,25 +42,17 @@ export function splitFindings<T extends Finding>(findings: readonly T[]): { erro
 }
 
 /**
- * Why "Mark complete" is disabled, in the order a user should address them.
- * Empty ⇒ enabled. Unsaved edits block because marking complete validates the
- * STORED definition — completing while the canvas differs would mark
- * something other than what the user is looking at.
+ * The words the UI uses for the two states. The wire and the backend say
+ * "complete"; everywhere a person reads it, a runnable workflow is
+ * "Published" and the act of making it runnable is "Publish".
  */
-export function markCompleteBlockers(opts: {
-  errors: readonly Finding[];
-  hasUnsavedChanges: boolean;
-  isSaving?: boolean;
-}): string[] {
-  const reasons: string[] = [];
-  if (opts.isSaving) reasons.push("Wait for the save to finish.");
-  if (opts.hasUnsavedChanges) reasons.push("Save your changes first.");
-  const errorCount = opts.errors.filter((e) => !isWarning(e)).length;
-  if (errorCount > 0) {
-    reasons.push(`Fix ${errorCount} validation error${errorCount === 1 ? "" : "s"}.`);
-  }
-  return reasons;
-}
+export const DRAFT_STATUS_LABEL: Record<DraftStatus, string> = {
+  draft: "Draft",
+  complete: "Published",
+};
+
+/** Why a draft cannot run, in the words every surface uses. */
+export const DRAFT_NOT_RUNNABLE = "Drafts can't run until they are published.";
 
 /**
  * Whether a listed workflow may be offered where a runnable workflow is

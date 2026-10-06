@@ -3,21 +3,21 @@ import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 
 interface DraftStatusBadgeProps {
-  /** Number of blocking validation errors the draft currently has. */
+  /** Number of blocking problems the draft currently has. */
   errorCount?: number;
   className?: string;
 }
 
 /**
  * "Draft" marker for a stored workflow that is work in progress: saved as-is,
- * possibly invalid, and never runnable until it is marked complete. Complete
+ * possibly with problems, and never runnable until it is published. Published
  * workflows render no badge — runnable is the default state users expect.
  */
 export function DraftStatusBadge({ errorCount = 0, className }: DraftStatusBadgeProps) {
   const tooltip =
     errorCount > 0
-      ? `Draft — not runnable. ${errorCount} validation error${errorCount === 1 ? "" : "s"} to fix before it can be marked complete.`
-      : "Draft — not runnable until it is marked complete.";
+      ? `Draft — can't run yet. ${errorCount} problem${errorCount === 1 ? "" : "s"} to fix before it can be published.`
+      : "Draft — can't run until it is published.";
   return (
     <Tooltip content={tooltip}>
       <span
