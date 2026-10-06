@@ -203,48 +203,6 @@ Create a git worktree for isolated development
 
 ---
 
-## Execute Tools
-
-Execute tool calls from an LLM response
-
-### Inputs
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `tool_calls` | string | No | - | CEL expression for tool calls to execute |
-
-### Outputs
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `thread_token_count` | integer | - |
-| `total_result_chars` | integer | - |
-| `granted_tools` | string | - |
-
----
-
-## Invoke Tool
-
-Invoke a single tool directly from the graph
-
-### Inputs
-
-| Field | Type | Required | Default | Description |
-|-------|------|----------|---------|-------------|
-| `tool` | string | No | - | Which tool to invoke |
-| `params` | map | No | - | Tool parameters, keyed as in the tool's schema |
-
-### Outputs
-
-| Field | Type | Description |
-|-------|------|-------------|
-| `content` | string | - |
-| `is_error` | boolean | - |
-| `attachment_ids` | string | - |
-| `tool` | string | - |
-
----
-
 ## Join
 
 Wait for parallel branches to complete before continuing
@@ -322,6 +280,48 @@ Execute a shell command
 | `stderr` | string | - |
 | `working_dir` | string | - |
 | `log_file` | string | - |
+
+---
+
+## Run LLM Tool Calls
+
+Run the tool calls an upstream Call LLM step returned
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `tool_calls` | string | No | - | CEL expression for tool calls to execute |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `thread_token_count` | integer | - |
+| `total_result_chars` | integer | - |
+| `granted_tools` | string | - |
+
+---
+
+## Run Tool
+
+Run one tool you pick, with parameters you set; no LLM involved
+
+### Inputs
+
+| Field | Type | Required | Default | Description |
+|-------|------|----------|---------|-------------|
+| `tool` | string | No | - | Which tool to invoke |
+| `params` | map | No | - | Tool parameters, keyed as in the tool's schema |
+
+### Outputs
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `content` | string | - |
+| `is_error` | boolean | - |
+| `attachment_ids` | string | - |
+| `tool` | string | - |
 
 ---
 

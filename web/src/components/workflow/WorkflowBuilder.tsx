@@ -106,7 +106,8 @@ import {
 } from "./CELCompletionContext";
 import { WorkflowMutationProvider } from "./WorkflowMutationContext";
 import { WorkflowNodeCallbacksProvider } from "./WorkflowNodeCallbacksContext";
-import { StepPalette } from "./palette/StepPalette";
+import { StepPalette, type PaletteFocus } from "./palette/StepPalette";
+import { toolCallsDefaultForEdge } from "./executeToolsDefaults";
 import { DeclaredTriggerPanel } from "./config/DeclaredTriggerPanel";
 import { ActivateTriggerDialog } from "../Automations/ActivateTriggerDialog";
 import { useTriggers } from "../../hooks/trigger-queries";
@@ -279,6 +280,8 @@ function WorkflowBuilderInner({
   const [paletteOpen, setPaletteOpen] = useState(false);
   // "+ Add trigger" opens the same palette on its Triggers kind.
   const [paletteKind, setPaletteKind] = useState<"action" | "trigger">("action");
+  // Where the palette opens: set by the sidebar's integration shortcuts.
+  const [paletteFocus, setPaletteFocus] = useState<PaletteFocus | undefined>(undefined);
   // The declared trigger whose editor is open (by index), and the one being
   // activated. A catalog ref remembered per trigger name gives the editor the
   // payload schema and event list of the type it was added from.
@@ -784,9 +787,18 @@ function WorkflowBuilderInner({
 
       setEdges((eds) => [...eds, newEdge]);
 
+      // Wiring Run LLM Tool Calls after a Call LLM fills in which calls it
+      // runs — the one value that step nearly always takes.
+      const prefilled = toolCallsDefaultForEdge(sourceId, targetId, nodes, edges);
+      if (prefilled) {
+        setNodes((nds) =>
+          nds.map((node) => (node.id === targetId ? { ...node, data: { ...node.data, step: prefilled } } : node)),
+        );
+      }
+
       return newEdge;
     },
-    [nodes, edges, setEdges, takeSnapshot],
+    [nodes, edges, setEdges, setNodes, takeSnapshot],
   );
 
   const onConnect = useCallback(
@@ -1157,6 +1169,7 @@ function WorkflowBuilderInner({
   const handleAddTrigger = useCallback(() => {
     if (canEditDefinition) {
       setPaletteKind("trigger");
+      setPaletteFocus(undefined);
       setPaletteOpen(true);
       return;
     }
@@ -1565,8 +1578,20 @@ function WorkflowBuilderInner({
   const openStepPalette = useCallback(() => {
     if (isBuiltinWorkflow) return;
     setPaletteKind("action");
+    setPaletteFocus(undefined);
     setPaletteOpen(true);
   }, [isBuiltinWorkflow]);
+
+  /** The sidebar's integration shortcuts: one integration expanded, or the list. */
+  const openStepPaletteOnIntegration = useCallback(
+    (integrationId?: string) => {
+      if (isBuiltinWorkflow) return;
+      setPaletteKind("action");
+      setPaletteFocus(integrationId ? { integration: integrationId } : "integrations");
+      setPaletteOpen(true);
+    },
+    [isBuiltinWorkflow],
+  );
 
   /** Declare a trigger and open its editor. */
   const declareTrigger = useCallback(
@@ -1691,6 +1716,7 @@ function WorkflowBuilderInner({
             onAddStep={addStep}
             onAddSwitch={addSwitch}
             onOpenPalette={openStepPalette}
+            onOpenIntegration={openStepPaletteOnIntegration}
             paletteShortcutLabel={paletteShortcutLabel}
           />
         )}
@@ -2421,6 +2447,7 @@ function WorkflowBuilderInner({
         key={paletteKind}
         open={paletteOpen}
         initialKind={paletteKind}
+        initialFocus={paletteFocus}
         allowKindSwitch={canEditDefinition}
         onClose={() => setPaletteOpen(false)}
         onChooseBuiltin={choosePaletteBuiltin}

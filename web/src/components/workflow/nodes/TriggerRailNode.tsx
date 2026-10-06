@@ -31,7 +31,7 @@ import { useTriggers } from '../../../hooks/trigger-queries'
 import { cn } from '../../../lib/utils'
 import { useTriggerRailContext } from '../TriggerRailContext'
 import { NodeStatusWrapper, buildHandleClassName } from './NodeStatusWrapper'
-import { IntegrationIcon } from '../palette/IntegrationIcon'
+import { IntegrationLogo } from '../../icons/IntegrationLogo'
 import { NODE_DIMENSIONS } from '../../../lib/workflow-node-dimensions'
 
 interface TriggerRailNodeProps {
@@ -68,7 +68,7 @@ const STATE_TEXT: Record<DeclaredRailLine['state'], string> = {
 
 function DeclaredIcon({ line }: { line: DeclaredRailLine }) {
   const kind = sourceCase(line.declared)
-  if (kind === 'integration') return <IntegrationIcon hint={integrationOf(line.declared)?.integration} size="sm" className="h-4 w-4 border-0 bg-transparent" />
+  if (kind === 'integration') return <IntegrationLogo icon={integrationOf(line.declared)?.integration} size="sm" />
   const Icon = kind === 'schedule' ? CalendarClock : kind === 'webhook' ? Webhook : kind === 'workflowEvent' ? Workflow : Zap
   return <Icon className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />
 }

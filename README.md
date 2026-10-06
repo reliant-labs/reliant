@@ -68,7 +68,7 @@ Full documentation at [docs.reliantlabs.io](https://docs.reliantlabs.io)
 When you send a message, Reliant runs a workflow. The default `agent` workflow:
 
 ```
-Your Message → Call LLM → Execute Tools → Loop while working → Response
+Your Message → Call LLM → Run LLM Tool Calls → Loop while working → Response
 ```
 
 The agent reads your codebase, plans changes, implements them, and verifies they work—all within this loop. A single message like "add input validation to the signup form" might trigger dozens of iterations as the agent explores, plans, and implements.

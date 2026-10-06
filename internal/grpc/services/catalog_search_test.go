@@ -217,6 +217,83 @@ func TestSearchCatalog_RejectsBadRequests(t *testing.T) {
 	}
 }
 
+// ListCatalogIntegrations is the browse a picker opens on: one row per
+// integration, the caller's usable ones first, with what a row needs to draw
+// (name, icon, how many entries) and nothing heavier.
+func TestListCatalogIntegrations_ListsIntegrationsConnectedFirst(t *testing.T) {
+	svc := newCatalogSearchTestService(t)
+	listing := func(user string, req *reliantv1.ListCatalogIntegrationsRequest) *reliantv1.ListCatalogIntegrationsResponse {
+		t.Helper()
+		resp, err := svc.ListCatalogIntegrations(asUser(user), connect.NewRequest(req))
+		require.NoError(t, err)
+		return resp.Msg
+	}
+	ids := func(msg *reliantv1.ListCatalogIntegrationsResponse) []string {
+		out := []string{}
+		for _, l := range msg.GetIntegrations() {
+			out = append(out, l.GetIntegration().GetId())
+		}
+		return out
+	}
+
+	// bob has no Acme connection, so only Web (no credential) is usable.
+	bob := listing("bob", &reliantv1.ListCatalogIntegrationsRequest{})
+	assert.Equal(t, []string{"web", "acme"}, ids(bob))
+	assert.EqualValues(t, 2, bob.GetTotalSize())
+	acme := bob.GetIntegrations()[1]
+	assert.Equal(t, "Acme CRM", acme.GetIntegration().GetDisplayName())
+	assert.Equal(t, "acme", acme.GetIntegration().GetIcon())
+	assert.Equal(t, "crm", acme.GetIntegration().GetCategory())
+	assert.EqualValues(t, 3, acme.GetEntryCount())
+	assert.False(t, acme.GetConnected())
+
+	// alice has one, so Acme sorts with the usable integrations.
+	alice := listing("alice", &reliantv1.ListCatalogIntegrationsRequest{})
+	assert.Equal(t, []string{"acme", "web"}, ids(alice))
+	assert.True(t, alice.GetIntegrations()[0].GetConnected())
+
+	core := listing("bob", &reliantv1.ListCatalogIntegrationsRequest{Category: "core"})
+	assert.Equal(t, []string{"web"}, ids(core))
+	assert.ElementsMatch(t, []string{"core", "crm"}, func() []string {
+		var out []string
+		for _, f := range core.GetCategoryFacets() {
+			out = append(out, f.GetValue())
+		}
+		return out
+	}(), "facets ignore the category filter")
+
+	triggers := listing("bob", &reliantv1.ListCatalogIntegrationsRequest{
+		Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_TRIGGER},
+	})
+	assert.Empty(t, triggers.GetIntegrations(), "neither fixture integration declares a trigger type")
+
+	p1 := listing("bob", &reliantv1.ListCatalogIntegrationsRequest{PageSize: 1})
+	require.NotEmpty(t, p1.GetNextPageToken())
+	p2 := listing("bob", &reliantv1.ListCatalogIntegrationsRequest{PageSize: 1, PageToken: p1.GetNextPageToken()})
+	assert.Equal(t, []string{"acme"}, ids(p2))
+	assert.Empty(t, p2.GetNextPageToken())
+}
+
+func TestListCatalogIntegrations_RejectsBadRequests(t *testing.T) {
+	svc := newCatalogSearchTestService(t)
+	cases := map[string]*reliantv1.ListCatalogIntegrationsRequest{
+		"bad page token":   {PageToken: "not-a-token"},
+		"negative size":    {PageSize: -1},
+		"unspecified kind": {Kinds: []reliantv1.CatalogEntryKind{reliantv1.CatalogEntryKind_CATALOG_ENTRY_KIND_UNSPECIFIED}},
+	}
+	for name, req := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := svc.ListCatalogIntegrations(asUser("bob"), connect.NewRequest(req))
+			require.Error(t, err)
+			assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+		})
+	}
+	_, err := svc.ListCatalogIntegrations(context.Background(), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
+	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
+	_, err = NewCatalogService(nil).ListCatalogIntegrations(asUser("bob"), connect.NewRequest(&reliantv1.ListCatalogIntegrationsRequest{}))
+	assert.Equal(t, connect.CodeUnimplemented, connect.CodeOf(err))
+}
+
 func TestSearchCatalog_RequiresAUser(t *testing.T) {
 	svc := newCatalogSearchTestService(t)
 	_, err := svc.SearchCatalog(context.Background(), connect.NewRequest(&reliantv1.SearchCatalogRequest{}))

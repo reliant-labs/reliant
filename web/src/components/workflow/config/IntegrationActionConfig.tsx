@@ -21,7 +21,7 @@ import type { Step } from "../../../types/workflow";
 import { ProtoFieldRenderer } from "../ProtoFieldRenderer";
 import { ConnectionPicker } from "../connections/ConnectionPicker";
 import { ConnectIntegrationDialog } from "../connections/ConnectIntegrationDialog";
-import { IntegrationIcon } from "../palette/IntegrationIcon";
+import { IntegrationLogoTile } from "../../icons/IntegrationLogo";
 import { useCatalogEntry } from "../../../hooks/connection-queries";
 import {
   getActionConnection,
@@ -112,7 +112,7 @@ export function IntegrationActionConfig({ step, onUpdate, isReadOnly = false }: 
     <>
       <Section>
         <div className="flex items-start gap-3">
-          <IntegrationIcon hint={integration.icon || refIntegration(uses)} />
+          <IntegrationLogoTile icon={integration.icon || refIntegration(uses)} />
           <div className="min-w-0 flex-1 space-y-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-sm font-semibold text-foreground">{entry.summary.displayName}</span>

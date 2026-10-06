@@ -87,6 +87,17 @@ func (s *Service) Search(ctx context.Context, userID string, q Query) (*Result, 
 	return s.index.Search(q)
 }
 
+// ListIntegrations runs q for userID, filling in which integrations the user
+// can use.
+func (s *Service) ListIntegrations(ctx context.Context, userID string, q IntegrationQuery) (*IntegrationResult, error) {
+	usable, err := s.Usable(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	q.Usable = usable
+	return s.index.ListIntegrations(q)
+}
+
 // Get returns one entry, and whether the user can use it now.
 func (s *Service) Get(ctx context.Context, userID, ref string) (*Entry, bool, error) {
 	e, ok := s.index.Get(ref)

@@ -585,8 +585,8 @@ message ToolResultMsg {
 message ExecuteToolsArgs {
   option (node_meta) = {
     node_type: "execute_tools"
-    display_name: "Execute Tools"
-    description: "Execute tool calls from an LLM response"
+    display_name: "Run LLM Tool Calls"
+    description: "Run the tool calls an upstream Call LLM step returned"
     is_structural: false
     category: "agentic"
     icon: "Wrench"
@@ -635,11 +635,11 @@ message ExecuteToolsArgs {
 message InvokeToolArgs {
   option (node_meta) = {
     node_type: "invoke_tool"
-    display_name: "Invoke Tool"
-    description: "Invoke a single tool directly from the graph"
+    display_name: "Run Tool"
+    description: "Run one tool you pick, with parameters you set; no LLM involved"
     is_structural: false
     category: "agentic"
-    icon: "Wrench"
+    icon: "Hammer"
   };
 
   // Tool names which tool to invoke, e.g. "generate_image". It must be a tool
