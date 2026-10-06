@@ -201,13 +201,74 @@ function liveEnvironments(scenario: Scenario) {
       phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
       drift: { state: "in_sync", observedAt: ts("2026-10-04T21:22:10Z") },
     },
+    {
+      // A HOSTED env with forge's long timestamp-plus-sha versions — the
+      // shape of a real tenant's prod, whose release rows wrapped and overlapped.
+      environment: {
+        id: "env-hosted",
+        name: "hosted",
+        project: "control-plane",
+        kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT",
+        currentPromotionId: "promo-h2",
+      },
+      currentPromotion: {
+        id: "promo-h2",
+        releaseVersion: HOSTED_PROMOTIONS[0]!.releaseVersion,
+        promotedByActor: "sean",
+        createdAt: HOSTED_PROMOTIONS[0]!.createdAt,
+      },
+      phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
+      drift: { state: "in_sync", observedAt: ts("2026-10-05T20:31:02Z") },
+    },
   ];
 }
 
+const HOSTED_PROMOTIONS = [
+  {
+    id: "promo-h2",
+    releaseVersion: "20261005.202711-1f9bf6721d7d",
+    kind: "promote",
+    promotedByActor: "sean",
+    createdAt: ts("2026-10-05T20:27:11Z"),
+    resolvedArtifacts: {
+      "us-central1-docker.pkg.dev/example/shop/shop-web": "sha256:1f9bf6721d7d0123456789abcdef",
+      "us-central1-docker.pkg.dev/example/shop/shop-api": "sha256:9c0ffee1234567890abcdef0123",
+    },
+  },
+  {
+    id: "promo-h1",
+    releaseVersion: "20261005.011748-0a1b2c3d4e5f",
+    kind: "promote",
+    promotedByActor: "ci",
+    createdAt: ts("2026-10-04T21:17:48Z"),
+    resolvedArtifacts: { "us-central1-docker.pkg.dev/example/shop/shop-web": "sha256:0a1b2c3d4e5f0123456789" },
+  },
+];
+
+const HOSTED_CONVERGENCES = [
+  { id: "conv-h3", state: "converged", reason: "ReconciliationSucceeded", cluster: "hosted-us-central1", observedAt: ts("2026-10-05T20:31:02Z") },
+  { id: "conv-h2", state: "failed", reason: "HealthCheckFailed", message: "deployment shop-web not ready", cluster: "hosted-us-central1", observedAt: ts("2026-10-05T20:28:40Z") },
+];
+
+const DOMAINS = [
+  {
+    id: "dom-1",
+    hostname: "example.com",
+    state: "DEPLOY_CUSTOM_DOMAIN_STATE_LIVE",
+    binding: { id: "bind-1", domainId: "dom-1", environmentId: "env-hosted", target: "shop-web" },
+  },
+  {
+    id: "dom-2",
+    hostname: "www.example.com",
+    state: "DEPLOY_CUSTOM_DOMAIN_STATE_VERIFYING",
+    binding: { id: "bind-2", domainId: "dom-2", environmentId: "env-hosted", redirectTo: "example.com" },
+  },
+];
+
 const PROMOTIONS = [
-  { id: "promo-15", releaseVersion: "v1.7.15", kind: "promote", promotedByActor: "sean", createdAt: ts("2026-10-04T21:18:54Z"), artifacts: [{ name: "control-plane", digest: "sha256:47d0d1525ccc4673aa" }] },
-  { id: "promo-14", releaseVersion: "v1.7.14", kind: "promote", promotedByActor: "ci", createdAt: ts("2026-10-03T16:02:11Z"), artifacts: [{ name: "control-plane", digest: "sha256:8a54465b8d718276bb" }] },
-  { id: "promo-13", releaseVersion: "v1.7.13", kind: "promote", promotedByActor: "ci", createdAt: ts("2026-10-02T11:40:03Z"), artifacts: [] },
+  { id: "promo-15", releaseVersion: "v1.7.15", kind: "promote", promotedByActor: "sean", createdAt: ts("2026-10-04T21:18:54Z"), resolvedArtifacts: { "control-plane": "sha256:47d0d1525ccc4673aa" } },
+  { id: "promo-14", releaseVersion: "v1.7.14", kind: "promote", promotedByActor: "ci", createdAt: ts("2026-10-03T16:02:11Z"), resolvedArtifacts: { "control-plane": "sha256:8a54465b8d718276bb" } },
+  { id: "promo-13", releaseVersion: "v1.7.13", kind: "promote", promotedByActor: "ci", createdAt: ts("2026-10-02T11:40:03Z") },
 ];
 
 const CONVERGENCES = [
@@ -262,12 +323,31 @@ function answer(scenario: Scenario, path: string, body: Record<string, unknown>)
       case "ListEnvironments":
         return { status: 200, json: { environments: liveEnvironments(scenario).map((env) => env.environment) } };
       case "ListPromotions":
-        return { status: 200, json: { promotions: body.environmentId === "env-prod" ? PROMOTIONS : [] } };
+        return {
+          status: 200,
+          json: {
+            promotions:
+              body.environmentId === "env-prod" ? PROMOTIONS : body.environmentId === "env-hosted" ? HOSTED_PROMOTIONS : [],
+          },
+        };
       case "ListConvergences":
-        return { status: 200, json: { convergences: body.environmentId === "env-prod" ? CONVERGENCES : [] } };
+        return {
+          status: 200,
+          json: {
+            convergences:
+              body.environmentId === "env-prod"
+                ? CONVERGENCES
+                : body.environmentId === "env-hosted"
+                  ? HOSTED_CONVERGENCES
+                  : [],
+          },
+        };
       default:
         return { status: 200, json: {} };
     }
+  }
+  if (path.includes("DomainService/ListDomains")) {
+    return { status: 200, json: { domains: scenario === "unregistered" ? [] : DOMAINS } };
   }
   if (path.includes("SecretStoreService/ListSecrets")) {
     return {

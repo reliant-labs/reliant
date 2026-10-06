@@ -10,11 +10,18 @@
  *
  * The boundary still holds — per TAB:
  *
- *   overview  releases  secrets   the control plane only. Render with the
- *                                 daemon asleep, from any browser.
- *   running                       the dev stack `forge env up` runs on the
- *                                 daemon's machine. Local envs only.
- *   changes   checks              read the user's checkout through the daemon.
+ *   overview  releases  activity
+ *   secrets   domains               the control plane only. Render with the
+ *                                   daemon asleep, from any browser.
+ *   running                         the dev stack `forge env up` runs on the
+ *                                   daemon's machine. Local envs only.
+ *   changes   checks                read the user's checkout through the daemon.
+ *
+ * RELEASES AND ACTIVITY ARE TWO TABS ON PURPOSE. A release is a thing you
+ * pick and compare ("what's on prod, what was before it"); activity is what
+ * HAPPENED — promotions and what the platform observed after each. Interleaved
+ * in one list, the observations pushed the releases apart and a burst of them
+ * buried the history a reader opened the tab for.
  *
  * A LOCAL environment has no releases (it runs the working tree) and leads
  * with what is running. An environment the control plane has no record of
@@ -23,7 +30,15 @@
 
 import type { EnvLifecycle } from "@/services/forge/roster";
 
-export type EnvTab = "overview" | "running" | "releases" | "secrets" | "changes" | "checks";
+export type EnvTab =
+  | "overview"
+  | "running"
+  | "releases"
+  | "activity"
+  | "secrets"
+  | "domains"
+  | "changes"
+  | "checks";
 
 export interface EnvTabSpec {
   id: EnvTab;
@@ -36,7 +51,9 @@ const SPECS: Record<EnvTab, EnvTabSpec> = {
   overview: { id: "overview", label: "Overview", needsDaemon: false },
   running: { id: "running", label: "Running", needsDaemon: true },
   releases: { id: "releases", label: "Releases", needsDaemon: false },
+  activity: { id: "activity", label: "Activity", needsDaemon: false },
   secrets: { id: "secrets", label: "Secrets", needsDaemon: false },
+  domains: { id: "domains", label: "Domains", needsDaemon: false },
   changes: { id: "changes", label: "Changes", needsDaemon: true },
   checks: { id: "checks", label: "Checks", needsDaemon: true },
 };
@@ -45,13 +62,20 @@ export function tabsFor(lifecycle: EnvLifecycle): EnvTabSpec[] {
   const ids: EnvTab[] =
     lifecycle === "local"
       ? ["running", "secrets", "changes", "checks"]
-      : ["overview", "releases", "secrets", "changes", "checks"];
+      : ["overview", "releases", "activity", "secrets", "domains", "changes", "checks"];
   return ids.map((id) => SPECS[id]);
 }
 
 /** The tab a bare link to this environment opens. */
 export function defaultTab(lifecycle: EnvLifecycle): EnvTab {
   return lifecycle === "local" ? "running" : "overview";
+}
+
+/** Whether a tab reads the daemon — the page asks for nothing else until one is open. */
+export function tabNeedsDaemon(tab: string | undefined): boolean {
+  if (!tab) return false;
+  if (tab === "preview") return true;
+  return tab in SPECS ? SPECS[tab as EnvTab].needsDaemon : false;
 }
 
 /**

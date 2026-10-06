@@ -4,9 +4,13 @@ package handlers
 import (
 	"context"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db"
+	dbcore "github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -510,4 +514,174 @@ func TestCallLLMActivity_SpawnToolsOfferedOnlyWhenReachable(t *testing.T) {
 			}
 		})
 	}
+}
+
+// An agent that has actually spawned gets the tools for managing what it
+// spawned, without having to load them by hand. spawn_status used to be
+// deferred: an orchestrator had to load_tool it after every fan-out before it
+// could check on a single child (seen on every roofers-2026-10-05 run).
+//
+// "Has spawned" is read from durable state — a spawn tool_calls row that
+// started a child — not from an in-process flag, so it survives a worker
+// restart and holds for an agent whose spawn config has since gone away.
+// Before the first spawn, spawn_status stays off the request: it costs schema
+// on every turn of an agent that may never fan out.
+func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *testing.T) {
+	tests := []struct {
+		name          string
+		spawnEntries  []string
+		seedSpawn     bool
+		seedInherited bool
+		want          []string
+		wantAbsent    []string
+	}{
+		{
+			name:         "orchestrator before its first spawn is not handed spawn_status yet",
+			spawnEntries: []string{"spawn:builtin://agent(general)"},
+			wantAbsent:   []string{tools.ToolSpawnStatus},
+		},
+		{
+			name:         "orchestrator that has spawned gets status, send and stop",
+			spawnEntries: []string{"spawn:builtin://agent(general)"},
+			seedSpawn:    true,
+			want:         []string{tools.ToolSpawnStatus, tools.ToolSpawnSend, tools.ToolSpawnStop},
+		},
+		{
+			// The spawn grant can disappear between turns (a workflow or
+			// preset change); the children it already started have not.
+			name:      "agent with children but no spawn config still manages them",
+			seedSpawn: true,
+			want:      []string{tools.ToolSpawnStatus, tools.ToolSpawnSend, tools.ToolSpawnStop},
+		},
+		{
+			// A branch may look at the sub-agents it inherited, never
+			// control them: the original conversation still owns them.
+			name:          "branch that inherited sub-agents gets spawn_status only",
+			seedInherited: true,
+			want:          []string{tools.ToolSpawnStatus},
+			wantAbsent:    []string{tools.ToolSpawnSend, tools.ToolSpawnStop},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			h := NewIdempotencyTestHelper(t)
+			defer h.Cleanup()
+
+			ctx := context.Background()
+			repo := h.Repo()
+			project := h.CreateTestProject(ctx, "project-spawned", "user-spawned")
+			var chat *db.Chat
+			if tc.seedInherited {
+				// The original spawns, then is branched after that spawn.
+				source := h.CreateTestChat(ctx, "chat-source", project.ID, project.UserID)
+				seedSpawnedChild(t, repo, source.ID, source.ID)
+				h.CreateTestUserMessage(ctx, source.ID, source.ID)
+				chat = branchAtLatestMessage(t, repo, source, "chat-branch")
+			} else {
+				chat = h.CreateTestChat(ctx, "chat-spawned", project.ID, project.UserID)
+			}
+			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
+
+			if tc.seedSpawn {
+				seedSpawnedChild(t, repo, chat.ID, chat.ID)
+			}
+
+			mockDriver := &toolCaptureMockDriver{}
+			driverResolver := func(ctx context.Context, userID string, prefs models.Preferences, opts ...llm.DriverOption) (llm.Driver, error) {
+				return mockDriver, nil
+			}
+			activityInstance := NewCallLLMActivity(
+				h.Repo(),
+				nil,
+				tools.NewToolsFactory(&tools.ToolsOptions{Repo: h.Repo()}),
+				&staticConfigProvider{},
+				driverResolver,
+				nil,
+			)
+
+			toolsConfig := &reliantv1.ToolsConfig{
+				PreloadedTools: celStringListLiteral([]string{"view"}),
+			}
+			if len(tc.spawnEntries) > 0 {
+				toolsConfig.Spawn = celStringListLiteral(tc.spawnEntries)
+			}
+			input := ActivityInput{
+				Runtime: RuntimeContext{ChatID: chat.ID, Thread: chat.ID},
+				Node: &reliantv1.Node{
+					Type: "call_llm",
+					Args: &reliantv1.Node_CallLlm{
+						CallLlm: &reliantv1.CallLLMArgs{
+							Model: &reliantv1.CelModelSelector{
+								Value: &reliantv1.CelModelSelector_Literal{
+									Literal: &reliantv1.ModelSelector{Id: "mock-model"},
+								},
+							},
+							ToolsConfig: toolsConfig,
+						},
+					},
+				},
+			}
+
+			var output CallLLMOutput
+			require.NoError(t, h.ExecuteActivity(activityInstance.Execute, input, &output))
+			for _, name := range tc.want {
+				assert.Contains(t, mockDriver.capturedTools, name)
+			}
+			for _, name := range tc.wantAbsent {
+				assert.NotContains(t, mockDriver.capturedTools, name)
+			}
+		})
+	}
+}
+
+// seedSpawnedChild records that parentThread spawned a sub-agent that started:
+// the child's thread and workflow, and the backgrounded spawn tool_calls row
+// that names it — the durable state spawnHistory reads.
+func seedSpawnedChild(t *testing.T, repo db.Repository, chatID, parentThread string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now()
+	childThread := "child-" + uuid.New().String()
+	_, err := repo.CreateThread(ctx, &db.Thread{
+		ID: childThread, ChatID: chatID, ParentThreadID: &parentThread,
+		Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusRunning, CreatedAt: now,
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
+		ID: childThread, ChatID: chatID, WorkflowName: "builtin://agent",
+		Thread: childThread, Status: db.Active(), CreatedAt: now,
+	}))
+	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
+		ID: "toolu_" + uuid.New().String(), ChatID: chatID, ThreadID: &parentThread,
+		ToolName: "spawn", Status: dbcore.ToolCallStatusBackgrounded, ChildWorkflowID: &childThread,
+		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
+	}))
+}
+
+// branchAtLatestMessage branches source the way BranchChat does — a new chat
+// whose root thread forks source's root at its latest message — and returns
+// the branch. Spawns source issued before that message are the branch's
+// inherited sub-agents.
+func branchAtLatestMessage(t *testing.T, repo db.Repository, source *db.Chat, branchID string) *db.Chat {
+	t.Helper()
+	ctx := context.Background()
+	forkPoint, err := repo.GetLatestMessageInThread(ctx, source.ID)
+	require.NoError(t, err)
+
+	branch := &db.Chat{ID: branchID, ProjectID: source.ProjectID, UserID: source.UserID}
+	require.NoError(t, repo.CreateChat(ctx, branch))
+	sourceThread := source.ID
+	_, err = repo.CreateThread(ctx, &db.Thread{
+		ID: branch.ID, ChatID: branch.ID, ParentThreadID: &sourceThread,
+		ForkAtMessageID: &forkPoint.ID, Origin: db.ThreadOriginFork,
+	})
+	require.NoError(t, err)
+	parentCW := forkPoint.ContextWindowID
+	_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{
+		ID: branch.ID + ":" + branch.ID + ":0", ThreadID: branch.ID,
+		ParentContextWindowID: &parentCW, ForkAtMessageID: &forkPoint.ID,
+	})
+	require.NoError(t, err)
+	return branch
 }

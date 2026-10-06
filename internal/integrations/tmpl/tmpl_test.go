@@ -89,6 +89,41 @@ func TestEvalExpr(t *testing.T) {
 	}
 }
 
+// GitHub's contents API sends a file base64-encoded, wrapped at 60 columns.
+// base64.decode undoes it, newlines and all, and .text() yields the string
+// only when the bytes are text: an image is an absent value, never an error
+// that would fail the whole output.
+func TestBase64DecodeAndText(t *testing.T) {
+	expr := `base64.decode(response.content).text().orValue(null)`
+	for _, tc := range []struct {
+		name    string
+		content string
+		want    any
+	}{
+		{"wrapped text", "cGFja2FnZSBt\nYWluCg==\n", "package main\n"},
+		{"unpadded", "aGk", "hi"},
+		{"empty file", "", ""},
+		{"utf-8", "aMOpbGxv", "héllo"},
+		{"invalid utf-8", "/w==", nil},
+		{"nul byte", "YQBi", nil},
+	} {
+		got, err := EvalExpr(expr, map[string]any{"response": map[string]any{"content": tc.content}})
+		if err != nil {
+			t.Fatalf("%s: %v", tc.name, err)
+		}
+		if !reflect.DeepEqual(got, tc.want) {
+			t.Errorf("%s: got %#v want %#v", tc.name, got, tc.want)
+		}
+	}
+	if _, err := EvalExpr(`base64.decode("not base64!")`, nil); err == nil {
+		t.Error("malformed base64 is an error")
+	}
+	got, err := EvalExpr(`base64.encode(b"hi")`, nil)
+	if err != nil || got != "aGk=" {
+		t.Errorf("base64.encode: got %#v, %v", got, err)
+	}
+}
+
 func TestHasExpr(t *testing.T) {
 	if !HasExpr("a{{b}}") || HasExpr("plain") {
 		t.Fatal("HasExpr wrong")

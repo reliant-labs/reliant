@@ -65,6 +65,8 @@ type noMachineFixture struct {
 	driver  *toolCaptureMockDriver
 	mcp     *countingMCPRuntime
 	callLLM *CallLLMActivity
+	// caps is the capability set the last offeredTools turn recorded.
+	caps *tools.Capabilities
 }
 
 func setupNoMachineFixture(t *testing.T, noMachine bool) *noMachineFixture {
@@ -128,6 +130,7 @@ func (f *noMachineFixture) offeredTools(t *testing.T, preloaded, loadable []stri
 			ToolsConfig: cfg,
 		}}},
 	}, &output))
+	f.caps = tools.CapabilitiesFromProto(output.GetCapabilities())
 	return append([]string(nil), f.driver.capturedTools...)
 }
 
@@ -158,43 +161,155 @@ func TestCallLLM_NoMachineRunIsOfferedOnlyToolsThatRunWithoutAMachine(t *testing
 	assert.Zero(t, f.mcp.calls.Load(), "a no-machine run must not ask any MCP server for its tools")
 
 	// load_tool's reach is narrowed the same way, so it cannot hand the model
-	// a machine tool on the next turn either.
-	scope := tools.Scope(f.chat.ID, f.chat.ID)
-	assert.False(t, tools.GetLoadedToolsStore().CanLoadTool(scope, tools.ShellToolName))
-	assert.False(t, tools.GetLoadedToolsStore().CanLoadTool(scope, tools.ToolView))
-	assert.True(t, tools.GetLoadedToolsStore().CanLoadTool(scope, tools.ToolGenerateImage))
+	// a machine tool on the next turn either — and the recorded set is exactly
+	// what the model was handed.
+	require.NotNil(t, f.caps, "call_llm records the turn's capability set")
+	assert.ElementsMatch(t, offered, f.caps.Offered)
+	assert.True(t, f.caps.NoMachine)
+	assert.False(t, f.caps.CanLoad(tools.ShellToolName))
+	assert.False(t, f.caps.CanLoad(tools.ToolView))
+	assert.True(t, f.caps.CanLoad(tools.ToolGenerateImage))
+}
+
+// request_machine (research/NO_MACHINE_CHATS.md §3) is how a no-machine run
+// asks for the user's computer. It is handed to a no-machine run that was given
+// any tools, and never reaches a run on a machine — not by naming it, not by a
+// glob, not through load_tool's reach or its advertised list.
+func TestCallLLM_RequestMachineIsOfferedOnlyToARunWithNoMachine(t *testing.T) {
+	f := setupNoMachineFixture(t, true)
+	assert.Contains(t, f.offeredTools(t, []string{"tag:coding:default"}, nil), tools.ToolRequestMachine)
+	// A node whose only tools need a machine is exactly the one that may need
+	// to ask for one.
+	assert.Equal(t, []string{tools.ToolRequestMachine}, f.offeredTools(t, []string{tools.ShellToolName, tools.ToolEdit}, nil))
+
+	ordinary := setupNoMachineFixture(t, false)
+	onMachine := ordinary.offeredTools(t,
+		[]string{"tag:coding:default", tools.ToolRequestMachine, "request_*"}, []string{"*"})
+	assert.Contains(t, onMachine, tools.ShellToolName, "control: the machine run is offered its tools")
+	assert.NotContains(t, onMachine, tools.ToolRequestMachine, "a run on a machine is never offered request_machine")
+
+	require.NotNil(t, ordinary.caps)
+	assert.NotContains(t, ordinary.caps.Deferred(), tools.ToolRequestMachine,
+		"load_tool must not advertise it on a machine")
+	assert.False(t, ordinary.caps.CanLoad(tools.ToolRequestMachine), "nor load it")
+}
+
+// The no-machine note and the GitHub repository note agree on what to do when
+// the task needs the user's computer: both point at request_machine when the
+// turn was offered it, and neither names it when it was not.
+func TestNoMachineNotes_NameRequestMachineOnlyWhenOffered(t *testing.T) {
+	repos := []githubRepo{{Owner: "acme", Name: "widgets"}}
+	offered := &tools.Capabilities{Permission: tools.PermissionMutating, NoMachine: true,
+		Offered: []string{tools.ToolRequestMachine}}
+	notOffered := &tools.Capabilities{Permission: tools.PermissionMutating, NoMachine: true}
+
+	with := noMachineNotes(offered, repos)
+	require.Len(t, with, 2)
+	assert.Equal(t, noMachineSystemNote, with[0])
+	assert.Contains(t, with[1], "call request_machine")
+
+	without := noMachineNotes(notOffered, repos)
+	require.Len(t, without, 2)
+	assert.Equal(t, noMachineSystemNoteWithoutRequest, without[0])
+	for _, note := range without {
+		assert.NotContains(t, note, "request_machine", "never name a tool the turn does not have")
+	}
+
+	assert.Len(t, noMachineNotes(offered, nil), 1, "no GitHub remote, no repository note")
+}
+
+// End to end: a no-machine turn in a project on GitHub, with GitHub not
+// connected, is told both that it has no machine and that the code cannot be
+// read from here, and both notes send it to request_machine.
+func TestCallLLM_NoMachineNotesComposeAroundRequestMachine(t *testing.T) {
+	f := setupIntegrationFixture(t, true, &ownerConnections{usable: map[string]bool{}})
+	f.setProjectRemote(t, "https://github.com/acme/widgets.git")
+
+	offered := f.offeredTools(t, []string{"tag:web"}, []string{"*"})
+	require.Contains(t, offered, tools.ToolRequestMachine)
+
+	prompt := f.systemPrompt()
+	assert.Contains(t, prompt, noMachineSystemNote)
+	assert.Contains(t, prompt, "No GitHub tools are available")
+	assert.Contains(t, prompt, "if the task needs it, call request_machine")
+	assert.NotContains(t, prompt, "if the task needs it, say so")
+}
+
+// A node given no tools at all (a title or a summary call) is not handed one.
+func TestCallLLM_NoMachineNodeWithNoToolsIsHandedNone(t *testing.T) {
+	f := setupNoMachineFixture(t, true)
+	assert.Empty(t, f.offeredTools(t, []string{}, nil))
+}
+
+// "Connect a machine" (SetChatDaemon → UpdateChatActiveDaemon) takes effect on
+// the running workflow's next turn: call_llm re-reads the chat row every turn,
+// so the same chat is offered the machine tools and no longer request_machine.
+func TestCallLLM_ConnectingAMachineGivesTheNextTurnTheFullToolSet(t *testing.T) {
+	f := setupNoMachineFixture(t, true)
+	preloaded := []string{"tag:coding:default"}
+
+	before := f.offeredTools(t, preloaded, nil)
+	assert.NotContains(t, before, tools.ShellToolName)
+	assert.Contains(t, before, tools.ToolRequestMachine)
+
+	daemonID := "daemon-connected"
+	require.NoError(t, f.h.Repo().UpdateChatActiveDaemon(context.Background(), f.chat.ID, &daemonID))
+
+	after := f.offeredTools(t, preloaded, nil)
+	assert.Contains(t, after, tools.ShellToolName, "the next turn has the machine's tools")
+	assert.Contains(t, after, tools.ToolView)
+	assert.NotContains(t, after, tools.ToolRequestMachine)
 }
 
 // A machine tool named anyway (from history, or a hallucination) is refused
 // before it reaches the executor, and the refusal is not a daemon-offline
 // signal: the breaker that pauses a run after three "no daemon connected"
 // results must never see one from a run that has no machine by design.
+//
+// Both with the turn's recorded capability set (which never offered them) and
+// without one (a batch from before the set existed, where the chat row alone
+// refuses them).
 func TestExecuteTools_NoMachineRunRefusesMachineToolsWithoutTrippingTheBreaker(t *testing.T) {
 	f := setupNoMachineFixture(t, true)
-	executor := newMockToolExecutor()
-	activity := NewExecuteToolsActivity(f.h.Repo(), executor)
+	f.offeredTools(t, []string{"tag:coding:default"}, []string{"*"})
+	require.NotNil(t, f.caps)
 
-	var output ExecuteToolsOutput
-	require.NoError(t, f.h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
-		ChatID: f.chat.ID,
-		Thread: f.chat.ID,
-		ToolCalls: []message.ToolCall{
-			{ID: "call-shell", Name: tools.ShellToolName, Input: `{"command":"ls"}`},
-			{ID: "call-view", Name: tools.ToolView, Input: `{"file_path":"README.md"}`},
-		},
-	}, &output))
+	for _, tc := range []struct {
+		name string
+		caps *reliantv1.ToolCapabilities
+	}{
+		{"recorded set", f.caps.Proto()},
+		{"no recorded set", nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			executor := newMockToolExecutor()
+			activity := NewExecuteToolsActivity(f.h.Repo(), executor)
+			shellID, viewID := "call-shell-"+uuid.NewString(), "call-view-"+uuid.NewString()
 
-	results := output.GetToolResults()
-	require.Len(t, results, 2)
-	for _, r := range results {
-		assert.True(t, r.GetIsError(), "%s must be refused", r.GetName())
-		assert.Equal(t, nomachine.Refusal(r.GetName()), r.GetContent())
-		assert.False(t, daemonoffline.IsToolResultContent(r.GetContent()),
-			"the refusal must not read as a daemon-offline result")
-		assert.False(t, strings.Contains(r.GetContent(), daemonoffline.ErrorSubstring))
+			var output ExecuteToolsOutput
+			require.NoError(t, f.h.ExecuteActivity(activity.Execute, ExecuteToolsInput{
+				ChatID:       f.chat.ID,
+				Thread:       f.chat.ID,
+				Capabilities: tc.caps,
+				ToolCalls: []message.ToolCall{
+					{ID: shellID, Name: tools.ShellToolName, Input: `{"command":"ls"}`},
+					{ID: viewID, Name: tools.ToolView, Input: `{"file_path":"README.md"}`},
+				},
+			}, &output))
+
+			results := output.GetToolResults()
+			require.Len(t, results, 2)
+			for _, r := range results {
+				assert.True(t, r.GetIsError(), "%s must be refused", r.GetName())
+				assert.Equal(t, nomachine.Refusal(r.GetName()), r.GetContent())
+				assert.False(t, daemonoffline.IsToolResultContent(r.GetContent()),
+					"the refusal must not read as a daemon-offline result")
+				assert.False(t, strings.Contains(r.GetContent(), daemonoffline.ErrorSubstring))
+			}
+			assert.Zero(t, executor.GetExecutionCount(shellID), "a refused tool must never reach the executor")
+			assert.Zero(t, executor.GetExecutionCount(viewID))
+		})
 	}
-	assert.Zero(t, executor.GetExecutionCount("call-shell"), "a refused tool must never reach the executor")
-	assert.Zero(t, executor.GetExecutionCount("call-view"))
 }
 
 // A server tool in a no-machine run executes, and the executor sees a context

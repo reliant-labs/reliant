@@ -1307,7 +1307,7 @@ func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdat
 			oom_kill_count = GREATEST(oom_kill_count, ?),
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-		  AND (last_status_changed_at IS NULL OR last_status_changed_at < ?)
+		  AND (lifecycle_phase IS NULL OR last_status_changed_at IS NULL OR last_status_changed_at < ?)
 	`
 	query = r.bindQuery(query)
 
@@ -3735,6 +3735,13 @@ func (r *Repo) UpdateTriggerEventOutcome(ctx context.Context, id string, outcome
 		return fmt.Errorf("trigger event ID cannot be empty")
 	}
 	return r.triggers.UpdateTriggerEventOutcome(ctx, id, outcome, detail, chatID)
+}
+
+func (r *Repo) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {
+	if chatID == "" {
+		return fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.triggers.SetLaunchEventRunStatus(ctx, chatID, status)
 }
 
 func (r *Repo) UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error {

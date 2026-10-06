@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"sync"
@@ -19,15 +20,120 @@ import (
 // a workflow can grant them as a group (`tag:integration`).
 const TagIntegration ToolTag = "integration"
 
-// ConnectionAvailable reports whether an integration's tools may be offered.
-// One that needs no credential (no auth, or auth_optional) always may. One
-// that requires a connection is withheld until the registry can ask whether
-// the RUN OWNER has one (or a delegated authority): the tool list is built
-// without an owner today, and a tool that is present-and-401ing is worse than
-// absent (INTEGRATIONS.md §3.2). Its action node works regardless.
-var ConnectionAvailable = func(m *reliantv1.IntegrationManifest) bool {
+// needsConnection reports whether an integration's calls require a
+// credential: it declares auth and does not make it optional.
+func needsConnection(m *reliantv1.IntegrationManifest) bool {
 	conn := m.GetConnection()
-	return len(conn.GetAuth()) == 0 || conn.GetAuthOptional()
+	return len(conn.GetAuth()) > 0 && !conn.GetAuthOptional()
+}
+
+var (
+	gatedToolsOnce sync.Once
+	gatedTools     map[string]*reliantv1.IntegrationManifest
+)
+
+// connectionGated maps every integration tool whose integration needs a
+// connection to that integration's manifest.
+func connectionGated() map[string]*reliantv1.IntegrationManifest {
+	gatedToolsOnce.Do(func() {
+		gatedTools = map[string]*reliantv1.IntegrationManifest{}
+		cat, err := catalog.Builtin()
+		if err != nil {
+			return
+		}
+		for _, m := range cat.Manifests() {
+			if !needsConnection(m) {
+				continue
+			}
+			for _, a := range m.GetActions() {
+				if a.GetTool().GetExpose() {
+					gatedTools[manifest.ToolName(m, a)] = m
+				}
+			}
+		}
+	})
+	return gatedTools
+}
+
+// ConnectionGatedIntegration reports the integration a tool authenticates
+// through when that integration needs a connection, so the tool may be offered
+// only to a run whose owner has one (UsableIntegrations). Every other tool,
+// including an integration's that needs no credential (http__request), is not
+// gated.
+//
+// The registry holds every exposed action regardless: availability is a
+// property of the run's owner, not of the process, so it is decided per
+// request by call_llm rather than baked into a registry built owner-blind
+// (INTEGRATIONS.md §3.2: a tool that is present-and-401ing is worse than
+// absent).
+func ConnectionGatedIntegration(name string) (integrationID string, gated bool) {
+	m, ok := connectionGated()[name]
+	if !ok {
+		return "", false
+	}
+	return m.GetId(), true
+}
+
+// connectionAvailability is the half of a credential source that can say,
+// without resolving a credential for any call, which integrations a run's
+// owner could authenticate now. Declared here, where it is consumed:
+// connauth.Source implements it by walking the same resolution order its
+// Credential uses (the owner's default saved connection, else a delegated
+// authority), so a tool offered because of it is a tool whose call will find
+// a credential.
+type connectionAvailability interface {
+	UsableIntegrations(ctx context.Context, runID string, integrations map[string]*reliantv1.ConnectionSpec) (map[string]bool, error)
+}
+
+// UsableIntegrations reports which of the named integrations the run's owner
+// can authenticate now, asked of the credential source this factory's
+// integration tools execute through. The run is identified exactly as an
+// integration tool identifies it at call time (integrationRunID), so the
+// answer is about the owner the call will act as.
+//
+// It fails closed: a factory with no credential source, or one that cannot
+// answer, reports nothing usable; so does an integration that needs no
+// connection (it is never gated). An error is returned for the caller to log,
+// alongside whatever the source did establish.
+func (f *ToolsFactory) UsableIntegrations(ctx context.Context, chatID, thread string, integrationIDs []string) (map[string]bool, error) {
+	usable := map[string]bool{}
+	checker, ok := f.integrationCredentials().(connectionAvailability)
+	if !ok || len(integrationIDs) == 0 {
+		return usable, nil
+	}
+	cat, err := catalog.Builtin()
+	if err != nil {
+		return usable, err
+	}
+	specs := make(map[string]*reliantv1.ConnectionSpec, len(integrationIDs))
+	for _, m := range cat.Manifests() {
+		for _, id := range integrationIDs {
+			if m.GetId() == id && needsConnection(m) {
+				specs[id] = m.GetConnection()
+			}
+		}
+	}
+	if len(specs) == 0 {
+		return usable, nil
+	}
+	answer, err := checker.UsableIntegrations(ctx, integrationRunID(chatID, thread), specs)
+	for id := range specs {
+		if answer[id] {
+			usable[id] = true
+		}
+	}
+	return usable, err
+}
+
+// integrationRunID is the run an integration tool executes in: the workflow
+// the tool runs under (its thread), falling back to the chat for runs whose
+// id is the chat id. Shared by the call and by the availability check, so the
+// two always ask about the same owner.
+func integrationRunID(chatID, thread string) string {
+	if thread != "" {
+		return thread
+	}
+	return chatID
 }
 
 var (
@@ -49,9 +155,11 @@ func sharedIntegrationRunner() *httpaction.Runner {
 	return integrationRunner
 }
 
-// integrationToolDefinitions turns every exposed manifest action whose
-// connection is available into a registry entry. Placement comes from the
-// manifest, which only curated manifests may set to server or any.
+// integrationToolDefinitions turns every exposed manifest action into a
+// registry entry. Placement comes from the manifest, which only curated
+// manifests may set to server or any. Whether a run may be OFFERED one whose
+// integration needs a connection is decided per run's owner
+// (ConnectionGatedIntegration), not here.
 func integrationToolDefinitions() []ToolDefinition {
 	cat, err := catalog.Builtin()
 	if err != nil {
@@ -59,9 +167,6 @@ func integrationToolDefinitions() []ToolDefinition {
 	}
 	var defs []ToolDefinition
 	for _, m := range cat.Manifests() {
-		if !ConnectionAvailable(m) {
-			continue
-		}
 		for _, a := range m.GetActions() {
 			if !a.GetTool().GetExpose() {
 				continue
@@ -175,13 +280,7 @@ func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse
 	if ctx == nil {
 		return NewTextErrorResponse("no execution context"), nil
 	}
-	// The run is the workflow the tool executes in (Thread is its id), falling
-	// back to the chat for runs whose id is the chat id.
-	runID := rc.Thread
-	if runID == "" {
-		runID = rc.ChatID
-	}
-	site := httpaction.CallSite{RunID: runID, ToolCallID: call.ID}
+	site := httpaction.CallSite{RunID: integrationRunID(rc.ChatID, rc.Thread), ToolCallID: call.ID}
 	result, err := sharedIntegrationRunner().RunAuthenticated(ctx, t.manifest, t.action, params, t.credentials, site)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil

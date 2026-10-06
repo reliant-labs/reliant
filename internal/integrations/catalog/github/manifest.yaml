@@ -718,6 +718,312 @@ actions:
                 pushed_at: { type: [string, "null"] }
                 can_push: { type: boolean }
 
+  - id: repo.get
+    display_name: Get repository
+    summary: A repository's metadata, including its default branch.
+    description: >-
+      Return one repository: full name, description, visibility, default
+      branch, primary language, topics, and whether the connection can push.
+      Read default_branch before browsing code on a branch nobody named.
+    keywords: [repository, repo, metadata, default branch, details, about]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo]
+      properties:
+        owner: *owner
+        repo: *repo
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}
+      errors: *github_errors
+    output:
+      select: >-
+        {"id": response.id,
+         "full_name": response.full_name,
+         "name": response.name,
+         "owner": response.owner.login,
+         "description": response.?description.orValue(null),
+         "private": response.private,
+         "visibility": response.?visibility.orValue(null),
+         "default_branch": response.default_branch,
+         "language": response.?language.orValue(null),
+         "topics": type(response.?topics.orValue(null)) == list ? response.topics : [],
+         "archived": response.?archived.orValue(false),
+         "fork": response.?fork.orValue(false),
+         "html_url": response.html_url,
+         "pushed_at": response.?pushed_at.orValue(null),
+         "can_push": response.?permissions.?push.orValue(false)}
+      schema:
+        type: object
+        properties:
+          id: { type: integer }
+          full_name: { type: string, description: "owner/name" }
+          name: { type: string }
+          owner: { type: string }
+          description: { type: [string, "null"] }
+          private: { type: boolean }
+          visibility: { type: [string, "null"], description: "public, private or internal." }
+          default_branch: { type: string }
+          language: { type: [string, "null"] }
+          topics: { type: array, items: { type: string } }
+          archived: { type: boolean }
+          fork: { type: boolean }
+          html_url: { type: string }
+          pushed_at: { type: [string, "null"] }
+          can_push: { type: boolean }
+
+  # ------------------------------------------------------------------- code
+  #
+  # Reading a repository without a checkout: what a run with no machine reads
+  # a project's code with. `path` and a tree's `ref` are interpolated into the
+  # URL path as ONE percent-escaped segment (GitHub decodes the %2F), so their
+  # pattern refuses empty, "." and ".." segments, which would otherwise survive
+  # into the decoded path.
+
+  - id: repo.get_content
+    display_name: Read repository file or directory
+    summary: Read a file's text, or list a directory, at a branch, tag or commit.
+    description: >-
+      Read one path in a repository through GitHub, with no checkout. For a
+      file, content is its text. A binary file has binary true and no
+      content; a file over 1 MB has too_large true and no content. For a
+      directory, entries lists what it holds, one level deep (repo.get_tree
+      lists everything). Omit path for the repository root and ref for the
+      default branch. Results longer than about 30,000 characters are cut
+      short.
+    keywords: [file, read, contents, source, code, directory, list, browse, open, cat]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo]
+      properties:
+        owner: *owner
+        repo: *repo
+        path:
+          type: string
+          pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
+          maxLength: 4096
+          description: >-
+            The path from the repository root, such as src/main.go or docs.
+            No leading slash. Omit for the root.
+        ref: &git_ref
+          type: string
+          pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
+          maxLength: 255
+          description: A branch, tag or commit SHA. Defaults to the repository's default branch.
+        connection: *connection
+    request:
+      method: GET
+      path: /repos/{{ params.owner }}/{{ params.repo }}/contents/{{ params.?path.orValue('') }}
+      query_expr: '{?"ref": params.?ref}'
+      # A 1 MB file arrives base64-encoded inside JSON.
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      # A directory answers with a list; anything else with one object whose
+      # `encoding` is base64 (a file's bytes), none (a file over 1 MB) or
+      # absent (a symlink or submodule).
+      select: >-
+        type(response) == list ?
+          {"type": "dir",
+           "path": params.?path.orValue(""),
+           "entries": response.map(e, {"name": e.name,
+                                       "path": e.path,
+                                       "type": e.type,
+                                       "size": e.?size.orValue(null)})} :
+          {"type": response.type,
+           "path": response.path,
+           "name": response.name,
+           "sha": response.?sha.orValue(null),
+           "size": response.?size.orValue(null),
+           "html_url": response.?html_url.orValue(null),
+           "content": response.?encoding.orValue('') == 'base64' ?
+             base64.decode(response.?content.orValue('')).text().orValue(null) : null,
+           "binary": response.?encoding.orValue('') == 'base64' &&
+             !base64.decode(response.?content.orValue('')).text().hasValue(),
+           "too_large": response.?encoding.orValue('') == 'none',
+           "target": response.?target.orValue(null),
+           "submodule_git_url": response.?submodule_git_url.orValue(null)}
+      schema:
+        type: object
+        properties:
+          type: { type: string, enum: [file, dir, symlink, submodule] }
+          path: { type: string }
+          name: { type: string, description: Absent for a directory. }
+          sha: { type: [string, "null"] }
+          size: { type: [integer, "null"], description: In bytes. }
+          html_url: { type: [string, "null"] }
+          content: { type: [string, "null"], description: "The file's text; null for a directory, a binary file, or a file over 1 MB." }
+          binary: { type: boolean, description: The file is not text, so content is null. }
+          too_large: { type: boolean, description: "The file is over 1 MB, which the contents API does not serve, so content is null." }
+          target: { type: [string, "null"], description: A symlink's target path. }
+          submodule_git_url: { type: [string, "null"] }
+          entries:
+            type: array
+            description: A directory's files and subdirectories.
+            items:
+              type: object
+              properties:
+                name: { type: string }
+                path: { type: string }
+                type: { type: string, enum: [file, dir, symlink, submodule] }
+                size: { type: [integer, "null"] }
+
+  - id: repo.get_tree
+    display_name: List repository files
+    summary: Every file path in a repository, or under one directory, at a branch, tag or commit.
+    description: >-
+      List the repository's files recursively from its git tree, with no
+      checkout: each entry's full path, type (blob is a file, tree a
+      directory, commit a submodule) and size. Pass path to list only one
+      directory, which a large repository needs: results longer than about
+      30,000 characters are cut short. truncated is true when the tree is
+      larger than GitHub returns at once (100,000 entries). Omit ref for the
+      default branch.
+    keywords: [tree, files, list, paths, structure, layout, find file, ls]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [owner, repo]
+      properties:
+        owner: *owner
+        repo: *repo
+        ref: *git_ref
+        path:
+          type: string
+          pattern: "^[^/]*[^/.][^/]*(/[^/]*[^/.][^/]*)*$"
+          maxLength: 4096
+          description: Only entries under this directory, such as internal/llm. Omit for the whole repository.
+        connection: *connection
+    request:
+      method: GET
+      # A directory is the tree-ish <ref>:<path>, so GitHub walks only that
+      # subtree; its entries' paths are relative to it, and the output puts
+      # the directory back in front.
+      path: >-
+        /repos/{{ params.owner }}/{{ params.repo }}/git/trees/{{ params.?ref.orValue('HEAD') +
+        (params.?path.hasValue() ? ':' + params.path : '') }}
+      query: { recursive: "1" }
+      # GitHub serves up to 7 MB of tree before it truncates.
+      max_response_bytes: 10485760
+      errors: *github_errors
+    output:
+      select: >-
+        {"sha": response.sha,
+         "truncated": response.?truncated.orValue(false),
+         "entries": response.tree.map(e, {
+           "path": params.?path.hasValue() ? params.path + '/' + e.path : e.path,
+           "type": e.type,
+           "size": e.?size.orValue(null)})}
+      schema:
+        type: object
+        properties:
+          sha: { type: string, description: The tree's SHA. }
+          truncated: { type: boolean, description: GitHub returned only part of a very large tree. }
+          entries:
+            type: array
+            items:
+              type: object
+              properties:
+                path: { type: string }
+                type: { type: string, enum: [blob, tree, commit] }
+                size: { type: [integer, "null"], description: A file's size in bytes; null for a directory. }
+
+  - id: code.search
+    display_name: Search code
+    summary: Find code with GitHub code search; returns matching files and the fragments that matched.
+    description: >-
+      Search file contents with GitHub's code search syntax. Scope the query
+      with a qualifier, repo:owner/name, org:name or user:name; without one
+      it searches every repository the connection can see. language:, path:
+      and extension: narrow it further, for example
+      "ParseDuration repo:golang/go language:go". Only default branches are
+      indexed, files over 384 KB are not, and GitHub allows about ten code
+      searches a minute, so prefer one precise query over many broad ones.
+    keywords: [search, grep, find, code, symbol, definition, usage, references]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [q]
+      properties:
+        q:
+          type: string
+          minLength: 1
+          maxLength: 256
+          description: >-
+            Search terms plus qualifiers, such as "ParseDuration repo:golang/go".
+            At least one search term is required besides the qualifiers.
+        per_page:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 30
+          description: Results per page.
+        page:
+          type: integer
+          minimum: 1
+          default: 1
+          description: The page of results. GitHub returns at most the first 1,000.
+        connection: *connection
+    request:
+      method: GET
+      path: /search/code
+      headers:
+        # Adds text_matches: the fragment of each file that matched.
+        Accept: application/vnd.github.text-match+json
+      query:
+        q: "{{ params.q }}"
+        per_page: "{{ params.per_page }}"
+        page: "{{ params.page }}"
+      max_response_bytes: 5242880
+      errors: *github_errors
+    output:
+      select: >-
+        {"total_count": response.total_count,
+         "incomplete_results": response.?incomplete_results.orValue(false),
+         "items": response.items.map(i, {
+           "repository": i.repository.full_name,
+           "path": i.path,
+           "name": i.name,
+           "sha": i.?sha.orValue(null),
+           "html_url": i.html_url,
+           "fragments": type(i.?text_matches.orValue(null)) == list ?
+             i.text_matches.map(m, m.fragment) : []})}
+      schema:
+        type: object
+        properties:
+          total_count: { type: integer }
+          incomplete_results: { type: boolean, description: GitHub timed out before searching everything. }
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                repository: { type: string, description: "owner/name" }
+                path: { type: string }
+                name: { type: string }
+                sha: { type: [string, "null"] }
+                html_url: { type: string }
+                fragments: { type: array, items: { type: string }, description: The text around each match. }
+
   # ----------------------------------------------------------------- actions
 
   - id: workflow.dispatch

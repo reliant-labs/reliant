@@ -191,7 +191,9 @@ const MOBILE: SurfaceCapabilities = {
   chatAttachments: false,
   // Authoring. Explicitly out of scope for the mobile surface.
   chatWorkflowParams: false,
-  chatDaemonSelection: false,
+  // Where a new chat runs: one of the user's machines, or No machine —
+  // preselected when none is awake (research/NO_MACHINE_CHATS.md §2.5).
+  chatDaemonSelection: true,
   chatBranching: false,
   // Dense multi-pane UI; no phone layout worth shipping.
   chatExecutionSidebar: false,

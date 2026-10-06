@@ -585,6 +585,10 @@ type Querier interface {
 	// the failure episode: Go reads its length and its oldest failure from it, so
 	// the episode is not truncated at the 10-firing health window. Same run
 	// columns and display-state table as ListRecentTriggerFirings.
+	//
+	// "Completed" is the run the trigger fired (run_status), not whatever turn
+	// the chat is on now — the same rule triggers.resolveFiring applies — so a
+	// person's later reply in the chat neither ends nor extends the episode.
 	ListFiringsSinceLastSuccess(ctx context.Context, arg ListFiringsSinceLastSuccessParams) ([]ListFiringsSinceLastSuccessRow, error)
 	// Which of the given threads are forks: their initial (sequence 0) context
 	// window links to a parent window. One round trip for a whole chat, where
@@ -618,7 +622,7 @@ type Querier interface {
 	//   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
 	//                    id and the block's start, so a later block is a new item
-	ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error)
+	ListInboxPending(ctx context.Context, arg ListInboxPendingParams) ([]ListInboxPendingRow, error)
 	// The users with at least one enabled trigger of an integration: whose
 	// access the periodic refresher keeps fresh.
 	ListIntegrationTriggerOwners(ctx context.Context, integration string) ([]string, error)
@@ -759,6 +763,14 @@ type Querier interface {
 	// resumed spawn they differ and both are needed: the thread is what a cancel
 	// signal names, while the workflow row id is what a status reconcile must
 	// CAS. Deriving either from the other is not possible — see spawn_stop.
+	//
+	// issuing_message_ordinal places the spawn in the parent's transcript. A chat
+	// BRANCHED from the parent inherits the parent's history only up to its fork
+	// point, so this is what decides which of the parent's spawns the branch
+	// inherited (ListInheritedSpawnChildren). messages.ordinal is per-thread, and
+	// the issuing message is always in tc.thread_id, so it compares directly with
+	// the fork point's ordinal. NULL when the call was recorded before its
+	// assistant message was finalized.
 	ListSpawnChildrenForThread(ctx context.Context, threadID sql.NullString) ([]ListSpawnChildrenForThreadRow, error)
 	// The spawn tool call behind each child thread in one chat, for the reconnect
 	// snapshot: it is what the background-work pill's cancel button addresses, and
@@ -1130,6 +1142,9 @@ type Querier interface {
 	SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error)
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
 	SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error
+	// Records how the run a trigger fired ended, on the chat's launch event (the
+	// same earliest-event rule as GetTriggerEventByChatID).
+	SetLaunchEventRunStatus(ctx context.Context, arg SetLaunchEventRunStatusParams) (int64, error)
 	// Records forge's name for a project (forge.yaml `name`) and marks it a forge
 	// project. A no-op — zero rows, no updated_at churn — when both already hold,
 	// so callers can run it on every successful forge read.
@@ -1163,6 +1178,9 @@ type Querier interface {
 	// Update the status of an approval
 	UpdateApprovalStatus(ctx context.Context, arg UpdateApprovalStatusParams) error
 	UpdateChat(ctx context.Context, arg UpdateChatParams) error
+	// Pinning a daemon puts the chat on a machine, so it ends no-machine in the same
+	// write (chats_no_machine_has_no_daemon_check). Clearing the daemon never sets
+	// no_machine: a chat that has had a machine does not become one without.
 	UpdateChatActiveDaemon(ctx context.Context, arg UpdateChatActiveDaemonParams) error
 	UpdateChatSelectedPresets(ctx context.Context, arg UpdateChatSelectedPresetsParams) error
 	UpdateChatTitle(ctx context.Context, arg UpdateChatTitleParams) error

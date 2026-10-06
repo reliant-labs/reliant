@@ -143,17 +143,28 @@ func TestRetiredReadOnlyWorkflowStillClearsItsGates(t *testing.T) {
 			"a normalized legacy workflow must still be able to run %q", name)
 	}
 
-	// ...but it does not silently gain the one capability the ladder still gates.
-	assert.False(t, PermissionAtLeast(resolved, MinimumPermissionForTool("spawn")),
-		"normalizing the retired tier must not grant spawn")
+	// ...but it does not silently gain what the ladder still gates.
+	assert.False(t, PermissionAtLeast(resolved, MinimumPermissionForTool(ToolStartRun)),
+		"normalizing the retired tier must not grant orchestrator tools")
 }
 
 // ----- MinimumPermissionForTool -----
 
 func TestMinimumPermissionForTool_OrchestratorTools(t *testing.T) {
 	t.Parallel()
-	assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool("spawn"))
 	assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool(ToolAgent))
+	for _, name := range []string{ToolStartRun, ToolControlRun, ToolSendToRun, ToolActivateTrigger} {
+		assert.Equal(t, PermissionOrchestrator, MinimumPermissionForTool(name), name)
+	}
+}
+
+// spawn is granted by the node's spawn declaration, not by the tier — the
+// builtin agent declares it at mutating. It never reached a tier check (it
+// runs workflow-side), so listing it here gated nothing; a menu that applies
+// the tier would have read the entry as "take spawn away from every agent".
+func TestMinimumPermissionForTool_SpawnIsNotTierGated(t *testing.T) {
+	t.Parallel()
+	assert.Equal(t, PermissionMutating, MinimumPermissionForTool(ToolSpawn))
 }
 
 // Everything that is not spawn sits at the base tier. With readonly gone there

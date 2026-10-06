@@ -79,9 +79,11 @@ export interface DomainsState {
  * the same reason: a user without a control plane, or without the org role
  * that may read domains, has not hit a fault.
  */
-export function useForgeDomains() {
+export function useForgeDomains({ enabled = true }: { enabled?: boolean } = {}) {
   return useQuery<DomainsState>({
     queryKey: domainKeys.list(),
+    // An environment page asks only while a tab that shows domains is open.
+    enabled,
     queryFn: async () => {
       if (!hasControlPlane()) {
         return { availability: "no-control-plane" as const, domains: [], detail: "" };
@@ -120,7 +122,7 @@ function useInvalidateDomains() {
  *
  * ONE MUTATION FOR BOTH CALLS, because the user performed one action. The
  * control plane keeps them separate — a domain is bindable in any state, and
- * a binding outlives a deployment — but a tenant adding `hounders.club`
+ * a binding outlives a deployment — but a tenant adding `example.com`
  * already knows it is for their web workload, and making them come back for a
  * second step would leave the common case half-finished on screen.
  *

@@ -2,17 +2,23 @@
 // Expressions are CEL, the engine's expression language, over the variables
 // params, connection (the resolved connection's non-secret params, as
 // connection.params.<name>), response (parsed JSON body), raw (body text),
-// status and headers.
+// status and headers. Beyond standard CEL they have optional types,
+// base64.decode / base64.encode, and <bytes>.text().
 package tmpl
 
 import (
+	"bytes"
 	"fmt"
 	"net/url"
 	"reflect"
 	"strings"
 	"sync"
+	"unicode/utf8"
 
 	"github.com/google/cel-go/cel"
+	"github.com/google/cel-go/common/types"
+	"github.com/google/cel-go/common/types/ref"
+	"github.com/google/cel-go/ext"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -47,10 +53,35 @@ func celEnv() (*cel.Env, error) {
 			// when the param is absent (a PATCH must not send null), and
 			// `headers[?'retry-after']` reads a header that may be missing.
 			cel.OptionalTypes(),
+			// base64.decode / base64.encode: providers that return file
+			// content (GitHub's contents API) send it base64-encoded.
+			ext.Encoders(),
+			bytesText,
 		)
 	})
 	return env, envErr
 }
+
+// bytesText is `<bytes>.text()`: the bytes as a string when they are text,
+// else optional.none(). "Text" is valid UTF-8 with no NUL byte — git's own
+// test for binary content — so `base64.decode(response.content).text()` turns
+// a source file into its text and an image into an absent value, where
+// string(<bytes>) would fail the whole expression on the first invalid byte.
+//
+// The optional is of dyn, not string, so `.text().orValue(null)` type-checks
+// the way `response.?x.orValue(null)` does everywhere else in a manifest.
+var bytesText = cel.Function("text",
+	cel.MemberOverload("bytes_text", []*cel.Type{cel.BytesType}, cel.OptionalType(cel.DynType),
+		cel.UnaryBinding(func(v ref.Val) ref.Val {
+			b, ok := v.(types.Bytes)
+			if !ok {
+				return types.MaybeNoSuchOverloadErr(v)
+			}
+			if !utf8.Valid(b) || bytes.IndexByte(b, 0) >= 0 {
+				return types.OptionalNone
+			}
+			return types.OptionalOf(types.String(b))
+		})))
 
 // HasExpr reports whether s contains a {{ }} expression.
 func HasExpr(s string) bool { return strings.Contains(s, "{{") }

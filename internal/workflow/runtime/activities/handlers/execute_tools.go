@@ -214,11 +214,14 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	expectedResponseTools := protoArgs.GetExpectedResponseTools()
 	responseToolSchemas := protoStructMapToGoMap(protoArgs.GetResponseToolSchemas())
 
-	// Resolve the permission level and the declared tool set for execution-time
-	// enforcement. Both were set by call_llm when it resolved tools for the LLM
-	// request; a tool must pass both to run.
-	scopeKey := tools.Scope(rtx.ChatID, rtx.Thread)
-	grantedPermission := tools.GetLoadedToolsStore().GetPermission(scopeKey)
+	// The capability set of the call_llm turn that produced these calls,
+	// carried here in the activity's own input (the runtime copies it from
+	// that call_llm's recorded output). It is the whole of execution-time
+	// enforcement: a call outside it is refused, and load_tool decides what it
+	// may grant from the same set. No worker-local state is consulted, so it
+	// holds on whichever worker this lands — research/TOOL_CAPABILITIES.md.
+	caps := tools.CapabilitiesFromProto(protoArgs.GetCapabilities())
+	ctx = tools.WithCapabilities(ctx, caps)
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
@@ -310,64 +313,20 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						return
 					}
 
-					// No declared-set check here, deliberately.
-					//
-					// An earlier version refused any tool outside the preloaded
-					// bundle at execution. That read an omission as a refusal and
-					// broke the documented path to tools left out of the default
-					// bundle for cost — generate_image among them — because
-					// load_tool grants them legitimately and this then rejected
-					// the call.
-					//
-					// Acquisition is the right place for that decision, and
-					// load_tool makes it against loadable_tools. By the time a
-					// call arrives here the tool was either preloaded or loaded,
-					// and both are answers the workflow already gave. A stale or
-					// hallucinated name fails in the executor, which is where an
-					// unknown tool has always failed.
-					//
-					// Enforce permission-based tool access control.
-					// The granted permission was set by call_llm from the workflow's permission config.
-					requiredPermission := tools.MinimumPermissionForTool(toolName)
-					if !tools.PermissionAtLeast(grantedPermission, requiredPermission) {
+					// The one capability check: was this tool offered in the
+					// request that produced this call? That set includes what
+					// load_tool granted on earlier turns, so a legitimately
+					// loaded tool (generate_image, deliberately outside every
+					// default bundle) passes, while a name the model was not
+					// shown — carried over from history, or hallucinated — is
+					// refused here instead of running. The tier is part of the
+					// set: a tool above it is never offered.
+					if reason := capabilityRefusal(caps, toolCall); reason != "" {
 						resultsChan <- toolCallResult{
-							index: job.index,
-							result: message.ToolResult{
-								ToolCallID: toolCallID,
-								Name:       toolName,
-								Content:    fmt.Sprintf("Tool '%s' requires '%s' permission, but the current permission level is '%s'.", toolName, requiredPermission, grantedPermission),
-								IsError:    true,
-							},
+							index:  job.index,
+							result: a.refuseToolCall(ctx, rtx, toolCall, reason),
 						}
 						return
-					}
-
-					// For spawn tool, validate preset is in available list (if list is provided).
-					if toolName == "spawn" && len(toolCall.AvailablePresets) > 0 {
-						var inputMap map[string]interface{}
-						if err := json.Unmarshal([]byte(toolInput), &inputMap); err == nil {
-							if preset, ok := inputMap["preset"].(string); ok {
-								presetAllowed := false
-								for _, available := range toolCall.AvailablePresets {
-									if available == preset {
-										presetAllowed = true
-										break
-									}
-								}
-								if !presetAllowed {
-									resultsChan <- toolCallResult{
-										index: job.index,
-										result: message.ToolResult{
-											ToolCallID: toolCallID,
-											Name:       toolName,
-											Content:    fmt.Sprintf("Preset '%s' is not available. The LLM may have hallucinated this preset. Available presets: %v", preset, toolCall.AvailablePresets),
-											IsError:    true,
-										},
-									}
-									return
-								}
-							}
-						}
 					}
 
 					// Response tools: identified via expected_response_tools list from workflow config.
@@ -486,6 +445,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 		ThreadTokenCount: int32(threadTokenCount),
 		TotalResultChars: int32(totalResultChars),
 		ResponseData:     goMapToProtoStruct(responseData),
+		// What this batch's load_tool calls granted. The workflow records it
+		// for the thread, and the thread's next call_llm offers it — the only
+		// record of a grant there is.
+		GrantedTools: grantedTools(results),
 		Message: &reliantv1.MessageOutput{
 			Role: "tool",
 			Text: "",
@@ -577,6 +540,11 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// hallucinated — is refused here, before dispatch. Recorded FAILED like any
 	// refusal. The text is not a daemon-offline result, so the offline breaker
 	// stays neutral: there is no machine to wait for.
+	//
+	// The capability check above already refuses such a call on any turn that
+	// recorded a set. This one reads the chat row itself, so it holds on every
+	// path — a batch with no recorded set included — and it is the boundary
+	// the server's lack of a route to the machine actually depends on.
 	if tec.chat.NoMachine {
 		ctx = nomachine.With(ctx)
 		if tools.NeedsMachine(toolName) {
@@ -588,6 +556,14 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 			}, &toolCallResultWrite{content: result.Content, isError: true})
 			return result
 		}
+	}
+
+	// The skill tool reads the project's skills, which live on the project's
+	// config row. Read here, per call, rather than carried from call_llm: the
+	// executor's factory has none of its own, and a worker-local copy is what
+	// a restart used to lose.
+	if toolName == tools.ToolSkill && tec.project != nil {
+		ctx = tools.WithSkills(ctx, a.projectSkills(ctx, tec.project.ID))
 	}
 
 	// Daemon routing priority: explicit node/workflow selector > the worktree's
@@ -753,7 +729,7 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 	// on the result the model is already reading — telling agents this in a
 	// description ahead of time has been measured at zero uptake, twice.
 	if !isError {
-		result.Content += maybeCodeContextNudge(toolName, tec.toolInput, tec.thread)
+		result.Content += maybeCodeContextNudge(toolName, tec.toolInput, durableContent, tec.thread)
 	}
 
 	status := core.ToolCallStatusCompleted
@@ -1345,44 +1321,26 @@ func isFileMutatingTool(toolName string) bool {
 	return fileMutatingTools[toolName]
 }
 
-type toolCallProtoMetadata struct {
-	AvailablePresets []string `json:"available_presets,omitempty"`
-	SpawnWorkflow    string   `json:"spawn_workflow,omitempty"`
+// toolCallInputEnvelope is the wrapper call_llm used to put around a spawn
+// call's input to carry the spawn tool's preset list
+// (`__reliant_tool_meta__`). The preset list now travels in the turn's
+// capability set and nothing writes the wrapper any more, but tool calls
+// recorded in histories from before that still carry it, so an input is
+// unwrapped on the way in.
+type toolCallInputEnvelope struct {
+	Input    string          `json:"input"`
+	Metadata json.RawMessage `json:"__reliant_tool_meta__,omitempty"`
 }
 
-type toolCallProtoEnvelope struct {
-	Input    string                 `json:"input"`
-	Metadata *toolCallProtoMetadata `json:"__reliant_tool_meta__,omitempty"`
-}
-
-func encodeToolCallInputForProto(toolCall message.ToolCall) string {
-	metadata := &toolCallProtoMetadata{
-		AvailablePresets: toolCall.AvailablePresets,
-		SpawnWorkflow:    toolCall.SpawnWorkflow,
-	}
-	if len(metadata.AvailablePresets) == 0 && metadata.SpawnWorkflow == "" {
-		return toolCall.Input
-	}
-	envelope := toolCallProtoEnvelope{
-		Input:    toolCall.Input,
-		Metadata: metadata,
-	}
-	encoded, err := json.Marshal(envelope)
-	if err != nil {
-		return toolCall.Input
-	}
-	return string(encoded)
-}
-
-func decodeToolCallInputFromProto(encodedInput string) (string, *toolCallProtoMetadata) {
-	var envelope toolCallProtoEnvelope
+func decodeToolCallInputFromProto(encodedInput string) string {
+	var envelope toolCallInputEnvelope
 	if err := json.Unmarshal([]byte(encodedInput), &envelope); err != nil {
-		return encodedInput, nil
+		return encodedInput
 	}
-	if envelope.Metadata == nil {
-		return encodedInput, nil
+	if len(envelope.Metadata) == 0 || string(envelope.Metadata) == "null" {
+		return encodedInput
 	}
-	return envelope.Input, envelope.Metadata
+	return envelope.Input
 }
 
 // protoToolCallsToMessage converts proto ToolCallMsg slice to message.ToolCall slice.
@@ -1392,16 +1350,11 @@ func protoToolCallsToMessage(protoTCs []*reliantv1.ToolCallMsg) []message.ToolCa
 	}
 	result := make([]message.ToolCall, len(protoTCs))
 	for i, tc := range protoTCs {
-		decodedInput, metadata := decodeToolCallInputFromProto(tc.GetInput())
 		result[i] = message.ToolCall{
 			ID:               tc.GetId(),
 			Name:             tc.GetName(),
-			Input:            decodedInput,
+			Input:            decodeToolCallInputFromProto(tc.GetInput()),
 			ThoughtSignature: tc.GetThoughtSignature(),
-		}
-		if metadata != nil {
-			result[i].AvailablePresets = metadata.AvailablePresets
-			result[i].SpawnWorkflow = metadata.SpawnWorkflow
 		}
 	}
 	return result
@@ -1435,7 +1388,7 @@ func messageToolCallsToProto(toolCalls []message.ToolCall) []*reliantv1.ToolCall
 		result[i] = &reliantv1.ToolCallMsg{
 			Id:               tc.ID,
 			Name:             tc.Name,
-			Input:            encodeToolCallInputForProto(tc),
+			Input:            tc.Input,
 			ThoughtSignature: tc.ThoughtSignature,
 		}
 	}

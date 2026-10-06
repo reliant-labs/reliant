@@ -4,12 +4,15 @@ package launch
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/structpb"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -113,4 +116,36 @@ func TestLaunchNoMachineWithADaemonIsInvalid(t *testing.T) {
 	var validation *ValidationError
 	require.True(t, errors.As(err, &validation), "got %T: %v", err, err)
 	assert.Equal(t, ValidationInvalidArgument, validation.Kind)
+}
+
+// A branch worktree is a checkout on one machine, so a chat with no machine
+// cannot run in one; it binds to the project's main checkout, which carries no
+// daemon, as every no-machine chat does.
+func TestLaunchNoMachineRefusesAMachineBoundWorktree(t *testing.T) {
+	repo, ctx, projectID, mainWorktreeID := launchFixture(t)
+	launcher, _ := newTestLauncher(t, repo, &fakeStarter{})
+
+	daemonID := "daemon-" + uuid.NewString()
+	branchWorktreeID := uuid.NewString()
+	now := time.Now().UTC()
+	require.NoError(t, repo.CreateWorktree(ctx, &db.Worktree{
+		ID: branchWorktreeID, Name: "feature", Path: t.TempDir(), Branch: "feature", BaseBranch: "main",
+		ProjectID: projectID, DaemonID: &daemonID, Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+
+	_, err := launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent", WorktreeID: &branchWorktreeID,
+		Params: mockModelParams(t), Messages: userSeed("go"), NoMachine: true,
+	})
+	var validation *ValidationError
+	require.True(t, errors.As(err, &validation), "got %T: %v", err, err)
+	assert.Contains(t, validation.Error(), "lives on a machine")
+
+	result, err := launcher.Launch(ctx, chatStartEvent(), Spec{
+		OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent", WorktreeID: &mainWorktreeID,
+		Params: mockModelParams(t), Messages: userSeed("go"), NoMachine: true,
+	})
+	require.NoError(t, err, "the main checkout carries no daemon")
+	assert.Equal(t, mainWorktreeID, *result.Chat.WorktreeID)
 }

@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
 )
 
@@ -16,7 +17,10 @@ type LoadToolParams struct {
 	Query string `json:"query,omitempty" jsonschema:"description=Search for tools by keyword"`
 }
 
-// LoadToolMetadata is the metadata returned by load_tool to signal the runtime.
+// LoadToolMetadata is what load_tool returns to the runtime: the tools it
+// granted. execute_tools unions it across the batch into
+// ExecuteToolsOutput.granted_tools, the workflow records that per thread, and
+// the thread's next call_llm offers them. There is no other record of a grant.
 type LoadToolMetadata struct {
 	LoadedTools []string `json:"loaded_tools,omitempty"`
 }
@@ -68,28 +72,31 @@ func (t *loadToolTool) Execute(rctx *rctx.ToolContext, params LoadToolParams) (T
 		return NewTextErrorResponse("Either 'name' or 'query' is required"), nil
 	}
 
-	// Resolve permission from the store (set by call_llm based on preset/workflow
-	// inputs). Keyed by scope, not chat: a spawned child shares the chat with its
-	// parent and is distinguished only by thread, so a chat-keyed read would hand
-	// the child whichever level was written last.
-	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
-	permission := GetLoadedToolsStore().GetPermission(scopeKey)
+	caps := capabilitiesFor(rctx)
 
-	// Search mode
 	if params.Query != "" {
-		return t.searchTools(rctx, scopeKey, params.Query, permission), nil
+		return t.searchTools(rctx, caps, params.Query), nil
 	}
-
-	// Load mode
 	if tag, ok := strings.CutPrefix(params.Name, "tag:"); ok {
-		return t.loadTag(rctx, tag, permission), nil
+		return t.loadTag(rctx, caps, tag), nil
 	}
-	return t.loadTool(rctx, params.Name, permission), nil
+	return t.loadTool(rctx, caps, params.Name), nil
+}
+
+// capabilitiesFor is the turn's capability set, handed over by execute_tools
+// on the context. A batch whose call_llm recorded none (a run that predates
+// the set) gets the legacy policy, bounded by the chat row's machine fact,
+// which execute_tools marks on the same context.
+func capabilitiesFor(rctx *rctx.ToolContext) *Capabilities {
+	if caps := CapabilitiesFrom(rctx.Context); caps != nil {
+		return caps
+	}
+	return LegacyCapabilities(nomachine.Is(rctx.Context))
 }
 
 // loadTag loads every registry tool carrying tag. Each tool goes through
 // loadTool, so loadable_tools and the permission ladder apply per tool.
-func (t *loadToolTool) loadTag(rctx *rctx.ToolContext, tag string, permission string) ToolResponse {
+func (t *loadToolTool) loadTag(rctx *rctx.ToolContext, caps *Capabilities, tag string) ToolResponse {
 	if _, known := TagDescriptions[ToolTag(tag)]; !known {
 		known := make([]string, 0, len(TagDescriptions))
 		for k := range TagDescriptions {
@@ -118,19 +125,17 @@ func (t *loadToolTool) loadTag(rctx *rctx.ToolContext, tag string, permission st
 		return NewTextResponse(msg)
 	}
 
-	store := GetLoadedToolsStore()
-	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
 	for _, name := range names {
-		wasLoaded := store.Has(scopeKey, name)
-		resp := t.loadTool(rctx, name, permission)
-		switch {
-		case resp.IsError:
-			refused = append(refused, fmt.Sprintf("%s (%s)", name, resp.Content))
-		case wasLoaded:
+		if caps.Offers(name) {
 			already = append(already, name)
-		default:
-			loaded = append(loaded, name)
+			continue
 		}
+		resp := t.loadTool(rctx, caps, name)
+		if resp.IsError {
+			refused = append(refused, fmt.Sprintf("%s (%s)", name, resp.Content))
+			continue
+		}
+		loaded = append(loaded, name)
 	}
 
 	var sb strings.Builder
@@ -154,52 +159,15 @@ func (t *loadToolTool) loadTag(rctx *rctx.ToolContext, tag string, permission st
 	return response
 }
 
-func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission string) ToolResponse {
-	// Check if tool exists in registry
-	registry := GetToolRegistry()
-	var found *ToolDefinition
-	for _, def := range registry {
-		if def.Name == name {
-			found = &def
-			break
-		}
-	}
-
-	if found == nil {
-		// Check MCP tools
-		if strings.HasPrefix(name, "mcp__") {
-			return t.loadMCPTool(rctx, name)
-		}
-		return NewTextErrorResponse(fmt.Sprintf(
-			"Tool '%s' not found in the registry. Use load_tool with query to search for available tools.", name))
-	}
-
-	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
-	store := GetLoadedToolsStore()
-
-	// What the workflow said load_tool may reach, checked independently of the
-	// permission ladder — a tool must pass both.
-	//
-	// This is loadable_tools, NOT the preloaded bundle. An earlier version
-	// checked the bundle, which read an omission as a refusal and made every
-	// tool outside it unreachable; unset here means unrestricted, which is how
-	// the product already behaves.
-	if !store.CanLoadTool(scopeKey, name) {
-		return NewTextErrorResponse(fmt.Sprintf(
-			"Tool '%s' is not loadable in this workflow (see loadable_tools).", name))
-	}
-
-	// Check permission
-	minPerm := MinimumPermissionForTool(name)
-	if !PermissionAtLeast(permission, minPerm) {
-		return NewTextErrorResponse(fmt.Sprintf(
-			"Tool '%s' requires '%s' permission, but agent has '%s' permission.",
-			name, minPerm, permission))
-	}
-
-	// Check if already loaded
-	if store.Has(scopeKey, name) {
+// loadTool grants one tool. The decision is the turn's capability set — the
+// same set the menu was built from and execution enforces — so a tool this
+// grants is one the next call_llm will offer.
+func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, caps *Capabilities, name string) ToolResponse {
+	if caps.Offers(name) {
 		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
+	}
+	if refusal := caps.LoadRefusal(name); refusal != "" {
+		return NewTextErrorResponse(refusal)
 	}
 
 	// A media tool the user has no provider for would load fine and then fail
@@ -208,86 +176,17 @@ func (t *loadToolTool) loadTool(rctx *rctx.ToolContext, name string, permission 
 		return NewTextErrorResponse(fmt.Sprintf("Tool '%s' was not loaded. %s.", name, message))
 	}
 
-	// Add to loaded tools store
-	store.Add(scopeKey, name)
-
-	// Return confirmation with metadata for the runtime
-	metadata := LoadToolMetadata{
-		LoadedTools: []string{name},
+	label := "Tool"
+	if strings.HasPrefix(name, MCPToolPrefix) {
+		label = "MCP tool"
 	}
-
 	response := NewTextResponse(fmt.Sprintf(
-		"Tool '%s' has been loaded. It will be available on your next turn.", name))
-
-	return WithResponseMetadata(response, metadata)
+		"%s '%s' has been loaded. It will be available on your next turn.", label, name))
+	return WithResponseMetadata(response, LoadToolMetadata{LoadedTools: []string{name}})
 }
 
-func (t *loadToolTool) loadMCPTool(rctx *rctx.ToolContext, name string) ToolResponse {
-	scopeKey := Scope(GetChatID(rctx), rctx.Thread)
-	store := GetLoadedToolsStore()
-
-	if store.Has(scopeKey, name) {
-		return NewTextResponse(fmt.Sprintf("Tool '%s' is already loaded.", name))
-	}
-
-	// loadable_tools covers MCP too. The ladder exemption below is deliberate
-	// and stays, but availability alone was previously the only check, so a
-	// workflow that wanted to bound what its agent could reach had no way to
-	// include MCP in that. `tag:mcp` expands to the connected names.
-	if !store.CanLoadTool(scopeKey, name) {
-		return NewTextErrorResponse(fmt.Sprintf(
-			"MCP tool '%s' is not loadable in this workflow (see loadable_tools).", name))
-	}
-
-	// Verify the MCP tool is actually connected in this environment before
-	// loading it. Adding an unavailable name would be silently dropped by the
-	// runtime next turn ("Tools in filter not found"), so fail loudly instead.
-	if !mcpToolAvailable(store.GetAvailableMCPTools(scopeKey), name) {
-		return NewTextErrorResponse(fmt.Sprintf(
-			"MCP tool '%s' is not available in this environment. Use load_tool with a query to discover connected MCP tools.", name))
-	}
-
-	// MCP tools are gated by MCP configuration, not the agent permission ladder.
-	store.Add(scopeKey, name)
-
-	metadata := LoadToolMetadata{
-		LoadedTools: []string{name},
-	}
-
-	response := NewTextResponse(fmt.Sprintf(
-		"MCP tool '%s' has been loaded. It will be available on your next turn.", name))
-
-	return WithResponseMetadata(response, metadata)
-}
-
-// mcpToolAvailable reports whether name is present in the recorded set of
-// connected/available MCP tools.
-func mcpToolAvailable(available []MCPToolInfo, name string) bool {
-	for _, m := range available {
-		if m.Name == name {
-			return true
-		}
-	}
-	return false
-}
-
-func (t *loadToolTool) searchTools(rctx *rctx.ToolContext, scopeKey, query string, permission string) ToolResponse {
-	store := GetLoadedToolsStore()
-	mcpTools := store.GetAvailableMCPTools(scopeKey)
-	results := SearchTools(query, permission, mcpTools)
-
-	// Discovery must agree with enforcement. Advertising a tool that loadTool
-	// will then refuse teaches the model to keep retrying something that cannot
-	// work, and burns a turn each time.
-	if !store.LoadableIsUnrestricted(scopeKey) {
-		filtered := results[:0]
-		for _, r := range results {
-			if store.CanLoadTool(scopeKey, r.Name) {
-				filtered = append(filtered, r)
-			}
-		}
-		results = filtered
-	}
+func (t *loadToolTool) searchTools(rctx *rctx.ToolContext, caps *Capabilities, query string) ToolResponse {
+	results := SearchTools(query, caps)
 
 	if len(results) == 0 {
 		return NewTextResponse(fmt.Sprintf("No tools found matching '%s'.", query))
@@ -302,7 +201,10 @@ func (t *loadToolTool) searchTools(rctx *rctx.ToolContext, scopeKey, query strin
 			tags[i] = string(tag)
 		}
 		status := "available"
-		if !r.PermissionAllowed {
+		switch {
+		case caps.Offers(r.Name):
+			status = "already loaded"
+		case !r.PermissionAllowed:
 			status = fmt.Sprintf("requires %s permission", r.MinPermission)
 		}
 		// Still listed when unusable, so the agent can tell the user why.
@@ -314,6 +216,66 @@ func (t *loadToolTool) searchTools(rctx *rctx.ToolContext, scopeKey, query strin
 
 	sb.WriteString("\nUse load_tool with name to load a specific tool.")
 	return NewTextResponse(sb.String())
+}
+
+// SearchTools searches the built-in registry and the turn's connected MCP
+// tools by keyword. Registry tools match on name or tag; MCP tools on name,
+// which carries the server name (mcp__chrome-devtools__take_screenshot) —
+// their descriptions are not part of the capability set, which carries names
+// only.
+//
+// Discovery must agree with enforcement (Capabilities.Searchable): a tool the
+// set could never grant — outside loadable_tools, needing a machine on a
+// no-machine run, an integration the owner has not connected, request_machine
+// anywhere — is left out, because advertising what loading will refuse teaches
+// the model to retry something that cannot work. A tool above the tier stays
+// listed with that status, so the agent can tell the user why it cannot have it.
+func SearchTools(query string, caps *Capabilities) []ToolSearchResult {
+	q := strings.ToLower(query)
+
+	var results []ToolSearchResult
+	for _, def := range GetToolRegistry() {
+		matched := strings.Contains(strings.ToLower(def.Name), q)
+		for _, tag := range def.Tags {
+			if strings.Contains(strings.ToLower(string(tag)), q) {
+				matched = true
+			}
+		}
+		if !matched || !caps.Searchable(def.Name) {
+			continue
+		}
+		minPerm := MinimumPermissionForTool(def.Name)
+		results = append(results, ToolSearchResult{
+			Name:              def.Name,
+			Tags:              def.Tags,
+			MinPermission:     minPerm,
+			PermissionAllowed: PermissionAtLeast(caps.Permission, minPerm),
+		})
+	}
+
+	// MCP tools are gated by MCP configuration rather than the permission
+	// ladder, so they always report as allowed once connected.
+	for _, name := range caps.MCPTools {
+		if !strings.Contains(strings.ToLower(name), q) || !caps.Searchable(name) {
+			continue
+		}
+		results = append(results, ToolSearchResult{
+			Name:              name,
+			Tags:              []ToolTag{TagMCP},
+			MinPermission:     PermissionMutating,
+			PermissionAllowed: true,
+		})
+	}
+
+	return results
+}
+
+// ToolSearchResult represents a search result for tool discovery.
+type ToolSearchResult struct {
+	Name              string    `json:"name"`
+	Tags              []ToolTag `json:"tags"`
+	MinPermission     string    `json:"min_permission"`
+	PermissionAllowed bool      `json:"allowed"`
 }
 
 // DeferredToolsAware is implemented by tools that can receive the list of

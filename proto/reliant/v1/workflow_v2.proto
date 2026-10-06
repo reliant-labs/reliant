@@ -606,6 +606,13 @@ message ExecuteToolsArgs {
   // consuming too much of the next LLM turn. Wire this from
   // nodes.<call_llm>.compaction_threshold so provider-specific windows are honored.
   CelInt compaction_threshold = 5 [(reliant) = {hidden: true}];
+  // Capabilities is the tool capability set of the call_llm turn that produced
+  // these tool calls, copied here by the runtime (never authored). A call to a
+  // tool outside capabilities.offered is refused, and load_tool checks
+  // loadability against the same set. Absent only for a batch whose call_llm
+  // recorded no set (a run that predates it, or tool calls not from an LLM).
+  // See research/TOOL_CAPABILITIES.md.
+  ToolCapabilities capabilities = 6 [(reliant) = {hidden: true}];
 }
 
 // InvokeToolArgs configures an invoke_tool node — invokes ONE tool directly from the graph,
@@ -1475,6 +1482,44 @@ message CallLLMOutput {
   // written against it should be written as a positive match on the values it
   // knows rather than a negative list of the ones it excludes.
   string finish_reason = 17;
+
+  // Capabilities is what this turn's model was offered and may load. It is
+  // recorded here — in workflow history — so the execute_tools that runs this
+  // turn's tool calls enforces exactly what the model was shown, on whichever
+  // worker it lands. See research/TOOL_CAPABILITIES.md.
+  ToolCapabilities capabilities = 19;
+}
+
+// ToolCapabilities is one agent turn's tool capability set: resolved once by
+// call_llm from durable inputs (the node's declaration, the chat row, the
+// load_tool grants recorded in workflow state, the connected MCP tools) and
+// checked at the menu, at load_tool and at execute_tools. Names only — never
+// schemas — because it rides in history twice per turn.
+message ToolCapabilities {
+  // Offered is every tool name in the request's tool array, sorted.
+  repeated string offered = 1;
+  // LoadableAll means load_tool may reach any reachable tool.
+  bool loadable_all = 2;
+  // Loadable is what load_tool may reach when loadable_all is false, sorted.
+  repeated string loadable = 3;
+  // Permission is the resolved tier ("mutating" or "orchestrator"). Always set
+  // on a resolved set, which is how a reader tells one from an absent message.
+  string permission = 4;
+  // NoMachine mirrors chats.no_machine for the turn: nothing needing the
+  // user's machine is offered or loadable, and a tool that exists only for a
+  // run without one (request_machine) is reachable only here.
+  bool no_machine = 5;
+  // MCPTools are the connected MCP tool names load_tool may verify against.
+  // Populated only when the node's filters can reach an MCP tool.
+  repeated string mcp_tools = 6;
+  // SpawnPresets are the presets the spawn tool was offered with.
+  repeated string spawn_presets = 7;
+  // WithheldIntegrations maps each connection-gated integration the turn's
+  // declaration reaches, but the run's owner cannot use, to the reason. Every
+  // action of a withheld integration is neither offered nor loadable. Keyed
+  // by integration, not tool, so it stays small however many actions a
+  // manifest exposes.
+  map<string, string> withheld_integrations = 8;
 }
 
 // ExecuteToolsOutput is the output from execute_tools nodes.
@@ -1484,6 +1529,11 @@ message ExecuteToolsOutput {
   int32 thread_token_count = 3;
   int32 total_result_chars = 4;
   google.protobuf.Struct response_data = 5;
+  // GrantedTools are the tools this batch's load_tool calls granted. The
+  // runtime records them per thread in workflow state and hands them to the
+  // thread's next call_llm, which is what makes a loaded tool appear on the
+  // following turn.
+  repeated string granted_tools = 6;
 }
 
 // InvokeToolOutput is the output from the invoke_tool activity.

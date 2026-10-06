@@ -131,6 +131,11 @@ const (
 
 	// Interaction tools
 	ToolAskUser = "ask_user"
+
+	// ToolRequestMachine offers the user a machine from a chat that has none.
+	// Reachable only in a run with no machine (OnlyWithoutMachine; enforced by
+	// the capability resolver).
+	ToolRequestMachine = "request_machine"
 )
 
 // Placement says where a tool or MCP server may execute. See PlacementOf.
@@ -674,6 +679,11 @@ func GetToolRegistry() []ToolDefinition {
 		// ask_user is a schema-only tool — execution is intercepted by the workflow
 		// runtime (splitProtoToolCalls → executeAskUserInline), not the normal tool path.
 		{ToolAskUser, (*ToolsFactory).AskUser, nil, PlacementServer},
+		// request_machine has no tags: a run with no machine is handed it
+		// directly (handlers/no_machine.go), and the capability resolver
+		// excludes it from every other run however a filter names it. See
+		// OnlyWithoutMachine.
+		{ToolRequestMachine, (*ToolsFactory).RequestMachine, nil, PlacementServer},
 
 		// Scenario tools
 		{ToolListScenarios, (*ToolsFactory).ListScenarios, []ToolTag{TagWorkflow, TagReadOnly}, PlacementServer},

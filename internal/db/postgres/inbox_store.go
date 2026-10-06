@@ -15,7 +15,11 @@ type inboxStore struct{ q pgdb.Querier }
 func NewInboxStore(q pgdb.Querier) core.InboxStore { return &inboxStore{q: q} }
 
 func (s *inboxStore) ListInboxPending(ctx context.Context, userID string) ([]*core.InboxPending, error) {
-	rows, err := s.q.ListInboxPending(ctx, userID)
+	rows, err := s.q.ListInboxPending(ctx, pgdb.ListInboxPendingParams{
+		UserID: userID,
+		// "Run finished" items follow the same rule as the unread write.
+		UnattendedKinds: core.UnattendedEventKinds(),
+	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to list inbox: %w", err)
 	}

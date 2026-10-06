@@ -13,6 +13,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/threads"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // These drive the inbound path through the REAL launcher against a real
@@ -78,6 +79,54 @@ func TestInboundDeliveryLaunchesOnceAndAdoptsTheReceiversRow(t *testing.T) {
 	body, _ := stored.Payload["body"].(map[string]any)
 	assert.Equal(t, "main", body["ref"], "the event payload survives the adoption")
 	assert.NotNil(t, stored.Payload["start"], "and gains the launch's start record")
+}
+
+// An inbound launch — a webhook delivery or a provider event — gives its run
+// the two facts preflight needs to wake the trigger's machine when nobody is
+// signed in: the run is pinned to the trigger's daemon, and the launch event
+// preflight finds by chat is of an unattended kind.
+func TestInboundLaunchPinsTheTriggersDaemonUnderAnUnattendedLaunchEvent(t *testing.T) {
+	for _, kind := range []core.TriggerKind{core.TriggerKindWebhook, core.TriggerKindIntegration} {
+		t.Run(string(kind), func(t *testing.T) {
+			f := newFireFixture(t, func(tr *core.Trigger, _ *core.ScheduleConfig) { tr.Kind = kind })
+			ctx := context.Background()
+			f.trigger.Config = json.RawMessage(`{}`)
+			require.NoError(t, f.repo.UpdateTrigger(ctx, f.trigger))
+			runs := &recordingStarter{}
+			firer := NewEventFirer(f.repo, launch.NewLauncher(f.repo, threads.NewService(f.repo), runs, noopRunRecorder{}, "test-queue", nil))
+			fires := &recordingStarter{}
+			intake := NewIntake(f.repo, fires, "test-queue")
+
+			ev := inbound(f.trigger, "delivery-1", map[string]any{"body": map[string]any{"ref": "main"}})
+			ev.Kind = kind.EventKind()
+			_, err := intake.Accept(ctx, f.trigger, ev, AcceptOptions{})
+			require.NoError(t, err)
+			out, err := firer.Fire(ctx, fires.snapshot()[0].Input.(EventFireInput))
+			require.NoError(t, err)
+			require.Equal(t, string(core.TriggerEventLaunched), out.Outcome)
+
+			chat, err := f.repo.GetChat(ctx, out.ChatID)
+			require.NoError(t, err)
+			require.NotNil(t, chat.ActiveDaemonID, "the run is pinned to a daemon")
+			assert.Equal(t, f.trigger.DaemonID, *chat.ActiveDaemonID, "the run is pinned to the trigger's daemon")
+			assert.False(t, chat.NoMachine)
+
+			var root *v2.WorkflowInput
+			for _, start := range runs.snapshot() {
+				if in, ok := start.Input.(v2.WorkflowInput); ok {
+					root = &in
+				}
+			}
+			require.NotNil(t, root, "the run's root workflow was started")
+			assert.Equal(t, f.trigger.DaemonID, root.Inputs["session_daemon_id"],
+				"the runtime hands this daemon to preflight as its selector")
+
+			launchEv, err := f.repo.GetTriggerEventByChatID(ctx, out.ChatID)
+			require.NoError(t, err)
+			assert.Equal(t, kind.EventKind(), launchEv.Kind)
+			assert.True(t, launchEv.Kind.Unattended(), "preflight may wake this run's daemon with the stored token")
+		})
+	}
 }
 
 func TestInboundFilterMissNeverReachesTheLauncher(t *testing.T) {

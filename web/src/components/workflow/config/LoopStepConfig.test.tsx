@@ -4,6 +4,16 @@ import type { LoopStep } from "../../../types/workflow";
 import { celExpr, directCel } from "../../../lib/celAdapter";
 import { LoopStepConfig } from "./LoopStepConfig";
 
+// The CEL editor fetches its completion catalog when it mounts. These tests
+// render the editor but never complete anything, and unmocked the fetch was a
+// real RPC that settled after the test.
+vi.mock("../../../lib/cel-completion-service", async () => ({
+  ...(await vi.importActual<typeof import("../../../lib/cel-completion-service")>(
+    "../../../lib/cel-completion-service",
+  )),
+  ensureCELCompletionsCached: async () => {},
+}));
+
 function createLoopStep(overrides: Partial<LoopStep> = {}): LoopStep {
   return {
     id: "loop_1",

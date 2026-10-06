@@ -264,6 +264,34 @@ vi.mock("@/services/forge/secretStore", async (importOriginal) => ({
   getSecretVersions: () => Promise.resolve({ name: "", versions: [] }),
 }));
 
+// Custom domains are an org-wide control-plane read. One is bound to prod,
+// one to staging, so the env-scoped view has something to filter out.
+vi.mock("@/services/forge/domains", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/services/forge/domains")>()),
+  hasControlPlane: () => true,
+  listDomains: () =>
+    Promise.resolve([
+      {
+        id: "dom-1",
+        hostname: "hounders.club",
+        state: "live",
+        origin: "external",
+        requiredRecords: [],
+        lastError: "",
+        binding: { id: "b1", domainId: "dom-1", environmentId: "cp-prod", target: "web", redirectTo: "" },
+      },
+      {
+        id: "dom-2",
+        hostname: "staging.hounders.club",
+        state: "live",
+        origin: "external",
+        requiredRecords: [],
+        lastError: "",
+        binding: { id: "b2", domainId: "dom-2", environmentId: "cp-staging", target: "web", redirectTo: "" },
+      },
+    ]),
+}));
+
 import { ForgeEnvPage } from "../ForgeEnvPage";
 import { ForgeOverviewPage } from "../../Overview/ForgeOverviewPage";
 
@@ -334,15 +362,40 @@ describe("the Live tab makes zero daemon calls", () => {
     expect(daemonCalls).toEqual([]);
   });
 
-  it("renders the Releases tab — intent and observations interleaved — with zero daemon calls", async () => {
+  it("renders the Releases tab — releases only, no observations — with zero daemon calls", async () => {
     routeState.env = "prod";
     routeState.tab = "releases";
     renderWithQuery(<ForgeEnvPage />);
 
     const releases = await screen.findByTestId("live-releases");
     expect(within(releases).getByTestId("promotion-promo-1")).toBeInTheDocument();
-    expect(within(releases).getByTestId("convergence-conv-1")).toBeInTheDocument();
+    // Convergence activity is the Activity tab's, never interleaved here.
+    expect(within(releases).queryByTestId("convergence-conv-1")).not.toBeInTheDocument();
+    expect(releases.querySelector('[data-entry="observation"]')).toBeNull();
     expectNoBannerOrError();
+    expect(daemonCalls).toEqual([]);
+  });
+
+  it("renders the Activity tab — promotions and observations interleaved — with zero daemon calls", async () => {
+    routeState.env = "prod";
+    routeState.tab = "activity";
+    renderWithQuery(<ForgeEnvPage />);
+
+    const activity = await screen.findByTestId("live-activity");
+    expect(within(activity).getByTestId("activity-promotion-promo-1")).toBeInTheDocument();
+    expect(within(activity).getByTestId("convergence-conv-1")).toHaveTextContent(/confirmed running/i);
+    expect(screen.queryByTestId("live-releases")).not.toBeInTheDocument();
+    expectNoBannerOrError();
+    expect(daemonCalls).toEqual([]);
+  });
+
+  it("renders the Domains tab with the domains bound to this env only, with zero daemon calls", async () => {
+    routeState.env = "prod";
+    routeState.tab = "domains";
+    renderWithQuery(<ForgeEnvPage />);
+
+    await screen.findByTestId("env-domain-hounders.club");
+    expect(screen.queryByTestId("env-domain-staging.hounders.club")).not.toBeInTheDocument();
     expect(daemonCalls).toEqual([]);
   });
 
@@ -467,5 +520,78 @@ describe("the Overview table needs no daemon", () => {
 
     expectNoBannerOrError();
     expect(daemonCalls.every((call) => call === "getTopology")).toBe(true);
+  });
+});
+
+/**
+ * The tab is URL-addressable: `?tab=` selects it, an absent param is the
+ * default (Overview for a deployed env), and a click writes a history entry
+ * so Back steps through the tabs a reader opened.
+ */
+describe("tab routing", () => {
+  it("opens a deployed env on Overview when the URL names no tab", async () => {
+    routeState.env = "prod";
+    renderWithQuery(<ForgeEnvPage />);
+    await screen.findByTestId("live-section");
+    expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "overview");
+    expect(screen.getByTestId("env-tab-overview")).toHaveAttribute("aria-selected", "true");
+  });
+
+  it.each(["releases", "activity", "secrets", "domains"])("selects the %s tab from the URL", async (tab) => {
+    routeState.env = "prod";
+    routeState.tab = tab;
+    renderWithQuery(<ForgeEnvPage />);
+    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", tab));
+    expect(screen.getByTestId(`env-tab-${tab}`)).toHaveAttribute("aria-selected", "true");
+  });
+
+  it("writes the clicked tab to the URL as a history entry, and the default as no param", async () => {
+    routeState.env = "prod";
+    const user = userEvent.setup();
+    renderWithQuery(<ForgeEnvPage />);
+    await screen.findByTestId("live-section");
+
+    await user.click(screen.getByTestId("env-tab-activity"));
+    const call = navigate.mock.calls.at(-1)?.[0] as {
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+      replace?: boolean;
+    };
+    expect(call.replace).toBeFalsy();
+    expect(call.search({ project: "proj-1" })).toEqual({ project: "proj-1", tab: "activity" });
+    expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "activity");
+
+    await user.click(screen.getByTestId("env-tab-overview"));
+    const back = navigate.mock.calls.at(-1)?.[0] as {
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+    };
+    expect(back.search({ project: "proj-1", tab: "activity" })).toEqual({ project: "proj-1", tab: undefined });
+  });
+
+  it("follows the URL when it moves after a click (Back/Forward)", async () => {
+    routeState.env = "prod";
+    const user = userEvent.setup();
+    const { rerender } = renderWithQuery(<ForgeEnvPage />);
+    await screen.findByTestId("live-section");
+
+    await user.click(screen.getByTestId("env-tab-releases"));
+    expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "releases");
+
+    // The router lands the click, then Back moves the URL to Secrets' entry.
+    routeState.tab = "secrets";
+    rerender(
+      <QueryClientProvider client={new QueryClient()}>
+        <ForgeEnvPage />
+      </QueryClientProvider>
+    );
+    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "secrets"));
+  });
+
+  it("shows one status line in the header, on every tab", async () => {
+    routeState.env = "prod";
+    routeState.tab = "secrets";
+    renderWithQuery(<ForgeEnvPage />);
+    const status = await screen.findByTestId("env-page-status");
+    expect(status).toHaveTextContent(/^Running · confirmed/);
+    expect(status).toHaveAttribute("data-tone", "ok");
   });
 });

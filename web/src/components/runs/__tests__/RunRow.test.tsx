@@ -55,6 +55,15 @@ describe("RunRow", () => {
     expect(link).toHaveAttribute("href", "/workflows/automations/trig-1");
   });
 
+  it.each(["webhook", "integration", "workflow_event"])(
+    "names the automation for a %s-launched run, linked to it",
+    async (launchKind) => {
+      renderRow({ launchKind, triggerId: "trig-2", triggerName: "On push" });
+      const link = await screen.findByRole("link", { name: "On push" });
+      expect(link).toHaveAttribute("href", "/workflows/automations/trig-2");
+    },
+  );
+
   it("says an agent started an agent-started run", async () => {
     renderRow({ launchKind: "agent.start_run" });
     const row = await screen.findByTestId("run-row-chat-1");

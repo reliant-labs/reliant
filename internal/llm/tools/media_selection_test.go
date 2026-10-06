@@ -342,7 +342,7 @@ func noProviderFor(modalities ...models.Modality) MediaAvailabilityCheck {
 
 func TestLoadTool_RefusesVideoWithTheFixWhenNoProvider(t *testing.T) {
 	withAvailability(t, noProviderFor(models.ModalityVideo))
-	tc, scopeKey := scopeWithAccess(t, "media-refuse-"+t.Name(), nil, []string{LoadableWildcard})
+	tc, _ := scopeWithAccess(t, nil, []string{LoadableWildcard})
 	tc.Context = context.WithValue(tc.Context, auth.UserIDContextKey, "test-user")
 	tool := &loadToolTool{}
 
@@ -350,17 +350,17 @@ func TestLoadTool_RefusesVideoWithTheFixWhenNoProvider(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "Video generation needs a Gemini API key or Reliant-managed credits — add one in Settings → AI providers")
-	assert.False(t, GetLoadedToolsStore().Has(scopeKey, ToolGenerateVideo), "an unusable media tool must not be loaded")
+	assert.Empty(t, grantsOf(t, resp), "an unusable media tool must not be granted")
 
 	resp, err = tool.Execute(tc, LoadToolParams{Name: ToolGenerateImage})
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, "image is still available: %s", resp.Content)
-	assert.True(t, GetLoadedToolsStore().Has(scopeKey, ToolGenerateImage))
+	assert.Equal(t, []string{ToolGenerateImage}, grantsOf(t, resp))
 }
 
 func TestLoadTool_RefusesImageWithTheFixWhenNoProvider(t *testing.T) {
 	withAvailability(t, noProviderFor(models.ModalityImage))
-	tc, scopeKey := scopeWithAccess(t, "media-refuse-img-"+t.Name(), nil, []string{LoadableWildcard})
+	tc, _ := scopeWithAccess(t, nil, []string{LoadableWildcard})
 	tc.Context = context.WithValue(tc.Context, auth.UserIDContextKey, "test-user")
 
 	resp, err := (&loadToolTool{}).Execute(tc, LoadToolParams{Name: ToolGenerateImage})
@@ -370,24 +370,24 @@ func TestLoadTool_RefusesImageWithTheFixWhenNoProvider(t *testing.T) {
 	assert.Contains(t, resp.Content, "an OpenAI API key")
 	assert.Contains(t, resp.Content, "a Gemini API key")
 	assert.Contains(t, resp.Content, "add one in Settings → AI providers")
-	assert.False(t, GetLoadedToolsStore().Has(scopeKey, ToolGenerateImage))
+	assert.Empty(t, grantsOf(t, resp))
 }
 
 func TestLoadTool_TagLoadSkipsUnavailableMediaTool(t *testing.T) {
 	withAvailability(t, noProviderFor(models.ModalityVideo))
-	tc, scopeKey := scopeWithAccess(t, "media-tag-"+t.Name(), nil, []string{LoadableWildcard})
+	tc, _ := scopeWithAccess(t, nil, []string{LoadableWildcard})
 	tc.Context = context.WithValue(tc.Context, auth.UserIDContextKey, "test-user")
 
 	resp, err := (&loadToolTool{}).Execute(tc, LoadToolParams{Name: "tag:media"})
 	require.NoError(t, err)
 	assert.Contains(t, resp.Content, "Video generation needs a Gemini API key")
-	assert.False(t, GetLoadedToolsStore().Has(scopeKey, ToolGenerateVideo))
-	assert.True(t, GetLoadedToolsStore().Has(scopeKey, ToolGenerateImage))
+	assert.NotContains(t, grantsOf(t, resp), ToolGenerateVideo)
+	assert.Contains(t, grantsOf(t, resp), ToolGenerateImage)
 }
 
 func TestLoadTool_SearchStillListsUnavailableMediaToolAnnotated(t *testing.T) {
 	withAvailability(t, noProviderFor(models.ModalityVideo))
-	tc, _ := scopeWithAccess(t, "media-search-"+t.Name(), nil, []string{LoadableWildcard})
+	tc, _ := scopeWithAccess(t, nil, []string{LoadableWildcard})
 	tc.Context = context.WithValue(tc.Context, auth.UserIDContextKey, "test-user")
 
 	resp, err := (&loadToolTool{}).Execute(tc, LoadToolParams{Query: "generate_video"})
@@ -404,7 +404,7 @@ func TestLoadTool_SearchStillListsUnavailableMediaToolAnnotated(t *testing.T) {
 
 func TestMediaUnavailableMessage_IdenticalAtLoadToolAndCallTime(t *testing.T) {
 	withAvailability(t, noProviderFor(models.ModalityVideo))
-	tc, _ := scopeWithAccess(t, "media-shared-"+t.Name(), nil, []string{LoadableWildcard})
+	tc, _ := scopeWithAccess(t, nil, []string{LoadableWildcard})
 	tc.Context = context.WithValue(tc.Context, auth.UserIDContextKey, "test-user")
 
 	shared := models.MediaUnavailableMessage(models.MustGetRegistry(), models.ModalityVideo)
@@ -426,13 +426,13 @@ func TestMediaUnavailableMessage_IdenticalAtLoadToolAndCallTime(t *testing.T) {
 
 func TestLoadTool_NoCheckInstalledDoesNotBlock(t *testing.T) {
 	SetMediaAvailabilityCheck(nil)
-	tc, scopeKey := scopeWithAccess(t, "media-nocheck-"+t.Name(), nil, []string{LoadableWildcard})
+	tc, _ := scopeWithAccess(t, nil, []string{LoadableWildcard})
 	tc.Context = context.WithValue(tc.Context, auth.UserIDContextKey, "test-user")
 
 	resp, err := (&loadToolTool{}).Execute(tc, LoadToolParams{Name: ToolGenerateVideo})
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, resp.Content)
-	assert.True(t, GetLoadedToolsStore().Has(scopeKey, ToolGenerateVideo))
+	assert.Equal(t, []string{ToolGenerateVideo}, grantsOf(t, resp))
 }
 
 // Omni accepts 4K but renders at 720p and upscales. The request is valid and

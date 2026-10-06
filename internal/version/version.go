@@ -26,23 +26,61 @@ var (
 	Branch  = "unknown"
 )
 
-// A user may install pug using `go install github.com/reliant-labs/reliant@latest`.
-// without -ldflags, in which case the version above is unset. As a workaround
-// we use the embedded build version that *is* set when using `go install` (and
-// is only set for `go install` and not for `go build`).
+// Dirty values. "unknown" means the build carried no VCS stamp: release builds
+// pass -buildvcs=false and stamp the version through -ldflags instead.
+const (
+	DirtyTrue    = "true"
+	DirtyFalse   = "false"
+	DirtyUnknown = "unknown"
+)
+
+// dirty is whether the source tree had uncommitted changes at build time, read
+// from the toolchain's VCS stamp. Not an -ldflags injection site.
+var dirty = DirtyUnknown
+
+// A binary built with `go install` or a plain `go build` carries no -ldflags,
+// so the vars above stay "unknown". What it DOES carry is the toolchain's own
+// stamp: the module version (`go install`) and, inside a checkout, the VCS
+// revision and whether the tree was modified. Without reading the latter, a
+// locally installed binary reported `commit: unknown` and could not say which
+// source it was built from — so two installs of "the same" reliant could not
+// be told apart (dogfood finding: an installed binary days behind the code it
+// was compared against, with nothing to show it).
 func init() {
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		// < go v1.18
-		return
+	if info, ok := debug.ReadBuildInfo(); ok {
+		applyBuildInfo(info)
 	}
-	mainVersion := info.Main.Version
-	if mainVersion == "" || mainVersion == "(devel)" {
-		// bin not built using `go install`
-		return
+}
+
+// applyBuildInfo fills whatever -ldflags left unset from the toolchain's
+// stamp. An -ldflags value always wins: a release build's stamp is deliberate,
+// and the module graph of the builder's checkout is not.
+func applyBuildInfo(info *debug.BuildInfo) {
+	if mainVersion := info.Main.Version; Version == "unknown" && mainVersion != "" && mainVersion != "(devel)" {
+		Version = mainVersion
 	}
-	// bin built using `go install`
-	Version = mainVersion
+	settings := make(map[string]string, len(info.Settings))
+	for _, s := range info.Settings {
+		settings[s.Key] = s.Value
+	}
+	if rev := settings["vcs.revision"]; Commit == "unknown" && rev != "" {
+		Commit = shortRevision(rev)
+	}
+	switch settings["vcs.modified"] {
+	case "true":
+		dirty = DirtyTrue
+	case "false":
+		dirty = DirtyFalse
+	}
+}
+
+// shortRevision abbreviates a commit hash to the 12 characters Go uses in a
+// pseudo-version, so the commit line matches the version line beside it.
+func shortRevision(rev string) string {
+	if len(rev) > 12 {
+		return rev[:12]
+	}
+	return rev
 }
 
 // forgeModulePath is the CLI module. Reliant also requires
@@ -89,6 +127,9 @@ type BuildInfo struct {
 	Commit  string
 	Date    string
 	Branch  string
+	// Dirty is DirtyTrue/DirtyFalse when the toolchain stamped VCS state,
+	// DirtyUnknown otherwise.
+	Dirty string
 	// Forge is resolved from the embedded module graph, not from -ldflags.
 	Forge string
 }
@@ -100,6 +141,7 @@ func Get() BuildInfo {
 		Commit:  Commit,
 		Date:    Date,
 		Branch:  Branch,
+		Dirty:   dirty,
 		Forge:   Forge(),
 	}
 }

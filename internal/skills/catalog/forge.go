@@ -290,11 +290,21 @@ func forgeParentBody(skills []forgecli.Skill) string {
 }
 
 // loadForgeDefinition hydrates a forge-scoped Definition's Body by
-// calling forge's public LoadSkillForAudience. The audience is derived
-// from whether the project has forge.yaml: present → "forge" (full body
-// including any `@forge-only` sections), absent → "general" (those
-// sections are stripped by the forge renderer). The synthetic parent
-// (forgePath == "") returns its pre-rendered body unchanged.
+// calling forge's public RenderSkill — the renderer behind `reliant forge
+// skill load` itself, so the body an agent reads through the skill tool (or
+// gets preloaded) is byte-for-byte what that command prints. That includes
+// the command-name rewrite: forge's raw SKILL.md says `forge generate`, the
+// CLI and the project memory say `reliant forge generate`, and an agent
+// handed the raw form runs whatever `forge` is on PATH — a different build
+// than the one linked into this binary, or nothing at all. CLIName is left
+// to forge's default, the same name RenderProjectMemory renders, so memory
+// and skills always agree.
+//
+// The audience is derived from whether the project has forge.yaml:
+// present → "forge" (full body including any `@forge-only` sections),
+// absent → "general" (those sections are stripped by the forge renderer).
+// The synthetic parent (forgePath == "") returns its pre-rendered body
+// unchanged.
 //
 // We re-check forge.yaml at load time rather than encoding the audience
 // in the synthetic path so the body reflects current reality if the
@@ -319,7 +329,7 @@ func loadForgeDefinition(def Definition) (Definition, error) {
 	if _, err := os.Stat(filepath.Join(baseDir, "forge.yaml")); err == nil {
 		audience = "forge"
 	}
-	body, err := forgecli.LoadSkillForAudience(baseDir, forgePath, audience)
+	body, err := forgecli.RenderSkill(baseDir, forgePath, forgecli.RenderSkillOptions{Audience: audience})
 	if err != nil {
 		return def, fmt.Errorf("load forge skill %q from %s: %w", forgePath, baseDir, err)
 	}

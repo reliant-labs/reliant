@@ -273,7 +273,7 @@ describe("ComputeStep loading gate", () => {
     // The form's CTAs are NOT in the DOM — there is no path through which
     // a click can race the auto-skip evaluation.
     expect(
-      screen.queryByRole("button", { name: /Use a Reliant machine/i }),
+      screen.queryByRole("button", { name: /^Continue with /i }),
     ).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Use your own computer/i }),
@@ -286,7 +286,7 @@ describe("ComputeStep loading gate", () => {
     // Loading marker is gone, form is back.
     expect(screen.queryByTestId("compute-step-loading")).not.toBeInTheDocument();
     expect(
-      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+      screen.getByRole("button", { name: /^Continue with /i }),
     ).toBeInTheDocument();
     expect(
       screen.getByRole("button", { name: /Use your own computer/i }),
@@ -375,7 +375,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+      screen.getByRole("button", { name: /^Continue with /i }),
     ).toBeEnabled();
     expect(
       screen.queryByText(/No cloud credits available/i),
@@ -431,7 +431,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
 
     await act(async () => {
       fireEvent.click(
-        screen.getByRole("button", { name: /Use a Reliant machine/i }),
+        screen.getByRole("button", { name: /^Continue with /i }),
       );
     });
 
@@ -476,7 +476,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+      screen.getByRole("button", { name: /^Continue with /i }),
     ).not.toBeDisabled();
   });
 
@@ -609,7 +609,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+      screen.getByRole("button", { name: /^Continue with /i }),
     ).toBeEnabled();
     // ...and no "you have no credits" scare copy.
     expect(
@@ -635,7 +635,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+      screen.getByRole("button", { name: /^Continue with /i }),
     ).toBeEnabled();
     expect(
       screen.getByRole("button", { name: /Have a coupon code\?/i }),
@@ -663,7 +663,7 @@ describe("ComputeStep cloud eligibility + coupon redemption", () => {
     renderComputeStep({ daemons: [], loading: false });
 
     expect(
-      screen.getByRole("button", { name: /Use a Reliant machine/i }),
+      screen.getByRole("button", { name: /^Continue with /i }),
     ).toBeEnabled();
     expect(
       screen.getByRole("button", { name: /Have a coupon code\?/i }),

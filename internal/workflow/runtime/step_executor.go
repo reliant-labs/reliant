@@ -542,6 +542,12 @@ func (e *StepExecutor) handleActivityCompletion(running *RunningStep, eventID st
 		e.nodeOutputs[running.StepID] = normalizedOutput
 	}
 
+	// Record what this batch's load_tool calls granted, for the thread's next
+	// call_llm. From the recorded result, so replay rebuilds the same grants.
+	if running.ActivityName == executeToolsActivityName {
+		e.childTracker.recordToolGrants(e.GetThread(), grantedToolsFromOutput(normalizedOutput))
+	}
+
 	// A node's save_message is written by whoever executed the node. When the
 	// activity executed it, the wrapper already wrote the message before
 	// returning; only an output the workflow assembled itself (ask_question,
@@ -778,6 +784,15 @@ func (e *StepExecutor) startAction(
 					}
 				}
 			}
+		}
+
+		// The capability set of the call_llm turn that produced these calls,
+		// copied from its recorded output: execute_tools refuses anything
+		// outside it, and load_tool grants against it. Owned by the runtime —
+		// it is never authored — and nil only when that call_llm recorded no
+		// set (research/TOOL_CAPABILITIES.md §4.1).
+		if etArgs := evalResult.GetExecuteTools(); etArgs != nil {
+			etArgs.Capabilities = e.upstreamToolCapabilities(node, etArgs.GetResolvedToolCalls())
 		}
 
 		rtx := e.buildRuntimeContext(node)
@@ -1050,6 +1065,13 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// Thread from execution context
 	if e.execContext != nil {
 		rtx.Thread = e.execContext.Thread
+	}
+
+	// What load_tool has granted on this thread so far. call_llm offers it,
+	// within what the node declares; this is how a tool loaded on one turn is
+	// callable on the next, whichever worker runs either.
+	if model.NodeType(node) == model.NodeTypeCallLLM {
+		rtx.ToolGrants = e.childTracker.toolGrantsFor(rtx.Thread)
 	}
 
 	// Loop context

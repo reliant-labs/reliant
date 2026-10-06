@@ -235,6 +235,14 @@ ORDER BY tc.requested_at ASC;
 -- resumed spawn they differ and both are needed: the thread is what a cancel
 -- signal names, while the workflow row id is what a status reconcile must
 -- CAS. Deriving either from the other is not possible — see spawn_stop.
+--
+-- issuing_message_ordinal places the spawn in the parent's transcript. A chat
+-- BRANCHED from the parent inherits the parent's history only up to its fork
+-- point, so this is what decides which of the parent's spawns the branch
+-- inherited (ListInheritedSpawnChildren). messages.ordinal is per-thread, and
+-- the issuing message is always in tc.thread_id, so it compares directly with
+-- the fork point's ordinal. NULL when the call was recorded before its
+-- assistant message was finalized.
 SELECT
     tc.id AS tool_call_id,
     tc.status AS tool_call_status,
@@ -246,10 +254,12 @@ SELECT
     w.state AS workflow_state,
     w.stop_reason AS workflow_stop_reason,
     w.completed_at AS workflow_completed_at,
-    t.title AS thread_title
+    t.title AS thread_title,
+    m.ordinal AS issuing_message_ordinal
 FROM tool_calls tc
 LEFT JOIN workflows w ON w.id = tc.child_workflow_id
 LEFT JOIN threads t ON t.id = w.thread
+LEFT JOIN messages m ON m.id = tc.message_id
 WHERE tc.tool_name = 'spawn'
   AND tc.thread_id = $1
 ORDER BY tc.requested_at ASC;

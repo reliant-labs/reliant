@@ -15,6 +15,7 @@ import {
 } from "../../gen/reliant/v1/chat_pb";
 import {
   isLiveRunStatus,
+  isUnattendedLaunchKind,
   launchKindDisplay,
   runStatus,
   runStatusFromActivity,
@@ -282,20 +283,62 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
     ["builder.test", {}, "Test", "Test run from the builder"],
     [
       "webhook",
-      { webhookName: "deploy-hook", at: "14:02" },
+      { triggerName: "deploy-hook", at: "14:02" },
       "Webhook",
       "Started by webhook deploy-hook at 14:02",
     ],
+    ["webhook", { at: "14:02" }, "Webhook", "Started by a webhook at 14:02"],
     [
       "integration",
-      { providerName: "GitHub", providerDetail: "issue #412 opened by @alice" },
-      "GitHub",
-      "Started by GitHub: issue #412 opened by @alice",
+      { triggerName: "Triage new issues", providerName: "github", providerEvent: "issues.opened" },
+      "github",
+      "Started by Triage new issues on github: issues.opened",
     ],
+    ["integration", { providerName: "github", providerEvent: "issues.opened" }, "github", "Started by github: issues.opened"],
+    ["integration", {}, "Integration", "Started by an integration"],
+    [
+      "workflow_event",
+      { triggerName: "After review", sourceWorkflow: "code-review", sourceOutcome: "finished" },
+      "Workflow event",
+      "Started by After review when code-review finished",
+    ],
+    [
+      "workflow_event",
+      { triggerName: "After review", sourceWorkflow: "code-review", sourceOutcome: "blocked" },
+      "Workflow event",
+      "Started by After review when code-review was blocked",
+    ],
+    ["workflow_event", { sourceWorkflow: "code-review", sourceOutcome: "failed" }, "Workflow event", "Started when code-review failed"],
+    ["workflow_event", {}, "Workflow event", "Started by a workflow event"],
   ] as const)("%s %j", (kind, context, shortLabel, startedByLine) => {
     const display = launchKindDisplay(kind, context);
     expect(display.shortLabel).toBe(shortLabel);
     expect(display.startedByLine).toBe(startedByLine);
+  });
+
+  // A surface links the automation by rendering lead + link + trail, so the
+  // parts must be the line exactly, and exist exactly when a name does.
+  it.each(["schedule", "webhook", "integration", "workflow_event"])(
+    "%s splits its line around the automation it names, and only then",
+    (kind) => {
+      const named = launchKindDisplay(kind, {
+        triggerName: "Auto",
+        scheduledFor: "Tue 09:00",
+        at: "14:02",
+        providerName: "github",
+        providerEvent: "push",
+        sourceWorkflow: "deploy",
+        sourceOutcome: "failed",
+      });
+      expect(named.automationParts?.automation).toBe("Auto");
+      const { lead, automation, trail } = named.automationParts!;
+      expect(`${lead}${automation}${trail}`).toBe(named.startedByLine);
+      expect(launchKindDisplay(kind, {}).automationParts).toBeUndefined();
+    },
+  );
+
+  it.each(["chat.start", "agent.start_run", "builder.test"])("%s names no automation", (kind) => {
+    expect(launchKindDisplay(kind, { triggerName: "Auto" }).automationParts).toBeUndefined();
   });
 
   it("treats null as chat.start", () => {
@@ -308,5 +351,25 @@ describe("launchKindDisplay: the §0 launch-kind vocabulary", () => {
       shortLabel: "future.kind",
       startedByLine: "Started by future.kind",
     });
+  });
+});
+
+describe("isUnattendedLaunchKind: core.TriggerEventKind.Unattended, mirrored", () => {
+  it.each([
+    ["schedule", true],
+    ["webhook", true],
+    ["integration", true],
+    ["workflow_event", true],
+    ["chat.start", false],
+    ["agent.start_run", false],
+    ["builder.test", false],
+  ])("%s → %s", (kind, unattended) => {
+    expect(isUnattendedLaunchKind(kind)).toBe(unattended);
+  });
+
+  it("reads a missing or unknown kind as attended", () => {
+    expect(isUnattendedLaunchKind(null)).toBe(false);
+    expect(isUnattendedLaunchKind(undefined)).toBe(false);
+    expect(isUnattendedLaunchKind("future.kind")).toBe(false);
   });
 });

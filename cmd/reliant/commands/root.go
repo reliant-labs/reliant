@@ -31,6 +31,7 @@ Reliant server components.`,
 	// the only place their values are read.
 	root.PersistentFlags().BoolVarP(&verbose, "verbose", "v", false, "Enable verbose output")
 	registerConnectionFlags(root)
+	enableVersionFlag(root)
 
 	// Register subcommand groups
 	root.AddCommand(newServerCmd())

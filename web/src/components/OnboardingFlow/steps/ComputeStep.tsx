@@ -38,6 +38,7 @@ import type {
   StepProps,
 } from "../types";
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
+import { StepFooterAction } from "../StepFooter";
 import { trackEvent } from "@/lib/analytics";
 import { capabilities } from "@/services/controlPlane/capabilities";
 
@@ -232,6 +233,9 @@ export function ComputeStep({
   const selectedPlanId =
     planOptions.find((option) => option.planId === plan.computePlanId)
       ?.planId ?? planOptions[0]?.planId;
+  const selectedPlanLabel = planOptions.find(
+    (option) => option.planId === selectedPlanId,
+  )?.label;
 
   // Whether the user can CHOOSE a hosted machine — which is now everyone, as
   // long as this build has hosted machines at all.
@@ -445,6 +449,9 @@ export function ComputeStep({
             // question.
             selected={!showLocal && option.planId === selectedPlanId}
             covered={option.planId === coveredPlanId}
+            // Spec and price on every row; the cost breakdown only on the
+            // picked one. Six rows of two-line breakdowns is most of a screen.
+            showFacts="selected"
             onSelect={() => {
               // Picking a hosted size is also picking "hosted", so it
               // closes the free row's expanded instructions. Without
@@ -798,38 +805,21 @@ export function ComputeStep({
             </div>
           )}
 
-          {/* The cloud CTA, and it is ABSENT while the free option is chosen.
+          {/* The step's way forward is in the card FOOTER, not here.
           
-              It is the commit for hosted compute, so with "Use your own
-              computer" selected it was a primary button that contradicted the
-              selection directly above it — the page showed a machine chosen
-              and, beneath it, one button offering to choose a different one.
-              Worse, it was the ONLY primary button on screen, so it read as
-              the way forward; clicking it silently discarded the free choice
-              and bought a machine.
+              It used to be the last thing in this box, under every machine row
+              and the notes beneath them. With six hosted sizes that put it
+              below the fold of a 1400x900 window: picking "Large" appeared to
+              do nothing, and the only button that could advance sat out of
+              sight while the footer bar was empty. The footer cannot scroll
+              away, so the action renders there — see ../StepFooter.tsx and
+              the StepFooterAction at the end of this component.
               
-              Hiding it leaves the free path with no button here at all, which
-              is correct: that path advances from the connect panel at the
-              bottom (Continue, when a daemon is already running) or
-              automatically when a daemon connects. Nothing is stranded. */}
-          {loading ? (
-            <div className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-muted px-4 py-2.5 text-sm font-semibold text-muted-foreground">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking availability...
-            </div>
-          ) : canChooseCloud && !showLocal ? (
-            // "Use a Reliant machine", not "Start my machine". The verb is
-            // the contract: this records a choice and moves on, and a label
-            // promising the machine is starting would be describing work
-            // that now happens at the end of onboarding.
-            <button
-              type="button"
-              onClick={chooseCloud}
-              className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-sky-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500"
-            >
-              Use a Reliant machine
-            </button>
-          ) : null}
+              What it says still follows the selection. It is the commit for
+              hosted compute only while a hosted machine is picked: with "Use
+              your own computer" chosen, a hosted-machine button would
+              contradict the selection and, being the only primary button on
+              screen, silently discard the free choice when clicked. */}
 
           {!loading && !HAS_CLOUD_DAEMONS && (
             <p className="text-xs leading-relaxed text-muted-foreground">
@@ -896,29 +886,20 @@ export function ComputeStep({
             list and two lines of prose. Same position, different distance.
             
             The two states are distinct answers, not a loading ladder: a daemon
-            is ALREADY running (confirm and go), or one is not (download,
-            token, wait). */}
+            is ALREADY running (confirm and go — Continue is in the footer), or
+            one is not (download, token, wait). */}
         {showLocal && activeDaemon && (
-          <div className="space-y-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
-            <div className="flex items-start gap-3">
-              <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
-              <div>
-                <h3 className="text-sm font-medium text-foreground">
-                  Your machine is connected
-                </h3>
-                <p className="mt-0.5 text-xs text-muted-foreground">
-                  Reliant found a machine already running. Continue to finish
-                  setting up.
-                </p>
-              </div>
+          <div className="flex items-start gap-3 rounded-xl border border-emerald-500/30 bg-emerald-500/5 p-4">
+            <Check className="mt-0.5 h-4 w-4 text-emerald-500" />
+            <div>
+              <h3 className="text-sm font-medium text-foreground">
+                Your machine is connected
+              </h3>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                Reliant found a machine already running. Continue to finish
+                setting up.
+              </p>
             </div>
-            <button
-              type="button"
-              onClick={handleLocalContinue}
-              className="w-full rounded-lg bg-zinc-950 py-2.5 text-sm font-medium text-white transition-colors hover:bg-zinc-800 dark:bg-white dark:text-zinc-950 dark:hover:bg-zinc-200"
-            >
-              Continue
-            </button>
           </div>
         )}
 
@@ -939,6 +920,49 @@ export function ComputeStep({
             choosing is local and cannot fail. Provisioning failures surface at
             the commit point, where the retry lives. */}
       </div>
+
+      {/* The way forward, rendered into the card footer (see the note where
+          the in-box button used to be). One slot, four states, so the footer
+          always says what happens next:
+            - checking eligibility       → disabled "Checking availability…"
+            - a hosted machine is picked → "Continue with <size>"
+            - own computer, connected    → "Continue"
+            - own computer, not yet      → disabled "Waiting…" (it advances on
+                                           its own when the machine connects)
+          "Continue with Large", not "Start my machine": this records a choice
+          and moves on. Provisioning happens at the end of onboarding, and a
+          label promising a start would be describing work that is not here. */}
+      <StepFooterAction>
+        {loading ? (
+          <button type="button" disabled className={FOOTER_PENDING}>
+            <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+            Checking availability…
+          </button>
+        ) : showLocal ? (
+          activeDaemon ? (
+            <button type="button" onClick={handleLocalContinue} className={FOOTER_PRIMARY}>
+              Continue
+            </button>
+          ) : (
+            <button type="button" disabled className={FOOTER_PENDING}>
+              <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+              Waiting for your computer to connect…
+            </button>
+          )
+        ) : canChooseCloud ? (
+          <button type="button" onClick={chooseCloud} className={FOOTER_PRIMARY}>
+            {selectedPlanLabel
+              ? `Continue with ${selectedPlanLabel}`
+              : "Continue with a Reliant machine"}
+          </button>
+        ) : null}
+      </StepFooterAction>
     </div>
   );
 }
+
+// Sized to sit beside the footer's Back button (px-4 py-2 text-sm).
+const FOOTER_PRIMARY =
+  "inline-flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-semibold text-white shadow-sm shadow-sky-600/20 transition-colors hover:bg-sky-500 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/60";
+const FOOTER_PENDING =
+  "inline-flex cursor-not-allowed items-center gap-2 rounded-lg border border-white/10 bg-white/[0.03] px-4 py-2 text-sm text-muted-foreground";

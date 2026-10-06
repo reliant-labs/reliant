@@ -33,6 +33,115 @@ type SpawnChild struct {
 	WorkflowStatus    *WorkflowStatus
 	WorkflowCompleted *time.Time
 	ThreadTitle       *string
+	// IssuingMessageOrdinal is the ordinal, in the issuing thread, of the
+	// assistant message that made this spawn call. Nil when the call was
+	// recorded before that message was finalized. It is what decides whether
+	// a chat branched from the issuer inherited the spawn.
+	IssuingMessageOrdinal *int64
+}
+
+// InheritedSpawnChild is a sub-agent spawned by a conversation the caller's
+// chat was BRANCHED from, before the branch point.
+//
+// A branch copies the transcript, spawn calls included, but not ownership:
+// the spawn's tool_calls row still names the original thread, and that thread
+// keeps running, keeps receiving the agent's reports, and is the only one that
+// can message or stop it. Exactly one owner at a time is what stops two
+// orchestrators from steering the same agent, so an inherited child is
+// something a branch can SEE, never control.
+type InheritedSpawnChild struct {
+	SpawnChild
+	// SourceThreadID is the thread that issued the spawn and still owns it.
+	SourceThreadID string
+	// SourceChatID / SourceChatTitle identify the conversation that owns it,
+	// so a refusal can tell the model where the agent actually lives.
+	SourceChatID    string
+	SourceChatTitle string
+}
+
+// maxBranchAncestry bounds the walk up a chain of branches-of-branches. Each
+// hop is a user action, so real chains are a handful deep; the bound exists
+// only so corrupt parent links cannot loop or run away.
+const maxBranchAncestry = 32
+
+// ListInheritedSpawnChildren returns the sub-agents threadID inherited by
+// being a branch (or a branch of a branch) of the conversations that spawned
+// them — every spawn an ancestor issued at or before the point the branch was
+// taken — nearest ancestor first.
+//
+// Only chat-crossing forks count. A spawned agent running in fork thread mode
+// is also an origin=fork thread, with the spawner as its parent, and it must
+// not mistake its siblings for children of its own; what makes a fork a
+// BRANCH is that it crossed into another chat, the same test ListBranches
+// applies.
+//
+// A thread that is not a branch returns nil: the common case costs one
+// primary-key read.
+func (r *Repo) ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*InheritedSpawnChild, error) {
+	if threadID == "" {
+		return nil, fmt.Errorf("thread ID cannot be empty")
+	}
+
+	var inherited []*InheritedSpawnChild
+	current := threadID
+	for hop := 0; hop < maxBranchAncestry; hop++ {
+		thread, parentChatID, err := r.GetThreadWithParent(ctx, current)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load thread %s: %w", current, err)
+		}
+		isBranch := thread.Origin == ThreadOriginFork &&
+			thread.ParentThreadID != nil && *thread.ParentThreadID != current &&
+			parentChatID != nil && *parentChatID != thread.ChatID
+		if !isBranch || thread.ForkAtMessageID == nil {
+			// Not a branch, or a branch that inherited nothing (its parent
+			// had no messages yet) — and so nothing from further up either.
+			return inherited, nil
+		}
+
+		forkPoint, err := r.GetMessage(ctx, *thread.ForkAtMessageID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load fork point %s of thread %s: %w", *thread.ForkAtMessageID, current, err)
+		}
+		sourceThreadID := *thread.ParentThreadID
+		children, err := r.ListSpawnChildren(ctx, sourceThreadID)
+		if err != nil {
+			return nil, err
+		}
+		// The title only makes a refusal friendlier; a failed read must not
+		// cost the caller the listing.
+		sourceChatTitle := ""
+		if chat, chatErr := r.GetChat(ctx, *parentChatID); chatErr == nil && chat != nil {
+			sourceChatTitle = chat.Title
+		}
+		for _, child := range children {
+			if !spawnedAtOrBefore(child, forkPoint) {
+				continue
+			}
+			inherited = append(inherited, &InheritedSpawnChild{
+				SpawnChild:      *child,
+				SourceThreadID:  sourceThreadID,
+				SourceChatID:    *parentChatID,
+				SourceChatTitle: sourceChatTitle,
+			})
+		}
+		// The next hop's cutoff is the parent's OWN fork point: the branch
+		// sees everything its parent inherited, which is all of the
+		// grandparent up to where the parent was branched.
+		current = sourceThreadID
+	}
+	return inherited, nil
+}
+
+// spawnedAtOrBefore reports whether child's spawn call is part of the history
+// up to and including forkPoint, i.e. in the branch's inherited transcript.
+func spawnedAtOrBefore(child *SpawnChild, forkPoint *Message) bool {
+	if child.IssuingMessageOrdinal != nil {
+		return *child.IssuingMessageOrdinal <= forkPoint.Ordinal
+	}
+	// No issuing message on record: fall back to time, which is coarser but
+	// errs the same way the transcript does — a call made before the fork
+	// point was written is one the branch can see.
+	return !child.RequestedAt.After(forkPoint.CreatedAt)
 }
 
 // SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool call
@@ -125,6 +234,10 @@ func (r *Repo) ListSpawnChildren(ctx context.Context, threadID string) ([]*Spawn
 		if row.ThreadTitle.Valid {
 			s := row.ThreadTitle.String
 			child.ThreadTitle = &s
+		}
+		if row.IssuingMessageOrdinal.Valid {
+			ordinal := row.IssuingMessageOrdinal.Int64
+			child.IssuingMessageOrdinal = &ordinal
 		}
 		children = append(children, child)
 	}

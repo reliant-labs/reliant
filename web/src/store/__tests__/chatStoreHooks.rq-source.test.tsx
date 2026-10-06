@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook, cleanup } from "@testing-library/react";
 import { QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -13,6 +13,23 @@ import type { Chat } from "../../types/chat";
 // patchChatCaches / seedChatDetail write to in production.
 
 import { chatKeys, patchChatCaches, seedChatDetail } from "../../hooks/chat-queries";
+
+// A hook asked for a chat that is not in the cache fetches it. The server
+// these tests stand in for has none of them; unmocked, the fetch was a real
+// RPC that settled after the test.
+vi.mock("../../api/chat-grpc", async () => {
+  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>("../../api/chat-grpc");
+  const { Code, ConnectError } = await import("@connectrpc/connect");
+  return {
+    ...actual,
+    chatGrpc: {
+      ...actual.chatGrpc,
+      get: vi.fn(async (chatId: string) => {
+        throw new ConnectError(`chat ${chatId} not found`, Code.NotFound);
+      }),
+    },
+  };
+});
 import { queryClient } from "../../lib/query-client";
 import { useChatStore } from "../chatStore";
 import { useActiveChat, useChat } from "../chatStoreHooks";

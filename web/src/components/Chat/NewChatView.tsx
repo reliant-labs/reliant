@@ -11,7 +11,19 @@ import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { useChatParamsStore } from "../../store/chatParamsStore";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
 import { useDaemonWait } from "@/hooks/useDaemonWait";
+import { useBundledDaemonPending } from "@/hooks/useBundledDaemonPending";
+import { useCapability } from "@/lib/surfaceContext";
+import {
+  DEFAULT_MACHINE,
+  NO_MACHINE,
+  NO_MACHINE_COMPOSER_HINT,
+  defaultChatMachine,
+  hasUsableMachineForChat,
+  startOptionsForMachine,
+  type ChatMachineChoice,
+} from "@/lib/chatMachine";
 import { DaemonWaitState } from "../DaemonWaitState";
+import { MachinePicker } from "./MachinePicker";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
@@ -24,6 +36,7 @@ import {
   Check,
   Search,
   FolderPlus,
+  CloudOff,
 } from "lucide-react";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
@@ -82,11 +95,30 @@ export function NewChatView({
   const ensureApiKeyOrShowModal = useApiKeySetupStore(
     (state) => state.ensureApiKeyOrShowModal
   );
-  const { activeDaemon, loading: daemonLoading, refresh: refreshDaemons } =
+  const { activeDaemon, daemons, loading: daemonLoading, refresh: refreshDaemons } =
     useDaemonStatus();
   const daemonConnected = Boolean(activeDaemon);
+
+  // Where the chat runs (NO_MACHINE_CHATS.md §2.1). Null until the user picks:
+  // the default is the user's machine whenever they have a usable one, and
+  // No machine only when they have none at all. An asleep machine still
+  // counts — sending wakes it — and the desktop app's own daemon gets the
+  // moments it needs to register before an empty list means "none".
+  const canPickMachine = useCapability("chatDaemonSelection");
+  const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
+  const awaitingBundledDaemon = useBundledDaemonPending(hasUsableMachineForChat(daemons));
+  const defaultMachine = defaultChatMachine({
+    daemons,
+    loading: daemonLoading,
+    awaitingBundledDaemon,
+  });
+  const machine = (canPickMachine ? machineChoice : null) ?? defaultMachine ?? DEFAULT_MACHINE;
+  const noMachine = machine === NO_MACHINE;
+  // A chat on a machine still waits for one to be connected, as before.
+  const machineReady = noMachine || daemonConnected;
+
   const daemonWait = useDaemonWait({
-    waiting: !daemonConnected && !daemonLoading,
+    waiting: !machineReady && !daemonLoading,
     onRetry: refreshDaemons,
   });
 
@@ -172,9 +204,9 @@ export function NewChatView({
     workflow?: string | null,
     workflowParams?: Record<string, unknown>
   ) => {
-    if (!daemonConnected) {
+    if (!machineReady) {
       toast.error("No machine connected", {
-        description: "Start a machine to begin chatting.",
+        description: "Start a machine to begin chatting, or continue without a machine.",
       });
       return;
     }
@@ -182,7 +214,10 @@ export function NewChatView({
 
     setIsCreating(true);
     try {
-      const chatWorktreeId = selectedWorkspaceId || mainWorktree?.id;
+      // A chat with no machine runs in the project's main checkout: a branch
+      // workspace is a checkout on one machine.
+      const chatWorktreeId = noMachine ? mainWorktree?.id : selectedWorkspaceId || mainWorktree?.id;
+      const { daemon_id: daemonId, no_machine: startNoMachine } = startOptionsForMachine(machine);
 
       if (!chatWorktreeId) {
         const error = `Cannot create chat: No worktree found. worktrees.length=${worktrees.length}, mainWorktree=${mainWorktree?.id}`;
@@ -192,11 +227,15 @@ export function NewChatView({
 
       const chat = await useChatStore
         .getState()
-        .startChat(chatWorktreeId, content, attachmentIds, workflowParams, workflow);
+        .startChat(chatWorktreeId, content, attachmentIds, workflowParams, workflow, undefined, {
+          daemonId,
+          noMachine: startNoMachine,
+        });
 
       trackEvent('chat_created', {
         has_attachments: Boolean(attachmentIds?.length),
         workflow: workflow ?? 'default',
+        no_machine: noMachine,
       });
 
       useChatParamsStore.getState().transferTempToChat(chat.id);
@@ -295,6 +334,20 @@ export function NewChatView({
                 className="w-full flex flex-wrap items-center justify-center gap-3"
                 data-onboarding="workspace-buttons"
               >
+                {canPickMachine && (
+                  <MachinePicker
+                    value={machine}
+                    onChange={setMachineChoice}
+                    daemons={daemons}
+                    defaultDaemon={activeDaemon}
+                    disabled={isCreating}
+                  />
+                )}
+
+                {/* Workspaces are checkouts on a machine; a chat with no
+                    machine has none to pick. */}
+                {!noMachine && (
+                <>
                 {/* Workspace Selector */}
                 <div className="relative" ref={workspaceDropdownRef}>
                   <Tooltip
@@ -407,6 +460,8 @@ export function NewChatView({
                     <span className="leading-none">New workspace</span>
                   </button>
                 </Tooltip>
+                </>
+                )}
               </div>
 
             </div>
@@ -433,23 +488,49 @@ export function NewChatView({
           started, but this banner used to say "No machine connected" for both
           — telling a user to go start a machine that was 15 seconds from
           ready. The shared wait state distinguishes them. */}
-      {!daemonConnected && !daemonLoading && daemonWait.state && (
-        <DaemonWaitState
-          state={daemonWait.state}
-          variant="inline"
-          onRetry={
-            capabilities.cloudDaemons
-              ? daemonWait.retryNow
-              : () => setShowConnectDaemonModal(true)
-          }
-        />
+      {!machineReady && !daemonLoading && daemonWait.state && (
+        <>
+          <DaemonWaitState
+            state={daemonWait.state}
+            variant="inline"
+            onRetry={
+              capabilities.cloudDaemons
+                ? daemonWait.retryNow
+                : () => setShowConnectDaemonModal(true)
+            }
+          />
+          {/* The machine is unavailable; the chat does not have to wait for it. */}
+          {canPickMachine && (
+            <div className="flex-shrink-0 px-4 pb-1 text-center text-xs text-muted-foreground">
+              <button
+                type="button"
+                onClick={() => setMachineChoice(NO_MACHINE)}
+                data-testid="new-chat-continue-without-machine"
+                className="font-medium text-primary hover:underline"
+              >
+                Continue without machine
+              </button>{" "}
+              — web &amp; integrations only
+            </div>
+          )}
+        </>
+      )}
+      {noMachine && (
+        <p
+          role="note"
+          data-testid="new-chat-no-machine-hint"
+          className="flex flex-shrink-0 items-center justify-center gap-1.5 px-4 pb-1.5 text-xs text-muted-foreground"
+        >
+          <CloudOff className="h-3 w-3" aria-hidden="true" />
+          {NO_MACHINE_COMPOSER_HINT}
+        </p>
       )}
       {isFocused ? (
         <div className="flex-shrink-0">
           <ChatInput
             ref={chatInputRef}
             onSend={handleCreateAndSend}
-            disabled={isCreating || !daemonConnected}
+            disabled={isCreating || !machineReady}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
           />
         </div>

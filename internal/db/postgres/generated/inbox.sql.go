@@ -197,7 +197,10 @@ SELECT kind, item_key, chat_id, run_id, trigger_id, project_id, project_name, wo
     -- A completed, still-unread run of an automation that opted in to
     -- "Notify me when it finishes". Unread is the clear condition: opening the
     -- chat marks it read. A run that declared a failure outcome is a failure,
-    -- not a finish.
+    -- not a finish. Every unattended launch kind counts — the caller passes
+    -- core.UnattendedEventKinds(), the rule the unread write follows — so a
+    -- webhook, provider-event or workflow-event automation is listed exactly
+    -- as a schedule is.
     SELECT
         6,
         c.id,
@@ -217,7 +220,7 @@ SELECT kind, item_key, chat_id, run_id, trigger_id, project_id, project_name, wo
     JOIN triggers t ON t.id = c.trigger_id AND t.user_id = c.user_id
     JOIN projects p ON p.id = c.project_id AND p.user_id = c.user_id
     LEFT JOIN workflows rw ON rw.id = c.workflow_id
-    WHERE c.launch_kind = 'schedule'
+    WHERE c.launch_kind = ANY($2::text[])
       AND t.notify_on_complete
       AND c.display_state = 5
       AND c.unread = 1
@@ -227,6 +230,11 @@ SELECT kind, item_key, chat_id, run_id, trigger_id, project_id, project_name, wo
 ) inbox
 ORDER BY kind, waiting_since, item_key
 `
+
+type ListInboxPendingParams struct {
+	UserID          string   `json:"user_id"`
+	UnattendedKinds []string `json:"unattended_kinds"`
+}
 
 type ListInboxPendingRow struct {
 	Kind         int32     `json:"kind"`
@@ -273,8 +281,8 @@ type ListInboxPendingRow struct {
 //	launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 //	waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
 //	                 id and the block's start, so a later block is a new item
-func (q *Queries) ListInboxPending(ctx context.Context, userID string) ([]ListInboxPendingRow, error) {
-	rows, err := q.db.QueryContext(ctx, listInboxPending, userID)
+func (q *Queries) ListInboxPending(ctx context.Context, arg ListInboxPendingParams) ([]ListInboxPendingRow, error) {
+	rows, err := q.db.QueryContext(ctx, listInboxPending, arg.UserID, pq.Array(arg.UnattendedKinds))
 	if err != nil {
 		return nil, err
 	}

@@ -1237,15 +1237,53 @@ func (s *ChatService) SetChatDaemon(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 	}
 
-	// Set or clear the active daemon
+	// Set or clear the active daemon. A daemon must be one the caller owns and,
+	// when the project tracks installs, one it is installed on — the same rule
+	// StartChat applies to a chosen daemon.
 	var daemonID *string
 	if req.Msg.DaemonId != "" {
+		if err := validateOwnedProjectDaemon(ctx, s.database, userID, chat.ProjectID, req.Msg.DaemonId); err != nil {
+			return nil, err
+		}
 		daemonID = &req.Msg.DaemonId
 	}
 
-	if err := s.database.UpdateChatActiveDaemon(ctx, chat.ID, daemonID); err != nil {
+	// Pinning a daemon is also how a chat with no machine gets one ("Connect a
+	// machine", research/NO_MACHINE_CHATS.md): UpdateChatActiveDaemon clears
+	// no_machine in the same write, and the next call_llm re-reads the row and
+	// offers the full tool set. Clearing never sets it, so a chat on a machine
+	// cannot become one without. Other clients learn of it through the same
+	// chat_config_changed update UpdateChat emits.
+	connecting := chat.NoMachine && daemonID != nil
+	if err := s.database.RunTx(ctx, func(txCtx context.Context) error {
+		if err := s.database.UpdateChatActiveDaemon(txCtx, chat.ID, daemonID); err != nil {
+			return err
+		}
+		configData, err := json.Marshal(map[string]interface{}{
+			"chat_id":          chat.ID,
+			"active_daemon_id": req.Msg.DaemonId,
+			"no_machine":       chat.NoMachine && !connecting,
+		})
+		if err != nil {
+			return err
+		}
+		return s.database.CreateUserUpdate(txCtx, &db.UserUpdate{
+			UserID:     userID,
+			ProjectID:  &chat.ProjectID,
+			WorktreeID: chat.WorktreeID,
+			ChatID:     &chat.ID,
+			UpdateType: db.UserUpdateChatConfigChanged,
+			EntityType: db.EntityTypeChat,
+			EntityID:   chat.ID,
+			Data:       configData,
+		})
+	}); err != nil {
 		logging.Error("Failed to set chat daemon", "error", err, "chatID", chat.ID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to set chat daemon"))
+	}
+	if connecting {
+		logging.Info("[SetChatDaemon] chat with no machine connected to a machine",
+			"chatID", chat.ID, "daemonID", req.Msg.DaemonId)
 	}
 
 	// Re-fetch chat with updated daemon

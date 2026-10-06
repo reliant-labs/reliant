@@ -754,6 +754,7 @@ type TriggerEvent struct {
 	OutcomeDetail string          `json:"outcome_detail"`
 	ChatID        sql.NullString  `json:"chat_id"`
 	CreatedAt     time.Time       `json:"created_at"`
+	RunStatus     sql.NullString  `json:"run_status"`
 }
 
 type TriggerRegistration struct {

@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"sort"
 	"time"
 )
 
@@ -82,6 +83,51 @@ const (
 // pending and launched later by the fire workflow.
 func (k TriggerEventKind) IsInbound() bool {
 	return k == TriggerEventKindWebhook || k == TriggerEventKindIntegration || k == TriggerEventKindWorkflowEvent
+}
+
+// Unattended reports whether a run launched by an event of this kind has no
+// human behind it, so its trigger stands in for its owner. Two things follow:
+//
+//   - Only such a run may wake its machine with the delegated daemon:resume
+//     token its trigger holds (see internal/automationcred): nobody is signed
+//     in to wake it any other way. An attended run acts as the signed-in user
+//     or not at all.
+//   - Only such a run's finish is governed by its trigger's notification
+//     policy (NotifyOnComplete, one notification per failure streak): nobody
+//     is waiting on it. An attended run notifies whoever is.
+//
+// Both also need the run's own trigger — its token, its row — which is the
+// launch event's trigger id, not something a kind can promise.
+//
+// A kind missing from eventKindUnattended reads as attended, so a new kind
+// that was never classified can never borrow the token or go quiet — and a
+// test fails until it is classified.
+func (k TriggerEventKind) Unattended() bool { return eventKindUnattended[k] }
+
+// UnattendedEventKinds lists, sorted, the kinds Unattended reports true for:
+// the same rule, for a query that has to apply it in SQL.
+func UnattendedEventKinds() []string {
+	kinds := make([]string, 0, len(eventKindUnattended))
+	for kind, unattended := range eventKindUnattended {
+		if unattended {
+			kinds = append(kinds, string(kind))
+		}
+	}
+	sort.Strings(kinds)
+	return kinds
+}
+
+// eventKindUnattended takes a position on every TriggerEventKind.
+var eventKindUnattended = map[TriggerEventKind]bool{
+	// A stored trigger fired: nobody pressed anything.
+	TriggerEventKindSchedule:      true,
+	TriggerEventKindWebhook:       true,
+	TriggerEventKindIntegration:   true,
+	TriggerEventKindWorkflowEvent: true,
+	// A human started it, directly or through an agent working for them.
+	TriggerEventKindChatStart:     false,
+	TriggerEventKindAgentStartRun: false,
+	TriggerEventKindBuilderTest:   false,
 }
 
 // TriggerEventOutcome records what a firing did.
@@ -293,7 +339,21 @@ type TriggerEvent struct {
 	OutcomeDetail string
 	ChatID        *string // the chat this firing launched, when it launched one
 	CreatedAt     time.Time
+	// RunStatus is how the run this firing launched ended — one of the
+	// TriggerRun* values — recorded when that run, the one the trigger itself
+	// fired, reaches a terminal status. Empty while it is still going, and for
+	// a firing that launched no unattended run. A person can keep a launched
+	// chat going with turns of their own; the trigger's health, streak and
+	// overlap rules are about its own run, so they read this, not the chat.
+	RunStatus string
 }
+
+// How a trigger's own run ended (TriggerEvent.RunStatus).
+const (
+	TriggerRunCompleted = "completed"
+	TriggerRunFailed    = "failed"
+	TriggerRunCancelled = "cancelled"
+)
 
 // TriggerEventRun is the run a launched firing started, as the firing's
 // reader sees it now. DisplayState is derived in SQL by the same table as
@@ -394,6 +454,10 @@ type TriggerStore interface {
 	// UpdateTriggerEventOutcome returns ErrTriggerEventNotFound when the id
 	// does not resolve.
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome TriggerEventOutcome, detail string, chatID *string) error
+	// SetLaunchEventRunStatus records status (a TriggerRun* value) as how the
+	// run its trigger fired ended, on chatID's launch event. A chat with no
+	// launch event is not an error: there is nothing to record against.
+	SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error
 	// UpdateTriggerEventPayload replaces the event's payload. It returns
 	// ErrTriggerEventNotFound when the id does not resolve.
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error

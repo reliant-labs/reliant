@@ -958,9 +958,10 @@ export const ErrorRuleSchema: GenMessage<ErrorRule> = /*@__PURE__*/
 export type OutputSpec = Message<"reliant.v1.OutputSpec"> & {
   /**
    * Select is "$" (whole parsed body; the default), "$raw" (raw body text as
-   * {"body": "..."}) or CEL over `response`, `status` and `headers`. With
-   * pagination, select is evaluated per page, must yield a list, and the
-   * lists are concatenated into {"items": [...]}.
+   * {"body": "..."}) or CEL over `response`, `status`, `headers` and the
+   * action's validated `params`. With pagination, select is evaluated per
+   * page, must yield a list, and the lists are concatenated into
+   * {"items": [...]}.
    *
    * @generated from field: string select = 1;
    */

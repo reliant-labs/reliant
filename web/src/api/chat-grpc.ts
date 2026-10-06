@@ -27,6 +27,7 @@ import {
   CompactChatRequestSchema,
   BranchChatRequestSchema,
   ListBranchesRequestSchema,
+  SetChatDaemonRequestSchema,
   UpdateWorkflowParamsRequestSchema,
   GetChatUpdatesRequestSchema,
   ListChatPlansRequestSchema,
@@ -180,6 +181,7 @@ export interface StartChatOptions {
   title?: string;
   worktree_id?: string;
   daemon_id?: string; // Machine the run executes on; omit for default resolution
+  no_machine?: boolean; // No machine by design (web & integrations only); excludes daemon_id
   workflow?: string;  // Optional - defaults to user's preference or builtin://agent
   mode?: string;
   attachments?: string[];
@@ -261,6 +263,7 @@ export const chatGrpc = {
       title: options.title,
       worktreeId: options.worktree_id,
       daemonId: options.daemon_id || undefined,
+      noMachine: options.no_machine || undefined,
       workflow: options.workflow,
       mode: options.mode,
       attachments: options.attachments || [],
@@ -676,6 +679,8 @@ export const chatGrpc = {
       messageId: string; // Message ID to branch from (unique, unambiguous)
       title?: string;
       worktreeId?: string;
+      // "Continue without machine": the branch has no machine (no worktree, no daemon).
+      noMachine?: boolean;
       workspaceContext?: {
         sourceWorktreeId?: string;
         filesCopied?: string[];
@@ -706,12 +711,23 @@ export const chatGrpc = {
       title: options.title,
       worktreeId: options.worktreeId,
       workspaceContext,
+      noMachine: options.noMachine || undefined,
     });
     const response = await client.branchChat(request);
     if (!response.chat) throw new Error("No chat in response");
     return {
       chat: convertProtoChat(response.chat),
     };
+  },
+
+  // Pin a chat to a machine. On a chat with no machine this is "Connect a
+  // machine": the server clears no_machine in the same write, and the next turn
+  // gets the full tool set. An empty daemonId clears the pin.
+  async setDaemon(chatId: string, daemonId: string): Promise<Chat> {
+    const client = grpcClient.chat();
+    const response = await client.setChatDaemon(create(SetChatDaemonRequestSchema, { chatId, daemonId }));
+    if (!response.chat) throw new Error("No chat in response");
+    return convertProtoChat(response.chat);
   },
 
   // List branches of a chat

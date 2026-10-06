@@ -449,7 +449,18 @@ export const forgeEnvPageSearchSchema = z.object({
    * Changes (what the old Preview tab led with).
    */
   tab: z
-    .enum(["overview", "running", "releases", "secrets", "changes", "checks", "live", "preview"])
+    .enum([
+      "overview",
+      "running",
+      "releases",
+      "activity",
+      "secrets",
+      "domains",
+      "changes",
+      "checks",
+      "live",
+      "preview",
+    ])
     .optional(),
 });
 

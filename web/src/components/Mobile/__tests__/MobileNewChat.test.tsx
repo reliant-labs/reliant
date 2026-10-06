@@ -1,10 +1,13 @@
 /**
  * The new-chat screen — what it sends, and what it refuses to show.
  *
- * The scope assertions matter as much as the happy path: `chatAttachments`,
- * `chatWorkflowParams` and `chatDaemonSelection` are all false for this
- * surface, and the way that regresses is someone porting one more control
- * over from the desktop composer "since it was right there".
+ * The scope assertions matter as much as the happy path: `chatAttachments`
+ * and `chatWorkflowParams` are false for this surface, and the way that
+ * regresses is someone porting one more control over from the desktop
+ * composer "since it was right there". Where the chat runs is the one
+ * deliberate exception (`chatDaemonSelection`, research/NO_MACHINE_CHATS.md
+ * §2.5): a phone often has no machine awake, and No machine is the default
+ * then.
  */
 
 import { describe, expect, it, vi, beforeEach } from 'vitest'
@@ -68,9 +71,22 @@ vi.mock('../../../store/preferencesStore', () => ({
 
 vi.mock('../../../lib/analytics', () => ({ trackEvent: vi.fn() }))
 
+// DaemonStatus: ACTIVE = 1, SUSPENDED = 5.
+const daemonList = vi.hoisted(() => ({
+  current: [{ daemonId: 'd-laptop', hostname: 'laptop', status: 1 }] as Array<{
+    daemonId: string
+    hostname: string
+    status: number
+  }>,
+}))
+vi.mock('@/hooks/useOnboardingQueries', () => ({
+  useDaemonList: () => ({ data: daemonList.current, isLoading: false }),
+}))
+
 const { MobileNewChat } = await import('../MobileNewChat')
 
 beforeEach(() => {
+  daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 1 }]
   startChat.mockReset()
   startChat.mockResolvedValue({ id: 'chat-9' })
   selectChat.mockReset()
@@ -150,11 +166,51 @@ describe('MobileNewChat', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('offers no attachment, params, or daemon controls', () => {
+  it('offers no attachment, params, or workspace controls', () => {
     render(<MobileNewChat />)
     expect(screen.queryByLabelText(/attach/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/parameters/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/daemon|machine/i)).not.toBeInTheDocument()
+    expect(screen.queryByText(/daemon/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/workspace|worktree|branch/i)).not.toBeInTheDocument()
+  })
+
+  it('runs on the awake machine by default, sending no daemon', async () => {
+    render(<MobileNewChat />)
+    expect(screen.getByText('Runs on')).toBeInTheDocument()
+    expect(screen.getByText('laptop')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Message'), 'hi')
+    await userEvent.click(screen.getByLabelText('Send'))
+
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    // No seventh argument: default resolution, exactly as before.
+    expect(startChat.mock.calls[0][6]).toBeUndefined()
+  })
+
+  it('preselects No machine when none of the machines is awake', async () => {
+    daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 5 }]
+    render(<MobileNewChat />)
+    expect(screen.getByText('No machine')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Message'), 'read the news')
+    await userEvent.click(screen.getByLabelText('Send'))
+
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    expect(startChat.mock.calls[0][0]).toBe('wt-main')
+    expect(startChat.mock.calls[0][6]).toEqual({ daemonId: undefined, noMachine: true })
+  })
+
+  it('wakes an asleep machine the user picks', async () => {
+    daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 5 }]
+    render(<MobileNewChat />)
+
+    await userEvent.click(screen.getByText('Runs on'))
+    await userEvent.click(screen.getByRole('button', { name: /^laptop/ }))
+    await userEvent.type(screen.getByLabelText('Message'), 'fix the build')
+    await userEvent.click(screen.getByLabelText('Send'))
+
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    // A chosen daemon is woken by the server at send.
+    expect(startChat.mock.calls[0][6]).toEqual({ daemonId: 'd-laptop', noMachine: undefined })
   })
 })

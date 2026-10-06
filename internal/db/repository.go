@@ -199,6 +199,10 @@ type Repository interface {
 	// this cannot return another thread's children), joined to each child's
 	// live workflow/thread state. Backs spawn_status's listing mode.
 	ListSpawnChildren(ctx context.Context, threadID string) ([]*SpawnChild, error)
+	// ListInheritedSpawnChildren returns the sub-agents threadID can see but
+	// does not own: those spawned, before the branch point, by a conversation
+	// threadID's chat was branched from. The original still owns them.
+	ListInheritedSpawnChildren(ctx context.Context, threadID string) ([]*InheritedSpawnChild, error)
 	// ListLiveBackgroundSpawns returns every background spawn issued anywhere
 	// in a root execution that has not reported back — the spawns a coarse
 	// fresh restart of that root must relaunch.
@@ -717,6 +721,9 @@ type Repository interface {
 	// event whose root run is still live (pending, active or paused).
 	CountLiveLaunchedRuns(ctx context.Context, userID string, kind core.TriggerEventKind) (int, error)
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome core.TriggerEventOutcome, detail string, chatID *string) error
+	// SetLaunchEventRunStatus records how the run a trigger fired ended, on
+	// the chat's launch event (core.TriggerEvent.RunStatus).
+	SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error
 	// ListTriggerEvents returns one page of the trigger's firings newest first,
 	// each with the run it launched, and whether more follow.

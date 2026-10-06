@@ -3,32 +3,22 @@ package tools
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-// newLoadToolTestCtx creates a ToolContext bound to a unique chat ID for the
-// running test and arranges cleanup of the global LoadedToolsStore entry.
+// newLoadToolTestCtx is a tool context for a turn whose node declared
+// loadable_tools: ["*"] at the given tier and was offered nothing yet — the
+// shape the default agents run load_tool in.
 func newLoadToolTestCtx(t *testing.T, permission string) *rctx.ToolContext {
 	t.Helper()
-	chatID := "loadtool-test-" + t.Name()
-	const thread = "0"
-	scopeKey := Scope(chatID, thread)
-
-	store := GetLoadedToolsStore()
-	store.Clear(scopeKey) // start clean in case a prior run left state
-	store.SetPermission(scopeKey, permission)
-
-	t.Cleanup(func() {
-		store.Clear(scopeKey)
-	})
-
-	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
-	return rctx.NewToolContext(context.Background(), chatID, thread, nil, worktree)
+	return toolCtxWithCaps(t, &Capabilities{LoadableAll: true, Permission: permission})
 }
 
 // ----- Load / search behavior -----
@@ -103,12 +93,9 @@ func TestLoadTool_GeneralPresetAgentCanReachWorkflowTools(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, loadResp.IsError,
 			"a mutating-permission agent must be able to load %q via load_tool: %s", name, loadResp.Content)
+		assert.Equal(t, []string{name}, grantsOf(t, loadResp), "%q must be granted", name)
 	}
 
-	loaded := GetLoadedToolsStore().Get(Scope(ctx.ChatID, ctx.Thread))
-	for _, name := range []string{ToolCreateWorkflow, ToolEditWorkflow, ToolListWorkflows, ToolGetWorkflow} {
-		assert.Contains(t, loaded, name, "%q should be recorded as loaded for this chat", name)
-	}
 }
 
 func TestLoadTool_SearchByQuery_NoMatches(t *testing.T) {
@@ -141,11 +128,8 @@ func TestLoadTool_EmptyParams_ReturnsError(t *testing.T) {
 func TestLoadTool_SearchByQuery_SurfacesConnectedMCPTool(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
-
-	GetLoadedToolsStore().SetAvailableMCPTools(Scope(ctx.ChatID, ctx.Thread), []MCPToolInfo{
-		{Name: "mcp__chrome-devtools__take_screenshot", Description: "Capture a screenshot"},
-	})
+	ctx := toolCtxWithCaps(t, &Capabilities{LoadableAll: true, Permission: PermissionOrchestrator,
+		MCPTools: []string{"mcp__chrome-devtools__take_screenshot"}})
 
 	resp, err := tool.Execute(ctx, LoadToolParams{Query: "screenshot"})
 	require.NoError(t, err)
@@ -157,39 +141,30 @@ func TestLoadTool_SearchByQuery_SurfacesConnectedMCPTool(t *testing.T) {
 func TestLoadTool_LoadMCPTool_ConnectedSucceeds(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
-
 	const mcpName = "mcp__chrome-devtools__take_screenshot"
-	GetLoadedToolsStore().SetAvailableMCPTools(Scope(ctx.ChatID, ctx.Thread), []MCPToolInfo{
-		{Name: mcpName, Description: "Capture a screenshot"},
-	})
+	ctx := toolCtxWithCaps(t, &Capabilities{LoadableAll: true, Permission: PermissionOrchestrator,
+		MCPTools: []string{mcpName}})
 
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: mcpName})
 	require.NoError(t, err)
 	assert.False(t, resp.IsError, "connected MCP tool should load: %s", resp.Content)
 	assert.Contains(t, resp.Content, mcpName)
-	assert.Contains(t, resp.Metadata, mcpName, "metadata should announce the loaded MCP tool")
-	assert.True(t, GetLoadedToolsStore().Has(Scope(ctx.ChatID, ctx.Thread), mcpName),
-		"connected MCP tool must be recorded in the store")
+	assert.Equal(t, []string{mcpName}, grantsOf(t, resp), "the connected MCP tool must be granted")
 }
 
 func TestLoadTool_LoadMCPTool_UnconnectedErrors(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
-
 	// A different MCP tool is connected; request one that is not.
-	GetLoadedToolsStore().SetAvailableMCPTools(ctx.ChatID, []MCPToolInfo{
-		{Name: "mcp__chrome-devtools__navigate_page", Description: "Navigate"},
-	})
+	ctx := toolCtxWithCaps(t, &Capabilities{LoadableAll: true, Permission: PermissionOrchestrator,
+		MCPTools: []string{"mcp__chrome-devtools__navigate_page"}})
 
 	const missing = "mcp__chrome-devtools__take_screenshot"
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: missing})
 	require.NoError(t, err)
 	assert.True(t, resp.IsError, "unconnected MCP tool must error instead of being silently added")
 	assert.Contains(t, resp.Content, "not available")
-	assert.False(t, GetLoadedToolsStore().Has(ctx.ChatID, missing),
-		"unavailable MCP tool must NOT be recorded in the store")
+	assert.Empty(t, grantsOf(t, resp), "an unavailable MCP tool must NOT be granted")
 }
 
 func TestLoadTool_LoadMCPTool_NoneConnectedErrors(t *testing.T) {
@@ -242,64 +217,63 @@ func TestLoadTool_PermissionGating_OrchestratorCanLoadAnything(t *testing.T) {
 	}
 }
 
-// ----- Store integration -----
+// ----- Grants -----
 
-func TestLoadTool_StoresInLoadedToolsStore(t *testing.T) {
+// A grant is reported, not stored: execute_tools reads it from the metadata
+// into granted_tools, and the workflow hands it to the thread's next call_llm.
+func TestLoadTool_GrantIsReportedInMetadata(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
 	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
-
-	store := GetLoadedToolsStore()
-	scopeKey := Scope(ctx.ChatID, ctx.Thread)
-	assert.False(t, store.Has(scopeKey, ToolWrite), "precondition: not yet loaded")
 
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, "load must succeed: %s", resp.Content)
-
-	assert.True(t, store.Has(scopeKey, ToolWrite),
-		"successfully loaded tool must be recorded in the store")
+	assert.Equal(t, []string{ToolWrite}, grantsOf(t, resp))
 }
 
-func TestLoadTool_LoadAlreadyLoadedTool_Idempotent(t *testing.T) {
+// "Already loaded" means offered on this turn — the set is the only record.
+func TestLoadTool_LoadOfferedTool_SaysAlreadyLoaded(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
+	ctx := toolCtxWithCaps(t, &Capabilities{LoadableAll: true, Permission: PermissionOrchestrator,
+		Offered: []string{ToolLoadTool, ToolWrite}})
 
-	// First load
-	resp1, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
 	require.NoError(t, err)
-	require.False(t, resp1.IsError)
-
-	// Second load
-	resp2, err := tool.Execute(ctx, LoadToolParams{Name: ToolWrite})
-	require.NoError(t, err)
-	assert.False(t, resp2.IsError, "loading an already-loaded tool must not error")
-	assert.Contains(t, strings.ToLower(resp2.Content), "already loaded")
-
-	// Still exactly one entry.
-	store := GetLoadedToolsStore()
-	loaded := store.Get(Scope(ctx.ChatID, ctx.Thread))
-	assert.Equal(t, []string{ToolWrite}, loaded)
+	assert.False(t, resp.IsError, "loading an already-loaded tool must not error")
+	assert.Contains(t, strings.ToLower(resp.Content), "already loaded")
+	assert.Empty(t, grantsOf(t, resp), "nothing new is granted")
 }
 
-func TestLoadTool_DeniedLoadNotStored(t *testing.T) {
+func TestLoadTool_DeniedLoadGrantsNothing(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	// spawn is the one capability the ladder still gates, so it is what a denial
-	// is tested with now that readonly is gone.
+	// start_run is orchestrator-only, so it is what a tier denial is tested with.
 	ctx := newLoadToolTestCtx(t, PermissionMutating)
 
-	resp, err := tool.Execute(ctx, LoadToolParams{Name: "spawn"})
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolStartRun})
 	require.NoError(t, err)
-	require.True(t, resp.IsError, "a mutating agent must be denied spawn")
+	require.True(t, resp.IsError, "a mutating agent must be denied start_run")
+	assert.Contains(t, resp.Content, "requires 'orchestrator' permission")
+	assert.Empty(t, grantsOf(t, resp), "a denied load must grant nothing")
+}
 
-	scopeKey := Scope(ctx.ChatID, ctx.Thread)
-	store := GetLoadedToolsStore()
-	assert.False(t, store.Has(scopeKey, "spawn"),
-		"permission-denied load must NOT be recorded in the store")
-	assert.Nil(t, store.Get(scopeKey),
-		"store should have no loaded tools after a denied load")
+// With no set on the context — a batch whose call_llm recorded none, from a
+// run that predates it — load_tool falls back to the chat row's boundary.
+func TestLoadTool_NoRecordedSet_StaysWithinTheChatRow(t *testing.T) {
+	t.Parallel()
+	tool := &loadToolTool{}
+	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
+	ctx := rctx.NewToolContext(nomachine.With(context.Background()), "legacy-"+t.Name(), "0", nil, worktree)
+
+	refused, err := tool.Execute(ctx, LoadToolParams{Name: ToolView})
+	require.NoError(t, err)
+	assert.True(t, refused.IsError, "a no-machine chat must not load a machine tool: %s", refused.Content)
+
+	loaded, err := tool.Execute(ctx, LoadToolParams{Name: ToolFetch})
+	require.NoError(t, err)
+	assert.False(t, loaded.IsError, loaded.Content)
 }
 
 // ----- SetDeferredTools / Description -----
@@ -366,23 +340,22 @@ func TestLoadTool_TagWorkflow_LoadsAllTwenty(t *testing.T) {
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
+	assert.ElementsMatch(t, want, grantsOf(t, resp))
 
-	loaded := GetLoadedToolsStore().Get(Scope(ctx.ChatID, ctx.Thread))
-	for _, name := range want {
-		assert.Contains(t, loaded, name)
-	}
-
-	again, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
+	// On the next turn they are offered, and loading the tag again is a no-op.
+	nextTurn := toolCtxWithCaps(t, &Capabilities{LoadableAll: true, Permission: PermissionOrchestrator,
+		Offered: sortedUnique(append([]string{ToolLoadTool}, want...))})
+	again, err := tool.Execute(nextTurn, LoadToolParams{Name: "tag:workflow"})
 	require.NoError(t, err)
 	assert.Contains(t, again.Content, "20 already loaded")
+	assert.Empty(t, grantsOf(t, again))
 }
 
 func TestLoadTool_TagWorkflow_RestrictedLoadableReportsRefused(t *testing.T) {
 	t.Parallel()
 	tool := &loadToolTool{}
-	ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
-	scopeKey := Scope(ctx.ChatID, ctx.Thread)
-	GetLoadedToolsStore().SetToolAccess(scopeKey, ToolAccess{Loadable: []string{ToolGetWorkflow, ToolListWorkflows}})
+	ctx := toolCtxWithCaps(t, &Capabilities{Permission: PermissionOrchestrator,
+		Loadable: sortedUnique([]string{ToolGetWorkflow, ToolListWorkflows})})
 
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: "tag:workflow"})
 	require.NoError(t, err)
@@ -391,8 +364,7 @@ func TestLoadTool_TagWorkflow_RestrictedLoadableReportsRefused(t *testing.T) {
 	assert.Contains(t, resp.Content, "18 refused")
 	assert.Contains(t, resp.Content, "not loadable")
 
-	loaded := GetLoadedToolsStore().Get(scopeKey)
-	assert.ElementsMatch(t, []string{ToolGetWorkflow, ToolListWorkflows}, loaded)
+	assert.ElementsMatch(t, []string{ToolGetWorkflow, ToolListWorkflows}, grantsOf(t, resp))
 }
 
 func TestLoadTool_TagUnknown_NamesKnownTags(t *testing.T) {
@@ -418,7 +390,14 @@ func TestLoadTool_SearchByTagName_ReturnsAllWorkflowTools(t *testing.T) {
 	for _, name := range workflowTagToolNames() {
 		assert.Contains(t, resp.Content, "**"+name+"**")
 	}
-	assert.Contains(t, resp.Content, "Found 20 tools")
+	// Plus anything NAMED for workflows without the tag (github__workflow_dispatch).
+	matches := 0
+	for _, def := range GetToolRegistry() {
+		if def.hasTag(TagWorkflow) || strings.Contains(def.Name, "workflow") {
+			matches++
+		}
+	}
+	assert.Contains(t, resp.Content, fmt.Sprintf("Found %d tools", matches))
 }
 
 func TestLoadTool_TagWithNoRegistryTools_SaysSo(t *testing.T) {
@@ -443,7 +422,7 @@ func TestLoadTool_TagRuns_PermissionLadderRefusesOrchestratorTools(t *testing.T)
 	require.NoError(t, err)
 	require.False(t, resp.IsError, resp.Content)
 
-	loaded := GetLoadedToolsStore().Get(Scope(ctx.ChatID, ctx.Thread))
+	loaded := grantsOf(t, resp)
 	for _, name := range []string{ToolStartRun, ToolControlRun, ToolSendToRun} {
 		assert.NotContains(t, loaded, name)
 		assert.Contains(t, resp.Content, name+" (Tool '"+name+"' requires 'orchestrator' permission")

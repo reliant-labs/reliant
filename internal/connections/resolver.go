@@ -247,9 +247,46 @@ func (r *Resolver) ForTrigger(ctx context.Context, site TriggerSite) (*Resolved,
 		core.ConnectionEvent{Actor: ActorTrigger(trigger.ID)})
 }
 
-// resolve turns (owner, ref) into a credential. It is the one implementation
-// of the rules every door shares; use carries the audit attribution.
-func (r *Resolver) resolve(ctx context.Context, owner string, ref Ref, use core.ConnectionEvent) (*Resolved, error) {
+// Usable answers, for each ref, what ForCall would for a call from this run,
+// short of reading the secret: nil when the run's owner has a connection a call
+// could authenticate with, else the typed error ForCall would return (no
+// connection, CodeNeedsReauth, a kind the catalog no longer offers, ...). The
+// owner is read once, from the run record, exactly as ForCall reads it; an
+// owner that cannot be read is the returned error.
+//
+// It records no use and decrypts nothing, so it is safe to ask before every
+// model turn — which is what it is for: offering an integration's tools only
+// to a run that can authenticate them. The one outcome it cannot foresee is a
+// token refresh that fails at call time.
+func (r *Resolver) Usable(ctx context.Context, call CallSite, refs []Ref) (map[Ref]error, error) {
+	if call.Placement != PlacementServer {
+		return nil, &Error{Code: CodeFailedPrecondition, Message: ErrDaemonPlacement.Error(), Err: ErrDaemonPlacement}
+	}
+	owner, err := r.OwnerOf(ctx, call.RunID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[Ref]error, len(refs))
+	for _, ref := range refs {
+		_, err := r.lookup(ctx, owner, ref)
+		out[ref] = err
+	}
+	return out, nil
+}
+
+// usableConnection is what lookup establishes: the connection a ref names for
+// its owner, and how this deployment authenticates with it.
+type usableConnection struct {
+	conn  *core.Connection
+	auth  Authenticator
+	hosts map[string]bool
+}
+
+// lookup is the half of resolve that decides WHICH connection (owner, ref)
+// names and whether it can authenticate a call — every rule short of reading
+// the secret. resolve and Usable share it, so a connection Usable reports is
+// one resolve would hand out.
+func (r *Resolver) lookup(ctx context.Context, owner string, ref Ref) (*usableConnection, error) {
 	var (
 		conn *core.Connection
 		err  error
@@ -294,6 +331,17 @@ func (r *Resolver) resolve(ctx context.Context, owner string, ref Ref, use core.
 	if err != nil {
 		return nil, err
 	}
+	return &usableConnection{conn: conn, auth: auth, hosts: hosts}, nil
+}
+
+// resolve turns (owner, ref) into a credential. It is the one implementation
+// of the rules every door shares; use carries the audit attribution.
+func (r *Resolver) resolve(ctx context.Context, owner string, ref Ref, use core.ConnectionEvent) (*Resolved, error) {
+	found, err := r.lookup(ctx, owner, ref)
+	if err != nil {
+		return nil, err
+	}
+	conn, auth, hosts := found.conn, found.auth, found.hosts
 	secret, gen, err := r.tokens.token(ctx, owner, conn.ID)
 	if err != nil {
 		return nil, err

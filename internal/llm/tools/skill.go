@@ -396,25 +396,30 @@ func (t *skillTool) loadSkill(path string) (ToolResponse, error) {
 
 // LoadSkillForInjection resolves a skill path against the given skills using the
 // SAME tolerant resolution as the runtime skill tool (findSkillByPath) and
-// returns the resolved skill's canonical name plus the exact body text the tool
-// would produce for action=load — including any sub-skill / related-skill /
-// allowed-tools annotations. Returns ("", "", false) when the path does not
-// resolve or the resolved skill has an empty body.
+// returns the resolved skill plus the exact body text the tool would produce
+// for action=load — including any sub-skill / related-skill / allowed-tools
+// annotations. ok is false when the path does not resolve or the resolved
+// skill has an empty body.
+//
+// The resolved skill's SkillPath is its identity; its Name is only a label,
+// and two different skills can share one (reliant's synthesized `forge`
+// namespace map and forge's own start-here skill at `forge/forge` are both
+// named "forge").
 //
 // call_llm uses this to seed a preloaded skill whose body is byte-identical to
 // the agent loading the skill by hand, so the preloaded body and a hand-loaded
 // body can never diverge.
-func LoadSkillForInjection(skills []config.StoredSkill, path string) (name string, body string, ok bool) {
+func LoadSkillForInjection(skills []config.StoredSkill, path string) (skill config.StoredSkill, body string, ok bool) {
 	def := findSkillByPath(skills, strings.ToLower(strings.TrimSpace(path)))
 	if def == nil || strings.TrimSpace(def.Body) == "" {
-		return "", "", false
+		return config.StoredSkill{}, "", false
 	}
 	t := &skillTool{skills: skills}
 	resp, err := t.loadSkill(path)
 	if err != nil || resp.IsError || strings.TrimSpace(resp.Content) == "" {
-		return "", "", false
+		return config.StoredSkill{}, "", false
 	}
-	return def.Name, resp.Content, true
+	return *def, resp.Content, true
 }
 
 func (t *skillTool) searchSkills(query string) (ToolResponse, error) {

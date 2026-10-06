@@ -98,6 +98,9 @@ var RuntimeInjectedInputs = map[string]bool{
 	// inside the workflow and rejected it as unknown, so every trigger fire of
 	// a workflow with declared inputs failed before its first node.
 	"unattended": true,
+	// The run the chat's launch started, as opposed to one a person's reply
+	// started later (runtime.InputKeyLaunchRun). Injected by the launcher only.
+	"__launch_run": true,
 }
 
 // NewWorkflowID generates a new random UUID for a root workflow.

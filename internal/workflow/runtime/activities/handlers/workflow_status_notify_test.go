@@ -79,6 +79,8 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 		Status:       status,
 		Thread:       chatID,
 		Outcome:      outcome,
+		// The chat's first run: the one its launch kind describes.
+		LaunchRun: true,
 	}
 	if child {
 		input.WorkflowID = uuid.NewString()
@@ -150,6 +152,10 @@ func TestWorkflowStatus_CompletionUnreadFollowsLaunchKind(t *testing.T) {
 		{"chat predating launch kinds notifies", "", "", true},
 		{"schedule-launched run is silent", core.TriggerEventKindSchedule, "", false},
 		{"schedule-launched declared success is silent", core.TriggerEventKindSchedule, model.OutcomeSuccess, false},
+		{"webhook-launched run is silent", core.TriggerEventKindWebhook, "", false},
+		{"integration-launched run is silent", core.TriggerEventKindIntegration, "", false},
+		{"workflow-event-launched run is silent", core.TriggerEventKindWorkflowEvent, "", false},
+		{"webhook-launched declared failure still notifies", core.TriggerEventKindWebhook, model.OutcomeFailure, true},
 		{"agent-started run is silent", core.TriggerEventKindAgentStartRun, "", false},
 		{"builder test notifies: the user is waiting on it", core.TriggerEventKindBuilderTest, "", true},
 		{"schedule-launched declared failure still notifies", core.TriggerEventKindSchedule, model.OutcomeFailure, true},

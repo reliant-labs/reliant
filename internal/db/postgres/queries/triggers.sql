@@ -243,6 +243,17 @@ UPDATE trigger_events SET
     chat_id = $3
 WHERE id = $4;
 
+-- name: SetLaunchEventRunStatus :execrows
+-- Records how the run a trigger fired ended, on the chat's launch event (the
+-- same earliest-event rule as GetTriggerEventByChatID).
+UPDATE trigger_events SET run_status = sqlc.arg('run_status')::text
+WHERE id = (
+    SELECT l.id FROM trigger_events l
+    WHERE l.chat_id = sqlc.arg('chat_id')::text
+    ORDER BY l.created_at ASC, l.id ASC
+    LIMIT 1
+);
+
 -- name: UpdateTriggerEventPayload :execrows
 UPDATE trigger_events SET payload = $1 WHERE id = $2;
 
@@ -318,14 +329,18 @@ LIMIT 1;
 -- the failure episode: Go reads its length and its oldest failure from it, so
 -- the episode is not truncated at the 10-firing health window. Same run
 -- columns and display-state table as ListRecentTriggerFirings.
+--
+-- "Completed" is the run the trigger fired (run_status), not whatever turn
+-- the chat is on now — the same rule triggers.resolveFiring applies — so a
+-- person's later reply in the chat neither ends nor extends the episode.
 WITH last_success AS (
     SELECT DISTINCT ON (e.trigger_id) e.trigger_id, e.occurred_at, e.id
     FROM trigger_events e
-    JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
+    LEFT JOIN chats_with_activity c ON c.id = e.chat_id AND c.user_id = e.user_id
     WHERE e.user_id = sqlc.arg('user_id')::text
         AND e.trigger_id = ANY(sqlc.arg('trigger_ids')::text[])
         AND e.outcome = 'launched'
-        AND c.display_state = 5
+        AND (e.run_status = 'completed' OR (e.run_status IS NULL AND c.display_state = 5))
     ORDER BY e.trigger_id, e.occurred_at DESC, e.id DESC
 ), ranked AS (
     SELECT

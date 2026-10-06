@@ -240,7 +240,7 @@ describe("ComputeStep never provisions", () => {
     const onNext = vi.fn();
     renderStep({ updatePlan, onNext });
 
-    fireEvent.click(screen.getByRole("button", { name: /Use a Reliant machine/i }));
+    fireEvent.click(screen.getByRole("button", { name: /^Continue with /i }));
 
     await waitFor(() => {
       expect(onNext).toHaveBeenCalled();

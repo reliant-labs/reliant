@@ -238,6 +238,11 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 	if prev == nil || prev.ChatID == nil || *prev.ChatID == "" {
 		return "", nil
 	}
+	// The run this trigger fired has ended. Anything still live in its chat is
+	// a person's own turn, which is theirs to have and holds nothing up.
+	if prev.RunStatus != "" {
+		return "", nil
+	}
 
 	statuses, err := f.repo.GetRootWorkflowStatusForChats(ctx, []string{*prev.ChatID})
 	if err != nil {

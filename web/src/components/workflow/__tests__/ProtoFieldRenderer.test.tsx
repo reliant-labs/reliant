@@ -3,6 +3,16 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import type { ProtoFieldSchema } from '../../../types/workflowFieldSchema'
 import { ProtoFieldRenderer } from '../ProtoFieldRenderer'
 
+// The CEL editor fetches its completion catalog when it mounts. These tests
+// render the editor but never complete anything, and unmocked the fetch was a
+// real RPC that settled after the test.
+vi.mock('../../../lib/cel-completion-service', async () => ({
+  ...(await vi.importActual<typeof import('../../../lib/cel-completion-service')>(
+    '../../../lib/cel-completion-service',
+  )),
+  ensureCELCompletionsCached: async () => {},
+}))
+
 function createSchema(overrides: Partial<ProtoFieldSchema> = {}): ProtoFieldSchema {
   return {
     key: 'test-field',

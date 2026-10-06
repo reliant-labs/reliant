@@ -40,7 +40,7 @@ func TestHandleWorkflowCompletion(t *testing.T) {
 func completionTestWorkflow(ctx workflow.Context, mode string) (result *WorkflowResult, retErr error) {
 	workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 	defer func() {
-		handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr, "", nil)
+		handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr, "", false, nil)
 	}()
 
 	switch mode {

@@ -7,6 +7,7 @@ import { useOnboardingFacts } from './useOnboardingFacts';
 import { BACK_CLEARS, deriveStep, stepMaxWidth, visibleStepsForPlan, STEP_COMPONENTS, STEP_LABELS } from './stepConfig';
 import { useOnboardingTracking } from './analytics';
 import { useTitleBarChrome } from '@/hooks/useTitleBarChrome';
+import { StepFooterOutlet, StepFooterProvider } from './StepFooter';
 import type { LaunchPlan } from './types';
 // Ensure step components are registered on module load
 import './steps';
@@ -97,7 +98,10 @@ export function OnboardingPage() {
         />
       )}
 
-      {/* Card */}
+      {/* Card. The footer-slot provider wraps it so a step can render its
+          primary action into the footer, which never scrolls away — see
+          ./StepFooter.tsx. */}
+      <StepFooterProvider>
       <div
         className={cn(
           "relative w-full rounded-[1.35rem] border border-white/15 bg-background/88 font-sans shadow-[0_28px_90px_rgba(2,6,23,0.55)] backdrop-blur-2xl flex flex-col overflow-hidden",
@@ -145,9 +149,10 @@ export function OnboardingPage() {
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="relative flex items-center justify-between border-t border-white/10 bg-background/80 px-6 py-4 backdrop-blur">
-          <div>
+        {/* Footer: Back on the left, the step's own next move on the right
+            (rendered there by StepFooterAction). */}
+        <div className="relative flex items-center justify-between gap-4 border-t border-white/10 bg-background/80 px-6 py-4 backdrop-blur">
+          <div className="flex-shrink-0">
             {!isFirst && (
               <button
                 type="button"
@@ -158,9 +163,10 @@ export function OnboardingPage() {
               </button>
             )}
           </div>
-          <div />
+          <StepFooterOutlet className="flex min-w-0 items-center justify-end gap-3" />
         </div>
       </div>
+      </StepFooterProvider>
     </div>
   );
 }

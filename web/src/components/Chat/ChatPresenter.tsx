@@ -17,6 +17,8 @@ import { ChatHeader } from "./ChatHeader";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
 import { ComposerWakeStatus } from "./ComposerWakeStatus";
+import { ContinueWithoutMachineButton, NoMachineComposerHint } from "./NoMachine";
+import { continueBranchPoint } from "../../lib/chatMachine";
 import { BackgroundWorkPill } from "./BackgroundWorkPill";
 import { QueuedMessages } from "./QueuedMessages";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
@@ -33,7 +35,7 @@ import type {
 import { settingsSync, SETTINGS_KEYS } from "../../services/settingsSync";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useViewerStore } from "../../store/viewerStore";
-import { MessageRole } from "../../gen/reliant/v1/chat_pb";
+import { ChatActivity, MessageRole } from "../../gen/reliant/v1/chat_pb";
 import { useCapability } from "../../lib/surfaceContext";
 import { useThreadMessages } from "../../hooks/message-queries";
 import { useChat } from "../../hooks/chat-queries";
@@ -408,6 +410,17 @@ export const ChatPresenter = memo(function ChatPresenter({
     [handleAdoptingSend, chatId],
   );
   const [takeOverExpandedFor, setTakeOverExpandedFor] = useState<string | null>(null);
+
+  // A chat with no machine by design (NO_MACHINE_CHATS.md): none of the
+  // machine surfaces apply, and the composer says what the chat can do.
+  const currentChat = chatForQueue?.id === chatId ? chatForQueue : undefined;
+  const noMachine = !!currentChat?.noMachine;
+  // For a chat ON a machine that is unavailable, "Continue without machine"
+  // branches at its latest stored main-thread message.
+  const continueFromMessageId = useMemo(
+    () => (noMachine ? undefined : continueBranchPoint(messages, currentChat?.workflowId || currentChat?.id)),
+    [noMachine, messages, currentChat?.workflowId, currentChat?.id],
+  );
   const showTakeOverBar =
     !!chatForQueue && chatForQueue.id === chatId && isUnadoptedAutomation(chatForQueue) && takeOverExpandedFor !== chatId;
 
@@ -503,7 +516,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           hideTitle={hideChatTitle}
         />
 
-        <ResumeDaemonPill />
+        {!noMachine && <ResumeDaemonPill />}
 
         {/* Inline Workflow Viewer Panel - shown when in inline mode */}
         {isInlineWorkflowViewerOpen && workflowExecution && projectId && (
@@ -640,13 +653,22 @@ export const ChatPresenter = memo(function ChatPresenter({
         </PermissionsPanelWrapper>
 
         {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
-        <OomKillBanner />
+        {!noMachine && <OomKillBanner />}
 
-        {/* "Waking <machine>…" while this send wakes the chat's machine. */}
-        <ComposerWakeStatus
-          sending={!!chatId && sendingChatId === chatId}
-          daemonId={chatForQueue?.id === chatId ? chatForQueue?.activeDaemonId : undefined}
-        />
+        {noMachine && chatId ? (
+          <NoMachineComposerHint chatId={chatId} />
+        ) : (
+          // "Waking <machine>…" while this send wakes the chat's machine, and
+          // "Continue without machine" whenever that machine is unavailable.
+          <ComposerWakeStatus
+            sending={!!chatId && sendingChatId === chatId}
+            daemonId={currentChat?.activeDaemonId}
+            waitingOnMachine={currentChat?.activity === ChatActivity.WAITING_FOR_DAEMON}
+            continueWithoutMachine={
+              chatId ? <ContinueWithoutMachineButton chatId={chatId} messageId={continueFromMessageId} /> : undefined
+            }
+          />
+        )}
 
         {/* Recovery Banner - shown when workflow was lost */}
         {needsRecovery && (

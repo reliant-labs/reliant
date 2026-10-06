@@ -263,6 +263,9 @@ service ChatService {
   // SetChatDaemon sets the active daemon for a chat session.
   // The selected daemon is used as the default for tool execution in this chat.
   // Set daemon_id to empty string to clear and revert to default resolution.
+  // Setting a daemon on a chat with no machine ("Connect a machine") clears
+  // no_machine in the same write; the next turn is offered the full tool set.
+  // The reverse never happens: clearing the daemon leaves no_machine false.
   rpc SetChatDaemon(SetChatDaemonRequest) returns (SetChatDaemonResponse) {}
 }
 
@@ -315,8 +318,10 @@ message Chat {
   // When the user adopted this run into their chats (AdoptChat). Unset when not
   // adopted. Origin (launch_kind, trigger_id) is never rewritten by adoption.
   optional string adopted_at = 35;
-  // This chat has no machine by design (StartChatRequest.no_machine, or a
-  // no-machine trigger). Its runs are offered only server-side tools.
+  // This chat has no machine by design (StartChatRequest.no_machine, a
+  // no-machine trigger, or BranchChatRequest.no_machine). Its runs are offered
+  // only server-side tools. One-way: SetChatDaemon with a daemon clears it, and
+  // nothing sets it on a chat that already has a machine.
   bool no_machine = 36;
 }
 
@@ -841,6 +846,14 @@ message BranchChatRequest {
   optional string title = 3;           // Optional title for the new branch
   optional string worktree_id = 4;     // Optional worktree ID to assign to the branched chat
   optional WorkspaceBranchContext workspace_context = 5;  // Context about workspace branching
+  // no_machine branches into a chat with no machine by design ("Continue
+  // without machine"): it carries the conversation, binds to the project's
+  // main worktree rather than a machine-bound one, pins no daemon, and never
+  // wakes one. The source chat is left as it is. Mutually exclusive with
+  // worktree_id and workspace_context, which both name a machine's checkout.
+  // A branch of a chat that already has no machine stays without one unless
+  // it names a worktree.
+  optional bool no_machine = 8;
   reserved 2; // was: ordinal (deprecated, use message_id)
   reserved 6; // was: thread (deprecated, use message_id)
 }

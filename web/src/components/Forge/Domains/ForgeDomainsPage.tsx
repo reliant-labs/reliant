@@ -9,7 +9,7 @@
  * because that is how a reader thinks about deployments. A domain is the one
  * thing here that genuinely is not: it is org-scoped, it has no environment,
  * and it deliberately OUTLIVES the environment it happens to be pointed at
- * today. Filing it under prod would make "move hounders.club to staging for
+ * today. Filing it under prod would make "move example.com to staging for
  * an hour" look like it belongs to prod, and would hide a claimed-but-unbound
  * domain — which is precisely the state a tenant is stuck in when they need
  * this screen most.
@@ -44,13 +44,14 @@ import {
   useUnbindDomain,
   useVerifyDomain,
 } from "@/hooks/forge-domain-queries";
-import { useForgeEnvironments } from "@/hooks/forge-queries";
+import { useCloudEnvStatuses, useForgeEnvironments } from "@/hooks/forge-queries";
 import { cn } from "@/lib/utils";
 import { cloudRunIdOf } from "@/services/forge/environments";
 import { hostedWorkloadsOf } from "@/services/forge/topology";
 import {
   DOMAIN_AVAILABILITY_EXPLANATIONS,
   bindingSummary,
+  domainTargetsOf,
   type ForgeDomain,
 } from "@/services/forge/domains";
 import { useProjectStore } from "@/store/projectStore";
@@ -82,24 +83,37 @@ export function ForgeDomainsPage() {
   const remove = useRemoveDomain();
   const verify = useVerifyDomain();
 
+  const cloudRunIds = useMemo(
+    () => envs.map(cloudRunIdOf).filter((id): id is string => !!id),
+    [envs]
+  );
+  const statuses = useCloudEnvStatuses(cloudRunIds);
+
   /**
    * The environments a domain can be bound into: the ones the control plane
    * RUNS, because a binding is written against a control-plane environment id
-   * and a local env has nothing to serve. Their targets are the hosted
-   * workloads forge reported, which is the same list the env page shows.
+   * and a local env has nothing to serve.
+   *
+   * Their targets come from the control plane's own deployment status when it
+   * has answered — it is what will route the domain, and it needs no daemon —
+   * and from forge's report until then. Either way only what can serve HTTP
+   * is offered (domainTargetsOf). Not memoised: the status map is rebuilt per
+   * render, and the dialog does not reset on a new list.
    */
-  const targetEnvs: DomainTargetEnv[] = useMemo(
-    () =>
-      envs.flatMap((env) => {
-        const environmentId = cloudRunIdOf(env);
-        if (!environmentId) return [];
-        const targets = hostedWorkloadsOf(env.forge)
-          .map((workload) => workload.name)
-          .filter((name): name is string => !!name);
-        return [{ name: env.name, environmentId, targets }];
-      }),
-    [envs]
-  );
+  const targetEnvs: DomainTargetEnv[] = envs.flatMap((env) => {
+    const environmentId = cloudRunIdOf(env);
+    if (!environmentId) return [];
+    const status = statuses.get(environmentId);
+    const targets = domainTargetsOf(status?.data?.workloads ?? hostedWorkloadsOf(env.forge));
+    return [
+      {
+        name: env.name,
+        environmentId,
+        targets,
+        targetsLoading: targets.length === 0 && !status?.data && !!status?.isLoading,
+      },
+    ];
+  });
 
   /** A binding stores an environment id; the reader knows a name. */
   const envNameFor = useCallback(
@@ -262,14 +276,17 @@ export function ForgeDomainsPage() {
         error={add.error}
       />
 
-      {/* Rebinding reuses the add dialog's picker, with the hostname fixed.
-          The same decision is being made, so it should look the same. */}
+      {/* Rebinding reuses the add dialog's picker, with the hostname fixed and
+          the current binding pre-selected. The same decision is being made,
+          so it should look the same. */}
       {rebinding && (
         <AddDomainDialog
           open
           onClose={() => setRebinding(null)}
           envs={targetEnvs}
           takenHostnames={[]}
+          hostname={rebinding.hostname}
+          current={rebinding.binding}
           onSubmit={onRebind}
           isSubmitting={bind.isPending}
           error={bind.error}
