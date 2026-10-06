@@ -23,6 +23,7 @@ import {
   domainIsConverging,
   domainOriginOf,
   domainStateOf,
+  domainTargetsOf,
   toForgeDomain,
   type DomainState,
 } from "@/services/forge/domains";
@@ -96,12 +97,12 @@ describe("conversion", () => {
   it("reads records verbatim and carries the binding through", () => {
     const converted = toForgeDomain({
       id: "dom-1",
-      hostname: "hounders.club",
+      hostname: "example.com",
       state: DeployCustomDomainState.PENDING_DNS,
       source: DomainSource.EXTERNAL,
       requiredRecords: [
-        { type: "A", name: "hounders.club", value: "34.63.203.181" },
-        { type: "TXT", name: "_reliant-challenge.hounders.club", value: "tok" },
+        { type: "A", name: "example.com", value: "34.63.203.181" },
+        { type: "TXT", name: "_reliant-challenge.example.com", value: "tok" },
       ],
       lastError: "",
       binding: {
@@ -119,14 +120,14 @@ describe("conversion", () => {
     expect(converted.requiredRecords).toEqual([
       {
         type: "A",
-        name: "hounders.club",
+        name: "example.com",
         value: "34.63.203.181",
         check: "unchecked",
         detail: "",
       },
       {
         type: "TXT",
-        name: "_reliant-challenge.hounders.club",
+        name: "_reliant-challenge.example.com",
         value: "tok",
         check: "unchecked",
         detail: "",
@@ -148,6 +149,44 @@ describe("conversion", () => {
   });
 });
 
+describe("domainTargetsOf", () => {
+  it("offers static sites and exposed services, labelled by kind", () => {
+    expect(
+      domainTargetsOf([
+        { name: "web", tier: "static" },
+        // The control plane's spelling of the workload tier…
+        { name: "api", tier: "backend", url: "https://api-abc.reliant.run" },
+        // …and forge's, for the same thing.
+        { name: "admin", tier: "workload", hostname: "admin-abc.reliant.run" },
+      ])
+    ).toEqual([
+      { name: "admin", kind: "service" },
+      { name: "api", kind: "service" },
+      { name: "web", kind: "static-site" },
+    ]);
+  });
+
+  it("leaves out what cannot answer HTTP: unexposed workloads and databases", () => {
+    expect(
+      domainTargetsOf([
+        { name: "worker", tier: "backend" },
+        { name: "db", tier: "database", url: "postgres://db" },
+        { name: "", tier: "static" },
+        { name: "gone", tier: "static", observed_state: "deleted" },
+      ])
+    ).toEqual([]);
+  });
+
+  it("names a target once even when it is reported twice", () => {
+    expect(
+      domainTargetsOf([
+        { name: "web", tier: "static" },
+        { name: "web", tier: "static" },
+      ])
+    ).toEqual([{ name: "web", kind: "static-site" }]);
+  });
+});
+
 describe("bindingSummary", () => {
   it("distinguishes unbound, bound and redirecting", () => {
     expect(bindingSummary(null)).toMatch(/not serving/i);
@@ -166,8 +205,8 @@ describe("bindingSummary", () => {
         domainId: "d",
         environmentId: "e",
         target: "",
-        redirectTo: "hounders.club",
+        redirectTo: "example.com",
       })
-    ).toBe("Redirects to hounders.club");
+    ).toBe("Redirects to example.com");
   });
 });

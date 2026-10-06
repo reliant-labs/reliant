@@ -122,7 +122,7 @@ function useInvalidateDomains() {
  *
  * ONE MUTATION FOR BOTH CALLS, because the user performed one action. The
  * control plane keeps them separate — a domain is bindable in any state, and
- * a binding outlives a deployment — but a tenant adding `hounders.club`
+ * a binding outlives a deployment — but a tenant adding `example.com`
  * already knows it is for their web workload, and making them come back for a
  * second step would leave the common case half-finished on screen.
  *
