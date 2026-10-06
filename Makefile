@@ -264,7 +264,7 @@ db-driver-audit:
 ## pin-forge: Pin forge to forge's current origin/main commit
 # Pre-launch we pin by COMMIT, not tag — a tag costs three CI cycles and up to
 # 20 minutes of module-proxy lag before a one-line forge fix can reach prod,
-# where every bug we chase actually lives. See docs/pinning.md for the mode
+# where every bug we chase actually lives. See dev-docs/pinning.md for the mode
 # switch and the exact command to go back to tags at launch.
 # Pass a ref to pin something else: make pin-forge REF=<sha|branch|tag>
 pin-forge:

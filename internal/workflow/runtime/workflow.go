@@ -3246,7 +3246,7 @@ func deferredStatus(deferred bool, status string) string {
 
 // spawnReportBeforeTerminalChangeID gates writing a detached spawn's mailbox
 // report BEFORE its terminal child/tool-call status. See
-// docs/incidents/2026-10-04-spawn-report-collision.md.
+// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 const spawnReportBeforeTerminalChangeID = "spawn-report-before-terminal-status"
 
 // runSpawnInlineChild runs the child's turns to completion (or terminal

@@ -67,7 +67,7 @@ var WorkflowExecutionTimeout = func() time.Duration {
 // worker took up to 42.5s per task; at 10s each such task timed out and was
 // retried from scratch, stalling the whole run for minutes. That stall is
 // what let a reconciler pass mistake a finishing background spawn for a lost
-// one (docs/incidents/2026-10-04-spawn-report-collision.md).
+// one (dev-docs/incidents/2026-10-04-spawn-report-collision.md).
 //
 // 60s covers the worst task observed with margin and stays under Temporal's
 // 120s ceiling. Continue-as-new and reset inherit it from the run they

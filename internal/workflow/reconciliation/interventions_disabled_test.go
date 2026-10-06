@@ -18,7 +18,7 @@ import (
 // default: on 2026-09-29 the wedge detector terminated a healthy chat, and its
 // six in-flight sub-agents with it, because an overloaded host made the run's
 // workflow tasks TIME OUT — the attempt counter it reads cannot tell a timeout
-// from a failure. See docs/incidents/2026-09-29-reconciler-false-wedge.md.
+// from a failure. See dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 //
 // These tests drive each detector past its confirmation thresholds with the
 // SHIPPED default config and assert that nothing happens: no TerminateWorkflow,
@@ -252,7 +252,7 @@ func TestReconciler_InterventionsDisabled_LostWorkflowStillRepaired(t *testing.T
 // flips it back without reading the incident write-up.
 func TestDefaultConfig_InterventionsOff(t *testing.T) {
 	assert.False(t, DefaultConfig().Interventions,
-		"interventions default off: see docs/incidents/2026-09-29-reconciler-false-wedge.md")
+		"interventions default off: see dev-docs/incidents/2026-09-29-reconciler-false-wedge.md")
 	assert.False(t, NewReconciler(nil, nil, nil).interventions)
 	assert.True(t, NewReconciler(nil, nil, &ReconcilerConfig{Interventions: true}).interventions,
 		"the switch must be carried from config onto the reconciler")

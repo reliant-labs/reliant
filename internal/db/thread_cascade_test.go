@@ -29,7 +29,7 @@ func insertTestThreadForWorkflow(t *testing.T, repo *Repo, id, chatID, workflowI
 // every descendant WORKFLOW to the parent's terminal status, but nothing did
 // the equivalent for the THREAD each of those workflows owns. Live DB: 288
 // threads stranded at status=2 under an already-terminal workflow (see
-// docs/incidents/2026-08-12-spawn-history-cap.md).
+// dev-docs/incidents/2026-08-12-spawn-history-cap.md).
 func TestCascadeTerminalStatusToThreadSubtree_CascadesRecursively(t *testing.T) {
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()

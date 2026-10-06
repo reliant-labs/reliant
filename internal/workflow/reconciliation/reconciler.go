@@ -73,7 +73,7 @@ import (
 // sluggish host rather than on a bug, and on 2026-09-29 the wedge detector
 // terminated a healthy chat (and its six in-flight sub-agents) because its
 // workflow tasks were merely TIMING OUT on an overloaded laptop. See
-// docs/incidents/2026-09-29-reconciler-false-wedge.md. Detection still runs
+// dev-docs/incidents/2026-09-29-reconciler-false-wedge.md. Detection still runs
 // and still logs; with interventions disabled each path logs one WARN per
 // streak and takes no action. Everything else — lost-workflow repair, status
 // drift / silent-termination repair, orphan reaps, stranded-spawn repairs,
@@ -345,7 +345,7 @@ type ReconcilerConfig struct {
 	// sub-agents running inline in the same Temporal execution — because an
 	// overloaded laptop made its workflow tasks TIME OUT. The run had zero
 	// WORKFLOW_TASK_FAILED events; it was slow, not stuck. Full write-up:
-	// docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	// dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 	//
 	// The code is kept rather than deleted so it can be brought back. Before
 	// re-enabling, the wedge detector must distinguish
@@ -1781,7 +1781,7 @@ func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passSta
 // live path — strands the thread at running (2) / paused (6) forever,
 // exactly as an unforgotten workflow cascade strands a workflow descendant.
 // Measured on the live DB before this fix existed: 288 threads stranded this
-// way (see docs/incidents/2026-08-12-spawn-history-cap.md), which also made
+// way (see dev-docs/incidents/2026-08-12-spawn-history-cap.md), which also made
 // their own orphaned mailboxes invisible to
 // ListThreadsWithOrphanedAgentMessages (it only matches threads already in a
 // terminal status) — so this backstop is what makes that sweep reachable at
@@ -2452,7 +2452,7 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 // activity. Measured on the incident this was written for: the WorkflowError
 // activity fired exactly once across a 51,199-event history that ended in
 // termination, and the user watched agents that were already dead appear to
-// keep running (docs/incidents/2026-08-12-spawn-history-cap.md).
+// keep running (dev-docs/incidents/2026-08-12-spawn-history-cap.md).
 //
 // The reconciler is the only component that ever observes the death, so it is
 // the only place the error can come from. It shares the activity's writer

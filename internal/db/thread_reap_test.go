@@ -11,7 +11,7 @@ import (
 // direction: a thread whose WORKFLOW is terminal is not running.
 //
 // This pins the measured regression from
-// docs/incidents/2026-08-12-spawn-history-cap.md: threads.status is written
+// dev-docs/incidents/2026-08-12-spawn-history-cap.md: threads.status is written
 // ONLY by ThreadStatusActivity on the live path, so any write path that
 // forgets (or is unable, e.g. a hard Temporal terminate) to run the direct
 // cascade strands the thread at running (2) / paused (6) forever. Measured on

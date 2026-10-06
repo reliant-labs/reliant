@@ -26,7 +26,7 @@ import (
 // the status activity and the error activity all never run. Before this
 // suite existed the reconciler repaired the DB status in silence and the UI
 // went on showing dead agents as running
-// (docs/incidents/2026-08-12-spawn-history-cap.md).
+// (dev-docs/incidents/2026-08-12-spawn-history-cap.md).
 
 // CreateChatUpdate on the shared mockRepo is a deliberate no-op. Any test
 // whose workflow drifts to a terminal failed status now reaches the emit

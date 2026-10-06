@@ -44,7 +44,7 @@ type Querier interface {
 	// exit (terminate, reap, a status write that races past the thread's own
 	// "completed" activity call) leaves the thread at running (2) forever, with
 	// completed_at NULL. Measured on the live DB (see
-	// docs/incidents/2026-08-12-spawn-history-cap.md): 288 threads stranded at
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md): 288 threads stranded at
 	// status=2 under an already-terminal workflow -- 174 whose workflow completed,
 	// 64 cancelled, 50 failed.
 	//
@@ -253,7 +253,7 @@ type Querier interface {
 	// A REAL terminal spawn report. Unlike EnqueueAgentMessageIfAbsent (the
 	// reconciler's placeholder write, DO NOTHING), a real report replaces a
 	// placeholder the reconciler synthesized for the same tool_call_id -- see
-	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	//
 	// It is re-queued even if the placeholder was already delivered: the parent
 	// was told "result lost, go check spawn_status" and should also receive the
@@ -1008,7 +1008,7 @@ type Querier interface {
 	// completed/failed/cancelled arms) must call this too, and a forgotten one
 	// strands the thread forever: nothing else ever revisits a threads row, and
 	// the 288-row measurement in
-	// docs/incidents/2026-08-12-spawn-history-cap.md is exactly what that
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md is exactly what that
 	// omission looks like at scale -- 174 completed, 64 cancelled, 50 failed
 	// workflows, each with a thread still reporting running.
 	//
@@ -1073,7 +1073,7 @@ type Querier interface {
 	// running at the reset point never re-executes that activity: it is in the
 	// replayed history. So the children stayed "failed" while actively working,
 	// and the UI showed live agents as failed. Measured: six of them, chat
-	// abe58f03, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	// abe58f03, dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 	//
 	// The predicate is a time window, because the reset point is the only thing
 	// that distinguishes work the new run will redo from work it will merely
