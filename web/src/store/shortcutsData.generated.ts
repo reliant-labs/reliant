@@ -669,12 +669,22 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
   openStepPalette: {
     id: 'openStepPalette',
     name: 'Add Step',
-    description: 'Search built-in steps and integration actions to add one',
+    description: 'Search built-in steps and integration actions to add one, connected after the selected step',
     category: 'Workflow Builder',
     defaultBinding: 'Cmd+I',
     defaultWebBinding: 'Cmd+I',
     context: 'workflow-canvas',
     handler: 'onOpenStepPalette',
     allowInInput: true
+  },
+  connectSelectedSteps: {
+    id: 'connectSelectedSteps',
+    name: 'Connect Selected Steps',
+    description: 'Draw an edge between the two selected steps, from the earlier one to the later',
+    category: 'Workflow Builder',
+    defaultBinding: 'Cmd+Shift+L',
+    defaultWebBinding: 'Cmd+Shift+L',
+    context: 'workflow-canvas',
+    handler: 'onConnectSelectedSteps'
   }
 };

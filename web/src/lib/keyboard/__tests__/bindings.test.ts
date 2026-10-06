@@ -317,4 +317,14 @@ describe("workflow builder shortcuts", () => {
       expect(registry.resolve(chord, ["global"]).kind).toBe("none");
     }
   });
+
+  it("connects the selected steps inside the builder, not while typing in a field, and nowhere else", () => {
+    for (const platform of [MAC_DESKTOP, MAC_WEB, PC_WEB]) {
+      const registry = buildRegistry(platform);
+      const chord = parseBinding("Cmd+Shift+L", platform.isMac);
+      expect(registry.resolve(chord, ["workflow-canvas", "global"]).shortcut?.handler).toBe("onConnectSelectedSteps");
+      expect(registry.resolve(chord, ["global"]).kind).toBe("none");
+      expect(getReservation(chord, platform.isMac)).toBeUndefined();
+    }
+  });
 });

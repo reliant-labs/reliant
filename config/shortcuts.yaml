@@ -677,9 +677,20 @@ shortcuts:
   # return now that the marker exists.
   - id: openStepPalette
     name: Add Step
-    description: Search built-in steps and integration actions to add one
+    description: Search built-in steps and integration actions to add one, connected after the selected step
     category: Workflow Builder
     binding: Cmd+I
     context: workflow-canvas
     allow_in_input: true
     handler: onOpenStepPalette
+
+  # The keyboard path to an edge: select two steps (Enter on one, then
+  # Cmd+Enter on the other adds it to the selection) and connect them, without
+  # a pointer drag between handles.
+  - id: connectSelectedSteps
+    name: Connect Selected Steps
+    description: Draw an edge between the two selected steps, from the earlier one to the later
+    category: Workflow Builder
+    binding: Cmd+Shift+L
+    context: workflow-canvas
+    handler: onConnectSelectedSteps

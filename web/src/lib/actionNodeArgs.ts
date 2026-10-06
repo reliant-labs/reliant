@@ -99,10 +99,20 @@ export function newActionStep(id: string, ref: string, defaults: Record<string, 
   } as Step;
 }
 
-/** A CEL-safe node id from a ref: "github/issue.create@1" → "issue_create". */
+/**
+ * A CEL-safe node id from a ref: "github/issue.create@1" → "github_issue_create".
+ * The integration is part of it, so `nodes.slack_message_post` reads as what
+ * it is and two integrations' `message.post` never collide.
+ */
 export function actionNodeIdBase(ref: string): string {
-  const id = ref.split("/")[1]?.split("@")[0] ?? "action";
-  const base = id.replace(/[^a-zA-Z0-9]+/g, "_").replace(/^_+|_+$/g, "").toLowerCase();
+  const [integration = "", rest = ""] = ref.split("/");
+  const id = rest.split("@")[0] || "action";
+  const base = [integration, id]
+    .filter(Boolean)
+    .join("_")
+    .replace(/[^a-zA-Z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .toLowerCase();
   return /^[a-z]/.test(base) ? base : `action_${base}`;
 }
 

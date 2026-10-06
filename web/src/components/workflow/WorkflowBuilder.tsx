@@ -108,6 +108,11 @@ import { WorkflowMutationProvider } from "./WorkflowMutationContext";
 import { WorkflowNodeCallbacksProvider } from "./WorkflowNodeCallbacksContext";
 import { StepPalette, type PaletteFocus } from "./palette/StepPalette";
 import { toolCallsDefaultForEdge } from "./executeToolsDefaults";
+import { CanvasInsertProvider, useCanvasInsertion } from "./canvas/CanvasInsertContext";
+import { NodeOutputAddButtons } from "./canvas/NodeOutputAddButtons";
+import { SelectionActions } from "./canvas/SelectionActions";
+import { buildFlowEdge, readableStepId, withNodeAriaLabels } from "./canvas/insertPlacement";
+import { getNodeDisplayName } from "../../lib/node-metadata";
 import { DeclaredTriggerPanel } from "./config/DeclaredTriggerPanel";
 import { ActivateTriggerDialog } from "../Automations/ActivateTriggerDialog";
 import { useTriggers } from "../../hooks/trigger-queries";
@@ -763,27 +768,9 @@ function WorkflowBuilderInner({
       takeSnapshot(nodes, edges);
       setHasModifications(true);
 
-      const newEdgeId = `edge-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-      // Determine sourceEvent for edge data
-      // For event nodes (like workflow start), preserve the eventType
-      // This is needed for buildWorkflow to correctly convert edges back to workflow format
-      const sourceNodeData = sourceNode.data as { eventType?: string };
-      const sourceEvent =
-        isEntryFlowNodeType(sourceNode.type) && sourceNodeData.eventType
-          ? sourceNodeData.eventType
-          : undefined;
-
-      const newEdge: Edge = {
-        id: newEdgeId,
-        source: sourceId,
-        target: targetId,
-        sourceHandle: sourceHandle || undefined,
-        type: "custom",
-        data: {
-          sourceEvent,
-        },
-      };
+      // The start node's event rides on the edge as sourceEvent, which is how
+      // buildWorkflow converts it back (shared with canvas inserts).
+      const newEdge = buildFlowEdge(sourceNode, targetId, sourceHandle);
 
       setEdges((eds) => [...eds, newEdge]);
 
@@ -921,7 +908,10 @@ function WorkflowBuilderInner({
   // A running test paints its node statuses onto the canvas.
   const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
   const testRunStatuses = useBuilderTestRun(testRunChatId, nodeIds);
-  const displayedNodes = useMemo(() => withTestRunStatus(nodes, testRunStatuses), [nodes, testRunStatuses]);
+  const displayedNodes = useMemo(
+    () => withNodeAriaLabels(withTestRunStatus(nodes, testRunStatuses), edges, getNodeDisplayName),
+    [nodes, edges, testRunStatuses],
+  );
 
   // Offered by a rejected save of a complete workflow: store the canvas as a
   // draft instead (it stops being runnable until marked complete again).
@@ -1418,58 +1408,59 @@ function WorkflowBuilderInner({
     [],
   );
 
-  /** Place a prepared step at the viewport centre, select it and open its panel. */
-  const insertStep = useCallback(
-    (step: Step) => {
-      // Take snapshot BEFORE adding node
-      takeSnapshot(nodes, edges);
-      setHasModifications(true);
-
-      const id = step.id!;
-      const stepType = step.type ?? "";
-      // Place new node at the center of the current viewport
+  // Every added step lands connected: at the "+" that asked for it, after the
+  // selected node, or after the end of the main path (./canvas).
+  const canvasInsertion = useCanvasInsertion({
+    enabled: !isBuiltinWorkflow,
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    takeSnapshot,
+    markDirty: () => setHasModifications(true),
+    selectedNodeId,
+    paletteOpen,
+    openPalette: () => {
+      setPaletteKind("action");
+      setPaletteFocus(undefined);
+      setPaletteOpen(true);
+    },
+    createEdge,
+    // Only a canvas with nothing to attach to places a node freely.
+    fallbackPosition: () => {
       const wrapper = reactFlowWrapper.current;
-      const vpCenterX = (wrapper?.clientWidth ?? 1200) / 2;
-      const vpCenterY = (wrapper?.clientHeight ?? 800) / 2;
-      const flowCenter = screenToFlowPosition({ x: vpCenterX, y: vpCenterY });
-      const candidateNode: Node = {
-        id: `_candidate_${id}`,
-        type: 'actionNode',
-        position: flowCenter,
-        data: { label: '' },
-      };
-      const position = findNonOverlappingPosition(candidateNode, nodes);
+      return screenToFlowPosition({ x: (wrapper?.clientWidth ?? 1200) / 2, y: (wrapper?.clientHeight ?? 800) / 2 });
+    },
+  });
 
-      // Determine React Flow node type
-      const flowNodeType = STRUCTURAL_TYPES.has(stepType)
-        ? `${stepType}Node`
-        : "actionNode";
-
-      const newNode: Node = {
-        id,
-        type: flowNodeType,
-        position,
-        data: {
-          step,
-          label: id,
-        },
-      };
-
-      setNodes((nds) => nds.concat(newNode));
+  /** Add a prepared node, connected; select it and open its panel. */
+  const placeNode = useCallback(
+    (node: Node) => {
+      const inserted = canvasInsertion.insertNode(node);
       // Auto-select the newly created node to open config panel
-      setSelectedNodeId(newNode.id);
+      setSelectedNodeId(inserted.id);
       setSelectedEdgeId(null);
       setShowSettingsEditor(false);
       // Close chat panel when config panel opens
       setChatPanelOpen(false);
     },
-    [setNodes, nodes, edges, takeSnapshot, STRUCTURAL_TYPES, screenToFlowPosition, findNonOverlappingPosition],
+    [canvasInsertion],
+  );
+
+  /** Add a prepared step, connected; select it and open its panel. */
+  const insertStep = useCallback(
+    (step: Step) => {
+      const stepType = step.type ?? "";
+      const flowNodeType = STRUCTURAL_TYPES.has(stepType) ? `${stepType}Node` : "actionNode";
+      placeNode({ id: step.id!, type: flowNodeType, position: { x: 0, y: 0 }, data: { step, label: step.id! } });
+    },
+    [placeNode, STRUCTURAL_TYPES],
   );
 
   const addStep = useCallback(
     (stepType: string) => {
-      // Use a CEL-safe ID prefix (e.g., call_llm_123, run_456)
-      const id = `${stepType}_${Date.now()}`;
+      // A readable, unique, CEL-safe id: call_llm, then call_llm_2.
+      const id = readableStepId(stepType, nodes.map((n) => n.id));
 
       // Build step with args oneof initialized
       // Note: position is stored in workflow.ui.positions, not on step
@@ -1492,7 +1483,7 @@ function WorkflowBuilderInner({
 
       insertStep(step);
     },
-    [insertStep],
+    [insertStep, nodes],
   );
 
   /**
@@ -1535,27 +1526,14 @@ function WorkflowBuilderInner({
   );
 
   const addSwitch = useCallback(() => {
-    takeSnapshot(nodes, edges);
-    setHasModifications(true);
-
-    const id = `switch_${Date.now()}`;
-    // Place new switch at the center of the current viewport
-    const wrapperEl = reactFlowWrapper.current;
-    const switchVpCenterX = (wrapperEl?.clientWidth ?? 1200) / 2;
-    const switchVpCenterY = (wrapperEl?.clientHeight ?? 800) / 2;
-    const switchFlowCenter = screenToFlowPosition({ x: switchVpCenterX, y: switchVpCenterY });
-    const switchCandidateNode: Node = {
-      id: `_candidate_${id}`,
-      type: 'switchNode',
-      position: switchFlowCenter,
-      data: { label: '' },
-    };
-    const position = findNonOverlappingPosition(switchCandidateNode, nodes);
-
-    const newNode: Node = {
+    // A Switch is canvas-only (it compiles into edge conditions), so its id
+    // never reaches YAML; the case ids are handle ids. Both only need to be
+    // unique.
+    const id = readableStepId("switch", nodes.map((n) => n.id));
+    placeNode({
       id,
       type: "switchNode",
-      position,
+      position: { x: 0, y: 0 },
       data: {
         label: "Switch",
         cases: [
@@ -1564,16 +1542,8 @@ function WorkflowBuilderInner({
         ],
       },
       draggable: canDragNodes,
-    };
-
-    setNodes((nds) => nds.concat(newNode));
-    // Auto-select the newly created switch to open config panel
-    setSelectedNodeId(newNode.id);
-    setSelectedEdgeId(null);
-    setShowSettingsEditor(false);
-    // Close chat panel when config panel opens
-    setChatPanelOpen(false);
-  }, [setNodes, nodes, edges, takeSnapshot, canDragNodes, screenToFlowPosition, findNonOverlappingPosition]);
+    });
+  }, [placeNode, nodes, canDragNodes]);
 
   const openStepPalette = useCallback(() => {
     if (isBuiltinWorkflow) return;
@@ -2019,6 +1989,7 @@ function WorkflowBuilderInner({
           className={`flex-1 bg-background ${interactionMode === "select" ? "selection-mode" : "pan-mode"} ${isViewReady ? "opacity-100" : "opacity-0"}`}
           data-onboarding="workflow-canvas"
         >
+          <CanvasInsertProvider value={canvasInsertion.api}>
           <ReactFlow
             nodes={displayedNodes}
             edges={edges}
@@ -2077,6 +2048,10 @@ function WorkflowBuilderInner({
               variant={"dots" as BackgroundVariant}
             />
 
+            {/* "+" on unconnected outputs, and the selection's Add / Connect bar. */}
+            <NodeOutputAddButtons />
+            <SelectionActions />
+
             {/* Floating Toolbar - Bottom Center */}
             <Panel position="bottom-center" className="mb-4">
               <FloatingToolbar
@@ -2102,6 +2077,7 @@ function WorkflowBuilderInner({
               />
             </Panel>
           </ReactFlow>
+          </CanvasInsertProvider>
         </div>
       </div>
 
