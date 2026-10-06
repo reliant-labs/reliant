@@ -20,6 +20,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/testsuite"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // titleInput is the input StartChat sends.
@@ -47,7 +49,7 @@ func generateTitleStub(ctx context.Context, input map[string]interface{}) (map[s
 // recorder for the inputs each invocation received.
 func newTitleEnv(t *testing.T, handler func(input map[string]interface{}, call int) (map[string]interface{}, error)) (*testsuite.TestWorkflowEnvironment, *[]map[string]interface{}) {
 	t.Helper()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterActivityWithOptions(generateTitleStub, activity.RegisterOptions{Name: "GenerateTitle"})
 

@@ -6,7 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // A loop's `while` may read the PARENT scope's node outputs (nodes.*). The
@@ -36,7 +37,7 @@ edges:
 
 func TestInlineLoop_WhileReadsParentScopeNodeOutputs(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, loopWhileReadsParentNodesYAML)
 

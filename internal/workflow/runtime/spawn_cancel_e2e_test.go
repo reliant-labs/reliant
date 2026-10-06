@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
@@ -238,7 +239,7 @@ func (e *cancelE2EEnv) statusesFor(toolCallID string) []string {
 
 type SpawnCancelE2ESuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestSpawnCancelE2E(t *testing.T) {

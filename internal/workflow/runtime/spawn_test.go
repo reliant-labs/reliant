@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
@@ -290,7 +291,7 @@ func TestSpawnChildWorkflowConfig_Fields(t *testing.T) {
 
 type SpawnTestSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestSpawnSuite(t *testing.T) {

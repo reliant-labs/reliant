@@ -11,8 +11,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // exhaustedActivityError returns the error a workflow REALLY observes when an
@@ -29,7 +30,7 @@ import (
 func exhaustedActivityError(t *testing.T, activities int) []error {
 	t.Helper()
 
-	var ts testsuite.WorkflowTestSuite
+	var ts temporaltest.WorkflowTestSuite
 	env := ts.NewTestWorkflowEnvironment()
 
 	failing := func(context.Context) error {

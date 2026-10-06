@@ -9,10 +9,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // A question's 24h timeout resolves the row through QuestionResolveActivity.
@@ -50,7 +50,7 @@ func TestQuestionResolveActivity_EmitsResolvedUpdate(t *testing.T) {
 	// The activity reads activity.GetLogger, so it needs a real activity
 	// context — the test environment supplies one.
 	resolveActivity := NewQuestionResolveActivity(repo)
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(resolveActivity.Execute)
 

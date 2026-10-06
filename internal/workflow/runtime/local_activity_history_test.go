@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 )
 
@@ -71,7 +72,7 @@ func watchDispatch(env *testsuite.TestWorkflowEnvironment, name string) *dispatc
 // one, fired once per agent turn — as a local activity.
 func TestEmitStreamFinalized_DispatchedLocally(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	var got types.EmitStreamFinalizedInput
@@ -117,7 +118,7 @@ func TestEmitStreamFinalized_DispatchedLocally(t *testing.T) {
 // 51,199-event history), so it costs nothing to leave durable.
 func TestEmitStreamFinalized_TerminalPathStaysRegular(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 
 	var calls int

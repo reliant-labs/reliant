@@ -12,8 +12,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/temporal"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // ============================================================================
@@ -290,7 +291,7 @@ func TestDaemonOfflineCircuitBreaker_NilPauseCallbackOnlyCounts(t *testing.T) {
 
 type DaemonOfflinePauseSuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestDaemonOfflinePause(t *testing.T) {

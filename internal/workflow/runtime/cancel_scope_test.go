@@ -6,8 +6,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 // TestCancelScopeCancelsNewestFirst pins the order the determinism rests on:
@@ -56,7 +57,7 @@ func cancelScopeWorkflow(ctx workflow.Context) (cancelScopeResult, error) {
 }
 
 func TestCancelScopeCancelsEveryDescendantAndPrunesCancelledChildren(t *testing.T) {
-	var ts testsuite.WorkflowTestSuite
+	var ts temporaltest.WorkflowTestSuite
 	env := ts.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(cancelScopeWorkflow)
 	require.True(t, env.IsWorkflowCompleted())
@@ -73,7 +74,7 @@ func TestCancelScopeCancelsEveryDescendantAndPrunesCancelledChildren(t *testing.
 // withScopedCancel outside any scope is plain workflow.WithCancel: the timer
 // contexts in approval/question flows may run under no pause coordinator.
 func TestWithScopedCancelOutsideAScope(t *testing.T) {
-	var ts testsuite.WorkflowTestSuite
+	var ts temporaltest.WorkflowTestSuite
 	env := ts.NewTestWorkflowEnvironment()
 	env.ExecuteWorkflow(func(ctx workflow.Context) (bool, error) {
 		child, cancel := withScopedCancel(ctx)

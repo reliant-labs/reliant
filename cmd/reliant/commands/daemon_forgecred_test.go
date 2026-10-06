@@ -4,6 +4,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -90,7 +91,7 @@ func TestDaemonStart_ElectronMintedPATLogsForgeIn(t *testing.T) {
 
 	conn := &connection{ServerURL: api.URL}
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 
 	creds, err := resolveOrAwaitCredentials(context.Background(), cmd, conn, "", t.TempDir(), true)
 	if err != nil {
@@ -126,7 +127,7 @@ func TestDaemonStart_DepositIsKeyedByTheControlPlaneNotTheAPIServer(t *testing.T
 
 	conn := &connection{ServerURL: api.URL}
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, conn, "", t.TempDir(), true); err != nil {
 		t.Fatal(err)
 	}
@@ -154,7 +155,7 @@ func TestDaemonStart_SelfHostedServerIsNotAnError(t *testing.T) {
 
 	conn := &connection{ServerURL: selfHosted.URL}
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	creds, err := resolveOrAwaitCredentials(context.Background(), cmd, conn, "", t.TempDir(), true)
 	if err != nil {
 		t.Fatalf("a self-hosted daemon failed to start: %v", err)
@@ -189,7 +190,7 @@ func TestDaemonStart_LeavesAHumanForgeLoginAlone(t *testing.T) {
 
 	conn := &connection{ServerURL: api.URL}
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, conn, "", t.TempDir(), true); err != nil {
 		t.Fatal(err)
 	}

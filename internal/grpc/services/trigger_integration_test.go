@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/runs"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/threads"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	v2workflow "github.com/reliant-labs/reliant/internal/workflow"
@@ -61,7 +62,7 @@ func TestTriggerFiresEndToEnd(t *testing.T) {
 		nil, // no daemon prober: triggers never request a greenfield probe
 	)
 
-	w := worker.New(temporalClient, taskQueue, worker.Options{})
+	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
@@ -206,7 +207,7 @@ func TestCronTriggerFiresEndToEnd(t *testing.T) {
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
 		taskQueue, nil)
 
-	w := worker.New(temporalClient, taskQueue, worker.Options{})
+	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,
@@ -297,7 +298,7 @@ func TestManualFireEndToEnd(t *testing.T) {
 		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)),
 		taskQueue, nil)
 
-	w := worker.New(temporalClient, taskQueue, worker.Options{})
+	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerFireWorkflow,
 		workflow.RegisterOptions{Name: triggers.FireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewFirer(repo, launcher).Fire,

@@ -6,10 +6,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -40,7 +40,7 @@ func TestActivityOptions_NeverWaitForCancellation(t *testing.T) {
 		model.NodeTypeSaveMessage,
 	} {
 		t.Run(nodeType, func(t *testing.T) {
-			var suite testsuite.WorkflowTestSuite
+			var suite temporaltest.WorkflowTestSuite
 			env := suite.NewTestWorkflowEnvironment()
 
 			env.ExecuteWorkflow(func(ctx workflow.Context) (bool, error) {

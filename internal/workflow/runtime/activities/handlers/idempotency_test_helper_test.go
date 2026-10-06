@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/ptr"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/testsuite"
 )
@@ -30,7 +31,7 @@ func NewIdempotencyTestHelper(t *testing.T) *IdempotencyTestHelper {
 	repo, sqlDB, cleanup := db.SetupTestDBWithRawDB(t)
 
 	// Create Temporal test environment
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 
 	return &IdempotencyTestHelper{

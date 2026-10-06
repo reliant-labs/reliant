@@ -10,10 +10,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -30,7 +30,7 @@ func executeDirect(t *testing.T, a *ActionActivity, connection string) (*reliant
 		With:       map[string]*structpb.Value{"url": structpb.NewStringValue("https://example.com/")},
 		Connection: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: connection}},
 	}}}
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(a.Execute)
 	val, err := env.ExecuteActivity(a.Execute, types.ActivityInput{Runtime: types.RuntimeContext{WorkflowID: "run-1", StepID: "n"}, Node: node})
@@ -89,7 +89,7 @@ func TestActionNodeResolvesForItsOwnRun(t *testing.T) {
 		ChatID: "chat-other", Thread: "thread-other", SessionID: "session-other",
 		WorkflowID: "run-own", StepID: "fetch", LoopNodeID: "each", LoopIteration: 2,
 	}
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(a.Execute)
 	_, err := env.ExecuteActivity(a.Execute, types.ActivityInput{Runtime: runtime, Node: node})

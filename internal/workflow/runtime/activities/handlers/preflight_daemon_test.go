@@ -8,10 +8,10 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 // mockLocalExecutor is a ToolExecutor that is NOT a RemoteExecutor.
@@ -53,7 +53,7 @@ func TestPreflightDaemonCheck_NonRemoteExecutor(t *testing.T) {
 
 	activity := NewPreflightDaemonCheckActivity(repo, &mockLocalExecutor{})
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 
@@ -73,7 +73,7 @@ func TestPreflightDaemonCheck_ChatNotFound(t *testing.T) {
 
 	activity := NewPreflightDaemonCheckActivity(repo, &mockLocalExecutor{})
 
-	suite := &testsuite.WorkflowTestSuite{}
+	suite := &temporaltest.WorkflowTestSuite{}
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(activity.Execute)
 

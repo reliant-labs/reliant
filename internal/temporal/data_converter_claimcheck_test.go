@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
-	"go.temporal.io/sdk/testsuite"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -69,7 +69,7 @@ func digest(r bigResult) string {
 // the SDK test environment, which routes activity results through the
 // configured DataConverter (encode on completion, decode in the workflow).
 func TestFlexibleDataConverterClaimChecksActivityResults(t *testing.T) {
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	store := &countingStore{blobs: map[string][]byte{}}
 	env.SetDataConverter(NewFlexibleDataConverter(WithPayloadStore(store)))

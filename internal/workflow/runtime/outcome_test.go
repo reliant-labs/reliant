@@ -4,10 +4,10 @@ package runtime
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 )
 
 // A run that routes to its workflow's failure terminal ends its graph with no
@@ -65,7 +65,7 @@ func terminalStatus(t *testing.T, rec *resumeEnvRecorder) map[string]interface{}
 
 func TestDynamicWorkflow_FailureTerminalRecordsTheVerdict(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, terminalOutcomeYAML)
 
@@ -84,7 +84,7 @@ func TestDynamicWorkflow_FailureTerminalRecordsTheVerdict(t *testing.T) {
 
 func TestDynamicWorkflow_SuccessTerminalRecordsTheVerdict(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, successOutcomeYAML)
 
@@ -100,7 +100,7 @@ func TestDynamicWorkflow_SuccessTerminalRecordsTheVerdict(t *testing.T) {
 // nothing, and absence must never be recorded as a verdict in either direction.
 func TestDynamicWorkflow_UndeclaredOutcomeStaysUndeclared(t *testing.T) {
 	t.Parallel()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, noOutcomeYAML)
 
@@ -131,7 +131,7 @@ edges:
   - from: work
     default: failed
 `
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	rec := setupResumeEnv(t, env, skippedYAML)
 

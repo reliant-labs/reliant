@@ -38,6 +38,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -701,7 +702,11 @@ func (r *Runner) RunContext(ctx context.Context, sc *scenario.Scenario) (result 
 	ctx, cancel := context.WithTimeout(ctx, r.timeout)
 	defer cancel()
 
-	var suite testsuite.WorkflowTestSuite
+	// temporaltest's suite holds the workflow to the production worker's
+	// deadlock budget. The SDK's own 1s default fails a scenario as
+	// "deadlocked" whenever this process is busy, on workflow code production
+	// would run without complaint.
+	var suite temporaltest.WorkflowTestSuite
 	// The runner executes inside API processes on every builder click; the
 	// workflow's own INFO chatter (one line per iteration, with full node
 	// outputs) is not something those processes should emit. The result

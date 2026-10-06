@@ -11,11 +11,13 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
+
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
 func newWorkflowEnv(t *testing.T) *testsuite.TestWorkflowEnvironment {
 	t.Helper()
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflowWithOptions(TriggerFireWorkflow, workflow.RegisterOptions{Name: FireWorkflowName})
 	return env

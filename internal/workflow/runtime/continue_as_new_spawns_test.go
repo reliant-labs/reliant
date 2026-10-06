@@ -16,6 +16,7 @@ import (
 	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/encoding/protojson"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
@@ -241,7 +242,7 @@ func TestContinueAsNew_CarriesLiveSpawnMidLoop(t *testing.T) {
 	const chatID = "chat-can-live-spawn"
 	child := canChildThread("tc-spawn")
 
-	var suite1 testsuite.WorkflowTestSuite
+	var suite1 temporaltest.WorkflowTestSuite
 	env1 := suite1.NewTestWorkflowEnvironment()
 	e1 := newCANSpawnEnv(t, env1)
 	parent := "thread-" + chatID
@@ -276,7 +277,7 @@ func TestContinueAsNew_CarriesLiveSpawnMidLoop(t *testing.T) {
 
 	// Successor: history is fresh; the relaunched spawn runs out its script.
 	pressure.set(historyPressureNone)
-	var suite2 testsuite.WorkflowTestSuite
+	var suite2 temporaltest.WorkflowTestSuite
 	env2 := suite2.NewTestWorkflowEnvironment()
 	e2 := newCANSpawnEnv(t, env2)
 	e2.scripts[child] = repeatTurns("r", 2)
@@ -303,7 +304,7 @@ func TestContinueAsNew_MainThreadParkedOnSpawns(t *testing.T) {
 	child := canChildThread("tc-spawn")
 	parent := "thread-" + chatID
 
-	var suite1 testsuite.WorkflowTestSuite
+	var suite1 temporaltest.WorkflowTestSuite
 	env1 := suite1.NewTestWorkflowEnvironment()
 	e1 := newCANSpawnEnv(t, env1)
 	e1.scripts[parent] = []scriptedToolCallsResponse{
@@ -327,7 +328,7 @@ func TestContinueAsNew_MainThreadParkedOnSpawns(t *testing.T) {
 	require.Len(t, carried.Resume.Spawns, 1)
 
 	pressure.set(historyPressureNone)
-	var suite2 testsuite.WorkflowTestSuite
+	var suite2 temporaltest.WorkflowTestSuite
 	env2 := suite2.NewTestWorkflowEnvironment()
 	e2 := newCANSpawnEnv(t, env2)
 	e2.scripts[child] = repeatTurns("r", 1)
@@ -387,7 +388,7 @@ func TestContinueAsNew_HardBackstopCarriesUnparkedSpawn(t *testing.T) {
 		}
 		return d, nil
 	}
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(wf)
 	env.ExecuteWorkflow(wf)
@@ -410,7 +411,7 @@ func TestContinueAsNew_PauseArmedBlocks(t *testing.T) {
 	forcePressure(t, "chat-can-pause", func() historyPressure { return historyPressureHard })
 	require.False(t, quiescentForContinueAsNew(tracker, true))
 
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	env.RegisterWorkflow(func(ctx workflow.Context) (bool, error) {
 		return readyToContinueAsNew(ctx, tracker, true), nil
@@ -459,7 +460,7 @@ func TestContinueAsNew_CancelWhileParkedHonoredInSuccessor(t *testing.T) {
 			Preset: "general", LoopIteration: 4, Cancelled: true,
 		}},
 	}
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	e := newCANSpawnEnv(t, env)
 	e.scripts[child] = repeatTurns("r", 5)
@@ -488,7 +489,7 @@ func TestPrepareSpawnRelaunch_DerivesMissingFields(t *testing.T) {
 	require.Equal(t, spawnNodeID("tc"), prep.spawnNode.GetId())
 }
 
-type testsuiteHolder struct{ testsuite.WorkflowTestSuite }
+type testsuiteHolder struct{ temporaltest.WorkflowTestSuite }
 
 func (h *testsuiteHolder) env() *testsuite.TestWorkflowEnvironment {
 	return h.NewTestWorkflowEnvironment()

@@ -12,10 +12,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/netguard"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -67,7 +67,7 @@ func TestActionNodeDispatchesGoExecutor(t *testing.T) {
 		Uses: &reliantv1.CelString{Value: &reliantv1.CelString_Literal{Literal: "signer/sign@1"}},
 		With: map[string]*structpb.Value{"text": structpb.NewStringValue("hello")},
 	}}}
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestActivityEnvironment()
 	env.RegisterActivity(a.Execute)
 	val, err := env.ExecuteActivity(a.Execute, types.ActivityInput{Runtime: types.RuntimeContext{WorkflowID: "run-1", StepID: "sign"}, Node: node})
