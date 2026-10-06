@@ -79,6 +79,8 @@ func finishRun(t *testing.T, kind core.TriggerEventKind, status, outcome string,
 		Status:       status,
 		Thread:       chatID,
 		Outcome:      outcome,
+		// The chat's first run: the one its launch kind describes.
+		LaunchRun: true,
 	}
 	if child {
 		input.WorkflowID = uuid.NewString()

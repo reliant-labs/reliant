@@ -95,11 +95,27 @@ run that launched and then failed reads as green.
 |---|---|---|
 | `chat.start` | Chat | "Started by you" |
 | `schedule` | Schedule | "Started by schedule **Nightly triage** for Tue 09:00 (Europe/London)" |
-| `schedule` + payload `manual: true` | Run now | "Started by **Run now** on Nightly triage" |
+| `schedule` + payload `manual: true` | Run now | "Started by Run now on **Nightly triage**" |
 | `agent.start_run` | Agent | "Started by an agent in **Refactor auth** (chat link)" |
-| `webhook` (later) | Webhook | "Started by webhook **deploy-hook** at 14:02" |
-| `integration` (later) | GitHub, Linear… (provider name and icon) | "Started by GitHub: issue #412 opened by @alice" |
+| `builder.test` | Test | "Test run from the builder" |
+| `webhook` | Webhook | "Started by webhook **deploy-hook** at 14:02" |
+| `integration` | the integration id (`github`) | "Started by **Triage new issues** on github: issues.opened" |
+| `workflow_event` | Workflow event | "Started by **After review** when code-review finished" (failed / was blocked) |
 | null (predates #392) | Chat | treat as `chat.start` |
+
+**Bold** is the automation, and every surface that shows the line links it to
+the automation's page — for every kind an automation fires, not only a
+schedule (`launchKindDisplay`'s `automationParts`). The name is the
+automation's current one; a deleted automation is named as it was when it
+fired where the event recorded it ("(since deleted)"), otherwise the line
+falls back to the unnamed form ("Started by a webhook at 14:02", "Started by
+github: issues.opened", "Started when code-review finished"). A webhook
+automation's name is the webhook's. The integration is shown by id: the client
+has no catalog of display names, and the line must not need an extra request.
+
+The launch kind describes the chat's FIRST run. A person replying in any of
+these chats starts a run of their own, which is attended: it notifies when it
+finishes and is never part of the automation's failure streak (§6.4).
 
 ---
 
@@ -884,9 +900,14 @@ pinned in `chatStore` regardless of list membership.
 | Needs input (pre-#404 questions, approvals with a notify policy) | (unchanged) | Inbox item + OS notification. |
 | Daemon pending at fire time | n/a | Inbox item, once per automation per machine episode. |
 
-Implementation: `WorkflowStatusActivity` (`workflow_status.go:105`) marks
-unread on root completion. It skips that when the chat's launch kind is not
-interactive and not adopted. The client notification path
+Implementation: `WorkflowStatusActivity` (`workflow_status.go`) marks unread
+on root completion. "Automation run" means the run the automation FIRED — the
+chat's launch run, which the launcher marks (`runtime.InputKeyLaunchRun`). A
+person's reply in an automation's chat, adopted or not, starts a run of their
+own: it notifies like an interactive chat, and its failure always notifies.
+The automation's streak, health and overlap check read how its own run ended
+(`trigger_events.run_status`), not the chat's latest turn, so a person's turn
+neither starts nor ends the automation's streak. The client notification path
 (`globalUpdatesStore.ts:607`) needs no change once the server stops emitting.
 
 ### 6.5 Search (L6)

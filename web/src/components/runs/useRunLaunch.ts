@@ -27,7 +27,7 @@ export interface RunLaunch {
   event: LaunchEvent | null | undefined;
   /** The chat an agent started this run from, when it is the caller's and still exists. */
   parent?: { chatId: string; title: string };
-  /** The automation's name now; undefined when deleted or not a scheduled run. */
+  /** The automation's name now; undefined when deleted or no automation fired the run. */
   triggerName?: string;
   /** The automation's schedule timezone. */
   timezone?: string;

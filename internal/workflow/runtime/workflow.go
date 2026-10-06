@@ -599,7 +599,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// needs its own channel instead of being read off the lifecycle status.
 	runOutcome := ""
 	defer func() {
-		handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, childTracker)
+		// Read at exit, off the final inputs map (ApplyDefaults replaces it).
+		launchRun := IsLaunchRun(input.Inputs)
+		handleWorkflowCompletion(ctx, workflowID, input.ChatID, input.WorkflowName, parentWorkflowID, thread, forkedFromThread, retErr, runOutcome, launchRun, childTracker)
 	}()
 
 	// STEP 5: Load workflow definition (YAML and JSON)
@@ -4356,6 +4358,9 @@ type workflowStatusOpts struct {
 	// Error is why the run failed, on a "failed" notification. It is what a
 	// workflow-event trigger reports as the source run's error.
 	Error string
+	// LaunchRun marks a terminal notification of the chat's launch run
+	// (IsLaunchRun), as opposed to a run a person's reply started.
+	LaunchRun bool
 }
 
 // maxStatusErrorBytes bounds the error text a status notification carries; it
@@ -4442,6 +4447,9 @@ func notifyWorkflowStatus(ctx workflow.Context, chatID, workflowID, workflowName
 		}
 		if opts.Error != "" {
 			input["error"] = opts.Error
+		}
+		if opts.LaunchRun {
+			input["launch_run"] = true
 		}
 	}
 
@@ -4670,7 +4678,11 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 // run that failed every gate lane and routed to its `failed` node reported
 // COMPLETED to every supervision surface. Status stays the lifecycle; the
 // outcome rides alongside it.
-func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, childTracker *ChildWorkflowTracker) {
+//
+// launchRun says whether this run is the chat's launch run (IsLaunchRun) or one
+// a person's reply started; it rides on every terminal notification, because
+// who is waiting on the run decides whether its finish notifies.
+func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, launchRun bool, childTracker *ChildWorkflowTracker) {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a disconnected context that will survive cancellation
@@ -4691,7 +4703,8 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		// Run cleanup activities (cancel pending approvals, etc.)
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow was cancelled and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread, nil)
+		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread,
+			&workflowStatusOpts{LaunchRun: launchRun})
 		return
 	}
 
@@ -4705,7 +4718,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
 		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
-			&workflowStatusOpts{Error: failureText(fmt.Errorf("panic: %v", r))})
+			&workflowStatusOpts{Error: failureText(fmt.Errorf("panic: %v", r)), LaunchRun: launchRun})
 		panic(r) // Re-panic to maintain Temporal semantics
 	}
 
@@ -4735,7 +4748,7 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
 		// Notify UI that workflow failed and update workflow record
 		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
-			&workflowStatusOpts{Error: failureText(retErr)})
+			&workflowStatusOpts{Error: failureText(retErr), LaunchRun: launchRun})
 		return
 	}
 
@@ -4765,7 +4778,8 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// Notify UI that the workflow finished and update the workflow record. The
 	// lifecycle status is "completed" — the Temporal execution really did finish
 	// — and the verdict travels beside it so no surface has to guess.
-	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread, &workflowStatusOpts{Outcome: runOutcome})
+	notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "completed", parentWorkflowID, thread,
+		&workflowStatusOpts{Outcome: runOutcome, LaunchRun: launchRun})
 }
 
 // terminalDrainDetachedSpawns is spec §6.7's belt-and-braces: the loop-exit

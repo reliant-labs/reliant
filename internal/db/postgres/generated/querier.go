@@ -585,6 +585,10 @@ type Querier interface {
 	// the failure episode: Go reads its length and its oldest failure from it, so
 	// the episode is not truncated at the 10-firing health window. Same run
 	// columns and display-state table as ListRecentTriggerFirings.
+	//
+	// "Completed" is the run the trigger fired (run_status), not whatever turn
+	// the chat is on now — the same rule triggers.resolveFiring applies — so a
+	// person's later reply in the chat neither ends nor extends the episode.
 	ListFiringsSinceLastSuccess(ctx context.Context, arg ListFiringsSinceLastSuccessParams) ([]ListFiringsSinceLastSuccessRow, error)
 	// Which of the given threads are forks: their initial (sequence 0) context
 	// window links to a parent window. One round trip for a whole chat, where
@@ -1138,6 +1142,9 @@ type Querier interface {
 	SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error)
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
 	SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error
+	// Records how the run a trigger fired ended, on the chat's launch event (the
+	// same earliest-event rule as GetTriggerEventByChatID).
+	SetLaunchEventRunStatus(ctx context.Context, arg SetLaunchEventRunStatusParams) (int64, error)
 	// Records forge's name for a project (forge.yaml `name`) and marks it a forge
 	// project. A no-op — zero rows, no updated_at churn — when both already hold,
 	// so callers can run it on every successful forge read.

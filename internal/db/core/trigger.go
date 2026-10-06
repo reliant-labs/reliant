@@ -339,7 +339,21 @@ type TriggerEvent struct {
 	OutcomeDetail string
 	ChatID        *string // the chat this firing launched, when it launched one
 	CreatedAt     time.Time
+	// RunStatus is how the run this firing launched ended — one of the
+	// TriggerRun* values — recorded when that run, the one the trigger itself
+	// fired, reaches a terminal status. Empty while it is still going, and for
+	// a firing that launched no unattended run. A person can keep a launched
+	// chat going with turns of their own; the trigger's health, streak and
+	// overlap rules are about its own run, so they read this, not the chat.
+	RunStatus string
 }
+
+// How a trigger's own run ended (TriggerEvent.RunStatus).
+const (
+	TriggerRunCompleted = "completed"
+	TriggerRunFailed    = "failed"
+	TriggerRunCancelled = "cancelled"
+)
 
 // TriggerEventRun is the run a launched firing started, as the firing's
 // reader sees it now. DisplayState is derived in SQL by the same table as
@@ -440,6 +454,10 @@ type TriggerStore interface {
 	// UpdateTriggerEventOutcome returns ErrTriggerEventNotFound when the id
 	// does not resolve.
 	UpdateTriggerEventOutcome(ctx context.Context, id string, outcome TriggerEventOutcome, detail string, chatID *string) error
+	// SetLaunchEventRunStatus records status (a TriggerRun* value) as how the
+	// run its trigger fired ended, on chatID's launch event. A chat with no
+	// launch event is not an error: there is nothing to record against.
+	SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error
 	// UpdateTriggerEventPayload replaces the event's payload. It returns
 	// ErrTriggerEventNotFound when the id does not resolve.
 	UpdateTriggerEventPayload(ctx context.Context, id string, payload map[string]any) error

@@ -1006,6 +1006,10 @@ func (l *Launcher) start(ctx context.Context, p startParams) (*Result, error) {
 	if p.spec.Unattended {
 		initialData[v2.InputKeyUnattended] = true
 	}
+	// This is the run the launch started; a reply's run never carries the mark,
+	// which is how the runtime tells the two apart (v2.InputKeyLaunchRun).
+	// Injected after validation for the same reason as unattended.
+	initialData[v2.InputKeyLaunchRun] = true
 
 	workflowInput := v2.WorkflowInput{
 		ChatID:       chatID,

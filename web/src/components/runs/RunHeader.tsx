@@ -12,7 +12,7 @@
  * Once a run has stopped it offers "Re-run (current definition)" (§14.1
  * decision 3: there is no definition snapshot, so the label says which
  * definition it uses). A failed run's Retry is the same action, not a second
- * path. A scheduled run also offers "Run automation now", which fires the
+ * path. A run an automation fired also offers "Run automation now", which fires the
  * automation itself and stays unattended under its policy.
  */
 
@@ -20,13 +20,15 @@ import { Link } from "@tanstack/react-router";
 import { CalendarClock, MessageSquarePlus, Pause, Play, RotateCcw, Square, Workflow } from "lucide-react";
 
 import type { Chat } from "@/api/client";
+import type { LaunchEvent } from "@/api/run-grpc";
 import { useDaemonStatus } from "@/hooks/useDaemonStatus";
-import { isLiveRunStatus, launchKindDisplay, runStatus } from "@/lib/runStatus";
+import { isLiveRunStatus, launchKindDisplay, runStatus, type LaunchKindDisplay } from "@/lib/runStatus";
 import { formatAbsoluteTime } from "@/lib/relativeTime";
 import { Button } from "../ui/Button";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
+import { launchContextOf } from "./launchContext";
 import { RunDuration } from "./RunRow";
 
 export interface RunHeaderActions {
@@ -48,8 +50,10 @@ export interface RunHeaderActions {
 
 interface RunHeaderProps {
   chat: Chat;
-  /** The automation's current name, when the run was scheduled and it still exists. */
+  /** The automation's current name, when an automation fired the run and it still exists. */
   triggerName?: string;
+  /** The launch event, for what the "Started by" line can say about the source. */
+  event?: LaunchEvent | null;
   /** The chat whose agent started this run, when known. */
   parent?: { chatId: string; title: string };
   projectName?: string;
@@ -58,14 +62,14 @@ interface RunHeaderProps {
   busy?: boolean;
 }
 
-export function RunHeader({ chat, triggerName, parent, projectName, actions, busy }: RunHeaderProps) {
+export function RunHeader({ chat, triggerName, event, parent, projectName, actions, busy }: RunHeaderProps) {
   const status = runStatus({
     state: chat.workflowState,
     stopReason: chat.workflowStopReason,
     activity: chat.activity,
   });
   const live = isLiveRunStatus(status);
-  const launch = launchKindDisplay(chat.launchKind, { triggerName });
+  const launch = launchKindDisplay(chat.launchKind, { ...launchContextOf(event), triggerName });
   const { daemons } = useDaemonStatus();
   const machine = chat.activeDaemonId
     ? daemonLabel(
@@ -169,7 +173,7 @@ export function RunHeader({ chat, triggerName, parent, projectName, actions, bus
 
       <p className="flex flex-wrap items-center gap-x-1.5 gap-y-0.5 text-sm text-muted-foreground">
         <span data-testid="run-started-by">
-          <StartedBy chat={chat} triggerName={triggerName} parent={parent} line={launch.startedByLine} />
+          <StartedBy chat={chat} triggerName={triggerName} parent={parent} launch={launch} />
         </span>
         {chat.workflowName && (
           <>
@@ -201,34 +205,39 @@ export function RunHeader({ chat, triggerName, parent, projectName, actions, bus
   );
 }
 
-/** The launch line, with what started the run linked when it can be. */
+/**
+ * The launch line, with what started the run linked when it can be: the
+ * automation that fired it, whatever kind of automation, or the agent's chat.
+ */
 function StartedBy({
   chat,
   triggerName,
   parent,
-  line,
+  launch,
 }: {
   chat: Chat;
   triggerName?: string;
   parent?: { chatId: string; title: string };
-  line: string;
+  launch: LaunchKindDisplay;
 }) {
-  const kind = chat.launchKind || "chat.start";
-  if (kind === "schedule") {
-    if (!chat.triggerId || !triggerName) return <>Started by a schedule that has since been deleted</>;
+  const kind = launch.kind;
+  const parts = launch.automationParts;
+  if (parts && chat.triggerId) {
     return (
       <>
-        Started by schedule{" "}
+        {parts.lead}
         <Link
           to="/workflows/automations/$triggerId"
           params={{ triggerId: chat.triggerId }}
           className="font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
-          {triggerName}
+          {parts.automation}
         </Link>
+        {parts.trail}
       </>
     );
   }
+  if (kind === "schedule" && !triggerName) return <>Started by a schedule that has since been deleted</>;
   if (kind === "agent.start_run" && parent) {
     return (
       <>
@@ -243,5 +252,5 @@ function StartedBy({
       </>
     );
   }
-  return <>{line}</>;
+  return <>{launch.startedByLine}</>;
 }

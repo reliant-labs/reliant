@@ -257,6 +257,31 @@ func TestFireSkipsWhileThePreviousRunIsLive(t *testing.T) {
 	}
 }
 
+// The previous fire's own run has ended; what is live in its chat is a person
+// replying there. Their turn is theirs and does not hold up the automation.
+func TestFireIsNotBlockedByAPersonsTurnInThePreviousRunsChat(t *testing.T) {
+	repo := newFakeRepo()
+	trigger := testTrigger(t, nil)
+	repo.triggers[trigger.ID] = trigger
+	prevChat := "chat-prev"
+	repo.statuses[prevChat] = core.Active()
+	repo.events = append(repo.events, &core.TriggerEvent{
+		ID: uuid.NewString(), TriggerID: &trigger.ID, UserID: trigger.UserID,
+		Kind: core.TriggerEventKindSchedule, DedupeKey: "earlier-fire",
+		OccurredAt: time.Date(2026, 1, 1, 9, 0, 0, 0, time.UTC),
+		Outcome:    core.TriggerEventLaunched, ChatID: &prevChat,
+		RunStatus: core.TriggerRunCompleted,
+	})
+	launcher := &fakeLauncher{}
+	out, err := NewFirer(repo, launcher).Fire(context.Background(), fireReq(trigger.ID))
+	if err != nil {
+		t.Fatalf("Fire: %v", err)
+	}
+	if out.Outcome != string(core.TriggerEventLaunched) {
+		t.Fatalf("Outcome = %q (%s), want launched: the fired run ended, the live turn is a person's", out.Outcome, out.Reason)
+	}
+}
+
 func TestFireDoesNotTreatAStrandedPendingRunAsLive(t *testing.T) {
 	repo := newFakeRepo()
 	trigger := testTrigger(t, nil)

@@ -11,6 +11,7 @@ import userEvent from "@testing-library/user-event";
 
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import type { Chat } from "@/api/client";
+import type { LaunchEvent } from "@/api/run-grpc";
 import { RunHeader, type RunHeaderActions } from "../RunHeader";
 import { renderRunsAt } from "./runTestUtils";
 
@@ -38,6 +39,10 @@ function chat(overrides: Partial<Chat> = {}): Chat {
     launchKind: "chat.start",
     ...overrides,
   } as Chat;
+}
+
+function launchEvent(overrides: Partial<LaunchEvent>): LaunchEvent {
+  return { kind: "", occurredAt: "", manual: false, ...overrides };
 }
 
 function actions(): RunHeaderActions {
@@ -100,6 +105,60 @@ describe("RunHeader", () => {
     );
     expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by schedule Hourly sweep");
     expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/automations/trig-1");
+  });
+
+  // Every kind an automation fires names that automation and links to it, with
+  // what the source did (§0 launch-kind vocabulary).
+  it.each([
+    {
+      launchKind: "webhook",
+      event: launchEvent({ kind: "webhook", occurredAt: "2026-10-06T14:02:00" }),
+      line: /^Started by webhook deploy-hook at \d\d:\d\d$/,
+      name: "deploy-hook",
+    },
+    {
+      launchKind: "integration",
+      event: launchEvent({ kind: "integration", integration: "github", providerEvent: "issues.opened" }),
+      line: /^Started by deploy-hook on github: issues\.opened$/,
+      name: "deploy-hook",
+    },
+    {
+      launchKind: "workflow_event",
+      event: launchEvent({ kind: "workflow_event", sourceWorkflow: "code-review", sourceOutcome: "failed" }),
+      // The source workflow reads by its display name.
+      line: /^Started by deploy-hook when Code Review failed$/,
+      name: "deploy-hook",
+    },
+  ])("a $launchKind-launched run names and links its automation", async ({ launchKind, event, line, name }) => {
+    renderRunsAt(
+      <RunHeader chat={chat({ launchKind, triggerId: "trig-2" })} triggerName={name} event={event} actions={handlers} />,
+      "/workflows/runs/chat-1",
+    );
+    expect((await screen.findByTestId("run-started-by")).textContent).toMatch(line);
+    expect(screen.getByRole("link", { name })).toHaveAttribute("href", "/workflows/automations/trig-2");
+  });
+
+  it("a Run now of a schedule says so and still links the automation", async () => {
+    renderRunsAt(
+      <RunHeader
+        chat={chat({ launchKind: "schedule", triggerId: "trig-1" })}
+        triggerName="Hourly sweep"
+        event={launchEvent({ kind: "schedule", manual: true })}
+        actions={handlers}
+      />,
+      "/workflows/runs/chat-1",
+    );
+    expect(await screen.findByTestId("run-started-by")).toHaveTextContent("Started by Run now on Hourly sweep");
+    expect(screen.getByRole("link", { name: "Hourly sweep" })).toHaveAttribute("href", "/workflows/automations/trig-1");
+  });
+
+  it("a webhook run whose automation is gone says what it can, unlinked", async () => {
+    renderRunsAt(
+      <RunHeader chat={chat({ launchKind: "webhook" })} event={launchEvent({ kind: "webhook" })} actions={handlers} />,
+      "/workflows/runs/chat-1",
+    );
+    expect(await screen.findByTestId("run-started-by")).toHaveTextContent(/^Started by a webhook/);
+    expect(screen.queryByRole("link")).not.toBeInTheDocument();
   });
 
   it("a run whose automation was deleted says so", async () => {
