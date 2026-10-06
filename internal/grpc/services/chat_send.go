@@ -324,7 +324,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 
 	// Step 4: Build workflow inputs (with presets and model defaults)
 	// Use worktree path if available, otherwise project path
-	projectPath := s.launcher().GetEffectiveWorkingPath(ctx, chat)
+	checkout := s.launcher().GetEffectiveCheckout(ctx, chat)
 
 	// Merge presets: existing chat presets + any new ones from the request
 	effectivePresets := make(map[string]string)
@@ -339,7 +339,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		}
 	}
 
-	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
 
 	// Validate workflow inputs before starting
 	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
@@ -996,10 +996,10 @@ func (s *ChatService) SendMessage(
 	}
 
 	// Resolve path for preset loading and workflow validation - use worktree if available
-	projectPath := s.launcher().GetEffectiveWorkingPath(ctx, chat)
+	checkout := s.launcher().GetEffectiveCheckout(ctx, chat)
 
 	// Build workflow inputs from merged presets and user params
-	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
 
 	// Determine target thread. Resume runs continue the interrupted run's
 	// thread (which may be a forked/child thread) so history stays continuous.

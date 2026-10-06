@@ -206,7 +206,7 @@ func TestEvaluateDeclaredOutputs_NoSchemaRegisteredDegradesToLegacyBehavior(t *t
 	wf := &reliantv1.Workflow{
 		Nodes: []*reliantv1.Node{{Id: "call_llm", Type: model.NodeTypeCallLLM}},
 	}
-	workflowContext := buildWorkflowContext("wf-id", "wf", "chat", map[string]interface{}{})
+	workflowContext := buildWorkflowContext("wf-id", "wf", "chat", map[string]interface{}{}, nil)
 
 	outputs := map[string]string{"tool_calls": "{{nodes.call_llm.tool_calls}}"}
 

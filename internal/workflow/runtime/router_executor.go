@@ -890,7 +890,7 @@ func routerThreadTitle(decision *routerDecision) string {
 func (r *RouterExecutor) celScope() *wfcel.RouterOutputContext {
 	return &wfcel.RouterOutputContext{
 		Inputs:   r.workflowInputs,
-		Workflow: workflowContextToTyped(buildWorkflowContext(r.workflowID, r.workflowName, r.chatID, r.workflowInputs)),
+		Workflow: workflowContextToTyped(buildWorkflowContext(r.workflowID, r.workflowName, r.chatID, r.workflowInputs, r.execContext)),
 	}
 }
 

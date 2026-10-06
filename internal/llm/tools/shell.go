@@ -4,6 +4,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -343,6 +344,13 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		return NewTextErrorResponse(refusal), nil
 	}
 
+	// Refuse a recursive delete aimed at /, a system directory or a home
+	// directory. Workflow `run` steps reach the daemon through this tool too.
+	// See shell_destructive_guard.go.
+	if refusal := destructiveRootRefusal(params.Command); refusal != "" {
+		return NewTextErrorResponse(refusal), nil
+	}
+
 	// params.Timeout is in milliseconds per the JSON schema
 	maxTimeoutMs := int(MaxShellTimeout.Milliseconds())
 	defaultTimeoutMs := int(DefaultShellTimeout.Milliseconds())
@@ -364,6 +372,12 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	}
 	if workingDir == "" {
 		return NewTextErrorResponse("No project working directory available - ensure you're working within a project"), nil
+	}
+	// A project rooted at "/" is a broken context, not a project: every
+	// relative path in the command would then mean the whole machine.
+	if path.Clean(workingDir) == "/" {
+		return NewTextErrorResponse("refused: the project working directory resolved to /, which is not a project. " +
+			"This is a misconfigured project or worktree path; no command was run."), nil
 	}
 	startTime := time.Now()
 

@@ -84,6 +84,11 @@ type Options struct {
 	// Timeout bounds one scenario's wall-clock time. Zero means
 	// DefaultTimeout.
 	Timeout time.Duration
+	// OnRunStep, when set, receives every `run` node's qualified path and the
+	// command the runtime resolved for it — exactly what a daemon would have
+	// been sent. The runner never executes a command; this is how a test gets
+	// the rendered command to inspect it, or to run it inside a sandbox.
+	OnRunStep func(nodePath, command string)
 }
 
 // Runner executes scenarios for a single workflow definition against
@@ -98,6 +103,9 @@ type Runner struct {
 	// seam standing in for an activity the runtime gained without a runner
 	// mock, so the catch-all can be exercised.
 	omitActivity string
+
+	// onRunStep is Options.OnRunStep.
+	onRunStep func(nodePath, command string)
 }
 
 // NewRunner builds a scenario runner for a workflow that resolves only
@@ -116,7 +124,7 @@ func New(wf *reliantv1.Workflow, opts Options) *Runner {
 	if timeout <= 0 {
 		timeout = DefaultTimeout
 	}
-	return &Runner{workflow: wf, loader: loader, timeout: timeout}
+	return &Runner{workflow: wf, loader: loader, timeout: timeout, onRunStep: opts.OnRunStep}
 }
 
 // LoadBuiltinWorkflow resolves a builtin workflow by ref ("builtin://agent")
@@ -1918,6 +1926,10 @@ func (r *Runner) registerActivities(
 					// makes an executed run node agree with a skipped one.
 					if nodePath, _ := in["node_path"].(string); nodePath != "" {
 						id = nodePath
+					}
+					if r.onRunStep != nil {
+						command, _ := in["command"].(string)
+						r.onRunStep(id, command)
 					}
 					out := normalizeOutput(events.next(id), activityName)
 					var req *types.SaveMessageRequest

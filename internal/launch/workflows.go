@@ -100,7 +100,7 @@ func (l *Launcher) ResolveDefaultWorkflow(ctx context.Context, userID string, re
 func (l *Launcher) BuildWorkflowInputs(
 	ctx context.Context,
 	userID string,
-	projectPath string,
+	checkout Checkout,
 	projectID string,
 	workflowName string,
 	selectedPresets map[string]string,
@@ -179,8 +179,14 @@ func (l *Launcher) BuildWorkflowInputs(
 
 	// Add project_path to workflow inputs so spawned workflows can load presets
 	// This flows through: workflow.go -> StepExecutor -> executeSpawnInline -> InlineWorkflowExecutor
-	if projectPath != "" {
-		initialData["project_path"] = projectPath
+	// It is also workflow.path; worktree_path and worktree_branch are
+	// workflow.worktree_path and workflow.branch (runtime addScopeEnvironment).
+	if checkout.Path != "" {
+		initialData["project_path"] = checkout.Path
+	}
+	if checkout.WorktreePath != "" {
+		initialData["worktree_path"] = checkout.WorktreePath
+		initialData["worktree_branch"] = checkout.Branch
 	}
 
 	return initialData
@@ -213,8 +219,7 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 		}
 	}
 
-	projectPath := l.GetEffectiveWorkingPath(ctx, chat)
-	return l.BuildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, requestParams)
+	return l.BuildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, workflowName, effectivePresets, requestParams)
 }
 
 // LoadWorkflowInputsForBuild loads workflow input schemas as proto types for ApplyDefaults.

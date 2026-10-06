@@ -270,7 +270,7 @@ func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interf
 	evalCtx := &wfcel.EdgeEvalContext{
 		Nodes:    e.nodeOutputs,
 		Inputs:   e.workflowInputs,
-		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)),
+		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)),
 		Iter:     e.enclosingIter(),
 	}
 	return applyPresets(presets, subInputs, evalCtx, e.loadPresetParams, e.logger, e.nodeID)
@@ -696,7 +696,8 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	// Create state machine for sub-workflow
 	bodyScope := subWorkflowScope(e.enclosingIter())
 	stateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
-		WithLoopScope(func() *LoopScope { return bodyScope })
+		WithLoopScope(func() *LoopScope { return bodyScope }).
+		WithExecContext(e.execContext)
 
 	// Create step executor for sub-workflow.
 	//
@@ -798,7 +799,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 			// Check node condition - if false, skip execution
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				e.ctx, node, subNodeOutputs, subInputs,
-				e.workflowID, e.chatID, e.subWorkflowName, e.logger,
+				e.workflowID, e.chatID, e.subWorkflowName, e.execContext, e.logger,
 				bodyScope,
 				e.nodePath(),
 			)
@@ -1458,7 +1459,7 @@ func (e *InlineWorkflowExecutor) executeNestedRouter(
 // completed nodes, its inputs, `workflow`, and the enclosing loop's iter (read
 // from the inputs the loop published). A failing expression fails the node.
 func (e *InlineWorkflowExecutor) evaluateOutputs(nodeOutputs, inputs map[string]interface{}) (map[string]interface{}, error) {
-	workflowContext := buildWorkflowContext(e.workflowID, e.subWorkflowName, e.chatID, inputs)
+	workflowContext := buildWorkflowContext(e.workflowID, e.subWorkflowName, e.chatID, inputs, e.execContext)
 	if iterMap := e.enclosingIterMap(); iterMap != nil {
 		workflowContext["iter"] = iterMap
 	}

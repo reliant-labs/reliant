@@ -23,6 +23,9 @@ type ExecutionContext struct {
 	WorkflowID   string
 	ChatID       string
 	WorkflowName string
+	// RunID is the Temporal run executing this context (workflow.run_id). Set
+	// by DynamicWorkflow from workflow info; inline children inherit it.
+	RunID string
 
 	// Thread - THE authoritative thread for this execution
 	// This is the single source of truth - no lookups needed
@@ -195,11 +198,11 @@ func ResolveCelDaemonSelector(cds *reliantv1.CelDaemonSelector, scope *wfcel.Nod
 // workflowDaemonScope is the scope of a WORKFLOW-level daemon selector,
 // evaluated before any node has run: inputs and workflow, with no completed
 // nodes and no loop.
-func workflowDaemonScope(workflowID, workflowName, chatID string, inputs map[string]interface{}) *wfcel.NodeResolutionContext {
+func workflowDaemonScope(workflowID, workflowName, chatID string, inputs map[string]interface{}, execCtx *ExecutionContext) *wfcel.NodeResolutionContext {
 	return &wfcel.NodeResolutionContext{
 		Inputs:   inputs,
 		Nodes:    map[string]interface{}{},
-		Workflow: workflowContextToTyped(buildWorkflowContext(workflowID, workflowName, chatID, inputs)),
+		Workflow: workflowContextToTyped(buildWorkflowContext(workflowID, workflowName, chatID, inputs, execCtx)),
 	}
 }
 
@@ -363,6 +366,7 @@ func (ctx *ExecutionContext) Clone() *ExecutionContext {
 		WorkflowID:     ctx.WorkflowID,
 		ChatID:         ctx.ChatID,
 		WorkflowName:   ctx.WorkflowName,
+		RunID:          ctx.RunID,
 		Thread:         ctx.Thread,
 		ThreadMode:     ctx.ThreadMode,
 		ThreadTitle:    ctx.ThreadTitle,

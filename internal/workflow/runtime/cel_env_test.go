@@ -159,13 +159,19 @@ func TestCELContextBuilder_WithExecContext(t *testing.T) {
 	assert.Equal(t, "test-workflow", workflow.Name)
 }
 
-// TestCELContextBuilder_WorkflowContext verifies workflow context is properly built
+// TestCELContextBuilder_WorkflowContext verifies the workflow namespace a node
+// config sees: identity, mode from inputs, and the scope's environment from its
+// execution context.
 func TestCELContextBuilder_WorkflowContext(t *testing.T) {
 	t.Parallel()
 	builder := NewCELContextBuilder().
 		WithWorkflow("wf-1", "test-workflow").
-		WithEnvironment("/workspace", "main").
-		WithInputs(map[string]interface{}{"mode": "auto"})
+		WithExecContext(&ExecutionContext{ProjectPath: "/workspace", RunID: "run-1"}).
+		WithInputs(map[string]interface{}{
+			"mode":            "auto",
+			"worktree_path":   "/workspace",
+			"worktree_branch": "feature/x",
+		})
 
 	ctx := builder.Build()
 	workflow := ctx["workflow"].(*model.WorkflowContext)
@@ -173,7 +179,25 @@ func TestCELContextBuilder_WorkflowContext(t *testing.T) {
 	assert.Equal(t, "wf-1", workflow.ID)
 	assert.Equal(t, "test-workflow", workflow.Name)
 	assert.Equal(t, "/workspace", workflow.Path)
-	assert.Equal(t, "main", workflow.Branch)
+	assert.Equal(t, "feature/x", workflow.Branch)
+	assert.Equal(t, "/workspace", workflow.WorktreePath)
+	assert.Equal(t, "auto", workflow.Mode)
+	assert.Equal(t, "run-1", workflow.RunID)
+}
+
+// A scope that runs somewhere other than the chat's worktree — a sub-workflow
+// with its own project.path — reports its own path and no branch: the chat's
+// branch describes a checkout that scope is not in.
+func TestCELContextBuilder_ScopeOutsideTheChatWorktreeHasNoBranch(t *testing.T) {
+	t.Parallel()
+	workflow := NewCELContextBuilder().
+		WithExecContext(&ExecutionContext{ProjectPath: "/home/u/.reliant/worktrees/p/compete-impl-1-x"}).
+		WithInputs(map[string]interface{}{"worktree_path": "/workspace", "worktree_branch": "feature/x"}).
+		Build()["workflow"].(*model.WorkflowContext)
+
+	assert.Equal(t, "/home/u/.reliant/worktrees/p/compete-impl-1-x", workflow.Path)
+	assert.Empty(t, workflow.Branch)
+	assert.Empty(t, workflow.WorktreePath)
 }
 
 // TestCELContextBuilder_ImplementsCELEvaluator verifies the interface is satisfied

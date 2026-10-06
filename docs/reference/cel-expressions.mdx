@@ -213,19 +213,37 @@ Provides workflow metadata and execution context.
 |-------|------|-------------|
 | `workflow.id` | string | Unique workflow execution ID |
 | `workflow.name` | string | Workflow definition name |
-| `workflow.path` | string | Working directory path |
-| `workflow.branch` | string | Current git branch |
+| `workflow.run_id` | string | Temporal run ID of the current execution |
+| `workflow.mode` | string | Execution mode (`auto`, `manual`, `plan`), from `inputs.mode` |
+| `workflow.path` | string | Absolute working directory of the current scope: the chat's worktree or project, or a sub-workflow's `project.path` |
+| `workflow.worktree_path` | string | The chat's worktree, when the current scope runs in it. Empty in the project's main checkout |
+| `workflow.branch` | string | That worktree's git branch. Empty in the project's main checkout, whose branch is not tracked |
+
+`workflow.path` is never rendered as an empty string. In a run with no project
+directory, reading it fails the node, the same way reading a missing key does.
+Test for it with `has(workflow.path)` where such a run is expected.
 
 ```yaml
 # Create unique resource names
 name: "worktree-{{workflow.id}}"
 
 # Include workflow context in messages
-content: "Workflow {{workflow.name}} completed"
+content: "Workflow {{workflow.name}} finished in {{workflow.path}}"
 
-# Access git branch
-base_branch: "{{workflow.branch}}"
+# Branch from the chat's worktree branch, or from the checkout's current commit
+base_branch: "{{has(workflow.branch) ? workflow.branch : 'HEAD'}}"
 ```
+
+#### Empty values in `run` commands
+
+A `run` node fails before anything is sent to the machine if any plain value
+reference in its command renders empty. Plain references are things like
+`{{workflow.path}}`, `{{inputs.dir}}` and `{{nodes.x.path}}`. An empty value in
+a shell command changes what the command does: `rm -rf "{{inputs.dir}}/"` with
+an empty `dir` becomes `rm -rf "/"`.
+
+When a value is genuinely optional, write an expression that says what empty
+means, for example `{{has(inputs.flags) ? inputs.flags : ''}}`.
 
 ### iter.*
 
@@ -494,7 +512,7 @@ Use `has()` to safely check for optional fields:
 condition: "has(nodes.verify) ? nodes.verify.exit_code == 0 : true"
 
 # Check nested optional fields
-branch: "{{has(workflow.branch) ? workflow.branch : 'main'}}"
+branch: "{{has(workflow.branch) ? workflow.branch : 'HEAD'}}"
 ```
 
 ### Working with Tool Calls

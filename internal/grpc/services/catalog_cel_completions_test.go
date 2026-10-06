@@ -45,9 +45,12 @@ func TestGetCELCompletions_KnownNamespacesPresent(t *testing.T) {
 		assert.False(t, ns.IsDynamic)
 
 		fieldNames := fieldNamesFromCELFields(ns.Fields)
-		for _, expected := range []string{"id", "name", "path", "branch", "mode", "run_id", "session_id", "worktree_path"} {
+		for _, expected := range []string{"id", "name", "path", "branch", "mode", "run_id", "worktree_path"} {
 			assert.Contains(t, fieldNames, expected, "workflow namespace should have field %q", expected)
 		}
+		// session_id was documented but never populated, and had no defined
+		// meaning; it is no longer a workflow field.
+		assert.NotContains(t, fieldNames, "session_id")
 	})
 
 	t.Run("iter namespace", func(t *testing.T) {

@@ -4,7 +4,7 @@ apiVersion: "0.0.5"
 description: |
   3 agents implement in parallel worktrees, reviewer picks winner or synthesizes.
   Thread mode: new (isolated context). Each worktree is independent.
-  Apply path: use_winner copies via rsync, synthesize merges best parts.
+  Apply path: use_winner applies the winner's changes to the project with git apply, synthesize merges best parts.
 
 entry: [improve_prompt]
 
@@ -134,7 +134,10 @@ nodes:
           type: create_worktree
           args:
             name: compete-impl-{{iter.item.num}}-{{workflow.id}}
-            base_branch: "{{workflow.branch != '' ? workflow.branch : 'main'}}"
+            # Start every candidate from what the chat's checkout has now: its
+            # worktree branch, or the project checkout's current commit. Then a
+            # candidate's changes apply back onto that checkout as-is.
+            base_branch: "{{has(workflow.branch) ? workflow.branch : 'HEAD'}}"
             copy_files:
               - .env
               - .env.local
@@ -296,13 +299,92 @@ nodes:
             description: "If strategy=synthesize, detailed instructions on what to take from each implementation"
 
   # Mutually exclusive paths via edge cases from review
+  #
+  # apply_winner applies the winning candidate's CHANGES to the chat's checkout
+  # with `git apply`. It used to `rsync --delete` the candidate over the
+  # checkout, which (a) deleted every file the candidate lacked, including the
+  # user's uncommitted work, and (b) on 2026-10-06 ran as
+  # `rsync --delete <winner>/ /` because workflow.path rendered empty. git apply
+  # cannot do either: it refuses any path outside the repository it runs in,
+  # touches only the files the candidate changed, and checks every patch before
+  # applying any. The runtime fails this step before it starts if src or dest
+  # renders empty; the script re-checks both and refuses anything that is not
+  # this run's checkout and one of its candidates.
   - id: apply_winner
     type: run
     command: |
-      rsync -av --delete --exclude='.git' --exclude='node_modules' --exclude='.dev-ports.sh' --exclude='data' --exclude='.env.local' \
-        "{{nodes.implementations._results[string(nodes.review.response.winner)].worktree_path}}/" \
-        "{{workflow.path}}/"
+      set -euo pipefail
+      src='{{nodes.implementations._results[string(nodes.review.response.winner)].worktree_path}}'
+      dest='{{workflow.path}}'
+      winner='{{nodes.review.response.winner}}'
 
+      refuse() { printf 'apply_winner: refusing: %s\n' "$*" >&2; exit 1; }
+
+      case "$dest" in /*) ;; *) refuse "project path '$dest' is not an absolute path" ;; esac
+      case "$src" in /*) ;; *) refuse "candidate path '$src' is not an absolute path" ;; esac
+      [ -d "$dest" ] || refuse "project path $dest is not a directory"
+      [ -d "$src" ] || refuse "candidate path $src is not a directory"
+      dest=$(cd "$dest" && pwd -P)
+      src=$(cd "$src" && pwd -P)
+      home=$(cd "$HOME" && pwd -P)
+
+      # The destination is this run's own checkout — the directory the daemon
+      # started this step in — and never / or $HOME.
+      [ "$dest" != / ] || refuse "project path is /"
+      [ "$dest" != "$home" ] || refuse "project path is the home directory $home"
+      [ "$dest" = "$(pwd -P)" ] || refuse "project path $dest is not this run's checkout $(pwd -P)"
+
+      # The source is one of this run's candidate worktrees, not the project.
+      case "$src/" in "$home/.reliant/worktrees/"?*) ;; *) refuse "candidate $src is not under $home/.reliant/worktrees" ;; esac
+      case "$src" in */compete-impl-*) ;; *) refuse "$src is not a parallel-compete candidate worktree" ;; esac
+      [ "$src" != "$dest" ] || refuse "candidate and project are the same directory"
+
+      # One patch per git checkout in the candidate: the workspace root for a
+      # single-repo project, each nested repo otherwise.
+      repos=()
+      while IFS= read -r rel; do repos+=("$rel"); done < <(cd "$src" && find . -name node_modules -prune -o -name .git -print -prune | sed 's|/\.git$||' | LC_ALL=C sort)
+      [ "${#repos[@]}" -gt 0 ] || refuse "candidate $src contains no git checkout"
+
+      work=$(mktemp -d)
+      trap 'rm -rf "$work"' EXIT
+      for i in "${!repos[@]}"; do
+        rel=${repos[$i]}
+        s="$src/$rel"
+        d="$dest/$rel"
+        [ -d "$d" ] || refuse "$rel is a checkout in the candidate but not in the project"
+        [ "$(git -C "$d" rev-parse --show-toplevel)" = "$(cd "$d" && pwd -P)" ] || refuse "$d is not the root of a git checkout"
+        [ "$(cd "$s" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" = "$(cd "$d" && cd "$(git rev-parse --git-common-dir)" && pwd -P)" ] \
+          || refuse "$s is not a worktree of the project's repository at $d"
+        base=$(git -C "$s" merge-base HEAD "$(git -C "$d" rev-parse HEAD)") || refuse "$s shares no history with $d"
+
+        # Everything the candidate changed since it started, committed or not.
+        # Staged in the candidate's own throwaway worktree; gitignored files,
+        # the files create_worktree copied in, and nested checkouts (which get
+        # their own patch) stay out.
+        pathspec=(. ':(exclude).env' ':(exclude).env.local' ':(exclude).dev-ports.sh')
+        for other in "${repos[@]}"; do
+          case "$other" in "$rel"/*) pathspec+=(":(exclude)${other#"$rel"/}") ;; esac
+        done
+        git -C "$s" add -A -- "${pathspec[@]}"
+        git -C "$s" diff --cached --binary --no-ext-diff --no-textconv --ignore-submodules=all "$base" > "$work/$i.patch"
+        if [ -s "$work/$i.patch" ]; then
+          git -C "$d" apply --check "$work/$i.patch" \
+            || refuse "candidate #$winner's changes do not apply cleanly to $d (uncommitted edits there?); nothing was changed"
+        fi
+      done
+
+      # Every patch checked; now apply them.
+      for i in "${!repos[@]}"; do
+        [ -s "$work/$i.patch" ] || continue
+        d="$dest/${repos[$i]}"
+        git -C "$d" apply --stat "$work/$i.patch"
+        git -C "$d" apply "$work/$i.patch"
+      done
+      echo "Applied candidate #$winner ($src) to $dest. Review with: git status && git diff"
+
+  # The synthesizer works directly in the chat's checkout. workflow.path is that
+  # checkout; a run without one fails here rather than starting an agent that
+  # copies files into an unknown directory.
   - id: synthesizer
     type: workflow
     ref: builtin://agent
@@ -332,12 +414,18 @@ nodes:
           **Synthesis Instructions from Reviewer:**
           {{nodes.review.response.synthesis_instructions}}
 
+          **Project directory (your working directory — the result goes here):**
+          {{workflow.path}}
+
           **Your Task:**
           1. Start with the base implementation (Candidate {{nodes.review.response.winner}})
           2. Follow the synthesis instructions to incorporate the best parts from other candidates
-          3. Use cp/rsync to copy files, or edit to merge specific code sections
+          3. Copy whole files with `cp <candidate>/<file> <file>`, or edit to merge specific code sections
           4. Ensure the final result is coherent and working
-          5. The result should be in your current working directory (the main worktree)
+          5. The result should be in your current working directory (the project directory above)
+
+          Never run `rsync --delete`, `rm -r`, or any command that removes files outside the
+          specific files you are replacing: the project directory holds the user's own work.
     save_message:
       role: assistant
       content: |
@@ -357,21 +445,24 @@ nodes:
 
         ## Guidelines
         - Use glob/view to examine each worktree
-        - Use cp or rsync to copy entire files when appropriate
+        - Use cp to copy entire files when appropriate — one file at a time, never `rsync --delete` or `rm -r`
         - Use edit to merge specific code sections
         - Ensure imports, dependencies, and references are consistent
         - Test that the combined code is coherent
         - Work in your current directory (the main worktree)
 
-  # Verify the applied result actually builds and passes tests
+  # Verify the applied result actually builds and passes tests. An empty
+  # command skips its check (a run command that renders empty fails instead).
   - id: verify
     type: parallel
     branches:
       - id: verify_test
         type: run
+        condition: "inputs.test_command != ''"
         command: "{{inputs.test_command}}"
       - id: verify_build
         type: run
+        condition: "inputs.build_command != ''"
         command: "{{inputs.build_command}}"
 
   - id: complete
