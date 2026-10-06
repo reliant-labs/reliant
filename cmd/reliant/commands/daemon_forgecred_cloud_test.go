@@ -4,6 +4,7 @@ package commands
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -117,7 +118,7 @@ func TestCloudDaemonStart_MountedSecretLogsForgeIn(t *testing.T) {
 
 	conn := &connection{ServerURL: api.URL}
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 
 	creds, err := resolveOrAwaitCredentials(context.Background(), cmd, conn, "",
 		t.TempDir(), daemonNonInteractiveDefault())
@@ -154,7 +155,7 @@ func TestCloudDaemonStart_ReadOnlyCredentialFileStillDeposits(t *testing.T) {
 	// file. The boot, and the deposit, must both survive it.
 	conn := &connection{ServerURL: api.URL, GatewayURL: "https://gateway.reliantapi.com"}
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 
 	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, conn, "",
 		t.TempDir(), daemonNonInteractiveDefault()); err != nil {
@@ -179,7 +180,7 @@ func TestCloudDaemonStart_DepositIsKeyedByTheControlPlane(t *testing.T) {
 
 	conn := &connection{ServerURL: api.URL}
 	cmd := &cobra.Command{}
-	cmd.SetOut(os.NewFile(0, os.DevNull))
+	cmd.SetOut(io.Discard)
 	if _, err := resolveOrAwaitCredentials(context.Background(), cmd, conn, "",
 		t.TempDir(), daemonNonInteractiveDefault()); err != nil {
 		t.Fatal(err)
