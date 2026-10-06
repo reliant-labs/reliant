@@ -10,6 +10,7 @@ import "controlplane/v1/deploy.proto";
 import "forge/v1/forge.proto";
 import "google/protobuf/struct.proto";
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/deploy/v1;deployv1";
 
@@ -1068,7 +1069,7 @@ message GetDeployReleaseResponse {
 }
 
 message ListDeployPromotionsRequest {
-  string environment_id = 1;
+  string environment_id = 1 [(buf.validate.field).required = true];
   // All `optional` — see ListDeployEnvironmentsRequest.
   optional DeployPromotionKind kind = 2;
   optional int32 limit = 3;
@@ -1125,7 +1126,7 @@ message RecordDeployGateResponse {
 }
 
 message ListDeployGatesRequest {
-  string promotion_id = 1;
+  string promotion_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListDeployGatesResponse {
@@ -1231,11 +1232,11 @@ message GetDeployBundleResponse {
 // over the observation timeline.
 
 message ListDeployConvergencesRequest {
-  string environment_id = 1;
+  string environment_id = 1 [(buf.validate.field).required = true];
   int32 limit = 2;
   // Keyset cursor: observations strictly older than this one. Keyset rather
   // than offset for ListDeployPromotionsRequest.before_promotion_id's reason.
-  string before_id = 3;
+  optional string before_id = 3;
 }
 
 message ListDeployConvergencesResponse {

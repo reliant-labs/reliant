@@ -10,6 +10,7 @@ package controlplane.v1;
 
 import "controlplane/v1/shared.proto";
 import "forge/v1/forge.proto";
+import "buf/validate/validate.proto";
 
 option go_package = "github.com/reliant-labs/control-plane/gen/services/daemon/v1;daemonv1";
 
@@ -89,8 +90,8 @@ message GetDaemonResponse {
 }
 
 message ListDaemonsRequest {
-  DaemonType daemon_type = 1;
-  DaemonStatus status = 2;
+  optional DaemonType daemon_type = 1;
+  optional DaemonStatus status = 2;
 }
 
 message ListDaemonsResponse {
@@ -150,7 +151,7 @@ message RemovePortAccessRequest {
 message RemovePortAccessResponse {}
 
 message ListPortAccessRulesRequest {
-  string daemon_id = 1;
+  string daemon_id = 1 [(buf.validate.field).required = true];
 }
 
 message ListPortAccessRulesResponse {

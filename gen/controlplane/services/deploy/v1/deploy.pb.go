@@ -3958,7 +3958,7 @@ type ListDeployConvergencesRequest struct {
 	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
 	// Keyset cursor: observations strictly older than this one. Keyset rather
 	// than offset for ListDeployPromotionsRequest.before_promotion_id's reason.
-	BeforeId      string `protobuf:"bytes,3,opt,name=before_id,json=beforeId,proto3" json:"before_id,omitempty"`
+	BeforeId      *string `protobuf:"bytes,3,opt,name=before_id,json=beforeId,proto3,oneof" json:"before_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -4008,8 +4008,8 @@ func (x *ListDeployConvergencesRequest) GetLimit() int32 {
 }
 
 func (x *ListDeployConvergencesRequest) GetBeforeId() string {
-	if x != nil {
-		return x.BeforeId
+	if x != nil && x.BeforeId != nil {
+		return *x.BeforeId
 	}
 	return ""
 }
@@ -5797,11 +5797,13 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x0eenvironment_id\x18\x02 \x01(\tR\renvironmentId\x12\x16\n" +
 	"\x06digest\x18\x03 \x01(\tR\x06digest\"P\n" +
 	"\x17GetDeployBundleResponse\x125\n" +
-	"\x06bundle\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployBundleR\x06bundle\"y\n" +
+	"\x06bundle\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployBundleR\x06bundle\"\x8c\x01\n" +
 	"\x1dListDeployConvergencesRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12\x14\n" +
-	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1b\n" +
-	"\tbefore_id\x18\x03 \x01(\tR\bbeforeId\"h\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12 \n" +
+	"\tbefore_id\x18\x03 \x01(\tH\x00R\bbeforeId\x88\x01\x01B\f\n" +
+	"\n" +
+	"_before_id\"h\n" +
 	"\x1eListDeployConvergencesResponse\x12F\n" +
 	"\fconvergences\x18\x01 \x03(\v2\".controlplane.v1.DeployConvergenceR\fconvergences\"]\n" +
 	"\x18GetDeployLiveViewRequest\x12\x18\n" +
@@ -6316,6 +6318,7 @@ func file_services_deploy_v1_deploy_proto_init() {
 	file_services_deploy_v1_deploy_proto_msgTypes[44].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[48].OneofWrappers = []any{}
 	file_services_deploy_v1_deploy_proto_msgTypes[58].OneofWrappers = []any{}
+	file_services_deploy_v1_deploy_proto_msgTypes[64].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
