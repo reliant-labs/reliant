@@ -15,6 +15,7 @@ import (
 	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
@@ -419,7 +420,7 @@ func spawnE2EWorkflowInput(chatID string) WorkflowInput {
 
 type SpawnBackgroundE2ESuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestSpawnBackgroundE2E(t *testing.T) {
