@@ -87,7 +87,6 @@
             "group": "Architecture",
             "pages": [
               "architecture/overview",
-              "architecture/monolith",
               "architecture/distributed"
             ]
           },

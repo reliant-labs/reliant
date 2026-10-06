@@ -91,6 +91,10 @@ def yaml_quote(value: str) -> str:
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
+# Tool descriptions introduce raw YAML examples under these bold headings.
+YAML_EXAMPLE_HEADINGS = ("**Scenario YAML structure:**", "**Events — typed mode")
+
+
 def fence_example_blocks(body: str) -> str:
     lines = body.splitlines()
     out: list[str] = []
@@ -129,6 +133,21 @@ def fence_example_blocks(body: str) -> str:
             continue
 
         prev = previous_nonempty(i)
+        if (
+            not in_fence
+            and stripped
+            and i > 0
+            and lines[i - 1].strip().startswith(YAML_EXAMPLE_HEADINGS)
+        ):
+            block = []
+            while i < len(lines) and lines[i].strip() != "":
+                block.append(lines[i])
+                i += 1
+            out.append("```yaml")
+            out.extend(block)
+            out.append("```")
+            continue
+
         if not in_fence and should_start_example_block(line, prev):
             block: list[str] = []
             while i < len(lines) and lines[i].strip() != "":
@@ -153,7 +172,7 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
     brace_token_re = re.compile(
         r"(?:[A-Za-z0-9_./*?\\-]+)?\{[^{}\n]*\}(?:[A-Za-z0-9_./*?\\-]+)?"
     )
-    angle_placeholder_re = re.compile(r"<[A-Za-z0-9_.:-]+(?:-[A-Za-z0-9_.:-]+)*>")
+    angle_placeholder_re = re.compile(r"<[@#!]?[A-Za-z0-9_.:-]+(?:-[A-Za-z0-9_.:-]+)*>")
 
     def wrap_segment(segment: str) -> str:
         protected: list[str] = []
@@ -184,7 +203,7 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
             out.append(line)
             continue
 
-        if in_fence or (("{" not in line or "}" not in line) and ("<" not in line or ">" not in line)):
+        if in_fence or (("{" not in line or "}" not in line) and "<" not in line and "{" not in line and "}" not in line):
             out.append(line)
             continue
 
@@ -192,7 +211,13 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
         for idx in range(0, len(parts), 2):
             if (("{" in parts[idx] and "}" in parts[idx]) or ("<" in parts[idx] and ">" in parts[idx])):
                 parts[idx] = wrap_segment(parts[idx])
-        out.append("`".join(parts))
+        # Braces left outside code (e.g. spanning inline code) would parse as MDX expressions.
+        resplit = "`".join(parts).split("`")
+        for idx in range(0, len(resplit), 2):
+            resplit[idx] = re.sub(r"(?<!\\)([{}])", r"\\\1", resplit[idx])
+            # A truncated or non-tag `<` (e.g. "<@ID...") would open a JSX tag.
+            resplit[idx] = re.sub(r"(?<!\\)<(?=[@#!])", r"\\<", resplit[idx])
+        out.append("`".join(resplit))
 
     return "\n".join(out)
 

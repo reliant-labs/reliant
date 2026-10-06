@@ -70,14 +70,11 @@ When you need to branch on structured data—code review pass/fail, classificati
 
 ### Where is my data stored?
 
-All local:
-- **Conversations**: `~/Library/Application Support/reliant` (macOS) or `~/.config/reliant` (Linux)
-- **API keys**: System keychain
-- **No cloud sync** — anonymous usage telemetry is on by default (opt out in Settings > Privacy)
+Reliant is a cloud service. Your chats, messages, tool calls and tool outputs (which often contain code), attachments, memories, workflow runs and project metadata are stored in our Postgres database on Google Cloud (us-central1). Model API keys and provider logins are stored encrypted. Your repository itself stays wherever your tools daemon runs: your machine, another machine you own, or a managed cloud machine. Local config lives in `~/.reliant/config.yaml`.
 
 ### Are conversations sent to Reliant?
 
-No. Reliant Labs has no servers receiving your data. Only your AI provider sees messages for inference.
+Yes. Our servers run the agent loop and make the model calls, so your prompts, whatever the agent reads, and whatever commands print are sent to our servers, stored with your chat, and sent to your model provider. We don't train on customer content. See [Privacy & Security](/help/privacy) for the full picture, including telemetry (on by default; opt out in Settings → Privacy), retention, and how to delete your chats and account.
 
 ## Known Limitations
 

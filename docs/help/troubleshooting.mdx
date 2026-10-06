@@ -43,7 +43,7 @@ rm -rf ~/Library/Logs/Reliant
 brew install --cask reliant
 ```
 
-Your API keys (stored in system keychain) are preserved.
+Your chats and API keys are stored in your Reliant account, so they are preserved.
 
 ### App won't start
 
@@ -119,7 +119,7 @@ If issues persist, do a clean reinstall (see "Something not working right" above
 
 ### Local model loading is broken
 
-Local model loading (e.g., Ollama, LM Studio) is currently not working. We're aware of the issue and working on a fix. In the meantime, please use cloud-based API providers.
+Local models (Ollama, LM Studio, or any OpenAI-compatible server) are configured in `~/.reliant/config.yaml` and reached through a daemon running on the machine that hosts the model server, so make sure a daemon is running there (`reliant daemon start`) and the server is up. See [Model Configuration](/settings/model-config#provider-configuration).
 
 ## Get Help
 
