@@ -129,7 +129,7 @@ export function ProtoFieldRenderer({
       root.querySelector<HTMLElement>('input, textarea, select, [contenteditable="true"]') ??
       root.querySelector<HTMLElement>('button:not([aria-pressed])')
     control?.focus({ preventScroll: true })
-  }, [focusSeq])
+  }, [focusSeq, inputId])
 
   const supportsModeToggle = !hideCELToggle && schema.celCapable && !schema.celExpressionOnly && (
     (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number') ||
