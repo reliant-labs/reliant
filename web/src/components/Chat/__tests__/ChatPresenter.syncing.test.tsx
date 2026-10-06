@@ -34,6 +34,13 @@ vi.mock("../../../hooks/queued-agent-messages", () => ({
 vi.mock("../thread-views", () => ({
   InterleavedTimeline: () => <div data-testid="timeline" />,
 }));
+// The presenter reads the chat row; this suite needs none of it.
+vi.mock("../../../hooks/chat-queries", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../hooks/chat-queries")
+  >("../../../hooks/chat-queries");
+  return { ...actual, useChat: () => ({ data: undefined }) };
+});
 vi.mock("../../workflow/WorkflowViewerPanel", () => ({
   WorkflowViewerPanel: () => null,
 }));

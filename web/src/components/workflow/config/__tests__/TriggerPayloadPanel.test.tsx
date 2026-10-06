@@ -21,6 +21,16 @@ import { CELInput } from "../../CELInput";
 import { TriggerPayloadPanel } from "../TriggerPayloadPanel";
 import { TRIGGER_CEL_FIELDS } from "../../../../lib/trigger-cel-fields";
 
+// The CEL editor fetches its completion catalog when it mounts. These tests
+// render the editor but never complete anything, and unmocked the fetch was a
+// real RPC that settled after the test.
+vi.mock("../../../../lib/cel-completion-service", async () => ({
+  ...(await vi.importActual<typeof import("../../../../lib/cel-completion-service")>(
+    "../../../../lib/cel-completion-service",
+  )),
+  ensureCELCompletionsCached: async () => {},
+}));
+
 const completion = { nodeIds: [], nodeTypeMap: {}, inputParams: {} };
 
 function Harness({ pureExpression = false, initial = "" }: { pureExpression?: boolean; initial?: string }) {

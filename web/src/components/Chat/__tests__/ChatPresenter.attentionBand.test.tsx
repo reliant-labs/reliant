@@ -50,6 +50,15 @@ vi.mock("../../../hooks/chat-queries", async () => {
   };
 });
 
+// BackgroundWorkPill (a subject here) also reads the chat's pending question;
+// none is pending. Unmocked, it was a real RPC that settled after the test.
+vi.mock("../../../hooks/approval-queries", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../hooks/approval-queries")
+  >("../../../hooks/approval-queries");
+  return { ...actual, usePendingQuestion: () => ({ data: null }) };
+});
+
 // ChatPresenter pulls in the whole chat stack. This suite is about the order
 // of two surfaces, so everything else renders a marker and nothing heavier —
 // except BackgroundWorkPill and QueuedMessages, which are the subjects.

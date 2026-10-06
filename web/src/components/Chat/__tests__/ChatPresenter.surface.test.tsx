@@ -65,6 +65,17 @@ vi.mock("../ChatHeader", () => ({
 vi.mock("../ResumeDaemonPill", () => ({
   ResumeDaemonPill: () => null,
 }));
+// It reads the chat's pending question over the network.
+vi.mock("../BackgroundWorkPill", () => ({
+  BackgroundWorkPill: () => null,
+}));
+// The presenter reads the chat row; this suite is about the surface gate.
+vi.mock("../../../hooks/chat-queries", async () => {
+  const actual = await vi.importActual<
+    typeof import("../../../hooks/chat-queries")
+  >("../../../hooks/chat-queries");
+  return { ...actual, useChat: () => ({ data: undefined }) };
+});
 vi.mock("../OomKillBanner", () => ({
   OomKillBanner: () => null,
 }));

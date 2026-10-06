@@ -77,6 +77,10 @@ vi.mock("../BranchToExistingWorktreeModal", () => ({
   BranchToExistingWorktreeModal: () => null,
 }));
 vi.mock("../CodeContextPill", () => ({ CodeContextPill: () => null }));
+// The real tool card reads the chat's workflow executions (for spawn links).
+vi.mock("../../../hooks/useWorkflowExecutions", () => ({
+  useWorkflowExecutions: () => ({ allWorkflows: [] }),
+}));
 
 const GENERATED = {
   id: "att-gen-1",

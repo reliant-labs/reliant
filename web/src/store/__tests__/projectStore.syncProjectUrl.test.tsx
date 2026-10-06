@@ -46,6 +46,28 @@ vi.mock("../../api/project-grpc", () => ({
   },
 }));
 
+// Selecting a project also loads its chats, presets and workflows in the
+// background. Unmocked, each was a real RPC that settled after the test — and
+// under load, late enough to time the test out.
+vi.mock("../../api/chat-grpc", async () => {
+  const actual = await vi.importActual<typeof import("../../api/chat-grpc")>("../../api/chat-grpc");
+  return {
+    ...actual,
+    chatGrpc: {
+      ...actual.chatGrpc,
+      list: vi.fn(async () => ({ chats: [], total: 0, lastUserUpdateSequence: 0 })),
+    },
+  };
+});
+vi.mock("../../api/preset-grpc", async () => {
+  const actual = await vi.importActual<typeof import("../../api/preset-grpc")>("../../api/preset-grpc");
+  return { ...actual, presetGrpc: { ...actual.presetGrpc, listPresets: vi.fn(async () => []) } };
+});
+vi.mock("../../api/workflow-grpc", async () => {
+  const actual = await vi.importActual<typeof import("../../api/workflow-grpc")>("../../api/workflow-grpc");
+  return { ...actual, workflowGrpc: { ...actual.workflowGrpc, listWorkflows: vi.fn(async () => []) } };
+});
+
 function makeRouter(initialEntry: string) {
   const rootRoute = createRootRoute({ component: () => <Outlet /> });
   // Mirrors routes.tsx: `_app` owns validateSearch, `/` and

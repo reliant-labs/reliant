@@ -62,6 +62,17 @@ vi.mock("../../../hooks/chat-queries", () => ({
   useUnarchiveChat: () => ({ mutateAsync: vi.fn() }),
   useChat: () => ({ data: undefined }),
 }));
+// The Inbox nav item reads its own counts; nothing is waiting here.
+vi.mock("../../../hooks/inbox-queries", async () => {
+  const actual = await vi.importActual<typeof import("../../../hooks/inbox-queries")>(
+    "../../../hooks/inbox-queries",
+  );
+  return {
+    ...actual,
+    useInboxCounts: () => ({ data: { blockingCount: 0, hasInformational: false }, isError: false }),
+    useInboxProjectId: () => undefined,
+  };
+});
 vi.mock("../../../hooks/message-queries", () => ({ useMarkUnread: () => ({ mutateAsync: vi.fn() }) }));
 
 import { Sidebar } from "../Sidebar";
