@@ -2,42 +2,49 @@
 package llm
 
 import (
-	"github.com/google/uuid"
+	"strings"
 
-	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/google/uuid"
 )
 
-// ToolCallIDs gives the tool calls of ONE model response their ids.
+// NewToolCallID mints the id reliant gives a tool call: call_<32 hex>.
 //
-// A driver that relays a third-party server's ids (a local OpenAI-compatible
-// server, an OpenRouter upstream) cannot assume they are usable: a server may
-// omit the id, or repeat one within a response. Reliant keys a call's record,
-// its result and a spawn's report by the id, so an empty id dropped the call
-// and a repeated one made two calls one. Assign keeps a provider id that is
-// non-empty and not yet used in this response -- the server pairs results with
-// calls by it -- and otherwise mints call_<uuid>, which a stateless
-// OpenAI-compatible server accepts because it only needs the ids in one
-// request to agree with each other.
+// Drivers that relay a third-party server's ids (a local OpenAI-compatible
+// server, an OpenRouter upstream, the LiteLLM gateway) mint every call's id
+// rather than trusting the server's. Reliant keys a call's record, its result
+// and a spawn's report by the id, and a server can omit it, repeat it within
+// a response, or repeat it across responses: some local servers answer call_0
+// every turn, and turn 2's call then matched turn 1's recorded result and was
+// answered without running. A minted id is stored in the transcript, so the
+// history sent back carries the same id on the tool call and on its result,
+// which is all an OpenAI-compatible server needs: it pairs results with calls
+// within one request.
 //
-// One value per response; the zero value is ready to use.
-type ToolCallIDs struct {
-	used map[string]struct{}
+// The shape is chosen to be accepted wherever the history may go next: at
+// most 40 characters (OpenAI's limit on tool_calls[].id), only [a-zA-Z0-9_]
+// (Anthropic's ^[a-zA-Z0-9_-]+$), and ending in at least nine alphanumerics
+// (vLLM keeps the last nine for Mistral's tokenizer).
+func NewToolCallID() string {
+	return "call_" + strings.ReplaceAll(uuid.New().String(), "-", "")
 }
 
-// Assign returns the id the next call of the response should carry, given
-// the id the provider sent for it.
-func (ids *ToolCallIDs) Assign(providerID string) string {
-	if ids.used == nil {
-		ids.used = make(map[string]struct{})
+// liteLLMThoughtSignatureSeparator is how the LiteLLM gateway carries a Gemini
+// thought signature through the OpenAI tool call shape: it appends
+// "__thought__<signature>" to the id it returns, and reads the signature back
+// from the id of the tool call in the next request (litellm v1.104.0,
+// prompt_templates/factory.py: _encode_tool_call_id_with_signature /
+// _get_thought_signature_from_tool). Gemini 3 rejects a function call in
+// history without its signature.
+const liteLLMThoughtSignatureSeparator = "__thought__"
+
+// NewToolCallIDKeepingThoughtSignature mints a tool call id like NewToolCallID,
+// carrying over a Gemini thought signature the LiteLLM gateway embedded in
+// providerID. The signature is the one part of a gateway-chosen id the next
+// request needs; the part before it is the gateway's and is replaced.
+func NewToolCallIDKeepingThoughtSignature(providerID string) string {
+	minted := NewToolCallID()
+	if _, signature, ok := strings.Cut(providerID, liteLLMThoughtSignatureSeparator); ok && signature != "" {
+		return minted + liteLLMThoughtSignatureSeparator + signature
 	}
-	id := providerID
-	if _, taken := ids.used[id]; id == "" || taken {
-		id = "call_" + uuid.New().String()
-		if providerID != "" {
-			logging.Warn("[LLM] Provider repeated a tool call id within one response; giving the call its own",
-				"provider_id", providerID, "assigned_id", id)
-		}
-	}
-	ids.used[id] = struct{}{}
-	return id
+	return minted
 }

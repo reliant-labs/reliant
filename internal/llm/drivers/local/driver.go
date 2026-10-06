@@ -281,9 +281,8 @@ func (c *LocalClient) toolCalls(completion openai.ChatCompletion) []message.Tool
 	var toolCalls []message.ToolCall
 
 	if len(completion.Choices) > 0 && len(completion.Choices[0].Message.ToolCalls) > 0 {
-		// The id is the server's to choose and may be missing or repeated;
-		// see llm.ToolCallIDs.
-		var ids llm.ToolCallIDs
+		// The id is ours, not the server's, which may be missing or repeated
+		// within or across responses; see llm.NewToolCallID.
 		for _, call := range completion.Choices[0].Message.ToolCalls {
 			if call.Function.Name == "" {
 				logging.Warn("Skipping tool call with no tool name from local model",
@@ -292,7 +291,7 @@ func (c *LocalClient) toolCalls(completion openai.ChatCompletion) []message.Tool
 			}
 
 			toolCall := message.ToolCall{
-				ID:       ids.Assign(call.ID),
+				ID:       llm.NewToolCallID(),
 				Name:     call.Function.Name,
 				Input:    call.Function.Arguments,
 				Type:     "function",

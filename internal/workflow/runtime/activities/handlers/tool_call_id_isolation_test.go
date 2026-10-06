@@ -3,6 +3,9 @@ package handlers
 
 import (
 	"context"
+	"io"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -12,6 +15,9 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/local"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -196,10 +202,15 @@ func (c *isolationChats) spawnReportFor(t *testing.T, chatID, child, parent, too
 }
 
 // Chat A's spawn and chat B's spawn both carry tool_call_id "spawn" (what the
-// Vertex Gemini driver emitted before #560). B's child reports; B's parent
-// must receive it. The report slot was keyed by tool_call_id alone, so B's
-// report found A's in it and was dropped as "already reported" with no error.
-func TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent(t *testing.T) {
+// Vertex Gemini driver emitted before #560). The report slot was keyed by
+// tool_call_id alone, so B's report found A's in it and was dropped as
+// "already reported" with no error.
+//
+// While the expand step keeps the chat-blind index for the previous release,
+// B's report still cannot be stored -- but it must fail, loudly, and leave
+// A's report alone. The contract step, which drops that index, delivers it
+// (TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent there).
+func TestRepro_SpawnReportWithAReusedToolCallIDIsNeverDroppedSilently(t *testing.T) {
 	c := newIsolationChats(t)
 	ctx := context.Background()
 	chatA, chatB := c.chat(t), c.chat(t)
@@ -208,12 +219,9 @@ func TestRepro_SpawnReportWithAReusedToolCallIDReachesItsParent(t *testing.T) {
 	c.thread(t, chatB, childB, &chatB)
 
 	require.NoError(t, c.spawnReportFor(t, chatA, childA, chatA, "spawn", "chat A's child: result A"))
-	require.NoError(t, c.spawnReportFor(t, chatB, childB, chatB, "spawn", "chat B's child: result B"))
-
-	queuedB, err := c.h.Repo().ListQueuedAgentMessagesForThread(ctx, chatB)
-	require.NoError(t, err)
-	require.Len(t, queuedB, 1, "chat B's parent has no report in its mailbox: chat B's child's result was dropped")
-	require.Equal(t, "chat B's child: result B", queuedB[0].Body)
+	err := c.spawnReportFor(t, chatB, childB, chatB, "spawn", "chat B's child: result B")
+	require.Error(t, err, "chat B's report must not be dropped as \"already reported\"")
+	require.ErrorContains(t, err, core.ErrSpawnReportSlotTaken.Error())
 
 	queuedA, err := c.h.Repo().ListQueuedAgentMessagesForThread(ctx, chatA)
 	require.NoError(t, err)
@@ -273,4 +281,70 @@ func TestToolCallIDIsolation_HistoryRecoveryUsesOnlyThisCallsResult(t *testing.T
 	out = recoverPersistedToolResults(ctx, c.h.Repo(), historyA)
 	require.Len(t, out, len(historyA)+1, "chat A's own result must still be recovered")
 	require.Equal(t, "chat A's private output", out[len(out)-1].ToolResults()[0].Content)
+}
+
+// callZeroServer is an OpenAI-compatible local server that numbers tool calls
+// per response, so every response's call is call_0 -- as some local servers do.
+func callZeroServer(t *testing.T) *httptest.Server {
+	t.Helper()
+	const stream = `data: {"id":"c1","object":"chat.completion.chunk","model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":"","tool_calls":[{"id":"call_0","index":0,"type":"function","function":{"name":"bash","arguments":"{\"command\":\"date\"}"}}]},"finish_reason":null}]}
+
+data: {"id":"c1","object":"chat.completion.chunk","model":"m","choices":[{"index":0,"delta":{"role":"assistant","content":""},"finish_reason":"tool_calls"}]}
+
+data: [DONE]
+
+`
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = io.WriteString(w, stream)
+	}))
+	t.Cleanup(srv.Close)
+	return srv
+}
+
+func streamedToolCall(t *testing.T, driver *local.LocalClient, history []message.Message) message.ToolCall {
+	t.Helper()
+	for ev := range driver.StreamResponse(context.Background(), nil, history, nil) {
+		require.NotEqual(t, llm.EventError, ev.Type, "stream error: %v", ev.Error)
+		if ev.Type == llm.EventComplete {
+			require.Len(t, ev.Response.ToolCalls, 1)
+			return ev.Response.ToolCalls[0]
+		}
+	}
+	t.Fatal("stream ended without a complete event")
+	return message.ToolCall{}
+}
+
+// Two consecutive responses that both say call_0 are two calls, and each
+// RUNS. Keeping the server's id -- even one unique within its response --
+// gave turn 2's call turn 1's id in the same chat and thread, which is exactly
+// what a re-dispatch looks like to execute_tools: turn 2 was answered with turn
+// 1's recorded output and never ran. The driver mints the ids, so it cannot.
+func TestRepro_ConsecutiveResponsesReusingCallZeroEachRun(t *testing.T) {
+	c := newIsolationChats(t)
+	chatA := c.chat(t)
+	driver := local.NewClient(llm.DriverOptions{
+		BaseURL: callZeroServer(t).URL + "/v1",
+		Model:   models.Model{ID: "qwen3:latest", APIModel: "qwen3:latest"},
+	})
+	user := message.Message{Role: message.User, Parts: []message.ContentPart{message.TextContent{Text: "what time is it, twice"}}}
+
+	turn1 := streamedToolCall(t, driver, []message.Message{user})
+	executor1 := executorAnswering(turn1.ID, "turn 1: 10:00")
+	out1 := c.runTool(t, chatA, chatA, turn1.ID, turn1.Input, executor1)
+	require.Equal(t, "turn 1: 10:00", out1.ToolResults[0].GetContent())
+
+	turn2 := streamedToolCall(t, driver, []message.Message{
+		user,
+		{Role: message.Assistant, Parts: []message.ContentPart{turn1}},
+		{Role: message.Tool, Parts: []message.ContentPart{message.ToolResult{ToolCallID: turn1.ID, Name: "bash", Content: "turn 1: 10:00"}}},
+	})
+	require.NotEqual(t, turn1.ID, turn2.ID, "both responses' call_0 became %q: one call, as far as reliant can tell", turn1.ID)
+
+	executor2 := executorAnswering(turn2.ID, "turn 2: 10:05")
+	out2 := c.runTool(t, chatA, chatA, turn2.ID, turn2.Input, executor2)
+	require.Equal(t, 1, executor2.GetExecutionCount(turn2.ID),
+		"turn 2's call was not executed; it was answered with: %q", out2.ToolResults[0].GetContent())
+	require.Equal(t, "turn 2: 10:05", out2.ToolResults[0].GetContent())
 }

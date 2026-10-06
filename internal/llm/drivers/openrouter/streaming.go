@@ -141,8 +141,6 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 		var allToolCalls []message.ToolCall
 		var streamUsage llm.TokenUsage
 		var reasoning reasoningAccumulator
-		// The upstream's ids may be missing or repeated; see llm.ToolCallIDs.
-		var ids llm.ToolCallIDs
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -214,11 +212,11 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 								currentToolCall := toolCallsByIndex[index]
 								if currentToolCall == nil {
 									// New tool call at this index. Its id is
-									// fixed here, before tool_use_start
-									// announces it.
-									toolCallID, _ := toolCallMap["id"].(string)
+									// ours (see llm.NewToolCallID), minted
+									// here before tool_use_start announces
+									// it; deltas are matched by index.
 									currentToolCall = &message.ToolCall{
-										ID: ids.Assign(toolCallID),
+										ID: llm.NewToolCallID(),
 									}
 									toolCallsByIndex[index] = currentToolCall
 
@@ -418,10 +416,9 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 		// Track reasoning_details for Gemini thought signatures
 		reasoningByID := make(map[string]ReasoningDetail)
 		var reasoning reasoningAccumulator
-		// The upstream's ids may be missing or repeated (see
-		// llm.ToolCallIDs). reasoning_details are keyed by the id the
-		// upstream SENT, so keep that per assigned id.
-		var ids llm.ToolCallIDs
+		// Tool call ids are ours (see llm.NewToolCallID). reasoning_details
+		// are keyed by the id the upstream SENT, and only within this
+		// response, so keep that per minted id until the response ends.
 		upstreamID := make(map[string]string)
 
 		for scanner.Scan() {
@@ -518,7 +515,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 								if currentToolCall == nil {
 									toolCallID, _ := toolCallMap["id"].(string)
 									currentToolCall = &message.ToolCall{
-										ID: ids.Assign(toolCallID),
+										ID: llm.NewToolCallID(),
 									}
 									upstreamID[currentToolCall.ID] = toolCallID
 									toolCallsByIndex[index] = currentToolCall

@@ -172,9 +172,12 @@ func NewClient(opts llm.DriverOptions) *Client {
 	if apiModel, err := getOpenRouterAPIModel(opts.Model.ID); err == nil {
 		opts.Model.APIModel = apiModel
 	}
-	return &Client{
-		openai.NewClient(opts),
-	}
+	// Models without a path of their own here go through the OpenAI client;
+	// their tool call ids are the upstream host's, so that client mints ours
+	// too (see llm.NewToolCallID).
+	delegate := openai.NewClient(opts)
+	delegate.MintToolCallIDs = true
+	return &Client{delegate}
 }
 
 // extendedCacheControl is the cache_control object for every breakpoint this

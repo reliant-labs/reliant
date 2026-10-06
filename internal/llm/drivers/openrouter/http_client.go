@@ -285,14 +285,14 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		}
 	}
 
-	// Convert tool calls with thought signatures. The id is the upstream's
-	// and may be missing or repeated (see llm.ToolCallIDs); reasoning_details
-	// still match on the id the upstream sent.
+	// Convert tool calls with thought signatures. The id is ours (see
+	// llm.NewToolCallID), not the upstream's, which may be missing or
+	// repeated. The upstream's id is still what reasoning_details are keyed
+	// by in THIS response, so the signature is matched on it here.
 	var toolCalls []message.ToolCall
-	var ids llm.ToolCallIDs
 	for _, tc := range choice.Message.ToolCalls {
 		toolCall := message.ToolCall{
-			ID:       ids.Assign(tc.ID),
+			ID:       llm.NewToolCallID(),
 			Name:     tc.Function.Name,
 			Input:    tc.Function.Arguments,
 			Type:     tc.Type,
@@ -482,14 +482,14 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		}
 	}
 
-	// Convert tool calls with thought signatures. The id is the upstream's
-	// and may be missing or repeated (see llm.ToolCallIDs); reasoning_details
-	// still match on the id the upstream sent.
+	// Convert tool calls with thought signatures. The id is ours (see
+	// llm.NewToolCallID), not the upstream's, which may be missing or
+	// repeated. The upstream's id is still what reasoning_details are keyed
+	// by in THIS response, so the signature is matched on it here.
 	var toolCalls []message.ToolCall
-	var ids llm.ToolCallIDs
 	for _, tc := range choice.Message.ToolCalls {
 		toolCall := message.ToolCall{
-			ID:       ids.Assign(tc.ID),
+			ID:       llm.NewToolCallID(),
 			Name:     tc.Function.Name,
 			Input:    tc.Function.Arguments,
 			Type:     tc.Type,
