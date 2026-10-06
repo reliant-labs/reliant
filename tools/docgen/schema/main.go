@@ -50,8 +50,11 @@ var toolHints = map[string]string{
 	"outputs": "CEL expressions mapping output names to values. Use get_cel_reference for CEL syntax.",
 	"edges":   "See Edge type below.",
 	"triggers": "WHEN the workflow runs: a list of {name, description, one source (schedule | webhook | integration | " +
-		"workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`)}. Declaring one fires " +
-		"nothing; activate it with activate_trigger. See the workflow-builder skill's Triggers section.",
+		"workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over " +
+		"`trigger`: the message each run starts from)}. Declaring one fires nothing; activate it with " +
+		"activate_trigger. See the workflow-builder skill's Triggers section.",
+	"automation_only": "The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat " +
+		"start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.",
 }
 
 func main() {

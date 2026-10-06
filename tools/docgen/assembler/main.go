@@ -321,6 +321,7 @@ triggers:
     filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')"
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
+    prompt: "Triage issue #{{ trigger.payload.data.issue.number }}: label it, ask for a repro if one is missing."
   - name: nightly
     schedule: {cron: ["0 9 * * 1-5"], timezone: America/New_York}   # 5-field cron, or interval: 1h
   - name: deploy-hook
@@ -336,6 +337,14 @@ nodes: ...
 An event whose payload a filter or input cannot read is recorded as a FAILED firing: guard optional
 fields with ` + bt + `has()` + bt + ` or a ternary. Each ` + bt + `inputs` + bt + ` key must be a declared workflow input; a value set there wins
 over the activation's params (activation refuses a param it would override).
+
+**` + bt + `prompt` + bt + `** is the message every run the trigger starts begins from, a ` + bt + `{{ }}` + bt + ` template over ` + bt + `trigger` + bt + ` like
+` + bt + `inputs` + bt + `. Write it so activating needs no prompt: an activation's own ` + bt + `message` + bt + ` overrides it, and with
+neither, activation is refused. The event is still attached after it as untrusted data.
+
+**Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
+` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused
+(a builder test run still works). Leave it unset for anything a person starts by chatting.
 
 What ` + bt + `trigger.payload` + bt + ` holds, by source:
 

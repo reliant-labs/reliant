@@ -1,4 +1,5 @@
 name: deploy-hook
+automation_only: true
 description: Run when CI posts a deploy notification.
 inputs:
     ref:
@@ -15,6 +16,7 @@ triggers:
       filter: trigger.payload.body.status == 'success'
       inputs:
         ref: '{{ trigger.payload.body.ref }}'
+      prompt: Deploy {{ trigger.payload.body.ref }} and report the result.
     - name: zapier
       description: Unsigned hook for Zapier; the token in the URL authenticates it
       webhook: {}

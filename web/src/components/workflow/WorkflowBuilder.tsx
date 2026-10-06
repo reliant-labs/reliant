@@ -117,13 +117,8 @@ import { DeclaredTriggerPanel } from "./config/DeclaredTriggerPanel";
 import { ActivateTriggerDialog } from "../Automations/ActivateTriggerDialog";
 import { useTriggers } from "../../hooks/trigger-queries";
 import { declaredRailLines } from "../../lib/triggerRail";
-import {
-  defaultSource,
-  findingsForTrigger,
-  newDeclaredTrigger,
-  uniqueTriggerName,
-  type DeclaredTrigger,
-} from "../../lib/declaredTriggers";
+import { findingsForTrigger, type DeclaredTrigger } from "../../lib/declaredTriggers";
+import { useAddTrigger } from "./hooks/useAddTrigger";
 import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
 import {
   catalogSearchGrpc,
@@ -1156,17 +1151,19 @@ function WorkflowBuilderInner({
     setAutomationDialog({ trigger });
   }, []);
   const canEditDefinition = !isBuiltinWorkflow && !isEditingLoop;
+  // One "Add trigger" everywhere: the palette's Triggers kind. What a pick
+  // becomes depends on the workflow (useAddTrigger): a declaration on one
+  // you can edit, a personal trigger on a built-in.
   const handleAddTrigger = useCallback(() => {
-    if (canEditDefinition) {
-      setPaletteKind("trigger");
-      setPaletteFocus(undefined);
-      setPaletteOpen(true);
-      return;
-    }
-    // A read-only workflow's definition can't gain a declaration, but the
-    // caller can still schedule it as an ad hoc automation.
-    setAutomationDialog({});
-  }, [canEditDefinition]);
+    setPaletteKind("trigger");
+    setPaletteFocus(undefined);
+    setPaletteOpen(true);
+  }, []);
+  // The Chat trigger: on unless the definition is automation-only.
+  const handleSetChatEnabled = useCallback((enabled: boolean) => {
+    setHasModifications(true);
+    setWorkflow((w) => ({ ...w, automationOnly: !enabled }));
+  }, []);
   const handleEditDeclared = useCallback((index: number) => {
     setSelectedDeclared(index);
     setSelectedNodeId(null);
@@ -1187,12 +1184,15 @@ function WorkflowBuilderInner({
       declared,
       findingsFor,
       unsavedDeclared,
+      selectedDeclared,
+      chatEnabled: !workflow.automationOnly,
+      onSetChatEnabled: handleSetChatEnabled,
       onEditTrigger: handleEditTrigger,
       onAddTrigger: handleAddTrigger,
       onEditDeclared: handleEditDeclared,
       onActivateDeclared: setActivatingDeclared,
     }),
-    [savedWorkflowName, currentProject?.id, isNewWorkflow, canEditDefinition, declared, findingsFor, unsavedDeclared, handleEditTrigger, handleAddTrigger, handleEditDeclared],
+    [savedWorkflowName, currentProject?.id, isNewWorkflow, canEditDefinition, declared, findingsFor, unsavedDeclared, selectedDeclared, workflow.automationOnly, handleSetChatEnabled, handleEditTrigger, handleAddTrigger, handleEditDeclared],
   );
   // The caller's activations, for the editor's Activations section (the
   // rail reads the same cached list).
@@ -1576,47 +1576,14 @@ function WorkflowBuilderInner({
     [workflow.triggers, handleEditDeclared],
   );
 
-  const choosePaletteBuiltinTrigger = useCallback(
-    (source: "schedule" | "webhook" | "workflow_event") => {
-      const base = source === "workflow_event" ? "after-workflow" : source;
-      declareTrigger(newDeclaredTrigger({ name: uniqueTriggerName(base, declared), source: defaultSource(source) }));
-    },
-    [declareTrigger, declared],
-  );
-
-  /**
-   * Declare an integration trigger from a catalog trigger type: its events
-   * are the type's event list (the payload schema's `event` enum).
-   */
-  const choosePaletteTrigger = useCallback(
-    async (entry: CatalogEntrySummary) => {
-      let full = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
-      if (!full) {
-        try {
-          full = await queryClient.fetchQuery({
-            queryKey: connectionKeys.catalogEntry(entry.ref),
-            queryFn: () => catalogSearchGrpc.get(entry.ref),
-            staleTime: 5 * 60_000,
-          });
-        } catch {
-          full = undefined;
-        }
-      }
-      const events = ((full?.payloadSchema?.properties?.event?.enum ?? []) as unknown[]).map(String);
-      declareTrigger(
-        newDeclaredTrigger({
-          name: uniqueTriggerName(entry.id.replace(/\./g, "-"), declared),
-          description: entry.summary,
-          source: {
-            case: "integration",
-            value: { integration: entry.integration.id, events, match: {}, pollInterval: "" },
-          } as NonNullable<DeclaredTrigger["source"]>,
-        }),
-        entry.ref,
-      );
-    },
-    [declareTrigger, declared, queryClient],
-  );
+  // One "Add trigger" picker: a declaration on a workflow you can edit, a
+  // personal trigger on a built-in.
+  const addTrigger = useAddTrigger({
+    canEditDefinition,
+    declared,
+    declare: declareTrigger,
+    closePalette: useCallback(() => setPaletteOpen(false), []),
+  });
 
   useWorkflowBuilderShortcuts({ onOpenStepPalette: openStepPalette });
   const paletteShortcutLabel = useStepPaletteShortcutLabel();
@@ -2446,8 +2413,8 @@ function WorkflowBuilderInner({
         onClose={() => setPaletteOpen(false)}
         onChooseBuiltin={choosePaletteBuiltin}
         onChooseAction={choosePaletteAction}
-        onChooseTrigger={(entry) => void choosePaletteTrigger(entry)}
-        onChooseBuiltinTrigger={choosePaletteBuiltinTrigger}
+        onChooseTrigger={(entry) => void addTrigger.chooseCatalog(entry)}
+        onChooseBuiltinTrigger={addTrigger.chooseBuiltin}
         onConnect={connectFromPalette}
       />
       {activatingDeclared !== null && declared[activatingDeclared] && (
@@ -2463,21 +2430,26 @@ function WorkflowBuilderInner({
       )}
       <ConnectIntegrationDialog target={connectTarget} onClose={() => setConnectTarget(null)} />
 
-      {/* Automation dialog, opened from the trigger rail. Allowed for
-          read-only and builtin workflows too: a trigger is its own row and
-          does not edit the definition. */}
+      {addTrigger.personal && (
+        <ActivateTriggerDialog
+          open
+          mode="personal"
+          onClose={addTrigger.closePersonal}
+          workflowRef={workflowRefForTrigger(savedWorkflowName, source)}
+          workflowTitle={workflow.title || savedWorkflowName}
+          declared={addTrigger.personal.trigger}
+          catalogRef={addTrigger.personal.catalogRef}
+          defaultProjectId={currentProject?.id}
+        />
+      )}
+
+      {/* Edit one of the caller's trigger rows (a personal trigger or an
+          activation), from its card. Allowed on read-only and built-in
+          workflows too: a row does not edit the definition. */}
       <AutomationFormDialog
         open={automationDialog !== null}
         onClose={() => setAutomationDialog(null)}
         trigger={automationDialog?.trigger}
-        prefill={
-          automationDialog && !automationDialog.trigger
-            ? {
-                workflow: workflowRefForTrigger(savedWorkflowName, source),
-                projectId: currentProject?.id,
-              }
-            : undefined
-        }
       />
     </div>
     </TriggerRailProvider>

@@ -186,6 +186,11 @@ func TestTriggerValidationRules(t *testing.T) {
 			triggers: "  - name: badoutcome\n    workflow_event: {outcomes: [exploded]}\n",
 			want:     []string{"badoutcome", "outcomes"},
 		},
+		{
+			name:     "prompt reads only trigger",
+			triggers: "  - name: hook\n    webhook: {}\n    prompt: \"Look at {{ inputs.title }}\"\n",
+			want:     []string{"hook", "prompt"},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

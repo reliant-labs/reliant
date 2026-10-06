@@ -20,6 +20,7 @@ export interface WorkflowDef {
   title?: string; // Definition-level display name
   is_hidden?: boolean; // Whether the workflow is hidden from the workflow dropdown
   status?: "draft" | "complete"; // Lifecycle: drafts are never runnable
+  automation_only?: boolean; // Chat trigger off: chat pickers must not offer it (isChatLaunchable)
 }
 
 interface Model {

@@ -108,10 +108,6 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		projected.Config = decl.Source.Config
 		trigger = &projected
 	}
-	inputs := map[string]string(nil)
-	if decl != nil {
-		inputs = decl.Inputs
-	}
 
 	// A stored config that no longer parses cannot tell us its overlap policy
 	// or timezone. Record that as the verdict rather than guessing, so the
@@ -145,7 +141,7 @@ func (f *Firer) Fire(ctx context.Context, req FireRequest) (*FireOutput, error) 
 		return nil, nonRetryable(detail, err)
 	}
 
-	spec, err := f.buildSpec(trigger, sched, req, inputs)
+	spec, err := f.buildSpec(trigger, sched, req, decl)
 	if err != nil {
 		return f.failPermanently(ctx, trigger, req, err.Error(), err)
 	}
@@ -259,24 +255,29 @@ func (f *Firer) previousRunBlocks(ctx context.Context, triggerID string) (string
 }
 
 // buildSpec is what a scheduled run is: owned by the trigger's user,
-// unattended, and seeded with the trigger's prompt.
-func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireRequest, inputs map[string]string) (launch.Spec, error) {
+// unattended, and seeded with the trigger's prompt. decl is the declaration
+// an activation fires from, nil for an ad hoc trigger.
+func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireRequest, decl *Declaration) (launch.Spec, error) {
 	local := req.ScheduledAt.In(sched.Location)
 	title := fmt.Sprintf("%s · %s", trigger.Name, local.Format("2006-01-02 15:04 MST"))
 
+	// The same root the run will see as `trigger`: what a schedule's inputs
+	// and prompt can read is its slot (trigger.scheduled_for) and name.
+	root := FilterInput{
+		Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
+		OccurredAt: req.ScheduledAt, Payload: f.buildEvent(trigger, req).Payload,
+	}.Root()
 	values := trigger.Params
-	if len(inputs) > 0 {
-		// The same root the run will see as `trigger`: what a schedule's
-		// inputs can read is its slot (trigger.scheduled_for) and name.
-		root := FilterInput{
-			Kind: string(core.TriggerEventKindSchedule), TriggerID: trigger.ID,
-			OccurredAt: req.ScheduledAt, Payload: f.buildEvent(trigger, req).Payload,
-		}.Root()
-		merged, err := MergeDeclaredInputs(trigger.Params, inputs, root)
+	if decl != nil && len(decl.Inputs) > 0 {
+		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, root)
 		if err != nil {
 			return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be evaluated: %w", err)
 		}
 		values = merged
+	}
+	prompt, err := SeedPrompt(trigger, decl, root)
+	if err != nil {
+		return launch.Spec{}, err
 	}
 	params, err := paramsToProto(values)
 	if err != nil {
@@ -287,7 +288,7 @@ func (f *Firer) buildSpec(trigger *core.Trigger, sched *Schedule, req FireReques
 	messages := []launch.SeedMessage{
 		{
 			Role:    reliantv1.MessageRole_MESSAGE_ROLE_USER,
-			Content: trigger.Message,
+			Content: prompt,
 		},
 		{
 			// The agent needs to know it is unattended, and it cannot infer

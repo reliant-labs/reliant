@@ -111,6 +111,15 @@ export function withFilter(trigger: DeclaredTrigger, filter: string): DeclaredTr
   return { ...trigger, filter } as DeclaredTrigger;
 }
 
+/** The declaration's prompt template ("" when activations write their own). */
+export function promptOf(trigger: DeclaredTrigger): string {
+  return (trigger as { prompt?: string }).prompt ?? "";
+}
+
+export function withPrompt(trigger: DeclaredTrigger, prompt: string): DeclaredTrigger {
+  return { ...trigger, prompt } as DeclaredTrigger;
+}
+
 /** Set (or with "" remove) the mapping for one workflow input. */
 export function withInput(trigger: DeclaredTrigger, input: string, template: string): DeclaredTrigger {
   const inputs = { ...(trigger.inputs ?? {}) } as Record<string, string>;
@@ -157,7 +166,29 @@ export interface NewDeclaredTriggerSpec {
 }
 
 export function newDeclaredTrigger(spec: NewDeclaredTriggerSpec): DeclaredTrigger {
-  return { name: spec.name, description: spec.description ?? "", filter: "", inputs: {}, source: spec.source } as DeclaredTrigger;
+  return { name: spec.name, description: spec.description ?? "", filter: "", inputs: {}, prompt: "", source: spec.source } as DeclaredTrigger;
+}
+
+/** A trigger for a built-in kind picked from the palette, named uniquely among `existing`. */
+export function triggerFromBuiltin(kind: "schedule" | "webhook" | "workflow_event", existing: readonly DeclaredTrigger[]): DeclaredTrigger {
+  const base = kind === "workflow_event" ? "after-workflow" : kind;
+  return newDeclaredTrigger({ name: uniqueTriggerName(base, existing), source: defaultSource(kind) });
+}
+
+/**
+ * A trigger for a catalog trigger type picked from the palette. Its events
+ * are the type's event list (the payload schema's `event` enum).
+ */
+export function triggerFromCatalog(
+  entry: { id: string; summary: string; integration: { id: string } },
+  events: string[],
+  existing: readonly DeclaredTrigger[],
+): DeclaredTrigger {
+  return newDeclaredTrigger({
+    name: uniqueTriggerName(entry.id.replace(/\./g, "-"), existing),
+    description: entry.summary,
+    source: { case: "integration", value: { integration: entry.integration.id, events, match: {}, pollInterval: "" } } as DeclaredSource,
+  });
 }
 
 /** The default source for a built-in kind. */

@@ -230,7 +230,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 	// Validate workflow tree BEFORE creating chat to avoid runtime graph failures and orphaned chats.
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only.
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, ev); err != nil {
 		return nil, err
 	}
 	if spec.NoMachine {
@@ -538,7 +538,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it would run. A pending chat has produced nothing, so its workflow can
 	// still change; this is the one place the system allows it.
 	workflowName, _, _ := effectiveStart(chat, spec)
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, ev); err != nil {
 		return nil, err
 	}
 	if noMachine {

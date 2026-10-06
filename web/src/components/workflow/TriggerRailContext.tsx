@@ -1,15 +1,15 @@
 /**
- * What the builder's trigger rail needs from its host: which workflow and
- * project it shows, the workflow's declared triggers, and what each line's
- * affordances do.
+ * What the builder's trigger lane needs from its host: which workflow and
+ * project it shows, the workflow's declared triggers, whether its Chat
+ * trigger is on, and what each card's affordances do.
  *
  * A context rather than node data, deliberately: node data is what the builder
  * serialises as the graph. Declared triggers ARE part of the definition
  * (research/INTEGRATIONS_V1_BRIEF.md §3a), but they live in the workflow's
  * `triggers:` field — held by the builder and edited through
  * WorkflowMutationContext — never in a node. Activations (trigger rows) are
- * read from ListTriggers at render time. Outside a provider the rail shows
- * only the always-present chat line.
+ * read from ListTriggers at render time. Outside a provider the lane shows
+ * only the Chat card.
  */
 
 import { createContext, useContext } from "react";
@@ -35,6 +35,15 @@ export interface TriggerRailContextValue {
   findingsFor: (index: number, name: string) => TriggerFinding[];
   /** Declared triggers edited since the last save: activating them uses the stored version. */
   unsavedDeclared: ReadonlySet<string>;
+  /** The declared trigger whose panel is open, for its card's selected state. */
+  selectedDeclared?: number | null;
+  /**
+   * The Chat trigger: whether a chat can start this workflow (the
+   * definition's `automation_only`, inverted). Off keeps it out of every chat
+   * picker, and the server refuses a chat start of it.
+   */
+  chatEnabled: boolean;
+  onSetChatEnabled: (enabled: boolean) => void;
   onEditTrigger: (trigger: Trigger) => void;
   onAddTrigger: () => void;
   onEditDeclared: (index: number) => void;

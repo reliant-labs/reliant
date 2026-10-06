@@ -37,6 +37,7 @@ export const api = {
           is_hidden: w.isHidden || false,
           title: w.title,
           status: w.status, // "draft" | "complete"; builtin/project are always complete
+          automation_only: w.automationOnly || false,
           // The graph travels on the wire already, and dropping it here made
           // the app contradict itself one tap apart: the catalog row read
           // `step_count` and said "17 steps", while the detail screen read

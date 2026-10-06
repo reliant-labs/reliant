@@ -445,12 +445,14 @@ func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, project
 // A workflow that cannot be LOADED is an invalid argument; one that loads but
 // does not validate is a failed precondition.
 func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, workflowName, projectID string) error {
-	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, "")
+	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, Event{Kind: core.TriggerEventKindChatStart})
 }
 
-// validateWorkflowTree is ValidateCreateChatWorkflowTree with the one workflow
-// (draftRoot) that may be a draft; see draftRootFor.
-func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, draftRoot string) error {
+// validateWorkflowTree is ValidateCreateChatWorkflowTree for the launch of ev:
+// its kind decides which workflow may be a draft (see draftRootFor) and
+// whether the workflow's Chat trigger must be on.
+func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID string, ev Event) error {
+	draftRoot := draftRootFor(ev, workflowName)
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
 	if err != nil {
 		var lookupErr *WorkflowLookupError
@@ -459,6 +461,9 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 			return &InternalError{Reason: "failed to look up workflow", Err: err}
 		}
 		return &ValidationError{Kind: ValidationInvalidArgument, Reason: err.Error()}
+	}
+	if err := refuseChatStart(ev.Kind, workflowName, wf); err != nil {
+		return err
 	}
 
 	validationOpts := &validation.ValidationOptions{
@@ -478,6 +483,22 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 	}
 
 	return nil
+}
+
+// refuseChatStart refuses a chat start of a workflow whose Chat trigger is
+// off (Workflow.automation_only). Only an interactive chat start is refused:
+// its triggers, an agent's start_run and a builder test run still start it.
+// Chat pickers leave such a workflow out, so this is the backstop for a
+// client that did not, or for a workflow switched off since it was picked.
+func refuseChatStart(kind core.TriggerEventKind, workflowName string, wf *reliantv1.Workflow) error {
+	if kind != core.TriggerEventKindChatStart || !wf.GetAutomationOnly() {
+		return nil
+	}
+	return &ValidationError{
+		Kind: ValidationFailedPrecondition,
+		Reason: fmt.Sprintf("workflow '%s' cannot be started from a chat: its Chat trigger is off (automation_only), so only its triggers start it. "+
+			"Turn its Chat trigger back on in the builder to start it here", workflowName),
+	}
 }
 
 // ValidateNoMachine reports whether workflowName can run in a chat with no

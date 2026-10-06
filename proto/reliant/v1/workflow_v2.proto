@@ -1885,4 +1885,9 @@ message Workflow {
   // other workflows `ref:` (structured-agent, scope-conversation), not for
   // retiring a workflow. Delete a workflow to retire it.
   bool hidden = 17;
+  // AutomationOnly turns off the workflow's Chat trigger: nobody can start it
+  // from a chat, and chat pickers do not offer it. Only its `triggers:` (and a
+  // builder test run) start it. Unset, the default, means a chat can start it
+  // like any other workflow.
+  bool automation_only = 18;
 }

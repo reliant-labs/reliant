@@ -4,6 +4,7 @@ package triggers
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -192,4 +193,82 @@ func TestActivationInputsThatCannotEvaluateFailTheFiring(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, core.TriggerEventFailed, events[0].Outcome)
 	assert.Contains(t, events[0].OutcomeDetail, "issue_number")
+}
+
+// The declaration's prompt template is what an activation with no message of
+// its own starts from, rendered against the event. The event is still
+// appended as untrusted data after it.
+func TestIntegrationActivationSeedsFromTheDeclarationsPrompt(t *testing.T) {
+	repo := newFakeRepo()
+	name := "new-issue"
+	trig := &core.Trigger{
+		ID: "t-prompt", UserID: "user-1", ProjectID: "project-1", Name: "triage",
+		Kind: core.TriggerKindIntegration, Enabled: true, Workflow: "triage", WorkflowTrigger: &name,
+		DaemonID: testDaemonID,
+		Config:   json.RawMessage(`{"integration":"github","events":["issues.opened"]}`),
+	}
+	repo.triggers[trig.ID] = trig
+	repo.events = append(repo.events, &core.TriggerEvent{
+		ID: "ev-prompt", TriggerID: &trig.ID, UserID: "user-1", Kind: core.TriggerEventKindIntegration,
+		DedupeKey: "t-prompt:d1", OccurredAt: time.Now(), Outcome: core.TriggerEventPending,
+		Payload: map[string]any{"data": map[string]any{"issue": map[string]any{"number": 7}}},
+	})
+	workflows := fakeWorkflows{yaml: map[string]string{"triage": `name: triage
+triggers:
+  - name: new-issue
+    integration: {integration: github, events: [issues.opened]}
+    prompt: "Triage issue #{{ trigger.payload.data.issue.number }}."
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`}}
+	launcher := &fakeLauncher{}
+	out, err := NewEventFirer(repo, launcher).WithWorkflows(workflows).Fire(context.Background(), EventFireInput{
+		TriggerID: trig.ID, Kind: core.TriggerEventKindIntegration, DedupeKey: "t-prompt:d1",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, string(core.TriggerEventLaunched), out.Outcome)
+	require.Len(t, launcher.snapshot(), 1)
+	seed := launcher.snapshot()[0].Spec.Messages[0].Content
+	assert.True(t, strings.HasPrefix(seed, "Triage issue #7.\n\n<trigger_event"), "seed: %q", seed)
+
+	// An activation's own message overrides the template.
+	trig.Message = "Just label it."
+	repo.events = append(repo.events, &core.TriggerEvent{
+		ID: "ev-prompt-2", TriggerID: &trig.ID, UserID: "user-1", Kind: core.TriggerEventKindIntegration,
+		DedupeKey: "t-prompt:d2", OccurredAt: time.Now(), Outcome: core.TriggerEventPending,
+		Payload: map[string]any{"data": map[string]any{"issue": map[string]any{"number": 8}}},
+	})
+	_, err = NewEventFirer(repo, launcher).WithWorkflows(workflows).Fire(context.Background(), EventFireInput{
+		TriggerID: trig.ID, Kind: core.TriggerEventKindIntegration, DedupeKey: "t-prompt:d2",
+	})
+	require.NoError(t, err)
+	require.Len(t, launcher.snapshot(), 2)
+	assert.True(t, strings.HasPrefix(launcher.snapshot()[1].Spec.Messages[0].Content, "Just label it.\n\n"))
+}
+
+// A schedule activation renders the template against its slot.
+func TestScheduleActivationSeedsFromTheDeclarationsPrompt(t *testing.T) {
+	repo := newFakeRepo()
+	trig := scheduleActivation(t)
+	trig.Message = ""
+	repo.triggers[trig.ID] = trig
+	launcher := &fakeLauncher{}
+	workflows := fakeWorkflows{yaml: map[string]string{"triage": `name: triage
+triggers:
+  - name: nightly
+    schedule: {cron: "0 9 * * *"}
+    prompt: "Summarise everything before {{ trigger.scheduled_for }}."
+entry: [a]
+nodes:
+  - id: a
+    type: approval
+    args: {title: ok}
+`}}
+	_, err := NewFirer(repo, launcher).WithWorkflows(workflows).Fire(context.Background(), fireReq(trig.ID))
+	require.NoError(t, err)
+	require.Len(t, launcher.snapshot(), 1)
+	assert.Equal(t, "Summarise everything before 2026-01-02T09:00:00Z.", launcher.snapshot()[0].Spec.Messages[0].Content)
 }

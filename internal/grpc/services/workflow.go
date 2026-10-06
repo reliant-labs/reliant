@@ -150,6 +150,8 @@ func (s *WorkflowService) ListWorkflows(
 			Inputs:          protoWf.Inputs,
 			HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
 			Status:          reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
+			AutomationOnly:  protoWf.AutomationOnly,
+			Triggers:        protoWf.Triggers,
 		}
 	}
 
@@ -285,6 +287,8 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 		DraftId:          &draftID,
 		Status:           draftStatusToProto(draft.Status),
 		ValidationErrors: check.protoErrors(true),
+		AutomationOnly:   protoWf.AutomationOnly,
+		Triggers:         protoWf.Triggers,
 	}
 	if !draft.UpdatedAt.IsZero() {
 		updatedAt := draft.UpdatedAt.Format(time.RFC3339)
@@ -339,6 +343,8 @@ func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, pro
 			Inputs:          protoWf.Inputs,
 			HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
 			Status:          reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
+			AutomationOnly:  protoWf.AutomationOnly,
+			Triggers:        protoWf.Triggers,
 		})
 	}
 

@@ -354,8 +354,9 @@ function LibraryBody({ projectId }: { projectId: string }) {
           }),
       },
     ];
-    // A default must be runnable, so a draft cannot be one.
-    if (workflow.status !== "draft" && defaultWorkflow !== workflow.name) {
+    // A default must be runnable from a chat, so neither a draft nor a
+    // workflow whose Chat trigger is off can be one.
+    if (workflow.status !== "draft" && !workflow.automationOnly && defaultWorkflow !== workflow.name) {
       actions.push({
         label: "Set as default",
         onSelect: () =>

@@ -617,7 +617,9 @@ func (s *TriggerService) triggerFromDefinition(
 	}
 	// A trigger with no prompt would launch a run with nothing to do, and the
 	// agent would have no way to ask what was wanted — nobody is watching.
-	if def.Message == "" {
+	// An activation may leave it empty when its declaration has a prompt
+	// template; that is checked once the declaration is read.
+	if def.Message == "" && def.GetWorkflowTrigger() == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("message is required"))
 	}
 	if def.ProjectId == "" {
@@ -762,13 +764,20 @@ func (s *TriggerService) resolveActivation(ctx context.Context, userID string, d
 		return nil, connect.NewError(connect.CodeNotFound,
 			fmt.Errorf("workflow %q does not resolve to a runnable workflow: %w", def.Workflow, err))
 	}
-	if triggers.FindDeclaredTrigger(wf, name) == nil {
+	declared := triggers.FindDeclaredTrigger(wf, name)
+	if declared == nil {
 		declared := triggers.DeclaredTriggerNames(wf)
 		msg := fmt.Sprintf("workflow %q does not declare a trigger named %q", def.Workflow, name)
 		if len(declared) > 0 {
 			msg += " (it declares: " + strings.Join(declared, ", ") + ")"
 		}
 		return nil, connect.NewError(connect.CodeNotFound, errors.New(msg))
+	}
+	// The activation's message overrides the declaration's prompt template;
+	// with neither, a run would start with nothing to do.
+	if strings.TrimSpace(def.Message) == "" && strings.TrimSpace(declared.GetPrompt()) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf(
+			"message is required: the declared trigger %q has no prompt, so the activation must write one", name))
 	}
 	// Activation has no previous kind to hold the declaration to.
 	decl, err := triggers.DeclarationIn(wf, &core.Trigger{Workflow: def.Workflow, WorkflowTrigger: &name})

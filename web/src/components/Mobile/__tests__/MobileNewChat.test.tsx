@@ -53,6 +53,8 @@ vi.mock('../../../store/globalDataStore', () => ({
     workflows: [
       { name: 'builtin://agent', description: 'Basic agentic chat' },
       { name: 'builtin://forge-one-shot', description: 'Build with Forge' },
+      // Its Chat trigger is off: a chat cannot start it.
+      { name: 'nightly-digest', description: 'Runs on a schedule', automation_only: true },
     ],
     loading: false,
   }),
@@ -141,6 +143,13 @@ describe('MobileNewChat', () => {
 
     await waitFor(() => expect(startChat).toHaveBeenCalled())
     expect(startChat.mock.calls[0][4]).toBe('builtin://agent')
+  })
+
+  it('does not offer a workflow whose Chat trigger is off', async () => {
+    render(<MobileNewChat />)
+    await userEvent.click(screen.getByText('Workflow'))
+    expect(screen.getByRole('button', { name: /^Agent/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Nightly Digest/i })).not.toBeInTheDocument()
   })
 
   it('will not send an empty message', async () => {

@@ -390,7 +390,9 @@ function AutomationFormBody({
       // no-machine trigger is left for the server to judge with its inputs.
       next.daemon = `No machine is not available: ${noMachineBlocker}. Choose a daemon.`;
     }
-    if (!message.trim()) next.message = "Write the prompt each run starts from.";
+    // An activation may leave its prompt empty to use its declared trigger's
+    // prompt template; the server refuses it when that declaration has none.
+    if (!message.trim() && lockedSource?.kind !== "activation") next.message = "Write the prompt each run starts from.";
     if (pendingWorkflow !== null) {
       next.inputs = "Confirm or cancel the workflow change first.";
     } else if (inputsStatus?.loading && workflow) {
@@ -637,7 +639,9 @@ function AutomationFormBody({
               aria-describedby={describedBy(fieldId("message-hint"), errors.message && fieldId("message-error"))}
             />
             <p id={fieldId("message-hint")} className={hintClass}>
-              Each run starts from this message. Nobody will be watching, so say everything the agent needs.
+              {lockedSource?.kind === "activation"
+                ? "Leave empty to use the prompt the workflow's trigger declares; anything here overrides it."
+                : "Each run starts from this message. Nobody will be watching, so say everything the agent needs."}
             </p>
             {errors.message && (
               <p id={fieldId("message-error")} className={errorTextClass}>

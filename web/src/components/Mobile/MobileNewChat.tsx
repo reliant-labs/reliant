@@ -46,6 +46,7 @@ import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useWorkflows } from "../../store/globalDataStore";
+import { isChatLaunchable } from "../../api/workflow-grpc";
 import {
   DEFAULT_WORKFLOW,
   usePreferencesStore,
@@ -122,11 +123,13 @@ export function MobileNewChat() {
   const targetWorktree = requestedWorktree ?? mainWorktree;
 
   // Same filtering the desktop selector applies: drop hidden workflows and
+  // ones a chat cannot start (their Chat trigger is off), and
   // de-duplicate, since project and user scopes can both supply a name.
   const visibleWorkflows = useMemo(() => {
     const seen = new Set<string>();
     const unique = workflows.filter((w) => {
       if (isWorkflowHidden(w.name)) return false;
+      if (!isChatLaunchable(w)) return false;
       const key = normalizeWorkflowRef(w.name).toLowerCase().trim();
       if (seen.has(key)) return false;
       seen.add(key);
