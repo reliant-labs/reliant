@@ -95,6 +95,21 @@ describe("useGoToBilling", () => {
     );
   });
 
+  it("captures an environment page with its project, for a deploy queued on billing", () => {
+    // The way back is the page where the queued release can be watched going
+    // out; without its search the page would not know which project it is.
+    window.history.pushState({}, "", "/forge/env/prod?project=proj-1");
+
+    const { result } = renderHook(() => useGoToBilling("forge"));
+    act(() => result.current());
+
+    expect(mockNavigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        search: expect.objectContaining({ tab: "plans", from: "forge", returnTo: "/forge/env/prod?project=proj-1" }),
+      }),
+    );
+  });
+
   it("does not capture a return URL when the caller is not onboarding", () => {
     // Settings and the chat shell are already where the user wants to be; a
     // returnTo would be noise in the URL and a needless open-redirect surface.

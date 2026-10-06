@@ -72,6 +72,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     drift: { state: "not-reported" },
     driftDetail: "",
     provenance: "v12 · main@abc1234",
+    holds: [],
     ...overrides,
   };
 }

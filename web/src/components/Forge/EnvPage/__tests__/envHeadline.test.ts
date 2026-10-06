@@ -27,6 +27,7 @@ function env(overrides: Partial<LiveEnv> = {}): LiveEnv {
     drift: { state: "not-reported" },
     driftDetail: "",
     provenance: "",
+    holds: [],
     ...overrides,
   };
 }
@@ -86,5 +87,35 @@ describe("the header's one status line", () => {
 
   it("says nothing is released yet before the first release", () => {
     expect(envHeadline(env({ release: "" }), undefined, NOW).text).toBe("Nothing released yet");
+  });
+
+  /**
+   * A QUEUED deploy outranks the readings and the run state: both describe the
+   * release still running, which converged long ago. "Running · confirmed"
+   * above a banner saying the new release is waiting on billing would read as
+   * if it had gone out.
+   */
+  it("says a queued deploy is waiting, in the waiting register, above a converged reading", () => {
+    const line = envHeadline(
+      env({
+        release: "v13",
+        phase: "held",
+        observed: { state: "queued" },
+        holds: [
+          {
+            kind: "billing",
+            promotionId: "promo-2",
+            reason: "this runs compute (1 workload) and the organization has no active compute plan",
+            fix: "",
+            actionUrl: "",
+            callerCanResolve: false,
+          },
+        ],
+      }),
+      status([{ name: "web", declared_run_state: "suspended", observed_state: "suspended" }]),
+      NOW
+    );
+    expect(line).toMatchObject({ tone: "waiting", text: "Queued · waiting on billing" });
+    expect(line.detail).toMatch(/no active compute plan/);
   });
 });

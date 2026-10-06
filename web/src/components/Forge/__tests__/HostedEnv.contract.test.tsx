@@ -63,6 +63,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     promotedByUserId: "",
     phase: "unspecified",
     provenance: "v2.0.0 · main@abc1234",
+    holds: [],
     ...overrides,
   };
 }
@@ -141,6 +142,24 @@ describe("a hosted row on the Overview", () => {
     // customer CAN act on: which source the running bytes were cut from.
     renderLiveRows([liveEnv()]);
     expect(screen.getByTestId("provenance-cloud").textContent).toBe("v2.0.0 · main@abc1234");
+  });
+
+  /**
+   * The release column names the QUEUED release — the promotion's — which is
+   * not what runs. Without the mark a reader would take v2.0.0 for live.
+   */
+  it("marks a release that is queued, on the release it is about", () => {
+    renderLiveRows([
+      liveEnv({
+        phase: "held",
+        holds: [
+          { kind: "billing", promotionId: "p2", reason: "", fix: "", actionUrl: "", callerCanResolve: false },
+        ],
+      }),
+      liveEnv({ id: "denv_other", name: "staging" }),
+    ]);
+    expect(screen.getByTestId("queued-cloud")).toHaveTextContent("Waiting on billing");
+    expect(screen.queryByTestId("queued-staging")).not.toBeInTheDocument();
   });
 
   it("says a declared-but-unbuilt env is just that, not a blank or a fault", () => {

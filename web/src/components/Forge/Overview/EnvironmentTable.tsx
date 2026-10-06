@@ -27,7 +27,14 @@ import { Button } from "@/components/ui/Button";
 import { Tooltip } from "@/components/ui/Tooltip";
 import { cn } from "@/lib/utils";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
-import { declaredNotBuilt, isPlacedKind, liveKindLabel, type LiveEnv } from "@/services/forge/live";
+import {
+  declaredNotBuilt,
+  isPlacedKind,
+  isQueued,
+  liveKindLabel,
+  queuedOnLabel,
+  type LiveEnv,
+} from "@/services/forge/live";
 
 import { HealthChip } from "../EnvBadges";
 
@@ -182,7 +189,19 @@ function ReleaseCell({ env }: { env: LiveEnv }) {
   }
   return (
     <div className="flex flex-col gap-0.5">
-      <span className="font-mono text-sm text-foreground">{env.release}</span>
+      <span className="flex items-center gap-2">
+        <span className="font-mono text-sm text-foreground">{env.release}</span>
+        {/* The release is RECORDED but not rolling out: it waits on a person.
+            Said here, on the release it is about, so a reader does not take
+            the version for what is running. */}
+        {isQueued(env) && (
+          <Tooltip content="Queued: this release is recorded and goes out on its own once that is resolved. Open the environment for what to do.">
+            <span data-testid={`queued-${env.name}`}>
+              <Badge label={`Waiting on ${queuedOnLabel(env.holds)}`} variant="warning" size="sm" dot />
+            </span>
+          </Tooltip>
+        )}
+      </span>
       {/* The provenance line (§2.1) — images from the release's source, config
           from the render's — is the fact this screen gained. Truncated here
           and shown in full on the environment's page. */}

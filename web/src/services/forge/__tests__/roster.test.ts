@@ -23,6 +23,7 @@ function live(name: string, kind: LiveEnv["kind"]): LiveEnv {
     drift: { state: "not-reported" },
     driftDetail: "",
     provenance: "",
+    holds: [],
   };
 }
 

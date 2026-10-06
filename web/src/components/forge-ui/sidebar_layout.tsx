@@ -10,6 +10,8 @@ interface NavItem {
   icon?: React.ReactNode;
   active?: boolean;
   section?: string;
+  /** A small status mark after the label (e.g. "Queued"). Hidden while collapsed. */
+  trailing?: React.ReactNode;
 }
 
 interface UserInfo {
@@ -154,6 +156,9 @@ export default function SidebarLayout({
                       )}
                       {!collapsed && (
                         <span className="truncate">{item.label}</span>
+                      )}
+                      {!collapsed && item.trailing && (
+                        <span className="ml-auto shrink-0">{item.trailing}</span>
                       )}
                     </Link>
                   </li>

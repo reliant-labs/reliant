@@ -23,12 +23,16 @@
 
 import { formatRelativeTime } from "@/lib/relativeTime";
 import type { CloudEnvStatus } from "@/services/forge/cloudEnvs";
-import { declaredNotBuilt, neverBuilt, type LiveEnv } from "@/services/forge/live";
+import { declaredNotBuilt, isQueued, neverBuilt, queuedOnLabel, type LiveEnv } from "@/services/forge/live";
 
 import { environmentStopped, runStateOf } from "../runStateVocabulary";
 
-/** ok = confirmed good; progress = moving; problem = needs a look; quiet = nothing to say yet. */
-export type HeadlineTone = "ok" | "progress" | "problem" | "quiet";
+/**
+ * ok = confirmed good; progress = moving; problem = needs a look; quiet =
+ * nothing to say yet; waiting = nothing is wrong, and nothing moves until a
+ * person acts (a queued deploy).
+ */
+export type HeadlineTone = "ok" | "progress" | "problem" | "quiet" | "waiting";
 
 export interface EnvHeadline {
   tone: HeadlineTone;
@@ -50,6 +54,17 @@ export function envHeadline(
   // "Stopped by you" would hide the fix.
   const billing = runStates.find((state) => state.kind === "billing");
   if (billing) return { tone: "problem", text: billing.label, detail: billing.detail };
+
+  // A QUEUED deploy outranks the run state and the readings: both describe
+  // the release still running, and what the reader needs is that the new one
+  // has not started and who has to do what for it to.
+  if (isQueued(live)) {
+    return {
+      tone: "waiting",
+      text: `Queued · waiting on ${queuedOnLabel(live.holds)}`,
+      detail: live.holds[0]?.reason ?? "",
+    };
+  }
 
   if (environmentStopped(workloads)) {
     return runStates.some((state) => state.kind === "stopping")

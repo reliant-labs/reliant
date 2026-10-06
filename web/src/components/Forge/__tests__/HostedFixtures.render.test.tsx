@@ -82,6 +82,7 @@ function liveEnv(overrides: Partial<LiveEnv> = {}): LiveEnv {
     promotedByUserId: "",
     phase: "unspecified",
     provenance: "v1.5.15 · main@abc1234",
+    holds: [],
     ...overrides,
   };
 }

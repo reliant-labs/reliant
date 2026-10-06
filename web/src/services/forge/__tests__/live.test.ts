@@ -25,6 +25,8 @@ import {
   DeployDriftSchema,
   DeployEnvironmentKind,
   DeployEnvironmentSchema,
+  DeployHoldKind,
+  DeployHoldSchema,
   DeployLiveEnvironmentSchema,
   DeployPromotionSchema,
   DeployReleaseSchema,
@@ -43,12 +45,14 @@ import {
   driftLine,
   intentLine,
   isPlacedKind,
+  isQueued,
   liveAvailabilityFromError,
   liveKindLabel,
   neverBuilt,
   observedIsFailure,
   observedLine,
   provenanceLine,
+  queuedOnLabel,
   shortCommit,
   toLiveConvergence,
   toLiveEnv,
@@ -80,6 +84,7 @@ function liveEnvFixture(overrides: Partial<LiveEnv> = {}): LiveEnv {
     drift: { state: "not-reported" },
     driftDetail: "",
     provenance: "",
+    holds: [],
     ...overrides,
   };
 }
@@ -594,6 +599,94 @@ describe("observed convergence", () => {
   });
 });
 
+// ── Queued deploys ──────────────────────────────────────────────────────────
+
+describe("a queued deploy", () => {
+  function queuedMsg(args: { holds?: boolean; drift?: string; phase?: DeployRolloutPhase } = {}) {
+    return create(DeployLiveEnvironmentSchema, {
+      environment: create(DeployEnvironmentSchema, {
+        id: "cp-prod",
+        name: "prod",
+        project: "hounders",
+        kind: DeployEnvironmentKind.PERSISTENT,
+        holds:
+          args.holds === false
+            ? []
+            : [
+                create(DeployHoldSchema, {
+                  kind: DeployHoldKind.BILLING,
+                  promotionId: "promo-2",
+                  reason: "this runs compute (1 workload) and the organization has no active compute plan",
+                  fix: "Subscribe to a Reliant Compute plan in Reliant → Settings → Billing (an org admin can).",
+                  actionUrl: "https://app.reliant.dev/forge/env/prod?forgeProject=hounders",
+                  callerCanResolve: true,
+                  heldSince: timestampFromDate(new Date("2026-10-06T12:00:00.000Z")),
+                }),
+              ],
+      }),
+      currentPromotion: create(DeployPromotionSchema, { id: "promo-2", releaseVersion: "v13" }),
+      // The readings describe the release STILL RUNNING (v12): in sync with
+      // nothing the queued intent names.
+      drift: args.drift ? create(DeployDriftSchema, { state: args.drift, observedAt: timestampFromDate(new Date("2026-10-05T20:31:02.000Z")) }) : undefined,
+      phase: args.phase ?? DeployRolloutPhase.HELD,
+    });
+  }
+
+  it("carries every word of the hold, verbatim", () => {
+    const env = toLiveEnv(queuedMsg());
+    expect(env?.phase).toBe("held");
+    expect(env?.holds).toEqual([
+      {
+        kind: "billing",
+        promotionId: "promo-2",
+        reason: "this runs compute (1 workload) and the organization has no active compute plan",
+        fix: "Subscribe to a Reliant Compute plan in Reliant → Settings → Billing (an org admin can).",
+        actionUrl: "https://app.reliant.dev/forge/env/prod?forgeProject=hounders",
+        callerCanResolve: true,
+        heldSince: "2026-10-06T12:00:00.000Z",
+      },
+    ]);
+    expect(env && isQueued(env)).toBe(true);
+    expect(queuedOnLabel(env?.holds ?? [])).toBe("billing");
+  });
+
+  /**
+   * A held intent has not started, so a reading cannot be about it. Read as
+   * "drifted, still progressing" it would say the queued release is ROLLING
+   * OUT — the one thing that is certainly not happening.
+   */
+  it("observes nothing about a held intent, whatever the readings say", () => {
+    const env = toLiveEnv(queuedMsg({ drift: "drifted" }));
+    expect(env?.observed).toEqual({ state: "queued" });
+    expect(observedLine(env!.observed)).toBe("Queued — not rolling out yet");
+    expect(observedIsFailure(env!.observed)).toBe(false);
+    // The drift verdict is still true of what runs, and is kept.
+    expect(env?.drift.state).toBe("drifted");
+  });
+
+  it("is nothing queued when the control plane sends no hold", () => {
+    const env = toLiveEnv(queuedMsg({ holds: false, phase: DeployRolloutPhase.PENDING }));
+    expect(env?.holds).toEqual([]);
+    expect(env && isQueued(env)).toBe(false);
+    expect(env?.observed.state).not.toBe("queued");
+  });
+
+  it("names a hold kind this build does not know as a wait, never as nothing", () => {
+    expect(
+      queuedOnLabel([
+        {
+          kind: "unknown",
+          promotionId: "p",
+          reason: "",
+          fix: "",
+          actionUrl: "",
+          callerCanResolve: false,
+        },
+      ])
+    ).toBe("an action");
+  });
+});
+
 describe("the state line's words", () => {
   it("states intent in the present tense with the promoter", () => {
     expect(intentLine(liveEnvFixture({ release: "v12", promotedByActor: "ci" }))).toBe(
@@ -622,6 +715,7 @@ describe("the state line's words", () => {
       "converged",
       "converging",
       "failed",
+      "queued",
       "unknown",
       "not-reported",
     ];

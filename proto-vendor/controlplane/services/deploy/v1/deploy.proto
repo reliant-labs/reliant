@@ -850,6 +850,11 @@ message PromoteReleaseRequest {
 
 message PromoteReleaseResponse {
   DeployPromotion promotion = 1;
+  // Non-empty when the promotion was ACCEPTED and RECORDED but is QUEUED on a
+  // human action (billing) — it is applied automatically once that clears,
+  // and nothing needs to be re-run. Also set on an idempotent re-promote of a
+  // release that is still queued.
+  repeated controlplane.v1.DeployHold holds = 2;
 }
 
 // === Scale and status ===
@@ -1331,6 +1336,13 @@ message CheckDeployCapacityResponse {
   int64 ceiling_cpu_millicores = 6;
   int64 ceiling_memory_bytes = 7;
   int64 ceiling_storage_gib = 8;
+  // Non-empty ⇔ allowed is false AND the deploy would be ACCEPTED and QUEUED
+  // rather than refused (today: it needs billing the org has not set up). A
+  // client proceeds — build, record, promote — and reports the queue; the
+  // deploy then starts on its own when billing is set up. promotion_id and
+  // held_since are empty here: nothing has been promoted yet. An older
+  // control plane never sets this, so an older client keeps refusing.
+  repeated controlplane.v1.DeployHold holds = 9;
 }
 
 // === Local sessions ===

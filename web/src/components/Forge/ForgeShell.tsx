@@ -61,6 +61,12 @@ export interface ForgeNavEnv {
   name: string;
   lifecycle: EnvLifecycle;
   source: RosterSource;
+  /**
+   * What this environment's QUEUED deploy waits on ("billing"), when one is.
+   * Marked in the nav because it is the one state that needs a person and
+   * would otherwise be visible only on the environment's own page.
+   */
+  queuedOn?: string;
 }
 
 /** Which nav section an environment is filed under. */
@@ -146,6 +152,7 @@ export function ForgeShell({
           active: decodeURI(activePath) === decodeURI(path),
           section: navSectionOf(env),
           icon: <Icon className="h-4 w-4" aria-hidden="true" />,
+          trailing: env.queuedOn ? <QueuedMark env={env.name} on={env.queuedOn} /> : undefined,
         };
       }),
     ];
@@ -184,5 +191,20 @@ export function ForgeShell({
         {children}
       </SidebarLayout>
     </div>
+  );
+}
+
+/** The nav's mark for an environment whose deploy is queued on a person. */
+function QueuedMark({ env, on }: { env: string; on: string }) {
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full bg-warning-surface px-1.5 py-0.5 text-2xs font-medium text-warning-ink ring-1 ring-inset ring-warning-border"
+      title={`A deploy to ${env} is queued, waiting on ${on}`}
+      data-testid={`forge-nav-queued-${env}`}
+    >
+      <span className="h-1.5 w-1.5 rounded-full bg-warning" aria-hidden="true" />
+      Queued
+      <span className="sr-only">, waiting on {on}</span>
+    </span>
   );
 }

@@ -91,13 +91,13 @@ vi.mock("@/api/grpc-client", async (importOriginal) => ({
   createForgeClient: daemonTripwire("createForgeClient"),
 }));
 
-const routeState: { env: string; tab?: string } = { env: "prod" };
+const routeState: { env: string; tab?: string; forgeProject?: string } = { env: "prod" };
 const navigate = vi.fn();
 
 vi.mock("@tanstack/react-router", () => ({
   useNavigate: () => navigate,
   useParams: () => ({ env: routeState.env }),
-  useSearch: () => ({ project: "proj-1", tab: routeState.tab }),
+  useSearch: () => ({ project: "proj-1", tab: routeState.tab, forgeProject: routeState.forgeProject }),
 }));
 
 // The Reliant project's display name and forge's name for it DIFFER, as they
@@ -145,6 +145,7 @@ function liveEnv(overrides: Partial<LiveEnv>): LiveEnv {
     drift: { state: "not-reported" },
     driftDetail: "",
     provenance: "",
+    holds: [],
     ...overrides,
   };
 }
@@ -306,6 +307,7 @@ beforeEach(() => {
   daemonCalls.length = 0;
   routeState.env = "prod";
   routeState.tab = undefined;
+  routeState.forgeProject = undefined;
   vi.clearAllMocks();
   getLiveView.mockResolvedValue([PROD, STAGING]);
   listEnvironmentConvergences.mockImplementation((id: string) =>
@@ -593,5 +595,79 @@ describe("tab routing", () => {
     const status = await screen.findByTestId("env-page-status");
     expect(status).toHaveTextContent(/^Running · confirmed/);
     expect(status).toHaveAttribute("data-tone", "ok");
+  });
+});
+
+/**
+ * A QUEUED deploy: prod's v13 was accepted and is waiting on billing, while
+ * v12 keeps running (and is confirmed running). The page must say the new
+ * release is waiting — above every tab — and offer the way to unblock it,
+ * from the control plane alone.
+ */
+describe("a queued deploy", () => {
+  const QUEUED_PROD: LiveEnv = liveEnv({
+    ...PROD,
+    release: "v13",
+    phase: "held",
+    observed: { state: "queued" },
+    holds: [
+      {
+        kind: "billing",
+        promotionId: "promo-2",
+        reason: "this runs compute (1 workload) and the organization has no active compute plan",
+        fix: "Subscribe to a Reliant Compute plan in Reliant → Settings → Billing (an org admin can). The deploy starts automatically once the plan is active; nothing needs to be re-run.",
+        actionUrl: "https://app.reliant.dev/forge/env/prod?forgeProject=hounders",
+        callerCanResolve: true,
+        heldSince: "2026-10-06T12:00:00.000Z",
+      },
+    ],
+  });
+
+  it("says it is waiting on billing, above every tab, and sends an admin to billing and back", async () => {
+    getLiveView.mockResolvedValue([QUEUED_PROD, STAGING]);
+    routeState.tab = "releases";
+    const user = userEvent.setup();
+    renderWithQuery(<ForgeEnvPage />);
+
+    const banner = await screen.findByTestId("queued-deploy-banner");
+    expect(banner).toHaveTextContent("Waiting on billing");
+    expect(banner).toHaveTextContent("Release v13 is recorded.");
+    expect(screen.getByTestId("env-page-status")).toHaveTextContent("Queued · waiting on billing");
+    expect(screen.getByTestId("env-page-status")).toHaveAttribute("data-tone", "waiting");
+
+    await user.click(within(banner).getByTestId("queued-deploy-set-up-billing"));
+    expect(navigate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        to: "/settings/$section",
+        params: { section: "billing" },
+        search: expect.objectContaining({ tab: "plans", from: "forge", returnTo: expect.stringMatching(/^\//) }),
+      })
+    );
+    expect(daemonCalls).toEqual([]);
+  });
+
+  it("says nothing of a queue when nothing is queued", async () => {
+    renderWithQuery(<ForgeEnvPage />);
+    await screen.findByTestId("live-section");
+    expect(screen.queryByTestId("queued-deploy-banner")).not.toBeInTheDocument();
+  });
+
+  /**
+   * The control plane's link names only the FORGE project. Opened by someone
+   * with no Reliant project declaring it — the admin a teammate sent it to —
+   * the page reads the control plane by that name, and asks no daemon: the
+   * current project's checkout is a different project, whose `prod` is not
+   * this one.
+   */
+  it("opens a control-plane link by its forge project name, with no daemon", async () => {
+    getLiveView.mockResolvedValue([{ ...QUEUED_PROD, project: "barkshop" }]);
+    routeState.forgeProject = "barkshop";
+    renderWithQuery(<ForgeEnvPage />);
+
+    await screen.findByTestId("queued-deploy-banner");
+    const asked = getLiveView.mock.calls.map((call) => (call as unknown[])[0]);
+    expect(asked.length).toBeGreaterThan(0);
+    expect(new Set(asked)).toEqual(new Set(["barkshop"]));
+    expect(daemonCalls).toEqual([]);
   });
 });
