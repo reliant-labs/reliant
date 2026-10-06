@@ -232,10 +232,9 @@ Status: %d`,
 		logging.Warn("[AddTaskTool] Failed to emit plan_tasks refetch", "error", err)
 	}
 
-	logging.Info("Task added to plan",
+	logging.Debug("Task added to plan",
 		"task_id", task.ID,
-		"plan_id", plan.ID,
-		"title", task.Title)
+		"plan_id", plan.ID)
 
 	return NewTextResponse(responseText), nil
 }

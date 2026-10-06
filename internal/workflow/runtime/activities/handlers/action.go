@@ -112,7 +112,7 @@ func (a *ActionActivity) Execute(ctx context.Context, input ActivityInput) (*rel
 			}
 		}
 	}
-	activity.GetLogger(ctx).Info("[Action] Completed", "stepID", rtx.StepID, "uses", uses,
+	activity.GetLogger(ctx).Debug("[Action] Completed", "stepID", rtx.StepID, "uses", uses,
 		"isError", out.IsError, "status", out.StatusCode)
 	return out, nil
 }

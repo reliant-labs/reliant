@@ -308,7 +308,7 @@ func SetupEvents(database db.Repository) {
 			return
 		}
 
-		logging.Info("Published background process event",
+		logging.Debug("Published background process event",
 			"processID", event.ProcessID,
 			"type", event.Type,
 			"worktreeID", event.WorktreeID,

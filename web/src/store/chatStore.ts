@@ -1617,7 +1617,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         Object.keys(sendOptions).length > 0 ? sendOptions : undefined,
       );
 
-      logger.log("Message sent successfully:", response);
+      logger.debug("Message sent successfully", { chatId: chatId.slice(0, 8) });
 
       const existingMessages = getMessagesFromCache(chatId);
       const isFirstInChat = existingMessages.filter(

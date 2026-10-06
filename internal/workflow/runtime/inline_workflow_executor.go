@@ -260,7 +260,7 @@ func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interf
 		return &TerminalError{Message: "project path not set, cannot load presets"}
 	}
 
-	e.logger.Info("[InlineWorkflow] Loading presets for sub-workflow",
+	e.logger.Debug("[InlineWorkflow] Loading presets for sub-workflow",
 		"nodeID", e.nodeID,
 		"presets", presets,
 	)
@@ -311,7 +311,7 @@ func applyPresets(
 		}
 
 		if resolvedPresetName != rawPresetName {
-			logger.Info("[InlineWorkflow] Resolved preset template",
+			logger.Debug("[InlineWorkflow] Resolved preset template",
 				"nodeID", nodeID,
 				"group", groupName,
 				"template", rawPresetName,
@@ -320,7 +320,7 @@ func applyPresets(
 		}
 
 		if resolvedPresetName == "" {
-			logger.Info("[InlineWorkflow] Skipping empty preset name after template evaluation",
+			logger.Debug("[InlineWorkflow] Skipping empty preset name after template evaluation",
 				"nodeID", nodeID,
 				"group", groupName,
 				"template", rawPresetName,
@@ -339,7 +339,7 @@ func applyPresets(
 
 		mergePresetParams(subInputs, groupName, params)
 
-		logger.Info("[InlineWorkflow] Applied preset params",
+		logger.Debug("[InlineWorkflow] Applied preset params",
 			"nodeID", nodeID,
 			"preset", resolvedPresetName,
 			"group", groupName,
@@ -534,7 +534,7 @@ func (e *InlineWorkflowExecutor) buildSubWorkflowInputsWithOwnership() (map[stri
 // 4. Execute sub-workflow nodes
 // 5. Evaluate and return sub-workflow outputs
 func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
-	e.logger.Info("[InlineWorkflow] Starting inline workflow execution",
+	e.logger.Debug("[InlineWorkflow] Starting inline workflow execution",
 		"nodeID", e.nodeID,
 		"subWorkflow", e.subWorkflowName,
 		"hasExecContext", e.execContext != nil,
@@ -561,7 +561,7 @@ func (e *InlineWorkflowExecutor) Execute() (map[string]interface{}, error) {
 		e.emitThreadCompleted()
 	}
 
-	e.logger.Info("[InlineWorkflow] Inline workflow completed",
+	e.logger.Debug("[InlineWorkflow] Inline workflow completed",
 		"nodeID", e.nodeID,
 		"subWorkflow", e.subWorkflowName,
 		"outputKeys", getMapKeys(outputs),
@@ -599,7 +599,7 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 			wf.Name = e.subWorkflowName
 		}
 		e.subWorkflow = wf
-		e.logger.Info("[InlineWorkflow] Using inline sub-workflow",
+		e.logger.Debug("[InlineWorkflow] Using inline sub-workflow",
 			"nodeID", e.nodeID,
 			"workflowIdentity", e.subWorkflowName,
 			"nodeCount", len(wf.GetNodes()),
@@ -637,7 +637,7 @@ func (e *InlineWorkflowExecutor) loadSubWorkflow() error {
 	}
 
 	e.subWorkflow = wf
-	e.logger.Info("[InlineWorkflow] Loaded sub-workflow",
+	e.logger.Debug("[InlineWorkflow] Loaded sub-workflow",
 		"nodeID", e.nodeID,
 		"workflowIdentity", e.subWorkflowName,
 		"workflowRef", workflowRef,
@@ -663,7 +663,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	if subThread == "" {
 		return nil, fmt.Errorf("sub-workflow %s requires execContext with thread (node: %s)", e.subWorkflowName, e.nodeID)
 	}
-	e.logger.Info("[InlineWorkflow] Using thread from execContext",
+	e.logger.Debug("[InlineWorkflow] Using thread from execContext",
 		"nodeID", e.nodeID,
 		"thread", subThread,
 		"mode", e.execContext.ThreadMode,
@@ -686,7 +686,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 		defer e.childTracker.UnregisterThreadInputs(subThread)
 	}
 
-	e.logger.Info("[InlineWorkflow] Executing sub-workflow",
+	e.logger.Debug("[InlineWorkflow] Executing sub-workflow",
 		"nodeID", e.nodeID,
 		"subWorkflow", e.subWorkflowName,
 		"thread", subThread,
@@ -985,26 +985,6 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 				return nil, fmt.Errorf("failed to evaluate sub-workflow outputs: %w", err)
 			}
 
-			// DEBUG: Log response_text for inject debugging
-			if rt, ok := outputs["response_text"]; ok {
-				rtStr := fmt.Sprintf("%v", rt)
-				if len(rtStr) > 200 {
-					rtStr = rtStr[:200] + "..."
-				}
-				e.logger.Info("[InlineWorkflow] Output response_text",
-					"nodeID", e.nodeID,
-					"subWorkflow", e.subWorkflowName,
-					"response_text_len", len(fmt.Sprintf("%v", rt)),
-					"response_text_preview", rtStr,
-				)
-			} else {
-				e.logger.Info("[InlineWorkflow] Output has NO response_text key",
-					"nodeID", e.nodeID,
-					"subWorkflow", e.subWorkflowName,
-					"outputKeys", getMapKeys(outputs),
-				)
-			}
-
 			return outputs, nil
 		}
 
@@ -1078,7 +1058,7 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 
 				// Handle retry exhaustion - pause workflow and retry on resume.
 				if stepEvent.RetryExhausted {
-					e.logger.Info("[InlineWorkflow] *** RETRY EXHAUSTION DETECTED *** Activity exhausted retries, triggering pause",
+					e.logger.Warn("[InlineWorkflow] Activity exhausted retries; pausing until resume",
 						"nodeID", e.nodeID,
 						"subWorkflow", e.subWorkflowName,
 						"stepID", running.StepID,
@@ -1393,7 +1373,7 @@ func (e *InlineWorkflowExecutor) executeNestedWorkflow(
 			}
 			saveInput := types.ActivityInput{Runtime: rtx, Node: buildSaveMessageNode(flatInput)}
 			_ = workflow.ExecuteActivity(activityCtx, "SaveMessage", saveInput).Get(e.ctx, nil)
-			e.logger.Info("[InlineWorkflow] Pre-saved inject message to inherited thread",
+			e.logger.Debug("[InlineWorkflow] Pre-saved inject message to inherited thread",
 				"nodeID", nid,
 				"thread", childExecCtx.Thread,
 			)
@@ -1512,14 +1492,14 @@ func (e *InlineWorkflowExecutor) emitThreadCreated() {
 
 	// Only emit for own and fork modes (inherit doesn't create a new thread)
 	if e.execContext.ThreadMode == model.ThreadModeInherit {
-		e.logger.Info("[InlineWorkflow] Thread inherited (no creation event)",
+		e.logger.Debug("[InlineWorkflow] Thread inherited (no creation event)",
 			"nodeID", e.nodeID,
 			"thread", e.execContext.Thread,
 		)
 		return
 	}
 
-	e.logger.Info("[InlineWorkflow] Thread created",
+	e.logger.Debug("[InlineWorkflow] Thread created",
 		"nodeID", e.nodeID,
 		"thread", e.execContext.Thread,
 		"mode", e.execContext.ThreadMode,
@@ -1608,7 +1588,7 @@ func (e *InlineWorkflowExecutor) emitThreadCompleted() {
 		return
 	}
 
-	e.logger.Info("[InlineWorkflow] Thread completed",
+	e.logger.Debug("[InlineWorkflow] Thread completed",
 		"nodeID", e.nodeID,
 		"thread", e.execContext.Thread,
 		"mode", e.execContext.ThreadMode,

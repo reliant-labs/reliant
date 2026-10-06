@@ -106,7 +106,7 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 				"tool_call_id", input.ToolCallID)
 		case core.SpawnReportAlreadyReported:
 			// Idempotent: also what a retry after a lost commit response sees.
-			logging.Info("[EnqueueAgentMessage] spawn already reported; no-op",
+			logging.Debug("[EnqueueAgentMessage] spawn already reported; no-op",
 				"tool_call_id", input.ToolCallID)
 		}
 		return EnqueueAgentMessageOutput{ID: msg.ID}, nil

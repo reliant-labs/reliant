@@ -118,7 +118,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 		// someone else's daemon), so pass them through rather than
 		// flattening everything to Internal.
 		logging.Error("CreateProjectFromRepo: clone dispatch failed",
-			"error", err, "daemon_id", daemonID, "clone_url", cloneURL)
+			"error", err, "daemon_id", daemonID, "clone_url", remoteURLForLog(cloneURL))
 		return nil, err
 	}
 	clonedPath := cloneResult.ClonedPath
@@ -168,7 +168,7 @@ func (s *ProjectService) CreateProjectFromRepo(
 
 	logging.Info("CreateProjectFromRepo: project added",
 		"project_id", project.ID, "daemon_id", daemonID,
-		"queued", cloneResult.Queued, "repo", cloneURL)
+		"queued", cloneResult.Queued, "repo", remoteURLForLog(cloneURL))
 
 	return connect.NewResponse(&reliantv1.CreateProjectFromRepoResponse{
 		Project:       projectToProto(project),

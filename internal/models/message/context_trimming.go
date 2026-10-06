@@ -286,7 +286,7 @@ func trimLastMessage(messages []Message, charsToTrim int) bool {
 		keepRatio = 0.1 // Keep at least 10% of content
 	}
 
-	logging.Info("[CONTEXT_TRIM] Trimming last message",
+	logging.Debug("[CONTEXT_TRIM] Trimming last message",
 		"role", lastMsg.Role,
 		"lastMsgChars", lastMsgChars,
 		"charsToTrim", charsToTrim,
@@ -364,7 +364,7 @@ func trimLargeToolResults(messages []Message, charsToTrim int) bool {
 
 		newLen := int(float64(len(tr.Content)) * keepRatio)
 		if newLen < len(tr.Content) {
-			logging.Info("[CONTEXT_TRIM] Trimming large tool result",
+			logging.Debug("[CONTEXT_TRIM] Trimming large tool result",
 				"messageIdx", loc.msgIdx,
 				"toolName", tr.Name,
 				"originalChars", loc.chars,

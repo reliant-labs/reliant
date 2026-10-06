@@ -81,7 +81,7 @@ func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID
 	for key, newValue := range incomingParams {
 		currentValue, exists := currentInputs[key]
 		if !exists {
-			logging.Debug("Param change detected: new param", "key", key, "value", newValue)
+			logging.Debug("Param change detected: new param", "key", key)
 			return true
 		}
 		newJSON, errNew := json.Marshal(newValue)
@@ -92,7 +92,7 @@ func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID
 			return true
 		}
 		if string(newJSON) != string(curJSON) {
-			logging.Debug("Param change detected: value changed", "key", key, "old", string(curJSON), "new", string(newJSON))
+			logging.Debug("Param change detected: value changed", "key", key)
 			return true
 		}
 	}

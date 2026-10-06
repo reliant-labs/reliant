@@ -52,7 +52,6 @@ func (i *DomainWhitelistInterceptor) checkDomain(ctx context.Context) error {
 
 	if !i.allowedDomains[domain] {
 		logging.Warn("[Domain Whitelist] Rejected email domain",
-			"email", email,
 			"domain", domain,
 		)
 		return connect.NewError(connect.CodePermissionDenied,

@@ -204,17 +204,11 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Log the request for debugging
-	bodyLen := len(requestBody)
-	previewLen := 500
-	if bodyLen < previewLen {
-		previewLen = bodyLen
-	}
 	logging.Debug("OpenRouter request with cache control",
 		"model", request.Model,
 		"hasTools", len(convertedTools) > 0,
 		"messageCount", len(request.Messages),
-		"bodyPreview", string(requestBody)[:previewLen])
+		"bodySize", len(requestBody))
 
 	// Send request with retry logic for transient errors
 	httpClient := llm.ResilientHTTPClient()
@@ -236,12 +230,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
-		bodyLen2 := len(body)
-		previewLen2 := 500
-		if bodyLen2 < previewLen2 {
-			previewLen2 = bodyLen2
-		}
-		logging.Debug("OpenRouter response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
+		logging.Debug("OpenRouter response", "status", resp.StatusCode, "bodySize", len(body))
 
 		if resp.StatusCode == http.StatusOK {
 			break
@@ -409,18 +398,12 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Log the request for debugging
-	bodyLen := len(requestBody)
-	previewLen := 500
-	if bodyLen < previewLen {
-		previewLen = bodyLen
-	}
 	logging.Debug("OpenRouter Gemini request",
 		"model", request.Model,
 		"hasTools", len(convertedTools) > 0,
 		"messageCount", len(request.Messages),
 		"hasReasoning", request.Reasoning != nil,
-		"bodyPreview", string(requestBody)[:previewLen])
+		"bodySize", len(requestBody))
 
 	// Send request with retry logic for transient errors
 	httpClient := llm.ResilientHTTPClient()
@@ -442,12 +425,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
-		bodyLen2 := len(body)
-		previewLen2 := 500
-		if bodyLen2 < previewLen2 {
-			previewLen2 = bodyLen2
-		}
-		logging.Debug("OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
+		logging.Debug("OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", len(body))
 
 		if resp.StatusCode == http.StatusOK {
 			break

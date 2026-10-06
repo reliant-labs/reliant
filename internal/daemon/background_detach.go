@@ -139,7 +139,7 @@ func PollForBackgroundDetach(ctx context.Context, opts DetachOptions) (CommandRe
 				return CommandResult{}, false
 			}
 
-			logging.Info("[exec] Detached command into background process",
+			logging.Debug("[exec] Detached command into background process",
 				"processID", process.ID, "toolCallID", toolCallID)
 
 			out := fmt.Sprintf(

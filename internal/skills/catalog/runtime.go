@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"unicode"
 
 	skillscore "github.com/reliant-labs/reliant/internal/skills/core"
@@ -498,6 +499,9 @@ func discoverAll(input DiscoverInput) Snapshot {
 	return result
 }
 
+// reportedShadows records the shadowings already warned about in this process.
+var reportedShadows sync.Map
+
 // reportShadowed says out loud that a skill arrived from two producers.
 //
 // Discovery has always known this and recorded it into two maps that nothing
@@ -506,8 +510,15 @@ func discoverAll(input DiscoverInput) Snapshot {
 // anywhere. Warn, not Debug: two copies of one skill is a fact about the
 // project that someone has to act on, and the losing copy is dropped silently
 // either way.
+//
+// Once per process per (skill, winner, loser): discovery reruns on every
+// catalog read, and repeating the same fact on each pass buried it (39k
+// identical lines in one dev day) instead of surfacing it.
 func reportShadowed(shadowed []ShadowedSkill) {
 	for _, s := range shadowed {
+		if _, seen := reportedShadows.LoadOrStore(s.Key+"\x00"+s.WinnerPath+"\x00"+s.LoserPath, struct{}{}); seen {
+			continue
+		}
 		slog.Warn("[Skills] skill delivered by two producers; one copy is being dropped",
 			"skill", s.Key,
 			"using", s.WinnerPath,

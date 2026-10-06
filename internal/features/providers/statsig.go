@@ -159,7 +159,7 @@ func (p *StatsigProvider) EvaluateBool(ctx context.Context, key string, evalCtx 
 	if resp.StatusCode != http.StatusOK {
 		// Read response body for better error debugging
 		body, _ := io.ReadAll(resp.Body)
-		logging.Warn("[Statsig] API error", "status", resp.StatusCode, "endpoint", endpoint, "body", string(body))
+		logging.Warn("[Statsig] API error", "status", resp.StatusCode, "endpoint", endpoint, "bodyLen", len(body))
 		return defaultValue, fmt.Errorf("statsig API returned status %d: %s", resp.StatusCode, string(body))
 	}
 

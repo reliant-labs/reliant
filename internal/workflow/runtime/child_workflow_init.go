@@ -225,7 +225,7 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 		return fmt.Errorf("failed to create child workflow+thread: %w", err)
 	}
 
-	opts.Logger.Info("[initChildWorkflow] Created child workflow",
+	opts.Logger.Debug("[initChildWorkflow] Created child workflow",
 		"childWorkflowID", opts.ChildWorkflowID,
 		"childThreadID", opts.ChildThreadID,
 		"threadMode", opts.ThreadMode,
@@ -264,7 +264,7 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 			return fmt.Errorf("failed to save inject message: %w", err)
 		}
 
-		opts.Logger.Info("[initChildWorkflow] Saved inject message to child thread",
+		opts.Logger.Debug("[initChildWorkflow] Saved inject message to child thread",
 			"childWorkflowID", opts.ChildWorkflowID,
 			"childThreadID", opts.ChildThreadID,
 			"role", opts.InjectMessage.Role,

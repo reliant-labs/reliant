@@ -74,7 +74,7 @@ func (t *MetadataWriterTool) writeMetadata(meta config.ProjectMeta, path string)
 		return nil, fmt.Errorf("failed to save metadata: %w", err)
 	}
 
-	logging.Info(fmt.Sprintf("Project metadata written to %s", path))
+	logging.Debug("Project metadata written", "path", path)
 
 	return map[string]interface{}{
 		"success": true,
@@ -108,7 +108,7 @@ func (t *MetadataWriterTool) updateMetadata(metadataParam config.ProjectMeta, pa
 		return nil, fmt.Errorf("failed to save updated metadata: %w", err)
 	}
 
-	logging.Info(fmt.Sprintf("Project metadata updated at %s", path))
+	logging.Debug("Project metadata updated", "path", path)
 
 	return map[string]interface{}{
 		"success": true,

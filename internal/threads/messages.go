@@ -98,7 +98,7 @@ func (s *Service) resolveMessagesFromCWOpts(ctx context.Context, cw *db.ContextW
 	if cw.ForkAtMessageID != nil {
 		forkMessageID = *cw.ForkAtMessageID
 	}
-	logging.Debug("[FORK-DEBUG] resolveMessagesFromCW visiting CW",
+	logging.Debug("[Fork] resolveMessagesFromCW visiting CW",
 		"cwID", cw.ID,
 		"threadID", cw.ThreadID,
 		"parentContextWindowID", parentCWID,
@@ -188,7 +188,7 @@ func (s *Service) resolveMessagesFromCWOpts(ctx context.Context, cw *db.ContextW
 			}
 		}
 		// FORK-DEBUG: Log filtered parent messages
-		logging.Debug("[FORK-DEBUG] resolveMessagesFromCW filtered parent messages",
+		logging.Debug("[Fork] resolveMessagesFromCW filtered parent messages",
 			"cwID", cw.ID,
 			"forkAtMessageID", cw.ForkAtMessageID,
 			"forkSeq", forkSeq,
@@ -304,7 +304,7 @@ func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*
 	if latestCW.ForkAtMessageID != nil {
 		forkAtMessageID = *latestCW.ForkAtMessageID
 	}
-	logging.Debug("[FORK-DEBUG] LoadCurrentMessages called",
+	logging.Debug("[Fork] LoadCurrentMessages called",
 		"threadID", threadID,
 		"latestCWID", latestCW.ID,
 		"parentContextWindowID", parentCWID,
@@ -319,7 +319,7 @@ func (s *Service) LoadCurrentMessages(ctx context.Context, threadID string) ([]*
 	}
 
 	// FORK-DEBUG: Log LoadCurrentMessages result
-	logging.Debug("[FORK-DEBUG] LoadCurrentMessages resolved messages",
+	logging.Debug("[Fork] LoadCurrentMessages resolved messages",
 		"threadID", threadID,
 		"totalMessages", len(messages),
 		"cwsVisited", len(visited))

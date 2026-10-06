@@ -268,23 +268,6 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		chat.ActiveDaemonID = &spec.DaemonID
 	}
 
-	// DEBUG: Log raw proto tools value before any processing
-	if toolsProto, ok := spec.Params["tools"]; ok {
-		logging.Info("[Launch] Raw proto tools param",
-			"chatID", chatID,
-			"asInterface", toolsProto.AsInterface(),
-			"protoString", toolsProto.String(),
-		)
-	} else {
-		logging.Info("[Launch] No tools param in workflowParams", "chatID", chatID, "paramKeys", func() []string {
-			keys := make([]string, 0, len(spec.Params))
-			for k := range spec.Params {
-				keys = append(keys, k)
-			}
-			return keys
-		}())
-	}
-
 	// Build and validate workflow inputs BEFORE creating chat
 	initialData, err := l.buildInputs(ctx, userID, chat, workflowName, spec.Presets, spec.Params)
 	if err != nil {

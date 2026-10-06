@@ -372,7 +372,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		params.RunInBackground = true
 		params.Command = strings.TrimSuffix(strings.TrimSpace(params.Command), "&")
 		params.Command = strings.TrimSpace(params.Command)
-		logging.Debug("[Shell] Detected trailing &, converting to background execution", "command", params.Command)
+		logging.Debug("[Shell] Detected trailing &, converting to background execution")
 	}
 
 	// Build the daemon request

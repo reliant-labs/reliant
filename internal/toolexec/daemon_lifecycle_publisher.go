@@ -87,5 +87,5 @@ func (p *DaemonLifecyclePublisher) publish(ctx context.Context, eventType, userI
 		return
 	}
 	observability.NATSPublishTotal.WithLabelValues("daemon.lifecycle").Inc()
-	logging.Info("[DaemonLifecyclePublisher] Published daemon lifecycle event", "type", eventType, "userID", userID, "daemonID", daemonID)
+	logging.Debug("[DaemonLifecyclePublisher] Published daemon lifecycle event", "type", eventType, "userID", userID, "daemonID", daemonID)
 }

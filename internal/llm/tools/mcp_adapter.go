@@ -83,7 +83,7 @@ func (a *MCPToolAdapter) ParamSchema() *jsonschema.Schema {
 
 // Run executes the MCP tool and returns the result.
 func (a *MCPToolAdapter) Run(toolCtx *rctx.ToolContext, params ToolCall) (ToolResponse, error) {
-	logging.Info("Executing MCP tool",
+	logging.Debug("Executing MCP tool",
 		"server", a.serverName,
 		"tool", a.tool.Name,
 		"id", params.ID)
@@ -91,7 +91,7 @@ func (a *MCPToolAdapter) Run(toolCtx *rctx.ToolContext, params ToolCall) (ToolRe
 	var arguments map[string]interface{}
 	if params.Input != "" {
 		if err := json.Unmarshal([]byte(params.Input), &arguments); err != nil {
-			logging.Error("Failed to parse tool arguments", "error", err, "input", params.Input)
+			logging.Warn("Failed to parse tool arguments", "server", a.serverName, "tool", a.tool.Name, "id", params.ID, "error", err, "input_len", len(params.Input))
 			return NewTextErrorResponse(fmt.Sprintf("Failed to parse arguments: %v", err)), nil
 		}
 	}
@@ -412,7 +412,7 @@ func (r *MCPToolRegistry) RefreshTools() error {
 	r.mu.Unlock()
 
 	if len(newTools) > 0 {
-		logging.Info("MCP tool registry refreshed", "count", len(newTools))
+		logging.Debug("MCP tool registry refreshed", "count", len(newTools))
 	}
 	return nil
 }

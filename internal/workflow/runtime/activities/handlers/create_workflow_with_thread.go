@@ -120,7 +120,7 @@ func (a *CreateWorkflowWithThreadActivity) Category() schema.ActivityCategory {
 // Execute creates a workflow and thread atomically using the threads.Service
 func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input CreateWorkflowWithThreadInput) (CreateWorkflowWithThreadOutput, error) {
 	logger := activity.GetLogger(ctx)
-	logger.Info("[CreateWorkflowWithThread] Creating workflow and thread",
+	logger.Debug("[CreateWorkflowWithThread] Creating workflow and thread",
 		"workflowID", input.WorkflowID,
 		"workflowName", input.WorkflowName,
 		"chatID", input.ChatID,

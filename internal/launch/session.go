@@ -180,7 +180,7 @@ func NormalizeModelInputs(inputs map[string]interface{}, schemas map[string]*rel
 					selector, normalized := NormalizeLegacyModelSelectorString(s)
 					if normalized != nil {
 						inputs[name] = normalized
-						logging.Info("[normalizeModelInputs] Converted string model to object", "input", name, "model", selector, "providers", normalized["providers"])
+						logging.Debug("[normalizeModelInputs] Converted string model to object", "input", name, "model", selector, "providers", normalized["providers"])
 					}
 				}
 			}

@@ -579,7 +579,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 		return &TerminalError{Message: "project path not set, cannot load presets"}
 	}
 
-	e.logger.Info("[InlineLoop] Loading presets for loop iteration",
+	e.logger.Debug("[InlineLoop] Loading presets for loop iteration",
 		"loopID", e.loopID,
 		"iteration", e.iteration,
 		"presets", presets,
@@ -604,7 +604,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 			return fmt.Errorf("resolve preset template %q for group %q: %w", rawName, groupName, err)
 		}
 		if presetName != rawName {
-			e.logger.Info("[InlineLoop] Resolved preset template",
+			e.logger.Debug("[InlineLoop] Resolved preset template",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
 				"group", groupName,
@@ -639,7 +639,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 			}
 		}
 
-		e.logger.Info("[InlineLoop] Applied preset params",
+		e.logger.Debug("[InlineLoop] Applied preset params",
 			"loopID", e.loopID,
 			"preset", presetName,
 			"group", groupName,
@@ -744,7 +744,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		}
 		e.resolvedItems = items
 		e.resolvedKeys = keys
-		e.logger.Info("[InlineLoop] Resolved items for sequential loop",
+		e.logger.Debug("[InlineLoop] Resolved items for sequential loop",
 			"loopID", e.loopID,
 			"itemCount", len(items),
 		)
@@ -776,7 +776,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		)
 	}
 
-	e.logger.Info("[InlineLoop] About to enter main loop",
+	e.logger.Debug("[InlineLoop] About to enter main loop",
 		"loopID", e.loopID,
 		"iteration", e.iteration,
 		"subWorkflowNodes", len(e.subWorkflow.GetNodes()),
@@ -837,7 +837,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 			break
 		}
 
-		e.logger.Info("[InlineLoop] Starting iteration",
+		e.logger.Debug("[InlineLoop] Starting iteration",
 			"loopID", e.loopID,
 			"iteration", e.iteration,
 		)
@@ -936,7 +936,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 				)
 				continue
 			}
-			e.logger.Info("[InlineLoop] While condition no longer satisfied, exiting",
+			e.logger.Debug("[InlineLoop] While condition no longer satisfied, exiting",
 				"loopID", e.loopID,
 				"iteration", e.iteration-1,
 				"while", model.DirectCelExpr(model.GetLoopArgs(e.loopStep.Node).GetWhile()),
@@ -985,7 +985,7 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 			wf.Name = e.workflowIdentity()
 		}
 		e.subWorkflow = wf
-		e.logger.Info("[InlineLoop] Using inline sub-workflow",
+		e.logger.Debug("[InlineLoop] Using inline sub-workflow",
 			"loopID", e.loopID,
 			"workflowIdentity", e.workflowIdentity(),
 			"nodeCount", len(wf.GetNodes()),
@@ -1027,7 +1027,7 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 	}
 
 	e.subWorkflow = wf
-	e.logger.Info("[InlineLoop] Loaded external sub-workflow",
+	e.logger.Debug("[InlineLoop] Loaded external sub-workflow",
 		"loopID", e.loopID,
 		"workflowIdentity", e.workflowIdentity(),
 		"workflowRef", workflowRef,
@@ -1175,7 +1175,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 	if err != nil {
 		return nil, err
 	}
-	e.logger.Info("[InlineLoop] Built iteration inputs",
+	e.logger.Debug("[InlineLoop] Built iteration inputs",
 		"loopID", e.loopID,
 		"iteration", e.iteration,
 		"inputPolicy", e.inputPolicy(),
@@ -1267,13 +1267,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			recordJoinSatisfied(e.ctx, joinNodePath(e.nodePath(), joinID))
 		}, workflow.Now(e.ctx))
 		// Find triggered steps
-		if len(events) > 0 {
-			e.logger.Info("[InlineLoop] First event details",
-				"loopID", e.loopID,
-				"eventID", events[0].ID,
-				"eventStepID", events[0].StepID,
-			)
-		}
 		backfillNodeOutputsFromEvents(events, iterNodeOutputs)
 		triggeredSteps, err := iterStateMachine.FindTriggeredNodes(events, iterNodeOutputs, iterInputs)
 		if err != nil {
@@ -1283,7 +1276,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		for i, ts := range triggeredSteps {
 			triggeredIDs[i] = ts.Node.GetId()
 		}
-		e.logger.Info("[InlineLoop] Found triggered steps",
+		e.logger.Debug("[InlineLoop] Found triggered steps",
 			"loopID", e.loopID,
 			"iteration", e.iteration,
 			"triggeredCount", len(triggeredSteps),
@@ -1316,7 +1309,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 			// Handle nested loops inline (recursively)
 			if step.Node.GetType() == model.NodeTypeLoop {
-				e.logger.Info("[InlineLoop] Executing nested loop",
+				e.logger.Debug("[InlineLoop] Executing nested loop",
 					"loopID", e.loopID,
 					"iteration", e.iteration,
 					"nestedLoopID", step.Node.GetId(),
@@ -1384,7 +1377,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 			// Handle workflow nodes inline
 			if step.Node.GetType() == model.NodeTypeWorkflow {
-				e.logger.Info("[InlineLoop] Executing inline workflow",
+				e.logger.Debug("[InlineLoop] Executing inline workflow",
 					"loopID", e.loopID,
 					"iteration", e.iteration,
 					"stepID", step.Node.GetId(),
@@ -1393,34 +1386,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 				// Use helpers for consistent context building
 				nestedIterCtx := e.buildIterCtx()
-
-				// DEBUG: Log node outputs before evaluating config (for inject debugging)
-				if model.NodeInjectConfig(step.Node) != nil {
-					e.logger.Info("[InlineLoop] BEFORE EvaluateNodeConfig for step with inject",
-						"loopID", e.loopID,
-						"iteration", e.iteration,
-						"stepID", step.Node.GetId(),
-						"injectContent", model.NodeInjectConfig(step.Node).GetContent(),
-						"iterNodeOutputsKeys", getMapKeys(iterNodeOutputs),
-					)
-					// Log each node output's response_text
-					for nodeID, output := range iterNodeOutputs {
-						if m, ok := output.(map[string]interface{}); ok {
-							if rt, ok := m["response_text"]; ok {
-								rtStr := fmt.Sprintf("%v", rt)
-								if len(rtStr) > 200 {
-									rtStr = rtStr[:200] + "..."
-								}
-								e.logger.Info("[InlineLoop] Node output available for inject",
-									"nodeID", nodeID,
-									// Same reason as the nodeOutputs log below: an
-									// assistant turn can quote a secret it just read.
-									"response_text", redactString(rtStr),
-								)
-							}
-						}
-					}
-				}
 
 				// Evaluate node config
 				evalResult, err := EvaluateNodeConfig(
@@ -1440,38 +1405,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					)
 					// Fail fast - CEL evaluation errors should halt the workflow, not silently continue
 					return nil, fmt.Errorf("step %s config evaluation failed: %w", step.Node.GetId(), err)
-				}
-
-				// Debug: Log inject details when present
-				if ic := model.NodeInjectConfig(evalResult); ic != nil && model.NodeInjectConfig(step.Node) != nil {
-					nodeOutputsDebug := make(map[string]string)
-					for k, v := range iterNodeOutputs {
-						if m, ok := v.(map[string]interface{}); ok {
-							if rt, ok := m["response_text"]; ok {
-								if rtStr, ok := rt.(string); ok {
-									if len(rtStr) > 100 {
-										nodeOutputsDebug[k+".response_text"] = rtStr[:100] + "..."
-									} else {
-										nodeOutputsDebug[k+".response_text"] = rtStr
-									}
-								} else {
-									nodeOutputsDebug[k+".response_text"] = fmt.Sprintf("<type:%T>", rt)
-								}
-							} else {
-								nodeOutputsDebug[k] = "<no response_text>"
-							}
-						} else {
-							nodeOutputsDebug[k] = fmt.Sprintf("<type:%T>", v)
-						}
-					}
-					e.logger.Info("[InlineLoop] Inject message evaluation",
-						"loopID", e.loopID,
-						"iteration", e.iteration,
-						"stepID", step.Node.GetId(),
-						"contentLength", len(model.CelStringValue(ic.GetContent())),
-						"nodeOutputsKeys", getMapKeys(iterNodeOutputs),
-						"nodeOutputsDebug", nodeOutputsDebug,
-					)
 				}
 
 				// Create inline workflow executor
@@ -1572,7 +1505,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 						}
 						saveInput := types.ActivityInput{Runtime: rtx, Node: buildSaveMessageNode(flatInput)}
 						_ = workflow.ExecuteActivity(activityCtx, "SaveMessage", saveInput).Get(e.ctx, nil)
-						e.logger.Info("[InlineLoop] Pre-saved inject message to inherited thread",
+						e.logger.Debug("[InlineLoop] Pre-saved inject message to inherited thread",
 							"stepID", step.Node.GetId(),
 							"thread", childExecCtx.Thread,
 						)
@@ -1638,30 +1571,11 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					}
 				}
 
-				// Debug: Log what we're storing with more detail
-				respText := ""
-				respTextType := "<missing>"
-				if rt, ok := inlineOutput["response_text"]; ok {
-					respTextType = fmt.Sprintf("%T", rt)
-					if rtStr, ok := rt.(string); ok {
-						if len(rtStr) > 200 {
-							respText = rtStr[:200] + "..."
-						} else {
-							respText = rtStr
-						}
-					} else if rt == nil {
-						respText = "<nil>"
-					}
-				}
-				e.logger.Info("[InlineLoop] Stored workflow output",
+				e.logger.Debug("[InlineLoop] Stored workflow output",
 					"loopID", e.loopID,
 					"iteration", e.iteration,
 					"stepID", step.Node.GetId(),
 					"outputKeys", getMapKeys(inlineOutput),
-					"responseTextType", respTextType,
-					// Preview of an assistant turn, which can quote a secret it
-					// just read — redact as the nodeOutputs log does.
-					"responseTextPreview", redactString(respText),
 				)
 
 				// Create completion event
@@ -1708,7 +1622,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				continue
 			}
 
-			e.logger.Info("[InlineLoop] Executing step",
+			e.logger.Debug("[InlineLoop] Executing step",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
 				"stepID", step.Node.GetId(),
@@ -1721,13 +1635,12 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 		// Check completion
 		if len(runningSteps) == 0 && len(events) == 0 {
-			e.logger.Info("[InlineLoop] Iteration complete, evaluating outputs",
+			// Keys only: node outputs carry LLM text and tool results, which
+			// stay in the DB and never go to logs.
+			e.logger.Debug("[InlineLoop] Iteration complete, evaluating outputs",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
-				"outputDefs", e.subWorkflow.GetOutputs(),
-				// Node outputs hold tool results / file contents, which may carry
-				// secrets read from files. Redact before logging.
-				"nodeOutputs", redactValue(iterNodeOutputs),
+				"nodeOutputsKeys", getMapKeys(iterNodeOutputs),
 			)
 
 			// Build workflow context for output evaluation
@@ -1744,11 +1657,10 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				return nil, fmt.Errorf("failed to evaluate sub-workflow outputs: %w", err)
 			}
 
-			e.logger.Info("[InlineLoop] Outputs evaluated",
+			e.logger.Debug("[InlineLoop] Outputs evaluated",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
-				// Evaluated outputs may carry tool-result/file content; redact.
-				"outputs", redactValue(outputs),
+				"outputKeys", getMapKeys(outputs),
 			)
 
 			return outputs, nil
@@ -1822,7 +1734,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				// This handles rate limits, transient errors, etc. that exhaust
 				// Temporal's retry budget.
 				if stepEvent.RetryExhausted {
-					e.logger.Info("[InlineLoop] *** RETRY EXHAUSTION DETECTED *** Activity exhausted retries, triggering pause",
+					e.logger.Warn("[InlineLoop] Activity exhausted retries; pausing until resume",
 						"loopID", e.loopID,
 						"iteration", e.iteration,
 						"stepID", running.StepID,
@@ -1920,8 +1832,7 @@ func (e *InlineLoopExecutor) evaluateWhileCondition(outputs map[string]interface
 		"loopID", e.loopID,
 		"iteration", e.iteration-1,
 		"while", whileExpr,
-		// Outputs may carry tool-result/file content; redact before logging.
-		"outputs", redactValue(outputs),
+		"outputKeys", getMapKeys(outputs),
 	)
 
 	// outputs is declared to CEL iff the field is non-nil, and a while

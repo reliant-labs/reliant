@@ -116,16 +116,15 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 	// Build a unique entity ID that includes the workflow ID to prevent cross-workflow collisions.
 	entityID := fmt.Sprintf("%s:%s", workflowID, activityID)
 
-	logger.Info("[ApprovalCreate] Creating approval record",
+	logger.Debug("[ApprovalCreate] Creating approval record",
 		"chatID", input.ChatID,
-		"title", input.Title,
 		"workflowID", workflowID,
 		"entityID", entityID)
 
 	// IDEMPOTENCY: Check if we already created this approval using the workflow-scoped entity ID.
 	existingApproval, err := a.repo.GetApprovalByEntityID(ctx, entityID)
 	if err == nil && existingApproval != nil {
-		logger.Info("[ApprovalCreate] Found existing approval",
+		logger.Debug("[ApprovalCreate] Found existing approval",
 			"approvalID", existingApproval.ID,
 			"entityID", entityID,
 			"status", existingApproval.Status)

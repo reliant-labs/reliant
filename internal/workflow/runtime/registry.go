@@ -567,12 +567,6 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Extract step_id - try from input first, fall back to parsing activityID
 	// The workflow engine uses activityID format "stepID-timestamp" (e.g., "tally-1234567890")
 	inputInfo := extractActivityInputInfo(input)
-	logging.Info("[ActivityWrapper] Extracted input info",
-		"activityType", activityType,
-		"loopNodeID", inputInfo.LoopNodeID,
-		"loopIteration", inputInfo.LoopIteration,
-		"stepID", inputInfo.StepID,
-	)
 	stepID := inputInfo.StepID
 	if stepID == "" {
 		// Parse step ID from activity ID (format: "stepID-timestamp")
@@ -584,12 +578,14 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Extract chat_id for node execution events
 	chatID := extractChatID(input)
 
-	logging.Info("[ActivityWrapper] Activity execution started",
+	logging.Debug("[ActivityWrapper] Activity execution started",
 		"activityType", activityType,
 		"activityID", activityID,
 		"attemptNumber", attemptNumber,
 		"workflowID", workflowID,
-		"stepID", stepID)
+		"stepID", stepID,
+		"loopNodeID", inputInfo.LoopNodeID,
+		"loopIteration", inputInfo.LoopIteration)
 
 	// Belt-and-suspenders: if Temporal is executing AGENT work for this
 	// workflow, the workflow IS running. Ensure the DB agrees. This is a fast
@@ -887,7 +883,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// workflow.
 	clearMessageOnlyFields(&result)
 
-	logging.Info("[ActivityWrapper] Activity execution completed",
+	logging.Debug("[ActivityWrapper] Activity execution completed",
 		"activityType", activityType,
 		"activityID", activityID,
 		"success", true,
@@ -1092,25 +1088,14 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	err error,
 	maxAttempts int32,
 ) {
-	logging.Info("[ActivityWrapper] writeErrorEvent called",
-		"activityType", activityType,
-		"activityID", activityID,
-		"attemptNumber", attemptNumber,
-		"error", err.Error())
-
 	// Extract chat_id from input if available
 	chatID := extractChatID(input)
 	if chatID == "" {
-		logging.Info("[ActivityWrapper] Skipping error event write - no chat_id in input",
+		logging.Debug("[ActivityWrapper] Skipping error event write - no chat_id in input",
 			"activityType", activityType,
 			"activityID", activityID)
 		return
 	}
-
-	logging.Info("[ActivityWrapper] Extracted chat_id for error event",
-		"chatID", chatID,
-		"activityType", activityType,
-		"activityID", activityID)
 
 	errorID := activityErrorEventID(workflowID, activityID)
 
@@ -1599,7 +1584,7 @@ func toMapInterface(v interface{}) map[string]interface{} {
 func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflowID, stepID, activityType string, output interface{}, execErr error, durationMs int64, loopNodeID string, loopIteration int) {
 	// Skip if we don't have the required IDs
 	if workflowID == "" || stepID == "" {
-		logging.Info("[ActivityWrapper] Skipping step execution write - missing workflow_id or step_id",
+		logging.Debug("[ActivityWrapper] Skipping step execution write - missing workflow_id or step_id",
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType)
@@ -1624,7 +1609,7 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflow
 			"stepID", stepID,
 			"activityType", activityType)
 	} else {
-		logging.Info("[ActivityWrapper] Step execution recorded",
+		logging.Debug("[ActivityWrapper] Step execution recorded",
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType,
@@ -1846,13 +1831,8 @@ func wrapActivity[TInput any, TOutput any](
 	// The function signature matches what Temporal expects for typed activities
 	return func(ctx context.Context, input TInput) (TOutput, error) {
 		// Pre-execution middleware (logging)
+		// Start/complete are logged once, by ActivityWrapper.Execute.
 		logger := getActivityLogger(ctx)
-		activityInfo := activity.GetInfo(ctx)
-		logger.Info("[Workflow Runtime Registry] Activity starting",
-			"activity", name,
-			"activity_id", activityInfo.ActivityID,
-			"attempt", activityInfo.Attempt,
-		)
 
 		// Execute the activity wrapper (handles middleware)
 		output, err := wrapper.Execute(ctx, input)
@@ -1877,8 +1857,6 @@ func wrapActivity[TInput any, TOutput any](
 			// Temporal will handle retry logic based on error type
 			return output, classified
 		}
-
-		logger.Info("[Workflow Runtime Registry] Activity completed", "activity", name)
 
 		return output, nil
 	}

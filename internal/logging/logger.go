@@ -56,19 +56,6 @@ func Error(msg string, args ...any) {
 	slog.Error(msg, args...)
 }
 
-// Temp is a temporary logging function for debugging purposes.
-// All calls to this function should be removed once the issue is resolved.
-func Temp(msg string, args ...any) {
-	slog.Warn(msg, args...)
-}
-
-// Message Logging for Debug
-var MessageDir string
-
-func GetSessionPrefix(sessionId string) string {
-	return sessionId[:8]
-}
-
 // SetupWithTrace configures the logging system with optional trace logging
 func SetupWithTrace(defaultLevel slog.Level, enableTrace bool) {
 	TraceEnabled = enableTrace

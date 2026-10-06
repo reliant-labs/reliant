@@ -590,7 +590,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// not a Temporal command — safe for all histories.
 	ctx = WithStreamIDTracker(ctx, NewStreamIDTracker())
 
-	logger.Info("[Workflow Runtime] Using execution context",
+	logger.Debug("[Workflow Runtime] Using execution context",
 		"thread", thread,
 		"mode", execCtx.ThreadMode,
 		"forkedFrom", forkedFromThread,
@@ -769,7 +769,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 		if ds != nil {
 			execCtx.DaemonSelector = ds
-			logger.Info("[Workflow Runtime] Resolved daemon selector",
+			logger.Debug("[Workflow Runtime] Resolved daemon selector",
 				"type", ds.Type,
 				"name", ds.Name,
 				"id", ds.ID,
@@ -783,7 +783,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	if execCtx.DaemonSelector == nil {
 		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
 			execCtx.DaemonSelector = &DaemonSelectorValue{ID: sessionDaemonID}
-			logger.Info("[Workflow Runtime] Using session daemon",
+			logger.Debug("[Workflow Runtime] Using session daemon",
 				"daemonID", sessionDaemonID,
 			)
 		}
@@ -826,7 +826,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", err.Error())
 			return nil, fmt.Errorf("preflight daemon check failed: %w", err)
 		}
-		logger.Info("[Workflow Runtime] Preflight daemon check passed")
+		logger.Debug("[Workflow Runtime] Preflight daemon check passed")
 	}
 
 	// STEP 6.1: Initialize thread tracker for runtime thread tracking
@@ -1000,7 +1000,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	joinState := NewJoinState()
 	joinState.InitializeJoins(wf)
 	if len(joinState.Progress) > 0 {
-		logger.Info("[Workflow Runtime] Initialized join nodes",
+		logger.Debug("[Workflow Runtime] Initialized join nodes",
 			"joinCount", len(joinState.Progress),
 			"joinState", joinState.String())
 	}
@@ -1293,7 +1293,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				return nil, fmt.Errorf("node router %s selected node %q not found in workflow", routerStepID, selectedNodeID)
 			}
 
-			logger.Info("[Workflow Runtime] Node router dynamic dispatch (no edges matched)",
+			logger.Debug("[Workflow Runtime] Node router dynamic dispatch (no edges matched)",
 				"routerStepID", routerStepID,
 				"selectedNode", selectedNodeID,
 			)
@@ -1366,7 +1366,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				}
 
 				loopArgs := model.GetLoopArgs(step.Node)
-				logger.Info("[Workflow Runtime] ========== EXECUTING LOOP STEP (INLINE) ==========",
+				logger.Debug("[Workflow Runtime] Executing loop step",
 					"stepID", step.Node.GetId(),
 					"while", model.DirectCelExpr(loopArgs.GetWhile()),
 					"workflowIdentity", contract.WorkflowIdentity,
@@ -1395,7 +1395,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						// Create a child context with the overridden project path
 						loopExecCtx = execCtx.Clone()
 						loopExecCtx.ProjectPath = loopProjectPath
-						logger.Info("[Workflow Runtime] Loop using custom project path",
+						logger.Debug("[Workflow Runtime] Loop using custom project path",
 							"stepID", step.Node.GetId(),
 							"projectPath", loopProjectPath,
 						)
@@ -1403,11 +1403,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				}
 
 				// Create inline loop executor
-				logger.Info("[SIGNAL_DEBUG] Creating loop executor from workflow.go",
-					"stepID", step.Node.GetId(),
-					"input.Inputs.addr", fmt.Sprintf("%p", input.Inputs),
-					"input.Inputs.mode", input.Inputs["mode"],
-				)
 				loopExecutor, err := NewInlineLoopExecutor(
 					ctx,
 					workflowID,
@@ -1603,7 +1598,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				if contract.WorkflowIdentity == "" {
 					return nil, fmt.Errorf("missing workflow identity in core semantics contract for workflow node %q", step.Node.GetId())
 				}
-				logger.Info("[Workflow Runtime] ========== EXECUTING WORKFLOW STEP (INLINE) ==========",
+				logger.Debug("[Workflow Runtime] Executing workflow step",
 					"stepID", step.Node.GetId(),
 					"stepType", string(step.Node.GetType()),
 					"workflowIdentity", contract.WorkflowIdentity,
@@ -1728,7 +1723,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 						)
 						return nil, fmt.Errorf("failed to save inject message for step %s: %w", step.Node.GetId(), err)
 					}
-					logger.Info("[Workflow Runtime] Pre-saved inject message to inherited thread",
+					logger.Debug("[Workflow Runtime] Pre-saved inject message to inherited thread",
 						"stepID", step.Node.GetId(),
 						"thread", childExecCtx.Thread,
 					)
@@ -1780,7 +1775,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				// Track the running inline workflow for later completion handling
 				runningInlineWorkflows = append(runningInlineWorkflows, running)
-				logger.Info("[Workflow Runtime] Started inline workflow in parallel",
+				logger.Debug("[Workflow Runtime] Started inline workflow in parallel",
 					"stepID", step.Node.GetId(),
 					"totalRunningInline", len(runningInlineWorkflows),
 				)
@@ -1789,7 +1784,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 			// Handle node routing routers - LLM-driven node selection (no child thread/sub-workflow)
 			if step.Node.GetType() == model.NodeTypeRouter && model.IsNodeRouterMode(step.Node) {
-				logger.Info("[Workflow Runtime] ========== EXECUTING NODE ROUTER STEP ===========",
+				logger.Debug("[Workflow Runtime] Executing node router step",
 					"stepID", step.Node.GetId(),
 				)
 
@@ -1860,7 +1855,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				})
 
 				runningInlineWorkflows = append(runningInlineWorkflows, running)
-				logger.Info("[Workflow Runtime] Started node router in parallel",
+				logger.Debug("[Workflow Runtime] Started node router in parallel",
 					"stepID", step.Node.GetId(),
 					"totalRunningInline", len(runningInlineWorkflows),
 				)
@@ -1869,7 +1864,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 			// Handle workflow routing routers - LLM-driven workflow selection and execution
 			if step.Node.GetType() == model.NodeTypeRouter {
-				logger.Info("[Workflow Runtime] ========== EXECUTING ROUTER STEP ===========",
+				logger.Debug("[Workflow Runtime] Executing router step",
 					"stepID", step.Node.GetId(),
 				)
 
@@ -1977,7 +1972,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				})
 
 				runningInlineWorkflows = append(runningInlineWorkflows, running)
-				logger.Info("[Workflow Runtime] Started router workflow in parallel",
+				logger.Debug("[Workflow Runtime] Started router workflow in parallel",
 					"stepID", step.Node.GetId(),
 					"totalRunningInline", len(runningInlineWorkflows),
 				)
@@ -2018,7 +2013,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 				continue
 			}
 
-			logger.Info("[Workflow Runtime] ========== EXECUTING STEP ==========",
+			logger.Debug("[Workflow Runtime] Executing step",
 				"stepID", step.Node.GetId(),
 				"type", string(step.Node.GetType()))
 
@@ -2029,7 +2024,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 		// If no running steps (activities or inline workflows) and no events, we're done!
 		if len(runningSteps) == 0 && len(runningInlineWorkflows) == 0 && len(events) == 0 {
-			logger.Info("[Workflow Runtime] Completed - evaluating outputs")
+			logger.Debug("[Workflow Runtime] Completed - evaluating outputs")
 
 			// Build workflow context for output evaluation
 			workflowContext := buildWorkflowContext(workflowID, input.WorkflowName, input.ChatID, input.Inputs)
@@ -2110,7 +2105,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				// Handle retry exhaustion - pause workflow and retry on resume
 				if stepEvent.RetryExhausted {
-					logger.Info("[Workflow Runtime] *** RETRY EXHAUSTION DETECTED *** Activity exhausted retries, triggering pause",
+					logger.Warn("[Workflow Runtime] Activity exhausted retries; pausing until resume",
 						"stepID", running.StepID,
 						"activityID", running.ActivityID,
 						"error", stepEvent.Error,
@@ -2179,7 +2174,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 			// Process completed inline workflows
 			for _, running := range completedInline {
-				logger.Info("[Workflow Runtime] Inline workflow completed",
+				logger.Debug("[Workflow Runtime] Inline workflow completed",
 					"stepID", running.StepID,
 					"hasError", running.Error != nil,
 				)
@@ -2534,19 +2529,10 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 	logger := workflow.GetLogger(ctx)
 	updateSignal := workflow.GetSignalChannel(ctx, "update_workflow_state")
 
-	// Log the map address for debugging reference identity
-	logger.Info("[SIGNAL_DEBUG] Signal handler initialized",
-		"workflowID", workflowID,
-		"workflowInputsAddr", fmt.Sprintf("%p", workflowInputs),
-	)
-
 	workflow.Go(ctx, func(ctx workflow.Context) {
 		for {
 			// Check for workflow cancellation
 			if ctx.Err() != nil {
-				logger.Info("[SIGNAL_DEBUG] Signal handler exiting due to workflow cancellation",
-					"workflowID", workflowID,
-				)
 				return
 			}
 
@@ -2559,24 +2545,25 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 				var update map[string]interface{}
 				c.Receive(ctx, &update)
 
-				logger.Info("[SIGNAL_DEBUG] Signal received",
-					"workflowID", workflowID,
-					"workflowInputsAddr", fmt.Sprintf("%p", workflowInputs),
-					"update", update,
-				)
-
-				// Check if this is a thread-scoped update (contains __thread key)
+				// Keys only: input values are user-supplied settings and prompts.
 				targetThread, isThreadScoped := update["__thread"].(string)
 				if isThreadScoped {
 					delete(update, "__thread") // Remove meta key before applying
+				}
+				logger.Info("[Workflow Runtime] State update received",
+					"workflowID", workflowID,
+					"thread", targetThread,
+					"keys", getMapKeys(update),
+				)
+
+				// Check if this is a thread-scoped update (contains __thread key)
+				if isThreadScoped {
 					threadInputs := childTracker.GetThreadInputs(targetThread)
 					if threadInputs != nil {
 						for key, value := range update {
-							logger.Info("[Workflow Runtime] Thread input updated via signal",
+							logger.Debug("[Workflow Runtime] Thread input updated via signal",
 								"thread", targetThread,
 								"key", key,
-								"old", threadInputs[key],
-								"new", value,
 							)
 							threadInputs[key] = value
 						}
@@ -2588,11 +2575,8 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 				} else {
 					// Global update: apply to root workflowInputs
 					for key, value := range update {
-						logger.Info("[Workflow Runtime] Input updated via signal",
+						logger.Debug("[Workflow Runtime] Input updated via signal",
 							"key", key,
-							"old", workflowInputs[key],
-							"new", value,
-							"mapAddr", fmt.Sprintf("%p", workflowInputs),
 						)
 						workflowInputs[key] = value
 					}
@@ -2615,19 +2599,15 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 							// silently demoted preset-pinned models to the
 							// root's own model mid-run.
 							if childTracker.threadOwnsKey(threadID, key) {
-								logger.Info("[Workflow Runtime] Global update skipped for thread-owned input",
+								logger.Debug("[Workflow Runtime] Global update skipped for thread-owned input",
 									"thread", threadID,
 									"key", key,
-									"kept", threadInputs[key],
-									"rejected", value,
 								)
 								continue
 							}
 							logger.Debug("[Workflow Runtime] Propagating global update to thread inputs",
 								"thread", threadID,
 								"key", key,
-								"old", threadInputs[key],
-								"new", value,
 							)
 							threadInputs[key] = value
 						}
@@ -2641,10 +2621,9 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 					}
 					sort.Strings(childIDs)
 					for _, childWorkflowID := range childIDs {
-						logger.Info("[Workflow Runtime] Forwarding state update to child workflow",
+						logger.Debug("[Workflow Runtime] Forwarding state update to child workflow",
 							"parentWorkflowID", workflowID,
 							"childWorkflowID", childWorkflowID,
-							"update", update,
 						)
 						workflow.SignalExternalWorkflow(ctx, childWorkflowID, "", "update_workflow_state", update)
 					}
@@ -2655,9 +2634,6 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 			selector.AddReceive(doneCh, func(c workflow.ReceiveChannel, more bool) {
 				var v bool
 				c.Receive(ctx, &v)
-				logger.Info("[SIGNAL_DEBUG] Signal handler received done signal, exiting",
-					"workflowID", workflowID,
-				)
 				done = true
 			})
 
@@ -2915,7 +2891,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 			"child_workflow_id", config.childWorkflowID,
 			"resuming_thread", config.childThread,
 			"preset", presetName,
-			"prompt_preview", fmt.Sprintf("%.100s", promptStr))
+			"prompt_len", len(promptStr))
 	} else {
 		// New conversation
 		config.childWorkflowID = DeterministicWorkflowID(parentWorkflowID, toolCallID)
@@ -2926,7 +2902,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 			"child_workflow_id", config.childWorkflowID,
 			"child_thread", config.childThread,
 			"preset", presetName,
-			"prompt_preview", fmt.Sprintf("%.100s", promptStr))
+			"prompt_len", len(promptStr))
 	}
 
 	return config, nil
@@ -3096,7 +3072,7 @@ func prepareSpawnInline(
 				IsError:    true,
 			}}
 		}
-		logger.Info("[SpawnInline] Thread ownership validated",
+		logger.Debug("[SpawnInline] Thread ownership validated",
 			"toolCallID", config.toolCallID,
 			"childThread", config.childThread,
 			"chatID", chatID,
@@ -3211,7 +3187,7 @@ func prepareSpawnInline(
 	// Spawn nodes are already fully resolved (no CEL), so use the proto node directly.
 	evalResult := spawnNode
 
-	logger.Info("[SpawnInline] Starting inline spawn execution",
+	logger.Debug("[SpawnInline] Starting inline spawn execution",
 		"toolCallID", config.toolCallID,
 		"childWorkflowID", config.childWorkflowID,
 		"thread", config.childThread,
@@ -3860,7 +3836,7 @@ func executeToolsWithSpawnSupport(
 ) workflow.Future {
 	logger := workflow.GetLogger(ctx)
 
-	logger.Info("[executeToolsWithSpawnSupport] Received inputs",
+	logger.Debug("[executeToolsWithSpawnSupport] Received inputs",
 		"step_id", rtx.StepID,
 		"loop_node_id", rtx.LoopNodeID,
 		"loop_iteration", rtx.LoopIteration,
@@ -3908,7 +3884,7 @@ func executeToolsWithSpawnSupport(
 			}},
 		}
 
-		logger.Info("[executeToolsWithSpawnSupport] Executing regular tools",
+		logger.Debug("[executeToolsWithSpawnSupport] Executing regular tools",
 			"step_id", rtx.StepID,
 			"count", len(split.regularToolCalls),
 			"loop_node_id", rtx.LoopNodeID,
@@ -4079,10 +4055,9 @@ func executeAskUserInline(
 	metaBytes, _ := json.Marshal(metaObj)
 	metadata := string(metaBytes)
 
-	logger.Info("[AskUserInline] Built question metadata",
+	logger.Debug("[AskUserInline] Built question metadata",
 		"toolCallID", toolCallID,
-		"rawInput", rawInput,
-		"metadata", metadata,
+		"metadataLen", len(metadata),
 		"hasQuestions", metaObj["questions"] != nil,
 	)
 
@@ -4106,7 +4081,6 @@ func executeAskUserInline(
 			"stepID", stepID,
 			"loopNodeID", loopNodeID,
 			"loopIteration", loopIteration,
-			"metadata", metadata,
 		)
 		return map[string]interface{}{
 			"tool_call_id": toolCallID,
@@ -4150,7 +4124,7 @@ func executeAskUserInline(
 
 	// STEP 2: If already resolved (replay), return immediately
 	if createOutput.AlreadyResolved {
-		logger.Info("[AskUser] Already resolved (replay)", "questionID", createOutput.QuestionID)
+		logger.Debug("[AskUser] Already resolved (replay)", "questionID", createOutput.QuestionID)
 		return map[string]interface{}{
 			"tool_call_id": toolCallID,
 			"content":      formatAskUserResponse("reply", createOutput.ResponseData),
@@ -4883,8 +4857,7 @@ func runCleanupActivities(ctx workflow.Context, chatID, workflowID, thread strin
 		logger.Info("[Workflow Runtime] Cleanup completed",
 			"chatID", chatID,
 			"workflowID", workflowID,
-			"thread", thread,
-			"result", redactValue(result))
+			"thread", thread)
 	}
 }
 
@@ -4939,5 +4912,6 @@ func getMapKeys(m map[string]interface{}) []string {
 	for k := range m {
 		keys = append(keys, k)
 	}
+	sort.Strings(keys)
 	return keys
 }

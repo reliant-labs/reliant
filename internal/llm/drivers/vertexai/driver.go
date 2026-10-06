@@ -85,7 +85,7 @@ func (c *VertexAIClient) initGeminiClient() error {
 	}
 	if location == "" {
 		location = "us-central1" // Default location
-		logging.Info("VERTEXAI_LOCATION not set, using default", "location", location)
+		logging.Debug("VERTEXAI_LOCATION not set, using default", "location", location)
 	}
 
 	client, err := llm.NewGenAISDKClient(context.Background(), &genai.ClientConfig{
@@ -112,7 +112,7 @@ func (c *VertexAIClient) initClaudeClient() error {
 		return fmt.Errorf("VERTEXAI_PROJECT environment variable is required")
 	}
 	if location == "" {
-		logging.Info("VERTEXAI_LOCATION not set, using default", "location", "us-central1")
+		logging.Debug("VERTEXAI_LOCATION not set, using default", "location", "us-central1")
 	}
 
 	return nil

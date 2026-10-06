@@ -162,7 +162,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 				// Parse JSON
 				var event map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					logging.Debug("Failed to parse SSE event", "error", err, "data", data)
+					logging.Debug("Failed to parse SSE event", "error", err, "dataLen", len(data))
 					continue
 				}
 
@@ -435,7 +435,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 				// Parse JSON
 				var event map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					logging.Debug("Failed to parse SSE event", "error", err, "data", data)
+					logging.Debug("Failed to parse SSE event", "error", err, "dataLen", len(data))
 					continue
 				}
 

@@ -27,7 +27,7 @@ func GenerateTitleWorkflow(ctx workflow.Context, input map[string]interface{}) e
 	logger := workflow.GetLogger(ctx)
 
 	chatID, _ := input["chat_id"].(string)
-	logger.Info("GenerateTitleWorkflow started", "chatID", chatID)
+	logger.Debug("GenerateTitleWorkflow started", "chatID", chatID)
 
 	ctx = workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: 30 * time.Second,
@@ -43,7 +43,7 @@ func GenerateTitleWorkflow(ctx workflow.Context, input map[string]interface{}) e
 	var output map[string]interface{}
 	err := workflow.ExecuteActivity(ctx, "GenerateTitle", input).Get(ctx, &output)
 	if err == nil {
-		logger.Info("GenerateTitleWorkflow completed successfully", "chatID", chatID)
+		logger.Debug("GenerateTitleWorkflow completed successfully", "chatID", chatID)
 		return nil
 	}
 

@@ -357,7 +357,7 @@ func (p *CreatePlanTool) Execute(rctx *rctx.ToolContext, params CreatePlanParams
 		}
 
 		if err := p.repo.CreateTask(rctx.Context, task); err != nil {
-			logging.Error("Failed to create task", "error", err, "task_title", taskInput.Title)
+			logging.Error("Failed to create task", "error", err, "plan_id", plan.ID)
 			// Continue creating other tasks even if one fails
 			continue
 		}
@@ -426,7 +426,7 @@ func (p *CreatePlanTool) Execute(rctx *rctx.ToolContext, params CreatePlanParams
 			}
 			if err := p.repo.CreateTaskDependency(rctx.Context, taskDep); err != nil {
 				logging.Error("Failed to create inline dependency", "error", err,
-					"from_task", refTask.Title, "to_task", thisTask.Title)
+					"from_task", refTask.ID, "to_task", thisTask.ID)
 				depErrors = append(depErrors, fmt.Sprintf("%s -> %s: %v", refTask.Title, thisTask.Title, err))
 				continue
 			}
@@ -665,7 +665,7 @@ Description:
 		logging.Warn("[UpdatePlanTool] Failed to emit plan_tasks refetch", "error", err)
 	}
 
-	logging.Info("Plan updated",
+	logging.Debug("Plan updated",
 		"plan_id", plan.ID,
 		"thread_id", threadID,
 		"status", plan.Status)

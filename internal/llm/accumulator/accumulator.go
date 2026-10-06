@@ -48,7 +48,7 @@ func StreamAndAccumulate(
 	// scales per-model and sits above the compaction threshold rather than using
 	// a fixed 200k-window assumption.
 	if message.TrimMessagesToFitContextWindow(messages, nil, nil, driver.Model().ContextWindow) {
-		logging.Info("[ACCUMULATOR] Trimmed messages to fit context window",
+		logging.Debug("[ACCUMULATOR] Trimmed messages to fit context window",
 			"contextWindow", driver.Model().ContextWindow)
 	}
 

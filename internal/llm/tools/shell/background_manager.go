@@ -304,7 +304,7 @@ func (m *BackgroundManager) EmitPortChangeEvent(processID string, ports []PortIn
 	process.Ports = ports
 	process.outputMu.Unlock()
 
-	logging.Info("Process port change detected",
+	logging.Debug("Process port change detected",
 		"id", processID,
 		"ports", len(ports))
 
@@ -465,9 +465,8 @@ func (m *BackgroundManager) StartProcess(ctx context.Context, opts StartProcessO
 	m.processes[processID] = process
 	m.mu.Unlock()
 
-	logging.Info("Started background process",
+	logging.Debug("Started background process",
 		"id", processID,
-		"command", opts.Command,
 		"workingDir", opts.WorkingDir,
 		"worktreeID", opts.WorktreeID,
 		"sessionID", opts.SessionID)
@@ -583,7 +582,7 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 					Sequence: process.outputSeq,
 				})
 				process.stderr.WriteString(msg + "\n")
-				logging.Warn("Background process OOM-killed", "id", process.ID, "command", process.Command)
+				logging.Warn("Background process OOM-killed", "id", process.ID, "exit_code", exitCode)
 			}
 		} else {
 			// No exit status means the process never ran to completion, so
@@ -601,13 +600,19 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 			})
 			process.stderr.WriteString(err.Error() + "\n")
 		}
-		logging.Error("Background process failed", "id", process.ID, "error", err)
+		// A non-zero exit is the command's own verdict (a failing test run),
+		// not a daemon fault; only a process that never ran is worth a WARN.
+		if exitErr, ok := err.(*exec.ExitError); ok {
+			logging.Debug("Background process exited non-zero", "id", process.ID, "exit_code", exitErr.ExitCode())
+		} else {
+			logging.Warn("Background process failed", "id", process.ID, "error", err)
+		}
 		eventType = "failed"
 	} else {
 		exitCode := 0
 		process.ExitCode = &exitCode
 		process.Status = "completed"
-		logging.Info("Background process completed", "id", process.ID)
+		logging.Debug("Background process completed", "id", process.ID)
 		eventType = "completed"
 	}
 
@@ -1218,9 +1223,8 @@ func (m *BackgroundManager) AdoptRunningProcess(opts AdoptRunningProcessOptions)
 	m.processes[processID] = process
 	m.mu.Unlock()
 
-	logging.Info("Adopted running process to background",
+	logging.Debug("Adopted running process to background",
 		"id", processID,
-		"command", opts.Command,
 		"workingDir", opts.WorkingDir,
 		"pid", opts.Cmd.Process.Pid,
 		"chatID", opts.ChatID)
@@ -1291,9 +1295,8 @@ func (m *BackgroundManager) LoadProcess(id, command, workingDir, worktreeID, ses
 	m.processes[id] = process
 	m.mu.Unlock()
 
-	logging.Info("Loaded process from database",
+	logging.Debug("Loaded process from database",
 		"id", id,
-		"command", command,
 		"status", status,
 		"pid", pid)
 }

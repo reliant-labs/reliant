@@ -1448,7 +1448,7 @@ func (s *ProjectService) InitializeGitRepo(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
-	logging.Info("Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "path", project.Path, "is_git_repo", project.IsGitRepo)
+	logging.Debug("Attempting to initialize git repository", "projectID", req.Msg.ProjectId, "path", project.Path, "is_git_repo", project.IsGitRepo)
 
 	// Check if already a git repository
 	if project.IsGitRepo {

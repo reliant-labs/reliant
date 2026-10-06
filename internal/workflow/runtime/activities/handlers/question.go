@@ -95,7 +95,7 @@ func (a *QuestionCreateActivity) Category() schema.ActivityCategory {
 func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCreateInput) (QuestionCreateOutput, error) {
 	logger := activity.GetLogger(ctx)
 
-	logger.Info("[QuestionCreate] Creating question record",
+	logger.Debug("[QuestionCreate] Creating question record",
 		"chatID", input.ChatID,
 		"workflowID", input.WorkflowID,
 		"stepID", input.StepID,
@@ -118,7 +118,7 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		}
 
 		if match != nil {
-			logger.Info("[QuestionCreate] Found existing question",
+			logger.Debug("[QuestionCreate] Found existing question",
 				"questionID", match.ID,
 				"status", match.Status)
 
@@ -196,11 +196,10 @@ func (a *QuestionCreateActivity) Execute(ctx context.Context, input QuestionCrea
 		if input.Metadata != nil {
 			metadata = *input.Metadata
 		}
-		logger.Info("[QuestionCreate] Emitting question update",
+		logger.Debug("[QuestionCreate] Emitting question update",
 			"questionID", questionID,
 			"chatID", input.ChatID,
 			"metadataLen", len(metadata),
-			"metadataPreview", truncateForLog(metadata, 200),
 		)
 		if err := a.repo.EmitQuestionUpdate(txCtx, input.ChatID, db.QuestionUpdate{
 			QuestionID: questionID,
@@ -340,11 +339,4 @@ func containsToolCallID(metadata *string, toolCallID string) bool {
 		return id == toolCallID
 	}
 	return false
-}
-
-func truncateForLog(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
-	}
-	return s[:maxLen] + "..."
 }

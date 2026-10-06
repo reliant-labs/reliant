@@ -223,7 +223,7 @@ func (c *CodexClient) logRequestShape(params *responses.ResponseNewParams) {
 
 	effort, summary, context := describeReasoning(params.Reasoning)
 
-	logging.Info("[Codex] Request",
+	logging.Debug("[Codex] Request",
 		"model", string(c.options.Model.ID),
 		"apiModel", string(params.Model),
 		"envelope", envelopeName(c.options.Model.ID),
@@ -272,7 +272,7 @@ func (c *CodexClient) logServedResponse(resp *responses.Response, upstreamReques
 		endTurn = strconv.FormatBool(value)
 	}
 
-	logging.Info("[Codex] Served",
+	logging.Debug("[Codex] Served",
 		"model", string(c.options.Model.ID),
 		"servedModel", served,
 		"servedEffort", string(resp.Reasoning.Effort),

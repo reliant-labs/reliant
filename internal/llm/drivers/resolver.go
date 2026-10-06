@@ -249,7 +249,8 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 			// No provider named: the caller asked for a model, so pick the
 			// best configured provider for it.
 			driverConfig, found = models.SelectBestDriver(model.ID, availableDrivers)
-			logging.Debug("auto-selected driver", "driverConfig", driverConfig, "found", found)
+			// DriverID only: DriverConfig carries the API key and OAuth refresh token.
+			logging.Debug("auto-selected driver", "driver", driverConfig.DriverID, "found", found)
 		}
 
 		if !found {

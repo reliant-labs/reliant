@@ -74,7 +74,7 @@ func (a *CleanupActivity) Category() schema.ActivityCategory {
 
 // Execute cancels pending approvals and notifies UI
 func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (CleanupOutput, error) {
-	logging.Info("[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
+	logging.Debug("[Cleanup] Starting cleanup for chat", "chatID", input.ChatID)
 
 	// Cancel orphaned tool calls (stops spinning indicators in UI for cancelled tool executions)
 	toolCallsCancelled := a.cancelOrphanedToolCalls(ctx, input.ChatID, input.Thread)
@@ -87,11 +87,11 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 	}
 
 	if len(pendingApprovals) == 0 {
-		logging.Info("[Cleanup] No pending approvals to cancel")
+		logging.Debug("[Cleanup] No pending approvals to cancel")
 		return CleanupOutput{ApprovalsCancelled: 0, ToolCallsCancelled: toolCallsCancelled}, nil
 	}
 
-	logging.Info("[Cleanup] Found pending approvals to cancel", "count", len(pendingApprovals))
+	logging.Debug("[Cleanup] Found pending approvals to cancel", "count", len(pendingApprovals))
 
 	// Cancel each pending approval
 	cancelledCount := 0
@@ -133,7 +133,7 @@ func (a *CleanupActivity) Execute(ctx context.Context, input CleanupInput) (Clea
 		}
 
 		cancelledCount++
-		logging.Info("[Cleanup] Cancelled approval", "approvalID", approval.ID, "title", approval.Title)
+		logging.Debug("[Cleanup] Cancelled approval", "approvalID", approval.ID)
 	}
 
 	logging.Info("[Cleanup] Cleanup completed", "approvalsCancelled", cancelledCount, "toolCallsCancelled", toolCallsCancelled)
@@ -333,7 +333,7 @@ func (a *CleanupActivity) callIsStillLive(ctx context.Context, toolCallID, toolN
 			}
 		}
 
-		logging.Info("[Cleanup] Tool call has no result yet but is still executing; not repairing",
+		logging.Debug("[Cleanup] Tool call has no result yet but is still executing; not repairing",
 			"toolCallID", toolCallID, "toolName", toolName, "status", call.Status)
 		return true
 	}
@@ -425,7 +425,7 @@ func (a *CleanupActivity) createRepairToolMessage(
 			continue
 		}
 
-		logging.Info("[Cleanup] Created repair tool_result",
+		logging.Debug("[Cleanup] Created repair tool_result",
 			"chatID", chatID,
 			"messageID", msgID,
 			"toolCallID", orphan.ToolCallID,

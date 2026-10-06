@@ -78,6 +78,6 @@ func (n *AgentMessageNotifier) NotifyAgentMessageQueued(ctx context.Context, cha
 			"error", err, "chatID", chatID, "threadID", toThreadID, "workflowID", workflowID)
 		return
 	}
-	logging.Info("Notified workflow of queued agent message",
+	logging.Debug("Notified workflow of queued agent message",
 		"chatID", chatID, "threadID", toThreadID, "workflowID", workflowID)
 }

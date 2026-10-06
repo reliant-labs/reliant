@@ -604,7 +604,7 @@ func (m *Manager) sessionClientFor(serverName, session string) (Client, bool) {
 	m.sessionClients[key] = lc
 	m.mu.Unlock()
 
-	logging.Info("Created session-scoped MCP client",
+	logging.Debug("Created session-scoped MCP client",
 		"server", serverName,
 		"session", session,
 		"reason", "server keeps per-caller state that concurrent threads must not share")
@@ -684,7 +684,7 @@ func (m *Manager) dirClientFor(serverName, projectPath string) (Client, bool, er
 		evicted.reapNow()
 	}
 
-	logging.Info("Created dir-scoped MCP client",
+	logging.Debug("Created dir-scoped MCP client",
 		"server", serverName,
 		"projectPath", projectPath,
 		"dir", scoped.Dir,
@@ -873,14 +873,14 @@ func (m *Manager) Close() error {
 		wg.Add(1)
 		go func(n string, c Client) {
 			defer wg.Done()
-			logging.Info("Closing MCP client", "name", n)
+			logging.Debug("Closing MCP client", "name", n)
 			if err := c.Close(); err != nil {
 				logging.Error("Failed to close MCP client", "name", n, "error", err)
 				errorsMu.Lock()
 				errors = append(errors, fmt.Errorf("%s: %w", n, err))
 				errorsMu.Unlock()
 			} else {
-				logging.Info("MCP client closed successfully", "name", n)
+				logging.Debug("MCP client closed successfully", "name", n)
 			}
 		}(name, client)
 	}
@@ -1167,7 +1167,7 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		return result
 	}
 
-	logging.Info("Loading MCP servers from project", "path", normalizedProjectPath, "count", len(servers))
+	logging.Debug("Loading MCP servers from project", "path", normalizedProjectPath, "count", len(servers))
 
 	// Get currently running servers
 	m.mu.RLock()
@@ -1226,7 +1226,7 @@ func (m *Manager) EnsureProjectServersLoaded(ctx context.Context, projectPath st
 		// Give first-time package downloads enough time (npx/uvx can be slow)
 		serverCtx, cancel := context.WithTimeout(ctx, defaultProjectServerLoadTimeout)
 
-		logging.Info("Loading MCP server from project config", "name", name, "command", serverCfg.Command)
+		logging.Debug("Loading MCP server from project config", "name", name)
 		if err := m.AddServer(serverCtx, name, serverCfg); err != nil {
 			logging.Warn("Failed to load MCP server (will continue without it)", "name", name, "error", err)
 			result.FailedServers = append(result.FailedServers, name)

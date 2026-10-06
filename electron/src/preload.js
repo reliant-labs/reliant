@@ -365,19 +365,16 @@ const log = (level, ...args) => {
 
 // Inject global configuration for the web app
 const injectReliantConfig = async () => {
-  log('warn', '[Preload] injectReliantConfig called', { atMs: Date.now() });
+  log('debug', 'injectReliantConfig called');
 
   try {
-    log('info', 'Getting daemon status via IPC...');
     const [daemonPort, appInfo, backendStatus] = await Promise.all([
       ipcRenderer.invoke('get-backend-port'),
       ipcRenderer.invoke('get-app-info'),
       ipcRenderer.invoke('get-backend-status')
     ]);
 
-    log('info', 'Daemon port received:', daemonPort, 'type:', typeof daemonPort);
-    log('info', 'App info received:', appInfo);
-    log('info', 'Backend status received:', backendStatus);
+    log('debug', 'Daemon status received', { daemonPort, isRunning: backendStatus?.isRunning });
 
     /**
      * Build the reliantConfig from backend status.
@@ -425,7 +422,7 @@ const injectReliantConfig = async () => {
 
       // Notify renderer that config is ready via postMessage (works with context isolation)
       window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, window.location.origin);
-      log('info', 'Config ready message posted');
+      log('info', 'Config ready message posted', { daemonPort });
 
       // Listen for daemon restart events
       ipcRenderer.on('backend-port', async (event, newPort) => {
@@ -437,10 +434,10 @@ const injectReliantConfig = async () => {
         window.postMessage({ type: 'backend-port-changed', port: newPort }, window.location.origin);
       });
     } else {
-      log('info', 'Daemon not ready yet (port:', daemonPort, '), waiting for backend-port event...');
+      log('debug', 'Daemon not ready yet, waiting for backend-port event', { daemonPort });
       // Daemon not ready, wait for it via event
       ipcRenderer.once('backend-port', async (event, port) => {
-        log('info', 'Received backend-port event with port:', port);
+        log('debug', 'Received backend-port event', { port });
         if (typeof port === 'number' && port > 0) {
           const [latestAppInfo, latestStatus] = await Promise.all([
             ipcRenderer.invoke('get-app-info'),
@@ -450,11 +447,9 @@ const injectReliantConfig = async () => {
           reliantConfig = buildConfig(latestStatus, latestAppInfo);
           reliantConfig.daemonPort = port;
 
-          log('info', 'Config stored from event:', reliantConfig);
-
           // Notify renderer via postMessage
           window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, window.location.origin);
-          log('info', 'reliant-config-ready event dispatched from event handler');
+          log('info', 'Config ready message posted from backend-port event', { daemonPort: port });
         } else {
           log('error', 'Invalid port received from backend-port event:', port);
         }
@@ -472,13 +467,11 @@ const injectReliantConfig = async () => {
       });
     }
   } catch (error) {
-    log('error', 'Error in config injection:', error);
-    log('error', 'Error stack:', error.stack);
+    log('error', 'Error in config injection:', error?.message, error?.stack);
 
     // Still set up listener for backend-port event as fallback
-    log('info', 'Setting up fallback listener for backend-port event...');
     ipcRenderer.once('backend-port', async (event, port) => {
-      log('info', 'Fallback: Received backend-port event with port:', port);
+      log('debug', 'Fallback: received backend-port event', { port });
       const [appInfo, backendStatus] = await Promise.all([
         ipcRenderer.invoke('get-app-info'),
         ipcRenderer.invoke('get-backend-status')
@@ -500,26 +493,19 @@ const injectReliantConfig = async () => {
         isDev: !appInfo.isPackaged
       };
 
-      log('info', 'Fallback: Config stored:', reliantConfig);
-
       window.postMessage({ type: 'reliant-config-ready', config: reliantConfig }, window.location.origin);
-      log('info', 'Fallback: reliant-config-ready event dispatched');
+      log('info', 'Fallback: config ready message posted', { daemonPort: port });
     });
   }
 };
 
-// Add debug to track config state
-log('info', 'Script loaded, reliantConfig initial state:', reliantConfig);
-
 // Inject configuration immediately AND when DOM is ready (for reloads)
-log('info', 'Calling injectReliantConfig() immediately...');
 injectReliantConfig().catch(err => {
   console.error('[Preload] Failed to inject config:', err);
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-  log('info', 'DOMContentLoaded event fired, calling injectReliantConfig() again...');
-  log('info', 'Current reliantConfig state:', reliantConfig);
+  log('debug', 'DOMContentLoaded event fired, calling injectReliantConfig() again');
   injectReliantConfig().catch(err => {
     console.error('[Preload] Failed to inject config on DOMContentLoaded:', err);
   });

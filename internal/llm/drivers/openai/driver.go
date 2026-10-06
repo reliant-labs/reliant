@@ -344,11 +344,6 @@ func (o *OpenaiClient) SendMessages(ctx context.Context, prompts []string, messa
 	}
 
 	params := o.preparedParams(o.ConvertMessages(prompts, messages), o.ConvertTools(tools))
-	// Debug logging temporarily disabled due to config migration
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
-	}
 	attempts := 0
 	for {
 		attempts++
@@ -409,12 +404,6 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 	params := o.preparedParams(o.ConvertMessages(prompts, messages), o.ConvertTools(tools))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
-	}
-
-	// Debug logging temporarily disabled due to config migration
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
 	}
 
 	attempts := 0
