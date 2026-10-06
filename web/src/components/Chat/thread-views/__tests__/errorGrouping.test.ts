@@ -263,36 +263,66 @@ describe("groupVisibleErrors", () => {
     expect(groups[0].errors).toHaveLength(2);
   });
 
-  it("keeps a thread-less legacy error standalone and visible in every view", () => {
-    // An error with no thread predates thread scoping. It stays visible
-    // everywhere rather than being guessed into a thread — and it must not be
-    // swallowed into another thread's collapsed row either.
-    const legacy = makeError({ id: "legacy", thread: undefined, timestamp: at(1) });
+  it("files a thread-less error under the main thread, not under every thread", () => {
+    // Observed in chat 8bb0a875: six EnqueueAgentMessage failures and a
+    // WorkflowStatus failure, all thread-less, rendered at the top of a spawn
+    // thread that was started days after they happened. Thread-less errors are
+    // not legacy — chat-level work (title generation, the daemon preflight,
+    // the main run's status writes) still produces them. They belong to the
+    // main thread, exactly as a thread-less message does.
+    const chatLevel = makeError({ id: "chat-level", thread: undefined, timestamp: at(1) });
     const scoped = makeError({ id: "scoped", thread: SPAWN_THREAD, timestamp: at(2) });
 
-    const allVisible = groupVisibleErrors([legacy, scoped], {
+    // Visibility only here; how the two group is the next test's concern.
+    const allVisible = groupVisibleErrors([chatLevel, scoped], {
       isVisible: showAll,
-      collapseAcrossThreads: true,
+      collapseAcrossThreads: false,
     });
-    expect(allVisible).toHaveLength(2);
-    expect(allVisible.map((g) => g.error.id).sort()).toEqual(["legacy", "scoped"]);
+    expect(allVisible.map((g) => g.error.id).sort()).toEqual(["chat-level", "scoped"]);
 
-    // Visible in the main-thread view, which the scoped spawn error is not.
-    const mainOnly = groupVisibleErrors([legacy, scoped], {
+    const mainOnly = groupVisibleErrors([chatLevel, scoped], {
       isVisible: createThreadVisibilityCheck(CHAT_ID, new Set([MAIN_THREAD])),
       collapseAcrossThreads: false,
     });
-    expect(mainOnly.map((g) => g.error.id)).toEqual(["legacy"]);
+    expect(mainOnly.map((g) => g.error.id)).toEqual(["chat-level"]);
 
-    // ...and in an unrelated spawn's view too.
-    const otherSpawn = groupVisibleErrors([legacy, scoped], {
+    // The reported bug: a spawn's own view shows only its own errors.
+    const spawnOnly = groupVisibleErrors([chatLevel, scoped], {
+      isVisible: createThreadVisibilityCheck(CHAT_ID, new Set([SPAWN_THREAD])),
+      collapseAcrossThreads: false,
+    });
+    expect(spawnOnly.map((g) => g.error.id)).toEqual(["scoped"]);
+
+    const unrelatedSpawn = groupVisibleErrors([chatLevel, scoped], {
       isVisible: createThreadVisibilityCheck(
         CHAT_ID,
         new Set(["44444444-4444-4444-8444-444444444444"]),
       ),
       collapseAcrossThreads: false,
     });
-    expect(otherSpawn.map((g) => g.error.id)).toEqual(["legacy"]);
+    expect(unrelatedSpawn).toEqual([]);
+  });
+
+  it("groups a thread-less error as a main-thread error", () => {
+    // Main-thread identity is the chat id, so a thread-less failure collapses
+    // with an identical concurrent spawn failure like any main-thread one...
+    const chatLevel = makeError({ id: "chat-level", thread: undefined, timestamp: at(0) });
+    const spawn = makeError({ id: "spawn", thread: SPAWN_THREAD, timestamp: at(3) });
+    const collapsed = groupVisibleErrors([chatLevel, spawn], {
+      isVisible: showAll,
+      collapseAcrossThreads: true,
+    });
+    expect(collapsed).toHaveLength(1);
+    expect(collapsed[0].errors.map((e) => e.id)).toEqual(["chat-level", "spawn"]);
+
+    // ...and, being on the SAME thread as an explicit main-thread error, does
+    // not collapse with one: two failures on one thread are two events.
+    const explicitMain = makeError({ id: "main", thread: MAIN_THREAD, timestamp: at(3) });
+    const separate = groupVisibleErrors([chatLevel, explicitMain], {
+      isVisible: showAll,
+      collapseAcrossThreads: true,
+    });
+    expect(separate).toHaveLength(2);
   });
 
   it("drops errors scoped to a thread that is not visible", () => {
@@ -346,8 +376,7 @@ describe("createThreadVisibilityCheck", () => {
     expect(spawnSelected(SPAWN_THREAD)).toBe(true);
     expect(spawnSelected(CHAT_ID)).toBe(false);
     expect(spawnSelected("0")).toBe(false);
-    // An undefined thread resolves to main, which is NOT selected here — the
-    // legacy "visible everywhere" rule lives in groupVisibleErrors, not here.
+    // An undefined thread resolves to main, which is NOT selected here.
     expect(spawnSelected(undefined)).toBe(false);
   });
 });

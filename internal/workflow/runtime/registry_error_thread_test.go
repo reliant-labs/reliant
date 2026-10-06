@@ -27,11 +27,11 @@ func (r *capturingRepo) CreateChatUpdate(_ context.Context, _ string, _ db.Updat
 // An activity error must name the thread it happened on.
 //
 // InterleavedTimeline scopes an error that carries a thread to that thread and
-// shows a thread-less one EVERYWHERE (it cannot guess, and guessing is what
-// produced a wrong-thread render before). Nothing was filling the field in, so
-// every activity error was chat-global in practice: a run of
-// DrainAgentMessages failures rendered at the top of a spawn thread that did
-// not exist when those failures happened.
+// files a thread-less one under the MAIN thread, the same default messages
+// use. So an activity that runs on a spawn but reports no thread has its
+// failure shown in the wrong place: a run of DrainAgentMessages failures
+// rendered at the top of a spawn thread that did not exist when those failures
+// happened, and later EnqueueAgentMessage failures did the same.
 func TestExtractThread(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -101,6 +101,24 @@ func TestExtractThread(t *testing.T) {
 			},
 			expected: "thread-recipient",
 		},
+		{
+			name: "input that declares its thread is not field-guessed",
+			input: declaredThreadInput{
+				ChatID:       "chat-7",
+				FromThreadID: "thread-spawn",
+				ToThreadID:   "thread-parent",
+			},
+			expected: "thread-spawn",
+		},
+		{
+			name: "declared thread through a pointer",
+			input: &declaredThreadInput{
+				ChatID:       "chat-8",
+				FromThreadID: "thread-spawn",
+				ToThreadID:   "thread-parent",
+			},
+			expected: "thread-spawn",
+		},
 	}
 
 	for _, tt := range tests {
@@ -157,9 +175,61 @@ func TestWriteErrorEventCarriesThread(t *testing.T) {
 	}
 }
 
-// A chat-scoped activity must OMIT the field rather than send "". The timeline
-// branches on presence, so an empty string would be a thread that matches no
-// thread — the error would vanish instead of showing everywhere.
+// declaredThreadInput stands in for handlers.EnqueueAgentMessageInput, which
+// this package cannot import (handlers imports runtime). Same shape: two
+// threads, neither named "thread", and only the activity knows it ran on the
+// sending one. The handlers side asserts the real input against
+// ThreadScopedInput, so the two cannot drift apart.
+type declaredThreadInput struct {
+	ChatID       string `json:"chat_id"`
+	FromThreadID string `json:"from_thread_id"`
+	ToThreadID   string `json:"to_thread_id"`
+}
+
+func (in declaredThreadInput) ActivityThread() string { return in.FromThreadID }
+
+// The reported bug, end to end. A background spawn reports its outcome to its
+// parent through EnqueueAgentMessage, from the spawn's own goroutine. Its
+// input names from_thread_id/to_thread_id and no "thread", so its failures were
+// written thread-less — and six of them rendered at the top of an unrelated
+// spawn thread that did not exist yet when they happened.
+func TestWriteErrorEventCarriesDeclaredThread(t *testing.T) {
+	t.Parallel()
+	repo := &capturingRepo{}
+	wrapper := NewActivityWrapper(
+		"EnqueueAgentMessage",
+		func(_ context.Context, _ declaredThreadInput) (struct{}, error) {
+			return struct{}{}, nil
+		},
+		repo,
+	)
+
+	wrapper.writeErrorEvent(
+		context.Background(),
+		declaredThreadInput{ChatID: "chat-1", FromThreadID: "thread-spawn", ToThreadID: "chat-1"},
+		"EnqueueAgentMessage",
+		"activity-3",
+		1,
+		"workflow-1",
+		errors.New("failed to enqueue agent message"),
+		3,
+	)
+
+	if len(repo.updates) != 1 {
+		t.Fatalf("expected 1 chat update, got %d", len(repo.updates))
+	}
+	var payload map[string]interface{}
+	if err := json.Unmarshal([]byte(repo.updates[0]), &payload); err != nil {
+		t.Fatalf("error payload is not valid JSON: %v", err)
+	}
+	if got := payload["thread"]; got != "thread-spawn" {
+		t.Errorf("thread = %v, want %q (the spawn whose goroutine ran the activity)", got, "thread-spawn")
+	}
+}
+
+// A chat-scoped activity must OMIT the field rather than send "". Absent means
+// "chat-level work", which the timeline files under the main thread; a
+// sentinel "" would make every consumer re-learn that the two are the same.
 func TestWriteErrorEventOmitsAbsentThread(t *testing.T) {
 	t.Parallel()
 	repo := &capturingRepo{}

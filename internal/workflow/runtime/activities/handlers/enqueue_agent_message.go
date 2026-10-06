@@ -26,6 +26,13 @@ type EnqueueAgentMessageInput struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
+// ActivityThread is the thread this activity runs on: the sender. A
+// background spawn reports its outcome from its own goroutine, so a failure
+// here is that spawn's — not the parent's, and not every thread's. Without it
+// the input carries no "thread" and its errors were written thread-less, which
+// rendered them in a spawn view that did not yet exist when they happened.
+func (in EnqueueAgentMessageInput) ActivityThread() string { return in.FromThreadID }
+
 // EnqueueAgentMessageOutput reports the id of the enqueued row.
 type EnqueueAgentMessageOutput struct {
 	ID string `json:"id"`

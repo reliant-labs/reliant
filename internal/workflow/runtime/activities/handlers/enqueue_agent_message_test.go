@@ -9,9 +9,26 @@ import (
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// A failure of this activity belongs to the spawn reporting its outcome — the
+// goroutine that ran it — not to the parent it reports to, and not to every
+// thread of the chat. The input names two threads and neither field is
+// "thread", so it must declare which one it ran on.
+var _ runtime.ThreadScopedInput = EnqueueAgentMessageInput{}
+
+func TestEnqueueAgentMessageInput_ActivityThreadIsTheReportingSpawn(t *testing.T) {
+	t.Parallel()
+	input := EnqueueAgentMessageInput{
+		ChatID:       "chat-1",
+		FromThreadID: "thread-spawn",
+		ToThreadID:   "chat-1",
+	}
+	assert.Equal(t, "thread-spawn", input.ActivityThread())
+}
 
 // TestEnqueueAgentMessage_Completion is the path a detached (background=true)
 // spawn uses to notify its parent's mailbox once it finishes: the activity
