@@ -346,7 +346,7 @@ func (s *FileSystemService) SaveFileContent(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	logging.Info("File saved successfully", "path", requestedPath, "project", projectID)
+	logging.Debug("File saved successfully", "path", requestedPath, "project", projectID)
 
 	return connect.NewResponse(&reliantv1.SaveFileContentResponse{
 		Message: "File saved successfully",
@@ -569,7 +569,7 @@ func (s *FileSystemService) CreateFileOrFolder(
 			logging.Error("Failed to create directory", "error", err, "path", absFullPath)
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		logging.Info("Directory created successfully", "path", requestedPath, "project", projectID)
+		logging.Debug("Directory created successfully", "path", requestedPath, "project", projectID)
 	} else {
 		// Ensure parent directory exists
 		parentDir := filepath.Dir(absFullPath)
@@ -583,7 +583,7 @@ func (s *FileSystemService) CreateFileOrFolder(
 			logging.Error("Failed to create file", "error", err, "path", absFullPath)
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		logging.Info("File created successfully", "path", requestedPath, "project", projectID)
+		logging.Debug("File created successfully", "path", requestedPath, "project", projectID)
 	}
 
 	return connect.NewResponse(&reliantv1.CreateFileOrFolderResponse{
@@ -634,13 +634,13 @@ func (s *FileSystemService) DeleteFileOrFolder(
 			logging.Error("Failed to delete directory", "error", err, "path", absFullPath)
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		logging.Info("Directory deleted successfully", "path", requestedPath, "project", projectID)
+		logging.Debug("Directory deleted successfully", "path", requestedPath, "project", projectID)
 	} else {
 		if err := s.fs.Remove(absFullPath); err != nil {
 			logging.Error("Failed to delete file", "error", err, "path", absFullPath)
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
-		logging.Info("File deleted successfully", "path", requestedPath, "project", projectID)
+		logging.Debug("File deleted successfully", "path", requestedPath, "project", projectID)
 	}
 
 	return connect.NewResponse(&reliantv1.DeleteFileOrFolderResponse{
@@ -719,7 +719,7 @@ func (s *FileSystemService) CopyFile(
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
 
-	logging.Info("File copied successfully", "source", sourcePath, "destination", destPath, "project", projectID)
+	logging.Debug("File copied successfully", "source", sourcePath, "destination", destPath, "project", projectID)
 
 	return connect.NewResponse(&reliantv1.CopyFileResponse{
 		Message:     "File copied successfully",

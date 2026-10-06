@@ -130,8 +130,6 @@ func (v *viewTool) RequiresPermission(params ViewParams) (bool, error) {
 
 // Run implements Tool.
 func (v *viewTool) Execute(rctx *rctx.ToolContext, params ViewParams) (ToolResponse, error) {
-	logging.Debug("view tool params", "params", params)
-
 	if rctx.Daemon == nil {
 		return NewTextErrorResponse("filesystem access requires a connected daemon"), nil
 	}

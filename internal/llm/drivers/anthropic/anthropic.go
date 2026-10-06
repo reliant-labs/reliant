@@ -169,7 +169,7 @@ func (c *AnthropicClient) Model() models.Model {
 }
 
 func (c *AnthropicClient) ValidateKey(ctx context.Context) error {
-	logging.Info("Validating Anthropic API key with Claude 3.5 Haiku model...")
+	logging.Debug("Validating Anthropic API key with Claude 3.5 Haiku model...")
 	testMessages := []message.Message{
 		{
 			Role: message.User,

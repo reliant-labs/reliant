@@ -213,7 +213,7 @@ func convertMessages(messages []message.Message) []*content {
 	}
 
 	if stamped := stampUnsignedCallSteps(history); stamped > 0 {
-		logging.Info("[ANTIGRAVITY] Replaying unsigned function calls with the documented stand-in signature",
+		logging.Debug("[ANTIGRAVITY] Replaying unsigned function calls with the documented stand-in signature",
 			"steps", stamped)
 	}
 

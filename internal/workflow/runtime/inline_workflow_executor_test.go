@@ -66,7 +66,7 @@ func TestApplyPresets(t *testing.T) {
 		assert.Equal(t, []string{"general"}, loaderCalls)
 		assert.Equal(t, "claude-sonnet", subInputs["model"])
 		// Literal should NOT emit "Resolved preset template" log.
-		assert.False(t, hasPresetLogMessage(logger.infos, "Resolved preset template"))
+		assert.False(t, hasPresetLogMessage(logger.debugs, "Resolved preset template"))
 	})
 
 	t.Run("templated preset name resolves from inputs and merges params", func(t *testing.T) {
@@ -90,8 +90,8 @@ func TestApplyPresets(t *testing.T) {
 		assert.Equal(t, "claude-sonnet", subInputs["model"])
 		assert.Equal(t, 0.3, subInputs["temp"])
 		// Template resolution should have been logged.
-		assert.True(t, hasPresetLogMessage(logger.infos, "Resolved preset template"),
-			"expected 'Resolved preset template' info log")
+		assert.True(t, hasPresetLogMessage(logger.debugs, "Resolved preset template"),
+			"expected 'Resolved preset template' debug log")
 	})
 
 	// A preset the caller named must load. Skipping it silently ran the agent
@@ -130,7 +130,7 @@ func TestApplyPresets(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 0, loaderCalls, "loader must not be invoked for empty resolved preset")
 		assert.Empty(t, subInputs, "no params should be merged")
-		assert.True(t, hasPresetLogMessage(logger.infos, "Skipping empty preset name"),
+		assert.True(t, hasPresetLogMessage(logger.debugs, "Skipping empty preset name"),
 			"expected skip-log for empty resolved preset")
 	})
 

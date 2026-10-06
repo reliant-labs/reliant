@@ -107,7 +107,7 @@ func NewClient(opts llm.DriverOptions) *ReliantClient {
 		opts.Model.APIModel = apiModel
 	}
 
-	logging.Info("Reliant driver client configured",
+	logging.Debug("Reliant driver client configured",
 		"base_url", opts.BaseURL,
 		"api_key_prefix", apiKeyPrefixForLog(opts.ApiKey),
 		"api_key_type", apiKeyTypeForLog(opts.ApiKey),
@@ -511,11 +511,6 @@ func (c *ReliantClient) preparedParams(messages []openai.ChatCompletionMessagePa
 func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, toolList []tools.Tool) (response *llm.DriverResponse, err error) {
 	params := c.preparedParams(c.ConvertMessages(prompts, messages), c.ConvertTools(toolList))
 
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
-	}
-
 	attempts := 0
 	for {
 		attempts++
@@ -577,11 +572,6 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 	params := c.preparedParams(c.ConvertMessages(prompts, messages), c.ConvertTools(toolList))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
-	}
-
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
 	}
 
 	attempts := 0

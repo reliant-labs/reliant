@@ -1062,7 +1062,7 @@ function ModelDropdown({
     });
 
     const fallbackModel = sortedModels[0] || models[0];
-    console.log("[ModelInput] Selected model not available, auto-selecting:", {
+    logger.debug("[ModelInput] Selected model not available, auto-selecting:", {
       oldModel: currentValue,
       newModel: fallbackModel.id,
       availableModels: models.map((m) => m.id),

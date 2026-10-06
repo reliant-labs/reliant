@@ -487,7 +487,6 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         provider,
         hasData: !!data,
         hasUrl: !!data?.url,
-        urlPreview: data?.url?.substring(0, 100),
         error: error?.message,
         errorCode: error?.code,
       })

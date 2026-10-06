@@ -315,7 +315,7 @@ func (s *ApprovalService) Deny(
 		"action_taken":  actionTakenStr,
 	})
 
-	logging.Info("Denied request and signalled workflow", "requestID", req.Msg.RequestId, "reason", denialReason)
+	logging.Info("Denied request and signalled workflow", "requestID", req.Msg.RequestId, "hasReason", denialReason != "")
 
 	return connect.NewResponse(&reliantv1.DenyResponse{
 		Success: true,

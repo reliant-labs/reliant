@@ -154,7 +154,7 @@ func (t *saveAttachmentTool) Execute(tc *rctx.ToolContext, params SaveAttachment
 		return NewTextErrorResponse(fmt.Sprintf("Could not write attachment %s to %s: %v", attachmentID, path, err)), nil
 	}
 
-	logging.Info("Saved attachment to disk",
+	logging.Debug("Saved attachment to disk",
 		"attachment_id", attachmentID,
 		"path", path,
 		"bytes", len(att.Content),

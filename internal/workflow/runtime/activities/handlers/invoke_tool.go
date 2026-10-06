@@ -119,7 +119,7 @@ func (a *InvokeToolActivity) Execute(ctx context.Context, input ActivityInput) (
 		Data:          structuredToolData(result.Metadata),
 	}
 
-	activity.GetLogger(ctx).Info("[InvokeTool] Completed",
+	activity.GetLogger(ctx).Debug("[InvokeTool] Completed",
 		"stepID", rtx.StepID,
 		"tool", toolName,
 		"isError", result.IsError,

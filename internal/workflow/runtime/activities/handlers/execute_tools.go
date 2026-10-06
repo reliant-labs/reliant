@@ -237,7 +237,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	}
 
 	// Debug logging to trace loop context
-	logging.Info("[ExecuteToolsActivity] Received input",
+	logging.Debug("[ExecuteToolsActivity] Received input",
 		"stepID", rtx.StepID,
 		"loopNodeID", rtx.LoopNodeID,
 		"loopIteration", rtx.LoopIteration,
@@ -463,7 +463,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 		},
 	}
 
-	activity.GetLogger(ctx).Info("[ExecuteTools] Completed",
+	activity.GetLogger(ctx).Debug("[ExecuteTools] Completed",
 		"toolResultsCount", len(output.ToolResults),
 		"threadTokenCount", threadTokenCount,
 		"totalResultChars", totalResultChars)
@@ -990,7 +990,7 @@ func (a *ExecuteToolsActivity) emitToolStatus(ctx context.Context, chatID, toolC
 			"tool_call_id", toolCallID,
 			"status", status)
 	} else {
-		activity.GetLogger(ctx).Info("[TOOL_STATUS] Emitted tool status update",
+		activity.GetLogger(ctx).Debug("[TOOL_STATUS] Emitted tool status update",
 			"tool_call_id", toolCallID,
 			"status", status)
 	}
@@ -1271,8 +1271,9 @@ func executeResponseToolInline(toolCallID, toolName, toolInput string, schema ma
 		if err != nil {
 			logging.Warn("[ExecuteTools] Response tool data failed schema validation",
 				"tool", toolName,
+				"tool_call_id", toolCallID,
 				"error", err,
-				"input", toolInput)
+				"inputBytes", len(toolInput))
 			return message.ToolResult{
 				ToolCallID: toolCallID,
 				Name:       toolName,

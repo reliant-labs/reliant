@@ -113,7 +113,7 @@ func (l *Launcher) BuildWorkflowInputs(
 	for k := range userParams {
 		userParamKeys = append(userParamKeys, k)
 	}
-	logging.Info("[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys)
+	logging.Debug("[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys)
 	if len(selectedPresets) > 0 {
 		loadPreset := l.createDBPresetLoaderFull(ctx, userID, projectID)
 		for groupName, presetName := range selectedPresets {
@@ -126,10 +126,10 @@ func (l *Launcher) BuildWorkflowInputs(
 				continue
 			}
 			initialData = preset.ApplyToInputs(p, initialData, groupName)
-			logging.Info("[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", initialData["tools"])
+			logging.Debug("[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", initialData["tools"])
 		}
 	} else {
-		logging.Info("[buildWorkflowInputs] No presets selected")
+		logging.Debug("[buildWorkflowInputs] No presets selected")
 	}
 
 	// User-provided params override preset values.
@@ -146,10 +146,6 @@ func (l *Launcher) BuildWorkflowInputs(
 		}
 		v := value.AsInterface()
 
-		if key == "tools" {
-			logging.Info("[buildWorkflowInputs] User param tools override", "value", v, "type", fmt.Sprintf("%T", v))
-		}
-
 		// If value is a map, merge it with existing group map.
 		if mapVal, ok := v.(map[string]interface{}); ok {
 			if existing, ok := initialData[key].(map[string]interface{}); ok {
@@ -163,8 +159,6 @@ func (l *Launcher) BuildWorkflowInputs(
 			initialData[key] = v
 		}
 	}
-
-	logging.Info("[buildWorkflowInputs] After user params", "tools", initialData["tools"])
 
 	// Apply workflow schema defaults (e.g. model: { id: gpt-4o }) so validation and execution
 	// see the same inputs the workflow defines. Required inputs without defaults remain absent
@@ -181,7 +175,7 @@ func (l *Launcher) BuildWorkflowInputs(
 		NormalizeModelInputs(initialData, protoInputs)
 	}
 
-	logging.Info("[buildWorkflowInputs] Final resolved", "tools", initialData["tools"])
+	logging.Debug("[buildWorkflowInputs] Final resolved", "tools", initialData["tools"])
 
 	// Add project_path to workflow inputs so spawned workflows can load presets
 	// This flows through: workflow.go -> StepExecutor -> executeSpawnInline -> InlineWorkflowExecutor

@@ -55,7 +55,7 @@ func (a *FetchThreadResultActivity) Category() schema.ActivityCategory {
 // Execute fetches the final assistant response from a child thread
 func (a *FetchThreadResultActivity) Execute(ctx context.Context, input FetchThreadResultInput) (FetchThreadResultOutput, error) {
 	logger := activity.GetLogger(ctx)
-	logger.Info("[FetchThreadResult] Fetching result from child thread",
+	logger.Debug("[FetchThreadResult] Fetching result from child thread",
 		"chatID", input.ChatID,
 		"thread", input.Thread)
 
@@ -113,7 +113,7 @@ func (a *FetchThreadResultActivity) Execute(ctx context.Context, input FetchThre
 		}, nil
 	}
 
-	logger.Info("[FetchThreadResult] Successfully fetched result",
+	logger.Debug("[FetchThreadResult] Successfully fetched result",
 		"chatID", input.ChatID,
 		"thread", input.Thread,
 		"contentLength", len(content))

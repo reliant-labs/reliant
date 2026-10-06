@@ -174,10 +174,6 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 				reasoning := msg.ReasoningContent()
 				if reasoning.Thinking != "" && reasoning.Signature != "" {
 					blocks = append(blocks, anthropic.NewThinkingBlock(reasoning.Signature, reasoning.Thinking))
-					logging.Info("[convertMessages] Added thinking block",
-						"msg_id", msg.ID,
-						"thinking_len", len(reasoning.Thinking),
-						"signature_len", len(reasoning.Signature))
 				} else if reasoning.Thinking != "" {
 					logging.Warn("[convertMessages] Skipping thinking block - missing signature",
 						"msg_id", msg.ID,
@@ -193,9 +189,6 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 						continue
 					}
 					blocks = append(blocks, anthropic.NewRedactedThinkingBlock(redacted.Data))
-					logging.Info("[convertMessages] Added redacted thinking block",
-						"msg_id", msg.ID,
-						"data_len", len(redacted.Data))
 				}
 			}
 
@@ -210,7 +203,7 @@ func (b *baseClient) convertMessages(messages []message.Message) (anthropicMessa
 					logging.Warn("Invalid or empty tool input, using empty JSON object",
 						"tool_id", toolCall.ID,
 						"tool_name", toolCall.Name,
-						"input", inputJSON)
+						"input_len", len(inputJSON))
 					inputJSON = "{}"
 				}
 				blocks = append(blocks, anthropic.NewToolUseBlock(toolCall.ID, json.RawMessage(inputJSON), toolCall.Name))
@@ -488,7 +481,6 @@ func (b *baseClient) buildCompleteEvent(accumulatedMessage anthropic.Message, ma
 	thinking := ""
 	thinkingSignature := ""
 	redactedThinking := ""
-	logging.Info("called build complete event with", "content_blocks", len(accumulatedMessage.Content))
 	for _, block := range accumulatedMessage.Content {
 		switch v := block.AsAny().(type) {
 		case anthropic.TextBlock:
@@ -496,7 +488,7 @@ func (b *baseClient) buildCompleteEvent(accumulatedMessage anthropic.Message, ma
 		case anthropic.ThinkingBlock:
 			thinking += v.Thinking
 			// The signature is returned with the thinking block
-			logging.Info("Found ThinkingBlock in accumulated message",
+			logging.Debug("Found ThinkingBlock in accumulated message",
 				"thinking_len", len(v.Thinking),
 				"sdk_signature_len", len(v.Signature),
 				"has_sdk_signature", v.Signature != "")
@@ -508,14 +500,14 @@ func (b *baseClient) buildCompleteEvent(accumulatedMessage anthropic.Message, ma
 			// be concatenated into `thinking`. Captured so the next request can
 			// replay it unchanged, as the API requires.
 			redactedThinking += v.Data
-			logging.Info("Found RedactedThinkingBlock in accumulated message",
+			logging.Debug("Found RedactedThinkingBlock in accumulated message",
 				"data_len", len(v.Data))
 		}
 	}
 
 	// Use manual signature as fallback if SDK didn't capture it
 	if thinkingSignature == "" && manualThinkingSignature != "" {
-		logging.Info("Using manually accumulated signature (SDK fallback)",
+		logging.Debug("Using manually accumulated signature (SDK fallback)",
 			"manual_signature_len", len(manualThinkingSignature))
 		thinkingSignature = manualThinkingSignature
 	}
@@ -704,14 +696,14 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 
 			case anthropic.MessageStopEvent:
 				gotMessageStop = true
-				logging.Info("Message stop event",
+				logging.Debug("Message stop event",
 					"reason", accumulated.StopReason,
 					"blocks", len(accumulated.Content))
 				eventChan <- b.buildCompleteEvent(accumulated, manualThinkingSignature)
 			}
 		}
 
-		logging.Info("Stream loop exited",
+		logging.Debug("Stream loop exited",
 			"gotMessageStop", gotMessageStop,
 			"accumulated_blocks", len(accumulated.Content),
 			"manual_signature_len", len(manualThinkingSignature))

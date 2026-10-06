@@ -53,7 +53,7 @@ func (e *InlineLoopExecutor) ExecuteParallel() (*reliantv1.LoopOutput, error) {
 	}
 
 	if len(items) == 0 {
-		e.logger.Info("[InlineLoop] Parallel loop has no items, returning empty results",
+		e.logger.Debug("[InlineLoop] Parallel loop has no items, returning empty results",
 			"loopID", e.loopID,
 		)
 		return &reliantv1.LoopOutput{
@@ -65,7 +65,7 @@ func (e *InlineLoopExecutor) ExecuteParallel() (*reliantv1.LoopOutput, error) {
 		}, nil
 	}
 
-	e.logger.Info("[InlineLoop] Parallel loop resolved items",
+	e.logger.Debug("[InlineLoop] Parallel loop resolved items",
 		"loopID", e.loopID,
 		"itemCount", len(items),
 	)
@@ -299,7 +299,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 	resolvedItem := e.resolveIterItem(item)
 
-	e.logger.Info("[InlineLoop] Starting parallel iteration",
+	e.logger.Debug("[InlineLoop] Starting parallel iteration",
 		"loopID", e.loopID,
 		"index", index,
 		"key", key,

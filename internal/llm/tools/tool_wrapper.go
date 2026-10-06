@@ -66,7 +66,7 @@ func unwrapStringifiedValues(jsonStr string, schema *jsonschema.Schema) string {
 			continue
 		}
 
-		logging.Warn("unwrapStringifiedValues: Fixed stringified value",
+		logging.Debug("unwrapStringifiedValues: Fixed stringified value",
 			"key", key, "expected_type", propSchema.Type, "parsed_type", fmt.Sprintf("%T", parsed))
 		data[key] = parsed
 		modified = true
@@ -424,7 +424,7 @@ func (t *ToolWrapper[P, O]) RequiresPermission(rctx *rctxpkg.ToolContext, call T
 	decoder := json.NewDecoder(strings.NewReader(input))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&typedParams); err != nil {
-		logging.Warn("RequiresPermission: unmarshaling failed", "tool", t.tool.Name(), "error", err, "input", truncateString(call.Input, 200))
+		logging.Warn("RequiresPermission: unmarshaling failed", "tool", t.tool.Name(), "tool_call_id", call.ID, "error", err, "input_len", len(call.Input))
 		return false, fmt.Errorf("%w: %v", ErrInvalidParameters, err)
 	}
 	return t.tool.RequiresPermission(typedParams)
@@ -464,7 +464,7 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 		repairedInput, err := validateJSONSchemaWithRepair(toolName, normalizedInput, schema)
 		if err != nil {
 			errMsg := fmt.Sprintf("JSON Schema validation failed: %v", err)
-			logging.Warn("Tool input schema validation failed", "tool", toolName, "error", err, "input", truncateString(normalizedInput, 500))
+			logging.Warn("Tool input schema validation failed", "tool", toolName, "tool_call_id", call.ID, "error", err, "input_len", len(normalizedInput))
 			return NewTextErrorResponse(errMsg), nil
 		}
 		normalizedInput = repairedInput
@@ -484,14 +484,11 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 	// Unmarshal to typed params with strict validation
 	var typedParams P
 
-	// Log raw input for debugging
-	logging.Debug("Tool input unmarshaling", "tool", toolName, "input_length", len(normalizedInput), "input_preview", truncateString(normalizedInput, 500))
-
 	decoder := json.NewDecoder(strings.NewReader(normalizedInput))
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&typedParams); err != nil {
 		errMsg := fmt.Sprintf("%v: %v", ErrInvalidParameters, err)
-		logging.Warn("Tool input unmarshaling failed", "tool", toolName, "error", err, "input", normalizedInput)
+		logging.Warn("Tool input unmarshaling failed", "tool", toolName, "tool_call_id", call.ID, "error", err, "input_len", len(normalizedInput))
 		return NewTextErrorResponse(errMsg), nil
 	}
 
@@ -544,7 +541,7 @@ func (t *ToolWrapper[P, O]) Run(rctx *rctxpkg.ToolContext, call ToolCall) (ToolR
 						"delivered_bytes", len(response.Content),
 						"dropped_bytes", originalSize-len(response.Content),
 						"budget_bytes", MaxSkillBodySize,
-						"input", truncateString(call.Input, 200))
+						"skill", skillPathForLog(call.Input))
 				} else {
 					logging.Warn("Tool output truncated",
 						"tool", toolName,
@@ -759,12 +756,14 @@ func deepCopySlice(s []interface{}) []interface{} {
 	return copy
 }
 
-// truncateString truncates a string to a maximum length for logging
-func truncateString(s string, maxLen int) string {
-	if len(s) <= maxLen {
-		return s
+// skillPathForLog extracts only the skill path from a skill tool call, so the
+// oversize-skill warning names the skill without logging the rest of the input.
+func skillPathForLog(input string) string {
+	var params struct {
+		Path string `json:"path"`
 	}
-	return s[:maxLen] + "... (truncated)"
+	_ = json.Unmarshal([]byte(input), &params)
+	return params.Path
 }
 
 // validateJSONSchema validates a JSON string against a JSON Schema (no repair).

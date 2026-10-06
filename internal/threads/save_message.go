@@ -289,7 +289,7 @@ func (s *Service) SaveMessage(ctx context.Context, opts SaveMessageOpts) (*SaveM
 		WasExisting:      false,
 	}
 
-	slog.Info("[SaveMessage] Created",
+	slog.Debug("[SaveMessage] Created",
 		"messageID", result.MessageID,
 		"role", opts.Role,
 		"ordinal", result.Ordinal,
@@ -406,7 +406,7 @@ func (s *Service) checkExistingMessage(ctx context.Context, opts SaveMessageOpts
 	if existingMsg != nil {
 		// On first attempt, return existing message
 		if opts.AttemptNumber == 1 {
-			slog.Info("SaveMessage: Found existing message from same attempt",
+			slog.Debug("SaveMessage: Found existing message from same attempt",
 				"messageID", existingMsg.ID,
 				"attemptNumber", opts.AttemptNumber)
 
@@ -466,7 +466,7 @@ func (s *Service) checkExistingMessageByID(ctx context.Context, opts SaveMessage
 		return nil, nil
 	}
 
-	slog.Info("SaveMessage: Converging on the row already written under this pre-allocated id",
+	slog.Debug("SaveMessage: Converging on the row already written under this pre-allocated id",
 		"messageID", existing.ID,
 		"existingActivityID", ptr.From(existing.ActivityID),
 		"incomingActivityID", ptr.From(opts.ActivityID),
@@ -585,7 +585,7 @@ func (s *Service) buildAssistantContentBlocks(messageID string, opts SaveMessage
 			thinkingSig = &opts.Thinking.Signature
 		}
 
-		slog.Info("[SaveMessage] Creating thinking block",
+		slog.Debug("[SaveMessage] Creating thinking block",
 			"message_id", messageID,
 			"thinking_len", len(opts.Thinking.Content),
 			"has_signature", opts.Thinking.Signature != "",
@@ -608,7 +608,7 @@ func (s *Service) buildAssistantContentBlocks(messageID string, opts SaveMessage
 	// Create the redacted thinking block, if the provider sealed one. Its own
 	// block type, so nothing downstream can read the ciphertext as reasoning.
 	if opts.Thinking != nil && opts.Thinking.Redacted != "" {
-		slog.Info("[SaveMessage] Creating redacted thinking block",
+		slog.Debug("[SaveMessage] Creating redacted thinking block",
 			"message_id", messageID,
 			"data_len", len(opts.Thinking.Redacted),
 			"position", position)

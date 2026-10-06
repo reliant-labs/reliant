@@ -349,7 +349,7 @@ func (js *JoinState) String() string {
 
 // Logger interface for processJoinEvents
 type joinLogger interface {
-	Info(msg string, keyvals ...interface{})
+	Debug(msg string, keyvals ...interface{})
 }
 
 // JoinSaveMessageFunc is called when a join completes and has save_message config.
@@ -418,7 +418,7 @@ func processJoinEvents(
 
 			// Check if join is now satisfied using condition
 			if joinState.IsJoinSatisfied(joinID, model.ConditionExpr(step)) {
-				logger.Info("[Workflow Runtime] Join satisfied",
+				logger.Debug("[Workflow Runtime] Join satisfied",
 					"joinID", joinID,
 					"condition", model.ConditionExpr(step),
 					"sources", joinState.GetJoinSources(joinID))

@@ -86,7 +86,7 @@ func (t *skillTool) RequiresPermission(params SkillParams) (bool, error) {
 }
 
 func (t *skillTool) Execute(_ *rctx.ToolContext, params SkillParams) (ToolResponse, error) {
-	slog.Debug("[SkillTool] Execute", "action", params.Action, "path", params.Path, "query", params.Query, "availableSkills", len(t.skills))
+	slog.Debug("[SkillTool] Execute", "action", params.Action, "path", params.Path, "availableSkills", len(t.skills))
 	switch params.Action {
 	case "list":
 		return t.listSkills(params.Path)

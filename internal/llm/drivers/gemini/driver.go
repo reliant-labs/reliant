@@ -821,7 +821,7 @@ func (g *GeminiClient) processStreamResponses(
 					if len(part.ThoughtSignature) > 0 {
 						logging.Debug("[GEMINI] Received text part with thought signature",
 							"signatureLength", len(part.ThoughtSignature),
-							"textPreview", delta[:min(50, len(delta))])
+							"textLen", len(delta))
 					} else {
 						logging.Debug("[GEMINI] Received text part without thought signature")
 					}

@@ -98,7 +98,7 @@ func (s *CatalogService) ListModels(
 	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 	allModels := registry.GetUserVisibleModels()
 
-	logging.Info("[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
+	logging.Debug("[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
 
 	// Build list of all model+driver combinations
 	// Key: "modelID@driverID" to ensure uniqueness
@@ -165,7 +165,7 @@ func (s *CatalogService) ListModels(
 	// Sort models: by provider, then by model priority within each provider
 	sortModelsByProvider(modelList)
 
-	logging.Info("[ListModels] Returning models", "count", len(modelList))
+	logging.Debug("[ListModels] Returning models", "count", len(modelList))
 
 	resp := &reliantv1.ListModelsResponse{
 		Models: modelList,
@@ -460,7 +460,7 @@ func (s *CatalogService) ListAvailableModels(
 		})
 	}
 
-	logging.Info("[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
+	logging.Debug("[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
 	return connect.NewResponse(&reliantv1.ListAvailableModelsResponse{Models: out}), nil
 }
 

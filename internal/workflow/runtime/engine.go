@@ -280,7 +280,7 @@ func skipNodeIfConditionFalse(
 		return false, nil, nil
 	}
 
-	logger.Info("Node skipped due to condition",
+	logger.Debug("Node skipped due to condition",
 		"stepID", node.GetId(),
 		"condition", condExpr,
 	)

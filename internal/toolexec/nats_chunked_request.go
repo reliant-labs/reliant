@@ -2,6 +2,7 @@
 package toolexec
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"strconv"
@@ -130,19 +131,16 @@ func publishChunkedRequest(nc *nats.Conn, msg *nats.Msg) (int, error) {
 // request is too large even for chunking.
 var errRequestExceedsAbsoluteCap = errors.New("request exceeds absolute chunked-request cap")
 
-// payloadEdge returns a short excerpt from the head or tail of a payload, for
-// an error that must not quote megabytes of base64. The head shows whether the
-// envelope began correctly; the tail shows whether it was cut off, which is
-// what separates a truncated transfer from a malformed request.
-func payloadEdge(payload []byte, head bool) string {
-	const edge = 48
-	if len(payload) <= edge {
-		return string(payload)
+// payloadFraming reports whether a JSON envelope opens and closes, for an error
+// that must not quote the payload: it carries tool inputs and file contents. An
+// envelope that opens but never closes is a truncated transfer; anything else
+// that fails to parse is a malformed request.
+func payloadFraming(payload []byte) (opens, closes bool) {
+	trimmed := bytes.TrimSpace(payload)
+	if len(trimmed) == 0 {
+		return false, false
 	}
-	if head {
-		return string(payload[:edge])
-	}
-	return string(payload[len(payload)-edge:])
+	return trimmed[0] == '{', trimmed[len(trimmed)-1] == '}'
 }
 
 // chunkAssembly is one in-progress reassembly.

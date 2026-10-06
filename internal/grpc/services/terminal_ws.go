@@ -129,7 +129,6 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			"session_id", sessionID,
 			"pid", createResp.PID,
 			"user_id", userID,
-			"working_dir", workingDir,
 		)
 
 		// Send init message to browser, carrying the daemon's session id so the

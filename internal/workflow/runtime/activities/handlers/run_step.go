@@ -187,7 +187,8 @@ func (a *ExecuteRunStepActivity) Execute(ctx context.Context, input ExecuteRunSt
 		var transportErr *toolexec.TransportError
 		if errors.As(err, &transportErr) {
 			activity.GetLogger(ctx).Error("[RunStep] command never reached a daemon",
-				"command", input.Command,
+				"chat_id", input.ChatID,
+				"step_id", input.StepID,
 				"code", transportErr.Code,
 				"detail", transportErr.Detail,
 			)
@@ -327,7 +328,7 @@ func (a *ExecuteRunStepActivity) writeRunOutput(ctx context.Context, input Execu
 			"chat_id", input.ChatID,
 			"step_id", input.StepID)
 	} else {
-		logger.Info("[RunStep] Run output written to chat_updates",
+		logger.Debug("[RunStep] Run output written to chat_updates",
 			"chat_id", input.ChatID,
 			"step_id", input.StepID,
 			"exit_code", output.ExitCode,

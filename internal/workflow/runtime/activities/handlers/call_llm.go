@@ -394,7 +394,7 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	output.PendingInbox = a.hasQueuedAgentMessages(probeCtx, thread)
 	cancelProbe()
 
-	logger.Info("[CallLLM] Completed",
+	logger.Debug("[CallLLM] Completed",
 		"chatID", rtx.ChatID,
 		"toolCalls", len(output.ToolCalls),
 		"tokenCount", output.TokenCount,
@@ -895,7 +895,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Cap permission to parent's level for spawned workflows.
 	// A plan-mode parent should not spawn a child with mutating permission.
 	if rtx.ParentPermission != "" && !tools.PermissionAtLeast(rtx.ParentPermission, permission) {
-		activity.GetLogger(ctx).Info("[CallLLM] Capping child permission to parent level",
+		activity.GetLogger(ctx).Debug("[CallLLM] Capping child permission to parent level",
 			"child_permission", permission,
 			"parent_permission", rtx.ParentPermission,
 			"thread", thread)
@@ -1013,7 +1013,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 
 	if resolved.Definition != nil {
-		activity.GetLogger(ctx).Info("[CallLLM] Resolved model",
+		activity.GetLogger(ctx).Debug("[CallLLM] Resolved model",
 			"selector", modelSelector,
 			"modelID", resolved.Definition.ID,
 			"modelIDWithDriver", resolved.ModelID)
@@ -1030,7 +1030,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			effectiveCompactionThreshold = int32(models.CompactionThresholdForProvider(resolved.Definition, resolved.ProviderDriver))
 		}
 	} else {
-		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
+		activity.GetLogger(ctx).Debug("[CallLLM] Using injected driver resolver",
 			"modelID", resolved.Model.ID)
 
 		// No registry definition (injected driver resolver, e.g. in tests):
@@ -1050,7 +1050,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// empty thinking level on a reasoning model still engages reasoning at the
 	// driver's medium default. Logging this here lets a run confirm reasoning was
 	// actually requested (no token values or secrets are logged).
-	activity.GetLogger(ctx).Info("[CallLLM] Reasoning",
+	activity.GetLogger(ctx).Debug("[CallLLM] Reasoning",
 		"chatID", chat.ID,
 		"modelID", resolvedModelID,
 		"provider", resolved.ProviderDriver,
@@ -1121,7 +1121,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				}
 			}
 		} else {
-			activity.GetLogger(ctx).Info("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
+			activity.GetLogger(ctx).Debug("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
 		}
 
 		// MCP discovery runs on the run's daemon, resolved the way
@@ -1155,7 +1155,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		for _, spawnConfig := range spawnConfigs {
 			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, spawnConfig); spawnTool != nil {
 				availableTools = append(availableTools, spawnTool)
-				activity.GetLogger(ctx).Info("[CallLLM] Added spawn tool from tools_config",
+				activity.GetLogger(ctx).Debug("[CallLLM] Added spawn tool from tools_config",
 					"workflow", spawnConfig.Workflow,
 					"presets", spawnConfig.Presets)
 			}
@@ -1342,7 +1342,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		if len(seededMsgs) > 0 {
 			history = insertSeededMessagesAfterFirstUserTurn(history, seededMsgs)
 		}
-		activity.GetLogger(ctx).Info("[CallLLM] Preload skills",
+		activity.GetLogger(ctx).Debug("[CallLLM] Preload skills",
 			"chatID", chat.ID,
 			"requested", len(requestedSkills),
 			"injected", len(injectedSkills),
@@ -1387,7 +1387,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			}
 			history = append(history, injectedMsg)
 		}
-		activity.GetLogger(ctx).Info("[CallLLM] Appended injected messages",
+		activity.GetLogger(ctx).Debug("[CallLLM] Appended injected messages",
 			"count", len(args.GetMessages()))
 	}
 
@@ -1423,7 +1423,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
-	activity.GetLogger(ctx).Info("[CallLLM] Starting stream",
+	activity.GetLogger(ctx).Debug("[CallLLM] Starting stream",
 		"chatID", chat.ID,
 		"thread", thread,
 		"contextSequence", rtx.ContextSequence,
@@ -1786,7 +1786,7 @@ streamLoop:
 			toolCallSignatures++
 		}
 	}
-	activity.GetLogger(ctx).Info("[CallLLM] Thinking captured",
+	activity.GetLogger(ctx).Debug("[CallLLM] Thinking captured",
 		"chatID", chat.ID,
 		"thread", thread,
 		"thinkingLen", len(thinkingText),
@@ -2031,12 +2031,6 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, req toolRequest) availableToolsResult {
 	noMachine := chat != nil && chat.NoMachine
 
-	logInfo := func(msg string, keyvals ...interface{}) {
-		if !activity.IsActivity(ctx) {
-			return
-		}
-		activity.GetLogger(ctx).Info(msg, keyvals...)
-	}
 	logWarn := func(msg string, keyvals ...interface{}) {
 		if !activity.IsActivity(ctx) {
 			return
@@ -2142,7 +2136,7 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		Unattended:         req.Unattended,
 	})
 
-	logInfo("[CallLLM] Tool capabilities resolved",
+	logDebug("[CallLLM] Tool capabilities resolved",
 		"input_filter", req.Preloaded,
 		"offered", len(caps.Offered),
 		"grants", req.Grants,
@@ -3346,7 +3340,7 @@ func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string
 	if deltaType != "stream_cancelled" && ctx.Err() != nil {
 		func() {
 			defer func() { _ = recover() }() // safe outside activity context (tests)
-			activity.GetLogger(ctx).Info("[STREAMING_DELTA] Dropping delta - context cancelled",
+			activity.GetLogger(ctx).Debug("[STREAMING_DELTA] Dropping delta - context cancelled",
 				"delta_type", deltaType,
 				"chat_id", chatID)
 		}()

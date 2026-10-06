@@ -52,7 +52,6 @@ export function singleflight<T>(key: string, fn: () => Promise<T>): Promise<T> {
 
   // Reset dedupe count when starting new flight
   dedupeCount.delete(key);
-  console.log(`[singleflight] Starting: ${key}`);
 
   // Synchronous set - register BEFORE starting async work
   // This is critical: no async gap between check and set
@@ -61,8 +60,6 @@ export function singleflight<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const finalCount = dedupeCount.get(key) || 0;
     if (finalCount > 0) {
       console.warn(`[singleflight] Completed "${key}" - deduplicated ${finalCount} total calls`);
-    } else {
-      console.log(`[singleflight] Completed: ${key}`);
     }
     // Clean up after completion (success or failure)
     inflight.delete(key);

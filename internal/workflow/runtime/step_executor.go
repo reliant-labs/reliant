@@ -353,7 +353,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 
 	// Determine step type and dispatch
 	stepType := node.GetType()
-	logging.Info("[StepExecutor] Starting step",
+	logging.Debug("[StepExecutor] Starting step",
 		"stepID", node.GetId(),
 		"stepType", stepType,
 	)
@@ -617,7 +617,7 @@ func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[strin
 		return nil, nil
 	}
 
-	e.logger.Info("[StepExecutor] Executing inline save_message",
+	e.logger.Debug("[StepExecutor] Executing inline save_message",
 		"stepID", node.GetId(),
 	)
 
@@ -805,7 +805,7 @@ func (e *StepExecutor) startAction(
 			delegated = rtx.SaveMessage != nil
 		}
 
-		logging.Info("[StepExecutor] startAction ExecuteTools",
+		logging.Debug("[StepExecutor] startAction ExecuteTools",
 			"stepID", node.GetId(),
 			"loopNodeID", rtx.LoopNodeID,
 			"loopIteration", rtx.LoopIteration,
@@ -922,7 +922,7 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		}
 	}
 
-	logging.Info("[StepExecutor] startRun",
+	logging.Debug("[StepExecutor] startRun",
 		"stepID", node.GetId(),
 		"loopNodeID", e.loopNodeID,
 		"loopIteration", e.loopIteration,

@@ -266,7 +266,6 @@ func (pm *ProcessMonitor) handleExternalKill(process *BackgroundProcess) {
 
 	logging.Info("Process killed externally",
 		"id", process.ID,
-		"command", process.Command,
 		"pid", pid)
 }
 

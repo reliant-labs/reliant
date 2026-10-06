@@ -163,7 +163,7 @@ func (c *VertexAIClient) sendMessagesClaude(ctx context.Context, prompts []strin
 
 	// Make the API request
 	endpoint := c.getClaudeEndpoint(false)
-	logging.Info("Vertex AI Claude: Sending request", "endpoint", endpoint, "model", c.options.Model.APIModel)
+	logging.Debug("Vertex AI Claude: Sending request", "endpoint", endpoint, "model", c.options.Model.APIModel)
 
 	respBody, err := c.makeClaudeRequest(ctx, endpoint, req, token)
 	if err != nil {
@@ -198,7 +198,7 @@ func (c *VertexAIClient) streamResponseClaude(ctx context.Context, prompts []str
 
 		// Make the streaming API request
 		endpoint := c.getClaudeEndpoint(true)
-		logging.Info("Vertex AI Claude: Starting stream", "endpoint", endpoint, "model", c.options.Model.APIModel)
+		logging.Debug("Vertex AI Claude: Starting stream", "endpoint", endpoint, "model", c.options.Model.APIModel)
 
 		resp, err := c.makeClaudeStreamRequest(ctx, endpoint, req, token)
 		if err != nil {
@@ -307,7 +307,7 @@ func (c *VertexAIClient) buildClaudeRequest(prompts []string, messages []message
 			// Apply caching to last 2 system prompts
 			if cache.ShouldCacheSystemPrompt(i, len(prompts), c.options.DisableCache) {
 				sysPrompt.CacheControl = extendedCacheControl()
-				logging.Info("Vertex AI Claude: Caching system prompt", "index", i)
+				logging.Debug("Vertex AI Claude: Caching system prompt", "index", i)
 			}
 
 			req.System = append(req.System, sysPrompt)
@@ -476,7 +476,7 @@ func (c *VertexAIClient) convertMessagesToClaude(messages []message.Message) []c
 			// Only cache text and tool_result blocks
 			if lastBlock.Type == "text" || lastBlock.Type == "tool_result" {
 				lastBlock.CacheControl = extendedCacheControl()
-				logging.Info("Vertex AI Claude: Caching last message block")
+				logging.Debug("Vertex AI Claude: Caching last message block")
 			}
 		}
 	}
@@ -515,7 +515,7 @@ func (c *VertexAIClient) convertToolsToClaude(toolsList []tools.Tool) []claudeTo
 		// Cache only the last tool
 		if cache.ShouldCacheTool(i, len(toolsList), 0, 0, c.options.DisableCache) {
 			claudeTools[i].CacheControl = extendedCacheControl()
-			logging.Info("Vertex AI Claude: Caching last tool", "name", tool.Name())
+			logging.Debug("Vertex AI Claude: Caching last tool", "name", tool.Name())
 		}
 	}
 
@@ -669,7 +669,7 @@ func (c *VertexAIClient) processClaudeStream(ctx context.Context, body io.Reader
 		switch event.Type {
 		case "message_start":
 			if event.Message != nil {
-				logging.Info("Stream started", "model", event.Message.Model)
+				logging.Debug("Stream started", "model", event.Message.Model)
 			}
 
 		case "content_block_start":

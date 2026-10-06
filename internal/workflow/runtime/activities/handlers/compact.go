@@ -239,7 +239,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 	// chat permanently untitled: this activity only ever runs once per chat, and
 	// it returns early above whenever a title is already set.
 	if strings.TrimSpace(input.FirstMessage) == "" {
-		logging.Info("[GenerateTitle] Skipping: chat has no first message text", "chatID", input.ChatID)
+		logging.Debug("[GenerateTitle] Skipping: chat has no first message text", "chatID", input.ChatID)
 		return GenerateTitleOutput{}, nil
 	}
 
@@ -255,7 +255,7 @@ func (a *GenerateTitleActivity) Execute(ctx context.Context, input GenerateTitle
 	if input.UseFallback {
 		generatedTitle = generateSimpleTitleFallback(input.FirstMessage)
 		logging.Warn("[GenerateTitle] LLM generation exhausted, writing truncated first message",
-			"chatID", input.ChatID, "title", generatedTitle)
+			"chatID", input.ChatID, "titleLen", len(generatedTitle))
 	} else {
 		generatedTitle, err = a.generateTitle(ctx, chat.UserID, input.FirstMessage)
 		if err != nil {
@@ -364,7 +364,7 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 			return "", err
 		}
 		spec.Selector = selector
-		logging.Info("[COMPACTION] 💡 Selected model for summarization",
+		logging.Debug("[COMPACTION] Selected model for summarization",
 			"chatID", chat.ID,
 			"model", selector.ID,
 			"tags", selector.Tags,
@@ -542,7 +542,7 @@ func (a *GenerateTitleActivity) generateTitle(ctx context.Context, userID, first
 		return "", err
 	}
 	driver := resolved.Driver
-	logging.Info("[GenerateTitle] Selected model", "model", resolved.ModelID)
+	logging.Debug("[GenerateTitle] Selected model", "model", resolved.ModelID)
 
 	// Wrap the message in a delimiter and restate the instruction after it.
 	// Unwrapped, the first message reads as a live request to an agent — and

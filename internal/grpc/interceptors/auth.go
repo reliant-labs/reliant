@@ -171,8 +171,10 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 
 	// Extract token from Authorization header
 	authHeader := header("Authorization")
+	// Rejections log at DEBUG: forge's LoggingInterceptor already records the
+	// Unauthenticated RPC ("rpc failed", procedure, request_id) once at WARN.
 	if authHeader == "" {
-		logging.Warn("[gRPC Auth] Missing authorization token",
+		logging.Debug("[gRPC Auth] Missing authorization token",
 			"procedure", procedure)
 		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("missing authorization token"))
@@ -180,7 +182,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 
 	tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 	if tokenString == authHeader {
-		logging.Warn("[gRPC Auth] Invalid authorization header format",
+		logging.Debug("[gRPC Auth] Invalid authorization header format",
 			"procedure", procedure)
 		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
 			fmt.Errorf("invalid authorization header format"))
@@ -219,7 +221,7 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 			return nil, nil, "", connect.NewError(connect.CodeUnavailable,
 				fmt.Errorf("token verification unavailable: %w", err))
 		}
-		logging.Warn("[gRPC Auth] Invalid token",
+		logging.Debug("[gRPC Auth] Invalid token",
 			"error", err,
 			"procedure", procedure)
 		return nil, nil, "", connect.NewError(connect.CodeUnauthenticated,
@@ -244,7 +246,6 @@ func (i *AuthInterceptor) authenticateRequest(ctx context.Context, procedure str
 	logging.Debug("[gRPC Auth] Authenticated request",
 		"user_id", claims.Sub,
 		"role", claims.Role,
-		"email", claims.Email,
 		"procedure", procedure)
 
 	return ctx, claims, tokenString, nil
@@ -289,8 +290,7 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 		analytics.SetUserID(claims.Sub)
 		telemetry.GetReporter().SetUser(claims.Sub, claims.Email)
 		logging.Info("[Analytics] User authenticated, updated analytics client",
-			"userID", claims.Sub,
-			"email", claims.Email)
+			"userID", claims.Sub)
 	}
 
 	// Always update the JWT (it refreshes on each request). Access tokens are
@@ -307,8 +307,7 @@ func (i *AuthInterceptor) trackSession(ctx context.Context, claims *auth.JWTClai
 		i.sessionTracker.updateSession(claims.Sub)
 		analyticsClient.TrackSessionStart()
 		logging.Info("[Analytics] New session started",
-			"userID", claims.Sub,
-			"email", claims.Email)
+			"userID", claims.Sub)
 	} else {
 		// Just update the last seen time without logging event
 		i.sessionTracker.updateSession(claims.Sub)

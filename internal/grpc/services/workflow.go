@@ -573,7 +573,7 @@ func (s *WorkflowService) SaveWorkflow(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to write workflow to file via daemon: %w", err))
 		}
 
-		logging.Info("SaveWorkflow wrote to project file",
+		logging.Debug("SaveWorkflow wrote to project file",
 			"name", protoWf.Name,
 			"slug", slug,
 			"source_path", sourcePath,

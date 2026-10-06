@@ -1070,7 +1070,7 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 		case *reliantv1.DaemonMessage_KillProcessResponse:
 			if resp := m.KillProcessResponse; resp != nil {
 				if resp.Success {
-					logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Kill process succeeded", "processID", resp.ProcessId)
+					logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" Kill process succeeded", "processID", resp.ProcessId)
 				} else {
 					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Kill process failed", "processID", resp.ProcessId, "error", resp.ErrorMessage)
 				}

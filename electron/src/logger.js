@@ -64,12 +64,17 @@ function getLogPaths() {
   return { logDir, logPath };
 }
 
-// Cleanup function to remove old archived logs
-async function cleanupOldLogs(logDir, maxArchives = MAX_ARCHIVES, maxAgeDays = MAX_AGE_DAYS) {
+// Cleanup function to remove old archived logs.
+//
+// `stem` is the active log's base name ("main", or "reliant-electron-main" under
+// RELIANT_LOG_DIR); archives are `<stem>.<timestamp>.log`. A hardcoded "main."
+// prefix matched nothing under RELIANT_LOG_DIR, so archives there were never
+// pruned and piled up beside the rest of the stack's logs.
+async function cleanupOldLogs(logDir, stem, maxArchives = MAX_ARCHIVES, maxAgeDays = MAX_AGE_DAYS) {
   try {
     const files = await fs.readdir(logDir);
     const archivedFiles = files
-      .filter(f => f.startsWith('main.') && f.endsWith('.log') && f !== 'main.log')
+      .filter(f => f.startsWith(`${stem}.`) && f.endsWith('.log') && f !== `${stem}.log`)
       .map(f => ({
         name: f,
         path: path.join(logDir, f),
@@ -174,9 +179,7 @@ if (app && app.getPath) {
       return logPath;
     };
 
-    // Log the location for debugging
-    console.log(`[Logger] Logs will be written to: ${logPath}`);
-    console.log(`[Logger] Max file size: ${(MAX_SIZE / 1024).toFixed(2)} KB (${(MAX_SIZE / 1024 / 1024).toFixed(2)} MB)`);
+    const logStem = path.parse(logPath).name;
 
     // Set max file size
     log.transports.file.maxSize = MAX_SIZE;
@@ -186,26 +189,22 @@ if (app && app.getPath) {
       try {
         const stat = await fs.stat(logPath);
         if (stat.size > MAX_SIZE) {
-          console.log(`[Logger] ⚠️  Log file exceeds max size (${(stat.size / 1024).toFixed(2)}KB > ${(MAX_SIZE / 1024).toFixed(2)}KB), triggering rotation...`);
-          
           // Get file info from electron-log
           const fileInfo = log.transports.file.getFile();
           if (fileInfo && fileInfo.path === logPath) {
             // Manually trigger rotation by calling archiveLogFn with file info
             // electron-log expects an object with path property
             await log.transports.file.archiveLogFn({ path: logPath, size: stat.size });
-            console.log(`[Logger] ✅ Manual rotation completed`);
           } else {
             // Fallback: manually rename the file and electron-log will create a new one
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
             const info = path.parse(logPath);
             const archivePath = path.join(info.dir, `${info.name}.${timestamp}${info.ext}`);
             await fs.rename(logPath, archivePath);
-            console.log(`[Logger] ✅ Manually rotated: ${path.basename(logPath)} -> ${path.basename(archivePath)}`);
             log.info(`[Logger] Log rotated: ${path.basename(logPath)} -> ${path.basename(archivePath)}`);
             
             // Cleanup old archives
-            await cleanupOldLogs(info.dir, MAX_ARCHIVES, MAX_AGE_DAYS);
+            await cleanupOldLogs(info.dir, info.name, MAX_ARCHIVES, MAX_AGE_DAYS);
           }
         }
       } catch (err) {
@@ -221,27 +220,22 @@ if (app && app.getPath) {
         ? oldLogPathOrInfo 
         : (oldLogPathOrInfo?.path || oldLogPathOrInfo);
       
-      console.log(`[Logger] 🔄 archiveLogFn called! Old path: ${oldLogPath}`);
       try {
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('.')[0];
         const info = path.parse(oldLogPath.toString());
         const newFileName = `${info.name}.${timestamp}${info.ext}`;
         const archivePath = path.join(info.dir, newFileName);
 
-        console.log(`[Logger] Archiving to: ${archivePath}`);
-
         // Rename the old log file
         await fs.rename(oldLogPath, archivePath);
 
-        console.log(`[Logger] ✅ Log rotated: ${path.basename(oldLogPath)} -> ${path.basename(archivePath)}`);
         log.info(`[Logger] Log rotated: ${path.basename(oldLogPath)} -> ${path.basename(archivePath)}`);
 
         // Cleanup old archives after rotation
-        await cleanupOldLogs(info.dir, MAX_ARCHIVES, MAX_AGE_DAYS);
+        await cleanupOldLogs(info.dir, info.name, MAX_ARCHIVES, MAX_AGE_DAYS);
 
         return archivePath;
       } catch (error) {
-        console.error(`[Logger] ❌ Failed to archive log:`, error);
         log.error('[Logger] Failed to archive log:', error);
         // Don't throw - allow logging to continue even if archiving fails
         return oldLogPath;
@@ -256,7 +250,7 @@ if (app && app.getPath) {
 
     // Run cleanup on startup to clean up any accumulated old logs
     // Don't await - let it run in background so it doesn't block app startup
-    cleanupOldLogs(logDir, MAX_ARCHIVES, MAX_AGE_DAYS).catch(err => {
+    cleanupOldLogs(logDir, logStem, MAX_ARCHIVES, MAX_AGE_DAYS).catch(err => {
       log.warn('[Logger] Startup cleanup failed:', err.message);
     });
   }
@@ -289,14 +283,7 @@ if (app && app.getPath) {
       // File doesn't exist yet
     }
     
-    log.info(`[Logger] Electron logger initialized. Logs are being written to: ${logPath}`);
-    log.info(`[Logger] Log level: file=${log.transports.file.level}, console=${log.transports.console.level}`);
-    log.info(`[Logger] Max file size: ${(MAX_SIZE / 1024).toFixed(2)}KB (${(MAX_SIZE / 1024 / 1024).toFixed(2)}MB), Max archives: ${MAX_ARCHIVES}, Max age: ${MAX_AGE_DAYS > 0 ? MAX_AGE_DAYS + ' days' : 'disabled'}`);
-    log.info(`[Logger] Current log file size: ${(currentSize / 1024).toFixed(2)}KB`);
-    if (currentSize > MAX_SIZE) {
-      log.warn(`[Logger] ⚠️  Log file already exceeds max size! Size: ${(currentSize / 1024).toFixed(2)}KB, Max: ${(MAX_SIZE / 1024).toFixed(2)}KB`);
-      log.warn(`[Logger] Rotation should trigger on next log write`);
-    }
+    log.info(`[Logger] Electron logger initialized: path=${logPath} level=${log.transports.file.level} maxSize=${(MAX_SIZE / 1024 / 1024).toFixed(2)}MB maxArchives=${MAX_ARCHIVES} currentSize=${(currentSize / 1024).toFixed(2)}KB`);
   }
 }
 

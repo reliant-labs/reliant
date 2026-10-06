@@ -2348,7 +2348,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		return reconciled, errors
 	}
 
-	logging.Info("[Reconciler] Reconciling workflows",
+	logging.Debug("[Reconciler] Reconciling workflows",
 		"running", len(allWorkflows),
 	)
 
