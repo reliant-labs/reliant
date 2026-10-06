@@ -1471,8 +1471,10 @@ message CallLLMOutput {
   // save_message and then stripped from the result the workflow receives:
   // signatures are large, and nothing in a workflow reads them.
   ThinkingOutput thinking = 5 [(reliant) = {message_only: true}];
-  string upstream_request_id = 6; // Provider request correlation ID (e.g. x-oai-request-id)
-  string upstream_proxyman_id = 7; // Proxyman flow correlation ID (e.g. x-proxyman-id)
+  // Correlation ids for debugging a provider call. "advanced" keeps them out
+  // of the builder's Outputs list unless the author asks for them.
+  string upstream_request_id = 6 [(reliant) = {visibility_contexts: "advanced"}]; // Provider request correlation ID (e.g. x-oai-request-id)
+  string upstream_proxyman_id = 7 [(reliant) = {visibility_contexts: "advanced"}]; // Proxyman flow correlation ID (e.g. x-proxyman-id)
   // Structured data from a response_tool call. When the node is configured with a
   // response_tool and the LLM returns a tool call to it, CallLLM parses the tool
   // call input JSON and stores it here. Consumers can read this directly instead
@@ -1484,7 +1486,7 @@ message CallLLMOutput {
   // default_compaction_threshold > global default. The agent-loop compact edge
   // reads this via nodes.call_llm.compaction_threshold so tag-based model
   // selectors get the correct per-model threshold after resolution.
-  int32 compaction_threshold = 10;
+  int32 compaction_threshold = 10 [(reliant) = {visibility_contexts: "advanced"}];
   // Model is the concrete model that served this completion, captured AFTER
   // tag/selector resolution (e.g. "claude-4.8-opus", not "tags:[flagship]").
   // Exposed as nodes.call_llm.model so the inline save_message can persist it
@@ -1503,7 +1505,7 @@ message CallLLMOutput {
   // which sends them back through CallLLM, which delivers it. Checked AFTER
   // streaming completes precisely so it covers the streaming window, which is
   // where a user watching a long answer actually types.
-  bool pending_inbox = 14;
+  bool pending_inbox = 14 [(reliant) = {visibility_contexts: "advanced"}];
 
   // Fields 15 (aborted) and 16 (stop_kind) were folded into stop_reason.
   reserved 15, 16;
@@ -1513,11 +1515,11 @@ message CallLLMOutput {
   // under (delta identity protocol). Echoed back from
   // RuntimeContext.AssistantMessageID so the workflow can carry it into the
   // stream_finalized marker. Empty for callers that don't pre-allocate.
-  string message_id = 12;
+  string message_id = 12 [(reliant) = {visibility_contexts: "advanced"}];
   // LastStreamSeq is the highest per-message stream sequence number stamped
   // onto deltas during this call. Lets the finalize marker tell consumers how
   // much of the stream they should have seen.
-  int64 last_stream_seq = 13;
+  int64 last_stream_seq = 13 [(reliant) = {visibility_contexts: "advanced"}];
 
   // StopReason is WHY this turn ended — the one field a loop's while-condition
   // reads to decide whether the model has more to do. Closed vocabulary,
@@ -1560,13 +1562,13 @@ message CallLLMOutput {
   // Using it means opting into a vocabulary that can grow, so a condition
   // written against it should be written as a positive match on the values it
   // knows rather than a negative list of the ones it excludes.
-  string finish_reason = 17;
+  string finish_reason = 17 [(reliant) = {visibility_contexts: "advanced"}];
 
   // Capabilities is what this turn's model was offered and may load. It is
   // recorded here — in workflow history — so the execute_tools that runs this
   // turn's tool calls enforces exactly what the model was shown, on whichever
   // worker it lands. See research/TOOL_CAPABILITIES.md.
-  ToolCapabilities capabilities = 19;
+  ToolCapabilities capabilities = 19 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // ToolCapabilities is one agent turn's tool capability set: resolved once by
@@ -1649,7 +1651,7 @@ message ExecuteToolsOutput {
   // runtime records them per thread in workflow state and hands them to the
   // thread's next call_llm, which is what makes a loaded tool appear on the
   // following turn.
-  repeated string granted_tools = 6;
+  repeated string granted_tools = 6 [(reliant) = {visibility_contexts: "advanced"}];
 }
 
 // InvokeToolOutput is the output from the invoke_tool activity.

@@ -241,6 +241,10 @@ export const proxyAuthSearchSchema = z.object({
 // onboarding tour to land the user inside a named loop/workflow node after the
 // builder loads.
 export const workflowSearchSchema = z.object({
+  // The project the workflow belongs to, so a refresh or a pasted link
+  // resolves it (useRouteProjectResolution) — the builder's routes never
+  // mount ModernApp, which is what restores a project anywhere else.
+  project: z.string().optional(),
   drill: z.string().optional(),
   tour: tourParam,
   // The chat shown in the editor's chat panel. UI state only: nothing on the

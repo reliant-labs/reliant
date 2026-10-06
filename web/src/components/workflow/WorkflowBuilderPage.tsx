@@ -21,9 +21,9 @@ import type {
 import {
   workflowGrpc,
   getWorkflowWithDraftId,
-  getWorkflowByDraftId,
   type WorkflowResponse,
 } from "../../api/workflow-grpc";
+import { NewWorkflowDialog } from "./NewWorkflowDialog";
 import { toast } from "sonner";
 import {
   useGlobalDataStore,
@@ -38,8 +38,14 @@ interface WorkflowBuilderPageProps {
   onWorkflowChange?: (workflow: Workflow) => void;
   /** Workflow name from the URL route (`/workflow/$workflowName`). */
   routeWorkflowName?: string;
-  /** When true, the route is `/workflow/new` and a fresh blank workflow should be created. */
+  /** When true, the route is `/workflow/new`: the New workflow dialog. */
   routeIsNew?: boolean;
+  /**
+   * Whether the route has finished resolving a project (?project=, then the
+   * last-used one). Until then a builder link with no project shows the
+   * loading screen; after, it goes to the Library to pick one.
+   */
+  projectResolved?: boolean;
   /** One-shot drill target from `?drill=`. Forwarded to WorkflowBuilder. */
   routeDrillIntoNodeId?: string;
   /** Chat shown in the editor's chat panel, from `?chat=`. */
@@ -82,6 +88,7 @@ export function WorkflowBuilderPage({
   onWorkflowChange,
   routeWorkflowName,
   routeIsNew = false,
+  projectResolved = true,
   routeDrillIntoNodeId,
   routeChatId,
   onChatIdChange,
@@ -145,10 +152,6 @@ export function WorkflowBuilderPage({
   // Track invalid workflows that failed to load
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
-  // Track whether the projects list is being fetched. Used below to distinguish
-  // "still loading projects" from "loaded but no project picked" when we hit a
-  // /workflow/$name deep-link with no current project.
-  const projectsLoading = useProjectStore((state) => state.isLoading);
 
   // Use cached workflows from global store for immediate display
   const { workflows: cachedWorkflows } = useWorkflows();
@@ -243,72 +246,34 @@ export function WorkflowBuilderPage({
     }
   }, [selectedWorkflow]);
 
+  // What this page has already loaded (or just saved), as loadKey(). A save
+  // that renames the workflow navigates to its new slug; the canvas already
+  // holds that workflow, so the route change must not reload it.
+  const loadedRouteNameRef = useRef<string | undefined>(undefined);
+  const loadKey = (name: string) => `${projectId ?? ""}::${tourMode}::${name}`;
+
   // Drive view state from the URL route:
-  //   routeIsNew === true                       → new blank editable workflow
+  //   routeIsNew === true                       → the New workflow dialog
   //   routeWorkflowName === undefined && !isNew → nothing to load
   //   routeWorkflowName set                     → load that workflow
-  // The route is the source of truth; no flag to clear afterwards.
+  // The route is the source of truth; no flag to clear afterwards. Nothing
+  // here CREATES anything: an effect can run twice (StrictMode, or any
+  // dependency change), so a create belongs to a click — see NewWorkflowDialog.
   useEffect(() => {
-    if (routeIsNew) {
-      // Create a new editable workflow. If a projectId is available, create a
-      // draft so we have a stable random name + draftId before showing the
-      // builder (mirrors the previous handleCreateNew flow). If there's no
-      // project, just show a blank builder.
-      setIsReadOnly(false);
-      setIsNewWorkflow(true);
-      setWorkflowSource("user");
-      setWorkflowVersion(0);
+    if ((routeIsNew || routeWorkflowName) && !projectId) {
+      // A link to the builder with no project. Wait while the route resolves
+      // one (useRouteProjectResolution: ?project=, then the last project);
+      // if none resolves, the Library is where a project is chosen. Rendering
+      // builder chrome meanwhile would lie about what the user is looking at.
+      if (projectResolved) {
+        navigate({ to: "/workflows/library", replace: true });
+      }
+      return;
+    }
 
-      let cancelled = false;
-      const createDraft = async () => {
-        if (!projectId) {
-          setEditingWorkflow(undefined);
-          setYamlDefinition(undefined);
-          setDraftId(undefined);
-          return;
-        }
-        try {
-          const { draftId: newDraftId } =
-            await workflowGrpc.createWorkflowDraft(projectId);
-          if (cancelled) return;
-          setDraftId(newDraftId);
-          const {
-            workflow,
-            version,
-            yamlDefinition: newYaml,
-            status: newStatus,
-          } = await getWorkflowByDraftId(projectId, newDraftId);
-          if (cancelled) return;
-          if (workflow) {
-            setEditingWorkflow(workflow);
-            setWorkflowVersion(version);
-            setYamlDefinition(newYaml);
-            setDraftStatus(newStatus);
-            // Leave /workflow/new so a reload reopens this draft instead of
-            // creating another; ?chat= named the previous draft, so it goes.
-            navigate({
-              to: "/workflow/$workflowName",
-              params: { workflowName: workflow.name },
-              search: (prev: Record<string, unknown>) => {
-                const { chat: _chat, ...rest } = prev;
-                return rest;
-              },
-              replace: true,
-            } as never);
-          } else {
-            setEditingWorkflow(undefined);
-          }
-        } catch (error) {
-          console.error("Failed to create workflow draft:", error);
-          if (cancelled) return;
-          setDraftId(undefined);
-          setEditingWorkflow(undefined);
-        }
-      };
-      void createDraft();
-      return () => {
-        cancelled = true;
-      };
+    if (routeIsNew) {
+      loadedRouteNameRef.current = undefined;
+      return;
     }
 
     if (!routeWorkflowName) {
@@ -321,30 +286,27 @@ export function WorkflowBuilderPage({
       return;
     }
 
-    if (!projectId) {
-      // Deep-link to /workflow/$name without a current project. Two states:
-      //   - projects are still being fetched → wait; the effect will re-run
-      //     when projectId resolves.
-      //   - projects already loaded, none selected → URL is the source of
-      //     truth, so push the user to the project picker shell. Rendering
-      //     stale builder chrome would lie about what they're looking at.
-      if (!projectsLoading) {
-        navigate({ to: "/", search: {} });
-      }
-      return;
-    }
+    if (!projectId) return;
 
     const workflowName = routeWorkflowName;
+    if (loadedRouteNameRef.current === loadKey(workflowName)) return;
+    let cancelled = false;
     const loadWorkflow = async () => {
       try {
         const {
           workflow,
           draftId: loadedDraftId,
+          version: loadedVersion,
           parseError: loadedParseError,
           rawDefinition: loadedRawDefinition,
           yamlDefinition: loadedYamlDef,
           status: loadedStatus,
+          source: loadedSource,
         } = await getWorkflowWithDraftId(projectId, workflowName);
+        // A response for a route we already left (a rename navigated away)
+        // must not touch the page — least of all with a 404 for the old name.
+        if (cancelled) return;
+        loadedRouteNameRef.current = loadKey(workflowName);
         setDraftStatus(loadedStatus);
 
         // Handle parse error - show error view with chat available
@@ -362,15 +324,15 @@ export function WorkflowBuilderPage({
           setRawDefinition(undefined);
           setErrorWorkflowName(undefined);
 
-          // Detect if this is a built-in workflow from the workflowName
-          const isBuiltinWorkflow = workflowName.startsWith("builtin://");
-          // Check if it's a project workflow by looking it up in existing workflows
-          const existingWorkflow = existingWorkflows.find(
-            (w) => w.name === workflowName,
-          );
-          const isProjectWorkflow = existingWorkflow?.source === "project";
+          // GetWorkflow says where it came from. (This used to look the name
+          // up in the workflow LIST, which made the list an input of this
+          // effect: every save refreshed the list and re-ran the load — by the
+          // old name, after a rename, which 404s.)
+          const isBuiltinWorkflow = loadedSource === "builtin" || workflowName.startsWith("builtin://");
+          const isProjectWorkflow = loadedSource === "project";
 
           setEditingWorkflow(workflow);
+          setWorkflowVersion(loadedVersion);
           // In tour mode, force editable so the user sees what editing feels
           // like on a builtin demo (e.g. get-it-right). Saves are blocked in
           // handleSave below — nothing actually persists.
@@ -391,6 +353,7 @@ export function WorkflowBuilderPage({
           navigate({ to: "/workflows/library" });
         }
       } catch (err) {
+        if (cancelled) return;
         console.error("Failed to load workflow:", err);
         toast.error(`Failed to load workflow "${workflowName}"`);
         // Same fallback logic for errors
@@ -398,8 +361,13 @@ export function WorkflowBuilderPage({
       }
     };
 
-    loadWorkflow();
-  }, [routeWorkflowName, routeIsNew, projectId, projectsLoading, existingWorkflows, navigate, tourMode]);
+    void loadWorkflow();
+    return () => {
+      cancelled = true;
+    };
+    // loadKey reads only projectId and tourMode, both listed.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [routeWorkflowName, routeIsNew, projectId, projectResolved, navigate, tourMode]);
 
   const handleSave = async (
     workflow: Workflow,
@@ -518,6 +486,21 @@ export function WorkflowBuilderPage({
         });
         return updated;
       });
+
+      // A save that renamed the workflow (or stored a copy of a built-in)
+      // lives at a new slug. Move the URL there BEFORE anything refreshes, in
+      // place (replace, so Back doesn't return to a name that no longer
+      // exists). The canvas already shows this workflow, unsaved edits and
+      // all, so the route change must not reload it.
+      if (response.slug && response.slug !== routeWorkflowName) {
+        loadedRouteNameRef.current = loadKey(response.slug);
+        navigate({
+          to: "/workflow/$workflowName",
+          params: { workflowName: response.slug },
+          search: (prev: Record<string, unknown>) => prev,
+          replace: true,
+        } as never);
+      }
 
       // Refresh global store + detailed data so cached list and all
       // subscribers (AgentSelector, the Library, etc.) see the save.
@@ -661,6 +644,34 @@ export function WorkflowBuilderPage({
   // imminent, it'll unmount this component before the spinner is even visible.
   if ((routeWorkflowName || routeIsNew) && !projectId) {
     return <LoadingSpinner />;
+  }
+
+  // /workflow/new is the New workflow dialog. Creating is the dialog's
+  // Create click; on success the URL moves to the new workflow (replace, so a
+  // reload or Back never lands on /workflow/new and offers to create again).
+  if (routeIsNew && projectId) {
+    return renderWithChrome(
+      <div className="h-full w-full bg-background" data-testid="new-workflow-page">
+        <NewWorkflowDialog
+          open
+          projectId={projectId}
+          onClose={() => navigate({ to: "/workflows/library", replace: true })}
+          onCreated={(created) => {
+            trackEvent("workflow_created");
+            navigate({
+              to: "/workflow/$workflowName",
+              params: { workflowName: created.slug },
+              search: (prev: Record<string, unknown>) => {
+                // ?chat= named whatever was open before; it is not this workflow's.
+                const { chat: _chat, ...rest } = prev;
+                return rest;
+              },
+              replace: true,
+            } as never);
+          }}
+        />
+      </div>,
+    );
   }
 
   const handleBack = async () => {

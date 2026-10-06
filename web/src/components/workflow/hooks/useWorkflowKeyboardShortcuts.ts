@@ -1,88 +1,89 @@
 /**
  * useWorkflowKeyboardShortcuts
  *
- * Owns the two keyboard listener effects in WorkflowBuilder:
- *   1. Undo / Redo: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y on the `window`.
- *   2. Escape: capture-phase Escape on the `window` that drives the workflow
- *      navigation stack — exit inline-edit, then deselect/close panels, then
- *      fall back to the global "go back to hub" handler.
+ * Owns the builder's two window-level keyboard listeners:
+ *   1. Undo / Redo: Ctrl/Cmd+Z, Ctrl/Cmd+Shift+Z, Ctrl/Cmd+Y.
+ *   2. Escape: closes the open side panels (a selected step or edge, the
+ *      start panel, a trigger's editor, Inputs; then the Test run panel).
  *
- * Extracted from `WorkflowBuilder.tsx`. Behavior is intentionally identical
- * to the original effects — same listeners, same options (capture phase for
- * Escape), same dependency arrays. The hook is a wrapper: it owns no state.
+ * ESCAPE NEVER NAVIGATES. It used to fall back to "leave the builder" when
+ * nothing was selected, and it could not see popovers, menus or the step
+ * palette, so pressing Escape to close a popover threw the user out to the
+ * Library (research/WORKFLOW_EDITOR_UX_REVIEW.md issue 10). It no longer exits
+ * a loop body either: that applies the body's edits, and Apply / Discard /
+ * Back are the buttons for it. Leaving is the Back button, behind the
+ * unsaved-changes guard.
  *
- * The Escape handler intentionally returns early when:
- *   - the target is an input/textarea/contenteditable;
- *   - any of the modal flags are open;
- *   - the URL has `?tour=…` (defer to the onboarding tour).
+ * An open overlay owns its own Escape. The handler runs in the CAPTURE phase,
+ * before any overlay's listener, and only to ASK whether one is open — if so
+ * it does nothing and lets the overlay close itself. Checking in the capture
+ * phase matters: by the bubble phase an overlay may already have closed, and
+ * Escape would close a panel behind it too. Overlays are recognized by role
+ * (dialogs, menus, listboxes — Modal, the step palette, row menus,
+ * dropdowns) or by `data-escape-layer`, which a non-modal popover sets.
  *
- * SCOPE. These listeners are safe to keep outside the central shortcut
- * dispatcher because the workflow builder lives on its own route (`/workflow/*`)
- * and ModernApp — which mounts the dispatcher — only renders on `/` and
- * `/project/$projectId`. There is no global handler here to race, and the
- * `stopImmediatePropagation` below is defensive rather than load-bearing.
- *
- * If the dispatcher is ever mounted app-wide, these must move into the
- * `workflow-canvas` context instead: an inner-context Escape shadows the global
- * one by precedence, which gets the same result without the race.
+ * SCOPE. These listeners are safe outside the central shortcut dispatcher
+ * because the builder lives on its own route (`/workflow/*`) and ModernApp,
+ * which mounts the dispatcher, does not render there.
  */
 
 import { useEffect } from "react";
 
+/** Elements that own Escape while they are open. */
+export const ESCAPE_LAYER_SELECTOR = [
+  '[aria-modal="true"]',
+  '[role="dialog"]',
+  '[role="alertdialog"]',
+  '[role="menu"]',
+  '[role="listbox"]',
+  '[data-dropdown-open="true"]',
+  "[data-escape-layer]",
+].join(", ");
+
+/** Whether an overlay that handles its own Escape is open. */
+export function hasOpenEscapeLayer(root: ParentNode = document): boolean {
+  return root.querySelector(ESCAPE_LAYER_SELECTOR) !== null;
+}
+
+function isTextEntry(target: EventTarget | null): boolean {
+  if (!(target instanceof HTMLElement)) return false;
+  return (
+    target.tagName === "INPUT" ||
+    target.tagName === "TEXTAREA" ||
+    target.tagName === "SELECT" ||
+    target.isContentEditable
+  );
+}
+
 export interface UseWorkflowKeyboardShortcutsArgs {
   onUndo: () => void;
   onRedo: () => void;
-  /** Called when Escape lands without any deselect/close action to take. */
-  onEscape: () => void;
-  /** Whether we're inside an inline-edit (loop/workflow body). */
-  isEditingLoop: boolean;
-  /** Exit the current inline-edit. Receives `saveChanges` flag. */
-  exitLoopEdit: (saveChanges?: boolean) => void;
-  /** Whether the workflow is a builtin (affects exit save behavior). */
-  isBuiltinWorkflow: boolean;
-  /** Selection state — Escape closes these before falling back to onEscape. */
-  hasSelectedNode: boolean;
-  hasSelectedEdge: boolean;
-  showSettingsEditor: boolean;
-  setSelectedNodeId: (id: string | null) => void;
-  setSelectedEdgeId: (id: string | null) => void;
-  setShowSettingsEditor: (open: boolean) => void;
-  /** Modal flags — Escape defers to modals when they're open. */
-  showTemplateModal: boolean;
-  showExitConfirmModal: boolean;
+  /** Whether any side panel Escape should close is open. */
+  hasOpenPanel: boolean;
+  /** Close every side panel (selection, start panel, trigger editor, Inputs). */
+  closePanels: () => void;
+  /** Whether the Test run panel is open; closed after the side panels. */
+  hasTestRunPanel: boolean;
+  closeTestRunPanel: () => void;
 }
 
 export function useWorkflowKeyboardShortcuts({
   onUndo,
   onRedo,
-  onEscape,
-  isEditingLoop,
-  exitLoopEdit,
-  isBuiltinWorkflow,
-  hasSelectedNode,
-  hasSelectedEdge,
-  showSettingsEditor,
-  setSelectedNodeId,
-  setSelectedEdgeId,
-  setShowSettingsEditor,
-  showTemplateModal,
-  showExitConfirmModal,
+  hasOpenPanel,
+  closePanels,
+  hasTestRunPanel,
+  closeTestRunPanel,
 }: UseWorkflowKeyboardShortcutsArgs): void {
-  // Keyboard shortcuts for undo/redo
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Ctrl/Cmd + Z for undo
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         onUndo();
-      }
-      // Ctrl/Cmd + Shift + Z for redo
-      else if ((e.ctrlKey || e.metaKey) && e.key === "z" && e.shiftKey) {
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "z" && e.shiftKey) {
         e.preventDefault();
         onRedo();
-      }
-      // Ctrl/Cmd + Y for redo (alternative)
-      else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
+      } else if ((e.ctrlKey || e.metaKey) && e.key === "y") {
         e.preventDefault();
         onRedo();
       }
@@ -92,71 +93,29 @@ export function useWorkflowKeyboardShortcuts({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [onUndo, onRedo]);
 
-  // Escape key handling - deselect first, then navigate back to hub
-  // Uses capture phase to intercept before ModernApp's global handler
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-
-      // Skip if we're in an input field
-      const target = e.target as HTMLElement;
-      if (
-        target.tagName === "INPUT" ||
-        target.tagName === "TEXTAREA" ||
-        target.contentEditable === "true"
-      ) {
-        return;
-      }
-
-      // Skip if modals are open - let them handle ESC
-      if (showTemplateModal || showExitConfirmModal) {
-        return;
-      }
-
-      // Defer to onboarding tour if it's active. Tour activity lives in the
-      // URL (`?tour=<step>`); read it directly since this handler is outside
-      // the React render cycle.
+      if (e.key !== "Escape" || e.defaultPrevented) return;
+      // A field (or Monaco's textarea) handles its own Escape.
+      if (isTextEntry(e.target)) return;
+      // The innermost overlay closes itself.
+      if (hasOpenEscapeLayer()) return;
+      // The onboarding tour owns Escape while it runs (`?tour=<step>`).
       if (new URLSearchParams(window.location.search).has("tour")) return;
 
-      // Prevent ModernApp from handling this ESC
-      e.preventDefault();
-      e.stopPropagation();
-      e.stopImmediatePropagation();
-
-      // Priority 1: If editing a loop, exit loop edit (save changes only for non-builtins)
-      if (isEditingLoop) {
-        exitLoopEdit(!isBuiltinWorkflow);
+      if (hasOpenPanel) {
+        e.preventDefault();
+        closePanels();
         return;
       }
-
-      // Priority 2: If something is selected or settings panel is open, deselect/close
-      if (hasSelectedNode || hasSelectedEdge || showSettingsEditor) {
-        setSelectedNodeId(null);
-        setSelectedEdgeId(null);
-        setShowSettingsEditor(false);
-        return;
+      if (hasTestRunPanel) {
+        e.preventDefault();
+        closeTestRunPanel();
       }
-
-      // Priority 3: Nothing selected - go back to hub
-      onEscape();
+      // Nothing open: Escape does nothing. It never leaves the builder.
     };
 
-    // Use window with capture phase to run BEFORE document-level handlers (like ModernApp's global shortcuts)
-    // This ensures the workflow navigation stack is respected (panels → hub → exit)
     window.addEventListener("keydown", handleEscape, true);
     return () => window.removeEventListener("keydown", handleEscape, true);
-  }, [
-    isEditingLoop,
-    exitLoopEdit,
-    hasSelectedNode,
-    hasSelectedEdge,
-    showSettingsEditor,
-    showTemplateModal,
-    showExitConfirmModal,
-      onEscape,
-    isBuiltinWorkflow,
-    setSelectedNodeId,
-    setSelectedEdgeId,
-    setShowSettingsEditor,
-  ]);
+  }, [hasOpenPanel, closePanels, hasTestRunPanel, closeTestRunPanel]);
 }

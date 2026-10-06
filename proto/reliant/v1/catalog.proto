@@ -251,6 +251,10 @@ message NodeInputField {
   // The kind of value in a few words ("list of tool calls"), when the type
   // undersells it. FieldMeta.type_hint.
   string type_hint = 17;
+  // Sub-fields of a message-typed OUTPUT field (or of its items, when the
+  // field is repeated), e.g. call_llm's tool_calls[].name. Empty on inputs
+  // and on dynamic objects (google.protobuf.Struct), whose keys are unknown.
+  repeated NodeInputField children = 18;
 }
 
 // NodeInfo represents a workflow node available for the builder

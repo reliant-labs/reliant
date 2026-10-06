@@ -579,6 +579,27 @@ var categoryDisplayNames = map[string]string{
 	"utility":             "Utility",
 }
 
+// outputFieldsToProto converts a node's output fields, with their nested
+// children and visibility contexts, for the builder's Outputs tab.
+func outputFieldsToProto(fields []schema.InputFieldInfo) []*reliantv1.NodeInputField {
+	out := make([]*reliantv1.NodeInputField, 0, len(fields))
+	for _, field := range fields {
+		protoField := &reliantv1.NodeInputField{
+			Name:               field.Name,
+			Type:               field.Type,
+			Description:        field.Description,
+			Label:              field.Label,
+			VisibilityContexts: field.VisibilityContexts,
+			Children:           outputFieldsToProto(field.Children),
+		}
+		if field.Default != nil {
+			protoField.DefaultValue = fmt.Sprintf("%v", field.Default)
+		}
+		out = append(out, protoField)
+	}
+	return out
+}
+
 // ListNodes returns all workflow nodes available for the builder
 func (s *CatalogService) ListNodes(
 	ctx context.Context,
@@ -643,19 +664,7 @@ func (s *CatalogService) ListNodes(
 			inputFields = append(inputFields, protoField)
 		}
 
-		// Convert output fields
-		outputFields := make([]*reliantv1.NodeInputField, 0, len(meta.OutputFields))
-		for _, field := range meta.OutputFields {
-			protoField := &reliantv1.NodeInputField{
-				Name:        field.Name,
-				Type:        field.Type,
-				Description: field.Description,
-			}
-			if field.Default != nil {
-				protoField.DefaultValue = fmt.Sprintf("%v", field.Default)
-			}
-			outputFields = append(outputFields, protoField)
-		}
+		outputFields := outputFieldsToProto(meta.OutputFields)
 
 		nodeResponses = append(nodeResponses, &reliantv1.NodeInfo{
 			Id:           meta.ID,

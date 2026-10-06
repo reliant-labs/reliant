@@ -349,15 +349,32 @@ func (x *HighlightSpan) GetReason() string {
 
 // ValidationError represents a structured validation error
 type ValidationError struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Type          string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`                             // "syntax_error", "anti_pattern", "schema_violation"
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`                       // Human-readable error message
-	Suggestion    string                 `protobuf:"bytes,3,opt,name=suggestion,proto3" json:"suggestion,omitempty"`                 // Suggested fix
-	EdgeIndex     int32                  `protobuf:"varint,4,opt,name=edge_index,json=edgeIndex,proto3" json:"edge_index,omitempty"` // Which edge has the error
-	EdgeFrom      string                 `protobuf:"bytes,5,opt,name=edge_from,json=edgeFrom,proto3" json:"edge_from,omitempty"`     // Edge source
-	CaseTo        string                 `protobuf:"bytes,6,opt,name=case_to,json=caseTo,proto3" json:"case_to,omitempty"`           // Case target (identifies which case in the edge)
-	Condition     string                 `protobuf:"bytes,7,opt,name=condition,proto3" json:"condition,omitempty"`                   // The problematic condition
-	Highlights    []*HighlightSpan       `protobuf:"bytes,8,rep,name=highlights,proto3" json:"highlights,omitempty"`                 // Character positions to highlight
+	state      protoimpl.MessageState `protogen:"open.v1"`
+	Type       string                 `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`                             // "syntax_error", "anti_pattern", "schema_violation"
+	Message    string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`                       // Human-readable error message
+	Suggestion string                 `protobuf:"bytes,3,opt,name=suggestion,proto3" json:"suggestion,omitempty"`                 // Suggested fix
+	EdgeIndex  int32                  `protobuf:"varint,4,opt,name=edge_index,json=edgeIndex,proto3" json:"edge_index,omitempty"` // Which edge has the error
+	EdgeFrom   string                 `protobuf:"bytes,5,opt,name=edge_from,json=edgeFrom,proto3" json:"edge_from,omitempty"`     // Edge source
+	CaseTo     string                 `protobuf:"bytes,6,opt,name=case_to,json=caseTo,proto3" json:"case_to,omitempty"`           // Case target (identifies which case in the edge)
+	Condition  string                 `protobuf:"bytes,7,opt,name=condition,proto3" json:"condition,omitempty"`                   // The problematic condition
+	Highlights []*HighlightSpan       `protobuf:"bytes,8,rep,name=highlights,proto3" json:"highlights,omitempty"`                 // Character positions to highlight
+	// Where the finding is, structured, so an editor can put it on the step and
+	// field it is about instead of parsing `message`.
+	//
+	// node_id is the TOP-LEVEL node the finding is in: the node itself, the
+	// node an inline body or loop body belongs to, or an edge's source. Empty
+	// for workflow-level findings (entry, inputs, triggers).
+	NodeId string `protobuf:"bytes,9,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
+	// field is the location within that node, dot-separated ("model",
+	// "with.channel", "system_prompt", "thread.inject.content"; for a finding
+	// inside an inline body it starts "inline.nodes.[i](id)"). Empty when the
+	// finding is about the node as a whole.
+	Field string `protobuf:"bytes,10,opt,name=field,proto3" json:"field,omitempty"`
+	// detail is the finding alone: `message` without its location prefix and
+	// without the "(suggestion)" suffix, which `suggestion` carries.
+	Detail string `protobuf:"bytes,11,opt,name=detail,proto3" json:"detail,omitempty"`
+	// path is the full dot-joined location, as `message` prints it.
+	Path          string `protobuf:"bytes,12,opt,name=path,proto3" json:"path,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -446,6 +463,34 @@ func (x *ValidationError) GetHighlights() []*HighlightSpan {
 		return x.Highlights
 	}
 	return nil
+}
+
+func (x *ValidationError) GetNodeId() string {
+	if x != nil {
+		return x.NodeId
+	}
+	return ""
+}
+
+func (x *ValidationError) GetField() string {
+	if x != nil {
+		return x.Field
+	}
+	return ""
+}
+
+func (x *ValidationError) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
+func (x *ValidationError) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
 }
 
 type ListWorkflowsRequest struct {
@@ -3158,7 +3203,15 @@ type CreateWorkflowDraftRequest struct {
 	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required: project context
 	// Intent; UNSPECIFIED and DRAFT create a draft. COMPLETE validates the
 	// starting template first.
-	Status        WorkflowDraftStatus `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	Status WorkflowDraftStatus `protobuf:"varint,2,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"`
+	// Display title. The slug (and `name:`) is derived from it and made unique
+	// among the caller's workflows. Empty: "Untitled workflow", numbered so it
+	// is unique too.
+	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	// What to start from. Empty: a blank workflow (no steps). A builtin ref
+	// ("builtin://agent") copies that built-in's graph, with this draft's own
+	// name and title and an empty description.
+	Template      string `protobuf:"bytes,4,opt,name=template,proto3" json:"template,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3207,12 +3260,27 @@ func (x *CreateWorkflowDraftRequest) GetStatus() WorkflowDraftStatus {
 	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
 }
 
+func (x *CreateWorkflowDraftRequest) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
+}
+
+func (x *CreateWorkflowDraftRequest) GetTemplate() string {
+	if x != nil {
+		return x.Template
+	}
+	return ""
+}
+
 type CreateWorkflowDraftResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	DraftId       string                 `protobuf:"bytes,1,opt,name=draft_id,json=draftId,proto3" json:"draft_id,omitempty"`                     // UUID of the created draft
 	Slug          string                 `protobuf:"bytes,2,opt,name=slug,proto3" json:"slug,omitempty"`                                          // Generated slug for the draft
-	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`                                          // Generated display name (e.g., "swift-fox-a1b2")
+	Name          string                 `protobuf:"bytes,3,opt,name=name,proto3" json:"name,omitempty"`                                          // The workflow's `name:` (equal to the slug)
 	Status        WorkflowDraftStatus    `protobuf:"varint,4,opt,name=status,proto3,enum=reliant.v1.WorkflowDraftStatus" json:"status,omitempty"` // Status the workflow was created with
+	Title         string                 `protobuf:"bytes,5,opt,name=title,proto3" json:"title,omitempty"`                                        // The title it was created with
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -3273,6 +3341,13 @@ func (x *CreateWorkflowDraftResponse) GetStatus() WorkflowDraftStatus {
 		return x.Status
 	}
 	return WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_UNSPECIFIED
+}
+
+func (x *CreateWorkflowDraftResponse) GetTitle() string {
+	if x != nil {
+		return x.Title
+	}
+	return ""
 }
 
 type SetWorkflowStatusRequest struct {
@@ -3459,7 +3534,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\rHighlightSpan\x12\x14\n" +
 	"\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n" +
 	"\x03end\x18\x02 \x01(\x05R\x03end\x12\x16\n" +
-	"\x06reason\x18\x03 \x01(\tR\x06reason\"\x8d\x02\n" +
+	"\x06reason\x18\x03 \x01(\tR\x06reason\"\xe8\x02\n" +
 	"\x0fValidationError\x12\x12\n" +
 	"\x04type\x18\x01 \x01(\tR\x04type\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x12\x1e\n" +
@@ -3473,7 +3548,12 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\tcondition\x18\a \x01(\tR\tcondition\x129\n" +
 	"\n" +
 	"highlights\x18\b \x03(\v2\x19.reliant.v1.HighlightSpanR\n" +
-	"highlights\"\x92\x01\n" +
+	"highlights\x12\x17\n" +
+	"\anode_id\x18\t \x01(\tR\x06nodeId\x12\x14\n" +
+	"\x05field\x18\n" +
+	" \x01(\tR\x05field\x12\x16\n" +
+	"\x06detail\x18\v \x01(\tR\x06detail\x12\x12\n" +
+	"\x04path\x18\f \x01(\tR\x04path\"\x92\x01\n" +
 	"\x14ListWorkflowsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12$\n" +
@@ -3736,16 +3816,19 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"scenarioId\"W\n" +
 	"\x16ExportScenarioResponse\x12!\n" +
 	"\fyaml_content\x18\x01 \x01(\tR\vyamlContent\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"t\n" +
+	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xa6\x01\n" +
 	"\x1aCreateWorkflowDraftRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x127\n" +
-	"\x06status\x18\x02 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\"\x99\x01\n" +
+	"\x06status\x18\x02 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12\x14\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\x12\x1a\n" +
+	"\btemplate\x18\x04 \x01(\tR\btemplate\"\xaf\x01\n" +
 	"\x1bCreateWorkflowDraftResponse\x12\x19\n" +
 	"\bdraft_id\x18\x01 \x01(\tR\adraftId\x12\x12\n" +
 	"\x04slug\x18\x02 \x01(\tR\x04slug\x12\x12\n" +
 	"\x04name\x18\x03 \x01(\tR\x04name\x127\n" +
-	"\x06status\x18\x04 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\"\xd2\x01\n" +
+	"\x06status\x18\x04 \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\x12\x14\n" +
+	"\x05title\x18\x05 \x01(\tR\x05title\"\xd2\x01\n" +
 	"\x18SetWorkflowStatusRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
