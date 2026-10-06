@@ -103,21 +103,11 @@ func projectGitHubRepos(project *db.Project, repos []*core.Repo) []githubRepo {
 }
 
 // githubReadable reports whether this turn can read GitHub: the reading tool
-// is in hand, or load_tool is and may reach it. The scope's reach was recorded
-// for this turn just before (getAvailableToolsWithSpawn), already narrowed to
-// the integrations the owner can use.
-func githubReadable(offered []tools.Tool, scope string) bool {
+// is in hand, or load_tool is and the turn's capability set lets it reach the
+// reader — which already accounts for whether the owner has GitHub connected.
+func githubReadable(caps *tools.Capabilities) bool {
 	const reader = "github__repo_get_content"
-	canLoad := false
-	for _, t := range offered {
-		switch t.Name() {
-		case reader:
-			return true
-		case tools.ToolLoadTool:
-			canLoad = true
-		}
-	}
-	return canLoad && tools.GetLoadedToolsStore().CanLoadTool(scope, reader)
+	return caps.Offers(reader) || (caps.Offers(tools.ToolLoadTool) && caps.CanLoad(reader))
 }
 
 // noMachineRepoNote is the no-machine note's addendum for a project on GitHub,

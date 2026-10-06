@@ -70,6 +70,13 @@ type RuntimeContext struct {
 	SpawnConfig      *SpawnConfig `json:"spawn_config,omitempty"`
 	ParentPermission string       `json:"parent_permission,omitempty"` // Cap child permission to parent's level
 
+	// ToolGrants are the tools load_tool has granted on this thread so far,
+	// recorded by the workflow from each ExecuteTools result's granted_tools
+	// and handed to every call_llm on the thread. Workflow state, not process
+	// state: it survives a worker restart, another replica, and
+	// continue-as-new. See research/TOOL_CAPABILITIES.md.
+	ToolGrants []string `json:"tool_grants,omitempty"`
+
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
 

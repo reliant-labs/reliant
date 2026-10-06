@@ -69,6 +69,8 @@ type integrationFixture struct {
 	driver  *promptCaptureDriver
 	conns   *ownerConnections
 	callLLM *CallLLMActivity
+	// caps is the capability set the last offeredTools turn recorded.
+	caps *tools.Capabilities
 }
 
 func setupIntegrationFixture(t *testing.T, noMachine bool, conns *ownerConnections) *integrationFixture {
@@ -114,39 +116,48 @@ func (f *integrationFixture) offeredTools(t *testing.T, preloaded, loadable []st
 			ToolsConfig: cfg,
 		}}},
 	}, &output))
+	f.caps = tools.CapabilitiesFromProto(output.GetCapabilities())
 	return append([]string(nil), f.driver.capturedTools...)
 }
 
+// canLoad reads load_tool's reach from the capability set the last turn
+// recorded — what execute_tools hands load_tool on whichever worker it runs.
 func (f *integrationFixture) canLoad(name string) bool {
-	return tools.GetLoadedToolsStore().CanLoadTool(tools.Scope(f.chat.ID, f.chat.ID), name)
+	return f.caps.CanLoad(name)
 }
 
-// The narrowing itself, without a database: gated tools of an integration the
-// owner cannot use leave every list, and "load anything" becomes an explicit
-// list only when something was actually withheld.
-func TestWithoutUnusableIntegrations(t *testing.T) {
-	registry := []string{tools.ToolFetch, "github__issue_get", "slack__message_post", "http__request"}
-	mcp := []string{"mcp__srv__probe"}
+// The withholding itself, without a database: gated tools of an integration
+// the owner cannot use are neither offered nor loadable, an explicit list just
+// loses them, and "load anything" stays exactly that — the resolver filters
+// per name, so nothing has to be expanded into a list.
+func TestUnusableIntegrationsAreWithheldByTheResolver(t *testing.T) {
+	resolve := func(access tools.ToolAccess, usable map[string]bool) *tools.Capabilities {
+		return tools.ResolveCapabilities(tools.CapabilityInputs{Access: access, Permission: tools.PermissionMutating,
+			MCPTools: []string{"mcp__srv__probe"}, UsableIntegrations: usable})
+	}
 
-	everything := map[string]bool{"github": true, "slack": true}
-	access, names := withoutUnusableIntegrations(tools.ToolAccess{LoadableAll: true, Preloaded: []string{"github__issue_get"}},
-		[]string{"github__issue_get", tools.ToolFetch}, mcp, registry, everything)
-	assert.True(t, access.LoadableAll, "nothing withheld: still unrestricted")
-	assert.Empty(t, access.Loadable)
-	assert.Equal(t, []string{"github__issue_get"}, access.Preloaded)
-	assert.Equal(t, []string{"github__issue_get", tools.ToolFetch}, names)
+	everything := map[string]bool{"github": true, "slack": true, "gmail": true, "twilio": true}
+	caps := resolve(tools.ToolAccess{LoadableAll: true, Preloaded: []string{"github__issue_get", tools.ToolFetch}}, everything)
+	assert.True(t, caps.LoadableAll, "nothing withheld: still unrestricted")
+	assert.Empty(t, caps.WithheldIntegrations)
+	assert.True(t, caps.Offers("github__issue_get"))
+	assert.True(t, caps.Offers(tools.ToolFetch))
 
 	onlyGitHub := map[string]bool{"github": true}
-	access, names = withoutUnusableIntegrations(tools.ToolAccess{LoadableAll: true},
-		[]string{"slack__message_post", "http__request"}, mcp, registry, onlyGitHub)
-	assert.False(t, access.LoadableAll)
-	assert.Equal(t, []string{tools.ToolFetch, "github__issue_get", "http__request", "mcp__srv__probe"}, access.Loadable,
-		"the registry minus Slack, plus the connected MCP tools")
-	assert.Equal(t, []string{"http__request"}, names)
+	caps = resolve(tools.ToolAccess{LoadableAll: true, Preloaded: []string{"slack__message_post", "http__request"}}, onlyGitHub)
+	assert.True(t, caps.LoadableAll, "withholding Slack does not turn \"*\" into a list")
+	assert.Empty(t, caps.Loadable)
+	assert.False(t, caps.Offers("slack__message_post"))
+	assert.True(t, caps.Offers("http__request"))
+	assert.False(t, caps.CanLoad("slack__message_post"))
+	assert.True(t, caps.CanLoad("github__issue_get"))
+	assert.True(t, caps.CanLoad(tools.ToolFetch))
+	assert.True(t, caps.CanLoad("mcp__srv__probe"), "the connected MCP tools stay loadable")
 
-	access, _ = withoutUnusableIntegrations(tools.ToolAccess{Loadable: []string{"github__issue_get", "slack__message_post", tools.ToolFetch}},
-		nil, mcp, registry, nil)
-	assert.Equal(t, []string{tools.ToolFetch}, access.Loadable, "an explicit list just loses the gated names")
+	caps = resolve(tools.ToolAccess{Loadable: []string{"github__issue_get", "slack__message_post", tools.ToolFetch}}, nil)
+	assert.True(t, caps.CanLoad(tools.ToolFetch), "an explicit list just loses the gated names")
+	assert.False(t, caps.CanLoad("github__issue_get"))
+	assert.False(t, caps.CanLoad("slack__message_post"))
 }
 
 // An integration that needs a connection is offered to an owner who has one:

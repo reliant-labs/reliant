@@ -179,11 +179,13 @@ func (e *LocalToolExecutor) executeTool(
 		toolsFactory = toolsFactory.WithMCPProjectPath(workingDir)
 	}
 
-	// Inject skills from the global store for this chat. call_llm stores
-	// skills per-chat; the executor's factory was created at startup without
-	// them, so we clone with skills here so the skill tool sees them.
-	if toolsFactory != nil && chatID != "" {
-		if skills := tools.GetLoadedToolsStore().GetSkills(tools.Scope(chatID, thread)); len(skills) > 0 {
+	// The executor's factory was created at startup without the project's
+	// skills, so the skill tool gets them from the context: execute_tools
+	// reads them from the project's config row when its batch calls `skill`.
+	// They used to come from a process-global store that call_llm filled,
+	// which a worker restart — or a second worker — emptied.
+	if toolsFactory != nil {
+		if skills := tools.SkillsFrom(ctx); len(skills) > 0 {
 			toolsFactory = toolsFactory.WithSkills(skills)
 		}
 	}

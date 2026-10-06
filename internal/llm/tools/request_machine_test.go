@@ -48,33 +48,36 @@ func TestRequestMachine_RefusesOnAMachine(t *testing.T) {
 	assert.Contains(t, resp.Content, "already has a machine")
 }
 
-// No filter grants it, however it is spelled: the no-machine narrowing in
+// No filter grants it to a run on a machine, however it is spelled: the
+// capability resolver excludes it there (TestResolveCapabilities_RequestMachine
+// OnlyWithoutAMachine covers the rule), and the no-machine narrowing in
 // call_llm is the only thing that hands it over.
-func TestRequestMachine_NoFilterGrantsIt(t *testing.T) {
+func TestRequestMachine_NoFilterGrantsItOnAMachine(t *testing.T) {
 	for _, filter := range [][]string{{ToolRequestMachine}, {"*"}, {"request_*"}} {
-		assert.NotContains(t, ExpandToolFilter(filter, nil), ToolRequestMachine, "filter %v", filter)
+		caps := ResolveCapabilities(CapabilityInputs{
+			Access:     ResolveToolAccess(filter, []string{LoadableWildcard}, nil),
+			Permission: PermissionOrchestrator,
+		})
+		assert.False(t, caps.Offers(ToolRequestMachine), "filter %v", filter)
 	}
 	assert.True(t, OnlyWithoutMachine(ToolRequestMachine))
 	assert.False(t, NeedsMachine(ToolRequestMachine), "it runs on the server")
 }
 
-// load_tool neither advertises nor loads it, so a grant can never outlive the
-// run's no-machine state (a chat connected to a machine keeps its loaded
-// tools' scope).
+// load_tool neither advertises nor loads it, so a grant of it never exists to
+// outlive the run's no-machine state.
 func TestRequestMachine_IsNeverLoadable(t *testing.T) {
-	for _, r := range SearchTools("machine", PermissionOrchestrator, nil) {
-		assert.NotEqual(t, ToolRequestMachine, r.Name, "load_tool search must not surface it")
-	}
-
 	tool := &loadToolTool{}
 	for _, noMachine := range []bool{false, true} {
-		ctx := newLoadToolTestCtx(t, PermissionOrchestrator)
-		if noMachine {
-			ctx.Context = nomachine.With(ctx.Context)
+		caps := &Capabilities{LoadableAll: true, Permission: PermissionOrchestrator, NoMachine: noMachine}
+		for _, r := range SearchTools("machine", caps) {
+			assert.NotEqual(t, ToolRequestMachine, r.Name, "noMachine=%v: load_tool search must not surface it", noMachine)
 		}
-		resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolRequestMachine})
+		assert.NotContains(t, caps.Deferred(), ToolRequestMachine)
+
+		resp, err := tool.Execute(toolCtxWithCaps(t, caps), LoadToolParams{Name: ToolRequestMachine})
 		require.NoError(t, err)
 		assert.True(t, resp.IsError, "noMachine=%v: load_tool must refuse it", noMachine)
-		assert.NotContains(t, GetLoadedToolsStore().Get(Scope(GetChatID(ctx), ctx.Thread)), ToolRequestMachine)
+		assert.Empty(t, grantsOf(t, resp), "noMachine=%v: nothing granted", noMachine)
 	}
 }

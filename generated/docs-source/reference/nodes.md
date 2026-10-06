@@ -219,6 +219,7 @@ Execute tool calls from an LLM response
 |-------|------|-------------|
 | `thread_token_count` | integer | - |
 | `total_result_chars` | integer | - |
+| `granted_tools` | string | - |
 
 ---
 

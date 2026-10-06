@@ -2,7 +2,6 @@
 package tools
 
 import (
-	"context"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -13,36 +12,25 @@ import (
 // These cover the interaction between loadable_tools and the other gates. The
 // loadable_tools semantics themselves live in load_tool_discovery_test.go.
 
-// newLoadableCtx records a declared loadable set and returns a bound context.
-func newLoadableCtx(t *testing.T, permission string, loadable []string) *rctx.ToolContext {
+// newLoadableCtx is a tool context for a turn whose node preloaded view and
+// declared the given loadable set, resolved the way call_llm resolves it.
+func newLoadableCtx(t *testing.T, permission string, loadable []string, mcp ...string) *rctx.ToolContext {
 	t.Helper()
-
-	chatID := "loadable-" + t.Name()
-	const thread = "0"
-	scopeKey := Scope(chatID, thread)
-
-	store := GetLoadedToolsStore()
-	store.Clear(scopeKey)
-	store.SetPermission(scopeKey, permission)
-	store.SetToolAccess(scopeKey, ResolveToolAccess([]string{ToolView}, loadable, nil))
-	t.Cleanup(func() { store.Clear(scopeKey) })
-
-	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
-	return rctx.NewToolContext(context.Background(), chatID, thread, nil, worktree)
+	return toolCtxWithCaps(t, declaredCaps(permission, []string{ToolView}, loadable, mcp))
 }
 
 // TestLoadTool_LoadableAndLadderAreBothRequired pins that the two gates are AND,
 // not OR. Naming a tool in loadable_tools must not promote an agent past its
 // permission tier, or the list becomes a privilege-escalation path.
 //
-// spawn is the capability the ladder still gates, so it is what can show this.
+// start_run is orchestrator-only, so it is what can show this.
 func TestLoadTool_LoadableAndLadderAreBothRequired(t *testing.T) {
 	t.Parallel()
 
-	ctx := newLoadableCtx(t, PermissionMutating, []string{"spawn"})
+	ctx := newLoadableCtx(t, PermissionMutating, []string{ToolStartRun})
 
 	tool := &loadToolTool{}
-	resp, err := tool.Execute(ctx, LoadToolParams{Name: "spawn"})
+	resp, err := tool.Execute(ctx, LoadToolParams{Name: ToolStartRun})
 	require.NoError(t, err)
 	assert.True(t, resp.IsError,
 		"the ladder must still apply to a tool loadable_tools allows: %s", resp.Content)
@@ -59,10 +47,7 @@ func TestLoadTool_MCPRespectsLoadableSet(t *testing.T) {
 
 	const mcpName = "mcp__chrome-devtools__take_screenshot"
 
-	ctx := newLoadableCtx(t, PermissionMutating, []string{ToolEdit})
-	GetLoadedToolsStore().SetAvailableMCPTools(Scope(ctx.ChatID, ctx.Thread), []MCPToolInfo{
-		{Name: mcpName, Description: "Capture a screenshot"},
-	})
+	ctx := newLoadableCtx(t, PermissionMutating, []string{ToolEdit}, mcpName)
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: mcpName})
@@ -78,10 +63,7 @@ func TestLoadTool_MCPLoadableByNameLoads(t *testing.T) {
 
 	const mcpName = "mcp__chrome-devtools__take_screenshot"
 
-	ctx := newLoadableCtx(t, PermissionMutating, []string{mcpName})
-	GetLoadedToolsStore().SetAvailableMCPTools(Scope(ctx.ChatID, ctx.Thread), []MCPToolInfo{
-		{Name: mcpName, Description: "Capture a screenshot"},
-	})
+	ctx := newLoadableCtx(t, PermissionMutating, []string{mcpName}, mcpName)
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: mcpName})
@@ -97,23 +79,9 @@ func TestLoadTool_MCPUnrestrictedLoads(t *testing.T) {
 
 	const mcpName = "mcp__chrome-devtools__take_screenshot"
 
-	chatID := "mcp-unrestricted-" + t.Name()
-	const thread = "0"
-	scopeKey := Scope(chatID, thread)
-
-	store := GetLoadedToolsStore()
-	store.Clear(scopeKey)
-	store.SetPermission(scopeKey, PermissionMutating)
 	// "Unrestricted" is now something a workflow SAYS rather than something it
 	// gets by omission — the wildcard is how the shipped workflows spell it.
-	store.SetToolAccess(scopeKey, ResolveToolAccess([]string{ToolView}, []string{LoadableWildcard}, nil))
-	store.SetAvailableMCPTools(scopeKey, []MCPToolInfo{
-		{Name: mcpName, Description: "Capture a screenshot"},
-	})
-	t.Cleanup(func() { store.Clear(scopeKey) })
-
-	worktree := &rctx.WorktreeInfo{ID: "test", Path: t.TempDir()}
-	ctx := rctx.NewToolContext(context.Background(), chatID, thread, nil, worktree)
+	ctx := newLoadableCtx(t, PermissionMutating, []string{LoadableWildcard}, mcpName)
 
 	tool := &loadToolTool{}
 	resp, err := tool.Execute(ctx, LoadToolParams{Name: mcpName})

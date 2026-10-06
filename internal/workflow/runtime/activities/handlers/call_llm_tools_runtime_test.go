@@ -563,26 +563,6 @@ func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *test
 		},
 	}
 
-	seedSpawnedChild := func(t *testing.T, repo db.Repository, ctx context.Context, chatID, parentThread string) {
-		t.Helper()
-		now := time.Now()
-		childThread := "child-" + uuid.New().String()
-		_, err := repo.CreateThread(ctx, &db.Thread{
-			ID: childThread, ChatID: chatID, ParentThreadID: &parentThread,
-			Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusRunning, CreatedAt: now,
-		})
-		require.NoError(t, err)
-		require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
-			ID: childThread, ChatID: chatID, WorkflowName: "builtin://agent",
-			Thread: childThread, Status: db.Active(), CreatedAt: now,
-		}))
-		require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
-			ID: "toolu_" + uuid.New().String(), ChatID: chatID, ThreadID: &parentThread,
-			ToolName: "spawn", Status: dbcore.ToolCallStatusBackgrounded, ChildWorkflowID: &childThread,
-			RequestedAt: now, CreatedAt: now, UpdatedAt: now,
-		}))
-	}
-
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			h := NewIdempotencyTestHelper(t)
@@ -595,32 +575,16 @@ func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *test
 			if tc.seedInherited {
 				// The original spawns, then is branched after that spawn.
 				source := h.CreateTestChat(ctx, "chat-source", project.ID, project.UserID)
-				seedSpawnedChild(t, repo, ctx, source.ID, source.ID)
+				seedSpawnedChild(t, repo, source.ID, source.ID)
 				h.CreateTestUserMessage(ctx, source.ID, source.ID)
-				forkPoint, err := repo.GetLatestMessageInThread(ctx, source.ID)
-				require.NoError(t, err)
-
-				chat = &db.Chat{ID: "chat-branch", ProjectID: project.ID, UserID: project.UserID}
-				require.NoError(t, repo.CreateChat(ctx, chat))
-				sourceThread := source.ID
-				_, err = repo.CreateThread(ctx, &db.Thread{
-					ID: chat.ID, ChatID: chat.ID, ParentThreadID: &sourceThread,
-					ForkAtMessageID: &forkPoint.ID, Origin: db.ThreadOriginFork,
-				})
-				require.NoError(t, err)
-				parentCW := forkPoint.ContextWindowID
-				_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{
-					ID: chat.ID + ":" + chat.ID + ":0", ThreadID: chat.ID,
-					ParentContextWindowID: &parentCW, ForkAtMessageID: &forkPoint.ID,
-				})
-				require.NoError(t, err)
+				chat = branchAtLatestMessage(t, repo, source, "chat-branch")
 			} else {
 				chat = h.CreateTestChat(ctx, "chat-spawned", project.ID, project.UserID)
 			}
 			h.CreateTestUserMessage(ctx, chat.ID, chat.ID)
 
 			if tc.seedSpawn {
-				seedSpawnedChild(t, repo, ctx, chat.ID, chat.ID)
+				seedSpawnedChild(t, repo, chat.ID, chat.ID)
 			}
 
 			mockDriver := &toolCaptureMockDriver{}
@@ -669,4 +633,55 @@ func TestCallLLMActivity_SpawnManagementToolsOfferedOnceThreadHasSpawned(t *test
 			}
 		})
 	}
+}
+
+// seedSpawnedChild records that parentThread spawned a sub-agent that started:
+// the child's thread and workflow, and the backgrounded spawn tool_calls row
+// that names it — the durable state spawnHistory reads.
+func seedSpawnedChild(t *testing.T, repo db.Repository, chatID, parentThread string) {
+	t.Helper()
+	ctx := context.Background()
+	now := time.Now()
+	childThread := "child-" + uuid.New().String()
+	_, err := repo.CreateThread(ctx, &db.Thread{
+		ID: childThread, ChatID: chatID, ParentThreadID: &parentThread,
+		Origin: db.ThreadOriginSpawn, Status: db.ThreadStatusRunning, CreatedAt: now,
+	})
+	require.NoError(t, err)
+	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
+		ID: childThread, ChatID: chatID, WorkflowName: "builtin://agent",
+		Thread: childThread, Status: db.Active(), CreatedAt: now,
+	}))
+	require.NoError(t, repo.UpsertToolCall(ctx, &db.ToolCall{
+		ID: "toolu_" + uuid.New().String(), ChatID: chatID, ThreadID: &parentThread,
+		ToolName: "spawn", Status: dbcore.ToolCallStatusBackgrounded, ChildWorkflowID: &childThread,
+		RequestedAt: now, CreatedAt: now, UpdatedAt: now,
+	}))
+}
+
+// branchAtLatestMessage branches source the way BranchChat does — a new chat
+// whose root thread forks source's root at its latest message — and returns
+// the branch. Spawns source issued before that message are the branch's
+// inherited sub-agents.
+func branchAtLatestMessage(t *testing.T, repo db.Repository, source *db.Chat, branchID string) *db.Chat {
+	t.Helper()
+	ctx := context.Background()
+	forkPoint, err := repo.GetLatestMessageInThread(ctx, source.ID)
+	require.NoError(t, err)
+
+	branch := &db.Chat{ID: branchID, ProjectID: source.ProjectID, UserID: source.UserID}
+	require.NoError(t, repo.CreateChat(ctx, branch))
+	sourceThread := source.ID
+	_, err = repo.CreateThread(ctx, &db.Thread{
+		ID: branch.ID, ChatID: branch.ID, ParentThreadID: &sourceThread,
+		ForkAtMessageID: &forkPoint.ID, Origin: db.ThreadOriginFork,
+	})
+	require.NoError(t, err)
+	parentCW := forkPoint.ContextWindowID
+	_, err = repo.CreateContextWindow(ctx, &db.ContextWindow{
+		ID: branch.ID + ":" + branch.ID + ":0", ThreadID: branch.ID,
+		ParentContextWindowID: &parentCW, ForkAtMessageID: &forkPoint.ID,
+	})
+	require.NoError(t, err)
+	return branch
 }

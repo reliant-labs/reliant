@@ -1,0 +1,119 @@
+// Copyright (c) 2025 Reliant Labs
+package handlers
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"time"
+
+	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/models/message"
+)
+
+// capabilityRefusal is why a call may not run under its turn's capability set,
+// or "" when it may.
+//
+// caps is nil only for a batch whose call_llm recorded no set — a run that
+// predates it. That batch keeps exactly what a worker restart already
+// produced: no offered check, and the base tier. The next call_llm records a
+// set, so a run spends at most one batch here (research/TOOL_CAPABILITIES.md
+// §4.1).
+func capabilityRefusal(caps *tools.Capabilities, toolCall message.ToolCall) string {
+	name := toolCall.Name
+	if caps == nil {
+		if required := tools.MinimumPermissionForTool(name); !tools.PermissionAtLeast(tools.PermissionMutating, required) {
+			return fmt.Sprintf("Tool '%s' requires '%s' permission, but the current permission level is '%s'.",
+				name, required, tools.PermissionMutating)
+		}
+		return ""
+	}
+	if !caps.Offers(name) {
+		return caps.Explain(name)
+	}
+	// spawn runs workflow-side. One reaches this activity only because the
+	// workflow declined to dispatch it (executeToolsWithSpawnSupport), and the
+	// only reason left once it was offered is the preset.
+	if name == tools.ToolSpawn {
+		if preset := spawnPreset(toolCall.Input); preset != "" && !caps.AllowsPreset(preset) {
+			return caps.ExplainPreset(preset)
+		}
+		return "The spawn call could not be dispatched, so it was not run."
+	}
+	return ""
+}
+
+// spawnPreset is the preset a spawn call names, or "".
+func spawnPreset(input string) string {
+	var params struct {
+		Preset string `json:"preset"`
+	}
+	if err := json.Unmarshal([]byte(input), &params); err != nil {
+		return ""
+	}
+	return params.Preset
+}
+
+// refuseToolCall answers a call the capability set does not allow: an error
+// tool_result the model reads, recorded FAILED with the reason like every
+// other refusal (the no-machine one included), so the UI shows a refused call
+// rather than a spinner.
+func (a *ExecuteToolsActivity) refuseToolCall(ctx context.Context, rtx RuntimeContext, toolCall message.ToolCall, reason string) message.ToolResult {
+	result := a.buildToolResult(toolCall.ID, toolCall.Name, reason, "", true, nil, nil)
+	tec, errMsg := a.loadToolExecutionContext(ctx, rtx.ChatID, rtx.Thread, toolCall.Name, toolCall.Input, toolCall.ID, rtx.ProjectPath)
+	if errMsg != "" {
+		return result
+	}
+	completedAt := time.Now()
+	a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+		completedAt:  &completedAt,
+		errorMessage: reason,
+	}, &toolCallResultWrite{content: result.Content, isError: true})
+	return result
+}
+
+// grantedTools is every tool this batch's load_tool calls granted, read from
+// their result metadata — the grant's only record until the workflow writes it
+// into its per-thread state.
+func grantedTools(results []message.ToolResult) []string {
+	seen := make(map[string]bool)
+	var granted []string
+	for _, r := range results {
+		if r.Name != tools.ToolLoadTool || r.IsError || r.Metadata == "" {
+			continue
+		}
+		var metadata tools.LoadToolMetadata
+		if err := json.Unmarshal([]byte(r.Metadata), &metadata); err != nil {
+			continue
+		}
+		for _, name := range metadata.LoadedTools {
+			if name != "" && !seen[name] {
+				seen[name] = true
+				granted = append(granted, name)
+			}
+		}
+	}
+	return granted
+}
+
+// projectSkills reads the project's skills from its config row — the same
+// source call_llm's config provider reads. A missing or unreadable row means
+// no skills, which the skill tool reports itself.
+func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID string) []cfgpkg.StoredSkill {
+	if a.repo == nil || projectID == "" {
+		return nil
+	}
+	record, err := a.repo.GetProjectConfigRecord(ctx, projectID)
+	if err != nil || record == nil {
+		return nil
+	}
+	skills, err := cfgpkg.ParseStoredSkills(record.ProjectSkillsJSON)
+	if err != nil {
+		logging.Warn("[ExecuteTools] Project skills could not be parsed", "projectID", projectID, "error", err)
+		return nil
+	}
+	return skills
+}

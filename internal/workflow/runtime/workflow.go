@@ -86,6 +86,10 @@ type ResumeInput struct {
 	// its background spawns, not about to take a turn, so the successor waits
 	// on the relaunched spawns before its first iteration.
 	AwaitSpawnsFirst bool `json:"await_spawns_first,omitempty"`
+	// ToolGrants are the predecessor's load_tool grants, per thread, so a tool
+	// an agent loaded before a continue-as-new is still offered after it.
+	// Relaunched spawns keep their thread, and with it their grants.
+	ToolGrants map[string][]string `json:"tool_grants,omitempty"`
 }
 
 // SpawnHandoff is one background spawn carried across an execution boundary.
@@ -277,6 +281,10 @@ type ChildWorkflowTracker struct {
 	// either of its ids. Read when building handoffs so a cancel that landed
 	// after the spawn parked survives into the successor.
 	spawnCancelled func(toolCallID, childThread string) bool
+
+	// toolGrants records, per thread, every tool load_tool has granted in
+	// this run — the only record of a grant there is (tool_grants.go).
+	toolGrants map[string][]string
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -547,6 +555,11 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Track active child workflows for signal forwarding
 	childTracker := &ChildWorkflowTracker{
 		children: make(map[string]bool),
+	}
+	// A continue-as-new successor starts with its predecessor's load_tool
+	// grants, so a loaded tool is still offered after the handoff.
+	if input.Resume != nil {
+		childTracker.seedToolGrants(input.Resume.ToolGrants)
 	}
 
 	// NOTE: Signal handler and query handler are set up AFTER ApplyDefaults (below)
@@ -2832,7 +2845,8 @@ func resolveParentPermission(workflowInputs map[string]interface{}) string {
 	// which promised more than it delivered — the shell was granted at that tier
 	// too, so a plan-mode agent could always write. What keeps write out of a
 	// planning agent's hands is its `tools:` filter (['tag:coding:plan', 'tag:shell']),
-	// which is enforced; see LoadedToolsStore.IsToolAllowed.
+	// which is enforced: a call outside the turn's capability set is refused
+	// at execution (research/TOOL_CAPABILITIES.md).
 	//
 	// The mode switch is kept rather than collapsed to a constant because an
 	// unrecognized mode must still return "" — "don't constrain" is a different
@@ -3867,8 +3881,10 @@ func executeToolsWithSpawnSupport(
 		return workflow.ExecuteActivity(activityCtx, "ExecuteTools", makeInput(evalNode))
 	}
 
-	// Split tool calls into regular tools and spawn tools
-	split := splitProtoToolCalls(toolCalls)
+	// Split tool calls into regular tools and spawn tools. A spawn or ask_user
+	// the turn's capability set does not allow joins the regular batch, where
+	// the activity refuses it like any other call.
+	split := withCapabilitiesApplied(splitProtoToolCalls(toolCalls), etArgs.GetCapabilities())
 	var threadInterruptFactory func(string) *ThreadInterrupt
 	if len(makeThreadInterrupt) > 0 {
 		threadInterruptFactory = makeThreadInterrupt[0]
@@ -3886,6 +3902,7 @@ func executeToolsWithSpawnSupport(
 				ExpectedResponseTools: etArgs.GetExpectedResponseTools(),
 				ResponseToolSchemas:   etArgs.GetResponseToolSchemas(),
 				CompactionThreshold:   etArgs.GetCompactionThreshold(),
+				Capabilities:          etArgs.GetCapabilities(),
 			}},
 		}
 
@@ -3927,6 +3944,7 @@ func executeToolsWithSpawnSupport(
 	workflow.Go(ctx, func(gCtx workflow.Context) {
 		var combinedResults []interface{}
 		var messageOutput map[string]interface{}
+		var grantedTools []interface{}
 
 		// Include any spawn parse errors as tool results
 		combinedResults = append(combinedResults, spawnParseErrors...)
@@ -3942,6 +3960,7 @@ func executeToolsWithSpawnSupport(
 				messageOutput = result.messageOutput
 			}
 			combinedResults = append(combinedResults, result.toolResults...)
+			grantedTools = result.grantedTools
 		}
 
 		// Every spawn dispatches detached. Each call to dispatchSpawnBackground
@@ -3980,8 +3999,13 @@ func executeToolsWithSpawnSupport(
 			combinedResults = append(combinedResults, result)
 		}
 
-		// Return in ExecuteToolsOutput format
+		// Return in ExecuteToolsOutput format. The regular batch's load_tool
+		// grants ride along: the step completion records them for the thread
+		// whichever way the batch was assembled.
 		finalResult := buildFinalToolResult(combinedResults, messageOutput)
+		if len(grantedTools) > 0 {
+			finalResult["granted_tools"] = grantedTools
+		}
 		resultSettable.SetValue(finalResult)
 	})
 
@@ -4232,6 +4256,7 @@ func formatAskUserResponse(action, responseData string) string {
 type regularToolsResult struct {
 	toolResults   []interface{}
 	messageOutput map[string]interface{}
+	grantedTools  []interface{}
 }
 
 // processRegularToolsFuture waits for and processes the regular tools future
@@ -4254,6 +4279,9 @@ func processRegularToolsFuture(ctx workflow.Context, future workflow.Future, log
 	// Extract tool_results array
 	if toolResults, ok := result["tool_results"].([]interface{}); ok {
 		res.toolResults = toolResults
+	}
+	if granted, ok := result["granted_tools"].([]interface{}); ok {
+		res.grantedTools = granted
 	}
 
 	return res, nil
