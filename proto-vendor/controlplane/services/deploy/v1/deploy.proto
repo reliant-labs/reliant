@@ -102,6 +102,18 @@ service DeployService {
   rpc DeleteEnvironment(DeleteDeployEnvironmentRequest) returns (DeleteDeployEnvironmentResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+  // ListRetainedDatabases lists the caller's org's databases that outlived a
+  // deleted environment (DeleteEnvironment without delete_data). Their data
+  // still exists and still bills as storage.
+  rpc ListRetainedDatabases(ListRetainedDatabasesRequest) returns (ListRetainedDatabasesResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+  // DeleteRetainedDatabase destroys one retained database's cluster, volumes
+  // and (when it was the last in its namespace) the namespace. ADMIN.
+  // IRREVERSIBLE; nothing else ever deletes retained data.
+  rpc DeleteRetainedDatabase(DeleteRetainedDatabaseRequest) returns (DeleteRetainedDatabaseResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
 
   // EnsureEnvironment makes an environment with this NAME exist in the
   // caller's org and returns it: created when absent, returned unchanged when
@@ -601,9 +613,46 @@ message DeleteDeployEnvironmentRequest {
   // Delete the environment's deployments along with it. Without this, an
   // environment that still has deployments is refused.
   bool force = 2;
+  // Also destroy the environment's DATA: its managed databases' Postgres
+  // clusters, volumes and credentials, and the workload-cluster namespace.
+  // IRREVERSIBLE. Default false RETAINS the data: the databases keep running
+  // in their namespace (and keep billing as storage) and are listed by
+  // ListRetainedDatabases until purged with DeleteRetainedDatabase. A
+  // re-deploy creates a NEW environment and does not reattach them.
+  bool delete_data = 3;
 }
 
 message DeleteDeployEnvironmentResponse {}
+
+// RetainedDatabase is a managed database whose environment was deleted
+// without delete_data. Its data still exists and still costs storage.
+message RetainedDatabase {
+  string id = 1;
+  // The deleted environment it belonged to.
+  string environment_id = 2;
+  string environment_name = 3;
+  string project = 4;
+  // The database's name (its CloudNativePG cluster name).
+  string database_name = 5;
+  // Where the data lives: workload cluster id and namespace.
+  string cluster_id = 6;
+  string namespace = 7;
+  // Provisioned storage across all instances, in GiB.
+  int64 storage_gib = 8;
+  google.protobuf.Timestamp retained_at = 9;
+}
+
+message ListRetainedDatabasesRequest {}
+
+message ListRetainedDatabasesResponse {
+  repeated RetainedDatabase retained_databases = 1;
+}
+
+message DeleteRetainedDatabaseRequest {
+  string id = 1;
+}
+
+message DeleteRetainedDatabaseResponse {}
 
 message EnsureDeployEnvironmentRequest {
   // The environment is addressed by (spec.project, spec.name) within the

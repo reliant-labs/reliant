@@ -57,6 +57,12 @@ const (
 	// DeployServiceDeleteEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// DeleteEnvironment RPC.
 	DeployServiceDeleteEnvironmentProcedure = "/controlplane.v1.DeployService/DeleteEnvironment"
+	// DeployServiceListRetainedDatabasesProcedure is the fully-qualified name of the DeployService's
+	// ListRetainedDatabases RPC.
+	DeployServiceListRetainedDatabasesProcedure = "/controlplane.v1.DeployService/ListRetainedDatabases"
+	// DeployServiceDeleteRetainedDatabaseProcedure is the fully-qualified name of the DeployService's
+	// DeleteRetainedDatabase RPC.
+	DeployServiceDeleteRetainedDatabaseProcedure = "/controlplane.v1.DeployService/DeleteRetainedDatabase"
 	// DeployServiceEnsureEnvironmentProcedure is the fully-qualified name of the DeployService's
 	// EnsureEnvironment RPC.
 	DeployServiceEnsureEnvironmentProcedure = "/controlplane.v1.DeployService/EnsureEnvironment"
@@ -157,6 +163,14 @@ type DeployServiceClient interface {
 	// unless force is set — deleting a namespace out from under running
 	// workloads is the kind of thing a user should have to say twice.
 	DeleteEnvironment(context.Context, *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error)
+	// ListRetainedDatabases lists the caller's org's databases that outlived a
+	// deleted environment (DeleteEnvironment without delete_data). Their data
+	// still exists and still bills as storage.
+	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
+	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
+	// and (when it was the last in its namespace) the namespace. ADMIN.
+	// IRREVERSIBLE; nothing else ever deletes retained data.
+	DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -467,6 +481,18 @@ func NewDeployServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(deployServiceMethods.ByName("DeleteEnvironment")),
 			connect.WithClientOptions(opts...),
 		),
+		listRetainedDatabases: connect.NewClient[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse](
+			httpClient,
+			baseURL+DeployServiceListRetainedDatabasesProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("ListRetainedDatabases")),
+			connect.WithClientOptions(opts...),
+		),
+		deleteRetainedDatabase: connect.NewClient[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse](
+			httpClient,
+			baseURL+DeployServiceDeleteRetainedDatabaseProcedure,
+			connect.WithSchema(deployServiceMethods.ByName("DeleteRetainedDatabase")),
+			connect.WithClientOptions(opts...),
+		),
 		ensureEnvironment: connect.NewClient[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse](
 			httpClient,
 			baseURL+DeployServiceEnsureEnvironmentProcedure,
@@ -653,6 +679,8 @@ type deployServiceClient struct {
 	listEnvironments       *connect.Client[v1.ListDeployEnvironmentsRequest, v1.ListDeployEnvironmentsResponse]
 	updateEnvironment      *connect.Client[v1.UpdateDeployEnvironmentRequest, v1.UpdateDeployEnvironmentResponse]
 	deleteEnvironment      *connect.Client[v1.DeleteDeployEnvironmentRequest, v1.DeleteDeployEnvironmentResponse]
+	listRetainedDatabases  *connect.Client[v1.ListRetainedDatabasesRequest, v1.ListRetainedDatabasesResponse]
+	deleteRetainedDatabase *connect.Client[v1.DeleteRetainedDatabaseRequest, v1.DeleteRetainedDatabaseResponse]
 	ensureEnvironment      *connect.Client[v1.EnsureDeployEnvironmentRequest, v1.EnsureDeployEnvironmentResponse]
 	createDeployment       *connect.Client[v1.CreateDeploymentRequest, v1.CreateDeploymentResponse]
 	getDeployment          *connect.Client[v1.GetDeploymentRequest, v1.GetDeploymentResponse]
@@ -717,6 +745,16 @@ func (c *deployServiceClient) UpdateEnvironment(ctx context.Context, req *connec
 // DeleteEnvironment calls controlplane.v1.DeployService.DeleteEnvironment.
 func (c *deployServiceClient) DeleteEnvironment(ctx context.Context, req *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error) {
 	return c.deleteEnvironment.CallUnary(ctx, req)
+}
+
+// ListRetainedDatabases calls controlplane.v1.DeployService.ListRetainedDatabases.
+func (c *deployServiceClient) ListRetainedDatabases(ctx context.Context, req *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error) {
+	return c.listRetainedDatabases.CallUnary(ctx, req)
+}
+
+// DeleteRetainedDatabase calls controlplane.v1.DeployService.DeleteRetainedDatabase.
+func (c *deployServiceClient) DeleteRetainedDatabase(ctx context.Context, req *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error) {
+	return c.deleteRetainedDatabase.CallUnary(ctx, req)
 }
 
 // EnsureEnvironment calls controlplane.v1.DeployService.EnsureEnvironment.
@@ -883,6 +921,14 @@ type DeployServiceHandler interface {
 	// unless force is set — deleting a namespace out from under running
 	// workloads is the kind of thing a user should have to say twice.
 	DeleteEnvironment(context.Context, *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error)
+	// ListRetainedDatabases lists the caller's org's databases that outlived a
+	// deleted environment (DeleteEnvironment without delete_data). Their data
+	// still exists and still bills as storage.
+	ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error)
+	// DeleteRetainedDatabase destroys one retained database's cluster, volumes
+	// and (when it was the last in its namespace) the namespace. ADMIN.
+	// IRREVERSIBLE; nothing else ever deletes retained data.
+	DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error)
 	// EnsureEnvironment makes an environment with this NAME exist in the
 	// caller's org and returns it: created when absent, returned unchanged when
 	// present. It is what `forge env deploy` calls for an env that declares
@@ -1189,6 +1235,18 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(deployServiceMethods.ByName("DeleteEnvironment")),
 		connect.WithHandlerOptions(opts...),
 	)
+	deployServiceListRetainedDatabasesHandler := connect.NewUnaryHandler(
+		DeployServiceListRetainedDatabasesProcedure,
+		svc.ListRetainedDatabases,
+		connect.WithSchema(deployServiceMethods.ByName("ListRetainedDatabases")),
+		connect.WithHandlerOptions(opts...),
+	)
+	deployServiceDeleteRetainedDatabaseHandler := connect.NewUnaryHandler(
+		DeployServiceDeleteRetainedDatabaseProcedure,
+		svc.DeleteRetainedDatabase,
+		connect.WithSchema(deployServiceMethods.ByName("DeleteRetainedDatabase")),
+		connect.WithHandlerOptions(opts...),
+	)
 	deployServiceEnsureEnvironmentHandler := connect.NewUnaryHandler(
 		DeployServiceEnsureEnvironmentProcedure,
 		svc.EnsureEnvironment,
@@ -1379,6 +1437,10 @@ func NewDeployServiceHandler(svc DeployServiceHandler, opts ...connect.HandlerOp
 			deployServiceUpdateEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceDeleteEnvironmentProcedure:
 			deployServiceDeleteEnvironmentHandler.ServeHTTP(w, r)
+		case DeployServiceListRetainedDatabasesProcedure:
+			deployServiceListRetainedDatabasesHandler.ServeHTTP(w, r)
+		case DeployServiceDeleteRetainedDatabaseProcedure:
+			deployServiceDeleteRetainedDatabaseHandler.ServeHTTP(w, r)
 		case DeployServiceEnsureEnvironmentProcedure:
 			deployServiceEnsureEnvironmentHandler.ServeHTTP(w, r)
 		case DeployServiceCreateDeploymentProcedure:
@@ -1472,6 +1534,14 @@ func (UnimplementedDeployServiceHandler) UpdateEnvironment(context.Context, *con
 
 func (UnimplementedDeployServiceHandler) DeleteEnvironment(context.Context, *connect.Request[v1.DeleteDeployEnvironmentRequest]) (*connect.Response[v1.DeleteDeployEnvironmentResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.DeleteEnvironment is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) ListRetainedDatabases(context.Context, *connect.Request[v1.ListRetainedDatabasesRequest]) (*connect.Response[v1.ListRetainedDatabasesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.ListRetainedDatabases is not implemented"))
+}
+
+func (UnimplementedDeployServiceHandler) DeleteRetainedDatabase(context.Context, *connect.Request[v1.DeleteRetainedDatabaseRequest]) (*connect.Response[v1.DeleteRetainedDatabaseResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DeployService.DeleteRetainedDatabase is not implemented"))
 }
 
 func (UnimplementedDeployServiceHandler) EnsureEnvironment(context.Context, *connect.Request[v1.EnsureDeployEnvironmentRequest]) (*connect.Response[v1.EnsureDeployEnvironmentResponse], error) {
