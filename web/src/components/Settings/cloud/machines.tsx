@@ -21,7 +21,7 @@
  * Access) instead of a dead end: it is the only place such a grant can be
  * seen or revoked.
  */
-import React, { useId, useMemo, useState } from "react";
+import React, { useEffect, useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
@@ -100,6 +100,7 @@ import {
   type RestartStage,
 } from "./machineLifecycle";
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
+import { clearWaking, markWaking, presentMachineStatus, useWakingMachines } from "./machineWake";
 import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
@@ -586,7 +587,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
   });
   const resumeMut = useMutation({
     mutationFn: (id: string) => resumeEnvironment(id),
-    onSuccess: () => { setActionError(""); invalidate(); },
+    onSuccess: (_data, id) => { markWaking(id); setActionError(""); invalidate(); },
     onError: (e) => setActionError(describeError(e, "Failed to resume machine")),
   });
   const deleteMut = useMutation({
@@ -771,6 +772,16 @@ function ManagedMachinesTable({
   busy: boolean;
   pricing?: DaemonPricingLike;
 }) {
+  const waking = useWakingMachines();
+  // Forget wakes that are over (the machine came up, failed, or never left
+  // sleep), so a later Pending is not mislabelled as a wake.
+  useEffect(() => {
+    for (const d of daemons) {
+      const started = waking.get(d.daemonId);
+      if (started === undefined) continue;
+      if (presentMachineStatus(daemonStatus(d), d.lastStatusMessage, started).wakeFinished) clearWaking(d.daemonId);
+    }
+  }, [daemons, waking]);
   return (
     <Table>
       <Thead>
@@ -786,7 +797,8 @@ function ManagedMachinesTable({
         {daemons.map((d) => {
           const status = daemonStatus(d);
           const badge = statusBadge[status];
-          const failureReason = daemonFailureReason(d);
+          const presentation = presentMachineStatus(status, d.lastStatusMessage, waking.get(d.daemonId));
+          const failureReason = presentation.label ? null : daemonFailureReason(d);
           const isSuspended = d.status === DaemonStatus.SUSPENDED;
           // Specs come from the size tier rather than from per-machine
           // resource requests. Those requests are part of the provisioning
@@ -809,7 +821,13 @@ function ManagedMachinesTable({
                 <AppAccessIndicator count={appCounts.get(d.daemonId) ?? 0} />
               </Td>
               <Td>
-                <StatusDot variant={statusDotVariant[status]} label={badge.label} />
+                <StatusDot
+                  variant={presentation.label ? "pending" : statusDotVariant[status]}
+                  label={presentation.label ?? badge.label}
+                />
+                {presentation.progress && (
+                  <p className="mt-1 max-w-xs text-xs text-muted-foreground">{presentation.progress}</p>
+                )}
                 {failureReason && (
                   // Destructive red for a machine that BROKE; muted for one
                   // that is merely stopped. A stopped machine is a normal
@@ -1489,7 +1507,7 @@ function EnvironmentDetail({
   });
   const resumeMut = useMutation({
     mutationFn: () => resumeEnvironment(daemonId),
-    onSuccess: () => { setError(""); refetchAll(); },
+    onSuccess: () => { markWaking(daemonId); setError(""); refetchAll(); },
     onError: (e) => setError(describeError(e, "Failed to resume machine")),
   });
   const deleteMut = useMutation({
@@ -1546,7 +1564,14 @@ function EnvironmentDetail({
   });
 
   const status = daemon ? daemonStatus(daemon) : "pending";
-  const badge = statusBadge[status];
+  const waking = useWakingMachines();
+  const presentation = presentMachineStatus(status, daemon?.lastStatusMessage, waking.get(daemonId));
+  useEffect(() => {
+    if (presentation.wakeFinished) clearWaking(daemonId);
+  }, [presentation.wakeFinished, daemonId]);
+  const badge = presentation.label
+    ? { label: presentation.label, variant: statusBadge.pending.variant }
+    : statusBadge[status];
   const connected = daemon?.status === DaemonStatus.ACTIVE;
   const busy =
     suspendMut.isPending || resumeMut.isPending || deleteMut.isPending || restartMut.isPending;

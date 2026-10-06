@@ -16,7 +16,9 @@ import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import { CelStringSchema, NodeSchema, SubWorkflowArgsSchema } from "@/gen/reliant/v1/workflow_v2_pb";
+import { CelStringSchema, NodeSchema, SubWorkflowArgsSchema, WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
+import { GetWorkflowResponseSchema } from "@/gen/reliant/v1/workflow_pb";
+import { ScheduleSourceSchema, WorkflowTriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { getWorkflowByName, presetsResponse } from "../../workflow/run/__tests__/runFormFixtures";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
@@ -124,6 +126,36 @@ describe("WorkflowDetailPage", () => {
       "/workflows/automations/t1",
     );
     expect(within(automations).queryByText("Other")).toBeNull();
+  });
+
+  it("lists a schedule the YAML declares but nobody activated, instead of 'Nothing runs this workflow'", async () => {
+    // ci-triage declares `triggers: - schedule: cron [0 6 * * 1-5]` and has
+    // no activation, so nothing runs it YET — but the page used to say
+    // nothing runs it at all, which reads as if the YAML was ignored.
+    mocks.listTriggers.mockResolvedValue({ triggers: [], lastUserUpdateSequence: "0" });
+    mocks.getWorkflow.mockImplementation(async (request: { name: string }) =>
+      request.name === "triage"
+        ? create(GetWorkflowResponseSchema, {
+            source: "project",
+            workflow: create(WorkflowSchema, {
+              name: "triage",
+              inputs: {},
+              triggers: [
+                create(WorkflowTriggerSchema, {
+                  name: "weekday-morning",
+                  source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 6 * * 1-5"], timezone: "UTC" }) },
+                }),
+              ],
+            }),
+          })
+        : getWorkflowByName(request),
+    );
+    renderDetail();
+
+    const declared = await screen.findByTestId("workflow-detail-declared-triggers");
+    expect(within(declared).getByText("Declared in the workflow · not active")).toBeInTheDocument();
+    expect(within(declared).getByRole("button", { name: "Activate" })).toBeInTheDocument();
+    expect(screen.queryByText("Nothing runs this workflow on its own.")).toBeNull();
   });
 
   it("shows the presets that fit it, and its inputs", async () => {

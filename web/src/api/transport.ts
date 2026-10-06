@@ -28,7 +28,7 @@
  *     real failure (tracing would otherwise mark OK and rethrow);
  *   - upgradeInterceptor opens the modal on ResourceExhausted + reason header
  *     before propagating;
- *   - unauthInterceptor (401 → signOut) lives innermost so it doesn't gobble
+ *   - unauthInterceptor (401 → one refresh, else one sign-out) lives innermost so it doesn't gobble
  *     the timeout's DeadlineExceeded or the upgrade's ResourceExhausted.
  *
  * Setting `withAuth: false` skips both `authInterceptor` AND
@@ -465,59 +465,114 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
   }
 };
 
-// Auto-sign-out on 401 with an active session.
+// Recovery from a token the backend rejected.
 //
-// When the backend rejects a stored token (most often because the token was
-// issued by a different Supabase project, or the user was deleted server-side,
-// or signing keys rotated), we clear the local session and redirect to /auth.
-// Without this, users get stuck on a loading screen with no recourse.
+// When a token expires (or was minted by a different Supabase project, or the
+// user was deleted, or signing keys rotated), EVERY request in flight carries
+// it, so a burst of 401s arrives together: measured in a dev log, ~75 failures
+// each of ListModels, ListSettings, ListProjects, DeleteSetting and
+// GetPrivacySettings, plus `SettingsSync failed after retries` x76. Each was
+// handled on its own, and the guard against concurrent sign-outs was checked
+// BEFORE an await and set after it, so every 401 in the burst got through it.
 //
-// Safety guards:
-// - Only fires when a session/API key is currently set (no sign-in→sign-out loops).
-// - Single-flight: a burst of parallel 401s triggers exactly one sign-out.
-// - Skipped on /auth so a 401 there doesn't trigger a redirect to itself.
+// Now the burst is one event:
+//   - The first rejected-token 401 starts ONE recovery; every other 401 that
+//     arrives while it runs awaits the same promise instead of deciding alone.
+//   - Recovery refreshes the session once. If that yields a token different
+//     from the rejected one, each waiting request is retried once with it —
+//     an expired access token is the common case and the user never notices.
+//   - Only if the refresh fails is the user signed out, exactly once, and
+//     sent to /auth.
 //
-// The guard is released on a timer rather than left latched for the redirect to
-// tear down. Assuming the navigation always happens is what turned a single bad
-// token into an unbounded loop once Electron's will-navigate handler cancelled
-// the redirect: the page survived, so nothing ever reset the flag or stopped the
-// dead session from firing. Re-arming after a delay means that if the redirect
-// does land the timer dies with the page, and if it is blocked we retry at a
-// bounded rate instead of hammering or wedging permanently.
+// The outcome is remembered per rejected token for a short window, so a 401
+// that lands just after recovery finished (a request that was already on the
+// wire) joins its result instead of starting a second recovery.
+//
+// Safety guards kept from the previous handler:
+// - Only acts when a session/API key is believed active (no sign-in→sign-out
+//   loops on the auth screen).
+// - Skipped on /auth so a 401 there doesn't redirect to itself.
+// - The redirect guard re-arms on a timer: if Electron's will-navigate handler
+//   cancels the navigation, the page survives, and a latched flag would wedge
+//   it while an unlatched one would loop. A bounded retry does neither.
 const SIGN_OUT_RETRY_MS = 10_000;
-let _signOutInFlight = false;
+const RECOVERY_REUSE_MS = 5_000;
 
-function releaseSignOutGuard(delayMs = SIGN_OUT_RETRY_MS) {
-  if (typeof window === "undefined") {
-    _signOutInFlight = false;
-    return;
-  }
-  window.setTimeout(() => {
-    _signOutInFlight = false;
-  }, delayMs);
+type RecoveryOutcome =
+  | { kind: "refreshed"; token: string }
+  | { kind: "signed-out" }
+  | { kind: "no-session" };
+
+interface Recovery {
+  rejectedToken: string;
+  outcome: Promise<RecoveryOutcome>;
+  settledAt?: number;
 }
+
+let _recovery: Recovery | null = null;
 
 const AUTH_HEADER = "Authorization";
 
-// Tear down the session after the backend refuses a credential we DID present.
-// Split out of the interceptor so the "never presented one" path can't reach
-// it by accident, and so the retry path can still fall into it when a freshly
-// resolved token is itself rejected.
-async function signOutOnRejectedToken(
+function bearer(token: string): string {
+  return `Bearer ${token}`;
+}
+
+/**
+ * Recover from a rejected credential: refresh once, else sign out once.
+ * Concurrent callers presenting the same rejected credential share one
+ * recovery. Synchronous up to the point the recovery is recorded, so two 401s
+ * in the same tick cannot both start one.
+ */
+function recoverFromRejectedToken(
   req: { service: { typeName: string }; method: { name: string } },
   error: ConnectError,
-): Promise<void> {
-  if (_signOutInFlight) return;
+  presented: string,
+): Promise<RecoveryOutcome> {
+  const current = _recovery;
+  if (current) {
+    const fresh =
+      current.settledAt === undefined ||
+      Date.now() - current.settledAt < RECOVERY_REUSE_MS;
+    // Join the recovery in flight, or one that just finished for this same
+    // credential. A DIFFERENT credential rejected after recovery settled is a
+    // new event (e.g. the refreshed token was itself rejected).
+    if (current.settledAt === undefined || (fresh && current.rejectedToken === presented)) {
+      return current.outcome;
+    }
+  }
 
+  const recovery: Recovery = {
+    rejectedToken: presented,
+    outcome: runRecovery(req, error, presented),
+  };
+  _recovery = recovery;
+  void recovery.outcome.finally(() => {
+    recovery.settledAt = Date.now();
+  });
+  return recovery.outcome;
+}
+
+async function runRecovery(
+  req: { service: { typeName: string }; method: { name: string } },
+  error: ConnectError,
+  presented: string,
+): Promise<RecoveryOutcome> {
+  const provider = getAuthTokenProvider();
   // Deliberately `hasSession()` rather than `getToken()`: this only needs to
-  // know whether a session is believed active, and a burst of 401s must not
-  // stampede the provider's refresh path.
-  const hasSession = await getAuthTokenProvider().hasSession();
-  if (!hasSession) return;
+  // know whether a session is believed active.
+  if (!(await provider.hasSession())) return { kind: "no-session" };
 
-  _signOutInFlight = true;
+  const refreshed = await provider.refresh().catch(() => null);
+  if (refreshed && bearer(refreshed) !== presented) {
+    logger.warn("[gRPC Client] token rejected by backend; refreshed the session", {
+      service: req.service.typeName,
+      method: req.method.name,
+    });
+    return { kind: "refreshed", token: refreshed };
+  }
+
   logger.warn(
-    "[gRPC Client] 401 with active session — token rejected by backend; signing out",
+    "[gRPC Client] token rejected by backend and the session could not be refreshed; signing out",
     {
       service: req.service.typeName,
       method: req.method.name,
@@ -547,11 +602,18 @@ async function signOutOnRejectedToken(
   ) {
     window.location.href = "/auth";
     // If the navigation lands, this page (and timer) are gone. If something
-    // cancels it, the guard re-arms so we neither spin nor wedge.
-    releaseSignOutGuard();
-  } else {
-    _signOutInFlight = false;
+    // cancels it, forget this recovery after a while so a later 401 can try
+    // again, at a bounded rate.
+    window.setTimeout(() => {
+      _recovery = null;
+    }, SIGN_OUT_RETRY_MS);
   }
+  return { kind: "signed-out" };
+}
+
+/** Test seam: forget any recovery in progress or remembered. */
+export function resetAuthRecoveryForTests(): void {
+  _recovery = null;
 }
 
 // A 401 proves our SESSION is bad only if we actually presented a credential.
@@ -600,8 +662,12 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
     });
 
     if (presented) {
-      await signOutOnRejectedToken(req, error);
-      throw error;
+      const outcome = await recoverFromRejectedToken(req, error, presented);
+      // Streams are not replayed: their owner reconnects, and the reconnect
+      // picks up the refreshed token through authInterceptor.
+      if (outcome.kind !== "refreshed" || req.stream) throw error;
+      req.header.set(AUTH_HEADER, bearer(outcome.token));
+      return await next(req);
     }
 
     // Nothing was presented. Re-resolve through the provider and retry once;
@@ -615,7 +681,7 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
       "[gRPC Client] retrying tokenless request with a freshly resolved token",
       { service: req.service.typeName, method: req.method.name },
     );
-    req.header.set(AUTH_HEADER, `Bearer ${refreshed}`);
+    req.header.set(AUTH_HEADER, bearer(refreshed));
     try {
       return await next(req);
     } catch (retryError) {
@@ -625,7 +691,7 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
         retryError instanceof ConnectError &&
         retryError.code === Code.Unauthenticated
       ) {
-        await signOutOnRejectedToken(req, retryError);
+        await recoverFromRejectedToken(req, retryError, bearer(refreshed));
       }
       throw retryError;
     }
