@@ -22,19 +22,20 @@ Because the frontend is served as static files, a hosted frontend must be a stat
 
 ## The free tier and billing
 
-A static site on its own is free: one site per organization, no billing needed. Everything else, meaning any hosted service, worker or job and the managed database, needs an active Reliant Compute plan. Set one up under **Settings → Billing**; plan details and prices are shown there.
+One static site per organization is free, with no billing needed. Everything else, meaning any hosted service, worker or job, the managed database, or a second static site, needs an active Reliant Compute plan. Set one up under **Settings → Billing**; plan details and prices are shown there. Compute plans are bought per user and attach to that user's first organization, so the person who sets one up is whoever can manage billing for the organization.
 
-You do not have to set up billing before your first deploy. If the organization has no plan, the deploy is **queued, not refused**. Reliant builds and records the release as usual, then holds it. Nothing is running yet, and nothing needs to be re-run: the moment billing is active, the held deploy goes live on its own. In the meantime:
+You do not have to set up billing before your first deploy. If the organization has no plan, the deploy is **queued, not refused**. Reliant builds and records the release as usual, then holds it. Nothing is running yet, and nothing needs to be re-run: once billing is set up, the hold is released automatically and the deploy goes live. In the meantime:
 
-- `forge env deploy` prints why it is waiting, a link, and exits with code **7**. Seven means "queued on a person", not "failed"; a CI job can treat it differently from a real error.
-- The environment's page under **Forge** in the Reliant app shows a "Waiting on billing" banner with a **Set up billing** button. Only an organization admin can subscribe; for anyone else the banner offers a link to send to one.
-- `forge env status <env> --wait` blocks until the deploy is live. A newer deploy to the same environment replaces a queued one.
+- `forge env deploy` prints one block (what it waits on, why, what to do, a link, and that there is nothing to re-run) and exits with code **7**. Seven means "queued on a person", not "failed"; a CI job can treat it differently from a real error. `--json` reports the same facts, and `forge env status <env>` also exits 7 while the deploy is queued.
+- `forge env deploy --wait` (or `forge env status <env> --wait`) blocks until the deploy is live.
+- The environment's page under **Forge** in the Reliant app shows a "Waiting on billing" banner. Someone who can manage billing gets a **Set up billing** button that returns them to the environment afterwards; anyone else is told that only an admin can set it up, with a **Copy link** button to send along. The Overview lists the release with a "Waiting on billing" badge, the sidebar marks the environment "Queued", and a desktop notification tells you once when the deploy goes live or fails.
+- A newer deploy to the same environment replaces a queued one.
 
-A deploy can also be refused outright, with the reason printed before anything builds: for example when it asks for more than your plan allows, or your spend cap has been reached.
+Some deploys are refused rather than queued, with the reason printed: when the deploy asks for more than your plan allows, when the plan cannot be determined (retry), or when your spend cap has been reached. The spend cap is deliberate: it can clear on its own at the start of a billing period, and a deploy should not fire unattended then.
 
 ## Secrets
 
-Hosted environments keep their secrets in Reliant's managed store, and a workload that reads a secret needs a value set before it can use it. Set them from the command line (`forge secret set --env prod STRIPE_SECRET_KEY`) or in the app, then deploy. See [Secrets](/features/secrets) for how values reach your workloads and why you can never read one back.
+Hosted environments keep their secrets in Reliant's managed store, and a workload that reads a secret needs a value set before it can use it: deploys that need an unset secret fail until it is set. Set them from the command line (`forge secret set --env prod STRIPE_SECRET_KEY`) or in the app, then deploy. See [Secrets](/features/secrets) for how values reach your workloads and why you can never read one back.
 
 ## Domains
 
