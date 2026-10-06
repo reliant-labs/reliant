@@ -325,3 +325,38 @@ func TestGenerateFixture_Compaction(t *testing.T) {
 
 	h.ExportHistory(workflowID, "compaction")
 }
+
+// TestGenerateFixture_ActionApproval pins the action approval gate: a turn
+// calls a mutating integration action (http__request) in an attended run, so
+// the batch first raises an approval (ApprovalCreate + signal.approval.* +
+// timer); the person denies it, and the ExecuteTools activity refuses the call
+// (recorded FAILED) before the next turn completes the run.
+func TestGenerateFixture_ActionApproval(t *testing.T) {
+	script := NewScriptedLLM(
+		Turn{
+			Text: "I'll notify the webhook.",
+			ToolCalls: []message.ToolCall{
+				ToolCall("call-http-1", "http__request", `{"url":"https://example.com/hook","method":"POST","body":{"text":"replay-fixture"}}`),
+			},
+		},
+		Turn{Text: "Understood — I did not send it."},
+	)
+	h := newHarness(t, script)
+
+	created := h.StartChat("builtin://agent", "Tell the webhook we shipped", map[string]any{
+		"mode":  "auto",
+		"tools": []any{"http__request"},
+	})
+	chatID := created.Chat.Id
+	workflowID := created.WorkflowId
+
+	approval := h.WaitPendingApproval(chatID)
+	require.Equal(t, "POST request to https://example.com/hook?", approval.Title)
+	h.DenyApproval(approval.ID)
+
+	h.WaitTemporalWorkflowDone(workflowID)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	assert.False(t, h.LLM.Exhausted())
+
+	h.ExportHistory(workflowID, "action_approval")
+}

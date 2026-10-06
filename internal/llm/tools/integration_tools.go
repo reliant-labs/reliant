@@ -76,16 +76,26 @@ func ConnectionGatedIntegration(name string) (integrationID string, gated bool) 
 
 var (
 	mutatingToolsOnce sync.Once
-	mutatingTools     map[string]bool
+	mutatingTools     map[string]IntegrationAction
 )
 
-// MutatingIntegrationAction reports whether name is an integration tool whose
-// manifest action changes external state (`mutates: true`): it posts, sends,
-// creates or updates something outside Reliant. Read from the manifest, so a
-// new integration classifies itself.
-func MutatingIntegrationAction(name string) bool {
+// IntegrationAction names a mutating integration action the way a person
+// reads it: the action and the integration it belongs to, as its manifest
+// declares them.
+type IntegrationAction struct {
+	// Tool is the tool name, e.g. "slack__message_post".
+	Tool string
+	// DisplayName is the action's, e.g. "Post message".
+	DisplayName string
+	// Integration is the integration's display name, e.g. "Slack".
+	Integration string
+	// Icon is the integration's manifest icon, e.g. "slack".
+	Icon string
+}
+
+func mutatingIntegrationActions() map[string]IntegrationAction {
 	mutatingToolsOnce.Do(func() {
-		mutatingTools = map[string]bool{}
+		mutatingTools = map[string]IntegrationAction{}
 		cat, err := catalog.Builtin()
 		if err != nil {
 			// No catalog means no integration tools in the registry either
@@ -95,12 +105,34 @@ func MutatingIntegrationAction(name string) bool {
 		for _, m := range cat.Manifests() {
 			for _, a := range m.GetActions() {
 				if a.GetTool().GetExpose() && a.GetMutates() {
-					mutatingTools[manifest.ToolName(m, a)] = true
+					name := manifest.ToolName(m, a)
+					mutatingTools[name] = IntegrationAction{
+						Tool:        name,
+						DisplayName: a.GetDisplayName(),
+						Integration: m.GetDisplayName(),
+						Icon:        m.GetIcon(),
+					}
 				}
 			}
 		}
 	})
-	return mutatingTools[name]
+	return mutatingTools
+}
+
+// MutatingIntegrationAction reports whether name is an integration tool whose
+// manifest action changes external state (`mutates: true`): it posts, sends,
+// creates or updates something outside Reliant. Read from the manifest, so a
+// new integration classifies itself.
+func MutatingIntegrationAction(name string) bool {
+	_, ok := mutatingIntegrationActions()[name]
+	return ok
+}
+
+// MutatingIntegrationActionInfo is how a person reads the mutating
+// integration action name, and whether name is one.
+func MutatingIntegrationActionInfo(name string) (IntegrationAction, bool) {
+	action, ok := mutatingIntegrationActions()[name]
+	return action, ok
 }
 
 // connectionAvailability is the half of a credential source that can say,
