@@ -11,6 +11,11 @@
 // they are cut to their first line and a short prefix with credential shapes
 // redacted.
 //
+// Native crash minidumps are never uploaded. A minidump is a copy of process
+// memory, so it can hold exactly the content this file keeps out, and no
+// scrubber can read it. JS errors from the main process and renderers are still
+// reported, through the hooks below.
+//
 // This is the main-process copy of a policy that also runs in the renderer
 // (web/src/lib/sentryScrub.ts) and on the backend
 // (internal/telemetry/scrub.go). Keep the three in step.
@@ -64,6 +69,12 @@ const URL_KEYS = new Set(['url', 'baseurl', 'from', 'to', 'crashedurl']);
 // One token, no whitespace: the shape of an id or an enum, not of prose.
 const IDENTIFIER_VALUE = /^[A-Za-z0-9_.:/@+%-]{1,128}$/;
 const IDENTIFIER_KEY_SUFFIXES = ['_id', '_ids', 'Id', 'Ids', 'ID', 'IDs'];
+
+// Integrations that upload native crash minidumps. @sentry/electron enables
+// SentryMinidump by default (it starts Electron's crashReporter and uploads the
+// dumps), so it has to be removed explicitly. ElectronMinidump is its opt-in
+// alternative, listed so adding it later cannot turn uploads back on.
+const MINIDUMP_INTEGRATIONS = new Set(['SentryMinidump', 'ElectronMinidump']);
 
 // SDK-populated contexts that carry environment facts, not user data.
 const STANDARD_CONTEXTS = new Set([
@@ -195,6 +206,10 @@ function scrubEvent(event) {
   return event;
 }
 
+function withoutMinidumps(integrations) {
+  return integrations.filter((integration) => !MINIDUMP_INTEGRATIONS.has(integration.name));
+}
+
 // The main process's Sentry.init options. isEnabled is re-read on every event
 // so turning crash reporting off in Settings takes effect without a restart.
 function sentryMainOptions({ dsn, environment, release, isEnabled }) {
@@ -202,6 +217,7 @@ function sentryMainOptions({ dsn, environment, release, isEnabled }) {
     dsn,
     environment,
     release,
+    integrations: withoutMinidumps,
     beforeBreadcrumb(breadcrumb) {
       return scrubBreadcrumb(breadcrumb);
     },
