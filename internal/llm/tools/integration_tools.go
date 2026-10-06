@@ -262,8 +262,11 @@ func (t *integrationTool) RequiresPermission(_ *rctx.ToolContext, _ ToolCall) (b
 }
 
 func (t *integrationTool) Run(rc *rctx.ToolContext, call ToolCall) (ToolResponse, error) {
-	input := stripBoundKeys(call.Input, t.bindings)
 	resolved, err := resolveBindings(t.bindings, nil, rc)
+	if err != nil {
+		return NewTextErrorResponse(err.Error()), nil
+	}
+	input, err := checkBoundKeys(t.Name(), call.Input, resolved)
 	if err != nil {
 		return NewTextErrorResponse(err.Error()), nil
 	}

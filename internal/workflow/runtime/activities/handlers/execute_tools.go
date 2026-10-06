@@ -52,6 +52,12 @@ type toolExecutionContext struct {
 	toolInput  string
 	toolCallID string
 
+	// dispatchInput is the input the executor runs: toolInput with the
+	// turn's bound parameters merged in (boundToolInput). toolInput stays the
+	// model's own, which is what the tool_calls row and the transcript show:
+	// a bound value can be a secret.
+	dispatchInput string
+
 	// projectPathOverride allows sub-workflows to specify a different working directory
 	// When set, this path is used instead of project.Path or worktree.Path
 	projectPathOverride string
@@ -76,6 +82,7 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 		thread:              thread,
 		toolName:            toolName,
 		toolInput:           toolInput,
+		dispatchInput:       toolInput,
 		toolCallID:          toolCallID,
 		projectPathOverride: projectPathOverride,
 	}
@@ -139,7 +146,7 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 
 	return &toolexec.ToolRequest{
 		ToolName:       tec.toolName,
-		ToolInput:      tec.toolInput,
+		ToolInput:      tec.dispatchInput,
 		ToolCallID:     tec.toolCallID,
 		ContentBlockID: "", // Not required - tool calls can be ephemeral
 		UserID:         tec.project.UserID,
@@ -347,6 +354,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 					// Execute the tool via normal toolexec path
 					result := a.executeSingleTool(
 						ctx,
+						caps,
 						rtx.ChatID,
 						rtx.Thread,
 						toolName,
@@ -470,6 +478,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 // executeSingleTool executes a single tool and returns the result
 func (a *ExecuteToolsActivity) executeSingleTool(
 	ctx context.Context,
+	caps *tools.Capabilities,
 	chatID string,
 	thread string,
 	toolName string,
@@ -557,6 +566,23 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 			return result
 		}
 	}
+
+	// Bound parameters take effect here, before dispatch. The executor builds
+	// a fresh, unbound tool for the call — on this worker, or on the daemon —
+	// so the input it receives has to carry the bound values already. A call
+	// the bindings refuse is recorded FAILED with the reason, like the
+	// no-machine refusal above.
+	dispatchInput, refusal := a.boundToolInput(ctx, caps, tec)
+	if refusal != "" {
+		result := a.buildToolResult(toolCallID, toolName, refusal, "", true, nil, nil)
+		completedAt := time.Now()
+		a.upsertTerminalToolCall(ctx, tec, core.ToolCallStatusFailed, toolCallUpsertOpts{
+			completedAt:  &completedAt,
+			errorMessage: refusal,
+		}, &toolCallResultWrite{content: result.Content, isError: true})
+		return result
+	}
+	tec.dispatchInput = dispatchInput
 
 	// The skill tool reads the project's skills, which live on the project's
 	// config row. Read here, per call, rather than carried from call_llm: the

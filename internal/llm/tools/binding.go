@@ -5,7 +5,9 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"sort"
+	"strings"
 
 	"github.com/invopop/jsonschema"
 	rctxpkg "github.com/reliant-labs/reliant/internal/rctx"
@@ -14,12 +16,18 @@ import (
 // A tool has ONE parameter schema. Every parameter in it is either BOUND — a
 // human fixed it ahead of time — or OPEN, filled at runtime by the model.
 //
-// Binding a parameter REMOVES it from the LLM-visible schema. That is the
-// entire access-control story, and the reason there is no separate permission
-// concept here: the model cannot override or hallucinate a parameter it was
-// never shown. A bound parameter's value is merged back in on the way to the
-// tool's Execute, after schema validation, so the typed params the tool
-// receives are complete either way.
+// Binding a parameter REMOVES it from the LLM-visible schema, and execution
+// merges the bound value back in. A call that sets a bound parameter anyway
+// — to anything but its bound value — is refused, never run with either value
+// (checkBoundKeys). So the model cannot override a parameter it was never
+// shown, and what runs is always what the model asked for.
+//
+// Hiding happens in call_llm, on the tool instance whose schema the driver
+// sends. Merging happens where the call runs: execute_tools applies the
+// bindings the turn's capability set recorded (ApplyBindings) before dispatch,
+// because the executor — on the worker or on the daemon — builds a fresh,
+// unbound tool for every call. A bound tool's own Run applies the same rule,
+// for a caller that runs it directly.
 //
 // A tool must be fully functional with ZERO bindings. Binding is refinement,
 // never activation.
@@ -36,6 +44,28 @@ var ErrBindingsUnsupported = errors.New("tool does not support parameter binding
 // schema does not declare. Wrapped, so callers can distinguish a typo in
 // configuration from a structurally unbindable tool.
 var ErrUnknownBoundParam = errors.New("tool has no such parameter")
+
+// BoundParamSetError is a call that set bound parameters to values other than
+// the ones they are bound to. Its text is written for the model, which was
+// never shown these parameters, and never repeats a bound value: a binding
+// can carry a secret.
+type BoundParamSetError struct {
+	Tool   string
+	Params []string // sorted
+}
+
+func (e *BoundParamSetError) Error() string {
+	quoted := make([]string, len(e.Params))
+	for i, name := range e.Params {
+		quoted[i] = "'" + name + "'"
+	}
+	if len(quoted) == 1 {
+		return fmt.Sprintf("Parameter %s of '%s' is fixed for this agent and cannot be set, so the call was not run. Call '%s' again without %s.",
+			quoted[0], e.Tool, e.Tool, quoted[0])
+	}
+	return fmt.Sprintf("Parameters %s of '%s' are fixed for this agent and cannot be set, so the call was not run. Call '%s' again without them.",
+		strings.Join(quoted, ", "), e.Tool, e.Tool)
+}
 
 // BoundValue is one bound parameter's value. It is deliberately not a bare
 // `any`: a binding is not necessarily a constant. `save_to` bound to
@@ -208,15 +238,32 @@ func resolveBindings(bindings Bindings, resolver BindingResolver, tc *rctxpkg.To
 	return resolved, nil
 }
 
-// applyBindingsToInput removes any bound key the model supplied and merges the
-// bound values in their place. Bound wins, unconditionally: a model that
-// somehow emits a parameter it was never shown must not be able to override
-// the human who fixed it.
+// ApplyBindings is a bound parameter's execution half: the model's call input
+// with every bound value merged in, or a *BoundParamSetError when the call
+// set a bound parameter to anything else. execute_tools runs it before
+// dispatch, so the executor — which builds a fresh, unbound tool — receives a
+// complete input on every path, the daemon's included, whatever its version.
 //
-// Dropping the model's key rather than rejecting the call is deliberate. The
-// LLM-visible schema sets additionalProperties:false, so leaving the key in
-// place would turn a hallucinated parameter into a hard validation failure
-// instead of the intended "you don't get a say in this one".
+// There is no expression engine at execution, so a parameter bound to an
+// expression fails the call here exactly as it does in a bound tool's Run.
+func ApplyBindings(toolName, input string, bindings Bindings) (string, error) {
+	if len(bindings) == 0 {
+		return input, nil
+	}
+	resolved, err := resolveBindings(bindings, nil, nil)
+	if err != nil {
+		return "", err
+	}
+	stripped, err := checkBoundKeys(toolName, input, resolved)
+	if err != nil {
+		return "", err
+	}
+	return applyBindingsToInput(stripped, resolved)
+}
+
+// applyBindingsToInput merges the bound values into the input. Bound wins:
+// checkBoundKeys has already refused a call whose own value for a bound
+// parameter differs, so anything it left in place is the bound value itself.
 func applyBindingsToInput(input string, resolved map[string]any) (string, error) {
 	if len(resolved) == 0 {
 		return input, nil
@@ -242,35 +289,79 @@ func applyBindingsToInput(input string, resolved map[string]any) (string, error)
 	return string(merged), nil
 }
 
-// stripBoundKeys removes bound parameters from the model's input before schema
-// validation, so a hallucinated bound parameter is ignored rather than fatal.
-func stripBoundKeys(input string, bindings Bindings) string {
-	if len(bindings) == 0 {
-		return input
+// checkBoundKeys is the one rule for a bound parameter the model set anyway.
+// Set to its bound value, the key is redundant and is dropped. Set to anything
+// else, the call is refused with a *BoundParamSetError naming every such
+// parameter — it is not run with the model's value, and not silently run with
+// the bound one either. The model was never shown the parameter, so a value
+// for it is a hallucination or an injected instruction, and the rest of the
+// call was composed around it: running it against the bound value would run
+// a call nobody wrote, then report it to the model as the call it made.
+//
+// Dropping the redundant key matters because the model-facing schema sets
+// additionalProperties:false, so a bound tool's own validation would reject
+// the key even when its value is right.
+//
+// Input that is not a JSON object is returned as-is: there is nothing to
+// check, and the decoder downstream reports the real problem.
+func checkBoundKeys(toolName, input string, resolved map[string]any) (string, error) {
+	if len(resolved) == 0 {
+		return input, nil
 	}
 	trimmed := trimJSONWhitespace(input)
 	if trimmed == "" {
-		return input
+		return input, nil
 	}
 	var fields map[string]any
 	if err := json.Unmarshal([]byte(trimmed), &fields); err != nil {
-		return input
+		return input, nil
 	}
+	var conflicting []string
 	removed := false
-	for name := range bindings {
-		if _, present := fields[name]; present {
-			delete(fields, name)
-			removed = true
+	for name, bound := range resolved {
+		supplied, present := fields[name]
+		if !present {
+			continue
 		}
+		if !sameJSONValue(supplied, bound) {
+			conflicting = append(conflicting, name)
+			continue
+		}
+		delete(fields, name)
+		removed = true
+	}
+	if len(conflicting) > 0 {
+		sort.Strings(conflicting)
+		return "", &BoundParamSetError{Tool: toolName, Params: conflicting}
 	}
 	if !removed {
-		return input
+		return input, nil
 	}
 	stripped, err := json.Marshal(fields)
 	if err != nil {
-		return input
+		return input, nil
 	}
-	return string(stripped)
+	return string(stripped), nil
+}
+
+// sameJSONValue compares a value decoded from the model's JSON with a bound
+// value, which may be any Go value a binding was written with (an int, a
+// struct). Both are taken through JSON so 3 and 3.0 are one value.
+func sameJSONValue(supplied, bound any) bool {
+	normalize := func(v any) (any, bool) {
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil, false
+		}
+		var out any
+		if err := json.Unmarshal(raw, &out); err != nil {
+			return nil, false
+		}
+		return out, true
+	}
+	a, okA := normalize(supplied)
+	b, okB := normalize(bound)
+	return okA && okB && reflect.DeepEqual(a, b)
 }
 
 func trimJSONWhitespace(s string) string {

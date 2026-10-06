@@ -279,9 +279,51 @@ func TestCapabilities_ProtoRoundTrip(t *testing.T) {
 		UsableIntegrations: map[string]bool{"github": true},
 	})
 	require.Contains(t, caps.WithheldIntegrations, "slack")
+	caps.RecordBoundParams(map[string]map[string]BoundParam{
+		ToolView: {
+			"limit": {Value: LiteralBinding(float64(5))},
+			"repo":  {Value: ExprBinding("inputs.repo")},
+			"pages": {Global: true},
+		},
+		"github__issue_get": {"repo": {Value: LiteralBinding(map[string]any{"owner": "o", "name": "n"})}},
+		ToolEdit:            {},
+	})
 	back := CapabilitiesFromProto(caps.Proto())
 	require.NotNil(t, back)
 	assert.Equal(t, caps, back)
+	assert.NotContains(t, back.BoundParams, ToolEdit, "a tool with nothing bound is not recorded")
+}
+
+// What a call runs with: the carried values as recorded, a global
+// parameter's value from the setting re-read at execution, and a refusal —
+// not an open parameter — when the setting no longer binds it.
+func TestCapabilities_ExecutionBindings(t *testing.T) {
+	t.Parallel()
+
+	caps := &Capabilities{Permission: PermissionMutating}
+	caps.RecordBoundParams(map[string]map[string]BoundParam{
+		"http__request": {
+			"url":     {Value: LiteralBinding("https://hooks.example.com/x")},
+			"headers": {Global: true},
+		},
+	})
+	require.True(t, caps.Binds("http__request"))
+	require.True(t, caps.BindsFromGlobalSetting("http__request"))
+	assert.False(t, caps.Binds(ToolView))
+
+	headers := LiteralBinding(map[string]any{"Authorization": "Bearer t"})
+	got, err := caps.ExecutionBindings("http__request", Bindings{"headers": headers, "method": LiteralBinding("PUT")})
+	require.NoError(t, err)
+	assert.Equal(t, Bindings{"url": LiteralBinding("https://hooks.example.com/x"), "headers": headers}, got,
+		"only what was recorded is bound; a setting that now binds more does not reach this call")
+
+	_, err = caps.ExecutionBindings("http__request", nil)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "'headers'")
+
+	none, err := (*Capabilities)(nil).ExecutionBindings("http__request", nil)
+	require.NoError(t, err, "a batch with no recorded set binds nothing")
+	assert.Nil(t, none)
 }
 
 // An output from before the set existed normalizes to a zero-valued message,

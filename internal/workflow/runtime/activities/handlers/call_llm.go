@@ -37,6 +37,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
+	"github.com/reliant-labs/reliant/internal/toolbindings"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -1070,6 +1071,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// was shown (research/TOOL_CAPABILITIES.md).
 	var availableTools []tools.Tool
 	var caps *tools.Capabilities
+	var bindingScopes toolbindings.Scopes
 	if tc == nil {
 		// No tools_config is the same statement as an empty one: this node's
 		// model calls nothing. Formerly a `toolsEnabled` boolean said this,
@@ -1166,9 +1168,8 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// bindable too, and before the response tool is appended because a
 		// response tool is a per-node structured-output shape rather than a
 		// registry tool anyone can configure globally.
-		availableTools = applyToolBindings(ctx,
-			availableTools,
-			a.resolveToolBindingScopes(ctx, chat.UserID, tc))
+		bindingScopes = a.resolveToolBindingScopes(ctx, chat.UserID, tc)
+		availableTools = applyToolBindings(ctx, availableTools, bindingScopes)
 	}
 
 	// Add custom response tool defined in the workflow
@@ -1196,6 +1197,11 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// and the spawn and response tools appended above are. Recorded before
 	// the system prompts, which say what this turn may do from the same set.
 	caps.RecordOffered(toolNames(availableTools))
+	// And what it binds, from the same array: a parameter hidden from the
+	// model here is the parameter execute_tools merges over its call. The
+	// tool instances bound above only shape the schema — the executor builds
+	// a fresh tool for every call.
+	caps.RecordBoundParams(toolbindings.Recorded(availableTools, bindingScopes))
 
 	// Generate system prompts
 	// Always include base prompts for the driver (claude-code requires specific prompts for sk-ant-oat keys)

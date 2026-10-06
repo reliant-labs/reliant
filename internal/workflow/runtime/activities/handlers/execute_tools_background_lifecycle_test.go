@@ -58,7 +58,7 @@ func executeSingleToolAsRetry(t *testing.T, f *durableStatusFixture, executor *m
 	activityInstance := NewExecuteToolsActivity(f.h.Repo(), executor)
 
 	runRetry := func(ctx context.Context) (message.ToolResult, error) {
-		return activityInstance.executeSingleTool(ctx, f.chatID, f.chatID, toolName, toolInput, toolCallID,
+		return activityInstance.executeSingleTool(ctx, nil, f.chatID, f.chatID, toolName, toolInput, toolCallID,
 			"act-retry", "run-retry", 2, "", nil), nil
 	}
 	f.h.env.RegisterActivity(runRetry)

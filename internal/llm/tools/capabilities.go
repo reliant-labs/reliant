@@ -3,9 +3,12 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"sort"
 	"strings"
+
+	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/config"
@@ -53,6 +56,26 @@ type Capabilities struct {
 	// by tool: one entry withholds every action of that integration, which
 	// keeps the set small however many actions a manifest exposes.
 	WithheldIntegrations map[string]string
+	// BoundParams are the parameters a human bound on each offered tool,
+	// keyed by tool and then parameter: removed from the schema the model was
+	// offered, and merged over its calls at execution (ExecutionBindings).
+	// Only tools with a bound parameter appear.
+	BoundParams map[string]map[string]BoundParam
+}
+
+// BoundParam is one bound parameter as a turn's capability set records it.
+type BoundParam struct {
+	// Value is the bound value, when the set carries it: a binding from the
+	// workflow's tools_config.tools, which is already in workflow history as
+	// call_llm's own input.
+	Value BoundValue
+	// Global marks a parameter bound by the run owner's global setting. The
+	// set records its name only, and execution re-reads the value from the
+	// setting. A binding can carry a secret — an Authorization header on the
+	// http integration — and a setting is not otherwise in workflow history,
+	// which is retained, shown in the Temporal UI, and checked into replay
+	// fixtures.
+	Global bool
 }
 
 // CapabilityInputs is everything one turn's tool reach is decided from. Every
@@ -288,6 +311,76 @@ func (c *Capabilities) RecordOffered(names []string) {
 	c.Offered = sortedUnique(names)
 }
 
+// RecordBoundParams records what the request's tool array binds. call_llm
+// calls it beside RecordOffered, from the same final array, so a parameter is
+// recorded exactly when it was hidden from the model.
+func (c *Capabilities) RecordBoundParams(bound map[string]map[string]BoundParam) {
+	c.BoundParams = nil
+	for tool, params := range bound {
+		if len(params) == 0 {
+			continue
+		}
+		if c.BoundParams == nil {
+			c.BoundParams = make(map[string]map[string]BoundParam, len(bound))
+		}
+		c.BoundParams[tool] = params
+	}
+}
+
+// Binds reports whether tool has a bound parameter on this turn.
+func (c *Capabilities) Binds(tool string) bool {
+	return c != nil && len(c.BoundParams[tool]) > 0
+}
+
+// BindsFromGlobalSetting reports whether a call to tool needs the run owner's
+// global setting for it read before ExecutionBindings can resolve it.
+func (c *Capabilities) BindsFromGlobalSetting(tool string) bool {
+	if c == nil {
+		return false
+	}
+	for _, param := range c.BoundParams[tool] {
+		if param.Global {
+			return true
+		}
+	}
+	return false
+}
+
+// ExecutionBindings is what a call to tool runs with: each carried value as
+// recorded, and each global parameter's value from global — the run owner's
+// setting for this tool, re-read by the caller.
+//
+// A global parameter the setting no longer binds is an error, not an open
+// parameter. The model was not shown it, so the call it made has no value
+// there; running it without the bound one would run a call nobody configured.
+// The next turn's set is resolved from the setting as it is then.
+func (c *Capabilities) ExecutionBindings(tool string, global Bindings) (Bindings, error) {
+	if !c.Binds(tool) {
+		return nil, nil
+	}
+	recorded := c.BoundParams[tool]
+	bindings := make(Bindings, len(recorded))
+	var gone []string
+	for name, param := range recorded {
+		if !param.Global {
+			bindings[name] = param.Value
+			continue
+		}
+		value, ok := global[name]
+		if !ok || (value.Literal == nil && value.Expr == "") {
+			gone = append(gone, name)
+			continue
+		}
+		bindings[name] = value
+	}
+	if len(gone) > 0 {
+		sort.Strings(gone)
+		return nil, fmt.Errorf("The value of '%s' on '%s' was fixed by a setting when this tool was offered, and that setting no longer fixes it, so the call was not run. Call '%s' again.",
+			strings.Join(gone, "', '"), tool, tool)
+	}
+	return bindings, nil
+}
+
 // Offers reports whether name was in this turn's tool array.
 func (c *Capabilities) Offers(name string) bool {
 	return c != nil && containsSorted(c.Offered, name)
@@ -431,7 +524,72 @@ func (c *Capabilities) Proto() *reliantv1.ToolCapabilities {
 		McpTools:             c.MCPTools,
 		SpawnPresets:         c.SpawnPresets,
 		WithheldIntegrations: c.WithheldIntegrations,
+		BoundParams:          boundParamsProto(c.BoundParams),
 	}
+}
+
+// boundParamsProto is the wire form of a set's bound parameters. A literal is
+// JSON by construction — every scope that binds one decodes it from JSON or
+// from a protobuf Value — so the conversion cannot fail for a real binding;
+// one that somehow did is recorded as a JSON null rather than dropped, so the
+// parameter still reads as bound at execution.
+func boundParamsProto(bound map[string]map[string]BoundParam) map[string]*reliantv1.ToolBoundParams {
+	if len(bound) == 0 {
+		return nil
+	}
+	out := make(map[string]*reliantv1.ToolBoundParams, len(bound))
+	for tool, params := range bound {
+		wire := &reliantv1.ToolBoundParams{Params: make(map[string]*reliantv1.BoundParam, len(params))}
+		for name, param := range params {
+			switch {
+			case param.Global:
+				wire.Params[name] = &reliantv1.BoundParam{Value: &reliantv1.BoundParam_Global{Global: true}}
+			case param.Value.IsExpr():
+				wire.Params[name] = &reliantv1.BoundParam{Value: &reliantv1.BoundParam_Expr{Expr: param.Value.Expr}}
+			default:
+				wire.Params[name] = &reliantv1.BoundParam{Value: &reliantv1.BoundParam_Literal{Literal: literalValue(param.Value.Literal)}}
+			}
+		}
+		out[tool] = wire
+	}
+	return out
+}
+
+func literalValue(literal any) *structpb.Value {
+	if raw, err := json.Marshal(literal); err == nil {
+		var decoded any
+		if json.Unmarshal(raw, &decoded) == nil {
+			if value, err := structpb.NewValue(decoded); err == nil {
+				return value
+			}
+		}
+	}
+	return structpb.NewNullValue()
+}
+
+func boundParamsFromProto(wire map[string]*reliantv1.ToolBoundParams) map[string]map[string]BoundParam {
+	if len(wire) == 0 {
+		return nil
+	}
+	out := make(map[string]map[string]BoundParam, len(wire))
+	for tool, params := range wire {
+		if len(params.GetParams()) == 0 {
+			continue
+		}
+		decoded := make(map[string]BoundParam, len(params.GetParams()))
+		for name, param := range params.GetParams() {
+			switch value := param.GetValue().(type) {
+			case *reliantv1.BoundParam_Global:
+				decoded[name] = BoundParam{Global: true}
+			case *reliantv1.BoundParam_Expr:
+				decoded[name] = BoundParam{Value: ExprBinding(value.Expr)}
+			case *reliantv1.BoundParam_Literal:
+				decoded[name] = BoundParam{Value: LiteralBinding(value.Literal.AsInterface())}
+			}
+		}
+		out[tool] = decoded
+	}
+	return out
 }
 
 // CapabilitiesFromProto reads a recorded set. It returns nil for an absent
@@ -450,6 +608,7 @@ func CapabilitiesFromProto(p *reliantv1.ToolCapabilities) *Capabilities {
 		NoMachine:    p.GetNoMachine(),
 		MCPTools:     sortedUnique(p.GetMcpTools()),
 		SpawnPresets: sortedUnique(p.GetSpawnPresets()),
+		BoundParams:  boundParamsFromProto(p.GetBoundParams()),
 	}
 	if len(p.GetWithheldIntegrations()) > 0 {
 		caps.WithheldIntegrations = make(map[string]string, len(p.GetWithheldIntegrations()))

@@ -3333,7 +3333,8 @@ type LoopArgs struct {
 	Key string `protobuf:"bytes,10,opt,name=key,proto3" json:"key,omitempty"`
 	// OnFailure controls behavior when a parallel iteration fails.
 	// Values: "continue" (default, others keep running), "fail_fast" (cancel remaining),
-	//   "fail_all" (wait for all, then fail if any failed).
+	//
+	//	"fail_all" (wait for all, then fail if any failed).
 	OnFailure string `protobuf:"bytes,11,opt,name=on_failure,json=onFailure,proto3" json:"on_failure,omitempty"`
 	// Thread configures how parallel iterations relate to conversation threads.
 	// Each parallel iteration creates its own thread. Defaults to mode: new.
@@ -5463,16 +5464,16 @@ type CallLLMOutput struct {
 	// reads to decide whether the model has more to do. Closed vocabulary,
 	// derived once in Go (internal/workflow/stopreason), first match wins:
 	//
-	//   interrupted  our stream was cut short mid-flight; the work is unfinished
-	//   tool_use     the model requested tools; their results are new input
-	//   refused      the safety system declined (refusal / content_filter)
-	//   truncated    it ran out of output room mid-turn (max_tokens)
-	//   incomplete   the provider paused the turn and expects it handed back —
-	//                Anthropic pause_turn, OpenAI Responses end_turn:false or
-	//                incomplete:interrupted — and the turn produced text
-	//   error        a provider/transport failure, a pause that produced
-	//                nothing, or any reason this vocabulary does not recognize
-	//   done         the model finished on its own terms
+	//	interrupted  our stream was cut short mid-flight; the work is unfinished
+	//	tool_use     the model requested tools; their results are new input
+	//	refused      the safety system declined (refusal / content_filter)
+	//	truncated    it ran out of output room mid-turn (max_tokens)
+	//	incomplete   the provider paused the turn and expects it handed back —
+	//	             Anthropic pause_turn, OpenAI Responses end_turn:false or
+	//	             incomplete:interrupted — and the turn produced text
+	//	error        a provider/transport failure, a pause that produced
+	//	             nothing, or any reason this vocabulary does not recognize
+	//	done         the model finished on its own terms
 	//
 	// A provider adding a stop reason maps into one of these rather than
 	// becoming an eighth value, so a condition written against them cannot
@@ -5689,8 +5690,13 @@ type ToolCapabilities struct {
 	// by integration, not tool, so it stays small however many actions a
 	// manifest exposes.
 	WithheldIntegrations map[string]string `protobuf:"bytes,8,rep,name=withheld_integrations,json=withheldIntegrations,proto3" json:"withheld_integrations,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	// BoundParams are the parameters a human bound on each offered tool, keyed
+	// by tool name. call_llm removed them from the schema the model was offered;
+	// execute_tools merges them over the model's call, and refuses a call that
+	// sets one to a different value. Only tools with a bound parameter appear.
+	BoundParams   map[string]*ToolBoundParams `protobuf:"bytes,9,rep,name=bound_params,json=boundParams,proto3" json:"bound_params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ToolCapabilities) Reset() {
@@ -5779,6 +5785,164 @@ func (x *ToolCapabilities) GetWithheldIntegrations() map[string]string {
 	return nil
 }
 
+func (x *ToolCapabilities) GetBoundParams() map[string]*ToolBoundParams {
+	if x != nil {
+		return x.BoundParams
+	}
+	return nil
+}
+
+// ToolBoundParams are one tool's bound parameters, keyed by parameter name.
+type ToolBoundParams struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Params        map[string]*BoundParam `protobuf:"bytes,1,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ToolBoundParams) Reset() {
+	*x = ToolBoundParams{}
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[63]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ToolBoundParams) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ToolBoundParams) ProtoMessage() {}
+
+func (x *ToolBoundParams) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[63]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ToolBoundParams.ProtoReflect.Descriptor instead.
+func (*ToolBoundParams) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{63}
+}
+
+func (x *ToolBoundParams) GetParams() map[string]*BoundParam {
+	if x != nil {
+		return x.Params
+	}
+	return nil
+}
+
+// BoundParam is one bound parameter as a turn's capability set records it.
+type BoundParam struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Value:
+	//
+	//	*BoundParam_Literal
+	//	*BoundParam_Expr
+	//	*BoundParam_Global
+	Value         isBoundParam_Value `protobuf_oneof:"value"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *BoundParam) Reset() {
+	*x = BoundParam{}
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[64]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *BoundParam) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BoundParam) ProtoMessage() {}
+
+func (x *BoundParam) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[64]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BoundParam.ProtoReflect.Descriptor instead.
+func (*BoundParam) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{64}
+}
+
+func (x *BoundParam) GetValue() isBoundParam_Value {
+	if x != nil {
+		return x.Value
+	}
+	return nil
+}
+
+func (x *BoundParam) GetLiteral() *structpb.Value {
+	if x != nil {
+		if x, ok := x.Value.(*BoundParam_Literal); ok {
+			return x.Literal
+		}
+	}
+	return nil
+}
+
+func (x *BoundParam) GetExpr() string {
+	if x != nil {
+		if x, ok := x.Value.(*BoundParam_Expr); ok {
+			return x.Expr
+		}
+	}
+	return ""
+}
+
+func (x *BoundParam) GetGlobal() bool {
+	if x != nil {
+		if x, ok := x.Value.(*BoundParam_Global); ok {
+			return x.Global
+		}
+	}
+	return false
+}
+
+type isBoundParam_Value interface {
+	isBoundParam_Value()
+}
+
+type BoundParam_Literal struct {
+	// Literal is a constant, from the workflow's tools_config.tools or the
+	// tool's own default. Already in workflow history as call_llm's input.
+	Literal *structpb.Value `protobuf:"bytes,1,opt,name=literal,proto3,oneof"`
+}
+
+type BoundParam_Expr struct {
+	// Expr is an expression evaluated at call time.
+	Expr string `protobuf:"bytes,2,opt,name=expr,proto3,oneof"`
+}
+
+type BoundParam_Global struct {
+	// Global marks a parameter bound by the run owner's global setting. Only
+	// the name is recorded: execute_tools re-reads the value from the setting,
+	// because a binding can carry a secret and a setting is not otherwise in
+	// workflow history.
+	Global bool `protobuf:"varint,3,opt,name=global,proto3,oneof"`
+}
+
+func (*BoundParam_Literal) isBoundParam_Value() {}
+
+func (*BoundParam_Expr) isBoundParam_Value() {}
+
+func (*BoundParam_Global) isBoundParam_Value() {}
+
 // ExecuteToolsOutput is the output from execute_tools nodes.
 type ExecuteToolsOutput struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
@@ -5798,7 +5962,7 @@ type ExecuteToolsOutput struct {
 
 func (x *ExecuteToolsOutput) Reset() {
 	*x = ExecuteToolsOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[63]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[65]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5810,7 +5974,7 @@ func (x *ExecuteToolsOutput) String() string {
 func (*ExecuteToolsOutput) ProtoMessage() {}
 
 func (x *ExecuteToolsOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[63]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[65]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5823,7 +5987,7 @@ func (x *ExecuteToolsOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ExecuteToolsOutput.ProtoReflect.Descriptor instead.
 func (*ExecuteToolsOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{63}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{65}
 }
 
 func (x *ExecuteToolsOutput) GetMessage() *MessageOutput {
@@ -5895,7 +6059,7 @@ type InvokeToolOutput struct {
 
 func (x *InvokeToolOutput) Reset() {
 	*x = InvokeToolOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[64]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[66]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5907,7 +6071,7 @@ func (x *InvokeToolOutput) String() string {
 func (*InvokeToolOutput) ProtoMessage() {}
 
 func (x *InvokeToolOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[64]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[66]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -5920,7 +6084,7 @@ func (x *InvokeToolOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use InvokeToolOutput.ProtoReflect.Descriptor instead.
 func (*InvokeToolOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{64}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{66}
 }
 
 func (x *InvokeToolOutput) GetContent() string {
@@ -5986,7 +6150,7 @@ type ActionOutput struct {
 
 func (x *ActionOutput) Reset() {
 	*x = ActionOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[65]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[67]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -5998,7 +6162,7 @@ func (x *ActionOutput) String() string {
 func (*ActionOutput) ProtoMessage() {}
 
 func (x *ActionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[65]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[67]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6011,7 +6175,7 @@ func (x *ActionOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ActionOutput.ProtoReflect.Descriptor instead.
 func (*ActionOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{65}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{67}
 }
 
 func (x *ActionOutput) GetContent() string {
@@ -6080,7 +6244,7 @@ type CompactOutput struct {
 
 func (x *CompactOutput) Reset() {
 	*x = CompactOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[66]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[68]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6092,7 +6256,7 @@ func (x *CompactOutput) String() string {
 func (*CompactOutput) ProtoMessage() {}
 
 func (x *CompactOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[66]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[68]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6105,7 +6269,7 @@ func (x *CompactOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CompactOutput.ProtoReflect.Descriptor instead.
 func (*CompactOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{66}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{68}
 }
 
 func (x *CompactOutput) GetMessage() *MessageOutput {
@@ -6128,7 +6292,7 @@ type ApprovalOutput struct {
 
 func (x *ApprovalOutput) Reset() {
 	*x = ApprovalOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[67]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[69]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6140,7 +6304,7 @@ func (x *ApprovalOutput) String() string {
 func (*ApprovalOutput) ProtoMessage() {}
 
 func (x *ApprovalOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[67]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[69]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6153,7 +6317,7 @@ func (x *ApprovalOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ApprovalOutput.ProtoReflect.Descriptor instead.
 func (*ApprovalOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{67}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{69}
 }
 
 func (x *ApprovalOutput) GetApprovalId() string {
@@ -6200,7 +6364,7 @@ type SaveMessageOutput struct {
 
 func (x *SaveMessageOutput) Reset() {
 	*x = SaveMessageOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[68]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[70]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6212,7 +6376,7 @@ func (x *SaveMessageOutput) String() string {
 func (*SaveMessageOutput) ProtoMessage() {}
 
 func (x *SaveMessageOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[68]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[70]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6225,7 +6389,7 @@ func (x *SaveMessageOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveMessageOutput.ProtoReflect.Descriptor instead.
 func (*SaveMessageOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{68}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{70}
 }
 
 func (x *SaveMessageOutput) GetMessage() *MessageOutput {
@@ -6293,7 +6457,7 @@ type CreateWorktreeOutput struct {
 
 func (x *CreateWorktreeOutput) Reset() {
 	*x = CreateWorktreeOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[69]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[71]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6305,7 +6469,7 @@ func (x *CreateWorktreeOutput) String() string {
 func (*CreateWorktreeOutput) ProtoMessage() {}
 
 func (x *CreateWorktreeOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[69]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[71]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6318,7 +6482,7 @@ func (x *CreateWorktreeOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorktreeOutput.ProtoReflect.Descriptor instead.
 func (*CreateWorktreeOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{69}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{71}
 }
 
 func (x *CreateWorktreeOutput) GetId() string {
@@ -6380,7 +6544,7 @@ type DeleteWorktreeOutput struct {
 
 func (x *DeleteWorktreeOutput) Reset() {
 	*x = DeleteWorktreeOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[70]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[72]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6392,7 +6556,7 @@ func (x *DeleteWorktreeOutput) String() string {
 func (*DeleteWorktreeOutput) ProtoMessage() {}
 
 func (x *DeleteWorktreeOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[70]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[72]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6405,7 +6569,7 @@ func (x *DeleteWorktreeOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteWorktreeOutput.ProtoReflect.Descriptor instead.
 func (*DeleteWorktreeOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{70}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{72}
 }
 
 func (x *DeleteWorktreeOutput) GetDeleted() bool {
@@ -6429,7 +6593,7 @@ type RunOutput struct {
 
 func (x *RunOutput) Reset() {
 	*x = RunOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[71]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[73]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6441,7 +6605,7 @@ func (x *RunOutput) String() string {
 func (*RunOutput) ProtoMessage() {}
 
 func (x *RunOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[71]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[73]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6454,7 +6618,7 @@ func (x *RunOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RunOutput.ProtoReflect.Descriptor instead.
 func (*RunOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{71}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{73}
 }
 
 func (x *RunOutput) GetExitCode() int32 {
@@ -6502,7 +6666,7 @@ type WorkflowOutput struct {
 
 func (x *WorkflowOutput) Reset() {
 	*x = WorkflowOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[72]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[74]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6514,7 +6678,7 @@ func (x *WorkflowOutput) String() string {
 func (*WorkflowOutput) ProtoMessage() {}
 
 func (x *WorkflowOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[72]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[74]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6527,7 +6691,7 @@ func (x *WorkflowOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowOutput.ProtoReflect.Descriptor instead.
 func (*WorkflowOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{72}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{74}
 }
 
 func (x *WorkflowOutput) GetOutputs() *structpb.Struct {
@@ -6555,7 +6719,7 @@ type LoopOutput struct {
 
 func (x *LoopOutput) Reset() {
 	*x = LoopOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[73]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[75]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6567,7 +6731,7 @@ func (x *LoopOutput) String() string {
 func (*LoopOutput) ProtoMessage() {}
 
 func (x *LoopOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[73]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[75]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6580,7 +6744,7 @@ func (x *LoopOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LoopOutput.ProtoReflect.Descriptor instead.
 func (*LoopOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{73}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{75}
 }
 
 func (x *LoopOutput) GetIterations() int32 {
@@ -6635,7 +6799,7 @@ type JoinOutput struct {
 
 func (x *JoinOutput) Reset() {
 	*x = JoinOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[74]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[76]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6647,7 +6811,7 @@ func (x *JoinOutput) String() string {
 func (*JoinOutput) ProtoMessage() {}
 
 func (x *JoinOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[74]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[76]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6660,7 +6824,7 @@ func (x *JoinOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use JoinOutput.ProtoReflect.Descriptor instead.
 func (*JoinOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{74}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{76}
 }
 
 func (x *JoinOutput) GetSources() []*structpb.Struct {
@@ -6689,7 +6853,7 @@ type RouterOutput struct {
 
 func (x *RouterOutput) Reset() {
 	*x = RouterOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[75]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[77]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6701,7 +6865,7 @@ func (x *RouterOutput) String() string {
 func (*RouterOutput) ProtoMessage() {}
 
 func (x *RouterOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[75]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[77]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6714,7 +6878,7 @@ func (x *RouterOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RouterOutput.ProtoReflect.Descriptor instead.
 func (*RouterOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{75}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{77}
 }
 
 func (x *RouterOutput) GetSelectedWorkflow() string {
@@ -6770,7 +6934,7 @@ type AskQuestionOutput struct {
 
 func (x *AskQuestionOutput) Reset() {
 	*x = AskQuestionOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[76]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[78]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6782,7 +6946,7 @@ func (x *AskQuestionOutput) String() string {
 func (*AskQuestionOutput) ProtoMessage() {}
 
 func (x *AskQuestionOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[76]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[78]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6795,7 +6959,7 @@ func (x *AskQuestionOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AskQuestionOutput.ProtoReflect.Descriptor instead.
 func (*AskQuestionOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{76}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{78}
 }
 
 func (x *AskQuestionOutput) GetHasFeedback() bool {
@@ -6822,7 +6986,7 @@ type SkippedOutput struct {
 
 func (x *SkippedOutput) Reset() {
 	*x = SkippedOutput{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[77]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[79]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6834,7 +6998,7 @@ func (x *SkippedOutput) String() string {
 func (*SkippedOutput) ProtoMessage() {}
 
 func (x *SkippedOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[77]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[79]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6847,7 +7011,7 @@ func (x *SkippedOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SkippedOutput.ProtoReflect.Descriptor instead.
 func (*SkippedOutput) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{77}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{79}
 }
 
 func (x *SkippedOutput) GetSkipped() bool {
@@ -6868,7 +7032,7 @@ type Position struct {
 
 func (x *Position) Reset() {
 	*x = Position{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[78]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[80]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6880,7 +7044,7 @@ func (x *Position) String() string {
 func (*Position) ProtoMessage() {}
 
 func (x *Position) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[78]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[80]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6893,7 +7057,7 @@ func (x *Position) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Position.ProtoReflect.Descriptor instead.
 func (*Position) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{78}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{80}
 }
 
 func (x *Position) GetX() float64 {
@@ -6922,7 +7086,7 @@ type SwitchCase struct {
 
 func (x *SwitchCase) Reset() {
 	*x = SwitchCase{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[79]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[81]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6934,7 +7098,7 @@ func (x *SwitchCase) String() string {
 func (*SwitchCase) ProtoMessage() {}
 
 func (x *SwitchCase) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[79]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[81]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -6947,7 +7111,7 @@ func (x *SwitchCase) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchCase.ProtoReflect.Descriptor instead.
 func (*SwitchCase) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{79}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{81}
 }
 
 func (x *SwitchCase) GetId() string {
@@ -6983,7 +7147,7 @@ type SwitchMetadata struct {
 
 func (x *SwitchMetadata) Reset() {
 	*x = SwitchMetadata{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[80]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[82]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -6995,7 +7159,7 @@ func (x *SwitchMetadata) String() string {
 func (*SwitchMetadata) ProtoMessage() {}
 
 func (x *SwitchMetadata) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[80]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[82]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7008,7 +7172,7 @@ func (x *SwitchMetadata) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SwitchMetadata.ProtoReflect.Descriptor instead.
 func (*SwitchMetadata) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{80}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{82}
 }
 
 func (x *SwitchMetadata) GetSourceNode() string {
@@ -7044,7 +7208,7 @@ type WorkflowUI struct {
 
 func (x *WorkflowUI) Reset() {
 	*x = WorkflowUI{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[81]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[83]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7056,7 +7220,7 @@ func (x *WorkflowUI) String() string {
 func (*WorkflowUI) ProtoMessage() {}
 
 func (x *WorkflowUI) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[81]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[83]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7069,7 +7233,7 @@ func (x *WorkflowUI) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use WorkflowUI.ProtoReflect.Descriptor instead.
 func (*WorkflowUI) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{81}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{83}
 }
 
 func (x *WorkflowUI) GetPositions() map[string]*Position {
@@ -7155,7 +7319,7 @@ type Workflow struct {
 
 func (x *Workflow) Reset() {
 	*x = Workflow{}
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[82]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[84]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -7167,7 +7331,7 @@ func (x *Workflow) String() string {
 func (*Workflow) ProtoMessage() {}
 
 func (x *Workflow) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[82]
+	mi := &file_reliant_v1_workflow_v2_proto_msgTypes[84]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -7180,7 +7344,7 @@ func (x *Workflow) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Workflow.ProtoReflect.Descriptor instead.
 func (*Workflow) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{82}
+	return file_reliant_v1_workflow_v2_proto_rawDescGZIP(), []int{84}
 }
 
 func (x *Workflow) GetName() string {
@@ -7867,7 +8031,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vstop_reason\x18\x12 \x01(\tR\n" +
 	"stopReason\x12#\n" +
 	"\rfinish_reason\x18\x11 \x01(\tR\ffinishReason\x12@\n" +
-	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesR\fcapabilitiesJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\aabortedR\tstop_kind\"\xa2\x03\n" +
+	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesR\fcapabilitiesJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\aabortedR\tstop_kind\"\xd1\x04\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +
@@ -7879,10 +8043,25 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"no_machine\x18\x05 \x01(\bR\tnoMachine\x12\x1b\n" +
 	"\tmcp_tools\x18\x06 \x03(\tR\bmcpTools\x12#\n" +
 	"\rspawn_presets\x18\a \x03(\tR\fspawnPresets\x12k\n" +
-	"\x15withheld_integrations\x18\b \x03(\v26.reliant.v1.ToolCapabilities.WithheldIntegrationsEntryR\x14withheldIntegrations\x1aG\n" +
+	"\x15withheld_integrations\x18\b \x03(\v26.reliant.v1.ToolCapabilities.WithheldIntegrationsEntryR\x14withheldIntegrations\x12P\n" +
+	"\fbound_params\x18\t \x03(\v2-.reliant.v1.ToolCapabilities.BoundParamsEntryR\vboundParams\x1aG\n" +
 	"\x19WithheldIntegrationsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xc6\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a[\n" +
+	"\x10BoundParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x121\n" +
+	"\x05value\x18\x02 \x01(\v2\x1b.reliant.v1.ToolBoundParamsR\x05value:\x028\x01\"\xa5\x01\n" +
+	"\x0fToolBoundParams\x12?\n" +
+	"\x06params\x18\x01 \x03(\v2'.reliant.v1.ToolBoundParams.ParamsEntryR\x06params\x1aQ\n" +
+	"\vParamsEntry\x12\x10\n" +
+	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.reliant.v1.BoundParamR\x05value:\x028\x01\"y\n" +
+	"\n" +
+	"BoundParam\x122\n" +
+	"\aliteral\x18\x01 \x01(\v2\x16.google.protobuf.ValueH\x00R\aliteral\x12\x14\n" +
+	"\x04expr\x18\x02 \x01(\tH\x00R\x04expr\x12\x18\n" +
+	"\x06global\x18\x03 \x01(\bH\x00R\x06globalB\a\n" +
+	"\x05value\"\xc6\x02\n" +
 	"\x12ExecuteToolsOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12<\n" +
 	"\ftool_results\x18\x02 \x03(\v2\x19.reliant.v1.ToolResultMsgR\vtoolResults\x12,\n" +
@@ -8036,7 +8215,7 @@ func file_reliant_v1_workflow_v2_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_workflow_v2_proto_rawDescData
 }
 
-var file_reliant_v1_workflow_v2_proto_msgTypes = make([]protoimpl.MessageInfo, 103)
+var file_reliant_v1_workflow_v2_proto_msgTypes = make([]protoimpl.MessageInfo, 107)
 var file_reliant_v1_workflow_v2_proto_goTypes = []any{
 	(*CelString)(nil),               // 0: reliant.v1.CelString
 	(*CelBool)(nil),                 // 1: reliant.v1.CelBool
@@ -8101,54 +8280,58 @@ var file_reliant_v1_workflow_v2_proto_goTypes = []any{
 	(*ThinkingOutput)(nil),          // 60: reliant.v1.ThinkingOutput
 	(*CallLLMOutput)(nil),           // 61: reliant.v1.CallLLMOutput
 	(*ToolCapabilities)(nil),        // 62: reliant.v1.ToolCapabilities
-	(*ExecuteToolsOutput)(nil),      // 63: reliant.v1.ExecuteToolsOutput
-	(*InvokeToolOutput)(nil),        // 64: reliant.v1.InvokeToolOutput
-	(*ActionOutput)(nil),            // 65: reliant.v1.ActionOutput
-	(*CompactOutput)(nil),           // 66: reliant.v1.CompactOutput
-	(*ApprovalOutput)(nil),          // 67: reliant.v1.ApprovalOutput
-	(*SaveMessageOutput)(nil),       // 68: reliant.v1.SaveMessageOutput
-	(*CreateWorktreeOutput)(nil),    // 69: reliant.v1.CreateWorktreeOutput
-	(*DeleteWorktreeOutput)(nil),    // 70: reliant.v1.DeleteWorktreeOutput
-	(*RunOutput)(nil),               // 71: reliant.v1.RunOutput
-	(*WorkflowOutput)(nil),          // 72: reliant.v1.WorkflowOutput
-	(*LoopOutput)(nil),              // 73: reliant.v1.LoopOutput
-	(*JoinOutput)(nil),              // 74: reliant.v1.JoinOutput
-	(*RouterOutput)(nil),            // 75: reliant.v1.RouterOutput
-	(*AskQuestionOutput)(nil),       // 76: reliant.v1.AskQuestionOutput
-	(*SkippedOutput)(nil),           // 77: reliant.v1.SkippedOutput
-	(*Position)(nil),                // 78: reliant.v1.Position
-	(*SwitchCase)(nil),              // 79: reliant.v1.SwitchCase
-	(*SwitchMetadata)(nil),          // 80: reliant.v1.SwitchMetadata
-	(*WorkflowUI)(nil),              // 81: reliant.v1.WorkflowUI
-	(*Workflow)(nil),                // 82: reliant.v1.Workflow
-	nil,                             // 83: reliant.v1.DaemonSelectorProto.LabelsEntry
-	nil,                             // 84: reliant.v1.ToolsConfig.ToolsEntry
-	nil,                             // 85: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry
-	nil,                             // 86: reliant.v1.InvokeToolArgs.ParamsEntry
-	nil,                             // 87: reliant.v1.ActionArgs.WithEntry
-	nil,                             // 88: reliant.v1.RunArgs.EnvEntry
-	nil,                             // 89: reliant.v1.SubWorkflowArgs.ArgsEntry
-	nil,                             // 90: reliant.v1.SubWorkflowArgs.PresetsEntry
-	nil,                             // 91: reliant.v1.LoopArgs.ArgsEntry
-	nil,                             // 92: reliant.v1.LoopArgs.PresetsEntry
-	nil,                             // 93: reliant.v1.RouterArgs.OutputsEntry
-	nil,                             // 94: reliant.v1.ObjectInputConfig.PropertiesEntry
-	nil,                             // 95: reliant.v1.PropertySchema.PropertiesEntry
-	nil,                             // 96: reliant.v1.GroupInputConfig.InputsEntry
-	nil,                             // 97: reliant.v1.ToolCapabilities.WithheldIntegrationsEntry
-	nil,                             // 98: reliant.v1.LoopOutput.ResultsEntry
-	nil,                             // 99: reliant.v1.WorkflowUI.PositionsEntry
-	nil,                             // 100: reliant.v1.WorkflowUI.SwitchesEntry
-	nil,                             // 101: reliant.v1.Workflow.InputsEntry
-	nil,                             // 102: reliant.v1.Workflow.OutputsEntry
-	(*structpb.Struct)(nil),         // 103: google.protobuf.Struct
-	(*structpb.Value)(nil),          // 104: google.protobuf.Value
-	(*WorkflowTrigger)(nil),         // 105: reliant.v1.WorkflowTrigger
+	(*ToolBoundParams)(nil),         // 63: reliant.v1.ToolBoundParams
+	(*BoundParam)(nil),              // 64: reliant.v1.BoundParam
+	(*ExecuteToolsOutput)(nil),      // 65: reliant.v1.ExecuteToolsOutput
+	(*InvokeToolOutput)(nil),        // 66: reliant.v1.InvokeToolOutput
+	(*ActionOutput)(nil),            // 67: reliant.v1.ActionOutput
+	(*CompactOutput)(nil),           // 68: reliant.v1.CompactOutput
+	(*ApprovalOutput)(nil),          // 69: reliant.v1.ApprovalOutput
+	(*SaveMessageOutput)(nil),       // 70: reliant.v1.SaveMessageOutput
+	(*CreateWorktreeOutput)(nil),    // 71: reliant.v1.CreateWorktreeOutput
+	(*DeleteWorktreeOutput)(nil),    // 72: reliant.v1.DeleteWorktreeOutput
+	(*RunOutput)(nil),               // 73: reliant.v1.RunOutput
+	(*WorkflowOutput)(nil),          // 74: reliant.v1.WorkflowOutput
+	(*LoopOutput)(nil),              // 75: reliant.v1.LoopOutput
+	(*JoinOutput)(nil),              // 76: reliant.v1.JoinOutput
+	(*RouterOutput)(nil),            // 77: reliant.v1.RouterOutput
+	(*AskQuestionOutput)(nil),       // 78: reliant.v1.AskQuestionOutput
+	(*SkippedOutput)(nil),           // 79: reliant.v1.SkippedOutput
+	(*Position)(nil),                // 80: reliant.v1.Position
+	(*SwitchCase)(nil),              // 81: reliant.v1.SwitchCase
+	(*SwitchMetadata)(nil),          // 82: reliant.v1.SwitchMetadata
+	(*WorkflowUI)(nil),              // 83: reliant.v1.WorkflowUI
+	(*Workflow)(nil),                // 84: reliant.v1.Workflow
+	nil,                             // 85: reliant.v1.DaemonSelectorProto.LabelsEntry
+	nil,                             // 86: reliant.v1.ToolsConfig.ToolsEntry
+	nil,                             // 87: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry
+	nil,                             // 88: reliant.v1.InvokeToolArgs.ParamsEntry
+	nil,                             // 89: reliant.v1.ActionArgs.WithEntry
+	nil,                             // 90: reliant.v1.RunArgs.EnvEntry
+	nil,                             // 91: reliant.v1.SubWorkflowArgs.ArgsEntry
+	nil,                             // 92: reliant.v1.SubWorkflowArgs.PresetsEntry
+	nil,                             // 93: reliant.v1.LoopArgs.ArgsEntry
+	nil,                             // 94: reliant.v1.LoopArgs.PresetsEntry
+	nil,                             // 95: reliant.v1.RouterArgs.OutputsEntry
+	nil,                             // 96: reliant.v1.ObjectInputConfig.PropertiesEntry
+	nil,                             // 97: reliant.v1.PropertySchema.PropertiesEntry
+	nil,                             // 98: reliant.v1.GroupInputConfig.InputsEntry
+	nil,                             // 99: reliant.v1.ToolCapabilities.WithheldIntegrationsEntry
+	nil,                             // 100: reliant.v1.ToolCapabilities.BoundParamsEntry
+	nil,                             // 101: reliant.v1.ToolBoundParams.ParamsEntry
+	nil,                             // 102: reliant.v1.LoopOutput.ResultsEntry
+	nil,                             // 103: reliant.v1.WorkflowUI.PositionsEntry
+	nil,                             // 104: reliant.v1.WorkflowUI.SwitchesEntry
+	nil,                             // 105: reliant.v1.Workflow.InputsEntry
+	nil,                             // 106: reliant.v1.Workflow.OutputsEntry
+	(*structpb.Struct)(nil),         // 107: google.protobuf.Struct
+	(*structpb.Value)(nil),          // 108: google.protobuf.Value
+	(*WorkflowTrigger)(nil),         // 109: reliant.v1.WorkflowTrigger
 }
 var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	7,   // 0: reliant.v1.CelStringList.literal:type_name -> reliant.v1.StringList
 	8,   // 1: reliant.v1.CelModelSelector.literal:type_name -> reliant.v1.ModelSelector
-	83,  // 2: reliant.v1.DaemonSelectorProto.labels:type_name -> reliant.v1.DaemonSelectorProto.LabelsEntry
+	85,  // 2: reliant.v1.DaemonSelectorProto.labels:type_name -> reliant.v1.DaemonSelectorProto.LabelsEntry
 	9,   // 3: reliant.v1.CelDaemonSelector.literal:type_name -> reliant.v1.DaemonSelectorProto
 	6,   // 4: reliant.v1.SaveMessageConfig.condition:type_name -> reliant.v1.DirectCelBool
 	0,   // 5: reliant.v1.SaveMessageConfig.role:type_name -> reliant.v1.CelString
@@ -8187,7 +8370,7 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	4,   // 38: reliant.v1.ToolsConfig.loadable_tools:type_name -> reliant.v1.CelStringList
 	4,   // 39: reliant.v1.ToolsConfig.spawn:type_name -> reliant.v1.CelStringList
 	0,   // 40: reliant.v1.ToolsConfig.permission:type_name -> reliant.v1.CelString
-	84,  // 41: reliant.v1.ToolsConfig.tools:type_name -> reliant.v1.ToolsConfig.ToolsEntry
+	86,  // 41: reliant.v1.ToolsConfig.tools:type_name -> reliant.v1.ToolsConfig.ToolsEntry
 	5,   // 42: reliant.v1.CallLLMArgs.model:type_name -> reliant.v1.CelModelSelector
 	2,   // 43: reliant.v1.CallLLMArgs.temperature:type_name -> reliant.v1.CelDouble
 	3,   // 44: reliant.v1.CallLLMArgs.max_tokens:type_name -> reliant.v1.CelInt
@@ -8201,18 +8384,18 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	1,   // 52: reliant.v1.CallLLMArgs.continue_turn:type_name -> reliant.v1.CelBool
 	0,   // 53: reliant.v1.ResponseTool.name:type_name -> reliant.v1.CelString
 	0,   // 54: reliant.v1.ResponseTool.description:type_name -> reliant.v1.CelString
-	103, // 55: reliant.v1.ResponseTool.schema:type_name -> google.protobuf.Struct
+	107, // 55: reliant.v1.ResponseTool.schema:type_name -> google.protobuf.Struct
 	23,  // 56: reliant.v1.CallLLMMessageInput.tool_result:type_name -> reliant.v1.ToolResultMsg
 	22,  // 57: reliant.v1.CallLLMMessageInput.tool_calls:type_name -> reliant.v1.ToolCallMsg
 	0,   // 58: reliant.v1.ExecuteToolsArgs.tool_calls:type_name -> reliant.v1.CelString
 	22,  // 59: reliant.v1.ExecuteToolsArgs.resolved_tool_calls:type_name -> reliant.v1.ToolCallMsg
-	85,  // 60: reliant.v1.ExecuteToolsArgs.response_tool_schemas:type_name -> reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry
+	87,  // 60: reliant.v1.ExecuteToolsArgs.response_tool_schemas:type_name -> reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry
 	3,   // 61: reliant.v1.ExecuteToolsArgs.compaction_threshold:type_name -> reliant.v1.CelInt
 	62,  // 62: reliant.v1.ExecuteToolsArgs.capabilities:type_name -> reliant.v1.ToolCapabilities
 	0,   // 63: reliant.v1.InvokeToolArgs.tool:type_name -> reliant.v1.CelString
-	86,  // 64: reliant.v1.InvokeToolArgs.params:type_name -> reliant.v1.InvokeToolArgs.ParamsEntry
+	88,  // 64: reliant.v1.InvokeToolArgs.params:type_name -> reliant.v1.InvokeToolArgs.ParamsEntry
 	0,   // 65: reliant.v1.ActionArgs.uses:type_name -> reliant.v1.CelString
-	87,  // 66: reliant.v1.ActionArgs.with:type_name -> reliant.v1.ActionArgs.WithEntry
+	89,  // 66: reliant.v1.ActionArgs.with:type_name -> reliant.v1.ActionArgs.WithEntry
 	0,   // 67: reliant.v1.ActionArgs.connection:type_name -> reliant.v1.CelString
 	5,   // 68: reliant.v1.CompactArgs.model:type_name -> reliant.v1.CelModelSelector
 	0,   // 69: reliant.v1.ApprovalArgs.title:type_name -> reliant.v1.CelString
@@ -8233,19 +8416,19 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	0,   // 84: reliant.v1.CreateWorktreeArgs.base_branch:type_name -> reliant.v1.CelString
 	1,   // 85: reliant.v1.CreateWorktreeArgs.force:type_name -> reliant.v1.CelBool
 	0,   // 86: reliant.v1.RunArgs.command:type_name -> reliant.v1.CelString
-	88,  // 87: reliant.v1.RunArgs.env:type_name -> reliant.v1.RunArgs.EnvEntry
+	90,  // 87: reliant.v1.RunArgs.env:type_name -> reliant.v1.RunArgs.EnvEntry
 	0,   // 88: reliant.v1.RunArgs.work_dir:type_name -> reliant.v1.CelString
 	0,   // 89: reliant.v1.RunArgs.log_file:type_name -> reliant.v1.CelString
 	0,   // 90: reliant.v1.SubWorkflowArgs.ref:type_name -> reliant.v1.CelString
-	82,  // 91: reliant.v1.SubWorkflowArgs.inline:type_name -> reliant.v1.Workflow
-	89,  // 92: reliant.v1.SubWorkflowArgs.args:type_name -> reliant.v1.SubWorkflowArgs.ArgsEntry
-	90,  // 93: reliant.v1.SubWorkflowArgs.presets:type_name -> reliant.v1.SubWorkflowArgs.PresetsEntry
+	84,  // 91: reliant.v1.SubWorkflowArgs.inline:type_name -> reliant.v1.Workflow
+	91,  // 92: reliant.v1.SubWorkflowArgs.args:type_name -> reliant.v1.SubWorkflowArgs.ArgsEntry
+	92,  // 93: reliant.v1.SubWorkflowArgs.presets:type_name -> reliant.v1.SubWorkflowArgs.PresetsEntry
 	15,  // 94: reliant.v1.SubWorkflowArgs.project:type_name -> reliant.v1.ProjectConfig
 	12,  // 95: reliant.v1.SubWorkflowArgs.thread:type_name -> reliant.v1.ThreadConfig
 	0,   // 96: reliant.v1.LoopArgs.ref:type_name -> reliant.v1.CelString
-	82,  // 97: reliant.v1.LoopArgs.inline:type_name -> reliant.v1.Workflow
-	91,  // 98: reliant.v1.LoopArgs.args:type_name -> reliant.v1.LoopArgs.ArgsEntry
-	92,  // 99: reliant.v1.LoopArgs.presets:type_name -> reliant.v1.LoopArgs.PresetsEntry
+	84,  // 97: reliant.v1.LoopArgs.inline:type_name -> reliant.v1.Workflow
+	93,  // 98: reliant.v1.LoopArgs.args:type_name -> reliant.v1.LoopArgs.ArgsEntry
+	94,  // 99: reliant.v1.LoopArgs.presets:type_name -> reliant.v1.LoopArgs.PresetsEntry
 	15,  // 100: reliant.v1.LoopArgs.project:type_name -> reliant.v1.ProjectConfig
 	6,   // 101: reliant.v1.LoopArgs.while:type_name -> reliant.v1.DirectCelBool
 	1,   // 102: reliant.v1.LoopArgs.parallel:type_name -> reliant.v1.CelBool
@@ -8256,7 +8439,7 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	5,   // 107: reliant.v1.RouterArgs.model:type_name -> reliant.v1.CelModelSelector
 	12,  // 108: reliant.v1.RouterArgs.thread:type_name -> reliant.v1.ThreadConfig
 	15,  // 109: reliant.v1.RouterArgs.project:type_name -> reliant.v1.ProjectConfig
-	93,  // 110: reliant.v1.RouterArgs.outputs:type_name -> reliant.v1.RouterArgs.OutputsEntry
+	95,  // 110: reliant.v1.RouterArgs.outputs:type_name -> reliant.v1.RouterArgs.OutputsEntry
 	38,  // 111: reliant.v1.RouterArgs.nodes:type_name -> reliant.v1.NodeRouterCandidate
 	41,  // 112: reliant.v1.Edge.cases:type_name -> reliant.v1.EdgeCase
 	44,  // 113: reliant.v1.Input.string_input:type_name -> reliant.v1.StringInputConfig
@@ -8278,81 +8461,86 @@ var file_reliant_v1_workflow_v2_proto_depIdxs = []int32{
 	43,  // 129: reliant.v1.IntegerInputConfig.base:type_name -> reliant.v1.InputBase
 	43,  // 130: reliant.v1.BooleanInputConfig.base:type_name -> reliant.v1.InputBase
 	43,  // 131: reliant.v1.EnumInputConfig.base:type_name -> reliant.v1.InputBase
-	104, // 132: reliant.v1.EnumInputConfig.default:type_name -> google.protobuf.Value
+	108, // 132: reliant.v1.EnumInputConfig.default:type_name -> google.protobuf.Value
 	43,  // 133: reliant.v1.ModelInputConfig.base:type_name -> reliant.v1.InputBase
 	8,   // 134: reliant.v1.ModelInputConfig.default:type_name -> reliant.v1.ModelSelector
 	43,  // 135: reliant.v1.MessageInputConfig.base:type_name -> reliant.v1.InputBase
 	43,  // 136: reliant.v1.AttachmentsInputConfig.base:type_name -> reliant.v1.InputBase
-	104, // 137: reliant.v1.AttachmentsInputConfig.default:type_name -> google.protobuf.Value
+	108, // 137: reliant.v1.AttachmentsInputConfig.default:type_name -> google.protobuf.Value
 	43,  // 138: reliant.v1.ToolsInputConfig.base:type_name -> reliant.v1.InputBase
-	104, // 139: reliant.v1.ToolsInputConfig.default:type_name -> google.protobuf.Value
+	108, // 139: reliant.v1.ToolsInputConfig.default:type_name -> google.protobuf.Value
 	43,  // 140: reliant.v1.ArrayInputConfig.base:type_name -> reliant.v1.InputBase
-	104, // 141: reliant.v1.ArrayInputConfig.default:type_name -> google.protobuf.Value
+	108, // 141: reliant.v1.ArrayInputConfig.default:type_name -> google.protobuf.Value
 	43,  // 142: reliant.v1.ObjectInputConfig.base:type_name -> reliant.v1.InputBase
-	94,  // 143: reliant.v1.ObjectInputConfig.properties:type_name -> reliant.v1.ObjectInputConfig.PropertiesEntry
-	104, // 144: reliant.v1.ObjectInputConfig.default:type_name -> google.protobuf.Value
-	104, // 145: reliant.v1.PropertySchema.enum_values:type_name -> google.protobuf.Value
-	95,  // 146: reliant.v1.PropertySchema.properties:type_name -> reliant.v1.PropertySchema.PropertiesEntry
+	96,  // 143: reliant.v1.ObjectInputConfig.properties:type_name -> reliant.v1.ObjectInputConfig.PropertiesEntry
+	108, // 144: reliant.v1.ObjectInputConfig.default:type_name -> google.protobuf.Value
+	108, // 145: reliant.v1.PropertySchema.enum_values:type_name -> google.protobuf.Value
+	97,  // 146: reliant.v1.PropertySchema.properties:type_name -> reliant.v1.PropertySchema.PropertiesEntry
 	55,  // 147: reliant.v1.PropertySchema.items:type_name -> reliant.v1.PropertySchema
 	43,  // 148: reliant.v1.AnyInputConfig.base:type_name -> reliant.v1.InputBase
-	104, // 149: reliant.v1.AnyInputConfig.default:type_name -> google.protobuf.Value
+	108, // 149: reliant.v1.AnyInputConfig.default:type_name -> google.protobuf.Value
 	43,  // 150: reliant.v1.GroupInputConfig.base:type_name -> reliant.v1.InputBase
 	16,  // 151: reliant.v1.GroupInputConfig.presets:type_name -> reliant.v1.PresetsConfig
-	96,  // 152: reliant.v1.GroupInputConfig.inputs:type_name -> reliant.v1.GroupInputConfig.InputsEntry
+	98,  // 152: reliant.v1.GroupInputConfig.inputs:type_name -> reliant.v1.GroupInputConfig.InputsEntry
 	43,  // 153: reliant.v1.PresetInputConfig.base:type_name -> reliant.v1.InputBase
-	104, // 154: reliant.v1.PresetInputConfig.default:type_name -> google.protobuf.Value
+	108, // 154: reliant.v1.PresetInputConfig.default:type_name -> google.protobuf.Value
 	59,  // 155: reliant.v1.CallLLMOutput.message:type_name -> reliant.v1.MessageOutput
 	22,  // 156: reliant.v1.CallLLMOutput.tool_calls:type_name -> reliant.v1.ToolCallMsg
 	60,  // 157: reliant.v1.CallLLMOutput.thinking:type_name -> reliant.v1.ThinkingOutput
-	103, // 158: reliant.v1.CallLLMOutput.response_data:type_name -> google.protobuf.Struct
+	107, // 158: reliant.v1.CallLLMOutput.response_data:type_name -> google.protobuf.Struct
 	62,  // 159: reliant.v1.CallLLMOutput.capabilities:type_name -> reliant.v1.ToolCapabilities
-	97,  // 160: reliant.v1.ToolCapabilities.withheld_integrations:type_name -> reliant.v1.ToolCapabilities.WithheldIntegrationsEntry
-	59,  // 161: reliant.v1.ExecuteToolsOutput.message:type_name -> reliant.v1.MessageOutput
-	23,  // 162: reliant.v1.ExecuteToolsOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
-	103, // 163: reliant.v1.ExecuteToolsOutput.response_data:type_name -> google.protobuf.Struct
-	103, // 164: reliant.v1.InvokeToolOutput.data:type_name -> google.protobuf.Struct
-	103, // 165: reliant.v1.ActionOutput.data:type_name -> google.protobuf.Struct
-	59,  // 166: reliant.v1.CompactOutput.message:type_name -> reliant.v1.MessageOutput
-	103, // 167: reliant.v1.ApprovalOutput.data:type_name -> google.protobuf.Struct
-	59,  // 168: reliant.v1.SaveMessageOutput.message:type_name -> reliant.v1.MessageOutput
-	22,  // 169: reliant.v1.SaveMessageOutput.tool_calls:type_name -> reliant.v1.ToolCallMsg
-	23,  // 170: reliant.v1.SaveMessageOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
-	103, // 171: reliant.v1.WorkflowOutput.outputs:type_name -> google.protobuf.Struct
-	103, // 172: reliant.v1.LoopOutput.outputs:type_name -> google.protobuf.Struct
-	98,  // 173: reliant.v1.LoopOutput.results:type_name -> reliant.v1.LoopOutput.ResultsEntry
-	103, // 174: reliant.v1.JoinOutput.sources:type_name -> google.protobuf.Struct
-	103, // 175: reliant.v1.RouterOutput.outputs:type_name -> google.protobuf.Struct
-	6,   // 176: reliant.v1.SwitchCase.condition:type_name -> reliant.v1.DirectCelBool
-	78,  // 177: reliant.v1.SwitchMetadata.position:type_name -> reliant.v1.Position
-	79,  // 178: reliant.v1.SwitchMetadata.cases:type_name -> reliant.v1.SwitchCase
-	99,  // 179: reliant.v1.WorkflowUI.positions:type_name -> reliant.v1.WorkflowUI.PositionsEntry
-	100, // 180: reliant.v1.WorkflowUI.switches:type_name -> reliant.v1.WorkflowUI.SwitchesEntry
-	17,  // 181: reliant.v1.Workflow.nodes:type_name -> reliant.v1.Node
-	40,  // 182: reliant.v1.Workflow.edges:type_name -> reliant.v1.Edge
-	101, // 183: reliant.v1.Workflow.inputs:type_name -> reliant.v1.Workflow.InputsEntry
-	102, // 184: reliant.v1.Workflow.outputs:type_name -> reliant.v1.Workflow.OutputsEntry
-	81,  // 185: reliant.v1.Workflow.ui:type_name -> reliant.v1.WorkflowUI
-	16,  // 186: reliant.v1.Workflow.presets:type_name -> reliant.v1.PresetsConfig
-	10,  // 187: reliant.v1.Workflow.daemon:type_name -> reliant.v1.CelDaemonSelector
-	105, // 188: reliant.v1.Workflow.triggers:type_name -> reliant.v1.WorkflowTrigger
-	103, // 189: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
-	103, // 190: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
-	104, // 191: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
-	104, // 192: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
-	104, // 193: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	104, // 194: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
-	55,  // 195: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	55,  // 196: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
-	42,  // 197: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
-	103, // 198: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
-	78,  // 199: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
-	80,  // 200: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
-	42,  // 201: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
-	202, // [202:202] is the sub-list for method output_type
-	202, // [202:202] is the sub-list for method input_type
-	202, // [202:202] is the sub-list for extension type_name
-	202, // [202:202] is the sub-list for extension extendee
-	0,   // [0:202] is the sub-list for field type_name
+	99,  // 160: reliant.v1.ToolCapabilities.withheld_integrations:type_name -> reliant.v1.ToolCapabilities.WithheldIntegrationsEntry
+	100, // 161: reliant.v1.ToolCapabilities.bound_params:type_name -> reliant.v1.ToolCapabilities.BoundParamsEntry
+	101, // 162: reliant.v1.ToolBoundParams.params:type_name -> reliant.v1.ToolBoundParams.ParamsEntry
+	108, // 163: reliant.v1.BoundParam.literal:type_name -> google.protobuf.Value
+	59,  // 164: reliant.v1.ExecuteToolsOutput.message:type_name -> reliant.v1.MessageOutput
+	23,  // 165: reliant.v1.ExecuteToolsOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
+	107, // 166: reliant.v1.ExecuteToolsOutput.response_data:type_name -> google.protobuf.Struct
+	107, // 167: reliant.v1.InvokeToolOutput.data:type_name -> google.protobuf.Struct
+	107, // 168: reliant.v1.ActionOutput.data:type_name -> google.protobuf.Struct
+	59,  // 169: reliant.v1.CompactOutput.message:type_name -> reliant.v1.MessageOutput
+	107, // 170: reliant.v1.ApprovalOutput.data:type_name -> google.protobuf.Struct
+	59,  // 171: reliant.v1.SaveMessageOutput.message:type_name -> reliant.v1.MessageOutput
+	22,  // 172: reliant.v1.SaveMessageOutput.tool_calls:type_name -> reliant.v1.ToolCallMsg
+	23,  // 173: reliant.v1.SaveMessageOutput.tool_results:type_name -> reliant.v1.ToolResultMsg
+	107, // 174: reliant.v1.WorkflowOutput.outputs:type_name -> google.protobuf.Struct
+	107, // 175: reliant.v1.LoopOutput.outputs:type_name -> google.protobuf.Struct
+	102, // 176: reliant.v1.LoopOutput.results:type_name -> reliant.v1.LoopOutput.ResultsEntry
+	107, // 177: reliant.v1.JoinOutput.sources:type_name -> google.protobuf.Struct
+	107, // 178: reliant.v1.RouterOutput.outputs:type_name -> google.protobuf.Struct
+	6,   // 179: reliant.v1.SwitchCase.condition:type_name -> reliant.v1.DirectCelBool
+	80,  // 180: reliant.v1.SwitchMetadata.position:type_name -> reliant.v1.Position
+	81,  // 181: reliant.v1.SwitchMetadata.cases:type_name -> reliant.v1.SwitchCase
+	103, // 182: reliant.v1.WorkflowUI.positions:type_name -> reliant.v1.WorkflowUI.PositionsEntry
+	104, // 183: reliant.v1.WorkflowUI.switches:type_name -> reliant.v1.WorkflowUI.SwitchesEntry
+	17,  // 184: reliant.v1.Workflow.nodes:type_name -> reliant.v1.Node
+	40,  // 185: reliant.v1.Workflow.edges:type_name -> reliant.v1.Edge
+	105, // 186: reliant.v1.Workflow.inputs:type_name -> reliant.v1.Workflow.InputsEntry
+	106, // 187: reliant.v1.Workflow.outputs:type_name -> reliant.v1.Workflow.OutputsEntry
+	83,  // 188: reliant.v1.Workflow.ui:type_name -> reliant.v1.WorkflowUI
+	16,  // 189: reliant.v1.Workflow.presets:type_name -> reliant.v1.PresetsConfig
+	10,  // 190: reliant.v1.Workflow.daemon:type_name -> reliant.v1.CelDaemonSelector
+	109, // 191: reliant.v1.Workflow.triggers:type_name -> reliant.v1.WorkflowTrigger
+	107, // 192: reliant.v1.ToolsConfig.ToolsEntry.value:type_name -> google.protobuf.Struct
+	107, // 193: reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntry.value:type_name -> google.protobuf.Struct
+	108, // 194: reliant.v1.InvokeToolArgs.ParamsEntry.value:type_name -> google.protobuf.Value
+	108, // 195: reliant.v1.ActionArgs.WithEntry.value:type_name -> google.protobuf.Value
+	108, // 196: reliant.v1.SubWorkflowArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	108, // 197: reliant.v1.LoopArgs.ArgsEntry.value:type_name -> google.protobuf.Value
+	55,  // 198: reliant.v1.ObjectInputConfig.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	55,  // 199: reliant.v1.PropertySchema.PropertiesEntry.value:type_name -> reliant.v1.PropertySchema
+	42,  // 200: reliant.v1.GroupInputConfig.InputsEntry.value:type_name -> reliant.v1.Input
+	63,  // 201: reliant.v1.ToolCapabilities.BoundParamsEntry.value:type_name -> reliant.v1.ToolBoundParams
+	64,  // 202: reliant.v1.ToolBoundParams.ParamsEntry.value:type_name -> reliant.v1.BoundParam
+	107, // 203: reliant.v1.LoopOutput.ResultsEntry.value:type_name -> google.protobuf.Struct
+	80,  // 204: reliant.v1.WorkflowUI.PositionsEntry.value:type_name -> reliant.v1.Position
+	82,  // 205: reliant.v1.WorkflowUI.SwitchesEntry.value:type_name -> reliant.v1.SwitchMetadata
+	42,  // 206: reliant.v1.Workflow.InputsEntry.value:type_name -> reliant.v1.Input
+	207, // [207:207] is the sub-list for method output_type
+	207, // [207:207] is the sub-list for method input_type
+	207, // [207:207] is the sub-list for extension type_name
+	207, // [207:207] is the sub-list for extension extendee
+	0,   // [0:207] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_v2_proto_init() }
@@ -8437,13 +8625,18 @@ func file_reliant_v1_workflow_v2_proto_init() {
 	file_reliant_v1_workflow_v2_proto_msgTypes[53].OneofWrappers = []any{}
 	file_reliant_v1_workflow_v2_proto_msgTypes[54].OneofWrappers = []any{}
 	file_reliant_v1_workflow_v2_proto_msgTypes[55].OneofWrappers = []any{}
+	file_reliant_v1_workflow_v2_proto_msgTypes[64].OneofWrappers = []any{
+		(*BoundParam_Literal)(nil),
+		(*BoundParam_Expr)(nil),
+		(*BoundParam_Global)(nil),
+	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_workflow_v2_proto_rawDesc), len(file_reliant_v1_workflow_v2_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   103,
+			NumMessages:   107,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

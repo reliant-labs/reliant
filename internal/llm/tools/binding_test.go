@@ -115,21 +115,63 @@ func TestBinding_BoundParamIsRemovedFromRequired(t *testing.T) {
 		"binding the only required parameter must leave the required list empty, not stale")
 }
 
-// TestBinding_BoundValueWinsOverModelSuppliedValue pins the precedence rule. A
-// model that somehow emits a bound parameter — from a cached schema, a
-// hallucination, or a prompt-injected instruction — must not override the
-// human who fixed it.
-func TestBinding_BoundValueWinsOverModelSuppliedValue(t *testing.T) {
+// TestBinding_ModelValueForABoundParamIsRefused pins the rule for a model
+// that emits a bound parameter anyway — from a cached schema, a
+// hallucination, or a prompt-injected instruction. It must not override the
+// human who fixed it, and the call is not run with the bound value either:
+// the rest of it was composed around the model's value, so what would run is
+// a call nobody wrote. Repeating the bound value is not a conflict.
+func TestBinding_ModelValueForABoundParamIsRefused(t *testing.T) {
 	wrapper, inner := newBindingWrapper(t)
 	bound, err := BindTool(wrapper, Bindings{"endpoint": LiteralBinding("prod")})
 	require.NoError(t, err)
 
 	resp := runBindingTool(t, bound, `{"query":"widgets","endpoint":"attacker-controlled"}`)
-	require.False(t, resp.IsError, "a hallucinated bound param must be ignored, not fatal: %s", resp.Content)
+	require.True(t, resp.IsError, "a different value for a bound param must refuse the call")
+	assert.Contains(t, resp.Content, "'endpoint'")
+	assert.NotContains(t, resp.Content, "prod", "the refusal never repeats the bound value")
+	assert.Equal(t, 0, inner.calls, "the tool must not run with either value")
 
+	repeated := runBindingTool(t, bound, `{"query":"widgets","endpoint":"prod"}`)
+	require.False(t, repeated.IsError, repeated.Content)
 	require.Equal(t, 1, inner.calls)
-	assert.Equal(t, "prod", inner.got.Endpoint, "the bound value must win over the model's")
+	assert.Equal(t, "prod", inner.got.Endpoint)
 	assert.Equal(t, "widgets", inner.got.Query, "open parameters must still come from the model")
+}
+
+// ApplyBindings is the execution half execute_tools runs before dispatch,
+// for an executor that builds a fresh, unbound tool: the same rule as a bound
+// tool's own Run, producing a complete input instead of running anything.
+func TestApplyBindings_MergesBoundValuesAndRefusesAModelOverride(t *testing.T) {
+	bindings := Bindings{"endpoint": LiteralBinding("prod"), "limit": LiteralBinding(float64(7))}
+
+	merged, err := ApplyBindings("binding_test_tool", `{"query":"widgets"}`, bindings)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"query":"widgets","endpoint":"prod","limit":7}`, merged, "bound values are merged; the open query is untouched")
+
+	repeated, err := ApplyBindings("binding_test_tool", `{"query":"widgets","limit":7}`, bindings)
+	require.NoError(t, err, "7 and 7.0 are one value")
+	assert.JSONEq(t, `{"query":"widgets","endpoint":"prod","limit":7}`, repeated)
+
+	_, err = ApplyBindings("binding_test_tool", `{"query":"widgets","endpoint":"staging","limit":100}`, bindings)
+	var conflict *BoundParamSetError
+	require.ErrorAs(t, err, &conflict)
+	assert.Equal(t, []string{"endpoint", "limit"}, conflict.Params)
+	assert.NotContains(t, err.Error(), "prod")
+
+	untouched, err := ApplyBindings("binding_test_tool", `{"query":"widgets","limit":100}`, nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"query":"widgets","limit":100}`, untouched, "no bindings, no change")
+
+	_, err = ApplyBindings("binding_test_tool", `{"query":"q"}`, Bindings{"endpoint": ExprBinding("nodes.plan.endpoint")})
+	require.Error(t, err, "there is no expression engine at execution")
+	assert.Contains(t, err.Error(), "no binding resolver is configured")
+
+	// The fresh tool the executor builds accepts the merged input.
+	wrapper, inner := newBindingWrapper(t)
+	resp := runBindingTool(t, wrapper, merged)
+	require.False(t, resp.IsError, resp.Content)
+	assert.Equal(t, bindingParams{Query: "widgets", Limit: 7, Endpoint: "prod"}, inner.got)
 }
 
 // TestBinding_BoundValueReachesTheToolWhenModelOmitsIt is the ordinary path:

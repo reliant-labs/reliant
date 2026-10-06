@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -274,6 +275,57 @@ func TestApply_UnbindableToolIsReportedNotFatal(t *testing.T) {
 	if len(problems) != 1 || !errors.Is(problems[0], tools.ErrBindingsUnsupported) {
 		t.Fatalf("want one ErrBindingsUnsupported, got %v", problems)
 	}
+}
+
+// Recorded is what the turn's capability set carries so execution can apply
+// the bindings Apply hid from the model. Exactly the parameters that took
+// effect are recorded; a global setting's value is never recorded, only that
+// the setting decides it.
+func TestRecorded_RecordsWhatTookEffectAndKeepsSettingValuesOut(t *testing.T) {
+	mcpish := tools.NewSchemaOnlyTool("remote", "remote tool", map[string]any{
+		"type":       "object",
+		"properties": map[string]any{"model": map[string]any{"type": "string"}},
+	})
+	scopes := Scopes{
+		Global: ByTool{
+			"image":  {"model": tools.LiteralBinding("secret-ish-global")},
+			"mixed":  {"model": tools.LiteralBinding("from-settings"), "prompt": tools.LiteralBinding("overridden")},
+			"remote": {"model": tools.LiteralBinding("x")},
+		},
+		Workflow: ByTool{
+			"mixed": {"prompt": tools.LiteralBinding("from-workflow")},
+			"typo":  {"no_such_param": tools.LiteralBinding(1)},
+		},
+	}
+	bound, _ := Apply([]tools.Tool{
+		newStubTool("image", nil),
+		newStubTool("mixed", nil),
+		newStubTool("typo", nil),
+		newStubTool("untouched", tools.Bindings{"model": tools.LiteralBinding("a-default")}),
+		mcpish,
+	}, scopes)
+
+	got := Recorded(bound, scopes)
+
+	want := map[string]map[string]tools.BoundParam{
+		"image": {"model": {Global: true}},
+		"mixed": {
+			"model":  {Global: true},
+			"prompt": {Value: tools.LiteralBinding("from-workflow")},
+		},
+	}
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("Recorded:\n got %v\nwant %v", got, want)
+	}
+	encoded, _ := json.Marshal(got)
+	for _, leaked := range []string{"secret-ish-global", "from-settings"} {
+		if strings.Contains(string(encoded), leaked) {
+			t.Errorf("a global setting's value %q was recorded: %s", leaked, encoded)
+		}
+	}
+	// typo: the binding failed, so the tool kept the parameter open and
+	// nothing is recorded. untouched: a tool default, which the executor's
+	// fresh tool applies itself. remote: an MCP-shaped tool cannot be bound.
 }
 
 // TestLoadGlobal_ReadsEveryToolInOneQuery is the server-side read. It also
