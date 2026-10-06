@@ -88,8 +88,8 @@ export async function createEnvironment(args: CreateEnvironmentArgs): Promise<Da
     daemonType: DaemonType.MANAGED,
     size: args.size,
     idleTimeout: args.idleTimeout ?? "",
-    // Repo cloning is a follow-up (GitCredentialService.CloneRepo); the field
-    // is accepted here but not yet auto-cloned, mirroring admin-web.
+    // A record of which repo the machine was made for — nothing clones from
+    // it. The clone is CreateProjectFromRepo; see Settings/cloud/createMachine.
     gitRepo: args.gitRepo ?? "",
     gitBranch: args.gitBranch ?? "",
   });

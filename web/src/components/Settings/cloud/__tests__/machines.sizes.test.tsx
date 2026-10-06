@@ -310,6 +310,10 @@ describe("no invented per-size price", () => {
     }
   });
 
+  // No ListPlans price list here (usePlans is unmocked and resolves nothing),
+  // which is an older control plane: the plan's flat rate is then the one rate
+  // the server states. Per-size prices from daemon_pricing are pinned in
+  // machines.createRepoAndPrice.test.tsx.
   it("shows the plan's own overage rate, which the server does state", async () => {
     mocks.getComputeEligibility.mockResolvedValue(
       subscribedTo(["small", "medium"]),

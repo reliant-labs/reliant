@@ -144,6 +144,20 @@ export function suspendedFeeLabel(pricing: DaemonPricingLike | undefined, storag
   return `${centsDecimalToDollars(String(perGib * storageGib))}/mo`;
 }
 
+/**
+ * One size's hourly price, short enough for a size card: "$0.26/hr".
+ *
+ * The same number `sizeFacts.hourlyPriceLabel` states in a sentence — what a
+ * running hour of this size costs once included hours are used up — from the
+ * same row of the server's price list. Null when the server sent no price
+ * for the size, so a card shows no price rather than a guessed one.
+ */
+export function hourlyPriceShort(pricing: DaemonPricingLike | undefined, size: string): string | null {
+  const row = pricing?.sizes.find((s) => s.size === size);
+  if (!row || !Number.isFinite(Number(row.hourlyPriceCents))) return null;
+  return `${centsDecimalToDollars(row.hourlyPriceCents)}/hr`;
+}
+
 /** One size's picker facts: price, burn rate, disk, and its suspended fee. */
 export interface SizeFacts {
   hourlyPriceLabel: string;

@@ -21,7 +21,7 @@
  * Access) instead of a dead end: it is the only place such a grant can be
  * seen or revoked.
  */
-import React, { useMemo, useState } from "react";
+import React, { useId, useMemo, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate, useParams, useSearch } from "@tanstack/react-router";
@@ -36,6 +36,7 @@ import {
   Cpu,
   ExternalLink,
   GitBranch,
+  Github,
   Pause,
   Play,
   Plus,
@@ -72,7 +73,6 @@ import {
 import {
   DaemonSize,
   PortAccessMode,
-  createEnvironment,
   deleteDaemon,
   describeError,
   getComputeSubscription,
@@ -103,12 +103,31 @@ import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonC
 import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
-import { suspendedFeeLabel, type DaemonPricingLike } from "@/components/Billing/daemonUsage";
-import { CLOUD_PROJECT_ROOT } from "@/lib/cloudProjectPath";
+import {
+  hourlyPriceShort,
+  sizeFacts,
+  suspendedFeeLabel,
+  type DaemonPricingLike,
+} from "@/components/Billing/daemonUsage";
+import { formatMachineSpec } from "@/components/Billing/machineSpecs";
+import { CardInset } from "@/components/forge-ui/card";
+import { CLOUD_PROJECT_ROOT, cloudPathForRepo } from "@/lib/cloudProjectPath";
+import { toast } from "@/lib/toast-manager";
+import { useProjectStore } from "@/store/projectStore";
+import type { GitRepo } from "@/services/controlPlane/git";
+import { createMachine, type CreateMachineResult } from "./createMachine";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
 import { formatOverageRate } from "./billingUtils";
+
+// The GitHub repo picker shared with onboarding and the project picker's Clone
+// dialog. Loaded when the user opens it: most machines are created without a
+// repository, and the picker brings the GitHub credential and repo-list
+// queries with it.
+const RepoSelector = React.lazy(() =>
+  import("@/components/Projects/RepoSelector").then((m) => ({ default: m.RepoSelector })),
+);
 
 // ── Query keys ──────────────────────────────────────────────────────────────
 const QK = {
@@ -237,17 +256,20 @@ export function daemonDisplayName(d: Pick<Daemon, "daemonId" | "hostname">): str
 
 // ── Size tiers (plan-gated) ─────────────────────────────────────────────────
 //
-// Specs only. These four carried a per-minute price — $0.02 / $0.04 / $0.08 /
-// $0.16 — which was a client-side table of what machines cost, sitting on the
-// button that creates one. Nothing on the wire states a per-size rate: the
-// server states a per-PLAN overage rate, and that is the only number here
-// anyone can reconcile against a charge. Same defect as the per-plan-id price
-// tables that were deleted from billingUtils, one step closer to the money.
+// No prices here. These four once carried a per-minute price — $0.02 / $0.04
+// / $0.08 / $0.16 — a client-side table of what machines cost, sitting on the
+// button that creates one. Prices come from the server's per-size list
+// (ListPlans' daemon_pricing) at render time.
+//
+// No spec copy either: `formatMachineSpec` is the one statement of what a
+// size reserves, shared with the billing page and onboarding. This file used
+// to keep its own ("1 CPU · 2GB RAM" for a Small that reserves 0.5 CPU), so
+// the same machine was described two ways depending on the screen.
 const SIZE_TIERS = [
-  { value: DaemonSize.DAEMON_SIZE_SMALL, name: "small", label: "Small", specs: "1 CPU · 2GB RAM" },
-  { value: DaemonSize.DAEMON_SIZE_MEDIUM, name: "medium", label: "Medium", specs: "2 CPU · 4GB RAM" },
-  { value: DaemonSize.DAEMON_SIZE_LARGE, name: "large", label: "Large", specs: "4 CPU · 8GB RAM" },
-  { value: DaemonSize.DAEMON_SIZE_XL, name: "xl", label: "XL", specs: "8 CPU · 16GB RAM" },
+  { value: DaemonSize.DAEMON_SIZE_SMALL, name: "small", label: "Small", specs: formatMachineSpec("small") },
+  { value: DaemonSize.DAEMON_SIZE_MEDIUM, name: "medium", label: "Medium", specs: formatMachineSpec("medium") },
+  { value: DaemonSize.DAEMON_SIZE_LARGE, name: "large", label: "Large", specs: formatMachineSpec("large") },
+  { value: DaemonSize.DAEMON_SIZE_XL, name: "xl", label: "XL", specs: formatMachineSpec("xl") },
 ] as const;
 
 // ── Copy for the un-funded state ────────────────────────────────────────────
@@ -693,6 +715,7 @@ function EnvironmentsList({ cloud, onOpenDetail }: { cloud: boolean; onOpenDetai
         open={createOpen}
         onClose={() => setCreateOpen(false)}
         allowedSizes={allowedSizes}
+        pricing={daemonPricing}
         overageCentsPerMinute={
           plan?.structuredLimits?.daemonOveragePerMinuteCents ?? 0
         }
@@ -970,10 +993,29 @@ function RemoveMachineModal({
   );
 }
 
+/**
+ * Tell the user what happened to the repository they picked, once the machine
+ * exists. Same copy as the project picker's Clone dialog for the queued case:
+ * a new machine is still booting, so the clone nearly always waits for it.
+ */
+function reportRepoOutcome({ machineName, repo }: CreateMachineResult) {
+  if (repo.kind === "added") {
+    void useProjectStore.getState().loadProjects();
+    if (repo.queued) {
+      toast.info(`Queued — ${repo.projectName} will clone when ${machineName} is ready`);
+    } else {
+      toast.success(`${repo.projectName} added to ${machineName}`);
+    }
+  } else if (repo.kind === "failed") {
+    toast.error(`${machineName} was created, but ${repo.projectName} could not be added: ${repo.message}`);
+  }
+}
+
 function CreateEnvironmentModal({
   open,
   onClose,
   allowedSizes,
+  pricing,
   overageCentsPerMinute,
   onCreated,
 }: {
@@ -984,11 +1026,24 @@ function CreateEnvironmentModal({
   // an empty list means exactly "no size may be started" and there is no
   // third, unknowable state to model.
   allowedSizes: DaemonSize[];
+  /** ListPlans' daemon_pricing — each size's hourly price and burn rate. */
+  pricing?: DaemonPricingLike;
+  /**
+   * The plan's flat overage rate. Shown only when the server sent no
+   * per-size price list (an older control plane), as the one rate it does
+   * state.
+   */
   overageCentsPerMinute: number;
   onCreated: () => void;
 }) {
+  const formId = useId();
   const [name, setName] = useState("");
-  const [gitRepo, setGitRepo] = useState("");
+  // The repository to add to the new machine, or null for an empty machine —
+  // a first-class choice, not a missing answer. `pickingRepo` shows the
+  // picker; it is separate from `repo` so "Change" keeps the current pick
+  // until a new one is made.
+  const [repo, setRepo] = useState<GitRepo | null>(null);
+  const [pickingRepo, setPickingRepo] = useState(false);
   const [idleTimeout, setIdleTimeout] = useState("30m");
   // No hardcoded default. MEDIUM used to be it, so a small-only plan opened
   // this modal with a size the server would refuse already selected. null
@@ -1018,11 +1073,16 @@ function CreateEnvironmentModal({
       if (effectiveSize === undefined) {
         throw new Error("Your plan does not allow any machine sizes.");
       }
-      return createEnvironment({ name: name.trim(), size: effectiveSize, idleTimeout, gitRepo: gitRepo.trim() || undefined });
+      return createMachine({
+        machine: { name: name.trim(), size: effectiveSize, idleTimeout },
+        repo,
+      });
     },
-    onSuccess: () => {
+    onSuccess: (result) => {
+      reportRepoOutcome(result);
       setName("");
-      setGitRepo("");
+      setRepo(null);
+      setPickingRepo(false);
       setIdleTimeout("30m");
       setError("");
       onCreated();
@@ -1030,9 +1090,19 @@ function CreateEnvironmentModal({
     onError: (e) => setError(describeError(e, "Failed to create machine")),
   });
 
+  // Prices come from the server's per-size list; a size it has no row for
+  // shows none rather than a guess.
+  const priced = tiers.some((t) => hourlyPriceShort(pricing, t.name) !== null);
+
+  // The form wraps only the Name field, and Create submits it by `form` id.
+  // The repository picker is the same RepoSelector the project picker and
+  // onboarding use, and it carries its own <form> (its paste-a-URL box); a
+  // form nested inside this one is invalid HTML, and its Enter would submit
+  // the outer form and create the machine.
   return (
     <Modal open={open} onClose={onClose} title="Create Machine" maxWidth="max-w-xl">
       <form
+        id={formId}
         onSubmit={(e) => {
           e.preventDefault();
           setError("");
@@ -1049,91 +1119,172 @@ function CreateEnvironmentModal({
             className={inputCls}
           />
         </Field>
-
-        <Field
-          label={
-            <span className="inline-flex items-center gap-1.5">
-              <GitBranch className="h-4 w-4 text-muted-foreground" /> Repository
-              <span className="text-xs font-normal text-muted-foreground">(optional)</span>
-            </span>
-          }
-          htmlFor="env-repo"
-        >
-          <input
-            id="env-repo"
-            type="url"
-            value={gitRepo}
-            onChange={(e) => setGitRepo(e.target.value)}
-            placeholder="https://github.com/owner/repo.git"
-            className={inputCls}
-          />
-          <p className="mt-1 text-xs text-muted-foreground">Automatic cloning is coming in a follow-up release.</p>
-        </Field>
-
-        <Field label={<span className="inline-flex items-center gap-1.5"><Cpu className="h-4 w-4 text-muted-foreground" /> Size</span>}>
-          {/* A real radiogroup, not a row of styled buttons: this is a
-              single-choice control and assistive tech should be told so. */}
-          <div role="radiogroup" aria-label="Size" className="grid grid-cols-2 gap-2 md:grid-cols-4">
-            {tiers.map((t) => {
-              const selected = effectiveSize === t.value;
-              return (
-                <button
-                  key={t.value}
-                  type="button"
-                  role="radio"
-                  aria-checked={selected}
-                  onClick={() => setSize(t.value)}
-                  className={cn(
-                    "rounded-lg border-2 p-3 text-left transition-colors",
-                    selected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/40",
-                  )}
-                >
-                  <div className="text-sm font-semibold text-foreground">{t.label}</div>
-                  <div className="mt-1 text-xs text-muted-foreground">{t.specs}</div>
-                </button>
-              );
-            })}
-          </div>
-          {tiers.length === 0 && (
-            <p className="text-xs text-muted-foreground">No sizes available on your current plan.</p>
-          )}
-          {tiers.length > 0 && tiers.length < SIZE_TIERS.length && (
-            <p className="mt-2 text-xs text-muted-foreground">Larger sizes are gated by your compute plan.</p>
-          )}
-          {/* The one rate the server actually states. It replaces four
-              per-size rates the client invented; every size on a plan draws
-              from the same bucket of included minutes and overflows at the
-              same plan rate, so a per-size price implied a weighting the
-              metering does not do. */}
-          {tiers.length > 0 && overageCentsPerMinute > 0 && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Included hours are shared across machines. Beyond them, usage is
-              billed at {formatOverageRate(overageCentsPerMinute)}.
-            </p>
-          )}
-        </Field>
-
-        <Field
-          label={<span className="inline-flex items-center gap-1.5"><Clock className="h-4 w-4 text-muted-foreground" /> Auto-suspend after inactivity</span>}
-          htmlFor="env-idle"
-        >
-          <select id="env-idle" value={idleTimeout} onChange={(e) => setIdleTimeout(e.target.value)} className={inputCls}>
-            {IDLE_TIMEOUT_OPTIONS.map((o) => (
-              <option key={o.value} value={o.value}>{o.label}</option>
-            ))}
-          </select>
-          <p className="mt-1 text-xs text-muted-foreground">Suspended machines are not billed.</p>
-        </Field>
-
-        <ErrorNote message={error} />
-
-        <div className="flex justify-end gap-3 border-t border-border pt-4">
-          <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-          <Button type="submit" isLoading={createMut.isPending} disabled={!name.trim() || tiers.length === 0}>
-            {createMut.isPending ? "Creating…" : "Create"}
-          </Button>
-        </div>
       </form>
+
+      <Field
+        label={
+          <span className="inline-flex items-center gap-1.5">
+            <GitBranch className="h-4 w-4 text-muted-foreground" /> Repository
+            <span className="text-xs font-normal text-muted-foreground">(optional)</span>
+          </span>
+        }
+      >
+        {pickingRepo ? (
+          <div className="space-y-2" data-testid="create-machine-repo-picker">
+            <React.Suspense
+              fallback={<p className="py-4 text-center text-sm text-muted-foreground">Loading repositories…</p>}
+            >
+              <RepoSelector
+                onSelect={(picked) => {
+                  setRepo(picked);
+                  setPickingRepo(false);
+                }}
+                analyticsPhase="create_machine"
+              />
+            </React.Suspense>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setPickingRepo(false)}>
+              {repo ? `Keep ${repo.fullName}` : "Start without a repository"}
+            </Button>
+          </div>
+        ) : repo ? (
+          <CardInset className="flex items-center gap-3" data-testid="create-machine-selected-repo">
+            <Github className="h-4 w-4 flex-shrink-0 text-muted-foreground" aria-hidden="true" />
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-sm font-medium text-foreground">{repo.fullName}</div>
+              <div className="truncate text-xs text-muted-foreground">
+                Cloned onto the machine at {cloudPathForRepo(repo)}
+              </div>
+            </div>
+            <Button type="button" variant="ghost" size="sm" onClick={() => setPickingRepo(true)}>
+              Change
+            </Button>
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              aria-label="Remove repository"
+              onClick={() => setRepo(null)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </CardInset>
+        ) : (
+          <CardInset className="flex items-center justify-between gap-3">
+            <p className="text-xs text-muted-foreground">
+              None — the machine starts empty, and you can add projects to it later.
+            </p>
+            <Button type="button" variant="outline" size="sm" onClick={() => setPickingRepo(true)}>
+              <Github className="h-4 w-4" /> Choose repository
+            </Button>
+          </CardInset>
+        )}
+      </Field>
+
+      <Field label={<span className="inline-flex items-center gap-1.5"><Cpu className="h-4 w-4 text-muted-foreground" /> Size</span>}>
+        {/* A real radiogroup, not a row of styled buttons: this is a
+            single-choice control and assistive tech should be told so.
+            Two columns, not four: a card has to hold a name, a price and a
+            spec line, and at a quarter of this modal the spec wrapped
+            mid-phrase ("2GB" / "RAM"). */}
+        <div role="radiogroup" aria-label="Size" className="grid grid-cols-2 gap-2">
+          {tiers.map((t) => {
+            const selected = effectiveSize === t.value;
+            const price = hourlyPriceShort(pricing, t.name);
+            const burn = sizeFacts(pricing, t.name)?.burnRateLabel;
+            const labelId = `${formId}-size-${t.name}`;
+            const detailId = `${labelId}-detail`;
+            return (
+              <button
+                key={t.value}
+                type="button"
+                role="radio"
+                aria-checked={selected}
+                // Named by the size alone so "Small" is the radio's name;
+                // the price and specs describe it.
+                aria-labelledby={labelId}
+                aria-describedby={detailId}
+                onClick={() => setSize(t.value)}
+                className={cn(
+                  "rounded-lg border-2 p-3 text-left transition-colors",
+                  selected ? "border-primary bg-primary/5" : "border-border bg-card hover:border-muted-foreground/40",
+                )}
+              >
+                <div className="flex items-baseline justify-between gap-2">
+                  <span id={labelId} className="text-sm font-semibold text-foreground">{t.label}</span>
+                  {price && (
+                    <span
+                      className="whitespace-nowrap text-sm font-semibold tabular-nums text-foreground"
+                      data-testid={`size-price-${t.name}`}
+                    >
+                      {price}
+                    </span>
+                  )}
+                </div>
+                <div id={detailId}>
+                  <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
+                  {burn && (
+                    <div className="mt-0.5 text-xs text-muted-foreground first-letter:uppercase">{burn}</div>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+        </div>
+        {tiers.length === 0 && (
+          <p className="text-xs text-muted-foreground">No sizes available on your current plan.</p>
+        )}
+        {tiers.length > 0 && tiers.length < SIZE_TIERS.length && (
+          <p className="mt-2 text-xs text-muted-foreground">Larger sizes are gated by your compute plan.</p>
+        )}
+        {/* Per-daemon billing (control-plane docs/design/per-daemon-billing.md):
+            a size burns the shared included hours at its multiplier, and past
+            them bills at its own hourly price — the number on each card,
+            from ListPlans' daemon_pricing, the same list the billing page's
+            machine rows read. The server marks those numbers placeholders
+            while the prices are being finalised, and says to say so. */}
+        {priced && (
+          <p className="mt-2 text-xs text-muted-foreground" data-testid="size-pricing-note">
+            Included hours are shared across your machines, and larger sizes
+            use them faster. Past them, a machine is billed at its size&apos;s
+            hourly price.
+            {pricing?.placeholder && " These prices are provisional."}
+          </p>
+        )}
+        {/* An older control plane sends no per-size list; its flat plan
+            rate is then the one rate it states. */}
+        {!priced && tiers.length > 0 && overageCentsPerMinute > 0 && (
+          <p className="mt-2 text-xs text-muted-foreground">
+            Included hours are shared across machines. Beyond them, usage is
+            billed at {formatOverageRate(overageCentsPerMinute)}.
+          </p>
+        )}
+      </Field>
+
+      <Field
+        label={<span className="inline-flex items-center gap-1.5"><Clock className="h-4 w-4 text-muted-foreground" /> Auto-suspend after inactivity</span>}
+        htmlFor="env-idle"
+      >
+        <select id="env-idle" value={idleTimeout} onChange={(e) => setIdleTimeout(e.target.value)} className={inputCls}>
+          {IDLE_TIMEOUT_OPTIONS.map((o) => (
+            <option key={o.value} value={o.value}>{o.label}</option>
+          ))}
+        </select>
+        <p className="mt-1 text-xs text-muted-foreground">Suspended machines are not billed for compute.</p>
+      </Field>
+
+      <ErrorNote message={error} />
+
+      <div className="flex justify-end gap-3 border-t border-border pt-4">
+        <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
+        <Button
+          type="submit"
+          form={formId}
+          isLoading={createMut.isPending}
+          disabled={!name.trim() || tiers.length === 0}
+        >
+          {createMut.isPending ? "Creating…" : "Create"}
+        </Button>
+      </div>
     </Modal>
   );
 }
