@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
@@ -472,6 +473,8 @@ type ActivityWrapper[I any, O any] struct {
 	// activity_message_save.go). A func so the registry's writer is read at
 	// execution time, not captured at registration.
 	messageWriter func() MessageWriter
+	// messageWriteRetry is how that writer's failed writes are retried.
+	messageWriteRetry messageWriteRetry
 }
 
 // writer returns the injected message writer, or nil.
@@ -495,10 +498,11 @@ func NewActivityWrapper[I any, O any](
 ) *ActivityWrapper[I, O] {
 	var o O
 	return &ActivityWrapper[I, O]{
-		outputType: reflect.TypeOf(o),
-		name:       name,
-		activity:   activity,
-		repo:       repo,
+		outputType:        reflect.TypeOf(o),
+		name:              name,
+		activity:          activity,
+		repo:              repo,
+		messageWriteRetry: defaultMessageWriteRetry(),
 	}
 }
 
@@ -536,11 +540,19 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// activity unwinds within its normal cancellation latency (~100ms), and the
 	// worker is still alive to report the failure, so Temporal re-dispatches on
 	// the next backoff instead of after the heartbeat deadline.
+	//
+	// The helper goroutines started below (this watcher and the heartbeat)
+	// belong to this execution. Each is stopped by a deferred cancel, and
+	// Execute waits for them to exit before returning: deferred first, so it
+	// runs after those cancels. Without the wait they outlive the activity —
+	// and in tests, the test that ran it.
+	var helpers sync.WaitGroup
+	defer helpers.Wait()
 	workerStopCh := activity.GetWorkerStopChannel(ctx)
 	ctx, cancelForWorkerStop := context.WithCancel(ctx)
 	defer cancelForWorkerStop()
 	if workerStopCh != nil {
-		go func() {
+		helpers.Go(func() {
 			select {
 			case <-workerStopCh:
 				logging.Info("[ActivityWrapper] Worker stopping, cancelling activity for fast re-dispatch",
@@ -549,7 +561,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 				cancelForWorkerStop()
 			case <-ctx.Done():
 			}
-		}()
+		})
 	}
 
 	// Extract step_id - try from input first, fall back to parsing activityID
@@ -608,7 +620,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat() // Stop heartbeat when activity completes
 
-	go func() {
+	helpers.Go(func() {
 		ticker := time.NewTicker(activityHeartbeatInterval)
 		defer ticker.Stop()
 
@@ -678,7 +690,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 				}
 			}
 		}
-	}()
+	})
 
 	// Setup defer for panic recovery
 	var execErr error
@@ -1715,14 +1727,18 @@ type ActivityRegistry struct {
 	outputTypes map[string]reflect.Type // activity name -> output type for schema introspection
 	// messageWriter writes a node's delegated save_message; see SetMessageWriter.
 	messageWriter MessageWriter
+	// messageWriteRetry is the retry policy for messageWriter's writes,
+	// copied into each wrapper at registration. Tests shrink it per registry.
+	messageWriteRetry messageWriteRetry
 }
 
 // NewActivityRegistry creates a new activity registry
 func NewActivityRegistry(repo db.Repository) *ActivityRegistry {
 	return &ActivityRegistry{
-		repo:        repo,
-		activities:  make(map[string]interface{}),
-		outputTypes: make(map[string]reflect.Type),
+		repo:              repo,
+		activities:        make(map[string]interface{}),
+		outputTypes:       make(map[string]reflect.Type),
+		messageWriteRetry: defaultMessageWriteRetry(),
 	}
 }
 
@@ -1809,6 +1825,7 @@ func wrapActivity[TInput any, TOutput any](
 	wrapper := NewActivityWrapper(name, execute, registry.repo)
 	wrapper.workKind = kind
 	wrapper.messageWriter = func() MessageWriter { return registry.messageWriter }
+	wrapper.messageWriteRetry = registry.messageWriteRetry
 
 	// Wrap with error classification middleware
 	// The function signature matches what Temporal expects for typed activities

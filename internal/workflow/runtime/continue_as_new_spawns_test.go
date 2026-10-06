@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -169,6 +170,20 @@ func forcePressure(t *testing.T, chatID string, fn func() historyPressure) {
 	t.Cleanup(func() { historyPressureOverrides.Delete(chatID) })
 }
 
+// pressureDial is a history pressure a test turns while the workflow reads it.
+// A test turns it from inside CallLLM, which runs on an activity goroutine,
+// while the workflow reads it from a coroutine on another — so it is atomic.
+type pressureDial struct{ level atomic.Int64 }
+
+func newPressureDial(p historyPressure) *pressureDial {
+	d := &pressureDial{}
+	d.set(p)
+	return d
+}
+
+func (d *pressureDial) set(p historyPressure) { d.level.Store(int64(p)) }
+func (d *pressureDial) get() historyPressure  { return historyPressure(d.level.Load()) }
+
 // carriedInput decodes the continuation a finished run handed off, failing
 // the test if the run did not continue as new.
 func carriedInput(t *testing.T, env *testsuite.TestWorkflowEnvironment) WorkflowInput {
@@ -235,12 +250,12 @@ func TestContinueAsNew_CarriesLiveSpawnMidLoop(t *testing.T) {
 	}, repeatTurns("p", 10)...)
 	e1.scripts[child] = repeatTurns("c", 10)
 
-	pressure := historyPressureNone
-	forcePressure(t, chatID, func() historyPressure { return pressure })
+	pressure := newPressureDial(historyPressureNone)
+	forcePressure(t, chatID, pressure.get)
 	e1.onLLM = func(thread string, n int) {
 		// The spawn is two iterations in: history crosses the threshold.
 		if thread == child && n == 2 {
-			pressure = historyPressureSoft
+			pressure.set(historyPressureSoft)
 		}
 	}
 
@@ -260,7 +275,7 @@ func TestContinueAsNew_CarriesLiveSpawnMidLoop(t *testing.T) {
 	require.NotContains(t, e1.toolStatusesFor("tc-spawn"), "failed")
 
 	// Successor: history is fresh; the relaunched spawn runs out its script.
-	pressure = historyPressureNone
+	pressure.set(historyPressureNone)
 	var suite2 testsuite.WorkflowTestSuite
 	env2 := suite2.NewTestWorkflowEnvironment()
 	e2 := newCANSpawnEnv(t, env2)
@@ -297,11 +312,11 @@ func TestContinueAsNew_MainThreadParkedOnSpawns(t *testing.T) {
 	}
 	e1.scripts[child] = repeatTurns("c", 10)
 
-	pressure := historyPressureNone
-	forcePressure(t, chatID, func() historyPressure { return pressure })
+	pressure := newPressureDial(historyPressureNone)
+	forcePressure(t, chatID, pressure.get)
 	e1.onLLM = func(thread string, n int) {
 		if thread == child && n == 3 {
-			pressure = historyPressureSoft
+			pressure.set(historyPressureSoft)
 		}
 	}
 
@@ -311,7 +326,7 @@ func TestContinueAsNew_MainThreadParkedOnSpawns(t *testing.T) {
 	require.True(t, carried.Resume.AwaitSpawnsFirst, "the successor must re-park on the spawn")
 	require.Len(t, carried.Resume.Spawns, 1)
 
-	pressure = historyPressureNone
+	pressure.set(historyPressureNone)
 	var suite2 testsuite.WorkflowTestSuite
 	env2 := suite2.NewTestWorkflowEnvironment()
 	e2 := newCANSpawnEnv(t, env2)
@@ -342,8 +357,8 @@ func TestContinueAsNew_MainThreadParkedOnSpawns(t *testing.T) {
 func TestContinueAsNew_HardBackstopCarriesUnparkedSpawn(t *testing.T) {
 	t.Parallel()
 	const chatID = "chat-can-hard"
-	pressure := historyPressureSoft
-	forcePressure(t, chatID, func() historyPressure { return pressure })
+	pressure := newPressureDial(historyPressureSoft)
+	forcePressure(t, chatID, pressure.get)
 
 	tracker := &ChildWorkflowTracker{handoffCapable: 1, chatID: chatID}
 	tracker.registerDetachedSpawn(&detachedSpawnRecord{
@@ -361,7 +376,7 @@ func TestContinueAsNew_HardBackstopCarriesUnparkedSpawn(t *testing.T) {
 	wf := func(ctx workflow.Context) (decision, error) {
 		var d decision
 		d.SoftReady = readyToContinueAsNew(ctx, tracker, false)
-		pressure = historyPressureHard
+		pressure.set(historyPressureHard)
 		d.HardReady = readyToContinueAsNew(ctx, tracker, false)
 		err := newContinueAsNewError(ctx, WorkflowInput{ChatID: chatID, ExecContext: &ExecutionContext{}}, "agent_loop", 9, tracker, false)
 		var contErr *workflow.ContinueAsNewError

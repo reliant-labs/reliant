@@ -63,7 +63,21 @@ func (r *ActivityRegistry) SetMessageWriter(w MessageWriter) {
 const messageWriteBudget = 15 * time.Second
 
 // messageWriteBackoff is the first retry delay; it doubles per attempt.
-var messageWriteBackoff = 500 * time.Millisecond
+const messageWriteBackoff = 500 * time.Millisecond
+
+// messageWriteRetry is the retry policy one wrapper applies to its message
+// writes. Each wrapper carries its own copy, taken from its registry, so a test
+// that wants faster retries sets it on its own registry instead of changing a
+// package variable every other wrapper in the process is reading.
+type messageWriteRetry struct {
+	budget  time.Duration // total time spent retrying before giving up
+	backoff time.Duration // first retry delay; doubles per attempt
+}
+
+// defaultMessageWriteRetry is the production policy.
+func defaultMessageWriteRetry() messageWriteRetry {
+	return messageWriteRetry{budget: messageWriteBudget, backoff: messageWriteBackoff}
+}
 
 // saveMessageRequestFrom finds the delegated save request in an activity input:
 // ActivityInput carries it on Runtime, the run step's flat input at its top
@@ -206,7 +220,7 @@ func (w *ActivityWrapper[I, O]) saveActivityMessage(
 	args := buildSaveMessageNode(saveInput).GetSaveMessageNode()
 
 	start := time.Now()
-	saveOutput, err := writeMessageWithRetry(ctx, writer, rtx, args, idempotencyKey, info.Attempt)
+	saveOutput, err := writeMessageWithRetry(ctx, w.messageWriteRetry, writer, rtx, args, idempotencyKey, info.Attempt)
 	if err != nil {
 		return fmt.Errorf("save_message for %s: %w", stepID, err)
 	}
@@ -303,18 +317,19 @@ func resultForSave[O any](result O) interface{} {
 }
 
 // writeMessageWithRetry writes through writer, retrying with doubling backoff
-// until messageWriteBudget is spent. The last error is returned, never
-// swallowed: a message that could not be written must fail the activity.
+// until retry.budget is spent. The last error is returned, never swallowed: a
+// message that could not be written must fail the activity.
 func writeMessageWithRetry(
 	ctx context.Context,
+	retry messageWriteRetry,
 	writer MessageWriter,
 	rtx types.RuntimeContext,
 	args *reliantv1.SaveMessageNodeArgs,
 	idempotencyKey string,
 	attempt int32,
 ) (*reliantv1.SaveMessageOutput, error) {
-	deadline := time.Now().Add(messageWriteBudget)
-	backoff := messageWriteBackoff
+	deadline := time.Now().Add(retry.budget)
+	backoff := retry.backoff
 	for try := 1; ; try++ {
 		out, err := writer.WriteMessage(ctx, rtx, args, idempotencyKey, attempt)
 		if err == nil {
