@@ -42,6 +42,13 @@ service CatalogService {
   // what a connection to its integration requires. An unknown ref is
   // NOT_FOUND.
   rpc GetCatalogEntry(GetCatalogEntryRequest) returns (GetCatalogEntryResponse) {}
+
+  // ListCatalogIntegrations browses the catalog by integration: one row per
+  // integration that has an entry of the requested kinds, the ones the caller
+  // can use now first. It is paged like SearchCatalog, so a picker browsing
+  // hundreds of integrations holds only what it has scrolled to;
+  // SearchCatalog with `integration` set lists one integration's entries.
+  rpc ListCatalogIntegrations(ListCatalogIntegrationsRequest) returns (ListCatalogIntegrationsResponse) {}
 }
 
 // ModelInfo represents information about an LLM model
@@ -423,6 +430,43 @@ message SearchCatalogResponse {
   // CategoryFacets count the matches per integration category, applying
   // every filter except category, so a picker can show what each category
   // would hold. Largest first, then by category.
+  repeated CatalogFacet category_facets = 4;
+}
+
+message ListCatalogIntegrationsRequest {
+  // Kinds keeps only integrations with at least one entry of these kinds,
+  // and counts only those entries. Empty means every kind.
+  repeated CatalogEntryKind kinds = 1;
+  // Category keeps only integrations in this category. Empty means every
+  // category.
+  string category = 2;
+  // PageSize defaults to 20; larger values are capped at 100.
+  int32 page_size = 3;
+  // PageToken is a previous response's next_page_token. It is only valid for
+  // the same filters.
+  string page_token = 4;
+}
+
+// CatalogIntegrationListing is one integration in a browse listing.
+message CatalogIntegrationListing {
+  CatalogIntegration integration = 1;
+  // EntryCount is how many of the integration's entries are of the requested
+  // kinds.
+  int32 entry_count = 2;
+  // Connected reports whether the caller can use the integration now, as
+  // CatalogEntrySummary.connected does for one entry.
+  bool connected = 3;
+}
+
+message ListCatalogIntegrationsResponse {
+  // Integrations are the page: connected first, then by display name.
+  repeated CatalogIntegrationListing integrations = 1;
+  // NextPageToken fetches the next page; empty on the last.
+  string next_page_token = 2;
+  // TotalSize is how many integrations match every filter.
+  int32 total_size = 3;
+  // CategoryFacets count the matching integrations per category, applying
+  // every filter except category. Largest first, then by category.
   repeated CatalogFacet category_facets = 4;
 }
 

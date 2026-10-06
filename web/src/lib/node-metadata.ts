@@ -13,7 +13,7 @@ import {
   Copy, Move, Archive, Unlink, Link, Eye, EyeOff, Bell, BellOff, Terminal,
   Code, Package, Cpu, Server, Cloud, Globe, Wifi, WifiOff, Power, PowerOff,
   AlertTriangle, AlertCircle, Info, HelpCircle, CheckCircle, XCircle,
-  Bot, Wrench, Minimize2, GitMerge, Sparkles,
+  Bot, Wrench, Hammer, Minimize2, GitMerge, Sparkles,
   FolderMinus,
   type LucideIcon,
 } from 'lucide-react'
@@ -30,6 +30,9 @@ const ICON_MAP: Record<string, LucideIcon> = {
   // Node type IDs (snake_case) — primary lookups
   'call_llm': Bot,
   'execute_tools': Wrench,
+  // Its own mark: it shared Call LLM's robot (the agentic category fallback),
+  // which read as "a model runs here" when none does.
+  'invoke_tool': Hammer,
   'compact': Minimize2,
   'approval': CheckCircle,
   'save_message': Save,
@@ -145,6 +148,7 @@ export interface NodeColorSet {
 const NODE_COLOR_MAP: Record<string, NodeColorSet> = {
   'call_llm':         { bg: 'bg-emerald-500', text: 'text-emerald-600', border: 'border-emerald-500' },
   'execute_tools':    { bg: 'bg-orange-500',   text: 'text-orange-600',  border: 'border-orange-500' },
+  'invoke_tool':      { bg: 'bg-fuchsia-500',  text: 'text-fuchsia-600', border: 'border-fuchsia-500' },
   'compact':          { bg: 'bg-pink-500',     text: 'text-pink-600',    border: 'border-pink-500' },
   'approval':         { bg: 'bg-amber-500',    text: 'text-amber-600',   border: 'border-amber-500' },
   'save_message':     { bg: 'bg-blue-500',     text: 'text-blue-600',    border: 'border-blue-500' },
@@ -176,6 +180,7 @@ const DEFAULT_COLOR: NodeColorSet = { bg: 'bg-emerald-500', text: 'text-emerald-
 const NODE_THEME_MAP: Record<string, NodeTheme> = {
   'call_llm': 'emerald',
   'execute_tools': 'orange',
+  'invoke_tool': 'fuchsia',
   'compact': 'pink',
   'approval': 'amber',
   'save_message': 'blue',
@@ -352,6 +357,7 @@ const CATEGORY_LABELS: Record<string, string> = {
   'git': 'Git',
   'utility': 'Utilities',
   'flow': 'Control Flow',
+  'advanced': 'Advanced',
 }
 
 /** Preferred display order for categories. */
@@ -361,12 +367,18 @@ const CATEGORY_ORDER = [
   'git',
 ]
 
+/** Groups that sort after every other, in this order. */
+const TRAILING_CATEGORIES = ['advanced']
+
 export function getCategoryLabel(category: string): string {
   return CATEGORY_LABELS[category] || category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())
 }
 
 export function sortCategories(categories: string[]): string[] {
   return [...categories].sort((a, b) => {
+    const at = TRAILING_CATEGORIES.indexOf(a)
+    const bt = TRAILING_CATEGORIES.indexOf(b)
+    if (at !== -1 || bt !== -1) return (at === -1 ? -1 : at) - (bt === -1 ? -1 : bt)
     const ai = CATEGORY_ORDER.indexOf(a)
     const bi = CATEGORY_ORDER.indexOf(b)
     if (ai !== -1 && bi !== -1) return ai - bi
@@ -374,6 +386,25 @@ export function sortCategories(categories: string[]): string[] {
     if (bi !== -1) return 1
     return a.localeCompare(b)
   })
+}
+
+/**
+ * The group the palette and the sidebar list agent building blocks under.
+ *
+ * `execute_tools`, `compact` and `save_message` are pieces of an agent loop:
+ * run the tool calls a Call LLM step returned, keep the thread inside the
+ * model's window, record the reply. The Agent step (`type: workflow`, ref
+ * `builtin://agent`) runs that whole loop, so offering the pieces beside it
+ * invites building by hand what one step already does. They stay one click
+ * away, under "Advanced", for an author writing a custom loop. Call LLM is
+ * not one of them: a single model call is a complete step on its own.
+ */
+export const ADVANCED_GROUP = 'advanced'
+
+const AGENT_BUILDING_BLOCKS: ReadonlySet<string> = new Set(['execute_tools', 'compact', 'save_message'])
+
+export function isAgentBuildingBlock(nodeType: string): boolean {
+  return AGENT_BUILDING_BLOCKS.has(nodeType)
 }
 
 /** The fields palette grouping reads; `NodeInfo` satisfies it. */
@@ -388,6 +419,11 @@ export type PaletteGroupKey<T extends PaletteNode> = (node: T) => string
 /** The default group: the node's category, with uncategorised nodes as utilities. */
 export function categoryGroupKey(node: PaletteNode): string {
   return node.category || 'utility'
+}
+
+/** The builder's grouping: agent building blocks apart, everything else by category. */
+export function builderGroupKey(node: PaletteNode): string {
+  return isAgentBuildingBlock(node.id) ? ADVANCED_GROUP : categoryGroupKey(node)
 }
 
 export interface PaletteGroup<T extends PaletteNode> {

@@ -21,11 +21,33 @@ export interface TriggerCelField {
 
 export const TRIGGER_CEL_NAMESPACE = 'trigger'
 
+/**
+ * Every value `trigger.kind` takes: core.TriggerEventKind in
+ * internal/db/core/trigger.go, in its declaration order. A test reads that
+ * file and fails when the two lists drift, so a new kind cannot ship without
+ * the builder describing it.
+ */
+export const TRIGGER_KINDS = [
+  'chat.start',
+  'schedule',
+  'agent.start_run',
+  'builder.test',
+  'webhook',
+  'integration',
+  'workflow_event',
+] as const
+
+/** `"a", "b" or "c"`: the kinds as the description lists them. */
+function quotedList(values: readonly string[]): string {
+  const quoted = values.map((value) => `"${value}"`)
+  return quoted.length <= 1 ? quoted.join('') : `${quoted.slice(0, -1).join(', ')} or ${quoted[quoted.length - 1]}`
+}
+
 export const TRIGGER_CEL_FIELDS: readonly TriggerCelField[] = [
   {
     name: 'kind',
     type: 'string',
-    description: 'What started the run: "chat.start", "schedule" or "agent.start_run".',
+    description: `What started the run: ${quotedList(TRIGGER_KINDS)}.`,
   },
   {
     name: 'name',

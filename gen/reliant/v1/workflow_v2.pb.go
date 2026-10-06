@@ -7642,7 +7642,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
 	"\acontent\x18\x03 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x04 \x01(\bR\aisError\x12%\n" +
-	"\x0eattachment_ids\x18\x05 \x03(\tR\rattachmentIds\"\xd4\x05\n" +
+	"\x0eattachment_ids\x18\x05 \x03(\tR\rattachmentIds\"\xe7\x05\n" +
 	"\x10ExecuteToolsArgs\x12d\n" +
 	"\n" +
 	"tool_calls\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
@@ -7654,8 +7654,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\fcapabilities\x18\x06 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x06\x82\xb5\x18\x02 \x01R\fcapabilities\x1a_\n" +
 	"\x18ResponseToolSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01:\\\x8a\xb5\x18X\n" +
-	"\rexecute_tools\x12\rExecute Tools\x1a'Execute tool calls from an LLM response*\aagentic2\x06Wrench\"\xa2\x03\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01:o\x8a\xb5\x18k\n" +
+	"\rexecute_tools\x12\x12Run LLM Tool Calls\x1a5Run the tool calls an upstream Call LLM step returned*\aagentic2\x06Wrench\"\xb2\x03\n" +
 	"\x0eInvokeToolArgs\x12T\n" +
 	"\x04tool\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB)\x82\xb5\x18%\n" +
 	"\x14Which tool to invokeJ\x04ToolZ\x05basicp\x01R\x04tool\x12\x87\x01\n" +
@@ -7664,8 +7664,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"ParametersZ\x05basicR\x06params\x1aQ\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:]\x8a\xb5\x18Y\n" +
-	"\vinvoke_tool\x12\vInvoke Tool\x1a,Invoke a single tool directly from the graph*\aagentic2\x06Wrench\"\xcc\x04\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:m\x8a\xb5\x18i\n" +
+	"\vinvoke_tool\x12\bRun Tool\x1a?Run one tool you pick, with parameters you set; no LLM involved*\aagentic2\x06Hammer\"\xcc\x04\n" +
 	"\n" +
 	"ActionArgs\x12~\n" +
 	"\x04uses\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBS\x82\xb5\x18O\n" +

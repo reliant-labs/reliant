@@ -195,12 +195,12 @@ func (a *ExecuteToolsActivity) Name() string {
 
 // DisplayName returns human-readable name for UI
 func (a *ExecuteToolsActivity) DisplayName() string {
-	return "Execute Tools"
+	return "Run LLM Tool Calls"
 }
 
 // Description returns what the activity does
 func (a *ExecuteToolsActivity) Description() string {
-	return "Execute tool calls from the LLM and return results"
+	return "Run the tool calls an upstream Call LLM step returned"
 }
 
 // Category returns the activity category for UI grouping

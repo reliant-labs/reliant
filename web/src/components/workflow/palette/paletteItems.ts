@@ -7,10 +7,13 @@
  *
  * Built-ins are matched locally (there are a dozen); integrations are
  * matched by the server, which is what lets the catalog grow to hundreds
- * without the browser ever holding all of it.
+ * without the browser ever holding all of it. Before anything is typed the
+ * integrations are browsed instead (ListCatalogIntegrations): one row per
+ * integration, which expands into its own actions or triggers.
  */
 
-import type { CatalogEntrySummary } from "../../../api/catalog-search-grpc";
+import type { CatalogEntrySummary, CatalogIntegrationListing } from "../../../api/catalog-search-grpc";
+import { isAgentBuildingBlock } from "../../../lib/node-metadata";
 
 /** A core node type: added by type, configured by its own panel. */
 export interface BuiltinPaletteItem {
@@ -20,6 +23,29 @@ export interface BuiltinPaletteItem {
   label: string;
   description: string;
   keywords: string;
+  /** A low-level agent-loop step, listed under Advanced (see isAgentBuildingBlock). */
+  advanced?: boolean;
+}
+
+/** The row that shows or hides the Advanced building blocks while browsing. */
+export interface AdvancedTogglePaletteItem {
+  kind: "advanced-toggle";
+  expanded: boolean;
+  count: number;
+}
+
+/** One integration while browsing; choosing it expands its entries beneath it. */
+export interface IntegrationPaletteItem {
+  kind: "integration";
+  listing: CatalogIntegrationListing;
+  expanded: boolean;
+}
+
+/** "Show more" at the end of an expanded integration with another page. */
+export interface MoreEntriesPaletteItem {
+  kind: "more-entries";
+  integrationId: string;
+  remaining: number;
 }
 
 /** A built-in trigger source with no catalog entry: schedule, webhook, workflow event. */
@@ -34,9 +60,17 @@ export interface BuiltinTriggerPaletteItem {
 export interface CatalogPaletteItem {
   kind: "catalog";
   entry: CatalogEntrySummary;
+  /** Listed beneath its expanded integration rather than as a search result. */
+  nested?: boolean;
 }
 
-export type PaletteItem = BuiltinPaletteItem | BuiltinTriggerPaletteItem | CatalogPaletteItem;
+export type PaletteItem =
+  | BuiltinPaletteItem
+  | BuiltinTriggerPaletteItem
+  | CatalogPaletteItem
+  | AdvancedTogglePaletteItem
+  | IntegrationPaletteItem
+  | MoreEntriesPaletteItem;
 
 export function paletteItemKey(item: PaletteItem): string {
   switch (item.kind) {
@@ -46,11 +80,33 @@ export function paletteItemKey(item: PaletteItem): string {
       return `builtin-trigger:${item.source}`;
     case "catalog":
       return `catalog:${item.entry.ref}`;
+    case "advanced-toggle":
+      return "advanced-toggle";
+    case "integration":
+      return `integration:${item.listing.integration.id}`;
+    case "more-entries":
+      return `more-entries:${item.integrationId}`;
   }
 }
 
 export function paletteItemLabel(item: PaletteItem): string {
-  return item.kind === "catalog" ? item.entry.displayName : item.label;
+  switch (item.kind) {
+    case "catalog":
+      return item.entry.displayName;
+    case "integration":
+      return item.listing.integration.displayName;
+    case "advanced-toggle":
+      return "Advanced: agent building blocks";
+    case "more-entries":
+      return item.remaining > 0 ? `Show ${item.remaining} more` : "Show more";
+    default:
+      return item.label;
+  }
+}
+
+/** How a browse row counts what expanding it shows: "3 actions", "1 trigger". */
+export function entryCountLabel(count: number, kind: "action" | "trigger"): string {
+  return `${count} ${kind}${count === 1 ? "" : "s"}`;
 }
 
 /** Control flow is drawn by the canvas, not listed by ListNodes. */
@@ -80,6 +136,17 @@ interface NodeLike {
   description: string;
 }
 
+/**
+ * Words a node is found by beyond its label and description. The renamed
+ * nodes keep their old names and YAML types as keywords, so "execute" and
+ * "invoke" still find them.
+ */
+const EXTRA_KEYWORDS: Record<string, string> = {
+  execute_tools: "execute tools tool calls agent loop",
+  invoke_tool: "invoke tool call direct",
+  workflow: "agent subworkflow sub-workflow",
+};
+
 export function builtinItemsFromNodes(nodes: readonly NodeLike[]): BuiltinPaletteItem[] {
   const fromCatalog = nodes
     .filter((node) => !HIDDEN_NODE_TYPES.has(node.id))
@@ -89,9 +156,12 @@ export function builtinItemsFromNodes(nodes: readonly NodeLike[]): BuiltinPalett
       type: node.id,
       label: node.displayName || node.id,
       description: node.description,
-      keywords: node.id.replace(/_/g, " "),
+      keywords: [node.id.replace(/_/g, " "), EXTRA_KEYWORDS[node.id]].filter(Boolean).join(" "),
+      advanced: isAgentBuildingBlock(node.id),
     }));
-  return [...fromCatalog, ...CONTROL_FLOW_ITEMS];
+  // Core steps first, then control flow, then the agent building blocks, so
+  // the Advanced group sits at the end of the built-ins.
+  return [...fromCatalog.filter((item) => !item.advanced), ...CONTROL_FLOW_ITEMS, ...fromCatalog.filter((item) => item.advanced)];
 }
 
 /**

@@ -24,7 +24,7 @@ import { ConfigurationPanel } from "../ConfigurationPanel";
 import { CELInput } from "../CELInput";
 import { CELCompletionProvider, useCELCompletionContext } from "../CELCompletionContext";
 import { useWorkflowMutations } from "../WorkflowMutationContext";
-import { IntegrationIcon } from "../palette/IntegrationIcon";
+import { IntegrationLogo } from "../../icons/IntegrationLogo";
 import { Section, SectionFields, SectionLabel } from "./primitives";
 import { ScheduleFields } from "../../Automations/AutomationFormDialog";
 import { formFromSchedule, scheduleFromForm, validateScheduleForm, type ScheduleFormState } from "../../Automations/scheduleForm";
@@ -117,7 +117,7 @@ export function DeclaredTriggerPanel(props: DeclaredTriggerPanelProps) {
   const title = trigger.name || "Trigger";
   const icon =
     kind === "integration" ? (
-      <IntegrationIcon hint={integration?.integration} size="sm" className="border-0 bg-transparent" />
+      <IntegrationLogo icon={integration?.integration} size="sm" />
     ) : kind === "webhook" ? (
       <Webhook />
     ) : (

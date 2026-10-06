@@ -16,7 +16,7 @@ Here's what happens when you send a message:
 ```mermaid
 flowchart TD
     message[Your Message] --> llm[Call LLM<br/>Claude, GPT, etc.]
-    llm --> tools[Execute Tools<br/>read, edit, search, etc.]
+    llm --> tools[Run LLM Tool Calls<br/>read, edit, search, etc.]
     tools -->|Loop while working| llm
     llm --> done[Final Response]
 ```

@@ -6,7 +6,15 @@
  */
 
 import { describe, expect, it } from 'vitest'
-import { groupPaletteNodes, type PaletteNode } from '../node-metadata'
+import {
+  ADVANCED_GROUP,
+  builderGroupKey,
+  getNodeIcon,
+  getNodeTheme,
+  groupPaletteNodes,
+  isAgentBuildingBlock,
+  type PaletteNode,
+} from '../node-metadata'
 
 const node = (id: string, category: string): PaletteNode => ({ id, category })
 
@@ -41,5 +49,37 @@ describe('groupPaletteNodes', () => {
       'read_file',
       'mystery',
     ])
+  })
+})
+
+describe('builderGroupKey: agent building blocks apart, under Advanced', () => {
+  const agentic = ['workflow', 'call_llm', 'invoke_tool', 'execute_tools', 'compact', 'save_message'].map((id) => node(id, 'agentic'))
+
+  it('moves the pieces the Agent step runs for you to a trailing Advanced group', () => {
+    const groups = groupPaletteNodes([...agentic, node('approval', 'utility')], builderGroupKey)
+    expect(groups.map((g) => g.key)).toEqual(['agentic', 'utility', ADVANCED_GROUP])
+    expect(groups.find((g) => g.key === ADVANCED_GROUP)?.nodes.map((n) => n.id)).toEqual(['execute_tools', 'compact', 'save_message'])
+    // A single model call, and a tool the author picks, are complete steps.
+    expect(groups.find((g) => g.key === 'agentic')?.nodes.map((n) => n.id)).toEqual(['workflow', 'call_llm', 'invoke_tool'])
+  })
+
+  it('keeps Advanced last even after categories it does not know', () => {
+    const groups = groupPaletteNodes([node('execute_tools', 'agentic'), node('zzz', 'zebra'), node('aaa', 'aardvark')], builderGroupKey)
+    expect(groups.map((g) => g.key)).toEqual(['aardvark', 'zebra', ADVANCED_GROUP])
+  })
+
+  it('names the building blocks by node type', () => {
+    expect(isAgentBuildingBlock('execute_tools')).toBe(true)
+    expect(isAgentBuildingBlock('invoke_tool')).toBe(false)
+    expect(isAgentBuildingBlock('call_llm')).toBe(false)
+  })
+})
+
+describe('Run Tool (invoke_tool) has its own look', () => {
+  it('does not share Call LLM\'s icon or Run LLM Tool Calls\' colour', () => {
+    expect(getNodeIcon('invoke_tool')).not.toBe(getNodeIcon('call_llm'))
+    expect(getNodeIcon('invoke_tool')).not.toBe(getNodeIcon('execute_tools'))
+    expect(getNodeTheme('invoke_tool')).not.toBe(getNodeTheme('execute_tools'))
+    expect(getNodeTheme('invoke_tool')).not.toBe(getNodeTheme('call_llm'))
   })
 })

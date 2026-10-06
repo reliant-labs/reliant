@@ -457,8 +457,8 @@ condition: "nodes.check.exit_code == 0"
 | `call_llm` | Send a prompt to a language model and get a response |
 | `compact` | Conversation context to reduce token usage |
 | `create_worktree` | Create a git worktree for isolated development |
-| `execute_tools` | Execute tool calls from an LLM response |
-| `invoke_tool` | Invoke a single tool directly from the graph |
+| `execute_tools` | Run the tool calls an upstream Call LLM step returned |
+| `invoke_tool` | Run one tool you pick, with parameters you set; no LLM involved |
 | `join` | Wait for parallel branches to complete before continuing |
 | `loop` | Execute a sub-workflow in a loop with conditions |
 | `router` | Route to a workflow or node based on LLM classification |
