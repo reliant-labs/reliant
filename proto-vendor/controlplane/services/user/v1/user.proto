@@ -103,7 +103,7 @@ message WalletRefundDestination {
 // renders these numbers and never derives one from another.
 message AccountDeletionWalletQuote {
   // Refunded automatically, split across destinations (newest payment
-  // first). Includes the processing fee only when includes_processing_fee.
+  // first). Includes the top-up service fee only when includes_service_fee.
   int64 refund_cents = 1;
   repeated WalletRefundDestination destinations = 2;
   // Paid credit no card payment can take back automatically. NOT forfeited:
@@ -111,7 +111,9 @@ message AccountDeletionWalletQuote {
   int64 unrefundable_cents = 3;
   // Promotional (coupon) credit that deletion forfeits.
   int64 forfeited_promo_cents = 4;
-  bool includes_processing_fee = 5;
+  reserved 5; // was: bool includes_processing_fee (renamed: the top-up fee is a service fee)
+  reserved "includes_processing_fee";
+  bool includes_service_fee = 6;
 }
 
 // AccountDeletionWalletSettlement is what deletion did to the wallet.

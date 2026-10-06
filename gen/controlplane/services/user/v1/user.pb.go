@@ -411,17 +411,17 @@ func (x *WalletRefundDestination) GetAmountCents() int64 {
 type AccountDeletionWalletQuote struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Refunded automatically, split across destinations (newest payment
-	// first). Includes the processing fee only when includes_processing_fee.
+	// first). Includes the top-up service fee only when includes_service_fee.
 	RefundCents  int64                      `protobuf:"varint,1,opt,name=refund_cents,json=refundCents,proto3" json:"refund_cents,omitempty"`
 	Destinations []*WalletRefundDestination `protobuf:"bytes,2,rep,name=destinations,proto3" json:"destinations,omitempty"`
 	// Paid credit no card payment can take back automatically. NOT forfeited:
 	// support refunds it by hand after deletion.
 	UnrefundableCents int64 `protobuf:"varint,3,opt,name=unrefundable_cents,json=unrefundableCents,proto3" json:"unrefundable_cents,omitempty"`
 	// Promotional (coupon) credit that deletion forfeits.
-	ForfeitedPromoCents   int64 `protobuf:"varint,4,opt,name=forfeited_promo_cents,json=forfeitedPromoCents,proto3" json:"forfeited_promo_cents,omitempty"`
-	IncludesProcessingFee bool  `protobuf:"varint,5,opt,name=includes_processing_fee,json=includesProcessingFee,proto3" json:"includes_processing_fee,omitempty"`
-	unknownFields         protoimpl.UnknownFields
-	sizeCache             protoimpl.SizeCache
+	ForfeitedPromoCents int64 `protobuf:"varint,4,opt,name=forfeited_promo_cents,json=forfeitedPromoCents,proto3" json:"forfeited_promo_cents,omitempty"`
+	IncludesServiceFee  bool  `protobuf:"varint,6,opt,name=includes_service_fee,json=includesServiceFee,proto3" json:"includes_service_fee,omitempty"`
+	unknownFields       protoimpl.UnknownFields
+	sizeCache           protoimpl.SizeCache
 }
 
 func (x *AccountDeletionWalletQuote) Reset() {
@@ -482,9 +482,9 @@ func (x *AccountDeletionWalletQuote) GetForfeitedPromoCents() int64 {
 	return 0
 }
 
-func (x *AccountDeletionWalletQuote) GetIncludesProcessingFee() bool {
+func (x *AccountDeletionWalletQuote) GetIncludesServiceFee() bool {
 	if x != nil {
-		return x.IncludesProcessingFee
+		return x.IncludesServiceFee
 	}
 	return false
 }
@@ -788,13 +788,13 @@ const file_services_user_v1_user_proto_rawDesc = "" +
 	"card_brand\x18\x01 \x01(\tR\tcardBrand\x12\x1d\n" +
 	"\n" +
 	"card_last4\x18\x02 \x01(\tR\tcardLast4\x12!\n" +
-	"\famount_cents\x18\x03 \x01(\x03R\vamountCents\"\xa8\x02\n" +
+	"\famount_cents\x18\x03 \x01(\x03R\vamountCents\"\xc1\x02\n" +
 	"\x1aAccountDeletionWalletQuote\x12!\n" +
 	"\frefund_cents\x18\x01 \x01(\x03R\vrefundCents\x12L\n" +
 	"\fdestinations\x18\x02 \x03(\v2(.controlplane.v1.WalletRefundDestinationR\fdestinations\x12-\n" +
 	"\x12unrefundable_cents\x18\x03 \x01(\x03R\x11unrefundableCents\x122\n" +
-	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\x126\n" +
-	"\x17includes_processing_fee\x18\x05 \x01(\bR\x15includesProcessingFee\"\xf6\x01\n" +
+	"\x15forfeited_promo_cents\x18\x04 \x01(\x03R\x13forfeitedPromoCents\x120\n" +
+	"\x14includes_service_fee\x18\x06 \x01(\bR\x12includesServiceFeeJ\x04\b\x05\x10\x06R\x17includes_processing_fee\"\xf6\x01\n" +
 	"\x1fAccountDeletionWalletSettlement\x12%\n" +
 	"\x0erefunded_cents\x18\x01 \x01(\x03R\rrefundedCents\x12L\n" +
 	"\fdestinations\x18\x02 \x03(\v2(.controlplane.v1.WalletRefundDestinationR\fdestinations\x12*\n" +

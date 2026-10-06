@@ -161,9 +161,7 @@ export function WalletTopupCheckout({
           "double setup" the owner complained about. */}
       <section className="space-y-3">
         <div className="flex flex-wrap items-baseline justify-between gap-2">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Adding {formatCentsAsDollars(amountCents)} of credit
-          </h3>
+          <TopupTotalHeadline creditCents={amountCents} />
           {onChangeAmount && (
             <button
               type="button"
@@ -175,7 +173,7 @@ export function WalletTopupCheckout({
           )}
         </div>
         <p className="text-xs text-muted-foreground">
-          Passthrough billing to the underlying API provider at no markup.
+          Reliant AI usage is billed at the provider&apos;s price.
         </p>
         <TopupCostBreakdown creditCents={amountCents} />
       </section>
@@ -225,13 +223,46 @@ export function WalletTopupCheckout({
  * nothing and they are paying for everything anyway.
  */
 /**
+ * The purchase in one sentence, total first: "Add $25.00 of credit — $26.25
+ * total (includes 5% service fee)".
+ *
+ * The TOTAL is up front, in the headline, because it is the number that
+ * reaches the card statement — the itemised breakdown below explains it, but a
+ * user should not have to reach the button to learn what they will pay. Every
+ * figure is the server's quote (see TopupCostBreakdown); until the quote
+ * arrives the headline names only the credit, rather than a total we cannot
+ * yet stand behind.
+ */
+function TopupTotalHeadline({ creditCents }: { creditCents: number }) {
+  const quote = useWalletTopupQuote(creditCents);
+  const credit = formatCentsAsDollars(creditCents);
+  const fee = Number(quote.data?.feeCents ?? 0);
+
+  return (
+    <p
+      className="text-sm font-medium text-foreground"
+      data-testid="topup-total-headline"
+    >
+      Add {credit} of credit
+      {quote.data && fee > 0 && (
+        <>
+          {" — "}
+          {formatCentsAsDollars(Number(quote.data.totalCents))} total (includes{" "}
+          {Number(quote.data.feePercent)}% service fee)
+        </>
+      )}
+    </p>
+  );
+}
+
+/**
  * What this top-up costs, itemised, before any card is entered.
  *
  * Three lines rather than one total, because the two numbers are genuinely
  * different things and the user is entitled to see both: the credit is what
- * lands in their balance, the fee is what card processing costs, and only the
- * sum reaches their statement. A page that showed just "$26.25" next to a "$25"
- * button is where chargebacks come from.
+ * lands in their balance, the service fee is Reliant's fee on the purchase,
+ * and only the sum reaches their statement. A page that showed just "$26.25"
+ * next to a "$25" button is where chargebacks come from.
  *
  * EVERY FIGURE IS THE SERVER'S. `useWalletTopupQuote` returns what the backend
  * derived from the same function that builds the Stripe charge, so this cannot
@@ -262,7 +293,7 @@ function TopupCostBreakdown({ creditCents }: { creditCents: number }) {
       {fee > 0 && (
         <div className="flex items-center justify-between">
           <dt className="text-muted-foreground">
-            Processing fee{percent > 0 ? ` (${percent}%)` : ""}
+            Service fee{percent > 0 ? ` (${percent}%)` : ""}
           </dt>
           <dd className="font-medium text-foreground">
             {formatCentsAsDollars(fee)}

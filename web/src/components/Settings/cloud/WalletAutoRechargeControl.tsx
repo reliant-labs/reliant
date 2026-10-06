@@ -44,8 +44,8 @@ import { cn } from "@/lib/utils";
  */
 
 /**
- * The smallest automatic top-up worth making. Below this the processing fee is
- * a large fraction of the charge, and the rule would fire constantly.
+ * The smallest automatic top-up worth making. Below this the rule would fire
+ * constantly, each time for a sliver of credit.
  */
 export const MIN_AUTO_RECHARGE_AMOUNT_CENTS = 500;
 

@@ -1,5 +1,5 @@
 /**
- * The processing fee, as the user sees it BEFORE paying.
+ * The top-up service fee, as the user sees it BEFORE paying.
  *
  * A surprise 5% on a card statement is a chargeback and a support ticket, so
  * the fee has to be its own line in the order summary — not folded into the
@@ -85,7 +85,7 @@ function renderCheckout(lines: CheckoutLine[], creditCents?: number) {
   );
 }
 
-describe("the processing fee is disclosed before payment, as its own line", () => {
+describe("the service fee is disclosed before payment, as its own line", () => {
   it("itemises the fee and adds it to the total", async () => {
     quote = {
       creditCents: 2500n,
@@ -99,6 +99,9 @@ describe("the processing fee is disclosed before payment, as its own line", () =
     expect(fee).toHaveTextContent("$1.25");
     // The rate is named, so the number is explicable rather than arbitrary.
     expect(fee).toHaveTextContent("5%");
+    // It is a SERVICE fee. It must not read as a card surcharge.
+    expect(fee).toHaveTextContent(/service fee/i);
+    expect(fee).not.toHaveTextContent(/processing|card/i);
 
     // The credit line still shows what the user actually receives. Folding the
     // fee into it would misstate the credit.
@@ -211,10 +214,10 @@ describe("a total we cannot vouch for is never shown", () => {
   });
 });
 
-describe("no card, no fee", () => {
+describe("no purchase, no fee", () => {
   /**
-   * A coupon that covers the credit leaves nothing to process, so there is
-   * nothing to recover a processing cost from.
+   * A coupon that covers the credit means no credit is being bought, so there
+   * is no purchase for the service fee to apply to.
    *
    * This is the path the brief asks to verify explicitly: a fully-couponed
    * checkout must charge NOTHING — not a fee on a zero purchase.
