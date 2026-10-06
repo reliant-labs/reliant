@@ -269,7 +269,7 @@ test.describe('Onboarding Flow', () => {
 
     // First step is Compute — verify the heading is visible.
     await expect(dialog.getByText('Where should Reliant run your code?')).toBeVisible();
-    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toBeVisible();
+    await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeVisible();
   });
 
   test('landing on / redirects a not-yet-onboarded user to /onboarding', async ({ page }) => {
@@ -332,7 +332,7 @@ test.describe('Onboarding Flow', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
+    await dialog.getByRole('button', { name: /^Continue with / }).click();
 
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
     // chooseCloud() records `compute: "cloud_paid"` — see ComputeStep.tsx.
@@ -361,7 +361,7 @@ test.describe('Onboarding Flow', () => {
     // The cloud CTA is gone while this path is selected — it would offer to
     // undo the choice the user just made, as the only primary button on the
     // step.
-    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toHaveCount(0);
+    await expect(dialog.getByRole('button', { name: /^Continue with / })).toHaveCount(0);
   });
 
   test('Compute: an already-connected local daemon auto-advances to Model', async ({ page }) => {
@@ -525,7 +525,7 @@ test.describe('Onboarding Flow', () => {
     // First step (compute): no Back button.
     await expect(dialog.getByRole('button', { name: /Back/i })).not.toBeVisible();
 
-    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
+    await dialog.getByRole('button', { name: /^Continue with / }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     // Back button now visible in the footer, and returns to Compute.
@@ -609,7 +609,7 @@ test.describe('Onboarding – Compute with no billing (the new-user default)', (
 
     // No longer dead: an ineligible cloud choice records itself and routes
     // to the checkout step, so the button stays enabled rather than absent.
-    await expect(dialog.getByRole('button', { name: 'Use a Reliant machine' })).toBeEnabled();
+    await expect(dialog.getByRole('button', { name: /^Continue with / })).toBeEnabled();
 
     // A code still skips the checkout step, so it stays on offer too.
     await expect(dialog.getByRole('button', { name: /Have a coupon code/i })).toBeEnabled();
@@ -852,11 +852,11 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await loginWithApiKey(page);
   });
 
-  test('Rapid double-click on "Use a Reliant machine" does not skip past Model', async ({ page }) => {
+  test('Rapid double-click on the hosted-machine Continue does not skip past Model', async ({ page }) => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).dblclick();
+    await dialog.getByRole('button', { name: /^Continue with / }).dblclick();
 
     // Lands on Model, not further — a double-fire would otherwise race two
     // updatePlan calls and could land past it.
@@ -886,7 +886,7 @@ test.describe('Onboarding – Navigation Edge Cases', () => {
     await gotoOnboarding(page);
     const dialog = page.getByRole('dialog', { name: 'Onboarding setup' });
 
-    await dialog.getByRole('button', { name: 'Use a Reliant machine' }).click();
+    await dialog.getByRole('button', { name: /^Continue with / }).click();
     await expect(dialog.getByText('Which AI should Reliant use?')).toBeVisible({ timeout: 10_000 });
 
     await dialog.getByRole('button', { name: /Back/i }).click();

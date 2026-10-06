@@ -175,8 +175,9 @@ describe("ComputeStep — a coupon covered the machine", () => {
     renderStep();
 
     expect(screen.getByText(/choose your machine/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /small/i })).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: /medium/i })).toBeInTheDocument();
+    // ^-anchored: the footer's "Continue with Small" also names the size.
+    expect(screen.getByRole("button", { name: /^small/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /^medium/i })).toBeInTheDocument();
   });
 
   // Coverage is per SIZE, not blanket, and this is the assertion that keeps
@@ -218,7 +219,7 @@ describe("ComputeStep — a coupon covered the machine", () => {
     const updatePlan = vi.fn(async () => {});
     renderStep(updatePlan);
 
-    screen.getByRole("button", { name: /use a reliant machine/i }).click();
+    screen.getByRole("button", { name: /^continue with /i }).click();
 
     await vi.waitFor(() => {
       expect(updatePlan).toHaveBeenCalled();
@@ -293,7 +294,7 @@ describe("ComputeStep — the free option is a peer, not an afterthought", () =>
     renderStep();
 
     const local = screen.getByRole("button", { name: /use your own computer/i });
-    const paid = screen.getByRole("button", { name: /small/i });
+    const paid = screen.getByRole("button", { name: /^small/i });
 
     expect(
       local.compareDocumentPosition(paid) & Node.DOCUMENT_POSITION_FOLLOWING,
