@@ -276,7 +276,7 @@ func (s *ChatService) BranchChat(
 	}
 
 	// The branch chat row, its forked workflow+thread, the inherited plan,
-	// the optional workspace-switch system message, and the chat_created
+	// the hidden branch note, and the chat_created
 	// announcement must not be observed apart. All of it is plain DB writes
 	// (no Temporal/network calls), so it can all join one transaction: any
 	// failure leaves no orphan chat, no thread-less chat, no half-copied
@@ -309,12 +309,12 @@ func (s *ChatService) BranchChat(
 		// ensures consistent message resolution between LLM context and UI display.
 		// See ListMessages() for the CW chain resolution implementation.
 
-		// Create a system message when branching to a different worktree
-		// This helps the user understand the context of the new workspace
-		if targetWorktree != nil {
-			if err := s.createWorkspaceBranchSystemMessage(txCtx, branchChat, targetWorktree, branchWorkflowID, req.Msg.WorkspaceContext); err != nil {
-				return fmt.Errorf("failed to create workspace branch system message: %w", err)
-			}
+		// Every branch starts with a hidden note telling the model what it
+		// is. Read after the thread exists, inside this transaction, so the
+		// inherited sub-agents it counts are exactly the ones spawn_status
+		// will list for this branch.
+		if err := s.createBranchNoteMessage(txCtx, branchChat, branchWorkflowID, sourceChat, branchPointMsg, targetWorktree, req.Msg.WorkspaceContext); err != nil {
+			return fmt.Errorf("failed to create branch note: %w", err)
 		}
 
 		if chatCreatedJSON != nil {
@@ -352,20 +352,93 @@ func (s *ChatService) BranchChat(
 	}), nil
 }
 
-// createWorkspaceBranchSystemMessage creates a system message when branching to a different workspace
-// This helps the user understand the context and what files were copied
-func (s *ChatService) createWorkspaceBranchSystemMessage(
+// createBranchNoteMessage writes the hidden note every branch starts with.
+//
+// A branch inherits a transcript that reads, to its model, as its own past —
+// including spawn handles promising "you will be notified" that will never
+// notify it, because the original chat still owns those sub-agents and keeps
+// receiving their results. The note states the facts that transcript cannot.
+//
+// Written once, at branch time, from values fixed at that moment, so it is
+// byte-stable for prompt caching. SYSTEM role and HIDDEN style: it reaches the
+// model through the ordinary history load (each driver renders a SYSTEM turn
+// as a <system> block) and stays out of the user's transcript.
+func (s *ChatService) createBranchNoteMessage(
 	ctx context.Context,
 	branchChat *db.Chat,
-	targetWorktree *db.Worktree,
 	branchWorkflowID string,
+	sourceChat *db.Chat,
+	forkPoint *db.Message,
+	targetWorktree *db.Worktree,
 	workspaceContext *reliantv1.WorkspaceBranchContext,
 ) error {
-	// Build the system message content
-	var messageContent string
+	inherited, err := s.database.ListInheritedSpawnChildren(ctx, branchWorkflowID)
+	if err != nil {
+		return fmt.Errorf("failed to list inherited sub-agents: %w", err)
+	}
+	messageContent := branchContextNote(sourceChat, forkPoint, inherited)
+	if targetWorktree != nil {
+		messageContent += "\n\n" + workspaceBranchNote(targetWorktree, workspaceContext)
+	}
 
-	// Base message about workspace branching
-	messageContent = fmt.Sprintf("This conversation has been branched to workspace **%s** (branch: `%s`).\n\n",
+	// SaveMessageToThread handles ordinal and context_sequence, inheriting
+	// the forked thread's context sequence.
+	hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
+	if _, err := s.database.SaveMessageToThread(ctx, branchChat.ID, branchWorkflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), messageContent, &branchWorkflowID, nil, &hiddenStyle); err != nil {
+		return fmt.Errorf("failed to save branch note: %w", err)
+	}
+	return nil
+}
+
+// branchContextNote states what a branch is: of which chat, from which point,
+// and — only when there are any — what became of the sub-agents the original
+// had already spawned. Facts only, a few lines; the model decides what to do
+// with them.
+func branchContextNote(sourceChat *db.Chat, forkPoint *db.Message, inherited []*db.InheritedSpawnChild) string {
+	source := "chat " + sourceChat.ID
+	if sourceChat.Title != "" {
+		source = fmt.Sprintf("%q (chat %s)", sourceChat.Title, sourceChat.ID)
+	}
+	note := fmt.Sprintf(
+		"This chat is a branch of %s, forked at the message above (%s). The original chat may still be running.",
+		source, forkPoint.CreatedAt.UTC().Format("2006-01-02 15:04 UTC"))
+
+	// One agent per child thread: a resumed spawn has a row per resumption.
+	// A call whose child never landed still counts, keyed by its tool call.
+	agents := map[string]bool{}
+	ownedBySource := true
+	for _, child := range inherited {
+		key := child.ToolCallID
+		if child.ChildThreadID != nil {
+			key = *child.ChildThreadID
+		}
+		agents[key] = true
+		if child.SourceChatID != sourceChat.ID {
+			// A branch of a branch also inherits what older chats spawned.
+			ownedBySource = false
+		}
+	}
+	owner := "the original chat"
+	if !ownedBySource {
+		owner = "the chats that spawned them"
+	}
+	switch n := len(agents); {
+	case n == 1:
+		note += "\nThe sub-agent spawned before the branch belongs to " + owner + ". " +
+			"Here it is visible read-only with spawn_status; its results and notifications are not delivered to this chat. " +
+			"Re-spawn anything you need from this chat."
+	case n > 1:
+		note += fmt.Sprintf("\nThe %d sub-agents spawned before the branch belong to %s. ", n, owner) +
+			"Here they are visible read-only with spawn_status; their results and notifications are not delivered to this chat. " +
+			"Re-spawn anything you need from this chat."
+	}
+	return note
+}
+
+// workspaceBranchNote describes the workspace a branch was moved into, and
+// which uncommitted files came with it.
+func workspaceBranchNote(targetWorktree *db.Worktree, workspaceContext *reliantv1.WorkspaceBranchContext) string {
+	messageContent := fmt.Sprintf("This conversation has been branched to workspace **%s** (branch: `%s`).\n\n",
 		targetWorktree.Name, targetWorktree.Branch)
 	messageContent += "All code changes should be made in this workspace."
 
@@ -391,17 +464,7 @@ func (s *ChatService) createWorkspaceBranchSystemMessage(
 			messageContent += "\n\n**Note:** Uncommitted files were not copied. Only committed changes are shared between workspaces."
 		}
 	}
-
-	// Use SaveMessageToThread to properly handle ordinal and context_sequence.
-	// This automatically inherits the correct context_sequence from the forked workflow.
-	// Use system role with display_style=hidden so it's sent to LLM but not shown in UI.
-	hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
-	_, err := s.database.SaveMessageToThread(ctx, branchChat.ID, branchWorkflowID, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), messageContent, &branchWorkflowID, nil, &hiddenStyle)
-	if err != nil {
-		return fmt.Errorf("failed to create system message: %w", err)
-	}
-
-	return nil
+	return messageContent
 }
 
 // copyPlanAndTasks copies the plan and tasks from a source chat to a target thread.
