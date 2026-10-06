@@ -487,6 +487,7 @@ type OauthFlow struct {
 	ExpiresAt             time.Time       `json:"expires_at"`
 	ConsumedAt            sql.NullTime    `json:"consumed_at"`
 	Params                json.RawMessage `json:"params"`
+	ReturnTo              sql.NullString  `json:"return_to"`
 }
 
 type Plan struct {

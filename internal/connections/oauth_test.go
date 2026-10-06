@@ -21,8 +21,8 @@ func startFlow(t *testing.T, e *env, p connections.StartParams) string {
 	if p.IntegrationID == "" {
 		p.IntegrationID = "github"
 	}
-	if p.Binder == "" {
-		p.Binder = "binder-1"
+	if p.ClientOrigin == "" && p.LoopbackRedirect == "" {
+		p.ClientOrigin = testAppOrigin
 	}
 	u, err := e.broker.Start(context.Background(), p)
 	require.NoError(t, err)
@@ -34,11 +34,11 @@ func TestOAuth_StateIsSingleUse(t *testing.T) {
 	ctx := context.Background()
 	state := startFlow(t, e, connections.StartParams{})
 
-	done, err := e.broker.Complete(ctx, connections.CompleteParams{ProviderID: "github", State: state, Code: "c1", Binder: "binder-1"})
+	done, err := e.broker.Complete(ctx, connections.CompleteParams{ProviderID: "github", State: state, Code: "c1", UserID: "alice"})
 	require.NoError(t, err)
 	require.Equal(t, "alice", done.Connection.UserID)
 
-	_, err = e.broker.Complete(ctx, connections.CompleteParams{ProviderID: "github", State: state, Code: "c1", Binder: "binder-1"})
+	_, err = e.broker.Complete(ctx, connections.CompleteParams{ProviderID: "github", State: state, Code: "c1", UserID: "alice"})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition, "a replayed callback must fail")
 	require.Equal(t, 1, int(e.gh.tokenCalls.Load()), "the replay must not reach the token endpoint")
 }
@@ -50,7 +50,7 @@ func TestOAuth_ConcurrentReplayExchangesOnce(t *testing.T) {
 	results := make(chan error, n)
 	for i := 0; i < n; i++ {
 		go func() {
-			_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c", Binder: "binder-1"})
+			_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c", UserID: "alice"})
 			results <- err
 		}()
 	}
@@ -64,21 +64,94 @@ func TestOAuth_ConcurrentReplayExchangesOnce(t *testing.T) {
 	require.Equal(t, 1, int(e.gh.tokenCalls.Load()))
 }
 
-func TestOAuth_DifferentSessionIsRejectedAndBurnsState(t *testing.T) {
+// The login-CSRF defence: a flow is bound to the user who started it, so a
+// state and code finished by anyone else are refused — whichever way round
+// the attack goes (an attacker's code planted in a victim's session, or a
+// victim's consent landing in the attacker's).
+func TestOAuth_AnotherUserCannotFinishAndBurnsState(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	state := startFlow(t, e, connections.StartParams{Binder: "victim-browser"})
+	state := startFlow(t, e, connections.StartParams{UserID: "alice"})
 
-	_, err := e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "attacker-code", Binder: "attacker-browser"})
+	_, err := e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "attacker-code", UserID: "mallory"})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
-	require.Contains(t, err.Error(), "different session")
-	require.Zero(t, e.gh.tokenCalls.Load(), "the code must never be exchanged for the wrong session")
+	require.Contains(t, err.Error(), "different account")
+	require.Zero(t, e.gh.tokenCalls.Load(), "the code must never be exchanged for the wrong user")
 	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
 
 	// The state is burned: the real owner cannot use it afterwards either.
-	_, err = e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "c", Binder: "victim-browser"})
+	_, err = e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "c", UserID: "alice"})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 	require.Zero(t, e.count(`SELECT count(*) FROM connections`))
+}
+
+func TestOAuth_CompleteRequiresAUser(t *testing.T) {
+	e := newEnv(t)
+	state := startFlow(t, e, connections.StartParams{})
+	_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c"})
+	require.ErrorIs(t, err, connections.ErrInvalidArgument)
+	require.Zero(t, e.gh.tokenCalls.Load())
+}
+
+// Where the provider's redirect is relayed is decided by the server: the web
+// app's callback route on an origin the deployment serves, or a loopback
+// receiver. Nothing else is accepted, so the relay cannot be pointed at a
+// third party.
+func TestOAuth_ReturnTargetIsAllowListedOrLoopback(t *testing.T) {
+	e := newEnv(t)
+	ctx := context.Background()
+	returnTo := func() string {
+		t.Helper()
+		var v string
+		require.NoError(t, e.raw.QueryRow(`SELECT return_to FROM oauth_flows ORDER BY expires_at DESC LIMIT 1`).Scan(&v))
+		return v
+	}
+
+	for origin, want := range map[string]string{
+		testAppOrigin:                     testAppOrigin + connections.AppCallbackPath,
+		"HTTPS://App.Reliant.Example:443": testAppOrigin + connections.AppCallbackPath,
+		"https://reliant.example":         "https://reliant.example" + connections.AppCallbackPath, // PUBLIC_URL's own origin
+		"http://localhost:5173":           "http://localhost:5173" + connections.AppCallbackPath,   // a local web app
+		"http://127.0.0.1:3000":           "http://127.0.0.1:3000" + connections.AppCallbackPath,
+	} {
+		_, err := e.broker.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: origin})
+		require.NoError(t, err, origin)
+		require.Equal(t, want, returnTo(), origin)
+	}
+
+	_, err := e.broker.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", LoopbackRedirect: "http://127.0.0.1:49152/callback"})
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:49152/callback", returnTo())
+
+	before := e.count(`SELECT count(*) FROM oauth_flows`)
+	for _, origin := range []string{
+		"https://evil.example", "https://app.reliant.example.evil.example", "null", "", "app://bundle",
+		"https://user@app.reliant.example",
+	} {
+		_, err := e.broker.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: origin})
+		require.Error(t, err, "origin %q must be refused", origin)
+	}
+	for _, loopback := range []string{
+		"https://evil.example/cb", "http://evil.example:80/cb", "http://localhost.evil.example:8000/cb",
+		"https://127.0.0.1:8000/cb", "http://127.0.0.1/cb", "http://u:p@127.0.0.1:8000/cb",
+		"http://127.0.0.1:8000/cb?next=https://evil.example", "javascript:alert(1)",
+	} {
+		_, err := e.broker.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", LoopbackRedirect: loopback})
+		require.ErrorIs(t, err, connections.ErrInvalidArgument, "loopback %q must be refused", loopback)
+	}
+	require.Equal(t, before, e.count(`SELECT count(*) FROM oauth_flows`), "a refused start records no flow")
+}
+
+// A wildcard CORS policy is not an allow-list: it must not let a browser flow
+// be relayed to any origin at all.
+func TestOAuth_WildcardOriginsAllowNothing(t *testing.T) {
+	e := newEnv(t)
+	b := connections.NewBroker(e.store, e.vault, e.providers, redirectingDoer{target: e.gh.srv}, "https://reliant.example").
+		WithAppOrigins([]string{"*", "app://bundle"})
+	_, err := b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: "https://evil.example"})
+	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
+	require.Contains(t, err.Error(), "CORS_ALLOWED_ORIGINS")
+	require.Zero(t, e.count(`SELECT count(*) FROM oauth_flows`))
 }
 
 func TestOAuth_ExpiredStateIsRejected(t *testing.T) {
@@ -86,7 +159,7 @@ func TestOAuth_ExpiredStateIsRejected(t *testing.T) {
 	state := startFlow(t, e, connections.StartParams{})
 	_, err := e.raw.Exec(`UPDATE oauth_flows SET expires_at = now() - interval '1 second'`)
 	require.NoError(t, err)
-	_, err = e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c", Binder: "binder-1"})
+	_, err = e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "c", UserID: "alice"})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 	require.Contains(t, err.Error(), "expired")
 	require.Zero(t, e.gh.tokenCalls.Load())
@@ -102,7 +175,7 @@ func TestOAuth_FlowExpiresInTenMinutes(t *testing.T) {
 
 func TestOAuth_UnknownStateIsRejected(t *testing.T) {
 	e := newEnv(t)
-	_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: "never-issued", Code: "c", Binder: "binder-1"})
+	_, err := e.broker.Complete(context.Background(), connections.CompleteParams{State: "never-issued", Code: "c", UserID: "alice"})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
 }
 
@@ -113,27 +186,27 @@ func TestOAuth_RedirectAfterMustBeRelative(t *testing.T) {
 		"https://evil.example/x", "//evil.example/x", "http://evil.example", "javascript:alert(1)",
 		`/\evil.example`, "evil.example/x", "/ok\nSet-Cookie: a=b", "/\t//evil.example",
 	} {
-		_, err := e.broker.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", Binder: "b", RedirectAfter: bad})
+		_, err := e.broker.Start(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: testAppOrigin, RedirectAfter: bad})
 		require.ErrorIs(t, err, connections.ErrInvalidArgument, "redirect_after %q must be rejected", bad)
 	}
 	require.Zero(t, e.count(`SELECT count(*) FROM oauth_flows`))
 
 	state := startFlow(t, e, connections.StartParams{RedirectAfter: "/settings/connections?x=1"})
-	done, err := e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "c", Binder: "binder-1"})
+	done, err := e.broker.Complete(ctx, connections.CompleteParams{State: state, Code: "c", UserID: "alice"})
 	require.NoError(t, err)
 	require.Equal(t, "/settings/connections?x=1", done.RedirectAfter)
 }
 
 func TestOAuth_PKCEVerifierMatchesChallenge(t *testing.T) {
 	e := newEnv(t)
-	authURL, err := e.broker.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", Binder: "b"})
+	authURL, err := e.broker.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 	challenge := mustQuery(t, authURL, "code_challenge")
 	state := mustQuery(t, authURL, "state")
 	require.Equal(t, clientID, mustQuery(t, authURL, "client_id"))
 	require.Equal(t, "https://reliant.example/integrations/oauth/github/callback", mustQuery(t, authURL, "redirect_uri"))
 
-	_, err = e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "the-code", Binder: "b"})
+	_, err = e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "the-code", UserID: "alice"})
 	require.NoError(t, err)
 
 	e.gh.mu.Lock()
@@ -172,7 +245,7 @@ func TestOAuth_ReconnectSameAccountUpdatesInPlace(t *testing.T) {
 	_, err := e.raw.Exec(`UPDATE connections SET status='needs_reauth', status_reason='invalid_grant' WHERE id=$1`, conn.ID)
 	require.NoError(t, err)
 
-	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ReconnectID: conn.ID})
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ReconnectID: conn.ID, ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 	done, err := e.svc.CompleteOAuth(ctx, "alice", mustQuery(t, authURL, "state"), "c")
 	require.NoError(t, err)
@@ -188,7 +261,7 @@ func TestOAuth_ReconnectAsDifferentAccountIsRefused(t *testing.T) {
 	ctx := context.Background()
 	conn := e.connect("alice", "work")
 	e.gh.accountID, e.gh.login = 4242, "someone-else"
-	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ReconnectID: conn.ID})
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ReconnectID: conn.ID, ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 	_, err = e.svc.CompleteOAuth(ctx, "alice", mustQuery(t, authURL, "state"), "c")
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
@@ -208,7 +281,7 @@ func TestOAuth_SameAccountConnectedTwiceDedupes(t *testing.T) {
 func TestOAuth_CannotReconnectSomeoneElsesConnection(t *testing.T) {
 	e := newEnv(t)
 	conn := e.connect("alice", "work")
-	_, err := e.broker.Start(context.Background(), connections.StartParams{UserID: "bob", IntegrationID: "github", Binder: "b", ReconnectID: conn.ID})
+	_, err := e.broker.Start(context.Background(), connections.StartParams{UserID: "bob", IntegrationID: "github", ClientOrigin: testAppOrigin, ReconnectID: conn.ID})
 	require.ErrorIs(t, err, connections.ErrNotFound)
 }
 
@@ -236,9 +309,9 @@ func TestOAuth_UnavailableProviderCannotStart(t *testing.T) {
 	reg, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(nil))
 	require.NoError(t, err)
 	b := connections.NewBroker(e.store, e.vault, reg, nil, "https://reliant.example")
-	_, err = b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", Binder: "b"})
+	_, err = b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: testAppOrigin})
 	require.ErrorIs(t, err, connections.ErrFailedPrecondition)
-	_, err = b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "nope", Binder: "b"})
+	_, err = b.Start(context.Background(), connections.StartParams{UserID: "alice", IntegrationID: "nope", ClientOrigin: testAppOrigin})
 	require.ErrorIs(t, err, connections.ErrNotFound)
 }
 
@@ -259,7 +332,7 @@ func TestOAuth_CorruptSealedVerifierFailsWithoutLeakingCode(t *testing.T) {
 	e.gh.refreshStatus = 0
 	_, err := e.raw.Exec(`UPDATE oauth_flows SET pkce_verifier_sealed = pkce_verifier_sealed || '\x00'::bytea`)
 	require.NoError(t, err)
-	_, err = e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "SECRET-AUTH-CODE", Binder: "binder-1"})
+	_, err = e.broker.Complete(context.Background(), connections.CompleteParams{State: state, Code: "SECRET-AUTH-CODE", UserID: "alice"})
 	require.Error(t, err)
 	require.NotContains(t, err.Error(), "SECRET-AUTH-CODE")
 }

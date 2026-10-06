@@ -10,6 +10,7 @@ import { createSettingsConnectorRoutes } from './settingsConnectorRoutes'
 import { createSettingsSectionRoutes } from './settingsSectionRoutes'
 import {
   authSearchSchema,
+  connectionOAuthCallbackSearchSchema,
   githubOAuthCallbackSearchSchema,
   indexSearchSchema,
   mobileNewChatSearchSchema,
@@ -54,6 +55,8 @@ const OAuthCallback = lazyRouteComponent(
   () => import('./components/OAuthCallback'), 'OAuthCallback')
 const GitHubOAuthCallback = lazyRouteComponent(
   () => import('./components/GitHubOAuthCallback'), 'GitHubOAuthCallback')
+const ConnectionOAuthCallback = lazyRouteComponent(
+  () => import('./components/ConnectionOAuthCallback'), 'ConnectionOAuthCallback')
 const ProxyAuth = lazyRouteComponent(
   () => import('./components/ProxyAuth'), 'ProxyAuth')
 const ResetPasswordScreen = lazyRouteComponent(
@@ -249,6 +252,20 @@ const githubOAuthCallbackRoute = createRoute({
   path: '/auth/github/callback',
   validateSearch: githubOAuthCallbackSearchSchema,
   component: GitHubOAuthCallback,
+})
+
+// Where the API relays an integration connection's OAuth flow (Slack, Gmail;
+// Go: connections.AppCallbackPath). Firebase serves the SPA for it like any
+// route. Signed in: finishing the flow as its own user is the CSRF check.
+const connectionOAuthCallbackRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/connections/oauth/callback',
+  validateSearch: connectionOAuthCallbackSearchSchema,
+  component: () => (
+    <AuthGuard requireAuth={true}>
+      <ConnectionOAuthCallback />
+    </AuthGuard>
+  ),
 })
 
 // Supabase OAuth 2.1 consent screen. Supabase's OAuth server validates the
@@ -775,6 +792,7 @@ const routeTree = rootRoute.addChildren([
   authRoute,
   oauthCallbackRoute,
   githubOAuthCallbackRoute,
+  connectionOAuthCallbackRoute,
   oauthConsentRoute,
   cliLoginRoute,
   proxyAuthRoute,

@@ -208,3 +208,52 @@ test('concurrent flows get independent ports and do not cross-deliver', async (t
   assert.equal((await providerLogin.waitForProviderLogin(a.flowId)).code, 'for-a');
   assert.equal((await providerLogin.waitForProviderLogin(b.flowId)).code, 'for-b');
 });
+
+// ── Integration connections (Slack, Gmail, …) ─────────────────────────
+//
+// Reliant's API owns the provider's redirect URI, so the provider redirects
+// there; the API relays the code to this receiver because consent ran in the
+// system browser, whose cookies are not the app's. The receiver must exist
+// BEFORE the flow starts (the API needs its address), and must not open
+// anything itself.
+
+function httpGetBody(url) {
+  return new Promise((resolve, reject) => {
+    http
+      .get(url, (res) => {
+        let body = '';
+        res.setEncoding('utf8');
+        res.on('data', (chunk) => { body += chunk; });
+        res.on('end', () => resolve({ status: res.statusCode, body }));
+      })
+      .on('error', reject);
+  });
+}
+
+test('a connection receiver advertises the loopback address it binds and delivers the relayed code', async (t) => {
+  const { flowId, redirectUri, authorizeUrl } = await providerLogin.startRedirectReceiver();
+  t.after(() => providerLogin.cancelProviderLogin(flowId, 'test cleanup'));
+
+  assert.equal(authorizeUrl, undefined, 'the receiver has no authorize URL: the API builds it');
+  const url = new URL(redirectUri);
+  assert.equal(url.protocol, 'http:');
+  assert.equal(url.hostname, '127.0.0.1', 'no provider allow-lists this URI, so it names the bound address');
+  assert.ok(Number(url.port) > 0);
+
+  const res = await httpGetBody(`${redirectUri}?code=relayed&state=st&redirect_after=%2Fworkflow%2Fx`);
+  assert.equal(res.status, 200);
+  assert.match(res.body, /Return to Reliant to finish connecting/);
+
+  const result = await providerLogin.waitForProviderLogin(flowId);
+  assert.equal(result.code, 'relayed');
+  assert.equal(result.state, 'st');
+});
+
+test('a refusal the API relays reaches the waiting connection flow', async (t) => {
+  const { flowId, redirectUri } = await providerLogin.startRedirectReceiver();
+  t.after(() => providerLogin.cancelProviderLogin(flowId, 'test cleanup'));
+
+  const res = await httpGetBody(`${redirectUri}?error=denied`);
+  assert.match(res.body, /Connection not completed/);
+  await assert.rejects(providerLogin.waitForProviderLogin(flowId), /^Error: denied$/);
+});

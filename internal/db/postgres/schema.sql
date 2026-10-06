@@ -836,7 +836,8 @@ CREATE TABLE public.oauth_flows (
     connection_name text,
     expires_at timestamp with time zone NOT NULL,
     consumed_at timestamp with time zone,
-    params jsonb DEFAULT '{}'::jsonb NOT NULL
+    params jsonb DEFAULT '{}'::jsonb NOT NULL,
+    return_to text
 );
 
 --

@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"crypto/rand"
+	"database/sql"
 	"encoding/base64"
 	"strings"
 	"testing"
@@ -176,9 +177,17 @@ func TestConnectionServiceRequestSecretsAreDebugRedacted(t *testing.T) {
 
 type connectionFixture struct {
 	svc *ConnectionService
+	raw *sql.DB
 }
 
 func newConnectionFixture(t *testing.T) *connectionFixture {
+	t.Helper()
+	return newConnectionFixtureWithEnv(t, func(string) string { return "" })
+}
+
+// newConnectionFixtureWithEnv reads OAuth client credentials from getenv, as a
+// deployment does.
+func newConnectionFixtureWithEnv(t *testing.T, getenv func(string) string) *connectionFixture {
 	t.Helper()
 	repo, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
@@ -189,12 +198,56 @@ func newConnectionFixture(t *testing.T) *connectionFixture {
 	require.NoError(t, err)
 	v := vault.New(raw, vault.NewEnvKeyWrapper(ring))
 
-	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(string) string { return "" })
+	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), getenv)
 	require.NoError(t, err)
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, v, providers, nil)
-	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
-	return &connectionFixture{svc: NewConnectionService(connections.NewService(store, v, providers, tokens, broker, nil))}
+	broker := connections.NewBroker(store, v, providers, nil, "https://api.reliant.example").
+		WithAppOrigins([]string{"https://app.reliant.example", "*", "app://bundle"})
+	return &connectionFixture{svc: NewConnectionService(connections.NewService(store, v, providers, tokens, broker, nil)), raw: raw}
+}
+
+// StartOAuth relays the provider's redirect back to the web app the request
+// came from — its Origin header, which page script cannot set — and only when
+// that origin is one the deployment serves. A desktop app names its loopback
+// receiver instead. Nothing else can become a relay target.
+func TestConnectionService_StartOAuthRelaysToTheRequestOrigin(t *testing.T) {
+	f := newConnectionFixtureWithEnv(t, func(k string) string {
+		return map[string]string{"RELIANT_OAUTH_SLACK_CLIENT_ID": "id", "RELIANT_OAUTH_SLACK_CLIENT_SECRET": "sec"}[k]
+	})
+	start := func(ctx context.Context, origin, loopback string) (*connect.Response[reliantv1.StartOAuthResponse], error) {
+		req := connect.NewRequest(&reliantv1.StartOAuthRequest{IntegrationId: "slack", RedirectAfter: "/workflow/x", LoopbackRedirect: loopback})
+		if origin != "" {
+			req.Header().Set("Origin", origin)
+		}
+		return f.svc.StartOAuth(ctx, req)
+	}
+	lastReturnTo := func() string {
+		var v string
+		require.NoError(t, f.raw.QueryRow(`SELECT return_to FROM oauth_flows ORDER BY expires_at DESC LIMIT 1`).Scan(&v))
+		return v
+	}
+
+	_, err := start(context.Background(), "https://app.reliant.example", "")
+	requireConnectCode(t, err, connect.CodeUnauthenticated)
+
+	alice := asConnUser("alice")
+	resp, err := start(alice, "https://app.reliant.example", "")
+	require.NoError(t, err)
+	require.True(t, strings.HasPrefix(resp.Msg.AuthorizeUrl, "https://slack.com/oauth/v2/authorize?"), resp.Msg.AuthorizeUrl)
+	require.Contains(t, resp.Msg.AuthorizeUrl, "redirect_uri=https%3A%2F%2Fapi.reliant.example%2Fintegrations%2Foauth%2Fslack%2Fcallback")
+	require.Equal(t, "https://app.reliant.example/connections/oauth/callback", lastReturnTo())
+
+	_, err = start(alice, "", "http://127.0.0.1:49152/callback")
+	require.NoError(t, err)
+	require.Equal(t, "http://127.0.0.1:49152/callback", lastReturnTo())
+
+	_, err = start(alice, "https://evil.example", "")
+	requireConnectCode(t, err, connect.CodeFailedPrecondition)
+	_, err = start(alice, "", "")
+	requireConnectCode(t, err, connect.CodeInvalidArgument)
+	_, err = start(alice, "https://app.reliant.example", "https://evil.example/callback")
+	requireConnectCode(t, err, connect.CodeInvalidArgument)
 }
 
 func asConnUser(userID string) context.Context {

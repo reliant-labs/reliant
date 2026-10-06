@@ -93,7 +93,7 @@ func TestTransplantedCiphertextFailsAtUse(t *testing.T) {
 func TestPKCEVerifierIsSealedAtRest(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
-	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github"})
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: "alice", IntegrationID: "github", ClientOrigin: testAppOrigin})
 	require.NoError(t, err)
 	require.NotEmpty(t, mustQuery(t, authURL, "code_challenge"))
 	require.Equal(t, "S256", mustQuery(t, authURL, "code_challenge_method"))

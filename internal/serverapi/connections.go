@@ -4,10 +4,8 @@ package serverapi
 
 import (
 	"fmt"
-	"net/http"
 	"os"
 
-	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -29,16 +27,20 @@ type wiredConnections struct {
 }
 
 // wireConnections builds the connection service, the token source and the
-// OAuth broker's HTTP routes. A provider whose client credentials are unset
+// OAuth broker's HTTP callback. A provider whose client credentials are unset
 // is listed as unavailable; it never fails boot.
-func wireConnections(repo *db.Repo, keys *vault.Vault, jwtPublicKey, jwksURL, publicURL string) (*wiredConnections, error) {
+//
+// appOrigins is the deployment's CORS allow-list: the origins the web app is
+// served from, which are the only ones (besides PUBLIC_URL's and loopback) a
+// browser OAuth flow is relayed back to.
+func wireConnections(repo *db.Repo, keys *vault.Vault, publicURL string, appOrigins []string) (*wiredConnections, error) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)
 	}
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, keys, providers, nil)
-	broker := connections.NewBroker(store, keys, providers, nil, publicURL)
+	broker := connections.NewBroker(store, keys, providers, nil, publicURL).WithAppOrigins(appOrigins)
 	svc := connections.NewService(store, keys, providers, tokens, broker, nil).
 		WithDelegated(delegatedAvailable(tokenauthority.ControlPlaneURL() != ""))
 	for _, in := range svc.ListIntegrations() {
@@ -48,13 +50,7 @@ func wireConnections(repo *db.Repo, keys *vault.Vault, jwtPublicKey, jwksURL, pu
 			}
 		}
 	}
-
-	authn, err := auth.NewMiddleware(jwtPublicKey, jwksURL)
-	if err != nil {
-		return nil, fmt.Errorf("connections: http auth: %w", err)
-	}
-	routes := connections.NewOAuthHTTP(broker, func(next http.Handler) http.Handler { return authn.RequireAuth(next) }, publicURL)
-	return &wiredConnections{service: svc, oauth: routes, tokens: tokens}, nil
+	return &wiredConnections{service: svc, oauth: connections.NewOAuthHTTP(broker), tokens: tokens}, nil
 }
 
 // wireCatalogSearch builds the integration catalog search: the embedded

@@ -32,6 +32,9 @@ import (
 const (
 	clientID     = "Iv1.testclient"
 	clientSecret = "client-secret-canary-0001"
+	// testAppOrigin is the web app's origin: a different site from the API
+	// (https://reliant.example), exactly as in production.
+	testAppOrigin = "https://app.reliant.example"
 )
 
 // testCatalog is what every test registry is built from: integrations are
@@ -249,7 +252,7 @@ func newEnv(t *testing.T) *env {
 
 	store := repo.Connections()
 	tokens := connections.NewTokenSource(store, v, providers, doer)
-	broker := connections.NewBroker(store, v, providers, doer, "https://reliant.example")
+	broker := connections.NewBroker(store, v, providers, doer, "https://reliant.example").WithAppOrigins([]string{testAppOrigin})
 	svc := connections.NewService(store, v, providers, tokens, broker, doer)
 	return &env{
 		t: t, repo: repo, raw: raw, vault: v, store: store, gh: gh, providers: providers,
@@ -263,7 +266,7 @@ func newEnv(t *testing.T) *env {
 func (e *env) connect(userID, name string) *core.Connection {
 	e.t.Helper()
 	ctx := context.Background()
-	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "github", Name: name})
+	authURL, err := e.svc.StartOAuth(ctx, connections.StartParams{UserID: userID, IntegrationID: "github", Name: name, ClientOrigin: testAppOrigin})
 	require.NoError(e.t, err)
 	state := mustQuery(e.t, authURL, "state")
 	done, err := e.svc.CompleteOAuth(ctx, userID, state, "authcode")

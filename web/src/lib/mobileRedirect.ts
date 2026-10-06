@@ -63,6 +63,7 @@ export function shouldRedirectToMobile(env: MobileRedirectEnv): boolean {
   const PRESERVED = [
     "/auth",
     "/oauth",
+    "/connections/oauth",
     "/onboarding",
     "/reset-password",
     "/verify-email",

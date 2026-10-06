@@ -224,6 +224,15 @@ export const githubOAuthCallbackSearchSchema = z.object({
   setup_action: z.string().optional(),
 });
 
+/** What the API relays a connection OAuth flow back to the web app with. */
+export const connectionOAuthCallbackSearchSchema = z.object({
+  code: z.string().optional(),
+  state: z.string().optional(),
+  /** An error class ("denied", "invalid"), never the provider's own text. */
+  error: z.string().optional(),
+  redirect_after: z.string().optional(),
+});
+
 export const proxyAuthSearchSchema = z.object({
   return: z.string().optional(),
 });

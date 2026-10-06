@@ -207,7 +207,7 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
-	conns, err := wireConnections(repo, vaultKeys, jwtPublicKey, jwksURL, strings.TrimSpace(os.Getenv("PUBLIC_URL")))
+	conns, err := wireConnections(repo, vaultKeys, strings.TrimSpace(os.Getenv("PUBLIC_URL")), opts.CORSAllowedOrigins)
 	if err != nil {
 		return err
 	}

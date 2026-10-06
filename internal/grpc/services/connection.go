@@ -217,6 +217,10 @@ func (s *ConnectionService) StartOAuth(ctx context.Context, req *connect.Request
 		UserID: userID, IntegrationID: req.Msg.GetIntegrationId(), Name: req.Msg.GetName(),
 		ReconnectID: req.Msg.GetReconnectId(), RedirectAfter: req.Msg.GetRedirectAfter(),
 		Params: req.Msg.GetParams(),
+		// The browser sets Origin; page script cannot. It names the web app
+		// the provider's redirect is relayed back to.
+		ClientOrigin:     req.Header().Get("Origin"),
+		LoopbackRedirect: req.Msg.GetLoopbackRedirect(),
 	})
 	if err != nil {
 		return nil, connectionError(err)

@@ -130,6 +130,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   cancelProviderOAuth: (flowId) => ipcRenderer.invoke('oauth:provider-login-cancel', flowId),
 
+  // Integration connection (Slack, Gmail, …): a loopback receiver the API
+  // relays the provider's code to. Opens nothing — the renderer starts the
+  // flow with the receiver's address, opens the returned authorize URL with
+  // openExternal, then collects the code with waitForProviderOAuth.
+  startConnectionOAuthReceiver: async () => {
+    const result = await ipcRenderer.invoke('oauth:connection-receiver-start');
+    if (!result?.success) {
+      throw new Error(result?.error || 'Could not start the connection listener');
+    }
+    return { flowId: result.flowId, redirectUri: result.redirectUri };
+  },
+
   // Stripe checkout, kept inside the app. Resolves with the outcome Stripe
   // reported ('success' / 'cancelled'), or 'dismissed' if the user just closed
   // the window. Optional in electron.d.ts like every bridge here: a build that

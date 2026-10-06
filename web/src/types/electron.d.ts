@@ -132,6 +132,12 @@ export interface ElectronAPI {
   ) => Promise<{ code: string; state: string; redirectUri: string }>;
   cancelProviderOAuth?: (flowId: string) => Promise<unknown>;
 
+  // Integration connection (Slack, Gmail, …): a loopback receiver the API
+  // relays the provider's code to, because consent runs in the system browser.
+  // Opens nothing; collect the code with waitForProviderOAuth. See
+  // web/src/lib/connection-oauth.ts.
+  startConnectionOAuthReceiver?: () => Promise<{ flowId: string; redirectUri: string }>;
+
   // Stripe checkout in a controlled window, so the desktop app can observe the
   // return instead of losing the purchase to the system browser. Optional: a
   // build without it falls back to the plain redirect (see lib/stripeCheckout).
