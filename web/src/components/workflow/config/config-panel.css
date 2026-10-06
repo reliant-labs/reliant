@@ -537,6 +537,13 @@
   color: hsl(var(--muted-foreground));
 }
 
+/* What kind of value a field takes ("list of tool calls"), beside its label. */
+.cpv2-field-label .cpv2-field-type {
+  font-size: 0.7857rem;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground) / 0.75);
+}
+
 .cpv2-field-default {
   font-size: 0.7857rem;
   color: hsl(var(--muted-foreground) / 0.6);
@@ -704,6 +711,18 @@
   cursor: pointer;
   transition: all var(--cpv2-transition);
   text-transform: capitalize;
+}
+/* The Fixed / Expression toggle beside a field label: text, not bare glyphs,
+   and a 24px target. */
+.cpv2-mode-pill.cpv2-mode-pill-compact {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 0.7857rem;
+  text-transform: none;
 }
 .cpv2-mode-pill:hover { border-color: hsl(var(--border) / 0.8); color: hsl(var(--foreground)); }
 .cpv2-mode-pill.active {

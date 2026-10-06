@@ -234,8 +234,9 @@ message NodeInputField {
   optional double max_value = 9;
   // Human-readable short label for form controls.
   string label = 10;
-  // Optional placeholder text for text-like controls.
-  optional string placeholder = 11;
+  // Field 11 was placeholder, replaced by example (16).
+  reserved 11;
+  reserved "placeholder";
   // Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
   repeated string visibility_contexts = 12;
   // Optional cleanup behavior hint for UI/client preprocessing.
@@ -244,6 +245,12 @@ message NodeInputField {
   bool is_cel = 14;
   // Per-field grouping category (e.g., "Model Settings", "Tools").
   string category = 15;
+  // What a value looks like, as an author writes it: a literal or a
+  // {{ expression }}. Shown as the empty input's placeholder. FieldMeta.example.
+  string example = 16;
+  // The kind of value in a few words ("list of tool calls"), when the type
+  // undersells it. FieldMeta.type_hint.
+  string type_hint = 17;
 }
 
 // NodeInfo represents a workflow node available for the builder
@@ -497,6 +504,10 @@ message CatalogEntry {
   // ToolName is the agent tool this action is also exposed as (for example
   // "github__user_get"); empty when it is not exposed to agents.
   string tool_name = 7;
+  // ParamOrder is the action's params in the order its manifest declares
+  // them. ParamsSchema is a Struct, so its keys arrive in no meaningful order;
+  // a form lists required params first, then the rest, each in this order.
+  repeated string param_order = 8;
 }
 
 // CatalogConnectionRequirement is what using an entry asks of a connection.

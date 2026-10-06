@@ -37,6 +37,7 @@ import { RunStepConfig } from "./RunStepConfig";
 import { ActionStepConfig } from "./ActionStepConfig";
 import { IntegrationActionConfig } from "./IntegrationActionConfig";
 import { getActionUses, isIntegrationActionStep } from "../../../lib/actionNodeArgs";
+import { useCatalogEntry } from "../../../hooks/connection-queries";
 import { WorkflowStepConfig } from "./WorkflowStepConfig";
 import { JoinStepConfig } from "./JoinStepConfig";
 import { LoopStepConfig } from "./LoopStepConfig";
@@ -246,6 +247,11 @@ export function ConfigPanel({
     [handleIdSave, handleIdCancel],
   );
 
+  // An integration action is titled by what it is ("Slack · Post message"),
+  // not its ref. IntegrationActionConfig reads the same cached entry.
+  const integrationUses = isIntegrationActionStep(step) ? getActionUses(step) : "";
+  const integrationEntry = useCatalogEntry(integrationUses && !integrationUses.includes("{{") ? integrationUses : undefined).data;
+
   // Fetch catalog nodes for output fields. Shared with ActionStepConfig via
   // props so we don't fire two identical listNodes RPCs per panel open.
   useEffect(() => {
@@ -345,7 +351,10 @@ export function ConfigPanel({
       return getStepCommand(step) || "Run";
     }
     if (isIntegrationActionStep(step)) {
-      return getActionUses(step) || "Action";
+      if (integrationEntry) {
+        return `${integrationEntry.summary.integration.displayName} · ${integrationEntry.summary.displayName}`;
+      }
+      return integrationUses || "Action";
     }
     if (isActionStep(step)) {
       // Format snake_case type to Title Case (e.g., "call_llm" -> "Call LLM")

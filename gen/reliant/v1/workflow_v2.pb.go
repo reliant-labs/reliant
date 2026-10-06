@@ -7594,29 +7594,29 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\n" +
 	"ToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01J\x04\b\x01\x10\x02\"\x85\x0e\n" +
-	"\vCallLLMArgs\x12\xbd\x01\n" +
-	"\x05model\x18\x01 \x01(\v2\x1c.reliant.v1.CelModelSelectorB\x88\x01\x82\xb5\x18\x83\x01\n" +
-	"8Model selector using tags (e.g. flagship) or explicit ID*\x05ModelJ\x05ModelR0e.g. flagship, fast, cheap, or explicit model IDZ\x05basicp\x01R\x05model\x12\x9f\x01\n" +
-	"\vtemperature\x18\x02 \x01(\v2\x15.reliant.v1.CelDoubleBf\x82\xb5\x18b\n" +
-	"%Temperature (0-1) controls randomness*\x05Model2\x030.79\x00\x00\x00\x00\x00\x00\x00\x00A\x00\x00\x00\x00\x00\x00\x00@J\vTemperatureZ\badvancedb\x04trimR\vtemperature\x12~\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01J\x04\b\x01\x10\x02\"\x8b\x0f\n" +
+	"\vCallLLMArgs\x12\x97\x01\n" +
+	"\x05model\x18\x01 \x01(\v2\x1c.reliant.v1.CelModelSelectorBc\x82\xb5\x18_\n" +
+	";A model tag (flagship, fast, cheap) or an explicit model ID*\x05ModelJ\x05ModelZ\x05basicp\x01\x82\x01\bflagshipR\x05model\x12\xd4\x01\n" +
+	"\vtemperature\x18\x02 \x01(\v2\x15.reliant.v1.CelDoubleB\x9a\x01\x82\xb5\x18\x95\x01\n" +
+	"RHow varied replies are: 0 is the most repeatable, higher is more creative (0 to 2)*\x05Model2\x030.79\x00\x00\x00\x00\x00\x00\x00\x00A\x00\x00\x00\x00\x00\x00\x00@J\vTemperatureZ\badvancedb\x04trim\x82\x01\x030.2R\vtemperature\x12~\n" +
 	"\n" +
 	"max_tokens\x18\x03 \x01(\v2\x12.reliant.v1.CelIntBK\x82\xb5\x18G\n" +
 	"\x1eMaximum tokens in the response \x01*\x05Model9\x00\x00\x00\x00\x00\x00\xf0?A\x00\x00\x00\x00\x00@\xff@J\n" +
 	"Max tokensR\tmaxTokens\x12\xb4\x01\n" +
 	"\x0ethinking_level\x18\x04 \x01(\v2\x15.reliant.v1.CelStringBv\x82\xb5\x18r\n" +
-	"-Extended thinking level for complex reasoning\x12\x1anone|low|medium|high|xhigh*\x05Model2\x04noneJ\x0eThinking levelZ\badvancedR\rthinkingLevel\x12\xbe\x01\n" +
-	"\rsystem_prompt\x18\x05 \x01(\v2\x15.reliant.v1.CelStringB\x81\x01\x82\xb5\x18}\n" +
-	" System message for this LLM call\x1a\btextarea*\x06PromptJ\rSystem promptR(Optional instructions for model behaviorZ\badvancedb\x04trimR\fsystemPrompt\x12z\n" +
+	"-Extended thinking level for complex reasoning\x12\x1anone|low|medium|high|xhigh*\x05Model2\x04noneJ\x0eThinking levelZ\badvancedR\rthinkingLevel\x12\x80\x02\n" +
+	"\rsystem_prompt\x18\x05 \x01(\v2\x15.reliant.v1.CelStringB\xc3\x01\x82\xb5\x18\xbe\x01\n" +
+	"BOptional instructions for how the model should behave on this call\x1a\btextarea*\x06PromptJ\rSystem promptZ\badvancedb\x04trim\x82\x01FYou are a careful code reviewer. Reply with a bulleted list of issues.R\fsystemPrompt\x12z\n" +
 	"\ftools_config\x18\f \x01(\v2\x17.reliant.v1.ToolsConfigB>\x82\xb5\x18:\n" +
 	"1Tool configuration: filter, spawn, and permission*\x05ToolsR\vtoolsConfig\x12=\n" +
 	"\rresponse_tool\x18\t \x01(\v2\x18.reliant.v1.ResponseToolR\fresponseTool\x12C\n" +
 	"\bmessages\x18\n" +
 	" \x03(\v2\x1f.reliant.v1.CallLLMMessageInputB\x06\x82\xb5\x18\x02 \x01R\bmessages\x12\xc0\x01\n" +
 	"\x14compaction_threshold\x18\r \x01(\v2\x12.reliant.v1.CelIntBy\x82\xb5\x18u\n" +
-	"AToken count to trigger context compaction (0 = use model default) \x01*\x05Model9\x00\x00\x00\x00\x00\x00\x00\x00J\x14Compaction thresholdZ\badvancedR\x13compactionThreshold\x12\xa6\x01\n" +
-	"\x06skills\x18\x0e \x01(\v2\x19.reliant.v1.CelStringListBs\x82\xb5\x18o\n" +
-	"SNamespaced skill paths to preload for this call (seeded as skill tool-interactions)*\x06PromptJ\x06SkillsZ\badvancedR\x06skills\x12\xb9\x01\n" +
+	"AToken count to trigger context compaction (0 = use model default) \x01*\x05Model9\x00\x00\x00\x00\x00\x00\x00\x00J\x14Compaction thresholdZ\badvancedR\x13compactionThreshold\x12\xdb\x01\n" +
+	"\x06skills\x18\x0e \x01(\v2\x19.reliant.v1.CelStringListB\xa7\x01\x82\xb5\x18\xa2\x01\n" +
+	"VSkills to preload into this call, by path, so the model starts with their instructions*\x06PromptJ\x06SkillsZ\badvanced\x82\x01\x17[forge/db, code-review]\x8a\x01\x13list of skill pathsR\x06skills\x12\xb9\x01\n" +
 	"\rcontinue_turn\x18\x0f \x01(\v2\x13.reliant.v1.CelBoolB\x7f\x82\xb5\x18{\n" +
 	"VCall the provider even though history ends with the assistant (continue a paused turn) \x01*\x06PromptJ\rContinue turnZ\badvancedR\fcontinueTurn:\\\x8a\xb5\x18X\n" +
 	"\bcall_llm\x12\bCall LLM\x1a4Send a prompt to a language model and get a response*\aagentic2\x03BotJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\v\x10\f\"\xa3\x01\n" +
@@ -7642,11 +7642,12 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
 	"\acontent\x18\x03 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x04 \x01(\bR\aisError\x12%\n" +
-	"\x0eattachment_ids\x18\x05 \x03(\tR\rattachmentIds\"\xe7\x05\n" +
-	"\x10ExecuteToolsArgs\x12d\n" +
+	"\x0eattachment_ids\x18\x05 \x03(\tR\rattachmentIds\"\xe0\x06\n" +
+	"\x10ExecuteToolsArgs\x12\xdc\x01\n" +
 	"\n" +
-	"tool_calls\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
-	"(CEL expression for tool calls to executeR\ttoolCalls\x12O\n" +
+	"tool_calls\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xa5\x01\x82\xb5\x18\xa0\x01\n" +
+	"]The tool calls to run: wire in the tool_calls output of the Call LLM step that requested themJ\n" +
+	"Tool calls\x82\x01\x1d{{nodes.call_llm.tool_calls}}\x8a\x01\x12list of tool callsR\ttoolCalls\x12O\n" +
 	"\x13resolved_tool_calls\x18\x02 \x03(\v2\x17.reliant.v1.ToolCallMsgB\x06\x82\xb5\x18\x02 \x01R\x11resolvedToolCalls\x12>\n" +
 	"\x17expected_response_tools\x18\x03 \x03(\tB\x06\x82\xb5\x18\x02 \x01R\x15expectedResponseTools\x12q\n" +
 	"\x15response_tool_schemas\x18\x04 \x03(\v25.reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntryB\x06\x82\xb5\x18\x02 \x01R\x13responseToolSchemas\x12M\n" +
@@ -7655,55 +7656,55 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x18ResponseToolSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
 	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01:o\x8a\xb5\x18k\n" +
-	"\rexecute_tools\x12\x12Run LLM Tool Calls\x1a5Run the tool calls an upstream Call LLM step returned*\aagentic2\x06Wrench\"\xb2\x03\n" +
-	"\x0eInvokeToolArgs\x12T\n" +
-	"\x04tool\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB)\x82\xb5\x18%\n" +
-	"\x14Which tool to invokeJ\x04ToolZ\x05basicp\x01R\x04tool\x12\x87\x01\n" +
-	"\x06params\x18\x02 \x03(\v2&.reliant.v1.InvokeToolArgs.ParamsEntryBG\x82\xb5\x18C\n" +
-	".Tool parameters, keyed as in the tool's schemaJ\n" +
-	"ParametersZ\x05basicR\x06params\x1aQ\n" +
+	"\rexecute_tools\x12\x12Run LLM Tool Calls\x1a5Run the tool calls an upstream Call LLM step returned*\aagentic2\x06Wrench\"\xf0\x04\n" +
+	"\x0eInvokeToolArgs\x12\xa8\x01\n" +
+	"\x04tool\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB}\x82\xb5\x18y\n" +
+	"WThe tool to run, by name. Only tools that allow direct use from a workflow can be namedJ\x04ToolZ\x05basicp\x01\x82\x01\x0egenerate_imageR\x04tool\x12\xf0\x01\n" +
+	"\x06params\x18\x02 \x03(\v2&.reliant.v1.InvokeToolArgs.ParamsEntryB\xaf\x01\x82\xb5\x18\xaa\x01\n" +
+	"XThe tool's parameters, keyed as in its schema. Values may be literals or {{ }} templatesJ\n" +
+	"ParametersZ\x05basic\x82\x01,{\"prompt\": \"A watercolor fox in fresh snow\"}\x8a\x01\vJSON objectR\x06params\x1aQ\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:m\x8a\xb5\x18i\n" +
-	"\vinvoke_tool\x12\bRun Tool\x1a?Run one tool you pick, with parameters you set; no LLM involved*\aagentic2\x06Hammer\"\xcc\x04\n" +
+	"\vinvoke_tool\x12\bRun Tool\x1a?Run one tool you pick, with parameters you set; no LLM involved*\aagentic2\x06Hammer\"\xad\x06\n" +
 	"\n" +
-	"ActionArgs\x12~\n" +
-	"\x04uses\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBS\x82\xb5\x18O\n" +
-	"<Which integration action to run, as integration/action@majorJ\x06ActionZ\x05basicp\x01R\x04uses\x12\x81\x01\n" +
-	"\x04with\x18\x02 \x03(\v2 .reliant.v1.ActionArgs.WithEntryBK\x82\xb5\x18G\n" +
-	"2Action parameters, keyed as in the action's schemaJ\n" +
-	"ParametersZ\x05basicR\x04with\x12\x84\x01\n" +
+	"ActionArgs\x12\x8f\x01\n" +
+	"\x04uses\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBd\x82\xb5\x18`\n" +
+	"<Which integration action to run, as integration/action@majorJ\x06ActionZ\x05basicp\x01\x82\x01\x0ehttp/request@1R\x04uses\x12\xfc\x01\n" +
+	"\x04with\x18\x02 \x03(\v2 .reliant.v1.ActionArgs.WithEntryB\xc5\x01\x82\xb5\x18\xc0\x01\n" +
+	"]Action parameters, keyed as in the action's schema. Values may be literals or {{ }} templatesJ\n" +
+	"ParametersZ\x05basic\x82\x01={\"url\": \"https://api.example.com/v1/orders\", \"method\": \"GET\"}\x8a\x01\vJSON objectR\x04with\x12\xd8\x01\n" +
 	"\n" +
-	"connection\x18\x03 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
-	"4Saved connection id to authenticate this action withJ\n" +
-	"ConnectionZ\x05basicR\n" +
+	"connection\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB\xa0\x01\x82\xb5\x18\x9b\x01\n" +
+	"^Id of the saved connection to authenticate with. Leave it empty to use your default connectionJ\n" +
+	"ConnectionZ\x05basic\x82\x01%conn_3f2a9c1e7b4d4e0f9a6c2b8d1e5f7a90R\n" +
 	"connection\x1aO\n" +
 	"\tWithEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:\\\x8a\xb5\x18X\n" +
-	"\x06action\x12\x06Action\x1a7Run an integration action (for example an HTTP request)*\autility2\x04PlugJ\x04\b\x04\x10\x05\"\xc8\x02\n" +
-	"\vCompactArgs\x12\xd2\x01\n" +
-	"\x05model\x18\x02 \x01(\v2\x1c.reliant.v1.CelModelSelectorB\x9d\x01\x82\xb5\x18\x98\x01\n" +
-	"VModel used to summarize the conversation (defaults to the built-in summarization tier)*\x05ModelJ\x05ModelR0e.g. flagship, fast, cheap, or explicit model IDR\x05model:^\x8a\xb5\x18Z\n" +
-	"\acompact\x12\aCompact\x1a2Compact conversation context to reduce token usage*\aagentic2\tMinimize2J\x04\b\x01\x10\x02\"\x9c\x02\n" +
-	"\fApprovalArgs\x12H\n" +
-	"\x05title\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\x1b\x82\xb5\x18\x17\n" +
-	"\x15Approval dialog titleR\x05title\x12T\n" +
-	"\atimeout\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB#\x82\xb5\x18\x1f\n" +
-	"\x1dHow long to wait for approvalR\atimeout:Z\x8a\xb5\x18V\n" +
-	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheckJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\xef\x01\n" +
-	"\x0fAskQuestionArgs\x12e\n" +
-	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB2\x82\xb5\x18.\n" +
-	",JSON metadata with question text and optionsR\bmetadata:u\x8a\xb5\x18q\n" +
-	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\xc3\v\n" +
+	"\x06action\x12\x06Action\x1a7Run an integration action (for example an HTTP request)*\autility2\x04PlugJ\x04\b\x04\x10\x05\"\x9f\x02\n" +
+	"\vCompactArgs\x12\xa9\x01\n" +
+	"\x05model\x18\x02 \x01(\v2\x1c.reliant.v1.CelModelSelectorBu\x82\xb5\x18q\n" +
+	"VModel used to summarize the conversation (defaults to the built-in summarization tier)*\x05ModelJ\x05Model\x82\x01\bflagshipR\x05model:^\x8a\xb5\x18Z\n" +
+	"\acompact\x12\aCompact\x1a2Compact conversation context to reduce token usage*\aagentic2\tMinimize2J\x04\b\x01\x10\x02\"\xa4\x03\n" +
+	"\fApprovalArgs\x12\xa1\x01\n" +
+	"\x05title\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBt\x82\xb5\x18p\n" +
+	"CWhat the approver is asked to decide, shown as the approval's title\x82\x01(Deploy {{inputs.version}} to production?R\x05title\x12\x81\x01\n" +
+	"\atimeout\x18\x03 \x01(\v2\x15.reliant.v1.CelStringBP\x82\xb5\x18L\n" +
+	"9How long to wait for a decision before the step times out\x82\x01\x0330m\x8a\x01\bdurationR\atimeout:Z\x8a\xb5\x18V\n" +
+	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheckJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x9e\x03\n" +
+	"\x0fAskQuestionArgs\x12\x93\x02\n" +
+	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xdf\x01\x82\xb5\x18\xda\x01\n" +
+	"XThe questions to ask, as JSON: a questions list, each with question text and its options\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
+	"\fask_question\x12\fAsk Question\x1a3Pause workflow execution to ask the user a question*\autility2\x15MessageCircleQuestion\"\x8b\r\n" +
 	"\x13SaveMessageNodeArgs\x12Y\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
-	"\fMessage role\x12\x1auser|assistant|system|toolR\x04role\x12P\n" +
-	"\acontent\x18\x02 \x01(\v2\x15.reliant.v1.CelStringB\x1f\x82\xb5\x18\x1b\n" +
-	"\x0fMessage content\x1a\btextareaR\acontent\x12X\n" +
+	"\fMessage role\x12\x1auser|assistant|system|toolR\x04role\x12\xa6\x01\n" +
+	"\acontent\x18\x02 \x01(\v2\x15.reliant.v1.CelStringBu\x82\xb5\x18q\n" +
+	"BThe message text, usually a template over an earlier step's output\x1a\btextarea\x82\x01 {{nodes.call_llm.response_text}}R\acontent\x12\xc8\x01\n" +
 	"\n" +
-	"tool_calls\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB\"\x82\xb5\x18\x1e\n" +
-	"\x1cTool calls from LLM responseR\ttoolCalls\x12X\n" +
+	"tool_calls\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB\x91\x01\x82\xb5\x18\x8c\x01\n" +
+	"UTool calls to save with an assistant message: the tool_calls a Call LLM step returned\x82\x01\x1d{{nodes.call_llm.tool_calls}}\x8a\x01\x12list of tool callsR\ttoolCalls\x12X\n" +
 	"\ftool_results\x18\x04 \x01(\v2\x15.reliant.v1.CelStringB\x1e\x82\xb5\x18\x1a\n" +
 	"\x16Tool execution results \x01R\vtoolResults\x12u\n" +
 	"\vattachments\x18\x05 \x01(\v2\x15.reliant.v1.CelStringB<\x82\xb5\x188\n" +
@@ -7728,24 +7729,24 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rInjectFileMsg\x12\x1a\n" +
 	"\bfilename\x18\x01 \x01(\tR\bfilename\x12\x1b\n" +
 	"\tmime_type\x18\x02 \x01(\tR\bmimeType\x12\x12\n" +
-	"\x04data\x18\x03 \x01(\fR\x04data\"\xd2\x04\n" +
-	"\x12CreateWorktreeArgs\x12L\n" +
-	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB!\x82\xb5\x18\x1d\n" +
-	"\x1bWorktree name, used in pathR\x04name\x12L\n" +
+	"\x04data\x18\x03 \x01(\fR\x04data\"\xf8\x05\n" +
+	"\x12CreateWorktreeArgs\x12\x92\x01\n" +
+	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBg\x82\xb5\x18c\n" +
+	"LA short name for the worktree; it becomes part of the worktree's folder path\x82\x01\x12fix-login-redirectR\x04name\x12L\n" +
 	"\x06branch\x18\x02 \x01(\v2\x15.reliant.v1.CelStringB\x1d\x82\xb5\x18\x19\n" +
-	"\x15Branch name to create \x01R\x06branch\x12X\n" +
-	"\vbase_branch\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB \x82\xb5\x18\x1c\n" +
-	"\x1aBase branch to branch fromR\n" +
-	"baseBranch\x12\x7f\n" +
+	"\x15Branch name to create \x01R\x06branch\x12\x89\x01\n" +
+	"\vbase_branch\x18\x03 \x01(\v2\x15.reliant.v1.CelStringBQ\x82\xb5\x18M\n" +
+	"DThe branch to start from. Empty uses the repository's default branch\x82\x01\x04mainR\n" +
+	"baseBranch\x12\xab\x01\n" +
 	"\n" +
-	"copy_files\x18\x04 \x03(\tB`\x82\xb5\x18\\\n" +
-	"ZExact paths from the project root to copy into the workspace (e.g. .env, web/node_modules)R\tcopyFiles\x12]\n" +
+	"copy_files\x18\x04 \x03(\tB\x8b\x01\x82\xb5\x18\x86\x01\n" +
+	"YExact paths from the project root to copy into the new worktree, such as untracked config\x82\x01\x18[.env, web/node_modules]\x8a\x01\rlist of pathsR\tcopyFiles\x12]\n" +
 	"\x05force\x18\x05 \x01(\v2\x13.reliant.v1.CelBoolB2\x82\xb5\x18.\n" +
 	",Force creation by deleting existing worktreeR\x05force:f\x8a\xb5\x18b\n" +
-	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\xeb\x03\n" +
-	"\aRunArgs\x12Q\n" +
-	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB \x82\xb5\x18\x1c\n" +
-	"\x18Shell command to executep\x01R\acommand\x12M\n" +
+	"\x0fcreate_worktree\x12\x0fCreate Worktree\x1a.Create a git worktree for isolated development*\x03git2\tGitBranch\"\x98\x04\n" +
+	"\aRunArgs\x12~\n" +
+	"\acommand\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBM\x82\xb5\x18I\n" +
+	"1The shell command to run in the project directoryp\x01\x82\x01\x11npm test -- --runR\acommand\x12M\n" +
 	"\x03env\x18\x02 \x03(\v2\x1c.reliant.v1.RunArgs.EnvEntryB\x1d\x82\xb5\x18\x19\n" +
 	"\x15Environment variables \x01R\x03env\x12a\n" +
 	"\bwork_dir\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB/\x82\xb5\x18+\n" +
@@ -7755,29 +7756,28 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\bEnvEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:D\x8a\xb5\x18@\n" +
-	"\x03run\x12\vRun Command\x1a\x17Execute a shell command \x01*\autility2\bTerminal\"\x8d\a\n" +
-	"\x0fSubWorkflowArgs\x12d\n" +
-	"\x03ref\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB;\x82\xb5\x187\n" +
-	"5Workflow reference (builtin://name or project://name)R\x03ref\x12,\n" +
-	"\x06inline\x18\x02 \x01(\v2\x14.reliant.v1.WorkflowR\x06inline\x12b\n" +
-	"\x04args\x18\x03 \x03(\v2%.reliant.v1.SubWorkflowArgs.ArgsEntryB'\x82\xb5\x18#\n" +
-	"!Input values for the sub-workflowR\x04args\x12w\n" +
-	"\apresets\x18\x04 \x03(\v2(.reliant.v1.SubWorkflowArgs.PresetsEntryB3\x82\xb5\x18/\n" +
-	"-Preset configurations for sub-workflow inputsR\apresets\x12p\n" +
+	"\x03run\x12\vRun Command\x1a\x17Execute a shell command \x01*\autility2\bTerminal\"\x9f\t\n" +
+	"\x0fSubWorkflowArgs\x12\x9f\x01\n" +
+	"\x03ref\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBv\x82\xb5\x18r\n" +
+	"^The workflow to run: builtin://<name> for a built-in, project://<name> for one in this project\x82\x01\x0fbuiltin://agentR\x03ref\x12,\n" +
+	"\x06inline\x18\x02 \x01(\v2\x14.reliant.v1.WorkflowR\x06inline\x12\xaa\x01\n" +
+	"\x04args\x18\x03 \x03(\v2%.reliant.v1.SubWorkflowArgs.ArgsEntryBo\x82\xb5\x18k\n" +
+	"9Values for the sub-workflow's inputs, keyed by input name\x82\x01\x1f{\"prompt\": \"{{inputs.prompt}}\"}\x8a\x01\vJSON objectR\x04args\x12\xc7\x01\n" +
+	"\apresets\x18\x04 \x03(\v2(.reliant.v1.SubWorkflowArgs.PresetsEntryB\x82\x01\x82\xb5\x18~\n" +
+	"UA preset to apply per input group, as group: preset. Use default for ungrouped inputs\x82\x01\x16{\"default\": \"general\"}\x8a\x01\vJSON objectR\apresets\x12p\n" +
 	"\aproject\x18\x05 \x01(\v2\x19.reliant.v1.ProjectConfigB;\x82\xb5\x187\n" +
 	"+Working directory override for sub-workflowZ\badvancedR\aproject\x12d\n" +
 	"\x06thread\x18\x06 \x01(\v2\x18.reliant.v1.ThreadConfigB2\x82\xb5\x18.\n" +
-	",Thread mode: inherit (default), new, or forkR\x06thread\x12\\\n" +
-	"\vpassthrough\x18\a \x03(\tB:\x82\xb5\x186\n" +
-	"4Input names to forward from parent to child workflowR\vpassthrough\x1aO\n" +
+	",Thread mode: inherit (default), new, or forkR\x06thread\x12\x97\x01\n" +
+	"\vpassthrough\x18\a \x03(\tBu\x82\xb5\x18q\n" +
+	"GInputs of this workflow to hand to the sub-workflow under the same name\x82\x01\x0f[prompt, model]\x8a\x01\x13list of input namesR\vpassthrough\x1aO\n" +
 	"\tArgsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1a:\n" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:F\x8a\xb5\x18B\n" +
-	"\bworkflow\x12\x05Agent\x1a\x1fInvoke an agent or sub-workflow \x01*\aagentic2\x03Bot\"\xc0\n" +
-	"\n" +
+	"\bworkflow\x12\x05Agent\x1a\x1fInvoke an agent or sub-workflow \x01*\aagentic2\x03Bot\"\x8b\f\n" +
 	"\bLoopArgs\x12Q\n" +
 	"\x03ref\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB(\x82\xb5\x18$\n" +
 	" Workflow reference for loop body \x01R\x03ref\x12,\n" +
@@ -7791,19 +7791,19 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05while\x18\x06 \x01(\v2\x19.reliant.v1.DirectCelBoolB.\x82\xb5\x18*\n" +
 	"(CEL condition: loop continues while trueR\x05while\x12Z\n" +
 	"\bparallel\x18\b \x01(\v2\x13.reliant.v1.CelBoolB)\x82\xb5\x18%\n" +
-	"#Execute all iterations concurrentlyR\bparallel\x12m\n" +
-	"\x05items\x18\t \x01(\v2\x15.reliant.v1.CelStringB@\x82\xb5\x18<\n" +
-	":CEL expression evaluating to a list or map to iterate overR\x05items\x12G\n" +
+	"#Execute all iterations concurrentlyR\bparallel\x12\xc2\x01\n" +
+	"\x05items\x18\t \x01(\v2\x15.reliant.v1.CelStringB\x94\x01\x82\xb5\x18\x8f\x01\n" +
+	"_What to iterate over: an expression yielding a list or map. Each iteration sees it as iter.item\x82\x01\x1d{{nodes.plan.response.tasks}}\x8a\x01\vlist or mapR\x05items\x12\x82\x01\n" +
 	"\x03key\x18\n" +
-	" \x01(\tB5\x82\xb5\x181\n" +
-	"/CEL expression for output map key per iterationR\x03key\x12h\n" +
+	" \x01(\tBp\x82\xb5\x18l\n" +
+	"WFor parallel loops, each iteration's key in _results. Defaults to the iteration's index\x82\x01\x10{{iter.item.id}}R\x03key\x12h\n" +
 	"\n" +
 	"on_failure\x18\v \x01(\tBI\x82\xb5\x18E\n" +
 	"&Failure policy for parallel iterations\x12\x1bcontinue|fail_fast|fail_allR\tonFailure\x12[\n" +
 	"\x06thread\x18\f \x01(\v2\x18.reliant.v1.ThreadConfigB)\x82\xb5\x18%\n" +
-	"#Thread mode for parallel iterationsR\x06thread\x12\\\n" +
-	"\vpassthrough\x18\r \x03(\tB:\x82\xb5\x186\n" +
-	"4Input names to forward from parent to child workflowR\vpassthrough\x1aO\n" +
+	"#Thread mode for parallel iterationsR\x06thread\x12\x94\x01\n" +
+	"\vpassthrough\x18\r \x03(\tBr\x82\xb5\x18n\n" +
+	"DInputs of this workflow to hand to the loop body under the same name\x82\x01\x0f[prompt, model]\x8a\x01\x13list of input namesR\vpassthrough\x1aO\n" +
 	"\tArgsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1a:\n" +
@@ -7819,23 +7819,24 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\"G\n" +
 	"\x13NodeRouterCandidate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\"\xca\b\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\"\xef\n" +
+	"\n" +
 	"\n" +
 	"RouterArgs\x12h\n" +
 	"\tworkflows\x18\x01 \x03(\v2#.reliant.v1.RouterWorkflowCandidateB%\x82\xb5\x18!\n" +
-	"\x1fCandidate workflows to route toR\tworkflows\x12j\n" +
-	"\rsystem_prompt\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB.\x82\xb5\x18*\n" +
-	"(Custom system prompt for the routing LLMR\fsystemPrompt\x12m\n" +
-	"\x05model\x18\x04 \x01(\v2\x1c.reliant.v1.CelModelSelectorB9\x82\xb5\x185\n" +
-	"3Model for routing decision (defaults to fast model)R\x05model\x12t\n" +
+	"\x1fCandidate workflows to route toR\tworkflows\x12\xe2\x01\n" +
+	"\rsystem_prompt\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB\xa5\x01\x82\xb5\x18\xa0\x01\n" +
+	"HInstructions for the routing model, replacing the default routing prompt\x82\x01SRoute bug reports to triage and feature requests to plan. If unsure, choose triage.R\fsystemPrompt\x12\x85\x01\n" +
+	"\x05model\x18\x04 \x01(\v2\x1c.reliant.v1.CelModelSelectorBQ\x82\xb5\x18M\n" +
+	"DThe model that makes the routing decision (defaults to a fast model)\x82\x01\x04fastR\x05model\x12t\n" +
 	"\x06thread\x18\x06 \x01(\v2\x18.reliant.v1.ThreadConfigBB\x82\xb5\x18>\n" +
-	"<Thread mode for the selected workflow: inherit, new, or forkR\x06thread\x12V\n" +
-	"\bfallback\x18\a \x01(\tB:\x82\xb5\x186\n" +
-	"4Fallback preset or node ID if routing decision failsR\bfallback\x12u\n" +
+	"<Thread mode for the selected workflow: inherit, new, or forkR\x06thread\x12\x93\x01\n" +
+	"\bfallback\x18\a \x01(\tBw\x82\xb5\x18s\n" +
+	"gWhere to go if the routing decision fails: a preset name (workflow routing) or a node id (node routing)\x82\x01\ageneralR\bfallback\x12u\n" +
 	"\aproject\x18\b \x01(\v2\x19.reliant.v1.ProjectConfigB@\x82\xb5\x18<\n" +
-	"0Working directory override for selected workflowZ\badvancedR\aproject\x12\x81\x01\n" +
-	"\aoutputs\x18\t \x03(\v2#.reliant.v1.RouterArgs.OutputsEntryBB\x82\xb5\x18>\n" +
-	"2Declared output mappings (name → CEL expression)Z\badvancedR\aoutputs\x12m\n" +
+	"0Working directory override for selected workflowZ\badvancedR\aproject\x12\xd6\x01\n" +
+	"\aoutputs\x18\t \x03(\v2#.reliant.v1.RouterArgs.OutputsEntryB\x96\x01\x82\xb5\x18\x91\x01\n" +
+	"RNamed outputs for this step, each an expression over the chosen workflow's outputsZ\badvanced\x82\x01\"{\"summary\": \"{{outputs.message}}\"}\x8a\x01\vJSON objectR\aoutputs\x12m\n" +
 	"\x05nodes\x18\n" +
 	" \x03(\v2\x1f.reliant.v1.NodeRouterCandidateB6\x82\xb5\x182\n" +
 	"0Candidate nodes within this workflow to route toR\x05nodes\x1a:\n" +

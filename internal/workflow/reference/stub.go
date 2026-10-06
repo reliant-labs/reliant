@@ -106,6 +106,10 @@ type NodeFieldInfo struct {
 	Required    bool
 	Description string
 	EnumValues  []string
+	// Example is what a value looks like, as YAML would hold it.
+	Example string
+	// TypeHint names the kind of value when Type undersells it.
+	TypeHint string
 }
 
 // nodeTypes is the registry of node type documentation.
@@ -482,6 +486,8 @@ func protoFieldsToNodeFields(md protoreflect.MessageDescriptor) []NodeFieldInfo 
 			Required:    !f.IsRepeated && f.DefaultValue == "",
 			Description: f.Description,
 			EnumValues:  f.EnumValues,
+			Example:     f.Example,
+			TypeHint:    f.TypeHint,
 		})
 	}
 	return result

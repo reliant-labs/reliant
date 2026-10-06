@@ -168,9 +168,10 @@ describe('ProtoFieldRenderer', () => {
 
     const input = screen.getByDisplayValue('{{input.prompt}}') as HTMLInputElement
     expect(input.value).toBe('{{input.prompt}}')
-    // CEL text/textarea fields now show a toggle instead of a static badge.
-    // When value contains {{ }}, it auto-detects into CEL mode and shows the Braces toggle.
-    expect(screen.getByTitle('Use CEL expression')).toBeInTheDocument()
+    // CEL text/textarea fields show a Fixed / Expression toggle instead of a
+    // static badge. A value containing {{ }} auto-detects into Expression mode.
+    expect(screen.getByRole('button', { name: 'Expression' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Fixed' })).toHaveAttribute('aria-pressed', 'false')
   })
 
   it('normalizes CEL-capable boolean wrappers for checkbox state', () => {
@@ -203,5 +204,99 @@ describe('ProtoFieldRenderer', () => {
     expect(screen.queryByRole('switch')).toBeNull()
     const input = screen.getByDisplayValue('{{inputs.debug_mode}}') as HTMLInputElement
     expect(input.value).toBe('{{inputs.debug_mode}}')
+  })
+})
+
+// "Lots of inputs are super unclear about what values look like": an empty
+// box with only a mode toggle. Every field now says what goes in it.
+describe('ProtoFieldRenderer says what a value looks like', () => {
+  it('prints the description under the input, describes the input with it, and shows the example', () => {
+    render(
+      <ProtoFieldRenderer
+        schema={createSchema({
+          key: 'sid',
+          label: 'Message SID *',
+          description: 'The SM… id returned by Send message.',
+          example: 'SM0123456789abcdef0123456789abcdef',
+        })}
+        value=""
+        onChange={vi.fn()}
+      />,
+    )
+
+    const input = screen.getByLabelText('Message SID *')
+    expect(input).toHaveAttribute('placeholder', 'SM0123456789abcdef0123456789abcdef')
+    const hint = screen.getByText('The SM… id returned by Send message.')
+    expect(input).toHaveAttribute('aria-describedby', hint.id)
+    // The description is not repeated behind a ? when there is nothing more to say.
+    expect(screen.queryByRole('button', { name: 'Help' })).toBeNull()
+  })
+
+  it('keeps the ? for what the description does not say, and shows the type beside the label', () => {
+    render(
+      <ProtoFieldRenderer
+        schema={createSchema({
+          key: 'tool_calls',
+          label: 'Tool calls',
+          description: 'The tool calls a Call LLM step returned.',
+          helpText: 'Default: none',
+          typeHint: 'list of tool calls',
+        })}
+        value=""
+        onChange={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('list of tool calls')).toBeInTheDocument()
+    expect(screen.getByText('The tool calls a Call LLM step returned.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Help' })).toBeInTheDocument()
+  })
+
+  it('shows the expression example in Expression mode, and the shape of one when the example is a literal', () => {
+    const { rerender } = render(
+      <ProtoFieldRenderer
+        schema={createSchema({ key: 'tool_calls', label: 'Tool calls', celCapable: true, example: '{{nodes.call_llm.tool_calls}}' })}
+        value=""
+        onChange={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Expression' }))
+    expect(screen.getByRole('button', { name: 'Expression' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByPlaceholderText('{{nodes.call_llm.tool_calls}}')).toBeInTheDocument()
+
+    rerender(
+      <ProtoFieldRenderer
+        schema={createSchema({ key: 'to', label: 'To', celCapable: true, example: '+15551234567' })}
+        value=""
+        onChange={vi.fn()}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Expression' }))
+    expect(screen.getByPlaceholderText('{{nodes.<step>.<output>}}')).toBeInTheDocument()
+  })
+
+  it('says what an unset field defaults to instead of showing an empty box', () => {
+    render(
+      <ProtoFieldRenderer
+        schema={createSchema({ key: 'timeout', label: 'Timeout (seconds)', widget: 'number', defaultValue: 30, example: '10' })}
+        value={undefined}
+        onChange={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Timeout (seconds)')).toHaveAttribute('placeholder', 'Default: 30')
+  })
+
+  it('labels the value-mode toggle in words, with pressed state', () => {
+    render(
+      <ProtoFieldRenderer
+        schema={createSchema({ key: 'to', label: 'To', celCapable: true })}
+        value=""
+        onChange={vi.fn()}
+      />,
+    )
+    const group = screen.getByRole('group', { name: 'To: value mode' })
+    expect(group).toHaveTextContent('Fixed')
+    expect(group).toHaveTextContent('Expression')
+    expect(screen.getByRole('button', { name: 'Fixed' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Expression' })).toHaveAttribute('aria-pressed', 'false')
   })
 })

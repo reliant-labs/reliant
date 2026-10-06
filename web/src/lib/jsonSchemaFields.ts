@@ -38,21 +38,60 @@ function labelFor(name: string, property: JsonSchema): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-function helpFor(property: JsonSchema, required: boolean): string | undefined {
+/** What the ? popover adds to the inline description: the default and range. */
+function extrasFor(property: JsonSchema): string | undefined {
   const parts: string[] = [];
-  if (property.description) parts.push(property.description.trim());
   if (property.default !== undefined) parts.push(`Default: ${JSON.stringify(property.default)}`);
   if (property.minimum !== undefined && property.maximum !== undefined) parts.push(`Range: ${property.minimum} – ${property.maximum}`);
-  if (required) parts.push("Required");
   return parts.length > 0 ? parts.join(". ") : undefined;
 }
 
-function placeholderFor(property: JsonSchema, kind: ParamValueKind): string | undefined {
+function isScalar(value: unknown): value is string | number | boolean {
+  return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
+}
+
+/** examples[0] as the text an author would type into this field's input. */
+function exampleFor(property: JsonSchema, kind: ParamValueKind): string | undefined {
   const example = property.examples?.[0];
-  if (typeof example === "string" || typeof example === "number") return String(example);
+  if (example === undefined || example === null) return undefined;
+  if (isScalar(example)) return String(example);
+  if (kind === "list" && Array.isArray(example) && example.every(isScalar)) return example.map(String).join(", ");
+  return JSON.stringify(example);
+}
+
+/** A fallback placeholder for the shapes that are hardest to guess, when there is no example. */
+function fallbackPlaceholder(kind: ParamValueKind): string | undefined {
   if (kind === "list") return "one, two, three";
-  if (kind === "json") return '{"key": "value"} or {{ nodes.x.data }}';
+  if (kind === "json") return '{"key": "value"}';
   return undefined;
+}
+
+const FORMAT_HINTS: Record<string, string> = {
+  uri: "URL",
+  email: "email address",
+  "date-time": "date and time, RFC 3339",
+  date: "date, YYYY-MM-DD",
+};
+
+/**
+ * The kind of value, when the widget does not already say it: a number box,
+ * a toggle and a dropdown need none, but a textarea could hold anything.
+ */
+function typeHintFor(property: JsonSchema, kind: ParamValueKind): string | undefined {
+  switch (kind) {
+    case "list":
+      return "list, comma-separated";
+    case "json": {
+      const type = schemaType(property);
+      if (type === "object") return "JSON object";
+      if (type === "array") return "JSON list";
+      return "JSON value";
+    }
+    case "string":
+      return property.format ? FORMAT_HINTS[property.format] : undefined;
+    default:
+      return undefined;
+  }
 }
 
 function valueKindOf(property: JsonSchema): ParamValueKind {
@@ -75,19 +114,37 @@ function valueKindOf(property: JsonSchema): ParamValueKind {
   }
 }
 
-export function actionParamFields(paramsSchema: JsonSchema | undefined): ActionParamField[] {
+/**
+ * The form's order: required params first, then the rest, each in the order
+ * the manifest declares them (`order`, CatalogEntry.param_order). Never
+ * alphabetical: Post message's author lists Channel and Text before Blocks.
+ * A param missing from `order` keeps the schema's order, after the rest.
+ */
+function orderProperties(entries: Array<[string, JsonSchema]>, required: Set<string>, order: readonly string[]): Array<[string, JsonSchema]> {
+  const rank = new Map(order.map((name, index) => [name, index]));
+  const position = (name: string, fallback: number) => rank.get(name) ?? order.length + fallback;
+  return entries
+    .map((entry, index) => ({ entry, required: required.has(entry[0]), at: position(entry[0], index) }))
+    .sort((a, b) => Number(b.required) - Number(a.required) || a.at - b.at)
+    .map(({ entry }) => entry);
+}
+
+export function actionParamFields(paramsSchema: JsonSchema | undefined, order: readonly string[] = []): ActionParamField[] {
   const required = new Set(paramsSchema?.required ?? []);
-  return schemaProperties(paramsSchema)
+  return orderProperties(schemaProperties(paramsSchema), required, order)
     .filter(([name]) => !RESERVED_PARAMS.has(name))
     .map(([name, property]) => {
       const isRequired = required.has(name);
       const valueKind = valueKindOf(property);
+      const example = exampleFor(property, valueKind);
       const base = {
         key: name,
         label: isRequired ? `${labelFor(name, property)} *` : labelFor(name, property),
-        description: property.description,
-        helpText: helpFor(property, isRequired),
-        placeholder: placeholderFor(property, valueKind),
+        description: property.description?.trim() || undefined,
+        helpText: extrasFor(property),
+        example,
+        placeholder: example === undefined ? fallbackPlaceholder(valueKind) : undefined,
+        typeHint: Array.isArray(property.enum) && property.enum.length > 0 ? undefined : typeHintFor(property, valueKind),
         celCapable: true,
         defaultValue: property.default,
         minValue: property.minimum,
@@ -101,7 +158,9 @@ export function actionParamFields(paramsSchema: JsonSchema | undefined): ActionP
           valueKind: "string",
           showCelModeToggle: true,
           options: property.enum.map((option) => ({ value: String(option), label: String(option) })),
-          allowEmptyOption: !isRequired,
+          // Unset means the default, which the select shows selected; an
+          // extra "None" beside it would offer the same value twice.
+          allowEmptyOption: !isRequired && property.default === undefined,
           emptyOptionLabel: "None",
         };
       } else if (valueKind === "boolean") {

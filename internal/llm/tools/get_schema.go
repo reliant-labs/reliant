@@ -187,7 +187,11 @@ func getNodeTypeDoc(typeName string) (string, error) {
 		// Detailed field descriptions
 		sb.WriteString("### Field Details\n\n")
 		for _, field := range info.Fields {
-			fmt.Fprintf(&sb, "**%s** (%s)", field.Name, field.Type)
+			fieldType := field.Type
+			if field.TypeHint != "" {
+				fieldType += ", " + field.TypeHint
+			}
+			fmt.Fprintf(&sb, "**%s** (%s)", field.Name, fieldType)
 			if field.Required {
 				sb.WriteString(" - *required*")
 			}
@@ -195,6 +199,9 @@ func getNodeTypeDoc(typeName string) (string, error) {
 			if field.Description != "" {
 				sb.WriteString(field.Description)
 				sb.WriteString("\n")
+			}
+			if field.Example != "" {
+				fmt.Fprintf(&sb, "Example: `%s`\n", field.Example)
 			}
 			sb.WriteString("\n")
 		}

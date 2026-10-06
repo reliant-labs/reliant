@@ -1012,8 +1012,6 @@ type NodeInputField struct {
 	MaxValue *float64 `protobuf:"fixed64,9,opt,name=max_value,json=maxValue,proto3,oneof" json:"max_value,omitempty"`
 	// Human-readable short label for form controls.
 	Label string `protobuf:"bytes,10,opt,name=label,proto3" json:"label,omitempty"`
-	// Optional placeholder text for text-like controls.
-	Placeholder *string `protobuf:"bytes,11,opt,name=placeholder,proto3,oneof" json:"placeholder,omitempty"`
 	// Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
 	VisibilityContexts []string `protobuf:"bytes,12,rep,name=visibility_contexts,json=visibilityContexts,proto3" json:"visibility_contexts,omitempty"`
 	// Optional cleanup behavior hint for UI/client preprocessing.
@@ -1021,7 +1019,13 @@ type NodeInputField struct {
 	// Whether this field supports CEL expressions (wrapped in CelX type).
 	IsCel bool `protobuf:"varint,14,opt,name=is_cel,json=isCel,proto3" json:"is_cel,omitempty"`
 	// Per-field grouping category (e.g., "Model Settings", "Tools").
-	Category      string `protobuf:"bytes,15,opt,name=category,proto3" json:"category,omitempty"`
+	Category string `protobuf:"bytes,15,opt,name=category,proto3" json:"category,omitempty"`
+	// What a value looks like, as an author writes it: a literal or a
+	// {{ expression }}. Shown as the empty input's placeholder. FieldMeta.example.
+	Example string `protobuf:"bytes,16,opt,name=example,proto3" json:"example,omitempty"`
+	// The kind of value in a few words ("list of tool calls"), when the type
+	// undersells it. FieldMeta.type_hint.
+	TypeHint      string `protobuf:"bytes,17,opt,name=type_hint,json=typeHint,proto3" json:"type_hint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1126,13 +1130,6 @@ func (x *NodeInputField) GetLabel() string {
 	return ""
 }
 
-func (x *NodeInputField) GetPlaceholder() string {
-	if x != nil && x.Placeholder != nil {
-		return *x.Placeholder
-	}
-	return ""
-}
-
 func (x *NodeInputField) GetVisibilityContexts() []string {
 	if x != nil {
 		return x.VisibilityContexts
@@ -1157,6 +1154,20 @@ func (x *NodeInputField) GetIsCel() bool {
 func (x *NodeInputField) GetCategory() string {
 	if x != nil {
 		return x.Category
+	}
+	return ""
+}
+
+func (x *NodeInputField) GetExample() string {
+	if x != nil {
+		return x.Example
+	}
+	return ""
+}
+
+func (x *NodeInputField) GetTypeHint() string {
+	if x != nil {
+		return x.TypeHint
 	}
 	return ""
 }
@@ -2643,7 +2654,11 @@ type CatalogEntry struct {
 	Connection    *CatalogConnectionRequirement `protobuf:"bytes,6,opt,name=connection,proto3" json:"connection,omitempty"`
 	// ToolName is the agent tool this action is also exposed as (for example
 	// "github__user_get"); empty when it is not exposed to agents.
-	ToolName      string `protobuf:"bytes,7,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	ToolName string `protobuf:"bytes,7,opt,name=tool_name,json=toolName,proto3" json:"tool_name,omitempty"`
+	// ParamOrder is the action's params in the order its manifest declares
+	// them. ParamsSchema is a Struct, so its keys arrive in no meaningful order;
+	// a form lists required params first, then the rest, each in this order.
+	ParamOrder    []string `protobuf:"bytes,8,rep,name=param_order,json=paramOrder,proto3" json:"param_order,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2725,6 +2740,13 @@ func (x *CatalogEntry) GetToolName() string {
 		return x.ToolName
 	}
 	return ""
+}
+
+func (x *CatalogEntry) GetParamOrder() []string {
+	if x != nil {
+		return x.ParamOrder
+	}
+	return nil
 }
 
 // CatalogConnectionRequirement is what using an entry asks of a connection.
@@ -2864,7 +2886,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x10ListToolsRequest\"U\n" +
 	"\x11ListToolsResponse\x12*\n" +
 	"\x05tools\x18\x01 \x03(\v2\x14.reliant.v1.ToolInfoR\x05tools\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xae\x04\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\xc1\x04\n" +
 	"\x0eNodeInputField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12 \n" +
@@ -2877,18 +2899,18 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\tmin_value\x18\b \x01(\x01H\x00R\bminValue\x88\x01\x01\x12 \n" +
 	"\tmax_value\x18\t \x01(\x01H\x01R\bmaxValue\x88\x01\x01\x12\x14\n" +
 	"\x05label\x18\n" +
-	" \x01(\tR\x05label\x12%\n" +
-	"\vplaceholder\x18\v \x01(\tH\x02R\vplaceholder\x88\x01\x01\x12/\n" +
+	" \x01(\tR\x05label\x12/\n" +
 	"\x13visibility_contexts\x18\f \x03(\tR\x12visibilityContexts\x120\n" +
-	"\x11cleanup_semantics\x18\r \x01(\tH\x03R\x10cleanupSemantics\x88\x01\x01\x12\x15\n" +
+	"\x11cleanup_semantics\x18\r \x01(\tH\x02R\x10cleanupSemantics\x88\x01\x01\x12\x15\n" +
 	"\x06is_cel\x18\x0e \x01(\bR\x05isCel\x12\x1a\n" +
-	"\bcategory\x18\x0f \x01(\tR\bcategoryB\f\n" +
+	"\bcategory\x18\x0f \x01(\tR\bcategory\x12\x18\n" +
+	"\aexample\x18\x10 \x01(\tR\aexample\x12\x1b\n" +
+	"\ttype_hint\x18\x11 \x01(\tR\btypeHintB\f\n" +
 	"\n" +
 	"_min_valueB\f\n" +
 	"\n" +
-	"_max_valueB\x0e\n" +
-	"\f_placeholderB\x14\n" +
-	"\x12_cleanup_semantics\"\x98\x02\n" +
+	"_max_valueB\x14\n" +
+	"\x12_cleanup_semanticsJ\x04\b\v\x10\fR\vplaceholder\"\x98\x02\n" +
 	"\bNodeInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +
@@ -3000,7 +3022,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x16GetCatalogEntryRequest\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\"I\n" +
 	"\x17GetCatalogEntryResponse\x12.\n" +
-	"\x05entry\x18\x01 \x01(\v2\x18.reliant.v1.CatalogEntryR\x05entry\"\x8e\x03\n" +
+	"\x05entry\x18\x01 \x01(\v2\x18.reliant.v1.CatalogEntryR\x05entry\"\xaf\x03\n" +
 	"\fCatalogEntry\x129\n" +
 	"\asummary\x18\x01 \x01(\v2\x1f.reliant.v1.CatalogEntrySummaryR\asummary\x12 \n" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12<\n" +
@@ -3010,7 +3032,9 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"connection\x18\x06 \x01(\v2(.reliant.v1.CatalogConnectionRequirementR\n" +
 	"connection\x12\x1b\n" +
-	"\ttool_name\x18\a \x01(\tR\btoolName\"\xcc\x01\n" +
+	"\ttool_name\x18\a \x01(\tR\btoolName\x12\x1f\n" +
+	"\vparam_order\x18\b \x03(\tR\n" +
+	"paramOrder\"\xcc\x01\n" +
 	"\x1cCatalogConnectionRequirement\x12\x1a\n" +
 	"\brequired\x18\x01 \x01(\bR\brequired\x12;\n" +
 	"\amethods\x18\x02 \x03(\v2!.reliant.v1.IntegrationAuthMethodR\amethods\x12S\n" +

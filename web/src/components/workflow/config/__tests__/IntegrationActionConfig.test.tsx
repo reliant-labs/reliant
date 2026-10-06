@@ -60,7 +60,7 @@ const paramsSchema = {
   },
 };
 
-function catalogEntry(methods: Array<{ kind: ConnectionAuthKind; available?: boolean }>, opts: { required?: boolean } = {}) {
+function catalogEntry(methods: Array<{ kind: ConnectionAuthKind; available?: boolean }>, opts: { required?: boolean; paramOrder?: string[] } = {}) {
   return create(GetCatalogEntryResponseSchema, {
     entry: create(CatalogEntrySchema, {
       summary: create(CatalogEntrySummarySchema, {
@@ -75,6 +75,7 @@ function catalogEntry(methods: Array<{ kind: ConnectionAuthKind; available?: boo
       }),
       description: "Open an issue in owner/repo.",
       paramsSchema,
+      paramOrder: opts.paramOrder ?? [],
       outputSchema: { type: "object", properties: { number: { type: "integer" } } },
       connection: create(CatalogConnectionRequirementSchema, {
         required: opts.required ?? true,
@@ -167,6 +168,25 @@ describe("IntegrationActionConfig", () => {
     expect(screen.getByDisplayValue("{{ trigger.payload.data.issue.title }}")).toBeInTheDocument();
   });
 
+  // A Struct's keys arrive sorted; the form follows the manifest instead.
+  it("lists required params first, then the manifest's declared order", async () => {
+    getCatalogEntry.mockResolvedValue(
+      catalogEntry([{ kind: ConnectionAuthKind.OAUTH2 }], { paramOrder: ["title", "owner", "repo", "priority", "body", "labels", "draft", "connection"] }),
+    );
+    renderConfig();
+    await screen.findByLabelText("Title *");
+    const labels = [...document.querySelectorAll(".cpv2-field-label label")].map((el) => el.textContent);
+    expect(labels).toEqual(["Title *", "Owner *", "Repo *", "Priority", "Body", "Labels"]);
+  });
+
+  it("prints each param's description under its input", async () => {
+    getCatalogEntry.mockResolvedValue(catalogEntry([{ kind: ConnectionAuthKind.OAUTH2 }]));
+    renderConfig();
+    const owner = await screen.findByLabelText("Owner *");
+    const hint = screen.getByText("The account that owns the repository.");
+    expect(owner).toHaveAttribute("aria-describedby", hint.id);
+  });
+
   it("explains an action the catalog does not know", async () => {
     getCatalogEntry.mockRejectedValue(new Error("not found"));
     renderConfig(newActionStep("gone", "acme/removed@1"));
@@ -207,6 +227,14 @@ describe("IntegrationActionConfig", () => {
       expect(within(dialog).getByText("Connect GitHub")).toBeInTheDocument();
       expect(within(dialog).getByRole("radio", { name: "Sign in" })).toBeInTheDocument();
       expect(within(dialog).getByRole("radio", { name: "API key" })).toBeInTheDocument();
+    });
+
+    it("unavailable: says it can't be connected here instead of offering a dead Connect", async () => {
+      getCatalogEntry.mockResolvedValue(catalogEntry([{ kind: ConnectionAuthKind.OAUTH2, available: false }]));
+      renderConfig();
+
+      expect(await screen.findByText("GitHub can't be connected on this deployment yet.")).toBeInTheDocument();
+      expect(screen.queryByRole("button", { name: /Connect GitHub/ })).not.toBeInTheDocument();
     });
 
     it("delegated: says the connected account is used, with a link to Settings", async () => {

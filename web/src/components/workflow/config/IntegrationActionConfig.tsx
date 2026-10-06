@@ -104,7 +104,7 @@ export function IntegrationActionConfig({ step, onUpdate, isReadOnly = false }: 
 
   const entry = entryQuery.data;
   const integration = entry.summary.integration;
-  const fields = actionParamFields(entry.paramsSchema);
+  const fields = actionParamFields(entry.paramsSchema, entry.paramOrder);
   const params = getActionParams(step);
   const missing = missingRequiredParams(fields, params);
 

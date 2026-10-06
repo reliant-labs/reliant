@@ -620,6 +620,8 @@ func (s *CatalogService) ListNodes(
 				VisibilityContexts: field.VisibilityContexts,
 				IsCel:              field.IsCEL,
 				Category:           field.Category,
+				Example:            field.Example,
+				TypeHint:           field.TypeHint,
 			}
 
 			// Set default value as string
@@ -633,9 +635,6 @@ func (s *CatalogService) ListNodes(
 			}
 			if field.Max != nil {
 				protoField.MaxValue = field.Max
-			}
-			if field.Placeholder != nil {
-				protoField.Placeholder = field.Placeholder
 			}
 			if field.CleanupSemantics != nil {
 				protoField.CleanupSemantics = field.CleanupSemantics

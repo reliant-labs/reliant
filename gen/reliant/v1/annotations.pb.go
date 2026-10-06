@@ -46,8 +46,6 @@ type FieldMeta struct {
 	MaxValue *float64 `protobuf:"fixed64,8,opt,name=max_value,json=maxValue,proto3,oneof" json:"max_value,omitempty"`
 	// Human-readable short label for form controls.
 	Label string `protobuf:"bytes,9,opt,name=label,proto3" json:"label,omitempty"`
-	// Optional placeholder text for text-like controls.
-	Placeholder *string `protobuf:"bytes,10,opt,name=placeholder,proto3,oneof" json:"placeholder,omitempty"`
 	// Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
 	VisibilityContexts []string `protobuf:"bytes,11,rep,name=visibility_contexts,json=visibilityContexts,proto3" json:"visibility_contexts,omitempty"`
 	// Optional cleanup behavior hint for UI/client preprocessing.
@@ -64,7 +62,19 @@ type FieldMeta struct {
 	// message, on an element of a repeated message, or on a map value is
 	// cleared too. Reaching the workflow through a parent that is itself not
 	// message_only is not an exemption.
-	MessageOnly   bool `protobuf:"varint,15,opt,name=message_only,json=messageOnly,proto3" json:"message_only,omitempty"`
+	MessageOnly bool `protobuf:"varint,15,opt,name=message_only,json=messageOnly,proto3" json:"message_only,omitempty"`
+	// Example is what a value looks like, written as an author would write it
+	// in YAML: a literal ("30m", "feature/login") or, for a field that is
+	// normally wired from another node, the expression a typical workflow uses
+	// ("{{nodes.call_llm.tool_calls}}"). The editor shows it as the empty
+	// input's placeholder, and the workflow reference prints it.
+	Example string `protobuf:"bytes,16,opt,name=example,proto3" json:"example,omitempty"`
+	// TypeHint names the kind of value in a few words when the field's proto
+	// type undersells it: a CelString that must evaluate to a list of tool
+	// calls is "list of tool calls", a duration string is "duration". The
+	// editor shows it beside the label. Leave it empty when the widget already
+	// says it (a number box, a toggle, a dropdown).
+	TypeHint      string `protobuf:"bytes,17,opt,name=type_hint,json=typeHint,proto3" json:"type_hint,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -162,13 +172,6 @@ func (x *FieldMeta) GetLabel() string {
 	return ""
 }
 
-func (x *FieldMeta) GetPlaceholder() string {
-	if x != nil && x.Placeholder != nil {
-		return *x.Placeholder
-	}
-	return ""
-}
-
 func (x *FieldMeta) GetVisibilityContexts() []string {
 	if x != nil {
 		return x.VisibilityContexts
@@ -195,6 +198,20 @@ func (x *FieldMeta) GetMessageOnly() bool {
 		return x.MessageOnly
 	}
 	return false
+}
+
+func (x *FieldMeta) GetExample() string {
+	if x != nil {
+		return x.Example
+	}
+	return ""
+}
+
+func (x *FieldMeta) GetTypeHint() string {
+	if x != nil {
+		return x.TypeHint
+	}
+	return ""
 }
 
 // NodeMeta describes metadata for a workflow node args message.
@@ -318,7 +335,7 @@ var File_reliant_v1_annotations_proto protoreflect.FileDescriptor
 const file_reliant_v1_annotations_proto_rawDesc = "" +
 	"\n" +
 	"\x1creliant/v1/annotations.proto\x12\n" +
-	"reliant.v1\x1a google/protobuf/descriptor.proto\"\xa5\x04\n" +
+	"reliant.v1\x1a google/protobuf/descriptor.proto\"\xb8\x04\n" +
 	"\tFieldMeta\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x1f\n" +
 	"\venum_values\x18\x02 \x01(\tR\n" +
@@ -329,19 +346,19 @@ const file_reliant_v1_annotations_proto_rawDesc = "" +
 	"\rdefault_value\x18\x06 \x01(\tR\fdefaultValue\x12 \n" +
 	"\tmin_value\x18\a \x01(\x01H\x00R\bminValue\x88\x01\x01\x12 \n" +
 	"\tmax_value\x18\b \x01(\x01H\x01R\bmaxValue\x88\x01\x01\x12\x14\n" +
-	"\x05label\x18\t \x01(\tR\x05label\x12%\n" +
-	"\vplaceholder\x18\n" +
-	" \x01(\tH\x02R\vplaceholder\x88\x01\x01\x12/\n" +
+	"\x05label\x18\t \x01(\tR\x05label\x12/\n" +
 	"\x13visibility_contexts\x18\v \x03(\tR\x12visibilityContexts\x120\n" +
-	"\x11cleanup_semantics\x18\f \x01(\tH\x03R\x10cleanupSemantics\x88\x01\x01\x12\x1a\n" +
+	"\x11cleanup_semantics\x18\f \x01(\tH\x02R\x10cleanupSemantics\x88\x01\x01\x12\x1a\n" +
 	"\brequired\x18\x0e \x01(\bR\brequired\x12!\n" +
-	"\fmessage_only\x18\x0f \x01(\bR\vmessageOnlyB\f\n" +
+	"\fmessage_only\x18\x0f \x01(\bR\vmessageOnly\x12\x18\n" +
+	"\aexample\x18\x10 \x01(\tR\aexample\x12\x1b\n" +
+	"\ttype_hint\x18\x11 \x01(\tR\btypeHintB\f\n" +
 	"\n" +
 	"_min_valueB\f\n" +
 	"\n" +
-	"_max_valueB\x0e\n" +
-	"\f_placeholderB\x14\n" +
-	"\x12_cleanup_semantics\"\xc1\x01\n" +
+	"_max_valueB\x14\n" +
+	"\x12_cleanup_semanticsJ\x04\b\n" +
+	"\x10\vR\vplaceholder\"\xc1\x01\n" +
 	"\bNodeMeta\x12\x1b\n" +
 	"\tnode_type\x18\x01 \x01(\tR\bnodeType\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +

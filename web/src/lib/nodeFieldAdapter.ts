@@ -16,6 +16,20 @@ function formatLabel(name: string): string {
 }
 
 /**
+ * A field's example as its input takes it. An example is written as YAML
+ * holds it, so a list is `[a, b]`; a list field's input is comma-separated.
+ */
+function exampleForInput(field: NodeInputField): string | undefined {
+  const example = (field.example ?? '').trim()
+  if (!example) return undefined
+  const isList = field.type === 'array' || field.type === 'string_list'
+  if (isList && example.startsWith('[') && example.endsWith(']')) {
+    return example.slice(1, -1).split(',').map((entry) => entry.trim()).filter(Boolean).join(', ')
+  }
+  return example
+}
+
+/**
  * Convert a NodeInputField (catalog RPC type) to a ProtoFieldSchema
  * (what ProtoFieldRenderer consumes). This eliminates the need for
  * hand-rolled rendering logic in ActionStepConfig.
@@ -23,9 +37,9 @@ function formatLabel(name: string): string {
 export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema {
   const label = field.label || formatLabel(field.name)
 
-  // Build enriched help text: combine description with default/range info
+  // The description is printed under the input; the ? popover adds only the
+  // default and range.
   const helpParts: string[] = []
-  if (field.description) helpParts.push(field.description)
   if (field.defaultValue) helpParts.push(`Default: ${formatValueForDisplay(field.defaultValue)}`)
   if (field.minValue !== undefined && field.maxValue !== undefined) {
     helpParts.push(`Range: ${field.minValue} – ${field.maxValue}`)
@@ -42,7 +56,8 @@ export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema 
     label,
     description: field.description || undefined,
     helpText,
-    placeholder: field.placeholder,
+    example: exampleForInput(field),
+    typeHint: field.typeHint || undefined,
     omitIfEmpty: field.cleanupSemantics === 'trim',
     defaultValue: field.defaultValue || undefined,
     minValue: field.minValue,
@@ -58,7 +73,9 @@ export function nodeInputFieldToSchema(field: NodeInputField): ProtoFieldSchema 
       celCapable: true,
       showCelModeToggle: true,
       options: field.enumValues.map((v) => ({ value: v, label: v })),
-      allowEmptyOption: !field.required,
+      // Unset means the default, which the select shows selected. An empty
+      // "None" option beside it is how Thinking level offered None and none.
+      allowEmptyOption: !field.required && !field.defaultValue,
       emptyOptionLabel: 'None',
     }
   }
@@ -174,9 +191,9 @@ export function inputDefToSchema(name: string, input: InputDef): ProtoFieldSchem
   const max = getInputMax(input)
   const ui = getInputUI(input)
 
-  // Build help text from description + default + range
+  // The description is printed under the input; the ? popover adds only the
+  // default and range.
   const helpParts: string[] = []
-  if (description) helpParts.push(description)
   if (defaultVal !== undefined && defaultVal !== null && defaultVal !== '') {
     helpParts.push(`Default: ${formatValueForDisplay(defaultVal)}`)
   }
@@ -221,7 +238,9 @@ export function inputDefToSchema(name: string, input: InputDef): ProtoFieldSchem
       celCapable: true,
       showCelModeToggle: true,
       options: enumValues.map((v) => ({ value: v, label: v || 'Off' })),
-      allowEmptyOption: true,
+      // No second way to say "unset": not when "" is already an option
+      // ("Off"), and not when unset means a default the select shows.
+      allowEmptyOption: !enumValues.includes('') && (defaultVal === undefined || defaultVal === null || defaultVal === ''),
       emptyOptionLabel: 'None',
     } as ProtoFieldSchema
   }

@@ -322,6 +322,8 @@ func TestGetCatalogEntry_ReturnsSchemasAndConnectionRequirement(t *testing.T) {
 	params := e.GetParamsSchema().AsMap()
 	assert.Equal(t, []any{"email"}, params["required"])
 	assert.Contains(t, params["properties"], "email")
+	// The Struct's keys arrive sorted; the declared order travels beside it.
+	assert.Equal(t, []string{"email"}, e.GetParamOrder())
 	assert.Contains(t, e.GetOutputSchema().AsMap()["properties"], "id")
 	assert.Nil(t, e.GetPayloadSchema(), "an action has no trigger payload")
 

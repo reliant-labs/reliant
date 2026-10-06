@@ -10,6 +10,7 @@ import type { ModelValue } from './ModelDropdown'
 import type { ProtoFieldContext, ProtoFieldSchema } from '../../types/workflowFieldSchema'
 import { isProtoFieldVisible, normalizeProtoFieldValue } from '../../types/workflowFieldSchema'
 import { normalizeCelNumberString, unwrapCelLiteralOrExpr } from '../../lib/celAdapter'
+import { formatValueForDisplay } from '../../lib/paramUtils'
 
 interface ProtoFieldRendererProps {
   schema: ProtoFieldSchema
@@ -25,6 +26,30 @@ interface ProtoFieldRendererProps {
 }
 
 const DEFAULT_CEL_REGEX = /\{\{[\s\S]*\}\}/
+
+/**
+ * What an expression-mode input shows when empty: the field's own example
+ * when it is an expression (`{{nodes.call_llm.tool_calls}}`), else the shape
+ * every template takes, so `{}` mode never opens on a blank box.
+ */
+export function expressionPlaceholder(schema: ProtoFieldSchema): string {
+  if (schema.celExpressionOnly) {
+    return schema.example || schema.placeholder || 'nodes.<step>.<output>'
+  }
+  return [schema.example, schema.placeholder].find((text) => text && DEFAULT_CEL_REGEX.test(text)) ?? '{{nodes.<step>.<output>}}'
+}
+
+/** A declared default as words for "Default: …", or undefined when there is none. */
+function describeDefault(value: unknown): string | undefined {
+  if (value === undefined || value === null || value === '') return undefined
+  if (Array.isArray(value)) return value.length > 0 ? value.map((entry) => formatValueForDisplay(entry)).join(', ') : undefined
+  if (typeof value === 'object') {
+    const model = value as { id?: unknown; tags?: unknown }
+    if (typeof model.id === 'string' && model.id) return model.id
+    if (Array.isArray(model.tags) && model.tags.length > 0) return model.tags.join(', ')
+  }
+  return formatValueForDisplay(value)
+}
 
 /** Split the comma-separated form of a list field into its stored entries. */
 function splitStringList(value: string): string[] {
@@ -70,7 +95,16 @@ export function ProtoFieldRenderer({
   currentNodeType,
   hideCELToggle = false,
 }: ProtoFieldRendererProps) {
-  const helperText = schema.helpText || schema.description
+  // The description is printed under the input, where it is read; the ?
+  // popover carries only what it adds (default, range), never a copy.
+  const inlineHint = schema.description || schema.helpText
+  const popoverText = schema.helpText && schema.helpText !== inlineHint ? schema.helpText : undefined
+  // An unset field with a default runs with the default, so its empty input
+  // says so rather than looking like "nothing".
+  const defaultLabel = describeDefault(schema.defaultValue)
+  const literalPlaceholder = schema.placeholder ?? (defaultLabel ? `Default: ${defaultLabel}` : schema.example)
+  const celPlaceholder = expressionPlaceholder(schema)
+  const hasPicker = schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools'
   const normalizedValue = normalizeProtoFieldValue(schema, value)
   const resolvedCelContext = celContext === 'workflow' ? 'default' : celContext
   const isInlineCheckbox = schema.widget === 'checkbox' && typeof normalizedValue !== 'string'
@@ -79,6 +113,7 @@ export function ProtoFieldRenderer({
   const modelStringValue = getModelStringValue(value)
   const numberStringValue = normalizeCelNumberString(value)
   const inputId = schema.key.replace(/\./g, '-')
+  const hintId = inlineHint ? `${inputId}-hint` : undefined
 
   const supportsModeToggle = !hideCELToggle && schema.celCapable && !schema.celExpressionOnly && (
     (schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'number') ||
@@ -140,9 +175,10 @@ export function ProtoFieldRenderer({
         <span className="cpv2-cel-toggle active">CEL</span>
       )}
       {supportsModeToggle && !disabled && (
-        <div className="cpv2-mode-group gap-[2px]">
+        <div role="group" aria-label={`${schema.label}: value mode`} className="cpv2-mode-group gap-[2px]">
           <button
             type="button"
+            aria-pressed={!useCelMode}
             onClick={() => {
               setUseCelMode(false)
               if (schema.widget === 'select' && !canRenderAsSelectLiteral(normalizedStringValue, options)) {
@@ -150,29 +186,28 @@ export function ProtoFieldRenderer({
                 onChange(fallbackOption ? fallbackOption.value : '')
               }
             }}
-            className={cn('cpv2-mode-pill !flex-none !p-[3px_6px]', !useCelMode && 'active')}
-            title={schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' ? 'Use dropdown' : 'Use literal value'}
+            className={cn('cpv2-mode-pill cpv2-mode-pill-compact', !useCelMode && 'active')}
+            title={hasPicker ? 'Pick a value' : 'Type a fixed value'}
           >
-            {schema.widget === 'select' || schema.widget === 'model' || schema.widget === 'tools' ? (
-              <List className="w-3 h-3" />
-            ) : (
-              <ALargeSmall className="w-3 h-3" />
-            )}
+            {hasPicker ? <List className="w-3 h-3" aria-hidden /> : <ALargeSmall className="w-3 h-3" aria-hidden />}
+            Fixed
           </button>
           <button
             type="button"
+            aria-pressed={useCelMode}
             onClick={() => setUseCelMode(true)}
-            className={cn('cpv2-mode-pill !flex-none !p-[3px_6px]', useCelMode && 'active')}
-            title="Use CEL expression"
+            className={cn('cpv2-mode-pill cpv2-mode-pill-compact', useCelMode && 'active')}
+            title="Compute the value with a {{ }} expression"
           >
-            <Braces className="w-3 h-3" />
+            <Braces className="w-3 h-3" aria-hidden />
+            Expression
           </button>
         </div>
       )}
     </div>
   )
 
-  const renderCelInput = (celValue: string, { multiline = false, placeholder = schema.placeholder }: { multiline?: boolean; placeholder?: string } = {}) => (
+  const renderCelInput = (celValue: string, { multiline = false, placeholder = celPlaceholder }: { multiline?: boolean; placeholder?: string } = {}) => (
     <CELInput
       id={inputId}
       value={celValue}
@@ -195,7 +230,8 @@ export function ProtoFieldRenderer({
         <div className="cpv2-field-label">
           <span className="flex items-center gap-1.5">
             <label htmlFor={inputId}>{schema.label}</label>
-            {helperText && <HelpPopover content={helperText} title={schema.label} />}
+            {schema.typeHint && <span className="cpv2-field-type">{schema.typeHint}</span>}
+            {popoverText && <HelpPopover content={popoverText} title={schema.label} />}
           </span>
           {labelAction}
         </div>
@@ -209,7 +245,8 @@ export function ProtoFieldRenderer({
             id={inputId}
             value={normalizedStringValue}
             onChange={(event) => onChange(event.target.value)}
-            placeholder={schema.placeholder}
+            placeholder={literalPlaceholder}
+            aria-describedby={hintId}
             disabled={disabled}
             className="cpv2-field-input"
           />
@@ -223,7 +260,8 @@ export function ProtoFieldRenderer({
             id={inputId}
             value={displayStringValue}
             onChange={(event) => emitChange(event.target.value)}
-            placeholder={schema.placeholder}
+            placeholder={literalPlaceholder}
+            aria-describedby={hintId}
             disabled={disabled}
             rows={3}
             className="cpv2-field-textarea"
@@ -232,13 +270,14 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'select' && (supportsModeToggle && useCelMode ? (
         <div className="border-l-2 border-primary/30 pl-2">
-          {renderCelInput(normalizedStringValue, { placeholder: schema.placeholder || '{{...}}' })}
+          {renderCelInput(normalizedStringValue)}
         </div>
       ) : (
         <select
           id={inputId}
           value={normalizedStringValue}
           onChange={(event) => onChange(event.target.value)}
+          aria-describedby={hintId}
           disabled={disabled}
           className="cpv2-field-select"
         >
@@ -255,14 +294,14 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'model' && (supportsModeToggle && useCelMode ? (
         <div className="border-l-2 border-primary/30 pl-2">
-          {renderCelInput(modelStringValue, { placeholder: schema.placeholder || '{{...}}' })}
+          {renderCelInput(modelStringValue)}
         </div>
       ) : (
         <ModelDropdown
           value={modelStringValue ? { id: modelStringValue } : value as Parameters<typeof ModelDropdown>[0]['value']}
           onChange={(nextModel) => onChange(extractModelId(nextModel))}
           disabled={disabled}
-          placeholder={schema.placeholder}
+          placeholder={schema.placeholder ?? (defaultLabel ? `Default: ${defaultLabel}` : schema.example ? `e.g. ${schema.example}` : undefined)}
         />
       ))}
 
@@ -288,6 +327,8 @@ export function ProtoFieldRenderer({
           step={schema.isInteger ? 1 : 'any'}
           min={schema.minValue}
           max={schema.maxValue}
+          placeholder={literalPlaceholder}
+          aria-describedby={hintId}
           disabled={disabled}
           className="cpv2-field-input"
         />
@@ -295,21 +336,27 @@ export function ProtoFieldRenderer({
 
       {schema.widget === 'tools' && (supportsModeToggle && useCelMode ? (
         <div className="border-l-2 border-primary/30 pl-2">
-          {renderCelInput(normalizedStringValue, { placeholder: schema.placeholder || '{{...}}' })}
+          {renderCelInput(normalizedStringValue)}
         </div>
       ) : (
-        <ToolsSelector
-          value={normalizedStringValue ? normalizedStringValue.split(',').map(s => s.trim()).filter(Boolean) : []}
-          onChange={(tools) => onChange(tools.join(', '))}
-          disabled={disabled}
-          hideLabel
-        />
+        <>
+          <ToolsSelector
+            value={normalizedStringValue ? normalizedStringValue.split(',').map(s => s.trim()).filter(Boolean) : []}
+            onChange={(tools) => onChange(tools.join(', '))}
+            disabled={disabled}
+            hideLabel
+          />
+          {/* The selector has no empty-state text of its own. */}
+          {!normalizedStringValue && defaultLabel && (
+            <p className="cpv2-field-hint !mt-0">Default: {defaultLabel}</p>
+          )}
+        </>
       ))}
 
       {schema.widget === 'checkbox' && (
         typeof normalizedValue === 'string' ? (
           <div className="border-l-2 border-primary/30 pl-2">
-            {renderCelInput(normalizedValue, { placeholder: schema.placeholder || '{{...}}' })}
+            {renderCelInput(normalizedValue)}
           </div>
         ) : (
           <div className="space-y-1">
@@ -318,8 +365,8 @@ export function ProtoFieldRenderer({
                 <span className="cpv2-fi-label">
                   {schema.label}
                 </span>
-                {helperText && (
-                  <HelpPopover content={helperText} title={schema.label} />
+                {popoverText && (
+                  <HelpPopover content={popoverText} title={schema.label} />
                 )}
               </div>
               <Toggle
@@ -334,7 +381,11 @@ export function ProtoFieldRenderer({
         )
       )}
 
-      {/* Annotations moved to helpText/tooltip — no longer rendered inline */}
+      {inlineHint && (
+        <p id={hintId} className="cpv2-field-hint !mt-0">
+          {inlineHint}
+        </p>
+      )}
     </div>
   )
 }
