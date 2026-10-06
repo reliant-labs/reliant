@@ -1044,6 +1044,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       <DaemonWaitState
         state={daemonWait.state}
         variant="panel"
+        secondary
         onRetry={daemonWait.retryNow}
       />
     );

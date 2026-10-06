@@ -815,46 +815,64 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
   return (
     <div className={cn("relative w-full h-full", className)}>
+      {/* `isolate` keeps xterm's own z-indices inside xterm. Its WebGL
+          renderer stacks a transparent, full-size `xterm-link-layer` canvas at
+          z-index 2; without a stacking context here that canvas competes with
+          the overlays below and wins, so every card rendered on top of the
+          terminal was visible but swallowed clicks — "Try again", "Manage
+          machines" and "Reconnect" all did nothing. */}
       <div
         ref={terminalRef}
-        className="w-full h-full"
+        className="isolate w-full h-full"
       />
-      {connectionState === "connecting" && (
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 font-mono text-xs"
-          role="status"
-          aria-live="polite"
-        >
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
-          Connecting to terminal...
-        </div>
-      )}
-      {connectionState === "reconnecting" && (
-        <div
-          className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 font-mono text-xs"
-          role="status"
-          aria-live="polite"
-        >
-          <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
-          Reconnecting...
-        </div>
-      )}
-      {connectionState === "waiting_for_daemon" && daemonWait.state && (
-        <DaemonWaitState
-          state={daemonWait.state}
-          variant="overlay"
-          onRetry={handleReconnectClick}
-        />
-      )}
-      {connectionState === "disconnected" && (
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-card border border-border text-foreground px-4 py-3 rounded-lg shadow-lg flex flex-col items-center gap-2">
-          <span className="font-mono text-xs text-muted-foreground">Terminal disconnected</span>
-          <button
-            onClick={handleReconnectClick}
-            className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
-          >
-            Reconnect
-          </button>
+      {/* One layer for every transient connection card. It centres by filling
+          the terminal rather than by `left-1/2`, which only left the card half
+          the panel's width to lay out in and wrapped the copy a word per line.
+          It ignores the pointer itself so a card over a live session doesn't
+          block selecting or scrolling the rest of the scrollback; each card
+          opts back in. */}
+      {connectionState !== "connected" && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-4">
+          {connectionState === "connecting" && (
+            <div
+              className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 font-mono text-xs text-foreground shadow-lg"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+              Connecting to terminal...
+            </div>
+          )}
+          {connectionState === "reconnecting" && (
+            <div
+              className="pointer-events-auto flex items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 font-mono text-xs text-foreground shadow-lg"
+              role="status"
+              aria-live="polite"
+            >
+              <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+              Reconnecting...
+            </div>
+          )}
+          {connectionState === "waiting_for_daemon" && daemonWait.state && (
+            <DaemonWaitState
+              state={daemonWait.state}
+              variant="overlay"
+              secondary
+              onRetry={handleReconnectClick}
+              className="pointer-events-auto"
+            />
+          )}
+          {connectionState === "disconnected" && (
+            <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-foreground shadow-lg">
+              <span className="font-mono text-xs text-muted-foreground">Terminal disconnected</span>
+              <button
+                onClick={handleReconnectClick}
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Reconnect
+              </button>
+            </div>
+          )}
         </div>
       )}
     </div>

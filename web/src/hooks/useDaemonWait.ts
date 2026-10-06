@@ -37,6 +37,22 @@ import {
 const TICK_MS = 1_000;
 
 /**
+ * When the current wait on the machine began — ONE clock for every surface.
+ *
+ * The escalation is about how long the user has been waiting on the machine,
+ * not on a particular panel. Per-surface clocks made those disagree: open a
+ * new chat five minutes into a boot and its composer said "This usually takes
+ * about a minute", with no buttons, while the file tree beside it had long
+ * since escalated. That mattered once only one surface speaks in full (see
+ * useDaemonWaitSpeaker) — the speaker could be the newest surface, and the
+ * exits would vanish.
+ *
+ * The clock starts with the first waiting surface and resets when the last
+ * one stops waiting, so the next outage starts from zero.
+ */
+const sharedWait = { startedAt: null as number | null, waiters: 0 };
+
+/**
  * Phases that mean "this machine is on its way up right now". A machine in one
  * of these is the one the user is waiting on, and the one whose phase should
  * drive the copy.
@@ -84,7 +100,6 @@ export function useDaemonWait({
   waiting,
   onRetry,
 }: UseDaemonWaitOptions): UseDaemonWaitResult {
-  const [startedAt, setStartedAt] = useState<number | null>(null);
   const [elapsedMs, setElapsedMs] = useState(0);
 
   // Keep the callback in a ref so the retry interval doesn't tear down and
@@ -94,23 +109,24 @@ export function useDaemonWait({
     onRetryRef.current = onRetry;
   }, [onRetry]);
 
-  // Start/stop the stopwatch on wait transitions.
+  // Join the shared clock while waiting, and tick it so the copy can
+  // escalate. Only runs while waiting.
   useEffect(() => {
     if (!waiting) {
-      setStartedAt(null);
       setElapsedMs(0);
       return;
     }
-    setStartedAt((prev) => prev ?? Date.now());
+    if (sharedWait.startedAt === null) sharedWait.startedAt = Date.now();
+    sharedWait.waiters += 1;
+    const tick = () => setElapsedMs(Date.now() - (sharedWait.startedAt ?? Date.now()));
+    tick();
+    const id = setInterval(tick, TICK_MS);
+    return () => {
+      clearInterval(id);
+      sharedWait.waiters -= 1;
+      if (sharedWait.waiters === 0) sharedWait.startedAt = null;
+    };
   }, [waiting]);
-
-  // Tick the elapsed clock so the copy can escalate. Only runs while waiting.
-  useEffect(() => {
-    if (!waiting || startedAt === null) return;
-    setElapsedMs(Date.now() - startedAt);
-    const id = setInterval(() => setElapsedMs(Date.now() - startedAt), TICK_MS);
-    return () => clearInterval(id);
-  }, [waiting, startedAt]);
 
   // Poll the machine's real status while waiting. Cloud-only: without a
   // control plane there is no record to read, and the copy falls back to the
@@ -166,8 +182,10 @@ export function useDaemonWait({
     return () => clearInterval(id);
   }, [waiting, shouldRetry]);
 
+  // Restarts the shared clock, so every surface's escalation starts over
+  // together; the others pick it up on their next tick.
   const retryNow = useCallback(() => {
-    setStartedAt(Date.now());
+    if (sharedWait.waiters > 0) sharedWait.startedAt = Date.now();
     setElapsedMs(0);
     void refetch();
     onRetryRef.current?.();
