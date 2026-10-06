@@ -559,7 +559,8 @@ func TestConcurrentUserUpdatesDoNotSerializationConflict(t *testing.T) {
 // SERIALIZABLE every one of those commits aborts the writer with SQLSTATE
 // 40001, so the writer burns its whole retry budget and the update is lost —
 // this fails on every run against the old code, not one run in five. At READ
-// COMMITTED the writer simply proceeds after the first commit.
+// COMMITTED the writer waits out each commit in its ONE transaction and takes
+// the number after the last of them.
 func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
 	defer cleanup()
@@ -603,30 +604,56 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 		return tx
 	}
 
+	// waitingTxn identifies the transaction seen waiting on the counter row. A
+	// backend's xact_start is fixed for the life of one transaction, so a
+	// writer that was aborted and retried shows up as a different waitingTxn
+	// even when the pool hands the retry the same connection.
+	type waitingTxn struct {
+		pid       int
+		xactStart time.Time
+	}
+
 	// awaitWriter blocks until the writer is either waiting on a lock or has
-	// returned. pg_stat_activity is read through the pool, outside any
-	// transaction, so each poll sees a fresh view.
+	// returned, and reports which transaction is waiting. pg_stat_activity is
+	// read through the pool, outside any transaction, so each poll sees a
+	// fresh view. The database belongs to this test alone and the rival only
+	// ever HOLDS the lock, so the writer is the only backend that can wait.
 	writerDone := make(chan error, 1)
-	awaitWriter := func() (finished bool, writerErr error) {
+	awaitWriter := func() (finished bool, waiter waitingTxn, writerErr error) {
 		t.Helper()
 		for {
 			select {
 			case err := <-writerDone:
-				return true, err
+				return true, waitingTxn{}, err
 			case <-ctx.Done():
 				t.Fatalf("writer neither blocked on the counter row nor finished: %v", ctx.Err())
 			default:
 			}
-			var lockWaiters int
-			if err := rawDB.QueryRowContext(ctx, `
-				SELECT count(*) FROM pg_stat_activity
+			rows, err := rawDB.QueryContext(ctx, `
+				SELECT pid, xact_start FROM pg_stat_activity
 				WHERE datname = current_database()
 				  AND wait_event_type = 'Lock'
-				  AND pid <> pg_backend_pid()`).Scan(&lockWaiters); err != nil {
+				  AND pid <> pg_backend_pid()`)
+			if err != nil {
 				t.Fatalf("poll pg_stat_activity: %v", err)
 			}
-			if lockWaiters > 0 {
-				return false, nil
+			var waiters []waitingTxn
+			for rows.Next() {
+				var w waitingTxn
+				if err := rows.Scan(&w.pid, &w.xactStart); err != nil {
+					t.Fatalf("scan pg_stat_activity: %v", err)
+				}
+				waiters = append(waiters, w)
+			}
+			if err := rows.Close(); err != nil {
+				t.Fatalf("close pg_stat_activity rows: %v", err)
+			}
+			switch len(waiters) {
+			case 0:
+			case 1:
+				return false, waiters[0], nil
+			default:
+				t.Fatalf("expected only the writer to wait on a lock, found %d waiters: %+v", len(waiters), waiters)
 			}
 			time.Sleep(5 * time.Millisecond)
 		}
@@ -636,16 +663,33 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 	writer := newUpdate("writer")
 	go func() { writerDone <- repo.CreateUserUpdate(ctx, writer) }()
 
-	// One commit per writer attempt, plus one so an exhausted retry budget is
-	// reached rather than stopped short of.
+	// Commit under the writer once per writer attempt, plus one, so a writer
+	// that retries on every commit exhausts its budget rather than being
+	// stopped short of it.
+	//
+	// The writer may legitimately wait behind more than one of these commits.
+	// The rival takes the lock again the instant it commits, and the writer —
+	// woken inside Postgres — still has to re-find the row's NEW version and
+	// lock that; on a loaded box the rival's next UPDATE regularly gets there
+	// first, and the writer waits again. What READ COMMITTED guarantees is
+	// that every one of those waits is the SAME transaction, never an abort
+	// and a retry. That is what this asserts, not how many waits it took.
 	rivalCommits := 0
 	var writerErr error
-	for round := 0; round <= maxRetries+1; round++ {
-		finished, err := awaitWriter()
+	var writerTxn waitingTxn
+	finished := false
+	for round := 0; round <= maxRetries+1 && !finished; round++ {
+		var waiter waitingTxn
+		finished, waiter, writerErr = awaitWriter()
 		if finished {
-			writerErr = err
-			_ = rival.Rollback()
 			break
+		}
+		if round == 0 {
+			writerTxn = waiter
+		} else if waiter != writerTxn {
+			t.Fatalf("after %d rival commit(s) the writer is waiting in a NEW transaction %+v, "+
+				"not the one that first waited %+v: it was aborted and retried instead of "+
+				"waiting out the commit", rivalCommits, waiter, writerTxn)
 		}
 		if err := rival.Commit(); err != nil {
 			t.Fatalf("rival commit: %v", err)
@@ -653,18 +697,31 @@ func TestUserUpdateAllocationWaitsOutAConcurrentCommit(t *testing.T) {
 		rivalCommits++
 		rival = holdCounterRow()
 	}
+	_ = rival.Rollback()
+	if !finished {
+		// The writer lost every race for the row; with the rival gone it can
+		// only proceed now.
+		select {
+		case writerErr = <-writerDone:
+		case <-ctx.Done():
+			t.Fatalf("writer did not finish once the rival released the row: %v", ctx.Err())
+		}
+	}
 
 	if writerErr != nil {
 		t.Fatalf("a writer waiting on the counter row was aborted instead of waiting "+
 			"(rival commits: %d): %v", rivalCommits, writerErr)
 	}
-	if rivalCommits != 1 {
-		t.Fatalf("writer should proceed after the first rival commit, took %d", rivalCommits)
+	if rivalCommits == 0 {
+		t.Fatal("the writer never waited on the rival's lock, so this run proved nothing")
 	}
-	// Seed took 1, the rival 2: the writer must observe the rival's committed
-	// value and take the very next number.
-	if writer.SequenceNumber != seed.SequenceNumber+2 {
-		t.Fatalf("writer sequence = %d, want %d (the number after the rival's)",
-			writer.SequenceNumber, seed.SequenceNumber+2)
+	if rivalCommits > 1 {
+		t.Logf("writer waited out %d rival commits in one transaction", rivalCommits)
+	}
+	// Seed took 1 and each committed rival one more: the writer must observe
+	// the last committed value and take the very next number.
+	if want := seed.SequenceNumber + int64(rivalCommits) + 1; writer.SequenceNumber != want {
+		t.Fatalf("writer sequence = %d, want %d (the number after the last rival commit's)",
+			writer.SequenceNumber, want)
 	}
 }
