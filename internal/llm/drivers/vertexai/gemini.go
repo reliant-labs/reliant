@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/geminiwire"
@@ -84,14 +85,7 @@ func (c *VertexAIClient) streamResponseGemini(ctx context.Context, prompts []str
 						}
 
 						if part.FunctionCall != nil {
-							// Handle function calls
-							argsJSON, _ := json.Marshal(part.FunctionCall.Args)
-							toolCall := message.ToolCall{
-								ID:       part.FunctionCall.Name,
-								Name:     part.FunctionCall.Name,
-								Input:    string(argsJSON),
-								Finished: true,
-							}
+							toolCall := geminiToolCall(part.FunctionCall)
 							accumulated.ToolCalls = append(accumulated.ToolCalls, toolCall)
 							eventChan <- llm.DriverEvent{
 								Type:     llm.EventToolUseStart,
@@ -322,13 +316,7 @@ func (c *VertexAIClient) convertGeminiResponse(resp *genai.GenerateContentRespon
 			}
 
 			if part.FunctionCall != nil {
-				argsJSON, _ := json.Marshal(part.FunctionCall.Args)
-				response.ToolCalls = append(response.ToolCalls, message.ToolCall{
-					ID:       part.FunctionCall.Name,
-					Name:     part.FunctionCall.Name,
-					Input:    string(argsJSON),
-					Finished: true,
-				})
+				response.ToolCalls = append(response.ToolCalls, geminiToolCall(part.FunctionCall))
 			}
 		}
 	}
@@ -347,6 +335,32 @@ func (c *VertexAIClient) convertGeminiResponse(resp *genai.GenerateContentRespon
 	}
 
 	return response, nil
+}
+
+// geminiToolCall converts a function call Gemini returned into a tool call
+// with an id of its own.
+//
+// The id must be unique across every call in every chat, because that is how
+// reliant keys a call once it is made: tool_calls and tool_call_results by id
+// alone, and a background spawn's report by tool_call_id across all chats
+// (idx_agent_messages_one_terminal_report_per_spawn). It used to be the
+// function NAME, so every call to a tool shared one id. A second spawn's
+// report was then "already reported" and dropped, and a second call to any
+// tool whose first call had finished was answered with that call's recorded
+// result instead of running (ExecuteToolsActivity.checkPriorTerminalResult),
+// whichever chat the first call belonged to.
+//
+// Minting it here is safe because the id never reaches Vertex:
+// convertMessagesToGemini pairs a function response with its call by name.
+// The direct Gemini and Antigravity drivers mint ids the same way.
+func geminiToolCall(fc *genai.FunctionCall) message.ToolCall {
+	argsJSON, _ := json.Marshal(fc.Args)
+	return message.ToolCall{
+		ID:       "call_" + uuid.New().String(),
+		Name:     fc.Name,
+		Input:    string(argsJSON),
+		Finished: true,
+	}
 }
 
 // convertTools converts internal tools to Gemini format
