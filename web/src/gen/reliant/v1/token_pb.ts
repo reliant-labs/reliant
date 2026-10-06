@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/token.proto.
  */
 export const file_reliant_v1_token: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLmAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmQSDgoGc2NvcGVzGAsgAygJSgQIBxAIUgpyZXZva2VkX2F0IkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIjgKEUxpc3RUb2tlbnNSZXF1ZXN0EiMKBGtpbmQYASABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCI7ChJMaXN0VG9rZW5zUmVzcG9uc2USJQoGdG9rZW5zGAEgAygLMhUucmVsaWFudC52MS5Ub2tlbkluZm8iIAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIhUKE1Jldm9rZVRva2VuUmVzcG9uc2UicwoSVXBkYXRlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIqCgZzY29wZXMYAyABKAsyFS5yZWxpYW50LnYxLlNjb3BlTGlzdEgBiAEBQgcKBV9uYW1lQgkKB19zY29wZXMiGwoJU2NvcGVMaXN0Eg4KBnNjb3BlcxgBIAMoCSI6ChNVcGRhdGVUb2tlblJlc3BvbnNlEiMKBGluZm8YASABKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbypSCglUb2tlbktpbmQSGgoWVE9LRU5fS0lORF9VTlNQRUNJRklFRBAAEhUKEVRPS0VOX0tJTkRfREFFTU9OEAESEgoOVE9LRU5fS0lORF9BUEkQAjLTAgoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAElAKC1VwZGF0ZVRva2VuEh4ucmVsaWFudC52MS5VcGRhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLlVwZGF0ZVRva2VuUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
+  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLmAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmQSDgoGc2NvcGVzGAsgAygJSgQIBxAIUgpyZXZva2VkX2F0IkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIjgKEUxpc3RUb2tlbnNSZXF1ZXN0EiMKBGtpbmQYASABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCI7ChJMaXN0VG9rZW5zUmVzcG9uc2USJQoGdG9rZW5zGAEgAygLMhUucmVsaWFudC52MS5Ub2tlbkluZm8iIAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIhUKE1Jldm9rZVRva2VuUmVzcG9uc2UicwoSVXBkYXRlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIqCgZzY29wZXMYAyABKAsyFS5yZWxpYW50LnYxLlNjb3BlTGlzdEgBiAEBQgcKBV9uYW1lQgkKB19zY29wZXMiGwoJU2NvcGVMaXN0Eg4KBnNjb3BlcxgBIAMoCSI6ChNVcGRhdGVUb2tlblJlc3BvbnNlEiMKBGluZm8YASABKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyI4ChRFeGNoYW5nZVRva2VuUmVxdWVzdBIQCghhdWRpZW5jZRgBIAEoCRIOCgZzY29wZXMYAiADKAkiYAoVRXhjaGFuZ2VUb2tlblJlc3BvbnNlEg0KBXRva2VuGAEgASgJEhQKDHRva2VuX3ByZWZpeBgCIAEoCRISCgpleHBpcmVzX2F0GAMgASgJEg4KBnNjb3BlcxgEIAMoCSpSCglUb2tlbktpbmQSGgoWVE9LRU5fS0lORF9VTlNQRUNJRklFRBAAEhUKEVRPS0VOX0tJTkRfREFFTU9OEAESEgoOVE9LRU5fS0lORF9BUEkQAjKrAwoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAElAKC1VwZGF0ZVRva2VuEh4ucmVsaWFudC52MS5VcGRhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLlVwZGF0ZVRva2VuUmVzcG9uc2UiABJWCg1FeGNoYW5nZVRva2VuEiAucmVsaWFudC52MS5FeGNoYW5nZVRva2VuUmVxdWVzdBohLnJlbGlhbnQudjEuRXhjaGFuZ2VUb2tlblJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
 
 /**
  * @generated from message reliant.v1.CreateTokenRequest
@@ -288,6 +288,75 @@ export const UpdateTokenResponseSchema: GenMessage<UpdateTokenResponse> = /*@__P
   messageDesc(file_reliant_v1_token, 9);
 
 /**
+ * @generated from message reliant.v1.ExchangeTokenRequest
+ */
+export type ExchangeTokenRequest = Message<"reliant.v1.ExchangeTokenRequest"> & {
+  /**
+   * audience is the control-plane origin the minted token will be presented
+   * to, e.g. "https://admin.reliantapi.com". It must be this deployment's
+   * authorization server.
+   *
+   * @generated from field: string audience = 1;
+   */
+  audience: string;
+
+  /**
+   * scopes requested. Empty asks for every exchangeable scope the calling
+   * token holds.
+   *
+   * @generated from field: repeated string scopes = 2;
+   */
+  scopes: string[];
+};
+
+/**
+ * Describes the message reliant.v1.ExchangeTokenRequest.
+ * Use `create(ExchangeTokenRequestSchema)` to create a new message.
+ */
+export const ExchangeTokenRequestSchema: GenMessage<ExchangeTokenRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 10);
+
+/**
+ * @generated from message reliant.v1.ExchangeTokenResponse
+ */
+export type ExchangeTokenResponse = Message<"reliant.v1.ExchangeTokenResponse"> & {
+  /**
+   * Raw rlat_ token — returned once
+   *
+   * @generated from field: string token = 1;
+   */
+  token: string;
+
+  /**
+   * Display identifier, e.g. "rlat_A3f9Kd2p"
+   *
+   * @generated from field: string token_prefix = 2;
+   */
+  tokenPrefix: string;
+
+  /**
+   * RFC 3339
+   *
+   * @generated from field: string expires_at = 3;
+   */
+  expiresAt: string;
+
+  /**
+   * What was actually granted
+   *
+   * @generated from field: repeated string scopes = 4;
+   */
+  scopes: string[];
+};
+
+/**
+ * Describes the message reliant.v1.ExchangeTokenResponse.
+ * Use `create(ExchangeTokenResponseSchema)` to create a new message.
+ */
+export const ExchangeTokenResponseSchema: GenMessage<ExchangeTokenResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 11);
+
+/**
  * @generated from enum reliant.v1.TokenKind
  */
 export enum TokenKind {
@@ -391,6 +460,34 @@ export const TokenService: GenService<{
     methodKind: "unary";
     input: typeof UpdateTokenRequestSchema;
     output: typeof UpdateTokenResponseSchema;
+  },
+  /**
+   * ExchangeToken trades the CALLING access token for a short-lived one that
+   * carries only control-plane authority — what forge presents to the control
+   * plane for `forge env deploy`, `forge secret`, `forge domain` and friends,
+   * so a user signed in to Reliant never runs `forge login` as well.
+   *
+   * ATTENUATION ONLY. The minted token's scopes are the requested ones that are
+   * exchangeable (deploy:*, secret:*, domain:*) AND held by the calling token:
+   * a token may never grant authority it does not hold, so a credential issued
+   * without deploy permission cannot become one that has it. Same acting user,
+   * same org, same daemon binding, and it expires within an hour (sooner if the
+   * caller does). The caller's own credential is never presented to the
+   * control plane's deploy API, and never copied anywhere.
+   *
+   * audience must be this deployment's control plane: the endpoint comes from
+   * a project's KCL, and a repository is not a trusted party. A mismatch mints
+   * nothing.
+   *
+   * Machine credential only — the exchange needs a credential to attenuate. A
+   * human session signs in with `forge login` or uses the web app.
+   *
+   * @generated from rpc reliant.v1.TokenService.ExchangeToken
+   */
+  exchangeToken: {
+    methodKind: "unary";
+    input: typeof ExchangeTokenRequestSchema;
+    output: typeof ExchangeTokenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_token, 0);

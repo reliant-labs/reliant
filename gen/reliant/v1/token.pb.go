@@ -633,6 +633,131 @@ func (x *UpdateTokenResponse) GetInfo() *TokenInfo {
 	return nil
 }
 
+type ExchangeTokenRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// audience is the control-plane origin the minted token will be presented
+	// to, e.g. "https://admin.reliantapi.com". It must be this deployment's
+	// authorization server.
+	Audience string `protobuf:"bytes,1,opt,name=audience,proto3" json:"audience,omitempty"`
+	// scopes requested. Empty asks for every exchangeable scope the calling
+	// token holds.
+	Scopes        []string `protobuf:"bytes,2,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeTokenRequest) Reset() {
+	*x = ExchangeTokenRequest{}
+	mi := &file_reliant_v1_token_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeTokenRequest) ProtoMessage() {}
+
+func (x *ExchangeTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_token_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeTokenRequest.ProtoReflect.Descriptor instead.
+func (*ExchangeTokenRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_token_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *ExchangeTokenRequest) GetAudience() string {
+	if x != nil {
+		return x.Audience
+	}
+	return ""
+}
+
+func (x *ExchangeTokenRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type ExchangeTokenResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Token         string                 `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`                                // Raw rlat_ token — returned once
+	TokenPrefix   string                 `protobuf:"bytes,2,opt,name=token_prefix,json=tokenPrefix,proto3" json:"token_prefix,omitempty"` // Display identifier, e.g. "rlat_A3f9Kd2p"
+	ExpiresAt     string                 `protobuf:"bytes,3,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`       // RFC 3339
+	Scopes        []string               `protobuf:"bytes,4,rep,name=scopes,proto3" json:"scopes,omitempty"`                              // What was actually granted
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeTokenResponse) Reset() {
+	*x = ExchangeTokenResponse{}
+	mi := &file_reliant_v1_token_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeTokenResponse) ProtoMessage() {}
+
+func (x *ExchangeTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_token_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeTokenResponse.ProtoReflect.Descriptor instead.
+func (*ExchangeTokenResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_token_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *ExchangeTokenResponse) GetToken() string {
+	if x != nil {
+		return x.Token
+	}
+	return ""
+}
+
+func (x *ExchangeTokenResponse) GetTokenPrefix() string {
+	if x != nil {
+		return x.TokenPrefix
+	}
+	return ""
+}
+
+func (x *ExchangeTokenResponse) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
+func (x *ExchangeTokenResponse) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
 var File_reliant_v1_token_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_token_proto_rawDesc = "" +
@@ -679,17 +804,27 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tScopeList\x12\x16\n" +
 	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"@\n" +
 	"\x13UpdateTokenResponse\x12)\n" +
-	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info*R\n" +
+	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\"J\n" +
+	"\x14ExchangeTokenRequest\x12\x1a\n" +
+	"\baudience\x18\x01 \x01(\tR\baudience\x12\x16\n" +
+	"\x06scopes\x18\x02 \x03(\tR\x06scopes\"\x87\x01\n" +
+	"\x15ExchangeTokenResponse\x12\x14\n" +
+	"\x05token\x18\x01 \x01(\tR\x05token\x12!\n" +
+	"\ftoken_prefix\x18\x02 \x01(\tR\vtokenPrefix\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x03 \x01(\tR\texpiresAt\x12\x16\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes*R\n" +
 	"\tTokenKind\x12\x1a\n" +
 	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_KIND_API\x10\x022\xd3\x02\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\xab\x03\n" +
 	"\fTokenService\x12P\n" +
 	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"\x00\x12M\n" +
 	"\n" +
 	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12P\n" +
 	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x00\x12P\n" +
-	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"\x00\x12V\n" +
+	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_token_proto_rawDescOnce sync.Once
@@ -704,19 +839,21 @@ func file_reliant_v1_token_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_token_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_reliant_v1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_reliant_v1_token_proto_goTypes = []any{
-	(TokenKind)(0),              // 0: reliant.v1.TokenKind
-	(*CreateTokenRequest)(nil),  // 1: reliant.v1.CreateTokenRequest
-	(*TokenInfo)(nil),           // 2: reliant.v1.TokenInfo
-	(*CreateTokenResponse)(nil), // 3: reliant.v1.CreateTokenResponse
-	(*ListTokensRequest)(nil),   // 4: reliant.v1.ListTokensRequest
-	(*ListTokensResponse)(nil),  // 5: reliant.v1.ListTokensResponse
-	(*RevokeTokenRequest)(nil),  // 6: reliant.v1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil), // 7: reliant.v1.RevokeTokenResponse
-	(*UpdateTokenRequest)(nil),  // 8: reliant.v1.UpdateTokenRequest
-	(*ScopeList)(nil),           // 9: reliant.v1.ScopeList
-	(*UpdateTokenResponse)(nil), // 10: reliant.v1.UpdateTokenResponse
+	(TokenKind)(0),                // 0: reliant.v1.TokenKind
+	(*CreateTokenRequest)(nil),    // 1: reliant.v1.CreateTokenRequest
+	(*TokenInfo)(nil),             // 2: reliant.v1.TokenInfo
+	(*CreateTokenResponse)(nil),   // 3: reliant.v1.CreateTokenResponse
+	(*ListTokensRequest)(nil),     // 4: reliant.v1.ListTokensRequest
+	(*ListTokensResponse)(nil),    // 5: reliant.v1.ListTokensResponse
+	(*RevokeTokenRequest)(nil),    // 6: reliant.v1.RevokeTokenRequest
+	(*RevokeTokenResponse)(nil),   // 7: reliant.v1.RevokeTokenResponse
+	(*UpdateTokenRequest)(nil),    // 8: reliant.v1.UpdateTokenRequest
+	(*ScopeList)(nil),             // 9: reliant.v1.ScopeList
+	(*UpdateTokenResponse)(nil),   // 10: reliant.v1.UpdateTokenResponse
+	(*ExchangeTokenRequest)(nil),  // 11: reliant.v1.ExchangeTokenRequest
+	(*ExchangeTokenResponse)(nil), // 12: reliant.v1.ExchangeTokenResponse
 }
 var file_reliant_v1_token_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.CreateTokenRequest.kind:type_name -> reliant.v1.TokenKind
@@ -730,12 +867,14 @@ var file_reliant_v1_token_proto_depIdxs = []int32{
 	4,  // 8: reliant.v1.TokenService.ListTokens:input_type -> reliant.v1.ListTokensRequest
 	6,  // 9: reliant.v1.TokenService.RevokeToken:input_type -> reliant.v1.RevokeTokenRequest
 	8,  // 10: reliant.v1.TokenService.UpdateToken:input_type -> reliant.v1.UpdateTokenRequest
-	3,  // 11: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
-	5,  // 12: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
-	7,  // 13: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
-	10, // 14: reliant.v1.TokenService.UpdateToken:output_type -> reliant.v1.UpdateTokenResponse
-	11, // [11:15] is the sub-list for method output_type
-	7,  // [7:11] is the sub-list for method input_type
+	11, // 11: reliant.v1.TokenService.ExchangeToken:input_type -> reliant.v1.ExchangeTokenRequest
+	3,  // 12: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
+	5,  // 13: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
+	7,  // 14: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
+	10, // 15: reliant.v1.TokenService.UpdateToken:output_type -> reliant.v1.UpdateTokenResponse
+	12, // 16: reliant.v1.TokenService.ExchangeToken:output_type -> reliant.v1.ExchangeTokenResponse
+	12, // [12:17] is the sub-list for method output_type
+	7,  // [7:12] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -753,7 +892,7 @@ func file_reliant_v1_token_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_token_proto_rawDesc), len(file_reliant_v1_token_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   10,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
