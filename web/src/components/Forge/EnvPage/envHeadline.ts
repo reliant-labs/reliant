@@ -45,6 +45,12 @@ export function envHeadline(
   const workloads = status?.workloads ?? [];
   const runStates = workloads.map(runStateOf);
 
+  // Billing first: when the owner stopped it AND billing lapsed, the platform
+  // reports billing (the one the owner cannot clear by pressing Start), and
+  // "Stopped by you" would hide the fix.
+  const billing = runStates.find((state) => state.kind === "billing");
+  if (billing) return { tone: "problem", text: billing.label, detail: billing.detail };
+
   if (environmentStopped(workloads)) {
     return runStates.some((state) => state.kind === "stopping")
       ? { tone: "progress", text: "Stopping…", detail: "" }
@@ -54,9 +60,6 @@ export function envHeadline(
           detail: "Compute is off. Data and URLs are kept. Start it to bring it back.",
         };
   }
-  const billing = runStates.find((state) => state.kind === "billing");
-  if (billing) return { tone: "problem", text: billing.label, detail: billing.detail };
-
   if (declaredNotBuilt(live)) return { tone: "quiet", text: "Declared, not built yet", detail: "" };
   if (neverBuilt(live)) return { tone: "quiet", text: "Nothing released yet", detail: "" };
 
