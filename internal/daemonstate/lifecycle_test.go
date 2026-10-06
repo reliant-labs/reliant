@@ -249,3 +249,43 @@ func TestDerivation_LifecycleRepoFailurePropagates(t *testing.T) {
 		t.Fatal("onLifecycle swallowed a repository error")
 	}
 }
+
+// An applied lifecycle event is the registry changing under the user's open
+// web clients, so it must be announced: they refetch the daemon list on it
+// rather than polling. A stale or unregistered one changed nothing and must
+// stay silent — every gateway replica sees every event, and only the one whose
+// write applied may speak, or each transition would be announced per replica.
+func TestDerivation_LifecycleNotifiesOnlyWhenApplied(t *testing.T) {
+	repo := newFakeRepo()
+	repo.seedDaemon(&db.Daemon{ID: "d-managed", UserID: "u-1"})
+	d := NewDerivation(nil, repo)
+
+	type call struct{ userID, daemonID string }
+	var calls []call
+	d.NotifyLifecycleApplied(func(_ context.Context, userID, daemonID string) {
+		calls = append(calls, call{userID, daemonID})
+	})
+
+	ctx := context.Background()
+	at := time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)
+	ready := Event{DaemonID: "d-managed", Type: EventLifecycle, At: at, Phase: LifecyclePhaseReady}
+
+	if err := d.dispatch(ctx, ready); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(calls) != 1 || calls[0] != (call{"", "d-managed"}) {
+		t.Fatalf("applied event: calls = %+v, want one call for d-managed (owner left for the notifier to resolve)", calls)
+	}
+
+	// The same event again (another replica, or a redelivery) is not newer.
+	if err := d.dispatch(ctx, ready); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	// A daemon with no registry row has nothing a client could list.
+	if err := d.dispatch(ctx, Event{DaemonID: "d-unknown", Type: EventLifecycle, At: at.Add(time.Minute), Phase: LifecyclePhaseReady}); err != nil {
+		t.Fatalf("dispatch: %v", err)
+	}
+	if len(calls) != 1 {
+		t.Fatalf("stale/unregistered events must not notify: calls = %+v", calls)
+	}
+}

@@ -56,7 +56,9 @@ vi.mock("@/services/controlPlane/daemon", async (importOriginal) => ({
   deleteDaemon: vi.fn(),
 }));
 
-vi.mock("@/hooks/useDaemonStatus", () => ({
+// Partial: useDaemonList shares this module's cache key and fetcher.
+vi.mock("@/hooks/useDaemonStatus", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/useDaemonStatus")>()),
   useDaemonStatus: () => ({
     daemons: env.daemons,
     activeDaemon: env.activeDaemon,

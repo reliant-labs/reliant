@@ -7,7 +7,34 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
+
+// announceAgentMailboxChanged tells the chat's open clients that one of its
+// threads gained a queued row, so the pending-queue strip re-reads the mailbox
+// instead of polling for it.
+//
+// Every enqueue path funnels through this file — the human composer
+// (SendAgentMessage), spawn_send, spawn completion reports and the
+// reconciler's synthesized placeholders — which is why the announcement lives
+// here rather than at each caller: a path that forgot to announce would leave
+// the strip blind to its rows until the client's slow fallback poll.
+//
+// Leaving the mailbox needs no announcement from here. A drain already
+// publishes AGENT_MESSAGES_DRAINED in its own transaction, a user claim or
+// cancel is client-initiated and applied locally, and a thread going terminal
+// is read once on the client's running→idle edge.
+//
+// Best-effort by design: the row is the source of truth and the client keeps a
+// fallback poll, so a failed announcement degrades latency, not correctness.
+// It is a chat-scoped refetch (chat_updates), so only clients viewing this
+// chat receive it, and it joins the caller's transaction when there is one —
+// the client is told only after the row it should read has committed.
+func (r *Repo) announceAgentMailboxChanged(ctx context.Context, chatID string) {
+	if err := r.EmitChatRefetch(ctx, chatID, RefetchAgentMailbox); err != nil {
+		logging.Warn("failed to announce agent mailbox change", "chatID", chatID, "error", err)
+	}
+}
 
 func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error {
 	if msg == nil {
@@ -25,7 +52,11 @@ func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 	if msg.ToThreadID == "" {
 		return fmt.Errorf("to thread ID is required")
 	}
-	return r.agentMessages.EnqueueAgentMessage(ctx, msg)
+	if err := r.agentMessages.EnqueueAgentMessage(ctx, msg); err != nil {
+		return err
+	}
+	r.announceAgentMailboxChanged(ctx, msg.ChatID)
+	return nil
 }
 
 // EnqueueAgentMessageIfAbsent is EnqueueAgentMessage's conditional sibling,
@@ -59,7 +90,14 @@ func (r *Repo) EnqueueAgentMessageIfAbsent(ctx context.Context, msg *AgentMessag
 	default:
 		return false, fmt.Errorf("kind must be a terminal kind (completion, cancelled, or failed), got %d", msg.Kind)
 	}
-	return r.agentMessages.EnqueueAgentMessageIfAbsent(ctx, msg)
+	inserted, err := r.agentMessages.EnqueueAgentMessageIfAbsent(ctx, msg)
+	if err != nil {
+		return false, err
+	}
+	if inserted {
+		r.announceAgentMailboxChanged(ctx, msg.ChatID)
+	}
+	return inserted, nil
 }
 
 // EnqueueSpawnReport writes a real terminal spawn report: it inserts,
@@ -92,7 +130,16 @@ func (r *Repo) EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (Spawn
 	if msg.Synthesized {
 		return 0, fmt.Errorf("a synthesized report cannot supersede; use EnqueueAgentMessageIfAbsent")
 	}
-	return r.agentMessages.EnqueueSpawnReport(ctx, msg)
+	outcome, err := r.agentMessages.EnqueueSpawnReport(ctx, msg)
+	if err != nil {
+		return 0, err
+	}
+	// A superseded placeholder is a visible change too: the strip was showing
+	// the synthesized body and now has the real report to show.
+	if outcome != core.SpawnReportAlreadyReported {
+		r.announceAgentMailboxChanged(ctx, msg.ChatID)
+	}
+	return outcome, nil
 }
 
 func (r *Repo) ListQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) ([]*AgentMessage, error) {

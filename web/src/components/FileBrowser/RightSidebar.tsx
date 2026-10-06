@@ -25,7 +25,7 @@ import { Tooltip } from "../ui/Tooltip";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
 import { useGitStatusRefreshTrigger } from "../../store/gitStatusStore";
-import { subscribeToRefetch } from "../../store/refetchStore";
+import { useFileTreePushRefresh } from "./useFileTreePushRefresh";
 import type { FileNode } from "./index";
 
 interface RightSidebarProps {
@@ -255,19 +255,15 @@ export function RightSidebar({ onCloseSidebar }: RightSidebarProps = {}) {
     }
   }, [gitRefreshTrigger]);
 
-  // Refresh file tree on daemon filesystem poll changes and agent tool calls
-  useEffect(() => {
-    const unsubFs = subscribeToRefetch("file_tree", () => {
-      fileTreeRef.current?.refresh();
-    });
-    const unsubWt = subscribeToRefetch("worktree_changes", () => {
-      fileTreeRef.current?.refresh();
-    });
-    return () => {
-      unsubFs();
-      unsubWt();
-    };
-  }, []);
+  // Refresh the tree when its files change on disk (agent tool calls, the
+  // daemon's filesystem watcher) — only for this worktree/project, and only
+  // while the Files tab is showing; see useFileTreePushRefresh.
+  useFileTreePushRefresh({
+    projectId: currentProject?.id,
+    worktreeId: activeWorktreeId,
+    visible: activeSidebarTab === "files",
+    refresh: () => fileTreeRef.current?.refresh(),
+  });
 
   const handleFileSelect = (file: FileNode) => {
     if (file.type === "file" && currentProject?.id) {

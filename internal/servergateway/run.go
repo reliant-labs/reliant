@@ -236,6 +236,10 @@ func Run(ctx context.Context, opts Options) error {
 	// ToolsDaemonService — the publisher above is now the single writer
 	// upstream, and this consumer is the single writer downstream.
 	derivation := daemonstate.NewDerivation(nc, repo)
+	// A control-plane lifecycle transition (provisioning → running, suspend,
+	// an OOM kill) changes what ListDaemons reports, so tell the owner's web
+	// clients to refetch rather than leaving them to poll for it.
+	derivation.NotifyLifecycleApplied(toolsDaemonService.PublishDaemonListChanged)
 	go func() {
 		if err := derivation.Start(ctx); err != nil && ctx.Err() == nil {
 			logging.Error("Daemon state derivation consumer failed", "error", err)
