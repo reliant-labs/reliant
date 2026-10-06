@@ -83,9 +83,22 @@ describe('lifecyclePlan', () => {
   // gateway connection. Restart is the single most useful thing to offer, so
   // it stays enabled rather than being lumped in with PENDING.
   it('keeps Suspend and Restart enabled on a disconnected cloud machine', () => {
-    const plan = lifecyclePlan(managed(MACHINE_STATUS_DISCONNECTED), null)
+    const plan = lifecyclePlan(managed(MACHINE_STATUS_DISCONNECTED, LIFECYCLE_PHASE_READY), null)
     expect(plan.offer).toEqual(['suspend', 'restart'])
     expect(plan.disabledReason).toBeNull()
+  })
+
+  // The mirror can be stale: a suspended machine whose phase never arrived
+  // reads DISCONNECTED + UNSPECIFIED. Resume must be reachable.
+  it('also offers Resume on an unattached cloud machine with no known phase', () => {
+    const plan = lifecyclePlan(managed(MACHINE_STATUS_DISCONNECTED, LIFECYCLE_PHASE_UNSPECIFIED), null)
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resume'])
+    expect(plan.disabledReason).toBeNull()
+  })
+
+  it('does not offer Resume on a disconnected machine whose phase is known READY', () => {
+    const plan = lifecyclePlan(managed(MACHINE_STATUS_DISCONNECTED, LIFECYCLE_PHASE_READY), null)
+    expect(plan.offer).toEqual(['suspend', 'restart'])
   })
 
   it('offers nothing for a self-hosted machine, at any status', () => {
@@ -188,6 +201,41 @@ describe('restartMachine', () => {
       onStage: () => {},
     })
     expect(resume).toHaveBeenCalledTimes(1)
+  })
+
+  const clockPastDeadline = () => {
+    let t = 0
+    return () => (t += 20)
+  }
+
+  it('tries resume once when the phase never reports and the wait times out', async () => {
+    const resume = vi.fn(async () => {})
+    await restartMachine({
+      suspend: async () => {},
+      resume,
+      poll: async () => ({ phase: LIFECYCLE_PHASE_UNSPECIFIED, status: MACHINE_STATUS_DISCONNECTED }),
+      sleep: async () => {},
+      onStage: () => {},
+      timeoutMs: 50,
+      now: clockPastDeadline(),
+    })
+    expect(resume).toHaveBeenCalledTimes(1)
+  })
+
+  it('reports "still stopping" when that fallback resume is refused as not suspended', async () => {
+    await expect(
+      restartMachine({
+        suspend: async () => {},
+        resume: async () => {
+          throw new Error('[failed_precondition] daemon is not suspended')
+        },
+        poll: async () => ({ phase: LIFECYCLE_PHASE_UNSPECIFIED, status: MACHINE_STATUS_DISCONNECTED }),
+        sleep: async () => {},
+        onStage: () => {},
+        timeoutMs: 50,
+        now: clockPastDeadline(),
+      }),
+    ).rejects.toThrow(/still stopping/i)
   })
 
   it('surfaces a suspend failure without attempting the resume', async () => {

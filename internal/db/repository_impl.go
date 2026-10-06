@@ -1307,7 +1307,7 @@ func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdat
 			oom_kill_count = GREATEST(oom_kill_count, ?),
 			updated_at = CURRENT_TIMESTAMP
 		WHERE id = ?
-		  AND (last_status_changed_at IS NULL OR last_status_changed_at < ?)
+		  AND (lifecycle_phase IS NULL OR last_status_changed_at IS NULL OR last_status_changed_at < ?)
 	`
 	query = r.bindQuery(query)
 

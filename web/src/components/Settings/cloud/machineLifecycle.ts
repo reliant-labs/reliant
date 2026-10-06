@@ -171,7 +171,19 @@ export function lifecyclePlan(
     // ACTIVE, and DISCONNECTED — which is not a transition: the pod is up and
     // the daemon lost its gateway connection. Restart is the most useful
     // thing to offer there, so it stays live.
+    //
+    // Unattached with NO phase is different: the lifecycle mirror never
+    // landed (or was lost), so the machine may in truth be suspended and
+    // DISCONNECTED is only a guess. Resume is offered too so a stale mirror
+    // can never leave a machine with no way to start; the server refuses it
+    // with FailedPrecondition if the machine is not actually suspended.
     default:
+      if (
+        machine.status === MACHINE_STATUS_DISCONNECTED &&
+        (machine.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED) === LIFECYCLE_PHASE_UNSPECIFIED
+      ) {
+        return { managed: true, offer: ['suspend', 'restart', 'resume'], disabledReason: null }
+      }
       return { managed: true, offer: ['suspend', 'restart'], disabledReason: null }
   }
 }
@@ -218,8 +230,10 @@ export async function restartMachine(opts: RestartOptions): Promise<void> {
   await suspend()
 
   const deadline = now() + timeoutMs
+  let sawKnownPhase = false
   for (;;) {
     const { phase, status } = await poll()
+    if (phase !== LIFECYCLE_PHASE_UNSPECIFIED) sawKnownPhase = true
 
     if (phase === LIFECYCLE_PHASE_SUSPENDED) break
 
@@ -238,6 +252,25 @@ export async function restartMachine(opts: RestartOptions): Promise<void> {
     }
 
     if (now() >= deadline) {
+      // The phase never reported anything: the mirror is stale, so "no
+      // SUSPENDED seen" proves nothing (the machine may have been suspended
+      // all along). Try the resume once; the server refuses it unless the
+      // machine really is suspended, which is the check we cannot make here.
+      if (!sawKnownPhase) {
+        onStage('starting')
+        try {
+          await resume()
+          return
+        } catch (e) {
+          const message = e instanceof Error ? e.message : String(e)
+          if (/not suspended|failed.?precondition/i.test(message)) {
+            throw new Error(
+              'The machine is still stopping. Try Resume again in a moment.',
+            )
+          }
+          throw e
+        }
+      }
       throw new Error(
         'The machine did not stop in time, so it was not restarted. It may still be stopping — check its status and resume it when it is suspended.',
       )
