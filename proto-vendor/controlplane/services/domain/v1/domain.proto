@@ -24,7 +24,7 @@ option go_package = "github.com/reliant-labs/control-plane/gen/services/domain/v
 // line up with a deployment's. It is acquired once, slowly, with a human
 // editing a zone we do not control; after that it is moved between
 // environments and targets freely — prod today, a staging cut tomorrow. As a
-// spec field, "point hounders.club at staging for an hour" would be a deploy,
+// spec field, "point example.com at staging for an hour" would be a deploy,
 // and re-creating the workload would drop and re-acquire the domain, which
 // costs a certificate against a rate limit that cannot be raised. As a
 // resource with a binding, it is one write.
@@ -107,7 +107,7 @@ service DomainService {
 }
 
 message CreateDomainRequest {
-  // The hostname to claim: 'hounders.club', 'www.hounders.club'. Lowercased
+  // The hostname to claim: 'example.com', 'www.example.com'. Lowercased
   // and trimmed of a trailing dot server-side, so a value pasted out of a
   // DNS tool claims the same domain as one typed by hand.
   string hostname = 1;

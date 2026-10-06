@@ -1744,11 +1744,11 @@ func (x *DeployBackupStatus) GetLastError() string {
 // It is the DEPLOY-SIDE VIEW of a Domain plus its binding, reported against
 // the deployment the binding points at. The domain itself is an org-scoped
 // resource owned by DomainService; this message exists so `forge env status`
-// can show "this workload answers on hounders.club, which is waiting on DNS"
+// can show "this workload answers on example.com, which is waiting on DNS"
 // without a second call to a second service.
 type DeployCustomDomainStatus struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The hostname, lowercased. 'hounders.club', 'api.hounders.club'.
+	// The hostname, lowercased. 'example.com', 'app.example.com'.
 	Domain string                  `protobuf:"bytes,1,opt,name=domain,proto3" json:"domain,omitempty"`
 	State  DeployCustomDomainState `protobuf:"varint,2,opt,name=state,proto3,enum=controlplane.v1.DeployCustomDomainState" json:"state,omitempty"`
 	// The A / CNAME / TXT records the tenant must publish. Computed per domain
@@ -1834,8 +1834,8 @@ type DeployDnsRecord struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// 'A', 'CNAME' or 'TXT'.
 	Type string `protobuf:"bytes,1,opt,name=type,proto3" json:"type,omitempty"`
-	// The name to create, fully qualified: 'hounders.club',
-	// 'www.hounders.club', '_reliant-challenge.hounders.club'.
+	// The name to create, fully qualified: 'example.com',
+	// 'www.example.com', '_reliant-challenge.example.com'.
 	Name string `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
 	// The value: an IP for A, the platform ingress target for CNAME, the
 	// ownership token for TXT.
@@ -1861,7 +1861,7 @@ type DeployDnsRecord struct {
 	Resolved bool `protobuf:"varint,4,opt,name=resolved,proto3" json:"resolved,omitempty"`
 	// Why this record is not confirmed, in words a tenant can act on:
 	// "resolves to 203.0.113.7, expected 34.63.203.181", "no TXT record
-	// found at _reliant-challenge.hounders.club". EMPTY when resolved, and
+	// found at _reliant-challenge.example.com". EMPTY when resolved, and
 	// empty when the record has not been checked.
 	//
 	// TENANT-SAFE BY CONSTRUCTION. Written only by the verifier, from the
@@ -1943,7 +1943,7 @@ func (x *DeployDnsRecord) GetDetail() string {
 type Domain struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	Id    string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	// The hostname, lowercased: 'hounders.club', 'api.hounders.club'.
+	// The hostname, lowercased: 'example.com', 'app.example.com'.
 	// IMMUTABLE — a domain is its name. Renaming would silently move a
 	// verification and a certificate onto an identity nobody proved.
 	Hostname string                  `protobuf:"bytes,2,opt,name=hostname,proto3" json:"hostname,omitempty"`
@@ -2092,7 +2092,7 @@ type DomainBinding struct {
 	// ever been deployed, which is the natural order for a first launch.
 	Target string `protobuf:"bytes,4,opt,name=target,proto3" json:"target,omitempty"`
 	// Serve a 308 to this hostname instead of proxying. The apex/www pair is
-	// the case: 'www.hounders.club' redirects to 'hounders.club'.
+	// the case: 'www.example.com' redirects to 'example.com'.
 	RedirectTo    string                 `protobuf:"bytes,5,opt,name=redirect_to,json=redirectTo,proto3" json:"redirect_to,omitempty"`
 	CreatedAt     *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	UpdatedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`

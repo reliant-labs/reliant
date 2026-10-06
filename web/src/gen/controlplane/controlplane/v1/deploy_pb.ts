@@ -623,14 +623,14 @@ export const DeployBackupStatusSchema: GenMessage<DeployBackupStatus> = /*@__PUR
  * It is the DEPLOY-SIDE VIEW of a Domain plus its binding, reported against
  * the deployment the binding points at. The domain itself is an org-scoped
  * resource owned by DomainService; this message exists so `forge env status`
- * can show "this workload answers on hounders.club, which is waiting on DNS"
+ * can show "this workload answers on example.com, which is waiting on DNS"
  * without a second call to a second service.
  *
  * @generated from message controlplane.v1.DeployCustomDomainStatus
  */
 export type DeployCustomDomainStatus = Message<"controlplane.v1.DeployCustomDomainStatus"> & {
   /**
-   * The hostname, lowercased. 'hounders.club', 'api.hounders.club'.
+   * The hostname, lowercased. 'example.com', 'app.example.com'.
    *
    * @generated from field: string domain = 1;
    */
@@ -687,8 +687,8 @@ export type DeployDnsRecord = Message<"controlplane.v1.DeployDnsRecord"> & {
   type: string;
 
   /**
-   * The name to create, fully qualified: 'hounders.club',
-   * 'www.hounders.club', '_reliant-challenge.hounders.club'.
+   * The name to create, fully qualified: 'example.com',
+   * 'www.example.com', '_reliant-challenge.example.com'.
    *
    * @generated from field: string name = 2;
    */
@@ -729,7 +729,7 @@ export type DeployDnsRecord = Message<"controlplane.v1.DeployDnsRecord"> & {
   /**
    * Why this record is not confirmed, in words a tenant can act on:
    * "resolves to 203.0.113.7, expected 34.63.203.181", "no TXT record
-   * found at _reliant-challenge.hounders.club". EMPTY when resolved, and
+   * found at _reliant-challenge.example.com". EMPTY when resolved, and
    * empty when the record has not been checked.
    *
    * TENANT-SAFE BY CONSTRUCTION. Written only by the verifier, from the
@@ -762,7 +762,7 @@ export type Domain = Message<"controlplane.v1.Domain"> & {
   id: string;
 
   /**
-   * The hostname, lowercased: 'hounders.club', 'api.hounders.club'.
+   * The hostname, lowercased: 'example.com', 'app.example.com'.
    * IMMUTABLE — a domain is its name. Renaming would silently move a
    * verification and a certificate onto an identity nobody proved.
    *
@@ -874,7 +874,7 @@ export type DomainBinding = Message<"controlplane.v1.DomainBinding"> & {
 
   /**
    * Serve a 308 to this hostname instead of proxying. The apex/www pair is
-   * the case: 'www.hounders.club' redirects to 'hounders.club'.
+   * the case: 'www.example.com' redirects to 'example.com'.
    *
    * @generated from field: string redirect_to = 5;
    */

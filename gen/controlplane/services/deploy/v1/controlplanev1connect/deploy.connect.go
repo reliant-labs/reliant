@@ -203,7 +203,7 @@ type DeployServiceClient interface {
 	// automatic scale-to-zero, and neither one stops storage.
 	Scale(context.Context, *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error)
 	// SetEnvironmentRunState suspends or resumes EVERY live deployment of an
-	// environment in one call: the "stop hounders" / "re-up hounders" button.
+	// environment in one call: the "stop my-app" / "re-up my-app" button.
 	// Same semantics as Scale per deployment — it writes the declared run
 	// state, the tier controllers act on it (replicas to zero, database
 	// hibernated, site unpublished; data is kept) — and the same independence
@@ -929,7 +929,7 @@ type DeployServiceHandler interface {
 	// automatic scale-to-zero, and neither one stops storage.
 	Scale(context.Context, *connect.Request[v1.ScaleDeploymentRequest]) (*connect.Response[v1.ScaleDeploymentResponse], error)
 	// SetEnvironmentRunState suspends or resumes EVERY live deployment of an
-	// environment in one call: the "stop hounders" / "re-up hounders" button.
+	// environment in one call: the "stop my-app" / "re-up my-app" button.
 	// Same semantics as Scale per deployment — it writes the declared run
 	// state, the tier controllers act on it (replicas to zero, database
 	// hibernated, site unpublished; data is kept) — and the same independence

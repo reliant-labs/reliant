@@ -30,7 +30,7 @@ const (
 
 type CreateDomainRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The hostname to claim: 'hounders.club', 'www.hounders.club'. Lowercased
+	// The hostname to claim: 'example.com', 'www.example.com'. Lowercased
 	// and trimmed of a trailing dot server-side, so a value pasted out of a
 	// DNS tool claims the same domain as one typed by hand.
 	Hostname      string `protobuf:"bytes,1,opt,name=hostname,proto3" json:"hostname,omitempty"`
