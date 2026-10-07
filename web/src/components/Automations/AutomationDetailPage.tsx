@@ -43,7 +43,7 @@ import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
 import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
-import { daemonLabel, daemonStatusLabel } from "./daemonChoices";
+import { automationMachineLabel, daemonStatusLabel } from "./daemonChoices";
 import { BrokenActivationNotice } from "./BrokenActivationNotice";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import type { RunDisplayState } from "@/gen/reliant/v1/run_pb";
@@ -179,10 +179,12 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{trigger.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {projectName ?? "Unknown project"} on{" "}
-            {daemonLabel(
+            {/* "Reliant on MacBook", but "Reliant · No machine": no machine is not a place to run on. */}
+            {projectName ?? "Unknown project"}
+            {trigger.noMachine ? " · " : " on "}
+            {automationMachineLabel(
+              trigger,
               daemons.find((d) => d.daemonId === trigger.daemonId),
-              trigger.daemonId,
             )}{" "}
             ·{" "}
             {describeTriggerSource(trigger.source, naming)}
@@ -285,10 +287,16 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
       label: "Runs on",
       value: (
         <span>
-          {daemonLabel(daemon, trigger.daemonId)}
+          {automationMachineLabel(trigger, daemon)}
           <span className="text-muted-foreground">
             {" "}
-            ({daemon ? daemonStatusLabel(daemon.status) : "not in your daemon list"})
+            (
+            {trigger.noMachine
+              ? "web & integrations only"
+              : daemon
+                ? daemonStatusLabel(daemon.status)
+                : "not in your daemon list"}
+            )
           </span>
         </span>
       ),

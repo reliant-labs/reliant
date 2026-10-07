@@ -16,6 +16,7 @@ import { SpawnToolRenderer } from './SpawnToolRenderer';
 import { RunToolRenderer } from './RunToolRenderer';
 import { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
 import { RequestMachineToolRenderer } from './RequestMachineToolRenderer';
+import { WorkflowEditToolRenderer } from './WorkflowEditToolRenderer';
 import {
   isShellTool,
   isFileTool,
@@ -28,6 +29,7 @@ import {
   isRunLinkTool,
   isGenerateVideoTool,
   isRequestMachineTool,
+  isWorkflowEditTool,
 } from '../../../lib/toolFormatters';
 
 export type { ToolRenderContext, ToolResultData };
@@ -58,6 +60,10 @@ function ToolContentAreaComponent({ ctx }: ToolContentAreaProps) {
 
   if (isFileTool(toolName)) {
     return <FileToolRenderer ctx={ctx} />;
+  }
+
+  if (isWorkflowEditTool(toolName)) {
+    return <WorkflowEditToolRenderer ctx={ctx} />;
   }
 
   if (isViewOnlyTool(toolName) || isReadToolWithResults(toolName)) {
@@ -102,3 +108,4 @@ export { SpawnToolRenderer } from './SpawnToolRenderer';
 export { RunToolRenderer } from './RunToolRenderer';
 export { GenerateVideoToolRenderer } from './GenerateVideoToolRenderer';
 export { RequestMachineToolRenderer, RequestMachineCard, requestMachineReason } from './RequestMachineToolRenderer';
+export { WorkflowEditToolRenderer } from './WorkflowEditToolRenderer';
