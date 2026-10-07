@@ -13,11 +13,6 @@ interface ChatActionButtonsProps {
   onAttach: () => void;
   uploading: boolean;
 
-  // Discuss
-  isDiscussMode?: boolean;
-  onToggleDiscuss?: () => void;
-  isPaused?: boolean;
-
   // Responsiveness
   compact?: boolean;
 }
@@ -28,7 +23,7 @@ interface ButtonLayoutProps extends ChatActionButtonsProps {
 
 export function ChatActionButtons(props: ChatActionButtonsProps) {
   const defaultLayout = [
-    "attach", "discuss", "sendStop"
+    "attach", "sendStop"
   ];
 
   return <ButtonLayout {...props} layout={defaultLayout} />;
@@ -47,9 +42,8 @@ export function ButtonLayout({
   const sendButton = layout.find(name => sendButtonNames.includes(name) && name !== "queueSend");
 
   const alwaysVisibleNames = ["attach"];
-  const trailingActionNames = ["discuss"];
   const alwaysVisibleButtons = layout.filter(name => alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name));
-  const inlineActionButtons = layout.filter(name => !alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name) && !trailingActionNames.includes(name));
+  const inlineActionButtons = layout.filter(name => !alwaysVisibleNames.includes(name) && !sendButtonNames.includes(name));
 
   const buttonPriority = {
     divider: 1,
@@ -66,7 +60,6 @@ export function ButtonLayout({
 
   const alwaysVisibleElements = alwaysVisibleButtons.map((buttonName) => buttons[buttonName]).filter(Boolean);
   const inlineActionElements = sortedInlineActionButtons.map((buttonName) => buttons[buttonName]).filter(Boolean) as React.ReactElement[];
-  const trailingActionElements = trailingActionNames.map((buttonName) => buttons[buttonName]).filter(Boolean);
   const queueButtonElement = buttons["queueSend"] ?? null;
   const sendButtonElement = sendButton ? buttons[sendButton] : null;
 
@@ -74,7 +67,6 @@ export function ButtonLayout({
     <div className="flex items-center gap-1.5 flex-shrink-0">
       {alwaysVisibleElements}
       {inlineActionElements}
-      {trailingActionElements}
       {queueButtonElement}
       {sendButtonElement}
     </div>

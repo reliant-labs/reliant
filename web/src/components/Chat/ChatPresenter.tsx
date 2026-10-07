@@ -86,7 +86,6 @@ interface ChatPresenterProps {
 
   // Discuss mode
   isDiscussMode?: boolean;
-  onToggleDiscuss?: () => void;
 
   // Question (ask_user) state
   hasPendingQuestion?: boolean;
@@ -128,7 +127,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   workflowExecution,
   workflowExecutions,
   isDiscussMode,
-  onToggleDiscuss,
   hasPendingQuestion,
   onLoadOlderMessages,
   isLoadingOlderMessages,
@@ -723,7 +721,6 @@ export const ChatPresenter = memo(function ChatPresenter({
               selectedThreadId={selectedThreadId}
               workflowExecution={workflowExecution}
               isDiscussMode={isDiscussMode}
-              onToggleDiscuss={onToggleDiscuss}
             />
           </div>
         ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (
