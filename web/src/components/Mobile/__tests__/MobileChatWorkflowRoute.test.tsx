@@ -153,20 +153,17 @@ describe("MobileChatWorkflowRoute", () => {
     expect(reconcileChatSubscription).toHaveBeenCalledWith(CHAT_ID);
   });
 
-  it("re-asserts the subscription once the chat list loads, since the stream cannot connect before", async () => {
-    useChatStore.setState({ hasLoaded: false });
-
+  it("shows a loop mid-run as Running from its history while the stream has not connected", async () => {
+    // No stream events: the subscription is asserted, but nothing arrives.
+    // The FULL tree's rows for the loop all say completed (rows are written
+    // as steps finish), and nothing after the loop has run, so the loop is
+    // still what the run is doing.
     await act(async () => {
       render(<MobileChatWorkflowRoute />);
     });
-    const callsBeforeLoad = reconcileChatSubscription.mock.calls.length;
 
-    await act(async () => {
-      useChatStore.setState({ hasLoaded: true });
-    });
-
-    expect(reconcileChatSubscription.mock.calls.length).toBeGreaterThan(callsBeforeLoad);
-    expect(reconcileChatSubscription).toHaveBeenLastCalledWith(CHAT_ID);
+    expect(statusOf("attempt")).toBe("Running");
+    expect(statusOf("plan")).toBe("Done");
   });
 
   it("reads finished steps and child workflows from the FULL tree, as the desktop viewer does", async () => {

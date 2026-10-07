@@ -119,6 +119,43 @@ describe("buildLoopChildStatus", () => {
     expect(result.byIteration.get(0)?.lint).toBe("failed");
   });
 
+  it("reads the newest iteration of a running loop as under way when only its finished rows are known", () => {
+    // No stream: iteration 1 has finished `implement` (and a failed lint, the
+    // normal shape of a review iteration) but not its other checks. Rows only
+    // record what finished, so on their own they read "completed"/"failed".
+    const result = buildLoopChildStatus({
+      workflowId: WF,
+      loopNodeId: "attempt",
+      childNodeIds: BODY,
+      iterations: [
+        iteration(0, [row("implement", 0), row("lint", 0), row("test", 0), row("build", 0), row("review", 0)]),
+        iteration(1, [row("implement", 1), row("lint", 1, "failed")]),
+      ],
+      loopScoped: [],
+      loopIsRunning: true,
+      latestSequence: undefined,
+    });
+
+    expect(result.iterationStatuses).toEqual(["completed", "running"]);
+    // What finished in it still says so.
+    expect(result.byIteration.get(1)?.implement).toBe("completed");
+    expect(result.byIteration.get(1)?.lint).toBe("failed");
+  });
+
+  it("leaves the newest iteration of a stopped loop as its rows say", () => {
+    const result = buildLoopChildStatus({
+      workflowId: WF,
+      loopNodeId: "attempt",
+      childNodeIds: BODY,
+      iterations: [iteration(0, [row("implement", 0), row("lint", 0, "failed")])],
+      loopScoped: [],
+      loopIsRunning: false,
+      latestSequence: undefined,
+    });
+
+    expect(result.iterationStatuses).toEqual(["failed"]);
+  });
+
   it("does not guess an iteration for a parallel loop's deep activity", () => {
     const result = buildLoopChildStatus({
       workflowId: WF,

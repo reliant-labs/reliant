@@ -20,7 +20,10 @@
  * stream), status falls back to a FACTUAL tree derivation from that node's own
  * executions (its child workflow, its spawned loop steps, or its direct step
  * records). The fallback deliberately does NOT re-introduce position inference —
- * a node with no evidence of execution simply has no status.
+ * a node with no evidence of execution simply has no status. A node with
+ * evidence that runs inline (a loop) is read as running while the run is still
+ * going and has done nothing since at another node: its rows record only
+ * activities that FINISHED, so they never show the loop itself finishing.
  */
 
 import { useMemo } from 'react'
@@ -158,6 +161,40 @@ function buildExecutionStatusResult(
     }
   }
 
+  // 4. When each node last left a record: a step row is written as an
+  //    activity finishes, a child workflow exists from the moment it is
+  //    spawned. A row from a scope nested below a node (its loopNodeId names
+  //    a node of some inner workflow, not of this one) cannot be placed, so
+  //    it says nothing about which of this workflow's nodes ran.
+  const lastRecordByNode = new Map<string, number>()
+  const noteRecord = (nodeId: string, at: number) => {
+    if (at > (lastRecordByNode.get(nodeId) ?? -Infinity)) lastRecordByNode.set(nodeId, at)
+  }
+  for (const step of execution.steps) {
+    const owner = step.loopNodeId
+      ? nodeIdSet.has(step.loopNodeId) ? step.loopNodeId : null
+      : resolveStepToNode(step.stepId, nodeIdSet)
+    if (owner) noteRecord(owner, step.createdAt)
+  }
+  for (const child of execution.children) {
+    if (child.spawnedByNodeId && nodeIdSet.has(child.spawnedByNodeId)) {
+      noteRecord(child.spawnedByNodeId, child.createdAt)
+    }
+  }
+  /** Whether the run has done anything, at any other node, since `nodeId`'s newest record. */
+  const runMovedPast = (nodeId: string): boolean => {
+    const last = lastRecordByNode.get(nodeId)
+    if (last === undefined) return false
+    for (const [otherId, at] of lastRecordByNode) {
+      if (otherId !== nodeId && at > last) return true
+    }
+    return false
+  }
+  // The stream has not said a word about this run: it is not connected yet,
+  // or the chat predates persisted node events. When it has, it knows which
+  // node the run is in, and the history below must not second-guess it.
+  const streamSilent = latestSequence === undefined
+
   // --- Per-node status + loop info ---
   for (const nodeId of nodeOrder) {
     const spawnedSteps = spawnedStepsByNode.get(nodeId)
@@ -208,6 +245,26 @@ function buildExecutionStatusResult(
     if (
       execution.status === 'running' &&
       scopedHere.some((entry) => ranInside(entry, nodeId) && isBusy(entry, latestSequence))
+    ) {
+      statusMap[nodeId] = 'running'
+      continue
+    }
+
+    // A node that runs its body inline — a loop, an inline sub-workflow — is
+    // recorded only as its activities FINISH, so its rows say completed (or
+    // failed) all the way through: iteration 2 is under way the moment
+    // iteration 1's last row is written, and a failed check is the normal
+    // shape of a review iteration. Its rows therefore cannot show it
+    // finished. What does is the run ending, or moving on to another node.
+    // Until then, with no stream to ask, the node whose records are the
+    // newest thing a running run did is the node it is still in — the same
+    // reading isBusy gives the stream for the gap between two activities.
+    if (
+      streamSilent &&
+      execution.status === 'running' &&
+      spawnedSteps &&
+      spawnedSteps.length > 0 &&
+      !runMovedPast(nodeId)
     ) {
       statusMap[nodeId] = 'running'
       continue
@@ -639,6 +696,15 @@ export function buildLoopChildStatus(input: LoopChildStatusInput): LoopChildStat
       else if (statuses.includes('failed')) iterationStatuses.push('failed')
       else if (statuses.every((s) => s === 'completed')) iterationStatuses.push('completed')
       else iterationStatuses.push('pending')
+    }
+
+    // While the loop runs, its newest iteration is the one under way. When
+    // nothing above placed a running step in it — no stream, only rows —
+    // the rows of what finished so far would read it as done, or as failed
+    // over a check the next attempt exists to fix. Not for a parallel loop,
+    // whose iterations are all in flight at once.
+    if (loopIsRunning && !parallel && !iterationStatuses.includes('running')) {
+      iterationStatuses[latestIteration] = 'running'
     }
   }
 

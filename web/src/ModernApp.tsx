@@ -63,7 +63,7 @@ import { useCancelOnUnload } from "./hooks/useCancelOnUnload";
 import { useTerminalStore } from "./store/terminalStore";
 import { useWorktreeStore } from "./store/worktreeStore";
 import { resolveTerminalWorkingDir } from "./lib/terminalWorkingDir";
-import { useGlobalUpdatesStore } from "./store/globalUpdatesStore";
+import { useUpdateStreamConnection } from "./hooks/useUpdateStreamConnection";
 import { useProcessStore } from "./store/processStore";
 
 import { isGrpcReady } from "./api/grpc-client";
@@ -1209,28 +1209,20 @@ function App() {
     };
   }, [loadProjects]); // Run once on mount — workspace restore handles project selection
 
-  // Connect global WebSocket for real-time updates after backend is ready.
-  // Chats are already loaded by workspace restore / selectProject before
-  // isBackendReady is set, so the lastUserUpdateSequence is already stored.
+  // Connect the live update stream once the backend is ready. Chats are
+  // already loaded by workspace restore / selectProject before isBackendReady
+  // is set, so the lastUserUpdateSequence is already stored.
   const projectId = currentProject?.id;
+  useUpdateStreamConnection(projectId, isBackendReady);
+
   useEffect(() => {
     if (!isBackendReady || !projectId) return;
-
-    // Chats are already loaded by workspace restore / selectProject,
-    // so we can connect the global updates stream directly.
-    const globalUpdates = useGlobalUpdatesStore.getState();
-    globalUpdates.connect();
 
     // Initialize notification store (loads settings from localStorage/DB)
     useNotificationStore.getState().initialize();
     
     // Start permission refresh interval to detect system permission changes
     startPermissionRefresh();
-
-    // Cleanup on unmount
-    return () => {
-      useGlobalUpdatesStore.getState().disconnect();
-    };
   }, [isBackendReady, projectId]);
 
   // Fetch background processes on app mount to ensure we have current state
