@@ -1158,8 +1158,6 @@ message RouterArgs {
   // Workflows lists candidate workflows the router can select from.
   // Mutually exclusive with `nodes` — set exactly one.
   repeated RouterWorkflowCandidate workflows = 1 [(reliant) = {description: "Candidate workflows to route to"}];
-  reserved 2, 5;
-  reserved "prompt", "include_history";
   // SystemPrompt overrides the default routing system prompt.
   CelString system_prompt = 3 [(reliant) = {
     description: "Instructions for the routing model, replacing the default routing prompt"

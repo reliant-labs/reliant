@@ -546,8 +546,8 @@ func (r *RouterExecutor) makeRoutingDecision(args *reliantv1.RouterArgs) error {
 	}
 
 	// Build messages for the routing LLM
-	// If include_history is true, the CallLLM activity will load conversation history
-	// from the thread. We also inject the user prompt as an additional message.
+	// The CallLLM activity loads conversation history from the thread (the
+	// parent thread, below). We also inject the user prompt as an additional message.
 	messages := []*reliantv1.CallLLMMessageInput{
 		{
 			Role:    "user",
