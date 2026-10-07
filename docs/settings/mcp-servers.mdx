@@ -246,14 +246,14 @@ Refer to the [Model Context Protocol documentation](https://modelcontextprotocol
 
 ## Managing MCP Servers
 
-MCP servers run on the project's machine, not on Reliant's servers. A server that needs `npx` or `uvx` therefore needs them installed on that machine, which matters most for a fresh cloud machine.
+MCP servers run on the machine a chat runs on, not on Reliant's servers. A server that needs `npx` or `uvx` therefore needs them installed on that machine, which matters most for a fresh cloud machine.
 
 ### Testing MCP Servers
 
 After adding an MCP server:
 
 1. Open **Settings → MCP Servers** and verify status or last error
-2. **Check logs** for connection errors. MCP servers are started by the daemon on the [machine](/machines/overview) the project lives on, so read that machine's log: run `reliant daemon logs` there. On a cloud machine, run it from a terminal on the machine.
+2. **Check logs** for connection errors. MCP servers are started by the daemon on the [machine](/machines/overview) the chat runs on, so read that machine's log: run `reliant daemon logs` there. On a cloud machine, run it from a terminal on the machine.
 3. **Test in a chat** by asking the agent to use the new tools
 
 ### Debugging Issues

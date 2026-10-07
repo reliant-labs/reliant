@@ -3,19 +3,19 @@ title: "Choosing a machine in workflows"
 description: "How Reliant decides which machine runs a chat or a workflow, and how to pin one with daemon:"
 ---
 
-A project has one machine, and its chats run there. Two things can send work somewhere else: a `daemon:` in a workflow, and an automation, which can be pointed at a different machine for the same project.
+A project can be installed on several machines, and each chat has its own machine: you pick it on the new-chat screen, or change it later with **Connect a machine**. A chat with no machine pinned runs on your default machine, and a branched chat runs on the machine that holds its worktree. An automation picks its own machine when you activate it, and a `daemon:` in a workflow can send work somewhere else again.
 
-When something does need to choose, Reliant resolves it in a fixed order, from the most specific instruction to the least:
+When a workflow run has to choose, Reliant resolves it in a fixed order, from the most specific instruction to the least:
 
 ```text
-Node daemon  →  Workflow daemon  →  Automation's machine  →  Project's machine
+Node daemon  →  Workflow daemon  →  Chat's or automation's machine  →  Default machine
 ```
 
-A `daemon:` on a single node wins over a `daemon:` on the whole workflow, which wins over the machine the automation was activated with, which wins over the project's own machine.
+A `daemon:` on a single node wins over a `daemon:` on the whole workflow, which wins over the machine the chat or automation was started with, which wins over your default machine.
 
 ## Automations
 
-When you activate an [automation](/automations/overview) you choose its machine, or **No machine** if the workflow allows it. The runs it starts use that machine's tools even if the project's chats use another. If you leave it unset for a project that has several candidates, you are asked to choose; an unattended run is never sent somewhere by guesswork.
+When you activate an [automation](/automations/overview) you choose its machine, or **No machine** if the workflow allows it. The runs it starts use that machine's tools, whichever machines your chats use. If you leave it unset for a project that has several candidates, you are asked to choose; an unattended run is never sent somewhere by guesswork.
 
 ## The `daemon:` field
 
