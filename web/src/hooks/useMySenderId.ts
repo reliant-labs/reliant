@@ -10,8 +10,8 @@
  * person's own credential, never a login: a login can be renamed and then
  * registered by someone else. A hosted GitHub account has no connection row —
  * its token is delegated by the control plane — so its id comes from the git
- * credential, which does not report one yet (GitCredentialStatus.accountId);
- * until it does, "Me" is not offered there and the hint says what to do.
+ * credential (GitCredentialStatus.accountId). When control-plane could not
+ * resolve that id, "Me" is not offered there and the hint says what to do.
  */
 
 import type { Connection } from "../api/connection-grpc";
