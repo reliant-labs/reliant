@@ -147,7 +147,7 @@ export function DeclaredTriggerPanel(props: DeclaredTriggerPanelProps) {
   return (
     <ConfigurationPanel
       title={title}
-      subtitle="Declared trigger"
+      subtitle="Trigger"
       subtitleMono={false}
       icon={icon}
       onClose={onClose}
@@ -417,8 +417,8 @@ function IntegrationSection({
                     }
                     className={
                       on
-                        ? "rounded-full border border-primary bg-primary px-2 py-0.5 font-mono text-2xs text-primary-foreground"
-                        : "rounded-full border border-border px-2 py-0.5 font-mono text-2xs text-muted-foreground hover:bg-muted hover:text-foreground"
+                        ? "rounded-full border border-primary bg-primary px-2 py-0.5 font-mono text-xs text-primary-foreground"
+                        : "rounded-full border border-border px-2 py-0.5 font-mono text-xs text-muted-foreground hover:bg-muted hover:text-foreground"
                     }
                   >
                     {event}
@@ -451,7 +451,7 @@ function IntegrationSection({
               const example = schema?.examples?.[0];
               return (
                 <div key={name}>
-                  <label htmlFor={`${ids}-match-${name}`} className="mb-1 block font-mono text-2xs text-muted-foreground">{name}</label>
+                  <label htmlFor={`${ids}-match-${name}`} className="mb-1 block font-mono text-xs text-muted-foreground">{name}</label>
                   <input
                     id={`${ids}-match-${name}`}
                     defaultValue={source.match[name] ?? ""}
@@ -552,7 +552,7 @@ function InputsSection({ trigger, inputs, onChange, disabled, findings }: { trig
                     <label htmlFor={`${ids}-in-${name}`} className="font-mono">{name}</label>
                     {input?.type && <span className="cpv2-field-type">{input.type}</span>}
                   </span>
-                  {!declared.includes(name) && <span className="text-2xs text-warning-ink">not a declared input</span>}
+                  {!declared.includes(name) && <span className="text-xs text-warning-ink">not a declared input</span>}
                 </div>
                 <CELInput
                   id={`${ids}-in-${name}`}

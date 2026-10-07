@@ -22,6 +22,7 @@ import { useId } from "react";
 import { CardInset } from "../../forge-ui/card";
 import type { CatalogEntry } from "../../../api/catalog-search-grpc";
 import type { Connection } from "../../../api/connection-grpc";
+import { methodsUnavailableHere } from "../../../lib/integrationAvailability";
 import { useConnections } from "../../../hooks/connection-queries";
 import { cn } from "../../../lib/utils";
 
@@ -46,8 +47,7 @@ export function connectionPickerState(entry: CatalogEntry, connections: readonly
   if (!entry.connection.required && methods.length === 0) return "none_required";
   if (!(entry.connection.required || entry.summary.connectionRequired)) return "none_required";
   // A Connect button that can only open "nothing is set up here" is a dead end.
-  const connectable = methods.filter((m) => m.kind !== "none");
-  return connectable.length > 0 && connectable.every((m) => !m.available) ? "unavailable" : "unconnected";
+  return methodsUnavailableHere(methods) ? "unavailable" : "unconnected";
 }
 
 function connectionLabel(connection: Connection): string {

@@ -137,15 +137,15 @@ export function PresetViewModal({ preset, projectId, onCopy, onClose }: PresetVi
                     {Array.isArray(value) ? (
                       <div className="flex flex-wrap gap-1.5">
                         {value.map((item: any, i: number) => (
-                          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium bg-muted text-muted-foreground">
+                          <span key={i} className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                             {formatValueForDisplay(item)}
                           </span>
                         ))}
                       </div>
                     ) : typeof value === 'object' && value !== null ? (
-                      <pre className="whitespace-pre-wrap text-2xs bg-background/50 p-2 rounded border border-border/50">{JSON.stringify(unwrapProtoValue(value as any) ?? value, null, 2)}</pre>
+                      <pre className="whitespace-pre-wrap text-xs bg-background/50 p-2 rounded border border-border/50">{JSON.stringify(unwrapProtoValue(value as any) ?? value, null, 2)}</pre>
                     ) : (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-2xs font-medium bg-muted text-muted-foreground">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-muted text-muted-foreground">
                         {formatValueForDisplay(value)}
                       </span>
                     )}

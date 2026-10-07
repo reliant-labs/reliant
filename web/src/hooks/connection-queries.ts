@@ -6,6 +6,8 @@ import { useMutation, useQueries, useQuery, useQueryClient, type QueryClient } f
 import { connectionGrpc, type Connection } from "../api/connection-grpc";
 import { catalogSearchGrpc } from "../api/catalog-search-grpc";
 import type { JsonSchema } from "../lib/jsonSchema";
+import { unavailableIntegrationIds } from "../lib/integrationAvailability";
+import { integrationEventNaming, RAW_EVENT_NAMING, type IntegrationEventNaming } from "../lib/integrationEventNames";
 
 export const connectionKeys = {
   all: ["connections"] as const,
@@ -21,6 +23,22 @@ export function useConnections(integrationId: string | undefined) {
     enabled: !!integrationId,
     staleTime: 30_000,
   });
+}
+
+/**
+ * The integrations nobody can connect on this deployment (every connection
+ * method switched off here), from ListIntegrations: one request for the whole
+ * catalog, so the palette can say so on every row before the user clicks.
+ * Empty until it loads, and if it fails — rows then read "Not connected",
+ * and the connect dialog still explains.
+ */
+export function useUnavailableIntegrations(): ReadonlySet<string> {
+  const query = useQuery({
+    queryKey: [...connectionKeys.all, "integrations"],
+    queryFn: () => connectionGrpc.listIntegrations(),
+    staleTime: 5 * 60_000,
+  });
+  return useMemo(() => unavailableIntegrationIds(query.data ?? []), [query.data]);
 }
 
 /** One catalog entry in full (schemas, connection methods). Shared with the palette's prefetch. */
@@ -78,6 +96,21 @@ export function useActionOutputSchemas(refsByNode: ReadonlyArray<readonly [strin
     return out;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- recomputed when a schema arrives or a ref moves
   }, [signature]);
+}
+
+/**
+ * Integration events by their catalog names — "GitHub: Issue opened", not
+ * "github: issues.opened" — for every run and trigger that names one
+ * (lib/integrationEventNames). One search of the trigger types, shared with
+ * useDeclaredTriggerRef's cache; the recorded names until it loads.
+ */
+export function useIntegrationEventNaming(): IntegrationEventNaming {
+  const search = useQuery({
+    queryKey: ["catalogSearch", "trigger-types", ""],
+    queryFn: () => catalogSearchGrpc.search({ query: "", kinds: ["trigger"], pageSize: 100 }),
+    staleTime: 5 * 60_000,
+  });
+  return useMemo(() => (search.data ? integrationEventNaming(search.data.entries) : RAW_EVENT_NAMING), [search.data]);
 }
 
 /**

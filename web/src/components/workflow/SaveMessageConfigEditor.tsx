@@ -215,8 +215,8 @@ export function SaveMessageConfigEditor({
   )
 
   const helpContent = isInLoop
-    ? 'Saves a message to the thread AFTER node execution completes.\n\nIn loops: Runs on EVERY iteration.\nUse the Condition field to skip saving on specific iterations.'
-    : 'Saves a message to the thread AFTER node execution completes. Use Condition to conditionally skip saving.'
+    ? 'Saves a message to the thread AFTER the step finishes.\n\nIn loops: Runs on EVERY iteration.\nUse the Condition field to skip saving on specific iterations.'
+    : 'Saves a message to the thread AFTER the step finishes. Use Condition to conditionally skip saving.'
 
   // Flat variant: render fields directly without any wrapper or header
   if (variant === 'flat') {

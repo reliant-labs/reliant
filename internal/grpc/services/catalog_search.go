@@ -218,6 +218,7 @@ func CatalogEntrySummaryToProto(e *catalogindex.Entry, connected bool) *reliantv
 		ConnectionRequired: e.ConnectionRequired,
 		Connected:          connected,
 		Mutates:            e.Action.GetMutates(),
+		Events:             e.Trigger.GetEvents(),
 	}
 }
 

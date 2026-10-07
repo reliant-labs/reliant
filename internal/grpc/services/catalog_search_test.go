@@ -426,6 +426,9 @@ func TestGetCatalogEntry_TriggerCarriesItsPayloadSchema(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"pager/alert.fired@1"}, entryRefs(list.Msg.GetEntries()))
 	assert.Equal(t, "Alert fired", list.Msg.GetEntries()[0].GetDisplayName())
+	// The summary names the provider events it fires on, so a client can
+	// name a run's event ("alert.fired" → "Alert fired") from the search alone.
+	assert.Equal(t, []string{"alert.fired"}, list.Msg.GetEntries()[0].GetEvents())
 
 	resp, err := svc.GetCatalogEntry(asUser("bob"), connect.NewRequest(&reliantv1.GetCatalogEntryRequest{Ref: "pager/alert.fired@1"}))
 	require.NoError(t, err)

@@ -90,7 +90,7 @@ export function ConfigurationPanel({
               target="_blank"
               rel="noopener noreferrer"
               className="inline-flex items-center text-muted-foreground/50 hover:text-muted-foreground transition-colors flex-shrink-0 ml-auto"
-              title="Node reference docs"
+              title="Step reference docs"
             >
               <ExternalLink className="w-3 h-3" />
             </a>

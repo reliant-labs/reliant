@@ -31,7 +31,8 @@ export function WorkflowBadge({
 }) {
   return (
     <span className="forge-ui inline-flex" data-testid={testId}>
-      <Badge label={label} variant={variant} size="sm" />
+      {/* md, not sm: sm renders under the 12px label floor. */}
+      <Badge label={label} variant={variant} size="md" />
     </span>
   );
 }

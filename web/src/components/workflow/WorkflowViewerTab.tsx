@@ -114,7 +114,7 @@ export function WorkflowViewerTab({ projectId, chatId, workflowName }: WorkflowV
                   {formatRelativeTime(wf.createdAt)}
                 </div>
               </div>
-              <RunStatusBadge status={statuses[index]!} />
+              <RunStatusBadge status={statuses[index]!} size="md" />
             </button>
           ))}
         </div>

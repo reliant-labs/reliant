@@ -26,6 +26,7 @@ import { cn } from "@/lib/utils";
 import { CardInset } from "../forge-ui/card";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { formatClock, launchContextOf } from "./launchContext";
+import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { LaunchKindIcon } from "./LaunchKindIcon";
 
 interface TriggerCardProps {
@@ -100,6 +101,7 @@ export function TriggerCard({
 }: TriggerCardProps) {
   const kind = launchKindDisplay(launchKind).kind;
   const [expanded, setExpanded] = useState(false);
+  const naming = useIntegrationEventNaming();
   const detailsId = useId();
 
   // A run a person started has nothing to explain. The marker keeps the
@@ -123,7 +125,7 @@ export function TriggerCard({
   // Every other kind reads its line from the vocabulary, naming the automation
   // (live, or as it was when it fired) so the link lands on the name.
   const display = launchKindDisplay(launchKind, {
-    ...launchContextOf(event),
+    ...launchContextOf(event, naming),
     triggerName: triggerName ?? event?.triggerName,
   });
   const parts = display.automationParts;

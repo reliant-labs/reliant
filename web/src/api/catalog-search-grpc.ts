@@ -51,6 +51,8 @@ export interface CatalogEntrySummary {
   connected: boolean;
   /** The action changes external state. */
   mutates: boolean;
+  /** A trigger's provider event types ("issues.opened"); empty for an action. */
+  events: string[];
 }
 
 export interface CatalogEntry {
@@ -147,6 +149,7 @@ export function catalogSummaryFromProto(proto: ProtoCatalogEntrySummary): Catalo
     connectionRequired: proto.connectionRequired,
     connected: proto.connected,
     mutates: proto.mutates,
+    events: [...(proto.events ?? [])],
   };
 }
 

@@ -168,13 +168,13 @@ describe("PresetList", () => {
     vi.spyOn(window, "confirm").mockReturnValue(true);
     wrap(<PresetList projectId="proj-1" presets={[careful, builtinPreset]} onChanged={onChanged} label="Presets" />);
 
-    await userEvent.click(screen.getByRole("button", { name: "More actions for careful" }));
+    await userEvent.click(screen.getByRole("button", { name: "More actions for careful (mine)" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
     await waitFor(() => expect(onChanged).toHaveBeenCalled());
     expect(mocks.deletePreset).toHaveBeenCalledWith(expect.objectContaining({ projectId: "proj-1", name: "careful" }));
 
-    await userEvent.click(screen.getByRole("button", { name: "More actions for fast" }));
-    const menu = await screen.findByRole("menu", { name: "More actions for fast" });
+    await userEvent.click(screen.getByRole("button", { name: "More actions for fast (built-in)" }));
+    const menu = await screen.findByRole("menu", { name: "More actions for fast (built-in)" });
     expect(within(menu).queryByRole("menuitem", { name: "Delete" })).toBeNull();
     expect(within(menu).getByRole("menuitem", { name: "Copy to new preset" })).toBeInTheDocument();
   });

@@ -119,7 +119,7 @@ export function IntegrationActionConfig({ step, onUpdate, isReadOnly = false }: 
               <span className="text-xs text-muted-foreground">{integration.displayName}</span>
             </div>
             <p className="cpv2-field-hint !mt-0">{entry.description || entry.summary.summary}</p>
-            {entry.summary.mutates && <Badge label={`Changes data in ${integration.displayName}`} variant="warning" size="sm" dot />}
+            {entry.summary.mutates && <Badge label={`Changes data in ${integration.displayName}`} variant="warning" size="md" dot />}
           </div>
         </div>
       </Section>

@@ -35,6 +35,7 @@ import { AlertOctagon, AlertTriangle, CalendarClock, Clock, MessageCircle, Plug,
 import type { NodeExecutionStatus } from "../../../lib/workflow-flow";
 import { declaredRailLines, triggerRailLines, type DeclaredRailLine, type TriggerRailLine } from "../../../lib/triggerRail";
 import { describeDeclaredSource, findingFieldLabel, integrationOf, sourceCase, type TriggerFinding } from "../../../lib/declaredTriggers";
+import { useIntegrationEventNaming } from "../../../hooks/connection-queries";
 import { describeSchedule } from "../../../lib/cronText";
 import { useTriggers } from "../../../hooks/trigger-queries";
 import type { Trigger } from "../../../api/trigger-grpc";
@@ -165,7 +166,7 @@ function Findings({ findings }: { findings: TriggerFinding[] }) {
   return (
     <>
       {findings.map((finding, i) => (
-        <p key={i} role="note" className="mt-0.5 flex items-start gap-1 pl-6 text-2xs text-warning-ink">
+        <p key={i} role="note" className="mt-0.5 flex items-start gap-1 pl-6 text-xs text-warning-ink">
           <AlertTriangle className="mt-px h-3 w-3 flex-shrink-0" aria-hidden />
           <span>
             {finding.field && <span className="font-medium">{findingFieldLabel(finding.field)}: </span>}
@@ -206,7 +207,7 @@ function StateBadge({ line }: { line: DeclaredRailLine }) {
 function DeclaredCard({ rail, line, compact }: { rail: TriggerRailContextValue; line: DeclaredRailLine; compact: boolean }) {
   const name = line.declared.name ?? "";
   const findings = rail.findingsFor(line.index, name);
-  const sourceText = describeDeclaredSource(line.declared, describeSchedule);
+  const sourceText = describeDeclaredSource(line.declared, describeSchedule, useIntegrationEventNaming());
   const unsaved = rail.unsavedDeclared.has(name);
   const selected = rail.selectedDeclared === line.index;
   const stateWords = line.state === "inactive" ? "not active" : `${STATE_TEXT[line.state]} for you`;
@@ -291,7 +292,7 @@ function PersonalCard({ rail, line, compact }: { rail: TriggerRailContextValue |
 
 function OrphanCard({ rail, orphan, compact }: { rail: TriggerRailContextValue | null; orphan: Trigger; compact: boolean }) {
   return (
-    <Tooltip content={orphan.health.lastFailureDetail || "Its declared trigger is gone"} placement="bottom" delay={300} wrapperClassName="flex w-full">
+    <Tooltip content={orphan.health.lastFailureDetail || "Its trigger is gone"} placement="bottom" delay={300} wrapperClassName="flex w-full">
       <button
         type="button"
         onClick={stop(() => rail?.onEditTrigger(orphan))}
@@ -320,7 +321,8 @@ export const TriggerRailNode = memo(({ data, selected }: TriggerRailNodeProps) =
   // every-project list; personal cards stay scoped to this project.
   const triggersQuery = useTriggers(undefined, { enabled: !!rail?.workflowRef });
   const all = triggersQuery.data ?? [];
-  const personal = rail && triggersQuery.data ? triggerRailLines(all, rail.workflowRef, rail.projectId) : [];
+  const eventNaming = useIntegrationEventNaming();
+  const personal = rail && triggersQuery.data ? triggerRailLines(all, rail.workflowRef, rail.projectId, eventNaming) : [];
   const declared = rail ? declaredRailLines(rail.declared, all, rail.workflowRef) : { lines: [], orphans: [] };
 
   const triggerCount = declared.lines.length + declared.orphans.length + personal.length;

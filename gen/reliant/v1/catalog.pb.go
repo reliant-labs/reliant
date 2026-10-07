@@ -2083,7 +2083,13 @@ type CatalogEntrySummary struct {
 	// on this deployment (GitHub through the control plane).
 	Connected bool `protobuf:"varint,9,opt,name=connected,proto3" json:"connected,omitempty"`
 	// Mutates is set on an action that changes external state.
-	Mutates       bool `protobuf:"varint,10,opt,name=mutates,proto3" json:"mutates,omitempty"`
+	Mutates bool `protobuf:"varint,10,opt,name=mutates,proto3" json:"mutates,omitempty"`
+	// Events are the provider event types a trigger fires on ("issues.opened"),
+	// as its TriggerSpec lists them; empty for an action. A run started by an
+	// integration event records the event type, and this is what lets a client
+	// name that event with the trigger's display_name ("Issue opened") from one
+	// search, without fetching every entry.
+	Events        []string `protobuf:"bytes,11,rep,name=events,proto3" json:"events,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -2186,6 +2192,13 @@ func (x *CatalogEntrySummary) GetMutates() bool {
 		return x.Mutates
 	}
 	return false
+}
+
+func (x *CatalogEntrySummary) GetEvents() []string {
+	if x != nil {
+		return x.Events
+	}
+	return nil
 }
 
 // CatalogFacet counts the matches that carry one value of a facet.
@@ -3063,7 +3076,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\aversion\x18\x02 \x01(\x05R\aversion\x12!\n" +
 	"\fdisplay_name\x18\x03 \x01(\tR\vdisplayName\x12\x12\n" +
 	"\x04icon\x18\x04 \x01(\tR\x04icon\x12\x1a\n" +
-	"\bcategory\x18\x05 \x01(\tR\bcategory\"\x90\x03\n" +
+	"\bcategory\x18\x05 \x01(\tR\bcategory\"\xa8\x03\n" +
 	"\x13CatalogEntrySummary\x12\x10\n" +
 	"\x03ref\x18\x01 \x01(\tR\x03ref\x120\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x1c.reliant.v1.CatalogEntryKindR\x04kind\x12\x0e\n" +
@@ -3076,7 +3089,8 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x13connection_required\x18\b \x01(\bR\x12connectionRequired\x12\x1c\n" +
 	"\tconnected\x18\t \x01(\bR\tconnected\x12\x18\n" +
 	"\amutates\x18\n" +
-	" \x01(\bR\amutates\":\n" +
+	" \x01(\bR\amutates\x12\x16\n" +
+	"\x06events\x18\v \x03(\tR\x06events\":\n" +
 	"\fCatalogFacet\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
 	"\x05count\x18\x02 \x01(\x05R\x05count\"\x81\x02\n" +

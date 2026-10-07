@@ -168,7 +168,7 @@ describe("the workflow editor's chat", () => {
       "Add a step that…",
       "Add a trigger when…",
       "Explain this workflow",
-      "Write test scenarios",
+      "Write tests",
     ]);
     expect(screen.queryByTestId("workflow-starter-cards")).toBeNull();
     expect(screen.queryByText("Create a pitch deck")).toBeNull();

@@ -80,6 +80,7 @@ function renderDialog(ui: ReactNode) {
   const routes = [
     createRoute({ getParentRoute: () => rootRoute, path: "/workflow", component: () => <>{ui}</> }),
     createRoute({ getParentRoute: () => rootRoute, path: "/project/$projectId", component: () => null }),
+    createRoute({ getParentRoute: () => rootRoute, path: "/settings/$section", component: () => null }),
   ];
   const router = createRouter({
     routeTree: rootRoute.addChildren(routes),
@@ -245,8 +246,32 @@ describe("RunWorkflowDialog", () => {
     await user.click(screen.getByRole("button", { name: "Run" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent("input 'label': model gpt-x is not available");
+    // Only a missing provider key points at Settings.
+    expect(screen.queryByRole("link", { name: /Your providers/ })).toBeNull();
     expect(onClose).not.toHaveBeenCalled();
     expect(loadRunContext).not.toHaveBeenCalled();
+  });
+
+  it("a run with no model provider links to Settings → AI → Your providers", async () => {
+    startChat.mockRejectedValue(
+      new ConnectError("no API keys configured: please add an API key in Settings > API Keys", Code.FailedPrecondition),
+    );
+    const user = userEvent.setup();
+    const onClose = vi.fn();
+    const { router } = renderDialog(<RunWorkflowDialog open onClose={onClose} projectId="proj-1" workflowRef="triage" />);
+
+    fill(await screen.findByLabelText("Label"), "bug");
+    fill(screen.getByLabelText("Message"), "Go");
+    await user.click(screen.getByRole("button", { name: "Run" }));
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("no API keys configured");
+    const link = within(alert).getByRole("link", { name: "Add a provider in Settings → AI → Your providers" });
+    // The AI section opens on its "Your providers" tab.
+    expect(link).toHaveAttribute("href", "/settings/general");
+    await user.click(link);
+    await waitFor(() => expect(router.state.location.pathname).toBe("/settings/general"));
+    expect(onClose).toHaveBeenCalled();
   });
 
   it("requires a message", async () => {

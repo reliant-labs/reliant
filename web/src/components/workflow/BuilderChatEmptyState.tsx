@@ -22,7 +22,7 @@ export const BUILDER_CHAT_SUGGESTIONS: readonly BuilderChatSuggestion[] = [
   { label: "Add a step that…", text: "Add a step that ", icon: Plus },
   { label: "Add a trigger when…", text: "Add a trigger so this runs when ", icon: Zap },
   { label: "Explain this workflow", text: "Explain what this workflow does, step by step.", icon: MessageSquareText },
-  { label: "Write test scenarios", text: "Write test scenarios that cover this workflow's main paths.", icon: TestTube2 },
+  { label: "Write tests", text: "Write tests that cover this workflow's main paths.", icon: TestTube2 },
 ];
 
 interface BuilderChatEmptyStateProps {
@@ -43,7 +43,7 @@ export function BuilderChatEmptyState({ workflowSlug, noMachine, onPick }: Build
           <span
             data-testid="builder-chat-no-machine-pill"
             title="Editing workflows runs on Reliant's servers, so it doesn't need a machine."
-            className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2 py-0.5 text-2xs font-medium text-muted-foreground"
+            className="inline-flex items-center gap-1 rounded-full border border-border/60 bg-background px-2 py-0.5 text-xs font-medium text-muted-foreground"
           >
             <CloudOff className="h-3 w-3" aria-hidden="true" />
             {NO_MACHINE_PILL}

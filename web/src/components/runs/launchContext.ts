@@ -9,6 +9,7 @@
 
 import type { LaunchEvent } from "@/api/run-grpc";
 import type { LaunchContext } from "@/lib/runStatus";
+import { RAW_EVENT_NAMING, type IntegrationEventNaming } from "@/lib/integrationEventNames";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 
 /** "14:02" in the viewer's clock, 24-hour. */
@@ -21,15 +22,20 @@ export function formatClock(iso: string): string {
 /**
  * The event's facts as a LaunchContext. The automation's name is the
  * caller's to add: the live name when it still exists, which the event does
- * not know.
+ * not know. An integration event reads by its catalog names ("GitHub: Issue
+ * opened") when `naming` has them (useIntegrationEventNaming).
  */
-export function launchContextOf(event: LaunchEvent | null | undefined): LaunchContext {
+export function launchContextOf(
+  event: LaunchEvent | null | undefined,
+  naming: IntegrationEventNaming = RAW_EVENT_NAMING,
+): LaunchContext {
   if (!event) return {};
+  const integration = event.integration;
   return {
     manual: event.manual,
     at: event.kind === "webhook" && event.occurredAt ? formatClock(event.occurredAt) : undefined,
-    providerName: event.integration,
-    providerEvent: event.providerEvent,
+    providerName: integration ? naming.integration(integration) : integration,
+    providerEvent: integration && event.providerEvent ? naming.event(integration, event.providerEvent) : event.providerEvent,
     sourceWorkflow: event.sourceWorkflow ? getWorkflowDisplayName(event.sourceWorkflow, true) : undefined,
     sourceOutcome: event.sourceOutcome,
   };

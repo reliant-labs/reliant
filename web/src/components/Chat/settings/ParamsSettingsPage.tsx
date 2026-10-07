@@ -59,7 +59,7 @@ export function ParamsSettingsPage({
       })
       .map(([group, params]): ParamGroup => ({
         group,
-        label: group || "Parameters",
+        label: group || "Inputs",
         params,
       }));
   }, [inputs, excludeParams]);

@@ -45,6 +45,7 @@ import {
   type PaletteItem,
 } from "./paletteItems";
 import { catalogSearchKeys, useCatalogIntegrations, useCatalogSearch } from "./useCatalogSearch";
+import { useUnavailableIntegrations } from "../../../hooks/connection-queries";
 
 export interface StepPaletteProps {
   open: boolean;
@@ -123,6 +124,9 @@ function StepPaletteBody({
 
   const browsing = query.trim() === "";
   const nodesQuery = useQuery({ queryKey: ["catalogNodes"], queryFn: ensureNodesCached, staleTime: Infinity });
+  // Integrations no connection method serves on this deployment: their rows
+  // say so instead of offering a Connect that can only explain why not.
+  const unavailableIntegrations = useUnavailableIntegrations();
   const search = useCatalogSearch({ query, kind, category, requireQuery: true, enabled: !browsing });
   const browse = useCatalogIntegrations({ kind, category, enabled: browsing });
   const expanded = useCatalogSearch({
@@ -364,6 +368,9 @@ function StepPaletteBody({
     const rowIndex = index;
     const active = rowIndex === clampedIndex;
     const unconnected = item.kind === "catalog" && !item.entry.connected;
+    const notAvailable =
+      (item.kind === "catalog" && !item.entry.connected && unavailableIntegrations.has(item.entry.integration.id)) ||
+      (item.kind === "integration" && !item.listing.connected && unavailableIntegrations.has(item.listing.integration.id));
     const nested = (item.kind === "catalog" && item.nested) || item.kind === "more-entries" || (item.kind === "builtin" && item.advanced && browsing);
     const disclosure = item.kind === "integration" || item.kind === "advanced-toggle" ? item.expanded : undefined;
     return (
@@ -372,7 +379,7 @@ function StepPaletteBody({
         id={optionId(rowIndex)}
         role="option"
         aria-selected={active}
-        aria-describedby={unconnected ? `${ids}-connect-hint` : undefined}
+        aria-describedby={unconnected && !notAvailable ? `${ids}-connect-hint` : undefined}
         data-palette-row={item.kind}
         onMouseMove={() => {
           if (!active) setActiveIndex(rowIndex);
@@ -395,17 +402,22 @@ function StepPaletteBody({
           </div>
           <RowDescription item={item} entryNoun={entryNoun} />
         </div>
-        {item.kind === "catalog" && item.entry.mutates && <Badge label="Changes data" variant="warning" size="sm" />}
+        {item.kind === "catalog" && item.entry.mutates && <Badge label="Changes data" variant="warning" size="md" />}
         {item.kind === "integration" &&
           (item.listing.connected ? (
-            <Badge label="Connected" variant="success" size="sm" dot />
-          ) : (
-            <span className="flex-shrink-0 text-2xs text-muted-foreground">Not connected</span>
+            <Badge label="Connected" variant="success" size="md" dot />
+          ) : notAvailable ? null : (
+            <span className="flex-shrink-0 text-xs text-muted-foreground">Not connected</span>
           ))}
-        {unconnected && (
+        {notAvailable && (
+          <span className="flex-shrink-0 text-xs text-muted-foreground" data-testid="palette-not-available">
+            Not available here
+          </span>
+        )}
+        {unconnected && !notAvailable && (
           <span
             data-palette-connect
-            className="flex-shrink-0 rounded-full border border-border px-2 py-0.5 text-2xs font-medium text-primary hover:bg-background"
+            className="flex-shrink-0 rounded-full border border-border px-2 py-0.5 text-xs font-medium text-primary hover:bg-background"
           >
             Connect
           </span>
@@ -564,9 +576,9 @@ function StepPaletteBody({
               <div className="flex items-baseline justify-between px-2.5 pb-1 pt-1.5" aria-hidden>
                 <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Integrations</span>
                 {browsing
-                  ? browse.totalSize > 0 && <span className="text-2xs text-muted-foreground">{browse.totalSize}</span>
+                  ? browse.totalSize > 0 && <span className="text-xs text-muted-foreground">{browse.totalSize}</span>
                   : search.totalSize > 0 && (
-                      <span className="text-2xs text-muted-foreground">
+                      <span className="text-xs text-muted-foreground">
                         {search.entries.length} of {search.totalSize}
                       </span>
                     )}
@@ -606,7 +618,7 @@ function StepPaletteBody({
                 </div>
               )}
               {browsing && !browse.isLoading && !browse.isError && !browse.hasNextPage && browse.totalSize > 0 && (
-                <p className="px-2.5 pb-1 pt-2 text-2xs text-muted-foreground">
+                <p className="px-2.5 pb-1 pt-2 text-xs text-muted-foreground">
                   Type to search every {entryNoun} across {browse.totalSize === 1 ? "1 integration" : `${browse.totalSize} integrations`}.
                 </p>
               )}
@@ -634,8 +646,22 @@ function StepPaletteBody({
           )}
         </ul>
 
-        <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-2 text-2xs text-muted-foreground">
-          {activeEntry && !activeEntry.connected ? (
+        <div className="flex items-center justify-between gap-3 border-t border-border/60 px-4 py-2 text-xs text-muted-foreground">
+          {activeEntry && !activeEntry.connected && unavailableIntegrations.has(activeEntry.integration.id) ? (
+            <span className="flex items-center gap-2">
+              <span id={`${ids}-connect-hint`} className="sr-only">
+                Press Shift Enter to connect.
+              </span>
+              <span>{activeEntry.integration.displayName} can't be connected on this deployment.</span>
+              <button
+                type="button"
+                onClick={() => onConnect(activeEntry)}
+                className="font-medium text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                Why?
+              </button>
+            </span>
+          ) : activeEntry && !activeEntry.connected ? (
             <span id={`${ids}-connect-hint`} className="flex items-center gap-2">
               <span>{activeEntry.integration.displayName} isn't connected.</span>
               <button
@@ -735,6 +761,6 @@ function FacetChip({ label, count, pressed, onClick }: { label: string; count?: 
 
 function Kbd({ children }: { children: string }) {
   return (
-    <kbd className="rounded border border-border/60 bg-background px-1 py-px font-mono text-2xs text-muted-foreground">{children}</kbd>
+    <kbd className="rounded border border-border/60 bg-background px-1 py-px font-mono text-xs text-muted-foreground">{children}</kbd>
   );
 }

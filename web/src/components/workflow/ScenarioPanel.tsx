@@ -196,7 +196,7 @@ function ScenarioItem({
           <div className="flex items-center gap-2">
             <span className="font-medium text-sm truncate">{scenario.name}</span>
             {isProjectScenario && (
-              <span className="text-2xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
+              <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400">
                 file
               </span>
             )}
@@ -220,7 +220,8 @@ function ScenarioItem({
               "p-1.5 rounded hover:bg-muted transition-colors",
               isRunning && "opacity-50 cursor-not-allowed"
             )}
-            title="Run scenario"
+            title="Run test"
+            aria-label={`Run test ${scenario.name}`}
           >
             {isRunning ? (
               <RefreshCw className="w-4 h-4 animate-spin text-blue-500" />
@@ -244,7 +245,8 @@ function ScenarioItem({
             <button
               onClick={onDelete}
               className="p-1.5 rounded hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
-              title="Delete scenario"
+              title="Delete test"
+              aria-label={`Delete test ${scenario.name}`}
             >
               <Trash2 className="w-4 h-4 text-red-500" />
             </button>
@@ -297,7 +299,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       setScenariosDir(result.scenariosDir)
     } catch (err) {
       console.error('Failed to load scenarios:', err)
-      setError(err instanceof Error ? err.message : 'Failed to load scenarios')
+      setError(err instanceof Error ? err.message : 'Failed to load tests')
     } finally {
       setIsLoading(false)
     }
@@ -320,13 +322,13 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       
       // Show result toast
       if (result.status === 'passed') {
-        toast.success('Scenario passed!')
+        toast.success('Test passed')
       } else if (result.status === 'failed') {
-        toast.error('Scenario failed', {
+        toast.error('Test failed', {
           description: result.mismatches?.[0] || 'Expectations not met'
         })
       } else {
-        toast.error('Scenario error', {
+        toast.error('Test error', {
           description: result.mismatches?.[0] || 'Unknown error'
         })
       }
@@ -335,7 +337,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       await loadScenarios()
     } catch (err) {
       console.error('Failed to run scenario:', err)
-      toast.error('Failed to run scenario', {
+      toast.error('Failed to run test', {
         description: err instanceof Error ? err.message : 'Unknown error'
       })
     } finally {
@@ -345,15 +347,15 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
 
   // Delete a scenario
   const handleDelete = async (scenarioId: string, scenarioName: string) => {
-    if (!confirm(`Delete scenario "${scenarioName}"?`)) return
+    if (!confirm(`Delete test "${scenarioName}"?`)) return
     
     try {
       await deleteScenario(projectId, scenarioId)
-      toast.success('Scenario deleted')
+      toast.success('Test deleted')
       await loadScenarios()
     } catch (err) {
       console.error('Failed to delete scenario:', err)
-      toast.error('Failed to delete scenario', {
+      toast.error('Failed to delete test', {
         description: err instanceof Error ? err.message : 'Unknown error'
       })
     }
@@ -389,7 +391,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       })
 
       if (result.success) {
-        toast.success('Scenario uploaded', {
+        toast.success('Test uploaded', {
           description: `Saved to ${result.path}`,
         })
         await loadScenarios()
@@ -400,7 +402,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       }
     } catch (err) {
       console.error('Failed to upload scenario:', err)
-      toast.error('Failed to upload scenario', {
+      toast.error('Failed to upload test', {
         description: err instanceof Error ? err.message : 'Unknown error',
       })
     } finally {
@@ -430,12 +432,12 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       document.body.removeChild(a)
       URL.revokeObjectURL(url)
 
-      toast.success('Scenario exported', {
+      toast.success('Test exported', {
         description: `Downloaded as ${result.filename}`,
       })
     } catch (err) {
       console.error('Failed to export scenario:', err)
-      toast.error('Failed to export scenario', {
+      toast.error('Failed to export test', {
         description: err instanceof Error ? err.message : 'Unknown error',
       })
     }
@@ -446,7 +448,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       <div className="p-4">
         <div className="flex items-center gap-2 text-muted-foreground">
           <RefreshCw className="w-4 h-4 animate-spin" />
-          <span>Loading scenarios...</span>
+          <span>Loading tests...</span>
         </div>
       </div>
     )
@@ -484,7 +486,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
       <div className="flex items-center justify-between px-4 py-3 border-b border-border">
         <div className="flex items-center gap-2">
           <TestTube2 className="w-4 h-4 text-muted-foreground" />
-          <span className="font-medium text-sm">Test Scenarios</span>
+          <span className="font-medium text-sm">Tests</span>
           <span className="text-xs text-muted-foreground">
             ({scenarios.length})
           </span>
@@ -515,7 +517,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
                 "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400",
                 "hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors"
               )}
-              title="Upload YAML scenario file"
+              title="Upload a YAML test file"
             >
               <Upload className="w-3 h-3" />
               Upload
@@ -538,7 +540,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
           <div className="text-center py-8">
             <TestTube2 className="w-12 h-12 text-muted-foreground/30 mx-auto mb-3" />
             <p className="text-sm text-muted-foreground mb-2">
-              No test scenarios yet
+              No tests yet
             </p>
             
             <div className="space-y-3 mt-4">
@@ -573,7 +575,7 @@ export function ScenarioPanel({ projectId, workflowSlug, isReadOnly }: ScenarioP
               {/* Assistant hint */}
               <p className="text-xs text-muted-foreground pt-2 border-t border-border mt-3">
                 <FileCode className="w-3 h-3 inline mr-1" />
-                Or ask the workflow assistant to create test scenarios
+                Or ask the workflow assistant to write tests
               </p>
             </div>
           </div>

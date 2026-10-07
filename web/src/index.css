@@ -294,7 +294,7 @@
     --secondary: 280 85% 65%;        /* Purple accent */
     --secondary-foreground: 0 0% 100%;
     --muted: 210 40% 96%;            /* Very light blue-gray */
-    --muted-foreground: 215 16% 47%;
+    --muted-foreground: 215 16% 45%; /* AA (4.5:1) on page, card, muted and input wells */
     --accent: 210 40% 96%;           /* Light blue accent */
     --accent-foreground: 217 91% 60%;
     --destructive: 0 70% 50%;

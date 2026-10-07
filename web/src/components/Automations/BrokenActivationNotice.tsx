@@ -37,8 +37,8 @@ export interface BrokenActivationNoticeProps {
 export function BrokenActivationNotice({ trigger, editHref, hideEdit = false, onRemoved, className, compact = false }: BrokenActivationNoticeProps) {
   const remove = useDeleteTrigger();
   const [confirming, setConfirming] = useState(false);
-  const reason = trigger.health.lastFailureDetail || "Its workflow's declared trigger is missing or changed.";
-  const declared = trigger.workflowTrigger ? `“${trigger.workflowTrigger}”` : "its declared trigger";
+  const reason = trigger.health.lastFailureDetail || "Its workflow's trigger is missing or changed.";
+  const declared = trigger.workflowTrigger ? `“${trigger.workflowTrigger}”` : "its trigger";
 
   const onRemove = () => {
     remove.mutate(trigger.id, {

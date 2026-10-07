@@ -159,7 +159,7 @@ export function FloatingWorkflowSidebar({
           <Search className="h-4 w-4 flex-shrink-0" aria-hidden />
           <span className="flex-1 font-medium">Add step…</span>
           {paletteShortcutLabel && (
-            <kbd className="rounded border border-border/60 px-1 font-mono text-2xs text-muted-foreground">{paletteShortcutLabel}</kbd>
+            <kbd className="rounded border border-border/60 px-1 font-mono text-xs text-muted-foreground">{paletteShortcutLabel}</kbd>
           )}
         </button>
       )}

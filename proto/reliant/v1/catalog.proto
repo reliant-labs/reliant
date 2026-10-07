@@ -414,6 +414,12 @@ message CatalogEntrySummary {
   bool connected = 9;
   // Mutates is set on an action that changes external state.
   bool mutates = 10;
+  // Events are the provider event types a trigger fires on ("issues.opened"),
+  // as its TriggerSpec lists them; empty for an action. A run started by an
+  // integration event records the event type, and this is what lets a client
+  // name that event with the trigger's display_name ("Issue opened") from one
+  // search, without fetching every entry.
+  repeated string events = 11;
 }
 
 // CatalogFacet counts the matches that carry one value of a facet.

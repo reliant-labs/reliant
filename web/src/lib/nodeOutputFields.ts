@@ -2,11 +2,14 @@
 
 /**
  * A node type's output fields as the builder shows them, from the one source
- * both the Outputs tab and the Insert data picker read: the catalog's
- * ListNodes output fields (CatalogService.ListNodes).
+ * the Outputs tab, the Insert data picker and `{{ nodes.… }}` completion all
+ * read: the catalog's ListNodes output fields (CatalogService.ListNodes). A
+ * second source — GetCELCompletions' node output schemas used to feed the
+ * completion — is how the two came to offer different fields.
  */
 
 import type { NodeInputField } from "../gen/reliant/v1/catalog_pb";
+import { getCachedNodes } from "./node-metadata";
 
 export interface OutputField {
   name: string;
@@ -34,6 +37,11 @@ export function catalogToOutputFields(fields: readonly NodeInputField[] | undefi
     children: f.children && f.children.length > 0 ? catalogToOutputFields(f.children) : undefined,
     advanced: (f.visibilityContexts ?? []).some((context) => ADVANCED_CONTEXTS.has(context)),
   }));
+}
+
+/** A node type's output fields, from the cached ListNodes catalog ([] until it loads). */
+export function outputFieldsForNodeType(nodeType: string): OutputField[] {
+  return catalogToOutputFields(getCachedNodes().find((node) => node.id === nodeType)?.outputFields);
 }
 
 /** The CEL path of a field's sub-fields: a list's are read through its first item. */

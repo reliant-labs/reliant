@@ -49,6 +49,7 @@ import { WorkflowBadge, WorkflowSourceBadge } from "../WorkflowSourceBadge";
 import { WorkflowPresetsSection } from "./WorkflowPresetsSection";
 import { ActivateTriggerDialog } from "../../Automations/ActivateTriggerDialog";
 import { declaredTriggers, describeDeclaredSource, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { declaredRailLines } from "@/lib/triggerRail";
 import { describeSchedule } from "@/lib/cronText";
 import { workflowsUsing } from "./workflowUsedBy";
@@ -313,6 +314,7 @@ function AutomationsCard({
   declared: DeclaredTrigger[];
 }) {
   const triggers = useTriggers(projectId);
+  const naming = useIntegrationEventNaming();
   const usingThis = useMemo<Trigger[]>(
     () =>
       (triggers.data ?? []).filter(
@@ -357,7 +359,7 @@ function AutomationsCard({
                 {inactiveDeclared.map((trigger) => (
                   <li key={trigger.name} className="flex items-center justify-between gap-3 px-4 py-2.5">
                     <div className="min-w-0">
-                      <p className="truncate text-sm text-foreground">{describeDeclaredSource(trigger, describeSchedule)}</p>
+                      <p className="truncate text-sm text-foreground">{describeDeclaredSource(trigger, describeSchedule, naming)}</p>
                       <p className="text-xs text-muted-foreground">Declared in the workflow · not active</p>
                     </div>
                     <Button variant="outline" size="sm" onClick={() => setActivating(trigger)}>

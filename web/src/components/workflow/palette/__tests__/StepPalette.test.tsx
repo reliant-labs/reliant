@@ -23,15 +23,20 @@ import {
   type ListCatalogIntegrationsRequest,
   type SearchCatalogRequest,
 } from "@/gen/reliant/v1/catalog_pb";
+import { ConnectionAuthKind, IntegrationAuthMethodSchema, IntegrationSchema } from "@/gen/reliant/v1/connection_pb";
 import { renderWithQuery } from "@/test/renderWithQuery";
 
 const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 const listCatalogIntegrations = vi.fn();
 const listNodes = vi.fn();
+const listIntegrations = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
-  grpcClient: { catalog: () => ({ searchCatalog, getCatalogEntry, listCatalogIntegrations }) },
+  grpcClient: {
+    catalog: () => ({ searchCatalog, getCatalogEntry, listCatalogIntegrations }),
+    connection: () => ({ listIntegrations }),
+  },
   getCatalogClient: () => ({ listNodes }),
   getGRPCBaseURLPublic: () => null,
 }));
@@ -111,6 +116,8 @@ beforeEach(() => {
   getCatalogEntry.mockReturnValue(new Promise(() => undefined));
   listCatalogIntegrations.mockReset();
   listCatalogIntegrations.mockResolvedValue(integrationsPage([]));
+  listIntegrations.mockReset();
+  listIntegrations.mockResolvedValue({ integrations: [] });
   listNodes.mockReset();
   listNodes.mockResolvedValue({
     nodes: [
@@ -436,6 +443,55 @@ describe("StepPalette: searching", () => {
 
     await user.click(within(row).getByText("Connect"));
     expect(handlers.onConnect).toHaveBeenCalledTimes(2);
+  });
+
+  it("says an integration no connection method serves here is not available, instead of offering Connect", async () => {
+    // Gmail's only method is OAuth, which this deployment has no client for;
+    // Slack's API key works.
+    listIntegrations.mockResolvedValue({
+      integrations: [
+        create(IntegrationSchema, {
+          id: "gmail",
+          displayName: "Gmail",
+          methods: [create(IntegrationAuthMethodSchema, { kind: ConnectionAuthKind.OAUTH2, available: false, unavailableReason: "no OAuth client" })],
+        }),
+        create(IntegrationSchema, {
+          id: "slack",
+          displayName: "Slack",
+          methods: [
+            create(IntegrationAuthMethodSchema, { kind: ConnectionAuthKind.OAUTH2, available: false }),
+            create(IntegrationAuthMethodSchema, { kind: ConnectionAuthKind.API_KEY, available: true }),
+          ],
+        }),
+      ],
+    });
+    listCatalogIntegrations.mockResolvedValue(integrationsPage([listing("gmail"), listing("slack")]));
+    searchCatalog.mockResolvedValue(
+      page([
+        entry("gmail/message.send@1", { name: "Send email", connected: false, integration: "gmail" }),
+        entry("slack/message.post@1", { name: "Post message", connected: false, integration: "slack" }),
+      ]),
+    );
+    const user = userEvent.setup();
+    renderPalette();
+
+    // Browsing: the integration row.
+    await waitFor(() => expect(within(optionNamed("Gmail")).getByText("Not available here")).toBeInTheDocument());
+    expect(within(optionNamed("Gmail")).queryByText("Not connected")).toBeNull();
+    expect(within(optionNamed("Slack")).getByText("Not connected")).toBeInTheDocument();
+
+    // Searching: the entry row has no Connect pill, and the footer says why.
+    await user.type(input(), "send");
+    await screen.findByText("Send email");
+    const gmail = optionNamed("Send email");
+    expect(within(gmail).getByText("Not available here")).toBeInTheDocument();
+    expect(within(gmail).queryByText("Connect")).toBeNull();
+    expect(gmail).not.toHaveAttribute("aria-describedby");
+    expect(screen.getByText("Gmail can't be connected on this deployment.")).toBeInTheDocument();
+
+    const slack = optionNamed("Post message");
+    expect(within(slack).getByText("Connect")).toBeInTheDocument();
+    expect(within(slack).queryByText("Not available here")).toBeNull();
   });
 
   it("shows designed error-with-retry and empty states", async () => {

@@ -27,6 +27,7 @@ import { sourceKindLabel, triggerErrorMessage, type Trigger, type TriggerSource 
 import { useSetTriggerEnabled } from "@/hooks/trigger-queries";
 import { automationHealth, type AutomationHealthDisplay } from "@/lib/automationHealth";
 import { describeTriggerSource } from "@/lib/cronText";
+import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { cn } from "@/lib/utils";
@@ -74,7 +75,7 @@ export function AutomationListHeader() {
 export function AutomationRow({ trigger }: { trigger: Trigger }) {
   const setEnabled = useSetTriggerEnabled();
   const health = automationHealth(trigger);
-  const scheduleText = describeTriggerSource(trigger.source);
+  const scheduleText = describeTriggerSource(trigger.source, useIntegrationEventNaming());
 
   const onToggle = (enabled: boolean) => {
     setEnabled.mutate(
@@ -203,7 +204,7 @@ function LastRun({ trigger }: { trigger: Trigger }) {
   // deleted), so there is no status left to report.
   const badge =
     event.outcome === "launched" && event.runDisplayState !== undefined ? (
-      <RunStatusBadge status={runStatusFromDisplayState(event.runDisplayState)} />
+      <RunStatusBadge status={runStatusFromDisplayState(event.runDisplayState)} size="md" />
     ) : (
       <OutcomeBadge outcome={event.outcome} />
     );
