@@ -65,7 +65,11 @@ func seedDaemon(t *testing.T, repo *db.Repo, userID, daemonID string, online boo
 	t.Helper()
 	ctx := context.Background()
 	host := "laptop"
-	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID, Hostname: &host}))
+	// A laptop serving local models is user-run. Since #593 a daemon with no
+	// type counts as managed, and an offline managed daemon with no lifecycle
+	// mirror reports UNSPECIFIED rather than DISCONNECTED.
+	selfHosted := "self_hosted"
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID, Hostname: &host, DaemonType: &selfHosted}))
 	if online {
 		now := time.Now().UTC()
 		require.NoError(t, repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
