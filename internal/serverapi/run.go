@@ -400,6 +400,12 @@ func Run(ctx context.Context, opts Options) error {
 		triggerInbound.Access = map[string]webhook.AccessRefresher{ghaccess.IntegrationID: gitHubAccess{ghAccess}}
 		go ghAccess.Run(ctx)
 	}
+	// "Only from" stores GitHub user ids and shows logins: this looks people
+	// up, as the caller, in both directions.
+	triggerSenders, err := wireGitHubSenders(repo, vaultKeys, os.Getenv)
+	if err != nil {
+		return err
+	}
 
 	grpcSrv, err := grpcserver.NewServer(&grpcserver.Config{
 		Port:           opts.GRPCPort,
@@ -410,6 +416,7 @@ func Run(ctx context.Context, opts Options) error {
 		CatalogSearch:  catalogSearch,
 		OAuthRoutes:    conns.oauth,
 		TriggerInbound: triggerInbound,
+		TriggerSenders: triggerSenders,
 		// Connector/MCP surface. PUBLIC_URL is this server's externally
 		// reachable base URL, used to tell a user where to point a
 		// third-party MCP client and to build the OAuth discovery document.

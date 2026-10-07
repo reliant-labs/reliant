@@ -3,6 +3,7 @@
 package serverapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -13,8 +14,10 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
+	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/ghaccess"
+	"github.com/reliant-labs/reliant/internal/integrations/ghusers"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
@@ -23,6 +26,48 @@ import (
 type gitHubAccess struct{ *ghaccess.Refresher }
 
 func (gitHubAccess) IsPermanent(err error) bool { return ghaccess.IsPermanent(err) }
+
+// gitHubSenders adapts *ghusers.Directory to services.SenderDirectory. It
+// asks GitHub with the same token source the access refresher uses: the
+// caller's own GitHub token, delegated by control-plane when hosted.
+type gitHubSenders struct{ dir *ghusers.Directory }
+
+func (g gitHubSenders) Resolve(ctx context.Context, userID string, handles, ids []string) ([]services.ResolvedSender, error) {
+	found, err := g.dir.Resolve(ctx, userID, handles, ids)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]services.ResolvedSender, 0, len(found))
+	for _, f := range found {
+		out = append(out, services.ResolvedSender{Query: f.Query, ID: f.User.ID, DisplayName: f.User.Login})
+	}
+	return out, nil
+}
+
+func (gitHubSenders) IsPermanent(err error) bool {
+	return ghaccess.IsPermanent(err) || errors.Is(err, ghusers.ErrTokenRejected)
+}
+
+func (gitHubSenders) IsInvalid(err error) bool { return errors.Is(err, ghusers.ErrTooManyQueries) }
+
+// wireGitHubSenders builds the GitHub people lookup behind "Only from", or
+// nil under the same condition as wireGitHubAccess: a deployment that
+// receives no GitHub webhooks has no GitHub triggers to restrict.
+func wireGitHubSenders(repo *db.Repo, keys *vault.Vault, getenv func(string) string) (map[string]services.SenderDirectory, error) {
+	if getenv == nil {
+		getenv = os.Getenv
+	}
+	if strings.TrimSpace(getenv(github.SecretEnv)) == "" {
+		return nil, nil
+	}
+	tokens, err := gitHubTokenSource(repo, keys, getenv)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]services.SenderDirectory{
+		ghusers.IntegrationID: gitHubSenders{dir: ghusers.New(tokens, ghusers.Options{})},
+	}, nil
+}
 
 // wireGitHubAccess builds the refresher that keeps GitHub trigger owners'
 // repository access fresh, or nil when this deployment receives no GitHub

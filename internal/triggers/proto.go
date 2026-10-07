@@ -125,7 +125,16 @@ func EventToProto(ev *core.TriggerEvent) (*reliantv1.TriggerEvent, error) {
 		OutcomeDetail: ev.OutcomeDetail,
 		ChatId:        ev.ChatID,
 		Payload:       payload,
+		Sender:        senderToProto(ev.Sender),
 	}, nil
+}
+
+// senderToProto renders trigger.sender; nil stays unset.
+func senderToProto(s *core.TriggerSender) *reliantv1.TriggerSender {
+	if s == nil {
+		return nil
+	}
+	return &reliantv1.TriggerSender{Kind: string(s.Kind), Id: s.ID, DisplayName: s.DisplayName, Verified: s.Verified}
 }
 
 // EventWithRunToProto renders one firing together with the run it launched.

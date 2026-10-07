@@ -902,8 +902,9 @@ type IdentityProbe struct {
 	RoutesEvents bool `protobuf:"varint,8,opt,name=routes_events,json=routesEvents,proto3" json:"routes_events,omitempty"`
 	// SenderId is CEL over `response` yielding the provider's id for the PERSON
 	// the credential belongs to, as that provider's own events name them in
-	// trigger.sender.id: a GitHub login, a Gmail address. It is what "Only
-	// from: Me" writes. Leave it unset when the probe answers for something
+	// trigger.sender.id: a GitHub user id (string(response.id), never the
+	// login, which can be renamed and reclaimed), a Gmail address. It is what
+	// "Only from: Me" writes. Leave it unset when the probe answers for something
 	// other than a person (Slack's auth.test names the bot); OAuth2Auth's
 	// sender_id can read it from the token response instead.
 	SenderId      string `protobuf:"bytes,9,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`

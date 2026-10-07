@@ -72,28 +72,54 @@ func assertRepoEvent(t *testing.T, ev Event, typ string) {
 	assert.Equal(t, "98765", ev.Attributes["installation_id"])
 	assert.Equal(t, "octocat", ev.Attributes["sender"])
 	assert.NotContains(t, ev.Data, "installation", "routing internals stay out of the payload")
-	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "octocat", DisplayName: "octocat", Verified: true}, ev.Sender)
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "1", DisplayName: "octocat", Verified: true}, ev.Sender)
+}
+
+// issuesOpenedFrom is the issues.opened fixture as sent by sender.
+func issuesOpenedFrom(t *testing.T, sender map[string]any) []byte {
+	t.Helper()
+	var body map[string]any
+	require.NoError(t, json.Unmarshal(fixture(t, "issues.opened"), &body))
+	if sender == nil {
+		delete(body, "sender")
+	} else {
+		body["sender"] = sender
+	}
+	raw, err := json.Marshal(body)
+	require.NoError(t, err)
+	return raw
 }
 
 // trigger.sender is GitHub's `sender`, from a body the provider verified
-// before parsing. Its id is the lowercased login, so an allowlist of
-// "octocat" matches a delivery that writes "OctoCat"; the display name keeps
-// GitHub's casing.
-func TestSenderIsTheDeliverysSenderLogin(t *testing.T) {
-	var body map[string]any
-	require.NoError(t, json.Unmarshal(fixture(t, "issues.opened"), &body))
-	body["sender"] = map[string]any{"login": "OctoCat", "id": 583231, "type": "User"}
-	raw, err := json.Marshal(body)
-	require.NoError(t, err)
-	ev := one(t, parseBody(t, "issues", raw))
-	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "octocat", DisplayName: "OctoCat", Verified: true}, ev.Sender)
+// before parsing. Its id is the numeric user id, which GitHub never changes
+// or reuses; the login, which can be renamed and then registered by someone
+// else, is only the display name, in GitHub's casing.
+func TestSenderIDIsTheNumericUserIDAndTheLoginIsTheDisplayName(t *testing.T) {
+	ev := one(t, parseBody(t, "issues", issuesOpenedFrom(t, map[string]any{"login": "OctoCat", "id": 583231, "type": "User"})))
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "583231", DisplayName: "OctoCat", Verified: true}, ev.Sender)
 
 	// No sender at all: recorded, and never verified.
-	delete(body, "sender")
-	raw, err = json.Marshal(body)
-	require.NoError(t, err)
-	ev = one(t, parseBody(t, "issues", raw))
+	ev = one(t, parseBody(t, "issues", issuesOpenedFrom(t, nil)))
 	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, Verified: false}, ev.Sender)
+
+	// A sender without an id never gets one made up: "0" would be an id an
+	// allowlist could be written to match.
+	ev = one(t, parseBody(t, "issues", issuesOpenedFrom(t, map[string]any{"login": "octocat", "type": "User"})))
+	assert.Empty(t, ev.Sender.ID)
+}
+
+// A login moves; the id does not. The same person under a new login is the
+// same trigger.sender.id, and whoever registers the login they gave up is
+// not.
+func TestARenamedLoginKeepsItsIDAndAReclaimedLoginGetsANewOne(t *testing.T) {
+	before := one(t, parseBody(t, "issues", issuesOpenedFrom(t, map[string]any{"login": "octocat", "id": 583231, "type": "User"})))
+	renamed := one(t, parseBody(t, "issues", issuesOpenedFrom(t, map[string]any{"login": "octo-renamed", "id": 583231, "type": "User"})))
+	squatter := one(t, parseBody(t, "issues", issuesOpenedFrom(t, map[string]any{"login": "octocat", "id": 99999999, "type": "User"})))
+
+	assert.Equal(t, before.Sender.ID, renamed.Sender.ID, "a rename keeps the person's id")
+	assert.Equal(t, "octo-renamed", renamed.Sender.DisplayName)
+	assert.NotEqual(t, before.Sender.ID, squatter.Sender.ID, "a reclaimed login is someone else")
+	assert.Equal(t, "99999999", squatter.Sender.ID)
 }
 
 func TestIssueEvents(t *testing.T) {

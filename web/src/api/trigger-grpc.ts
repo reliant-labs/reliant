@@ -32,6 +32,7 @@ import {
   GetTriggerRequestSchema,
   ListTriggerEventsRequestSchema,
   ListTriggersRequestSchema,
+  ResolveTriggerSendersRequestSchema,
   RotateWebhookTokenRequestSchema,
   ScheduleSourceSchema,
   SetTriggerEnabledRequestSchema,
@@ -120,6 +121,29 @@ export interface TriggerEvent {
    * Unset for a firing that launched nothing, or one whose chat is gone.
    */
   runDisplayState?: RunDisplayState;
+  /** trigger.sender: who the source says sent the event. Unset when none was recorded. */
+  sender?: TriggerSender;
+}
+
+/** trigger.sender, as a firing recorded it. */
+export interface TriggerSender {
+  /** "slack", "github", "email", "sms", "webhook", "workflow", "schedule" or "user". */
+  kind: string;
+  /** The provider's stable id: a Slack user id, a GitHub user id (digits), an email address. What "Only from" stores. */
+  id: string;
+  /** For people (a GitHub login). Never authorize on it. */
+  displayName: string;
+  verified: boolean;
+}
+
+/** One person ResolveTriggerSenders found. */
+export interface ResolvedSender {
+  /** The handle or id as it was asked. */
+  query: string;
+  /** trigger.sender.id for the person: on GitHub the numeric user id. */
+  senderId: string;
+  /** Their name now (a GitHub login). */
+  displayName: string;
 }
 
 /** TriggerHealthStatus; UNSPECIFIED (an older server) reads as unknown. */
@@ -332,6 +356,9 @@ export function eventFromProto(event: ProtoTriggerEvent): TriggerEvent {
     chatId: event.chatId || undefined,
     manual: event.payload?.manual === true,
     runDisplayState: event.run?.displayState || undefined,
+    sender: event.sender
+      ? { kind: event.sender.kind, id: event.sender.id, displayName: event.sender.displayName, verified: event.sender.verified }
+      : undefined,
   };
 }
 
@@ -611,5 +638,24 @@ export const triggerGrpc = {
       .trigger()
       .listTriggerEvents(create(ListTriggerEventsRequestSchema, { triggerId, limit }));
     return response.events.map(eventFromProto);
+  },
+
+  /**
+   * Looks people up for "Only from", as the caller: handles (GitHub logins)
+   * to the ids an allowlist stores, and ids to the names it shows. Someone
+   * the provider does not know is absent from the result.
+   */
+  async resolveSenders(
+    integration: string,
+    query: { handles?: readonly string[]; senderIds?: readonly string[] },
+  ): Promise<ResolvedSender[]> {
+    const response = await grpcClient.trigger().resolveTriggerSenders(
+      create(ResolveTriggerSendersRequestSchema, {
+        integration,
+        handles: [...(query.handles ?? [])],
+        senderIds: [...(query.senderIds ?? [])],
+      }),
+    );
+    return response.senders.map((s) => ({ query: s.query, senderId: s.senderId, displayName: s.displayName }));
   },
 };

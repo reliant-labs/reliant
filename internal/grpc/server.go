@@ -120,6 +120,10 @@ type Config struct {
 	// lets TriggerService write webhook and integration triggers. nil leaves
 	// both off: only schedule triggers can be created.
 	TriggerInbound *webhook.Inbound
+
+	// TriggerSenders backs TriggerService.ResolveTriggerSenders, keyed by
+	// integration id ("github"). nil leaves it answering Unavailable.
+	TriggerSenders map[string]services.SenderDirectory
 }
 
 // NewServer creates a new Connect/gRPC server.
@@ -295,6 +299,9 @@ func NewServer(cfg *Config) (*Server, error) {
 			}
 		}
 		triggerService.WithInbound(opts).WithPolledIntegrations(in.Registry.IsPolled)
+	}
+	if len(cfg.TriggerSenders) > 0 {
+		triggerService.WithSenderDirectories(cfg.TriggerSenders)
 	}
 	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(services.NewInboxService(database), opts...)
 	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)

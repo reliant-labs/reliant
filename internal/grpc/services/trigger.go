@@ -59,6 +59,8 @@ type TriggerService struct {
 	fires    triggerFireStarter
 	grants   *automationGrants
 	inbound  InboundOptions
+	// senders looks people up for "Only from", keyed by integration id.
+	senders map[string]SenderDirectory
 }
 
 // triggerConnections is the slice of the connection store an integration

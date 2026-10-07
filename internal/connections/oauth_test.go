@@ -260,7 +260,7 @@ func TestOAuth_CompleteStoresConnectionAndSealedTokens(t *testing.T) {
 	require.Equal(t, "octocat", *conn.AccountLabel)
 	require.Equal(t, "583231", *conn.ExternalAccountID)
 	require.NotNil(t, conn.SenderID, "the probe's sender_id names the person, for Only from: Me")
-	require.Equal(t, "octocat", *conn.SenderID)
+	require.Equal(t, "583231", *conn.SenderID, "the GitHub user id, not the renameable login")
 	require.Equal(t, "oauth2", conn.AuthKind)
 	require.Equal(t, "active", conn.Status)
 	require.NotNil(t, conn.AccessExpiresAt)

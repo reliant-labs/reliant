@@ -46,9 +46,9 @@ export interface Connection {
   accountLabel: string;
   /**
    * The provider's id for the person who made it, as that provider's events
-   * name them in `trigger.sender.id` (a Slack user id, a GitHub login, a
-   * Gmail address); "" when the integration does not say. What "Only from:
-   * Me" allowlists.
+   * name them in `trigger.sender.id` (a Slack user id, a GitHub user id — the
+   * number, never the renameable login — a Gmail address); "" when the
+   * integration does not say. What "Only from: Me" allowlists.
    */
   senderId: string;
   status: ConnectionHealth;

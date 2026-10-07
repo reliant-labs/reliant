@@ -65,9 +65,10 @@ connection:
     path: /user
     external_id: string(response.id)
     label: response.login
-    # The person, as a webhook's sender.login names them (trigger.sender.id,
-    # which lowercases it the same way "Only from" does).
-    sender_id: response.login
+    # The person, as trigger.sender.id names them: the numeric user id, which
+    # GitHub never changes or reuses. Never the login (the label above): a
+    # login can be renamed and then registered by someone else.
+    sender_id: string(response.id)
 
 actions:
   - id: user.get
@@ -1167,7 +1168,7 @@ triggers:
     attributes: &issue_attrs
       - &attr_repository { name: repository, description: "The repository, owner/name.", example: acme/app }
       - &attr_installation { name: installation_id, description: The GitHub App installation the event came through., example: "98765" }
-      - &attr_sender { name: sender, description: Login of the user who acted., example: octocat }
+      - &attr_sender { name: sender, description: "Login of the user who acted. A login can be renamed and reclaimed by someone else, so never use it to decide who may start a run; trigger.sender.id (the user id) is for that.", example: octocat }
       - &attr_action { name: action, description: The webhook action., example: opened }
     data: &issue_data
       type: object

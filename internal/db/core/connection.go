@@ -67,7 +67,7 @@ type Connection struct {
 	ExternalAccountID *string
 	// SenderID is the provider's id for the person who made the connection,
 	// as that provider's events name them in trigger.sender.id (a Slack user
-	// id, a GitHub login, a Gmail address). Nil when the integration does
+	// id, a GitHub user id, a Gmail address). Nil when the integration does
 	// not say. Unlike ExternalAccountID it never routes anything.
 	SenderID    *string
 	Scopes      []string

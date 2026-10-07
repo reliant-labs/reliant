@@ -71,6 +71,13 @@ service TriggerService {
   // RotateWebhookToken replaces a webhook trigger's token. The old token
   // stops working immediately; the new one is returned once and never again.
   rpc RotateWebhookToken(RotateWebhookTokenRequest) returns (RotateWebhookTokenResponse) {}
+
+  // ResolveTriggerSenders looks people up for a trigger's "Only from": a
+  // handle (a GitHub login) to the id trigger.sender.id carries, and an id
+  // back to the person's current name. It asks the provider with the
+  // CALLER's own credential for the integration. GitHub only; a caller with
+  // no usable GitHub credential is FailedPrecondition.
+  rpc ResolveTriggerSenders(ResolveTriggerSendersRequest) returns (ResolveTriggerSendersResponse) {}
 }
 
 // TriggerKind is the source a stored trigger listens to.
@@ -507,6 +514,30 @@ message TriggerEvent {
   // Read-only: the run this firing started, as of now. Set when the firing
   // launched a chat that still exists; unset otherwise.
   optional TriggerEventRun run = 9;
+
+  // Who the source says sent the event: trigger.sender. Unset for a firing
+  // recorded without one (a start a person made themselves, or one recorded
+  // before senders were).
+  optional TriggerSender sender = 10;
+}
+
+// TriggerSender is trigger.sender: who sent the event that fired a trigger,
+// as the source authenticated it.
+message TriggerSender {
+  // "slack", "github", "email", "sms", "webhook", "workflow", "schedule" or
+  // "user".
+  string kind = 1;
+
+  // The provider's stable id for the sender: a Slack user id, a GitHub user
+  // id (the number, as a string), an email address, an E.164 number, a
+  // trigger id. What an allowlist compares.
+  string id = 2;
+
+  // For people (a GitHub login, a Slack name). Never authorize on it.
+  string display_name = 3;
+
+  // Whether the source vouches for id.
+  bool verified = 4;
 }
 
 // TriggerDefinition is the writable half of a Trigger: the fields a caller
@@ -746,4 +777,36 @@ message GetLaunchEventRequest {
 message GetLaunchEventResponse {
   // Unset when the chat has no launch event (it predates trigger events).
   optional TriggerEvent event = 1;
+}
+
+// ResolveTriggerSendersRequest is the request for ResolveTriggerSenders.
+message ResolveTriggerSendersRequest {
+  // The integration whose people to look up. Only "github".
+  string integration = 1;
+
+  // Handles to resolve to ids: GitHub logins, with or without a leading "@".
+  repeated string handles = 2;
+
+  // Ids (trigger.sender.id values) to resolve to the person's current name.
+  repeated string sender_ids = 3;
+}
+
+// ResolvedTriggerSender is one person ResolveTriggerSenders found.
+message ResolvedTriggerSender {
+  // The handle or id this answers, exactly as it was asked.
+  string query = 1;
+
+  // The id trigger.sender.id carries for this person: on GitHub, the numeric
+  // user id as a string. What an "Only from" list stores.
+  string sender_id = 2;
+
+  // The person's current name (a GitHub login): for display only.
+  string display_name = 3;
+}
+
+// ResolveTriggerSendersResponse is the response for ResolveTriggerSenders.
+message ResolveTriggerSendersResponse {
+  // One per handle or id the provider knows. One it does not know (no such
+  // user, or an organization, which never sends an event) is absent.
+  repeated ResolvedTriggerSender senders = 1;
 }

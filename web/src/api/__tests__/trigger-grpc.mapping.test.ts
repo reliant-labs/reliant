@@ -17,11 +17,12 @@ import {
   TriggerHealthSchema,
   TriggerHealthStatus,
   TriggerSchema,
+  TriggerSenderSchema,
   type Trigger as ProtoTrigger,
 } from "@/gen/reliant/v1/trigger_pb";
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
-import { definitionFromTrigger, definitionToProto, triggerFromProto } from "../trigger-grpc";
+import { definitionFromTrigger, definitionToProto, eventFromProto, triggerFromProto } from "../trigger-grpc";
 
 function proto(overrides: Partial<Parameters<typeof create<typeof TriggerSchema>>[1]> = {}) {
   return create(TriggerSchema, {
@@ -101,6 +102,17 @@ describe("triggerFromProto", () => {
       proto({ lastEvent: create(TriggerEventSchema, { id: "ev-1", outcome: TriggerEventOutcome.SKIPPED }) }),
     );
     expect(trigger.lastEvent?.runDisplayState).toBeUndefined();
+  });
+
+  it("carries who sent a firing: the id an allowlist stores, the name people read", () => {
+    const sender = create(TriggerSenderSchema, { kind: "github", id: "583231", displayName: "octocat", verified: true });
+    expect(eventFromProto(create(TriggerEventSchema, { id: "ev-1", sender })).sender).toEqual({
+      kind: "github",
+      id: "583231",
+      displayName: "octocat",
+      verified: true,
+    });
+    expect(eventFromProto(create(TriggerEventSchema, { id: "ev-2" })).sender).toBeUndefined();
   });
 });
 

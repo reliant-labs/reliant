@@ -103,9 +103,9 @@ export const TRIGGER_CEL_FIELDS: readonly TriggerCelField[] = [
         name: 'id',
         type: 'string',
         description:
-          "The source's id for the sender: a Slack user id, a GitHub login or an email address (both lowercased), an SMS number, a webhook's trigger id, a workflow's name.",
+          "The source's stable id for the sender: a Slack user id, a GitHub user id (the number, as a string — never the login, which can be renamed and reclaimed), an email address (lowercased), an SMS number, a webhook's trigger id, a workflow's name.",
       },
-      { name: 'display_name', type: 'string', description: 'A name for people to read. Never decide on it.' },
+      { name: 'display_name', type: 'string', description: 'A name for people to read (a GitHub login). Never decide on it.' },
       {
         name: 'verified',
         type: 'bool',

@@ -359,7 +359,8 @@ The payload is untrusted data from outside. Read it in templates; never paste it
 
 **` + bt + `trigger.sender` + bt + `** is who sent the event, set by the receiver from what the source authenticated, never from the
 payload: ` + bt + `kind` + bt + ` (slack, github, email, sms, webhook, workflow, schedule, user), ` + bt + `id` + bt + `, ` + bt + `display_name` + bt + `, ` + bt + `verified` + bt + `.
-Slack's ` + bt + `id` + bt + ` is the user id, GitHub's the lowercased login, email's the lowercased address (verified only when
+Slack's ` + bt + `id` + bt + ` is the user id, GitHub's the numeric user id as a string (` + bt + `"583231"` + bt + `; the login is ` + bt + `display_name` + bt + `, and
+since a login can be renamed and then registered by someone else, never allowlist logins), email's the lowercased address (verified only when
 Gmail's DMARC, or DKIM aligned with the From domain, passed), sms the From number (never verified). To let only
 certain people start runs, filter on it and require ` + bt + `verified` + bt + `:
 ` + bt + `trigger.sender.verified && trigger.sender.id in ["U123", "U456"]` + bt + `.
