@@ -3,7 +3,7 @@ title: "Machines"
 description: "Where your code lives and your commands run: your own computer or a Reliant cloud machine"
 ---
 
-A **machine** is the place your project actually lives. Reliant's servers run the conversation and call the model, but anything that touches your code happens on a machine: reading and editing files, running shell commands, running tests, using git, and starting your [MCP servers](/settings/mcp-servers). The program that does this work is called the **tools daemon**, and you will see "daemon" in the CLI and in some settings. In the app it is simply a machine.
+A **machine** is the place your code actually lives and your commands run. Reliant's servers run the conversation and call the model, but anything that touches your code happens on a machine: reading and editing files, running shell commands, running tests, using git, and starting your [MCP servers](/settings/mcp-servers). The program that does this work is called the **tools daemon**, and you will see "daemon" in the CLI and in some settings. In the app it is simply a machine.
 
 There are two kinds, and you can use both at once.
 
@@ -17,7 +17,7 @@ There are two kinds, and you can use both at once.
 
 ## When to use which
 
-Choose your own computer for a project when the project is already checked out there, when it needs hardware or network access only that computer has, or when you want the work to happen next to your editor. Choose a cloud machine when you want runs to keep going while your laptop is closed, when you want to start work from the web or your phone, or when an [automation](/automations/overview) has to fire at 3 a.m. on a schedule. You can have both and give different projects different machines.
+Choose your own computer for a chat when the project is already checked out there, when it needs hardware or network access only that computer has, or when you want the work to happen next to your editor. Choose a cloud machine when you want runs to keep going while your laptop is closed, when you want to start work from the web or your phone, or when an [automation](/automations/overview) has to fire at 3 a.m. on a schedule. You can have both and run different chats on different machines.
 
 ## What lives on the machine
 
@@ -30,11 +30,15 @@ Because the daemon is the thing that reads your files, several pieces of configu
 
 What a machine sends back to Reliant is covered in [Privacy & security](/help/privacy): whatever an agent reads or a command prints is stored with the chat and sent to your model provider.
 
-## One machine per project
+## Which machine a chat runs on
 
-Every chat in a project runs on that project's machine. You do not pick a machine each time you start a chat: the project has one, and its files, git history and worktrees live there. Different projects can live on different machines, for example one on your laptop and another on a cloud machine.
+A project is not tied to one machine. You can install the same project on several machines, for example your laptop and a cloud machine, and each has its own checkout, git history and worktrees. What decides where work happens is the chat.
 
-[Automations](/automations/overview) are the exception. An automation can run its project's work on a different machine from the one your chats use, which is how a scheduled job can use a cloud machine that is awake at 3 a.m. while you work interactively on your laptop. A workflow can also pin a machine itself with `daemon:`. The rules are in [Choosing a machine in workflows](/machines/choosing).
+Each chat runs on one machine. On the new-chat screen the machine picker shows where it will run, starting from your default machine, and you can choose another machine you own, or **No machine**. A chat with no machine can use the web and your integrations but cannot read or change files, run a shell or reach a local MCP server. If you leave the machine unchosen, the chat runs on your default machine. You can change a chat's machine later with **Connect a machine**, which is also how a no-machine chat gets one.
+
+A branched chat is the exception to choosing freely. Its [worktree](/features/worktrees) lives on the disk of the machine that created it, so the branch runs on that machine. A new worktree is created on the machine of the chat it is created for, and the Files tab and the file, worktree and git operations for a chat all go to that chat's machine. A workspace you create from the new-chat screen, before the chat exists, is created on your default machine.
+
+[Automations](/automations/overview) pick their own machine when you activate them, independently of your chats. That is how a scheduled job can use a cloud machine that is awake at 3 a.m. while you work interactively on your laptop. A workflow can also pin a machine itself with `daemon:`. The rules are in [Choosing a machine in workflows](/machines/choosing).
 
 <Frame caption="A cloud machine running a chat. Example data.">
   <img src="/images/v2/p2-chat-running-on-cloud-machine.png" alt="A chat running on a cloud machine" />
