@@ -299,6 +299,28 @@ When debugging this flow, read `admin-server.log` first — the RPC sequence
 (`RedeemCoupon` → `CreateDaemon` → `CompleteOnboarding`) tells you what
 actually happened server-side, independent of any frontend logging.
 
+### Testing while iterating
+
+Run the fast tier, scoped to what you touched:
+
+```bash
+make test-short PKG=./internal/<pkg>/...   # -short, cached, no -race, 60s/pkg
+```
+
+- **Never `make test` / `make test-all`** — they run `make stop`, which stops
+  other agents' environments. For the full lane run `go test ./internal/<pkg>/...`
+  (no `-short`) once at the end; CI runs everything.
+- `-short` skips DB-backed tests (the shared Postgres is the bottleneck). When
+  you change SQL or a repo method: `REQUIRE_TEST_DB=1 make test-short PKG=...`.
+- No `-count=1` or `-race` in the inner loop — they defeat the test cache,
+  which is correct for hermetic tests. Never set a private `GOCACHE`.
+- The cache only sees files the test process itself reads. A test that execs a
+  child reading repo files (not embedded, not in `t.TempDir()`) must skip under
+  `testing.Short()` or `os.ReadFile` those inputs itself.
+- A new test that takes >2s gets `if testing.Short() { t.Skip("<why>; skipped under -short") }`
+  — gate it, never weaken the assertion.
+- Anything expected to run >~2 min: `run_in_background` + `shell_wait`.
+
 ### Project nuances
 
 We are using reliant to build reliant. Reliant is a multi-workflow, multi-workspace agentic assistant. That means there might be 10 reliant processes we're running at a time, each for a different feature. Reliant has dynamic port allocation. We typically use 1 central reliant to iterate on all of the others.

@@ -217,6 +217,10 @@ const defaultTestDSN = "postgres://postgres:postgres@localhost:5433/reliant?sslm
 func resolveTestDSN(t *testing.T) string {
 	t.Helper()
 
+	if reason := shortModeDBSkipReason(testing.Short(), requireTestDB()); reason != "" {
+		t.Skip(reason)
+	}
+
 	dsn := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	source := "DATABASE_URL"
 	if dsn == "" {
@@ -237,6 +241,25 @@ func resolveTestDSN(t *testing.T) string {
 		t.Skipf("SKIPPING DB-BACKED TEST — %s", msg)
 	}
 	return dsn
+}
+
+// shortModeDBSkipReason returns why a DB-backed test is skipped in this mode,
+// or "" when it should run.
+//
+// -short is the hermetic inner-loop tier (`make test-short`), so it does not
+// touch Postgres. That is not about any one slow test: DB-backed tests are
+// serial and Postgres-bound, and every agent on a shared box queues behind the
+// SAME server. Measured: internal/grpc/services under -short took 173s wall for
+// 10s of CPU with the database, 7.9s without it. The full lane (no -short) and
+// CI still run every one of them.
+//
+// REQUIRE_TEST_DB=1 opts back in — it already means "these tests must run" —
+// so a change to SQL or a repo method can still be iterated on with -short.
+func shortModeDBSkipReason(short, required bool) string {
+	if !short || required {
+		return ""
+	}
+	return "DB-backed test; skipped under -short. Run without -short, or set REQUIRE_TEST_DB=1 to include it"
 }
 
 // requireTestDB reports whether a missing database must fail rather than skip.

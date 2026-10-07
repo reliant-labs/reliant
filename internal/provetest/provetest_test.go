@@ -651,6 +651,9 @@ func TestProve_RefusesBadRequests(t *testing.T) {
 // End to end with a real `go test`: the failure the before-run reports is the
 // test's own assertion, not a stand-in.
 func TestProve_RealGoTest(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs a real `go test` twice; skipped under -short")
+	}
 	goBin, err := exec.LookPath("go")
 	if err != nil {
 		t.Skip("go not installed")
@@ -669,6 +672,9 @@ func TestProve_RealGoTest(t *testing.T) {
 }
 
 func TestProve_RealGoTestBaselineDoesNotCompile(t *testing.T) {
+	if testing.Short() {
+		t.Skip("compiles and runs a real `go test`; skipped under -short")
+	}
 	goBin, err := exec.LookPath("go")
 	if err != nil {
 		t.Skip("go not installed")

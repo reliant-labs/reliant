@@ -90,8 +90,13 @@ func requireRipgrep(t *testing.T) {
 	}
 }
 
+// requireGopls also keeps these tests out of -short: each one cold-starts a
+// real gopls (seconds apiece), which is not an inner-loop cost.
 func requireGopls(t *testing.T) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("starts a real gopls; skipped under -short")
+	}
 	if _, err := exec.LookPath("gopls"); err != nil {
 		t.Skip("gopls not installed")
 	}
@@ -291,6 +296,9 @@ export function callerTwo(): number {
 // there is no global install to rely on.
 func locateTypeScriptLib(t *testing.T) string {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("starts a real tsserver; skipped under -short")
+	}
 	if _, err := exec.LookPath("node"); err != nil {
 		t.Skip("node not installed")
 	}

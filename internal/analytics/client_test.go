@@ -250,16 +250,20 @@ func TestBatching(t *testing.T) {
 		totalEvents += len(batch)
 	}
 	assert.Equal(t, maxBatchSize, totalEvents)
+	mu.Unlock()
 
 	// Track one more event to trigger another batch
 	client.Track(EventType("test_event"), map[string]interface{}{
 		"index": maxBatchSize,
 	})
 
-	// Force flush the remaining event
+	// Force flush the remaining event. The handler takes mu, so it must not be
+	// held here: holding it blocked the handler until the client's 5s timeout
+	// had fired on all three attempts (~21s), and the event was dropped.
 	client.flush()
 
 	// Should have at least one batch, possibly two
+	mu.Lock()
 	assert.GreaterOrEqual(t, len(receivedBatches), 1)
 	mu.Unlock()
 
@@ -267,6 +271,9 @@ func TestBatching(t *testing.T) {
 }
 
 func TestRetryLogic(t *testing.T) {
+	if testing.Short() {
+		t.Skip("sleeps through the real 2s+4s retry backoff; skipped under -short")
+	}
 	attemptCount := 0
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		attemptCount++

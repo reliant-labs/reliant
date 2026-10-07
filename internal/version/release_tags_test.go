@@ -2,7 +2,7 @@
 package version_test
 
 import (
-	"os/exec"
+	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -47,7 +47,10 @@ func repoRootFromTest(t *testing.T) string {
 func readScript(t *testing.T, name string) string {
 	t.Helper()
 	path := filepath.Join(repoRootFromTest(t), "scripts", name)
-	out, err := exec.Command("cat", path).Output()
+	// Read in-process, never via a child like `cat`: Go's test cache keys only
+	// on files the test process itself opens, so a script read by a child is
+	// invisible to it and a cached `ok` would outlive an edit to the script.
+	out, err := os.ReadFile(path)
 	if err != nil {
 		t.Fatalf("reading %s: %v", path, err)
 	}

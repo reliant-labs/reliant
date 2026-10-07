@@ -100,6 +100,9 @@ func startUnrelatedProcess(t *testing.T, body string) int {
 // it was unreachable, and "Daemon stopped" was printed over a live daemon whose
 // runtime record had just been deleted.
 func TestStopDoesNotReportSuccessUntilTheProcessIsGone(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out the real 12s daemonStopGrace before escalating; skipped under -short")
+	}
 	dataDir := t.TempDir()
 	pid := startUnrelatedProcess(t, `sh -c 'trap "" TERM; while :; do sleep 0.2; done'`)
 	writeRecordForPID(t, dataDir, pid)
@@ -138,6 +141,9 @@ func TestStopReportsSuccessWhenTheProcessExitsGracefully(t *testing.T) {
 // a stale one — `status` then says "no daemon running" and `start` creates a
 // second daemon under the same gateway identity.
 func TestStopKeepsTheRecordAndFailsWhenTheProcessSurvives(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out the real 12s stop grace plus 5s kill grace; skipped under -short")
+	}
 	dataDir := t.TempDir()
 	writeRecordForPID(t, dataDir, 4242)
 
@@ -193,6 +199,9 @@ func TestStopWithoutARecordSaysSo(t *testing.T) {
 
 // --force does not get to skip verification either.
 func TestForceStopStillVerifiesTheProcessIsGone(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out the real 5s daemonKillGrace; skipped under -short")
+	}
 	dataDir := t.TempDir()
 	writeRecordForPID(t, dataDir, 4242)
 

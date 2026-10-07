@@ -102,6 +102,9 @@ func (s *SelfResumeSuite) TestUnattendedUserPause_StaysParked() {
 	// "Unattended" means nobody is watching, not that nobody may instruct. A
 	// pause someone sent by hand must survive, or the ladder would quietly
 	// undo an explicit instruction — the single worst thing it could do.
+	if testing.Short() {
+		s.T().Skip("ends on the harness's 30s deadlock detector; skipped under -short")
+	}
 	env := s.NewTestWorkflowEnvironment()
 
 	env.RegisterDelayedCallback(func() {
@@ -135,6 +138,9 @@ func selfPauseAfterUserPauseWorkflow(ctx workflow.Context) (string, error) {
 func (s *SelfResumeSuite) TestUserPauseOverSelfPause_StaysParked() {
 	// The overlap case: the run self-paused, and THEN a person paused it. The
 	// ladder must not treat the still-armed self-pause as its own to clear.
+	if testing.Short() {
+		s.T().Skip("takes 30s of wall clock (deadlock detector); skipped under -short")
+	}
 	env := s.NewTestWorkflowEnvironment()
 
 	env.RegisterDelayedCallback(func() {
@@ -184,6 +190,9 @@ func (s *SelfResumeSuite) TestUnattendedSelfPause_LadderIsBounded() {
 	// A cause that outlives every rung is not a rate limit — it needs a
 	// person. The ladder must run out and leave the run parked where someone
 	// can see it, rather than burning tokens against it forever.
+	if testing.Short() {
+		s.T().Skip("takes 30s of wall clock (deadlock detector); skipped under -short")
+	}
 	env := s.NewTestWorkflowEnvironment()
 
 	resumes := 0
