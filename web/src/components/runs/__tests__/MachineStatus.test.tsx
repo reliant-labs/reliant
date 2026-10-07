@@ -16,7 +16,7 @@ import { ChatActivity } from "@/gen/reliant/v1/chat_pb";
 import type { Chat } from "@/api/client";
 
 const mocks = vi.hoisted(() => ({
-  daemons: [] as Array<{ daemonId: string; hostname: string; status: number; daemonType: string }>,
+  daemons: [] as Array<{ daemonId: string; name?: string; hostname: string; status: number; daemonType: string }>,
   daemonsLoading: false,
   resumeDaemon: vi.fn(),
   goToBilling: vi.fn(),
@@ -43,7 +43,8 @@ import { MachineStatus, RunMachineBanner } from "../MachineStatus";
 import { useActivityStore } from "@/store/activityStore";
 
 function daemon(status: DaemonStatus, overrides: Partial<(typeof mocks.daemons)[number]> = {}) {
-  return { daemonId: "d-1", hostname: "MacBook (cloud)", status, daemonType: "managed", ...overrides };
+  // A managed machine is called by its control-plane name, not its pod hostname.
+  return { daemonId: "d-1", name: "MacBook (cloud)", hostname: "ws-ws-d-1", status, daemonType: "managed", ...overrides };
 }
 
 beforeEach(() => {
@@ -82,7 +83,7 @@ describe("MachineStatus copy by daemon state", () => {
   });
 
   it("offline (local daemon): open Reliant on that machine, no action", () => {
-    mocks.daemons = [daemon(DaemonStatus.DISCONNECTED, { hostname: "Sean's laptop", daemonType: "self_hosted" })];
+    mocks.daemons = [daemon(DaemonStatus.DISCONNECTED, { name: "", hostname: "Sean's laptop", daemonType: "self_hosted" })];
     render(<MachineStatus daemonId="d-1" />);
     expect(screen.getByText("Sean's laptop")).toBeInTheDocument();
     expect(screen.getByText(/is offline\. Open Reliant on that machine to continue\./)).toBeInTheDocument();

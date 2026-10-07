@@ -135,6 +135,64 @@ func (FileViewerKind) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{1}
 }
 
+// ProjectCheckoutState is what is happening to a project's checkout on one
+// machine, from this server's record of clones (project_daemons).
+type ProjectCheckoutState int32
+
+const (
+	ProjectCheckoutState_PROJECT_CHECKOUT_STATE_UNSPECIFIED ProjectCheckoutState = 0
+	// A clone onto this machine is queued or running; the directory will
+	// appear when it lands.
+	ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING ProjectCheckoutState = 1
+	// A clone onto this machine ran and failed.
+	ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONE_FAILED ProjectCheckoutState = 2
+	// Nothing is putting the project on this machine.
+	ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT ProjectCheckoutState = 3
+)
+
+// Enum value maps for ProjectCheckoutState.
+var (
+	ProjectCheckoutState_name = map[int32]string{
+		0: "PROJECT_CHECKOUT_STATE_UNSPECIFIED",
+		1: "PROJECT_CHECKOUT_STATE_CLONING",
+		2: "PROJECT_CHECKOUT_STATE_CLONE_FAILED",
+		3: "PROJECT_CHECKOUT_STATE_ABSENT",
+	}
+	ProjectCheckoutState_value = map[string]int32{
+		"PROJECT_CHECKOUT_STATE_UNSPECIFIED":  0,
+		"PROJECT_CHECKOUT_STATE_CLONING":      1,
+		"PROJECT_CHECKOUT_STATE_CLONE_FAILED": 2,
+		"PROJECT_CHECKOUT_STATE_ABSENT":       3,
+	}
+)
+
+func (x ProjectCheckoutState) Enum() *ProjectCheckoutState {
+	p := new(ProjectCheckoutState)
+	*p = x
+	return p
+}
+
+func (x ProjectCheckoutState) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (ProjectCheckoutState) Descriptor() protoreflect.EnumDescriptor {
+	return file_reliant_v1_filesystem_proto_enumTypes[2].Descriptor()
+}
+
+func (ProjectCheckoutState) Type() protoreflect.EnumType {
+	return &file_reliant_v1_filesystem_proto_enumTypes[2]
+}
+
+func (x ProjectCheckoutState) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use ProjectCheckoutState.Descriptor instead.
+func (ProjectCheckoutState) EnumDescriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{2}
+}
+
 // FileNode represents a file or directory in the tree
 type FileNode struct {
 	state    protoimpl.MessageState `protogen:"open.v1"`
@@ -574,6 +632,112 @@ func (x *GetFileTreeResponse) GetNodeCount() int32 {
 	return 0
 }
 
+// ProjectCheckoutMissing is attached, as a Connect error detail with code
+// NOT_FOUND, when a request for a project's root finds that the project's
+// directory does not exist on the machine the request reached.
+//
+// Before it, that case came back as a bare INTERNAL ("read dir …: no such file
+// or directory") and the UI rendered the raw text — repeatedly, for every
+// surface that reads the tree. Two very different situations hid behind it,
+// and only one of them is a problem:
+//
+//   - the project is being CLONED onto this machine and the clone has not
+//     landed yet (the queued-clone window right after "Clone from GitHub");
+//   - the project simply is not on this machine — it was cloned onto another
+//     one, or its checkout is gone — and the user can clone it here.
+//
+// The state says which, so the UI can show "Cloning…" for the first and offer
+// "Clone it here" for the second.
+type ProjectCheckoutMissing struct {
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// The machine the request reached. Empty only when the server could not
+	// tell which machine default resolution picked.
+	DaemonId string `protobuf:"bytes,2,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// The project directory that does not exist on that machine.
+	Path  string               `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`
+	State ProjectCheckoutState `protobuf:"varint,4,opt,name=state,proto3,enum=reliant.v1.ProjectCheckoutState" json:"state,omitempty"`
+	// Why the clone onto this machine failed, for CLONE_FAILED.
+	InstallError string `protobuf:"bytes,5,opt,name=install_error,json=installError,proto3" json:"install_error,omitempty"`
+	// The repository the project comes from. Empty for a plain folder, which
+	// cannot be cloned anywhere.
+	RemoteUrl     string `protobuf:"bytes,6,opt,name=remote_url,json=remoteUrl,proto3" json:"remote_url,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ProjectCheckoutMissing) Reset() {
+	*x = ProjectCheckoutMissing{}
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ProjectCheckoutMissing) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ProjectCheckoutMissing) ProtoMessage() {}
+
+func (x *ProjectCheckoutMissing) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ProjectCheckoutMissing.ProtoReflect.Descriptor instead.
+func (*ProjectCheckoutMissing) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ProjectCheckoutMissing) GetProjectId() string {
+	if x != nil {
+		return x.ProjectId
+	}
+	return ""
+}
+
+func (x *ProjectCheckoutMissing) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *ProjectCheckoutMissing) GetPath() string {
+	if x != nil {
+		return x.Path
+	}
+	return ""
+}
+
+func (x *ProjectCheckoutMissing) GetState() ProjectCheckoutState {
+	if x != nil {
+		return x.State
+	}
+	return ProjectCheckoutState_PROJECT_CHECKOUT_STATE_UNSPECIFIED
+}
+
+func (x *ProjectCheckoutMissing) GetInstallError() string {
+	if x != nil {
+		return x.InstallError
+	}
+	return ""
+}
+
+func (x *ProjectCheckoutMissing) GetRemoteUrl() string {
+	if x != nil {
+		return x.RemoteUrl
+	}
+	return ""
+}
+
 type GetFileContentRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
@@ -586,7 +750,7 @@ type GetFileContentRequest struct {
 
 func (x *GetFileContentRequest) Reset() {
 	*x = GetFileContentRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[5]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -598,7 +762,7 @@ func (x *GetFileContentRequest) String() string {
 func (*GetFileContentRequest) ProtoMessage() {}
 
 func (x *GetFileContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[5]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -611,7 +775,7 @@ func (x *GetFileContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileContentRequest.ProtoReflect.Descriptor instead.
 func (*GetFileContentRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetFileContentRequest) GetProjectId() string {
@@ -651,7 +815,7 @@ type GetFileContentResponse struct {
 
 func (x *GetFileContentResponse) Reset() {
 	*x = GetFileContentResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[6]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -663,7 +827,7 @@ func (x *GetFileContentResponse) String() string {
 func (*GetFileContentResponse) ProtoMessage() {}
 
 func (x *GetFileContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[6]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -676,7 +840,7 @@ func (x *GetFileContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileContentResponse.ProtoReflect.Descriptor instead.
 func (*GetFileContentResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *GetFileContentResponse) GetContent() string {
@@ -699,7 +863,7 @@ type SaveFileContentRequest struct {
 
 func (x *SaveFileContentRequest) Reset() {
 	*x = SaveFileContentRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[7]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -711,7 +875,7 @@ func (x *SaveFileContentRequest) String() string {
 func (*SaveFileContentRequest) ProtoMessage() {}
 
 func (x *SaveFileContentRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[7]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -724,7 +888,7 @@ func (x *SaveFileContentRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveFileContentRequest.ProtoReflect.Descriptor instead.
 func (*SaveFileContentRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *SaveFileContentRequest) GetProjectId() string {
@@ -771,7 +935,7 @@ type SaveFileContentResponse struct {
 
 func (x *SaveFileContentResponse) Reset() {
 	*x = SaveFileContentResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[8]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -783,7 +947,7 @@ func (x *SaveFileContentResponse) String() string {
 func (*SaveFileContentResponse) ProtoMessage() {}
 
 func (x *SaveFileContentResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[8]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -796,7 +960,7 @@ func (x *SaveFileContentResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SaveFileContentResponse.ProtoReflect.Descriptor instead.
 func (*SaveFileContentResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *SaveFileContentResponse) GetMessage() string {
@@ -818,7 +982,7 @@ type GetFileMetadataRequest struct {
 
 func (x *GetFileMetadataRequest) Reset() {
 	*x = GetFileMetadataRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[9]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -830,7 +994,7 @@ func (x *GetFileMetadataRequest) String() string {
 func (*GetFileMetadataRequest) ProtoMessage() {}
 
 func (x *GetFileMetadataRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[9]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -843,7 +1007,7 @@ func (x *GetFileMetadataRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileMetadataRequest.ProtoReflect.Descriptor instead.
 func (*GetFileMetadataRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *GetFileMetadataRequest) GetProjectId() string {
@@ -883,7 +1047,7 @@ type GetFileMetadataResponse struct {
 
 func (x *GetFileMetadataResponse) Reset() {
 	*x = GetFileMetadataResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[10]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -895,7 +1059,7 @@ func (x *GetFileMetadataResponse) String() string {
 func (*GetFileMetadataResponse) ProtoMessage() {}
 
 func (x *GetFileMetadataResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[10]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -908,7 +1072,7 @@ func (x *GetFileMetadataResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFileMetadataResponse.ProtoReflect.Descriptor instead.
 func (*GetFileMetadataResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *GetFileMetadataResponse) GetMetadata() *FileMetadata {
@@ -930,7 +1094,7 @@ type GetFilePreviewInfoRequest struct {
 
 func (x *GetFilePreviewInfoRequest) Reset() {
 	*x = GetFilePreviewInfoRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[11]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -942,7 +1106,7 @@ func (x *GetFilePreviewInfoRequest) String() string {
 func (*GetFilePreviewInfoRequest) ProtoMessage() {}
 
 func (x *GetFilePreviewInfoRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[11]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -955,7 +1119,7 @@ func (x *GetFilePreviewInfoRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFilePreviewInfoRequest.ProtoReflect.Descriptor instead.
 func (*GetFilePreviewInfoRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *GetFilePreviewInfoRequest) GetProjectId() string {
@@ -995,7 +1159,7 @@ type GetFilePreviewInfoResponse struct {
 
 func (x *GetFilePreviewInfoResponse) Reset() {
 	*x = GetFilePreviewInfoResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[12]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1007,7 +1171,7 @@ func (x *GetFilePreviewInfoResponse) String() string {
 func (*GetFilePreviewInfoResponse) ProtoMessage() {}
 
 func (x *GetFilePreviewInfoResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[12]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1020,7 +1184,7 @@ func (x *GetFilePreviewInfoResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFilePreviewInfoResponse.ProtoReflect.Descriptor instead.
 func (*GetFilePreviewInfoResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *GetFilePreviewInfoResponse) GetInfo() *FilePreviewInfo {
@@ -1044,7 +1208,7 @@ type CreateFileOrFolderRequest struct {
 
 func (x *CreateFileOrFolderRequest) Reset() {
 	*x = CreateFileOrFolderRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[13]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1056,7 +1220,7 @@ func (x *CreateFileOrFolderRequest) String() string {
 func (*CreateFileOrFolderRequest) ProtoMessage() {}
 
 func (x *CreateFileOrFolderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[13]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1069,7 +1233,7 @@ func (x *CreateFileOrFolderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFileOrFolderRequest.ProtoReflect.Descriptor instead.
 func (*CreateFileOrFolderRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *CreateFileOrFolderRequest) GetProjectId() string {
@@ -1124,7 +1288,7 @@ type CreateFileOrFolderResponse struct {
 
 func (x *CreateFileOrFolderResponse) Reset() {
 	*x = CreateFileOrFolderResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[14]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1136,7 +1300,7 @@ func (x *CreateFileOrFolderResponse) String() string {
 func (*CreateFileOrFolderResponse) ProtoMessage() {}
 
 func (x *CreateFileOrFolderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[14]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1149,7 +1313,7 @@ func (x *CreateFileOrFolderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateFileOrFolderResponse.ProtoReflect.Descriptor instead.
 func (*CreateFileOrFolderResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{14}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *CreateFileOrFolderResponse) GetMessage() string {
@@ -1178,7 +1342,7 @@ type DeleteFileOrFolderRequest struct {
 
 func (x *DeleteFileOrFolderRequest) Reset() {
 	*x = DeleteFileOrFolderRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[15]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1190,7 +1354,7 @@ func (x *DeleteFileOrFolderRequest) String() string {
 func (*DeleteFileOrFolderRequest) ProtoMessage() {}
 
 func (x *DeleteFileOrFolderRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[15]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1203,7 +1367,7 @@ func (x *DeleteFileOrFolderRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileOrFolderRequest.ProtoReflect.Descriptor instead.
 func (*DeleteFileOrFolderRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{15}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DeleteFileOrFolderRequest) GetProjectId() string {
@@ -1243,7 +1407,7 @@ type DeleteFileOrFolderResponse struct {
 
 func (x *DeleteFileOrFolderResponse) Reset() {
 	*x = DeleteFileOrFolderResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[16]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[17]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1255,7 +1419,7 @@ func (x *DeleteFileOrFolderResponse) String() string {
 func (*DeleteFileOrFolderResponse) ProtoMessage() {}
 
 func (x *DeleteFileOrFolderResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[16]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[17]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1268,7 +1432,7 @@ func (x *DeleteFileOrFolderResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteFileOrFolderResponse.ProtoReflect.Descriptor instead.
 func (*DeleteFileOrFolderResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{16}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *DeleteFileOrFolderResponse) GetMessage() string {
@@ -1291,7 +1455,7 @@ type CopyFileRequest struct {
 
 func (x *CopyFileRequest) Reset() {
 	*x = CopyFileRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[17]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1303,7 +1467,7 @@ func (x *CopyFileRequest) String() string {
 func (*CopyFileRequest) ProtoMessage() {}
 
 func (x *CopyFileRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[17]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1316,7 +1480,7 @@ func (x *CopyFileRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyFileRequest.ProtoReflect.Descriptor instead.
 func (*CopyFileRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{17}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CopyFileRequest) GetProjectId() string {
@@ -1364,7 +1528,7 @@ type CopyFileResponse struct {
 
 func (x *CopyFileResponse) Reset() {
 	*x = CopyFileResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[18]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1376,7 +1540,7 @@ func (x *CopyFileResponse) String() string {
 func (*CopyFileResponse) ProtoMessage() {}
 
 func (x *CopyFileResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[18]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1389,7 +1553,7 @@ func (x *CopyFileResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CopyFileResponse.ProtoReflect.Descriptor instead.
 func (*CopyFileResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{18}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CopyFileResponse) GetMessage() string {
@@ -1423,7 +1587,7 @@ type SearchFilesRequest struct {
 
 func (x *SearchFilesRequest) Reset() {
 	*x = SearchFilesRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[19]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[20]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1435,7 +1599,7 @@ func (x *SearchFilesRequest) String() string {
 func (*SearchFilesRequest) ProtoMessage() {}
 
 func (x *SearchFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[19]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[20]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1448,7 +1612,7 @@ func (x *SearchFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchFilesRequest.ProtoReflect.Descriptor instead.
 func (*SearchFilesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{19}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *SearchFilesRequest) GetProjectId() string {
@@ -1525,7 +1689,7 @@ type SearchFilesResponse struct {
 
 func (x *SearchFilesResponse) Reset() {
 	*x = SearchFilesResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[20]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[21]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1537,7 +1701,7 @@ func (x *SearchFilesResponse) String() string {
 func (*SearchFilesResponse) ProtoMessage() {}
 
 func (x *SearchFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[20]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[21]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1550,7 +1714,7 @@ func (x *SearchFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchFilesResponse.ProtoReflect.Descriptor instead.
 func (*SearchFilesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{20}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *SearchFilesResponse) GetResults() []*SearchResult {
@@ -1584,7 +1748,7 @@ type SearchResult struct {
 
 func (x *SearchResult) Reset() {
 	*x = SearchResult{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[21]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1596,7 +1760,7 @@ func (x *SearchResult) String() string {
 func (*SearchResult) ProtoMessage() {}
 
 func (x *SearchResult) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[21]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1609,7 +1773,7 @@ func (x *SearchResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchResult.ProtoReflect.Descriptor instead.
 func (*SearchResult) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{21}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *SearchResult) GetPath() string {
@@ -1640,7 +1804,7 @@ type SearchMatch struct {
 
 func (x *SearchMatch) Reset() {
 	*x = SearchMatch{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[22]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1652,7 +1816,7 @@ func (x *SearchMatch) String() string {
 func (*SearchMatch) ProtoMessage() {}
 
 func (x *SearchMatch) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[22]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1665,7 +1829,7 @@ func (x *SearchMatch) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SearchMatch.ProtoReflect.Descriptor instead.
 func (*SearchMatch) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{22}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *SearchMatch) GetLineNumber() int32 {
@@ -1727,7 +1891,7 @@ type ReplaceInFilesRequest struct {
 
 func (x *ReplaceInFilesRequest) Reset() {
 	*x = ReplaceInFilesRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[23]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1739,7 +1903,7 @@ func (x *ReplaceInFilesRequest) String() string {
 func (*ReplaceInFilesRequest) ProtoMessage() {}
 
 func (x *ReplaceInFilesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[23]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1752,7 +1916,7 @@ func (x *ReplaceInFilesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplaceInFilesRequest.ProtoReflect.Descriptor instead.
 func (*ReplaceInFilesRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{23}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *ReplaceInFilesRequest) GetProjectId() string {
@@ -1829,7 +1993,7 @@ type ReplaceInFilesResponse struct {
 
 func (x *ReplaceInFilesResponse) Reset() {
 	*x = ReplaceInFilesResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[24]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1841,7 +2005,7 @@ func (x *ReplaceInFilesResponse) String() string {
 func (*ReplaceInFilesResponse) ProtoMessage() {}
 
 func (x *ReplaceInFilesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[24]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1854,7 +2018,7 @@ func (x *ReplaceInFilesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplaceInFilesResponse.ProtoReflect.Descriptor instead.
 func (*ReplaceInFilesResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{24}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *ReplaceInFilesResponse) GetResults() []*ReplaceResult {
@@ -1890,7 +2054,7 @@ type ReplaceResult struct {
 
 func (x *ReplaceResult) Reset() {
 	*x = ReplaceResult{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[25]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[26]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1902,7 +2066,7 @@ func (x *ReplaceResult) String() string {
 func (*ReplaceResult) ProtoMessage() {}
 
 func (x *ReplaceResult) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[25]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[26]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1915,7 +2079,7 @@ func (x *ReplaceResult) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ReplaceResult.ProtoReflect.Descriptor instead.
 func (*ReplaceResult) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{25}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{26}
 }
 
 func (x *ReplaceResult) GetPath() string {
@@ -1955,7 +2119,7 @@ type ListDirectoryRequest struct {
 
 func (x *ListDirectoryRequest) Reset() {
 	*x = ListDirectoryRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[26]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[27]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1967,7 +2131,7 @@ func (x *ListDirectoryRequest) String() string {
 func (*ListDirectoryRequest) ProtoMessage() {}
 
 func (x *ListDirectoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[26]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[27]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1980,7 +2144,7 @@ func (x *ListDirectoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDirectoryRequest.ProtoReflect.Descriptor instead.
 func (*ListDirectoryRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{26}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListDirectoryRequest) GetPath() string {
@@ -2000,7 +2164,7 @@ type ListDirectoryResponse struct {
 
 func (x *ListDirectoryResponse) Reset() {
 	*x = ListDirectoryResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[27]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[28]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2012,7 +2176,7 @@ func (x *ListDirectoryResponse) String() string {
 func (*ListDirectoryResponse) ProtoMessage() {}
 
 func (x *ListDirectoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[27]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[28]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2025,7 +2189,7 @@ func (x *ListDirectoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDirectoryResponse.ProtoReflect.Descriptor instead.
 func (*ListDirectoryResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{27}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{28}
 }
 
 func (x *ListDirectoryResponse) GetPath() string {
@@ -2055,7 +2219,7 @@ type DirectoryEntry struct {
 
 func (x *DirectoryEntry) Reset() {
 	*x = DirectoryEntry{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[28]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[29]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2067,7 +2231,7 @@ func (x *DirectoryEntry) String() string {
 func (*DirectoryEntry) ProtoMessage() {}
 
 func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[28]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[29]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2080,7 +2244,7 @@ func (x *DirectoryEntry) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryEntry.ProtoReflect.Descriptor instead.
 func (*DirectoryEntry) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{28}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *DirectoryEntry) GetName() string {
@@ -2127,7 +2291,7 @@ type CreateDirectoryRequest struct {
 
 func (x *CreateDirectoryRequest) Reset() {
 	*x = CreateDirectoryRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[29]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[30]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2139,7 +2303,7 @@ func (x *CreateDirectoryRequest) String() string {
 func (*CreateDirectoryRequest) ProtoMessage() {}
 
 func (x *CreateDirectoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[29]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[30]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2152,7 +2316,7 @@ func (x *CreateDirectoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDirectoryRequest.ProtoReflect.Descriptor instead.
 func (*CreateDirectoryRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{29}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *CreateDirectoryRequest) GetPath() string {
@@ -2171,7 +2335,7 @@ type CreateDirectoryResponse struct {
 
 func (x *CreateDirectoryResponse) Reset() {
 	*x = CreateDirectoryResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[30]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[31]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2183,7 +2347,7 @@ func (x *CreateDirectoryResponse) String() string {
 func (*CreateDirectoryResponse) ProtoMessage() {}
 
 func (x *CreateDirectoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[30]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[31]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2196,7 +2360,7 @@ func (x *CreateDirectoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateDirectoryResponse.ProtoReflect.Descriptor instead.
 func (*CreateDirectoryResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{30}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{31}
 }
 
 func (x *CreateDirectoryResponse) GetPath() string {
@@ -2218,7 +2382,7 @@ type GetFilePreviewRequest struct {
 
 func (x *GetFilePreviewRequest) Reset() {
 	*x = GetFilePreviewRequest{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[31]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[32]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2230,7 +2394,7 @@ func (x *GetFilePreviewRequest) String() string {
 func (*GetFilePreviewRequest) ProtoMessage() {}
 
 func (x *GetFilePreviewRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[31]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[32]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2243,7 +2407,7 @@ func (x *GetFilePreviewRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFilePreviewRequest.ProtoReflect.Descriptor instead.
 func (*GetFilePreviewRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{31}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *GetFilePreviewRequest) GetProjectId() string {
@@ -2286,7 +2450,7 @@ type GetFilePreviewResponse struct {
 
 func (x *GetFilePreviewResponse) Reset() {
 	*x = GetFilePreviewResponse{}
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[32]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[33]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -2298,7 +2462,7 @@ func (x *GetFilePreviewResponse) String() string {
 func (*GetFilePreviewResponse) ProtoMessage() {}
 
 func (x *GetFilePreviewResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_filesystem_proto_msgTypes[32]
+	mi := &file_reliant_v1_filesystem_proto_msgTypes[33]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2311,7 +2475,7 @@ func (x *GetFilePreviewResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetFilePreviewResponse.ProtoReflect.Descriptor instead.
 func (*GetFilePreviewResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{32}
+	return file_reliant_v1_filesystem_proto_rawDescGZIP(), []int{33}
 }
 
 func (x *GetFilePreviewResponse) GetContent() []byte {
@@ -2393,7 +2557,16 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x05files\x18\x01 \x03(\v2\x14.reliant.v1.FileNodeR\x05files\x12\x1c\n" +
 	"\ttruncated\x18\x02 \x01(\bR\ttruncated\x12\x1d\n" +
 	"\n" +
-	"node_count\x18\x03 \x01(\x05R\tnodeCount\"\xaa\x01\n" +
+	"node_count\x18\x03 \x01(\x05R\tnodeCount\"\xe4\x01\n" +
+	"\x16ProjectCheckoutMissing\x12\x1d\n" +
+	"\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
+	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\x12\x12\n" +
+	"\x04path\x18\x03 \x01(\tR\x04path\x126\n" +
+	"\x05state\x18\x04 \x01(\x0e2 .reliant.v1.ProjectCheckoutStateR\x05state\x12#\n" +
+	"\rinstall_error\x18\x05 \x01(\tR\finstallError\x12\x1d\n" +
+	"\n" +
+	"remote_url\x18\x06 \x01(\tR\tremoteUrl\"\xaa\x01\n" +
 	"\x15GetFileContentRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -2593,7 +2766,12 @@ const file_reliant_v1_filesystem_proto_rawDesc = "" +
 	"\x14FILE_VIEWER_KIND_PDF\x10\x03\x12\x1a\n" +
 	"\x16FILE_VIEWER_KIND_AUDIO\x10\x04\x12\x1a\n" +
 	"\x16FILE_VIEWER_KIND_VIDEO\x10\x05\x12\x1b\n" +
-	"\x17FILE_VIEWER_KIND_BINARY\x10\x062\xb8\t\n" +
+	"\x17FILE_VIEWER_KIND_BINARY\x10\x06*\xae\x01\n" +
+	"\x14ProjectCheckoutState\x12&\n" +
+	"\"PROJECT_CHECKOUT_STATE_UNSPECIFIED\x10\x00\x12\"\n" +
+	"\x1ePROJECT_CHECKOUT_STATE_CLONING\x10\x01\x12'\n" +
+	"#PROJECT_CHECKOUT_STATE_CLONE_FAILED\x10\x02\x12!\n" +
+	"\x1dPROJECT_CHECKOUT_STATE_ABSENT\x10\x032\xb8\t\n" +
 	"\x11FileSystemService\x12P\n" +
 	"\vGetFileTree\x12\x1e.reliant.v1.GetFileTreeRequest\x1a\x1f.reliant.v1.GetFileTreeResponse\"\x00\x12Y\n" +
 	"\x0eGetFileContent\x12!.reliant.v1.GetFileContentRequest\x1a\".reliant.v1.GetFileContentResponse\"\x00\x12\\\n" +
@@ -2621,89 +2799,92 @@ func file_reliant_v1_filesystem_proto_rawDescGZIP() []byte {
 	return file_reliant_v1_filesystem_proto_rawDescData
 }
 
-var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 33)
+var file_reliant_v1_filesystem_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_reliant_v1_filesystem_proto_msgTypes = make([]protoimpl.MessageInfo, 34)
 var file_reliant_v1_filesystem_proto_goTypes = []any{
 	(FileNodeType)(0),                  // 0: reliant.v1.FileNodeType
 	(FileViewerKind)(0),                // 1: reliant.v1.FileViewerKind
-	(*FileNode)(nil),                   // 2: reliant.v1.FileNode
-	(*FileMetadata)(nil),               // 3: reliant.v1.FileMetadata
-	(*FilePreviewInfo)(nil),            // 4: reliant.v1.FilePreviewInfo
-	(*GetFileTreeRequest)(nil),         // 5: reliant.v1.GetFileTreeRequest
-	(*GetFileTreeResponse)(nil),        // 6: reliant.v1.GetFileTreeResponse
-	(*GetFileContentRequest)(nil),      // 7: reliant.v1.GetFileContentRequest
-	(*GetFileContentResponse)(nil),     // 8: reliant.v1.GetFileContentResponse
-	(*SaveFileContentRequest)(nil),     // 9: reliant.v1.SaveFileContentRequest
-	(*SaveFileContentResponse)(nil),    // 10: reliant.v1.SaveFileContentResponse
-	(*GetFileMetadataRequest)(nil),     // 11: reliant.v1.GetFileMetadataRequest
-	(*GetFileMetadataResponse)(nil),    // 12: reliant.v1.GetFileMetadataResponse
-	(*GetFilePreviewInfoRequest)(nil),  // 13: reliant.v1.GetFilePreviewInfoRequest
-	(*GetFilePreviewInfoResponse)(nil), // 14: reliant.v1.GetFilePreviewInfoResponse
-	(*CreateFileOrFolderRequest)(nil),  // 15: reliant.v1.CreateFileOrFolderRequest
-	(*CreateFileOrFolderResponse)(nil), // 16: reliant.v1.CreateFileOrFolderResponse
-	(*DeleteFileOrFolderRequest)(nil),  // 17: reliant.v1.DeleteFileOrFolderRequest
-	(*DeleteFileOrFolderResponse)(nil), // 18: reliant.v1.DeleteFileOrFolderResponse
-	(*CopyFileRequest)(nil),            // 19: reliant.v1.CopyFileRequest
-	(*CopyFileResponse)(nil),           // 20: reliant.v1.CopyFileResponse
-	(*SearchFilesRequest)(nil),         // 21: reliant.v1.SearchFilesRequest
-	(*SearchFilesResponse)(nil),        // 22: reliant.v1.SearchFilesResponse
-	(*SearchResult)(nil),               // 23: reliant.v1.SearchResult
-	(*SearchMatch)(nil),                // 24: reliant.v1.SearchMatch
-	(*ReplaceInFilesRequest)(nil),      // 25: reliant.v1.ReplaceInFilesRequest
-	(*ReplaceInFilesResponse)(nil),     // 26: reliant.v1.ReplaceInFilesResponse
-	(*ReplaceResult)(nil),              // 27: reliant.v1.ReplaceResult
-	(*ListDirectoryRequest)(nil),       // 28: reliant.v1.ListDirectoryRequest
-	(*ListDirectoryResponse)(nil),      // 29: reliant.v1.ListDirectoryResponse
-	(*DirectoryEntry)(nil),             // 30: reliant.v1.DirectoryEntry
-	(*CreateDirectoryRequest)(nil),     // 31: reliant.v1.CreateDirectoryRequest
-	(*CreateDirectoryResponse)(nil),    // 32: reliant.v1.CreateDirectoryResponse
-	(*GetFilePreviewRequest)(nil),      // 33: reliant.v1.GetFilePreviewRequest
-	(*GetFilePreviewResponse)(nil),     // 34: reliant.v1.GetFilePreviewResponse
+	(ProjectCheckoutState)(0),          // 2: reliant.v1.ProjectCheckoutState
+	(*FileNode)(nil),                   // 3: reliant.v1.FileNode
+	(*FileMetadata)(nil),               // 4: reliant.v1.FileMetadata
+	(*FilePreviewInfo)(nil),            // 5: reliant.v1.FilePreviewInfo
+	(*GetFileTreeRequest)(nil),         // 6: reliant.v1.GetFileTreeRequest
+	(*GetFileTreeResponse)(nil),        // 7: reliant.v1.GetFileTreeResponse
+	(*ProjectCheckoutMissing)(nil),     // 8: reliant.v1.ProjectCheckoutMissing
+	(*GetFileContentRequest)(nil),      // 9: reliant.v1.GetFileContentRequest
+	(*GetFileContentResponse)(nil),     // 10: reliant.v1.GetFileContentResponse
+	(*SaveFileContentRequest)(nil),     // 11: reliant.v1.SaveFileContentRequest
+	(*SaveFileContentResponse)(nil),    // 12: reliant.v1.SaveFileContentResponse
+	(*GetFileMetadataRequest)(nil),     // 13: reliant.v1.GetFileMetadataRequest
+	(*GetFileMetadataResponse)(nil),    // 14: reliant.v1.GetFileMetadataResponse
+	(*GetFilePreviewInfoRequest)(nil),  // 15: reliant.v1.GetFilePreviewInfoRequest
+	(*GetFilePreviewInfoResponse)(nil), // 16: reliant.v1.GetFilePreviewInfoResponse
+	(*CreateFileOrFolderRequest)(nil),  // 17: reliant.v1.CreateFileOrFolderRequest
+	(*CreateFileOrFolderResponse)(nil), // 18: reliant.v1.CreateFileOrFolderResponse
+	(*DeleteFileOrFolderRequest)(nil),  // 19: reliant.v1.DeleteFileOrFolderRequest
+	(*DeleteFileOrFolderResponse)(nil), // 20: reliant.v1.DeleteFileOrFolderResponse
+	(*CopyFileRequest)(nil),            // 21: reliant.v1.CopyFileRequest
+	(*CopyFileResponse)(nil),           // 22: reliant.v1.CopyFileResponse
+	(*SearchFilesRequest)(nil),         // 23: reliant.v1.SearchFilesRequest
+	(*SearchFilesResponse)(nil),        // 24: reliant.v1.SearchFilesResponse
+	(*SearchResult)(nil),               // 25: reliant.v1.SearchResult
+	(*SearchMatch)(nil),                // 26: reliant.v1.SearchMatch
+	(*ReplaceInFilesRequest)(nil),      // 27: reliant.v1.ReplaceInFilesRequest
+	(*ReplaceInFilesResponse)(nil),     // 28: reliant.v1.ReplaceInFilesResponse
+	(*ReplaceResult)(nil),              // 29: reliant.v1.ReplaceResult
+	(*ListDirectoryRequest)(nil),       // 30: reliant.v1.ListDirectoryRequest
+	(*ListDirectoryResponse)(nil),      // 31: reliant.v1.ListDirectoryResponse
+	(*DirectoryEntry)(nil),             // 32: reliant.v1.DirectoryEntry
+	(*CreateDirectoryRequest)(nil),     // 33: reliant.v1.CreateDirectoryRequest
+	(*CreateDirectoryResponse)(nil),    // 34: reliant.v1.CreateDirectoryResponse
+	(*GetFilePreviewRequest)(nil),      // 35: reliant.v1.GetFilePreviewRequest
+	(*GetFilePreviewResponse)(nil),     // 36: reliant.v1.GetFilePreviewResponse
 }
 var file_reliant_v1_filesystem_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.FileNode.type:type_name -> reliant.v1.FileNodeType
-	2,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
+	3,  // 1: reliant.v1.FileNode.children:type_name -> reliant.v1.FileNode
 	0,  // 2: reliant.v1.FileMetadata.type:type_name -> reliant.v1.FileNodeType
 	1,  // 3: reliant.v1.FilePreviewInfo.viewer_kind:type_name -> reliant.v1.FileViewerKind
-	2,  // 4: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
-	3,  // 5: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
-	4,  // 6: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
-	0,  // 7: reliant.v1.CreateFileOrFolderRequest.type:type_name -> reliant.v1.FileNodeType
-	23, // 8: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
-	24, // 9: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
-	27, // 10: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
-	30, // 11: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
-	5,  // 12: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
-	7,  // 13: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
-	9,  // 14: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
-	11, // 15: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
-	13, // 16: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
-	33, // 17: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
-	15, // 18: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
-	17, // 19: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
-	19, // 20: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
-	21, // 21: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
-	25, // 22: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
-	28, // 23: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
-	31, // 24: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
-	6,  // 25: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
-	8,  // 26: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
-	10, // 27: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
-	12, // 28: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
-	14, // 29: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
-	34, // 30: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
-	16, // 31: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
-	18, // 32: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
-	20, // 33: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
-	22, // 34: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
-	26, // 35: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
-	29, // 36: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
-	32, // 37: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
-	25, // [25:38] is the sub-list for method output_type
-	12, // [12:25] is the sub-list for method input_type
-	12, // [12:12] is the sub-list for extension type_name
-	12, // [12:12] is the sub-list for extension extendee
-	0,  // [0:12] is the sub-list for field type_name
+	3,  // 4: reliant.v1.GetFileTreeResponse.files:type_name -> reliant.v1.FileNode
+	2,  // 5: reliant.v1.ProjectCheckoutMissing.state:type_name -> reliant.v1.ProjectCheckoutState
+	4,  // 6: reliant.v1.GetFileMetadataResponse.metadata:type_name -> reliant.v1.FileMetadata
+	5,  // 7: reliant.v1.GetFilePreviewInfoResponse.info:type_name -> reliant.v1.FilePreviewInfo
+	0,  // 8: reliant.v1.CreateFileOrFolderRequest.type:type_name -> reliant.v1.FileNodeType
+	25, // 9: reliant.v1.SearchFilesResponse.results:type_name -> reliant.v1.SearchResult
+	26, // 10: reliant.v1.SearchResult.matches:type_name -> reliant.v1.SearchMatch
+	29, // 11: reliant.v1.ReplaceInFilesResponse.results:type_name -> reliant.v1.ReplaceResult
+	32, // 12: reliant.v1.ListDirectoryResponse.entries:type_name -> reliant.v1.DirectoryEntry
+	6,  // 13: reliant.v1.FileSystemService.GetFileTree:input_type -> reliant.v1.GetFileTreeRequest
+	9,  // 14: reliant.v1.FileSystemService.GetFileContent:input_type -> reliant.v1.GetFileContentRequest
+	11, // 15: reliant.v1.FileSystemService.SaveFileContent:input_type -> reliant.v1.SaveFileContentRequest
+	13, // 16: reliant.v1.FileSystemService.GetFileMetadata:input_type -> reliant.v1.GetFileMetadataRequest
+	15, // 17: reliant.v1.FileSystemService.GetFilePreviewInfo:input_type -> reliant.v1.GetFilePreviewInfoRequest
+	35, // 18: reliant.v1.FileSystemService.GetFilePreview:input_type -> reliant.v1.GetFilePreviewRequest
+	17, // 19: reliant.v1.FileSystemService.CreateFileOrFolder:input_type -> reliant.v1.CreateFileOrFolderRequest
+	19, // 20: reliant.v1.FileSystemService.DeleteFileOrFolder:input_type -> reliant.v1.DeleteFileOrFolderRequest
+	21, // 21: reliant.v1.FileSystemService.CopyFile:input_type -> reliant.v1.CopyFileRequest
+	23, // 22: reliant.v1.FileSystemService.SearchFiles:input_type -> reliant.v1.SearchFilesRequest
+	27, // 23: reliant.v1.FileSystemService.ReplaceInFiles:input_type -> reliant.v1.ReplaceInFilesRequest
+	30, // 24: reliant.v1.FileSystemService.ListDirectory:input_type -> reliant.v1.ListDirectoryRequest
+	33, // 25: reliant.v1.FileSystemService.CreateDirectory:input_type -> reliant.v1.CreateDirectoryRequest
+	7,  // 26: reliant.v1.FileSystemService.GetFileTree:output_type -> reliant.v1.GetFileTreeResponse
+	10, // 27: reliant.v1.FileSystemService.GetFileContent:output_type -> reliant.v1.GetFileContentResponse
+	12, // 28: reliant.v1.FileSystemService.SaveFileContent:output_type -> reliant.v1.SaveFileContentResponse
+	14, // 29: reliant.v1.FileSystemService.GetFileMetadata:output_type -> reliant.v1.GetFileMetadataResponse
+	16, // 30: reliant.v1.FileSystemService.GetFilePreviewInfo:output_type -> reliant.v1.GetFilePreviewInfoResponse
+	36, // 31: reliant.v1.FileSystemService.GetFilePreview:output_type -> reliant.v1.GetFilePreviewResponse
+	18, // 32: reliant.v1.FileSystemService.CreateFileOrFolder:output_type -> reliant.v1.CreateFileOrFolderResponse
+	20, // 33: reliant.v1.FileSystemService.DeleteFileOrFolder:output_type -> reliant.v1.DeleteFileOrFolderResponse
+	22, // 34: reliant.v1.FileSystemService.CopyFile:output_type -> reliant.v1.CopyFileResponse
+	24, // 35: reliant.v1.FileSystemService.SearchFiles:output_type -> reliant.v1.SearchFilesResponse
+	28, // 36: reliant.v1.FileSystemService.ReplaceInFiles:output_type -> reliant.v1.ReplaceInFilesResponse
+	31, // 37: reliant.v1.FileSystemService.ListDirectory:output_type -> reliant.v1.ListDirectoryResponse
+	34, // 38: reliant.v1.FileSystemService.CreateDirectory:output_type -> reliant.v1.CreateDirectoryResponse
+	26, // [26:39] is the sub-list for method output_type
+	13, // [13:26] is the sub-list for method input_type
+	13, // [13:13] is the sub-list for extension type_name
+	13, // [13:13] is the sub-list for extension extendee
+	0,  // [0:13] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_filesystem_proto_init() }
@@ -2713,23 +2894,23 @@ func file_reliant_v1_filesystem_proto_init() {
 	}
 	file_reliant_v1_filesystem_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_filesystem_proto_msgTypes[3].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[5].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[7].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[9].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[11].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[13].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[15].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[17].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[19].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[23].OneofWrappers = []any{}
-	file_reliant_v1_filesystem_proto_msgTypes[31].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[6].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[8].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[10].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[12].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[14].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[16].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[18].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[20].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[24].OneofWrappers = []any{}
+	file_reliant_v1_filesystem_proto_msgTypes[32].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_filesystem_proto_rawDesc), len(file_reliant_v1_filesystem_proto_rawDesc)),
-			NumEnums:      2,
-			NumMessages:   33,
+			NumEnums:      3,
+			NumMessages:   34,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

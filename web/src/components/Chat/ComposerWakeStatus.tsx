@@ -30,6 +30,7 @@ import type { ReactNode } from "react";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import StatusDot from "../forge-ui/status_dot";
+import { machineDisplayName } from "@/lib/machineName";
 
 interface ComposerWakeStatusProps {
   /** A send for this chat is awaiting the server. */
@@ -89,7 +90,7 @@ function WakeLine({
   // machine is gone once there is a list to be absent from.
   if (!daemons) return null;
   const daemon = daemons.find((d) => d.daemonId === daemonId);
-  const name = daemon?.hostname || "your machine";
+  const name = daemon ? machineDisplayName(daemon) : "your machine";
 
   if (!daemon || isOffline(daemon.status)) {
     const label = daemon ? `${name} is offline` : "This chat's machine is no longer available";

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/filesystem.proto.
  */
 export const file_reliant_v1_filesystem: GenFile = /*@__PURE__*/
-  fileDesc("ChtyZWxpYW50L3YxL2ZpbGVzeXN0ZW0ucHJvdG8SCnJlbGlhbnQudjEizAEKCEZpbGVOb2RlEgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRImCgR0eXBlGAMgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSJgoIY2hpbGRyZW4YBCADKAsyFC5yZWxpYW50LnYxLkZpbGVOb2RlEhEKBHNpemUYBSABKANIAIgBARIVCghtb2RpZmllZBgGIAEoCUgBiAEBEhQKDGhhc19jaGlsZHJlbhgHIAEoCEIHCgVfc2l6ZUILCglfbW9kaWZpZWQihwEKDEZpbGVNZXRhZGF0YRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRImCgR0eXBlGAUgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSEwoLcGVybWlzc2lvbnMYBiABKAkiuQEKD0ZpbGVQcmV2aWV3SW5mbxIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRIvCgt2aWV3ZXJfa2luZBgFIAEoDjIaLnJlbGlhbnQudjEuRmlsZVZpZXdlcktpbmQSEQoJbWltZV90eXBlGAYgASgJEhEKCWlzX2JpbmFyeRgHIAEoCBITCgtpc19lZGl0YWJsZRgIIAEoCCKmAQoSR2V0RmlsZVRyZWVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRITCgtzaG93X2hpZGRlbhgDIAEoCBIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBARINCgVkZXB0aBgGIAEoBUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiYQoTR2V0RmlsZVRyZWVSZXNwb25zZRIjCgVmaWxlcxgBIAMoCzIULnJlbGlhbnQudjEuRmlsZU5vZGUSEQoJdHJ1bmNhdGVkGAIgASgIEhIKCm5vZGVfY291bnQYAyABKAUihQEKFUdldEZpbGVDb250ZW50UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSGAoLd29ya3RyZWVfaWQYAyABKAlIAIgBARIUCgdjaGF0X2lkGAQgASgJSAGIAQFCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkIikKFkdldEZpbGVDb250ZW50UmVzcG9uc2USDwoHY29udGVudBgBIAEoCSKXAQoWU2F2ZUZpbGVDb250ZW50UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSDwoHY29udGVudBgDIAEoCRIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiKgoXU2F2ZUZpbGVDb250ZW50UmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSKGAQoWR2V0RmlsZU1ldGFkYXRhUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSGAoLd29ya3RyZWVfaWQYAyABKAlIAIgBARIUCgdjaGF0X2lkGAQgASgJSAGIAQFCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkIkUKF0dldEZpbGVNZXRhZGF0YVJlc3BvbnNlEioKCG1ldGFkYXRhGAEgASgLMhgucmVsaWFudC52MS5GaWxlTWV0YWRhdGEiiQEKGUdldEZpbGVQcmV2aWV3SW5mb1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJHChpHZXRGaWxlUHJldmlld0luZm9SZXNwb25zZRIpCgRpbmZvGAEgASgLMhsucmVsaWFudC52MS5GaWxlUHJldmlld0luZm8iwgEKGUNyZWF0ZUZpbGVPckZvbGRlclJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEiYKBHR5cGUYAyABKA4yGC5yZWxpYW50LnYxLkZpbGVOb2RlVHlwZRIPCgdjb250ZW50GAQgASgJEhgKC3dvcmt0cmVlX2lkGAUgASgJSACIAQESFAoHY2hhdF9pZBgGIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCI7ChpDcmVhdGVGaWxlT3JGb2xkZXJSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEgwKBHBhdGgYAiABKAkiiQEKGURlbGV0ZUZpbGVPckZvbGRlclJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCItChpEZWxldGVGaWxlT3JGb2xkZXJSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJIqABCg9Db3B5RmlsZVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRITCgtzb3VyY2VfcGF0aBgCIAEoCRIYChBkZXN0aW5hdGlvbl9wYXRoGAMgASgJEhgKC3dvcmt0cmVlX2lkGAQgASgJSACIAQESFAoHY2hhdF9pZBgFIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCI4ChBDb3B5RmlsZVJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkSEwoLZGVzdGluYXRpb24YAiABKAki0wIKElNlYXJjaEZpbGVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEg0KBXF1ZXJ5GAIgASgJEhEKBHBhdGgYAyABKAlIAIgBARIYCgt3b3JrdHJlZV9pZBgEIAEoCUgBiAEBEhQKB2NoYXRfaWQYBSABKAlIAogBARIZCgxmaWxlX3BhdHRlcm4YBiABKAlIA4gBARIbCg5jYXNlX3NlbnNpdGl2ZRgHIAEoCEgEiAEBEhgKC21heF9yZXN1bHRzGAggASgFSAWIAQESGgoNY29udGV4dF9saW5lcxgJIAEoBUgGiAEBQgcKBV9wYXRoQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZEIPCg1fZmlsZV9wYXR0ZXJuQhEKD19jYXNlX3NlbnNpdGl2ZUIOCgxfbWF4X3Jlc3VsdHNCEAoOX2NvbnRleHRfbGluZXMiagoTU2VhcmNoRmlsZXNSZXNwb25zZRIpCgdyZXN1bHRzGAEgAygLMhgucmVsaWFudC52MS5TZWFyY2hSZXN1bHQSFQoNdG90YWxfbWF0Y2hlcxgCIAEoBRIRCgl0cnVuY2F0ZWQYAyABKAgiRgoMU2VhcmNoUmVzdWx0EgwKBHBhdGgYASABKAkSKAoHbWF0Y2hlcxgCIAMoCzIXLnJlbGlhbnQudjEuU2VhcmNoTWF0Y2gijwEKC1NlYXJjaE1hdGNoEhMKC2xpbmVfbnVtYmVyGAEgASgFEhQKDGxpbmVfY29udGVudBgCIAEoCRITCgttYXRjaF9zdGFydBgDIAEoBRIRCgltYXRjaF9lbmQYBCABKAUSFgoOY29udGV4dF9iZWZvcmUYBSADKAkSFQoNY29udGV4dF9hZnRlchgGIAMoCSKuAgoVUmVwbGFjZUluRmlsZXNSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc2VhcmNoX3RleHQYAiABKAkSFAoMcmVwbGFjZV90ZXh0GAMgASgJEhEKBHBhdGgYBCABKAlIAIgBARIYCgt3b3JrdHJlZV9pZBgFIAEoCUgBiAEBEhQKB2NoYXRfaWQYBiABKAlIAogBARIZCgxmaWxlX3BhdHRlcm4YByABKAlIA4gBARIbCg5jYXNlX3NlbnNpdGl2ZRgIIAEoCEgEiAEBEhIKCmZpbGVfcGF0aHMYCSADKAlCBwoFX3BhdGhCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkQg8KDV9maWxlX3BhdHRlcm5CEQoPX2Nhc2Vfc2Vuc2l0aXZlIngKFlJlcGxhY2VJbkZpbGVzUmVzcG9uc2USKgoHcmVzdWx0cxgBIAMoCzIZLnJlbGlhbnQudjEuUmVwbGFjZVJlc3VsdBIaChJ0b3RhbF9yZXBsYWNlbWVudHMYAiABKAUSFgoOZmlsZXNfbW9kaWZpZWQYAyABKAUiUwoNUmVwbGFjZVJlc3VsdBIMCgRwYXRoGAEgASgJEhQKDHJlcGxhY2VtZW50cxgCIAEoBRIPCgdzdWNjZXNzGAMgASgIEg0KBWVycm9yGAQgASgJIiQKFExpc3REaXJlY3RvcnlSZXF1ZXN0EgwKBHBhdGgYASABKAkiUgoVTGlzdERpcmVjdG9yeVJlc3BvbnNlEgwKBHBhdGgYASABKAkSKwoHZW50cmllcxgCIAMoCzIaLnJlbGlhbnQudjEuRGlyZWN0b3J5RW50cnkiaQoORGlyZWN0b3J5RW50cnkSDAoEbmFtZRgBIAEoCRIMCgRwYXRoGAIgASgJEhQKDGlzX2RpcmVjdG9yeRgDIAEoCBIRCglpc19oaWRkZW4YBCABKAgSEgoKaXNfc3ltbGluaxgFIAEoCCImChZDcmVhdGVEaXJlY3RvcnlSZXF1ZXN0EgwKBHBhdGgYASABKAkiJwoXQ3JlYXRlRGlyZWN0b3J5UmVzcG9uc2USDAoEcGF0aBgBIAEoCSKFAQoVR2V0RmlsZVByZXZpZXdSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBEhQKB2NoYXRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiXwoWR2V0RmlsZVByZXZpZXdSZXNwb25zZRIPCgdjb250ZW50GAEgASgMEhQKDGNvbnRlbnRfdHlwZRgCIAEoCRIQCghmaWxlbmFtZRgDIAEoCRIMCgRzaXplGAQgASgDKmUKDEZpbGVOb2RlVHlwZRIeChpGSUxFX05PREVfVFlQRV9VTlNQRUNJRklFRBAAEhcKE0ZJTEVfTk9ERV9UWVBFX0ZJTEUQARIcChhGSUxFX05PREVfVFlQRV9ESVJFQ1RPUlkQAirYAQoORmlsZVZpZXdlcktpbmQSIAocRklMRV9WSUVXRVJfS0lORF9VTlNQRUNJRklFRBAAEhkKFUZJTEVfVklFV0VSX0tJTkRfVEVYVBABEhoKFkZJTEVfVklFV0VSX0tJTkRfSU1BR0UQAhIYChRGSUxFX1ZJRVdFUl9LSU5EX1BERhADEhoKFkZJTEVfVklFV0VSX0tJTkRfQVVESU8QBBIaChZGSUxFX1ZJRVdFUl9LSU5EX1ZJREVPEAUSGwoXRklMRV9WSUVXRVJfS0lORF9CSU5BUlkQBjK4CQoRRmlsZVN5c3RlbVNlcnZpY2USUAoLR2V0RmlsZVRyZWUSHi5yZWxpYW50LnYxLkdldEZpbGVUcmVlUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0RmlsZVRyZWVSZXNwb25zZSIAElkKDkdldEZpbGVDb250ZW50EiEucmVsaWFudC52MS5HZXRGaWxlQ29udGVudFJlcXVlc3QaIi5yZWxpYW50LnYxLkdldEZpbGVDb250ZW50UmVzcG9uc2UiABJcCg9TYXZlRmlsZUNvbnRlbnQSIi5yZWxpYW50LnYxLlNhdmVGaWxlQ29udGVudFJlcXVlc3QaIy5yZWxpYW50LnYxLlNhdmVGaWxlQ29udGVudFJlc3BvbnNlIgASXAoPR2V0RmlsZU1ldGFkYXRhEiIucmVsaWFudC52MS5HZXRGaWxlTWV0YWRhdGFSZXF1ZXN0GiMucmVsaWFudC52MS5HZXRGaWxlTWV0YWRhdGFSZXNwb25zZSIAEmUKEkdldEZpbGVQcmV2aWV3SW5mbxIlLnJlbGlhbnQudjEuR2V0RmlsZVByZXZpZXdJbmZvUmVxdWVzdBomLnJlbGlhbnQudjEuR2V0RmlsZVByZXZpZXdJbmZvUmVzcG9uc2UiABJZCg5HZXRGaWxlUHJldmlldxIhLnJlbGlhbnQudjEuR2V0RmlsZVByZXZpZXdSZXF1ZXN0GiIucmVsaWFudC52MS5HZXRGaWxlUHJldmlld1Jlc3BvbnNlIgASZQoSQ3JlYXRlRmlsZU9yRm9sZGVyEiUucmVsaWFudC52MS5DcmVhdGVGaWxlT3JGb2xkZXJSZXF1ZXN0GiYucmVsaWFudC52MS5DcmVhdGVGaWxlT3JGb2xkZXJSZXNwb25zZSIAEmUKEkRlbGV0ZUZpbGVPckZvbGRlchIlLnJlbGlhbnQudjEuRGVsZXRlRmlsZU9yRm9sZGVyUmVxdWVzdBomLnJlbGlhbnQudjEuRGVsZXRlRmlsZU9yRm9sZGVyUmVzcG9uc2UiABJHCghDb3B5RmlsZRIbLnJlbGlhbnQudjEuQ29weUZpbGVSZXF1ZXN0GhwucmVsaWFudC52MS5Db3B5RmlsZVJlc3BvbnNlIgASUAoLU2VhcmNoRmlsZXMSHi5yZWxpYW50LnYxLlNlYXJjaEZpbGVzUmVxdWVzdBofLnJlbGlhbnQudjEuU2VhcmNoRmlsZXNSZXNwb25zZSIAElkKDlJlcGxhY2VJbkZpbGVzEiEucmVsaWFudC52MS5SZXBsYWNlSW5GaWxlc1JlcXVlc3QaIi5yZWxpYW50LnYxLlJlcGxhY2VJbkZpbGVzUmVzcG9uc2UiABJWCg1MaXN0RGlyZWN0b3J5EiAucmVsaWFudC52MS5MaXN0RGlyZWN0b3J5UmVxdWVzdBohLnJlbGlhbnQudjEuTGlzdERpcmVjdG9yeVJlc3BvbnNlIgASXAoPQ3JlYXRlRGlyZWN0b3J5EiIucmVsaWFudC52MS5DcmVhdGVEaXJlY3RvcnlSZXF1ZXN0GiMucmVsaWFudC52MS5DcmVhdGVEaXJlY3RvcnlSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChtyZWxpYW50L3YxL2ZpbGVzeXN0ZW0ucHJvdG8SCnJlbGlhbnQudjEizAEKCEZpbGVOb2RlEgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRImCgR0eXBlGAMgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSJgoIY2hpbGRyZW4YBCADKAsyFC5yZWxpYW50LnYxLkZpbGVOb2RlEhEKBHNpemUYBSABKANIAIgBARIVCghtb2RpZmllZBgGIAEoCUgBiAEBEhQKDGhhc19jaGlsZHJlbhgHIAEoCEIHCgVfc2l6ZUILCglfbW9kaWZpZWQihwEKDEZpbGVNZXRhZGF0YRIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRImCgR0eXBlGAUgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSEwoLcGVybWlzc2lvbnMYBiABKAkiuQEKD0ZpbGVQcmV2aWV3SW5mbxIMCgRuYW1lGAEgASgJEgwKBHBhdGgYAiABKAkSDAoEc2l6ZRgDIAEoAxIQCghtb2RpZmllZBgEIAEoCRIvCgt2aWV3ZXJfa2luZBgFIAEoDjIaLnJlbGlhbnQudjEuRmlsZVZpZXdlcktpbmQSEQoJbWltZV90eXBlGAYgASgJEhEKCWlzX2JpbmFyeRgHIAEoCBITCgtpc19lZGl0YWJsZRgIIAEoCCKmAQoSR2V0RmlsZVRyZWVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRITCgtzaG93X2hpZGRlbhgDIAEoCBIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBARINCgVkZXB0aBgGIAEoBUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiYQoTR2V0RmlsZVRyZWVSZXNwb25zZRIjCgVmaWxlcxgBIAMoCzIULnJlbGlhbnQudjEuRmlsZU5vZGUSEQoJdHJ1bmNhdGVkGAIgASgIEhIKCm5vZGVfY291bnQYAyABKAUiqQEKFlByb2plY3RDaGVja291dE1pc3NpbmcSEgoKcHJvamVjdF9pZBgBIAEoCRIRCglkYWVtb25faWQYAiABKAkSDAoEcGF0aBgDIAEoCRIvCgVzdGF0ZRgEIAEoDjIgLnJlbGlhbnQudjEuUHJvamVjdENoZWNrb3V0U3RhdGUSFQoNaW5zdGFsbF9lcnJvchgFIAEoCRISCgpyZW1vdGVfdXJsGAYgASgJIoUBChVHZXRGaWxlQ29udGVudFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCIpChZHZXRGaWxlQ29udGVudFJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAkilwEKFlNhdmVGaWxlQ29udGVudFJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEg8KB2NvbnRlbnQYAyABKAkSGAoLd29ya3RyZWVfaWQYBCABKAlIAIgBARIUCgdjaGF0X2lkGAUgASgJSAGIAQFCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkIioKF1NhdmVGaWxlQ29udGVudFJlc3BvbnNlEg8KB21lc3NhZ2UYASABKAkihgEKFkdldEZpbGVNZXRhZGF0YVJlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRIMCgRwYXRoGAIgASgJEhgKC3dvcmt0cmVlX2lkGAMgASgJSACIAQESFAoHY2hhdF9pZBgEIAEoCUgBiAEBQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZCJFChdHZXRGaWxlTWV0YWRhdGFSZXNwb25zZRIqCghtZXRhZGF0YRgBIAEoCzIYLnJlbGlhbnQudjEuRmlsZU1ldGFkYXRhIokBChlHZXRGaWxlUHJldmlld0luZm9SZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBEhQKB2NoYXRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiRwoaR2V0RmlsZVByZXZpZXdJbmZvUmVzcG9uc2USKQoEaW5mbxgBIAEoCzIbLnJlbGlhbnQudjEuRmlsZVByZXZpZXdJbmZvIsIBChlDcmVhdGVGaWxlT3JGb2xkZXJSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRImCgR0eXBlGAMgASgOMhgucmVsaWFudC52MS5GaWxlTm9kZVR5cGUSDwoHY29udGVudBgEIAEoCRIYCgt3b3JrdHJlZV9pZBgFIAEoCUgAiAEBEhQKB2NoYXRfaWQYBiABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiOwoaQ3JlYXRlRmlsZU9yRm9sZGVyUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCRIMCgRwYXRoGAIgASgJIokBChlEZWxldGVGaWxlT3JGb2xkZXJSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSDAoEcGF0aBgCIAEoCRIYCgt3b3JrdHJlZV9pZBgDIAEoCUgAiAEBEhQKB2NoYXRfaWQYBCABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiLQoaRGVsZXRlRmlsZU9yRm9sZGVyUmVzcG9uc2USDwoHbWVzc2FnZRgBIAEoCSKgAQoPQ29weUZpbGVSZXF1ZXN0EhIKCnByb2plY3RfaWQYASABKAkSEwoLc291cmNlX3BhdGgYAiABKAkSGAoQZGVzdGluYXRpb25fcGF0aBgDIAEoCRIYCgt3b3JrdHJlZV9pZBgEIAEoCUgAiAEBEhQKB2NoYXRfaWQYBSABKAlIAYgBAUIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWQiOAoQQ29weUZpbGVSZXNwb25zZRIPCgdtZXNzYWdlGAEgASgJEhMKC2Rlc3RpbmF0aW9uGAIgASgJItMCChJTZWFyY2hGaWxlc1JlcXVlc3QSEgoKcHJvamVjdF9pZBgBIAEoCRINCgVxdWVyeRgCIAEoCRIRCgRwYXRoGAMgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBCABKAlIAYgBARIUCgdjaGF0X2lkGAUgASgJSAKIAQESGQoMZmlsZV9wYXR0ZXJuGAYgASgJSAOIAQESGwoOY2FzZV9zZW5zaXRpdmUYByABKAhIBIgBARIYCgttYXhfcmVzdWx0cxgIIAEoBUgFiAEBEhoKDWNvbnRleHRfbGluZXMYCSABKAVIBogBAUIHCgVfcGF0aEIOCgxfd29ya3RyZWVfaWRCCgoIX2NoYXRfaWRCDwoNX2ZpbGVfcGF0dGVybkIRCg9fY2FzZV9zZW5zaXRpdmVCDgoMX21heF9yZXN1bHRzQhAKDl9jb250ZXh0X2xpbmVzImoKE1NlYXJjaEZpbGVzUmVzcG9uc2USKQoHcmVzdWx0cxgBIAMoCzIYLnJlbGlhbnQudjEuU2VhcmNoUmVzdWx0EhUKDXRvdGFsX21hdGNoZXMYAiABKAUSEQoJdHJ1bmNhdGVkGAMgASgIIkYKDFNlYXJjaFJlc3VsdBIMCgRwYXRoGAEgASgJEigKB21hdGNoZXMYAiADKAsyFy5yZWxpYW50LnYxLlNlYXJjaE1hdGNoIo8BCgtTZWFyY2hNYXRjaBITCgtsaW5lX251bWJlchgBIAEoBRIUCgxsaW5lX2NvbnRlbnQYAiABKAkSEwoLbWF0Y2hfc3RhcnQYAyABKAUSEQoJbWF0Y2hfZW5kGAQgASgFEhYKDmNvbnRleHRfYmVmb3JlGAUgAygJEhUKDWNvbnRleHRfYWZ0ZXIYBiADKAkirgIKFVJlcGxhY2VJbkZpbGVzUmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEhMKC3NlYXJjaF90ZXh0GAIgASgJEhQKDHJlcGxhY2VfdGV4dBgDIAEoCRIRCgRwYXRoGAQgASgJSACIAQESGAoLd29ya3RyZWVfaWQYBSABKAlIAYgBARIUCgdjaGF0X2lkGAYgASgJSAKIAQESGQoMZmlsZV9wYXR0ZXJuGAcgASgJSAOIAQESGwoOY2FzZV9zZW5zaXRpdmUYCCABKAhIBIgBARISCgpmaWxlX3BhdGhzGAkgAygJQgcKBV9wYXRoQg4KDF93b3JrdHJlZV9pZEIKCghfY2hhdF9pZEIPCg1fZmlsZV9wYXR0ZXJuQhEKD19jYXNlX3NlbnNpdGl2ZSJ4ChZSZXBsYWNlSW5GaWxlc1Jlc3BvbnNlEioKB3Jlc3VsdHMYASADKAsyGS5yZWxpYW50LnYxLlJlcGxhY2VSZXN1bHQSGgoSdG90YWxfcmVwbGFjZW1lbnRzGAIgASgFEhYKDmZpbGVzX21vZGlmaWVkGAMgASgFIlMKDVJlcGxhY2VSZXN1bHQSDAoEcGF0aBgBIAEoCRIUCgxyZXBsYWNlbWVudHMYAiABKAUSDwoHc3VjY2VzcxgDIAEoCBINCgVlcnJvchgEIAEoCSIkChRMaXN0RGlyZWN0b3J5UmVxdWVzdBIMCgRwYXRoGAEgASgJIlIKFUxpc3REaXJlY3RvcnlSZXNwb25zZRIMCgRwYXRoGAEgASgJEisKB2VudHJpZXMYAiADKAsyGi5yZWxpYW50LnYxLkRpcmVjdG9yeUVudHJ5ImkKDkRpcmVjdG9yeUVudHJ5EgwKBG5hbWUYASABKAkSDAoEcGF0aBgCIAEoCRIUCgxpc19kaXJlY3RvcnkYAyABKAgSEQoJaXNfaGlkZGVuGAQgASgIEhIKCmlzX3N5bWxpbmsYBSABKAgiJgoWQ3JlYXRlRGlyZWN0b3J5UmVxdWVzdBIMCgRwYXRoGAEgASgJIicKF0NyZWF0ZURpcmVjdG9yeVJlc3BvbnNlEgwKBHBhdGgYASABKAkihQEKFUdldEZpbGVQcmV2aWV3UmVxdWVzdBISCgpwcm9qZWN0X2lkGAEgASgJEgwKBHBhdGgYAiABKAkSGAoLd29ya3RyZWVfaWQYAyABKAlIAIgBARIUCgdjaGF0X2lkGAQgASgJSAGIAQFCDgoMX3dvcmt0cmVlX2lkQgoKCF9jaGF0X2lkIl8KFkdldEZpbGVQcmV2aWV3UmVzcG9uc2USDwoHY29udGVudBgBIAEoDBIUCgxjb250ZW50X3R5cGUYAiABKAkSEAoIZmlsZW5hbWUYAyABKAkSDAoEc2l6ZRgEIAEoAyplCgxGaWxlTm9kZVR5cGUSHgoaRklMRV9OT0RFX1RZUEVfVU5TUEVDSUZJRUQQABIXChNGSUxFX05PREVfVFlQRV9GSUxFEAESHAoYRklMRV9OT0RFX1RZUEVfRElSRUNUT1JZEAIq2AEKDkZpbGVWaWV3ZXJLaW5kEiAKHEZJTEVfVklFV0VSX0tJTkRfVU5TUEVDSUZJRUQQABIZChVGSUxFX1ZJRVdFUl9LSU5EX1RFWFQQARIaChZGSUxFX1ZJRVdFUl9LSU5EX0lNQUdFEAISGAoURklMRV9WSUVXRVJfS0lORF9QREYQAxIaChZGSUxFX1ZJRVdFUl9LSU5EX0FVRElPEAQSGgoWRklMRV9WSUVXRVJfS0lORF9WSURFTxAFEhsKF0ZJTEVfVklFV0VSX0tJTkRfQklOQVJZEAYqrgEKFFByb2plY3RDaGVja291dFN0YXRlEiYKIlBST0pFQ1RfQ0hFQ0tPVVRfU1RBVEVfVU5TUEVDSUZJRUQQABIiCh5QUk9KRUNUX0NIRUNLT1VUX1NUQVRFX0NMT05JTkcQARInCiNQUk9KRUNUX0NIRUNLT1VUX1NUQVRFX0NMT05FX0ZBSUxFRBACEiEKHVBST0pFQ1RfQ0hFQ0tPVVRfU1RBVEVfQUJTRU5UEAMyuAkKEUZpbGVTeXN0ZW1TZXJ2aWNlElAKC0dldEZpbGVUcmVlEh4ucmVsaWFudC52MS5HZXRGaWxlVHJlZVJlcXVlc3QaHy5yZWxpYW50LnYxLkdldEZpbGVUcmVlUmVzcG9uc2UiABJZCg5HZXRGaWxlQ29udGVudBIhLnJlbGlhbnQudjEuR2V0RmlsZUNvbnRlbnRSZXF1ZXN0GiIucmVsaWFudC52MS5HZXRGaWxlQ29udGVudFJlc3BvbnNlIgASXAoPU2F2ZUZpbGVDb250ZW50EiIucmVsaWFudC52MS5TYXZlRmlsZUNvbnRlbnRSZXF1ZXN0GiMucmVsaWFudC52MS5TYXZlRmlsZUNvbnRlbnRSZXNwb25zZSIAElwKD0dldEZpbGVNZXRhZGF0YRIiLnJlbGlhbnQudjEuR2V0RmlsZU1ldGFkYXRhUmVxdWVzdBojLnJlbGlhbnQudjEuR2V0RmlsZU1ldGFkYXRhUmVzcG9uc2UiABJlChJHZXRGaWxlUHJldmlld0luZm8SJS5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3SW5mb1JlcXVlc3QaJi5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3SW5mb1Jlc3BvbnNlIgASWQoOR2V0RmlsZVByZXZpZXcSIS5yZWxpYW50LnYxLkdldEZpbGVQcmV2aWV3UmVxdWVzdBoiLnJlbGlhbnQudjEuR2V0RmlsZVByZXZpZXdSZXNwb25zZSIAEmUKEkNyZWF0ZUZpbGVPckZvbGRlchIlLnJlbGlhbnQudjEuQ3JlYXRlRmlsZU9yRm9sZGVyUmVxdWVzdBomLnJlbGlhbnQudjEuQ3JlYXRlRmlsZU9yRm9sZGVyUmVzcG9uc2UiABJlChJEZWxldGVGaWxlT3JGb2xkZXISJS5yZWxpYW50LnYxLkRlbGV0ZUZpbGVPckZvbGRlclJlcXVlc3QaJi5yZWxpYW50LnYxLkRlbGV0ZUZpbGVPckZvbGRlclJlc3BvbnNlIgASRwoIQ29weUZpbGUSGy5yZWxpYW50LnYxLkNvcHlGaWxlUmVxdWVzdBocLnJlbGlhbnQudjEuQ29weUZpbGVSZXNwb25zZSIAElAKC1NlYXJjaEZpbGVzEh4ucmVsaWFudC52MS5TZWFyY2hGaWxlc1JlcXVlc3QaHy5yZWxpYW50LnYxLlNlYXJjaEZpbGVzUmVzcG9uc2UiABJZCg5SZXBsYWNlSW5GaWxlcxIhLnJlbGlhbnQudjEuUmVwbGFjZUluRmlsZXNSZXF1ZXN0GiIucmVsaWFudC52MS5SZXBsYWNlSW5GaWxlc1Jlc3BvbnNlIgASVgoNTGlzdERpcmVjdG9yeRIgLnJlbGlhbnQudjEuTGlzdERpcmVjdG9yeVJlcXVlc3QaIS5yZWxpYW50LnYxLkxpc3REaXJlY3RvcnlSZXNwb25zZSIAElwKD0NyZWF0ZURpcmVjdG9yeRIiLnJlbGlhbnQudjEuQ3JlYXRlRGlyZWN0b3J5UmVxdWVzdBojLnJlbGlhbnQudjEuQ3JlYXRlRGlyZWN0b3J5UmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z");
 
 /**
  * FileNode represents a file or directory in the tree
@@ -259,6 +259,75 @@ export const GetFileTreeResponseSchema: GenMessage<GetFileTreeResponse> = /*@__P
   messageDesc(file_reliant_v1_filesystem, 4);
 
 /**
+ * ProjectCheckoutMissing is attached, as a Connect error detail with code
+ * NOT_FOUND, when a request for a project's root finds that the project's
+ * directory does not exist on the machine the request reached.
+ *
+ * Before it, that case came back as a bare INTERNAL ("read dir …: no such file
+ * or directory") and the UI rendered the raw text — repeatedly, for every
+ * surface that reads the tree. Two very different situations hid behind it,
+ * and only one of them is a problem:
+ *
+ *   - the project is being CLONED onto this machine and the clone has not
+ *     landed yet (the queued-clone window right after "Clone from GitHub");
+ *   - the project simply is not on this machine — it was cloned onto another
+ *     one, or its checkout is gone — and the user can clone it here.
+ *
+ * The state says which, so the UI can show "Cloning…" for the first and offer
+ * "Clone it here" for the second.
+ *
+ * @generated from message reliant.v1.ProjectCheckoutMissing
+ */
+export type ProjectCheckoutMissing = Message<"reliant.v1.ProjectCheckoutMissing"> & {
+  /**
+   * @generated from field: string project_id = 1;
+   */
+  projectId: string;
+
+  /**
+   * The machine the request reached. Empty only when the server could not
+   * tell which machine default resolution picked.
+   *
+   * @generated from field: string daemon_id = 2;
+   */
+  daemonId: string;
+
+  /**
+   * The project directory that does not exist on that machine.
+   *
+   * @generated from field: string path = 3;
+   */
+  path: string;
+
+  /**
+   * @generated from field: reliant.v1.ProjectCheckoutState state = 4;
+   */
+  state: ProjectCheckoutState;
+
+  /**
+   * Why the clone onto this machine failed, for CLONE_FAILED.
+   *
+   * @generated from field: string install_error = 5;
+   */
+  installError: string;
+
+  /**
+   * The repository the project comes from. Empty for a plain folder, which
+   * cannot be cloned anywhere.
+   *
+   * @generated from field: string remote_url = 6;
+   */
+  remoteUrl: string;
+};
+
+/**
+ * Describes the message reliant.v1.ProjectCheckoutMissing.
+ * Use `create(ProjectCheckoutMissingSchema)` to create a new message.
+ */
+export const ProjectCheckoutMissingSchema: GenMessage<ProjectCheckoutMissing> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_filesystem, 5);
+
+/**
  * @generated from message reliant.v1.GetFileContentRequest
  */
 export type GetFileContentRequest = Message<"reliant.v1.GetFileContentRequest"> & {
@@ -288,7 +357,7 @@ export type GetFileContentRequest = Message<"reliant.v1.GetFileContentRequest"> 
  * Use `create(GetFileContentRequestSchema)` to create a new message.
  */
 export const GetFileContentRequestSchema: GenMessage<GetFileContentRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 5);
+  messageDesc(file_reliant_v1_filesystem, 6);
 
 /**
  * @generated from message reliant.v1.GetFileContentResponse
@@ -305,7 +374,7 @@ export type GetFileContentResponse = Message<"reliant.v1.GetFileContentResponse"
  * Use `create(GetFileContentResponseSchema)` to create a new message.
  */
 export const GetFileContentResponseSchema: GenMessage<GetFileContentResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 6);
+  messageDesc(file_reliant_v1_filesystem, 7);
 
 /**
  * @generated from message reliant.v1.SaveFileContentRequest
@@ -342,7 +411,7 @@ export type SaveFileContentRequest = Message<"reliant.v1.SaveFileContentRequest"
  * Use `create(SaveFileContentRequestSchema)` to create a new message.
  */
 export const SaveFileContentRequestSchema: GenMessage<SaveFileContentRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 7);
+  messageDesc(file_reliant_v1_filesystem, 8);
 
 /**
  * @generated from message reliant.v1.SaveFileContentResponse
@@ -359,7 +428,7 @@ export type SaveFileContentResponse = Message<"reliant.v1.SaveFileContentRespons
  * Use `create(SaveFileContentResponseSchema)` to create a new message.
  */
 export const SaveFileContentResponseSchema: GenMessage<SaveFileContentResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 8);
+  messageDesc(file_reliant_v1_filesystem, 9);
 
 /**
  * @generated from message reliant.v1.GetFileMetadataRequest
@@ -391,7 +460,7 @@ export type GetFileMetadataRequest = Message<"reliant.v1.GetFileMetadataRequest"
  * Use `create(GetFileMetadataRequestSchema)` to create a new message.
  */
 export const GetFileMetadataRequestSchema: GenMessage<GetFileMetadataRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 9);
+  messageDesc(file_reliant_v1_filesystem, 10);
 
 /**
  * @generated from message reliant.v1.GetFileMetadataResponse
@@ -408,7 +477,7 @@ export type GetFileMetadataResponse = Message<"reliant.v1.GetFileMetadataRespons
  * Use `create(GetFileMetadataResponseSchema)` to create a new message.
  */
 export const GetFileMetadataResponseSchema: GenMessage<GetFileMetadataResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 10);
+  messageDesc(file_reliant_v1_filesystem, 11);
 
 /**
  * @generated from message reliant.v1.GetFilePreviewInfoRequest
@@ -440,7 +509,7 @@ export type GetFilePreviewInfoRequest = Message<"reliant.v1.GetFilePreviewInfoRe
  * Use `create(GetFilePreviewInfoRequestSchema)` to create a new message.
  */
 export const GetFilePreviewInfoRequestSchema: GenMessage<GetFilePreviewInfoRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 11);
+  messageDesc(file_reliant_v1_filesystem, 12);
 
 /**
  * @generated from message reliant.v1.GetFilePreviewInfoResponse
@@ -457,7 +526,7 @@ export type GetFilePreviewInfoResponse = Message<"reliant.v1.GetFilePreviewInfoR
  * Use `create(GetFilePreviewInfoResponseSchema)` to create a new message.
  */
 export const GetFilePreviewInfoResponseSchema: GenMessage<GetFilePreviewInfoResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 12);
+  messageDesc(file_reliant_v1_filesystem, 13);
 
 /**
  * @generated from message reliant.v1.CreateFileOrFolderRequest
@@ -501,7 +570,7 @@ export type CreateFileOrFolderRequest = Message<"reliant.v1.CreateFileOrFolderRe
  * Use `create(CreateFileOrFolderRequestSchema)` to create a new message.
  */
 export const CreateFileOrFolderRequestSchema: GenMessage<CreateFileOrFolderRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 13);
+  messageDesc(file_reliant_v1_filesystem, 14);
 
 /**
  * @generated from message reliant.v1.CreateFileOrFolderResponse
@@ -523,7 +592,7 @@ export type CreateFileOrFolderResponse = Message<"reliant.v1.CreateFileOrFolderR
  * Use `create(CreateFileOrFolderResponseSchema)` to create a new message.
  */
 export const CreateFileOrFolderResponseSchema: GenMessage<CreateFileOrFolderResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 14);
+  messageDesc(file_reliant_v1_filesystem, 15);
 
 /**
  * @generated from message reliant.v1.DeleteFileOrFolderRequest
@@ -555,7 +624,7 @@ export type DeleteFileOrFolderRequest = Message<"reliant.v1.DeleteFileOrFolderRe
  * Use `create(DeleteFileOrFolderRequestSchema)` to create a new message.
  */
 export const DeleteFileOrFolderRequestSchema: GenMessage<DeleteFileOrFolderRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 15);
+  messageDesc(file_reliant_v1_filesystem, 16);
 
 /**
  * @generated from message reliant.v1.DeleteFileOrFolderResponse
@@ -572,7 +641,7 @@ export type DeleteFileOrFolderResponse = Message<"reliant.v1.DeleteFileOrFolderR
  * Use `create(DeleteFileOrFolderResponseSchema)` to create a new message.
  */
 export const DeleteFileOrFolderResponseSchema: GenMessage<DeleteFileOrFolderResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 16);
+  messageDesc(file_reliant_v1_filesystem, 17);
 
 /**
  * @generated from message reliant.v1.CopyFileRequest
@@ -609,7 +678,7 @@ export type CopyFileRequest = Message<"reliant.v1.CopyFileRequest"> & {
  * Use `create(CopyFileRequestSchema)` to create a new message.
  */
 export const CopyFileRequestSchema: GenMessage<CopyFileRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 17);
+  messageDesc(file_reliant_v1_filesystem, 18);
 
 /**
  * @generated from message reliant.v1.CopyFileResponse
@@ -631,7 +700,7 @@ export type CopyFileResponse = Message<"reliant.v1.CopyFileResponse"> & {
  * Use `create(CopyFileResponseSchema)` to create a new message.
  */
 export const CopyFileResponseSchema: GenMessage<CopyFileResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 18);
+  messageDesc(file_reliant_v1_filesystem, 19);
 
 /**
  * @generated from message reliant.v1.SearchFilesRequest
@@ -700,7 +769,7 @@ export type SearchFilesRequest = Message<"reliant.v1.SearchFilesRequest"> & {
  * Use `create(SearchFilesRequestSchema)` to create a new message.
  */
 export const SearchFilesRequestSchema: GenMessage<SearchFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 19);
+  messageDesc(file_reliant_v1_filesystem, 20);
 
 /**
  * @generated from message reliant.v1.SearchFilesResponse
@@ -731,7 +800,7 @@ export type SearchFilesResponse = Message<"reliant.v1.SearchFilesResponse"> & {
  * Use `create(SearchFilesResponseSchema)` to create a new message.
  */
 export const SearchFilesResponseSchema: GenMessage<SearchFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 20);
+  messageDesc(file_reliant_v1_filesystem, 21);
 
 /**
  * @generated from message reliant.v1.SearchResult
@@ -755,7 +824,7 @@ export type SearchResult = Message<"reliant.v1.SearchResult"> & {
  * Use `create(SearchResultSchema)` to create a new message.
  */
 export const SearchResultSchema: GenMessage<SearchResult> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 21);
+  messageDesc(file_reliant_v1_filesystem, 22);
 
 /**
  * @generated from message reliant.v1.SearchMatch
@@ -807,7 +876,7 @@ export type SearchMatch = Message<"reliant.v1.SearchMatch"> & {
  * Use `create(SearchMatchSchema)` to create a new message.
  */
 export const SearchMatchSchema: GenMessage<SearchMatch> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 22);
+  messageDesc(file_reliant_v1_filesystem, 23);
 
 /**
  * @generated from message reliant.v1.ReplaceInFilesRequest
@@ -876,7 +945,7 @@ export type ReplaceInFilesRequest = Message<"reliant.v1.ReplaceInFilesRequest"> 
  * Use `create(ReplaceInFilesRequestSchema)` to create a new message.
  */
 export const ReplaceInFilesRequestSchema: GenMessage<ReplaceInFilesRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 23);
+  messageDesc(file_reliant_v1_filesystem, 24);
 
 /**
  * @generated from message reliant.v1.ReplaceInFilesResponse
@@ -903,7 +972,7 @@ export type ReplaceInFilesResponse = Message<"reliant.v1.ReplaceInFilesResponse"
  * Use `create(ReplaceInFilesResponseSchema)` to create a new message.
  */
 export const ReplaceInFilesResponseSchema: GenMessage<ReplaceInFilesResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 24);
+  messageDesc(file_reliant_v1_filesystem, 25);
 
 /**
  * @generated from message reliant.v1.ReplaceResult
@@ -939,7 +1008,7 @@ export type ReplaceResult = Message<"reliant.v1.ReplaceResult"> & {
  * Use `create(ReplaceResultSchema)` to create a new message.
  */
 export const ReplaceResultSchema: GenMessage<ReplaceResult> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 25);
+  messageDesc(file_reliant_v1_filesystem, 26);
 
 /**
  * @generated from message reliant.v1.ListDirectoryRequest
@@ -958,7 +1027,7 @@ export type ListDirectoryRequest = Message<"reliant.v1.ListDirectoryRequest"> & 
  * Use `create(ListDirectoryRequestSchema)` to create a new message.
  */
 export const ListDirectoryRequestSchema: GenMessage<ListDirectoryRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 26);
+  messageDesc(file_reliant_v1_filesystem, 27);
 
 /**
  * @generated from message reliant.v1.ListDirectoryResponse
@@ -982,7 +1051,7 @@ export type ListDirectoryResponse = Message<"reliant.v1.ListDirectoryResponse"> 
  * Use `create(ListDirectoryResponseSchema)` to create a new message.
  */
 export const ListDirectoryResponseSchema: GenMessage<ListDirectoryResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 27);
+  messageDesc(file_reliant_v1_filesystem, 28);
 
 /**
  * @generated from message reliant.v1.DirectoryEntry
@@ -1021,7 +1090,7 @@ export type DirectoryEntry = Message<"reliant.v1.DirectoryEntry"> & {
  * Use `create(DirectoryEntrySchema)` to create a new message.
  */
 export const DirectoryEntrySchema: GenMessage<DirectoryEntry> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 28);
+  messageDesc(file_reliant_v1_filesystem, 29);
 
 /**
  * @generated from message reliant.v1.CreateDirectoryRequest
@@ -1040,7 +1109,7 @@ export type CreateDirectoryRequest = Message<"reliant.v1.CreateDirectoryRequest"
  * Use `create(CreateDirectoryRequestSchema)` to create a new message.
  */
 export const CreateDirectoryRequestSchema: GenMessage<CreateDirectoryRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 29);
+  messageDesc(file_reliant_v1_filesystem, 30);
 
 /**
  * @generated from message reliant.v1.CreateDirectoryResponse
@@ -1059,7 +1128,7 @@ export type CreateDirectoryResponse = Message<"reliant.v1.CreateDirectoryRespons
  * Use `create(CreateDirectoryResponseSchema)` to create a new message.
  */
 export const CreateDirectoryResponseSchema: GenMessage<CreateDirectoryResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 30);
+  messageDesc(file_reliant_v1_filesystem, 31);
 
 /**
  * @generated from message reliant.v1.GetFilePreviewRequest
@@ -1091,7 +1160,7 @@ export type GetFilePreviewRequest = Message<"reliant.v1.GetFilePreviewRequest"> 
  * Use `create(GetFilePreviewRequestSchema)` to create a new message.
  */
 export const GetFilePreviewRequestSchema: GenMessage<GetFilePreviewRequest> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 31);
+  messageDesc(file_reliant_v1_filesystem, 32);
 
 /**
  * @generated from message reliant.v1.GetFilePreviewResponse
@@ -1131,7 +1200,7 @@ export type GetFilePreviewResponse = Message<"reliant.v1.GetFilePreviewResponse"
  * Use `create(GetFilePreviewResponseSchema)` to create a new message.
  */
 export const GetFilePreviewResponseSchema: GenMessage<GetFilePreviewResponse> = /*@__PURE__*/
-  messageDesc(file_reliant_v1_filesystem, 32);
+  messageDesc(file_reliant_v1_filesystem, 33);
 
 /**
  * FileNodeType distinguishes files from directories
@@ -1208,6 +1277,47 @@ export enum FileViewerKind {
  */
 export const FileViewerKindSchema: GenEnum<FileViewerKind> = /*@__PURE__*/
   enumDesc(file_reliant_v1_filesystem, 1);
+
+/**
+ * ProjectCheckoutState is what is happening to a project's checkout on one
+ * machine, from this server's record of clones (project_daemons).
+ *
+ * @generated from enum reliant.v1.ProjectCheckoutState
+ */
+export enum ProjectCheckoutState {
+  /**
+   * @generated from enum value: PROJECT_CHECKOUT_STATE_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * A clone onto this machine is queued or running; the directory will
+   * appear when it lands.
+   *
+   * @generated from enum value: PROJECT_CHECKOUT_STATE_CLONING = 1;
+   */
+  CLONING = 1,
+
+  /**
+   * A clone onto this machine ran and failed.
+   *
+   * @generated from enum value: PROJECT_CHECKOUT_STATE_CLONE_FAILED = 2;
+   */
+  CLONE_FAILED = 2,
+
+  /**
+   * Nothing is putting the project on this machine.
+   *
+   * @generated from enum value: PROJECT_CHECKOUT_STATE_ABSENT = 3;
+   */
+  ABSENT = 3,
+}
+
+/**
+ * Describes the enum reliant.v1.ProjectCheckoutState.
+ */
+export const ProjectCheckoutStateSchema: GenEnum<ProjectCheckoutState> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_filesystem, 2);
 
 /**
  * FileSystemService handles file system operations within projects

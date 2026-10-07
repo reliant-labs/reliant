@@ -154,8 +154,11 @@ func TestDerivation_LifecycleForUnregisteredDaemonIsNotAnError(t *testing.T) {
 	if !waitFor(t, time.Second, func() bool { return repo.lifecycleCallCount() > 0 }) {
 		t.Fatal("lifecycle event was never dispatched to the repository")
 	}
+	// No DaemonType: this event carries no identity (HasIdentity), which is
+	// what the control plane's workspace-event path sends. It must not create
+	// a row — only an identity-bearing event or a registry snapshot may.
 	if _, ok := repo.daemonSnapshot("d-not-yet"); ok {
-		t.Fatal("lifecycle event invented an identity row; the registry must own its own identity table")
+		t.Fatal("an identity-less lifecycle event invented a registry row with no owner type")
 	}
 }
 

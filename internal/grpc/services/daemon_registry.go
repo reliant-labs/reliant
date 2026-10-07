@@ -245,14 +245,8 @@ func (s *DaemonRegistryService) ResolveDaemon(
 		if req.Msg.DaemonId != "" && d.ID != req.Msg.DaemonId {
 			continue
 		}
-		if req.Msg.DaemonName != "" {
-			name := ""
-			if d.Hostname != nil {
-				name = *d.Hostname
-			}
-			if name != req.Msg.DaemonName {
-				continue
-			}
+		if req.Msg.DaemonName != "" && !daemonAnswersToName(d, req.Msg.DaemonName) {
+			continue
 		}
 		// Prefer attached (routable) daemons, but accept any match.
 		if best == nil || attached[d.ID] != nil {
@@ -309,6 +303,16 @@ func (s *DaemonRegistryService) ResumeDaemon(
 		Resumed:      false,
 		ErrorMessage: fmt.Sprintf("daemon %s has no active attachment; automatic resume not available in OSS mode", req.Msg.DaemonId),
 	}), nil
+}
+
+// daemonAnswersToName reports whether a daemon is the one a caller means by
+// name: the name its owner gave it, or — for a daemon that has none, or a
+// caller that knows it by where it runs — its hostname.
+func daemonAnswersToName(d *db.Daemon, name string) bool {
+	if d.Name != "" && d.Name == name {
+		return true
+	}
+	return d.Hostname != nil && *d.Hostname == name
 }
 
 // lifecyclePhaseToProto maps the stored public lifecycle vocabulary onto the
@@ -410,6 +414,7 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 	info := &reliantv1.DaemonInfo{
 		DaemonId:          d.ID,
 		UserId:            d.UserID,
+		Name:              d.Name,
 		Status:            composeDaemonStatus(phase, att != nil, isSelfHostedDaemonType(d.DaemonType)),
 		Projects:          projectPathsToDiscoveredProjects(d.ProjectPaths),
 		LifecyclePhase:    phase,

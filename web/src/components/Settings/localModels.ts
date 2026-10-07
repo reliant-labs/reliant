@@ -4,6 +4,7 @@ import type {
   LocalModelEndpoint,
   LocalModelInventory,
 } from "../../gen/reliant/v1/tools_daemon_pb";
+import { machineDisplayName } from "@/lib/machineName";
 
 export const ENDPOINT_KIND_LABELS: Record<string, string> = {
   ollama: "Ollama",
@@ -74,8 +75,10 @@ export function isManagedDaemon(daemon: Pick<DaemonInfo, "daemonType">): boolean
   return daemon.daemonType === "managed";
 }
 
-export function machineLabel(daemon: Pick<DaemonInfo, "hostname" | "daemonId">): string {
-  return daemon.hostname || daemon.daemonId;
+export function machineLabel(
+  daemon: Pick<DaemonInfo, "hostname" | "daemonId"> & Partial<Pick<DaemonInfo, "name" | "daemonType">>,
+): string {
+  return machineDisplayName(daemon);
 }
 
 function hostOf(baseUrl: string): string {

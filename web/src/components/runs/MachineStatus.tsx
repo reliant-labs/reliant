@@ -32,6 +32,7 @@ import { isQuotaResumeError, formatResumeError } from "@/lib/daemon-resume";
 import { cn } from "@/lib/utils";
 import { useActivityStore } from "@/store/activityStore";
 import StatusDot from "../forge-ui/status_dot";
+import { machineDisplayName } from "@/lib/machineName";
 
 type MachineState = "suspended" | "starting" | "offline" | "deleted" | "online" | "unknown";
 
@@ -75,7 +76,7 @@ export function MachineStatus({ daemonId, automation, className }: MachineStatus
 
   const daemon = daemons.data.find((d) => d.daemonId === daemonId);
   const state = machineState(daemon?.status);
-  const name = daemon?.hostname || "This machine";
+  const name = daemon ? machineDisplayName(daemon) : "This machine";
   const waking = resume.isPending;
 
   let body: React.ReactNode;

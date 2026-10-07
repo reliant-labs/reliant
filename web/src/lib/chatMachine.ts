@@ -115,7 +115,9 @@ const STATUS_RANK: Partial<Record<DaemonStatus, number>> = {
 
 /** The user's machines, usable first and online before asleep, by name. */
 export function chatMachineOptions(
-  daemons: ReadonlyArray<Pick<DaemonInfo, "daemonId" | "hostname" | "status">>,
+  daemons: ReadonlyArray<
+    Pick<DaemonInfo, "daemonId" | "hostname" | "status"> & Partial<Pick<DaemonInfo, "name" | "daemonType">>
+  >,
 ): ChatMachineOption[] {
   return [...daemons]
     .sort((a, b) => {

@@ -57,6 +57,7 @@ vi.mock("@/services/controlPlane/git", async (importOriginal) => {
 });
 
 import { addRepoProject, pickOnboardingDaemon } from "../addRepoProject";
+import { markMachineGone, resetGoneMachinesForTest } from "@/lib/goneMachines";
 
 function makeDaemon(partial: Partial<Daemon>): Daemon {
   return partial as unknown as Daemon;
@@ -213,11 +214,26 @@ describe("pickOnboardingDaemon", () => {
     expect(picked?.daemonId).toBe("active");
   });
 
-  it("falls back to a failed machine only when it is the only one", () => {
-    // Onboarding has to attempt SOMETHING: a hard refusal at the final step
-    // is worse than a clone that reports its own failure.
+  // A clone queued onto a FAILED machine does not "report its own failure":
+  // the control plane accepts it and nothing ever drains the queue, so the
+  // project sits installing forever. A failed machine is never auto-picked
+  // (MACHINE_LIST_BUGS_2026-10-07); addRepoProject says why instead.
+  it("never falls back to a failed machine", () => {
     const picked = pickOnboardingDaemon([makeDaemon({ daemonId: "failed", status: DaemonStatus.FAILED })]);
 
-    expect(picked?.daemonId).toBe("failed");
+    expect(picked).toBeUndefined();
+  });
+
+  it("never picks a machine the control plane said is gone", () => {
+    markMachineGone("ghost");
+    try {
+      const picked = pickOnboardingDaemon([
+        makeDaemon({ daemonId: "ghost", status: DaemonStatus.PENDING }),
+        makeDaemon({ daemonId: "live", status: DaemonStatus.SUSPENDED }),
+      ]);
+      expect(picked?.daemonId).toBe("live");
+    } finally {
+      resetGoneMachinesForTest();
+    }
   });
 });

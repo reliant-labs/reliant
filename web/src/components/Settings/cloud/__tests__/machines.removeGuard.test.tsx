@@ -58,9 +58,12 @@ import {
 } from '@/components/Settings/cloud/machines'
 import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 
+// A managed machine is labelled by its control-plane name, never its pod
+// hostname, so the fixture carries both the way a real registry row does.
 const row = (name: string, daemonType: string, status: number) => ({
   daemonId: `id-${name}`,
-  hostname: name,
+  name: daemonType === 'managed' ? name : '',
+  hostname: daemonType === 'managed' ? `ws-ws-${name}` : name,
   daemonType,
   status,
   platform: 'darwin',

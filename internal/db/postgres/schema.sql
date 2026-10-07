@@ -699,6 +699,7 @@ CREATE TABLE public.daemons (
     oom_kill_count integer DEFAULT 0 NOT NULL,
     local_models text DEFAULT ''::text NOT NULL,
     storage_state text DEFAULT ''::text NOT NULL,
+    name text DEFAULT ''::text NOT NULL,
     CONSTRAINT daemons_lifecycle_phase_check CHECK (((lifecycle_phase IS NULL) OR (lifecycle_phase = ANY (ARRAY['provisioning'::text, 'cloning'::text, 'ready'::text, 'suspending'::text, 'suspended'::text, 'failed'::text]))))
 );
 

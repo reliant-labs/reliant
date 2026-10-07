@@ -215,8 +215,17 @@ func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
 	if len(projects) == 0 {
 		return
 	}
-	logging.Info("project-dir-heal: ensuring project dirs on daemon",
-		"userID", userID, "daemonID", daemonID, "projects", len(projects))
+	// The counts are logged, not just the total. The total alone read as
+	// "ensured 2 project dirs" on 2026-10-07 when the heal had in fact
+	// skipped both — they were repositories, whose directories only a clone
+	// may create — and the log was the first place anyone looked for why the
+	// new machine had no houndersclub directory.
+	var healed, skippedRepository int
+	defer func() {
+		logging.Info("project-dir-heal: done",
+			"userID", userID, "daemonID", daemonID, "projects", len(projects),
+			"mkdir", healed, "skipped_repository", skippedRepository)
+	}()
 	for _, p := range projects {
 		// Judged with ospath because the mkdir runs on the daemon, not here.
 		// Under filepath.IsAbs this heal silently skipped every project
@@ -226,6 +235,7 @@ func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
 			continue
 		}
 		if !projectDirIsHealable(p) {
+			skippedRepository++
 			continue
 		}
 		if p.Path == "" || !ospath.IsAbs(p.Path) {
@@ -235,7 +245,9 @@ func (s *ProjectService) ensureProjectDirsOnDaemon(userID, daemonID string) {
 		}
 		if err := s.sendProjectDaemonCommand(ctx, userID, "fs.mkdir", map[string]string{"path": p.Path}, nil); err != nil {
 			logging.Warn("project-dir-heal: failed to mkdir project path", "error", err, "userID", userID, "daemonID", daemonID, "path", p.Path)
+			continue
 		}
+		healed++
 	}
 }
 

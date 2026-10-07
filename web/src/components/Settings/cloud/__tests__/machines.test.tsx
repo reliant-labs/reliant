@@ -117,7 +117,7 @@ vi.mock('@/api/grpc-client', () => ({
 }))
 
 import { MachinesSection, daemonDisplayName } from '@/components/Settings/cloud/machines'
-import { DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
+import { DaemonLifecyclePhase, DaemonStatus } from '@/gen/reliant/v1/daemon_registry_pb'
 
 function renderSection() {
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } })
@@ -211,9 +211,12 @@ describe('MachinesSection', () => {
     // size is the lifecycle mirror's tier name. The table's spec column is
     // derived from size (the per-machine resource requests are control-plane
     // spec and are not on the one list).
+    // A managed machine's hostname is its pod's ("ws-" + its workspace id
+    // "ws-dd67e516"); what the user named it arrives as `name`.
     const managedDaemon = {
       daemonId: 'dd67e516-d02c-49d0-8210-8749022aba61',
-      hostname: 'onboarding-daemon',
+      name: 'onboarding-daemon',
+      hostname: 'ws-ws-dd67e516',
       daemonType: 'managed',
       status: DaemonStatus.ACTIVE,
       platform: '',
@@ -265,6 +268,31 @@ describe('MachinesSection', () => {
       expect(screen.getByRole('button', { name: /remove/i })).toBeInTheDocument()
       // Suspend appears exactly once — on the managed row, not the self-hosted one.
       expect(screen.getAllByRole('button', { name: /suspend/i })).toHaveLength(1)
+    })
+
+    // MACHINE_LIST_BUGS_2026-10-07: the owner named a new machine "default"
+    // and the list showed "ws-ws-2aab1465" — the pod hostname, with the
+    // workspace id's own "ws-" prefix doubled — or nothing at all while it was
+    // provisioning. A provisioning machine is listed, under its name.
+    it('lists a provisioning machine under the name its owner gave it, never its pod hostname', async () => {
+      mocks.listDaemons.mockResolvedValue({
+        daemons: [
+          {
+            daemonId: '2aab1465-f76b-4d95-b61b-480d9ba070e6',
+            name: 'default',
+            hostname: 'ws-ws-2aab1465',
+            daemonType: 'managed',
+            status: DaemonStatus.PENDING,
+            lifecyclePhase: DaemonLifecyclePhase.PROVISIONING,
+            platform: '',
+            size: 'small',
+          },
+        ],
+      })
+      renderSection()
+
+      expect(await screen.findByText('default')).toBeInTheDocument()
+      expect(screen.queryByText(/ws-ws-/)).not.toBeInTheDocument()
     })
 
     it('omits an empty group instead of rendering an empty table', async () => {

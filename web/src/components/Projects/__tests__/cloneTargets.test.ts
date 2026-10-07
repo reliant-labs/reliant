@@ -1,8 +1,12 @@
 import { describe, expect, it } from "vitest";
+import { Code, ConnectError } from "@connectrpc/connect";
 import {
   cloneAvailability,
+  cloneDescription,
   cloneTargetOptions,
+  describeCloneError,
   failureReason,
+  isCloneTargetGone,
   isCloneableDaemon,
   pickCloneTarget,
 } from "../cloneTargets";
@@ -204,5 +208,37 @@ describe("failureReason", () => {
     expect(
       failureReason(daemon({ status: DAEMON_STATUS_FAILED, lastStatusMessage: "   " })),
     ).toBeNull();
+  });
+});
+
+describe("describeCloneError", () => {
+  // The raw text on 2026-10-07 was `[not_found] daemon "cda8a89b-…" not found`:
+  // a UUID and no way forward.
+  it("turns a not_found from the clone dispatch into something the user can act on", () => {
+    const err = new ConnectError(`daemon "cda8a89b-d15c-455d-a506-4c40335e4278" not found`, Code.NotFound);
+    const message = describeCloneError(err, "default");
+    expect(message).toContain("default no longer exists");
+    expect(message).toMatch(/choose another machine/i);
+    expect(message).not.toContain("cda8a89b");
+    expect(isCloneTargetGone(err)).toBe(true);
+  });
+
+  it("passes the control plane's own message through for other refusals", () => {
+    const err = new ConnectError(`no git credential found for provider "github"`, Code.FailedPrecondition);
+    expect(describeCloneError(err, "default")).toBe(`no git credential found for provider "github"`);
+    expect(isCloneTargetGone(err)).toBe(false);
+  });
+});
+
+describe("cloneDescription", () => {
+  it("names the machine and never promises the clone will happen", () => {
+    const target = daemon({ daemonId: "d1", status: DAEMON_STATUS_SUSPENDED, name: "default", daemonType: "managed" });
+    const queued = cloneDescription({
+      cloneState: { kind: "ready", target, immediate: false },
+      hasGitHubCredential: true,
+    });
+    expect(queued).toContain("default");
+    expect(queued).toMatch(/queue/i);
+    expect(queued).not.toMatch(/will clone when|it'll clone when/i);
   });
 });

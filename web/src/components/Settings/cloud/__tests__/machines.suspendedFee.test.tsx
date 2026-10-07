@@ -147,7 +147,8 @@ function renderSection() {
 // what the fee lookup keys on (SIZE_TIERS → the server's per-size disk).
 const managed = (name: string, status: number, size: string) => ({
   daemonId: `00000000-0000-4000-8000-${name.length.toString().padStart(12, '0')}${status}`.slice(0, 36),
-  hostname: name,
+  name,
+  hostname: `ws-ws-${name}`,
   daemonType: 'managed',
   status,
   platform: '',

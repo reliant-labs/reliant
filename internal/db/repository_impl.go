@@ -1185,6 +1185,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 			capabilities,
 			project_paths,
 			daemon_type,
+			name,
 			created_at,
 			updated_at,
 			lifecycle_phase,
@@ -1217,6 +1218,7 @@ func (r *Repo) GetDaemon(ctx context.Context, id string) (*Daemon, error) {
 		&capabilities,
 		&projectPaths,
 		&daemonType,
+		&daemon.Name,
 		&daemon.CreatedAt,
 		&daemon.UpdatedAt,
 		&lifecycle.phase,
@@ -1286,6 +1288,13 @@ func (s daemonLifecycleScan) applyTo(d *Daemon) {
 // the guard holds across every replica and every retry, not only within one
 // consumer goroutine.
 func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdate) (bool, error) {
+	return r.applyDaemonLifecycle(ctx, r.DB, lc)
+}
+
+// applyDaemonLifecycle is ApplyDaemonLifecycle against any executor, so the
+// registry snapshot applies lifecycle with the same guard inside its own
+// transaction.
+func (r *Repo) applyDaemonLifecycle(ctx context.Context, ex execer, lc DaemonLifecycleUpdate) (bool, error) {
 	if lc.DaemonID == "" {
 		return false, fmt.Errorf("daemon ID cannot be empty")
 	}
@@ -1311,7 +1320,7 @@ func (r *Repo) ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdat
 	`
 	query = r.bindQuery(query)
 
-	res, err := r.DB.ExecContext(ctx, query,
+	res, err := ex.ExecContext(ctx, query,
 		lc.Phase,
 		lc.Size,
 		lc.StatusMessage,
@@ -1345,6 +1354,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			capabilities,
 			project_paths,
 			daemon_type,
+			name,
 			created_at,
 			updated_at,
 			lifecycle_phase,
@@ -1385,6 +1395,7 @@ func (r *Repo) ListDaemonsByUserID(ctx context.Context, userID string) ([]*Daemo
 			&capabilities,
 			&projectPaths,
 			&daemonType,
+			&daemon.Name,
 			&daemon.CreatedAt,
 			&daemon.UpdatedAt,
 			&lifecycle.phase,

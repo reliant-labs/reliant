@@ -6,13 +6,18 @@ import { Loader2, AlertCircle, FilePlus, FolderPlus } from "lucide-react";
 import type { FileNode } from "./index";
 import { getFileTree, createFile, createFolder, deleteFileOrFolder, copyFile, getFileContent, getFilePreviewInfo } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
-import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { isDaemonConnectingError, projectCheckoutMissing } from "../../lib/daemon-errors";
+import { ProjectCheckoutState, type ProjectCheckoutMissing } from "../../gen/reliant/v1/filesystem_pb";
+import { ProjectCheckoutMissingPanel } from "./ProjectCheckoutMissingPanel";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { useProjectStore } from "../../store/projectStore";
 import { useViewerStore } from "../../store/viewerStore";
 import { useFileDeletionStore } from "../../store/fileDeletionStore";
 import { toast } from "../../lib/toast-manager";
+
+/** How often the tree re-reads the root while a clone onto its machine lands. */
+const CHECKOUT_CLONING_RETRY_MS = 3_000;
 
 interface FileTreeProps {
   searchQuery: string;
@@ -194,6 +199,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // owns the stopwatch, the status poll, and the retry cadence; we only record
   // that we're blocked on it.
   const [waitingOnDaemon, setWaitingOnDaemon] = useState(false);
+  // The project's directory is not on this machine — a clone still landing,
+  // or a project that lives elsewhere. A state with its own panel, never the
+  // raw "no such file or directory" error. See ProjectCheckoutMissingPanel.
+  const [checkoutMissing, setCheckoutMissing] = useState<ProjectCheckoutMissing | null>(null);
   // Lazy directory loading: which directories are currently fetching children
   // (for per-node spinners), and an in-flight guard to dedupe concurrent loads.
   const [loadingPaths, setLoadingPaths] = useState<Set<string>>(new Set());
@@ -286,8 +295,13 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       const rootChildren = await getFileTree("/", showHidden, worktreeId, 2);
       setTree((prev) => reconcileChildren(rootChildren, prev, expandedPathsRef.current));
       setWaitingOnDaemon(false);
+      setCheckoutMissing(null);
     } catch (err) {
-      if (isDaemonConnectingError(err)) {
+      const missing = projectCheckoutMissing(err);
+      if (missing) {
+        setWaitingOnDaemon(false);
+        setCheckoutMissing(missing);
+      } else if (isDaemonConnectingError(err)) {
         // The machine isn't serving yet. We no longer convert this into an
         // error after 60s: that deadline was the frontend's invention, and it
         // reported "couldn't connect" for machines that were still legitimately
@@ -296,6 +310,7 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
         setWaitingOnDaemon(true);
       } else {
         setWaitingOnDaemon(false);
+        setCheckoutMissing(null);
         setError(err instanceof Error ? err.message : "Failed to load file tree");
       }
     } finally {
@@ -313,6 +328,18 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       void loadFileTree(false);
     }, [loadFileTree]),
   });
+
+  // While a clone onto this machine is landing, re-read the root until the
+  // directory exists. A queued clone is drained within seconds of being
+  // queued, so a short fixed cadence is enough; nothing here gives up.
+  const cloning = checkoutMissing?.state === ProjectCheckoutState.CLONING;
+  useEffect(() => {
+    if (!cloning) return;
+    const timer = setInterval(() => {
+      void loadFileTree(false);
+    }, CHECKOUT_CLONING_RETRY_MS);
+    return () => clearInterval(timer);
+  }, [cloning, loadFileTree]);
 
   // Lazily fetch children for any expanded directory that hasn't loaded them yet
   // (children === undefined). Covers every expansion path — click, keyboard,
@@ -1046,6 +1073,16 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
         variant="panel"
         secondary
         onRetry={daemonWait.retryNow}
+      />
+    );
+  }
+
+  if (checkoutMissing) {
+    return (
+      <ProjectCheckoutMissingPanel
+        missing={checkoutMissing}
+        projectName={currentProject?.name ?? "This project"}
+        onCloneQueued={() => void loadFileTree(false)}
       />
     );
   }

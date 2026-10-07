@@ -21,6 +21,7 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Badge } from "../ui/Badge";
 import { cn } from "../../lib/utils";
+import { machineDisplayName } from "@/lib/machineName";
 
 /**
  * OAuth consent: choosing which connector an application may act through.
@@ -614,7 +615,7 @@ export function ConnectorConsent({
                 <option value="">Select a machine…</option>
                 {daemons.map((d) => (
                   <option key={d.daemonId} value={d.daemonId}>
-                    {d.hostname || d.daemonId}
+                    {machineDisplayName(d)}
                     {isPersonalMachine(d) ? " (your computer)" : ""}
                   </option>
                 ))}

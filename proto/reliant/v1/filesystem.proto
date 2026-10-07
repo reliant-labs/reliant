@@ -140,6 +140,50 @@ message GetFileTreeResponse {
   int32 node_count = 3;
 }
 
+// ProjectCheckoutMissing is attached, as a Connect error detail with code
+// NOT_FOUND, when a request for a project's root finds that the project's
+// directory does not exist on the machine the request reached.
+//
+// Before it, that case came back as a bare INTERNAL ("read dir …: no such file
+// or directory") and the UI rendered the raw text — repeatedly, for every
+// surface that reads the tree. Two very different situations hid behind it,
+// and only one of them is a problem:
+//
+//   - the project is being CLONED onto this machine and the clone has not
+//     landed yet (the queued-clone window right after "Clone from GitHub");
+//   - the project simply is not on this machine — it was cloned onto another
+//     one, or its checkout is gone — and the user can clone it here.
+//
+// The state says which, so the UI can show "Cloning…" for the first and offer
+// "Clone it here" for the second.
+message ProjectCheckoutMissing {
+  string project_id = 1;
+  // The machine the request reached. Empty only when the server could not
+  // tell which machine default resolution picked.
+  string daemon_id = 2;
+  // The project directory that does not exist on that machine.
+  string path = 3;
+  ProjectCheckoutState state = 4;
+  // Why the clone onto this machine failed, for CLONE_FAILED.
+  string install_error = 5;
+  // The repository the project comes from. Empty for a plain folder, which
+  // cannot be cloned anywhere.
+  string remote_url = 6;
+}
+
+// ProjectCheckoutState is what is happening to a project's checkout on one
+// machine, from this server's record of clones (project_daemons).
+enum ProjectCheckoutState {
+  PROJECT_CHECKOUT_STATE_UNSPECIFIED = 0;
+  // A clone onto this machine is queued or running; the directory will
+  // appear when it lands.
+  PROJECT_CHECKOUT_STATE_CLONING = 1;
+  // A clone onto this machine ran and failed.
+  PROJECT_CHECKOUT_STATE_CLONE_FAILED = 2;
+  // Nothing is putting the project on this machine.
+  PROJECT_CHECKOUT_STATE_ABSENT = 3;
+}
+
 // ============================================
 // GetFileContent
 // ============================================

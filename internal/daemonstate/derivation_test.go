@@ -46,6 +46,9 @@ type fakeRepo struct {
 	daemons        map[string]*db.Daemon
 	lifecycleCalls int
 	lifecycleErr   error
+
+	// snapshots records every registry snapshot applied, in order.
+	snapshots []db.RegistrySnapshotApply
 }
 
 func newFakeRepo() *fakeRepo {
