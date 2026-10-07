@@ -1,7 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { describe, it, expect } from "vitest";
+import { create, fromJson, toJson, type MessageInitShape } from "@bufbuild/protobuf";
+import { InputSchema } from "../../gen/reliant/v1/workflow_v2_pb";
 import {
+  type InputDef,
+  getInputIntegerDefault,
   getInputDescription,
   getInputUI,
   getInputDefault,
@@ -266,7 +270,8 @@ describe("setters — immutable updates", () => {
 
   it("setInputDefault", () => {
     const updated = setInputDefault(input, "new-default");
-    expect(updated.config.value.default).toBe("new-default");
+    expect(getInputDefault(updated)).toBe("new-default");
+    expect(getInputDefault(input)).toBeUndefined(); // original unchanged
   });
 
   it("setInputEnumValues", () => {
@@ -372,6 +377,86 @@ describe("example", () => {
     expect(changed.config.case).toBe("integerInput");
     expect(getInputExample(changed)).toBe("3");
     expect(getInputDescription(changed)).toBe("Count");
+  });
+});
+
+describe("changeInputType keeps what lives outside the config", () => {
+  it("keeps fields a caller stores on the input, like the params editor's name and key", () => {
+    const named = { ...createInput("string", { description: "Retries" }), _id: "param-1", _name: "max_attempts" };
+    const changed = changeInputType(named, "integer") as typeof named;
+    expect(changed._name).toBe("max_attempts");
+    expect(changed._id).toBe("param-1");
+    expect(changed.type).toBe("integer");
+    expect(changed.config.case).toBe("integerInput");
+    expect(getInputDescription(changed)).toBe("Retries");
+  });
+
+  it("keeps them through applyInputUpdates, the editor's update path", () => {
+    const named = { ...createInput("string"), _id: "param-1", _name: "max_attempts" };
+    const changed = applyInputUpdates(named, { type: "enum", default: undefined }) as typeof named;
+    expect(changed._name).toBe("max_attempts");
+    expect(changed._id).toBe("param-1");
+    expect(changed.config.case).toBe("enumInput");
+  });
+});
+
+describe("setInputDefault writes each config case's wire type", () => {
+  // `default` is a string, double, int64, bool, ModelSelector or
+  // google.protobuf.Value depending on the config case. A value in the wrong
+  // shape is accepted here and only throws when the save request is encoded,
+  // so each case goes through the same proto JSON encode/decode a save does.
+  function saveAndReload(input: InputDef): InputDef {
+    const json = toJson(InputSchema, create(InputSchema, input as MessageInitShape<typeof InputSchema>));
+    return fromJson(InputSchema, json);
+  }
+
+  const cases: Array<[type: string, value: unknown, reloaded: unknown]> = [
+    ["string", "main", "main"],
+    ["message", "Fix the flaky test", "Fix the flaky test"],
+    ["number", 0.75, 0.75],
+    ["number", "0.75", 0.75],
+    ["integer", 5, 5],
+    ["integer", "5", 5],
+    ["integer", 5n, 5],
+    ["boolean", true, true],
+    ["boolean", false, false],
+    ["enum", "b", "b"],
+    ["model", "claude-sonnet-5", expect.objectContaining({ id: "claude-sonnet-5" })],
+    ["model", { tags: ["flagship"] }, expect.objectContaining({ tags: ["flagship"] })],
+    ["tools", ["bash", "read"], ["bash", "read"]],
+    ["attachments", ["spec.md"], ["spec.md"]],
+    ["array", [1, 2], [1, 2]],
+    ["object", { retries: 2 }, { retries: 2 }],
+    ["any", "anything", "anything"],
+    ["preset", ["careful"], ["careful"]],
+  ];
+
+  it.each(cases)("%s default %o survives save and reload", (type, value, reloaded) => {
+    const input = setInputDefault(createInput(type), value);
+    expect(getInputDefault(input)).toEqual(reloaded);
+    expect(getInputDefault(saveAndReload(input))).toEqual(reloaded);
+  });
+
+  it("stores an integer default as an exact int64", () => {
+    const big = "9007199254740993"; // 2^53 + 1: a JS number rounds it
+    const input = setInputDefault(createInput("integer"), big);
+    expect(getInputIntegerDefault(input)).toBe(9007199254740993n);
+    expect(getInputIntegerDefault(saveAndReload(input))).toBe(9007199254740993n);
+  });
+
+  it("clears the default for undefined", () => {
+    for (const type of ["string", "number", "integer", "boolean", "enum", "model", "object"]) {
+      const input = setInputDefault(setInputDefault(createInput(type), type === "boolean" ? true : "1"), undefined);
+      expect(getInputDefault(input), type).toBeUndefined();
+      expect(getInputDefault(saveAndReload(input)), type).toBeUndefined();
+    }
+  });
+
+  it("drops a value the field cannot hold rather than writing an unencodable one", () => {
+    expect(getInputDefault(setInputDefault(createInput("integer"), "abc"))).toBeUndefined();
+    expect(getInputDefault(setInputDefault(createInput("number"), "abc"))).toBeUndefined();
+    expect(getInputDefault(setInputDefault(createInput("boolean"), "maybe"))).toBeUndefined();
+    expect(getInputDefault(setInputDefault(createInput("integer"), "99999999999999999999"))).toBeUndefined();
   });
 });
 

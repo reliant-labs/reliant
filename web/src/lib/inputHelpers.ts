@@ -17,7 +17,7 @@ import type {
   PresetsConfig,
 } from "../gen/reliant/v1/workflow_v2_pb";
 import { InputSchema } from "../gen/reliant/v1/workflow_v2_pb";
-import { protoValueToJs } from "../api/proto-utils";
+import { jsToProtoValue, protoValueToJs } from "../api/proto-utils";
 
 /** Proto Input init shape — use getters to read fields through the config oneof. */
 export type InputDef = MessageInitShape<typeof InputSchema>;
@@ -122,6 +122,17 @@ export function getInputDefault(input: InputDef): unknown {
   }
 
   return toJsDefault(raw);
+}
+
+/**
+ * An integer input's default, exactly. getInputDefault converts the int64 to a
+ * JS number, which rounds past 2^53 — fine for sending a value, wrong for an
+ * editor that shows the default as text and writes it back.
+ */
+export function getInputIntegerDefault(input: InputDef): bigint | undefined {
+  if (getConfigCase(input) !== "integerInput") return undefined;
+  const raw = getConfigValue(input)?.default;
+  return typeof raw === "bigint" ? raw : toInt64(raw);
 }
 
 /** Get enum values for an enum input */
@@ -285,9 +296,19 @@ export function setInputExample(input: InputDef, example: string): InputDef {
   return updateBase(input, { example });
 }
 
-/** Set the default value on an input */
+/**
+ * Set the default from a plain JS value — the shape getInputDefault returns,
+ * or the text a form field holds. `undefined` clears it.
+ *
+ * Each config case types `default` differently on the wire: string, double,
+ * int64 (bigint), bool, ModelSelector, or google.protobuf.Value for the
+ * free-form types. Nothing checks the shape until the save request is
+ * encoded, where a mismatch throws ("expected bigint (int64), got object"),
+ * so the conversion lives here, beside the getter that undoes it. A value the
+ * field cannot hold clears the default rather than poisoning the save.
+ */
 export function setInputDefault(input: InputDef, defaultValue: unknown): InputDef {
-  return updateConfigValue(input, { default: defaultValue });
+  return updateConfigValue(input, { default: toProtoDefault(getConfigCase(input), defaultValue) });
 }
 
 /** Set enum values on an enum input */
@@ -475,6 +496,56 @@ function updateBase(input: InputDef, updates: Partial<InputBase>): InputDef {
   } as InputDef;
 }
 
+const INT64_MIN = -(2n ** 63n);
+const INT64_MAX = 2n ** 63n - 1n;
+
+/** An int64 from a bigint, a number or numeric text; undefined if it isn't one. */
+function toInt64(value: unknown): bigint | undefined {
+  let result: bigint | undefined;
+  if (typeof value === "bigint") {
+    result = value;
+  } else if (typeof value === "string" && /^[+-]?\d+$/.test(value.trim())) {
+    // Integer text converts exactly: a number would round past 2^53.
+    result = BigInt(value.trim());
+  } else {
+    const n = toFiniteNumber(value);
+    if (n !== undefined) result = BigInt(Math.trunc(n));
+  }
+  if (result === undefined || result < INT64_MIN || result > INT64_MAX) return undefined;
+  return result;
+}
+
+/** A finite number from a number, a bigint or numeric text. */
+function toFiniteNumber(value: unknown): number | undefined {
+  if (typeof value === "bigint") return Number(value);
+  const n = typeof value === "string" && value.trim() !== "" ? Number(value) : value;
+  return typeof n === "number" && Number.isFinite(n) ? n : undefined;
+}
+
+/** A JS default in the wire type of the given config case's `default` field. */
+function toProtoDefault(configCase: string | undefined, value: unknown): unknown {
+  if (value === undefined || value === null) return undefined;
+  switch (configCase) {
+    case "stringInput":
+    case "messageInput":
+      return typeof value === "object" ? undefined : String(value);
+    case "numberInput":
+      return toFiniteNumber(value);
+    case "integerInput":
+      return toInt64(value);
+    case "booleanInput":
+      if (typeof value === "boolean") return value;
+      return value === "true" ? true : value === "false" ? false : undefined;
+    case "modelInput":
+      // A ModelSelector. The builder picks an exact id; YAML may give tags.
+      if (typeof value === "string") return value ? { id: value } : undefined;
+      return typeof value === "object" && !Array.isArray(value) ? value : undefined;
+    default:
+      // enum, attachments, tools, array, object, any, preset: google.protobuf.Value.
+      return jsToProtoValue(value);
+  }
+}
+
 /** Update config value fields, returning a new object */
 function updateConfigValue(input: InputDef, updates: Record<string, unknown>): InputDef {
   const cv = getConfigValue(input);
@@ -494,16 +565,21 @@ function updateConfigValue(input: InputDef, updates: Record<string, unknown>): I
 
 /**
  * Change the type of an input, preserving common base fields.
- * Creates a new Input with the target type's config case.
+ * Creates a new Input with the target type's config case. Everything outside
+ * the config carries over too — including fields a caller keeps on the input
+ * itself, like the params editor's `_name` and `_id`, which a type change must
+ * not wipe.
  */
 export function changeInputType(input: InputDef, newType: string): InputDef {
-  const desc = getInputDescription(input);
-  const ui = getInputUI(input);
-  return createInput(newType, {
-    description: desc ?? "",
-    ui: ui ?? "",
-    example: getInputExample(input) ?? "",
-  });
+  const { type: _type, config: _config, ...rest } = input;
+  return {
+    ...rest,
+    ...createInput(newType, {
+      description: getInputDescription(input) ?? "",
+      ui: getInputUI(input) ?? "",
+      example: getInputExample(input) ?? "",
+    }),
+  } as InputDef;
 }
 
 /**
