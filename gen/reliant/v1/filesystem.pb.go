@@ -425,11 +425,9 @@ type GetFileTreeRequest struct {
 	WorktreeId *string                `protobuf:"bytes,4,opt,name=worktree_id,json=worktreeId,proto3,oneof" json:"worktree_id,omitempty"` // Optional worktree to scope the tree
 	ChatId     *string                `protobuf:"bytes,5,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`             // Optional chat to resolve worktree from
 	// depth bounds how many levels of children are returned below `path`:
-	//
-	//	0  = the server default (2 levels) — NOT unlimited
-	//	N  = N levels of descendants (e.g. 1 = immediate children only)
-	//	-1 = as deep as the server's node budget allows
-	//
+	//   0  = the server default (2 levels) — NOT unlimited
+	//   N  = N levels of descendants (e.g. 1 = immediate children only)
+	//   -1 = as deep as the server's node budget allows
 	// No value asks for a truly unbounded walk. Every tree is additionally
 	// capped by a hard node budget, and by the server's skip set and the
 	// repository's .gitignore rules; a tree cut short by the budget comes back

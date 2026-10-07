@@ -2,6 +2,7 @@
 package buildmode_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -13,23 +14,34 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// TestBufRemotePluginsArePinned keeps `buf generate` reproducible.
+// protocGenESDir is the npm package that pins every protoc-gen-es a buf
+// template runs. Its devDependencies are aliases named for their version.
+const protocGenESDir = "tools/protoc-gen-es"
+
+// TestBufPluginsAreLocalAndPinned keeps `make generate-all` reproducible: the
+// same inputs must produce the same bytes on every machine and in CI, or the
+// "Generated code is up to date" gate cannot tell a real change from noise.
 //
-// A `remote:` plugin with no `:vX.Y.Z` suffix resolves to whatever the Buf
-// Schema Registry calls latest at the moment the command runs. Nothing in the
-// repo changes, yet the output does: buf.gen.yaml carried
-// `remote: buf.build/bufbuild/es`, and `make proto-generate` rewrote the
-// committed web/src/gen/reliant/v1/forge_pb.ts from protoc-gen-es v2.14.1 to
-// v2.15.0 the day upstream released. A contributor who regenerates for an
-// unrelated proto change then commits a diff they did not make, and the drift
-// gate cannot tell a real change from a registry release.
+// Every plugin a buf.gen*.yaml template runs must therefore be local and
+// pinned by a file in this repo. The two shapes that are not, and what each
+// cost:
 //
-// It also keeps templates that write the SAME output directory on the same
-// plugin version. buf.gen.yaml (`make proto-generate`) and buf.gen-go-only.yaml
-// (`make generate-go`, which CI's drift gate runs) both write gen/; pinned to
-// different versions, each command would undo the other and the drift gate
-// would go red on whichever one a contributor did not run.
-func TestBufRemotePluginsArePinned(t *testing.T) {
+//   - `remote: buf.build/...` runs on the Buf Schema Registry, which
+//     rate-limits (`resource_exhausted: too many requests`) and failed
+//     `make generate-go` for every agent at once. Unpinned, a remote also
+//     rewrote committed code whenever upstream released (protoc-gen-es
+//     v2.14.1 -> v2.15.0 on forge_pb.ts).
+//   - `local: protoc-gen-go` is a PATH lookup: the version is whatever this
+//     machine installed, built by whatever Go it had. protoc-gen-go v1.36.12
+//     built with go1.25 and with go1.27 write different bytes.
+//
+// The accepted shapes are `[go, tool, <name>]`, where <name> is a `tool`
+// directive in go.mod, and `[node, tools/protoc-gen-es/node_modules/<alias>/bin/<bin>]`,
+// where <alias> is an exact `npm:` pin in tools/protoc-gen-es/package.json.
+//
+// It also keeps templates that write the SAME directory on the same plugin
+// version, or each `buf generate` would undo the other.
+func TestBufPluginsAreLocalAndPinned(t *testing.T) {
 	t.Parallel()
 
 	root := repoRoot(t)
@@ -53,7 +65,20 @@ func TestBufRemotePluginsArePinned(t *testing.T) {
 		sources[filepath.Base(path)] = data
 	}
 
-	for _, problem := range checkBufPluginPins(sources) {
+	goMod, err := os.ReadFile(filepath.Join(root, "go.mod"))
+	if err != nil {
+		t.Fatalf("read go.mod: %v", err)
+	}
+	pkgJSON, err := os.ReadFile(filepath.Join(root, protocGenESDir, "package.json"))
+	if err != nil {
+		t.Fatalf("read %s/package.json: %v", protocGenESDir, err)
+	}
+	esPins, err := parseNPMAliasPins(pkgJSON)
+	if err != nil {
+		t.Fatalf("%s/package.json: %v", protocGenESDir, err)
+	}
+
+	for _, problem := range checkBufPluginPins(sources, goModTools(goMod), esPins) {
 		t.Error(problem)
 	}
 }
@@ -64,53 +89,103 @@ func TestBufRemotePluginsArePinned(t *testing.T) {
 func TestCheckBufPluginPins(t *testing.T) {
 	t.Parallel()
 
+	goTools := goModTools([]byte("module x\n\ngo 1.27.0\n\ntool (\n" +
+		"\tconnectrpc.com/connect/cmd/protoc-gen-connect-go\n" +
+		"\tgoogle.golang.org/protobuf/cmd/protoc-gen-go\n)\n"))
+	esPins, err := parseNPMAliasPins([]byte(`{"devDependencies": {
+		"protoc-gen-es-v2.12.0": "npm:@bufbuild/protoc-gen-es@2.12.0",
+		"protoc-gen-es-v2.15.0": "npm:@bufbuild/protoc-gen-es@2.15.0",
+		"protoc-gen-es-loose": "npm:@bufbuild/protoc-gen-es@^2.15.0"
+	}}`))
+	if err != nil {
+		t.Fatalf("parse fixture package.json: %v", err)
+	}
+
+	const es215 = "[node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.15.0/bin/protoc-gen-es]"
+	const es212 = "[node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.12.0/bin/protoc-gen-es]"
+
 	cases := []struct {
 		name      string
 		templates map[string]string
 		wantFound []string // substrings; empty means "no problems"
 	}{
 		{
-			name: "all pinned",
+			name: "all local and pinned",
 			templates: map[string]string{
 				"buf.gen.yaml": "version: v2\nplugins:\n" +
-					"  - remote: buf.build/protocolbuffers/go:v1.36.12\n    out: gen\n" +
-					"  - remote: buf.build/bufbuild/es:v2.15.0\n    out: web/src/gen\n" +
-					"  - local: protoc-gen-go\n    out: gen\n",
+					"  - local: [go, tool, protoc-gen-go]\n    out: gen\n" +
+					"  - local: [go, tool, protoc-gen-connect-go]\n    out: gen\n" +
+					"  - local: " + es215 + "\n    out: web/src/gen\n",
 			},
 		},
 		{
-			name: "unpinned remote",
+			name: "remote plugin",
 			templates: map[string]string{
-				"buf.gen.yaml": "version: v2\nplugins:\n  - remote: buf.build/bufbuild/es\n    out: web/src/gen\n",
+				"buf.gen.yaml": "version: v2\nplugins:\n  - remote: buf.build/protocolbuffers/go:v1.36.12\n    out: gen\n",
 			},
-			wantFound: []string{`buf.gen.yaml: remote plugin "buf.build/bufbuild/es" is not pinned`},
+			wantFound: []string{`buf.gen.yaml: remote plugin "buf.build/protocolbuffers/go:v1.36.12" runs on the Buf Schema Registry`},
 		},
 		{
-			name: "non-semver label",
+			name: "bare PATH lookup",
 			templates: map[string]string{
-				"buf.gen.yaml": "version: v2\nplugins:\n  - remote: buf.build/bufbuild/es:latest\n    out: web/src/gen\n",
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: protoc-gen-go\n    out: gen\n",
 			},
-			wantFound: []string{`"buf.build/bufbuild/es:latest" is not pinned`},
+			wantFound: []string{`buf.gen.yaml: local plugin "protoc-gen-go" is a PATH lookup`},
+		},
+		{
+			name: "go tool not declared in go.mod",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [go, tool, protoc-gen-go-grpc]\n    out: gen\n",
+			},
+			wantFound: []string{`runs "protoc-gen-go-grpc", which is not a tool directive in go.mod`},
+		},
+		{
+			name: "go run is not go tool",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [go, run, google.golang.org/protobuf/cmd/protoc-gen-go@latest]\n    out: gen\n",
+			},
+			wantFound: []string{`is neither [go, tool, <name>] nor [node, tools/protoc-gen-es/node_modules/<alias>/bin/<bin>]`},
+		},
+		{
+			name: "node plugin outside the pinned package",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, web/node_modules/@bufbuild/protoc-gen-es/bin/protoc-gen-es]\n    out: web/src/gen\n",
+			},
+			wantFound: []string{`is neither [go, tool, <name>] nor`},
+		},
+		{
+			name: "node plugin alias missing from package.json",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v9.9.9/bin/protoc-gen-es]\n    out: web/src/gen\n",
+			},
+			wantFound: []string{`runs "protoc-gen-es-v9.9.9", which is not a devDependency of tools/protoc-gen-es/package.json`},
+		},
+		{
+			name: "node plugin alias with a range",
+			templates: map[string]string{
+				"buf.gen.yaml": "version: v2\nplugins:\n  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-loose/bin/protoc-gen-es]\n    out: web/src/gen\n",
+			},
+			wantFound: []string{`"protoc-gen-es-loose" is "npm:@bufbuild/protoc-gen-es@^2.15.0", not an exact`},
 		},
 		{
 			name: "same plugin and out dir, different versions",
 			templates: map[string]string{
-				"buf.gen.yaml":         "version: v2\nplugins:\n  - remote: buf.build/connectrpc/go:v1.21.0\n    out: gen\n",
-				"buf.gen-go-only.yaml": "version: v2\nplugins:\n  - remote: buf.build/connectrpc/go:v1.20.0\n    out: gen\n",
+				"buf.gen.yaml":       "version: v2\nplugins:\n  - local: " + es215 + "\n    out: web/src/gen\n",
+				"buf.gen-other.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: web/src/gen\n",
 			},
-			wantFound: []string{`buf.build/connectrpc/go writes gen/ at different versions`},
+			wantFound: []string{`@bufbuild/protoc-gen-es writes web/src/gen/ at different versions`},
 		},
 		{
 			name: "same plugin, different out dirs may differ",
 			templates: map[string]string{
-				"buf.gen.yaml":              "version: v2\nplugins:\n  - remote: buf.build/bufbuild/es:v2.15.0\n    out: web/src/gen\n",
-				"buf.gen.controlplane.yaml": "version: v2\nplugins:\n  - remote: buf.build/bufbuild/es:v2.12.0\n    out: web/src/gen/controlplane\n",
+				"buf.gen.yaml":              "version: v2\nplugins:\n  - local: " + es215 + "\n    out: web/src/gen\n",
+				"buf.gen.controlplane.yaml": "version: v2\nplugins:\n  - local: " + es212 + "\n    out: web/src/gen/controlplane\n",
 			},
 		},
 		{
 			name: "template with no plugins is itself a problem",
 			templates: map[string]string{
-				"buf.gen.yaml": "version: v2\nplugin:\n  - remote: buf.build/bufbuild/es\n",
+				"buf.gen.yaml": "version: v2\nplugin:\n  - local: [go, tool, protoc-gen-go]\n",
 			},
 			wantFound: []string{"buf.gen.yaml: declares no plugins"},
 		},
@@ -124,7 +199,7 @@ func TestCheckBufPluginPins(t *testing.T) {
 			for name, body := range tc.templates {
 				sources[name] = []byte(body)
 			}
-			problems := checkBufPluginPins(sources)
+			problems := checkBufPluginPins(sources, goTools, esPins)
 
 			if len(tc.wantFound) == 0 && len(problems) > 0 {
 				t.Fatalf("want no problems, got:\n%s", strings.Join(problems, "\n"))
@@ -139,16 +214,26 @@ func TestCheckBufPluginPins(t *testing.T) {
 	}
 }
 
-// pinnedRemote is a BSR remote plugin reference with an exact semver label:
-// buf.build/<owner>/<plugin>:v<major>.<minor>.<patch>[-prerelease].
-var pinnedRemote = regexp.MustCompile(`^([^\s:]+/[^\s:]+/[^\s:]+):v\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$`)
+// esPluginPath is the only node plugin shape accepted: a bin script inside one
+// alias of the pinned tools/protoc-gen-es package.
+var esPluginPath = regexp.MustCompile(`^` + regexp.QuoteMeta(protocGenESDir) + `/node_modules/([^/]+)/bin/[^/]+$`)
+
+// exactNPMAlias is `npm:<package>@<exact semver>`, e.g.
+// npm:@bufbuild/protoc-gen-es@2.15.0. A range (^, ~, x) is not a pin.
+var exactNPMAlias = regexp.MustCompile(`^npm:((?:@[^/@\s]+/)?[^@\s]+)@(\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)$`)
+
+// majorVersionSuffix is the /vN element `go tool` drops from a short name.
+var majorVersionSuffix = regexp.MustCompile(`^v\d+$`)
 
 // checkBufPluginPins returns one human-readable problem per violation across
-// the given templates (keyed by file name). An empty result means every remote
-// plugin is pinned and co-located plugins agree on a version.
-func checkBufPluginPins(templates map[string][]byte) []string {
+// the given templates (keyed by file name). goTools holds go.mod's tool
+// directives; esPins maps each tools/protoc-gen-es alias to its `npm:` spec.
+// An empty result means every plugin is local and pinned, and plugins that
+// write the same directory agree on a version.
+func checkBufPluginPins(templates map[string][]byte, goTools []string, esPins map[string]string) []string {
 	type pluginRef struct {
 		Remote string `yaml:"remote"`
+		Local  any    `yaml:"local"`
 		Out    string `yaml:"out"`
 	}
 	type template struct {
@@ -162,8 +247,15 @@ func checkBufPluginPins(templates map[string][]byte) []string {
 	sort.Strings(names)
 
 	var problems []string
-	// plugin name + out dir -> version -> templates using it
+	// plugin identity + out dir -> version -> templates using it
 	seen := map[string]map[string][]string{}
+	record := func(identity, version, out, template string) {
+		key := identity + " writes " + filepath.Clean(out) + "/"
+		if seen[key] == nil {
+			seen[key] = map[string][]string{}
+		}
+		seen[key][version] = append(seen[key][version], template)
+	}
 
 	for _, name := range names {
 		var tmpl template
@@ -176,25 +268,36 @@ func checkBufPluginPins(templates map[string][]byte) []string {
 			continue
 		}
 		for _, plugin := range tmpl.Plugins {
-			if plugin.Remote == "" {
-				continue // local: plugins are versioned by whatever is on PATH
-			}
-			match := pinnedRemote.FindStringSubmatch(plugin.Remote)
-			if match == nil {
+			if plugin.Remote != "" {
 				problems = append(problems, fmt.Sprintf(
-					"%s: remote plugin %q is not pinned to an exact version. "+
-						"Unpinned, it resolves to the registry's latest on every run and silently "+
-						"rewrites committed generated code. Pin it, e.g. %q, choosing the version the "+
-						"committed output was generated with (see its '@generated by' / 'protoc-gen-* v' header).",
-					name, plugin.Remote, strings.SplitN(plugin.Remote, ":", 2)[0]+":vX.Y.Z"))
+					"%s: remote plugin %q runs on the Buf Schema Registry, which rate-limits "+
+						"(`resource_exhausted: too many requests`) and needs the network. Run it "+
+						"locally: [go, tool, <name>] with a `tool` directive in go.mod, or "+
+						"[node, %s/node_modules/<alias>/bin/<bin>] with an exact pin in %s/package.json.",
+					name, plugin.Remote, protocGenESDir, protocGenESDir))
 				continue
 			}
-			key := match[1] + " writes " + filepath.Clean(plugin.Out) + "/"
-			version := strings.TrimPrefix(plugin.Remote, match[1]+":")
-			if seen[key] == nil {
-				seen[key] = map[string][]string{}
+			switch local := plugin.Local.(type) {
+			case string:
+				problems = append(problems, fmt.Sprintf(
+					"%s: local plugin %q is a PATH lookup, so its version (and the Go that built it) "+
+						"is whatever this machine has installed. Use [go, tool, %s] with a `tool` "+
+						"directive in go.mod instead.",
+					name, local, local))
+			case []any:
+				argv := make([]string, 0, len(local))
+				for _, arg := range local {
+					argv = append(argv, fmt.Sprint(arg))
+				}
+				identity, version, problem := resolveLocalPlugin(argv, goTools, esPins)
+				if problem != "" {
+					problems = append(problems, fmt.Sprintf("%s: local plugin %v %s", name, argv, problem))
+					continue
+				}
+				record(identity, version, plugin.Out, name)
+			default:
+				problems = append(problems, fmt.Sprintf("%s: plugin writing %q is neither remote nor local; the checker cannot see what it runs", name, plugin.Out))
 			}
-			seen[key][version] = append(seen[key][version], name)
 		}
 	}
 
@@ -219,6 +322,86 @@ func checkBufPluginPins(templates map[string][]byte) []string {
 			key, strings.Join(detail, "; ")))
 	}
 	return problems
+}
+
+// resolveLocalPlugin maps a `local:` argv onto the pin that fixes its version.
+// It returns the plugin's identity and version, or a problem describing why
+// the argv is not one of the two pinned shapes.
+func resolveLocalPlugin(argv []string, goTools []string, esPins map[string]string) (identity, version, problem string) {
+	switch {
+	case len(argv) == 3 && argv[0] == "go" && argv[1] == "tool":
+		for _, tool := range goTools {
+			if argv[2] == tool || argv[2] == goToolName(tool) {
+				// go.mod has exactly one version of the module providing it.
+				return tool, "go.mod", ""
+			}
+		}
+		return "", "", fmt.Sprintf("runs %q, which is not a tool directive in go.mod (have %v). "+
+			"Add it with `go get -tool <package>@<version the module already requires>`.", argv[2], goTools)
+	case len(argv) == 2 && argv[0] == "node" && esPluginPath.MatchString(argv[1]):
+		alias := esPluginPath.FindStringSubmatch(argv[1])[1]
+		spec, ok := esPins[alias]
+		if !ok {
+			return "", "", fmt.Sprintf("runs %q, which is not a devDependency of %s/package.json.", alias, protocGenESDir)
+		}
+		match := exactNPMAlias.FindStringSubmatch(spec)
+		if match == nil {
+			return "", "", fmt.Sprintf("runs %q, but %q is %q, not an exact `npm:<package>@X.Y.Z` pin.", alias, alias, spec)
+		}
+		return match[1], match[2], ""
+	default:
+		return "", "", fmt.Sprintf("is neither [go, tool, <name>] nor [node, %s/node_modules/<alias>/bin/<bin>], "+
+			"so nothing in this repo pins its version.", protocGenESDir)
+	}
+}
+
+// goModTools returns the package paths of go.mod's `tool` directives, in both
+// the single-line and the block form.
+func goModTools(goMod []byte) []string {
+	var tools []string
+	inBlock := false
+	for _, line := range strings.Split(string(goMod), "\n") {
+		line = strings.TrimSpace(line)
+		if i := strings.Index(line, "//"); i >= 0 {
+			line = strings.TrimSpace(line[:i])
+		}
+		switch {
+		case inBlock && line == ")":
+			inBlock = false
+		case inBlock && line != "":
+			tools = append(tools, line)
+		case line == "tool (":
+			inBlock = true
+		case strings.HasPrefix(line, "tool "):
+			tools = append(tools, strings.TrimSpace(strings.TrimPrefix(line, "tool ")))
+		}
+	}
+	return tools
+}
+
+// goToolName is the short name `go tool` accepts for a tool package: its last
+// path element, without a /vN major-version suffix.
+func goToolName(pkg string) string {
+	parts := strings.Split(pkg, "/")
+	last := parts[len(parts)-1]
+	if len(parts) > 1 && majorVersionSuffix.MatchString(last) {
+		last = parts[len(parts)-2]
+	}
+	return last
+}
+
+// parseNPMAliasPins reads a package.json's devDependencies.
+func parseNPMAliasPins(packageJSON []byte) (map[string]string, error) {
+	var pkg struct {
+		DevDependencies map[string]string `json:"devDependencies"`
+	}
+	if err := json.Unmarshal(packageJSON, &pkg); err != nil {
+		return nil, fmt.Errorf("not valid JSON: %w", err)
+	}
+	if len(pkg.DevDependencies) == 0 {
+		return nil, fmt.Errorf("declares no devDependencies; no protoc-gen-es is pinned")
+	}
+	return pkg.DevDependencies, nil
 }
 
 func containsBase(paths []string, base string) bool {

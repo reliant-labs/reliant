@@ -44,11 +44,11 @@
     "test:e2e": "cd web && npm run test:e2e",
     "find:ports": "node scripts/find-ports.js",
     "clean:ports": "rm -f .ports.json .instance-info",
-    "proto:generate": "PATH=./web/node_modules/.bin:$PATH buf generate && npm run proto:generate:controlplane",
+    "proto:generate": "make proto-generate",
     "proto:sync:controlplane": "node .github/scripts/sync-controlplane-proto.mjs",
-    "proto:generate:controlplane": "scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane",
-    "proto:lint": "buf lint",
-    "proto:format": "buf format -w",
+    "proto:generate:controlplane": "make proto-generate-controlplane",
+    "proto:lint": "make proto-lint",
+    "proto:format": "make proto-format",
     "postinstall": "cd web && npm install --legacy-peer-deps && cd ../electron && npm install",
     "android": "expo run:android",
     "ios": "expo run:ios"
@@ -60,7 +60,6 @@
     "ws": "^8.18.3"
   },
   "devDependencies": {
-    "@bufbuild/protoc-gen-es": "^2.10.1",
     "cross-env": "^10.1.0"
   },
   "engines": {

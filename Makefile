@@ -220,19 +220,75 @@ deps: setup-hooks
 	$(GOMOD) tidy
 	@echo "$(GREEN)✅ Dependencies updated$(NC)"
 
-## proto-generate: Generate Go and TypeScript code from protobuf definitions
-proto-generate:
-	@echo "$(YELLOW)Generating code from protobuf definitions...$(NC)"
-	@PATH="$(shell pwd)/web/node_modules/.bin:$(PATH)" buf generate
-	@$(MAKE) --no-print-directory proto-generate-controlplane
+# ========================================
+# Code generation: local, pinned, reproducible
+# ========================================
+# Generated code is committed, and CI's "Generated code is up to date" job
+# runs `make generate-all` and fails on any diff. That only holds if every
+# machine writes the same bytes, so nothing a generator runs may come from
+# the machine it happens to run on:
+#
+#   protoc plugins  Local, never `remote:` — the Buf Schema Registry rate-limits
+#                   (`resource_exhausted: too many requests`). protoc-gen-go and
+#                   protoc-gen-connect-go are `tool` directives in go.mod, run
+#                   with `go tool`; protoc-gen-es is pinned by
+#                   tools/protoc-gen-es/package-lock.json.
+#   buf             A versioned binary built from source, like sqlc below. buf
+#                   compiles the descriptors the generated code embeds.
+#   Go toolchain    GOTOOLCHAIN is exactly go.mod's. protoc-gen-go formats its
+#                   output with the go/printer of the Go that BUILT it, and doc
+#                   comment layout changes between releases: protoc-gen-go
+#                   v1.36.12 built with go1.25 and with go1.27 write different
+#                   bytes for gen/reliant/v1/filesystem.pb.go. A machine with a
+#                   different Go downloads go.mod's once and uses that.
+#   GOWORK=off      A machine-local go.work (`use ../forge`) would compile the
+#                   plugins and docgen tools against a sibling checkout instead
+#                   of go.mod's pins. cli.md embeds forge's whole command tree,
+#                   so it documented whichever forge branch was checked out.
+#
+# The exports below apply to every generation target AND its prerequisites,
+# so `make generate-cli` alone is pinned exactly like `make generate-all`.
+GEN_GOTOOLCHAIN := $(shell sed -n 's/^toolchain //p' go.mod)
+ifeq ($(GEN_GOTOOLCHAIN),)
+GEN_GOTOOLCHAIN := go$(shell sed -n 's/^go //p' go.mod)
+endif
+generate proto-generate sqlc db-regenerate: export GOWORK := off
+generate proto-generate sqlc db-regenerate: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
+generate-% proto-generate-%: export GOWORK := off
+generate-% proto-generate-%: export GOTOOLCHAIN := $(GEN_GOTOOLCHAIN)
+
+BUF_VERSION := v1.57.0
+BUF_BIN := $(HOME)/go/bin/buf-$(BUF_VERSION)
+
+$(BUF_BIN):
+	@echo "$(YELLOW)Installing buf $(BUF_VERSION) → $(BUF_BIN)...$(NC)"
+	@mkdir -p "$(dir $(BUF_BIN))" && tmp=$$(mktemp -d) && \
+		GOBIN=$$tmp $(GOCMD) install github.com/bufbuild/buf/cmd/buf@$(BUF_VERSION) && \
+		mv "$$tmp/buf" "$(BUF_BIN)" && rmdir "$$tmp"
+
+# npm ci rewrites node_modules/.package-lock.json, so it doubles as the stamp:
+# a lockfile edit (a version bump) reinstalls, an unchanged one is a no-op.
+PROTOC_GEN_ES_DIR := tools/protoc-gen-es
+PROTOC_GEN_ES := $(PROTOC_GEN_ES_DIR)/node_modules/.package-lock.json
+
+$(PROTOC_GEN_ES): $(PROTOC_GEN_ES_DIR)/package-lock.json
+	@echo "$(YELLOW)Installing pinned protoc-gen-es ($(PROTOC_GEN_ES_DIR))...$(NC)"
+	@npm ci --prefix $(PROTOC_GEN_ES_DIR) --ignore-scripts --no-audit --no-fund --loglevel=error
+
+## proto-generate: Generate Go and TypeScript code from protobuf definitions (local, pinned plugins)
+proto-generate: proto-generate-reliant proto-generate-controlplane
 	@echo "$(GREEN)✅ Protobuf code generated$(NC)"
 
+## proto-generate-reliant: Generate only reliant's own protos (proto/ -> gen/, web/src/gen/) via buf.gen.yaml
+proto-generate-reliant: $(BUF_BIN) $(PROTOC_GEN_ES)
+	@echo "$(YELLOW)Generating code from protobuf definitions...$(NC)"
+	@$(BUF_BIN) generate
+
 ## proto-generate-go: Generate only Go code from protobuf definitions
-## (also regenerates the control-plane client, Go + TS, from proto-vendor/ so
-## the generate-drift CI job covers it)
-proto-generate-go:
+## (also regenerates the control-plane client, Go + TS, from proto-vendor/)
+proto-generate-go: $(BUF_BIN) $(PROTOC_GEN_ES)
 	@echo "$(YELLOW)Generating Go code from protobuf definitions...$(NC)"
-	@buf generate --template buf.gen-go-only.yaml
+	@$(BUF_BIN) generate --template buf.gen-go-only.yaml
 	@$(MAKE) --no-print-directory proto-generate-controlplane
 	@echo "$(GREEN)✅ Go protobuf code generated$(NC)"
 
@@ -241,19 +297,19 @@ proto-generate-go:
 ## contract. To pull a new contract first: node .github/scripts/sync-controlplane-proto.mjs
 ## Both output dirs are replaced wholesale (pruning stale files), but only after
 ## buf succeeds — a failed generate leaves the existing code in place.
-proto-generate-controlplane:
-	@scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane
+proto-generate-controlplane: $(BUF_BIN) $(PROTOC_GEN_ES)
+	@BUF="$(BUF_BIN)" scripts/proto-generate-atomic.sh buf.gen.controlplane.yaml gen/controlplane web/src/gen/controlplane
 
 ## proto-lint: Lint protobuf files
-proto-lint:
+proto-lint: $(BUF_BIN)
 	@echo "$(YELLOW)Linting protobuf files...$(NC)"
-	@buf lint
+	@$(BUF_BIN) lint
 	@echo "$(GREEN)✅ Protobuf lint complete$(NC)"
 
 ## proto-format: Format protobuf files
-proto-format:
+proto-format: $(BUF_BIN)
 	@echo "$(YELLOW)Formatting protobuf files...$(NC)"
-	@buf format -w
+	@$(BUF_BIN) format -w
 	@echo "$(GREEN)✅ Protobuf formatting complete$(NC)"
 
 ## db-driver-audit: Static dual-driver audit (SQLite/Postgres parity and bindQuery checks)
@@ -298,7 +354,7 @@ db-regenerate: sqlc
 	@echo "$(GREEN)✅ Database schema and code regenerated$(NC)"
 	@echo "$(BLUE)You can now write Go code using the new schema types$(NC)"
 
-## generate-all: Run all code generators (protobuf, sqlc, docs/presets)
+## generate-all: Run every code generator (protobuf, sqlc, docs) — what CI's "Generated code is up to date" job runs
 generate-all: proto-generate generate
 	@echo "$(GREEN)✅ All code generation complete$(NC)"
 
@@ -368,7 +424,7 @@ CONFIG_DIR=config
 WEB_SRC_DIR=web/src
 CHANGELOG_DIR=$(MINTLIFY_DOCS_DIR)/data/releases
 
-## generate: Generate all docs, presets, and skills (run during build)
+## generate: Generate sqlc, Go protobuf, docs, presets and skills (generate-all minus the reliant TS protobufs)
 generate: generate-yaml-bindings generate-tool-catalog sqlc generate-schema generate-scenario-schema generate-refcheck generate-cel-reference generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-models generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference
 	@echo "$(GREEN)✅ All generated files up to date$(NC)"
 

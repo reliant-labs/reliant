@@ -33,7 +33,7 @@ jobs:
   # PREPARE: Build shared artifacts on fast Ubuntu runner
   # ============================================================================
   prepare:
-    name: Build Web & Generate Protobuf
+    name: Build Web
     runs-on: ubuntu-latest
     timeout-minutes: 30
     outputs:
@@ -43,7 +43,6 @@ jobs:
       electron_version: ${{ steps.electron-versions.outputs.electron_version }}
       electron_builder_version: ${{ steps.electron-versions.outputs.electron_builder_version }}
       duration_seconds: ${{ steps.prepare-metrics.outputs.duration_seconds }}
-      proto_cache_hit: ${{ steps.prepare-metrics.outputs.proto_cache_hit }}
 
     steps:
       - name: Checkout code
@@ -138,52 +137,21 @@ jobs:
 
           echo "Using Electron cache versions: electron=$ELECTRON_VERSION, electron-builder=$ELECTRON_BUILDER_VERSION"
 
-      - name: Setup Go (for protobuf tools)
-        uses: actions/setup-go@v6
-        with:
-          go-version-file: go.mod
-          cache: true
-
-      # Cache protobuf generation output
-      - name: Cache protobuf output
-        id: proto-cache
-        uses: actions/cache@v4
-        with:
-          path: |
-            web/src/gen
-            internal/gen
-          key: protobuf-${{ hashFiles('proto/**/*.proto', 'buf.yaml', 'buf.gen.yaml') }}
-
       - name: Install web dependencies
         working-directory: web
         run: npm ci --legacy-peer-deps --prefer-offline
 
-      - name: Install buf CLI
-        if: steps.proto-cache.outputs.cache-hit != 'true'
-        uses: bufbuild/buf-action@v1
-        with:
-          setup_only: true
-          token: ${{ secrets.BUF_API_KEY }}
-
-      - name: Install Go protobuf tools
-        if: steps.proto-cache.outputs.cache-hit != 'true'
-        run: |
-          go install google.golang.org/protobuf/cmd/protoc-gen-go@latest
-          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@latest
-
-      - name: Generate protobuf code
-        if: steps.proto-cache.outputs.cache-hit != 'true'
-        run: |
-          echo "Generating protobuf code..."
-          export PATH="$PWD/web/node_modules/.bin:$PATH"
-          buf generate
-          echo "Protobuf code generated"
-
-      - name: Install goose
-        run: go install github.com/pressly/goose/v3/cmd/goose@latest
-
-      - name: Generate docs and shortcuts
-        run: make generate
+      # NO CODE GENERATION HERE. Generated code is committed, and PR CI's
+      # "Generated code is up to date" job runs `make generate-all` on every
+      # PR and every push to main and fails on any diff — so the tagged commit
+      # already holds exactly what the generators produce, and a release
+      # builds what was reviewed.
+      #
+      # This job used to regenerate anyway, which could only ever ship
+      # UNREVIEWED code: protoc-gen-go/-connect-go `@latest` instead of the
+      # go.mod pins, remote buf plugins on the rate-limited Buf Schema
+      # Registry, and a cache keyed on proto/ alone that, on a hit, restored
+      # a web/src/gen from some earlier release over the committed one.
 
       # The renderer's build-time config, from control-plane's KCL.
       #
@@ -325,23 +293,14 @@ jobs:
           DURATION=$((END_TS - START_TS))
           MINS=$((DURATION / 60))
           SECS=$((DURATION % 60))
-          PROTO_CACHE_HIT_RAW="${{ steps.proto-cache.outputs.cache-hit }}"
-
-          if [[ "$PROTO_CACHE_HIT_RAW" == "true" ]]; then
-            PROTO_CACHE_HIT="hit"
-          else
-            PROTO_CACHE_HIT="miss"
-          fi
 
           echo "duration_seconds=$DURATION" >> "$GITHUB_OUTPUT"
-          echo "proto_cache_hit=$PROTO_CACHE_HIT" >> "$GITHUB_OUTPUT"
 
           cat >> "$GITHUB_STEP_SUMMARY" << EOF
           ### ⏱️ Prepare Job Metrics
 
-          - **Job:** Build Web & Generate Protobuf
+          - **Job:** Build Web
           - **Duration:** ${MINS}m ${SECS}s
-          - **Protobuf cache hit:** ${PROTO_CACHE_HIT}
           EOF
 
   # ============================================================================
@@ -1116,7 +1075,6 @@ jobs:
           LINUX_RESULT: ${{ needs.release-linux.result }}
           WINDOWS_RESULT: ${{ needs.release-windows.result }}
           PREPARE_DURATION_SECONDS: ${{ needs.prepare.outputs.duration_seconds }}
-          PREPARE_PROTO_CACHE_HIT: ${{ needs.prepare.outputs.proto_cache_hit }}
           ELECTRON_VERSION: ${{ needs.prepare.outputs.electron_version }}
           ELECTRON_BUILDER_VERSION: ${{ needs.prepare.outputs.electron_builder_version }}
           MACOS_DURATION_SECONDS: ${{ needs.release-macos.outputs.duration_seconds }}
@@ -1176,7 +1134,7 @@ jobs:
 
           | Job | Duration | Cache |
           |:----|:---------|:------|
-          | Prepare | $(format_duration "$PREPARE_DURATION_SECONDS") | protobuf: ${PREPARE_PROTO_CACHE_HIT:-n/a} |
+          | Prepare | $(format_duration "$PREPARE_DURATION_SECONDS") | n/a |
           | macOS | $(format_duration "$MACOS_DURATION_SECONDS") | electron: ${MACOS_ELECTRON_CACHE_HIT:-n/a} |
           | Linux | $(format_duration "$LINUX_DURATION_SECONDS") | electron: ${LINUX_ELECTRON_CACHE_HIT:-n/a} |
           | Windows | $(format_duration "$WINDOWS_DURATION_SECONDS") | electron: ${WINDOWS_ELECTRON_CACHE_HIT:-n/a} |

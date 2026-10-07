@@ -27,9 +27,14 @@ and skews later — then proves the result with `GOWORK=off go build ./...`.
 forge from `../forge` on disk, so a plain `go build` can pass while CI fails on
 the version `go.mod` actually pins.
 
-It edits `go.mod` and `go.sum` and **stops**. It does not commit — this
-checkout is shared with other agents, and staging paths in a tree holding
-someone else's in-flight work is how that work gets lost.
+It then runs `make generate-all`, because a forge bump changes generated
+output — `generated/docs-source/reference/cli.md` embeds forge's whole command
+tree, and MVS can move the protobuf/connect versions the protoc plugins run
+at. CI's "Generated code is up to date" gate fails a pin bump without it.
+
+It edits `go.mod`, `go.sum` and that generated output, and **stops**. It does
+not commit — this checkout is shared with other agents, and staging paths in a
+tree holding someone else's in-flight work is how that work gets lost.
 
 ## Why commits, pre-launch
 
