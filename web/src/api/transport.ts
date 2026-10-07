@@ -16,6 +16,7 @@
  *
  * The chain order is:
  *   timeout → auth → daemon-last-seen → tracing → error-logging → upgrade-modal → machine-wake → 401-signout
+ * (daemon-last-seen only on reliant api-server transports — see TransportBackend).
  *
  * Why this order:
  *   - timeout outermost so the full request lifecycle (incl. retries through
@@ -88,6 +89,10 @@ export function setCurrentBaseURL(url: string | null): void {
 
 // Attaches x-daemon-last-seen header so the server can skip the
 // IsDaemonOnline DB query when the daemon was recently seen.
+//
+// Only the reliant api-server reads it (internal/grpc/interceptors/auth.go),
+// so only its transports carry it — see TransportBackend. Its CORS allow-list
+// must name it; internal/grpc/cors_web_client_test.go enforces that.
 const daemonLastSeenInterceptor: Interceptor = (next) => async (req) => {
   if (_daemonLastSeen !== null) {
     req.header.set("x-daemon-last-seen", String(_daemonLastSeen));
@@ -703,6 +708,19 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
 };
 
 /**
+ * Which server a transport dials.
+ *
+ * It decides the one backend-specific header: x-daemon-last-seen, a hint only
+ * the reliant api-server reads. In a production build the web app calls both
+ * servers CROSS-ORIGIN (api.reliantapi.com and admin.reliantapi.com), so every
+ * header it sends must be in that server's CORS preflight allow-list or the
+ * browser refuses to send the RPC at all. The control-plane admin-server does
+ * not read this header and does not allow it, so sending it there blocked
+ * every controlplane.v1 RPC once a machine heartbeated.
+ */
+export type TransportBackend = "reliant-api" | "control-plane";
+
+/**
  * Build the canonical Connect interceptor chain.
  *
  * `withAuth: true` (default) attaches the bearer-token interceptor and the
@@ -713,18 +731,21 @@ const unauthInterceptor: Interceptor = (next) => async (req) => {
  * the upgrade-modal interceptor so a quota-exhausted DevAuth call still
  * pops the modal.
  *
+ * `backend` (default `"reliant-api"`) names the server the transport dials;
+ * `"control-plane"` omits the daemon-last-seen header. See TransportBackend.
+ *
  * Order is intentional — see the module-level comment. Do NOT reorder
  * without thinking through the timeout/upgrade/unauth interaction.
  */
 export function buildInterceptors(
-  options: { withAuth?: boolean } = {},
+  options: { withAuth?: boolean; backend?: TransportBackend } = {},
 ): Interceptor[] {
-  const { withAuth = true } = options;
+  const { withAuth = true, backend = "reliant-api" } = options;
 
   const chain: Interceptor[] = [
     timeoutInterceptor,
     ...(withAuth ? [authInterceptor] : []),
-    daemonLastSeenInterceptor,
+    ...(backend === "reliant-api" ? [daemonLastSeenInterceptor] : []),
     tracingInterceptor,
     errorInterceptor,
     upgradeInterceptor,

@@ -156,7 +156,7 @@ export const getControlPlaneTransport = () => {
     // interceptors via buildInterceptors — see api/transport.ts
     _controlPlaneTransport = createConnectTransport({
       baseUrl: cpURL,
-      interceptors: buildInterceptors({ withAuth: true }),
+      interceptors: buildInterceptors({ withAuth: true, backend: "control-plane" }),
       useBinaryFormat: false,
     });
   }
