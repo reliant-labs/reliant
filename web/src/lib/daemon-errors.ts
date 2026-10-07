@@ -1,5 +1,7 @@
 import { ConnectError } from "@connectrpc/connect";
 
+import { DaemonWakingSchema } from "@/gen/reliant/v1/daemon_registry_pb";
+
 /**
  * Transient "your machine hasn't connected yet" detection.
  *
@@ -50,4 +52,22 @@ export function isDaemonPendingError(error: unknown): boolean {
   const message = extractMessage(error).toLowerCase();
   if (!message.includes("no daemon connected")) return false;
   return message.includes("still starting") || message.includes("suspended");
+}
+
+/**
+ * The machine the server woke for this failed request, when it woke one.
+ *
+ * A file or worktree request that finds its machine asleep wakes it and fails
+ * as Unavailable with a `DaemonWaking` detail naming the machine
+ * (internal/grpc/services/machine_wake.go). The message still carries the
+ * "no daemon connected" marker, so `isDaemonConnectingError` — and every
+ * surface's wait and retry — already treat it as "the machine is coming"; the
+ * detail adds WHICH machine, so the wait can say "Waking up…" about it.
+ */
+export function wakingDaemonId(error: unknown): string | null {
+  if (!(error instanceof ConnectError)) return null;
+  for (const detail of error.findDetails(DaemonWakingSchema)) {
+    if (detail.daemonId) return detail.daemonId;
+  }
+  return null;
 }

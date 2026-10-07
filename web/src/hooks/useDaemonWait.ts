@@ -32,6 +32,12 @@ import {
   DAEMON_WAIT_POLL_MS,
   type DaemonWaitState,
 } from "@/lib/daemon-wait";
+import {
+  clearWaking,
+  machineWsStatus,
+  presentMachineStatus,
+  useWakingMachines,
+} from "@/lib/machineWake";
 
 /** How often the elapsed clock re-renders the copy while waiting. */
 const TICK_MS = 1_000;
@@ -145,23 +151,48 @@ export function useDaemonWait({
     staleTime: 0,
   });
 
+  // Wakes in flight (lib/machineWake). A request that found its machine
+  // asleep comes back naming the machine the server woke, and the transport
+  // records it there.
+  const waking = useWakingMachines();
+  const isWaking = useCallback(
+    (d: Daemon) => {
+      const started = waking.get(d.daemonId);
+      return (
+        started !== undefined &&
+        !presentMachineStatus(machineWsStatus(d.status), d.lastStatusMessage, started).wakeFinished
+      );
+    },
+    [waking],
+  );
+
+  // Forget wakes that are over (the machine came up, failed, or never left
+  // sleep), so a later wait on the same machine is not mislabelled as a wake.
+  useEffect(() => {
+    for (const d of daemons ?? []) {
+      if (waking.has(d.daemonId) && !isWaking(d)) clearWaking(d.daemonId);
+    }
+  }, [daemons, waking, isWaking]);
+
   // Which machine are we actually waiting on?
   //
   // Ordered by what best explains the wait, because picking wrong means
   // narrating the wrong machine: a user with one booting machine and one
   // long-suspended machine should see "cloning your repository", not
-  // "suspended". A machine reporting an in-flight startup phase wins; then one
-  // the backend has said something about; then anything.
+  // "suspended". A machine being woken for this user wins — the server named
+  // it as the one a request needed; then one reporting an in-flight startup
+  // phase; then one the backend has said something about; then anything.
   const daemon = useMemo<Daemon | null>(() => {
     const list = daemons ?? [];
     if (list.length === 0) return null;
     return (
+      list.find(isWaking) ??
       list.find((d) => STARTUP_PHASES.has(d.lifecyclePhase)) ??
       list.find((d) => d.lastStatusMessage?.trim()) ??
       list[0] ??
       null
     );
-  }, [daemons]);
+  }, [daemons, isWaking]);
 
   // Drive the caller's retry on the poll cadence, but only while the state
   // says retrying is still worthwhile — a FAILED or SUSPENDED machine will
@@ -172,8 +203,9 @@ export function useDaemonWait({
       daemon,
       elapsedMs,
       isCloud: capabilities.cloudDaemons,
+      wakeStartedAt: daemon ? waking.get(daemon.daemonId) : undefined,
     });
-  }, [waiting, daemon, elapsedMs]);
+  }, [waiting, daemon, elapsedMs, waking]);
 
   const shouldRetry = state?.shouldRetry ?? false;
   useEffect(() => {

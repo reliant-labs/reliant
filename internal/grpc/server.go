@@ -11,6 +11,7 @@ import (
 	"net/http"
 	"os"
 	"reflect"
+	"slices"
 	"strings"
 
 	"connectrpc.com/connect"
@@ -229,7 +230,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	taskPath, taskHandler := reliantv1connect.NewTaskServiceHandler(taskService, opts...)
 	catalogPath, catalogHandler := reliantv1connect.NewCatalogServiceHandler(catalogService, opts...)
 	projectPath, projectHandler := reliantv1connect.NewProjectServiceHandler(projectService, opts...)
-	worktreePath, worktreeHandler := reliantv1connect.NewWorktreeServiceHandler(worktreeService, opts...)
+	// The services whose requests wake an asleep machine (services.machineWake)
+	// report the wake as Unavailable + DaemonWaking, whatever error they wrap
+	// it in. Cloned so the shared opts slice is never appended into.
+	machineWakeOpts := append(slices.Clone(opts), connect.WithInterceptors(services.NewMachineWakingInterceptor()))
+	worktreePath, worktreeHandler := reliantv1connect.NewWorktreeServiceHandler(worktreeService, machineWakeOpts...)
 	repoPath, repoHandler := reliantv1connect.NewRepoServiceHandler(repoService, opts...)
 	approvalPath, approvalHandler := reliantv1connect.NewApprovalServiceHandler(approvalService, opts...)
 	questionPath, questionHandler := reliantv1connect.NewQuestionServiceHandler(questionService, opts...)
@@ -322,7 +327,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		logging.Info("Registering daemon proxy services (FileSystem, Background, Terminal)")
 
 		fsProxy := services.NewFileSystemProxyService(router, database)
-		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(fsProxy, opts...)
+		filesystemPath, filesystemHandler = reliantv1connect.NewFileSystemServiceHandler(fsProxy, machineWakeOpts...)
 
 		bgProxy := services.NewBackgroundProxyService(router)
 		backgroundPath, backgroundHandler = reliantv1connect.NewBackgroundServiceHandler(bgProxy, opts...)

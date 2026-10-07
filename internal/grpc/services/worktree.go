@@ -43,11 +43,17 @@ type WorktreeService struct {
 	database     db.Repository
 	tempClient   client.Client
 	daemonRouter toolexec.DaemonRouter
+	wake         machineWake
 }
 
 // NewWorktreeService creates a new WorktreeService
 func NewWorktreeService(database db.Repository, tempClient client.Client, daemonRouter toolexec.DaemonRouter) *WorktreeService {
-	return &WorktreeService{database: database, tempClient: tempClient, daemonRouter: daemonRouter}
+	return &WorktreeService{
+		database:     database,
+		tempClient:   tempClient,
+		daemonRouter: daemonRouter,
+		wake:         machineWake{router: daemonRouter, owners: database},
+	}
 }
 
 // worktreeOwner is the daemon holding a worktree's checkout on disk, or "" when
@@ -80,17 +86,25 @@ func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID,
 // explicit timeout — use worktreeReadCommandTimeoutMs for the polled read
 // paths so a slow daemon can't pin connections for the full mutation budget.
 func (s *WorktreeService) sendWorktreeDaemonCommandTimeout(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
+	return s.sendToMachine(ctx, userID, wakeTarget{daemonID: daemonID}, commandType, payload, resp, timeoutMs)
+}
+
+// sendToMachine sends a command to the target machine. Every worktree command
+// goes through here, so a machine found asleep is woken (machineWake) and the
+// request fails as waking, for the client to retry once it is up.
+func (s *WorktreeService) sendToMachine(ctx context.Context, userID string, target wakeTarget, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 	var respBytes []byte
-	if daemonID == "" {
+	if target.daemonID == "" {
 		respBytes, err = s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
 	} else {
-		respBytes, err = s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payloadBytes, timeoutMs)
+		respBytes, err = s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, target.daemonID, commandType, payloadBytes, timeoutMs)
 	}
 	if err != nil {
+		err = s.wake.afterFailure(ctx, userID, target, err)
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
 	if resp != nil {
@@ -266,7 +280,7 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 		Error  string `json:"error,omitempty"`
 	}
 	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("cannot access worktree directory: %v", err))
+		return connect.NewError(connect.CodeInternal, fmt.Errorf("cannot access worktree directory: %w", err))
 	}
 	if !resp.Exists {
 		if resp.Error == "not_found" {
@@ -275,6 +289,25 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("cannot access worktree directory: %s", resp.Error))
 	}
 
+	return nil
+}
+
+// wakeIfAsleep asks the target machine a cheap question before a write that
+// would otherwise meet an asleep machine too late: a create that persists its
+// row and makes the checkouts in the background, or a delete whose cleanup is
+// best-effort. An asleep machine is woken and the call fails as waking (see
+// machineWake), so nothing is recorded until a retry finds the machine up.
+//
+// Only a wake is returned. Any other failure of the probe is left for the
+// operation itself to meet, as before.
+func (s *WorktreeService) wakeIfAsleep(ctx context.Context, userID string, target wakeTarget, path string) error {
+	var resp struct {
+		Exists bool `json:"exists"`
+	}
+	err := s.sendToMachine(ctx, userID, target, "worktree.validate_path", map[string]string{"path": path}, &resp, worktreeReadCommandTimeoutMs)
+	if isMachineWaking(err) {
+		return err
+	}
 	return nil
 }
 
@@ -361,8 +394,16 @@ func (s *WorktreeService) CreateWorktree(
 	// back to (a branch chat's worktree exists on disk only here). Fail fast
 	// if no daemon is reachable — creating a worktree row that points at a
 	// directory on no daemon is worse than a clear up-front error.
-	ownerDaemonID, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, "create")
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, "create")
 	if err != nil {
+		return nil, err
+	}
+	ownerDaemonID := placement.daemonID
+	// The checkouts are made after this returns, so an asleep machine would
+	// leave a row that fails in the background. Wake it now instead, and let
+	// the client's retry (idempotency_key makes that safe) create the
+	// worktree on a machine that is up.
+	if err := s.wakeIfAsleep(ctx, userID, placement, project.Path); err != nil {
 		return nil, err
 	}
 
@@ -996,6 +1037,15 @@ func (s *WorktreeService) DeleteWorktree(
 
 	isPermanentDelete := worktree.DeletedAt != nil
 
+	// Cleanup is best-effort and the row is archived whatever it managed, so
+	// against an asleep machine the delete would "succeed" and leave the
+	// checkout on disk. Wake the machine first; the client retries.
+	if (req.Msg.DeleteLocalDirectory || req.Msg.DeleteGitBranch) && project != nil {
+		if err := s.wakeIfAsleep(ctx, userID, wakeTarget{daemonID: worktreeOwner(worktree)}, project.Path); err != nil {
+			return nil, err
+		}
+	}
+
 	// Perform cleanup
 	deletedDir := false
 	deletedBranch := false
@@ -1075,6 +1125,13 @@ func (s *WorktreeService) ArchiveWorktree(
 	project, err := s.database.GetProject(ctx, worktree.ProjectID)
 	if err != nil {
 		logging.Warn("Failed to get project for worktree cleanup", "error", err)
+	}
+
+	// As in DeleteWorktree: wake an asleep machine before best-effort cleanup.
+	if (req.Msg.DeleteLocalDirectory || req.Msg.DeleteGitBranch) && project != nil {
+		if err := s.wakeIfAsleep(ctx, userID, wakeTarget{daemonID: worktreeOwner(worktree)}, project.Path); err != nil {
+			return nil, err
+		}
 	}
 
 	// Perform cleanup
@@ -1341,10 +1398,11 @@ func (s *WorktreeService) ImportWorktree(
 	// imported worktree — the chat's machine when one is named — so the same
 	// id is recorded on the row and tool execution routes back to the machine
 	// the checkout actually lives on.
-	ownerDaemonID, err := s.placeNewWorktree(ctx, userID, req.Msg.ProjectId, req.Msg.ChatId, nil, "import")
+	placement, err := s.placeNewWorktree(ctx, userID, req.Msg.ProjectId, req.Msg.ChatId, nil, "import")
 	if err != nil {
 		return nil, err
 	}
+	ownerDaemonID := placement.daemonID
 
 	// Validate path exists and is a git worktree via daemon
 	var importResp struct {
@@ -1354,7 +1412,10 @@ func (s *WorktreeService) ImportWorktree(
 		BaseBranch string `json:"base_branch"`
 		Error      string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.import_validate", map[string]string{"path": req.Msg.Path}, &importResp); err != nil {
+	if err := s.sendToMachine(ctx, userID, placement, "worktree.import_validate", map[string]string{"path": req.Msg.Path}, &importResp, worktreeDaemonCommandTimeoutMs); err != nil {
+		if isMachineWaking(err) {
+			return nil, err
+		}
 		logging.Error("Failed to validate import path via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate path"))
 	}
@@ -2026,7 +2087,7 @@ func (s *WorktreeService) CommitWorktree(
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("no staged changes to commit; stage files first"))
 		}
 		logging.Error("Failed to commit changes", "error", err, "path", repoPath)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to commit: %s", errStr))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to commit: %w", err))
 	}
 
 	return connect.NewResponse(&reliantv1.CommitWorktreeResponse{
@@ -2071,7 +2132,7 @@ func (s *WorktreeService) PushWorktree(
 	output, err := s.pushViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath)
 	if err != nil {
 		logging.Error("Failed to push changes", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to push: %s", err.Error()))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to push: %w", err))
 	}
 
 	return connect.NewResponse(&reliantv1.PushWorktreeResponse{
@@ -2114,7 +2175,7 @@ func (s *WorktreeService) PullWorktree(
 	output, err := s.pullViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath)
 	if err != nil {
 		logging.Error("Failed to pull changes", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pull: %s", err.Error()))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pull: %w", err))
 	}
 
 	return connect.NewResponse(&reliantv1.PullWorktreeResponse{

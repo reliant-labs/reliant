@@ -152,6 +152,41 @@ func TestEnsureAwakeReportsAResumeRefusal(t *testing.T) {
 	assert.Equal(t, connect.CodeResourceExhausted, connect.CodeOf(err))
 }
 
+// Wake reports whether it resumed anything. A user's file and worktree
+// requests say "waking" only when a machine actually was asleep, so a machine
+// that is already up, or still on its way up, keeps its own copy.
+func TestWakeReportsWhetherItResumed(t *testing.T) {
+	const userID = "user-wake-report"
+	auth.SetUserJWT(userID, "jwt-attended")
+	t.Cleanup(func() { auth.SetUserJWT(userID, "") })
+
+	router, resumer := newSuspendedRouter(t, userID)
+	res, err := router.Wake(context.Background(), userID, pinned)
+	require.NoError(t, err)
+	assert.Equal(t, WakeResult{DaemonID: "daemon-suspended", Resumed: true}, res)
+	assert.Len(t, resumer.calls, 1)
+
+	// Attached: awake, nothing to ask.
+	live := NewNATSDaemonRouter(nil, WithDaemonResumer(&fakeResumer{}), WithDatabase(&fakeDaemonRecords{
+		daemons:  []*db.Daemon{{ID: "daemon-live", UserID: userID, LifecyclePhase: strPtr("suspended")}},
+		attached: []string{"daemon-live"},
+	}))
+	res, err = live.Wake(context.Background(), userID, &DaemonSelector{ID: "daemon-live"})
+	require.NoError(t, err)
+	assert.Equal(t, WakeResult{DaemonID: "daemon-live"}, res)
+
+	// The mirror says suspended but the control plane no longer holds it so
+	// (an earlier request woke it): treated as awake, and not a fresh wake.
+	refused := NewNATSDaemonRouter(nil,
+		WithDaemonResumer(&fakeResumer{err: connect.NewError(connect.CodeFailedPrecondition, nil)}),
+		WithDatabase(&fakeDaemonRecords{daemons: []*db.Daemon{
+			{ID: "daemon-waking", UserID: userID, LifecyclePhase: strPtr("suspended")},
+		}}))
+	res, err = refused.Wake(context.Background(), userID, &DaemonSelector{ID: "daemon-waking"})
+	require.NoError(t, err)
+	assert.Equal(t, WakeResult{DaemonID: "daemon-waking"}, res)
+}
+
 // The structural guard: tool-time code holds a DaemonRouter, which must have
 // no way to wake. If someone adds a wake method to the interface, this fails.
 func TestToolTimeInterfacesHaveNoWakeMethod(t *testing.T) {

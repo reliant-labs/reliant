@@ -1,17 +1,20 @@
 /**
- * "Waking up…" for a sleeping machine the user just resumed.
+ * "Waking up…" for a sleeping machine that is being woken.
  *
  * The registry has no resuming phase: a machine coming back from sleep reads
  * PENDING, exactly like one being created, so the list said "Pending" for the
  * whole wake — the "machines that wake on demand" moment, rendered as a stall.
- * The page that sent Resume does know it is a wake, so it records that here,
- * and the status shown is derived from the record plus what the registry says.
+ * Whatever started the wake knows it is one, so it records that here, and the
+ * status shown is derived from the record plus what the registry says.
  *
- * Module-level rather than component state because the list and the detail
- * view are separate components: resuming from the list and opening the
- * machine must still say "Waking up…".
+ * Two things record wakes: Settings → Machines when the user presses Resume,
+ * and the transport when a request comes back saying the server woke the
+ * machine it needed (api/machineWakeInterceptor.ts). Module-level rather than
+ * component state because every surface reads the same record: the machines
+ * list and detail view, and the machine-wait placeholders (useDaemonWait).
  */
 import { useSyncExternalStore } from "react";
+import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 
 /** How long a resumed machine may still read SUSPENDED before we stop claiming it is waking. */
 export const WAKE_SUSPENDED_GRACE_MS = 60_000;
@@ -47,6 +50,19 @@ export function useWakingMachines(): ReadonlyMap<string, number> {
 }
 
 export type MachineWsStatus = "active" | "suspended" | "failed" | "pending" | "disconnected" | "unknown";
+
+const wsStatusFromEnum: Partial<Record<DaemonStatus, MachineWsStatus>> = {
+  [DaemonStatus.ACTIVE]: "active",
+  [DaemonStatus.SUSPENDED]: "suspended",
+  [DaemonStatus.FAILED]: "failed",
+  [DaemonStatus.PENDING]: "pending",
+  [DaemonStatus.DISCONNECTED]: "disconnected",
+};
+
+/** The registry's status in the vocabulary `presentMachineStatus` reads. */
+export function machineWsStatus(status: DaemonStatus): MachineWsStatus {
+  return wsStatusFromEnum[status] ?? "unknown";
+}
 
 export interface MachineStatusPresentation {
   /** Overrides the status badge's label; undefined keeps the default. */

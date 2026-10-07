@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import * as gitApi from "../../../api/git";
+import { isDaemonConnectingError } from "../../../lib/daemon-errors";
 import { logger } from "../../../lib/logger";
 import { matchesRefetchScope, subscribeToRefetch } from "../../../store/refetchStore";
 import { fetchChanges, getCachedData, invalidateCache, setCachedData } from "./gitStatusCache";
@@ -46,6 +47,10 @@ export function useRepoChanges({
   const [data, setData] = useState<RecentChangesData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // The machine isn't serving (asleep and being woken, or still starting):
+  // not an error, a wait. The panel renders the shared machine-wait state and
+  // retries on its cadence (useDaemonWait) instead of "Couldn't load changes".
+  const [waitingOnDaemon, setWaitingOnDaemon] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadRequestIdRef = useRef(0);
@@ -76,6 +81,7 @@ export function useRepoChanges({
     setData(null);
     setLoading(true);
     setLoadError(null);
+    setWaitingOnDaemon(false);
     onScopeChangeRef.current?.();
   }, [worktreeId, projectId, repoId]);
 
@@ -103,9 +109,15 @@ export function useRepoChanges({
         }
 
         setData(changesData);
+        setWaitingOnDaemon(false);
         setCachedData(worktreeId, projectId, changesData, repoId);
       } catch (err) {
         if (!isCurrent()) return;
+        if (isDaemonConnectingError(err)) {
+          setWaitingOnDaemon(true);
+          return;
+        }
+        setWaitingOnDaemon(false);
         const message = err instanceof Error ? err.message : "Failed to load changes";
         console.error("[RecentChanges] Failed to load recent changes:", {
           error: err,
@@ -191,7 +203,7 @@ export function useRepoChanges({
     void loadRef.current(true);
   }, [worktreeId, projectId, repoId]);
 
-  return { data, loading, loadError, refreshing, reload, refresh, retry };
+  return { data, loading, loadError, waitingOnDaemon, refreshing, reload, refresh, retry };
 }
 
 /**

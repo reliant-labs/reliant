@@ -21,6 +21,8 @@ interface CommitComposerProps {
   op: GitOp | null;
   disabled: boolean;
   error: string | null;
+  /** A transient note about the op in flight, e.g. that it is waiting on the machine to wake. */
+  status?: string | null;
   onDismissError: () => void;
   onCommit: (opts: { push: boolean }) => void;
   onPush: () => void;
@@ -49,6 +51,7 @@ export function CommitComposer({
   op,
   disabled,
   error,
+  status,
   onDismissError,
   onCommit,
   onPush,
@@ -78,6 +81,12 @@ export function CommitComposer({
 
   return (
     <div className="flex shrink-0 flex-col gap-2 border-b border-border p-3">
+      {status && (
+        <p role="status" className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="h-3 w-3 shrink-0 animate-spin" aria-hidden="true" />
+          <span className="min-w-0 flex-1 break-words">{status}</span>
+        </p>
+      )}
       {error && (
         <div
           role="alert"

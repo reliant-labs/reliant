@@ -100,7 +100,7 @@ import {
   type RestartStage,
 } from "./machineLifecycle";
 import { SelfHostedDaemonConnect } from "@/components/Projects/SelfHostedDaemonConnect";
-import { clearWaking, markWaking, presentMachineStatus, useWakingMachines } from "./machineWake";
+import { clearWaking, markWaking, presentMachineStatus, useWakingMachines } from "@/lib/machineWake";
 import { getComputeEligibility } from "@/services/controlPlane/billing";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { usePlans } from "@/hooks/useCloudBillingQueries";
