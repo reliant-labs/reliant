@@ -148,103 +148,13 @@ skills:
 - **`filesystem`** (default) — Include filesystem location hints and load supporting files into prompt context.
 - **`tool`** — Suppress filesystem hints and avoid injecting supporting-file content.
 
-## Skill installer
-
-Reliant includes an `install_skill` tool for installing skills into managed destinations.
-
-### Sources
-
-- Local directory containing `SKILL.md`
-- Git URL with optional `source_subpath`
-- GitHub `tree` and `blob` URLs
-
-### Destination scopes
-
-- `project` → `.reliant/skills/`
-- `project_local` → `.reliant.local/skills/`
-- `global` → `~/.reliant/skills/`
-
-### Conflict policies
-
-- **`skip`** (default) — Keep existing files, skip conflicts.
-- **`overwrite`** — Replace existing files.
-- **`rename`** — Install into a suffixed directory. Not supported for `SKILL.md` skills because the skill name must match the parent directory name.
-
-### Examples
-
-**Dry-run preview:**
-
-```json
-{
-  "source": "/path/to/skill-dir",
-  "scope": "project",
-  "conflict_policy": "skip",
-  "dry_run": true
-}
-```
-
-**Apply install:**
-
-```json
-{
-  "source": "/path/to/skill-dir",
-  "scope": "project_local",
-  "conflict_policy": "overwrite"
-}
-```
-
-**Install from git with subfolder:**
-
-```json
-{
-  "source": "https://github.com/acme/skills.git",
-  "source_subpath": "skills/incident-response",
-  "ref": "main",
-  "scope": "project",
-  "conflict_policy": "rename",
-  "dry_run": true
-}
-```
-
-**Install from a GitHub tree URL:**
-
-```json
-{
-  "source": "https://github.com/anthropics/skills/tree/main/skills/frontend-design",
-  "scope": "project",
-  "conflict_policy": "rename",
-  "dry_run": true
-}
-```
-
-### Safety guarantees
-
-- Validates `scope` and `conflict_policy` values strictly
-- Rejects symlinks in source and destination
-- Rejects path traversal (including in `source_subpath`)
-- Uses staging + rollback to avoid partial installs on failure
-- Runs post-install discovery validation
-- Skips excluded non-runtime files
-
-## Frontend skills management
-
-The **Settings → Skills** page provides a UI for managing skills:
-
-- View discovered skills across all scopes with format and location details
-- Install from recommended skills or import from other tool folders (`.claude/skills`, `.codex/skills`, `.agents/skills`, `.cursor/skills`)
-- Run the installer in dry-run or install mode directly from the UI
-- Copy installer prompts for chat-based execution
-- Copy skill definitions and starter prompts for the built-in skill creator
-
-Both direct UI execution and assistant-assisted chat execution use the same backend installer and guardrails.
-
 ## Migrating skills from other tools
 
 If you have skills in `.claude/skills`, `.codex/skills`, `.agents/skills`, or similar folders:
 
 1. Put shared/team skills in `.reliant/skills/`
 2. Put personal variants in `.reliant.local/skills/`
-3. Use **Settings → Skills** import actions or the `install_skill` tool to copy them into Reliant roots
+3. Copy the folders into those roots yourself, or ask the agent in a chat to do it, or run [Import from Claude Code / Cursor](/guides/import)
 
 ## Compatibility
 

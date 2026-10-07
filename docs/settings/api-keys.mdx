@@ -74,7 +74,7 @@ If you use your own key or login, you pay the provider directly and their rate l
 
 You can run models on your own hardware with Ollama, LM Studio or any server that speaks the OpenAI API (llama.cpp and vLLM work too) and use them from Reliant.
 
-Because Reliant's servers make the model calls, a local model is reached through a **daemon** running on the machine that can see the model server, usually your own computer. The desktop app runs one for you; otherwise start one with `reliant daemon start` (see [Remote Daemons](/features/remote-daemons)). A cloud machine can't see a server on your laptop, so connect your laptop as a machine, too.
+Because Reliant's servers make the model calls, a local model is reached through a **daemon** running on the machine that can see the model server, usually your own computer. The desktop app runs one for you; otherwise start one with `reliant daemon start` (see [Remote Daemons](/machines/overview)). A cloud machine can't see a server on your laptop, so connect your laptop as a machine, too.
 
 Then open **Settings → AI → Custom & local models**. Reliant looks for model servers on that machine and lists the models it finds. If yours isn't detected, use **Add endpoint** and enter its address, for example:
 

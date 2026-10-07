@@ -22,73 +22,103 @@
         "tab": "Docs",
         "groups": [
           {
-            "group": "Getting Started",
+            "group": "Get started",
             "pages": [
-              "getting-started/installation",
               "getting-started/quick-start",
+              "getting-started/installation",
               "getting-started/concepts"
             ]
           },
           {
-            "group": "Workflows",
+            "group": "Use Reliant",
             "pages": [
               "workflows/overview",
+              "workflows/workflow-control",
+              "features/branching",
+              "features/worktrees",
+              "features/git-integration",
+              "features/threads",
+              "workflows/spawn",
+              "features/attachments",
+              "features/processes"
+            ]
+          },
+          {
+            "group": "Built-in workflows",
+            "pages": [
+              "guides/overview",
+              "guides/get-it-right",
+              "guides/best-of-three",
+              "guides/create-a-workflow",
+              "guides/import"
+            ]
+          },
+          {
+            "group": "Machines",
+            "pages": [
+              "machines/overview",
+              "machines/your-computer",
+              "machines/cloud",
+              "machines/choosing"
+            ]
+          },
+          {
+            "group": "Automations & integrations",
+            "pages": [
+              "automations/overview",
+              "automations/schedules",
+              "automations/webhooks",
+              "automations/workflow-events",
+              "automations/no-machine-runs",
+              {
+                "group": "Integrations",
+                "pages": [
+                  "integrations/overview",
+                  "integrations/github",
+                  "integrations/gmail",
+                  "integrations/slack",
+                  "integrations/http",
+                  "integrations/twilio"
+                ]
+              }
+            ]
+          },
+          {
+            "group": "Build workflows",
+            "pages": [
               "workflows/custom-workflows",
               "workflows/presets",
-              "workflows/workflow-control",
-              "workflows/spawn",
               "workflows/patterns",
               "workflows/routing",
               "workflows/testing",
-              "examples/workflow-snippets"
+              "examples/workflow-snippets",
+              "guides/self-improvement"
             ]
           },
           {
-            "group": "Workspace & Git",
+            "group": "Customize",
             "pages": [
-              "features/worktrees",
-              "features/branching",
-              "features/git-integration"
-            ]
-          },
-          {
-            "group": "Agent Features",
-            "pages": [
-              "features/threads",
-              "features/attachments",
+              "settings/api-keys",
+              "settings/model-config",
+              "settings/memories",
               "features/skills",
-              "features/processes",
-              "features/remote-daemons"
+              "settings/mcp-servers"
             ]
           },
           {
-            "group": "Deployment",
+            "group": "Build & host with Forge",
             "pages": [
               "features/deploy-and-host",
+              "features/forge-sign-in",
               "features/secrets",
               "features/custom-domains"
             ]
           },
           {
-            "group": "Integrations",
+            "group": "Account & billing",
             "pages": [
-              "features/twilio"
-            ]
-          },
-          {
-            "group": "Settings",
-            "pages": [
-              "settings/memories",
-              "settings/model-config",
-              "settings/api-keys",
-              "settings/mcp-servers"
-            ]
-          },
-          {
-            "group": "Architecture",
-            "pages": [
-              "architecture/overview",
-              "architecture/distributed"
+              "account/billing",
+              "help/privacy"
             ]
           },
           {
@@ -96,12 +126,12 @@
             "pages": [
               "reference/nodes",
               "reference/types",
+              "reference/workflow-schema",
               "reference/cel-expressions",
               "reference/models",
               "reference/tools",
-              "reference/llm-guide",
               "reference/scenario-schema",
-              "reference/workflow-schema"
+              "reference/llm-guide"
             ]
           },
           {
@@ -110,12 +140,8 @@
               "help/faq",
               "help/troubleshooting",
               "help/feedback",
-              "help/privacy"
-            ]
-          },
-          {
-            "group": "About",
-            "pages": [
+              "architecture/overview",
+              "architecture/distributed",
               "changelog",
               "license-faq"
             ]

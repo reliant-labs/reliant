@@ -1,0 +1,73 @@
+---
+title: "No-machine runs"
+description: "Automations that run on Reliant's servers alone, with no computer of yours involved"
+---
+
+Most runs need a [machine](/machines/overview): that is where files are read and commands run. But many useful automations do neither. "When a customer emails, label it and post to Slack" talks only to Gmail and Slack. A web-research digest only reads web pages. These can run with **no machine**, entirely on Reliant's servers, so they fire even when your laptop is shut and no cloud machine is awake.
+
+You choose this when you activate an automation, by picking **No machine** in its **Runs on** control (schedules created with `reliant trigger create` always need a machine).
+
+## What a no-machine run can use
+
+A no-machine run is offered only tools that run server-side: web access, [integrations](/integrations/overview), and planning tools. It is not offered the shell, file editing or anything else that needs a machine.
+
+```yaml
+name: label-customer-mail
+description: Label new Gmail from customers and tell the team in Slack
+entry: [announce]
+
+triggers:
+  - name: customer-mail
+    integration:
+      integration: gmail
+      events: [message.received]
+      match:
+        label_ids: "INBOX,UNREAD"
+
+nodes:
+  - id: announce
+    type: action
+    uses: slack/message.post@1
+    with:
+      channel: C0123ABCD
+      text: "New customer email: {{ trigger.payload.data.subject }}"
+```
+
+An agent works too, if you limit its tools to ones that need no machine:
+
+```yaml
+name: web-research-digest
+description: Research a topic on the web every weekday and write a summary
+entry: [research]
+triggers:
+  - name: weekday
+    schedule:
+      cron: ["0 8 * * 1-5"]
+nodes:
+  - id: research
+    type: workflow
+    ref: builtin://agent
+    args:
+      tools: ["tag:web"]
+```
+
+The stock agent's default tools include the shell and file tools, so leaving `tools` at its default makes it a machine workflow. Setting it to `["tag:web"]`, as above, does not.
+
+## What needs a machine
+
+Reliant checks this before the automation is saved, and the workflow builder warns you as you author. These make a workflow need a machine:
+
+- a `run` node (a shell command);
+- a `create_worktree` node;
+- an action that runs on a machine;
+- an `invoke_tool` of a machine tool;
+- a `daemon:` selector on the workflow or a node;
+- an agent that is given machine tools in its `tools` list.
+
+If you try to turn on **No machine** for a workflow like this, the app refuses and names what needs one. Activating a no-machine automation whose agent is given machine tools is refused for the same reason: dropping those tools silently would quietly change what an unattended automation does.
+
+## Related topics
+
+- [Automations overview](/automations/overview)
+- [Choosing a machine in workflows](/machines/choosing)
+- [Integrations](/integrations/overview)

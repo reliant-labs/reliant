@@ -1,0 +1,85 @@
+---
+title: "Choosing a machine in workflows"
+description: "How Reliant decides which machine runs a chat or a workflow, and how to pin one with daemon:"
+---
+
+A project has one machine, and its chats run there. Two things can send work somewhere else: a `daemon:` in a workflow, and an automation, which can be pointed at a different machine for the same project.
+
+When something does need to choose, Reliant resolves it in a fixed order, from the most specific instruction to the least:
+
+```text
+Node daemon  →  Workflow daemon  →  Automation's machine  →  Project's machine
+```
+
+A `daemon:` on a single node wins over a `daemon:` on the whole workflow, which wins over the machine the automation was activated with, which wins over the project's own machine.
+
+## Automations
+
+When you activate an [automation](/automations/overview) you choose its machine, or **No machine** if the workflow allows it. The runs it starts use that machine's tools even if the project's chats use another. If you leave it unset for a project that has several candidates, you are asked to choose; an unattended run is never sent somewhere by guesswork.
+
+## The `daemon:` field
+
+A workflow, or any node in it, can name where its tools run. The shorthand takes a kind or a machine name:
+
+```yaml
+name: build-on-cloud
+description: Plan on whichever machine is default, run the build on a cloud machine
+entry: [plan, build]
+daemon: local
+
+nodes:
+  - id: plan
+    type: workflow
+    ref: builtin://agent
+  - id: build
+    type: run
+    daemon: cloud
+    command: make build
+
+edges:
+  - from: plan
+    default: build
+```
+
+`local`, `cloud` and `any` are kinds; any other string is matched against machine names. Here the workflow defaults to your own computer, and the `build` node overrides that to run on a cloud machine.
+
+For more control, use a selector. Every field you give must match:
+
+```yaml
+name: runner-by-selector
+entry: [build]
+
+nodes:
+  - id: build
+    type: run
+    daemon:
+      type: cloud
+      labels:
+        gpu: "true"
+    command: make build
+```
+
+A selector may contain `id`, `name`, `type` (`local`, `cloud` or `any`) and `labels`; every label listed must be present on the machine. Machines advertise labels to Reliant when they connect, but `reliant daemon start` has no flag for setting your own, so rely on `id`, `name` and `type` unless you know what a machine advertises.
+
+The value can also be a CEL expression, such as `"{{ inputs.where }}"`, which may produce a string or a map with the same keys.
+
+<Warning>
+A `daemon:` makes the workflow need a machine. It cannot run as a [no-machine run](/automations/no-machine-runs), and the workflow builder warns you about it.
+</Warning>
+
+## Machine status
+
+| Status | Meaning |
+|--------|---------|
+| active | Connected and working |
+| idle | Connected, not recently active |
+| disconnected | Not connected. A cloud machine in this state is woken when something needs it |
+
+A running daemon sends a heartbeat every 15 seconds and is treated as gone after 30 seconds without one.
+
+## Related topics
+
+- [Machines overview](/machines/overview)
+- [Cloud machines & plans](/machines/cloud)
+- [No-machine runs](/automations/no-machine-runs)
+- [Custom workflows](/workflows/custom-workflows)

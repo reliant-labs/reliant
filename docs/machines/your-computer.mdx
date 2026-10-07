@@ -1,0 +1,85 @@
+---
+title: "Your own computer"
+description: "Run a Reliant daemon on a computer you own with the reliant CLI"
+---
+
+If you use the desktop app, you usually do nothing here: the app starts a daemon on your computer, signs it in with your account, and it appears under **Settings → Machines** as connected. This page is for everything else: a workstation you only reach over SSH, a home server, a Raspberry Pi, or a second laptop. For those you run the daemon yourself with the `reliant` CLI ([installing it](/getting-started/installation)).
+
+The daemon dials **out** to Reliant over a persistent gRPC stream, so the computer needs no open inbound port. Your repository stays on it. Whatever an agent reads or a command prints is sent to Reliant's servers, stored with the chat and sent to your model provider; see [Privacy & security](/help/privacy).
+
+## Register and start
+
+Register once. It signs you in through your browser if you are not already, creates a long-lived access token for this computer, and stores it in `~/.reliant/daemon.json`:
+
+```bash
+reliant daemon register
+```
+
+Then start the daemon:
+
+```bash
+reliant daemon start
+```
+
+In practice you can skip `register`: if you run `start` without credentials it signs you in and registers on the spot. By default it runs in the foreground; add `--background` to detach it. When it connects, the computer shows up as a machine in the app, named `<instance-id>@<hostname>` unless you pass `--name`.
+
+<Tip>
+If the daemon loses its connection or is told its credential is no longer valid, it re-registers and reconnects by itself. You do not need to restart it for a network blip.
+</Tip>
+
+## Headless and CI machines
+
+Where no browser is available, pipe an access token with the `daemon:connect` scope into `--token`. Create one under **Settings → Access Tokens**:
+
+```bash
+echo "rlat_..." | reliant daemon start --token
+```
+
+Use `--non-interactive` when something else owns sign-in (this is how the desktop app launches it). The daemon then never opens a browser; it stays idle, reports that it is awaiting credentials, and picks them up as soon as a credentials file appears on disk.
+
+## Flags
+
+| Flag | Default | What it does |
+|------|---------|--------------|
+| `--name` | `<instance-id>@<hostname>` | The friendly name shown in the app |
+| `--background` | off | Run detached |
+| `--token` | off | Read an access token from stdin instead of using browser sign-in |
+| `--non-interactive` | off | Never open a browser or run login; wait for credentials on disk |
+| `--account` | | Which account this daemon runs as, when several accounts share one computer |
+| `--workspace` | git worktree root of the current directory | The workspace this daemon serves |
+| `--data-dir` | this instance's folder under `~/.reliant/instances` | Where its state and logs live |
+| `--port` | `9190` | Local listen port |
+| `--server-mode`, `--listen-port` | off, `9190` | Listen for gateway connections instead of dialing out |
+| `--grpc-url` | | gRPC server URL to connect to |
+| `--tls-cert`, `--tls-key`, `--tls-mode` | | TLS options (`tls`, `insecure_tls_skip_verify`, `h2c`, `disabled`) |
+
+The global `--server` and `--gateway` flags choose which Reliant server the daemon talks to. Release builds already point at Reliant's hosted service, so you normally leave them alone.
+
+## One daemon per workspace
+
+A daemon is identified by three things: the server it talks to, the account it runs as, and the workspace it serves. Each combination has its own folder under `~/.reliant/instances/`, holding its runtime record and logs. Because the workspace defaults to the git worktree root of the directory you run the command in, every subdirectory of one checkout is the same daemon, while a second worktree is a separate one. This is why `stop`, `status` and `logs` find the right daemon no matter which subdirectory you run them from.
+
+## Check on it
+
+```bash
+reliant daemon status   # connected, or not, and which binary is running
+reliant daemon logs     # last 50 lines, then follow (-n to change, -f is on by default)
+reliant daemon stop     # graceful stop; --force to kill
+reliant daemon ls       # every daemon instance on this computer
+```
+
+`status` exits non-zero unless the stream to Reliant is actually established, so it is safe to use in a script: "running" means connected, not merely "a process exists".
+
+## Troubleshooting
+
+**The daemon will not connect.** Run `reliant daemon status`. If credentials are stale, delete `~/.reliant/daemon.json` and run `reliant daemon register` again.
+
+**Two daemons seem to fight.** Run `reliant daemon ls` to see every instance. A stop that did not finish can leave a daemon holding its registration; `reliant daemon stop` waits for the process to exit and escalates to a kill if it does not, and exits non-zero if it could not.
+
+**TLS errors against a development server.** Use `--tls-mode insecure_tls_skip_verify` for self-signed certificates in development only.
+
+## Related topics
+
+- [Machines overview](/machines/overview)
+- [Choosing a machine in workflows](/machines/choosing)
+- [Deploying with Forge: signing in](/features/forge-sign-in), for how Forge commands run on a daemon use your Reliant sign-in

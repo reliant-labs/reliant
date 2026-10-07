@@ -1,0 +1,55 @@
+---
+title: "Get It Right"
+description: "An implement, check and review loop for changes in a complex existing codebase"
+---
+
+Some codebases punish a quick edit. The change compiles, the obvious tests pass, and a week later you discover the new code was pasted on top of assumptions it never understood. **Get It Right** is built around the idea that sometimes you have to try and fail to understand a codebase, so it makes the attempt, checks it mechanically, has a separate agent judge it, and tries again with what was learned.
+
+## How a run goes
+
+Each pass through the loop has the same shape:
+
+1. **Implement.** An agent makes the change. This is the only step that writes code.
+2. **Check.** Your lint, test and build commands run in parallel. Any lane you did not configure is skipped.
+3. **Review.** A separate reviewer agent, which has read-only tools plus a shell, evaluates the result. If a check failed it skips straight back to implementing.
+4. **Decide.** The reviewer returns a verdict: `pass` ends the loop; `continue` goes back to implement with the feedback; `refactor` first runs an agent that **undoes** the problematic work (it does not reimplement), then starts a fresh implement pass; `stuck` pauses for you.
+
+The checks have the last word on success. A reviewer that says `pass` over a failing build is overridden to `continue`. The reverse is not true: a reviewer can still fail a green build, because it can see what exit codes cannot, such as a page that renders blank or a handler nobody wired up.
+
+`stuck` is for when the *review* could not be done, such as a missing tool or an app that will not start, not for hard problems. It escalates to you, and your answer goes to the reviewer rather than to the implementer, so a finished build does not get reimplemented because a reviewer was blocked.
+
+<Frame caption="The reviewer's verdict on an iteration. Example data.">
+  <img src="/images/v2/p1-get-it-right-verdict-pass.png" alt="A Get It Right run with a passing reviewer verdict" />
+</Frame>
+
+## Inputs worth setting
+
+| Input | Default | What it does |
+|-------|---------|--------------|
+| `lint_command`, `test_command`, `build_command` | empty (skipped) | The mechanical gate. Set at least one or the loop relies on the reviewer alone |
+| `max_retries` | 5 | Most implement-review iterations (1 to 10) |
+| `ask` | on | Pause for your review after each iteration |
+| `unattended` | off | No human is available; checkpoints resolve with no answer |
+| `review_enabled` | on | Turn off to gate on the checks alone |
+| `review_instructions` | empty | Replace the default review guidance, to scope what the reviewer judges |
+| `start_app_command` | empty | A command that brings the app up for the reviewer to look at |
+| `review_tools` | view, shell and web | What the reviewer may use. Add browser tools so it opens the live app |
+| `implementer_preset` | `general` | Preset for the implementing agent |
+| `context_bridge` | `feedback_only` | How much carries between iterations (below) |
+| `skills` | none | Skills to preload for the implementer |
+
+`context_bridge` controls memory across iterations. With `feedback_only`, each implementation starts fresh but sees the reviewer's accumulated feedback and the earlier summaries. `full` keeps the whole conversation for both. `none` starts every pass cold and relies on variation between attempts.
+
+## Reading a run
+
+Open the chat and each iteration appears as a step with its three check results and the reviewer's grade, strategy and feedback. The reviewer's `feedback` is the *only* thing the next attempt gets beyond your original request, so it is worth reading: it tells you what the agent believes is wrong.
+
+## Cost
+
+Every iteration is at least one implement run and one review run on a flagship model by default, up to five times. Use `max_retries` to cap it, a cheaper `model` for mechanical phases, and `review_enabled: false` when the checks alone are enough.
+
+## Related topics
+
+- [Built-in workflows](/guides/overview)
+- [Best of Three](/guides/best-of-three)
+- [Presets](/workflows/presets)

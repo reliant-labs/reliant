@@ -1,0 +1,67 @@
+---
+title: "Slack"
+description: "Post and read messages as the Reliant bot, and start runs from messages, mentions and reactions"
+---
+
+The Slack integration connects a **workspace**. Reliant acts as a bot, not as you: messages it posts come from the Reliant bot user, and your own Slack identity is never stored. You connect by installing the Reliant app in the workspace through Slack's consent screen.
+
+## Add the bot to a channel
+
+The bot can read and post only where it is a member. Invite it from the channel with `/invite @Reliant`. Posting to a channel it is not in fails with a "not in channel" error that says so, and event triggers only fire for conversations the bot is in.
+
+## Actions
+
+| Action | What it does |
+|--------|--------------|
+| `slack/message.post@1` | Post to a channel, DM or thread. `channel` is required; give `text`, `blocks` or both |
+| `slack/message.reply@1` | Reply in a message's thread (`channel` and `thread_ts` required) |
+| `slack/message.update@1` | Edit a message the bot posted |
+| `slack/reaction.add@1` | React to a message with an emoji |
+| `slack/user.lookup_by_email@1` | Find a workspace member by email |
+| `slack/conversations.list@1` | Channels the bot can see, with their ids |
+| `slack/conversations.history@1` | Recent messages in a channel, newest first. Thread replies are not included, only each thread's parent |
+
+Channels are identified by id (like `C0123ABCD`), not by name; use `conversations.list` to find one. A message's `ts` identifies it, and replying in its thread means passing that value as `thread_ts`.
+
+## Events
+
+| `events` value | Fires when |
+|----------------|-----------|
+| `message.channels`, `message.groups`, `message.im`, `message.mpim` | A person posts in a public channel, private channel, DM with the bot or group DM. List the ones you want |
+| `app_mention` | Someone @-mentions the bot |
+| `reaction_added` | Someone adds an emoji reaction |
+
+Messages posted by bots, including Reliant's own, never fire, so a workflow that posts cannot trigger itself. Edits and deletions do not fire either. You can `match` on `channel`, `user`, `thread_ts` and (for messages) `channel_type` and `subtype`; for reactions, `reaction` (the emoji name without colons) and `item_user`. An attribute Slack leaves out is the empty string.
+
+## Example: answer when the bot is mentioned
+
+```yaml
+name: slack-ask
+description: Answer when someone mentions the bot, in the same thread
+entry: [answer]
+
+triggers:
+  - name: mentioned
+    integration:
+      integration: slack
+      events: [app_mention]
+      match:
+        channel: C0123ABCD
+
+nodes:
+  - id: answer
+    type: action
+    uses: slack/message.reply@1
+    with:
+      channel: "{{ trigger.payload.data.channel }}"
+      thread_ts: "{{ trigger.payload.data.ts }}"
+      text: "On it."
+```
+
+An event reaches a trigger only through a Slack connection to the **same workspace** it came from.
+
+## Related topics
+
+- [Integrations overview](/integrations/overview)
+- [Gmail](/integrations/gmail), for a worked automation that posts to Slack
+- [Automations](/automations/overview)

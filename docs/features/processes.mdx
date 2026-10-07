@@ -1,9 +1,9 @@
 ---
-title: "Processes"
-description: "Run commands discovered from package.json, Makefile, and Taskfile"
+title: "Run project commands"
+description: "Run commands discovered from package.json, Makefile, and Taskfile from the Processes tab"
 ---
 
-The Processes tab discovers runnable commands from your project's build files and lets you execute them directly.
+The **Processes** tab in the right sidebar (next to Files and Changes) discovers runnable commands from your project's build files and lets you run them with a click. Discovery and execution happen on the project's [machine](/machines/overview), so a cloud project shows the commands from its cloud checkout.
 
 ![Processes panel showing discovered Make targets and NPM scripts](/images/screenshots/processes-panel.png)
 
@@ -21,10 +21,12 @@ Reliant automatically detects and parses:
 
 Reliant scans your project recursively (up to 10 levels deep) looking for these files. It skips common non-source directories:
 
-- Package managers: `node_modules`, `vendor`, `.pnpm-store`
-- Build outputs: `dist`, `build`, `.next`, `target`
-- Caches: `.cache`, `.turbo`, `.nx`
-- Test fixtures: `__tests__`, `fixtures`, `testdata`
+- Package managers: `node_modules`, `vendor`, `.pnpm-store`, `bower_components`
+- Version control: `.git`, `.svn`, `.hg`
+- Build outputs: `dist`, `build`, `.next`, `.nuxt`, `target`, `out`, `output`
+- Caches: `cache`, `.cache`, `.turbo`, `.nx`, `.parcel-cache`
+- Test fixtures: `__tests__`, `__mocks__`, `fixtures`, `testdata`
+- Python environments, coverage output and temp folders: `.venv`, `venv`, `coverage`, `tmp`, `temp`
 
 Monorepos with multiple `package.json` files are fully supported—each directory's commands appear separately.
 
@@ -51,6 +53,9 @@ For `package.json`, Reliant extracts all scripts and adds common builtin command
 - `npm audit` — Security audit
 - `npm update` — Update packages
 - `npm outdated` — Check for outdated packages
+- `npm prune` — Remove extraneous packages
+- `npm dedupe` — Reduce duplicated packages
+- `npm audit fix` — Apply security fixes
 
 ## Makefile Targets
 
@@ -94,11 +99,11 @@ Tasks marked `internal: true` or starting with `_` are hidden.
 
 Click any command to run it. Commands execute in the directory containing the build file, respecting your workspace/worktree context.
 
-Output appears in the terminal panel. Long-running commands (like dev servers) run in the background—you can view output and kill them from the terminal.
+Commands that are running appear under **Running**, where you can open their logs, rerun them or stop them. Long-running commands such as dev servers keep running in the background. You can mark commands as favorites to find them under **Favorites**.
 
 ## Workspace Scoping
 
-Processes are scoped to your current workspace. If you're working in a worktree, commands run in that worktree's directory, not the main repository.
+Commands are scoped to your current workspace. If you're working in a worktree, they run in that worktree's directory, not the main repository. The running list can also show processes from all workspaces.
 
 ## Related Topics
 

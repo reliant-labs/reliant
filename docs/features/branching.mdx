@@ -5,12 +5,17 @@ description: "Explore alternative paths without losing your conversation history
 
 Branching lets you explore different approaches without losing the original conversation. When you branch from a message, Reliant creates a new chat session that inherits all messages up to that point.
 
-![Branch from a message to create a new chat or workspace](/images/screenshots/branch-screenshot.png)
+<Frame caption="The branch menu on a message. Example data.">
+  <img src="/images/v2/p2-branch-chat-menu.png" alt="The branch menu offering a new chat, a new workspace or an existing workspace" />
+</Frame>
 
 ## How branching works
 
 1. Find the message where you want to diverge.
-2. Click the branch action on that message.
+2. Click the branch action on that message and choose where the branch goes:
+   - **Branch to New Chat** continues in the same workspace.
+   - **Branch to New Workspace** also creates a new git worktree, so the branch's file changes stay separate.
+   - **Branch to Existing Workspace** puts the new chat in a worktree you already have.
 3. Reliant opens a new chat with the history up to that message.
 
 The original chat stays intact. The branched chat becomes an independent conversation from that point forward.

@@ -1,0 +1,64 @@
+---
+title: "Gmail"
+description: "Send, search and read email, and start a run when new mail arrives"
+---
+
+The Gmail integration works on one mailbox, as the Google account you connect.
+
+## Connecting
+
+You sign in with Google and approve two permissions: sending email, and read-only access to the mailbox. The connection is labelled with the mailbox's address. If Google stops accepting the stored sign-in, the connection needs to be reconnected; reconnecting asks for consent again so Google issues a fresh one.
+
+## Actions
+
+| Action | What it does |
+|--------|--------------|
+| `gmail/message.send@1` | Send an email, or a reply in a thread. Takes `to` (and optionally `cc`, `bcc`), `subject`, and a body as `text`, `html` or both. To reply, pass the original's `thread_id` and its Message-ID header as `in_reply_to` (and `references` for a long thread), and keep the subject. Returns the sent message's `id` and `thread_id` |
+| `gmail/message.list@1` | Search with Gmail's own syntax (`q`, such as `from:ann is:unread newer_than:2d`) and/or `label_ids`. Returns message ids, newest first, up to five pages. Optionally includes Spam and Trash |
+| `gmail/message.get@1` | Read one message by `id`: headers, labels, snippet, attachments' names and sizes, and by default the decoded body. `format: metadata` skips the body; `max_body_chars` (default 20000) cuts it |
+| `gmail/label.list@1` | The mailbox's labels and their ids |
+
+## New email trigger
+
+The `message.received` event fires for each new message added to the **inbox**. Sent mail and drafts never fire. Gmail is checked by polling roughly every five minutes, so expect that delay. The payload carries headers and a snippet, not the body; read the whole message with `message.get` using `trigger.payload.data.message_id`.
+
+You can `match` on `from`, `to`, `subject`, `label_ids` (comma-separated, in Gmail's order) and `thread_id`, or filter in CEL on fields such as `trigger.payload.data.subject` and `.snippet`.
+
+## Example: read a new invoice email and tell Slack
+
+```yaml
+name: summarize-customer-mail
+description: When a new email arrives, read it and post a one-line summary to Slack
+entry: [read, post]
+
+triggers:
+  - name: new-mail
+    integration:
+      integration: gmail
+      events: [message.received]
+    filter: "trigger.payload.data.subject.contains('Invoice')"
+
+nodes:
+  - id: read
+    type: action
+    uses: gmail/message.get@1
+    with:
+      id: "{{ trigger.payload.data.message_id }}"
+      max_body_chars: 4000
+  - id: post
+    type: action
+    uses: slack/message.post@1
+    with:
+      channel: C0123ABCD
+      text: "Invoice mail from {{ nodes.read.from }}: {{ nodes.read.subject }}"
+
+edges:
+  - from: read
+    default: post
+```
+
+## Related topics
+
+- [Integrations overview](/integrations/overview)
+- [Slack](/integrations/slack)
+- [No-machine runs](/automations/no-machine-runs)
