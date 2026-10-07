@@ -91,7 +91,7 @@ export function EventSequence({ events }: { events: SimulatedEvent[] }) {
           <div className="flex-1 min-w-0 pb-2.5">
             <div className="flex items-center gap-1.5">
               {event.node ? (
-                <span className="text-2xs px-1 py-0.5 rounded bg-muted font-mono text-muted-foreground">
+                <span className="text-xs px-1 py-0.5 rounded bg-muted font-mono text-muted-foreground">
                   {event.node}
                 </span>
               ) : (
@@ -99,7 +99,7 @@ export function EventSequence({ events }: { events: SimulatedEvent[] }) {
                   Event
                 </span>
               )}
-              <span className="text-2xs text-muted-foreground/50">#{idx + 1}</span>
+              <span className="text-xs text-muted-foreground/50">#{idx + 1}</span>
             </div>
             <div className="text-xs mt-0.5 break-all">
               <EventData event={event} />

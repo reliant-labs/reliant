@@ -14,7 +14,7 @@ import { Braces, Plus, Search } from "lucide-react";
 
 import { cn } from "../../lib/utils";
 import { ensureNodesCached, getCachedNodes, getNodeDisplayName } from "../../lib/node-metadata";
-import { catalogToOutputFields } from "../../lib/nodeOutputFields";
+import { outputFieldsForNodeType } from "../../lib/nodeOutputFields";
 import { insertableData, matchesSearch, type InsertableGroup } from "../../lib/insertableData";
 import type { CELCompletionContext } from "../../lib/monaco-cel-completions";
 import { useCELCompletionContext, useCELCurrentNode } from "./CELCompletionContext";
@@ -70,7 +70,7 @@ export function InsertDataMenu({ onInsert, fieldLabel, celContext, disabled = fa
       currentNodeId,
       celContext,
       // The same fields the step's Outputs tab lists.
-      nodeOutputFields: (nodeType) => catalogToOutputFields(getCachedNodes().find((node) => node.id === nodeType)?.outputFields),
+      nodeOutputFields: outputFieldsForNodeType,
       nodeTypeLabel: getNodeDisplayName,
     });
     // `loaded` re-derives the groups once the node catalog arrives.
@@ -186,8 +186,8 @@ export function InsertDataMenu({ onInsert, fieldLabel, celContext, disabled = fa
             {visible.map((group) => (
               <div key={group.id} role="group" aria-label={group.label}>
                 <div className="flex items-baseline gap-1.5 px-2.5 pb-0.5 pt-2">
-                  <span className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</span>
-                  {group.detail && <span className="truncate text-2xs text-muted-foreground/80">{group.detail}</span>}
+                  <span className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">{group.label}</span>
+                  {group.detail && <span className="truncate text-xs text-muted-foreground/80">{group.detail}</span>}
                 </div>
                 {group.fields.map((field) => (
                   <div
@@ -207,16 +207,16 @@ export function InsertDataMenu({ onInsert, fieldLabel, celContext, disabled = fa
                     <span className="flex items-center gap-1.5">
                       <Braces className="h-3 w-3 flex-shrink-0 text-muted-foreground" aria-hidden />
                       <code className="truncate font-mono text-xs text-foreground">{field.path}</code>
-                      <span className="ml-auto flex-shrink-0 text-2xs text-muted-foreground">{field.type}</span>
+                      <span className="ml-auto flex-shrink-0 text-xs text-muted-foreground">{field.type}</span>
                     </span>
-                    {field.description && <span className="line-clamp-2 pl-[18px] text-2xs text-muted-foreground">{field.description}</span>}
+                    {field.description && <span className="line-clamp-2 pl-[18px] text-xs text-muted-foreground">{field.description}</span>}
                   </div>
                 ))}
               </div>
             ))}
             {visible.length === 0 && <p className="px-2.5 py-3 text-xs text-muted-foreground">Nothing matches “{query}”.</p>}
             {currentNodeId && !hasSteps && !query && (
-              <p className="border-t border-border/60 px-2.5 py-2 text-2xs text-muted-foreground">
+              <p className="border-t border-border/60 px-2.5 py-2 text-xs text-muted-foreground">
                 Outputs of steps that run before this one appear here. Connect a step to this one to use what it produces.
               </p>
             )}

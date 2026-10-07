@@ -15,6 +15,7 @@ import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
+import { WorkflowDraftStatus } from "@/gen/reliant/v1/workflow_pb";
 import { TriggerHealthSchema, TriggerHealthStatus, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
@@ -144,7 +145,7 @@ describe("LibraryPage", () => {
   it("Run… opens the run dialog for that workflow; a draft offers no Run…", async () => {
     renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
-    await userEvent.click(within(triage).getByRole("button", { name: "Run Triage" }));
+    await userEvent.click(within(triage).getByRole("button", { name: "Run Triage (project, triage)" }));
     expect(await screen.findByRole("dialog", { name: "Run Triage" })).toBeInTheDocument();
 
     const draft = screen.getByTestId("workflow-row-my-draft");
@@ -152,10 +153,43 @@ describe("LibraryPage", () => {
     expect(within(draft).getByTestId("workflow-draft-badge")).toBeInTheDocument();
   });
 
+  it("rows that share a title still have actions with unique names; the description is a description, not the name", async () => {
+    // Two copies of the built-in Agent keep its title: three rows named "Agent".
+    const response = libraryResponse();
+    const agentCopy = (name: string, status: WorkflowDraftStatus) => ({
+      ...response.workflows[0]!,
+      name,
+      filename: name,
+      title: "Agent",
+      source: "user",
+      status,
+      validationErrors: [],
+    });
+    response.workflows.push(agentCopy("high-maple", WorkflowDraftStatus.DRAFT), agentCopy("smart-seal", WorkflowDraftStatus.COMPLETE));
+    mocks.listWorkflows.mockResolvedValue(response);
+    renderLibrary();
+    await screen.findByTestId("workflow-row-high-maple");
+
+    const menus = screen.getAllByRole("button", { name: /^More actions for Agent/ }).map((b) => b.getAttribute("aria-label"));
+    expect(menus.sort()).toEqual([
+      "More actions for Agent (built-in, agent)",
+      "More actions for Agent (draft, high-maple)",
+      "More actions for Agent (mine, smart-seal)",
+    ]);
+    expect(new Set(screen.getAllByRole("button", { name: /^Run / }).map((b) => b.getAttribute("aria-label"))).size).toBe(
+      screen.getAllByRole("button", { name: /^Run / }).length,
+    );
+
+    // The name is the title alone; the clipped description is read on request.
+    const link = within(screen.getByTestId("workflow-row-triage")).getByRole("link", { name: "Triage" });
+    expect(link).toHaveAttribute("aria-description", "Triage new issues");
+    expect(within(screen.getByTestId("workflow-row-triage")).getByText("Triage new issues")).toHaveAttribute("aria-hidden", "true");
+  });
+
   it("the row menu's Edit opens the builder", async () => {
     const { router } = renderLibrary();
     const triage = await screen.findByTestId("workflow-row-triage");
-    await userEvent.click(within(triage).getByRole("button", { name: "More actions for Triage" }));
+    await userEvent.click(within(triage).getByRole("button", { name: "More actions for Triage (project, triage)" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Edit" }));
     await waitFor(() => expect(router.state.location.pathname).toBe("/workflow/triage"));
   });
@@ -222,7 +256,7 @@ describe("LibraryPage", () => {
   it("a user workflow's menu offers Export and Delete; a built-in's does not", async () => {
     renderLibrary();
     const draft = await screen.findByTestId("workflow-row-my-draft");
-    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft" }));
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
     const menu = await screen.findByRole("menu");
     expect(within(menu).getByRole("menuitem", { name: "Delete" })).toBeInTheDocument();
     expect(within(menu).getByRole("menuitem", { name: "Export" })).toBeInTheDocument();
@@ -231,7 +265,7 @@ describe("LibraryPage", () => {
     await userEvent.keyboard("{Escape}");
 
     const agent = screen.getByTestId("workflow-row-builtin://agent");
-    await userEvent.click(within(agent).getByRole("button", { name: "More actions for Agent" }));
+    await userEvent.click(within(agent).getByRole("button", { name: "More actions for Agent (built-in, agent)" }));
     const builtinMenu = await screen.findByRole("menu");
     expect(within(builtinMenu).queryByRole("menuitem", { name: "Delete" })).toBeNull();
     expect(within(builtinMenu).getByRole("menuitem", { name: "Duplicate" })).toBeInTheDocument();
@@ -242,7 +276,7 @@ describe("LibraryPage", () => {
     mocks.deleteWorkflow.mockResolvedValue({});
     renderLibrary();
     const draft = await screen.findByTestId("workflow-row-my-draft");
-    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft" }));
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
 
     const dialog = await screen.findByRole("dialog", { name: "Delete “My Draft”?" });
@@ -256,7 +290,7 @@ describe("LibraryPage", () => {
     expect(screen.queryByRole("dialog", { name: "Delete “My Draft”?" })).toBeNull();
     expect(mocks.deleteWorkflow).not.toHaveBeenCalled();
 
-    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft" }));
+    await userEvent.click(within(draft).getByRole("button", { name: "More actions for My Draft (draft, my-draft)" }));
     await userEvent.click(await screen.findByRole("menuitem", { name: "Delete" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Delete workflow" }));
     await waitFor(() =>

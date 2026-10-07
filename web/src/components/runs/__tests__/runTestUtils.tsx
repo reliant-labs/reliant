@@ -20,7 +20,35 @@ import {
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v1/chat_pb";
 import type { RunSummary } from "@/api/run-grpc";
+import type { CatalogEntrySummary } from "@/api/catalog-search-grpc";
 import { runsSearchSchema } from "@/routeSchemas";
+
+/**
+ * The catalog's GitHub trigger types, as SearchCatalog lists them: what names
+ * an integration event in run wording ("GitHub: Issue opened"). Return it from
+ * a `catalogSearchGrpc.search` mock.
+ */
+export function githubTriggerTypes(): { entries: CatalogEntrySummary[]; nextPageToken: string; totalSize: number; categoryFacets: [] } {
+  const integration = { id: "github", version: 1, displayName: "GitHub", icon: "github", category: "engineering" };
+  const trigger = (id: string, displayName: string, events: string[]): CatalogEntrySummary => ({
+    ref: `github/${id}@1`,
+    kind: "trigger",
+    id,
+    displayName,
+    summary: "",
+    integration,
+    authKinds: [],
+    connectionRequired: true,
+    connected: true,
+    mutates: false,
+    events,
+  });
+  const entries = [
+    trigger("issue.opened", "Issue opened", ["issues.opened"]),
+    trigger("pull_request.opened", "Pull request opened", ["pull_request.opened"]),
+  ];
+  return { entries, nextPageToken: "", totalSize: entries.length, categoryFacets: [] };
+}
 
 export function renderRunsAt(ui: ReactNode, path = "/workflows/runs") {
   const queryClient = new QueryClient({

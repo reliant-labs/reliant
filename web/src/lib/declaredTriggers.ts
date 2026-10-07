@@ -17,6 +17,7 @@
  */
 
 import type { Workflow } from "../types/workflow";
+import { describeIntegrationEvents, RAW_EVENT_NAMING, type IntegrationEventNaming } from "./integrationEventNames";
 
 /** One declared trigger, as the builder holds it (the proto init shape). */
 export type DeclaredTrigger = NonNullable<Workflow["triggers"]>[number];
@@ -261,12 +262,13 @@ export function findingFieldLabel(field: string): string {
 
 /**
  * A declared source in words, for a rail line: "Weekdays at 09:00",
- * "GitHub: issues.opened", "Webhook", "When deploy fails".
+ * "GitHub: Issue opened", "Webhook", "When deploy fails". Integration events
+ * read by their catalog names when `naming` has them (useIntegrationEventNaming).
  */
 export function describeDeclaredSource(
   trigger: DeclaredTrigger,
   describeSchedule: (schedule: { cron: string[]; interval?: string; timezone: string }) => string,
-  integrationName: (id: string) => string = (id) => id,
+  naming: IntegrationEventNaming = RAW_EVENT_NAMING,
 ): string {
   switch (sourceCase(trigger)) {
     case "schedule": {
@@ -275,11 +277,8 @@ export function describeDeclaredSource(
     }
     case "webhook":
       return "Webhook";
-    case "integration": {
-      const source = integrationOf(trigger)!;
-      const events = source.events.length > 2 ? `${source.events.slice(0, 2).join(", ")} +${source.events.length - 2}` : source.events.join(", ");
-      return `${integrationName(source.integration) || "Integration"}${events ? `: ${events}` : ""}`;
-    }
+    case "integration":
+      return describeIntegrationEvents(integrationOf(trigger)!, naming);
     case "workflowEvent": {
       const event = workflowEventOf(trigger)!;
       const outcomes = event.outcomes.length ? event.outcomes.join(" or ") : "finishes, fails or blocks";

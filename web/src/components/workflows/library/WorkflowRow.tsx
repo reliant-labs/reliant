@@ -27,9 +27,9 @@ import { runStatusFromDisplayState } from "@/lib/runStatus";
 import { RunStatusDot } from "../../ui/RunStatusIndicator";
 import { Tooltip } from "../../ui/Tooltip";
 import { DraftStatusBadge } from "../../workflow/DraftStatusBadge";
-import { workflowDisplayName } from "../../../lib/workflowDisplayName";
+import { stripWorkflowRefPrefix, workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { RowMenu, type RowMenuAction } from "../RowMenu";
-import { WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
+import { WORKFLOW_SOURCE_LABEL, WorkflowBadge, WorkflowSourceBadge, type WorkflowSource } from "../WorkflowSourceBadge";
 import { automationsSummary } from "./libraryView";
 
 export type WorkflowRowAction = RowMenuAction;
@@ -60,6 +60,17 @@ export interface LibraryTableRow extends Record<string, unknown> {
   /** Opens Run…; absent for a workflow that cannot run (a draft). */
   onRun?: () => void;
   actions: WorkflowRowAction[];
+}
+
+/**
+ * What tells this row apart from another with the same title, for its
+ * actions' accessible names: "draft, my-slug" or "built-in, agent". Titles
+ * repeat (a copy of Agent is still titled Agent), so "More actions for Agent"
+ * three times over leaves a screen reader user guessing; the slug is unique.
+ */
+export function workflowRowQualifier(workflow: Pick<WorkflowRowItem, "name" | "source" | "isDraft">): string {
+  const state = workflow.isDraft ? "draft" : WORKFLOW_SOURCE_LABEL[workflow.source].toLowerCase();
+  return `${state}, ${stripWorkflowRefPrefix(workflow.name)}`;
 }
 
 /**
@@ -119,6 +130,9 @@ function NameCell({ row, project }: { row: LibraryTableRow; project?: string }) 
           to="/workflows/library/$workflowRef"
           params={{ workflowRef: workflow.name }}
           search={project ? { project } : {}}
+          // The description is read on request, not as part of the row: it
+          // is clipped to one line on screen and was read out in full.
+          aria-description={workflow.description || undefined}
           className="truncate rounded-sm text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           {workflowDisplayName(workflow)}
@@ -128,7 +142,7 @@ function NameCell({ row, project }: { row: LibraryTableRow; project?: string }) 
         {workflow.isHidden && <WorkflowBadge label="Hidden" variant="neutral" />}
       </div>
       {workflow.description && (
-        <p className="mt-0.5 truncate text-xs text-muted-foreground" title={workflow.description}>
+        <p aria-hidden="true" className="mt-0.5 truncate text-xs text-muted-foreground" title={workflow.description}>
           {workflow.description}
         </p>
       )}
@@ -162,20 +176,21 @@ function AutomationsCell({ row }: { row: LibraryTableRow }) {
 
 function ActionsCell({ row }: { row: LibraryTableRow }) {
   const displayName = workflowDisplayName(row.workflow);
+  const qualifier = workflowRowQualifier(row.workflow);
   return (
     <div className="flex items-center justify-end gap-1">
       {row.onRun && (
         <button
           type="button"
           onClick={row.onRun}
-          aria-label={`Run ${displayName}`}
+          aria-label={`Run ${displayName} (${qualifier})`}
           className="inline-flex h-7 items-center gap-1.5 rounded-md border border-border px-2 text-xs font-medium text-foreground transition-colors hover:bg-muted/60 focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
         >
           <Play className="h-3.5 w-3.5" aria-hidden="true" />
           Run…
         </button>
       )}
-      <RowMenu label={`More actions for ${displayName}`} actions={row.actions} />
+      <RowMenu label={`More actions for ${displayName} (${qualifier})`} actions={row.actions} />
     </div>
   );
 }

@@ -17,7 +17,7 @@
   --popover-foreground: 0 0% 15%;
   --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 210 40% 96%;             /* Very light blue-gray */
-  --muted-foreground: 215 16% 47%;
+  --muted-foreground: 215 16% 45%;  /* AA on every light surface, incl. --muted */
   --primary: 217 91% 60%;           /* Vibrant blue */
   --primary-foreground: 0 0% 100%;
   --secondary: 280 85% 65%;         /* Purple accent */
@@ -39,7 +39,7 @@
   /* Chat input colors - cohesive blue theme */
   --chat-input-bg: hsl(210 50% 98%);           /* Very light blue background */
   --chat-input-text: hsl(0 0% 15%);            /* Dark text */
-  --chat-input-placeholder: hsl(215 16% 47%);  /* Muted blue */
+  --chat-input-placeholder: hsl(215 16% 45%);  /* Muted blue */
   --chat-button-bg: hsl(210 40% 94%);          /* Light blue button */
   --chat-button-text: hsl(0 0% 15%);           /* Dark text */
   --chat-button-hover: hsl(210 40% 90%);       /* Subtle blue hover */
@@ -123,7 +123,7 @@
   --popover-foreground: 25 18% 20%;
   --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 30 15% 95%;              /* Warm off-white */
-  --muted-foreground: 25 15% 45%;
+  --muted-foreground: 25 15% 43%;   /* AA on every light surface, incl. --muted */
   --primary: 25 22% 28%;            /* Mocha brown */
   --primary-foreground: 0 0% 100%;
   --secondary: 30 15% 95%;          /* Warm off-white */
@@ -145,7 +145,7 @@
   /* Chat input colors - cohesive warm neutral theme */
   --chat-input-bg: hsl(30 20% 97%);            /* Warm creamy background */
   --chat-input-text: hsl(25 18% 20%);          /* Dark warm text */
-  --chat-input-placeholder: hsl(25 15% 45%);   /* Muted warm */
+  --chat-input-placeholder: hsl(25 15% 43%);   /* Muted warm */
   --chat-button-bg: hsl(30 15% 93%);           /* Light warm button */
   --chat-button-text: hsl(25 18% 20%);         /* Dark warm text */
   --chat-button-hover: hsl(30 15% 88%);        /* Subtle warm hover */
@@ -229,7 +229,7 @@
   --popover-foreground: 185 20% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 185 14% 95%;             /* Warm teal-tinted gray */
-  --muted-foreground: 185 18% 45%;
+  --muted-foreground: 185 18% 40%;  /* AA on every light surface, incl. --muted */
   --primary: 180 88% 42%;           /* Modern teal */
   --primary-foreground: 0 0% 100%;
   --secondary: 185 14% 95%;         /* Warm teal-tinted gray */
@@ -251,7 +251,7 @@
   /* Chat input colors - cohesive teal theme */
   --chat-input-bg: hsl(180 40% 97%);           /* Very light teal background */
   --chat-input-text: hsl(185 20% 18%);         /* Dark teal text */
-  --chat-input-placeholder: hsl(185 18% 45%);  /* Muted teal */
+  --chat-input-placeholder: hsl(185 18% 40%);  /* Muted teal */
   --chat-button-bg: hsl(185 14% 93%);          /* Light teal button */
   --chat-button-text: hsl(185 20% 18%);        /* Dark teal text */
   --chat-button-hover: hsl(180 25% 88%);       /* Subtle teal hover */
@@ -334,7 +334,7 @@
   --popover-foreground: 215 22% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 215 18% 94%;             /* Soft slate gray */
-  --muted-foreground: 215 16% 45%;
+  --muted-foreground: 215 16% 44%;  /* AA on every light surface, incl. --muted */
   --primary: 215 28% 32%;           /* Deep slate blue */
   --primary-foreground: 0 0% 100%;
   --secondary: 215 18% 94%;         /* Soft slate gray */
@@ -356,7 +356,7 @@
   /* Chat input colors - cohesive slate theme */
   --chat-input-bg: hsl(215 24% 97%);           /* Very light slate background */
   --chat-input-text: hsl(215 22% 18%);         /* Dark slate text */
-  --chat-input-placeholder: hsl(215 16% 45%);  /* Muted slate */
+  --chat-input-placeholder: hsl(215 16% 44%);  /* Muted slate */
   --chat-button-bg: hsl(215 18% 92%);          /* Light slate button */
   --chat-button-text: hsl(215 22% 18%);        /* Dark slate text */
   --chat-button-hover: hsl(215 18% 87%);       /* Subtle slate hover */
@@ -439,7 +439,7 @@
   --popover-foreground: 145 20% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 145 12% 94%;             /* Warm sage-gray */
-  --muted-foreground: 145 15% 45%;
+  --muted-foreground: 145 15% 39%;  /* AA on every light surface, incl. --muted */
   --primary: 158 58% 38%;           /* Deep forest green */
   --primary-foreground: 0 0% 100%;
   --secondary: 145 12% 94%;         /* Warm sage-gray */
@@ -461,7 +461,7 @@
   /* Chat input colors - cohesive green theme */
   --chat-input-bg: hsl(158 30% 97%);           /* Very light sage background */
   --chat-input-text: hsl(145 20% 18%);         /* Dark green text */
-  --chat-input-placeholder: hsl(145 15% 45%);  /* Muted green */
+  --chat-input-placeholder: hsl(145 15% 39%);  /* Muted green */
   --chat-button-bg: hsl(145 12% 92%);          /* Light sage button */
   --chat-button-text: hsl(145 20% 18%);        /* Dark green */
   --chat-button-hover: hsl(158 20% 88%);       /* Subtle green hover */
@@ -651,7 +651,7 @@
   --popover-foreground: 25 18% 18%;
   --surface-modal: 0 0% 100%;       /* Modal background */
   --muted: 25 25% 95%;              /* Soft orange-gray */
-  --muted-foreground: 25 15% 45%;
+  --muted-foreground: 25 15% 43%;   /* AA on every light surface, incl. --muted */
   --primary: 25 95% 53%;            /* Vibrant orange */
   --primary-foreground: 0 0% 100%;
   --secondary: 25 25% 95%;          /* Soft orange-gray */
@@ -673,7 +673,7 @@
   /* Chat input colors - cohesive orange theme */
   --chat-input-bg: hsl(25 45% 97%);            /* Very light orange background */
   --chat-input-text: hsl(25 18% 18%);          /* Dark text */
-  --chat-input-placeholder: hsl(25 15% 45%);   /* Muted orange */
+  --chat-input-placeholder: hsl(25 15% 43%);   /* Muted orange */
   --chat-button-bg: hsl(25 25% 93%);           /* Light orange button */
   --chat-button-text: hsl(25 18% 18%);         /* Dark text */
   --chat-button-hover: hsl(25 35% 88%);        /* Subtle orange hover */
@@ -969,7 +969,7 @@
   --popover-foreground: 0 0% 5%;
   --surface-modal: 0 0% 100%;          /* Modal background */
   --muted: 0 0% 96%;                   /* Very light gray */
-  --muted-foreground: 0 0% 45%;
+  --muted-foreground: 0 0% 44%;        /* AA on every light surface, incl. --muted */
   --primary: 0 0% 9%;                  /* Near black primary */
   --primary-foreground: 0 0% 100%;
   --secondary: 0 0% 96%;               /* Light gray */
@@ -991,7 +991,7 @@
   /* Chat input colors - monochrome theme */
   --chat-input-bg: hsl(0 0% 98%);              /* Very light gray background */
   --chat-input-text: hsl(0 0% 5%);             /* Near black text */
-  --chat-input-placeholder: hsl(0 0% 45%);    /* Gray placeholder */
+  --chat-input-placeholder: hsl(0 0% 44%);    /* Gray placeholder */
   --chat-button-bg: hsl(0 0% 94%);             /* Light gray button */
   --chat-button-text: hsl(0 0% 5%);            /* Near black text */
   --chat-button-hover: hsl(0 0% 88%);          /* Slightly darker hover */

@@ -29,6 +29,7 @@ import { RunStatusBadge } from "../ui/RunStatusIndicator";
 import { daemonLabel } from "../Automations/daemonChoices";
 import { getWorkflowDisplayName } from "../workflow/useWorkflowInputs";
 import { launchContextOf } from "./launchContext";
+import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { RunDuration } from "./RunRow";
 
 export interface RunHeaderActions {
@@ -69,7 +70,8 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
     activity: chat.activity,
   });
   const live = isLiveRunStatus(status);
-  const launch = launchKindDisplay(chat.launchKind, { ...launchContextOf(event), triggerName });
+  const naming = useIntegrationEventNaming();
+  const launch = launchKindDisplay(chat.launchKind, { ...launchContextOf(event, naming), triggerName });
   const { daemons } = useDaemonStatus();
   const machine = chat.activeDaemonId
     ? daemonLabel(
@@ -90,7 +92,7 @@ export function RunHeader({ chat, triggerName, event, parent, projectName, actio
             {chat.title || "Untitled run"}
           </h1>
           <span className="shrink-0">
-            <RunStatusBadge status={status} />
+            <RunStatusBadge status={status} size="md" />
           </span>
         </div>
 

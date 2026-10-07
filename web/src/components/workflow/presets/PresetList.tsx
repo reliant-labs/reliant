@@ -88,21 +88,25 @@ export function PresetList({ projectId, presets, availablePresets, onChanged, la
               <button
                 type="button"
                 onClick={() => setViewing(preset)}
+                aria-description={typeof preset.description === "string" && preset.description ? preset.description : undefined}
                 className="min-w-0 flex-1 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
               >
                 <span className="flex min-w-0 flex-wrap items-center gap-2">
                   <span className="truncate text-sm font-medium text-foreground hover:underline">{name}</span>
                   <WorkflowBadge label={WORKFLOW_SOURCE_LABEL[preset.source as keyof typeof WORKFLOW_SOURCE_LABEL] ?? preset.source} variant="neutral" />
-                  {tag && <span className="font-mono text-2xs text-muted-foreground">{tag}</span>}
+                  {tag && <span className="font-mono text-xs text-muted-foreground">{tag}</span>}
                   {isPresetHidden(preset.name) && (
-                    <span className="text-2xs font-medium uppercase text-muted-foreground">Hidden</span>
+                    <span className="text-xs font-medium uppercase text-muted-foreground">Hidden</span>
                   )}
                 </span>
                 {typeof preset.description === "string" && preset.description && (
-                  <span className="mt-0.5 block truncate text-xs text-muted-foreground">{preset.description}</span>
+                  <span aria-hidden="true" className="mt-0.5 block truncate text-xs text-muted-foreground">{preset.description}</span>
                 )}
               </button>
-              <RowMenu label={`More actions for ${name}`} actions={actionsFor(preset)} />
+              <RowMenu
+                label={`More actions for ${name} (${(WORKFLOW_SOURCE_LABEL[preset.source as keyof typeof WORKFLOW_SOURCE_LABEL] ?? preset.source).toLowerCase()})`}
+                actions={actionsFor(preset)}
+              />
             </li>
           );
         })}

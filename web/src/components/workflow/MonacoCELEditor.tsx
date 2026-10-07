@@ -158,7 +158,9 @@ export function MonacoCELEditor({
 
   const height = multiline ? rows * 20 : 32;
 
-  // Ensure CEL completion data is fetched (singleton, safe to call multiple times)
+  // Ensure CEL completion data is fetched (singleton, safe to call multiple
+  // times). The node catalog that `nodes.<id>.` completes from is the
+  // builder's: its step sidebar loads it on mount.
   useEffect(() => {
     ensureCELCompletionsCached();
   }, []);

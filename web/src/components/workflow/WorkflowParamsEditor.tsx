@@ -1,6 +1,5 @@
 import { useState, useRef, useEffect, useId } from 'react'
 import { Plus, Trash2, ChevronDown, ChevronRight } from 'lucide-react'
-import { ConfigurationPanel } from './ConfigurationPanel'
 import { ToolsSelector } from './ToolsSelector'
 import { presetGrpc, type Preset } from '../../api/preset-grpc'
 import { useProjectStore } from '../../store/projectStore'
@@ -42,13 +41,6 @@ function toDefaultValue(val: unknown): unknown {
 // Casting through this alias keeps call sites readable.
 type ParamLike = Param | ParamWithId
 
-interface WorkflowParamsEditorProps {
-  params: Record<string, Param>
-  onUpdate: (params: Record<string, Param>) => void
-  onClose: () => void
-}
-
-// Content-only props (no panel wrapper)
 interface WorkflowParamsEditorContentProps {
   params: Record<string, Param>
   onUpdate: (params: Record<string, Param>) => void
@@ -130,7 +122,7 @@ function useParamsState(params: Record<string, Param>, onUpdate: (params: Record
   const addParam = () => {
     // Generate unique name
     const existingNames = new Set(localParams.map(p => p._name))
-    const baseName = 'param'
+    const baseName = 'input'
     let counter = 1
     while (existingNames.has(`${baseName}${counter}`)) {
       counter++
@@ -165,20 +157,20 @@ function useParamsState(params: Record<string, Param>, onUpdate: (params: Record
   return { localParams, updateParam, addParam, removeParam, renameParam }
 }
 
-// Content-only version for embedding in other panels
+// The Inputs tab of the workflow's Inputs panel (WorkflowSettingsEditor).
 export function WorkflowParamsEditorContent({ params, onUpdate }: WorkflowParamsEditorContentProps) {
   const { localParams, updateParam, addParam, removeParam, renameParam } = useParamsState(params, onUpdate)
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted-foreground">
-        Define parameters for this workflow.
-        Access in CEL as <code className="font-mono bg-muted px-1 rounded">inputs.&lt;name&gt;</code>
+        Define the inputs this workflow takes.
+        Read one in an expression as <code className="font-mono bg-background border border-border/60 px-1 rounded">inputs.&lt;name&gt;</code>
       </p>
 
       {localParams.length === 0 && (
-        <div className="text-sm text-muted-foreground italic py-4 bg-muted rounded px-3 text-center">
-          No parameters defined. Click "Add Parameter" to create one.
+        <div className="text-sm text-muted-foreground italic py-4 bg-background border border-border/60 rounded px-3 text-center">
+          No inputs yet. Click "Add input" to create one.
         </div>
       )}
 
@@ -197,73 +189,19 @@ export function WorkflowParamsEditorContent({ params, onUpdate }: WorkflowParams
         className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary border border-primary/40 rounded-md hover:bg-primary/10 transition-colors w-full justify-center"
       >
         <Plus className="w-4 h-4" />
-        Add Parameter
+        Add input
       </button>
 
-      {/* CEL Reference */}
-      <div className="bg-muted/40 border border-border rounded p-3">
-        <p className="text-xs font-medium text-foreground mb-2">Using Parameters in CEL</p>
+      {/* Expression reference */}
+      <div className="bg-background border border-border/60 rounded p-3">
+        <p className="text-xs font-medium text-foreground mb-2">Using inputs in expressions</p>
         <div className="text-xs font-mono text-muted-foreground space-y-1">
-          <div>inputs.&lt;name&gt; - access parameter value</div>
-          <div>inputs.branch_name - example: string param</div>
-          <div>inputs.max_retries - example: integer param</div>
+          <div>inputs.&lt;name&gt; - the input&apos;s value</div>
+          <div>inputs.branch_name - example: a string input</div>
+          <div>inputs.max_retries - example: an integer input</div>
         </div>
       </div>
     </div>
-  )
-}
-
-// Full panel version (legacy, still used by standalone params editor)
-export function WorkflowParamsEditor({ params, onUpdate, onClose }: WorkflowParamsEditorProps) {
-  const { localParams, updateParam, addParam, removeParam, renameParam } = useParamsState(params, onUpdate)
-
-  return (
-    <ConfigurationPanel
-      title="Workflow Parameters"
-      subtitle={`${localParams.length} parameter${localParams.length !== 1 ? 's' : ''}`}
-      onClose={onClose}
-    >
-      <div className="space-y-4">
-        <p className="text-xs text-muted-foreground">
-          Define parameters for this workflow.
-          Access in CEL as <code className="font-mono bg-muted px-1 rounded">inputs.&lt;name&gt;</code>
-        </p>
-
-        {localParams.length === 0 && (
-          <div className="text-sm text-muted-foreground italic py-4 bg-muted rounded px-3 text-center">
-            No parameters defined. Click "Add Parameter" to create one.
-          </div>
-        )}
-
-        {localParams.map((param) => (
-          <ParamEditor
-            key={param._id}
-            param={param}
-            onUpdate={(updates) => updateParam(param._id, updates)}
-            onRename={(newName) => renameParam(param._id, newName)}
-            onRemove={() => removeParam(param._id)}
-          />
-        ))}
-
-        <button
-          onClick={addParam}
-          className="flex items-center gap-1.5 px-3 py-2 text-sm text-primary border border-primary/40 rounded-md hover:bg-primary/10 transition-colors w-full justify-center"
-        >
-          <Plus className="w-4 h-4" />
-          Add Parameter
-        </button>
-
-        {/* CEL Reference */}
-        <div className="bg-muted/40 border border-border rounded p-3">
-          <p className="text-xs font-medium text-foreground mb-2">Using Parameters in CEL</p>
-          <div className="text-xs font-mono text-muted-foreground space-y-1">
-            <div>inputs.&lt;name&gt; - access parameter value</div>
-            <div>inputs.branch_name - example: string param</div>
-            <div>inputs.max_retries - example: integer param</div>
-          </div>
-        </div>
-      </div>
-    </ConfigurationPanel>
   )
 }
 
@@ -295,13 +233,14 @@ function ParamEditor({ param, onUpdate, onRename, onRemove }: ParamEditorProps) 
             value={param._name}
             onChange={(e) => onRename(e.target.value)}
             className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
-            placeholder="param_name"
+            placeholder="input_name"
           />
         </div>
         <button
           onClick={onRemove}
           className="text-red-600 hover:text-red-700 mt-5"
-          title="Remove parameter"
+          title="Remove input"
+          aria-label={`Remove input ${param._name}`}
         >
           <Trash2 className="w-4 h-4" />
         </button>

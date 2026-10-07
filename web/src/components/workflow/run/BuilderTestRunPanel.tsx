@@ -27,6 +27,7 @@ import { cn } from "@/lib/utils";
 import { RunStatusBadge } from "../../ui/RunStatusIndicator";
 import { Button } from "../../ui/Button";
 import { ConfigurationPanel } from "../ConfigurationPanel";
+import { RunFormError } from "./RunFormError";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
@@ -140,18 +141,11 @@ export function BuilderTestRunPanel({
         topOffset={topOffset}
       >
         <form onSubmit={onSubmit} noValidate aria-label="Test run" className="cpv2-section space-y-4">
-          {formError && (
-            <div
-              role="alert"
-              className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink"
-            >
-              {formError}
-            </div>
-          )}
+          {formError && <RunFormError message={formError} />}
 
           {testChatId && (
             <div className="flex flex-wrap items-center gap-2" data-testid="test-run-status">
-              {runState && <RunStatusBadge status={runState} />}
+              {runState && <RunStatusBadge status={runState} size="md" />}
               <Link
                 to="/workflows/runs/$runId"
                 params={{ runId: testChatId }}

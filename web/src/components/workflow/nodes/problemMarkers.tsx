@@ -55,7 +55,7 @@ export function ProblemBadge({ problemCount = 0, warningCount = 0 }: ProblemMark
       data-testid="node-problem-badge"
       title={`${count} ${isProblem ? "problem" : "warning"}${count === 1 ? "" : "s"} — select the step to see ${count === 1 ? "it" : "them"}`}
       className={
-        "pointer-events-none absolute -right-2 -top-2 z-10 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-2xs font-semibold shadow " +
+        "pointer-events-none absolute -right-2 -top-2 z-10 flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-xs font-semibold leading-none shadow " +
         (isProblem ? "bg-destructive text-destructive-foreground" : "bg-warning text-black")
       }
     >

@@ -24,7 +24,7 @@ export function DraftStatusBadge({ errorCount = 0, className }: DraftStatusBadge
         data-testid="workflow-draft-badge"
         className={cn(
           "inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5",
-          "text-2xs font-medium uppercase text-muted-foreground",
+          "text-xs font-medium uppercase text-muted-foreground",
           className,
         )}
       >

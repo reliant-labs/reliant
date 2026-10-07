@@ -19,6 +19,7 @@ import { Button } from "../ui/Button";
 import { ActivateTriggerDialog } from "./ActivateTriggerDialog";
 import { describeSchedule } from "@/lib/cronText";
 import { describeDeclaredSource, integrationOf, sourceCase, type DeclaredTrigger } from "@/lib/declaredTriggers";
+import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import type { InactiveDeclaredTrigger } from "@/lib/triggerRail";
 import { IntegrationLogoTile } from "../icons/IntegrationLogo";
 
@@ -44,10 +45,11 @@ export function InactiveDeclaredTriggers({
   showWorkflow?: boolean;
 }) {
   const [activating, setActivating] = useState<InactiveDeclaredTrigger | null>(null);
+  const naming = useIntegrationEventNaming();
   if (items.length === 0) return null;
   return (
     <>
-      <ul aria-label="Declared triggers that are not active" className="divide-y divide-border/60" data-testid="inactive-declared-triggers">
+      <ul aria-label="Triggers that are not active" className="divide-y divide-border/60" data-testid="inactive-declared-triggers">
         {items.map((item) => {
           const name = item.declared.name ?? "";
           const label = showWorkflow ? `${item.workflowTitle} · ${name}` : name;
@@ -57,7 +59,7 @@ export function InactiveDeclaredTriggers({
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium text-foreground">{label}</p>
                 <p className="truncate text-xs text-muted-foreground">
-                  {describeDeclaredSource(item.declared, describeSchedule)} · Not active
+                  {describeDeclaredSource(item.declared, describeSchedule, naming)} · Not active
                 </p>
               </div>
               <Button size="sm" variant="outline" onClick={() => setActivating(item)} aria-label={`Activate ${label}`}>

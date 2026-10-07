@@ -150,7 +150,7 @@ export function WorkflowParamsPanel({
       })
       .map(([group, params]) => ({
         group,
-        label: group || "Parameters",
+        label: group || "Inputs",
         params,
         // Assign tag: workflow tag for default group, group tag for named groups
         tag: group === "" ? workflowTag : groupTags[group],
@@ -618,7 +618,7 @@ export function WorkflowParamsPanel({
         >
           <div className="flex items-center gap-2">
             <Settings2 className="w-4 h-4 text-muted-foreground" />
-            <span>Workflow Parameters</span>
+            <span>Inputs</span>
             <span className="text-xs text-muted-foreground">
               ({configurableCount} settings)
             </span>

@@ -17,6 +17,7 @@ import {
 import type { CELFieldInfo } from '../gen/reliant/v1/catalog_pb'
 import { TRIGGER_CEL_FIELDS, TRIGGER_CEL_NAMESPACE } from './trigger-cel-fields'
 import { schemaAtPath, schemaProperties, schemaType, type JsonSchema } from './jsonSchema'
+import { outputFieldsForNodeType, type OutputField } from './nodeOutputFields'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -204,6 +205,17 @@ function extractChain(exprText: string): string {
       continue
     }
 
+    // Closing bracket ] — a list index like [0] reads through to the item, so
+    // `tool_calls[0].` completes tool_calls' item fields (the path Insert data
+    // inserts); it adds no segment.
+    if (ch === ']') {
+      const index = /\[\s*\d+\s*\]$/.exec(exprText.slice(0, i + 1))
+      if (index) {
+        i -= index[0].length
+        continue
+      }
+    }
+
     // Closing bracket ] — might be bracket-access like ["my-id"]
     if (ch === ']') {
       const bracketResult = consumeBracketAccess(exprText, i)
@@ -364,7 +376,9 @@ export function resolveCompletions(
     const nodeId = parsed.path[1]
     const nodeType = ctx.nodeTypeMap[nodeId]
     if (nodeType) {
-      const schemaFields = getFieldCompletions(getNodeOutputSchema(nodeType))
+      // The fields the step's Outputs tab and Insert data list, from the same
+      // source (lib/nodeOutputFields), so the three never disagree.
+      const schemaFields = getOutputFieldCompletions(visibleOutputFields(outputFieldsForNodeType(nodeType)))
       // Merge declared output keys (e.g., from router outputs map)
       const declaredKeys = [...(ctx.nodeDeclaredOutputs?.[nodeId] ?? [])]
       // An action whose output schema is known also exposes `data`.
@@ -396,6 +410,21 @@ export function resolveCompletions(
     if (schema) {
       return [
         ...getSchemaFieldCompletions(schemaAtPath(schema, parsed.path.slice(3))),
+        ...getMemberFunctionCompletions(),
+      ]
+    }
+  }
+
+  // path = ["nodes", "<id>", "<field>"] — a message field's sub-fields
+  // (message.text, tool_calls[0].name), as Insert data offers them.
+  if (root === 'nodes' && parsed.path.length === 3) {
+    const nodeType = ctx.nodeTypeMap[parsed.path[1]]
+    const field = nodeType
+      ? visibleOutputFields(outputFieldsForNodeType(nodeType)).find((f) => f.name === parsed.path[2])
+      : undefined
+    if (field?.children?.length) {
+      return [
+        ...getOutputFieldCompletions(visibleOutputFields(field.children)),
         ...getMemberFunctionCompletions(),
       ]
     }
@@ -547,6 +576,22 @@ function getSchemaFieldCompletions(schema: JsonSchema | undefined): CompletionEn
     insertText: name,
     detail: schemaType(property) ?? 'any',
     documentation: property.description ?? '',
+    sortGroup: 1,
+  }))
+}
+
+/** Debug and plumbing outputs stay readable by hand but are not offered, as in Insert data. */
+function visibleOutputFields(fields: readonly OutputField[]): OutputField[] {
+  return fields.filter((field) => !field.advanced)
+}
+
+function getOutputFieldCompletions(fields: readonly OutputField[]): CompletionEntry[] {
+  return fields.map((f) => ({
+    label: f.name,
+    kind: 'field' as const,
+    insertText: f.name,
+    detail: f.type,
+    documentation: f.description,
     sortGroup: 1,
   }))
 }

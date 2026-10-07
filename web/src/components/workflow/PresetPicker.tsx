@@ -356,7 +356,7 @@ export function PresetPicker({
             <>
               <Code2 className="w-4 h-4 flex-shrink-0 text-violet-500" />
               <span className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
                   Expression
                 </span>
                 <span className="truncate font-mono text-xs text-muted-foreground">

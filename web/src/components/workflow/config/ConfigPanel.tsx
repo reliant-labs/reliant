@@ -223,7 +223,7 @@ export function ConfigPanel({
       return;
     }
     if (trimmedId !== step.id && existingNodeIds.includes(trimmedId)) {
-      setIdError("A node with this ID already exists");
+      setIdError("A step with this ID already exists");
       return;
     }
 
@@ -582,7 +582,7 @@ export function ConfigPanel({
           <div className="cpv2-section">
             <div className="cpv2-info-banner">
               <Info className="w-3.5 h-3.5" />
-              <span>Adds a message to the thread <strong>before</strong> this node executes.</span>
+              <span>Adds a message to the thread <strong>before</strong> this step runs.</span>
             </div>
           </div>
           <NodeThreadConfigEditor

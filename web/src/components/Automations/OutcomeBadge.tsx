@@ -13,7 +13,7 @@ export function OutcomeBadge({ outcome }: { outcome: TriggerOutcome }) {
   const { label, badgeVariant } = triggerEventOutcomeDisplay(outcome);
   return (
     <span className="forge-ui inline-flex" data-event-outcome={outcome} data-badge-variant={badgeVariant}>
-      <Badge label={label} variant={badgeVariant} size="sm" dot />
+      <Badge label={label} variant={badgeVariant} size="md" dot />
     </span>
   );
 }

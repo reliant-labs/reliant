@@ -25,7 +25,7 @@ const buttonClass =
 
 function Kbd({ children }: { children: string }) {
   if (!children) return null;
-  return <kbd className="rounded border border-border/60 bg-background px-1 font-mono text-2xs text-muted-foreground">{children}</kbd>;
+  return <kbd className="rounded border border-border/60 bg-background px-1 font-mono text-xs text-muted-foreground">{children}</kbd>;
 }
 
 /** A short name for the bar: the step's id, or "Start". */

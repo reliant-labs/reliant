@@ -84,7 +84,7 @@ export const ActionNode = memo(({ data, selected }: ActionNodeProps) => {
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className={`text-2xs font-bold uppercase tracking-wide truncate ${integrationHeader ? 'text-foreground' : colors.text}`}>{displayName}</div>
+            <div className={`text-xs font-bold uppercase tracking-wide truncate ${integrationHeader ? 'text-foreground' : colors.text}`}>{displayName}</div>
             <div className="font-medium text-muted-foreground text-xs leading-tight truncate">{label}</div>
           </div>
         </div>

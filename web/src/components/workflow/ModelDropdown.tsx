@@ -130,7 +130,7 @@ export function ModelDropdown({
             {providers.map((provider) => (
               <div key={provider}>
                 {providers.length > 1 && (
-                  <div className="px-3 py-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {provider}
                   </div>
                 )}
