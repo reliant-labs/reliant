@@ -603,6 +603,11 @@ message SendMessageRequest {
   repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
   reserved 16;  // was: yield_id
   bool discuss = 17;              // If true, chat with LLM without resuming paused workflow
+  // Client-chosen UUID for the user message. When the message is queued for a
+  // running thread (see SendMessageResponse.queued) it becomes the queued
+  // row's id, so a client can key its optimistic copy by the id the queue
+  // will report from the moment it sends. Ignored when not a UUID.
+  optional string client_message_id = 18;
 }
 
 // SendMessageResponse confirms message sent
@@ -612,7 +617,12 @@ message SendMessageResponse {
   string run_id = 3;
   string status = 4;                   // 'processing'
   optional string workflow_status = 5; // Workflow status after operation (running, paused, etc.)
-  string message_id = 6;               // ID of the saved user message
+  // ID of the user message: the history row, or — when queued — the queued
+  // mailbox row, which becomes history when the thread's next turn drains it.
+  string message_id = 6;
+  // True when the message was queued in the target thread's mailbox (the
+  // thread's run was executing) rather than written to its history.
+  bool queued = 7;
 }
 
 // SendAgentMessageRequest queues a human message into a specific running

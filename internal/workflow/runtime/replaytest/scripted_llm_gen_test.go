@@ -35,6 +35,10 @@ type Turn struct {
 	Text       string
 	ToolCalls  []message.ToolCall
 	TokenCount int64 // reported usage; drives compaction edges. Defaults to 50.
+	// During runs while this turn is in flight — after its CallLLM has read
+	// history, before the turn's reply streams — for scenarios that need
+	// something to happen mid-turn (a user message arriving).
+	During func()
 }
 
 // ToolCall is a convenience constructor for a scripted tool call. Its id is
@@ -179,6 +183,9 @@ func (s *ScriptedLLM) StreamResponse(ctx context.Context, prompts []string, msgs
 	}
 	s.mu.Unlock()
 
+	if turn.During != nil {
+		turn.During()
+	}
 	return s.streamCanned(turn)
 }
 

@@ -252,7 +252,17 @@ func isContinueAsNew(err error) bool {
 // awaitingSpawns records that the loop was parked in awaitLiveDetachedSpawns
 // rather than at the top of an iteration, so the successor waits on the
 // relaunched spawns before its first turn instead of spending one.
+//
+// Except when the parked thread has been woken since its last turn. The park
+// releases on a wake, but a handoff that became ready in the same moment wins
+// it, and a successor that waited on its spawns first would leave the user's
+// message unread until one of them finished. It takes its turn first instead.
 func newContinueAsNewError(ctx workflow.Context, input WorkflowInput, nodeID string, iteration int, childTracker *ChildWorkflowTracker, awaitingSpawns bool) error {
+	if awaitingSpawns && childTracker != nil && input.ExecContext != nil &&
+		childTracker.wakeSinceLastTurn(input.ExecContext.Thread) &&
+		workflow.GetVersion(ctx, lateUserWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		awaitingSpawns = false
+	}
 	resume := &ResumeInput{
 		NodeID:           nodeID,
 		LoopIteration:    iteration,

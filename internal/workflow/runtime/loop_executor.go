@@ -426,8 +426,26 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 		//
 		// Cancellation still wins: re-entering would only reach the boundary
 		// check that stops the thread.
-		finishedDuringTurn := e.childTracker.detachedCompletionCount(thread) > startCompletions
-		return finishedDuringTurn && !e.pauseCtrl.IsCancelled(), nil
+		if e.pauseCtrl.IsCancelled() {
+			return false, nil
+		}
+		if e.childTracker.detachedCompletionCount(thread) > startCompletions {
+			return true, nil
+		}
+		// The same goes for a wake. A user message (SendMessage or
+		// SendAgentMessage: a mailbox row, then the doorbell) that landed after
+		// the turn's pending_inbox probe was seen by nothing — the probe is the
+		// turn's last look. The doorbell is the one record of it, and this
+		// branch used to return before reading it, so the run ended with the
+		// message unanswered. A wake for input the turn did see costs one turn
+		// that drains nothing and yields without calling the provider.
+		// Versioned: a history that exited here must replay the exit. See
+		// TestLateUserMessageE2E.
+		if e.childTracker.threadWakeCount(thread) > startWakes &&
+			workflow.GetVersion(e.ctx, lateUserWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+			return true, nil
+		}
+		return false, nil
 	}
 
 	// A cancel that arrives while this thread is parked must be observed
@@ -962,6 +980,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 				completions: e.childTracker.detachedCompletionCount(thread),
 				wakes:       e.childTracker.threadWakeCount(thread),
 			}
+			e.childTracker.recordTurnStart(thread)
 		}
 
 		// Execute this iteration

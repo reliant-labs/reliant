@@ -9,6 +9,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.temporal.io/api/enums/v1"
 )
 
 // TestResolveOrphanedAgentMessages_ResolvesTerminalThreadBacklog covers the
@@ -90,6 +91,60 @@ func TestResolveOrphanedAgentMessages_ContinuesPastPerThreadFailure(t *testing.T
 	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
 	require.NoError(t, err, "a per-thread failure is logged and skipped, not surfaced as a pass error")
 	assert.Equal(t, 0, resolved)
+}
+
+// A root run that delivers a late queued row stamps its thread terminal
+// ("completed") before its successor starts and revives it; across that gap
+// the thread is terminal with mail in it, under a workflow that is still open.
+// The sweep must leave it to the run — marking it undelivered there would
+// destroy a message that was about to arrive — and resolve it only once
+// Temporal says the run is gone.
+func TestResolveOrphanedAgentMessages_LeavesAThreadWhoseRunIsStillOpen(t *testing.T) {
+	repo := newMockRepo()
+	repo.orphanedMailboxThreads = []string{"main-thread"}
+	repo.orphanedMailboxRows = map[string]int64{"main-thread": 1}
+	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
+		"main-thread": {resp: makeRunningDescribeResp("run-successor")},
+	}}
+	reconciler := NewReconciler(repo, temporal, DefaultConfig())
+
+	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Zero(t, resolved)
+	assert.Empty(t, repo.resolvedMailboxThreads,
+		"a row its own still-open run is about to deliver must not be marked undelivered")
+
+	// The run closed without draining it: now it is final.
+	temporal.describeResponses["main-thread"] = mockDescribeResponse{resp: makeTerminalDescribeResp(enums.WORKFLOW_EXECUTION_STATUS_COMPLETED)}
+	resolved, err = reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Equal(t, 1, resolved)
+	assert.Equal(t, []string{"main-thread"}, repo.resolvedMailboxThreads)
+}
+
+// The owning workflow is the thread's, when the thread names one; and a
+// workflow Temporal cannot answer for is treated as open — the thread is
+// revisited next pass rather than its mail destroyed on a guess.
+func TestResolveOrphanedAgentMessages_AsksAboutTheOwningWorkflowAndFailsClosed(t *testing.T) {
+	repo := newMockRepo()
+	owner := "chat-workflow"
+	repo.threads["main-thread"] = &db.Thread{ID: "main-thread", WorkflowID: &owner}
+	repo.orphanedMailboxThreads = []string{"main-thread"}
+	repo.orphanedMailboxRows = map[string]int64{"main-thread": 1}
+	temporal := &mockReconcilerTemporalClient{describeResponses: map[string]mockDescribeResponse{
+		owner: {resp: makeRunningDescribeResp("run-1")},
+	}}
+	reconciler := NewReconciler(repo, temporal, DefaultConfig())
+
+	resolved, err := reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Zero(t, resolved, "the thread's own workflow is open")
+
+	temporal.describeResponses[owner] = mockDescribeResponse{err: errors.New("deadline exceeded")}
+	resolved, err = reconciler.resolveOrphanedAgentMessages(context.Background(), &passStats{})
+	require.NoError(t, err)
+	assert.Zero(t, resolved, "Temporal could not answer: fail closed")
+	assert.Empty(t, repo.resolvedMailboxThreads)
 }
 
 // TestResolveOrphanedAgentMessages_SurfacesListFailure covers the read half:

@@ -8,6 +8,7 @@
  */
 
 import { create } from "zustand";
+import { notifyManager } from "@tanstack/react-query";
 // Phase 12: Use gRPC streaming service instead of WebSocket
 import { UserStreamingService } from "../api/streaming-grpc";
 import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo, MessagePaginationInfo } from "../types/streaming";
@@ -501,15 +502,18 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       return;
     }
 
-    // Route incremental chat updates (merge semantics)
-    useChatStore.getState().processChatStreamUpdates(chatId, updates);
-
-    // Then announce the mailbox rows this batch drained. AFTER the messages
-    // are committed, and in the same synchronous task: the two land in one
-    // React commit, so the strip never renders empty against a transcript
-    // that has not shown the message yet. The reverse order would open
-    // exactly that gap.
-    publishDrainedMailboxRows(chatId, updates);
+    // Route incremental chat updates (merge semantics), then announce the
+    // mailbox rows this batch drained. AFTER the messages are committed, and
+    // in one React Query batch: both cache writes reach their observers in
+    // the same flush, so the strip never renders empty against a transcript
+    // that has not shown the message yet, nor shows it alongside the
+    // transcript. Outside a batch each write schedules its own notification
+    // and a render can land between them. The reverse order would open the
+    // empty gap outright.
+    notifyManager.batch(() => {
+      useChatStore.getState().processChatStreamUpdates(chatId, updates);
+      publishDrainedMailboxRows(chatId, updates);
+    });
   },
 
   handleChatSnapshot: (updates) => {
@@ -519,14 +523,15 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       return;
     }
 
-    // Route snapshot updates (replace semantics — prevents cross-chat message leaking)
-    useChatStore.getState().processChatStreamUpdates(chatId, updates, true);
-
-    // A reconnect replays the drain announcements alongside the messages they
-    // describe. Publishing them here too means a client that was offline
-    // through a drain still retires those rows on the way back, instead of
-    // showing them until the next poll.
-    publishDrainedMailboxRows(chatId, updates);
+    // Route snapshot updates (replace semantics — prevents cross-chat message
+    // leaking). A reconnect replays the drain announcements alongside the
+    // messages they describe; publishing them here too means a client that
+    // was offline through a drain still retires those rows on the way back,
+    // instead of showing them until the next poll. One batch, as above.
+    notifyManager.batch(() => {
+      useChatStore.getState().processChatStreamUpdates(chatId, updates, true);
+      publishDrainedMailboxRows(chatId, updates);
+    });
   },
 
 

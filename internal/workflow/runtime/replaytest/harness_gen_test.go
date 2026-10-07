@@ -406,6 +406,25 @@ func (h *Harness) StartChat(workflowRef, prompt string, params map[string]any) *
 	return resp.Msg
 }
 
+// SendMessage sends a follow-up user message to a started chat through the
+// production ChatService handler, with the same mock model StartChat uses.
+// It returns the error rather than failing the test, so it is safe to call
+// from a scripted turn's During hook, which runs on an activity goroutine.
+func (h *Harness) SendMessage(chatID, content string) error {
+	model, err := structpb.NewValue(map[string]any{"id": "mock"})
+	if err != nil {
+		return err
+	}
+	_, err = h.ChatSvc.SendMessage(h.Ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+		ChatId: chatID,
+		Messages: []*reliantv1.InputMessage{
+			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: content},
+		},
+		WorkflowParams: map[string]*structpb.Value{"model": model},
+	}))
+	return err
+}
+
 // ResolveQuestion answers a pending ask_question through the production
 // QuestionService handler (same double-shape payload as the e2e stories —
 // "answers" for the workflow, "reply" for thread persistence).

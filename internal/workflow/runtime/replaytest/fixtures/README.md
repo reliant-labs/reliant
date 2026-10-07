@@ -35,6 +35,7 @@ fixtures make that class of change fail at **test time** instead.
 | `compaction.json` | `builtin://agent` (tiny `compaction_threshold`) | Compaction edge: token count exceeds threshold after execute_tools → compact node (summary LLM request, new context window) → post-compaction turn → completion. |
 | `spawn.json` | `builtin://agent` | Spawn: a spawn tool call dispatches the child agent detached (`dispatchSpawnBackground`), settling immediately with a handle; the parent's loop blocks without spinning (`InlineLoopExecutor.awaitLiveDetachedSpawns`) until the detached child's completion lands in its mailbox, then reacts to it on its next turn. |
 | `action_approval.json` | `builtin://agent` (`tools: [http__request]`) | Action approval gate: an attended turn calls a mutating integration action, so the batch first raises an approval (`ApprovalCreate`, a timer, `signal.approval.*`); it is denied, and `ExecuteTools` refuses the call (`refused_tool_calls`) before the next turn completes the run. |
+| `late_user_message.json` | `builtin://agent` | Late wake: a `thread_wake` signal lands while the run's only (tool-less) turn is in flight, with nothing queued for its `pending_inbox` probe and nothing live. The loop-exit gate re-enters for it (`late-user-wake-gets-a-turn` version marker, a second `CallLLM`) instead of completing. A history recorded before that change — one `CallLLM`, then completion, with the signal unanswered — must keep replaying that way; that is what the version marker is for. |
 
 ## When `TestReplayFixtures` fails
 
@@ -57,7 +58,12 @@ structure, changing side effects, or changing any branch condition that gates
 the above. Things that do NOT break replay: activity *implementation* changes,
 changes to values that don't alter the command sequence, logging.
 
-### Do not add a version gate
+### Do not add a version gate (unless asked)
+
+`late-user-wake-gets-a-turn` (`late_user_message.json`) is a deliberate
+exception, requested explicitly: the change it gates decides whether a user's
+message is answered, so an in-flight run must not wedge over it. Everything
+below still applies to everything else.
 
 `workflow.GetVersion` keeps old histories on the old code path by keeping the
 old code path. **We do not do that here.** This product has not launched, so
