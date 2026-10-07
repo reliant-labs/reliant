@@ -120,7 +120,7 @@ func registerWrapped[I any, O any](
 	name string,
 	fn func(context.Context, I) (O, error),
 ) {
-	env.RegisterActivityWithOptions(wrapActivity(registry, name, fn, lifecycle.AgentWork), activity.RegisterOptions{Name: name})
+	env.RegisterActivityWithOptions(wrapActivity(registry, name, fn, lifecycle.AgentWork, false), activity.RegisterOptions{Name: name})
 }
 
 // messageWriterFunc adapts a function to MessageWriter.

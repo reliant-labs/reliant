@@ -220,6 +220,19 @@ func (a *ExecuteToolsActivity) Name() string {
 	return "ExecuteTools"
 }
 
+// OutlivesHeartbeatRPCFailure keeps a running tool alive when a heartbeat RPC
+// to the Temporal server merely times out (runtime's
+// shieldFromSpuriousHeartbeatCancel).
+//
+// A tool cannot be retried the way a CallLLM turn can: a redelivered attempt
+// deliberately reports "interrupted" rather than run the tool twice
+// (isActivityRetry), so an attempt abandoned to a slow heartbeat is a result
+// the agent never gets back. Letting the attempt finish is the only way that
+// result reaches the conversation without double-executing the tool.
+func (a *ExecuteToolsActivity) OutlivesHeartbeatRPCFailure() bool {
+	return true
+}
+
 // DisplayName returns human-readable name for UI
 func (a *ExecuteToolsActivity) DisplayName() string {
 	return "Run LLM Tool Calls"

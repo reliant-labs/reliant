@@ -40,17 +40,7 @@ import (
 // The non-terminal write is dropped rather than erroring: it is bookkeeping
 // about a transition that has been overtaken by events, not a failure.
 //
-// Terminal-to-terminal writes are still allowed -- a cancel landing after a
-// failure is a real correction -- with one exception: COMPLETED is never
-// downgraded to CANCELLED. A completed call ran and produced a result the user
-// can already see, so relabelling it cancelled is not a correction, it is a
-// lie about work that happened. That write has a specific source: every tool
-// call in an LLM turn executes as parallel goroutines under one shared
-// context, so cancelling a single tool used to deliver a cancellation to all
-// of its siblings, durably erasing results that had already been recorded.
-// The blast radius is fixed at the source, but the door stays shut here too --
-// this is the last point before the row is overwritten, and no legitimate
-// writer needs to make a finished call cancelled.
+// The FIRST terminal write wins, too: see pinTerminalOutcome.
 //
 // The existing row must be THIS chat's. A tool call id is the model
 // provider's, and a provider can hand two chats the same one; inheriting from
@@ -70,11 +60,11 @@ func UpsertToolCallStatus(ctx context.Context, repo Repository, call *core.ToolC
 				"tool_call_id", call.ID, "chat_id", call.ChatID, "holding_chat_id", existing.ChatID, "status", call.Status)
 			return fmt.Errorf("%w: id %q, writing for chat %q", core.ErrToolCallIDInAnotherChat, call.ID, call.ChatID)
 		}
-		if existing.Status.IsTerminal() && !call.Status.IsTerminal() {
-			return nil
-		}
-		if existing.Status == core.ToolCallStatusCompleted && call.Status == core.ToolCallStatusCancelled {
-			return nil
+		if existing.Status.IsTerminal() {
+			if !call.Status.IsTerminal() {
+				return nil
+			}
+			pinTerminalOutcome(existing, call)
 		}
 		inheritToolCallFields(existing, call)
 	}
@@ -82,6 +72,37 @@ func UpsertToolCallStatus(ctx context.Context, repo Repository, call *core.ToolC
 	resolveToolCallMessage(ctx, repo, call)
 
 	return repo.UpsertToolCall(ctx, call)
+}
+
+// pinTerminalOutcome keeps a terminal call's outcome -- status, completed_at
+// and error message -- as its first terminal write recorded it, while still
+// letting a later write fill in columns that write did not know (message,
+// thread, child workflow).
+//
+// A call ends once. Every later terminal write comes from a writer that was
+// not there when it ended and is describing it from the outside:
+//   - Cleanup's orphan sweep closing a row that was already closed, which
+//     moved completed_at on 3 rows in 15 days of the dev stack's data;
+//   - a cancel aimed at a sibling tool (every call in a turn shares one
+//     context), which used to relabel a COMPLETED call cancelled and erase a
+//     result the user had already seen;
+//   - an abandoned activity attempt finishing after Temporal re-dispatched it
+//     (runtime.shieldFromSpuriousHeartbeatCancel lets a tool outlive a failed
+//     heartbeat RPC). The re-dispatch already reported the call interrupted
+//     and closed the row; the conversation holds that answer, so the late
+//     COMPLETED must not make the durable record disagree with it.
+//
+// The earlier rule let one terminal status "correct" another (a cancel after a
+// failure). None of the writers above is a correction, and no writer is known
+// that is, so the rule is the simple one: first terminal write wins.
+func pinTerminalOutcome(existing, call *core.ToolCall) {
+	if call.Status != existing.Status {
+		logging.Info("[ToolCallStatus] Tool call already terminal; keeping its first outcome",
+			"tool_call_id", call.ID, "status", existing.Status, "ignored_status", call.Status)
+	}
+	call.Status = existing.Status
+	call.CompletedAt = existing.CompletedAt
+	call.ErrorMessage = existing.ErrorMessage
 }
 
 // resolveToolCallMessage fills in message_id (and thread_id) from the call's
