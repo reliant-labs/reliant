@@ -81,6 +81,7 @@ export const MACHINE_STATUS_ACTIVE = DaemonStatus.ACTIVE
 export const MACHINE_STATUS_SUSPENDED = DaemonStatus.SUSPENDED
 export const MACHINE_STATUS_DISCONNECTED = DaemonStatus.DISCONNECTED
 export const MACHINE_STATUS_FAILED = DaemonStatus.FAILED
+export const MACHINE_STATUS_UNKNOWN = DaemonStatus.UNSPECIFIED
 
 export const LIFECYCLE_PHASE_UNSPECIFIED = DaemonLifecyclePhase.UNSPECIFIED
 export const LIFECYCLE_PHASE_READY = DaemonLifecyclePhase.READY
@@ -180,6 +181,12 @@ export function lifecyclePlan(
         disabledReason: 'This machine is still starting.',
         recoveryHint: null,
       }
+
+    // Unknown status (UNSPECIFIED): a managed machine whose lifecycle mirror
+    // is missing, so it may be suspended. Offer everything the server will
+    // vet: it refuses Resume unless the machine is really suspended.
+    case MACHINE_STATUS_UNKNOWN:
+      return { managed: true, offer: ['suspend', 'restart', 'resume'], disabledReason: null, recoveryHint: null }
 
     // ACTIVE, and DISCONNECTED — which is not a transition: the pod is up and
     // the daemon lost its gateway connection. Restart is the most useful

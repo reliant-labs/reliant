@@ -46,7 +46,7 @@ export function useWakingMachines(): ReadonlyMap<string, number> {
   );
 }
 
-export type MachineWsStatus = "active" | "suspended" | "failed" | "pending" | "disconnected";
+export type MachineWsStatus = "active" | "suspended" | "failed" | "pending" | "disconnected" | "unknown";
 
 export interface MachineStatusPresentation {
   /** Overrides the status badge's label; undefined keeps the default. */

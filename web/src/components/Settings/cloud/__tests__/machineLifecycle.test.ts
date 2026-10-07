@@ -29,6 +29,7 @@ import {
   MACHINE_STATUS_DISCONNECTED,
   MACHINE_STATUS_FAILED,
   MACHINE_STATUS_PENDING,
+  MACHINE_STATUS_UNKNOWN,
   MACHINE_STATUS_SUSPENDED,
   lifecyclePlan,
   restartMachine,
@@ -49,6 +50,12 @@ const selfHosted = (status: number) => ({
 })
 
 describe('lifecyclePlan', () => {
+  it('still offers Resume (and the rest) when a managed machine status is unknown', () => {
+    const plan = lifecyclePlan(managed(MACHINE_STATUS_UNKNOWN), null)
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resume'])
+    expect(plan.disabledReason).toBeNull()
+  })
+
   it('offers Suspend and Restart on a running cloud machine, both enabled', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_ACTIVE), null)
     expect(plan.managed).toBe(true)

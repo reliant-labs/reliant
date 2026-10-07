@@ -34,7 +34,7 @@ func TestComposeDaemonStatus_AttachmentWinsOverLifecycle(t *testing.T) {
 		reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED,
 	}
 	for _, phase := range phases {
-		if got := composeDaemonStatus(phase, true); got != reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE {
+		if got := composeDaemonStatus(phase, true, false); got != reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE {
 			t.Errorf("attached daemon with phase %v: status = %v, want ACTIVE", phase, got)
 		}
 	}
@@ -50,23 +50,28 @@ func TestComposeDaemonStatus_UnattachedTakesTheLifecyclePhase(t *testing.T) {
 		name  string
 		phase reliantv1.DaemonLifecyclePhase
 		want  reliantv1.DaemonStatus
+		// selfHosted marks a user-run daemon, which never has a phase.
+		selfHosted bool
 	}{
-		{"provisioning is pending", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_PROVISIONING, reliantv1.DaemonStatus_DAEMON_STATUS_PENDING},
-		{"cloning is pending", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_CLONING, reliantv1.DaemonStatus_DAEMON_STATUS_PENDING},
-		{"suspending is suspended", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDING, reliantv1.DaemonStatus_DAEMON_STATUS_SUSPENDED},
-		{"suspended is suspended", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDED, reliantv1.DaemonStatus_DAEMON_STATUS_SUSPENDED},
-		{"failed is failed", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED, reliantv1.DaemonStatus_DAEMON_STATUS_FAILED},
+		{"provisioning is pending", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_PROVISIONING, reliantv1.DaemonStatus_DAEMON_STATUS_PENDING, false},
+		{"cloning is pending", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_CLONING, reliantv1.DaemonStatus_DAEMON_STATUS_PENDING, false},
+		{"suspending is suspended", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDING, reliantv1.DaemonStatus_DAEMON_STATUS_SUSPENDED, false},
+		{"suspended is suspended", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDED, reliantv1.DaemonStatus_DAEMON_STATUS_SUSPENDED, false},
+		{"failed is failed", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED, reliantv1.DaemonStatus_DAEMON_STATUS_FAILED, false},
 		// READY-but-unattached is the operator saying the pod is up while
 		// nothing is attached to route work to. That window is precisely what
 		// the attachment lease exists to report, so it is DISCONNECTED.
-		{"ready but unattached is disconnected", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_READY, reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED},
+		{"ready but unattached is disconnected", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_READY, reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED, false},
 		// No phase ever reported: the permanent state of every self-hosted
 		// daemon. Must behave exactly as it did before lifecycle existed.
-		{"no phase is disconnected", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED, reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED},
+		{"self-hosted with no phase is disconnected", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED, reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED, true},
+		// A managed machine with no usable phase may be suspended; calling it
+		// DISCONNECTED hid Resume. Unknown is reported as unknown.
+		{"managed with no phase is unknown", reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED, reliantv1.DaemonStatus_DAEMON_STATUS_UNSPECIFIED, false},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			if got := composeDaemonStatus(tc.phase, false); got != tc.want {
+			if got := composeDaemonStatus(tc.phase, false, tc.selfHosted); got != tc.want {
 				t.Errorf("status = %v, want %v", got, tc.want)
 			}
 		})
@@ -158,5 +163,14 @@ func TestLifecyclePhaseToProto_UnknownIsUnspecified(t *testing.T) {
 	}
 	if got := lifecyclePhaseToProto(nil); got != reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED {
 		t.Errorf("nil phase = %v, want UNSPECIFIED", got)
+	}
+}
+
+func TestDaemonToProto_ManagedUnknownPhaseIsUnknown(t *testing.T) {
+	for name, phase := range map[string]*string{"null": nil, "unrecognised": strp("bogus")} {
+		d := &db.Daemon{ID: "d-m", UserID: "u-1", DaemonType: strp("managed"), LifecyclePhase: phase}
+		if got := daemonToProto(d, nil).GetStatus(); got != reliantv1.DaemonStatus_DAEMON_STATUS_UNSPECIFIED {
+			t.Errorf("%s phase: status = %v, want UNSPECIFIED", name, got)
+		}
 	}
 }
