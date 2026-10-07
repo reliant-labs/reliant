@@ -11,7 +11,7 @@ Click the stop button or press `Esc`. The workflow stops with state preserved. S
 
 ### Can I change parameters while running?
 
-Yes. Open parameters panel (gear icon), change values. Changes take effect on the next iteration. Common updates: switching to manual mode, adjusting temperature, changing model.
+Yes. Open parameters panel (gear icon), change values. Changes take effect on the next iteration. Common updates: switching to manual mode or changing the model.
 
 ### What happens when a workflow fails?
 
@@ -50,21 +50,57 @@ Workflows define structure. Changing mid-run would break execution. Branch from 
 
 ### What are response tools?
 
-Synthetic tools that force structured output from the LLM:
+Synthetic tools that force structured output from the model. You describe the output with a JSON `schema`:
 
 ```yaml
 response_tool:
   name: review_result
-  options:
-    approved: "Code looks good"
-    needs_changes: "Issues found"
+  schema:
+    type: object
+    properties:
+      choice:
+        type: string
+        enum: [approved, needs_changes]
+      value:
+        type: string
+    required: [choice, value]
 ```
 
-Output is always `{ choice: string, value: string }`.
+A common pattern is a `choice` and an explanatory `value`, which later edges can branch on. See [Workflow Patterns](/workflows/patterns) for a full example.
 
 ### When should I use them?
 
 When you need to branch on structured data—code review pass/fail, classification, validation results.
+
+## Account, Billing and Machines
+
+### Do I need an account?
+
+Yes. Reliant is a cloud service: you sign in to use the web or desktop app, and your chats, projects and settings live in your account. See [Key Concepts](/getting-started/concepts) for how the pieces fit.
+
+### What does Reliant cost?
+
+There are two separate things you might pay for, and you only pay for the ones you use. **Cloud machines** are a monthly subscription: Compute Small, Medium, Large, XL and 2XL cost $15, $35, $79, $159 and $299 per month. **Reliant AI** is pay as you go from a wallet: usage is billed at the provider's price, and wallet top-ups include a 5% service fee. If you run agents on your own computer with your own API key or provider login, you pay Reliant nothing for those parts and the provider directly for the model. Your current plan and usage are in **Settings → Billing**.
+
+### Where do my agents run?
+
+On a **machine** you choose: your own computer, another computer you own, or a Reliant cloud machine. The daemon on that machine reads files and runs commands for the agent, so your code stays there. See [Remote Daemons](/features/remote-daemons).
+
+### What happens to a cloud machine when I'm not using it?
+
+It suspends after a period of inactivity, which you can change in **Settings → Machines**, and wakes up automatically when you send your next message. A suspended machine isn't billed for compute, but its disk is. Delete the machine to stop all charges for it.
+
+### Can I use my own API key or my Claude, ChatGPT or Copilot subscription?
+
+Yes. Connect them in **Settings → AI**. See [AI Providers](/settings/api-keys).
+
+### Can I use a local model?
+
+Yes, through a daemon on the computer that runs the model server. The prompt and reply still pass through Reliant's servers. See [AI Providers](/settings/api-keys#local-models).
+
+### How do I delete my account?
+
+**Settings → Account → Delete account**. The confirmation screen shows what will be deleted and what will be refunded. See [Privacy & Security](/help/privacy#deleting-your-data).
 
 ## Data and Privacy
 
@@ -75,38 +111,6 @@ Reliant is a cloud service. Your chats, messages, tool calls and tool outputs (w
 ### Are conversations sent to Reliant?
 
 Yes. Our servers run the agent loop and make the model calls, so your prompts, whatever the agent reads, and whatever commands print are sent to our servers, stored with your chat, and sent to your model provider. We don't train on customer content. See [Privacy & Security](/help/privacy) for the full picture, including telemetry (on by default; opt out in Settings → Privacy), retention, and how to delete your chats and account.
-
-## Known Limitations
-
-Current limitations we're aware of. We're working on these—check back for updates.
-
-### Terminal
-
-**Interactive utilities don't work.** Commands like `vim`, `nano`, and other interactive terminal programs aren't supported yet. Use GUI editors or non-interactive commands.
-
-### Models
-
-**Switching models mid-chat may cause issues.** Changing models during a conversation can break context, especially with thinking models. Workaround: branch first, then switch models on the new branch.
-
-**Gemini may experience issues.** Google's Gemini models have intermittent compatibility issues. If you encounter problems, try switching to Claude or OpenAI models.
-
-### Branching
-
-**Branching from a different workspace uses the original workspace.** If you branch a message that originated from a chat in a different workspace, the new branch will be created in that original workspace, not your current one.
-
-### Workflows
-
-**Approval denial restarts the workflow.** Denying an approval node will cancel the entire workflow. When you resume, it starts over from the beginning. We're investigating better mechanics here.
-
-**Tool access is enforced by permission level.** Tools are gated by permission levels (readonly, mutating, orchestrator) at execution time. If the LLM requests a tool that exceeds the granted permission, the call is denied with a clear error. This prevents unauthorized tool use regardless of what tools the LLM has seen in context.
-
-**`continue_as_new` uses newer workflow versions.** When a workflow continues as new, it may pick up a newer version of the workflow definition, causing inconsistent behavior.
-
-**Spawned agents limited to `builtin://agent` workflow.** The spawn node currently only works with the built-in `builtin://agent` workflow, not custom workflows.
-
-### Experimental Features
-
-**Activity viewer is in alpha.** The activity viewer is experimental and not fully supported. Expect rough edges.
 
 ---
 

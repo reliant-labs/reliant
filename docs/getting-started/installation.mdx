@@ -1,35 +1,29 @@
 ---
 title: "Installation"
-description: "Download and install Reliant on macOS, Linux, and Windows"
+description: "Use Reliant in the browser, or install the desktop app on macOS, Windows or Linux"
 ---
 
-Get Reliant up and running on your system.
+Reliant is a cloud service, so there are three ways in: use it in the browser with nothing to install, install the desktop app, or install the `reliant` command line tool to run a daemon on a machine of your own. Whichever you pick, you sign in to the same account, and what you see is the same.
 
-## System Requirements
+## Web app
 
-### Hardware
+Open [app.reliantlabs.io](https://app.reliantlabs.io) and sign in. There is nothing to download. If you choose a Reliant cloud machine during setup, this is all you need, and it works from any device with a browser, including your phone.
 
-- **RAM**: Minimum 8GB, recommended 16GB+
-- **Storage**: At least 4GB free
-- **Processor**: Intel x86-64, Apple Silicon, or ARM64
+## Desktop app
 
-### Operating System
+The desktop app is the same interface in its own window. It also lets you use your own computer as the machine that runs your agents' tools (read files, run commands) without any extra setup, because the app starts a daemon for you.
 
-| Platform | Minimum | Recommended |
-|----------|---------|-------------|
-| **macOS** | 11.0 (Big Sur) | 13.0+ (Ventura) |
-| **Linux** | x86_64 or ARM64 | AppImage format |
-| **Windows** | Windows 10 | Windows 10/11 (x64 or ARM64) |
+### Requirements
 
-### Additional Requirements
+| Platform | Requirement |
+|----------|-------------|
+| **macOS** | macOS 12 (Monterey) or later, Apple Silicon or Intel |
+| **Windows** | Windows 10 or 11, x64 or ARM64 |
+| **Linux** | x86_64 or ARM64, as an AppImage or a `.deb` package (Debian, Ubuntu) |
 
-- **Internet**: Required for AI features
-- **AI Provider Authentication**: Required (API key or OAuth login, depending on provider — see [Quick Start](/getting-started/quick-start))
-- **Git**: Optional but recommended
+You also need an internet connection, because Reliant's servers run the agent loop and call the model.
 
-## Install via Homebrew (macOS/Linux)
-
-The easiest way to install Reliant on **macOS and Linux** is via Homebrew.
+### Homebrew (macOS only)
 
 ```bash
 brew install --cask reliant-labs/reliant/reliant
@@ -42,11 +36,9 @@ brew tap reliant-labs/reliant
 brew install --cask reliant
 ```
 
-Homebrew automatically downloads the correct version for your Mac (Apple Silicon or Intel).
+Homebrew picks the right build for your Mac (Apple Silicon or Intel). The cask is for macOS only; on Windows and Linux use the direct downloads below. If you don't have Homebrew, see [brew.sh](https://brew.sh).
 
-> Homebrew must be installed first. Visit [brew.sh](https://brew.sh) if you don't have it.
-
-## Direct Download
+### Direct download
 
 | Platform | Architecture | Download |
 |----------|-------------|----------|
@@ -56,15 +48,24 @@ Homebrew automatically downloads the correct version for your Mac (Apple Silicon
 | **Windows** | ARM64 | [Download .exe](https://downloads.reliantlabs.io/Reliant-latest-win-arm64.exe?utm_source=docs&utm_medium=installation) |
 | **Linux** | x86_64 | [Download .AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-x86_64.AppImage?utm_source=docs&utm_medium=installation) |
 | **Linux** | ARM64 | [Download .AppImage](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.AppImage?utm_source=docs&utm_medium=installation) |
+| **Linux** | x86_64 | [Download .deb](https://downloads.reliantlabs.io/Reliant-latest-linux-amd64.deb?utm_source=docs&utm_medium=installation) |
+| **Linux** | ARM64 | [Download .deb](https://downloads.reliantlabs.io/Reliant-latest-linux-arm64.deb?utm_source=docs&utm_medium=installation) |
 
-> **Not sure which Mac?** Check Apple menu → About This Mac → Chip
+Not sure which Mac you have? Check Apple menu → About This Mac → Chip.
 
-**Linux users**: After downloading, make the AppImage executable and run it:
+On Linux, make an AppImage executable and run it, or install the `.deb` with your package manager:
 
 ```bash
 chmod +x Reliant-latest-linux-*.AppImage
 ./Reliant-latest-linux-*.AppImage
+
+# or, on Debian/Ubuntu
+sudo apt install ./Reliant-latest-linux-amd64.deb
 ```
+
+## Command line tool
+
+The `reliant` CLI is what runs a daemon on a machine you own, such as a workstation, a server or a Raspberry Pi, so your agents can work there. You don't need it if you use the desktop app or a Reliant cloud machine. The CLI is built from source (see below); once you have the binary, `reliant daemon start` connects the machine to your account. See [Remote Daemons](/features/remote-daemons) for the full walkthrough.
 
 ## Build from Source
 
@@ -124,58 +125,21 @@ with no flags and no environment:
 reliant daemon start --token
 ```
 
-### Pointing at your own stack
-
-Self-hosting, or running against a local dev stack? Override the server, and the
-gateway when it isn't on the same host:
-
-```bash
-reliant daemon start --server http://localhost:8080 --gateway http://localhost:29190
-```
-
-Or set them once in your shell:
-
-```bash
-export RELIANT_SERVER_URL=http://localhost:8080
-export RELIANT_GATEWAY_URL=http://localhost:29190
-```
-
-<Note>
-The gateway is a **separate process** from the API server — it is the only one
-that serves the daemon's connection stream. On a cloud host the daemon derives
-the gateway from the server automatically; on localhost it cannot guess the
-port, so set `--gateway` (or `RELIANT_GATEWAY_URL`) explicitly. Without it the
-daemon dials the API server and fails with a 404.
-</Note>
-
 > See [CONTRIBUTING.md](https://github.com/reliant-labs/reliant/blob/main/CONTRIBUTING.md) for the full development setup guide.
 
-## Post-Installation
+## After installing
 
-1. **Launch Reliant** from Applications (macOS), Start Menu (Windows), or run the AppImage (Linux)
-2. **Open a project folder** or create a new one
-3. **Configure your API key** — see [Quick Start](/getting-started/quick-start)
+Launch Reliant and sign in. Setup walks you through choosing a machine, a model, and your first project; the [Quick Start](/getting-started/quick-start) follows it step by step.
 
 ## Updating
 
-### Via Homebrew
+The desktop app updates itself. To check manually, use **Reliant → Check for Updates**. With Homebrew:
 
 ```bash
 brew upgrade --cask reliant
 ```
 
-### Via Source
-
-```bash
-cd reliant
-git pull
-npm install
-npm run dev   # or: make build
-```
-
-### Manual
-
-Go to **Reliant → Check for Updates**, or download and install the latest version over your existing installation.
+The web app is always current. If you built the CLI from source, pull and rebuild.
 
 ## Uninstalling
 
@@ -208,7 +172,7 @@ rm -rf ~/Library/Logs/Reliant
 ### Linux
 
 1. Quit Reliant
-2. Delete the AppImage file
+2. Delete the AppImage file, or remove the package with your package manager if you installed the `.deb`
 3. Remove settings (optional):
 
 ```bash
@@ -220,4 +184,4 @@ Your projects and code remain untouched.
 
 ---
 
-**Next**: [Quick Start](/getting-started/quick-start) — Configure your API key and start chatting
+**Next**: [Quick Start](/getting-started/quick-start) — Set up your machine and model and run your first workflow
