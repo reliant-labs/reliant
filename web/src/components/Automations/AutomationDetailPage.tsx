@@ -179,7 +179,9 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{trigger.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {projectName ?? "Unknown project"} on{" "}
+            {/* "Reliant on MacBook", but "Reliant · No machine": no machine is not a place to run on. */}
+            {projectName ?? "Unknown project"}
+            {trigger.noMachine ? " · " : " on "}
             {automationMachineLabel(
               trigger,
               daemons.find((d) => d.daemonId === trigger.daemonId),

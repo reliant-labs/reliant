@@ -149,8 +149,24 @@ describe("MobileChatWorkflowRoute", () => {
       render(<MobileChatWorkflowRoute />);
     });
 
-    expect(reconcileChatSubscription).toHaveBeenCalledWith(CHAT_ID);
     expect(statusOf("attempt")).toBe("Running");
+    expect(reconcileChatSubscription).toHaveBeenCalledWith(CHAT_ID);
+  });
+
+  it("re-asserts the subscription once the chat list loads, since the stream cannot connect before", async () => {
+    useChatStore.setState({ hasLoaded: false });
+
+    await act(async () => {
+      render(<MobileChatWorkflowRoute />);
+    });
+    const callsBeforeLoad = reconcileChatSubscription.mock.calls.length;
+
+    await act(async () => {
+      useChatStore.setState({ hasLoaded: true });
+    });
+
+    expect(reconcileChatSubscription.mock.calls.length).toBeGreaterThan(callsBeforeLoad);
+    expect(reconcileChatSubscription).toHaveBeenLastCalledWith(CHAT_ID);
   });
 
   it("reads finished steps and child workflows from the FULL tree, as the desktop viewer does", async () => {
@@ -172,10 +188,10 @@ describe("MobileChatWorkflowRoute", () => {
       render(<MobileChatWorkflowRoute />);
     });
 
-    expect(useWorkflowExecutions).toHaveBeenCalledWith(CHAT_ID, WorkflowExecutionView.FULL);
     // A step row says the step finished.
     expect(statusOf("plan")).toBe("Done");
     // A sub-workflow node is running while its child workflow is.
     expect(statusOf("ship")).toBe("Running");
+    expect(useWorkflowExecutions).toHaveBeenCalledWith(CHAT_ID, WorkflowExecutionView.FULL);
   });
 });

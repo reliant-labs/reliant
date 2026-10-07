@@ -19,6 +19,7 @@ import { Loader2 } from "lucide-react";
 import { MobileWorkflowScreen } from "./MobileWorkflowScreen";
 import { useWorkflows } from "../../store/globalDataStore";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
+import { useChatStore } from "../../store/chatStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { useFullStepExecution } from "../workflow/hooks/useFullStepExecution";
@@ -89,12 +90,15 @@ export function MobileChatWorkflowRoute() {
   // The node_execution stream reaches the store only for the subscribed chat.
   // On desktop the viewer sits inside ChatContainer, which asserts that
   // subscription; this route is reachable directly (a reload, a shared link),
-  // so it asserts it the same way.
+  // so it asserts it the same way. The stream will not connect until the
+  // chat list has loaded (globalUpdatesStore.connect), so a direct load
+  // re-asserts once it has.
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const reconcileChatSubscription = useGlobalUpdatesStore((s) => s.reconcileChatSubscription);
+  const chatsLoaded = useChatStore((s) => s.hasLoaded);
   useEffect(() => {
     reconcileChatSubscription(chatId ?? null);
-  }, [chatId, connectionStatus, reconcileChatSubscription]);
+  }, [chatId, connectionStatus, chatsLoaded, reconcileChatSubscription]);
 
   if (loading) {
     return (
