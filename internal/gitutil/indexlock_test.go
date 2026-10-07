@@ -154,6 +154,9 @@ func TestEnsureIndexWritable_RecoversStrandedLock(t *testing.T) {
 // does not depend on lsof's speed — a slow probe answers Unknown, which keeps
 // the lock exactly as Held does.
 func TestEnsureIndexWritable_LeavesLiveLockAlone(t *testing.T) {
+	if testing.Short() {
+		t.Skip("runs real git plus the real lsof holder probe (up to its 10s timeout on a loaded host); runs in make test")
+	}
 	repo := initRepo(t)
 
 	// A clean filter that blocks until the test releases it, so git holds

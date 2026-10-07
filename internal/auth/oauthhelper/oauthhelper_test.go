@@ -218,6 +218,9 @@ func TestIdleTimeout_ClosesThePort(t *testing.T) {
 // A request must RESET the idle clock, or a user reading the consent screen
 // would have the port closed under them.
 func TestIdleTimeout_RequestKeepsItAlive(t *testing.T) {
+	if testing.Short() {
+		t.Skip("sleeps across a real 3s idle window to prove a request resets it (~5s); runs in make test")
+	}
 	srv, err := Start(Options{
 		Port:        freePort(t),
 		Source:      "daemon",

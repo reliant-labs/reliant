@@ -36,6 +36,16 @@ func startBackground(t *testing.T, policy *reliantv1.ConnectorPolicy, root strin
 	return out.ProcessID
 }
 
+// skipBackgroundPortScanUnderShort gates tests that look a live background
+// process up: every BackgroundManager.GetProcess refreshes its ports with a
+// real ps + lsof scan, which takes seconds on a loaded macOS box.
+func skipBackgroundPortScanUnderShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("each lookup of a live background process runs a real ps/lsof port scan (seconds on a loaded macOS box); runs in make test")
+	}
+}
+
 func bgPolicy(grantID, root string) *reliantv1.ConnectorPolicy {
 	return &reliantv1.ConnectorPolicy{
 		GrantId:       grantID,
@@ -54,6 +64,7 @@ func bgPolicy(grantID, root string) *reliantv1.ConnectorPolicy {
 // the output of — or kill — a process belonging to someone else. Build and
 // test output routinely contains secrets.
 func TestBackgroundProcessesAreGrantScoped(t *testing.T) {
+	skipBackgroundPortScanUnderShort(t)
 	root := t.TempDir()
 
 	victimID := startBackground(t, bgPolicy("grant-a", root), root, "sleep", "30")
@@ -107,6 +118,7 @@ func TestBackgroundProcessesAreGrantScoped(t *testing.T) {
 // TestFirstPartyCanSeeAllBackgroundProcesses: the unconfined path must keep
 // working exactly as it did, or the app's own process views break.
 func TestFirstPartyCanSeeAllBackgroundProcesses(t *testing.T) {
+	skipBackgroundPortScanUnderShort(t)
 	root := t.TempDir()
 
 	id := startBackground(t, bgPolicy("grant-a", root), root, "sleep", "30")

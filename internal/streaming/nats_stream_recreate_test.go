@@ -25,6 +25,9 @@ import (
 // The hub must heal itself: recreate the missing stream and retry the consumer,
 // so a subscription taken out after a NATS restart still delivers deltas.
 func TestConsumeLoop_RecreatesStreamAfterNATSWipe(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out drainAll's 3s quiet window after the stream is recreated; runs in make test")
+	}
 	hub := newTestHub(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
