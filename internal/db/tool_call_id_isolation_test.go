@@ -187,12 +187,10 @@ func TestToolCallIDIsolation_LiveSpawnIsNotHiddenByAnotherChatsReport(t *testing
 	require.Equal(t, reusedToolCallID, live[0].ToolCallID)
 }
 
-// While the chat-blind slot still exists (the expand step keeps it for the
-// previous release), chat A's placeholder under an id chat B already reported
-// under cannot be stored. It must fail loudly, not as DO NOTHING's silent
-// "already reported" -- the contract step, which drops the chat-blind index,
-// turns this into the placeholder landing.
-func TestToolCallIDIsolation_PlaceholderUnderAnotherChatsReportedIDFailsLoudly(t *testing.T) {
+// The sweep's placeholder for chat A's stranded spawn must land even though
+// chat B already holds a report under the same id. DO NOTHING against a
+// chat-blind slot used to make this a silent no-op.
+func TestToolCallIDIsolation_PlaceholderLandsDespiteAnotherChatsReport(t *testing.T) {
 	repo, cleanup := SetupTestDB(t)
 	defer cleanup()
 	ctx := context.Background()
@@ -206,76 +204,13 @@ func TestToolCallIDIsolation_PlaceholderUnderAnotherChatsReportedIDFailsLoudly(t
 	placeholder := spawnReport("chat-iso-a", "child-a", "chat-iso-a", "Sub-agent finished while its result was lost in transit; check spawn_status.")
 	placeholder.Synthesized = true
 	inserted, err := repo.EnqueueAgentMessageIfAbsent(ctx, placeholder)
-	require.ErrorIs(t, err, core.ErrSpawnReportSlotTaken, "chat A's placeholder must not vanish as \"already reported\"")
-	require.False(t, inserted)
-
-	queuedB, err := repo.ListQueuedAgentMessagesForThread(ctx, "chat-iso-b")
 	require.NoError(t, err)
-	require.Len(t, queuedB, 1)
-	require.Equal(t, "chat B's result", queuedB[0].Body, "chat B's report must be untouched")
-}
+	require.True(t, inserted, "chat A's placeholder must be written; chat B's report holds nothing of A's")
 
-// The expand step's promise: the PREVIOUS release's report writers -- which
-// arbitrate on the chat-blind index by naming ON CONFLICT (tool_call_id) --
-// still work against this schema. These are that release's statements,
-// verbatim. The contract step drops the index they need, and this test with it.
-func TestSpawnReportSlot_PreviousReleaseStatementsStillWork(t *testing.T) {
-	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
-	defer cleanup()
-	ctx := context.Background()
-	createActivityTestChat(t, repo, "chat-prev")
-	childThread(t, repo, "child-prev", "chat-prev")
-
-	const previousIfAbsent = `INSERT INTO agent_messages (
-    id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments, synthesized
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
-)
-ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO NOTHING
-RETURNING id`
-	const previousSpawnReport = `INSERT INTO agent_messages (
-    id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
-    status, created_at, attachments, synthesized
-) VALUES (
-    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, false
-)
-ON CONFLICT (tool_call_id) WHERE kind IN (2, 3, 4) DO UPDATE SET
-    id = EXCLUDED.id,
-    chat_id = EXCLUDED.chat_id,
-    from_thread_id = EXCLUDED.from_thread_id,
-    to_thread_id = EXCLUDED.to_thread_id,
-    kind = EXCLUDED.kind,
-    body = EXCLUDED.body,
-    attachments = EXCLUDED.attachments,
-    status = EXCLUDED.status,
-    created_at = EXCLUDED.created_at,
-    delivered_at = NULL,
-    delivered_message_id = NULL,
-    synthesized = false
-WHERE agent_messages.synthesized
-RETURNING id, (xmax = 0) AS inserted`
-
-	now := time.Now().UTC()
-	var id string
-	require.NoError(t, rawDB.QueryRowContext(ctx, previousIfAbsent,
-		"am-prev-placeholder", "chat-prev", "child-prev", "chat-prev", int32(core.AgentMessageKindCompletion),
-		"lost in transit", reusedToolCallID, int32(core.AgentMessageStatusQueued), now, nil, true,
-	).Scan(&id), "the previous release's placeholder write must still find its arbiter index")
-	require.Equal(t, "am-prev-placeholder", id)
-
-	var inserted bool
-	require.NoError(t, rawDB.QueryRowContext(ctx, previousSpawnReport,
-		"am-prev-real", "chat-prev", "child-prev", "chat-prev", int32(core.AgentMessageKindCompletion),
-		"the real result", reusedToolCallID, int32(core.AgentMessageStatusQueued), now, nil,
-	).Scan(&id, &inserted), "the previous release's real report must still supersede its placeholder")
-	require.Equal(t, "am-prev-real", id)
-	require.False(t, inserted, "superseded, not inserted")
-
-	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, "chat-prev")
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, "chat-iso-a")
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
-	require.Equal(t, "the real result", queued[0].Body)
+	require.Equal(t, placeholder.Body, queued[0].Body)
 }
 
 // Within one chat the slot is still one per id. The sweep's placeholder for a

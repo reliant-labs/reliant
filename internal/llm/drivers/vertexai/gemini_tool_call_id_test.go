@@ -18,8 +18,8 @@ import (
 
 // A tool call's id is a GLOBAL key in reliant's persistence, not a per-turn
 // label: tool_calls and tool_call_results are keyed by it alone, and a spawn's
-// terminal report is unique per tool_call_id across every chat
-// (idx_agent_messages_one_terminal_report_per_spawn). Vertex Gemini returns no
+// terminal report is unique per tool_call_id within its chat
+// (idx_agent_messages_one_terminal_report_per_chat_spawn). Vertex Gemini returns no
 // id of its own, and this driver used the FUNCTION NAME in its place, so every
 // `spawn` call in every chat was `spawn`. The second one's report is then
 // "already reported" and silently dropped, and a second call to any tool whose
