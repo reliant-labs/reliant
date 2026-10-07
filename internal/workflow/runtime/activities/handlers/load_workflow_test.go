@@ -22,9 +22,9 @@ func TestLoadBuiltinWorkflow(t *testing.T) {
 	})
 
 	t.Run("fails for non-existent builtin", func(t *testing.T) {
-		_, err := loadBuiltinWorkflow("builtin://non-existent-workflow")
+		_, err := loadBuiltinWorkflow("non-existent-workflow")
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "builtin workflow not found")
+		assert.Contains(t, err.Error(), `no builtin workflow is named "non-existent-workflow"`)
 	})
 }
 

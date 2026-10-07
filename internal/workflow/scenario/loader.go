@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -30,34 +28,6 @@ func LoadScenariosFromFile(path string) ([]*Scenario, error) {
 		return nil, fmt.Errorf("failed to read scenario file %s: %w", path, err)
 	}
 	return ParseScenarioYAML(data)
-}
-
-// LoadScenariosFromDir loads all scenario files from a directory.
-// Files must have .yaml or .yml extension.
-func LoadScenariosFromDir(dir string) ([]*Scenario, error) {
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read scenario directory %s: %w", dir, err)
-	}
-
-	var allScenarios []*Scenario
-	for _, entry := range entries {
-		if entry.IsDir() {
-			continue
-		}
-		name := entry.Name()
-		if !strings.HasSuffix(name, ".yaml") && !strings.HasSuffix(name, ".yml") {
-			continue
-		}
-
-		scenarios, err := LoadScenariosFromFile(filepath.Join(dir, name))
-		if err != nil {
-			return nil, fmt.Errorf("failed to load scenarios from %s: %w", name, err)
-		}
-		allScenarios = append(allScenarios, scenarios...)
-	}
-
-	return allScenarios, nil
 }
 
 // ParseScenarioYAML parses scenario YAML bytes into Scenario structs.
@@ -90,6 +60,55 @@ func ParseScenarioYAML(data []byte) ([]*Scenario, error) {
 	}
 
 	return scenarios, nil
+}
+
+// ParseScenarioFile parses a PROJECT scenario file: one scenario per file, as
+// .reliant/workflows/<slug>/scenarios/<name>.yaml holds them
+// (workflowref.ScenarioPath). A file that declares no name: takes
+// defaultName, its file stem.
+//
+// The CLI and the app both read project scenarios with this. The app
+// identifies a project scenario by its file, so a file holding several would
+// silently lose all but the first there; it is an error here instead, on
+// both surfaces. (ParseScenarioYAML, which accepts many, is for the builtin
+// corpus under internal/workflow/builtin/testdata.)
+func ParseScenarioFile(data []byte, defaultName string) (*Scenario, error) {
+	decoder := yaml.NewDecoder(bytes.NewReader(data))
+	var scenarios []*Scenario
+	for {
+		var doc yaml.Node
+		err := decoder.Decode(&doc)
+		if err == io.EOF {
+			break
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
+		}
+		if len(doc.Content) == 0 || doc.Content[0].Kind == 0 {
+			continue // an empty document between separators
+		}
+		var wrapper ScenarioFile
+		if err := doc.Decode(&wrapper); err == nil && len(wrapper.Scenarios) > 0 {
+			return nil, fmt.Errorf("holds a list of %d scenarios; a project scenario file holds one — split it into one file per scenario", len(wrapper.Scenarios))
+		}
+		var sc Scenario
+		if err := doc.Decode(&sc); err != nil {
+			return nil, fmt.Errorf("failed to parse scenario YAML: %w", err)
+		}
+		scenarios = append(scenarios, &sc)
+	}
+	switch len(scenarios) {
+	case 0:
+		return nil, fmt.Errorf("holds no scenario")
+	case 1:
+	default:
+		return nil, fmt.Errorf("holds %d scenarios; a project scenario file holds one — split it into one file per scenario", len(scenarios))
+	}
+	sc := scenarios[0]
+	if sc.Name == "" {
+		sc.Name = defaultName
+	}
+	return sc, nil
 }
 
 // LoadWorkflowFromFile loads a workflow from a YAML file on disk.

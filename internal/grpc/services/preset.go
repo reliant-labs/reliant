@@ -24,7 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
-	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 )
 
 // PresetService implements the gRPC PresetService
@@ -394,58 +394,18 @@ func (s *PresetService) loadPresetByNameFromDB(ctx context.Context, projectID, n
 	return nil, fmt.Errorf("preset not found: %s", name)
 }
 
-// loadWorkflow loads a workflow by name using the normal resolution path:
-// builtin -> user DB draft -> DB-stored project workflow.
+// loadWorkflow resolves a workflow ref the way a run does (workflowsource):
+// builtin:// from the embedded builtins; anything else from the user's own
+// complete workflows, then the project's synced workflows by name:.
 // No filesystem access — the API server may run in the cloud without disk access.
-func (s *PresetService) loadWorkflow(ctx context.Context, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	parseYAML := func(data []byte) (*reliantv1.Workflow, error) {
-		return wfyaml.ParseWorkflow(data)
+func (s *PresetService) loadWorkflow(ctx context.Context, workflowRef, projectID string) (*reliantv1.Workflow, error) {
+	resolved, err := workflowsource.Resolve(ctx, s.database, workflowsource.Options{
+		UserID: auth.MustGetUserID(ctx), ProjectID: projectID,
+	}, workflowRef)
+	if err != nil {
+		return nil, fmt.Errorf("workflow %q: %w", workflowRef, err)
 	}
-
-	// 1. Handle builtin:// protocol
-	if strings.HasPrefix(workflowName, "builtin://") {
-		name := workflowName[10:]
-		data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
-		if err != nil {
-			return nil, fmt.Errorf("builtin workflow not found: %s", workflowName)
-		}
-		return parseYAML(data)
-	}
-
-	// 2. Try builtin workflows (without the builtin:// prefix)
-	data, err := builtin.BuiltinWorkflowsFS.ReadFile(workflowName + ".yaml")
-	if err == nil {
-		return parseYAML(data)
-	}
-
-	// 3. Try usable user DB drafts.
-	userID := auth.MustGetUserID(ctx)
-	slug := strings.ToLower(strings.ReplaceAll(workflowName, " ", "-"))
-	draft, dbErr := s.database.GetUsableWorkflowBySlug(ctx, userID, slug)
-	if dbErr != nil {
-		return nil, fmt.Errorf("failed to load user workflow draft %q: %w", workflowName, dbErr)
-	}
-	if draft != nil {
-		return parseDraftDefinitionV2([]byte(draft.Definition))
-	}
-
-	// 4. Try DB-stored project workflows (synced by daemon from .reliant/workflows/ on disk).
-	// The workflow name inside the YAML may differ from the filename (e.g., file "blog.yaml"
-	// with name "blog-content-pipeline"), so we look up by slug in the stored config.
-	if projectID != "" {
-		record, dbErr := s.database.GetProjectConfigRecord(ctx, projectID)
-		if dbErr == nil {
-			workflows, parseErr := cfg.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
-			if parseErr == nil {
-				sw := cfg.FindStoredWorkflowBySlug(workflows, slug)
-				if sw != nil {
-					return parseYAML([]byte(sw.YAMLContent))
-				}
-			}
-		}
-	}
-
-	return nil, fmt.Errorf("workflow not found: %s", workflowName)
+	return resolved.Workflow, nil
 }
 
 // CreatePreset saves a new user preset to the database.

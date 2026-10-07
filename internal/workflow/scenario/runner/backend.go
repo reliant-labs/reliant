@@ -39,9 +39,9 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
-	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 
 	// Imported for its init(), which registers every activity's input/output
 	// type into the schema registry. This is the same registration production
@@ -53,7 +53,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/stopreason"
-	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/mock"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
@@ -128,25 +127,22 @@ func New(wf *reliantv1.Workflow, opts Options) *Runner {
 	return &Runner{workflow: wf, loader: loader, timeout: timeout, onRunStep: opts.OnRunStep}
 }
 
-// LoadBuiltinWorkflow resolves a builtin workflow by ref ("builtin://agent")
-// or bare name ("agent").
+// LoadBuiltinWorkflow resolves builtin:// refs by the one resolution rule
+// (workflowref.Resolve) — and nothing else. It is the loader of a runner with
+// no project: a project ref (project://x, or a bare x) has nowhere to resolve,
+// and is an error rather than a guess at a builtin of that name.
 func LoadBuiltinWorkflow(ref string) (*reliantv1.Workflow, error) {
-	name := bareWorkflowName(ref)
-	data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
+	resolved, err := workflowref.Resolve(ref, workflowref.Sources{})
 	if err != nil {
-		return nil, fmt.Errorf("workflow %q not found in builtins: %w", ref, err)
+		return nil, fmt.Errorf("workflow %q: %w", ref, err)
 	}
-	wf, err := wfyaml.ParseWorkflow(data)
-	if err != nil {
-		return nil, fmt.Errorf("parse builtin workflow %q: %w", name, err)
-	}
-	return wf, nil
+	return resolved.Workflow, nil
 }
 
 // loadRef resolves a ref through the runner's loader. A builtin:// ref always
 // resolves from the embedded builtins, whatever loader was configured.
 func (r *Runner) loadRef(ref string) (*reliantv1.Workflow, error) {
-	if strings.HasPrefix(ref, "builtin://") {
+	if parsed, err := workflowref.Parse(ref); err == nil && parsed.Kind == workflowref.Builtin {
 		return LoadBuiltinWorkflow(ref)
 	}
 	return r.loader(ref)

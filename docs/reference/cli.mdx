@@ -8400,8 +8400,15 @@ reliant workflow scenario
 
 List available scenarios for workflows
 
-Lists scenarios discovered from co-located *_scenarios.yaml files or from
-scenarios/`<workflow-name>`/ directories.
+Lists the scenarios of project workflows.
+
+A project workflow's scenarios live in .reliant/workflows/`<slug>`/scenarios/,
+one scenario per .yaml file, where `<slug>` is the workflow's name: as a slug
+(blog.yaml declaring "name: blog-content-pipeline" keeps its scenarios in
+blog-content-pipeline/scenarios/). That is the layout the app indexes, so the
+CLI and the app see the same scenarios. A sub-workflow ref (project://`<name>`)
+resolves by name: too, never by file name. Scenarios in the retired layouts
+(scenarios/`<file>`/, `<file>`_scenarios.yaml) are an error naming where they go.
 
 Examples:
   reliant workflow scenario list                               # list all project scenarios
@@ -8428,8 +8435,14 @@ Run scenario tests against workflows
 
 Runs scenario tests against workflow definitions on the real workflow runtime
 (DynamicWorkflow in an in-memory Temporal environment; only activities are mocked).
-Scenarios are discovered from co-located *_scenarios.yaml files or from
-scenarios/`<workflow-name>`/ directories.
+
+A project workflow's scenarios live in .reliant/workflows/`<slug>`/scenarios/,
+one scenario per .yaml file, where `<slug>` is the workflow's name: as a slug
+(blog.yaml declaring "name: blog-content-pipeline" keeps its scenarios in
+blog-content-pipeline/scenarios/). That is the layout the app indexes, so the
+CLI and the app see the same scenarios. A sub-workflow ref (project://`<name>`)
+resolves by name: too, never by file name. Scenarios in the retired layouts
+(scenarios/`<file>`/, `<file>`_scenarios.yaml) are an error naming where they go.
 
 If a specific workflow file is given, runs scenarios for that workflow only.
 Otherwise, discovers all workflows in the workflow directory and runs their
@@ -8561,8 +8574,10 @@ PresetLoader alongside the WorkflowLoader so preset-param mismatches (for
 example a preset setting params that aren't declared inputs on the target
 workflow) are surfaced offline.
 
-The reference may be either a filesystem path to a workflow YAML file, or a
-builtin reference like "builtin://get-it-right".
+The reference may be a filesystem path to a workflow YAML file, a builtin
+reference like "builtin://get-it-right", or a project reference like
+"project://deploy", which names a workflow in --dir by its name: field (the
+way the app resolves it — never by file name).
 
 Exit code 0 if no errors, 1 if any errors are found.
 

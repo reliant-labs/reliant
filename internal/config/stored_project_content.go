@@ -3,16 +3,21 @@ package config
 import (
 	"encoding/json"
 	"fmt"
-	"regexp"
 	"strings"
+
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
 // StoredWorkflow represents a project workflow stored in the DB via daemon config sync.
 type StoredWorkflow struct {
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	YAMLContent string `json:"yaml_content"`
-	ContentHash string `json:"content_hash"`
+	Slug string `json:"slug"`
+	Name string `json:"name"`
+	// RelativePath is the file it was synced from, relative to the project
+	// root (".reliant/workflows/blog.yaml"). It is never an address; it is
+	// how a ref that misses can name the file the author probably meant.
+	RelativePath string `json:"relative_path,omitempty"`
+	YAMLContent  string `json:"yaml_content"`
+	ContentHash  string `json:"content_hash"`
 }
 
 // StoredPreset represents a project preset stored in the DB via daemon config sync.
@@ -156,26 +161,25 @@ func FindStoredSkillByPath(skills []StoredSkill, path string) *StoredSkill {
 	return nil
 }
 
-// FindStoredWorkflowBySlug finds a workflow by slug in the stored list.
-func FindStoredWorkflowBySlug(workflows []StoredWorkflow, slug string) *StoredWorkflow {
-	for i := range workflows {
-		if workflows[i].Slug == slug {
-			return &workflows[i]
-		}
+// ProjectWorkflowIndex indexes a project's synced workflows exactly as the
+// CLI indexes .reliant/workflows on disk (workflowref.NewIndex over each
+// file's path and content), so a ref resolves the same way in both. The slug
+// the daemon stored is not consulted: the index derives it from the content.
+func ProjectWorkflowIndex(workflows []StoredWorkflow) *workflowref.Index {
+	files := make([]workflowref.File, 0, len(workflows))
+	for _, w := range workflows {
+		files = append(files, workflowref.File{
+			Path:    strings.TrimPrefix(w.RelativePath, workflowref.Dir+"/"),
+			Content: []byte(w.YAMLContent),
+		})
 	}
-	return nil
+	return workflowref.NewIndex(files)
 }
 
-// NormalizeSlug converts a name to a URL-safe slug.
+// NormalizeSlug converts a name to a URL-safe slug: workflowref.Slug, the
+// one slug workflow names and refs are compared under.
 func NormalizeSlug(name string) string {
-	s := strings.ToLower(name)
-	s = strings.ReplaceAll(s, " ", "-")
-	s = strings.ReplaceAll(s, "_", "-")
-	re := regexp.MustCompile(`[^a-z0-9-]`)
-	s = re.ReplaceAllString(s, "")
-	re = regexp.MustCompile(`-+`)
-	s = re.ReplaceAllString(s, "-")
-	return strings.Trim(s, "-")
+	return workflowref.Slug(name)
 }
 
 // FindStoredPresetByName finds a preset by name in the stored list.

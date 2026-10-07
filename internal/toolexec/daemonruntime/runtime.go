@@ -22,7 +22,6 @@ import (
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
-	"gopkg.in/yaml.v3"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
@@ -42,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
 const (
@@ -1777,9 +1777,10 @@ func buildProjectSnapshot(projectPath string) (*reliantv1.ProjectConfigSnapshot,
 	// here. For non-forge projects this is a no-op.
 	projectMemory = projectMemoryWithForgeFramework(projectPath, projectMemory)
 
-	workflows, workflowBytes := indexWorkflows(projectPath)
+	layout, workflowsDir := readWorkflowLayout(projectPath)
+	workflows, workflowBytes := indexWorkflows(layout, workflowsDir)
 	presets, presetBytes := indexPresets(projectPath)
-	scenarios, scenarioBytes := indexScenarios(projectPath)
+	scenarios, scenarioBytes := indexScenarios(layout, workflowsDir)
 	skills, skillBytes := indexSkills(projectPath)
 	repoMemories, repoMemoriesBytes := collectRepoMemories(projectPath)
 
@@ -2007,56 +2008,46 @@ func buildSkillsIndex(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 	return results, []byte(acc.String())
 }
 
-func indexWorkflows(projectPath string) ([]*reliantv1.IndexedWorkflow, []byte) {
-	baseDir := filepath.Join(projectPath, ".reliant", "workflows")
-	files := listYAMLFiles(baseDir)
-	results := make([]*reliantv1.IndexedWorkflow, 0, len(files))
+// readWorkflowLayout reads the project's .reliant/workflows with the one
+// locator the CLI uses too (workflowref.ReadLayout), so the server indexes
+// exactly the workflows and scenarios `reliant workflow` sees on disk.
+func readWorkflowLayout(projectPath string) (*workflowref.Layout, string) {
+	baseDir := filepath.Join(projectPath, filepath.FromSlash(workflowref.Dir))
+	layout, err := workflowref.ReadLayout(os.DirFS(baseDir))
+	if err != nil {
+		logging.Warn("Failed to read project workflows", "dir", baseDir, "error", err)
+		return workflowref.NewLayout(nil), baseDir
+	}
+	// Misplaced scenarios are reported by the surfaces that read them
+	// (`reliant workflow scenario`), not here: this runs on every 2s poll.
+	return layout, baseDir
+}
+
+// indexWorkflows syncs every project workflow file with its path and
+// content. Problems (no name:, a name two files share) are not resolved here:
+// the server indexes the files with workflowref, as the CLI does, and reports
+// them where a ref or the workflow list meets them.
+func indexWorkflows(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedWorkflow, []byte) {
+	entries := layout.Workflows.Entries()
+	results := make([]*reliantv1.IndexedWorkflow, 0, len(entries))
 	acc := strings.Builder{}
-	seenSlugs := make(map[string]string) // slug -> file path (for duplicate detection)
 
-	for _, path := range files {
-		// Only index top-level YAML files; subdirectory files (e.g. {slug}/scenarios/*.yaml)
-		// are handled by indexScenarios.
-		relToBase, err := filepath.Rel(baseDir, path)
+	for _, e := range entries {
+		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, e.Path))
+		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(e.Path)))
 		if err != nil {
 			continue
 		}
-		if strings.Contains(filepath.ToSlash(relToBase), "/") {
-			continue
-		}
-		rel, err := filepath.Rel(projectPath, path)
-		if err != nil {
-			continue
-		}
-		st, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-		blob, _ := os.ReadFile(path)
-		filename := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		name := extractNameFromYAML(blob)
-		if strings.TrimSpace(name) == "" {
-			name = filename
-		}
-		slug := config.NormalizeSlug(name)
-
-		if existingFile, ok := seenSlugs[slug]; ok {
-			logging.Warn("Duplicate workflow name, skipping",
-				"slug", slug, "file", filepath.Base(path), "conflicts_with", existingFile)
-			continue
-		}
-		seenSlugs[slug] = filepath.Base(path)
-
-		h := hashBytes(blob)
+		h := hashBytes(e.Content)
 		results = append(results, &reliantv1.IndexedWorkflow{
-			Slug:         slug,
-			Name:         name,
-			RelativePath: filepath.ToSlash(rel),
+			Slug:         e.Slug,
+			Name:         e.Name,
+			RelativePath: rel,
 			ContentHash:  h,
 			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  blob,
+			YamlContent:  e.Content,
 		})
-		acc.WriteString(filepath.ToSlash(rel))
+		acc.WriteString(rel)
 		acc.WriteString(":")
 		acc.WriteString(h)
 		acc.WriteString(";")
@@ -2098,46 +2089,28 @@ func indexPresets(projectPath string) ([]*reliantv1.IndexedPreset, []byte) {
 	return results, []byte(acc.String())
 }
 
-func indexScenarios(projectPath string) ([]*reliantv1.IndexedScenario, []byte) {
-	root := filepath.Join(projectPath, ".reliant", "workflows")
-	all := listYAMLFiles(root)
-	results := make([]*reliantv1.IndexedScenario, 0)
+// indexScenarios syncs the scenarios in .reliant/workflows/<slug>/scenarios/,
+// located by workflowref — the locator `reliant workflow scenario` uses.
+func indexScenarios(layout *workflowref.Layout, baseDir string) ([]*reliantv1.IndexedScenario, []byte) {
+	results := make([]*reliantv1.IndexedScenario, 0, len(layout.Scenarios))
 	acc := strings.Builder{}
 
-	for _, path := range all {
-		relToWorkflows, err := filepath.Rel(root, path)
+	for _, sc := range layout.Scenarios {
+		rel := filepath.ToSlash(filepath.Join(workflowref.Dir, sc.Path))
+		st, err := os.Stat(filepath.Join(baseDir, filepath.FromSlash(sc.Path)))
 		if err != nil {
 			continue
 		}
-		parts := strings.Split(filepath.ToSlash(relToWorkflows), "/")
-		if len(parts) < 3 {
-			continue
-		}
-		if parts[1] != "scenarios" {
-			continue
-		}
-
-		workflowSlug := parts[0]
-		scenarioName := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-		relProject, err := filepath.Rel(projectPath, path)
-		if err != nil {
-			continue
-		}
-		st, err := os.Stat(path)
-		if err != nil {
-			continue
-		}
-		blob, _ := os.ReadFile(path)
-		h := hashBytes(blob)
+		h := hashBytes(sc.Content)
 		results = append(results, &reliantv1.IndexedScenario{
-			WorkflowSlug: workflowSlug,
-			Name:         scenarioName,
-			RelativePath: filepath.ToSlash(relProject),
+			WorkflowSlug: sc.WorkflowSlug,
+			Name:         sc.Name,
+			RelativePath: rel,
 			ContentHash:  h,
 			MtimeUnixMs:  st.ModTime().UTC().UnixMilli(),
-			YamlContent:  blob,
+			YamlContent:  sc.Content,
 		})
-		acc.WriteString(filepath.ToSlash(relProject))
+		acc.WriteString(rel)
 		acc.WriteString(":")
 		acc.WriteString(h)
 		acc.WriteString(";")
@@ -2164,20 +2137,6 @@ func listYAMLFiles(root string) []string {
 	})
 	sort.Strings(files)
 	return files
-}
-
-func extractNameFromYAML(blob []byte) string {
-	if len(blob) == 0 {
-		return ""
-	}
-	var doc map[string]interface{}
-	if err := yaml.Unmarshal(blob, &doc); err != nil {
-		return ""
-	}
-	if v, ok := doc["name"].(string); ok {
-		return strings.TrimSpace(v)
-	}
-	return ""
 }
 
 func readOptionalFile(path string) ([]byte, error) {

@@ -64,13 +64,20 @@ Reliant automatically discovers workflow files in your project's `.reliant/workf
         <Tree.File name="code-review.yaml" />
         <Tree.File name="security-audit.yaml" />
         <Tree.File name="release-prep.yaml" />
+        <Tree.Folder name="code-review" defaultOpen>
+          <Tree.Folder name="scenarios" defaultOpen>
+            <Tree.File name="flags-missing-tests.yaml" />
+          </Tree.Folder>
+        </Tree.Folder>
       </Tree.Folder>
     </Tree.Folder>
     <Tree.Folder name="src" />
   </Tree.Folder>
 </Tree>
 
-**Naming convention**: Use lowercase with hyphens (for example, `code-review.yaml`). The filename becomes the workflow identifier.
+**Naming convention**: A workflow is identified by its `name:` field, never by its file name — `ref: project://code-review` and the scenario directory `code-review/scenarios/` both mean "the workflow named `code-review`", wherever it lives. Name the file after the workflow (`code-review.yaml` for `name: code-review`) so the two never disagree; two files declaring one name, or a file without a `name:`, are reported as errors rather than one of them being picked.
+
+**Scenarios**: A workflow's [scenario tests](/workflows/testing) live in `<name>/scenarios/` next to it, one scenario per file, where `<name>` is the workflow's `name:` as a slug.
 
 **Discovery**: When you start Reliant, it scans for `.yaml` files in `.reliant/workflows/`. Changes require restarting Reliant or reloading workflows.
 

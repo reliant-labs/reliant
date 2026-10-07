@@ -125,11 +125,18 @@ func TestDocsWorkflowExamplesValidate(t *testing.T) {
 		validated++
 		name := fmt.Sprintf("%s:%d", b.file, b.line)
 		t.Run(name, func(t *testing.T) {
-			path := filepath.Join(tmp, fmt.Sprintf("example-%d.yaml", validated))
+			// One project per example: examples share names (most are
+			// "docs-example"), and two files with one name in a project
+			// is itself an error.
+			dir := filepath.Join(tmp, fmt.Sprintf("example-%d", validated))
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(dir, "example.yaml")
 			if err := os.WriteFile(path, []byte(wrapDocsFragment(b.body)), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			res := validateWorkflowFile(path, tmp)
+			res := validateWorkflowFile(path, dir)
 			if !res.Valid {
 				t.Errorf("docs example %s does not validate:\n  %s", name, strings.Join(res.Errors, "\n  "))
 			}

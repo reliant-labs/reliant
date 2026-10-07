@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -19,7 +18,6 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
-	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -28,6 +26,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
@@ -299,32 +299,40 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 // discoverProjectWorkflowsFromDB loads project workflows from the stored config record (synced by daemon).
 // Returns both valid workflows and invalid workflows that failed to parse.
 func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, projectID string) ([]*reliantv1.WorkflowListItem, []*reliantv1.InvalidWorkflow) {
-	if projectID == "" {
-		return nil, nil
-	}
-
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
+	// The project's workflows as the CLI indexes them on disk
+	// (workflowref): a file no ref can address — no name:, a name another
+	// file also declares — is listed as invalid, with the reason, rather
+	// than one of them silently winning.
+	index, err := workflowsource.ProjectIndex(ctx, repo, projectID)
 	if err != nil {
-		return nil, nil
-	}
-
-	workflows, err := cfg.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
-	if err != nil {
-		logging.Warn("Failed to parse stored project workflows", "error", err, "project_id", projectID)
+		logging.Warn("Failed to read stored project workflows", "error", err, "project_id", projectID)
 		return nil, nil
 	}
 
 	var items []*reliantv1.WorkflowListItem
 	var invalidWorkflows []*reliantv1.InvalidWorkflow
 
-	for _, sw := range workflows {
-		slug := generateSlug(sw.Slug)
-		protoWf, err := parseWorkflowYAML([]byte(sw.YAMLContent))
-		if err != nil {
-			logging.Warn("Failed to parse stored project workflow", "error", err, "slug", sw.Slug)
+	for _, entry := range index.Entries() {
+		label := entry.Name
+		if label == "" {
+			label = entry.Path
+		}
+		if entry.Problem != nil {
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
-				Name:   slug,
+				Name:   label,
 				Source: "project",
+				Path:   entry.Path,
+				Errors: []string{entry.Problem.Error()},
+			})
+			continue
+		}
+		protoWf, err := parseWorkflowYAML(entry.Content)
+		if err != nil {
+			logging.Warn("Failed to parse stored project workflow", "error", err, "path", entry.Path)
+			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
+				Name:   entry.Slug,
+				Source: "project",
+				Path:   entry.Path,
 				Errors: []string{err.Error()},
 			})
 			continue
@@ -333,7 +341,7 @@ func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, pro
 		items = append(items, &reliantv1.WorkflowListItem{
 			Name:            protoWf.Name,
 			Title:           protoWf.Title,
-			Filename:        slug,
+			Filename:        entry.Slug,
 			Description:     protoWf.Description,
 			StepCount:       int32(len(protoWf.Nodes)),
 			Source:          "project",
@@ -350,22 +358,10 @@ func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, pro
 	return items, invalidWorkflows
 }
 
-// generateSlug creates a URL-safe slug from a workflow name
+// generateSlug is the slug a workflow name is stored and compared under —
+// workflowref.Slug, the one slug every surface uses.
 func generateSlug(name string) string {
-	// Convert to lowercase
-	slug := strings.ToLower(name)
-	// Replace spaces and underscores with hyphens
-	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = strings.ReplaceAll(slug, "_", "-")
-	// Remove any characters that aren't alphanumeric or hyphens
-	reg := regexp.MustCompile(`[^a-z0-9-]`)
-	slug = reg.ReplaceAllString(slug, "")
-	// Remove consecutive hyphens
-	reg = regexp.MustCompile(`-+`)
-	slug = reg.ReplaceAllString(slug, "-")
-	// Trim leading/trailing hyphens
-	slug = strings.Trim(slug, "-")
-	return slug
+	return workflowref.Slug(name)
 }
 
 // SaveWorkflow creates or updates a workflow in the database
@@ -1096,7 +1092,8 @@ func (s *WorkflowService) GetWorkflow(
 		}), nil
 	}
 
-	slug := generateSlug(workflowName)
+	// A ref ("project://deploy") or a bare name: the slug it addresses.
+	slug := workflowref.ProjectSlug(workflowName)
 
 	// Try to load from project files first (if project_id provided)
 	if req.Msg.ProjectId != "" {
@@ -1422,46 +1419,12 @@ func (s *WorkflowService) ValidateWorkflow(
 	}), nil
 }
 
-// createValidationWorkflowLoader creates a WorkflowLoader for validation.
-// It resolves builtin:// refs from the embedded FS and user workflows from the
-// database the way run start does: only a complete workflow loads, and a draft
+// createValidationWorkflowLoader creates a WorkflowLoader for validating one of
+// the user's workflows, resolving refs the way run start does
+// (workflowsource.DraftLoader): only a complete workflow loads, and a draft
 // child is an error (a parent that refs a draft would fail at run start). The
 // workflow being validated resolves to itself, so a workflow that spawns
 // itself can be validated — and marked complete — while it is still a draft.
 func (s *WorkflowService) createValidationWorkflowLoader(ctx context.Context, userID string, self *reliantv1.Workflow) v2.WorkflowLoader {
-	selfSlug := ""
-	if self != nil {
-		selfSlug = generateSlug(self.GetName())
-	}
-	return func(ref string) (*reliantv1.Workflow, error) {
-		// Handle builtin:// protocol
-		if strings.HasPrefix(ref, "builtin://") {
-			name := strings.TrimPrefix(ref, "builtin://")
-			data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
-			if err != nil {
-				return nil, nil // not found — let validation continue
-			}
-			return wfyaml.ParseWorkflow(data)
-		}
-
-		slug := generateSlug(ref)
-		if slug == "" {
-			return nil, nil
-		}
-		if slug == selfSlug {
-			return self, nil
-		}
-		draft, err := s.database.GetUsableWorkflowBySlug(ctx, userID, slug)
-		if err != nil {
-			var notRunnable *db.WorkflowDraftNotRunnableError
-			if errors.As(err, &notRunnable) {
-				return nil, err
-			}
-			return nil, nil
-		}
-		if draft == nil || draft.Definition == "" {
-			return nil, nil // not found — let validation continue
-		}
-		return wfyaml.ParseWorkflow([]byte(draft.Definition))
-	}
+	return workflowsource.DraftLoader(ctx, s.database, userID, self)
 }

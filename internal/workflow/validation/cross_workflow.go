@@ -2,6 +2,7 @@
 package validation
 
 import (
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -42,6 +43,16 @@ func validateCrossWorkflow(wf *reliantv1.Workflow, opts *ValidationOptions, resu
 
 	program, err := core.Compile(wf, compileOptions)
 	if err != nil {
+		// Compile follows refs transitively; a ref it could not follow —
+		// missing, unparseable, or a cycle — is reported with every hop
+		// that reached it: "a.yaml → project://b → project://c: ...".
+		var refErr *core.RefError
+		if errors.As(err, &refErr) {
+			topNode, _, _ := strings.Cut(refErr.Node, "/")
+			result.AddError(CategoryCrossWorkflow, []string{wf.GetName(), "nodes", topNode}, "ref",
+				rootLabel(wf, opts)+" → "+refErr.Error())
+			return
+		}
 		result.AddError(CategoryCrossWorkflow, []string{wf.GetName()}, "",
 			fmt.Sprintf("failed to compile core semantic contracts: %v", err))
 		return
@@ -49,6 +60,14 @@ func validateCrossWorkflow(wf *reliantv1.Workflow, opts *ValidationOptions, resu
 
 	visited := make(map[string]bool)
 	validateWorkflowTree(wf, wf, opts, program.Semantics, "", []string{}, program.Semantics.CanonicalWorkflowRef, visited, result)
+}
+
+// rootLabel names the workflow under validation at the head of a ref chain.
+func rootLabel(wf *reliantv1.Workflow, opts *ValidationOptions) string {
+	if opts != nil && strings.TrimSpace(opts.RootLabel) != "" {
+		return strings.TrimSpace(opts.RootLabel)
+	}
+	return wf.GetName()
 }
 
 // validateWorkflowTree recursively validates a workflow and its children using core semantic contracts.

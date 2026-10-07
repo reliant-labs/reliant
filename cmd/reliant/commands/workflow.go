@@ -24,6 +24,7 @@ import (
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
@@ -116,8 +117,10 @@ PresetLoader alongside the WorkflowLoader so preset-param mismatches (for
 example a preset setting params that aren't declared inputs on the target
 workflow) are surfaced offline.
 
-The reference may be either a filesystem path to a workflow YAML file, or a
-builtin reference like "builtin://get-it-right".
+The reference may be a filesystem path to a workflow YAML file, a builtin
+reference like "builtin://get-it-right", or a project reference like
+"project://deploy", which names a workflow in --dir by its name: field (the
+way the app resolves it — never by file name).
 
 Exit code 0 if no errors, 1 if any errors are found.`,
 		Args: cobra.ExactArgs(1),
@@ -154,26 +157,24 @@ func newWorkflowListCmd() *cobra.Command {
 			// Collect project workflows
 			if !builtinsOnly {
 				cwd, _ := os.Getwd()
-				projectDir := filepath.Join(cwd, ".reliant", "workflows")
-				files, err := collectYAMLFiles(projectDir)
-				if err == nil {
-					for _, f := range files {
-						info := parseWorkflowInfo(f, "project")
-						workflows = append(workflows, info)
-					}
+				files, err := workflowFilesIn(filepath.Join(cwd, filepath.FromSlash(workflowref.Dir)))
+				if err != nil {
+					return err
+				}
+				for _, f := range files {
+					workflows = append(workflows, parseWorkflowInfo(f, "project"))
 				}
 			}
 
 			// Collect builtin workflows
 			if !projectOnly {
-				builtinDir := findBuiltinDir()
-				if builtinDir != "" {
-					files, err := collectYAMLFiles(builtinDir)
-					if err == nil {
-						for _, f := range files {
-							info := parseWorkflowInfo(f, "builtin")
-							workflows = append(workflows, info)
-						}
+				if builtinDir := findBuiltinDir(); builtinDir != "" {
+					files, err := workflowFilesIn(builtinDir)
+					if err != nil {
+						return err
+					}
+					for _, f := range files {
+						workflows = append(workflows, parseWorkflowInfo(f, "builtin"))
 					}
 				}
 			}
@@ -475,7 +476,7 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 		}
 		if info.IsDir() {
 			dir = path
-			f, err := collectYAMLFiles(path)
+			f, err := workflowFilesIn(path)
 			if err != nil {
 				return err
 			}
@@ -493,7 +494,7 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 			}
 			dir = filepath.Join(cwd, dir)
 		}
-		f, err := collectYAMLFiles(dir)
+		f, err := workflowFilesIn(dir)
 		if err != nil {
 			return err
 		}
@@ -502,13 +503,19 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 
 	// Include builtins
 	if includeBuiltins {
-		builtinDir := findBuiltinDir()
-		if builtinDir != "" {
-			f, err := collectYAMLFiles(builtinDir)
-			if err == nil {
-				files = append(files, f...)
+		if builtinDir := findBuiltinDir(); builtinDir != "" {
+			f, err := workflowFilesIn(builtinDir)
+			if err != nil {
+				return err
 			}
+			files = append(files, f...)
 		}
+	}
+
+	// Refs resolve against the project the files belong to, read once.
+	layout, err := readWorkflowLayout(dir)
+	if err != nil {
+		return err
 	}
 
 	if len(files) == 0 {
@@ -528,7 +535,7 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 	hasErrors := false
 
 	for _, file := range files {
-		result := validateWorkflowFile(file, dir)
+		result := validateWorkflowFileIn(file, dir, layout)
 		results = append(results, result)
 
 		if !jsonOut {
@@ -563,28 +570,29 @@ func runWorkflowValidate(_ *cobra.Command, args []string, dir string, verbose, f
 	return nil
 }
 
-func collectYAMLFiles(dir string) ([]string, error) {
-	info, err := os.Stat(dir)
+// readWorkflowLayout reads a workflows directory the way the daemon reads a
+// project's .reliant/workflows for the app (workflowref.ReadLayout), so the
+// CLI sees exactly the workflows and scenarios the app does.
+func readWorkflowLayout(dir string) (*workflowref.Layout, error) {
+	layout, err := workflowref.ReadLayout(os.DirFS(dir))
 	if err != nil {
-		return nil, fmt.Errorf("directory not found: %s", dir)
+		return nil, fmt.Errorf("reading %s: %w", dir, err)
 	}
-	if !info.IsDir() {
-		return nil, fmt.Errorf("not a directory: %s", dir)
-	}
+	return layout, nil
+}
 
-	yamlFiles, _ := filepath.Glob(filepath.Join(dir, "*.yaml"))
-	ymlFiles, _ := filepath.Glob(filepath.Join(dir, "*.yml"))
-	all := append(yamlFiles, ymlFiles...)
-
-	var filtered []string
-	for _, f := range all {
-		base := filepath.Base(f)
-		if strings.HasSuffix(base, "_test.yaml") || strings.HasSuffix(base, "_test.yml") {
-			continue
-		}
-		filtered = append(filtered, f)
+// workflowFilesIn returns the workflow files in a workflows directory — its
+// top-level YAML, as the app indexes it — as paths on disk.
+func workflowFilesIn(dir string) ([]string, error) {
+	layout, err := readWorkflowLayout(dir)
+	if err != nil {
+		return nil, err
 	}
-	return filtered, nil
+	var files []string
+	for _, e := range layout.Workflows.Entries() {
+		files = append(files, filepath.Join(dir, filepath.FromSlash(e.Path)))
+	}
+	return files, nil
 }
 
 func findBuiltinDir() string {
@@ -599,25 +607,18 @@ func findBuiltinDir() string {
 	return ""
 }
 
-func buildCLIWorkflowLoader(dir string) runtime.WorkflowLoader {
+// projectWorkflowLoader resolves refs exactly as the app does
+// (workflowref.Resolve), against a project's workflows. The CLI has no user
+// workflows, so a project ref resolves in the project or not at all — and a
+// ref that does not resolve is an error, not a silent pass: a broken ref
+// fails here rather than at run time.
+func projectWorkflowLoader(project *workflowref.Index) runtime.WorkflowLoader {
 	return func(ref string) (*reliantv1.Workflow, error) {
-		name := strings.TrimPrefix(ref, "builtin://")
-
-		// Try builtin embedded FS first
-		if data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml"); err == nil {
-			return wfyaml.ParseWorkflow(data)
+		resolved, err := workflowref.Resolve(ref, workflowref.Sources{Project: project})
+		if err != nil {
+			return nil, err
 		}
-
-		// Fall back to local workflow directory
-		if dir != "" {
-			localPath := filepath.Join(dir, name+".yaml")
-			if data, err := os.ReadFile(localPath); err == nil {
-				return wfyaml.ParseWorkflow(data)
-			}
-		}
-
-		// Not found — allow validation to continue gracefully
-		return nil, nil
+		return resolved.Workflow, nil
 	}
 }
 
@@ -643,7 +644,17 @@ var cliSkillResolver = sync.OnceValue(func() *validation.SkillResolver {
 
 func buildCLISkillResolver() *validation.SkillResolver { return cliSkillResolver() }
 
+// validateWorkflowFile validates one workflow file, resolving its refs against
+// the workflows in workflowDir.
 func validateWorkflowFile(path string, workflowDir string) validateResult {
+	layout, err := readWorkflowLayout(workflowDir)
+	if err != nil {
+		return validateResult{File: filepath.Base(path), Errors: []string{err.Error()}}
+	}
+	return validateWorkflowFileIn(path, workflowDir, layout)
+}
+
+func validateWorkflowFileIn(path, workflowDir string, layout *workflowref.Layout) validateResult {
 	result := validateResult{
 		File: filepath.Base(path),
 	}
@@ -665,10 +676,20 @@ func validateWorkflowFile(path string, workflowDir string) validateResult {
 	result.Nodes = len(wf.GetNodes())
 	result.Edges = len(wf.GetEdges())
 
-	// Run full validation with cross-workflow loader and a real skill catalog.
-	loader := buildCLIWorkflowLoader(workflowDir)
-	valResult, valErr := runtime.ValidateYAMLResultWithOptions(data, loader, &validation.ValidationOptions{
+	// A file the project index cannot address — its name: is another file's
+	// too, or crosses another file's file name — fails here, as every ref to
+	// it would. (A missing name: is the validator's own "name is required".)
+	if rel, relErr := filepath.Rel(workflowDir, path); relErr == nil {
+		if entry := layout.Workflows.EntryAt(filepath.ToSlash(rel)); entry != nil && entry.Name != "" && entry.Problem != nil {
+			result.Errors = append(result.Errors, entry.Problem.Error())
+		}
+	}
+
+	// Run full validation with the app's ref resolution, which follows refs
+	// transitively, and a real skill catalog.
+	valResult, valErr := runtime.ValidateYAMLResultWithOptions(data, projectWorkflowLoader(layout.Workflows), &validation.ValidationOptions{
 		SkillResolver: buildCLISkillResolver(),
+		RootLabel:     result.File,
 	})
 	if valErr != nil {
 		result.Errors = append(result.Errors, valErr.Error())
@@ -740,8 +761,13 @@ func printVerboseValidateResult(r validateResult) {
 // --- workflow validate-tree implementation ---
 
 func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir string, includeBuiltins bool, inputs []string, inputFile string, verbose, jsonOut bool) error {
-	// Resolve the workflow YAML: either a path or a builtin:// ref.
-	data, displayName, err := loadWorkflowTreeSource(ref)
+	layout, err := readWorkflowLayout(workflowDir)
+	if err != nil {
+		return err
+	}
+
+	// Resolve the workflow YAML: a path, or a builtin:// / project:// ref.
+	data, displayName, err := loadWorkflowTreeSource(ref, layout.Workflows)
 	if err != nil {
 		return err
 	}
@@ -752,16 +778,12 @@ func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir str
 	}
 
 	// Build loaders.
-	var wfLoader validation.WorkflowLoader
-	baseLoader := buildCLIWorkflowLoader(workflowDir)
-	if includeBuiltins {
+	baseLoader := projectWorkflowLoader(layout.Workflows)
+	wfLoader := validation.WorkflowLoader(baseLoader)
+	if !includeBuiltins {
 		wfLoader = func(r string) (*reliantv1.Workflow, error) {
-			return baseLoader(r)
-		}
-	} else {
-		wfLoader = func(r string) (*reliantv1.Workflow, error) {
-			if strings.HasPrefix(r, "builtin://") {
-				return nil, nil
+			if parsed, err := workflowref.Parse(r); err == nil && parsed.Kind == workflowref.Builtin {
+				return nil, nil // not followed: --include-builtins=false
 			}
 			return baseLoader(r)
 		}
@@ -774,6 +796,7 @@ func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir str
 		WorkflowLoader:       wfLoader,
 		PresetLoader:         presetLoader,
 		CanonicalWorkflowRef: canonicalWorkflowRef(ref),
+		RootLabel:            displayName,
 	}
 	staticResult := validation.StaticAnalysisWithOptions(wf, opts)
 
@@ -832,16 +855,16 @@ func runWorkflowValidateTree(cmd *cobra.Command, ref, workflowDir, presetDir str
 	return nil
 }
 
-// loadWorkflowTreeSource reads the workflow YAML from either a file path or a
-// builtin:// reference and returns the data plus a display label.
-func loadWorkflowTreeSource(ref string) ([]byte, string, error) {
-	if strings.HasPrefix(ref, "builtin://") {
-		name := strings.TrimPrefix(ref, "builtin://")
-		data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
+// loadWorkflowTreeSource reads the workflow YAML from a file path, or from a
+// builtin:// or project:// reference resolved the way the app resolves it,
+// and returns the data plus a display label.
+func loadWorkflowTreeSource(ref string, project *workflowref.Index) ([]byte, string, error) {
+	if strings.HasPrefix(ref, workflowref.BuiltinScheme) || strings.HasPrefix(ref, workflowref.ProjectScheme) {
+		resolved, err := workflowref.Resolve(ref, workflowref.Sources{Project: project})
 		if err != nil {
-			return nil, "", fmt.Errorf("builtin workflow not found: %s", ref)
+			return nil, "", fmt.Errorf("%s: %w", ref, err)
 		}
-		return data, ref, nil
+		return resolved.YAML, ref, nil
 	}
 
 	data, err := os.ReadFile(ref)
@@ -852,11 +875,10 @@ func loadWorkflowTreeSource(ref string) ([]byte, string, error) {
 }
 
 // canonicalWorkflowRef returns a loadable ref suitable for
-// ValidationOptions.CanonicalWorkflowRef. For builtin:// refs we preserve the
-// ref; for filesystem paths we leave it empty so validation falls back to
-// wf.name.
+// ValidationOptions.CanonicalWorkflowRef. A ref is kept; for filesystem
+// paths it is left empty so validation falls back to wf.name.
 func canonicalWorkflowRef(ref string) string {
-	if strings.HasPrefix(ref, "builtin://") {
+	if strings.HasPrefix(ref, workflowref.BuiltinScheme) || strings.HasPrefix(ref, workflowref.ProjectScheme) {
 		return ref
 	}
 	return ""
@@ -989,9 +1011,7 @@ func newWorkflowScenarioRunCmd() *cobra.Command {
 		Short: "Run scenario tests against workflows",
 		Long: `Runs scenario tests against workflow definitions on the real workflow runtime
 (DynamicWorkflow in an in-memory Temporal environment; only activities are mocked).
-Scenarios are discovered from co-located *_scenarios.yaml files or from
-scenarios/<workflow-name>/ directories.
-
+` + scenarioLayoutHelp + `
 If a specific workflow file is given, runs scenarios for that workflow only.
 Otherwise, discovers all workflows in the workflow directory and runs their
 associated scenarios.
@@ -1030,9 +1050,8 @@ func newWorkflowScenarioListCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "list [workflow-path]",
 		Short: "List available scenarios for workflows",
-		Long: `Lists scenarios discovered from co-located *_scenarios.yaml files or from
-scenarios/<workflow-name>/ directories.
-
+		Long: `Lists the scenarios of project workflows.
+` + scenarioLayoutHelp + `
 Examples:
   reliant workflow scenario list                               # list all project scenarios
   reliant workflow scenario list my-workflow.yaml              # list scenarios for one workflow
@@ -1050,12 +1069,26 @@ Examples:
 	return cmd
 }
 
+// scenarioLayoutHelp is where `workflow scenario` looks, for its help text.
+const scenarioLayoutHelp = `
+A project workflow's scenarios live in .reliant/workflows/<slug>/scenarios/,
+one scenario per .yaml file, where <slug> is the workflow's name: as a slug
+(blog.yaml declaring "name: blog-content-pipeline" keeps its scenarios in
+blog-content-pipeline/scenarios/). That is the layout the app indexes, so the
+CLI and the app see the same scenarios. A sub-workflow ref (project://<name>)
+resolves by name: too, never by file name. Scenarios in the retired layouts
+(scenarios/<file>/, <file>_scenarios.yaml) are an error naming where they go.
+`
+
 // workflowWithScenarios pairs a workflow file with its discovered scenarios.
 type workflowWithScenarios struct {
 	WorkflowFile string
 	WorkflowName string
 	Source       string // "project" or "builtin"
 	Scenarios    []*wfscenario.Scenario
+	// Project is the index the workflow's project:// refs resolve in. Nil
+	// for a builtin, and read from the workflow file's directory when unset.
+	Project *workflowref.Index
 }
 
 // scenarioRunResult captures the result of running scenarios for one workflow.
@@ -1251,11 +1284,15 @@ func runWorkflowScenarioList(_ *cobra.Command, args []string, dir string, jsonOu
 }
 
 // discoverWorkflowsWithScenarios finds all workflow + scenario pairings.
+//
+// Project scenarios are located by workflowref — the locator the daemon uses
+// to index them for the app — so the CLI runs exactly the scenarios the app
+// lists. Scenarios the app would never see (a retired layout, a directory
+// that names no workflow) are an error, not a silent skip.
 func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins bool) ([]workflowWithScenarios, error) {
 	var results []workflowWithScenarios
 
-	// Collect project workflow files
-	var projectFiles []string
+	workflowsDir, onlyFile := dir, ""
 	if len(args) == 1 {
 		path := args[0]
 		info, err := os.Stat(path)
@@ -1263,42 +1300,52 @@ func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins b
 			return nil, fmt.Errorf("cannot access %s: %w", path, err)
 		}
 		if info.IsDir() {
-			f, err := collectYAMLFiles(path)
-			if err != nil {
-				return nil, err
-			}
-			projectFiles = append(projectFiles, f...)
+			workflowsDir = path
 		} else {
-			projectFiles = append(projectFiles, path)
+			workflowsDir, onlyFile = filepath.Dir(path), filepath.Base(path)
 		}
-	} else {
-		resolvedDir := dir
-		if !filepath.IsAbs(resolvedDir) {
-			cwd, err := os.Getwd()
-			if err != nil {
-				return nil, fmt.Errorf("could not get working directory: %w", err)
-			}
-			resolvedDir = filepath.Join(cwd, resolvedDir)
+	} else if !filepath.IsAbs(workflowsDir) {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return nil, fmt.Errorf("could not get working directory: %w", err)
 		}
-		f, err := collectYAMLFiles(resolvedDir)
-		if err == nil {
-			projectFiles = append(projectFiles, f...)
-		}
+		workflowsDir = filepath.Join(cwd, workflowsDir)
 	}
 
-	// For each project workflow, find associated scenarios
-	for _, wfFile := range projectFiles {
-		scenarios := findScenariosForWorkflow(wfFile)
-		if len(scenarios) == 0 {
+	layout, err := readWorkflowLayout(workflowsDir)
+	if err != nil {
+		return nil, err
+	}
+	if problems := layout.ScenarioProblems(); len(problems) > 0 {
+		msgs := make([]string, len(problems))
+		for i, p := range problems {
+			msgs[i] = "  - " + p.Error()
+		}
+		return nil, fmt.Errorf("scenarios in %s are not where the app reads them:\n%s", workflowsDir, strings.Join(msgs, "\n"))
+	}
+
+	for _, entry := range layout.Workflows.Entries() {
+		if onlyFile != "" && entry.Path != onlyFile {
 			continue
 		}
-
-		wfName := workflowNameFromFile(wfFile)
+		files := layout.ScenariosFor(entry.Slug)
+		if entry.Slug == "" || len(files) == 0 {
+			continue
+		}
+		scenarios := make([]*wfscenario.Scenario, 0, len(files))
+		for _, f := range files {
+			sc, err := wfscenario.ParseScenarioFile(f.Content, f.Name)
+			if err != nil {
+				return nil, fmt.Errorf("%s: %w", filepath.Join(workflowsDir, filepath.FromSlash(f.Path)), err)
+			}
+			scenarios = append(scenarios, sc)
+		}
 		results = append(results, workflowWithScenarios{
-			WorkflowFile: wfFile,
-			WorkflowName: wfName,
+			WorkflowFile: filepath.Join(workflowsDir, filepath.FromSlash(entry.Path)),
+			WorkflowName: entry.Name,
 			Source:       "project",
 			Scenarios:    scenarios,
+			Project:      layout.Workflows,
 		})
 	}
 
@@ -1309,36 +1356,6 @@ func discoverWorkflowsWithScenarios(args []string, dir string, includeBuiltins b
 	}
 
 	return results, nil
-}
-
-// findScenariosForWorkflow discovers scenarios for a given workflow file.
-// Checks:
-// 1. Co-located <name>_scenarios.yaml
-// 2. scenarios/<name>/ directory
-func findScenariosForWorkflow(workflowFile string) []*wfscenario.Scenario {
-	dir := filepath.Dir(workflowFile)
-	base := filepath.Base(workflowFile)
-	name := strings.TrimSuffix(base, filepath.Ext(base))
-
-	var allScenarios []*wfscenario.Scenario
-
-	// Check co-located <name>_scenarios.yaml
-	for _, ext := range []string{".yaml", ".yml"} {
-		colocated := filepath.Join(dir, name+"_scenarios"+ext)
-		if scenarios, err := wfscenario.LoadScenariosFromFile(colocated); err == nil {
-			allScenarios = append(allScenarios, scenarios...)
-		}
-	}
-
-	// Check scenarios/<name>/ directory
-	scenarioDir := filepath.Join(dir, "scenarios", name)
-	if info, err := os.Stat(scenarioDir); err == nil && info.IsDir() {
-		if scenarios, err := wfscenario.LoadScenariosFromDir(scenarioDir); err == nil {
-			allScenarios = append(allScenarios, scenarios...)
-		}
-	}
-
-	return allScenarios
 }
 
 // discoverBuiltinScenarios loads scenarios for all builtin workflows from the embedded FS.
@@ -1382,7 +1399,8 @@ func discoverBuiltinScenarios() []workflowWithScenarios {
 // loadScenarioRunner loads a workflow and returns the scenario runner for it,
 // which executes scenarios on the real DynamicWorkflow. Handles both project
 // files (from disk) and builtins (from embedded FS); a project workflow's
-// project:// refs resolve from sibling files in its directory.
+// project:// refs resolve by name: among the workflows beside it, exactly as
+// the app resolves them.
 func loadScenarioRunner(wf workflowWithScenarios) (*runner.Runner, error) {
 	var data []byte
 	var err error
@@ -1403,41 +1421,17 @@ func loadScenarioRunner(wf workflowWithScenarios) (*runner.Runner, error) {
 
 	var loader runner.WorkflowLoader
 	if wf.Source != "builtin" {
-		loader = projectDirWorkflowLoader(filepath.Dir(wf.WorkflowFile))
+		project := wf.Project
+		if project == nil {
+			layout, err := readWorkflowLayout(filepath.Dir(wf.WorkflowFile))
+			if err != nil {
+				return nil, err
+			}
+			project = layout.Workflows
+		}
+		loader = runner.WorkflowLoader(projectWorkflowLoader(project))
 	}
 	return runner.New(parsedWf, runner.Options{Loader: loader}), nil
-}
-
-// projectDirWorkflowLoader resolves project refs ("project://deploy", or a
-// bare "deploy") to <dir>/<name>.yaml / .yml. builtin:// refs are resolved by
-// the runner itself.
-func projectDirWorkflowLoader(dir string) runner.WorkflowLoader {
-	return func(ref string) (*reliantv1.Workflow, error) {
-		name := strings.TrimPrefix(strings.TrimSpace(ref), "project://")
-		for _, ext := range []string{".yaml", ".yml"} {
-			data, err := os.ReadFile(filepath.Join(dir, name+ext))
-			if err != nil {
-				continue
-			}
-			return wfyaml.ParseWorkflow(data)
-		}
-		return nil, fmt.Errorf("workflow %q not found in %s", ref, dir)
-	}
-}
-
-// workflowNameFromFile extracts a workflow name from the YAML, falling back to filename.
-func workflowNameFromFile(path string) string {
-	data, err := os.ReadFile(path)
-	if err != nil {
-		return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	}
-
-	wf, err := wfyaml.ParseWorkflow(data)
-	if err != nil || wf.GetName() == "" {
-		return strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
-	}
-
-	return wf.GetName()
 }
 
 func printScenarioResult(s scenarioResultSummary, workflowName string, verbose bool) {

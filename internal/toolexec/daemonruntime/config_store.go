@@ -23,10 +23,11 @@ type filesystemConfigStore struct{}
 // produced by the server's flattenIndexed* helpers so that StoredConfigProvider
 // can deserialize them identically.
 type storedWorkflow struct {
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	YAMLContent string `json:"yaml_content"`
-	ContentHash string `json:"content_hash"`
+	Slug         string `json:"slug"`
+	Name         string `json:"name"`
+	RelativePath string `json:"relative_path,omitempty"`
+	YAMLContent  string `json:"yaml_content"`
+	ContentHash  string `json:"content_hash"`
 }
 
 type storedPreset struct {
@@ -90,9 +91,10 @@ func (f *filesystemConfigStore) GetProjectConfigRecord(ctx context.Context, proj
 
 	mcpConfigs := flattenMCPConfigBytes(userMCP, mergedProjectMCP, mergedLocalMCP)
 
-	workflows, _ := indexWorkflows(projectPath)
+	layout, workflowsDir := readWorkflowLayout(projectPath)
+	workflows, _ := indexWorkflows(layout, workflowsDir)
 	presets, _ := indexPresets(projectPath)
-	scenarios, _ := indexScenarios(projectPath)
+	scenarios, _ := indexScenarios(layout, workflowsDir)
 	skills, _ := indexSkills(projectPath)
 	repoMemories, _ := collectRepoMemories(projectPath)
 
@@ -275,10 +277,11 @@ func flattenWorkflows(workflows []*reliantv1.IndexedWorkflow) *string {
 	items := make([]storedWorkflow, 0, len(workflows))
 	for _, w := range workflows {
 		items = append(items, storedWorkflow{
-			Slug:        w.Slug,
-			Name:        w.Name,
-			YAMLContent: string(w.YamlContent),
-			ContentHash: w.ContentHash,
+			Slug:         w.Slug,
+			Name:         w.Name,
+			RelativePath: w.RelativePath,
+			YAMLContent:  string(w.YamlContent),
+			ContentHash:  w.ContentHash,
 		})
 	}
 	encoded, err := json.Marshal(items)

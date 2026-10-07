@@ -663,7 +663,7 @@ scenario passes without testing what its author intended.
 
 A node can legitimately land in both `completed:` and `skipped:` across one run — e.g. a
 loop-body node that runs on iteration 0 and is skipped on iteration 1. Real example, from
-`internal/workflow/builtin/scenarios/get-it-right/stuck_feedback_rereviews_without_reimplementing.yaml`:
+`internal/workflow/builtin/get-it-right/scenarios/stuck_feedback_rereviews_without_reimplementing.yaml`:
 
 ```yaml
 expect:
@@ -754,7 +754,7 @@ Notes on this example, all load-bearing:
 `outputs:` checks the workflow's declared outputs (as opposed to `node_outputs:`, which checks a
 specific node's raw activity output). Keys support dotted paths into structured values, and matching
 is partial — only the paths you list are checked. Verbatim from
-`internal/workflow/builtin/scenarios/structured-agent/happy_path.yaml`:
+`internal/workflow/builtin/structured-agent/scenarios/happy_path.yaml`:
 
 ```yaml
 expect:
@@ -769,11 +769,33 @@ expect:
     completed: true
 ```
 
-### Multi-scenario files
+### Where scenario files live
 
-A scenario file holds one scenario per YAML document, separated by `---`. Put related scenarios for
-one workflow in a single file (e.g. `agent_scenarios.yaml` holds 9+ scenarios) rather than one file per
-scenario — this is the convention every builtin workflow follows.
+A project workflow's scenarios live in `.reliant/workflows/<slug>/scenarios/`, **one scenario per
+file**, where `<slug>` is the workflow's `name:` as a slug — not its file name. `blog.yaml` declaring
+`name: blog-content-pipeline` keeps its scenarios in `blog-content-pipeline/scenarios/`:
+
+```
+.reliant/workflows/
+  blog.yaml                          # name: blog-content-pipeline
+  blog-content-pipeline/scenarios/
+    drafts_from_brief.yaml           # one scenario; its name: defaults to the file stem
+```
+
+The app indexes exactly this layout, and `reliant workflow scenario run` /
+`reliant workflow scenario list` read it the same way, so a scenario the CLI runs is one the app lists.
+A file holding several scenarios (`---`-separated, or a `scenarios:` list) is an error: the app
+identifies a project scenario by its file. The retired layouts — `scenarios/<file>/` and
+`<file>_scenarios.yaml` — are an error naming where each file belongs.
+
+The same rule addresses sub-workflows: `ref: project://blog-content-pipeline` names the workflow by its
+`name:`, never its file name, in a run, in a scenario and in `reliant workflow validate` alike.
+`validate` follows every `project://` ref transitively and reports a broken one with the whole chain
+(`a.yaml → project://b → project://c: no project workflow is named "c"`) — and a ref cycle as an error.
+
+(The builtin workflows' own CI corpus additionally keeps multi-document files in
+`internal/workflow/builtin/testdata/<workflow>_scenarios.yaml`. That is reliant's test fixture format,
+not a project layout.)
 
 ### Reading `run_scenario` output
 
@@ -811,7 +833,7 @@ that never exercised what its name claims to test:
   first candidate. A scenario can pass while asserting nothing about which branch was chosen. **If
   you are testing routing, you must mock the router explicitly** — otherwise the scenario proves
   nothing about the routing decision, no matter what its name says. Fix, verbatim from
-  `internal/workflow/builtin/scenarios/pitch-deck/start_from_research.yaml`:
+  `internal/workflow/builtin/pitch-deck/scenarios/start_from_research.yaml`:
 
   ```yaml
   events:
@@ -857,7 +879,7 @@ expression was never even compiled. The bug shipped to production and stayed inv
 green corpus. Loop bodies now execute by default for exactly this reason — this is the one case where
 opting back in with `black_box: true` needs a real reason, not a reflex.
 
-Real example, verbatim from `internal/workflow/builtin/scenarios/pitch-deck/start_from_research.yaml`,
+Real example, verbatim from `internal/workflow/builtin/pitch-deck/scenarios/start_from_research.yaml`,
 declaring a parallel loop black-box deliberately because the scenario tests the caller's aggregation of
 per-slide results, not the per-slide pipeline itself:
 

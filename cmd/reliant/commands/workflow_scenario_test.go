@@ -70,7 +70,8 @@ expect:
 func TestWorkflowScenarioRun_ExecutesOnTheRuntime(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "denied-loop.yaml"), []byte(deniedLoopWorkflow), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "denied-loop_scenarios.yaml"), []byte(deniedOnceScenario), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "denied-loop", "scenarios"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "denied-loop", "scenarios", "denied_once.yaml"), []byte(deniedOnceScenario), 0o644))
 
 	workflows, err := discoverWorkflowsWithScenarios([]string{dir}, "", false)
 	require.NoError(t, err)
@@ -90,8 +91,8 @@ func TestWorkflowScenarioRun_ExecutesOnTheRuntime(t *testing.T) {
 	require.Error(t, err)
 }
 
-// A project workflow's project:// refs resolve from sibling files, so a
-// scenario can open a referenced workflow's body from the CLI.
+// A project workflow's project:// refs resolve among the workflows beside it,
+// so a scenario can open a referenced workflow's body from the CLI.
 func TestWorkflowScenarioRun_ResolvesProjectRefsFromSiblings(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "parent.yaml"), []byte(`name: parent
@@ -113,7 +114,8 @@ nodes:
 outputs:
   response_text: "{{nodes.draft.response_text}}"
 `), 0o644))
-	require.NoError(t, os.WriteFile(filepath.Join(dir, "parent_scenarios.yaml"), []byte(`name: opens_child
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "parent", "scenarios"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "parent", "scenarios", "opens_child.yaml"), []byte(`name: opens_child
 events:
   - node: child.draft
     output: {response_text: done}

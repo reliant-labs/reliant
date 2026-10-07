@@ -8,10 +8,11 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	"gopkg.in/yaml.v3"
 )
 
@@ -120,35 +121,40 @@ func (t *listWorkflowsTool) Execute(ctx *rctx.ToolContext, args ListWorkflowsPar
 		}
 	}
 
-	// Get project workflows (from .reliant/workflows/ synced via daemon)
+	// Get project workflows (from .reliant/workflows/ synced via daemon),
+	// indexed as every surface indexes them (workflowsource): a file no ref
+	// can address — no name:, a name another file shares — is listed invalid.
 	if (source == "all" || source == "project") && t.repo != nil {
 		if ctx.Project != nil && ctx.Project.ID != "" {
-			record, err := t.repo.GetProjectConfigRecord(ctx, ctx.Project.ID)
-			if err == nil && record != nil {
-				storedWorkflows, err := config.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
-				if err == nil {
-					for _, sw := range storedWorkflows {
-						var wf struct {
-							Name        string `yaml:"name"`
-							Description string `yaml:"description"`
-						}
-						if err := yaml.Unmarshal([]byte(sw.YAMLContent), &wf); err != nil {
-							continue
-						}
-
-						desc := wf.Description
-						if desc == "" {
-							desc = "(no description)"
-						}
-
-						workflows = append(workflows, workflowInfo{
-							name:        sw.Slug,
-							description: desc,
-							source:      "project",
-							status:      string(db.WorkflowDraftStatusComplete),
-							isValid:     true,
-						})
+			index, err := workflowsource.ProjectIndex(ctx, t.repo, ctx.Project.ID)
+			if err == nil {
+				for _, entry := range index.Entries() {
+					var wf struct {
+						Description string `yaml:"description"`
 					}
+					if err := yaml.Unmarshal(entry.Content, &wf); err != nil {
+						continue
+					}
+
+					desc := wf.Description
+					if desc == "" {
+						desc = "(no description)"
+					}
+					name := entry.Slug
+					if name == "" {
+						name = entry.Path
+					}
+					if entry.Problem != nil {
+						desc = entry.Problem.Error()
+					}
+
+					workflows = append(workflows, workflowInfo{
+						name:        name,
+						description: desc,
+						source:      "project",
+						status:      string(db.WorkflowDraftStatusComplete),
+						isValid:     entry.Problem == nil,
+					})
 				}
 			}
 		}
@@ -336,21 +342,17 @@ func (t *getWorkflowTool) findReadOnlyWorkflow(ctx *rctx.ToolContext, idOrName s
 	if t.repo == nil || ctx == nil || ctx.Project == nil || ctx.Project.ID == "" {
 		return "", "", false
 	}
-	record, err := t.repo.GetProjectConfigRecord(ctx, ctx.Project.ID)
-	if err != nil || record == nil {
-		return "", "", false
-	}
-	storedWorkflows, err := config.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
+	// A project workflow is addressed by its name: (as a slug, with or
+	// without project://), the one rule every surface resolves by.
+	index, err := workflowsource.ProjectIndex(ctx, t.repo, ctx.Project.ID)
 	if err != nil {
 		return "", "", false
 	}
-	for _, sw := range storedWorkflows {
-		if handle == sw.Slug || handle == sw.Name {
-			return sw.YAMLContent, "project", true
-		}
+	entry, err := index.Lookup(workflowref.ProjectSlug(handle))
+	if err != nil {
+		return "", "", false
 	}
-
-	return "", "", false
+	return string(entry.Content), "project", true
 }
 
 // formatReadOnlyWorkflowResponse renders a builtin or project workflow. It
