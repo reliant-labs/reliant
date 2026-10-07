@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/converter"
-	"go.temporal.io/sdk/testsuite"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
 
@@ -38,7 +38,7 @@ func (r *greenfieldProbeRun) order() []string {
 func runWithGreenfieldProbe(t *testing.T, probe bool, probeErr error) *greenfieldProbeRun {
 	t.Helper()
 
-	var suite testsuite.WorkflowTestSuite
+	var suite temporaltest.WorkflowTestSuite
 	env := suite.NewTestWorkflowEnvironment()
 	run := &greenfieldProbeRun{}
 
