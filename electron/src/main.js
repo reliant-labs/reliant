@@ -59,6 +59,7 @@ const {
   resolveMenuAccelerators,
 } = require("./menu-accelerators");
 const WindowManager = require("./window-manager");
+const { pickWindowToSurface, shouldHideOnClose } = require("./window-surfacing");
 const BrowserManager = require("./browser-manager");
 const windowConfig = require("./window-config");
 const { shouldOpenExternally } = require("./navigation-policy");
@@ -758,21 +759,34 @@ function getChatMenuState(chat) {
   return "Idle";
 }
 
-function ensureMainWindowVisible() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
+// Reliant's own windows (not checkout/login popups), most recently focused first.
+function appWindowsByRecency() {
+  if (windowManager) {
+    return windowManager.getWindowsByRecency();
+  }
+  return mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : [];
+}
+
+// Brings Reliant forward for the tray and the dock: the window the user was
+// last in if it is open, otherwise the one they closed to the tray, otherwise a
+// new one. NOT `mainWindow` — that is only the most recently created window, and
+// surfacing it resurrected windows the user had closed. See window-surfacing.js.
+function surfaceAppWindow() {
+  const window = pickWindowToSurface(appWindowsByRecency());
+  if (window) {
+    if (window.isMinimized()) {
+      window.restore();
     }
-    mainWindow.show();
-    mainWindow.focus();
-    return Promise.resolve(mainWindow);
+    window.show();
+    window.focus();
+    return Promise.resolve(window);
   }
 
   return createWindow().then(() => mainWindow);
 }
 
-function sendToMainWindow(channel, payload) {
-  ensureMainWindowVisible()
+function sendToSurfacedWindow(channel, payload) {
+  surfaceAppWindow()
     .then((window) => {
       if (!window || window.isDestroyed()) {
         return;
@@ -815,21 +829,21 @@ function refreshTrayMenu() {
     {
       label: "Show Reliant",
       click: () => {
-        ensureMainWindowVisible();
+        surfaceAppWindow();
       },
     },
     {
       label: "New Chat",
       enabled: trayStatus.canCreateChat,
       click: () => {
-        sendToMainWindow("create-new-tab");
+        sendToSurfacedWindow("create-new-tab");
       },
     },
     {
       label: "Resume Last Chat",
       enabled: trayStatus.hasChats && trayStatus.canCreateChat,
       click: () => {
-        sendToMainWindow("resume-last-chat");
+        sendToSurfacedWindow("resume-last-chat");
       },
     },
   ];
@@ -845,7 +859,7 @@ function refreshTrayMenu() {
     ? trayStatus.recentChats.map((chat) => ({
         label: `${truncateLabel(chat.title, 34)} • ${getChatMenuState(chat)}`,
         enabled: trayStatus.canCreateChat,
-        click: () => sendToMainWindow("tray:go-to-chat", { chatId: chat.id }),
+        click: () => sendToSurfacedWindow("tray:go-to-chat", { chatId: chat.id }),
       }))
     : [{ label: "No recent chats", enabled: false }];
 
@@ -862,7 +876,7 @@ function refreshTrayMenu() {
           trayStatus.currentWorktreeId === workspace.id,
         enabled: Boolean(trayStatus.currentProjectName),
         click: () =>
-          sendToMainWindow("tray:switch-workspace", {
+          sendToSurfacedWindow("tray:switch-workspace", {
             workspaceId: workspace.isMain ? "__main__" : workspace.id,
           }),
       }))
@@ -873,7 +887,7 @@ function refreshTrayMenu() {
     .map((workflow) => ({
       label: truncateLabel(workflow.name.replace("builtin://", ""), 40),
       enabled: Boolean(trayStatus.currentProjectName),
-      click: () => sendToMainWindow("tray:open-workflow", { workflowName: workflow.name }),
+      click: () => sendToSurfacedWindow("tray:open-workflow", { workflowName: workflow.name }),
     }));
 
   const createdWorkflowItems = trayStatus.workflows
@@ -881,7 +895,7 @@ function refreshTrayMenu() {
     .map((workflow) => ({
       label: truncateLabel(workflow.name, 40),
       enabled: Boolean(trayStatus.currentProjectName),
-      click: () => sendToMainWindow("tray:open-workflow", { workflowName: workflow.name }),
+      click: () => sendToSurfacedWindow("tray:open-workflow", { workflowName: workflow.name }),
     }));
 
   const workflowsSubmenu = [
@@ -916,24 +930,24 @@ function refreshTrayMenu() {
           label: "Current Chat",
           enabled: Boolean(trayStatus.activeChatId) && trayStatus.canCreateChat,
           click: () =>
-            sendToMainWindow("tray:go-to-chat", {
+            sendToSurfacedWindow("tray:go-to-chat", {
               chatId: trayStatus.activeChatId,
             }),
         },
         {
           label: "Workflow Hub",
           enabled: Boolean(trayStatus.currentProjectName),
-          click: () => sendToMainWindow("tray:go-to-workflow-hub"),
+          click: () => sendToSurfacedWindow("tray:go-to-workflow-hub"),
         },
         {
           label: "Settings",
           enabled: true,
-          click: () => sendToMainWindow("tray:go-to-settings"),
+          click: () => sendToSurfacedWindow("tray:go-to-settings"),
         },
         {
           label: "Project Picker",
           enabled: true,
-          click: () => sendToMainWindow("tray:go-to-project-picker"),
+          click: () => sendToSurfacedWindow("tray:go-to-project-picker"),
         },
       ],
     },
@@ -1017,6 +1031,18 @@ async function createWindow(options = {}) {
     titleBarStyle: windowConfig.getTitleBarStyle('inset'), // Main window uses hiddenInset
     backgroundColor: "#111111", // avoids white flash if we show early
   });
+
+  // Register with WindowManager immediately, not after the load below: the
+  // tray, the dock and the close-to-tray decision all read its window list,
+  // and a window still loading is already a window the user can be shown.
+  if (windowManager) {
+    windowManager.registerWindow(mainWindow, {
+      worktreeId: null,
+      projectId: null,
+      projectName: "Reliant",
+    });
+    log.debug("[Window] Registered new window with WindowManager");
+  }
 
   // ---- External links (register before load) ----
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1468,17 +1494,26 @@ async function createWindow(options = {}) {
   const currentWindow = mainWindow;
 
   currentWindow.on("closed", () => {
-    // Only clear mainWindow if this is the current main window
+    // Only reassign mainWindow if this is the current main window. Hand the
+    // role to the window the user was most recently in: other windows can
+    // outlive this one, and a live app with no mainWindow drops deep links and
+    // OAuth callbacks, or opens a fresh window instead of using the open one.
     if (mainWindow === currentWindow) {
-      mainWindow = null;
+      mainWindow = appWindowsByRecency().find((window) => window !== currentWindow) || null;
     }
   });
 
-  // macOS: close -> hide to tray
+  // macOS: closing the LAST open window hides it to the tray; closing any other
+  // window really closes it. Hiding every closed window kept them all alive,
+  // and the tray then brought one back. See window-surfacing.js.
   // CRITICAL: Use currentWindow (captured in closure) instead of mainWindow
   // to ensure we're checking the correct window instance
   currentWindow.on("close", (event) => {
-    if (!isQuitting && process.platform === "darwin") {
+    const hide = shouldHideOnClose(currentWindow, appWindowsByRecency(), {
+      platform: process.platform,
+      isQuitting,
+    });
+    if (hide) {
       event.preventDefault();
       currentWindow.hide();
     }
@@ -1529,17 +1564,6 @@ async function createWindow(options = {}) {
     log.debug("[Window] Page URL:", mainWindow.webContents.getURL());
   }
 
-  // Register window with WindowManager if available
-  // This ensures all windows are properly tracked, including those created from menu
-  if (windowManager && currentWindow) {
-    windowManager.registerWindow(currentWindow, {
-      worktreeId: null,
-      projectId: null,
-      projectName: "Reliant",
-    });
-    log.debug("[Window] Registered new window with WindowManager");
-  }
-
   // Initialize browser manager for this window
   const windowBrowserManager = new BrowserManager();
   windowBrowserManager.initialize(currentWindow);
@@ -1566,7 +1590,7 @@ function createTray() {
     tray.setToolTip("Reliant");
 
     tray.on("click", () => {
-      ensureMainWindowVisible();
+      surfaceAppWindow();
     });
   } catch (error) {
     log.error("Failed to create tray:", error);
@@ -4357,23 +4381,13 @@ app.whenReady().then(async () => {
     log.info("[AutoUpdater] Automatic checks enabled - will check after window loads");
   }
 
+  // Dock click: same rule as the tray — focus the window in use, and only
+  // create one when there is none to bring back.
   app.on("activate", () => {
-    const windows = BrowserWindow.getAllWindows();
-    log.debug("[App] activate event - Current window count:", windows.length);
-    log.debug("[App] activate event - mainWindow exists:", !!mainWindow);
-
-    // Only create a new window if there are truly no windows
-    if (windows.length === 0) {
-      log.debug("[App] No windows exist, creating new window");
-      createWindow();
-    } else {
-      // Focus the main window or the first available window
-      const windowToFocus = mainWindow || windows[0];
-      if (windowToFocus.isMinimized()) windowToFocus.restore();
-      windowToFocus.show();
-      windowToFocus.focus();
-      log.debug("[App] Focused existing window");
-    }
+    log.debug("[App] activate event - app window count:", appWindowsByRecency().length);
+    surfaceAppWindow().catch((error) => {
+      log.error("[App] Failed to surface a window on activate:", error);
+    });
   });
 });
 
