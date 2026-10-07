@@ -14,6 +14,11 @@ import (
 // window the daemon router uses to decide a daemon is routable.
 const backgroundProcessLeaseWindow = 90 * time.Second
 
+// worktreeSweepInterval is how often the server asks each daemon to settle its
+// archived worktrees. Archiving already attempts removal immediately, so this
+// only catches worktrees the daemon was offline or busy for.
+const worktreeSweepInterval = 10 * time.Minute
+
 // backgroundProcessDaemons adapts the daemon router and the attachment table
 // to reconciliation.BackgroundProcessDaemons: the reconciler asks a daemon
 // about its processes through the router, and learns which daemons are

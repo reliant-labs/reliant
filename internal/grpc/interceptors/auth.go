@@ -411,6 +411,10 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.WorktreeService/GetWorktreePR":            worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/CreateWorktreePR":         worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/RevertFiles":              worktreeOperationTimeout,
+			// Starting a storage clean-up lists accepted work and returns; the
+			// work itself runs detached. The call still reads the held set and
+			// writes progress for every accepted worktree.
+			"/reliant.v1.InboxService/CleanupStorage": worktreeOperationTimeout,
 			// MCP operations - external process management can be slow
 			"/reliant.v1.MCPService/InstallServer":      60 * time.Second,
 			"/reliant.v1.MCPService/RestartServer":      60 * time.Second,

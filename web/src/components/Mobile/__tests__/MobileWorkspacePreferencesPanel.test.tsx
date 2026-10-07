@@ -61,7 +61,6 @@ describe("MobileWorkspacePreferencesPanel", () => {
   it("renders the same archive-mode options desktop WorktreeSettings exposes", async () => {
     mocks.getPreferences.mockResolvedValue({
       worktree_archive_mode: "ask_me",
-      worktree_default_delete_directory: true,
       worktree_default_delete_branch: false,
       branch_copy_uncommitted_files_default: false,
     });
@@ -74,7 +73,6 @@ describe("MobileWorkspacePreferencesPanel", () => {
   it("writes archive mode through the same api.settings.updatePreferences call desktop uses", async () => {
     mocks.getPreferences.mockResolvedValue({
       worktree_archive_mode: "ask_me",
-      worktree_default_delete_directory: true,
       worktree_default_delete_branch: false,
       branch_copy_uncommitted_files_default: false,
     });
@@ -90,23 +88,22 @@ describe("MobileWorkspacePreferencesPanel", () => {
     );
   });
 
-  it("reveals cleanup toggles only when archive mode is always_cleanup, and writes through updatePreferences", async () => {
+  it("reveals the branch toggle only when archive mode is always_cleanup, and writes through updatePreferences", async () => {
     mocks.getPreferences.mockResolvedValue({
       worktree_archive_mode: "always_cleanup",
-      worktree_default_delete_directory: true,
       worktree_default_delete_branch: false,
       branch_copy_uncommitted_files_default: false,
     });
     mocks.updatePreferences.mockResolvedValue({});
     const { default: userEvent } = await import("@testing-library/user-event");
     renderPanel();
-    const toggle = await screen.findByRole("switch", {
-      name: /delete workspace directory/i,
-    });
-    await userEvent.setup().click(toggle);
+    // The directory is no longer a preference: the machine decides.
+    await screen.findByRole("switch", { name: /delete git branch/i });
+    expect(screen.queryByRole("switch", { name: /delete workspace directory/i })).not.toBeInTheDocument();
+    await userEvent.setup().click(screen.getByRole("switch", { name: /delete git branch/i }));
     await waitFor(() =>
       expect(mocks.updatePreferences).toHaveBeenCalledWith(
-        expect.objectContaining({ worktree_default_delete_directory: false }),
+        expect.objectContaining({ worktree_default_delete_branch: true }),
       ),
     );
   });

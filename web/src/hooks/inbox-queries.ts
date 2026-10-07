@@ -21,6 +21,7 @@ import { persist } from "zustand/middleware";
 
 import { grpcClient } from "../api/grpc-client";
 import {
+  CleanupStorageRequestSchema,
   DismissInboxItemRequestSchema,
   ListInboxRequestSchema,
   RestoreInboxItemRequestSchema,
@@ -165,6 +166,23 @@ export function useRestoreInboxItems() {
     mutationFn: async (itemIds: string[]) => {
       await grpcClient.inbox().restoreInboxItem(create(RestoreInboxItemRequestSchema, { itemIds }));
     },
+    onSettled: () => {
+      void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
+    },
+  });
+}
+
+/**
+ * Clean up a machine's held worktrees: the machine saves each one's work to a
+ * local ref, verifies it, and removes the directory. The caller passes exactly
+ * the ids the user confirmed. Whatever the machine reports, the storage item is
+ * read again afterwards, so the list shows what is actually left.
+ */
+export function useCleanupStorage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (request: { daemonId: string; worktreeIds: string[] }) =>
+      grpcClient.inbox().cleanupStorage(create(CleanupStorageRequestSchema, request)),
     onSettled: () => {
       void queryClient.invalidateQueries({ queryKey: inboxKeys.all });
     },

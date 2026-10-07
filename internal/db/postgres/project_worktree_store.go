@@ -389,6 +389,46 @@ func (s *worktreeStore) UpdateWorktreeCleanupMetadata(ctx context.Context, id st
 	return s.q.UpdateWorktreeCleanupMetadata(ctx, pgdb.UpdateWorktreeCleanupMetadataParams{CleanupMetadata: metadataJSON, ID: id})
 }
 
+func (s *worktreeStore) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
+	rows, err := s.q.ListWorktreesForReclaim(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list worktrees for reclaim: %w", err)
+	}
+	out := make([]*core.ReclaimCandidate, len(rows))
+	for i, row := range rows {
+		out[i] = &core.ReclaimCandidate{Worktree: worktreeFromPG(row.Worktree), OwnerUserID: row.OwnerUserID, ProjectPath: row.ProjectPath}
+	}
+	return out, nil
+}
+
+func (s *worktreeStore) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
+	return s.q.AdoptWorktreeDaemon(ctx, pgdb.AdoptWorktreeDaemonParams{DaemonID: sql.NullString{String: daemonID, Valid: true}, ID: id})
+}
+
+func (s *worktreeStore) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
+	rows, err := s.q.ListLiveWorktreePathsForUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list live worktree paths: %w", err)
+	}
+	out := make([]core.WorktreePath, len(rows))
+	for i, r := range rows {
+		out[i] = core.WorktreePath{ID: r.ID, Path: r.Path}
+	}
+	return out, nil
+}
+
+func (s *worktreeStore) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
+	rows, err := s.q.ListHeldWorktreesForUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list held worktrees: %w", err)
+	}
+	out := make([]*core.HeldWorktree, len(rows))
+	for i, row := range rows {
+		out[i] = &core.HeldWorktree{Worktree: worktreeFromPG(row.Worktree), ProjectName: row.ProjectName, ProjectPath: row.ProjectPath}
+	}
+	return out, nil
+}
+
 func (s *worktreeStore) DeleteWorktree(ctx context.Context, id string) error {
 	return s.q.DeleteWorktree(ctx, id)
 }

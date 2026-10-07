@@ -14,7 +14,13 @@ import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
-import { InboxItemKind, ListInboxResponseSchema, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
+import {
+  CleanupStorageOutcome,
+  CleanupStorageResponseSchema,
+  InboxItemKind,
+  ListInboxResponseSchema,
+  type InboxItem,
+} from "@/gen/reliant/v1/inbox_pb";
 import { useInboxScopeStore } from "@/hooks/inbox-queries";
 import { useProjectStore } from "@/store/projectStore";
 import {
@@ -24,11 +30,13 @@ import {
   questionItem,
   renderInboxAt,
   runFinishedItem,
+  storageItem,
   waitingItem,
 } from "./inboxTestUtils";
 
 const mocks = vi.hoisted(() => ({
   listInbox: vi.fn(),
+  cleanupStorage: vi.fn(),
   dismissInboxItem: vi.fn(),
   restoreInboxItem: vi.fn(),
   approve: vi.fn(),
@@ -43,6 +51,7 @@ vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     inbox: () => ({
       listInbox: mocks.listInbox,
+      cleanupStorage: mocks.cleanupStorage,
       dismissInboxItem: mocks.dismissInboxItem,
       restoreInboxItem: mocks.restoreInboxItem,
     }),
@@ -350,5 +359,117 @@ describe("InboxPage states", () => {
     respond([approvalItem()], { truncated: true });
     renderInboxAt(<InboxPage />);
     expect(await screen.findByText(/more items are waiting/i)).toBeInTheDocument();
+  });
+});
+
+
+describe("InboxPage storage item", () => {
+  it("shows the machine's disk and what it kept, under its own heading", async () => {
+    respond([storageItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    expect(screen.getByTestId(`inbox-section-${InboxItemKind.STORAGE}`)).toHaveTextContent(/^Storage1/);
+    expect(within(row).getByText("MacBook storage")).toBeInTheDocument();
+    expect(within(row).getByText(/12 GB free of 500 GB/)).toBeInTheDocument();
+    expect(within(row).getByText(/3 workspaces kept \(3\.3 GB\)/)).toBeInTheDocument();
+  });
+
+  it("sorts after the blocking kinds and does not count as blocking", async () => {
+    respond([storageItem(), approvalItem()]);
+    renderInboxAt(<InboxPage />);
+    await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent ?? "");
+    expect(headings.findIndex((t) => t.startsWith("Approvals"))).toBeGreaterThanOrEqual(0);
+    expect(headings.findIndex((t) => t.startsWith("Approvals"))).toBeLessThan(
+      headings.findIndex((t) => t.startsWith("Storage")),
+    );
+  });
+
+  it("Clean up lists exactly what will be removed and calls nothing until confirmed", async () => {
+    respond([storageItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    await userEvent.click(within(row).getByRole("button", { name: "Clean up" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const list = within(dialog).getByRole("list", { name: "Workspaces to remove" });
+    expect(within(list).getByText("fix-login")).toBeInTheDocument();
+    expect(within(list).getByText("spike")).toBeInTheDocument();
+    expect(within(list).getByText(/Uncommitted changes/)).toBeInTheDocument();
+    expect(within(list).getByText(/Commits not pushed/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/frees about/i)).toHaveTextContent("3.2 GB");
+    expect(within(dialog).getByText(/nothing is pushed and no branch is deleted/i)).toBeInTheDocument();
+    // B2: a workspace holding data is listed, but under "remove manually", and
+    // is not in the list of things that will be removed.
+    expect(within(list).queryByText("taxes")).not.toBeInTheDocument();
+    const manual = within(dialog).getByRole("list", { name: "Workspaces to remove manually" });
+    expect(within(manual).getByText("taxes")).toBeInTheDocument();
+    expect(within(manual).getByText(/Remove it manually/)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Ignored files that are only build output/i)).toBeInTheDocument();
+    expect(mocks.cleanupStorage).not.toHaveBeenCalled();
+  });
+
+  it("Cancel makes no call", async () => {
+    respond([storageItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    await userEvent.click(within(row).getByRole("button", { name: "Clean up" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
+    expect(mocks.cleanupStorage).not.toHaveBeenCalled();
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("confirming starts the clean-up for exactly the removable workspaces, never the manual ones", async () => {
+    mocks.cleanupStorage.mockResolvedValue(
+      create(CleanupStorageResponseSchema, {
+        results: [
+          { worktreeId: "wt-1", outcome: CleanupStorageOutcome.ACCEPTED },
+          { worktreeId: "wt-2", outcome: CleanupStorageOutcome.ACCEPTED },
+        ],
+      }),
+    );
+    respond([storageItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    await userEvent.click(within(row).getByRole("button", { name: "Clean up" }));
+    await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove 2 workspaces" }));
+
+    await waitFor(() => expect(mocks.cleanupStorage).toHaveBeenCalledTimes(1));
+    const request = mocks.cleanupStorage.mock.calls[0][0];
+    expect(request.daemonId).toBe("d-1");
+    expect(request.worktreeIds).toEqual(["wt-1", "wt-2"]);
+    expect(request.worktreeIds).not.toContain("wt-3");
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
+  });
+
+  it("while a clean-up runs, Clean up is disabled and says so", async () => {
+    respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n } as never] })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    expect(within(row).getByRole("button", { name: "Cleaning up…" })).toBeDisabled();
+  });
+
+  it("when nothing is removable, Clean up is disabled and explains why", async () => {
+    respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n } as never] })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const button = within(row).getByRole("button", { name: "Clean up" });
+    expect(button).toBeDisabled();
+    expect(button).toHaveAttribute("title", expect.stringMatching(/remove it manually/i));
+  });
+
+  it("an offline machine's Clean up is disabled", async () => {
+    respond([storageItem({}, { online: false })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    expect(within(row).getByRole("button", { name: "Clean up" })).toBeDisabled();
+    expect(within(row).getByText(/offline/)).toBeInTheDocument();
+  });
+
+  it("a disk-low item with nothing held has no Clean up action", async () => {
+    respond([storageItem({}, { held: [] })]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
   });
 });

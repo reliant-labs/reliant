@@ -21,6 +21,16 @@ service InboxService {
   // cheap call the nav badge makes.
   rpc ListInbox(ListInboxRequest) returns (ListInboxResponse) {}
 
+  // CleanupStorage starts the "Clean up" action of a storage item and returns
+  // at once. For each accepted worktree the machine saves the work to a local
+  // ref, proves the save matches the files, and only then removes the
+  // directory, in the background. Progress and outcome appear on the storage
+  // item (HeldWorktree.cleaning, then the worktree leaves the list). Nothing is
+  // pushed and no branch is deleted. Worktrees holding data, another
+  // repository, or files outside their checkouts are never removed: they come
+  // back SKIPPED and are listed for manual removal.
+  rpc CleanupStorage(CleanupStorageRequest) returns (CleanupStorageResponse) {}
+
   // DismissInboxItem hides items from the caller's inbox. Every kind can be
   // dismissed. Hiding an approval or a question does not resolve it: the run
   // still waits, and the chat still shows it. A newer failure of the same
@@ -52,6 +62,9 @@ enum InboxItemKind {
   // An automation that opted in (Trigger.notify_on_complete) completed a run
   // that has not been opened yet. Informational.
   INBOX_ITEM_KIND_RUN_FINISHED = 6;
+  // A machine is low on disk, or holds archived worktrees it will not remove
+  // on its own. One item per machine. Informational.
+  INBOX_ITEM_KIND_STORAGE = 7;
 }
 
 message ListInboxRequest {
@@ -88,7 +101,7 @@ message InboxItem {
 
   // Stable key for dismissal and de-duplication, prefixed by kind
   // ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
-  // "automation_launch_failed:", "run_finished:"). Approvals and questions
+  // "automation_launch_failed:", "run_finished:", "storage:"). Approvals and questions
   // embed their row id; waiting-for-machine embeds the chat id and when the
   // block began, so a later block is a new item; run-finished embeds the chat
   // id. Automation failure items embed the id of the FIRST failing event of the
@@ -122,6 +135,7 @@ message InboxItem {
     InboxAutomationFailing automation_failing = 23;
     InboxAutomationLaunchFailed automation_launch_failed = 24;
     InboxRunFinished run_finished = 25;
+    InboxStorage storage = 26;
   }
 }
 
@@ -186,3 +200,80 @@ message RestoreInboxItemRequest {
 }
 
 message RestoreInboxItemResponse {}
+
+// InboxStorage describes one machine's disk and the archived worktrees it is
+// holding. The item exists while the disk is low or any worktree is held.
+message InboxStorage {
+  string daemon_id = 1;
+  string daemon_name = 2;
+  // The volume holding the worktree root, as the machine last reported it.
+  // Both 0 when the machine has not reported yet.
+  int64 disk_free_bytes = 3;
+  int64 disk_total_bytes = 4;
+  // True when free space is under the threshold (below 10% or below 50 GiB).
+  bool disk_low = 5;
+  // RFC 3339 of the machine's last report; empty when it has not reported.
+  string reported_at = 6;
+  // Archived worktrees the machine would not remove by itself. Clean up acts
+  // on the removable ones; the rest are listed for manual removal.
+  repeated HeldWorktree held = 7;
+  // False when the machine is offline: the item still shows what it last
+  // reported, but Clean up cannot run until it reconnects.
+  bool online = 8;
+}
+
+// HeldWorktree is one archived workspace kept on a machine, and why.
+message HeldWorktree {
+  string worktree_id = 1;
+  string name = 2;
+  string project_name = 3;
+  string path = 4;
+  // Why it was not removed automatically: "dirty" (uncommitted, untracked or
+  // hidden edits), "unpushed" (commits on no remote branch), "in_use" (a
+  // running process is inside it), "unverified" (git could not answer),
+  // "too_large" (too big to save), "data" (ignored files that are not
+  // rebuildable: ./data, .env*, *.db, ...), "nested-repository" (another git
+  // repository inside it), "files-outside-checkout" (files in a multi-repo
+  // workspace outside every checkout) or "unmanaged" (not reliant's to remove).
+  string reason = 5;
+  string detail = 6;
+  // Directory size; a lower bound for very large trees. 0 when unmeasured.
+  int64 size_bytes = 7;
+  // True when Clean up may remove it. False for data, nested repositories and
+  // files outside the checkouts: remove those by hand.
+  bool removable = 8;
+  // A clean-up of this worktree is running now.
+  bool cleaning = 9;
+}
+
+message CleanupStorageRequest {
+  // The machine whose item was shown.
+  string daemon_id = 1;
+  // The worktree ids listed in the confirmation dialog. The server acts on the
+  // INTERSECTION of these with what that machine still holds, so a worktree
+  // archived after the dialog opened is never removed unseen, and an id the
+  // machine does not hold is ignored.
+  repeated string worktree_ids = 2;
+}
+
+message CleanupStorageResponse {
+  // One entry per requested id: ACCEPTED (running in the background) or
+  // SKIPPED with the reason.
+  repeated CleanupStorageResult results = 1;
+}
+
+message CleanupStorageResult {
+  string worktree_id = 1;
+  CleanupStorageOutcome outcome = 2;
+  // Why it was left alone, for display.
+  string message = 3;
+}
+
+enum CleanupStorageOutcome {
+  CLEANUP_STORAGE_OUTCOME_UNSPECIFIED = 0;
+  // Started; progress shows on the storage item.
+  CLEANUP_STORAGE_OUTCOME_ACCEPTED = 1;
+  // Not started and left exactly as it was: no longer held, already being
+  // cleaned up, or not removable by Clean up.
+  CLEANUP_STORAGE_OUTCOME_SKIPPED = 2;
+}

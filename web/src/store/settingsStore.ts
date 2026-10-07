@@ -9,7 +9,6 @@ export type WorktreeArchiveMode = "ask_me" | "always_cleanup" | "always_keep";
 
 export interface WorktreePreferences {
   archiveMode: WorktreeArchiveMode;
-  defaultDeleteDirectory: boolean;
   defaultDeleteBranch: boolean;
   branchCopyUncommittedFilesDefault: boolean;
 }
@@ -40,7 +39,6 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   streamingEnabled: true,
   worktree: {
     archiveMode: "ask_me", // Safe default - always ask
-    defaultDeleteDirectory: true, // When in always_cleanup mode
     defaultDeleteBranch: false, // Safer to not delete branches by default
     branchCopyUncommittedFilesDefault: false, // Safe default - don't copy uncommitted files
   },
@@ -71,8 +69,6 @@ export const useSettingsStore = create<SettingsStore>()(
               archiveMode:
                 (response.worktree_archive_mode as WorktreeArchiveMode) ??
                 "ask_me",
-              defaultDeleteDirectory:
-                response.worktree_default_delete_directory ?? true,
               defaultDeleteBranch:
                 response.worktree_default_delete_branch ?? false,
               branchCopyUncommittedFilesDefault:
@@ -114,10 +110,6 @@ export const useSettingsStore = create<SettingsStore>()(
           const backendPrefs: Record<string, unknown> = {};
           if (prefs.archiveMode !== undefined) {
             backendPrefs.worktree_archive_mode = prefs.archiveMode;
-          }
-          if (prefs.defaultDeleteDirectory !== undefined) {
-            backendPrefs.worktree_default_delete_directory =
-              prefs.defaultDeleteDirectory;
           }
           if (prefs.defaultDeleteBranch !== undefined) {
             backendPrefs.worktree_default_delete_branch =
@@ -162,10 +154,6 @@ export const useSettingsStore = create<SettingsStore>()(
           if (prefs.worktree) {
             if (prefs.worktree.archiveMode !== undefined) {
               backendPrefs.worktree_archive_mode = prefs.worktree.archiveMode;
-            }
-            if (prefs.worktree.defaultDeleteDirectory !== undefined) {
-              backendPrefs.worktree_default_delete_directory =
-                prefs.worktree.defaultDeleteDirectory;
             }
             if (prefs.worktree.defaultDeleteBranch !== undefined) {
               backendPrefs.worktree_default_delete_branch =

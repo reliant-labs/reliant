@@ -85,7 +85,6 @@ export interface ProviderStatus {
 export interface Preferences {
   streaming_enabled: boolean;
   worktree_archive_mode: string;
-  worktree_default_delete_directory: boolean;
   worktree_default_delete_branch: boolean;
   additional: Record<string, string>;
   branch_copy_uncommitted_files_default: boolean;
@@ -311,8 +310,6 @@ export const settingsGrpc = {
         return {
           streaming_enabled: response.streamingEnabled,
           worktree_archive_mode: response.worktreeArchiveMode,
-          worktree_default_delete_directory:
-            response.worktreeDefaultDeleteDirectory,
           worktree_default_delete_branch: response.worktreeDefaultDeleteBranch,
           additional: response.additional,
           branch_copy_uncommitted_files_default:
@@ -342,7 +339,6 @@ export const settingsGrpc = {
     const request = create(UpdatePreferencesRequestSchema, {
       streamingEnabled: prefs.streaming_enabled,
       worktreeArchiveMode: prefs.worktree_archive_mode,
-      worktreeDefaultDeleteDirectory: prefs.worktree_default_delete_directory,
       worktreeDefaultDeleteBranch: prefs.worktree_default_delete_branch,
       additional: prefs.additional || {},
       branchCopyUncommittedFilesDefault:

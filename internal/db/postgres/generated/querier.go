@@ -12,6 +12,9 @@ import (
 
 type Querier interface {
 	AddCommandFavorite(ctx context.Context, arg AddCommandFavoriteParams) error
+	// A daemon that found a workspace's directory on its disk has proven it owns
+	// it. Rows created before daemon_id was recorded get it filled in here, once.
+	AdoptWorktreeDaemon(ctx context.Context, arg AdoptWorktreeDaemonParams) error
 	AppendToContentBlock(ctx context.Context, arg AppendToContentBlockParams) error
 	ArchiveWorktree(ctx context.Context, id string) error
 	// Conditional on status = 1 so this can never delete a row that has already
@@ -610,6 +613,9 @@ type Querier interface {
 	// window links to a parent window. One round trip for a whole chat, where
 	// GetContextWindowBySequence(thread, 0) cost one per workflow.
 	ListForkedThreadIDs(ctx context.Context, threadIds []string) ([]string, error)
+	// Archived workspaces the daemon declined to remove on its own, for the
+	// storage inbox item.
+	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]ListHeldWorktreesForUserRow, error)
 	ListHiddenItemDefaults(ctx context.Context, itemType int32) ([]ListHiddenItemDefaultsRow, error)
 	// The Inbox: everything waiting on one user, across every chat and project
 	// (research/WORKFLOW_UI.md §8). One UNION ALL so the read is one round trip;
@@ -672,6 +678,11 @@ type Querier interface {
 	// partial idx_tool_calls_chat_live (a few dozen rows database-wide) instead of
 	// a scan of the chat's ~25k terminal calls.
 	ListLiveToolCallsByChat(ctx context.Context, chatID string) ([]ToolCall, error)
+	// Every path one user's unarchived worktree rows claim. An archived row's
+	// directory may only be removed when none of the SAME user's live rows has a
+	// path that equals, contains or sits inside it. Scoped by user because another
+	// tenant's rows say nothing about this user's directories.
+	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]ListLiveWorktreePathsForUserRow, error)
 	ListMessages(ctx context.Context, chatID string) ([]Message, error)
 	// Messages in a single context window with seq >= from_seq, ascending, and
 	// optionally seq < to_seq (NULL means unbounded above). Used to bound a
@@ -952,6 +963,13 @@ type Querier interface {
 	// Used for startup recovery to restart workers for active workflows.
 	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
 	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
+	// Every workspace whose directory a daemon may still hold: not main, has a
+	// path, and not already known to be removed. Status 5 is CREATING and 6 is
+	// FAILED (WorktreeStatus in worktree.proto); neither has a directory yet. Archived rows are the ones to remove; the rest are locked as
+	// reliant-owned. owner_user_id lets the sweep find the daemon's connection.
+	// cleanup_metadata is only ever NULL or JSON we wrote, but the cast sits inside
+	// a CASE so a hand-edited value cannot fail the whole listing.
+	ListWorktreesForReclaim(ctx context.Context) ([]ListWorktreesForReclaimRow, error)
 	// Row-locks the chat for the rest of the transaction. Serializes the "was the
 	// run already blocked?" check across concurrent approval and question
 	// creations in the same chat.

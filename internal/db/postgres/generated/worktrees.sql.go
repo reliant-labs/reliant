@@ -11,6 +11,22 @@ import (
 	"time"
 )
 
+const adoptWorktreeDaemon = `-- name: AdoptWorktreeDaemon :exec
+UPDATE worktrees SET daemon_id = $1 WHERE id = $2 AND daemon_id IS NULL
+`
+
+type AdoptWorktreeDaemonParams struct {
+	DaemonID sql.NullString `json:"daemon_id"`
+	ID       string         `json:"id"`
+}
+
+// A daemon that found a workspace's directory on its disk has proven it owns
+// it. Rows created before daemon_id was recorded get it filled in here, once.
+func (q *Queries) AdoptWorktreeDaemon(ctx context.Context, arg AdoptWorktreeDaemonParams) error {
+	_, err := q.db.ExecContext(ctx, adoptWorktreeDaemon, arg.DaemonID, arg.ID)
+	return err
+}
+
 const archiveWorktree = `-- name: ArchiveWorktree :exec
 UPDATE worktrees SET
     deleted_at = NOW(),
@@ -176,6 +192,112 @@ func (q *Queries) GetWorktreeByPath(ctx context.Context, path string) (Worktree,
 	return i, err
 }
 
+const listHeldWorktreesForUser = `-- name: ListHeldWorktreesForUser :many
+SELECT
+    w.id, w.name, w.path, w.branch, w.base_branch, w.project_id, w.chat_id, w.status, w.created_at, w.updated_at, w.last_active, w.deleted_at, w.is_main, w.cleanup_metadata, w.base_branches, w.daemon_id, w.idempotency_key,
+    p.name AS project_name,
+    p.path AS project_path
+FROM worktrees w
+JOIN projects p ON p.id = w.project_id
+WHERE p.user_id = $1
+  AND w.is_main = false
+  AND w.deleted_at IS NOT NULL
+  AND (CASE WHEN w.cleanup_metadata IS NULL OR w.cleanup_metadata = '' THEN ''
+            ELSE COALESCE(w.cleanup_metadata::jsonb ->> 'held_reason', '') END) <> ''
+  AND (CASE WHEN w.cleanup_metadata IS NULL OR w.cleanup_metadata = '' THEN false
+            ELSE COALESCE((w.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false
+ORDER BY w.deleted_at
+`
+
+type ListHeldWorktreesForUserRow struct {
+	Worktree    Worktree `json:"worktree"`
+	ProjectName string   `json:"project_name"`
+	ProjectPath string   `json:"project_path"`
+}
+
+// Archived workspaces the daemon declined to remove on its own, for the
+// storage inbox item.
+func (q *Queries) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]ListHeldWorktreesForUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listHeldWorktreesForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListHeldWorktreesForUserRow{}
+	for rows.Next() {
+		var i ListHeldWorktreesForUserRow
+		if err := rows.Scan(
+			&i.Worktree.ID,
+			&i.Worktree.Name,
+			&i.Worktree.Path,
+			&i.Worktree.Branch,
+			&i.Worktree.BaseBranch,
+			&i.Worktree.ProjectID,
+			&i.Worktree.ChatID,
+			&i.Worktree.Status,
+			&i.Worktree.CreatedAt,
+			&i.Worktree.UpdatedAt,
+			&i.Worktree.LastActive,
+			&i.Worktree.DeletedAt,
+			&i.Worktree.IsMain,
+			&i.Worktree.CleanupMetadata,
+			&i.Worktree.BaseBranches,
+			&i.Worktree.DaemonID,
+			&i.Worktree.IdempotencyKey,
+			&i.ProjectName,
+			&i.ProjectPath,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listLiveWorktreePathsForUser = `-- name: ListLiveWorktreePathsForUser :many
+SELECT w.id, w.path FROM worktrees w
+JOIN projects p ON p.id = w.project_id
+WHERE p.user_id = $1 AND w.deleted_at IS NULL AND w.path <> ''
+`
+
+type ListLiveWorktreePathsForUserRow struct {
+	ID   string `json:"id"`
+	Path string `json:"path"`
+}
+
+// Every path one user's unarchived worktree rows claim. An archived row's
+// directory may only be removed when none of the SAME user's live rows has a
+// path that equals, contains or sits inside it. Scoped by user because another
+// tenant's rows say nothing about this user's directories.
+func (q *Queries) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]ListLiveWorktreePathsForUserRow, error) {
+	rows, err := q.db.QueryContext(ctx, listLiveWorktreePathsForUser, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListLiveWorktreePathsForUserRow{}
+	for rows.Next() {
+		var i ListLiveWorktreePathsForUserRow
+		if err := rows.Scan(&i.ID, &i.Path); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listWorktrees = `-- name: ListWorktrees :many
 SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees
 WHERE
@@ -230,6 +352,76 @@ func (q *Queries) ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([
 			&i.BaseBranches,
 			&i.DaemonID,
 			&i.IdempotencyKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorktreesForReclaim = `-- name: ListWorktreesForReclaim :many
+SELECT
+    w.id, w.name, w.path, w.branch, w.base_branch, w.project_id, w.chat_id, w.status, w.created_at, w.updated_at, w.last_active, w.deleted_at, w.is_main, w.cleanup_metadata, w.base_branches, w.daemon_id, w.idempotency_key,
+    p.user_id AS owner_user_id,
+    p.path AS project_path
+FROM worktrees w
+JOIN projects p ON p.id = w.project_id
+WHERE w.is_main = false
+  AND w.path <> ''
+  AND w.status NOT IN (5, 6)
+  AND (CASE WHEN w.cleanup_metadata IS NULL OR w.cleanup_metadata = '' THEN false
+            ELSE COALESCE((w.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false
+ORDER BY w.last_active DESC
+`
+
+type ListWorktreesForReclaimRow struct {
+	Worktree    Worktree `json:"worktree"`
+	OwnerUserID string   `json:"owner_user_id"`
+	ProjectPath string   `json:"project_path"`
+}
+
+// Every workspace whose directory a daemon may still hold: not main, has a
+// path, and not already known to be removed. Status 5 is CREATING and 6 is
+// FAILED (WorktreeStatus in worktree.proto); neither has a directory yet. Archived rows are the ones to remove; the rest are locked as
+// reliant-owned. owner_user_id lets the sweep find the daemon's connection.
+// cleanup_metadata is only ever NULL or JSON we wrote, but the cast sits inside
+// a CASE so a hand-edited value cannot fail the whole listing.
+func (q *Queries) ListWorktreesForReclaim(ctx context.Context) ([]ListWorktreesForReclaimRow, error) {
+	rows, err := q.db.QueryContext(ctx, listWorktreesForReclaim)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListWorktreesForReclaimRow{}
+	for rows.Next() {
+		var i ListWorktreesForReclaimRow
+		if err := rows.Scan(
+			&i.Worktree.ID,
+			&i.Worktree.Name,
+			&i.Worktree.Path,
+			&i.Worktree.Branch,
+			&i.Worktree.BaseBranch,
+			&i.Worktree.ProjectID,
+			&i.Worktree.ChatID,
+			&i.Worktree.Status,
+			&i.Worktree.CreatedAt,
+			&i.Worktree.UpdatedAt,
+			&i.Worktree.LastActive,
+			&i.Worktree.DeletedAt,
+			&i.Worktree.IsMain,
+			&i.Worktree.CleanupMetadata,
+			&i.Worktree.BaseBranches,
+			&i.Worktree.DaemonID,
+			&i.Worktree.IdempotencyKey,
+			&i.OwnerUserID,
+			&i.ProjectPath,
 		); err != nil {
 			return nil, err
 		}

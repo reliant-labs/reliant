@@ -37,6 +37,9 @@ const (
 const (
 	// InboxServiceListInboxProcedure is the fully-qualified name of the InboxService's ListInbox RPC.
 	InboxServiceListInboxProcedure = "/reliant.v1.InboxService/ListInbox"
+	// InboxServiceCleanupStorageProcedure is the fully-qualified name of the InboxService's
+	// CleanupStorage RPC.
+	InboxServiceCleanupStorageProcedure = "/reliant.v1.InboxService/CleanupStorage"
 	// InboxServiceDismissInboxItemProcedure is the fully-qualified name of the InboxService's
 	// DismissInboxItem RPC.
 	InboxServiceDismissInboxItemProcedure = "/reliant.v1.InboxService/DismissInboxItem"
@@ -51,6 +54,15 @@ type InboxServiceClient interface {
 	// trip. With limit = 0 it returns no items, only the counts, which is the
 	// cheap call the nav badge makes.
 	ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error)
+	// CleanupStorage starts the "Clean up" action of a storage item and returns
+	// at once. For each accepted worktree the machine saves the work to a local
+	// ref, proves the save matches the files, and only then removes the
+	// directory, in the background. Progress and outcome appear on the storage
+	// item (HeldWorktree.cleaning, then the worktree leaves the list). Nothing is
+	// pushed and no branch is deleted. Worktrees holding data, another
+	// repository, or files outside their checkouts are never removed: they come
+	// back SKIPPED and are listed for manual removal.
+	CleanupStorage(context.Context, *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
@@ -79,6 +91,12 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
 			connect.WithClientOptions(opts...),
 		),
+		cleanupStorage: connect.NewClient[v1.CleanupStorageRequest, v1.CleanupStorageResponse](
+			httpClient,
+			baseURL+InboxServiceCleanupStorageProcedure,
+			connect.WithSchema(inboxServiceMethods.ByName("CleanupStorage")),
+			connect.WithClientOptions(opts...),
+		),
 		dismissInboxItem: connect.NewClient[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse](
 			httpClient,
 			baseURL+InboxServiceDismissInboxItemProcedure,
@@ -97,6 +115,7 @@ func NewInboxServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 // inboxServiceClient implements InboxServiceClient.
 type inboxServiceClient struct {
 	listInbox        *connect.Client[v1.ListInboxRequest, v1.ListInboxResponse]
+	cleanupStorage   *connect.Client[v1.CleanupStorageRequest, v1.CleanupStorageResponse]
 	dismissInboxItem *connect.Client[v1.DismissInboxItemRequest, v1.DismissInboxItemResponse]
 	restoreInboxItem *connect.Client[v1.RestoreInboxItemRequest, v1.RestoreInboxItemResponse]
 }
@@ -104,6 +123,11 @@ type inboxServiceClient struct {
 // ListInbox calls reliant.v1.InboxService.ListInbox.
 func (c *inboxServiceClient) ListInbox(ctx context.Context, req *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error) {
 	return c.listInbox.CallUnary(ctx, req)
+}
+
+// CleanupStorage calls reliant.v1.InboxService.CleanupStorage.
+func (c *inboxServiceClient) CleanupStorage(ctx context.Context, req *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error) {
+	return c.cleanupStorage.CallUnary(ctx, req)
 }
 
 // DismissInboxItem calls reliant.v1.InboxService.DismissInboxItem.
@@ -122,6 +146,15 @@ type InboxServiceHandler interface {
 	// trip. With limit = 0 it returns no items, only the counts, which is the
 	// cheap call the nav badge makes.
 	ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error)
+	// CleanupStorage starts the "Clean up" action of a storage item and returns
+	// at once. For each accepted worktree the machine saves the work to a local
+	// ref, proves the save matches the files, and only then removes the
+	// directory, in the background. Progress and outcome appear on the storage
+	// item (HeldWorktree.cleaning, then the worktree leaves the list). Nothing is
+	// pushed and no branch is deleted. Worktrees holding data, another
+	// repository, or files outside their checkouts are never removed: they come
+	// back SKIPPED and are listed for manual removal.
+	CleanupStorage(context.Context, *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error)
 	// DismissInboxItem hides items from the caller's inbox. Every kind can be
 	// dismissed. Hiding an approval or a question does not resolve it: the run
 	// still waits, and the chat still shows it. A newer failure of the same
@@ -146,6 +179,12 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(inboxServiceMethods.ByName("ListInbox")),
 		connect.WithHandlerOptions(opts...),
 	)
+	inboxServiceCleanupStorageHandler := connect.NewUnaryHandler(
+		InboxServiceCleanupStorageProcedure,
+		svc.CleanupStorage,
+		connect.WithSchema(inboxServiceMethods.ByName("CleanupStorage")),
+		connect.WithHandlerOptions(opts...),
+	)
 	inboxServiceDismissInboxItemHandler := connect.NewUnaryHandler(
 		InboxServiceDismissInboxItemProcedure,
 		svc.DismissInboxItem,
@@ -162,6 +201,8 @@ func NewInboxServiceHandler(svc InboxServiceHandler, opts ...connect.HandlerOpti
 		switch r.URL.Path {
 		case InboxServiceListInboxProcedure:
 			inboxServiceListInboxHandler.ServeHTTP(w, r)
+		case InboxServiceCleanupStorageProcedure:
+			inboxServiceCleanupStorageHandler.ServeHTTP(w, r)
 		case InboxServiceDismissInboxItemProcedure:
 			inboxServiceDismissInboxItemHandler.ServeHTTP(w, r)
 		case InboxServiceRestoreInboxItemProcedure:
@@ -177,6 +218,10 @@ type UnimplementedInboxServiceHandler struct{}
 
 func (UnimplementedInboxServiceHandler) ListInbox(context.Context, *connect.Request[v1.ListInboxRequest]) (*connect.Response[v1.ListInboxResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.ListInbox is not implemented"))
+}
+
+func (UnimplementedInboxServiceHandler) CleanupStorage(context.Context, *connect.Request[v1.CleanupStorageRequest]) (*connect.Response[v1.CleanupStorageResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.InboxService.CleanupStorage is not implemented"))
 }
 
 func (UnimplementedInboxServiceHandler) DismissInboxItem(context.Context, *connect.Request[v1.DismissInboxItemRequest]) (*connect.Response[v1.DismissInboxItemResponse], error) {

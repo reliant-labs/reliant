@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -44,6 +45,16 @@ type WorktreeService struct {
 	tempClient   client.Client
 	daemonRouter toolexec.DaemonRouter
 	wake         machineWake
+	// settler removes an archived worktree's directory when it is provably
+	// safe. Nil in tests that do not exercise it.
+	settler worktreeSettler
+}
+
+// worktreeSettler is what archiving needs from the sweep: one immediate
+// attempt to settle the directory of a worktree that was just archived.
+type worktreeSettler interface {
+	Settle(ctx context.Context, userID string, cand *core.ReclaimCandidate)
+	SettleBlocking(ctx context.Context, userID string, cand *core.ReclaimCandidate) *core.CleanupMetadata
 }
 
 // NewWorktreeService creates a new WorktreeService
@@ -69,6 +80,91 @@ func worktreeOwner(worktree *db.Worktree) string {
 		return ""
 	}
 	return *worktree.DaemonID
+}
+
+// relockActive tells the owning daemon to lock this worktree's checkouts as
+// active and to RETIRE the archive's fence, so nothing built from a read taken
+// before the restore can claim or remove the directory afterwards.
+//
+// It is synchronous and its answer is checked:
+//   - "gone": a removal already finished. The row is recorded as removed and the
+//     unarchive is refused (restore it with recreate); flipping it to active over
+//     a missing directory would leave a broken workspace.
+//   - anything but "locked" (unreachable, held such as a parked checkout, error):
+//     the row stays archived and an error is returned, never an active row with
+//     no verified lock.
+//
+// It returns true only when the machine answered "locked".
+func (s *WorktreeService) relockActive(ctx context.Context, userID string, worktree *db.Worktree) (bool, error) {
+	if worktree.Path == "" || worktree.DaemonID == nil || *worktree.DaemonID == "" {
+		return true, nil
+	}
+	fence := ""
+	if worktree.DeletedAt != nil {
+		fence = strconv.FormatInt(worktree.DeletedAt.UnixNano(), 10)
+	}
+	req := struct {
+		Worktrees []map[string]any `json:"worktrees"`
+	}{Worktrees: []map[string]any{{"id": worktree.ID, "path": worktree.Path, "state": "active", "retire": fence}}}
+	var resp struct {
+		Results []struct {
+			Outcome string `json:"outcome"`
+			Reason  string `json:"reason"`
+			Detail  string `json:"detail"`
+			Error   string `json:"error"`
+		} `json:"results"`
+	}
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, *worktree.DaemonID, "worktree.reconcile", req, &resp); err != nil {
+		// Do not flip the row to active over a directory we could not re-lock:
+		// it stays archived and the user retries when the machine is reachable.
+		logging.Warn("Could not reach the machine to re-lock an archived workspace; leaving it archived", "worktreeID", worktree.ID, "error", err)
+		return false, fmt.Errorf("the machine that holds this workspace is unreachable, so it was left archived: %w", err)
+	}
+	if len(resp.Results) == 0 {
+		return false, fmt.Errorf("the machine did not answer for this workspace")
+	}
+	res := resp.Results[0]
+	switch res.Outcome {
+	case "locked":
+		return true, nil
+	case "gone":
+		_ = s.database.MergeWorktreeCleanupMetadata(ctx, worktree.ID, func(m *db.CleanupMetadata, _ bool) bool {
+			m.DirectoryDeleted = true
+			return true
+		})
+		return false, nil
+	case "held":
+		return false, fmt.Errorf("could not restore: %s (%s)", res.Detail, res.Reason)
+	case "error":
+		return false, fmt.Errorf("the machine could not re-lock this workspace: %s", res.Error)
+	}
+	return false, fmt.Errorf("could not restore: the machine answered %q", res.Outcome)
+}
+
+// WithSettler enables settling an archived worktree's directory immediately.
+func (s *WorktreeService) WithSettler(settler worktreeSettler) *WorktreeService {
+	s.settler = settler
+	return s
+}
+
+// settleArchived asks the owning daemon to remove an archived worktree's
+// directory if that is safe, on a context detached from the request: archiving
+// has already succeeded, and a client that disconnects must not abandon a
+// half-finished removal. The directory is the daemon's to judge; whatever it
+// declines is recorded and offered in the storage inbox item.
+func (s *WorktreeService) settleArchived(ctx context.Context, userID string, worktree *db.Worktree, projectPath string) {
+	if s.settler == nil || worktree.Path == "" {
+		return
+	}
+	archived, err := s.database.GetWorktree(ctx, worktree.ID)
+	if err != nil || archived == nil {
+		return
+	}
+	bg, cancel := context.WithTimeout(context.WithoutCancel(ctx), 2*time.Minute)
+	go func() {
+		defer cancel()
+		s.settler.Settle(bg, userID, &core.ReclaimCandidate{Worktree: archived, OwnerUserID: userID, ProjectPath: projectPath})
+	}()
 }
 
 // sendWorktreeDaemonCommand sends a command to daemonID ("" = the user's
@@ -175,6 +271,10 @@ func worktreeToProto(w *db.Worktree) *reliantv1.Worktree {
 		proto.CleanupMetadata = &reliantv1.CleanupMetadata{
 			DirectoryDeleted: w.CleanupMetadata.DirectoryDeleted,
 			BranchDeleted:    w.CleanupMetadata.BranchDeleted,
+			HeldReason:       w.CleanupMetadata.HeldReason,
+			HeldDetail:       w.CleanupMetadata.HeldDetail,
+			SizeBytes:        w.CleanupMetadata.SizeBytes,
+			SnapshotRefs:     w.CleanupMetadata.SnapshotRefs,
 		}
 	}
 
@@ -610,6 +710,7 @@ func (s *WorktreeService) finishWorktreeCreate(
 			Branch      string `json:"branch"`
 			BaseBranch  string `json:"base_branch"`
 			Force       bool   `json:"force"`
+			WorktreeID  string `json:"worktree_id"`
 		}
 		var createResp struct {
 			Success      bool   `json:"success"`
@@ -619,6 +720,7 @@ func (s *WorktreeService) finishWorktreeCreate(
 		}
 
 		err := s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.create", createReq{
+			WorktreeID:  worktree.ID,
 			ProjectPath: repoPath,
 			WorkspaceID: workspaceID,
 			SubPath:     repo.RelativePath,
@@ -1037,29 +1139,38 @@ func (s *WorktreeService) DeleteWorktree(
 
 	isPermanentDelete := worktree.DeletedAt != nil
 
-	// Cleanup is best-effort and the row is archived whatever it managed, so
-	// against an asleep machine the delete would "succeed" and leave the
-	// checkout on disk. Wake the machine first; the client retries.
-	if (req.Msg.DeleteLocalDirectory || req.Msg.DeleteGitBranch) && project != nil {
+	// The directory is no longer the client's call: the owning daemon removes it
+	// when it is provably safe and otherwise holds it for the user to clean up
+	// knowingly. A permanent delete and a branch delete still reach the machine
+	// from here, so wake an asleep one first; the client retries.
+	if (req.Msg.DeleteGitBranch || isPermanentDelete) && project != nil {
 		if err := s.wakeIfAsleep(ctx, userID, wakeTarget{daemonID: worktreeOwner(worktree)}, project.Path); err != nil {
 			return nil, err
 		}
 	}
 
-	// Perform cleanup
-	deletedDir := false
-	deletedBranch := false
-
-	if req.Msg.DeleteLocalDirectory && project != nil && worktree.Path != "" {
-		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, worktreeOwner(worktree), project.ID, project.Path, worktree.Path)
-	}
-
-	if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
-		deletedBranch = s.cleanupWorktreeBranch(ctx, userID, worktreeOwner(worktree), project.Path, worktree.Branch)
-	}
-
+	// The directory is no longer the client's call. The owning daemon removes
+	// it when it is provably safe (clean, pushed or merged, not in use) and
+	// otherwise holds it for the user to clean up knowingly; see settleArchived.
 	if isPermanentDelete {
-		// Permanently delete from database
+		// The row is the only thing that lets reliant find this directory
+		// again, so it may only go once the machine has removed the directory
+		// (or it never existed). Otherwise the directory stays locked with
+		// reliant's reason forever and nothing will ever clean it up.
+		if worktree.Path != "" && project != nil && s.settler != nil {
+			meta := s.settler.SettleBlocking(ctx, userID, &core.ReclaimCandidate{Worktree: worktree, OwnerUserID: userID, ProjectPath: project.Path})
+			if meta == nil || !meta.DirectoryDeleted {
+				reason := "the machine has not removed its directory yet"
+				if meta != nil && meta.HeldReason != "" {
+					reason = "its directory is still on disk (" + meta.HeldReason + "): clean it up from your Inbox first"
+				}
+				return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("cannot delete this workspace permanently: %s", reason))
+			}
+		}
+		deletedBranch := false
+		if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
+			deletedBranch = s.cleanupWorktreeBranch(ctx, userID, worktreeOwner(worktree), project.Path, worktree.Branch)
+		}
 		if err := s.database.DeleteWorktree(ctx, req.Msg.WorktreeId); err != nil {
 			logging.Error("Failed to permanently delete worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to permanently delete worktree"))
@@ -1067,14 +1178,12 @@ func (s *WorktreeService) DeleteWorktree(
 
 		return connect.NewResponse(&reliantv1.DeleteWorktreeResponse{
 			Message:           "Worktree permanently deleted",
-			DeletedDirectory:  deletedDir,
 			DeletedBranch:     deletedBranch,
 			IsPermanentDelete: true,
 		}), nil
 	}
 
-	// Store cleanup metadata
-	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, deletedDir, deletedBranch)
+	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, req.Msg.DeleteGitBranch)
 
 	// Archive the worktree
 	if err := s.database.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
@@ -1084,11 +1193,12 @@ func (s *WorktreeService) DeleteWorktree(
 
 	// Archive associated chats
 	s.archiveWorktreeChats(ctx, userID, worktree)
+	if project != nil {
+		s.settleArchived(ctx, userID, worktree, project.Path)
+	}
 
 	return connect.NewResponse(&reliantv1.DeleteWorktreeResponse{
 		Message:           "Worktree and associated chats archived successfully",
-		DeletedDirectory:  deletedDir,
-		DeletedBranch:     deletedBranch,
 		IsPermanentDelete: false,
 	}), nil
 }
@@ -1127,27 +1237,10 @@ func (s *WorktreeService) ArchiveWorktree(
 		logging.Warn("Failed to get project for worktree cleanup", "error", err)
 	}
 
-	// As in DeleteWorktree: wake an asleep machine before best-effort cleanup.
-	if (req.Msg.DeleteLocalDirectory || req.Msg.DeleteGitBranch) && project != nil {
-		if err := s.wakeIfAsleep(ctx, userID, wakeTarget{daemonID: worktreeOwner(worktree)}, project.Path); err != nil {
-			return nil, err
-		}
-	}
-
-	// Perform cleanup
-	deletedDir := false
-	deletedBranch := false
-
-	if req.Msg.DeleteLocalDirectory && project != nil && worktree.Path != "" {
-		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, worktreeOwner(worktree), project.ID, project.Path, worktree.Path)
-	}
-
-	if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
-		deletedBranch = s.cleanupWorktreeBranch(ctx, userID, worktreeOwner(worktree), project.Path, worktree.Branch)
-	}
-
-	// Store cleanup metadata
-	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, deletedDir, deletedBranch)
+	// The branch is checked out in the directory until the machine removes it,
+	// and git refuses to delete a checked-out branch, so deletion is requested
+	// here and carried out after the machine reports the directory removed.
+	s.storeCleanupMetadata(ctx, req.Msg.WorktreeId, req.Msg.DeleteGitBranch)
 
 	// Archive the worktree
 	if err := s.database.ArchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
@@ -1157,11 +1250,12 @@ func (s *WorktreeService) ArchiveWorktree(
 
 	// Archive associated chats
 	s.archiveWorktreeChats(ctx, userID, worktree)
+	if project != nil {
+		s.settleArchived(ctx, userID, worktree, project.Path)
+	}
 
 	return connect.NewResponse(&reliantv1.ArchiveWorktreeResponse{
-		Message:          "Worktree and associated chats archived successfully",
-		DeletedDirectory: deletedDir,
-		DeletedBranch:    deletedBranch,
+		Message: "Worktree and associated chats archived successfully",
 	}), nil
 }
 
@@ -1190,6 +1284,24 @@ func (s *WorktreeService) UnarchiveWorktree(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is not archived"))
 	}
 
+	// A directory that is already gone cannot be unarchived into a working
+	// workspace: the user restores it with RecreateWorktree, which rebuilds it.
+	if worktree.CleanupMetadata != nil && worktree.CleanupMetadata.DirectoryDeleted {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace's files were removed; restore it with recreate"))
+	}
+
+	// Take the archive fence off the directory FIRST, and retire it: the machine
+	// re-locks the checkouts as "restored <fence>", so a removal already in
+	// flight for this archive finds a lock it does not own and refuses, and no
+	// claim built before now can use that fence again. See relockActive.
+	proceed, err := s.relockActive(ctx, userID, worktree)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnavailable, err)
+	}
+	if !proceed {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace's files were removed; restore it with recreate"))
+	}
+
 	if err := s.database.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
 		logging.Error("Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unarchive worktree"))
@@ -1207,92 +1319,6 @@ func (s *WorktreeService) UnarchiveWorktree(
 // Cleanup Helpers
 // =============================================================================
 
-// cleanupWorktreeDirectory removes the workspace's nested git checkouts and
-// the workspace root itself. In multi-repo mode it fans out one daemon
-// `worktree.delete_directory` per nested repo (each `git worktree remove`s
-// its checkout from the parent repo), then asks the daemon to wipe the
-// workspace root. In single-repo / legacy projects (one repo with empty
-// RelativePath) it collapses to one daemon call. Best-effort: individual
-// per-repo failures are logged and skipped — a leaked worktree registration
-// is recoverable via `git worktree prune` and shouldn't block teardown.
-//
-// projectID is used to enumerate nested repos; projectPath is the on-disk
-// project root used to derive each parent-repo's git dir. daemonID is the
-// worktree's owner (see worktreeOwner): the checkouts exist only there.
-func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, daemonID, projectID, projectPath, worktreePath string) bool {
-	repos, err := s.database.ListReposByProject(ctx, projectID)
-	if err != nil {
-		logging.Warn("Failed to list repos for worktree cleanup; falling back to single-step delete",
-			"error", err, "projectID", projectID)
-		return s.cleanupWorktreeDirectorySingle(ctx, userID, daemonID, projectPath, worktreePath)
-	}
-
-	// Legacy single-repo (or pre-migration) project: one repo at the project
-	// root, or no Repo rows at all. The worktree path is itself the git
-	// checkout, so a single delete_directory call is correct.
-	if len(repos) <= 1 && (len(repos) == 0 || repos[0].RelativePath == "") {
-		return s.cleanupWorktreeDirectorySingle(ctx, userID, daemonID, projectPath, worktreePath)
-	}
-
-	// Multi-repo: per-repo `git worktree remove`, then wipe the workspace dir.
-	allDeleted := true
-	for _, repo := range repos {
-		repoPath := filepath.Join(projectPath, repo.RelativePath)
-		checkoutPath := filepath.Join(worktreePath, repo.RelativePath)
-		var resp struct {
-			Deleted bool `json:"deleted"`
-		}
-		if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.delete_directory", map[string]string{
-			"project_path":  repoPath,
-			"worktree_path": checkoutPath,
-		}, &resp); err != nil {
-			logging.Warn("Per-repo worktree delete failed (continuing)",
-				"error", err, "repo", repo.ID, "checkout", checkoutPath)
-			allDeleted = false
-			continue
-		}
-		if !resp.Deleted {
-			logging.Warn("Per-repo worktree delete reported not deleted (continuing)",
-				"repo", repo.ID, "checkout", checkoutPath)
-			allDeleted = false
-		}
-	}
-
-	var wsResp struct {
-		Deleted bool   `json:"deleted"`
-		Error   string `json:"error,omitempty"`
-	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.remove_workspace_dir", map[string]string{
-		"workspace_path": worktreePath,
-	}, &wsResp); err != nil {
-		logging.Warn("Workspace dir removal failed (continuing)",
-			"error", err, "workspace", worktreePath)
-		return false
-	}
-	if !wsResp.Deleted {
-		if wsResp.Error != "" {
-			logging.Warn("Workspace dir removal reported error",
-				"workspace", worktreePath, "error", wsResp.Error)
-		}
-		return false
-	}
-	return allDeleted
-}
-
-func (s *WorktreeService) cleanupWorktreeDirectorySingle(ctx context.Context, userID, daemonID, projectPath, worktreePath string) bool {
-	var resp struct {
-		Deleted bool `json:"deleted"`
-	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.delete_directory", map[string]string{
-		"project_path":  projectPath,
-		"worktree_path": worktreePath,
-	}, &resp); err != nil {
-		logging.Warn("Failed to remove git worktree via daemon", "error", err, "path", worktreePath)
-		return false
-	}
-	return resp.Deleted
-}
-
 // cleanupWorktreeBranch deletes the worktree's branch from the project clone on
 // daemonID — the owner's clone, which is where creating the worktree made it.
 func (s *WorktreeService) cleanupWorktreeBranch(ctx context.Context, userID, daemonID, projectPath, branch string) bool {
@@ -1309,16 +1335,18 @@ func (s *WorktreeService) cleanupWorktreeBranch(ctx context.Context, userID, dae
 	return resp.Deleted
 }
 
-func (s *WorktreeService) storeCleanupMetadata(ctx context.Context, worktreeID string, deletedDir, deletedBranch bool) {
-	if !deletedDir && !deletedBranch {
+// storeCleanupMetadata records that the user wants the branch deleted once the
+// directory is gone. Whether the directory went is the daemon's to report, so it
+// is never set here, and what is already stored (held reason, snapshot refs) is
+// kept.
+func (s *WorktreeService) storeCleanupMetadata(ctx context.Context, worktreeID string, deleteBranch bool) {
+	if !deleteBranch {
 		return
 	}
-
-	metadata := db.CleanupMetadata{
-		DirectoryDeleted: deletedDir,
-		BranchDeleted:    deletedBranch,
-	}
-	err := s.database.UpdateWorktreeCleanupMetadata(ctx, worktreeID, &metadata)
+	err := s.database.MergeWorktreeCleanupMetadata(ctx, worktreeID, func(m *db.CleanupMetadata, _ bool) bool {
+		m.DeleteBranch = true
+		return true
+	})
 	if err != nil {
 		logging.Warn("Failed to store cleanup metadata", "error", err, "worktreeID", worktreeID)
 	}
@@ -1442,9 +1470,13 @@ func (s *WorktreeService) ImportWorktree(
 	}
 
 	// Check if worktree with this name or path already exists for this project
+	// Archived rows count: an archived workspace's directory is still the
+	// machine's to settle, and a second row sharing its path would let the
+	// archive be removed out from under the new one.
 	existingWorktrees, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
-		ProjectID: &req.Msg.ProjectId,
-		Limit:     1000,
+		ProjectID:       &req.Msg.ProjectId,
+		IncludeArchived: true,
+		Limit:           1000,
 	})
 	if err != nil {
 		logging.Error("Failed to list worktrees", "error", err)
@@ -1452,10 +1484,13 @@ func (s *WorktreeService) ImportWorktree(
 	}
 
 	for _, wt := range existingWorktrees {
-		if wt.Name == name {
+		if wt.Name == name && wt.DeletedAt == nil {
 			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project", name))
 		}
 		if wt.Path == absPath {
+			if wt.DeletedAt != nil {
+				return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree at path '%s' belongs to an archived workspace; restore it instead", absPath))
+			}
 			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree at path '%s' is already imported", absPath))
 		}
 	}
@@ -1621,18 +1656,51 @@ func (s *WorktreeService) RecreateWorktree(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
 
-	// Recreate worktree via daemon (checks branch, path, creates dir, runs git worktree add)
+	// Recreate EVERY repo of the workspace. A multi-repo project's root is not a
+	// git repository, so rebuilding it means one `git worktree add` per nested
+	// repo, each in its own repository, under <workspace>/<relative path>.
+	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+	type recreateRepo struct {
+		RepoPath string `json:"repo_path"`
+		Rel      string `json:"rel"`
+		Branch   string `json:"branch,omitempty"`
+	}
+	var recreateRepos []recreateRepo
+	for _, repo := range repos {
+		recreateRepos = append(recreateRepos, recreateRepo{
+			RepoPath: filepath.Join(project.Path, repo.RelativePath),
+			Rel:      filepath.ToSlash(repo.RelativePath),
+			Branch:   worktree.Branch,
+		})
+	}
 	var recreateResp struct {
 		Success      bool   `json:"success"`
 		BranchExists bool   `json:"branch_exists"`
 		PathExists   bool   `json:"path_exists"`
 		Output       string `json:"output,omitempty"`
 		Error        string `json:"error,omitempty"`
+		// SnapshotApplied: saved work was put back on every checkout that had
+		// some. SnapshotFailed names the ones it was not.
+		SnapshotApplied bool     `json:"snapshot_applied,omitempty"`
+		SnapshotFailed  []string `json:"snapshot_failed,omitempty"`
+		// SnapshotBranchMoved: saved work not applied because the branch moved.
+		SnapshotBranchMoved []string `json:"snapshot_branch_moved,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.recreate", map[string]string{
+	var savedRefs []string
+	if worktree.CleanupMetadata != nil {
+		savedRefs = worktree.CleanupMetadata.SnapshotRefs
+	}
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.recreate", map[string]any{
 		"project_path":  project.Path,
 		"worktree_path": worktree.Path,
 		"branch":        worktree.Branch,
+		"worktree_id":   worktree.ID,
+		"snapshot_refs": savedRefs,
+		"fence":         strconv.FormatInt(worktree.DeletedAt.UnixNano(), 10),
+		"repos":         recreateRepos,
 	}, &recreateResp); err != nil {
 		logging.Error("Failed to recreate worktree via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to recreate worktree"))
@@ -1647,10 +1715,19 @@ func (s *WorktreeService) RecreateWorktree(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to recreate worktree: %s", recreateResp.Error))
 	}
 
-	// Clear cleanup metadata since files are now restored
-	err = s.database.UpdateWorktreeCleanupMetadata(ctx, req.Msg.WorktreeId, nil)
-	if err != nil {
-		logging.Warn("Failed to clear cleanup metadata", "error", err)
+	// The directory is back, so it is no longer "removed" or "held". The saved
+	// refs are kept until a snapshot has actually been re-applied: they are the
+	// only copy of that work, and the archived panel lists them.
+	// A failed apply keeps the refs on the row, so the work is never forgotten.
+	keep := &db.CleanupMetadata{}
+	if len(savedRefs) > 0 && !recreateResp.SnapshotApplied {
+		keep.SnapshotRefs = savedRefs
+	}
+	if len(keep.SnapshotRefs) == 0 {
+		keep = nil
+	}
+	if err := s.database.UpdateWorktreeCleanupMetadata(ctx, req.Msg.WorktreeId, keep); err != nil {
+		logging.Warn("Failed to update cleanup metadata", "error", err)
 	}
 
 	// Unarchive the worktree
@@ -1662,11 +1739,22 @@ func (s *WorktreeService) RecreateWorktree(
 	// Unarchive all chats associated with this worktree
 	s.unarchiveWorktreeChats(ctx, userID, worktree)
 
-	return connect.NewResponse(&reliantv1.RecreateWorktreeResponse{
+	out := &reliantv1.RecreateWorktreeResponse{
 		Message: "Worktree recreated successfully from branch",
 		Path:    worktree.Path,
 		Branch:  worktree.Branch,
-	}), nil
+	}
+	switch {
+	case len(recreateResp.SnapshotBranchMoved) > 0:
+		out.Message = "Worktree recreated, but its saved work was not applied"
+		out.SnapshotWarning = fmt.Sprintf("Your work is saved at %s but was not applied because the branch moved since it was saved.", strings.Join(savedRefs, ", "))
+		out.SnapshotRefs = savedRefs
+	case len(recreateResp.SnapshotFailed) > 0:
+		out.Message = "Worktree recreated, but its saved work was not applied"
+		out.SnapshotWarning = fmt.Sprintf("Your work is saved at %s but could not be applied (%s).", strings.Join(savedRefs, ", "), strings.Join(recreateResp.SnapshotFailed, ", "))
+		out.SnapshotRefs = savedRefs
+	}
+	return connect.NewResponse(out), nil
 }
 
 // =============================================================================

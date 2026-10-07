@@ -249,8 +249,20 @@ type CleanupMetadata struct {
 	state            protoimpl.MessageState `protogen:"open.v1"`
 	DirectoryDeleted bool                   `protobuf:"varint,1,opt,name=directory_deleted,json=directoryDeleted,proto3" json:"directory_deleted,omitempty"`
 	BranchDeleted    bool                   `protobuf:"varint,2,opt,name=branch_deleted,json=branchDeleted,proto3" json:"branch_deleted,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	// Set while the machine is holding the directory: "dirty", "unpushed",
+	// "in_use", "unverified", "data" (ignored files that are not rebuildable),
+	// "nested-repository", "files-outside-checkout" or "quarantined" (a checkout
+	// parked under the worktree root's .reclaim directory, still locked; the
+	// detail names the path). Cleared once the
+	// directory is removed.
+	HeldReason string `protobuf:"bytes,3,opt,name=held_reason,json=heldReason,proto3" json:"held_reason,omitempty"`
+	HeldDetail string `protobuf:"bytes,4,opt,name=held_detail,json=heldDetail,proto3" json:"held_detail,omitempty"`
+	SizeBytes  int64  `protobuf:"varint,5,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
+	// Local refs holding work saved before the directory was removed. Kept until
+	// a restore has applied them.
+	SnapshotRefs  []string `protobuf:"bytes,6,rep,name=snapshot_refs,json=snapshotRefs,proto3" json:"snapshot_refs,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *CleanupMetadata) Reset() {
@@ -295,6 +307,34 @@ func (x *CleanupMetadata) GetBranchDeleted() bool {
 		return x.BranchDeleted
 	}
 	return false
+}
+
+func (x *CleanupMetadata) GetHeldReason() string {
+	if x != nil {
+		return x.HeldReason
+	}
+	return ""
+}
+
+func (x *CleanupMetadata) GetHeldDetail() string {
+	if x != nil {
+		return x.HeldDetail
+	}
+	return ""
+}
+
+func (x *CleanupMetadata) GetSizeBytes() int64 {
+	if x != nil {
+		return x.SizeBytes
+	}
+	return 0
+}
+
+func (x *CleanupMetadata) GetSnapshotRefs() []string {
+	if x != nil {
+		return x.SnapshotRefs
+	}
+	return nil
 }
 
 // DiscoveredWorktree represents a worktree found via git discovery
@@ -1056,12 +1096,11 @@ func (x *UpdateWorktreeResponse) GetWorktree() *Worktree {
 
 // DeleteWorktreeRequest deletes or archives a worktree
 type DeleteWorktreeRequest struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	WorktreeId           string                 `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3" json:"worktree_id,omitempty"`
-	DeleteLocalDirectory bool                   `protobuf:"varint,2,opt,name=delete_local_directory,json=deleteLocalDirectory,proto3" json:"delete_local_directory,omitempty"`
-	DeleteGitBranch      bool                   `protobuf:"varint,3,opt,name=delete_git_branch,json=deleteGitBranch,proto3" json:"delete_git_branch,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	WorktreeId      string                 `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3" json:"worktree_id,omitempty"`
+	DeleteGitBranch bool                   `protobuf:"varint,3,opt,name=delete_git_branch,json=deleteGitBranch,proto3" json:"delete_git_branch,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DeleteWorktreeRequest) Reset() {
@@ -1101,13 +1140,6 @@ func (x *DeleteWorktreeRequest) GetWorktreeId() string {
 	return ""
 }
 
-func (x *DeleteWorktreeRequest) GetDeleteLocalDirectory() bool {
-	if x != nil {
-		return x.DeleteLocalDirectory
-	}
-	return false
-}
-
 func (x *DeleteWorktreeRequest) GetDeleteGitBranch() bool {
 	if x != nil {
 		return x.DeleteGitBranch
@@ -1119,9 +1151,8 @@ func (x *DeleteWorktreeRequest) GetDeleteGitBranch() bool {
 type DeleteWorktreeResponse struct {
 	state             protoimpl.MessageState `protogen:"open.v1"`
 	Message           string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	DeletedDirectory  bool                   `protobuf:"varint,2,opt,name=deleted_directory,json=deletedDirectory,proto3" json:"deleted_directory,omitempty"`
-	DeletedBranch     bool                   `protobuf:"varint,3,opt,name=deleted_branch,json=deletedBranch,proto3" json:"deleted_branch,omitempty"`
-	IsPermanentDelete bool                   `protobuf:"varint,4,opt,name=is_permanent_delete,json=isPermanentDelete,proto3" json:"is_permanent_delete,omitempty"`
+	DeletedBranch     bool                   `protobuf:"varint,2,opt,name=deleted_branch,json=deletedBranch,proto3" json:"deleted_branch,omitempty"`
+	IsPermanentDelete bool                   `protobuf:"varint,3,opt,name=is_permanent_delete,json=isPermanentDelete,proto3" json:"is_permanent_delete,omitempty"`
 	unknownFields     protoimpl.UnknownFields
 	sizeCache         protoimpl.SizeCache
 }
@@ -1163,13 +1194,6 @@ func (x *DeleteWorktreeResponse) GetMessage() string {
 	return ""
 }
 
-func (x *DeleteWorktreeResponse) GetDeletedDirectory() bool {
-	if x != nil {
-		return x.DeletedDirectory
-	}
-	return false
-}
-
 func (x *DeleteWorktreeResponse) GetDeletedBranch() bool {
 	if x != nil {
 		return x.DeletedBranch
@@ -1186,12 +1210,11 @@ func (x *DeleteWorktreeResponse) GetIsPermanentDelete() bool {
 
 // ArchiveWorktreeRequest archives a worktree (sets deleted_at)
 type ArchiveWorktreeRequest struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	WorktreeId           string                 `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3" json:"worktree_id,omitempty"`
-	DeleteLocalDirectory bool                   `protobuf:"varint,2,opt,name=delete_local_directory,json=deleteLocalDirectory,proto3" json:"delete_local_directory,omitempty"`
-	DeleteGitBranch      bool                   `protobuf:"varint,3,opt,name=delete_git_branch,json=deleteGitBranch,proto3" json:"delete_git_branch,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	WorktreeId      string                 `protobuf:"bytes,1,opt,name=worktree_id,json=worktreeId,proto3" json:"worktree_id,omitempty"`
+	DeleteGitBranch bool                   `protobuf:"varint,3,opt,name=delete_git_branch,json=deleteGitBranch,proto3" json:"delete_git_branch,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *ArchiveWorktreeRequest) Reset() {
@@ -1231,13 +1254,6 @@ func (x *ArchiveWorktreeRequest) GetWorktreeId() string {
 	return ""
 }
 
-func (x *ArchiveWorktreeRequest) GetDeleteLocalDirectory() bool {
-	if x != nil {
-		return x.DeleteLocalDirectory
-	}
-	return false
-}
-
 func (x *ArchiveWorktreeRequest) GetDeleteGitBranch() bool {
 	if x != nil {
 		return x.DeleteGitBranch
@@ -1247,12 +1263,11 @@ func (x *ArchiveWorktreeRequest) GetDeleteGitBranch() bool {
 
 // ArchiveWorktreeResponse confirms archive
 type ArchiveWorktreeResponse struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Message          string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	DeletedDirectory bool                   `protobuf:"varint,2,opt,name=deleted_directory,json=deletedDirectory,proto3" json:"deleted_directory,omitempty"`
-	DeletedBranch    bool                   `protobuf:"varint,3,opt,name=deleted_branch,json=deletedBranch,proto3" json:"deleted_branch,omitempty"`
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	DeletedBranch bool                   `protobuf:"varint,2,opt,name=deleted_branch,json=deletedBranch,proto3" json:"deleted_branch,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ArchiveWorktreeResponse) Reset() {
@@ -1290,13 +1305,6 @@ func (x *ArchiveWorktreeResponse) GetMessage() string {
 		return x.Message
 	}
 	return ""
-}
-
-func (x *ArchiveWorktreeResponse) GetDeletedDirectory() bool {
-	if x != nil {
-		return x.DeletedDirectory
-	}
-	return false
 }
 
 func (x *ArchiveWorktreeResponse) GetDeletedBranch() bool {
@@ -1655,10 +1663,15 @@ func (x *RecreateWorktreeRequest) GetWorktreeId() string {
 
 // RecreateWorktreeResponse confirms recreation
 type RecreateWorktreeResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
-	Path          string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
-	Branch        string                 `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
+	state   protoimpl.MessageState `protogen:"open.v1"`
+	Message string                 `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`
+	Path    string                 `protobuf:"bytes,2,opt,name=path,proto3" json:"path,omitempty"`
+	Branch  string                 `protobuf:"bytes,3,opt,name=branch,proto3" json:"branch,omitempty"`
+	// snapshot_warning is set when saved work could not be put back (for example
+	// because the branch moved). The work is still on snapshot_refs.
+	SnapshotWarning string `protobuf:"bytes,4,opt,name=snapshot_warning,json=snapshotWarning,proto3" json:"snapshot_warning,omitempty"`
+	// snapshot_refs are the refs still holding saved work that was not applied.
+	SnapshotRefs  []string `protobuf:"bytes,5,rep,name=snapshot_refs,json=snapshotRefs,proto3" json:"snapshot_refs,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1712,6 +1725,20 @@ func (x *RecreateWorktreeResponse) GetBranch() string {
 		return x.Branch
 	}
 	return ""
+}
+
+func (x *RecreateWorktreeResponse) GetSnapshotWarning() string {
+	if x != nil {
+		return x.SnapshotWarning
+	}
+	return ""
+}
+
+func (x *RecreateWorktreeResponse) GetSnapshotRefs() []string {
+	if x != nil {
+		return x.SnapshotRefs
+	}
+	return nil
 }
 
 // GetWorktreeChangesRequest gets file changes for a worktree.
@@ -3379,10 +3406,17 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\n" +
 	"\b_chat_idB\r\n" +
 	"\v_deleted_atB\x13\n" +
-	"\x11_cleanup_metadata\"e\n" +
+	"\x11_cleanup_metadata\"\xeb\x01\n" +
 	"\x0fCleanupMetadata\x12+\n" +
 	"\x11directory_deleted\x18\x01 \x01(\bR\x10directoryDeleted\x12%\n" +
-	"\x0ebranch_deleted\x18\x02 \x01(\bR\rbranchDeleted\"\xcc\x01\n" +
+	"\x0ebranch_deleted\x18\x02 \x01(\bR\rbranchDeleted\x12\x1f\n" +
+	"\vheld_reason\x18\x03 \x01(\tR\n" +
+	"heldReason\x12\x1f\n" +
+	"\vheld_detail\x18\x04 \x01(\tR\n" +
+	"heldDetail\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x05 \x01(\x03R\tsizeBytes\x12#\n" +
+	"\rsnapshot_refs\x18\x06 \x03(\tR\fsnapshotRefs\"\xcc\x01\n" +
 	"\x12DiscoveredWorktree\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x16\n" +
@@ -3460,26 +3494,22 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\a_statusB\x0e\n" +
 	"\f_base_branch\"J\n" +
 	"\x16UpdateWorktreeResponse\x120\n" +
-	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\x9a\x01\n" +
+	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"d\n" +
 	"\x15DeleteWorktreeRequest\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
-	"worktreeId\x124\n" +
-	"\x16delete_local_directory\x18\x02 \x01(\bR\x14deleteLocalDirectory\x12*\n" +
-	"\x11delete_git_branch\x18\x03 \x01(\bR\x0fdeleteGitBranch\"\xb6\x01\n" +
+	"worktreeId\x12*\n" +
+	"\x11delete_git_branch\x18\x03 \x01(\bR\x0fdeleteGitBranch\"\x89\x01\n" +
 	"\x16DeleteWorktreeResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12+\n" +
-	"\x11deleted_directory\x18\x02 \x01(\bR\x10deletedDirectory\x12%\n" +
-	"\x0edeleted_branch\x18\x03 \x01(\bR\rdeletedBranch\x12.\n" +
-	"\x13is_permanent_delete\x18\x04 \x01(\bR\x11isPermanentDelete\"\x9b\x01\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12%\n" +
+	"\x0edeleted_branch\x18\x02 \x01(\bR\rdeletedBranch\x12.\n" +
+	"\x13is_permanent_delete\x18\x03 \x01(\bR\x11isPermanentDelete\"e\n" +
 	"\x16ArchiveWorktreeRequest\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
-	"worktreeId\x124\n" +
-	"\x16delete_local_directory\x18\x02 \x01(\bR\x14deleteLocalDirectory\x12*\n" +
-	"\x11delete_git_branch\x18\x03 \x01(\bR\x0fdeleteGitBranch\"\x87\x01\n" +
+	"worktreeId\x12*\n" +
+	"\x11delete_git_branch\x18\x03 \x01(\bR\x0fdeleteGitBranch\"Z\n" +
 	"\x17ArchiveWorktreeResponse\x12\x18\n" +
-	"\amessage\x18\x01 \x01(\tR\amessage\x12+\n" +
-	"\x11deleted_directory\x18\x02 \x01(\bR\x10deletedDirectory\x12%\n" +
-	"\x0edeleted_branch\x18\x03 \x01(\bR\rdeletedBranch\";\n" +
+	"\amessage\x18\x01 \x01(\tR\amessage\x12%\n" +
+	"\x0edeleted_branch\x18\x02 \x01(\bR\rdeletedBranch\";\n" +
 	"\x18UnarchiveWorktreeRequest\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\"5\n" +
@@ -3506,11 +3536,13 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\":\n" +
 	"\x17RecreateWorktreeRequest\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
-	"worktreeId\"`\n" +
+	"worktreeId\"\xb0\x01\n" +
 	"\x18RecreateWorktreeResponse\x12\x18\n" +
 	"\amessage\x18\x01 \x01(\tR\amessage\x12\x12\n" +
 	"\x04path\x18\x02 \x01(\tR\x04path\x12\x16\n" +
-	"\x06branch\x18\x03 \x01(\tR\x06branch\"U\n" +
+	"\x06branch\x18\x03 \x01(\tR\x06branch\x12)\n" +
+	"\x10snapshot_warning\x18\x04 \x01(\tR\x0fsnapshotWarning\x12#\n" +
+	"\rsnapshot_refs\x18\x05 \x03(\tR\fsnapshotRefs\"U\n" +
 	"\x19GetWorktreeChangesRequest\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\x12\x17\n" +

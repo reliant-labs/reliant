@@ -71,3 +71,26 @@ func TestHandleDispatchesRegisteredCommand(t *testing.T) {
 		t.Errorf("payload round-trip = %q, want %q", out, `{"ok":true}`)
 	}
 }
+
+// F2: a panicking handler returns an error for that command; the registry (and
+// so the daemon) keeps serving.
+func TestCommandRegistry_PanickingHandlerBecomesAnError(t *testing.T) {
+	reg := NewCommandRegistry()
+	reg.Register("boom", func(context.Context, []byte) ([]byte, error) {
+		var empty []string
+		_ = empty[0] // the shape of the real crash: an unguarded index
+		return nil, nil
+	})
+	reg.Register("ok", func(context.Context, []byte) ([]byte, error) { return []byte("fine"), nil })
+
+	out, err := reg.Handle(context.Background(), "boom", nil)
+	if err == nil || out != nil {
+		t.Fatalf("got (%q, %v), want an error and no payload", out, err)
+	}
+	if !strings.Contains(err.Error(), "boom") {
+		t.Fatalf("the error should name the command: %v", err)
+	}
+	if out, err := reg.Handle(context.Background(), "ok", nil); err != nil || string(out) != "fine" {
+		t.Fatalf("the registry stopped serving after a panic: (%q, %v)", out, err)
+	}
+}

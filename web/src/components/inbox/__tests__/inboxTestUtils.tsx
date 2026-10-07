@@ -18,7 +18,7 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { InboxItemKind, InboxItemSchema, type InboxItem } from "@/gen/reliant/v1/inbox_pb";
+import { InboxItemKind, InboxItemSchema, InboxStorageSchema, type InboxItem, type InboxStorage } from "@/gen/reliant/v1/inbox_pb";
 import { TriggerHealthSchema, TriggerHealthStatus } from "@/gen/reliant/v1/trigger_pb";
 import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 
@@ -156,6 +156,62 @@ export function runFinishedItem(overrides: Partial<InboxItem> = {}): InboxItem {
     triggerId: "trg-3",
     triggerName: "Nightly triage",
     payload: { case: "runFinished", value: {} },
+    ...overrides,
+  });
+}
+
+export function storageItem(
+  overrides: Partial<InboxItem> = {},
+  storage: Partial<InboxStorage> = {},
+): InboxItem {
+  return create(InboxItemSchema, {
+    kind: InboxItemKind.STORAGE,
+    itemId: "storage:d-1:ab12cd34",
+    waitingSince: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+    payload: {
+      case: "storage",
+      value: create(InboxStorageSchema, {
+        daemonId: "d-1",
+        daemonName: "MacBook",
+        diskFreeBytes: 12_000_000_000n,
+        diskTotalBytes: 500_000_000_000n,
+        diskLow: true,
+        online: true,
+        held: [
+          {
+            worktreeId: "wt-1",
+            name: "fix-login",
+            projectName: "reliant",
+            path: "/Users/me/.reliant/worktrees/reliant/fix-login",
+            reason: "dirty",
+            detail: "3 changed or untracked file(s)",
+            sizeBytes: 2_400_000_000n,
+            removable: true,
+          },
+          {
+            worktreeId: "wt-2",
+            name: "spike",
+            projectName: "reliant",
+            path: "/Users/me/.reliant/worktrees/reliant/spike",
+            reason: "unpushed",
+            detail: "HEAD is not on any remote branch and not merged into main",
+            sizeBytes: 800_000_000n,
+            removable: true,
+          },
+          {
+            worktreeId: "wt-3",
+            name: "taxes",
+            projectName: "reliant",
+            path: "/Users/me/.reliant/worktrees/reliant/taxes",
+            reason: "files-outside-checkout",
+            detail: "4 file(s) sit outside every checkout",
+            sizeBytes: 90_000_000n,
+            removable: false,
+          },
+        ],
+        ...storage,
+      }),
+    },
     ...overrides,
   });
 }

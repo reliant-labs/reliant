@@ -351,6 +351,7 @@ type Daemon struct {
 	LastOomKilledAt     sql.NullTime   `json:"last_oom_killed_at"`
 	OomKillCount        int32          `json:"oom_kill_count"`
 	LocalModels         string         `json:"local_models"`
+	StorageState        string         `json:"storage_state"`
 }
 
 type DaemonAttachment struct {

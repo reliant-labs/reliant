@@ -96,6 +96,18 @@ message Worktree {
 message CleanupMetadata {
   bool directory_deleted = 1;
   bool branch_deleted = 2;
+  // Set while the machine is holding the directory: "dirty", "unpushed",
+  // "in_use", "unverified", "data" (ignored files that are not rebuildable),
+  // "nested-repository", "files-outside-checkout" or "quarantined" (a checkout
+  // parked under the worktree root's .reclaim directory, still locked; the
+  // detail names the path). Cleared once the
+  // directory is removed.
+  string held_reason = 3;
+  string held_detail = 4;
+  int64 size_bytes = 5;
+  // Local refs holding work saved before the directory was removed. Kept until
+  // a restore has applied them.
+  repeated string snapshot_refs = 6;
 }
 
 // DiscoveredWorktree represents a worktree found via git discovery
@@ -212,30 +224,26 @@ message UpdateWorktreeResponse {
 // DeleteWorktreeRequest deletes or archives a worktree
 message DeleteWorktreeRequest {
   string worktree_id = 1;
-  bool delete_local_directory = 2;
   bool delete_git_branch = 3;
 }
 
 // DeleteWorktreeResponse confirms deletion/archive
 message DeleteWorktreeResponse {
   string message = 1;
-  bool deleted_directory = 2;
-  bool deleted_branch = 3;
-  bool is_permanent_delete = 4;
+  bool deleted_branch = 2;
+  bool is_permanent_delete = 3;
 }
 
 // ArchiveWorktreeRequest archives a worktree (sets deleted_at)
 message ArchiveWorktreeRequest {
   string worktree_id = 1;
-  bool delete_local_directory = 2;
   bool delete_git_branch = 3;
 }
 
 // ArchiveWorktreeResponse confirms archive
 message ArchiveWorktreeResponse {
   string message = 1;
-  bool deleted_directory = 2;
-  bool deleted_branch = 3;
+  bool deleted_branch = 2;
 }
 
 // UnarchiveWorktreeRequest restores an archived worktree
@@ -286,6 +294,11 @@ message RecreateWorktreeResponse {
   string message = 1;
   string path = 2;
   string branch = 3;
+  // snapshot_warning is set when saved work could not be put back (for example
+  // because the branch moved). The work is still on snapshot_refs.
+  string snapshot_warning = 4;
+  // snapshot_refs are the refs still holding saved work that was not applied.
+  repeated string snapshot_refs = 5;
 }
 
 // =============================================================================

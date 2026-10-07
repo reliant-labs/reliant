@@ -70,7 +70,6 @@ func TestSettingsService_GetPreferences_ReturnsDefaultsWhenNothingIsStored(t *te
 	msg := resp.Msg
 	assert.True(t, msg.StreamingEnabled, "streaming defaults on")
 	assert.Equal(t, "ask_me", msg.WorktreeArchiveMode)
-	assert.True(t, msg.WorktreeDefaultDeleteDirectory)
 	assert.False(t, msg.WorktreeDefaultDeleteBranch)
 	assert.False(t, msg.BranchCopyUncommittedFilesDefault)
 	assert.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT, msg.DefaultMcpScope)
@@ -90,7 +89,6 @@ func TestSettingsService_GetPreferences_ReturnsStoredValues(t *testing.T) {
 
 	writeUserSetting(t, ctx, repo, "features.streaming_enabled", "false")
 	writeUserSetting(t, ctx, repo, "worktree.archive_cleanup_mode", "always")
-	writeUserSetting(t, ctx, repo, "worktree.default_delete_directory", "false")
 	writeUserSetting(t, ctx, repo, "worktree.default_delete_branch", "true")
 	writeUserSetting(t, ctx, repo, "worktree.branch_copy_uncommitted_files_default", "true")
 	writeUserSetting(t, ctx, repo, "config.default_mcp_scope", "CONFIG_SCOPE_GLOBAL")
@@ -105,7 +103,6 @@ func TestSettingsService_GetPreferences_ReturnsStoredValues(t *testing.T) {
 	msg := resp.Msg
 	assert.False(t, msg.StreamingEnabled)
 	assert.Equal(t, "always", msg.WorktreeArchiveMode)
-	assert.False(t, msg.WorktreeDefaultDeleteDirectory)
 	assert.True(t, msg.WorktreeDefaultDeleteBranch)
 	assert.True(t, msg.BranchCopyUncommittedFilesDefault)
 	assert.Equal(t, reliantv1.ConfigScope_CONFIG_SCOPE_GLOBAL, msg.DefaultMcpScope)

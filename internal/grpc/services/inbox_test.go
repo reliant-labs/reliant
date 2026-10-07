@@ -46,6 +46,7 @@ func (f *inboxFixture) otherUser(t *testing.T) (context.Context, string, string)
 
 func (f *inboxFixture) list(t *testing.T, limit *int32) *reliantv1.ListInboxResponse {
 	t.Helper()
+	f.inbox.storageCache.Delete(f.userID) // tests change state between reads; production caches for 60s
 	resp, err := f.inbox.ListInbox(f.ctx, connect.NewRequest(&reliantv1.ListInboxRequest{Limit: limit}))
 	require.NoError(t, err)
 	return resp.Msg

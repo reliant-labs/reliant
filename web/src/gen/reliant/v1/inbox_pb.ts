@@ -17,7 +17,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/inbox.proto.
  */
 export const file_reliant_v1_inbox: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSLtBAoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASNAoMcnVuX2ZpbmlzaGVkGBkgASgLMhwucmVsaWFudC52MS5JbmJveFJ1bkZpbmlzaGVkSABCCQoHcGF5bG9hZCLQAQoNSW5ib3hBcHByb3ZhbBITCgthcHByb3ZhbF9pZBgBIAEoCRIvCg1hcHByb3ZhbF90eXBlGAIgASgOMhgucmVsaWFudC52MS5BcHByb3ZhbFR5cGUSDQoFdGl0bGUYAyABKAkSFgoJdG9vbF9uYW1lGAQgASgJSACIAQESGQoMdG9vbF9jYWxsX2lkGAUgASgJSAGIAQESGAoQYXJndW1lbnRfc3VtbWFyeRgGIAEoCUIMCgpfdG9vbF9uYW1lQg8KDV90b29sX2NhbGxfaWQiawoNSW5ib3hRdWVzdGlvbhITCgtxdWVzdGlvbl9pZBgBIAEoCRIRCgl0aHJlYWRfaWQYAiABKAkSDgoGcHJvbXB0GAMgASgJEhUKCG1ldGFkYXRhGAQgASgJSACIAQFCCwoJX21ldGFkYXRhIkAKFkluYm94V2FpdGluZ0Zvck1hY2hpbmUSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJIncKFkluYm94QXV0b21hdGlvbkZhaWxpbmcSKQoGaGVhbHRoGAEgASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEh0KEGxhc3RfcnVuX2NoYXRfaWQYAiABKAlIAIgBAUITChFfbGFzdF9ydW5fY2hhdF9pZCJdChtJbmJveEF1dG9tYXRpb25MYXVuY2hGYWlsZWQSDgoGcmVhc29uGAEgASgJEhAKCGV2ZW50X2lkGAIgASgJEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAMgASgFIhIKEEluYm94UnVuRmluaXNoZWQiKwoXRGlzbWlzc0luYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYAiADKAkiGgoYRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlIisKF1Jlc3RvcmVJbmJveEl0ZW1SZXF1ZXN0EhAKCGl0ZW1faWRzGAEgAygJIhoKGFJlc3RvcmVJbmJveEl0ZW1SZXNwb25zZSqNAgoNSW5ib3hJdGVtS2luZBIfChtJTkJPWF9JVEVNX0tJTkRfVU5TUEVDSUZJRUQQABIcChhJTkJPWF9JVEVNX0tJTkRfQVBQUk9WQUwQARIcChhJTkJPWF9JVEVNX0tJTkRfUVVFU1RJT04QAhInCiNJTkJPWF9JVEVNX0tJTkRfV0FJVElOR19GT1JfTUFDSElORRADEiYKIklOQk9YX0lURU1fS0lORF9BVVRPTUFUSU9OX0ZBSUxJTkcQBBIsCihJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9MQVVOQ0hfRkFJTEVEEAUSIAocSU5CT1hfSVRFTV9LSU5EX1JVTl9GSU5JU0hFRBAGMpwCCgxJbmJveFNlcnZpY2USSgoJTGlzdEluYm94EhwucmVsaWFudC52MS5MaXN0SW5ib3hSZXF1ZXN0Gh0ucmVsaWFudC52MS5MaXN0SW5ib3hSZXNwb25zZSIAEl8KEERpc21pc3NJbmJveEl0ZW0SIy5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXF1ZXN0GiQucmVsaWFudC52MS5EaXNtaXNzSW5ib3hJdGVtUmVzcG9uc2UiABJfChBSZXN0b3JlSW5ib3hJdGVtEiMucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVxdWVzdBokLnJlbGlhbnQudjEuUmVzdG9yZUluYm94SXRlbVJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_reliant_v1_approval, file_reliant_v1_trigger]);
+  fileDesc("ChZyZWxpYW50L3YxL2luYm94LnByb3RvEgpyZWxpYW50LnYxIlgKEExpc3RJbmJveFJlcXVlc3QSEgoFbGltaXQYASABKAVIAIgBARIXCgpwcm9qZWN0X2lkGAIgASgJSAGIAQFCCAoGX2xpbWl0Qg0KC19wcm9qZWN0X2lkIp0BChFMaXN0SW5ib3hSZXNwb25zZRIkCgVpdGVtcxgBIAMoCzIVLnJlbGlhbnQudjEuSW5ib3hJdGVtEhYKDmJsb2NraW5nX2NvdW50GAIgASgFEhkKEWhhc19pbmZvcm1hdGlvbmFsGAMgASgIEhEKCXRydW5jYXRlZBgEIAEoCBIcChRvdGhlcl9wcm9qZWN0c19jb3VudBgFIAEoBSKaBQoJSW5ib3hJdGVtEicKBGtpbmQYASABKA4yGS5yZWxpYW50LnYxLkluYm94SXRlbUtpbmQSDwoHaXRlbV9pZBgCIAEoCRIPCgdjaGF0X2lkGAMgASgJEg4KBnJ1bl9pZBgEIAEoCRISCgp0cmlnZ2VyX2lkGAUgASgJEhQKDHRyaWdnZXJfbmFtZRgGIAEoCRISCgpwcm9qZWN0X2lkGAcgASgJEhQKDHByb2plY3RfbmFtZRgIIAEoCRIVCg13b3JrZmxvd19uYW1lGAkgASgJEhIKCmNoYXRfdGl0bGUYCiABKAkSFQoNd2FpdGluZ19zaW5jZRgLIAEoCRItCghhcHByb3ZhbBgUIAEoCzIZLnJlbGlhbnQudjEuSW5ib3hBcHByb3ZhbEgAEi0KCHF1ZXN0aW9uGBUgASgLMhkucmVsaWFudC52MS5JbmJveFF1ZXN0aW9uSAASQQoTd2FpdGluZ19mb3JfbWFjaGluZRgWIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hXYWl0aW5nRm9yTWFjaGluZUgAEkAKEmF1dG9tYXRpb25fZmFpbGluZxgXIAEoCzIiLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uRmFpbGluZ0gAEksKGGF1dG9tYXRpb25fbGF1bmNoX2ZhaWxlZBgYIAEoCzInLnJlbGlhbnQudjEuSW5ib3hBdXRvbWF0aW9uTGF1bmNoRmFpbGVkSAASNAoMcnVuX2ZpbmlzaGVkGBkgASgLMhwucmVsaWFudC52MS5JbmJveFJ1bkZpbmlzaGVkSAASKwoHc3RvcmFnZRgaIAEoCzIYLnJlbGlhbnQudjEuSW5ib3hTdG9yYWdlSABCCQoHcGF5bG9hZCLQAQoNSW5ib3hBcHByb3ZhbBITCgthcHByb3ZhbF9pZBgBIAEoCRIvCg1hcHByb3ZhbF90eXBlGAIgASgOMhgucmVsaWFudC52MS5BcHByb3ZhbFR5cGUSDQoFdGl0bGUYAyABKAkSFgoJdG9vbF9uYW1lGAQgASgJSACIAQESGQoMdG9vbF9jYWxsX2lkGAUgASgJSAGIAQESGAoQYXJndW1lbnRfc3VtbWFyeRgGIAEoCUIMCgpfdG9vbF9uYW1lQg8KDV90b29sX2NhbGxfaWQiawoNSW5ib3hRdWVzdGlvbhITCgtxdWVzdGlvbl9pZBgBIAEoCRIRCgl0aHJlYWRfaWQYAiABKAkSDgoGcHJvbXB0GAMgASgJEhUKCG1ldGFkYXRhGAQgASgJSACIAQFCCwoJX21ldGFkYXRhIkAKFkluYm94V2FpdGluZ0Zvck1hY2hpbmUSEQoJZGFlbW9uX2lkGAEgASgJEhMKC2RhZW1vbl9uYW1lGAIgASgJIncKFkluYm94QXV0b21hdGlvbkZhaWxpbmcSKQoGaGVhbHRoGAEgASgLMhkucmVsaWFudC52MS5UcmlnZ2VySGVhbHRoEh0KEGxhc3RfcnVuX2NoYXRfaWQYAiABKAlIAIgBAUITChFfbGFzdF9ydW5fY2hhdF9pZCJdChtJbmJveEF1dG9tYXRpb25MYXVuY2hGYWlsZWQSDgoGcmVhc29uGAEgASgJEhAKCGV2ZW50X2lkGAIgASgJEhwKFGNvbnNlY3V0aXZlX2ZhaWx1cmVzGAMgASgFIhIKEEluYm94UnVuRmluaXNoZWQiKwoXRGlzbWlzc0luYm94SXRlbVJlcXVlc3QSEAoIaXRlbV9pZHMYAiADKAkiGgoYRGlzbWlzc0luYm94SXRlbVJlc3BvbnNlIisKF1Jlc3RvcmVJbmJveEl0ZW1SZXF1ZXN0EhAKCGl0ZW1faWRzGAEgAygJIhoKGFJlc3RvcmVJbmJveEl0ZW1SZXNwb25zZSLIAQoMSW5ib3hTdG9yYWdlEhEKCWRhZW1vbl9pZBgBIAEoCRITCgtkYWVtb25fbmFtZRgCIAEoCRIXCg9kaXNrX2ZyZWVfYnl0ZXMYAyABKAMSGAoQZGlza190b3RhbF9ieXRlcxgEIAEoAxIQCghkaXNrX2xvdxgFIAEoCBITCgtyZXBvcnRlZF9hdBgGIAEoCRImCgRoZWxkGAcgAygLMhgucmVsaWFudC52MS5IZWxkV29ya3RyZWUSDgoGb25saW5lGAggASgIIq4BCgxIZWxkV29ya3RyZWUSEwoLd29ya3RyZWVfaWQYASABKAkSDAoEbmFtZRgCIAEoCRIUCgxwcm9qZWN0X25hbWUYAyABKAkSDAoEcGF0aBgEIAEoCRIOCgZyZWFzb24YBSABKAkSDgoGZGV0YWlsGAYgASgJEhIKCnNpemVfYnl0ZXMYByABKAMSEQoJcmVtb3ZhYmxlGAggASgIEhAKCGNsZWFuaW5nGAkgASgIIkAKFUNsZWFudXBTdG9yYWdlUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSFAoMd29ya3RyZWVfaWRzGAIgAygJIksKFkNsZWFudXBTdG9yYWdlUmVzcG9uc2USMQoHcmVzdWx0cxgBIAMoCzIgLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VSZXN1bHQicAoUQ2xlYW51cFN0b3JhZ2VSZXN1bHQSEwoLd29ya3RyZWVfaWQYASABKAkSMgoHb3V0Y29tZRgCIAEoDjIhLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VPdXRjb21lEg8KB21lc3NhZ2UYAyABKAkqqgIKDUluYm94SXRlbUtpbmQSHwobSU5CT1hfSVRFTV9LSU5EX1VOU1BFQ0lGSUVEEAASHAoYSU5CT1hfSVRFTV9LSU5EX0FQUFJPVkFMEAESHAoYSU5CT1hfSVRFTV9LSU5EX1FVRVNUSU9OEAISJwojSU5CT1hfSVRFTV9LSU5EX1dBSVRJTkdfRk9SX01BQ0hJTkUQAxImCiJJTkJPWF9JVEVNX0tJTkRfQVVUT01BVElPTl9GQUlMSU5HEAQSLAooSU5CT1hfSVRFTV9LSU5EX0FVVE9NQVRJT05fTEFVTkNIX0ZBSUxFRBAFEiAKHElOQk9YX0lURU1fS0lORF9SVU5fRklOSVNIRUQQBhIbChdJTkJPWF9JVEVNX0tJTkRfU1RPUkFHRRAHKosBChVDbGVhbnVwU3RvcmFnZU91dGNvbWUSJwojQ0xFQU5VUF9TVE9SQUdFX09VVENPTUVfVU5TUEVDSUZJRUQQABIkCiBDTEVBTlVQX1NUT1JBR0VfT1VUQ09NRV9BQ0NFUFRFRBABEiMKH0NMRUFOVVBfU1RPUkFHRV9PVVRDT01FX1NLSVBQRUQQAjL3AgoMSW5ib3hTZXJ2aWNlEkoKCUxpc3RJbmJveBIcLnJlbGlhbnQudjEuTGlzdEluYm94UmVxdWVzdBodLnJlbGlhbnQudjEuTGlzdEluYm94UmVzcG9uc2UiABJZCg5DbGVhbnVwU3RvcmFnZRIhLnJlbGlhbnQudjEuQ2xlYW51cFN0b3JhZ2VSZXF1ZXN0GiIucmVsaWFudC52MS5DbGVhbnVwU3RvcmFnZVJlc3BvbnNlIgASXwoQRGlzbWlzc0luYm94SXRlbRIjLnJlbGlhbnQudjEuRGlzbWlzc0luYm94SXRlbVJlcXVlc3QaJC5yZWxpYW50LnYxLkRpc21pc3NJbmJveEl0ZW1SZXNwb25zZSIAEl8KEFJlc3RvcmVJbmJveEl0ZW0SIy5yZWxpYW50LnYxLlJlc3RvcmVJbmJveEl0ZW1SZXF1ZXN0GiQucmVsaWFudC52MS5SZXN0b3JlSW5ib3hJdGVtUmVzcG9uc2UiAEI6WjhnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9yZWxpYW50L3YxO3JlbGlhbnR2MWIGcHJvdG8z", [file_reliant_v1_approval, file_reliant_v1_trigger]);
 
 /**
  * @generated from message reliant.v1.ListInboxRequest
@@ -109,7 +109,7 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
   /**
    * Stable key for dismissal and de-duplication, prefixed by kind
    * ("approval:", "question:", "waiting_for_machine:", "automation_failing:",
-   * "automation_launch_failed:", "run_finished:"). Approvals and questions
+   * "automation_launch_failed:", "run_finished:", "storage:"). Approvals and questions
    * embed their row id; waiting-for-machine embeds the chat id and when the
    * block began, so a later block is a new item; run-finished embeds the chat
    * id. Automation failure items embed the id of the FIRST failing event of the
@@ -215,6 +215,12 @@ export type InboxItem = Message<"reliant.v1.InboxItem"> & {
      */
     value: InboxRunFinished;
     case: "runFinished";
+  } | {
+    /**
+     * @generated from field: reliant.v1.InboxStorage storage = 26;
+     */
+    value: InboxStorage;
+    case: "storage";
   } | { case: undefined; value?: undefined };
 };
 
@@ -472,6 +478,226 @@ export const RestoreInboxItemResponseSchema: GenMessage<RestoreInboxItemResponse
   messageDesc(file_reliant_v1_inbox, 12);
 
 /**
+ * InboxStorage describes one machine's disk and the archived worktrees it is
+ * holding. The item exists while the disk is low or any worktree is held.
+ *
+ * @generated from message reliant.v1.InboxStorage
+ */
+export type InboxStorage = Message<"reliant.v1.InboxStorage"> & {
+  /**
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+
+  /**
+   * @generated from field: string daemon_name = 2;
+   */
+  daemonName: string;
+
+  /**
+   * The volume holding the worktree root, as the machine last reported it.
+   * Both 0 when the machine has not reported yet.
+   *
+   * @generated from field: int64 disk_free_bytes = 3;
+   */
+  diskFreeBytes: bigint;
+
+  /**
+   * @generated from field: int64 disk_total_bytes = 4;
+   */
+  diskTotalBytes: bigint;
+
+  /**
+   * True when free space is under the threshold (below 10% or below 50 GiB).
+   *
+   * @generated from field: bool disk_low = 5;
+   */
+  diskLow: boolean;
+
+  /**
+   * RFC 3339 of the machine's last report; empty when it has not reported.
+   *
+   * @generated from field: string reported_at = 6;
+   */
+  reportedAt: string;
+
+  /**
+   * Archived worktrees the machine would not remove by itself. Clean up acts
+   * on the removable ones; the rest are listed for manual removal.
+   *
+   * @generated from field: repeated reliant.v1.HeldWorktree held = 7;
+   */
+  held: HeldWorktree[];
+
+  /**
+   * False when the machine is offline: the item still shows what it last
+   * reported, but Clean up cannot run until it reconnects.
+   *
+   * @generated from field: bool online = 8;
+   */
+  online: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.InboxStorage.
+ * Use `create(InboxStorageSchema)` to create a new message.
+ */
+export const InboxStorageSchema: GenMessage<InboxStorage> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 13);
+
+/**
+ * HeldWorktree is one archived workspace kept on a machine, and why.
+ *
+ * @generated from message reliant.v1.HeldWorktree
+ */
+export type HeldWorktree = Message<"reliant.v1.HeldWorktree"> & {
+  /**
+   * @generated from field: string worktree_id = 1;
+   */
+  worktreeId: string;
+
+  /**
+   * @generated from field: string name = 2;
+   */
+  name: string;
+
+  /**
+   * @generated from field: string project_name = 3;
+   */
+  projectName: string;
+
+  /**
+   * @generated from field: string path = 4;
+   */
+  path: string;
+
+  /**
+   * Why it was not removed automatically: "dirty" (uncommitted, untracked or
+   * hidden edits), "unpushed" (commits on no remote branch), "in_use" (a
+   * running process is inside it), "unverified" (git could not answer),
+   * "too_large" (too big to save), "data" (ignored files that are not
+   * rebuildable: ./data, .env*, *.db, ...), "nested-repository" (another git
+   * repository inside it), "files-outside-checkout" (files in a multi-repo
+   * workspace outside every checkout) or "unmanaged" (not reliant's to remove).
+   *
+   * @generated from field: string reason = 5;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: string detail = 6;
+   */
+  detail: string;
+
+  /**
+   * Directory size; a lower bound for very large trees. 0 when unmeasured.
+   *
+   * @generated from field: int64 size_bytes = 7;
+   */
+  sizeBytes: bigint;
+
+  /**
+   * True when Clean up may remove it. False for data, nested repositories and
+   * files outside the checkouts: remove those by hand.
+   *
+   * @generated from field: bool removable = 8;
+   */
+  removable: boolean;
+
+  /**
+   * A clean-up of this worktree is running now.
+   *
+   * @generated from field: bool cleaning = 9;
+   */
+  cleaning: boolean;
+};
+
+/**
+ * Describes the message reliant.v1.HeldWorktree.
+ * Use `create(HeldWorktreeSchema)` to create a new message.
+ */
+export const HeldWorktreeSchema: GenMessage<HeldWorktree> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 14);
+
+/**
+ * @generated from message reliant.v1.CleanupStorageRequest
+ */
+export type CleanupStorageRequest = Message<"reliant.v1.CleanupStorageRequest"> & {
+  /**
+   * The machine whose item was shown.
+   *
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+
+  /**
+   * The worktree ids listed in the confirmation dialog. The server acts on the
+   * INTERSECTION of these with what that machine still holds, so a worktree
+   * archived after the dialog opened is never removed unseen, and an id the
+   * machine does not hold is ignored.
+   *
+   * @generated from field: repeated string worktree_ids = 2;
+   */
+  worktreeIds: string[];
+};
+
+/**
+ * Describes the message reliant.v1.CleanupStorageRequest.
+ * Use `create(CleanupStorageRequestSchema)` to create a new message.
+ */
+export const CleanupStorageRequestSchema: GenMessage<CleanupStorageRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 15);
+
+/**
+ * @generated from message reliant.v1.CleanupStorageResponse
+ */
+export type CleanupStorageResponse = Message<"reliant.v1.CleanupStorageResponse"> & {
+  /**
+   * One entry per requested id: ACCEPTED (running in the background) or
+   * SKIPPED with the reason.
+   *
+   * @generated from field: repeated reliant.v1.CleanupStorageResult results = 1;
+   */
+  results: CleanupStorageResult[];
+};
+
+/**
+ * Describes the message reliant.v1.CleanupStorageResponse.
+ * Use `create(CleanupStorageResponseSchema)` to create a new message.
+ */
+export const CleanupStorageResponseSchema: GenMessage<CleanupStorageResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 16);
+
+/**
+ * @generated from message reliant.v1.CleanupStorageResult
+ */
+export type CleanupStorageResult = Message<"reliant.v1.CleanupStorageResult"> & {
+  /**
+   * @generated from field: string worktree_id = 1;
+   */
+  worktreeId: string;
+
+  /**
+   * @generated from field: reliant.v1.CleanupStorageOutcome outcome = 2;
+   */
+  outcome: CleanupStorageOutcome;
+
+  /**
+   * Why it was left alone, for display.
+   *
+   * @generated from field: string message = 3;
+   */
+  message: string;
+};
+
+/**
+ * Describes the message reliant.v1.CleanupStorageResult.
+ * Use `create(CleanupStorageResultSchema)` to create a new message.
+ */
+export const CleanupStorageResultSchema: GenMessage<CleanupStorageResult> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_inbox, 17);
+
+/**
  * InboxItemKind is declared in priority order: lower values sort first. The
  * kinds that block a live run (approval, question, waiting for machine) come
  * before the informational failures, so the badge count is a prefix of the list.
@@ -527,6 +753,14 @@ export enum InboxItemKind {
    * @generated from enum value: INBOX_ITEM_KIND_RUN_FINISHED = 6;
    */
   RUN_FINISHED = 6,
+
+  /**
+   * A machine is low on disk, or holds archived worktrees it will not remove
+   * on its own. One item per machine. Informational.
+   *
+   * @generated from enum value: INBOX_ITEM_KIND_STORAGE = 7;
+   */
+  STORAGE = 7,
 }
 
 /**
@@ -534,6 +768,37 @@ export enum InboxItemKind {
  */
 export const InboxItemKindSchema: GenEnum<InboxItemKind> = /*@__PURE__*/
   enumDesc(file_reliant_v1_inbox, 0);
+
+/**
+ * @generated from enum reliant.v1.CleanupStorageOutcome
+ */
+export enum CleanupStorageOutcome {
+  /**
+   * @generated from enum value: CLEANUP_STORAGE_OUTCOME_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * Started; progress shows on the storage item.
+   *
+   * @generated from enum value: CLEANUP_STORAGE_OUTCOME_ACCEPTED = 1;
+   */
+  ACCEPTED = 1,
+
+  /**
+   * Not started and left exactly as it was: no longer held, already being
+   * cleaned up, or not removable by Clean up.
+   *
+   * @generated from enum value: CLEANUP_STORAGE_OUTCOME_SKIPPED = 2;
+   */
+  SKIPPED = 2,
+}
+
+/**
+ * Describes the enum reliant.v1.CleanupStorageOutcome.
+ */
+export const CleanupStorageOutcomeSchema: GenEnum<CleanupStorageOutcome> = /*@__PURE__*/
+  enumDesc(file_reliant_v1_inbox, 1);
 
 /**
  * InboxService lists everything waiting on the calling user, across every
@@ -558,6 +823,23 @@ export const InboxService: GenService<{
     methodKind: "unary";
     input: typeof ListInboxRequestSchema;
     output: typeof ListInboxResponseSchema;
+  },
+  /**
+   * CleanupStorage starts the "Clean up" action of a storage item and returns
+   * at once. For each accepted worktree the machine saves the work to a local
+   * ref, proves the save matches the files, and only then removes the
+   * directory, in the background. Progress and outcome appear on the storage
+   * item (HeldWorktree.cleaning, then the worktree leaves the list). Nothing is
+   * pushed and no branch is deleted. Worktrees holding data, another
+   * repository, or files outside their checkouts are never removed: they come
+   * back SKIPPED and are listed for manual removal.
+   *
+   * @generated from rpc reliant.v1.InboxService.CleanupStorage
+   */
+  cleanupStorage: {
+    methodKind: "unary";
+    input: typeof CleanupStorageRequestSchema;
+    output: typeof CleanupStorageResponseSchema;
   },
   /**
    * DismissInboxItem hides items from the caller's inbox. Every kind can be

@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/toolexec/transport"
 	"github.com/reliant-labs/reliant/internal/workflow"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
 // Server is the Connect/gRPC server
@@ -55,6 +56,10 @@ type Server struct {
 	projectService *services.ProjectService
 
 	router toolexec.DaemonRouter
+
+	// worktreeSweeper settles archived worktrees' directories through their
+	// daemons. Nil when the server has no daemon router.
+	worktreeSweeper *worktreesweep.Sweeper
 }
 
 // Config holds gRPC server configuration
@@ -190,6 +195,11 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 	projectService := services.NewProjectService(database, router)
 	worktreeService := services.NewWorktreeService(database, cfg.TemporalClient, router)
+	var worktreeSweeper *worktreesweep.Sweeper
+	if router != nil {
+		worktreeSweeper = worktreesweep.New(database, router).WithKeepFiles(worktreesweep.KeepSetting{R: database})
+		worktreeService.WithSettler(worktreeSweeper)
+	}
 	repoService := services.NewRepoService(database, router)
 	approvalService := services.NewApprovalService(database, cfg.PauseService)
 	questionService := services.NewQuestionService(database, cfg.PauseService)
@@ -308,7 +318,7 @@ func NewServer(cfg *Config) (*Server, error) {
 	if len(cfg.TriggerSenders) > 0 {
 		triggerService.WithSenderDirectories(cfg.TriggerSenders)
 	}
-	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(services.NewInboxService(database), opts...)
+	inboxPath, inboxHandler := reliantv1connect.NewInboxServiceHandler(services.NewInboxService(database).WithSweeper(worktreeSweeper), opts...)
 	triggerPath, triggerHandler := reliantv1connect.NewTriggerServiceHandler(triggerService, opts...)
 
 	// FileSystem, Background, and Terminal services: when a daemon router is
@@ -562,12 +572,13 @@ func NewServer(cfg *Config) (*Server, error) {
 	}
 
 	return &Server{
-		server:         srv,
-		mux:            mux,
-		tlsCertFile:    cfg.TLSCertFile,
-		tlsKeyFile:     cfg.TLSKeyFile,
-		projectService: projectService,
-		router:         router,
+		server:          srv,
+		mux:             mux,
+		tlsCertFile:     cfg.TLSCertFile,
+		tlsKeyFile:      cfg.TLSKeyFile,
+		projectService:  projectService,
+		router:          router,
+		worktreeSweeper: worktreeSweeper,
 	}, nil
 }
 
@@ -575,6 +586,12 @@ func NewServer(cfg *Config) (*Server, error) {
 // out-of-band inputs (e.g. JetStream consumers in serverapi.Run).
 func (s *Server) ProjectService() *services.ProjectService {
 	return s.projectService
+}
+
+// WorktreeSweeper returns the sweeper that settles archived worktrees, or nil
+// when the server has no daemon router.
+func (s *Server) WorktreeSweeper() *worktreesweep.Sweeper {
+	return s.worktreeSweeper
 }
 
 // DaemonRouter returns the daemon router used by this server.

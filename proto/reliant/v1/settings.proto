@@ -333,7 +333,6 @@ message GetPreferencesRequest {}
 message GetPreferencesResponse {
   bool streaming_enabled = 1;
   string worktree_archive_mode = 3;
-  bool worktree_default_delete_directory = 4;
   bool worktree_default_delete_branch = 5;
   // Additional arbitrary preferences stored as JSON
   map<string, string> additional = 6;
@@ -362,7 +361,6 @@ message GetPreferencesResponse {
 message UpdatePreferencesRequest {
   optional bool streaming_enabled = 1;
   optional string worktree_archive_mode = 3;
-  optional bool worktree_default_delete_directory = 4;
   optional bool worktree_default_delete_branch = 5;
   // Additional arbitrary preferences
   map<string, string> additional = 6;

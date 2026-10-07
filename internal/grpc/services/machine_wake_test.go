@@ -402,14 +402,15 @@ func TestCreateWorktree_AsleepChatMachine_WakesBeforeRecordingAnything(t *testin
 	assertPlacedOn(t, &f.router.placementRouter, wt, asleepMachineB)
 }
 
-// Deleting a worktree whose owner is asleep wakes it rather than archiving the
-// row with its checkout still on disk.
+// Deleting a worktree's branch is carried out on its owner after the directory
+// is gone, so an asleep owner is woken first rather than the row being archived
+// with the request unservable. (The directory itself is the daemon's to settle.)
 func TestDeleteWorktree_AsleepOwner_WakesInsteadOfArchiving(t *testing.T) {
 	f := newAsleepFixture(t, asleepMachineB)
 	wt := f.worktree(t, asleepMachineB)
 	del := func() error {
 		_, err := f.wt.DeleteWorktree(f.ctx, connect.NewRequest(&reliantv1.DeleteWorktreeRequest{
-			WorktreeId: wt.ID, DeleteLocalDirectory: true,
+			WorktreeId: wt.ID, DeleteGitBranch: true,
 		}))
 		return err
 	}
@@ -421,7 +422,9 @@ func TestDeleteWorktree_AsleepOwner_WakesInsteadOfArchiving(t *testing.T) {
 
 	f.router.wakeUp(asleepMachineB)
 	require.NoError(t, del())
-	assert.Equal(t, []string{asleepMachineB}, f.router.daemonsFor("worktree.delete_directory"))
+	got, err = f.repo.GetWorktree(context.Background(), wt.ID)
+	require.NoError(t, err)
+	assert.NotNil(t, got.DeletedAt, "the retry on the awake machine archives the row")
 }
 
 // TestFileSystemProxy_GetFilePreview_ServesImageFromOwningDaemon is the
