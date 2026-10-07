@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/testsuite"
 	"go.temporal.io/sdk/workflow"
 
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -81,9 +82,66 @@ func (s *SelfResumeSuite) TestAttendedSelfPause_StaysParked() {
 
 	env.ExecuteWorkflow(selfPauseWorkflow, false)
 
-	s.True(env.IsWorkflowCompleted())
-	s.Error(env.GetWorkflowError(),
+	s.requireCancelledWhileParked(env,
 		"an attended run must stay parked: the human is the resume")
+}
+
+// requireCancelledWhileParked asserts the run was still parked when the
+// harness cancelled it, and that the cancellation then completed.
+//
+// "Some error" is not that. A deadlock-detector panic is an error too, and
+// these tests once passed on exactly that: the ladder spun on the cancelled
+// context until TMPRL1101 failed the run, 30 seconds of wall clock per test,
+// while the assertion read it as "still parked".
+func (s *SelfResumeSuite) requireCancelledWhileParked(env *testsuite.TestWorkflowEnvironment, msg string) {
+	s.T().Helper()
+	s.True(env.IsWorkflowCompleted())
+	err := env.GetWorkflowError()
+	s.Truef(temporal.IsCanceledError(err), "%s: want the harness's cancellation, got %v", msg, err)
+}
+
+func (s *SelfResumeSuite) TestUnattendedSelfPause_CancelledMidRung() {
+	// Cancelled while waiting out a rung. The cancel is not the rung
+	// elapsing: the ladder must stand down, not resume a run its owner has
+	// just cancelled.
+	env := s.NewTestWorkflowEnvironment()
+
+	// Inside the first 1m rung.
+	env.RegisterDelayedCallback(func() {
+		env.CancelWorkflow()
+	}, 30*time.Second)
+
+	env.ExecuteWorkflow(selfPauseWorkflow, true)
+
+	s.requireCancelledWhileParked(env,
+		"a cancel mid-rung must end the run, not self-resume it")
+}
+
+// runningUnattendedWorkflow is an unattended run doing ordinary work, with no
+// pause armed, when its owner cancels it.
+func runningUnattendedWorkflow(ctx workflow.Context) (string, error) {
+	newPauseCoordinator(ctx, "wf-test", pauseOptions{HoldResume: true, Unattended: true})
+	if err := workflow.Sleep(ctx, 24*time.Hour); err != nil {
+		return "", err
+	}
+	return "finished", nil
+}
+
+func (s *SelfResumeSuite) TestUnattendedRun_CancelsCleanly() {
+	// The commonest shape in production: archiving or deleting a chat cancels
+	// its workflow, usually mid-work rather than mid-pause. The ladder is
+	// running on every unattended run, so it has to let that cancellation
+	// finish.
+	env := s.NewTestWorkflowEnvironment()
+
+	env.RegisterDelayedCallback(func() {
+		env.CancelWorkflow()
+	}, time.Minute)
+
+	env.ExecuteWorkflow(runningUnattendedWorkflow)
+
+	s.requireCancelledWhileParked(env,
+		"cancelling an unattended run must complete")
 }
 
 // userPauseWorkflow parks on a pause it did NOT arm itself.
@@ -102,9 +160,6 @@ func (s *SelfResumeSuite) TestUnattendedUserPause_StaysParked() {
 	// "Unattended" means nobody is watching, not that nobody may instruct. A
 	// pause someone sent by hand must survive, or the ladder would quietly
 	// undo an explicit instruction — the single worst thing it could do.
-	if testing.Short() {
-		s.T().Skip("ends on the harness's 30s deadlock detector; skipped under -short")
-	}
 	env := s.NewTestWorkflowEnvironment()
 
 	env.RegisterDelayedCallback(func() {
@@ -116,8 +171,7 @@ func (s *SelfResumeSuite) TestUnattendedUserPause_StaysParked() {
 
 	env.ExecuteWorkflow(userPauseWorkflow)
 
-	s.True(env.IsWorkflowCompleted())
-	s.Error(env.GetWorkflowError(),
+	s.requireCancelledWhileParked(env,
 		"a pause a person sent must stick, even with no person watching")
 }
 
@@ -138,9 +192,6 @@ func selfPauseAfterUserPauseWorkflow(ctx workflow.Context) (string, error) {
 func (s *SelfResumeSuite) TestUserPauseOverSelfPause_StaysParked() {
 	// The overlap case: the run self-paused, and THEN a person paused it. The
 	// ladder must not treat the still-armed self-pause as its own to clear.
-	if testing.Short() {
-		s.T().Skip("takes 30s of wall clock (deadlock detector); skipped under -short")
-	}
 	env := s.NewTestWorkflowEnvironment()
 
 	env.RegisterDelayedCallback(func() {
@@ -152,8 +203,7 @@ func (s *SelfResumeSuite) TestUserPauseOverSelfPause_StaysParked() {
 
 	env.ExecuteWorkflow(selfPauseAfterUserPauseWorkflow)
 
-	s.True(env.IsWorkflowCompleted())
-	s.Error(env.GetWorkflowError(),
+	s.requireCancelledWhileParked(env,
 		"a user pause landing on top of a self-pause must stop the ladder")
 }
 
@@ -190,9 +240,6 @@ func (s *SelfResumeSuite) TestUnattendedSelfPause_LadderIsBounded() {
 	// A cause that outlives every rung is not a rate limit — it needs a
 	// person. The ladder must run out and leave the run parked where someone
 	// can see it, rather than burning tokens against it forever.
-	if testing.Short() {
-		s.T().Skip("takes 30s of wall clock (deadlock detector); skipped under -short")
-	}
 	env := s.NewTestWorkflowEnvironment()
 
 	resumes := 0
@@ -210,8 +257,7 @@ func (s *SelfResumeSuite) TestUnattendedSelfPause_LadderIsBounded() {
 
 	env.ExecuteWorkflow(repeatedSelfPauseWorkflow)
 
-	s.True(env.IsWorkflowCompleted())
-	s.Error(env.GetWorkflowError(),
+	s.requireCancelledWhileParked(env,
 		"the workflow must still be parked when the ladder runs out")
 	s.Equal(len(selfPauseBackoff), resumes,
 		"the ladder must grant exactly one resume per rung and then stop")

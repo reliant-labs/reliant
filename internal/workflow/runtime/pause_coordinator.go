@@ -235,11 +235,22 @@ func (pc *pauseCoordinator) broadcastResume() {
 // nothing is done — the ladder never overrides a decision someone else made.
 // If the rung elapses with the self-pause still armed, it resumes the workflow
 // itself.
+//
+// It exits when the workflow is cancelled, and every wait below must keep it
+// that way. On a cancelled context workflow.Await returns at once WITHOUT
+// yielding, so a loop that discards that error never yields again: it climbs
+// every rung in the same instant, self-resuming a run someone just cancelled,
+// then spins in the exhausted branch until Temporal's deadlock detector fails
+// the workflow task — on every retry — and the cancellation never completes.
+// Archiving or deleting the chat of an unattended run cancels it, so that is
+// an ordinary path, not a corner.
 func (pc *pauseCoordinator) selfResumeLoop(gCtx workflow.Context) {
 	for {
 		// Park until the workflow pauses ITSELF. A user pause never satisfies
 		// this, so a human-paused run stays paused.
-		_ = workflow.Await(gCtx, func() bool { return pc.requested && pc.selfPaused })
+		if err := workflow.Await(gCtx, func() bool { return pc.requested && pc.selfPaused }); err != nil {
+			return
+		}
 
 		// A quiet stretch means the previous episode is over: start again at
 		// the bottom of the ladder rather than punishing a long run for having
@@ -256,16 +267,23 @@ func (pc *pauseCoordinator) selfResumeLoop(gCtx workflow.Context) {
 					"selfResumes", pc.selfResumes,
 				)
 			}
-			_ = workflow.Await(gCtx, func() bool { return !pc.requested })
+			if err := workflow.Await(gCtx, func() bool { return !pc.requested }); err != nil {
+				return
+			}
 			continue
 		}
 
 		wait := selfPauseBackoff[pc.selfResumes]
 		// Ends early if the pause clears (a real resume) or stops being a
-		// self-pause (a user pause superseded it).
-		resolved, _ := workflow.AwaitWithTimeout(gCtx, wait, func() bool {
+		// self-pause (a user pause superseded it). A cancellation is neither,
+		// and is not the rung elapsing either: resuming here would restart
+		// the run its owner just cancelled.
+		resolved, err := workflow.AwaitWithTimeout(gCtx, wait, func() bool {
 			return !pc.requested || !pc.selfPaused
 		})
+		if err != nil {
+			return
+		}
 		if resolved {
 			continue
 		}
