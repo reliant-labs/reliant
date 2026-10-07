@@ -229,6 +229,120 @@ describe('useExecutionStatus (characterization — Phase 2 stream source)', () =
       expect(statusMap['a']).toBe('running')
     })
   })
+
+  // A loop runs its body inline, and its step rows are written as each
+  // activity FINISHES — so every row says completed (or failed), even while
+  // the loop is halfway through iteration 2. With no stream to say what is
+  // running, those rows used to read as a finished loop: "Done".
+  describe('tree fallback: a loop is running until the run moves past it', () => {
+    function loopRow(stepId: string, iteration: number, createdAt: number, status: StepExecution['status'] = 'completed') {
+      return step({ stepId, loopNodeId: 'attempt', loopIteration: iteration, status, createdAt })
+    }
+    const nodes = ['plan', 'attempt', 'ship']
+
+    it('reads a loop in iteration 2, whose rows all say completed, as running', () => {
+      const exec = execution({
+        status: 'running',
+        steps: [
+          step({ stepId: 'plan', createdAt: 5 }),
+          loopRow('implement', 0, 10),
+          loopRow('lint', 0, 20),
+          loopRow('implement', 1, 30),
+        ],
+      })
+
+      const { statusMap } = render(exec, nodes, null)
+
+      expect(statusMap['attempt']).toBe('running')
+      expect(statusMap['plan']).toBe('completed')
+      expect(statusMap['ship']).toBeUndefined()
+    })
+
+    it('reads a loop between iterations (the last one fully finished) as running', () => {
+      const exec = execution({
+        status: 'running',
+        steps: [step({ stepId: 'plan', createdAt: 5 }), loopRow('implement', 0, 10), loopRow('lint', 0, 20)],
+      })
+
+      expect(render(exec, nodes, null).statusMap['attempt']).toBe('running')
+    })
+
+    it('does not fail a running loop over a check that failed inside it', () => {
+      // A failed lint is the normal shape of a review iteration; the loop
+      // goes round again.
+      const exec = execution({
+        status: 'running',
+        steps: [loopRow('implement', 0, 10), loopRow('lint', 0, 20, 'failed')],
+      })
+
+      expect(render(exec, nodes, null).statusMap['attempt']).toBe('running')
+    })
+
+    it('reads a loop as done once another node has run after it', () => {
+      const exec = execution({
+        status: 'running',
+        steps: [loopRow('implement', 0, 10), loopRow('lint', 0, 20), step({ stepId: 'ship', createdAt: 30 })],
+      })
+
+      const { statusMap } = render(exec, nodes, null)
+
+      expect(statusMap['attempt']).toBe('completed')
+      expect(statusMap['ship']).toBe('completed')
+    })
+
+    it('reads a loop as done once a child workflow of a later node is spawned', () => {
+      const exec = execution({
+        status: 'running',
+        steps: [loopRow('implement', 0, 10), loopRow('lint', 0, 20)],
+        children: [execution({ id: 'wf-ship', spawnedByNodeId: 'ship', status: 'running', createdAt: 30 })],
+      })
+
+      const { statusMap } = render(exec, nodes, null)
+
+      expect(statusMap['attempt']).toBe('completed')
+      expect(statusMap['ship']).toBe('running')
+    })
+
+    it('does not count a row from a scope nested inside the loop as the run moving on', () => {
+      // An agent inside the loop body runs its own inner loop; its rows name
+      // that inner loop, which is not a node of this workflow, so they say
+      // nothing about which root node ran.
+      const exec = execution({
+        status: 'running',
+        steps: [
+          loopRow('implement', 0, 10),
+          step({ stepId: 'call_llm', loopNodeId: 'agent_loop', loopIteration: 3, createdAt: 40 }),
+        ],
+      })
+
+      expect(render(exec, nodes, null).statusMap['attempt']).toBe('running')
+    })
+
+    it('reads the loop of a finished run from its rows', () => {
+      const exec = execution({
+        status: 'completed',
+        steps: [loopRow('implement', 0, 10), loopRow('lint', 0, 20)],
+      })
+
+      expect(render(exec, nodes, null).statusMap['attempt']).toBe('completed')
+    })
+
+    it('leaves a loop to the stream once the stream has spoken for the run', () => {
+      // The stream knows the run is in "ship" now and that nothing inside the
+      // loop is busy, so the loop is done — even though no row of "ship"
+      // exists yet to say so.
+      seedStream([nodeEvent('ship', NodeExecutionEventType.STARTED, 50)])
+      const exec = execution({
+        status: 'running',
+        steps: [loopRow('implement', 0, 10), loopRow('lint', 0, 20)],
+      })
+
+      const { statusMap } = render(exec, nodes, CHAT_ID)
+
+      expect(statusMap['attempt']).toBe('completed')
+      expect(statusMap['ship']).toBe('running')
+    })
+  })
 })
 
 // Reference the key helper so the module import is exercised and the alignment

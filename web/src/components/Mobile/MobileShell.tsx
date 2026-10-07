@@ -37,6 +37,15 @@
  * routed, and a single instance means there is exactly one source of truth
  * for open/closed state (`mobileDrawerStore`). Each screen's own header opts
  * in with `<MobileMenuButton />`, which just calls `store.open()`.
+ *
+ * ## 4. The live update stream
+ *
+ * Connected here, as ModernApp connects it on desktop (see
+ * `useUpdateStreamConnection`), once the selected project's chats have
+ * loaded. Screens only subscribe to the chat they show. Before, nothing on
+ * `/m/*` connected it: the chat list never went live, and a chat or its
+ * workflow view opened directly by URL subscribed before the chats loaded,
+ * was deferred, and never connected at all.
  */
 
 import { useEffect } from "react";
@@ -45,7 +54,9 @@ import { Loader2 } from "lucide-react";
 import { MobileLayout } from "./MobileLayout";
 import { MobileNavDrawer } from "./MobileNavDrawer";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
+import { useUpdateStreamConnection } from "@/hooks/useUpdateStreamConnection";
 import { useProjectStore } from "../../store/projectStore";
+import { useChatStore } from "../../store/chatStore";
 import { useMobileDrawerStore } from "../../store/mobileDrawerStore";
 
 export function MobileShell() {
@@ -84,6 +95,9 @@ export function MobileShell() {
     if (currentProject || projects.length === 0) return;
     void selectProject(projects[0]);
   }, [currentProject, projects, selectProject]);
+
+  const chatsLoaded = useChatStore((s) => s.hasLoaded);
+  useUpdateStreamConnection(currentProject?.id, chatsLoaded);
 
   const isDrawerOpen = useMobileDrawerStore((s) => s.isOpen);
   const closeDrawer = useMobileDrawerStore((s) => s.close);
