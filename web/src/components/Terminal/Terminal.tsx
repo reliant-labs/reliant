@@ -44,20 +44,34 @@ const DAEMON_OFFLINE_RETRY_DELAY = 30000;
 // longer than one poll interval means two consecutive observations have to
 // agree before we act.
 const DAEMON_OFFLINE_GRACE_DELAY = 6000;
+// The server's `code` on an "error" when the daemon refused the requested
+// working directory because it is not on the machine — most often a project
+// whose clone is still running. See wsErrorWorkingDirUnavailable in
+// internal/grpc/services/terminal_ws.go.
+const WORKING_DIR_UNAVAILABLE_CODE = "working_dir_unavailable";
+// Retry cadence while waiting for that directory. Polling is the only signal
+// that it has appeared, so the cap stays short enough that the shell opens
+// soon after a clone lands. Not counted against WS_MAX_RECONNECT_ATTEMPTS: a
+// clone can outlast that budget, and giving up would leave the user to
+// reconnect by hand.
+const WORKING_DIR_RETRY_BASE_DELAY = 2000;
+const WORKING_DIR_RETRY_MAX_DELAY = 10000;
 
 /**
  * Terminal connection lifecycle:
- * - connecting:         initial session attempt (or a retry after the daemon came back)
- * - connected:          session established (server sent "init")
- * - reconnecting:       session dropped while a daemon is online; auto-retrying with backoff
- * - waiting_for_daemon: no daemon connected; retries are gated on daemon status
- * - disconnected:       terminal ended or retries exhausted; manual reconnect offered
+ * - connecting:            initial session attempt (or a retry after the daemon came back)
+ * - connected:             session established (server sent "init")
+ * - reconnecting:          session dropped while a daemon is online; auto-retrying with backoff
+ * - waiting_for_daemon:    no daemon connected; retries are gated on daemon status
+ * - waiting_for_directory: the working directory is not on the machine (yet); retrying until it is
+ * - disconnected:          terminal ended or retries exhausted; manual reconnect offered
  */
 type TerminalConnectionState =
   | "connecting"
   | "connected"
   | "reconnecting"
   | "waiting_for_daemon"
+  | "waiting_for_directory"
   | "disconnected";
 
 export function Terminal({ sessionId, workingDir, worktreeId, className }: TerminalProps) {
@@ -71,6 +85,10 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
   const connectionStateRef = useRef<TerminalConnectionState>("connecting");
   // Set when the server reports "no daemon connected" for the current attempt.
   const daemonUnavailableRef = useRef(false);
+  // Set when the daemon refused this attempt's working directory, and the
+  // count of consecutive such refusals (drives the retry delay).
+  const workingDirUnavailableRef = useRef(false);
+  const workingDirAttemptsRef = useRef(0);
   // Armed while the daemon looks offline but has not yet been offline long
   // enough to act on. See DAEMON_OFFLINE_GRACE_DELAY.
   const daemonOfflineGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -194,6 +212,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
     // Fresh run: reset connection bookkeeping (refs survive effect re-runs).
     reconnectAttemptsRef.current = 0;
     daemonUnavailableRef.current = false;
+    workingDirUnavailableRef.current = false;
+    workingDirAttemptsRef.current = 0;
     updateConnectionState("connecting");
 
     // Get theme colors from CSS variables
@@ -365,6 +385,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
       // Per-attempt evidence: cleared here, set by this attempt's messages.
       daemonUnavailableRef.current = false;
+      workingDirUnavailableRef.current = false;
       closedForDaemonOfflineRef.current = false;
 
       // Use the main gRPC base URL for terminal WebSocket connections.
@@ -434,6 +455,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
               // This (not ws.onopen) is the success signal: reset the backoff.
               reconnectAttemptsRef.current = 0;
               daemonUnavailableRef.current = false;
+              workingDirAttemptsRef.current = 0;
               updateConnectionState("connected");
               if (data.pid) {
                 updateSessionPID(sessionId, data.pid);
@@ -447,7 +469,19 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
             } else if (data.type === "output") {
               term.write(data.data);
             } else if (data.type === "error") {
-              if (isDaemonConnectingError(data.data)) {
+              if (data.code === WORKING_DIR_UNAVAILABLE_CODE) {
+                // The daemon could not start the shell in workingDir because
+                // the directory is not on the machine — typically a clone
+                // still running. It used to start the shell in $HOME instead.
+                // The waiting overlay names the directory; the server closes
+                // this socket and ws.onclose schedules the retry.
+                workingDirUnavailableRef.current = true;
+                logger.info("[Terminal] Working directory not on the machine yet", {
+                  sessionId,
+                  workingDir,
+                  detail: data.data,
+                });
+              } else if (isDaemonConnectingError(data.data)) {
                 // "no daemon connected" — expected while the daemon is
                 // offline. The waiting overlay owns the messaging; writing a
                 // red error per retry was spamming the buffer.
@@ -489,6 +523,28 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
         // "disconnected" instead of the waiting overlay.
         const closedForDaemonOffline = closedForDaemonOfflineRef.current;
         closedForDaemonOfflineRef.current = false;
+
+        // The daemon refused this attempt's working directory. Checked first:
+        // it is this attempt's own evidence, and it proves the daemon was
+        // reachable, so neither "shell exited" nor "daemon offline" applies.
+        // Keep retrying until the directory appears — usually when a clone
+        // finishes — so the shell opens where it was asked to.
+        if (workingDirUnavailableRef.current) {
+          const attempt = workingDirAttemptsRef.current + 1;
+          workingDirAttemptsRef.current = attempt;
+          const delay = Math.min(
+            WORKING_DIR_RETRY_BASE_DELAY * Math.pow(2, attempt - 1),
+            WORKING_DIR_RETRY_MAX_DELAY
+          );
+          if (connectionStateRef.current !== "waiting_for_directory") {
+            updateConnectionState("waiting_for_directory");
+          }
+          reconnectTimerRef.current = setTimeout(() => {
+            logger.info("[Terminal] Retrying working directory", { sessionId, workingDir, attempt });
+            connectWebSocket();
+          }, delay);
+          return;
+        }
 
         // Normal exit (e.g. shell exited) — code 1000 means clean close.
         if (event.code === 1000 && !closedForDaemonOffline) {
@@ -799,6 +855,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
     }
     reconnectAttemptsRef.current = 0;
     daemonUnavailableRef.current = false;
+    workingDirUnavailableRef.current = false;
+    workingDirAttemptsRef.current = 0;
     updateConnectionState("connecting");
     void connectWebSocketRef.current?.();
   }, [updateConnectionState]);
@@ -861,6 +919,31 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
               onRetry={handleReconnectClick}
               className="pointer-events-auto"
             />
+          )}
+          {connectionState === "waiting_for_directory" && (
+            <div
+              className="pointer-events-auto flex max-w-md flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-center text-foreground shadow-lg"
+              role="status"
+              aria-live="polite"
+            >
+              <span className="flex items-center gap-2 text-xs font-medium">
+                <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" aria-hidden="true" />
+                Waiting for this folder
+              </span>
+              {workingDir && (
+                <code className="break-all font-mono text-xs text-muted-foreground">{workingDir}</code>
+              )}
+              <span className="text-xs text-muted-foreground">
+                It doesn&rsquo;t exist on this machine yet. If the project is still cloning, the
+                terminal opens here as soon as it&rsquo;s ready.
+              </span>
+              <button
+                onClick={handleReconnectClick}
+                className="px-3 py-1.5 text-xs font-medium rounded-md border border-border bg-background hover:bg-accent transition-colors"
+              >
+                Try now
+              </button>
+            </div>
           )}
           {connectionState === "disconnected" && (
             <div className="pointer-events-auto flex flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-foreground shadow-lg">

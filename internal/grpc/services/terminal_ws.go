@@ -13,6 +13,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -34,12 +35,23 @@ var wsUpgrader = websocket.Upgrader{
 // before the socket exists), so without this field it had no way to learn the
 // real one — and CloseSession was called with the local id, which the daemon
 // has never heard of. That failed every close and leaked the PTY.
+//
+// Code classifies an "error" the browser must handle differently from a
+// broken session. See wsErrorWorkingDirUnavailable.
 type wsMessage struct {
 	Type      string `json:"type"`
 	Data      string `json:"data,omitempty"`
+	Code      string `json:"code,omitempty"`
 	PID       int32  `json:"pid,omitempty"`
 	SessionID string `json:"session_id,omitempty"`
 }
+
+// wsErrorWorkingDirUnavailable is the Code of an "error" sent when the daemon
+// refused the requested working directory — most often a project whose clone
+// has not finished, so the directory does not exist yet. The browser waits
+// for the directory and retries, instead of spending its reconnect budget as
+// it would on a broken session.
+const wsErrorWorkingDirUnavailable = "working_dir_unavailable"
 
 // wsResizeMessage is the JSON message the browser sends for resize events.
 type wsResizeMessage struct {
@@ -108,6 +120,16 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 		respBytes, err := router.SendDaemonCommand(ctx, userID, "terminal.create", payload, 30000)
 		if err != nil {
+			if terminal.IsWorkingDirUnavailable(err) {
+				logging.Warn("[TerminalWS] Working directory unavailable",
+					"requested_working_dir", workingDir,
+					"worktree_id", worktreeID,
+					"user_id", userID,
+					"error", err,
+				)
+				writeWSJSON(conn, wsMessage{Type: "error", Code: wsErrorWorkingDirUnavailable, Data: err.Error()})
+				return
+			}
 			writeWSError(conn, fmt.Sprintf("create terminal session: %v", err))
 			return
 		}
@@ -115,6 +137,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		var createResp struct {
 			SessionID string `json:"session_id"`
 			PID       int32  `json:"pid"`
+			// Where the shell actually started. Empty only from a daemon
+			// that predates reporting it.
+			WorkingDir string `json:"working_dir"`
 		}
 		if err := json.Unmarshal(respBytes, &createResp); err != nil {
 			writeWSError(conn, fmt.Sprintf("unmarshal create response: %v", err))
@@ -125,10 +150,15 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// This connection owns the session, so it closes it however the
 		// connection ends — including every early return below.
 		defer closeDaemonTerminalSession(ctx, router, userID, sessionID)
+		// Both directories, so a terminal in the wrong place is diagnosable
+		// from this line alone: this server cannot see the filesystem.
 		logging.Info("[TerminalWS] Session created",
 			"session_id", sessionID,
 			"pid", createResp.PID,
 			"user_id", userID,
+			"worktree_id", worktreeID,
+			"requested_working_dir", workingDir,
+			"working_dir", createResp.WorkingDir,
 		)
 
 		// Send init message to browser, carrying the daemon's session id so the
