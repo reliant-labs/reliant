@@ -40,8 +40,7 @@ export function refKey(ref: string): string | null {
   const trimmed = ref.trim();
   if (!trimmed || trimmed.includes("{{")) return null;
   if (trimmed.startsWith(BUILTIN_PREFIX)) return trimmed;
-  // project:// and workflow:// are spellings of the same project/user lookup.
-  const bare = trimmed.replace(/^(project|workflow):\/\//, "");
+  const bare = trimmed.replace(/^project:\/\//, "");
   const slug = workflowSlug(bare);
   return slug ? `slug:${slug}` : null;
 }

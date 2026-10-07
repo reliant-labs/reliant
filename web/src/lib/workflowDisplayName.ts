@@ -3,7 +3,6 @@ import { useGlobalDataStore } from "../store/globalDataStore";
 /** Strip protocol prefixes from a workflow reference. */
 export function stripWorkflowRefPrefix(ref: string): string {
   if (ref.startsWith("builtin://")) return ref.slice("builtin://".length);
-  if (ref.startsWith("workflow://")) return ref.slice("workflow://".length);
   return ref;
 }
 

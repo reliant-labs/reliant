@@ -37,7 +37,6 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
 
   // Determine workflow type
   const isBuiltin = workflowRef?.startsWith("builtin://") ?? false
-  const isUserWorkflow = workflowRef?.startsWith("workflow://") ?? false
 
   // Count inline workflow nodes
   const inlineNodeCount = inlineWorkflow?.nodes?.length ?? 0
@@ -116,10 +115,10 @@ export const WorkflowNode = memo(({ id, data, selected }: WorkflowNodeProps) => 
               <span className="text-purple-600 font-medium">Reference:</span>{' '}
               <span className="text-foreground font-semibold">{workflowName}</span>
             </div>
-            {(isBuiltin || isUserWorkflow) && (
+            {isBuiltin && (
               <div className="text-xs">
                 <span className="px-1.5 py-0.5 rounded text-xs font-medium bg-muted text-muted-foreground">
-                  {isBuiltin ? 'builtin' : 'saved workflow'}
+                  builtin
                 </span>
               </div>
             )}

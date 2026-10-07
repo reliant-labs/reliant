@@ -47,10 +47,10 @@ describe("groupAutomations", () => {
   it("groups by workflow, labelled by the workflow's name, groups in label order", () => {
     const { groups } = groupAutomations(
       [
-        trigger({ id: "a", workflow: "workflow://weekly-report" }),
+        trigger({ id: "a", workflow: "weekly-report" }),
         trigger({ id: "b", workflow: "builtin://agent" }),
         trigger({ id: "c", workflow: "" }),
-        trigger({ id: "d", workflow: "workflow://weekly-report" }),
+        trigger({ id: "d", workflow: "weekly-report" }),
       ],
       "workflow",
     );
@@ -99,7 +99,7 @@ describe("groupAutomations", () => {
         trigger({ id: "fine" }),
         trigger({ id: "degraded", health: health("degraded", { consecutiveFailures: 1 }) }),
         trigger({ id: "skipping", health: health("degraded", { consecutiveSkips: 3 }) }),
-        trigger({ id: "failing", health: health("failing", { consecutiveFailures: 2 }), workflow: "workflow://other" }),
+        trigger({ id: "failing", health: health("failing", { consecutiveFailures: 2 }), workflow: "other" }),
         trigger({
           id: "waiting",
           lastEvent: {
