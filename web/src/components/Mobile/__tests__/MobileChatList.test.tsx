@@ -63,7 +63,23 @@ vi.mock("../../../store/mobileDrawerStore", () => ({
     selector({ isOpen: false, open: vi.fn(), close: vi.fn() }),
 }));
 
+// The sheet has its own tests; here it only needs to report a creation.
+vi.mock("../MobileCreateWorkspaceSheet", () => ({
+  MobileCreateWorkspaceSheet: ({
+    onCreated,
+  }: {
+    onCreated: (worktree: { id: string }) => void;
+  }) => (
+    <div role="dialog" aria-label="New workspace">
+      <button type="button" onClick={() => onCreated({ id: "wt-new" })}>
+        Create stub
+      </button>
+    </div>
+  ),
+}));
+
 const { MobileChatList } = await import("../MobileChatList");
+const { SurfaceProvider } = await import("../../../lib/surfaceContext");
 
 function renderList() {
   // The component invalidates the chat list after archiving a worktree, so it
@@ -71,11 +87,13 @@ function renderList() {
   // before anything renders, and every test in this file fails identically.
   const client = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   return render(
-    <QueryClientProvider client={client}>
-      <VirtuosoMockContext.Provider value={{ viewportHeight: 1000, itemHeight: 64 }}>
-        <MobileChatList />
-      </VirtuosoMockContext.Provider>
-    </QueryClientProvider>,
+    <SurfaceProvider surface="mobile">
+      <QueryClientProvider client={client}>
+        <VirtuosoMockContext.Provider value={{ viewportHeight: 1000, itemHeight: 64 }}>
+          <MobileChatList />
+        </VirtuosoMockContext.Provider>
+      </QueryClientProvider>
+    </SurfaceProvider>,
   );
 }
 
@@ -195,16 +213,35 @@ describe("MobileChatList", () => {
     expect(screen.getByText("Main chat")).toBeInTheDocument();
   });
 
-  it("navigates to /m/new with the group's worktreeId from the group header", async () => {
+  it("has exactly one new-chat control, in the header", () => {
+    // The reported bug: the header `+` and the main group's `+` rendered as two
+    // identical icons a few px apart. Which workspace a chat starts in is now
+    // picked on /m/new, so no group carries its own new-chat button.
+    useChatList.mockReturnValue({
+      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
+      isLoading: false,
+    });
+    renderList();
+
+    // By label: the stubbed Link renders an <a> with no href, which has no
+    // link role.
+    const newChat = screen.getAllByLabelText(/New chat/);
+    expect(newChat).toHaveLength(1);
+    expect(newChat[0]).toHaveAttribute("to", "/m/new");
+    expect(screen.queryByRole("button", { name: /New chat in/ })).not.toBeInTheDocument();
+  });
+
+  it("creates a workspace from the list and lands on the composer pointed at it", async () => {
     const user = userEvent.setup();
     useChatList.mockReturnValue({ data: [], isLoading: false });
-
     renderList();
-    await user.click(screen.getByRole("button", { name: /New chat in reliant/ }));
-    expect(navigate).toHaveBeenCalledWith({
-      to: "/m/new",
-      search: { worktreeId: "wt-main" },
-    });
+
+    await user.click(screen.getByRole("button", { name: "New workspace" }));
+    expect(screen.getByRole("dialog", { name: "New workspace" })).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Create stub" }));
+    expect(navigate).toHaveBeenCalledWith({ to: "/m/new", search: { worktreeId: "wt-new" } });
+    expect(screen.queryByRole("dialog", { name: "New workspace" })).not.toBeInTheDocument();
   });
 
   it("does not offer to archive the main workspace", () => {
@@ -262,6 +299,33 @@ describe("MobileChatList", () => {
       expect(invalidate).toHaveBeenCalledWith({
         queryKey: ["chats", "list"],
       }),
+    );
+  });
+
+  it("shows the archive in progress and ignores a second tap", async () => {
+    // Archiving waits on the workspace's machine, which may be waking. The
+    // sheet used to keep a live Archive button with no feedback meanwhile.
+    const user = userEvent.setup();
+    let finish!: () => void;
+    archiveWorktree.mockReturnValue(new Promise<void>((resolve) => (finish = resolve)));
+    useChatList.mockReturnValue({
+      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
+      isLoading: false,
+    });
+
+    renderList();
+    await user.click(screen.getByRole("button", { name: /Archive feature-x/ }));
+    await user.click(screen.getByRole("button", { name: "Archive" }));
+
+    const pending = await screen.findByRole("button", { name: /Archiving/ });
+    expect(pending).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    await user.click(pending);
+    expect(archiveWorktree).toHaveBeenCalledTimes(1);
+
+    finish();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog", { name: "Confirm archive" })).not.toBeInTheDocument(),
     );
   });
 

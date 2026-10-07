@@ -46,6 +46,13 @@
  * `/m/*` connected it: the chat list never went live, and a chat or its
  * workflow view opened directly by URL subscribed before the chats loaded,
  * was deferred, and never connected at all.
+ *
+ * ## 5. Navigation feedback
+ *
+ * `MobileNavigationFeedback` warms every screen's lazy chunk and shows a
+ * progress bar while a navigation is pending. Without it, the first tap on
+ * any destination did nothing visible until that chunk had downloaded. The
+ * module comment there has the measurements.
  */
 
 import { useEffect } from "react";
@@ -53,6 +60,7 @@ import { Outlet, useNavigate } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { MobileLayout } from "./MobileLayout";
 import { MobileNavDrawer } from "./MobileNavDrawer";
+import { MobileNavigationFeedback } from "./MobileNavigationFeedback";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { useUpdateStreamConnection } from "@/hooks/useUpdateStreamConnection";
 import { useProjectStore } from "../../store/projectStore";
@@ -124,6 +132,7 @@ export function MobileShell() {
         <Outlet />
       </div>
       <MobileNavDrawer isOpen={isDrawerOpen} onClose={closeDrawer} />
+      <MobileNavigationFeedback />
     </MobileLayout>
   );
 }

@@ -12,6 +12,18 @@
  * screen can never disagree about what a chat's state means. Groups
  * themselves sort main-first, then by whether any chat in them needs
  * attention, then by most recent activity.
+ *
+ * ## One affordance per action
+ *
+ * "New chat" is the compose button in the header, and nothing else on this
+ * screen. Every group header used to carry a `+` too, and in the common case
+ * (one project, only the main workspace) that put two identical `+` icons a
+ * few pixels apart. Which workspace a chat starts in is now chosen on
+ * `/m/new` (its Workspace row), defaulting to main, the way the compose
+ * screens of most mobile apps pick a destination.
+ *
+ * "New workspace" is a labeled action under the groups, next to the thing it
+ * creates. It is not a second header icon competing with compose.
  */
 
 import { useCallback, useMemo, useState } from "react";
@@ -22,9 +34,9 @@ import {
   ChevronDown,
   ChevronRight,
   GitBranch,
+  GitBranchPlus,
   Loader2,
   MessageSquarePlus,
-  Plus,
 } from "lucide-react";
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useQueryClient } from "@tanstack/react-query";
@@ -40,6 +52,8 @@ import {
   MobileEmptyState,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
+import { useCapability } from "../../lib/surfaceContext";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
 // The DOMAIN Chat (types/chat), not the raw protobuf one: it is
 // `Omit<ProtoChat, '$typeName'>` plus the client-side fields the API layer
@@ -210,7 +224,6 @@ interface GroupHeaderProps {
   group: ChatGroup;
   isCollapsed: boolean;
   onToggle: () => void;
-  onNewChat: () => void;
   onArchive: () => void;
 }
 
@@ -225,7 +238,7 @@ interface GroupHeaderProps {
  * one. It can't live on the scroller as a `space-y`, because Virtuoso renders
  * group headers and items as flat siblings.
  */
-function GroupHeader({ group, isCollapsed, onToggle, onNewChat, onArchive }: GroupHeaderProps) {
+function GroupHeader({ group, isCollapsed, onToggle, onArchive }: GroupHeaderProps) {
   const capsBottom = isCollapsed || group.chats.length === 0;
 
   return (
@@ -278,15 +291,6 @@ function GroupHeader({ group, isCollapsed, onToggle, onNewChat, onArchive }: Gro
           </span>
         </button>
 
-        <button
-          type="button"
-          onClick={onNewChat}
-          aria-label={`New chat in ${group.worktreeName}`}
-          className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-muted-foreground active:bg-foreground/5"
-        >
-          <Plus className="h-4 w-4" />
-        </button>
-
         {!group.isMain && (
           <button
             type="button"
@@ -313,6 +317,9 @@ export function MobileChatList() {
 
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
   const [confirmingArchive, setConfirmingArchive] = useState<ChatGroup | null>(null);
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const canCreateWorkspace = useCapability("worktreeCreate");
 
   const groups = useMemo(
     () => buildGroups(chats ?? [], worktrees, sortOrder),
@@ -340,17 +347,50 @@ export function MobileChatList() {
     return offset + count;
   }, 0);
 
+  // Archiving can take as long as waking the workspace's machine (the store
+  // retries across a wake for up to two minutes). Before this state existed the
+  // sheet just sat there with a live Archive button, which read as a dead tap
+  // and invited a second archive call.
   const handleArchiveConfirmed = useCallback(async () => {
-    if (!confirmingArchive) return;
-    await archiveWorktree(confirmingArchive.worktreeId);
-    // Archiving a worktree also archives its chats server-side, but only the
-    // worktree store refetches. Without invalidating the chat list the archived
-    // chats stay in cache still pointing at a worktree that is gone, and
-    // `buildGroups` drops them into its unknown-worktree fallback — leaving a
-    // ghost "Unknown workspace" group until a manual reload.
-    await queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
-    setConfirmingArchive(null);
-  }, [confirmingArchive, archiveWorktree, queryClient]);
+    if (!confirmingArchive || isArchiving) return;
+    setIsArchiving(true);
+    try {
+      // The store reports failure itself (toast) and does not throw.
+      await archiveWorktree(confirmingArchive.worktreeId);
+      // Archiving a worktree also archives its chats server-side, but only the
+      // worktree store refetches. Without invalidating the chat list the
+      // archived chats stay in cache still pointing at a worktree that is gone,
+      // and `buildGroups` drops them into its unknown-worktree fallback —
+      // leaving a ghost "Unknown workspace" group until a manual reload.
+      await queryClient.invalidateQueries({ queryKey: chatKeys.lists() });
+    } finally {
+      setIsArchiving(false);
+      setConfirmingArchive(null);
+    }
+  }, [confirmingArchive, isArchiving, archiveWorktree, queryClient]);
+
+  // Memoized so Virtuoso gets a stable component type. An inline component
+  // would remount the footer, and the button in it, on every render.
+  const listComponents = useMemo(
+    () => ({
+      Footer: () =>
+        canCreateWorkspace ? (
+          <div className="px-4 pb-8 pt-6">
+            <button
+              type="button"
+              onClick={() => setCreatingWorkspace(true)}
+              className="flex min-h-[48px] w-full items-center justify-center gap-2 rounded-lg border border-dashed border-border text-sm font-medium text-primary active:bg-primary/10"
+            >
+              <GitBranchPlus className="h-4 w-4" />
+              New workspace
+            </button>
+          </div>
+        ) : (
+          <div className="h-8" />
+        ),
+    }),
+    [canCreateWorkspace],
+  );
 
   return (
     <div className="flex h-full min-h-0 flex-col">
@@ -363,7 +403,9 @@ export function MobileChatList() {
             className="flex min-h-[44px] min-w-[44px] items-center justify-center rounded-md text-muted-foreground active:bg-muted"
             aria-label="New chat"
           >
-            <Plus className="h-5 w-5" />
+            {/* The same glyph the nav drawer uses for New chat, so the two
+                entry points read as one action. */}
+            <MessageSquarePlus className="h-5 w-5" />
           </Link>
         }
       />
@@ -379,7 +421,7 @@ export function MobileChatList() {
           description="Start a chat to put an agent to work on this project."
           action={
             <Link to="/m/new" className={MOBILE_PRIMARY_ACTION}>
-              <Plus className="h-4 w-4" />
+              <MessageSquarePlus className="h-4 w-4" />
               Start a chat
             </Link>
           }
@@ -397,12 +439,6 @@ export function MobileChatList() {
                 group={group}
                 isCollapsed={collapsed[group.worktreeId] ?? false}
                 onToggle={() => toggleGroup(group.worktreeId)}
-                onNewChat={() =>
-                  void navigate({
-                    to: "/m/new",
-                    search: { worktreeId: group.worktreeId },
-                  })
-                }
                 onArchive={() => setConfirmingArchive(group)}
               />
             );
@@ -412,7 +448,21 @@ export function MobileChatList() {
             if (!chat) return null;
             return <ChatRow chat={chat} isLast={groupEndIndices.has(index)} />;
           }}
-          components={{ Footer: () => <div className="h-8" /> }}
+          components={listComponents}
+        />
+      )}
+
+      {creatingWorkspace && currentProjectId && (
+        <MobileCreateWorkspaceSheet
+          projectId={currentProjectId}
+          onClose={() => setCreatingWorkspace(false)}
+          onCreated={(worktree) => {
+            setCreatingWorkspace(false);
+            // A workspace is made to work in, and an empty one is not listed
+            // here (groups come from chats). So land on the composer already
+            // pointed at it, rather than back on a list that doesn't show it.
+            void navigate({ to: "/m/new", search: { worktreeId: worktree.id } });
+          }}
         />
       )}
 
@@ -422,7 +472,9 @@ export function MobileChatList() {
           aria-modal="true"
           aria-label="Confirm archive"
           className="fixed inset-0 z-[9999] flex items-end justify-center bg-black/50"
-          onClick={() => setConfirmingArchive(null)}
+          onClick={() => {
+            if (!isArchiving) setConfirmingArchive(null);
+          }}
         >
           <div
             className="w-full max-w-lg rounded-t-2xl border-t border-border bg-popover px-4 pt-5 shadow-2xl"
@@ -447,16 +499,19 @@ export function MobileChatList() {
               <button
                 type="button"
                 onClick={() => setConfirmingArchive(null)}
-                className="flex min-h-[48px] flex-1 items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground active:bg-muted"
+                disabled={isArchiving}
+                className="flex min-h-[48px] flex-1 items-center justify-center rounded-lg border border-border text-sm font-medium text-foreground active:bg-muted disabled:opacity-60"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => void handleArchiveConfirmed()}
-                className="flex min-h-[48px] flex-1 items-center justify-center rounded-lg bg-destructive text-sm font-medium text-destructive-foreground active:opacity-80"
+                disabled={isArchiving}
+                className="flex min-h-[48px] flex-1 items-center justify-center gap-2 rounded-lg bg-destructive text-sm font-medium text-destructive-foreground active:opacity-80 disabled:opacity-60"
               >
-                Archive
+                {isArchiving && <Loader2 className="h-4 w-4 animate-spin" />}
+                {isArchiving ? "Archiving…" : "Archive"}
               </button>
             </div>
           </div>

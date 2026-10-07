@@ -40,12 +40,34 @@ vi.mock('../../../store/projectStore', () => ({
     selector({ currentProject: { id: 'p1', name: 'reliant' } }),
 }))
 
+// WorktreeStatus: ACTIVE = 1, CREATING = 5, FAILED = 6.
+const worktreeList = vi.hoisted(() => ({
+  current: [] as Array<Record<string, unknown>>,
+}))
+const MAIN_WORKTREE = { id: 'wt-main', is_main: true, name: 'main', branch: 'main', status: 1 }
 vi.mock('../../../store/worktreeStore', () => ({
   useWorktreeStore: (selector: (s: unknown) => unknown) =>
-    selector({
-      worktrees: [{ id: 'wt-main', is_main: true, name: 'main' }],
-      loadWorktrees: vi.fn(),
-    }),
+    selector({ worktrees: worktreeList.current, loadWorktrees: vi.fn() }),
+}))
+
+// The sheet has its own tests; here it only needs to report a creation.
+vi.mock('../MobileCreateWorkspaceSheet', () => ({
+  MobileCreateWorkspaceSheet: ({ onCreated }: { onCreated: (w: { id: string }) => void }) => (
+    <div role="dialog" aria-label="New workspace">
+      <button
+        type="button"
+        onClick={() => {
+          worktreeList.current = [
+            ...worktreeList.current,
+            { id: 'wt-new', is_main: false, name: 'fresh', branch: 'fresh', status: 5 },
+          ]
+          onCreated({ id: 'wt-new' })
+        }}
+      >
+        Create stub
+      </button>
+    </div>
+  ),
 }))
 
 vi.mock('../../../store/globalDataStore', () => ({
@@ -88,6 +110,7 @@ vi.mock('@/hooks/useOnboardingQueries', () => ({
 const { MobileNewChat } = await import('../MobileNewChat')
 
 beforeEach(() => {
+  worktreeList.current = [MAIN_WORKTREE]
   daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 1 }]
   startChat.mockReset()
   startChat.mockResolvedValue({ id: 'chat-9' })
@@ -175,12 +198,54 @@ describe('MobileNewChat', () => {
     expect(navigate).not.toHaveBeenCalled()
   })
 
-  it('offers no attachment, params, or workspace controls', () => {
+  it('offers no attachment or params controls', () => {
     render(<MobileNewChat />)
     expect(screen.queryByLabelText(/attach/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/parameters/i)).not.toBeInTheDocument()
     expect(screen.queryByText(/daemon/i)).not.toBeInTheDocument()
-    expect(screen.queryByText(/workspace|worktree|branch/i)).not.toBeInTheDocument()
+  })
+
+  it('starts the chat in the workspace the user picks', async () => {
+    worktreeList.current = [
+      MAIN_WORKTREE,
+      { id: 'wt-feature', is_main: false, name: 'feature-x', branch: 'feature/x', status: 1 },
+      // Never got a checkout, so a chat cannot run in it.
+      { id: 'wt-failed', is_main: false, name: 'broken', branch: 'broken', status: 6 },
+    ]
+    render(<MobileNewChat />)
+
+    await userEvent.click(screen.getByText('Workspace'))
+    expect(screen.queryByRole('button', { name: /^broken/ })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /^feature-x/ }))
+
+    await userEvent.type(screen.getByLabelText('Message'), 'on the branch')
+    await userEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    expect(startChat.mock.calls[0][0]).toBe('wt-feature')
+  })
+
+  it('creates a workspace from the picker and selects it', async () => {
+    render(<MobileNewChat />)
+
+    await userEvent.click(screen.getByText('Workspace'))
+    await userEvent.click(screen.getByRole('button', { name: 'New workspace' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create stub' }))
+
+    expect(screen.queryByRole('dialog', { name: 'New workspace' })).not.toBeInTheDocument()
+    // Still CREATING: it is offered, labelled as such, and selected.
+    expect(screen.getByText('fresh')).toBeInTheDocument()
+
+    await userEvent.type(screen.getByLabelText('Message'), 'go')
+    await userEvent.click(screen.getByLabelText('Send'))
+    await waitFor(() => expect(startChat).toHaveBeenCalled())
+    expect(startChat.mock.calls[0][0]).toBe('wt-new')
+  })
+
+  it('hides the workspace row for a chat with no machine', () => {
+    daemonList.current = [{ daemonId: 'd-laptop', hostname: 'laptop', status: 5 }]
+    render(<MobileNewChat />)
+    expect(screen.getByText('No machine')).toBeInTheDocument()
+    expect(screen.queryByText('Workspace')).not.toBeInTheDocument()
   })
 
   it('runs on the awake machine by default, sending no daemon', async () => {

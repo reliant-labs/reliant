@@ -61,6 +61,8 @@ vi.mock("@/hooks/useOnboardingQueries", () => ({
 }));
 
 vi.mock("../MobileNavDrawer", () => ({ MobileNavDrawer: () => null }));
+// Reads the live router, which this file replaces with a two-export stub.
+vi.mock("../MobileNavigationFeedback", () => ({ MobileNavigationFeedback: () => null }));
 
 import { MobileShell } from "../MobileShell";
 import { useChatStore } from "../../../store/chatStore";

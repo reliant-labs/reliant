@@ -2,9 +2,10 @@
  * `/m/new` — start a chat.
  *
  * Deliberately the narrow slice of `NewChatView`: a project header, a
- * workflow picker, where the chat runs, one message box. Attachments, workflow
- * params, presets, branching and worktree selection are all `false` for this
- * surface, and the point of that list is that none of them appear here.
+ * workflow picker, where the chat runs, which workspace it runs in, one
+ * message box. Attachments, workflow params, presets and branching are all
+ * `false` for this surface, and the point of that list is that none of them
+ * appear here.
  *
  * Where it runs (research/NO_MACHINE_CHATS.md §2.5): one of the user's
  * machines, or No machine — preselected when none of their machines is awake,
@@ -19,11 +20,13 @@
  * `api.chatsV2.start` here would land on `/m/chats/$chatId` with an empty
  * transcript and no spinner until the stream caught up.
  *
- * Worktree: defaults to the project's main worktree, the same default the
+ * Workspace: defaults to the project's main worktree, the same default the
  * desktop composer resolves to when the user hasn't switched workspaces. The
- * chat list's per-group "new chat in this workspace" action overrides that
- * via the `worktreeId` search param, so a chat started from a branch group
- * lands in that branch rather than always falling back to main.
+ * Workspace row picks another one, or creates one (`worktreeCreate`) through
+ * the same sheet the chat list opens. A `worktreeId` search param preselects
+ * it; that is how a workspace just created from the chat list arrives here.
+ * The row is hidden for No machine, because a branch workspace is a checkout
+ * on one machine and a machineless chat always runs in main.
  *
  * ## Why the workflow picker is a single row, not 23 full-bleed ones
  *
@@ -41,10 +44,12 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Link, useNavigate, useSearch } from "@tanstack/react-router";
-import { ArrowUp, ChevronLeft, Loader2 } from "lucide-react";
+import { ArrowUp, ChevronLeft, GitBranchPlus, Loader2 } from "lucide-react";
 import { useChatStore } from "../../store/chatStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useWorktreeStore } from "../../store/worktreeStore";
+import { useWorktreeStore, type Worktree } from "../../store/worktreeStore";
+import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
+import { sortActiveWorkspaces } from "../Worktrees/workspaceStatus";
 import { useWorkflows } from "../../store/globalDataStore";
 import { isChatLaunchable } from "../../api/workflow-grpc";
 import {
@@ -58,7 +63,8 @@ import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { trackEvent } from "../../lib/analytics";
 import { cn } from "../../lib/utils";
 import { MobileCardGroup, MobileScreenHeader } from "./MobileChrome";
-import { MobileSelectRow } from "./MobileSettingsRow";
+import { MobileSelectRow, type MobileSettingOption } from "./MobileSettingsRow";
+import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useCapability } from "@/lib/surfaceContext";
 import {
@@ -76,6 +82,27 @@ import {
 // normalize or the user's default silently fails to match its list entry.
 const sameWorkflow = (a: string, b: string) =>
   normalizeWorkflowRef(a) === normalizeWorkflowRef(b);
+
+/**
+ * Workspaces a chat can start in: main first, then most recently active.
+ * FAILED ones are left out because they never got a checkout. CREATING ones
+ * stay in: a chat can start while its checkout finishes, which is what the
+ * desktop composer allows straight after create too.
+ */
+export function workspaceOptions(worktrees: Worktree[]): MobileSettingOption[] {
+  return sortActiveWorkspaces(
+    worktrees.filter((w) => !w.deleted_at && w.status !== WorktreeStatus.FAILED),
+  ).map((w) => ({
+    value: w.id,
+    label: w.name,
+    description:
+      w.status === WorktreeStatus.CREATING
+        ? "Setting up…"
+        : w.is_main
+          ? `${w.branch} · main checkout`
+          : w.branch,
+  }));
+}
 
 export function MobileNewChat() {
   const navigate = useNavigate();
@@ -116,11 +143,18 @@ export function MobileNewChat() {
     if (worktrees.length === 0) void loadWorktrees(currentProject.id);
   }, [currentProject, worktrees.length, loadWorktrees]);
 
+  // The user's pick on this screen wins over the one the URL arrived with.
+  const [pickedWorktreeId, setPickedWorktreeId] = useState<string | null>(null);
+  const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const canCreateWorkspace = useCapability("worktreeCreate");
+
   const mainWorktree = worktrees.find((w) => w.is_main && !w.deleted_at);
-  const requestedWorktree = requestedWorktreeId
-    ? worktrees.find((w) => w.id === requestedWorktreeId && !w.deleted_at)
+  const wantedWorktreeId = pickedWorktreeId ?? requestedWorktreeId;
+  const requestedWorktree = wantedWorktreeId
+    ? worktrees.find((w) => w.id === wantedWorktreeId && !w.deleted_at)
     : undefined;
   const targetWorktree = requestedWorktree ?? mainWorktree;
+  const workspaceRowOptions = useMemo(() => workspaceOptions(worktrees), [worktrees]);
 
   // Same filtering the desktop selector applies: drop hidden workflows and
   // ones a chat cannot start (their Chat trigger is off), and
@@ -257,6 +291,29 @@ export function MobileNewChat() {
                 onChange={setSelectedMachine}
               />
             )}
+            {/* Shown only when there is something to do with it: another
+                workspace to pick, or one to create. A row with main as the
+                only choice is just noise above the composer. */}
+            {!noMachine &&
+              workspaceRowOptions.length > 0 &&
+              (workspaceRowOptions.length > 1 || canCreateWorkspace) && (
+                <MobileSelectRow
+                  label="Workspace"
+                  value={targetWorktree?.id ?? ""}
+                  sheetTitle="Which workspace"
+                  options={workspaceRowOptions}
+                  onChange={setPickedWorktreeId}
+                  action={
+                    canCreateWorkspace
+                      ? {
+                          label: "New workspace",
+                          icon: <GitBranchPlus className="h-4 w-4" />,
+                          onSelect: () => setCreatingWorkspace(true),
+                        }
+                      : undefined
+                  }
+                />
+              )}
           </MobileCardGroup>
         )}
         {noMachine && (
@@ -304,6 +361,19 @@ export function MobileNewChat() {
           )}
         </button>
       </div>
+
+      {creatingWorkspace && currentProject && (
+        <MobileCreateWorkspaceSheet
+          projectId={currentProject.id}
+          onClose={() => setCreatingWorkspace(false)}
+          onCreated={(worktree) => {
+            // The store has already appended it, so selecting it by id
+            // resolves on the next render.
+            setPickedWorktreeId(worktree.id);
+            setCreatingWorkspace(false);
+          }}
+        />
+      )}
     </div>
   );
 }
