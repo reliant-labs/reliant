@@ -102,12 +102,10 @@ function RouterCandidateCard({
 
   const ref = candidate.ref ?? "";
   const isBuiltin = ref.startsWith("builtin://");
-  const isUserWorkflow = ref.startsWith("workflow://");
-  const isCustomPath = !isBuiltin && !isUserWorkflow && ref !== "";
+  const isCustomPath = !isBuiltin && ref !== "";
 
   const getSelectionType = () => {
     if (isBuiltin) return ref;
-    if (isUserWorkflow) return ref;
     if (isCustomPath) return "custom";
     return "";
   };

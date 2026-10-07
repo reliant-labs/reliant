@@ -22,10 +22,10 @@ describe("NodeDetailsPanel", () => {
                 description: "Default agent route",
               },
               {
-                ref: "workflow://triage",
+                ref: "project://triage",
               },
             ],
-            fallback: "workflow://fallback-handler",
+            fallback: "project://fallback-handler",
           },
         },
       },
@@ -48,6 +48,6 @@ describe("NodeDetailsPanel", () => {
     expect(screen.getByText("Presets: fast, safe")).toBeInTheDocument();
     expect(screen.getByText("Default agent route")).toBeInTheDocument();
     expect(screen.getByText("Fallback:")).toBeInTheDocument();
-    expect(screen.getByText("workflow://fallback-handler")).toBeInTheDocument();
+    expect(screen.getByText("project://fallback-handler")).toBeInTheDocument();
   });
 });

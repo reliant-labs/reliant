@@ -35,8 +35,8 @@ listWorkflows.mockResolvedValue({
   workflows: [
     { name: "builtin://agent", title: "Agent", description: "A coding agent with tools.", source: "builtin" },
     { name: "builtin://structured-agent", title: "Structured agent", description: "Answers through a response tool.", source: "builtin" },
-    { name: "workflow://triage", title: "", description: "Label new issues.", source: "user" },
-    { name: "workflow://editing", title: "Editing", description: "", source: "user" },
+    { name: "triage", title: "", description: "Label new issues.", source: "user" },
+    { name: "editing", title: "Editing", description: "", source: "user" },
   ],
 });
 
@@ -50,7 +50,7 @@ function step(ref: string): WorkflowStep {
 
 function renderStep(ref = "") {
   const onUpdate = vi.fn();
-  render(<WorkflowStepConfig step={step(ref)} onUpdate={onUpdate} currentWorkflowName="workflow://editing" />);
+  render(<WorkflowStepConfig step={step(ref)} onUpdate={onUpdate} currentWorkflowName="editing" />);
   return { onUpdate, latest: () => onUpdate.mock.calls.at(-1)![0] as WorkflowStep };
 }
 
@@ -68,8 +68,8 @@ describe("WorkflowStepConfig reference picker", () => {
       "Structured agentbuiltin://structured-agentAnswers through a response tool.",
     ]);
     const yours = screen.getByRole("group", { name: "Your workflows" });
-    // No title: named by its ref, without the scheme. The workflow being edited is left out.
-    expect(within(yours).getAllByRole("option").map((o) => o.textContent)).toEqual(["triageworkflow://triageLabel new issues."]);
+    // No title: named by its ref. The workflow being edited is left out.
+    expect(within(yours).getAllByRole("option").map((o) => o.textContent)).toEqual(["triageLabel new issues."]);
   });
 
   it("finds a workflow by what it does, and clears the old args and presets on pick", async () => {
@@ -81,7 +81,7 @@ describe("WorkflowStepConfig reference picker", () => {
     await user.type(screen.getByRole("combobox", { name: "Search workflows" }), "label");
     await user.keyboard("{Enter}");
 
-    expect(getStepRef(latest())).toBe("workflow://triage");
+    expect(getStepRef(latest())).toBe("triage");
     expect(getStepInputs(latest())).toEqual({});
     expect(getStepPresets(latest())).toEqual({});
   });

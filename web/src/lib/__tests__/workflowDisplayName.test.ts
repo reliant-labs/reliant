@@ -16,9 +16,9 @@ describe("workflowDisplayName", () => {
     expect(workflowDisplayName({ name: "get-it-right", title: "  " })).toBe("Get It Right");
   });
 
-  it("strips builtin:// and workflow:// prefixes when formatting", () => {
+  it("strips the builtin:// prefix when formatting", () => {
     expect(formatWorkflowSlug("builtin://forge-one-shot")).toBe("Forge One Shot");
-    expect(formatWorkflowSlug("workflow://my_flow")).toBe("My Flow");
+    expect(formatWorkflowSlug("my_flow")).toBe("My Flow");
   });
 
   it("resolves a ref's title from the cached workflow list", () => {

@@ -243,7 +243,7 @@ export function WorkflowStepConfig({
     })),
     ...userWorkflows.map((wf) => ({
       value: wf.name,
-      label: wf.title || wf.name.replace(/^workflow:\/\//, ""),
+      label: wf.title || wf.name,
       description: wf.description || undefined,
       group: "Your workflows",
     })),

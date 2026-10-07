@@ -16,7 +16,7 @@ describe("mergeStepUpdate", () => {
               description: "Primary candidate",
             },
           ],
-          fallback: "workflow://fallback",
+          fallback: "project://fallback",
         },
       } as Step["args"],
     }
@@ -42,7 +42,7 @@ describe("mergeStepUpdate", () => {
         description: "Primary candidate",
       },
     ])
-    expect(mergedArgs.fallback).toBe("workflow://fallback")
+    expect(mergedArgs.fallback).toBe("project://fallback")
     expect(mergedArgs.systemPrompt).toEqual(celString("Route carefully"))
   })
 

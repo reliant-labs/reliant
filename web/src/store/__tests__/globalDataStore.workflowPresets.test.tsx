@@ -57,9 +57,9 @@ describe("workflow presets follow the right project", () => {
   });
 
   it("useWorkflowPresets reads the project it is given, not the current one", async () => {
-    const { result } = renderHook(() => useWorkflowPresets("proj-other", "workflow://triage"));
+    const { result } = renderHook(() => useWorkflowPresets("proj-other", "builtin://triage"));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(listPresetsForWorkflow).toHaveBeenCalledWith("proj-other", "workflow://triage");
+    expect(listPresetsForWorkflow).toHaveBeenCalledWith("proj-other", "builtin://triage");
     expect(listPresetsForWorkflow).not.toHaveBeenCalledWith("proj-current", expect.anything());
     expect(result.current.presets.map((p) => p.name)).toEqual(["preset-of-proj-other"]);
   });
@@ -75,13 +75,13 @@ describe("workflow presets follow the right project", () => {
     const { result } = renderHook(() =>
       useWorkflowInputs({
         projectId: "proj-other",
-        workflowRef: "workflow://triage",
+        workflowRef: "builtin://triage",
         values: {},
         onValuesChange: () => undefined,
       }),
     );
     await waitFor(() => expect(result.current.presetsLoading).toBe(false));
-    expect(listPresetsForWorkflow).toHaveBeenCalledWith("proj-other", "workflow://triage");
+    expect(listPresetsForWorkflow).toHaveBeenCalledWith("proj-other", "builtin://triage");
     expect(listPresetsForWorkflow).not.toHaveBeenCalledWith("proj-current", expect.anything());
   });
 });

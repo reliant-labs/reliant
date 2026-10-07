@@ -74,11 +74,10 @@ describe("workflowSlug / refKey", () => {
     expect(workflowSlug("a--b")).toBe("a-b");
   });
 
-  it("keeps builtin refs exact and slugs the rest, ignoring project:// and workflow://", () => {
+  it("keeps builtin refs exact and slugs the rest, ignoring project://", () => {
     expect(refKey("builtin://agent")).toBe("builtin://agent");
     expect(refKey("Nightly Triage")).toBe("slug:nightly-triage");
     expect(refKey("project://nightly-triage")).toBe("slug:nightly-triage");
-    expect(refKey("workflow://nightly_triage")).toBe("slug:nightly-triage");
   });
 
   it("cannot resolve a CEL-computed ref", () => {

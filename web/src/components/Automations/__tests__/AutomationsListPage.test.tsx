@@ -294,7 +294,7 @@ describe("AutomationsListPage", () => {
     listTriggers.mockResolvedValue({
       triggers: [
         protoTrigger({ id: "a", name: "A", workflow: "builtin://agent", projectId: "p1", projectName: "Zeta" }),
-        protoTrigger({ id: "b", name: "B", workflow: "workflow://triage", projectId: "p1", projectName: "Zeta" }),
+        protoTrigger({ id: "b", name: "B", workflow: "triage", projectId: "p1", projectName: "Zeta" }),
         protoTrigger({ id: "c", name: "C", workflow: "builtin://agent", projectId: "p2", projectName: "Alpha" }),
       ],
     });

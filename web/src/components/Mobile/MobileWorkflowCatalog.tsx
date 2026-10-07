@@ -104,15 +104,13 @@ function iconForWorkflow(workflow: WorkflowDef, fallback: LucideIcon): LucideIco
 
 /**
  * `source` is absent on refs that reach the store through paths that never set
- * it, so the `builtin://` / `workflow://` prefix on the name is the fallback —
- * it is the same signal `normalizeWorkflowRef` keys off and is always present.
+ * it, so a ref with no source is treated as builtin.
  */
 function originOf(workflow: WorkflowDef): OriginId {
   if (workflow.source === "user" || workflow.source === "project") {
     return workflow.source;
   }
-  if (workflow.source === "builtin") return "builtin";
-  return workflow.name.startsWith("workflow://") ? "user" : "builtin";
+  return "builtin";
 }
 
 export function MobileWorkflowCatalog() {

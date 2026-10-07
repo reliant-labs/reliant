@@ -21,7 +21,7 @@ import { useWorkflowDefinition } from "./useWorkflowDefinition";
 export interface UseWorkflowInputsOptions {
   /** Project ID for API calls */
   projectId: string | undefined;
-  /** Workflow reference (e.g., "builtin://agent", "workflow://my-flow", or raw path) */
+  /** Workflow reference (e.g., "builtin://agent", "project://my-flow", or raw path) */
   workflowRef: string;
   /** Current input/arg values */
   values: Record<string, unknown>;
@@ -75,9 +75,6 @@ export function normalizeWorkflowRef(ref: string): string {
   if (ref.startsWith("builtin://")) {
     return ref.replace("builtin://", "");
   }
-  if (ref.startsWith("workflow://")) {
-    return ref.replace("workflow://", "");
-  }
   return ref;
 }
 
@@ -96,7 +93,7 @@ export function getWorkflowDisplayName(ref: string, format: boolean = false): st
 /** Ensure workflow ref has a protocol prefix for preset lookup */
 function ensureWorkflowRefPrefix(ref: string): string {
   if (!ref) return "";
-  if (ref.startsWith("builtin://") || ref.startsWith("workflow://")) {
+  if (ref.startsWith("builtin://")) {
     return ref;
   }
   // Default to builtin:// for backward compatibility
