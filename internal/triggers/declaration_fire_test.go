@@ -163,8 +163,9 @@ func TestIntegrationActivationFiltersAndMapsInputsFromItsDeclaration(t *testing.
 	assert.Equal(t, float64(42), params["issue_number"].GetNumberValue())
 }
 
-// octocat is a GitHub receiver's verified sender.
-var octocat = &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "octocat", DisplayName: "octocat", Verified: true}
+// octocat is a GitHub receiver's verified sender: the numeric user id, with
+// the login to show.
+var octocat = &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "583231", DisplayName: "octocat", Verified: true}
 
 const senderGatedWorkflow = `name: triage
 inputs:
@@ -176,7 +177,7 @@ triggers:
     integration:
       integration: github
       events: [issues.opened]
-    filter: 'trigger.sender.id == "octocat"'
+    filter: 'trigger.sender.id == "583231"'
     inputs:
       requester: "{{ trigger.sender.display_name }}"
 entry: [a]
@@ -201,7 +202,7 @@ func TestActivationFilterAndInputsReadTheSender(t *testing.T) {
 	workflows := fakeWorkflows{yaml: map[string]string{"triage": senderGatedWorkflow}}
 	intake := NewIntake(repo, &recordingStarter{}, "q").WithWorkflows(workflows)
 
-	hubot := &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "hubot", DisplayName: "hubot", Verified: true}
+	hubot := &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "7", DisplayName: "hubot", Verified: true}
 	res, err := intake.Accept(context.Background(), trig, InboundEvent{
 		Kind: core.TriggerEventKindIntegration, DedupeKey: "t-sender:d0", Payload: map[string]any{}, Sender: hubot,
 	}, AcceptOptions{})

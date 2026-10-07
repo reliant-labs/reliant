@@ -6,7 +6,7 @@
 
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { fireEvent, screen, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
@@ -26,10 +26,11 @@ const searchCatalog = vi.fn();
 const getCatalogEntry = vi.fn();
 const setTriggerEnabled = vi.fn();
 const listConnections = vi.fn();
+const resolveTriggerSenders = vi.fn();
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
     catalog: () => ({ searchCatalog, getCatalogEntry }),
-    trigger: () => ({ setTriggerEnabled }),
+    trigger: () => ({ setTriggerEnabled, resolveTriggerSenders }),
     connection: () => ({ listConnections }),
   },
   getGRPCBaseURLPublic: () => null,
@@ -40,7 +41,12 @@ import { WorkflowMutationProvider } from "../../WorkflowMutationContext";
 import type { Workflow } from "@/types/workflow";
 import type { DeclaredTrigger } from "@/lib/declaredTriggers";
 import type { Trigger } from "@/api/trigger-grpc";
-import { SetTriggerEnabledResponseSchema, TriggerSchema } from "@/gen/reliant/v1/trigger_pb";
+import {
+  ResolvedTriggerSenderSchema,
+  ResolveTriggerSendersResponseSchema,
+  SetTriggerEnabledResponseSchema,
+  TriggerSchema,
+} from "@/gen/reliant/v1/trigger_pb";
 import { ConnectionSchema, ConnectionStatus, ListConnectionsResponseSchema } from "@/gen/reliant/v1/connection_pb";
 import { createInput } from "@/lib/inputHelpers";
 
@@ -159,7 +165,17 @@ beforeEach(() => {
   listConnections.mockReset();
   listConnections.mockResolvedValue(
     create(ListConnectionsResponseSchema, {
-      connections: [create(ConnectionSchema, { id: "conn_gh", integrationId: "github", name: "work", senderId: "OctoCat", status: ConnectionStatus.ACTIVE, isDefault: true })],
+      connections: [
+        create(ConnectionSchema, {
+          id: "conn_gh",
+          integrationId: "github",
+          name: "work",
+          accountLabel: "OctoCat",
+          senderId: "583231",
+          status: ConnectionStatus.ACTIVE,
+          isDefault: true,
+        }),
+      ],
     }),
   );
 });
@@ -194,16 +210,25 @@ describe("DeclaredTriggerPanel", () => {
 
   it("'Only from' on the Definition tab writes the declaration's filter, after what is already there", async () => {
     const user = userEvent.setup();
+    resolveTriggerSenders.mockResolvedValue(
+      create(ResolveTriggerSendersResponseSchema, {
+        senders: [create(ResolvedTriggerSenderSchema, { query: "Hubot", senderId: "7", displayName: "hubot" })],
+      }),
+    );
     const { latest } = renderPanel([{ ...issueTrigger, filter: "trigger.payload.data.issue.number > 0" } as DeclaredTrigger]);
 
-    await user.click(await screen.findByRole("button", { name: "Add me (octocat)" }));
+    // GitHub senders are user ids; the control shows them by login.
+    await user.click(await screen.findByRole("button", { name: "Add me (OctoCat)" }));
     expect(latest()![0]!.filter).toBe(
-      `(trigger.payload.data.issue.number > 0) && trigger.sender.verified && trigger.sender.id in ["octocat"]`,
+      `(trigger.payload.data.issue.number > 0) && trigger.sender.verified && trigger.sender.id in ["583231"]`,
     );
     await user.type(screen.getByLabelText("Add a sender"), "Hubot{Enter}");
-    expect(latest()![0]!.filter).toBe(
-      `(trigger.payload.data.issue.number > 0) && trigger.sender.verified && trigger.sender.id in ["octocat", "hubot"]`,
+    await waitFor(() =>
+      expect(latest()![0]!.filter).toBe(
+        `(trigger.payload.data.issue.number > 0) && trigger.sender.verified && trigger.sender.id in ["583231", "7"]`,
+      ),
     );
+    expect(screen.getByRole("list", { name: "Allowed senders" })).toHaveTextContent("OctoCathubot");
     expect(screen.getByTestId("dirty")).toHaveTextContent("true");
   });
 

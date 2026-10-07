@@ -242,17 +242,21 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 // X-Hub-Signature-256 the provider verified before parsing, so it is
 // verified.
 //
-// The id is the login, lowercased: logins are case-insensitive on GitHub,
-// and an allowlist written as "octocat" must match a delivery that says
-// "Octocat". The display name keeps GitHub's casing. The numeric account id
-// stays in trigger.payload.data.sender.id; a login can be renamed and later
-// claimed by someone else, which an allowlist of logins accepts as the cost
-// of being readable.
+// The id is GitHub's numeric user id, as a string, and the display name is
+// the login. Never the other way round: a login can be renamed, and the old
+// one registered by someone else, so an allowlist of logins would admit
+// whoever claims a name after its owner gave it up. The numeric id is
+// assigned once and never reused. "Only from" shows the login and stores the
+// id (web/src/lib/onlyFromFilter.ts).
 func sender(body *payload) *core.TriggerSender {
 	login := senderLogin(body)
+	id := ""
+	if body.Sender != nil && body.Sender.ID > 0 {
+		id = strconv.FormatInt(body.Sender.ID, 10)
+	}
 	return &core.TriggerSender{
 		Kind:        core.TriggerSenderKindGitHub,
-		ID:          strings.ToLower(login),
+		ID:          id,
 		DisplayName: login,
 		Verified:    login != "",
 	}

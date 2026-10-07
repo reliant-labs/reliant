@@ -2,12 +2,15 @@
 package triggers
 
 import (
+	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
 )
 
 func TestCompileFilterRejectsWhatCannotRun(t *testing.T) {
@@ -49,8 +52,8 @@ func TestCompileFilterAcceptsTheTriggerRoot(t *testing.T) {
 func TestCompileFilterAcceptsTheSender(t *testing.T) {
 	for _, expr := range []string{
 		`trigger.sender.verified && trigger.sender.id in ["U123"]`,
-		`trigger.sender.id == "octocat"`,
-		`(trigger.payload.data.issue.number > 1) && trigger.sender.verified && trigger.sender.id in ["octocat", "hubot"]`,
+		`trigger.sender.id == "583231"`,
+		`(trigger.payload.data.issue.number > 1) && trigger.sender.verified && trigger.sender.id in ["583231", "7"]`,
 		`trigger.sender.kind == "email" && trigger.sender.display_name != ""`,
 	} {
 		_, err := CompileFilter(expr)
@@ -80,11 +83,57 @@ func TestSenderFilterMatchesOnlyAVerifiedAllowlistedSender(t *testing.T) {
 		})
 	}
 
-	login, err := CompileFilter(`trigger.sender.id == "octocat"`)
+	byID, err := CompileFilter(`trigger.sender.id == "583231"`)
 	require.NoError(t, err)
-	hit, err := login.Match(FilterInput{Kind: "integration", Sender: &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "octocat", Verified: true}})
+	hit, err := byID.Match(FilterInput{Kind: "integration", Sender: &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "583231", DisplayName: "octocat", Verified: true}})
 	require.NoError(t, err)
 	assert.True(t, hit)
+}
+
+// gitHubSender is the trigger.sender the GitHub receiver records for an
+// issue opened by login, whose GitHub user id is id.
+func gitHubSender(t *testing.T, login string, id int64) *core.TriggerSender {
+	t.Helper()
+	body := fmt.Sprintf(`{"action":"opened","issue":{"number":1,"title":"t"},"repository":{"id":1,"full_name":"acme/app"},`+
+		`"installation":{"id":2},"sender":{"login":%q,"id":%d,"type":"User"}}`, login, id)
+	parsed, err := github.Parse("issues", []byte(body), time.Now())
+	require.NoError(t, err)
+	require.Len(t, parsed.Events, 1)
+	return parsed.Events[0].Sender
+}
+
+// "Only from" on GitHub, end to end from what the receiver records: the list
+// names a person by their GitHub user id, so it follows them through a rename
+// and never follows their old login to whoever registers it next.
+func TestGitHubOnlyFromFollowsTheUserIDNotTheLogin(t *testing.T) {
+	only, err := CompileFilter(`trigger.sender.verified && trigger.sender.id in ["583231"]`)
+	require.NoError(t, err)
+	for name, tc := range map[string]struct {
+		sender *core.TriggerSender
+		want   bool
+	}{
+		"the person":                        {gitHubSender(t, "octocat", 583231), true},
+		"the person, renamed":               {gitHubSender(t, "octo-renamed", 583231), true},
+		"someone who claimed their login":   {gitHubSender(t, "octocat", 99999999), false},
+		"someone with a lookalike login":    {gitHubSender(t, "OctoCat", 31337), false},
+		"a login that happens to be the id": {gitHubSender(t, "583231", 4242), false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			hit, err := only.Match(FilterInput{Kind: "integration", Sender: tc.sender})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, hit)
+		})
+	}
+
+	// A list of logins — what "Only from" wrote before ids — admits nobody,
+	// not even the login's owner. That is why the migration that shipped with
+	// this change cleared such lists and disabled their triggers instead of
+	// leaving them to match nothing in silence.
+	stale, err := CompileFilter(`trigger.sender.verified && trigger.sender.id in ["octocat"]`)
+	require.NoError(t, err)
+	hit, err := stale.Match(FilterInput{Kind: "integration", Sender: gitHubSender(t, "octocat", 583231)})
+	require.NoError(t, err)
+	assert.False(t, hit)
 }
 
 func TestFilterMatchEvaluatesOverThePayload(t *testing.T) {

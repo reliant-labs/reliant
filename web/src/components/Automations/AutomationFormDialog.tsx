@@ -776,6 +776,7 @@ function AutomationFormBody({
               filter={filter}
               onChange={setFilter}
               connectionId={trigger?.connectionId}
+              triggerId={trigger?.id}
               classes={{ label: labelClass, input: fieldClass, hint: hintClass }}
             />
           )}

@@ -29,6 +29,12 @@ export interface GitCredentialStatus {
   /** The GitHub account the token belongs to. Empty when the provider could
    *  not be reached — the UI then shows health rather than an unverified name. */
   accountLogin?: string;
+  /** GitHub's numeric user id for that account (digits, as a string): the id
+   *  `trigger.sender.id` carries, so what "Only from: Me" stores. Unset until
+   *  control-plane reports it — its GetGitCredentialResponse does not yet
+   *  carry the id (see readAccountId in cloud.ts) — and whenever the login
+   *  above is unset. */
+  accountId?: string;
   accountAvatarUrl?: string;
   kind?: GitCredentialKind;
   health?: GitCredentialHealth;

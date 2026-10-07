@@ -379,8 +379,10 @@ const (
 // but an allowlist must require verified to mean anything.
 type TriggerSender struct {
 	Kind TriggerSenderKind `json:"kind"`
-	// ID is the provider's own identifier for the sender: a Slack user id,
-	// a GitHub login, an email address, an E.164 number, a trigger id.
+	// ID is the provider's own stable identifier for the sender: a Slack
+	// user id, a GitHub user id (the number, as a string — never the login,
+	// which can be renamed and reclaimed), an email address, an E.164 number,
+	// a trigger id.
 	ID string `json:"id"`
 	// DisplayName is for people; never authorize on it.
 	DisplayName string `json:"display_name,omitempty"`

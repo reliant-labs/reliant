@@ -15,6 +15,9 @@
  * `verified` is part of the clause on purpose: an id the source could not
  * vouch for (an email whose DMARC failed) is a claim, and an allowlist of
  * claims admits whoever claims to be on it.
+ *
+ * The list holds ids, never names: on GitHub the numeric user id, which the
+ * control shows by login (hooks/useSenderNames).
  */
 
 /** Integrations whose senders a source can verify, so an allowlist means something. */
@@ -27,13 +30,28 @@ export function isOnlyFromIntegration(integration: string | undefined): integrat
 }
 
 /**
- * An allowlist entry in the form trigger.sender.id carries it: GitHub logins
- * and email addresses are case-insensitive and arrive lowercased; a Slack
- * user id is kept exactly.
+ * An allowlist entry in the form trigger.sender.id carries it: email addresses
+ * are case-insensitive and arrive lowercased; a Slack user id and a GitHub
+ * user id are kept exactly.
  */
 export function normalizeSenderId(integration: string | undefined, raw: string): string {
   const id = raw.trim();
-  return integration === "github" || integration === "gmail" ? id.toLowerCase() : id;
+  return integration === "gmail" ? id.toLowerCase() : id;
+}
+
+/**
+ * Whether id is a GitHub user id, the only thing trigger.sender.id carries on
+ * GitHub: the number GitHub assigns once and never reuses. A login is not one
+ * — it can be renamed, and the old one registered by someone else — so a
+ * login in a GitHub list (written before senders were ids) matches nobody.
+ */
+export function isGitHubUserId(id: string): boolean {
+  return /^[1-9][0-9]*$/.test(id);
+}
+
+/** A GitHub login as typed: trimmed, without a leading "@". */
+export function gitHubLogin(raw: string): string {
+  return raw.trim().replace(/^@/, "");
 }
 
 export type OnlyFromState =

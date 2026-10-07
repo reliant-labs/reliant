@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { normalizeSenderId, onlyFromClause, parseOnlyFrom, withOnlyFrom } from '../onlyFromFilter'
+import { gitHubLogin, isGitHubUserId, normalizeSenderId, onlyFromClause, parseOnlyFrom, withOnlyFrom } from '../onlyFromFilter'
 
 describe('Only from: the sender clause of a trigger filter', () => {
   it('writes the clause the server compiles (internal/triggers filter_test.go)', () => {
@@ -58,8 +58,17 @@ describe('Only from: the sender clause of a trigger filter', () => {
   })
 
   it('normalizes ids the way trigger.sender carries them', () => {
-    expect(normalizeSenderId('github', ' OctoCat ')).toBe('octocat')
+    expect(normalizeSenderId('github', ' 583231 ')).toBe('583231')
     expect(normalizeSenderId('gmail', 'Boss@Example.com')).toBe('boss@example.com')
     expect(normalizeSenderId('slack', ' U0ABC ')).toBe('U0ABC')
+  })
+
+  it('knows a GitHub user id from a login', () => {
+    expect(isGitHubUserId('583231')).toBe(true)
+    // A login, even one that looks like a number, is not what trigger.sender.id carries.
+    for (const notAnId of ['octocat', 'OctoCat', '0', '0123', '12a', '', '-1', 'dependabot[bot]']) {
+      expect(isGitHubUserId(notAnId), notAnId).toBe(false)
+    }
+    expect(gitHubLogin('  @OctoCat ')).toBe('OctoCat')
   })
 })

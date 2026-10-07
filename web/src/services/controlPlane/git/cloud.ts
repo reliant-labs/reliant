@@ -11,6 +11,7 @@ import { timestampDate, type Timestamp } from "@bufbuild/protobuf/wkt";
 import { ConnectError } from "@connectrpc/connect";
 import { getControlPlaneClient } from "../client";
 import { CONTROL_PLANE_API_URL } from "../config";
+import { readAccountId } from "./accountId";
 import {
   GitCredentialService,
   GitCredentialHealth as PbHealth,
@@ -78,6 +79,7 @@ export async function getCredential(
       createdAt: timestampToISO(res.createdAt),
       updatedAt: timestampToISO(res.updatedAt),
       accountLogin: res.accountLogin || undefined,
+      accountId: res.accountLogin ? readAccountId(res) : undefined,
       accountAvatarUrl: res.accountAvatarUrl || undefined,
       kind: credentialKindFromProto(res.kind),
       health: credentialHealthFromProto(res.health),

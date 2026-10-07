@@ -109,7 +109,8 @@ export type Connection = Message<"reliant.v1.Connection"> & {
   /**
    * The provider's id for the person who made this connection, as that
    * provider's events name them in trigger.sender.id: a Slack user id, a
-   * GitHub login, a Gmail address. Empty when the integration does not say.
+   * GitHub user id (the number, never the renameable login), a Gmail
+   * address. Empty when the integration does not say.
    * It is what a trigger's "Only from: Me" allowlists.
    *
    * @generated from field: string sender_id = 16;

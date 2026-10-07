@@ -220,7 +220,8 @@ type Connection struct {
 	Params map[string]string `protobuf:"bytes,15,rep,name=params,proto3" json:"params,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// The provider's id for the person who made this connection, as that
 	// provider's events name them in trigger.sender.id: a Slack user id, a
-	// GitHub login, a Gmail address. Empty when the integration does not say.
+	// GitHub user id (the number, never the renameable login), a Gmail
+	// address. Empty when the integration does not say.
 	// It is what a trigger's "Only from: Me" allowlists.
 	SenderId      string `protobuf:"bytes,16,opt,name=sender_id,json=senderId,proto3" json:"sender_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
