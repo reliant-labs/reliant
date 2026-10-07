@@ -18,7 +18,8 @@
 //	DATABASE_URL=postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable \
 //	  go test -tags e2e ./e2e/stories/ -v
 //
-// (make e2e brings up Postgres via docker compose and runs the suite.)
+// (`make test-e2e` runs the suite against your DATABASE_URL, or, when it is
+// unset, brings up the compose Postgres and uses that.)
 //
 // Each story is independent and parallel-safe: it creates its own user,
 // project, chat, and Temporal worker on a unique task queue. The Postgres

@@ -123,7 +123,13 @@ decides which:
   `scripts/dev.sh` stack on the machine, so prefer the first mode whenever you
   have a database of your own.
 
-The two steps are also fine to run by hand, which is all the target does:
+That choice is the Makefile's, and it is the same for every Make target that
+runs Go tests (see "Which Postgres the Go tests use" in the `Makefile`). The
+generator itself never picks a server: run by hand without `DATABASE_URL`, it
+exits with an error instead.
+
+The two steps are also fine to run by hand, which is all the target does. Only
+the first needs a database; the replay check is hermetic:
 
 ```
 DATABASE_URL=... go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/

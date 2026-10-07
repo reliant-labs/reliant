@@ -96,9 +96,30 @@ plugins. `make pin-forge` regenerates for you.
 ## Running Tests
 
 ```bash
+make postgres-up       # once: this repo's compose Postgres, for DB-backed tests
 make test              # Go tests
 npm run verify:dev     # full verification (lint + type-check + tests)
 ```
+
+### Which database the Go tests use
+
+DB-backed tests use `DATABASE_URL` and nothing else. They never pick a server
+on their own:
+
+- **`make test`** (and `test-short`, `test-race`, `test-coverage`, `test-e2e`,
+  `replay-fixtures`) passes `DATABASE_URL` for you: yours if you set one,
+  otherwise the compose Postgres from `make postgres-up`. `test-e2e` and
+  `replay-fixtures` start that container only when they are about to use it.
+- **Plain `go test`** with `DATABASE_URL` unset skips every DB-backed test,
+  loudly, and connects to nothing. To run them, set it yourself:
+  `DATABASE_URL='postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable' go test ./...`
+  for the compose Postgres, or point it at a database of your own.
+- **`REQUIRE_TEST_DB=1`** turns that skip into a failure. CI sets it, so a
+  green run means the DB-backed tests actually ran.
+
+Each test gets its own throwaway database, copied from a migrated template, and
+drops it when done. They are named `rlnttest_*`, and nothing else on the
+server is touched — but on a shared machine, prefer a server of your own.
 
 ## Making Changes
 
