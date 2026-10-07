@@ -17,6 +17,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/filepreview"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
@@ -24,7 +25,8 @@ import (
 )
 
 // FileSystemProxyService implements FileSystemServiceHandler by forwarding
-// requests to the user's daemon via DaemonCommand (request/response).
+// requests to a daemon via DaemonCommand (request/response): the machine that
+// holds the workspace a request names (see workspaceDaemonID).
 type FileSystemProxyService struct {
 	reliantv1connect.UnimplementedFileSystemServiceHandler
 	router   toolexec.DaemonRouter
@@ -75,7 +77,97 @@ func (s *FileSystemProxyService) requireProjectBase(ctx context.Context, project
 	return basePath, nil
 }
 
-// resolvePath turns a client path into the absolute, confined path the daemon
+// workspaceScope is where a workspace-scoped request acts: the directory it
+// is confined to, and the machine that directory is on.
+type workspaceScope struct {
+	basePath string
+	// daemonID is the machine holding basePath, or "" when default resolution
+	// picks it. See workspaceDaemonID.
+	daemonID string
+}
+
+// resolveScope resolves the workspace root a request is scoped to and the
+// machine it must run on. Every request that names a project goes through
+// here, so a file tree, a preview and a save of the same file cannot land on
+// different machines.
+func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (workspaceScope, error) {
+	basePath, err := s.requireProjectBase(ctx, projectID, worktreeID, chatID)
+	if err != nil {
+		return workspaceScope{}, err
+	}
+	daemonID, err := s.workspaceDaemonID(ctx, userID, projectID, worktreeID, chatID)
+	if err != nil {
+		return workspaceScope{}, err
+	}
+	return workspaceScope{basePath: basePath, daemonID: daemonID}, nil
+}
+
+// workspaceDaemonID returns the machine a workspace-scoped request must run
+// on, or "" to leave it to default resolution.
+//
+// The files exist on one machine. For a request made for a chat (chat_id) it
+// is the chat's machine: its pinned daemon, else its worktree's owner
+// (chatDaemonID, the precedence ExecuteTools routes the chat's tools by). The
+// Files tab and the preview must show the files the chat's tools read and
+// write. Default resolution picks the user's default machine instead, which is
+// the wrong disk for any chat on another machine, main checkout included.
+//
+// A request that names a worktree some machine owns, other than the chat's
+// own, is about that worktree, and goes to its owner: no other machine has the
+// checkout. Without a chat, an owned worktree goes to its owner too. Anything
+// else (the main checkout, legacy rows that record no owner) keeps default
+// resolution.
+func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (string, error) {
+	var worktree *db.Worktree
+	if worktreeID != nil && *worktreeID != "" {
+		wt, err := s.database.GetWorktree(ctx, *worktreeID)
+		switch {
+		case errors.Is(err, core.ErrWorktreeNotFound):
+			// A missing row means "no owner", as it does for tool routing.
+		case err != nil:
+			logging.Error("[FSProxy] Failed to load worktree to route request", "error", err, "worktreeID", *worktreeID)
+			return "", connect.NewError(connect.CodeInternal, errors.New("failed to resolve the workspace's machine"))
+		default:
+			worktree = wt
+		}
+	}
+	owner := worktreeOwner(worktree)
+
+	if chatID == nil || *chatID == "" {
+		return owner, nil
+	}
+	chat, err := s.database.GetChat(ctx, *chatID)
+	switch {
+	case errors.Is(err, core.ErrChatNotFound):
+		// The UI can still name a chat it has just deleted. Degrade to the
+		// routing a request without a chat gets rather than fail the tree.
+		return owner, nil
+	case err != nil:
+		logging.Error("[FSProxy] Failed to load chat to route request", "error", err, "chatID", *chatID)
+		return "", connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
+	case chat.UserID != userID:
+		return "", connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
+	case chat.ProjectID != projectID:
+		// A chat from another project says nothing about this project's
+		// files. It is stale UI context (a project switch racing the tree),
+		// and ResolveBasePath ignores it the same way.
+		return owner, nil
+	}
+	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
+		return owner, nil
+	}
+	daemonID, err := chatDaemonID(ctx, s.database, chat)
+	if err != nil {
+		logging.Error("[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
+		return "", connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
+	}
+	if daemonID != "" {
+		return daemonID, nil
+	}
+	return owner, nil
+}
+
+// resolve turns a client path into the absolute, confined path the daemon
 // will act on.
 //
 // The "" | "/" == workspace root rule and the confinement check are NOT
@@ -89,15 +181,11 @@ func (s *FileSystemProxyService) requireProjectBase(ctx context.Context, project
 // the daemon.
 //
 // Errors are already typed connect errors — PermissionDenied for an escape,
-// InvalidArgument for a malformed request, NotFound for an unknown project —
-// so callers return them unchanged. Re-wrapping them as NotFound (which every
-// call site used to do) reported a refused traversal as a missing file.
-func (s *FileSystemProxyService) resolvePath(ctx context.Context, projectID string, worktreeID *string, chatID *string, requestedPath string) (string, error) {
-	basePath, err := s.requireProjectBase(ctx, projectID, worktreeID, chatID)
-	if err != nil {
-		return "", err
-	}
-	return validateWorkspacePath(basePath, requestedPath, filepreview.ScopeBaseOnly)
+// InvalidArgument for a malformed request — so callers return them unchanged.
+// Re-wrapping them as NotFound (which every call site used to do) reported a
+// refused traversal as a missing file.
+func (w workspaceScope) resolve(requestedPath string) (string, error) {
+	return validateWorkspacePath(w.basePath, requestedPath, filepreview.ScopeBaseOnly)
 }
 
 // projectRelativePrefix reports where resolvedPath sits under basePath, in the
@@ -119,15 +207,20 @@ func projectRelativePrefix(basePath, resolvedPath string) string {
 	return strings.Trim(filepath.ToSlash(rel), "/")
 }
 
-// sendCommand is a helper that marshals the request, sends the daemon command,
-// and unmarshals the response.
-func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID, commandType string, req any, resp any, timeoutMs int32) error {
+// sendCommand is a helper that marshals the request, sends the daemon command
+// to daemonID ("" = default resolution), and unmarshals the response.
+func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID, daemonID, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
-	respBytes, err := s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	var respBytes []byte
+	if daemonID == "" {
+		respBytes, err = s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
+	} else {
+		respBytes, err = s.router.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
+	}
 	if err != nil {
 		// A daemon that exists but hasn't connected yet (still
 		// provisioning) is retryable, unlike every other daemon-command
@@ -157,11 +250,11 @@ func (s *FileSystemProxyService) GetFileTree(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	basePath, err := s.requireProjectBase(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	resolvedPath, err := validateWorkspacePath(basePath, req.Msg.Path, filepreview.ScopeBaseOnly)
+	resolvedPath, err := scope.resolve(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +270,7 @@ func (s *FileSystemProxyService) GetFileTree(
 		Truncated bool              `json:"truncated"`
 		NodeCount int               `json:"node_count"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -193,7 +286,7 @@ func (s *FileSystemProxyService) GetFileTree(
 	// FileSystemService's contract and what the UI needs to lazily expand a
 	// subdirectory (child path = parent path + "/" + name). Root requests
 	// ("" / "/") need no prefix.
-	if prefix := projectRelativePrefix(basePath, resolvedPath); prefix != "" {
+	if prefix := projectRelativePrefix(scope.basePath, resolvedPath); prefix != "" {
 		for _, f := range files {
 			prefixFileNodePaths(f, prefix)
 		}
@@ -265,7 +358,11 @@ func (s *FileSystemProxyService) GetFileContent(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -280,7 +377,7 @@ func (s *FileSystemProxyService) GetFileContent(
 		Truncated  bool   `json:"truncated"`
 		Size       int64  `json:"size"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -299,7 +396,11 @@ func (s *FileSystemProxyService) SaveFileContent(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -314,7 +415,7 @@ func (s *FileSystemProxyService) SaveFileContent(
 		BytesWritten int    `json:"bytes_written"`
 		ModTime      string `json:"mod_time"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -333,7 +434,11 @@ func (s *FileSystemProxyService) GetFileMetadata(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -349,7 +454,7 @@ func (s *FileSystemProxyService) GetFileMetadata(
 		IsDir   bool      `json:"is_dir"`
 		Mode    string    `json:"mode"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -384,7 +489,11 @@ func (s *FileSystemProxyService) GetFilePreviewInfo(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -403,7 +512,7 @@ func (s *FileSystemProxyService) GetFilePreviewInfo(
 		IsBinary   bool   `json:"is_binary"`
 		IsEditable bool   `json:"is_editable"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.preview_info", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.preview_info", cmdReq, &cmdResp, 30000); err != nil {
 		// Requesting preview info for a directory is a client-input condition
 		// (e.g. the UI asking for a tree folder), not a server failure. Return
 		// the same typed error as the local FileSystemService so it stays out
@@ -441,7 +550,11 @@ func (s *FileSystemProxyService) CreateFileOrFolder(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +566,7 @@ func (s *FileSystemProxyService) CreateFileOrFolder(
 			"path": resolvedPath,
 		}
 		var cmdResp struct{}
-		if err := s.sendCommand(ctx, userID, "fs.mkdir", cmdReq, &cmdResp, 30000); err != nil {
+		if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.mkdir", cmdReq, &cmdResp, 30000); err != nil {
 			return nil, err
 		}
 	} else {
@@ -466,7 +579,7 @@ func (s *FileSystemProxyService) CreateFileOrFolder(
 			BytesWritten int    `json:"bytes_written"`
 			ModTime      string `json:"mod_time"`
 		}
-		if err := s.sendCommand(ctx, userID, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
+		if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
 			return nil, err
 		}
 	}
@@ -491,7 +604,11 @@ func (s *FileSystemProxyService) DeleteFileOrFolder(
 		return nil, connect.NewError(connect.CodeUnauthenticated, err)
 	}
 
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.Path)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(req.Msg.Path)
 	if err != nil {
 		return nil, err
 	}
@@ -501,7 +618,7 @@ func (s *FileSystemProxyService) DeleteFileOrFolder(
 	}
 
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, "fs.delete", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.delete", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -523,11 +640,15 @@ func (s *FileSystemProxyService) CopyFile(
 	// Both endpoints are confined, not merely joined: filepath.Join(base,
 	// "../../etc/passwd") cleans into an escape, so a copy could previously
 	// read from or write to any path on the daemon.
-	sourcePath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.SourcePath)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
 	if err != nil {
 		return nil, err
 	}
-	destPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, req.Msg.DestinationPath)
+	sourcePath, err := scope.resolve(req.Msg.SourcePath)
+	if err != nil {
+		return nil, err
+	}
+	destPath, err := scope.resolve(req.Msg.DestinationPath)
 	if err != nil {
 		return nil, err
 	}
@@ -541,7 +662,7 @@ func (s *FileSystemProxyService) CopyFile(
 		Message     string `json:"message"`
 		Destination string `json:"destination"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.copy", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.copy", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -565,7 +686,11 @@ func (s *FileSystemProxyService) SearchFiles(
 	if req.Msg.Path != nil {
 		searchPath = *req.Msg.Path
 	}
-	resolvedPath, err := s.resolvePath(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId, searchPath)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(searchPath)
 	if err != nil {
 		return nil, err
 	}
@@ -600,7 +725,7 @@ func (s *FileSystemProxyService) SearchFiles(
 		Matches   []daemonSearchMatch `json:"matches"`
 		Truncated bool                `json:"truncated"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.search", cmdReq, &cmdResp, 60000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.search", cmdReq, &cmdResp, 60000); err != nil {
 		return nil, err
 	}
 
@@ -656,13 +781,13 @@ func (s *FileSystemProxyService) ReplaceInFiles(
 	// base_dir is the only thing bounding this walk. Omitting it (which an
 	// empty base used to do) leaves the daemon to fall back to its own working
 	// directory and rewrite files across the whole machine.
-	basePath, err := s.requireProjectBase(ctx, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
 	if err != nil {
 		return nil, err
 	}
 
 	opts := map[string]any{
-		"base_dir": basePath,
+		"base_dir": scope.basePath,
 	}
 	if req.Msg.FilePattern != nil {
 		opts["file_glob"] = *req.Msg.FilePattern
@@ -684,7 +809,7 @@ func (s *FileSystemProxyService) ReplaceInFiles(
 			Replacements int    `json:"replacements"`
 		} `json:"changes"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.find_replace", cmdReq, &cmdResp, 60000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.find_replace", cmdReq, &cmdResp, 60000); err != nil {
 		return nil, err
 	}
 
@@ -747,7 +872,8 @@ func (s *FileSystemProxyService) ListDirectory(
 		Path    string            `json:"path"`
 		Entries []fsProxyDirEntry `json:"entries"`
 	}
-	if err := s.sendCommand(ctx, userID, "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
+	// No workspace to follow: the project picker browses the default machine.
+	if err := s.sendCommand(ctx, userID, "", "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 
@@ -804,7 +930,7 @@ func (s *FileSystemProxyService) CreateDirectory(
 		"path": path,
 	}
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, "", "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 

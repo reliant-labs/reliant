@@ -54,7 +54,7 @@ func TestRemoteExecutorKeepsNoMachineRunsOffTheDaemon(t *testing.T) {
 	server := &LocalToolExecutor{}
 	executor.SetServerExecutor(server)
 	var handedClient daemon.Client
-	executor.SetDaemonClientFactory(func(string) daemon.Client {
+	executor.SetDaemonClientFactory(func(string, *DaemonSelector) daemon.Client {
 		handedClient = daemon.NewLocalClient()
 		return handedClient
 	})

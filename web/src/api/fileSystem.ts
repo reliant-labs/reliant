@@ -67,6 +67,22 @@ export const FILE_TREE_DEPTH_MAX = -1;
 export const FILE_TREE_DEPTH_SERVER_DEFAULT = 0;
 
 /**
+ * The chat the file APIs act for: the open one.
+ *
+ * The server sends each request to that chat's machine (its pinned machine,
+ * else its workspace's owner), which is where its tools read and write.
+ * Without it a request goes to the user's default machine, the wrong disk for
+ * a chat on any other machine, main checkout included.
+ *
+ * Imported lazily, like the worktree store below, to keep this module out of
+ * the store's import graph.
+ */
+async function activeChatIdForAPI(): Promise<string | undefined> {
+  const { useChatStore } = await import("../store/chatStore");
+  return useChatStore.getState().activeChatId ?? undefined;
+}
+
+/**
  * Fetches the file tree structure from the API.
  *
  * @param path - Optional path to start from (default: the project/worktree root)
@@ -88,7 +104,7 @@ export async function getFileTree(path: string = "/", showHidden: boolean = fals
     return [];
   }
 
-  return await filesystemGrpc.getFileTree(currentProject.id, path, showHidden, worktreeId, undefined, depth);
+  return await filesystemGrpc.getFileTree(currentProject.id, path, showHidden, worktreeId, await activeChatIdForAPI(), depth);
 }
 
 /**
@@ -125,7 +141,7 @@ export async function getFileContent(path: string, worktreeId?: string): Promise
 
   try {
     const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-    return await filesystemGrpc.getFileContent(currentProject.id, apiPath, worktreeId);
+    return await filesystemGrpc.getFileContent(currentProject.id, apiPath, worktreeId, await activeChatIdForAPI());
   } catch (error) {
     console.error("Failed to fetch file content:", error);
     throw error; // Re-throw to let FileViewer handle it
@@ -147,7 +163,7 @@ export async function saveFileContent(path: string, content: string, worktreeId?
     }
 
     const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-    await filesystemGrpc.saveFileContent(currentProject.id, apiPath, content, worktreeId);
+    await filesystemGrpc.saveFileContent(currentProject.id, apiPath, content, worktreeId, await activeChatIdForAPI());
     // Trigger git status refresh after file save
     triggerGitStatusRefresh(worktreeId, currentProject.id);
   } catch (error) {
@@ -170,7 +186,7 @@ export async function getFileMetadata(path: string, worktreeId?: string): Promis
     }
 
     const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-    return await filesystemGrpc.getFileMetadata(currentProject.id, apiPath, worktreeId);
+    return await filesystemGrpc.getFileMetadata(currentProject.id, apiPath, worktreeId, await activeChatIdForAPI());
   } catch (error) {
     console.error("Failed to fetch file metadata:", error);
     throw error;
@@ -185,7 +201,7 @@ export async function getFilePreviewInfo(path: string, worktreeId?: string) {
     }
 
     const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-    return await filesystemGrpc.getFilePreviewInfo(currentProject.id, apiPath, worktreeId);
+    return await filesystemGrpc.getFilePreviewInfo(currentProject.id, apiPath, worktreeId, await activeChatIdForAPI());
   } catch (error) {
     console.error("Failed to fetch file preview info:", error);
     throw error;
@@ -199,7 +215,7 @@ export async function getFilePreviewBlob(path: string, worktreeId?: string): Pro
   }
 
   const apiPath = await normalizeFilePathForAPI(path, worktreeId);
-  const response = await filesystemGrpc.getFilePreview(currentProject.id, apiPath, worktreeId);
+  const response = await filesystemGrpc.getFilePreview(currentProject.id, apiPath, worktreeId, await activeChatIdForAPI());
   return new Blob([response.content], { type: response.contentType });
 }
 
@@ -229,7 +245,7 @@ export async function searchFiles(
     throw new Error("No current project selected");
   }
 
-  return await filesystemGrpc.searchFiles(currentProject.id, query, options);
+  return await filesystemGrpc.searchFiles(currentProject.id, query, { ...options, chatId: await activeChatIdForAPI() });
 }
 
 /**
@@ -246,7 +262,7 @@ export async function createFile(path: string, content: string = "", worktreeId?
       throw new Error("No current project selected");
     }
 
-    await filesystemGrpc.createFile(currentProject.id, path, content, worktreeId);
+    await filesystemGrpc.createFile(currentProject.id, path, content, worktreeId, await activeChatIdForAPI());
     // Trigger git status refresh after file creation
     triggerGitStatusRefresh(worktreeId, currentProject.id);
   } catch (error) {
@@ -268,7 +284,7 @@ export async function createFolder(path: string, worktreeId?: string): Promise<v
       throw new Error("No current project selected");
     }
 
-    await filesystemGrpc.createFolder(currentProject.id, path, worktreeId);
+    await filesystemGrpc.createFolder(currentProject.id, path, worktreeId, await activeChatIdForAPI());
     // Trigger git status refresh after folder creation
     triggerGitStatusRefresh(worktreeId, currentProject.id);
   } catch (error) {
@@ -290,7 +306,7 @@ export async function deleteFileOrFolder(path: string, worktreeId?: string): Pro
       throw new Error("No current project selected");
     }
 
-    await filesystemGrpc.deleteFileOrFolder(currentProject.id, path, worktreeId);
+    await filesystemGrpc.deleteFileOrFolder(currentProject.id, path, worktreeId, await activeChatIdForAPI());
     // Trigger git status refresh after deletion
     triggerGitStatusRefresh(worktreeId, currentProject.id);
   } catch (error) {
@@ -313,7 +329,7 @@ export async function copyFile(sourcePath: string, destinationPath: string, work
       throw new Error("No current project selected");
     }
 
-    await filesystemGrpc.copyFile(currentProject.id, sourcePath, destinationPath, worktreeId);
+    await filesystemGrpc.copyFile(currentProject.id, sourcePath, destinationPath, worktreeId, await activeChatIdForAPI());
     // Trigger git status refresh after file copy
     triggerGitStatusRefresh(worktreeId, currentProject.id);
   } catch (error) {
@@ -376,7 +392,7 @@ export async function moveFile(sourcePath: string, destinationPath: string, work
     }
 
     // Move = copy + delete
-    await filesystemGrpc.copyFile(currentProject.id, sourcePath, destinationPath, worktreeId);
+    await filesystemGrpc.copyFile(currentProject.id, sourcePath, destinationPath, worktreeId, await activeChatIdForAPI());
     await deleteFileOrFolder(sourcePath, worktreeId);
   } catch (error) {
     console.error("Failed to move file:", error);
@@ -407,7 +423,7 @@ export async function replaceInFiles(
     throw new Error("No current project selected");
   }
 
-  const result = await filesystemGrpc.replaceInFiles(currentProject.id, searchText, replaceText, options);
+  const result = await filesystemGrpc.replaceInFiles(currentProject.id, searchText, replaceText, { ...options, chatId: await activeChatIdForAPI() });
   // Trigger git status refresh after replace in files
   triggerGitStatusRefresh(options?.worktreeId, currentProject.id);
   return result;
