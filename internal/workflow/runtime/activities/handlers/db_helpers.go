@@ -338,7 +338,7 @@ func recoverPersistedToolResults(ctx context.Context, repo db.Repository, msgs [
 
 		if len(parts) > 0 {
 			out = append(out, message.Message{
-				ID:    fmt.Sprintf("recovered-tool-result-%s", msgs[i].ID),
+				ID:    fmt.Sprintf("recovered-tool-result-%s", msgs[i].ID), //nolint:gosec // G602: i ranges over msgs
 				Role:  message.Tool,
 				Parts: parts,
 			})

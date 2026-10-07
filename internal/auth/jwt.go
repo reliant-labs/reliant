@@ -106,6 +106,23 @@ func NewJWTValidator(publicKeyPEM string) (*JWTValidator, error) {
 	}, nil
 }
 
+// ecdsaKeyFromCoordinates builds a public key from a JWK's x and y. The JWK
+// spec fixes both at the curve's full byte width, but a decoder may hand back
+// fewer bytes when the value has leading zeros, so they are left-padded before
+// the SEC1 uncompressed point is parsed (which also rejects a point that is
+// not on the curve).
+func ecdsaKeyFromCoordinates(curve elliptic.Curve, x, y []byte) (*ecdsa.PublicKey, error) {
+	size := (curve.Params().BitSize + 7) / 8
+	if len(x) > size || len(y) > size {
+		return nil, fmt.Errorf("coordinate longer than the %d bytes %s allows", size, curve.Params().Name)
+	}
+	point := make([]byte, 1+2*size)
+	point[0] = 0x04
+	copy(point[1+size-len(x):1+size], x)
+	copy(point[1+2*size-len(y):], y)
+	return ecdsa.ParseUncompressedPublicKey(curve, point)
+}
+
 // NewJWTValidatorFromJWKS creates a validator from JWKS JSON
 func NewJWTValidatorFromJWKS(jwksJSON string) (*JWTValidator, error) {
 	var jwks struct {
@@ -157,10 +174,9 @@ func NewJWTValidatorFromJWKS(jwksJSON string) (*JWTValidator, error) {
 			return nil, fmt.Errorf("%w: failed to decode Y coordinate: %v", ErrInvalidPublicKey, err)
 		}
 
-		ecdsaPub := &ecdsa.PublicKey{
-			Curve: curve,
-			X:     new(big.Int).SetBytes(xBytes),
-			Y:     new(big.Int).SetBytes(yBytes),
+		ecdsaPub, err := ecdsaKeyFromCoordinates(curve, xBytes, yBytes)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrInvalidPublicKey, err)
 		}
 		if firstKey == nil {
 			firstKey = ecdsaPub
@@ -267,12 +283,6 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	}
 
 	return &claims, nil
-}
-
-// verifySignature verifies the JWT signature using ECDSA (ES256) against the
-// validator's default key.
-func (v *JWTValidator) verifySignature(header, payload, signature string) error {
-	return v.verifySignatureWithKey(v.publicKey, header, payload, signature)
 }
 
 // verifySignatureWithKey verifies the JWT signature using ECDSA (ES256)

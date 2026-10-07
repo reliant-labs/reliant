@@ -186,7 +186,7 @@ func extractInputFields(t reflect.Type) []InputFieldInfo {
 	}
 
 	// Handle pointer types
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -488,7 +488,7 @@ func mapGoTypeToSchema(t reflect.Type) string {
 		return "array"
 	case reflect.Map, reflect.Struct:
 		return "object"
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return mapGoTypeToSchema(t.Elem())
 	default:
 		return "any"

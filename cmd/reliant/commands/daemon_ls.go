@@ -98,7 +98,7 @@ func printDaemonInstances(w io.Writer, instances []daemonstate.Instance, root st
 
 		fmt.Fprintf(table, "%s\t%s\t%s\t%s\t%s\n", running, pid, stream, uptime, instance.Slug)
 	}
-	table.Flush()
+	_ = table.Flush()
 
 	for _, instance := range instances {
 		if instance.RecordErr != nil {

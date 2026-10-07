@@ -220,10 +220,6 @@ func (s *Service) CountDisplayMessages(ctx context.Context, threadID string) (in
 	return s.countMessagesFromCWOpts(ctx, latestCW, visited, resolveOpts{crossCompaction: true})
 }
 
-func (s *Service) countMessagesFromCW(ctx context.Context, cw *db.ContextWindow, visited map[string]bool) (int, error) {
-	return s.countMessagesFromCWOpts(ctx, cw, visited, resolveOpts{})
-}
-
 // countMessagesFromCWOpts walks the CW chain summing COUNTs. It must track
 // resolveMessagesFromCWOpts branch for branch -- same compaction stop, same
 // fork cut, same crossCompaction behavior -- or the total disagrees with the

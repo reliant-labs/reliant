@@ -145,10 +145,7 @@ func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts)
 	}
 
 	outcome := s.cancelToolCalls(ctx, opts.UserID, executing, interruptToolCancelReason)
-	result := InterruptThreadResult{
-		CancelledToolCalls:     outcome.CancelledToolCalls,
-		UndeliverableToolCalls: outcome.UndeliverableToolCalls,
-	}
+	result := InterruptThreadResult(outcome)
 
 	// A cancel push that failed to reach the daemon must not strand the
 	// workflow un-interrupted -- signal regardless of outcome above.

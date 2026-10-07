@@ -515,7 +515,7 @@ func allowedHosts(m *reliantv1.IntegrationManifest, base *url.URL) map[string]bo
 // the host must be allowed (unless the connection takes any public host, in
 // which case the dialer is the backstop against private addresses).
 func checkURL(u *url.URL, allowed map[string]bool, anyHost bool) error {
-	if u.Scheme != "https" && !(u.Scheme == "http" && anyHost) {
+	if u.Scheme != "https" && (u.Scheme != "http" || !anyHost) {
 		return fmt.Errorf("scheme %q is not allowed", u.Scheme)
 	}
 	if u.User != nil || u.Hostname() == "" {

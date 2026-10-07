@@ -38,7 +38,7 @@ const (
 	ProviderID = "github"
 	// SecretEnv names the App's webhook secret, a deployment secret shared
 	// with the App's webhook configuration.
-	SecretEnv = "RELIANT_GITHUB_WEBHOOK_SECRET"
+	SecretEnv = "RELIANT_GITHUB_WEBHOOK_SECRET" //nolint:gosec // G101: the NAME of an env var, not a secret
 
 	// EventHeader names the event type of a delivery.
 	EventHeader = "X-GitHub-Event"

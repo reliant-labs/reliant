@@ -14,7 +14,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net"
 	"net/http"
@@ -23,6 +22,8 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/netguard"
 )
 
 const protocolVersion = "2025-06-18"

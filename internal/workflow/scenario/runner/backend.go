@@ -42,6 +42,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	runtime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+
 	// Imported for its init(), which registers every activity's input/output
 	// type into the schema registry. This is the same registration production
 	// relies on for output normalization and CEL typing; without it every

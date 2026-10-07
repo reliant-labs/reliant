@@ -444,7 +444,7 @@ func videoSummary(o GenerateVideoOutput, saveNote string) string {
 // failure maps a Wait error to a result and updates the job record. A timeout
 // keeps the job submitted: it may still finish, and a re-ask can resume it.
 func (t *generateVideoTool) failure(tc *rctx.ToolContext, generator VideoGenerator, job *videojobs.Job, providerJob videogen.Job, err error) ToolResponse {
-	if tc.Context.Err() != nil {
+	if tc.Err() != nil {
 		cleanup, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 		_ = generator.Cancel(cleanup, providerJob)

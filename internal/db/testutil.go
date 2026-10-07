@@ -10,8 +10,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"github.com/reliant-labs/forge/pkg/crypto"
-	"github.com/reliant-labs/reliant/internal/vault"
 	"net/url"
 	"os"
 	"strconv"
@@ -21,6 +19,9 @@ import (
 	"syscall"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/forge/pkg/crypto"
+	"github.com/reliant-labs/reliant/internal/vault"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 )
@@ -204,7 +205,7 @@ func dropTestDB(name string) {
 // harness resets state with TRUNCATE ... CASCADE across every table in the
 // public schema, so a default aimed at the wrong port would turn a routine
 // test run into data loss.
-const defaultTestDSN = "postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable"
+const defaultTestDSN = "postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable" //nolint:gosec // G101: the throwaway local test database
 
 // resolveTestDSN returns the DSN for DB-backed tests.
 //

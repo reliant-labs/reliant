@@ -3,7 +3,6 @@ package runtime
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -80,7 +79,6 @@ edges: []
 type nestedPauseEnv struct {
 	t *testing.T
 
-	mu sync.Mutex
 	// prepareRuns counts entries into the on-entry node. Re-entry shows up
 	// here: the defect makes it run twice for a single pause.
 	prepareRuns int32
