@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -47,8 +48,8 @@ type DeleteWorktreeInput struct {
 // ============================================================================
 
 // CreateWorktreeActivity implements the create_worktree activity.
-// This activity creates a new git worktree for a chat's project
-// by routing git operations through the user's daemon via DaemonRouter.
+// This activity creates a new git worktree for a chat's project on the
+// machine the run's tools execute on, via DaemonRouter.
 type CreateWorktreeActivity struct {
 	repo         db.Repository
 	daemonRouter toolexec.DaemonRouter
@@ -121,6 +122,26 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to get project: %w", err)
 	}
 
+	// The worktree goes on the machine this run's tools execute on, chosen
+	// exactly as ExecuteTools chooses it (toolDaemonSelector): the run's own
+	// daemon (workflow-level, or the chat's pinned session daemon) over the
+	// owner of the chat's worktree. The run's next steps work inside the new
+	// worktree, so anywhere else and they cannot see it.
+	//
+	// Resolved ONCE: every per-repo create, any rollback, and the owner
+	// recorded on the row must name the same machine. Without the recorded
+	// owner, a chat later bound to this worktree routes its tools by default
+	// resolution, which need not be where the checkout is.
+	chatWorktreeOwner, err := worktreeOwnerOf(ctx, a.repo, chat.WorktreeID)
+	if err != nil {
+		return CreateWorktreeOutput{}, err
+	}
+	ownerDaemonID, err := toolexec.ResolveDaemonIDForSelector(ctx, a.daemonRouter, chat.UserID,
+		toolDaemonSelector(chatWorktreeOwner, rtx.DaemonSelector))
+	if err != nil {
+		return CreateWorktreeOutput{}, fmt.Errorf("failed to resolve daemon for worktree: %w", err)
+	}
+
 	// Enumerate the project's nested repos. A standalone-repo project has
 	// exactly one Repo with RelativePath == "" — that legacy single-repo
 	// shape continues to work without changes here.
@@ -171,7 +192,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		for _, s := range successes {
 			repoPath := filepath.Join(project.Path, s.repo.RelativePath)
 			_, _ = sendWorktreeDaemonCmd[worktreeDeleteDaemonResponse](
-				ctx, a.daemonRouter, chat.UserID, "worktree.delete_directory",
+				ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.delete_directory",
 				worktreeDeleteDaemonRequest{
 					ProjectPath:  repoPath,
 					WorktreePath: s.worktreePath,
@@ -187,7 +208,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		if force {
 			// Stale-branch cleanup; the workspace dir itself is fresh per UUID.
 			_, _ = sendWorktreeDaemonCmd[map[string]any](
-				ctx, a.daemonRouter, chat.UserID, "worktree.force_cleanup",
+				ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.force_cleanup",
 				map[string]string{
 					"project_path":  repoPath,
 					"worktree_path": "",
@@ -197,7 +218,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		}
 
 		createResp, err := sendWorktreeDaemonCmd[worktreeCreateDaemonResponse](
-			ctx, a.daemonRouter, chat.UserID, "worktree.create",
+			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.create",
 			worktreeCreateDaemonRequest{
 				ProjectPath: repoPath,
 				WorkspaceID: workspaceID,
@@ -279,7 +300,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	// fatal: the checkouts are complete and usable.
 	if len(copyPaths) > 0 && workspaceRoot != "" {
 		copyResp, err := sendWorktreeDaemonCmd[worktreeCopyPathsDaemonResponse](
-			ctx, a.daemonRouter, chat.UserID, "worktree.copy_paths",
+			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.copy_paths",
 			worktreeCopyPathsDaemonRequest{
 				SourceRoot: project.Path,
 				DestRoot:   workspaceRoot,
@@ -331,6 +352,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		BaseBranches: baseBranches,
 		ProjectID:    project.ID,
 		ChatID:       chatIDPtr,
+		DaemonID:     &ownerDaemonID,
 		Status:       int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
 		CreatedAt:    now,
 		UpdatedAt:    now,
@@ -453,6 +475,13 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 	if worktree == nil {
 		return DeleteWorktreeOutput{}, fmt.Errorf("worktree '%s' not found", input.Name)
 	}
+	// The checkouts exist only on the worktree's owner; tearing them down
+	// anywhere else deletes nothing and strands them there. A row with no
+	// recorded owner keeps default resolution.
+	ownerDaemonID := ""
+	if worktree.DaemonID != nil {
+		ownerDaemonID = *worktree.DaemonID
+	}
 
 	// Enumerate the project's nested repos. A standalone-repo project has
 	// exactly one Repo with RelativePath == "" — that legacy single-repo
@@ -468,7 +497,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 
 	if legacySingleRepo {
 		deleteResp, err := sendWorktreeDaemonCmd[worktreeDeleteDaemonResponse](
-			ctx, a.daemonRouter, chat.UserID, "worktree.delete_directory",
+			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.delete_directory",
 			worktreeDeleteDaemonRequest{
 				ProjectPath:  project.Path,
 				WorktreePath: worktree.Path,
@@ -490,7 +519,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 		repoPath := filepath.Join(project.Path, repo.RelativePath)
 		checkoutPath := filepath.Join(worktree.Path, repo.RelativePath)
 		resp, err := sendWorktreeDaemonCmd[worktreeDeleteDaemonResponse](
-			ctx, a.daemonRouter, chat.UserID, "worktree.delete_directory",
+			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.delete_directory",
 			worktreeDeleteDaemonRequest{
 				ProjectPath:  repoPath,
 				WorktreePath: checkoutPath,
@@ -509,7 +538,7 @@ func (a *DeleteWorktreeActivity) Execute(ctx context.Context, input DeleteWorktr
 
 	// Wipe the workspace root itself (parent of the per-repo checkouts).
 	wsResp, err := sendWorktreeDaemonCmd[worktreeRemoveWorkspaceDaemonResponse](
-		ctx, a.daemonRouter, chat.UserID, "worktree.remove_workspace_dir",
+		ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.remove_workspace_dir",
 		worktreeRemoveWorkspaceDaemonRequest{WorkspacePath: worktree.Path}, 30_000,
 	)
 	if err != nil {
@@ -586,14 +615,41 @@ type worktreeRemoveWorkspaceDaemonResponse struct {
 	Error   string `json:"error,omitempty"`
 }
 
-// sendWorktreeDaemonCmd marshals a request, sends it via DaemonRouter, and unmarshals the response.
-func sendWorktreeDaemonCmd[T any](ctx context.Context, router toolexec.DaemonRouter, userID, commandType string, payload interface{}, timeoutMs int32) (T, error) {
+// worktreeOwnerOf returns the daemon owning a worktree's checkout, or "" when
+// worktreeID is unset, names no row, or the row records no owner — the cases in
+// which ExecuteTools routes by default resolution. Any other lookup failure is
+// returned rather than read as "no owner".
+func worktreeOwnerOf(ctx context.Context, repo db.Repository, worktreeID *string) (string, error) {
+	if worktreeID == nil || *worktreeID == "" {
+		return "", nil
+	}
+	worktree, err := repo.GetWorktree(ctx, *worktreeID)
+	if errors.Is(err, core.ErrWorktreeNotFound) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("failed to get worktree %s: %w", *worktreeID, err)
+	}
+	if worktree.DaemonID == nil {
+		return "", nil
+	}
+	return *worktree.DaemonID, nil
+}
+
+// sendWorktreeDaemonCmd marshals a request, sends it to daemonID ("" = default
+// resolution), and unmarshals the response.
+func sendWorktreeDaemonCmd[T any](ctx context.Context, router toolexec.DaemonRouter, userID, daemonID, commandType string, payload interface{}, timeoutMs int32) (T, error) {
 	var zero T
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return zero, fmt.Errorf("marshal payload: %w", err)
 	}
-	respBytes, err := router.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
+	var respBytes []byte
+	if daemonID == "" {
+		respBytes, err = router.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
+	} else {
+		respBytes, err = router.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payloadBytes, timeoutMs)
+	}
 	if err != nil {
 		return zero, fmt.Errorf("daemon command %s: %w", commandType, err)
 	}

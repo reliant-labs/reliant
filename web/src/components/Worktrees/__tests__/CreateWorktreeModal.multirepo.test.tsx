@@ -126,6 +126,22 @@ describe("CreateWorktreeModal in a multi-repo project", () => {
     );
   });
 
+  // chat_id is how the server knows which machine to create the workspace
+  // on; a modal opened for a chat must send it.
+  it("sends the chat it was opened for", async () => {
+    const user = userEvent.setup();
+    render(
+      <CreateWorktreeModal isOpen onClose={vi.fn()} onWorktreeCreated={vi.fn()} projectId="project-1" chatId="chat-1" />
+    );
+    await waitFor(() => expect(listReposMock).toHaveBeenCalled());
+    await user.type(await screen.findByPlaceholderText(/feature|name/i), "feature-x");
+    await user.click(screen.getByRole("button", { name: /create workspace/i }));
+
+    await waitFor(() =>
+      expect(createWorktreeMock).toHaveBeenCalledWith(expect.objectContaining({ chat_id: "chat-1" }))
+    );
+  });
+
   it("rejects a copy path that leaves the workspace, without creating", async () => {
     const user = userEvent.setup();
     render(

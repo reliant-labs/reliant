@@ -185,6 +185,9 @@ export function BranchToWorktreeModal({
       onWorktreeCreated={handleWorktreeCreated}
       projectId={projectId}
       title="Branch to New Workspace"
+      // The branch runs on the machine holding its workspace, so the
+      // workspace must be created on the machine this chat runs on.
+      chatId={chatId}
       sourceWorktreeId={sourceWorktree?.id}
       sourceWorktreeBranch={currentBranch}
       additionalCopyFiles={filesToCopy}

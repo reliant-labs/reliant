@@ -362,6 +362,68 @@ func TestBranchChat_PinsActiveDaemonFromWorktree(t *testing.T) {
 	require.Equal(t, daemonID, *branchedChat.ActiveDaemonID)
 }
 
+// TestBranchChat_InheritsSourceMachineOnUnownedWorktree: a branch that stays in
+// a worktree no machine owns (the main checkout) keeps running on the machine
+// its source chat runs on. Left unpinned, it fell to the user's default
+// machine, which silently moved the conversation.
+func TestBranchChat_InheritsSourceMachineOnUnownedWorktree(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+	now := time.Now().UTC()
+
+	projectID := "test-project-branch-inherit-" + uuid.NewString()
+	require.NoError(t, repo.CreateProject(ctx, &db.Project{
+		ID: projectID, UserID: "test-user", Name: "Branch Inherit Project", Path: t.TempDir(),
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+
+	mainWorktreeID := "wt-" + uuid.NewString()
+	require.NoError(t, repo.CreateWorktree(ctx, &db.Worktree{
+		ID: mainWorktreeID, Name: "main", Path: t.TempDir(), Branch: "main", ProjectID: projectID,
+		IsMain: true, CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+
+	sourceDaemonID := "daemon-b"
+	chatID := uuid.NewString()
+	threadID := chatID
+	require.NoError(t, repo.CreateChat(ctx, &db.Chat{
+		ID: chatID, UserID: "test-user", Title: "Source Chat", ProjectID: projectID,
+		WorktreeID: &mainWorktreeID, ActiveDaemonID: &sourceDaemonID, State: db.ChatStateIdle,
+		CreatedAt: now, UpdatedAt: now,
+	}))
+
+	threadsSvc := threads.NewService(repo)
+	_, _, _, err := threadsSvc.CreateWorkflowWithThread(ctx, threads.CreateWorkflowWithThreadOpts{
+		Workflow: &db.Workflow{
+			ID: chatID, ChatID: chatID, WorkflowName: "builtin://agent", Thread: threadID,
+			Status: db.Pending(), CreatedAt: now,
+		},
+		ThreadID: threadID,
+		ChatID:   chatID,
+	})
+	require.NoError(t, err)
+
+	msgID := uuid.NewString()
+	require.NoError(t, repo.CreateMessage(ctx, &db.Message{
+		ID: msgID, ChatID: chatID, ThreadID: threadID, ContextWindowID: chatID + ":" + threadID + ":0",
+		Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Ordinal: 1, Seq: 1, CreatedAt: now,
+	}))
+
+	service := &ChatService{database: repo, threads: threadsSvc}
+	resp, err := service.BranchChat(ctx, connect.NewRequest(&reliantv1.BranchChatRequest{
+		ChatId:    chatID,
+		MessageId: msgID,
+	}))
+	require.NoError(t, err)
+
+	branchedChat, err := repo.GetChat(ctx, resp.Msg.Chat.Id)
+	require.NoError(t, err)
+	require.NotNil(t, branchedChat.ActiveDaemonID, "branch must stay on its source chat's machine")
+	require.Equal(t, sourceDaemonID, *branchedChat.ActiveDaemonID)
+}
+
 // TestBranchChat_MultiThreadChat_ToolCallAdjustment_OrdinalSeqDiverge verifies
 // that branching from an assistant message with a pending tool call still
 // finds and includes the following tool-result message (chat_branch.go's
