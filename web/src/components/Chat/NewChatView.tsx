@@ -1,10 +1,9 @@
 import { logger } from "../../lib/logger";
 import { useState, useEffect, useRef, type ReactNode } from "react";
 import { ConnectDaemonModal } from "../Layout/ConnectDaemonModal";
-import { useChatStore } from "../../store/chatStore"; // For getState() and setState() only — also subscribed via selector below
+import { useChatStore } from "../../store/chatStore"; // For getState() only
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { useProjectStore } from "../../store/projectStore";
-import { useChatList } from "../../hooks/chat-queries";
 import { useAttachmentStore } from "../../store/attachmentStore";
 import { useWorkspaceStateStore } from "../../store/workspaceStateStore";
 import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
@@ -27,7 +26,6 @@ import { MachinePicker } from "./MachinePicker";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { ChatInput, type ComposerPrefill } from "./ChatInput";
 import { ReliantIcon } from "../icons/ReliantIcon";
-import { WorkflowStarterCards } from "../Onboarding/WorkflowStarterCards";
 import { CreateWorktreeModal } from "../Worktrees/CreateWorktreeModal";
 import { DiscoverWorktreesModal } from "../Worktrees/DiscoverWorktreesModal";
 import {
@@ -51,9 +49,9 @@ interface NewChatViewProps {
   isFocused?: boolean; // NEW: Whether this pane has focus
   onChatCreated?: (chatId: string) => void; // Optional: Callback when chat is created (for command center)
   /**
-   * Shown instead of the workflow starter cards, by a host whose chat is
-   * about one thing (the workflow editor): the cards would each start a
-   * different workflow. Told whether the chat will run with no machine.
+   * Shown below the workspace controls, by a host whose chat is about one
+   * thing (the workflow editor) and has something specific to suggest. Told
+   * whether the chat will run with no machine.
    */
   emptyState?: (context: { noMachine: boolean }) => ReactNode;
   composerPrefill?: ComposerPrefill;
@@ -79,23 +77,6 @@ export function NewChatView({
 
   const currentWorktree = useWorktreeStore((state) => state.currentWorktree);
   const worktrees = useWorktreeStore((state) => state.worktrees);
-  // Starter cards stay available on every new-chat view — not just first run —
-  // so users can re-pick a workflow (landing page, pitch deck, blog, …) at any
-  // time. Previously they were gated to `chats.size === 0` and vanished after
-  // the first chat, which made those flows unreachable. We still wait for the
-  // initial `loadChats` to complete (`hasLoaded`, set on both success and
-  // failure) so we don't flash the cards while chats are still loading.
-  //
-  // They are always INLINE. A first-run user used to get the same cards as a
-  // blocking full-screen dialog portalled to document.body, which asked the
-  // question this screen already asks and — because it painted over any
-  // spotlight — forced the post-onboarding tour to wait behind it.
-  const chatsListProjectId = useProjectStore((state) => state.currentProject?.id);
-  const { isSuccess: chatsQuerySucceeded } = useChatList(chatsListProjectId);
-  // hasLoaded (Zustand) combined with the list query having resolved, so we
-  // never flash the cards pre-fetch.
-  const showInlineCards =
-    useChatStore((state) => state.hasLoaded) && chatsQuerySucceeded;
   const switchWorktreeContext = useWorktreeStore(
     (state) => state.switchWorktreeContext
   );
@@ -329,8 +310,16 @@ export function NewChatView({
       <div className={cn("relative flex-1 min-h-0 overflow-y-auto", emptyState ? "px-4" : "px-8")}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,hsl(var(--muted)_/_0.16),transparent_62%)]" />
 
-        <div className="relative z-10 min-h-full w-full max-w-5xl mx-auto grid grid-rows-[auto_1fr_auto]">
-          <div className={cn("flex items-center justify-center", emptyState ? "pt-4" : "pt-8")}>
+        {/* Without a host empty state the welcome block is all there is, so
+            it centres in the space above the composer instead of pinning to
+            the top of an otherwise empty pane. */}
+        <div
+          className={cn(
+            "relative z-10 min-h-full w-full max-w-5xl mx-auto",
+            emptyState ? "grid grid-rows-[auto_1fr]" : "flex flex-col justify-center",
+          )}
+        >
+          <div className={cn("flex items-center justify-center", emptyState ? "pt-4" : "py-8")}>
             <div className="w-full max-w-xl mx-auto flex flex-col items-center text-center gap-3">
               <ResumeDaemonPill placement="inline" />
 
@@ -480,19 +469,8 @@ export function NewChatView({
             </div>
           </div>
 
-          {/* Starter cards — pick a workflow to seed the next chat. Shown on
-              every new-chat view (except when the blocking first-run modal is
-              up, or the host has its own empty state) so landing-page /
-              pitch-deck / blog stay reachable, not just on the first-ever
-              chat. */}
-          {emptyState ? (
+          {emptyState && (
             <div className="w-full py-3">{emptyState({ noMachine })}</div>
-          ) : (
-            showInlineCards && (
-              <div className="w-full px-4 py-4 md:py-5">
-                <WorkflowStarterCards />
-              </div>
-            )
           )}
 
         </div>

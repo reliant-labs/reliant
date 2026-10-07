@@ -377,8 +377,7 @@ export function OnboardingWizard() {
   // NOTE: the wizard used to defer itself while NewChatView's blocking
   // "What are you building?" dialog could be on screen, which meant waiting
   // on the chat-list query before the tour could start — a visible lag for
-  // exactly the brand-new user the tour is for. That dialog is gone (the
-  // starter cards render inline now and never paint over a spotlight), so
+  // exactly the brand-new user the tour is for. That dialog is gone, so
   // there is nothing left to defer for.
 
   // Load state on mount. Pure data fetch — no navigation.

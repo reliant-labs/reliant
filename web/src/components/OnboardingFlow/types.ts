@@ -1,8 +1,6 @@
 // Intent values the rendered onboarding wizard can actually set. ProjectChoiceStep
 // only ever writes "build_app" or "existing_codebase"; deriveStep / getStepsForPlan
-// / codeSourceForCompute branch on those two alone. The richer set of
-// landing_page/pitch_deck/blog_post/etc. lives in WorkflowStarterCards
-// (components/Onboarding) under its own `WorkflowStarterIntent` type — unrelated.
+// / codeSourceForCompute branch on those two alone.
 export type OnboardingIntent = "build_app" | "existing_codebase";
 
 export type ComputeChoice =

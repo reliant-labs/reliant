@@ -1,27 +1,25 @@
 /**
- * NewChatView — the first-run starter question is asked inline, never as a
- * blocking modal.
+ * NewChatView — the new-chat screen goes straight to the composer.
  *
- * THE CHANGE THIS LOCKS IN: a project with no chats used to portal a
- * full-screen "What are you building?" dialog over the whole new-chat view,
- * and the inline starter cards were suppressed while it was up. That asked
- * the same question the screen already asks, and — because the dialog
- * portals to document.body, above any spotlight — it was also what forced
- * the onboarding tour to sit and wait (see OnboardingWizard.starterGate).
+ * THE CHANGE THIS LOCKS IN: the space above the composer used to hold a grid
+ * of workflow starter cards under "What are you building?" (Forge, landing
+ * page, pitch deck, custom workflow, Claude Code migration, "Just chat"). The
+ * grid is gone. Every one of those workflows is still chosen from the
+ * composer's workflow selector; the screen itself is the welcome block, the
+ * workspace controls and the composer, which starts a chat on its own.
  *
- * The cards themselves stay. The user should still be offered a starting
- * point on the new-chat screen; they just should not be trapped behind it.
+ * A host with something specific to suggest (the workflow editor) still
+ * passes `emptyState`, and that is then the only thing rendered there.
  */
-import { render, screen, waitFor } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // ── Mocks ────────────────────────────────────────────────────────────────
-// Everything that is not the starter-card surface is stubbed: this test is
-// about which starter UI renders, not about chat input, daemons or worktrees.
+// Everything that is not the empty-state surface is stubbed: this test is
+// about what fills the screen above the composer, not about daemons or
+// worktrees.
 
-const chatListState = vi.hoisted(() => ({
-  current: { data: [] as any[], isSuccess: true },
-}));
+const startChat = vi.hoisted(() => vi.fn(async () => ({ id: "chat-new" })));
 
 const chatParamsState = vi.hoisted(() => ({
   current: {
@@ -33,8 +31,10 @@ const chatParamsState = vi.hoisted(() => ({
   },
 }));
 
+// The starter grid waited on the chat list before rendering. It is resolved
+// here, so if a grid comes back on that condition these tests see it.
 vi.mock("../../../hooks/chat-queries", () => ({
-  useChatList: () => chatListState.current,
+  useChatList: () => ({ data: [{ id: "c1" }], isSuccess: true }),
 }));
 
 function storeMock(state: () => any) {
@@ -52,7 +52,7 @@ vi.mock("../../../store/chatStore", () => ({
   useChatStore: storeMock(() => ({
     hasLoaded: true,
     chats: new Map(),
-    startChat: vi.fn(),
+    startChat,
     selectChat: vi.fn(),
   })),
 }));
@@ -108,8 +108,13 @@ vi.mock("@/services/controlPlane/capabilities", () => ({
   capabilities: { cloudDaemons: false },
 }));
 
+// The composer sends what the user typed, with no workflow chosen.
 vi.mock("../ChatInput", () => ({
-  ChatInput: () => <div data-testid="chat-input" />,
+  ChatInput: ({ onSend }: { onSend: (content: string) => Promise<void> }) => (
+    <button type="button" data-testid="chat-input" onClick={() => void onSend("hello")}>
+      Send
+    </button>
+  ),
 }));
 
 vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
@@ -138,54 +143,56 @@ vi.mock("sonner", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
 import { NewChatView } from "../NewChatView";
 
+const STARTER_LABELS = [
+  "What are you building?",
+  "Build something new with Forge",
+  "Create a landing page",
+  "Create a pitch deck",
+  "Create a custom workflow",
+  "Migrate from Claude Code",
+  "Just chat",
+];
+
 beforeEach(() => {
   vi.clearAllMocks();
-  chatListState.current = { data: [], isSuccess: true };
   chatParamsState.current.tempNewChatWorkflow = null;
 });
 
 // ── Tests ────────────────────────────────────────────────────────────────
 
-describe("NewChatView — first-run starter picker", () => {
-  // The empty-state first run: zero chats, no starter picked. This is exactly
-  // the condition that used to raise the blocking dialog.
-  it("does not trap a first-run user behind a blocking starter dialog", async () => {
+describe("NewChatView — empty state", () => {
+  it("shows the composer and no workflow starter grid", () => {
     render(<NewChatView tabId="t1" />);
 
-    await waitFor(() =>
-      expect(screen.getByText("What are you building?")).toBeInTheDocument(),
-    );
-    expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.getByTestId("chat-input")).toBeInTheDocument();
+    for (const label of STARTER_LABELS) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
   });
 
-  it("still asks the starter question inline on the new-chat screen", async () => {
+  it("starts a chat straight from the composer, with no workflow picked first", async () => {
     render(<NewChatView tabId="t1" />);
 
-    await waitFor(() =>
-      expect(screen.getByText("What are you building?")).toBeInTheDocument(),
-    );
-    // Exactly one copy — the inline set. A second would mean the modal is
-    // back alongside it.
-    expect(screen.getAllByText("What are you building?")).toHaveLength(1);
+    fireEvent.click(screen.getByTestId("chat-input"));
+
+    await waitFor(() => expect(startChat).toHaveBeenCalledTimes(1));
+    const [worktreeId, content, , , workflow] = startChat.mock.calls[0] as unknown[];
+    expect(worktreeId).toBe("w1");
+    expect(content).toBe("hello");
+    // No starter seeded one: the composer's own (default) workflow applies.
+    expect(workflow).toBeUndefined();
   });
 
-  it("keeps showing the cards for a project that already has chats", async () => {
-    chatListState.current = { data: [{ id: "c1" }], isSuccess: true };
+  it("renders a host's own empty state, told whether the chat has a machine", () => {
+    const emptyState = vi.fn(({ noMachine }: { noMachine: boolean }) => (
+      <div data-testid="host-empty-state">{noMachine ? "no machine" : "on a machine"}</div>
+    ));
 
-    render(<NewChatView tabId="t1" />);
+    render(<NewChatView tabId="t1" emptyState={emptyState} />);
 
-    await waitFor(() =>
-      expect(screen.getByText("What are you building?")).toBeInTheDocument(),
-    );
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  // Don't flash the cards before we know whether this project has chats.
-  it("waits for the chat list before rendering the cards", () => {
-    chatListState.current = { data: undefined as any, isSuccess: false };
-
-    render(<NewChatView tabId="t1" />);
-
-    expect(screen.queryByText("What are you building?")).toBeNull();
+    expect(screen.getByTestId("host-empty-state")).toHaveTextContent("on a machine");
+    for (const label of STARTER_LABELS) {
+      expect(screen.queryByText(label)).toBeNull();
+    }
   });
 });

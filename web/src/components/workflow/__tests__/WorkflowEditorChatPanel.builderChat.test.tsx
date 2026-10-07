@@ -2,8 +2,7 @@
  * The workflow editor's chat, rendered through the real NewChatView
  * (research/WORKFLOW_EDITOR_UX_REVIEW.md issue 8, research/NO_MACHINE_CHATS.md).
  *
- *   - Its empty state is about THIS workflow: suggested prompts, not the
- *     new-chat starter cards, each of which starts a different workflow.
+ *   - Its empty state is about THIS workflow: suggested prompts.
  *   - It never blocks on a machine it does not need. With no usable machine it
  *     starts with no machine, says so, and its composer works; with one, it
  *     runs there as every chat does.
@@ -122,9 +121,6 @@ vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () 
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModal: () => null }));
 vi.mock("../../ui/Tooltip", () => ({ Tooltip: ({ children }: any) => <>{children}</> }));
 vi.mock("../../icons/ReliantIcon", () => ({ ReliantIcon: () => null }));
-vi.mock("../../Onboarding/WorkflowStarterCards", () => ({
-  WorkflowStarterCards: () => <div data-testid="workflow-starter-cards">Create a pitch deck</div>,
-}));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));
@@ -161,7 +157,7 @@ beforeEach(() => {
 });
 
 describe("the workflow editor's chat", () => {
-  it("offers prompts about this workflow instead of the new-chat starter cards", () => {
+  it("offers prompts about this workflow", () => {
     render(panel());
     expect(screen.getByTestId("builder-chat-empty-state")).toHaveTextContent("swift-fox-a1b2");
     expect(screen.getAllByTestId("builder-chat-suggestion").map((b) => b.textContent)).toEqual([
@@ -170,8 +166,6 @@ describe("the workflow editor's chat", () => {
       "Explain this workflow",
       "Write tests",
     ]);
-    expect(screen.queryByTestId("workflow-starter-cards")).toBeNull();
-    expect(screen.queryByText("Create a pitch deck")).toBeNull();
   });
 
   it("starts with no machine, without waiting for one, when the user has no usable machine", async () => {

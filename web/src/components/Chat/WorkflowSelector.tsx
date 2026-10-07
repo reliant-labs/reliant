@@ -11,10 +11,10 @@ import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { isChatLaunchable } from "../../api/workflow-grpc";
 
 // Workflow refs appear in two formats: bare names from ListWorkflows ("agent")
-// and URIs from starter cards / preferences ("builtin://agent"). Every ref
-// comparison in this component must go through sameWorkflow so a starter-card
-// selection ("builtin://forge-one-shot") matches its list entry — otherwise
-// the trigger silently falls back to the default label.
+// and URIs from preferences ("builtin://agent"). Every ref comparison in this
+// component must go through sameWorkflow so a URI selection
+// ("builtin://forge-one-shot") matches its list entry — otherwise the trigger
+// silently falls back to the default label.
 const sameWorkflow = (a: string, b: string) =>
   normalizeWorkflowRef(a) === normalizeWorkflowRef(b);
 
