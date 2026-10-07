@@ -21,7 +21,13 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { ChatSchema, StartChatResponseSchema } from "@/gen/reliant/v1/chat_pb";
+import {
+  ChatActivity,
+  ChatSchema,
+  StartChatResponseSchema,
+  WorkflowState,
+  WorkflowStopReason,
+} from "@/gen/reliant/v1/chat_pb";
 import { WORKFLOW_LIST, getWorkflowByName, presetsResponse, worktreesResponse } from "./runFormFixtures";
 
 const listWorkflows = vi.fn();
@@ -253,5 +259,20 @@ describe("BuilderTestRunPanel", () => {
     expect(failure).toHaveTextContent("channel_not_found");
     await user.click(screen.getByRole("button", { name: "Go to problem" }));
     expect(onGoToProblem).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds Run again back only while the run is executing, not while it is parked on a failed step", async () => {
+    const running = { workflowState: WorkflowState.ACTIVE, workflowStopReason: WorkflowStopReason.UNSPECIFIED, activity: ChatActivity.RUNNING };
+    chatQuery.mockReturnValue({ data: running });
+    renderPanel(<BuilderTestRunPanel {...baseProps({ testChatId: "test-chat-1" })} />);
+    expect(await screen.findByRole("button", { name: "Run again" })).toBeDisabled();
+  });
+
+  it("lets a paused run be run again, so a fix can be tried", async () => {
+    chatQuery.mockReturnValue({
+      data: { workflowState: WorkflowState.STOPPED, workflowStopReason: WorkflowStopReason.PAUSED, activity: ChatActivity.PAUSED },
+    });
+    renderPanel(<BuilderTestRunPanel {...baseProps({ testChatId: "test-chat-1" })} />);
+    expect(await screen.findByRole("button", { name: "Run again" })).toBeEnabled();
   });
 });

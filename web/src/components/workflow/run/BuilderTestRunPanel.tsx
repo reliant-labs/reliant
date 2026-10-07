@@ -114,6 +114,10 @@ export function BuilderTestRunPanel({
     ? runStatus({ state: chat.workflowState, stopReason: chat.workflowStopReason, activity: chat.activity })
     : null;
   const live = runState ? isLiveRunStatus(runState) : false;
+  // Only a run that is executing holds Run again back. A run parked on a
+  // failed step (paused) or waiting on a person is still live, but the next
+  // test run is a separate run, and starting it is how a fix gets tried.
+  const busy = runState?.key === "running" || runState?.key === "queued";
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -242,9 +246,9 @@ export function BuilderTestRunPanel({
 
           <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
             <p className={cn(hintClass, "mt-0")}>
-              {live ? "Running now. Statuses show on the canvas." : "Saves the draft, then runs it. Tests stay out of your chat list."}
+              {busy ? "Running now. Statuses show on the canvas." : "Saves the draft, then runs it. Tests stay out of your chat list."}
             </p>
-            <Button type="submit" variant="primary" size="sm" loading={starting} disabled={live}>
+            <Button type="submit" variant="primary" size="sm" loading={starting} disabled={busy}>
               {testChatId ? "Run again" : "Run"}
             </Button>
           </div>

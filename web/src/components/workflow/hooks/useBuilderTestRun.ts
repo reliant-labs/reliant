@@ -19,8 +19,11 @@
 
 import { useEffect, useMemo } from 'react'
 import type { Edge, Node } from '@xyflow/react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useGlobalUpdatesStore } from '../../../store/globalUpdatesStore'
-import { useChat } from '../../../hooks/chat-queries'
+import { useChatActivity } from '../../../store/activityStore'
+import { chatDetailKeys } from '../../../hooks/chat-detail-keys'
+import { chatKeys, useChat } from '../../../hooks/chat-queries'
 import { useWorkflowExecutions } from '../../../hooks/useWorkflowExecutions'
 import { WorkflowExecutionView } from '../../../gen/reliant/v1/chat_pb'
 import { isLiveRunStatus, runStatus, type RunStatusDisplay } from '../../../lib/runStatus'
@@ -130,6 +133,29 @@ export function useBuilderRun(
     settled += loopScoped.filter((entry) => isSettled(entry.status)).length
     return settled + (live ? 0 : 1)
   }, [statusByKey, loopScoped, live])
+
+  // A loop has no activity of its own, so its state and iterations come from
+  // the execution tree — which the server only re-announces when the RUN's
+  // status changes. A run waiting on an approval after a loop never does, so
+  // the tree is fetched again each time a step settles.
+  const queryClient = useQueryClient()
+  useEffect(() => {
+    if (!testChatId || settledVersion === 0) return
+    void queryClient.invalidateQueries(
+      { queryKey: chatDetailKeys.workflowExecutionsView(testChatId, WorkflowExecutionView.FULL) },
+      { cancelRefetch: false },
+    )
+  }, [queryClient, testChatId, settledVersion])
+
+  // The run's own status is the chat's, which the stream does not patch. What
+  // the stream does carry is the chat's activity (running, paused on a failed
+  // step, waiting on a person, idle), so each change of it asks for the chat
+  // again.
+  const activity = useChatActivity(testChatId ?? '')
+  useEffect(() => {
+    if (!testChatId) return
+    void queryClient.invalidateQueries({ queryKey: chatKeys.detail(testChatId) }, { cancelRefetch: false })
+  }, [queryClient, testChatId, activity])
 
   return useMemo(
     () => (testChatId && view ? { chatId: testChatId, view, status, settledVersion } : null),

@@ -980,7 +980,9 @@ function WorkflowBuilderInner({
     setSelectedNodeId(nodeId);
     setFindingFocus((prev) => ({ nodeId, fieldKey, seq: (prev?.seq ?? 0) + 1 }));
   }, []);
-  const failedStepId = testRunView?.ended ? testRunView.failed[0] : undefined;
+  // A failed step is reported as soon as it fails: an attended run parks on
+  // the failure (paused) rather than ending, waiting for a fix.
+  const failedStepId = testRunView?.failed[0];
   const failedStepError = failedStepId ? testRunView?.nodes[failedStepId]?.error : undefined;
   const testRunFailure = useMemo(
     () => (failedStepId ? { label: describeNode(failedStepId), message: failedStepError } : null),

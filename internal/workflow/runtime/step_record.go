@@ -61,7 +61,33 @@ func recordedArgs(input interface{}) sql.NullString {
 	if err != nil || len(args) == 0 {
 		return sql.NullString{}
 	}
-	return boundedJSON(args, recordedArgsMaxBytes)
+	return boundedJSON(unwrapLiterals(args), recordedArgsMaxBytes)
+}
+
+// unwrapLiterals replaces every {"literal": value} left in decoded args with
+// the value. NodeArgsAsMap keeps object literals (a model selector) wrapped so
+// they survive a protojson round trip; a record of what the step was given
+// has no such need, and reads as the value the author wrote.
+func unwrapLiterals(value interface{}) interface{} {
+	switch typed := value.(type) {
+	case map[string]interface{}:
+		if literal, ok := typed["literal"]; ok && len(typed) == 1 {
+			return unwrapLiterals(literal)
+		}
+		unwrapped := make(map[string]interface{}, len(typed))
+		for key, item := range typed {
+			unwrapped[key] = unwrapLiterals(item)
+		}
+		return unwrapped
+	case []interface{}:
+		unwrapped := make([]interface{}, len(typed))
+		for index, item := range typed {
+			unwrapped[index] = unwrapLiterals(item)
+		}
+		return unwrapped
+	default:
+		return value
+	}
 }
 
 // boundedJSON marshals value within maxBytes, cutting long strings first and

@@ -88,6 +88,11 @@ export function MonacoCELEditor({
   const isUpdatingRef = useRef(false);
   const [isFocused, setIsFocused] = useState(false);
   const horizontalPadding = 10;
+  // The fallback input had focus when Monaco replaced it. Monaco is never
+  // ready on the first render, so anything that focuses a field as its panel
+  // opens — the problems list, "Go to problem" — lands on the fallback, and
+  // the swap would drop that focus on the floor.
+  const focusHandoffRef = useRef(false);
 
   // Keep onChange in a ref so the Monaco listener always calls the latest callback
   const onChangeRef = useRef(onChange);
@@ -223,6 +228,10 @@ export function MonacoCELEditor({
     });
 
     editorRef.current = editor;
+    if (focusHandoffRef.current) {
+      focusHandoffRef.current = false;
+      editor.focus();
+    }
 
     // Apply DOM id to Monaco's internal textarea so `<label htmlFor>` (and
     // accessibility tools / `getByLabelText`) can locate the focusable input.
@@ -357,6 +366,7 @@ export function MonacoCELEditor({
         id={id}
         pureExpression={pureExpression}
         insertRef={insertRef}
+        focusHandoffRef={focusHandoffRef}
       />
     );
   }
@@ -402,10 +412,14 @@ function FallbackInput({
   id,
   pureExpression = false,
   insertRef,
+  focusHandoffRef,
 }: Pick<
   MonacoCELEditorProps,
   'value' | 'onChange' | 'placeholder' | 'multiline' | 'rows' | 'disabled' | 'className' | 'id' | 'pureExpression' | 'insertRef'
->) {
+> & {
+  /** Set when this input is removed while focused, so the editor that replaces it takes the focus. */
+  focusHandoffRef?: MutableRefObject<boolean>;
+}) {
   const handleChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
       onChange(e.target.value);
@@ -417,6 +431,13 @@ function FallbackInput({
   // Monaco has loaded (and in tests, where it never does).
   const insertRegistry = useCELInsertRegistry();
   const elementRef = useRef<HTMLInputElement | HTMLTextAreaElement | null>(null);
+  // Detached while still in the document: whether it had focus is still readable.
+  const setElement = (element: HTMLInputElement | HTMLTextAreaElement | null) => {
+    if (!element && focusHandoffRef && elementRef.current && document.activeElement === elementRef.current) {
+      focusHandoffRef.current = true;
+    }
+    elementRef.current = element;
+  };
   const latestRef = useRef({ value, onChange, pureExpression });
   latestRef.current = { value, onChange, pureExpression };
   const targetRef = useRef<CELInsertTarget | null>(null);
@@ -450,7 +471,7 @@ function FallbackInput({
   if (multiline) {
     return (
       <textarea
-        ref={(element) => { elementRef.current = element; }}
+        ref={setElement}
         id={id}
         value={value}
         onChange={handleChange}
@@ -465,7 +486,7 @@ function FallbackInput({
 
   return (
     <input
-      ref={(element) => { elementRef.current = element; }}
+      ref={setElement}
       id={id}
       type="text"
       value={value}

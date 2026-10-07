@@ -174,16 +174,24 @@ export function ConfigPanel({
   const hasRunRef = useRef(!!stepRun);
   hasRunRef.current = !!stepRun;
 
-  // Tab state: a step that ran in the test run opens on what it did.
-  const [activeTab, setActiveTab] = useState(() => (stepRun ? "run" : "config"));
+  // The canvas's problems with this step. Picking one in the header's
+  // problems list (or "Go to problem" on a test run) lands here: show the
+  // Config tab, where its field is.
+  const { findings: stepFindings, focus: findingFocus } = useNodeFindings(step.id);
+
+  // Tab state: a step that ran in the test run opens on what it did — unless
+  // it was opened to take the author to one of its fields.
+  const [activeTab, setActiveTab] = useState(() => (stepRun && !findingFocus ? "run" : "config"));
 
   // Collapsible section state for Advanced tab
   const [isSaveMessageExpanded, setIsSaveMessageExpanded] = useState(false);
   const [isProjectExpanded, setIsProjectExpanded] = useState(false);
 
   // Reset tab when step changes
+  const findingFocusRef = useRef(findingFocus);
+  findingFocusRef.current = findingFocus;
   useEffect(() => {
-    setActiveTab(hasRunRef.current ? "run" : "config");
+    setActiveTab(hasRunRef.current && !findingFocusRef.current ? "run" : "config");
   }, [step.id]);
 
   // "Go to problem" on a run failure no field owns lands on the Run tab.
@@ -192,9 +200,6 @@ export function ConfigPanel({
     if (runFocus) setActiveTab("run");
   }, [runFocus]);
 
-  // The canvas's problems with this step. Picking one in the header's
-  // problems list lands here: show the Config tab, where its field is.
-  const { findings: stepFindings, focus: findingFocus } = useNodeFindings(step.id);
   useEffect(() => {
     if (findingFocus) setActiveTab("config");
   }, [findingFocus]);

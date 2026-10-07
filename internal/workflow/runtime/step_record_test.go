@@ -25,6 +25,9 @@ func TestBuildStepExecution_RecordsWhatTheStepWasGivenAndHowItEnded(t *testing.T
 			Type: "call_llm",
 			Args: &reliantv1.Node_CallLlm{CallLlm: &reliantv1.CallLLMArgs{
 				SystemPrompt: celLiteral("Summarize issue #42"),
+				Model: &reliantv1.CelModelSelector{Value: &reliantv1.CelModelSelector_Literal{
+					Literal: &reliantv1.ModelSelector{Tags: []string{"flagship"}},
+				}},
 			}},
 		},
 	}
@@ -44,6 +47,8 @@ func TestBuildStepExecution_RecordsWhatTheStepWasGivenAndHowItEnded(t *testing.T
 	var args map[string]interface{}
 	require.NoError(t, json.Unmarshal([]byte(row.InputJSON.String), &args))
 	assert.Equal(t, "Summarize issue #42", args["system_prompt"], "a CelString is recorded as the value it resolved to")
+	assert.Equal(t, map[string]interface{}{"tags": []interface{}{"flagship"}}, args["model"],
+		"an object literal is recorded as the object, not its {literal: …} wrapper")
 
 	assert.Equal(t, "provider returned 400: model not found", row.ErrorMessage.String)
 	assert.True(t, row.ErrorMessage.Valid)
@@ -110,6 +115,8 @@ func TestFailStepInput_AttributesTheFailureToItsNode(t *testing.T) {
 	}
 	node := &reliantv1.Node{Id: "post", Type: "action"}
 
+	// FailStep's input type must carry these keys too, or Temporal drops them
+	// before the wrapper sees them: TestFailStepInput_KeepsTheNodeLocation.
 	info := extractActivityInputInfo(executor.failStepInput(node, "CEL evaluation failed for step post: boom"))
 
 	assert.Equal(t, "post", info.StepID)
