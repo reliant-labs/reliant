@@ -54,7 +54,11 @@ interface PreviewAwareFileMutationProps {
   disablePreview?: boolean;
 }
 
-function PreviewAwareFileMutation({
+/**
+ * The diff a file mutation is drawn as. Exported so other tools that change a
+ * text document (the workflow-editing tools) get the same treatment.
+ */
+export function PreviewAwareFileMutation({
   filePath,
   originalContent,
   modifiedContent,

@@ -13,71 +13,17 @@
  * and the chat header pill rendered a bare "Not Found".
  */
 
+import { useEffect, useMemo } from "react";
 import { useParams } from "@tanstack/react-router";
 import { Loader2 } from "lucide-react";
 import { MobileWorkflowScreen } from "./MobileWorkflowScreen";
 import { useWorkflows } from "../../store/globalDataStore";
+import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
 import { normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
-import type { WorkflowExecutionData } from "../../types/chat";
+import { useFullStepExecution } from "../workflow/hooks/useFullStepExecution";
+import { transformWorkflowExecution } from "../Chat/ExecutionSidebar/transformApiData";
 import { runStatus } from "../../lib/runStatus";
-import type { WorkflowExecution } from "../Chat/ExecutionSidebar/types";
-import {
-  WorkflowState,
-  WorkflowStopReason,
-} from "../../gen/reliant/v1/chat_pb";
-
-/**
- * Adapt a wire `WorkflowExecutionData` to the `WorkflowExecution` shape the
- * screen renders.
- *
- * The wire model preserves workflow state and stop reason separately. The
- * per-node step view has a smaller status vocabulary, so collapse the pair
- * only for it. The header pill does NOT read this collapsed status: it gets
- * the run's status from lib/runStatus, which keeps paused and queued distinct.
- */
-function toScreenExecution(
-  execution: WorkflowExecutionData | null | undefined,
-): WorkflowExecution | undefined {
-  if (!execution) return undefined;
-
-  let status: WorkflowExecution["status"] = "running";
-  if (execution.state === WorkflowState.STOPPED) {
-    switch (execution.stopReason) {
-      case WorkflowStopReason.COMPLETED:
-        status = "completed";
-        break;
-      case WorkflowStopReason.FAILED:
-        status = "failed";
-        break;
-      case WorkflowStopReason.CANCELLED:
-        status = "cancelled";
-        break;
-    }
-  }
-
-  // Timestamps cross the boundary as ISO strings on the wire and as epoch
-  // millis in the view model, so they are CONVERTED, not spread through.
-  const toMillis = (value: string | undefined): number =>
-    value ? Date.parse(value) : 0;
-
-  // Only the fields the screen reads are mapped. `children` and `steps` are
-  // deliberately empty: this screen renders a status pill, not the execution
-  // tree, and recursing two mutually-incompatible shapes to populate
-  // something nothing displays would be work in service of a type rather
-  // than a user.
-  return {
-    id: execution.id,
-    workflowName: execution.workflowName,
-    thread: execution.thread,
-    status,
-    createdAt: toMillis(execution.createdAt),
-    completedAt: execution.completedAt ? toMillis(execution.completedAt) : undefined,
-    messageCount: 0,
-    children: [],
-    steps: [],
-  };
-}
 
 function Centered({ children }: { children: React.ReactNode }) {
   return (
@@ -117,16 +63,38 @@ export function MobileWorkflowDetailRoute() {
   return <MobileWorkflowScreen workflow={workflow} backTo="/m/workflows" />;
 }
 
-/** `/m/chats/$chatId/workflow` — the running workflow behind a chat. */
+/**
+ * `/m/chats/$chatId/workflow` — the running workflow behind a chat.
+ *
+ * Node status comes from exactly what the desktop viewer reads (see
+ * useExtendedExecutionStatus): the node_execution stream, which is the only
+ * source that knows a step inside a loop is running NOW, plus the FULL
+ * execution tree — step rows and child workflows — for everything the stream
+ * does not carry. This route used to pass an execution with its steps and
+ * children stripped and never subscribed to the chat's stream, so a running
+ * loop read "Pending" under a "Running" header.
+ */
 export function MobileChatWorkflowRoute() {
   const { chatId } = useParams({ strict: false });
   const { workflows, loading } = useWorkflows();
   // `data` is the latest execution for this chat — the one the header pill is
   // reporting on, which is what a user tapping through expects to see.
-  //
-  // The default (BASIC) view on purpose: toScreenExecution maps no steps, so
-  // the FULL step history would be fetched only to be discarded.
   const { data: execution } = useWorkflowExecutions(chatId ?? null);
+  const basicExecution = useMemo(
+    () => (execution ? transformWorkflowExecution(execution) : undefined),
+    [execution],
+  );
+  const screenExecution = useFullStepExecution(chatId, basicExecution);
+
+  // The node_execution stream reaches the store only for the subscribed chat.
+  // On desktop the viewer sits inside ChatContainer, which asserts that
+  // subscription; this route is reachable directly (a reload, a shared link),
+  // so it asserts it the same way.
+  const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
+  const reconcileChatSubscription = useGlobalUpdatesStore((s) => s.reconcileChatSubscription);
+  useEffect(() => {
+    reconcileChatSubscription(chatId ?? null);
+  }, [chatId, connectionStatus, reconcileChatSubscription]);
 
   if (loading) {
     return (
@@ -147,7 +115,7 @@ export function MobileChatWorkflowRoute() {
   return (
     <MobileWorkflowScreen
       workflow={workflow}
-      execution={toScreenExecution(execution)}
+      execution={screenExecution}
       runStatus={
         execution
           ? runStatus({

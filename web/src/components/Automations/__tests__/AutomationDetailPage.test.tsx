@@ -195,6 +195,18 @@ describe("AutomationDetail", () => {
     expect(listTriggerEvents.mock.calls[0]![0]).toMatchObject({ triggerId: "trig-1" });
   });
 
+  it("says No machine for an automation that runs with no machine, never a daemon", async () => {
+    getTrigger.mockResolvedValue(
+      create(GetTriggerResponseSchema, { trigger: { ...trigger, daemonId: "", noMachine: true } }),
+    );
+    renderAtRoute(<AutomationDetail triggerId="trig-1" />, "/workflows/automations/trig-1");
+
+    expect(await screen.findByRole("heading", { name: "Morning triage" })).toBeInTheDocument();
+    expect(await screen.findByText("(web & integrations only)")).toBeInTheDocument();
+    expect(screen.getAllByText(/No machine/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.queryByText(/daemon/i)).not.toBeInTheDocument();
+  });
+
   it("Run now calls FireTrigger, toasts, and refetches the history", async () => {
     fireTrigger.mockResolvedValue(
       create(FireTriggerResponseSchema, { fireWorkflowId: "trigger-fire-trig-1-manual" }),

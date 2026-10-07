@@ -142,6 +142,20 @@ describe("AutomationsListPage", () => {
     expect(listTriggers.mock.calls[0]![0].projectId).toBeUndefined();
   });
 
+  it("says No machine for an automation that runs with no machine, never a daemon", async () => {
+    // A no-machine automation has an empty daemonId by design
+    // (research/DAEMONLESS_RUNS.md), not a daemon whose name is missing.
+    listTriggers.mockResolvedValue({
+      triggers: [protoTrigger({ daemonId: "", daemonName: "", noMachine: true })],
+    });
+
+    renderAtRoute(<AutomationsListPage />);
+
+    const row = await screen.findByTestId("automation-row-trig-1");
+    expect(within(row).getByText("Reliant · No machine")).toBeInTheDocument();
+    expect(within(row).queryByText(/daemon/i)).not.toBeInTheDocument();
+  });
+
   it("names come from the trigger itself, with no store or daemon lookup", async () => {
     listTriggers.mockResolvedValue({ triggers: [protoTrigger()] });
 
