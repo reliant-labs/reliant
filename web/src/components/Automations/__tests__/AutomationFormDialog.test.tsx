@@ -9,7 +9,7 @@
  * InvalidArgument is shown beside the field it is about.
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
 import { fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
@@ -96,6 +96,47 @@ function fill(element: HTMLElement, value: string) {
   fireEvent.change(element, { target: { value } });
 }
 
+/**
+ * The runtime's time-zone database, pinned to a few zones.
+ *
+ * The Time zone field offers every IANA zone as <datalist> suggestions: about
+ * 420 <option>s, four fifths of the dialog's DOM. No test here reads them, but
+ * every testing-library query walks them. With them in the document a label
+ * query cost ~13x more, and an unscoped option query ~50x (it computes the
+ * accessible name of each hidden option, a jsdom getComputedStyle apiece,
+ * before discarding it), and a findBy* pays that again on every DOM mutation
+ * while it waits. That is what pushed this file past vitest's 5s per-test
+ * budget in full runs on a loaded machine. Pinning the list also stops the
+ * file's cost depending on which ICU build Node ships with.
+ */
+const PINNED_TIME_ZONES = ["UTC", "America/New_York", "Europe/Berlin"];
+
+let supportedValuesOf: MockInstance<typeof Intl.supportedValuesOf>;
+
+beforeAll(() => {
+  const runtime = Intl.supportedValuesOf.bind(Intl);
+  supportedValuesOf = vi
+    .spyOn(Intl, "supportedValuesOf")
+    .mockImplementation((key) => (key === "timeZone" ? [...PINNED_TIME_ZONES] : runtime(key)));
+});
+
+// Intl is shared by every file this worker runs; leave it as it was found.
+afterAll(() => supportedValuesOf.mockRestore());
+
+/**
+ * The option called `name` in the <select> labelled `picker`: scoped, so the
+ * assertion is about that picker and the query never walks the time-zone
+ * suggestions, whatever their size.
+ */
+function getOption(picker: string, name: string | RegExp): HTMLElement {
+  return within(screen.getByLabelText(picker)).getByRole("option", { name });
+}
+
+/** getOption, once the picker and that option have rendered. */
+function findOption(picker: string, name: string | RegExp): Promise<HTMLElement> {
+  return waitFor(() => getOption(picker, name));
+}
+
 function storedTrigger() {
   return create(TriggerSchema, {
     id: "trig-9",
@@ -169,6 +210,15 @@ describe("AutomationFormDialog", () => {
     expect(screen.queryByRole("option", { name: "Default machine" })).not.toBeInTheDocument();
   });
 
+  it("suggests the runtime's time zones under the Time zone field", async () => {
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
+
+    const field = await screen.findByLabelText("Time zone");
+    const suggestions = document.getElementById(field.getAttribute("list") ?? "");
+    // Also proves the pin above is in effect: the list is read at render time.
+    expect(Array.from(suggestions?.querySelectorAll("option") ?? [], (o) => o.value)).toEqual(PINNED_TIME_ZONES);
+  });
+
   it("builds a CreateTriggerRequest from the weekdays preset", async () => {
     const created = create(TriggerSchema, { id: "new-1", name: "Morning triage", projectId: "proj-2" });
     createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: created }));
@@ -184,9 +234,9 @@ describe("AutomationFormDialog", () => {
     // The one daemon with Forge installed is preselected; the other is shown
     // but cannot be chosen, because the server would refuse it.
     await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
-    expect(screen.getByRole("option", { name: /laptop \(online, project installed\)/ })).toBeEnabled();
-    expect(screen.getByRole("option", { name: /cloud-box \(suspended, project not installed\)/ })).toBeDisabled();
-    await screen.findByRole("option", { name: "Triage" });
+    expect(getOption("Runs on", /laptop \(online, project installed\)/)).toBeEnabled();
+    expect(getOption("Runs on", /cloud-box \(suspended, project not installed\)/)).toBeDisabled();
+    await findOption("Workflow", "Triage");
     await user.selectOptions(screen.getByLabelText("Workflow"), "triage");
     fill(screen.getByLabelText("Prompt"), "Triage new issues");
     // "Every weekday" is the default preset.
@@ -293,7 +343,7 @@ describe("AutomationFormDialog", () => {
 
     // Reopens on the preset that produced the stored cron.
     expect(await screen.findByLabelText("Repeat")).toHaveValue("daily");
-    await screen.findByRole("option", { name: /cloud-box/ });
+    await findOption("Runs on", /cloud-box/);
     expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-2");
     expect(screen.getByLabelText("At")).toHaveValue("02:00");
     fill(screen.getByLabelText("Name"), "Nightly dependency bump");
@@ -343,7 +393,7 @@ describe("AutomationFormDialog", () => {
     expect(screen.queryByLabelText("Time zone")).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Catch-up window")).not.toBeInTheDocument();
 
-    await screen.findByRole("option", { name: /cloud-box/ });
+    await findOption("Runs on", /cloud-box/);
     fill(screen.getByLabelText("Name"), "Renamed hook");
     fill(screen.getByLabelText("Prompt"), "New prompt");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
@@ -360,7 +410,7 @@ describe("AutomationFormDialog", () => {
     const user = userEvent.setup();
 
     renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
-    await screen.findByRole("option", { name: /cloud-box/ });
+    await findOption("Runs on", /cloud-box/);
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/newer version of Reliant/);
@@ -373,7 +423,7 @@ describe("AutomationFormDialog", () => {
     const user = userEvent.setup();
 
     renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
-    await screen.findByRole("option", { name: /laptop/ });
+    await findOption("Runs on", /laptop/);
     await user.selectOptions(screen.getByLabelText("Runs on"), "daemon-1");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
@@ -387,7 +437,7 @@ describe("AutomationFormDialog", () => {
       const user = userEvent.setup();
       renderAtRoute(<AutomationFormDialog open onClose={onClose} />);
 
-      await screen.findByRole("option", { name: /laptop/ });
+      await findOption("Runs on", /laptop/);
       fill(screen.getByLabelText("Prompt"), "A long, carefully written prompt");
       fireEvent.keyDown(document, { key: "Escape" });
 
@@ -405,7 +455,7 @@ describe("AutomationFormDialog", () => {
       const user = userEvent.setup();
       renderAtRoute(<AutomationFormDialog open onClose={onClose} />);
 
-      await screen.findByRole("option", { name: /laptop/ });
+      await findOption("Runs on", /laptop/);
       fill(screen.getByLabelText("Name"), "Morning triage");
       await user.click(screen.getByRole("button", { name: "Cancel" }));
       await user.click(await screen.findByRole("button", { name: "Discard" }));
@@ -418,7 +468,7 @@ describe("AutomationFormDialog", () => {
       renderAtRoute(<AutomationFormDialog open onClose={onClose} />);
 
       // The daemon and project defaults have been applied by now.
-      await screen.findByRole("option", { name: /laptop/ });
+      await findOption("Runs on", /laptop/);
       await waitFor(() => expect(screen.getByLabelText("Runs on")).not.toHaveValue(""));
       fireEvent.keyDown(document, { key: "Escape" });
 
@@ -445,7 +495,7 @@ describe("AutomationFormDialog", () => {
     const user = userEvent.setup();
     renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
 
-    await screen.findByRole("option", { name: /laptop/ });
+    await findOption("Runs on", /laptop/);
     fill(screen.getByLabelText("Name"), "Morning triage");
     fill(screen.getByLabelText("Prompt"), "Triage");
     fill(screen.getByLabelText("Time zone"), "Mars/Olympus");
@@ -481,7 +531,7 @@ describe("AutomationFormDialog", () => {
     renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
     fill(await screen.findByLabelText("Name"), "Morning triage");
     fill(screen.getByLabelText("Prompt"), "Triage new issues");
-    await screen.findByRole("option", { name: /cloud-box/ });
+    await findOption("Runs on", /cloud-box/);
     // Two equally valid daemons: no guess.
     expect(screen.getByLabelText("Runs on")).toHaveValue("");
     await user.click(screen.getByRole("button", { name: "Create automation" }));
@@ -551,7 +601,7 @@ describe("AutomationFormDialog", () => {
       // The stored group preset supplies strictness.
       await waitFor(() => expect(screen.getByLabelText("Strictness")).toHaveValue("high"));
       // The stored workspace is selected.
-      await screen.findByRole("option", { name: "feature (feat/x)" });
+      await findOption("Workspace", "feature (feat/x)");
       expect(screen.getByLabelText("Workspace")).toHaveValue("wt-1");
 
       fill(depth, "7");
@@ -579,7 +629,7 @@ describe("AutomationFormDialog", () => {
       renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} defaultProjectId="proj-1" />);
       fill(await screen.findByLabelText("Name"), "Careful triage");
       fill(screen.getByLabelText("Prompt"), "Triage");
-      await screen.findByRole("option", { name: "Triage" });
+      await findOption("Workflow", "Triage");
       await user.selectOptions(screen.getByLabelText("Workflow"), "triage");
 
       // Choosing the workflow-level preset fills the required input.
@@ -589,7 +639,7 @@ describe("AutomationFormDialog", () => {
       await user.click(await screen.findByRole("button", { name: /careful/ }));
       await waitFor(() => expect(screen.getByLabelText("Label")).toHaveValue("bug"));
 
-      await screen.findByRole("option", { name: "hotfix (fix/y)" });
+      await findOption("Workspace", "hotfix (fix/y)");
       await user.selectOptions(screen.getByLabelText("Workspace"), "wt-2");
       await user.selectOptions(screen.getByLabelText("Runs on"), "daemon-1");
       await user.click(screen.getByRole("button", { name: "Create automation" }));
@@ -606,7 +656,7 @@ describe("AutomationFormDialog", () => {
       renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} defaultProjectId="proj-1" />);
       fill(await screen.findByLabelText("Name"), "Triage");
       fill(screen.getByLabelText("Prompt"), "Triage");
-      await screen.findByRole("option", { name: "Triage" });
+      await findOption("Workflow", "Triage");
       await user.selectOptions(screen.getByLabelText("Workflow"), "triage");
       await screen.findByLabelText("Label");
       await user.selectOptions(screen.getByLabelText("Runs on"), "daemon-1");
@@ -630,7 +680,7 @@ describe("AutomationFormDialog", () => {
 
       renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
       await screen.findByLabelText("Depth");
-      await screen.findByRole("option", { name: "Sweep" });
+      await findOption("Workflow", "Sweep");
 
       // Cancelling keeps the workflow and every input.
       await user.selectOptions(screen.getByLabelText("Workflow"), "sweep");
@@ -662,7 +712,7 @@ describe("AutomationFormDialog", () => {
     it("switches without asking when no inputs are set", async () => {
       const user = userEvent.setup();
       renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} defaultProjectId="proj-1" />);
-      await screen.findByRole("option", { name: "Triage" });
+      await findOption("Workflow", "Triage");
       await user.selectOptions(screen.getByLabelText("Workflow"), "triage");
       await screen.findByLabelText("Depth");
       await user.selectOptions(screen.getByLabelText("Workflow"), "agent");
@@ -789,7 +839,7 @@ describe("AutomationFormDialog", () => {
     expect(await screen.findByLabelText("Label")).toHaveValue("ci");
     expect(screen.getByLabelText("Strictness")).toHaveValue("high");
     // proj-1 is installed on both daemons, so the form does not guess one.
-    await screen.findByRole("option", { name: /laptop/ });
+    await findOption("Runs on", /laptop/);
     await user.selectOptions(screen.getByLabelText("Runs on"), "daemon-1");
     await user.click(screen.getByRole("button", { name: "Create automation" }));
 
@@ -826,21 +876,21 @@ describe("AutomationFormDialog", () => {
       renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} />);
 
       // "Your default workflow" resolves to the agent and its coding tools.
-      const option = await screen.findByRole("option", { name: /No machine \(server only/ });
+      const option = await findOption("Runs on", /No machine \(server only/);
       expect(option).toBeDisabled();
       expect(option).toHaveTextContent(/your default workflow needs a machine/);
 
       // So does the agent chosen explicitly: the server said so.
       await user.selectOptions(await screen.findByLabelText("Workflow"), "agent");
       await waitFor(() =>
-        expect(screen.getByRole("option", { name: /No machine \(server only/ })).toHaveTextContent(
+        expect(getOption("Runs on", /No machine \(server only/)).toHaveTextContent(
           /this workflow needs a machine/,
         ),
       );
-      expect(screen.getByRole("option", { name: /No machine \(server only/ })).toBeDisabled();
+      expect(getOption("Runs on", /No machine \(server only/)).toBeDisabled();
 
       await user.selectOptions(screen.getByLabelText("Workflow"), "digest");
-      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+      await waitFor(() => expect(getOption("Runs on", /No machine \(server only\)/)).toBeEnabled());
     });
 
     it("creates a no-machine automation with no daemon", async () => {
@@ -851,7 +901,7 @@ describe("AutomationFormDialog", () => {
       fill(await screen.findByLabelText("Name"), "Morning digest");
       fill(screen.getByLabelText("Prompt"), "Summarise the status page");
       await user.selectOptions(await screen.findByLabelText("Workflow"), "digest");
-      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+      await waitFor(() => expect(getOption("Runs on", /No machine \(server only\)/)).toBeEnabled());
       await user.selectOptions(screen.getByLabelText("Runs on"), "__no_machine__");
       expect(screen.getByText(/runs on Reliant's servers only/)).toBeInTheDocument();
       await user.click(screen.getByRole("button", { name: "Create automation" }));
@@ -872,7 +922,7 @@ describe("AutomationFormDialog", () => {
       fill(await screen.findByLabelText("Name"), "Morning digest");
       fill(screen.getByLabelText("Prompt"), "Summarise");
       await user.selectOptions(await screen.findByLabelText("Workflow"), "digest");
-      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+      await waitFor(() => expect(getOption("Runs on", /No machine \(server only\)/)).toBeEnabled());
       await user.selectOptions(screen.getByLabelText("Runs on"), "__no_machine__");
       await user.click(screen.getByRole("button", { name: "Create automation" }));
 
@@ -893,7 +943,7 @@ describe("AutomationFormDialog", () => {
       fill(await screen.findByLabelText("Name"), "Morning digest");
       fill(screen.getByLabelText("Prompt"), "Summarise");
       await user.selectOptions(await screen.findByLabelText("Workflow"), "digest");
-      await waitFor(() => expect(screen.getByRole("option", { name: /No machine \(server only\)/ })).toBeEnabled());
+      await waitFor(() => expect(getOption("Runs on", /No machine \(server only\)/)).toBeEnabled());
       await user.selectOptions(screen.getByLabelText("Runs on"), "__no_machine__");
       await user.click(screen.getByRole("button", { name: "Create automation" }));
 
