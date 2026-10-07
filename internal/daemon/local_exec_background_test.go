@@ -3,9 +3,12 @@ package daemon
 
 import (
 	"context"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 )
 
 // The "push to background" button reaches a RUNNING command through this path,
@@ -76,6 +79,79 @@ func TestRunCommand_BackgroundDetach(t *testing.T) {
 	if !strings.Contains(res.Stdout, res.ProcessID) {
 		t.Errorf("Stdout = %q, want it to name the process id %q so the model can "+
 			"read the output it was handed", res.Stdout, res.ProcessID)
+	}
+}
+
+// The detached command has to actually keep running. Reporting a process id
+// is worthless if the process behind it is already dead.
+//
+// It was: RunCommand ran the command under a context it cancelled on return
+// (`defer cancel()`), and os/exec answers a cancelled context by calling
+// cmd.Cancel — the graceful SIGTERM to the process group. So the instant the
+// handoff was reported, the handed-off command was terminated, and shell_output
+// showed it "failed". Even without the deferred cancel, the foreground timeout
+// would have killed it at TimeoutMs, which no longer applies to a background
+// process.
+//
+// The command outlives its own foreground timeout on purpose: 1s timeout,
+// 2s of work. A background process is not bound by the foreground budget.
+func TestRunCommand_DetachedCommandKeepsRunning(t *testing.T) {
+	asked := false
+	ctx := WithBackgroundProbe(context.Background(), func() (string, bool) {
+		if asked {
+			return "", false
+		}
+		asked = true
+		return "toolu_detach_survives", true
+	})
+
+	res, err := NewLocalClient().RunCommand(ctx, &RunCommandRequest{
+		Command:    "sleep 2; echo survived",
+		WorkingDir: t.TempDir(),
+		TimeoutMs:  1000,
+	})
+	if err != nil {
+		t.Fatalf("RunCommand returned a transport error: %v", err)
+	}
+	if !res.Backgrounded {
+		t.Fatalf("Backgrounded = false, want true; result was %+v", res)
+	}
+
+	assertBackgroundProcessCompletes(t, res.ProcessID, "survived")
+}
+
+// assertBackgroundProcessCompletes waits for an adopted process to finish and
+// requires that it finished on its own, with the output it was going to write.
+func assertBackgroundProcessCompletes(t *testing.T, processID, wantOutput string) {
+	t.Helper()
+	bgm := shell.GetBackgroundManager()
+	deadline := time.Now().Add(15 * time.Second)
+	for {
+		status, done, exitCode, err := bgm.GetProcessStatus(processID)
+		if err != nil {
+			t.Fatalf("GetProcessStatus(%s): %v", processID, err)
+		}
+		if done {
+			stdout, stderr, _ := bgm.GetOutput(processID)
+			if status != "completed" || exitCode == nil || *exitCode != 0 {
+				code := "<nil>"
+				if exitCode != nil {
+					code = strconv.Itoa(*exitCode)
+				}
+				t.Fatalf("detached process ended with status=%q exit=%s, want completed/0 — "+
+					"it was stopped after the handoff instead of being left to run "+
+					"(stdout=%q stderr=%q)", status, code, stdout, stderr)
+			}
+			if !strings.Contains(stdout, wantOutput) {
+				t.Fatalf("detached process stdout = %q, want it to contain %q", stdout, wantOutput)
+			}
+			return
+		}
+		if time.Now().After(deadline) {
+			_ = bgm.KillProcess(processID)
+			t.Fatalf("detached process %s still %q after 15s", processID, status)
+		}
+		time.Sleep(50 * time.Millisecond)
 	}
 }
 
