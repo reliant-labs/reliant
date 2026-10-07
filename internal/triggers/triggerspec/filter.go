@@ -40,11 +40,18 @@ type Filter struct {
 // workflow would be empty there, and accepting them would let an expression
 // compile that can only ever see blanks.
 func triggerEnv() (*cel.Env, error) {
-	return wfcel.NewEnv(wfcel.CELEnvConfig{
-		Namespaces:             []wfcel.CELNamespace{wfcel.CELTrigger},
+	return wfcel.NewEnv(triggerEnvConfig(wfcel.CELTrigger))
+}
+
+// triggerEnvConfig is the one configuration every trigger expression is
+// compiled in; a Shape uses it too, so typing `trigger` is the only
+// difference between checking an expression and running it.
+func triggerEnvConfig(namespaces ...wfcel.CELNamespace) wfcel.CELEnvConfig {
+	return wfcel.CELEnvConfig{
+		Namespaces:             namespaces,
 		IncludeStdLib:          true,
 		IncludeCustomFunctions: true,
-	})
+	}
 }
 
 // CompileFilter validates expr and prepares it for evaluation. An empty or
@@ -67,7 +74,8 @@ func CompileFilter(expr string) (*Filter, error) {
 	}
 	// The trigger root is dynamic, so a field read type-checks as dyn; only
 	// an expression whose result is statically not a bool can be rejected
-	// here. Anything else is checked at evaluation.
+	// here. Anything else is checked at evaluation — or, where the source's
+	// payload is declared, by workflow validation against a Shape.
 	if out := ast.OutputType(); out != cel.BoolType && out != cel.DynType {
 		return nil, &FilterError{Expr: expr, Reason: fmt.Sprintf("must evaluate to a bool, not %s", out)}
 	}

@@ -79,7 +79,7 @@ function issueEntry() {
       payloadSchema: {
         type: "object",
         properties: {
-          event: { type: "string", enum: ["issues.opened", "issues.reopened"] },
+          event: { type: "string", enum: ["issues.opened", "issues.labeled"] },
           attributes: { type: "object", properties: { repository: { type: "string", description: "owner/repo", examples: ["acme/app"] } } },
           data: { type: "object", properties: { issue: { type: "object", properties: { number: { type: "integer" } } } } },
         },
@@ -187,8 +187,8 @@ describe("DeclaredTriggerPanel", () => {
 
     // Events come from the trigger type's payload schema.
     const events = await screen.findByRole("group", { name: "Events" });
-    await user.click(within(events).getByRole("button", { name: "issues.reopened" }));
-    expect(latest()![0]!.source).toMatchObject({ case: "integration", value: { events: ["issues.opened", "issues.reopened"] } });
+    await user.click(within(events).getByRole("button", { name: "issues.labeled" }));
+    expect(latest()![0]!.source).toMatchObject({ case: "integration", value: { events: ["issues.opened", "issues.labeled"] } });
 
     const repo = screen.getByLabelText("repository");
     expect(repo).toHaveAttribute("placeholder", "acme/app");

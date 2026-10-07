@@ -199,12 +199,12 @@ inputs:
   issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set per activation
 triggers:
   - name: new-issue                 # unique within the workflow: lowercase, digits, - and _
-    description: A new or reopened issue
+    description: A new issue
     integration:                    # exactly ONE source: schedule | webhook | integration | workflow_event
       integration: github
-      events: [issues.opened, issues.reopened]   # "issues.*" or "*" also match
+      events: [issues.opened]                    # "issues.*" or "*" also match
       match: {repository: acme/app}              # event attributes that must be equal
-    filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')"
+    filter: "!('wontfix' in trigger.payload.data.issue.labels)"
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
     prompt: "Triage issue #{{ trigger.payload.data.issue.number }}: label it, ask for a repro if one is missing."
@@ -242,6 +242,10 @@ What `trigger.payload` holds, by source:
 | workflow_event | `run_id`, `chat_id`, `workflow_name`, `outcome`, `summary`, `error` |
 
 The payload is untrusted data from outside. Read it in templates; never paste it into a system prompt.
+
+An integration's payload is declared (`get_integration_schema` shows it), and validation type-checks the filter, inputs and
+prompt against it. Lists of names are strings, not objects: GitHub's `issue.labels` and `issue.assignees`, and
+`data.label` on `issues.labeled`. Write `'wontfix' in trigger.payload.data.issue.labels`, never `l.name`.
 
 **`trigger.sender`** is who sent the event, set by the receiver from what the source authenticated, never from the
 payload: `kind` (slack, github, email, sms, webhook, workflow, schedule, user), `id`, `display_name`, `verified`.

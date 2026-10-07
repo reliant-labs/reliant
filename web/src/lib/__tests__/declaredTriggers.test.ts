@@ -25,12 +25,12 @@ describe('declared triggers', () => {
   it('edits source, filter and inputs as the proto shape', () => {
     let t = withFilter(issue, "trigger.payload.data.issue.user.login != 'bot'")
     t = withInput(t, 'issue_number', '{{ trigger.payload.data.issue.number }}')
-    t = withIntegration(t, { ...integrationOf(t)!, events: ['issues.opened', 'issues.reopened'], match: { repository: 'acme/app', '': 'dropped' } })
+    t = withIntegration(t, { ...integrationOf(t)!, events: ['issues.opened', 'issues.labeled'], match: { repository: 'acme/app', '': 'dropped' } })
     expect(t).toMatchObject({
       name: 'new-issue',
       filter: "trigger.payload.data.issue.user.login != 'bot'",
       inputs: { issue_number: '{{ trigger.payload.data.issue.number }}' },
-      source: { case: 'integration', value: { integration: 'github', events: ['issues.opened', 'issues.reopened'], match: { repository: 'acme/app' } } },
+      source: { case: 'integration', value: { integration: 'github', events: ['issues.opened', 'issues.labeled'], match: { repository: 'acme/app' } } },
     })
     expect(withInput(t, 'issue_number', '').inputs).toEqual({})
   })

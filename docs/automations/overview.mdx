@@ -68,6 +68,8 @@ Each entry has a unique `name` and exactly one source. The fields around the sou
 
 Inside templates and filters, `trigger.payload` is the event's data and `trigger.kind` says what fired. Unknown keys in a `triggers:` block are errors, not ignored: a mistyped `filtr:` would otherwise mean a trigger that fires on everything.
 
+For an integration trigger, validation also checks the filter, inputs and prompt against the payload the integration declares for its events, so a read that payload can never satisfy is an error before the trigger fires. For example, GitHub's `issue.labels` is a list of label names: write `!('wontfix' in trigger.payload.data.issue.labels)`, not `l.name`.
+
 ## The four kinds
 
 | Kind | Fires when | Page |

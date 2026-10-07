@@ -9,6 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 )
@@ -31,8 +32,13 @@ var triggerNamePattern = regexp.MustCompile(`^[a-z0-9]([a-z0-9_-]{0,62}[a-z0-9])
 // routing attributes (TriggerSpec.attributes) those events carry. ok=false is
 // an integration not in the catalog; an integration that declares no
 // triggers returns no types and is not narrowed.
+//
+// PayloadSchemas is the JSON Schema of trigger.payload for one event type
+// (manifest.TriggerPayloadSchema), one per declared trigger that delivers
+// it; none when nothing declares it.
 type IntegrationIndex interface {
 	TriggerTypes(integration string) (eventTypes, attributes []string, ok bool)
+	PayloadSchemas(integration, eventType string) []map[string]any
 }
 
 // catalogIntegrations is the IntegrationIndex over the embedded catalog.
@@ -58,6 +64,28 @@ func (catalogIntegrations) TriggerTypes(integration string) ([]string, []string,
 		}
 	}
 	return events, attrs, found
+}
+
+func (catalogIntegrations) PayloadSchemas(integration, eventType string) []map[string]any {
+	c, err := catalog.Builtin()
+	if err != nil {
+		return nil
+	}
+	var out []map[string]any
+	for _, m := range c.Manifests() {
+		if m.GetId() != integration {
+			continue
+		}
+		for _, ts := range m.GetTriggers() {
+			for _, ev := range ts.GetEvents() {
+				if ev == eventType {
+					out = append(out, manifest.TriggerPayloadSchema(m, ts))
+					break
+				}
+			}
+		}
+	}
+	return out
 }
 
 func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrations IntegrationIndex, result *Result) {
@@ -97,6 +125,14 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			addTriggerSourceError(result, path, wt, err)
 		}
 
+		// The declared type of `trigger` for this source, when its events'
+		// payload is declared; nil leaves the payload dynamic.
+		var shape *payloadShape
+		if src != nil && wt.GetIntegration() != nil {
+			validateTriggerIntegration(wt.GetIntegration(), path, integrations, result)
+			shape = integrationPayloadShape(wt.GetIntegration(), integrations)
+		}
+
 		if filter := strings.TrimSpace(wt.GetFilter()); filter != "" {
 			if wt.GetSchedule() != nil {
 				result.AddErrorWithSuggestion(CategoryTrigger, path, "filter",
@@ -105,20 +141,89 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 			} else if _, err := triggerspec.CompileFilter(filter); err != nil {
 				result.AddErrorWithSuggestion(CategoryTrigger, path, "filter", strings.TrimPrefix(err.Error(), "filter: "),
 					"a filter is a raw CEL bool over `trigger` (e.g. trigger.payload.data.action == 'opened'); guard optional fields with has()")
+			} else if shape != nil {
+				shape.report(result, path, "filter", "", shape.CheckFilter(filter))
 			}
 		}
 
-		if src != nil && wt.GetIntegration() != nil {
-			validateTriggerIntegration(wt.GetIntegration(), path, integrations, result)
-		}
 		if ev := wt.GetWorkflowEvent(); ev != nil && opts != nil && opts.WorkflowLoader != nil {
 			validateWorkflowEventRefs(ev, path, opts.WorkflowLoader, result)
 		}
-		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, result)
+		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, shape, result)
 		warnUnmappedRequiredInputs(wt.GetInputs(), declaredInputs, path, result)
 		if err := triggerspec.CompilePrompt(wt.GetPrompt()); err != nil {
 			result.AddErrorWithSuggestion(CategoryTrigger, path, "prompt", strings.TrimPrefix(err.Error(), "prompt: "),
 				"a prompt reads only `trigger` (e.g. Triage #{{ trigger.payload.data.issue.number }}); the run's inputs and nodes do not exist yet")
+		} else if shape != nil {
+			for _, expr := range triggerspec.InputExpressions(wt.GetPrompt()) {
+				shape.report(result, path, "prompt", expr, shape.CheckExpr(expr))
+			}
+		}
+	}
+}
+
+// payloadShape is a trigger's typed `trigger` root, with what it was
+// declared by for the findings it produces.
+type payloadShape struct {
+	*triggerspec.Shape
+	// declaredBy names where the payload type comes from, e.g. "checked
+	// against the payload github declares for issues.opened".
+	declaredBy string
+}
+
+// integrationPayloadShape types `trigger` for an integration source: the
+// union of the payloads the catalog declares for the events it listens to.
+// nil when none of them is declared.
+func integrationPayloadShape(src *reliantv1.IntegrationSource, integrations IntegrationIndex) *payloadShape {
+	id := strings.TrimSpace(src.GetIntegration())
+	types, _, ok := integrations.TriggerTypes(id)
+	if !ok || len(types) == 0 {
+		return nil
+	}
+	var schemas []map[string]any
+	var typed []string // the patterns as written that named a declared payload
+	seen := map[string]bool{}
+	for _, pattern := range src.GetEvents() {
+		pattern = strings.TrimSpace(pattern)
+		matched := false
+		for _, t := range uniqueSorted(types) {
+			if !eventMatches(pattern, t) {
+				continue
+			}
+			if !seen[t] {
+				seen[t] = true
+				schemas = append(schemas, integrations.PayloadSchemas(id, t)...)
+			}
+			matched = true
+		}
+		if matched {
+			typed = append(typed, pattern)
+		}
+	}
+	if len(schemas) == 0 {
+		return nil
+	}
+	shape, err := triggerspec.NewShape(schemas...)
+	if err != nil {
+		// The environment is built from the catalog, not the workflow: a
+		// failure is a bug here, and the untyped checks still ran.
+		return nil
+	}
+	return &payloadShape{Shape: shape, declaredBy: fmt.Sprintf("checked against the payload %s declares for %s", id, strings.Join(typed, ", "))}
+}
+
+// report adds a type error for each finding under field. expr, when set, is
+// the template expression the findings are about.
+func (s *payloadShape) report(result *Result, path []string, field, expr string, errs []*triggerspec.TypeError) {
+	for _, e := range errs {
+		msg := e.Reason + " (" + s.declaredBy + ")"
+		if expr != "" {
+			msg = fmt.Sprintf("{{ %s }}: %s", expr, msg)
+		}
+		if e.Suggestion != "" {
+			result.AddErrorWithSuggestion(CategoryTrigger, path, field, msg, e.Suggestion)
+		} else {
+			result.AddError(CategoryTrigger, path, field, msg)
 		}
 	}
 }
@@ -250,20 +355,21 @@ func uniqueSorted(in []string) []string {
 }
 
 // eventMatchesAny reports whether a trigger's event pattern names at least
-// one type the integration delivers: "*" matches all, "issues.*" a prefix.
+// one type the integration delivers.
 func eventMatchesAny(pattern string, types []string) bool {
-	if pattern == "*" {
-		return true
-	}
 	for _, t := range types {
-		if pattern == t {
-			return true
-		}
-		if strings.HasSuffix(pattern, ".*") && strings.HasPrefix(t, strings.TrimSuffix(pattern, "*")) {
+		if eventMatches(pattern, t) {
 			return true
 		}
 	}
 	return false
+}
+
+// eventMatches reports whether an event pattern names event type t: "*"
+// matches all, "issues.*" a prefix.
+func eventMatches(pattern, t string) bool {
+	return pattern == "*" || pattern == t ||
+		(strings.HasSuffix(pattern, ".*") && strings.HasPrefix(t, strings.TrimSuffix(pattern, "*")))
 }
 
 // validateWorkflowEventRefs warns about a referenced workflow that does not
@@ -288,8 +394,9 @@ func validateWorkflowEventRefs(src *reliantv1.WorkflowEventSource, path []string
 }
 
 // validateTriggerInputs checks the inputs mapping: every key is a declared
-// workflow input, and every value compiles as a template over `trigger`.
-func validateTriggerInputs(inputs map[string]string, declared map[string]*reliantv1.Input, path []string, result *Result) {
+// workflow input, and every value compiles as a template over `trigger` —
+// against the payload's declared shape, when there is one.
+func validateTriggerInputs(inputs map[string]string, declared map[string]*reliantv1.Input, path []string, shape *payloadShape, result *Result) {
 	if len(inputs) == 0 {
 		return
 	}
@@ -310,12 +417,25 @@ func validateTriggerInputs(inputs map[string]string, declared map[string]*relian
 				fmt.Sprintf("%q is passed as literal text; wrap it as {{ %s }} to read the event", inputs[name], strings.TrimSpace(inputs[name])))
 		}
 	}
+	failed := map[string]bool{}
 	for _, e := range triggerspec.CompileInputs(inputs) {
+		failed[e.Input] = true
 		if _, ok := declared[e.Input]; !ok {
 			continue // already reported
 		}
 		result.AddErrorWithSuggestion(CategoryTrigger, path, "inputs."+e.Input, e.Reason,
 			"an input mapping reads only `trigger` (e.g. {{ trigger.payload.data.issue.number }}); the run's inputs and nodes do not exist yet")
+	}
+	if shape == nil {
+		return
+	}
+	for _, name := range names {
+		if _, ok := declared[name]; !ok || failed[name] {
+			continue
+		}
+		for _, expr := range triggerspec.InputExpressions(inputs[name]) {
+			shape.report(result, path, "inputs."+name, expr, shape.CheckExpr(expr))
+		}
 	}
 }
 

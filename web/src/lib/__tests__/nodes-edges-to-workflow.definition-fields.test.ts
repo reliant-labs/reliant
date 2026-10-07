@@ -26,7 +26,7 @@ const workflow: Workflow = {
     {
       name: 'new-issue',
       description: 'A new issue',
-      filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')",
+      filter: "!('wontfix' in trigger.payload.data.issue.labels)",
       inputs: { issue_number: '{{ trigger.payload.data.issue.number }}' },
       source: {
         case: 'integration',

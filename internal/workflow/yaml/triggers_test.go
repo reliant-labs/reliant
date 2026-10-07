@@ -81,10 +81,10 @@ triggers:
     description: A new issue was opened
     integration:
       integration: github
-      events: [issues.opened, issues.reopened]
+      events: [issues.opened, issues.labeled]
       match: {repository: reliant-labs/reliant}
       poll_interval: 5m
-    filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')"
+    filter: "!('wontfix' in trigger.payload.data.issue.labels)"
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
   - name: nightly
@@ -112,11 +112,11 @@ nodes:
 	issue := wf.GetTriggers()[0]
 	assert.Equal(t, "new-issue", issue.GetName())
 	assert.Equal(t, "A new issue was opened", issue.GetDescription())
-	assert.Equal(t, "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')", issue.GetFilter())
+	assert.Equal(t, "!('wontfix' in trigger.payload.data.issue.labels)", issue.GetFilter())
 	assert.Equal(t, map[string]string{"issue_number": "{{ trigger.payload.data.issue.number }}"}, issue.GetInputs())
 	assert.True(t, proto.Equal(&reliantv1.IntegrationSource{
 		Integration:  "github",
-		Events:       []string{"issues.opened", "issues.reopened"},
+		Events:       []string{"issues.opened", "issues.labeled"},
 		Match:        map[string]string{"repository": "reliant-labs/reliant"},
 		PollInterval: "5m",
 	}, issue.GetIntegration()))

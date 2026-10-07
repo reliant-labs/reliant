@@ -346,3 +346,5 @@ func (f fakeIntegrationIndex) TriggerTypes(integration string) ([]string, []stri
 	in, ok := f[integration]
 	return in.events, in.attrs, ok
 }
+
+func (f fakeIntegrationIndex) PayloadSchemas(string, string) []map[string]any { return nil }

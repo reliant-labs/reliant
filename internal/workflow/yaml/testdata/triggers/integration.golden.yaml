@@ -8,13 +8,13 @@ inputs:
 entry: [triage]
 triggers:
     - name: new-issue
-      description: A new or reopened issue
+      description: A new issue
       integration:
         integration: github
-        events: [issues.opened, issues.reopened]
+        events: [issues.opened]
         match:
             repository: reliant-labs/reliant
-      filter: '!trigger.payload.data.issue.labels.exists(l, l.name == ''wontfix'')'
+      filter: '!(''wontfix'' in trigger.payload.data.issue.labels)'
       inputs:
         issue_number: '{{ trigger.payload.data.issue.number }}'
         title: '#{{ trigger.payload.data.issue.number }}: {{ trigger.payload.data.issue.title }}'
