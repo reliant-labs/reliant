@@ -348,9 +348,12 @@ func lifecyclePhaseToProto(phase *string) reliantv1.DaemonLifecyclePhase {
 // With no attachment the phase is the only information available, and it is
 // what separates the three cases the old two-value enum collapsed into one:
 // still coming up (PENDING), deliberately parked (SUSPENDED), and broken
-// (FAILED). No phase means no lifecycle was ever reported — the permanent
-// state of every self-hosted daemon — so DISCONNECTED, exactly as before.
-func composeDaemonStatus(phase reliantv1.DaemonLifecyclePhase, attached bool) reliantv1.DaemonStatus {
+// (FAILED). No phase means no lifecycle was ever reported. That is the
+// permanent state of every self-hosted daemon, so those stay DISCONNECTED; for
+// a managed daemon it means the mirror is missing or unrecognised and the
+// machine may well be suspended, so the honest answer is UNSPECIFIED
+// ("unknown") rather than a DISCONNECTED guess that hides Resume.
+func composeDaemonStatus(phase reliantv1.DaemonLifecyclePhase, attached, selfHosted bool) reliantv1.DaemonStatus {
 	if attached {
 		return reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
 	}
@@ -363,12 +366,26 @@ func composeDaemonStatus(phase reliantv1.DaemonLifecyclePhase, attached bool) re
 		return reliantv1.DaemonStatus_DAEMON_STATUS_SUSPENDED
 	case reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED:
 		return reliantv1.DaemonStatus_DAEMON_STATUS_FAILED
+	case reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED:
+		if selfHosted {
+			return reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
+		}
+		return reliantv1.DaemonStatus_DAEMON_STATUS_UNSPECIFIED
 	default:
 		// READY-but-unattached is DISCONNECTED, not ACTIVE: the operator says
 		// the pod is up, but nothing is attached to route work to. That is
 		// precisely the window the attachment lease exists to report.
 		return reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
 	}
+}
+
+// isSelfHostedDaemonType reports whether a daemon is user-run, i.e. has no
+// control-plane lifecycle to mirror. "external" is control-plane's word for it.
+func isSelfHostedDaemonType(daemonType *string) bool {
+	if daemonType == nil {
+		return false
+	}
+	return *daemonType == "self_hosted" || *daemonType == "external"
 }
 
 // daemonToProto converts a db.Daemon into the proto DaemonInfo.
@@ -390,7 +407,7 @@ func daemonToProto(d *db.Daemon, att *db.DaemonAttachment) *reliantv1.DaemonInfo
 	info := &reliantv1.DaemonInfo{
 		DaemonId:          d.ID,
 		UserId:            d.UserID,
-		Status:            composeDaemonStatus(phase, att != nil),
+		Status:            composeDaemonStatus(phase, att != nil, isSelfHostedDaemonType(d.DaemonType)),
 		Projects:          projectPathsToDiscoveredProjects(d.ProjectPaths),
 		LifecyclePhase:    phase,
 		LastStatusMessage: d.LastStatusMessage,

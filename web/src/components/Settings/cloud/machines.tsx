@@ -148,7 +148,7 @@ const QK = {
 };
 
 // ── Status presentation ─────────────────────────────────────────────────────
-type WsStatus = "active" | "suspended" | "failed" | "pending" | "disconnected";
+type WsStatus = "active" | "suspended" | "failed" | "pending" | "disconnected" | "unknown";
 
 const statusFromEnum: Record<number, WsStatus> = {
   [DaemonStatus.ACTIVE]: "active",
@@ -164,6 +164,7 @@ const statusBadge: Record<WsStatus, { label: string; variant: BadgeVariant }> = 
   failed: { label: "Failed", variant: "error" },
   pending: { label: "Pending", variant: "neutral" },
   disconnected: { label: "Disconnected", variant: "error" },
+  unknown: { label: "Status unknown", variant: "neutral" },
 };
 
 const statusDotVariant: Record<WsStatus, StatusDotVariant> = {
@@ -172,10 +173,11 @@ const statusDotVariant: Record<WsStatus, StatusDotVariant> = {
   failed: "error",
   pending: "pending",
   disconnected: "error",
+  unknown: "pending",
 };
 
 function daemonStatus(d: Daemon): WsStatus {
-  return statusFromEnum[d.status] ?? "pending";
+  return statusFromEnum[d.status] ?? "unknown";
 }
 
 /**
