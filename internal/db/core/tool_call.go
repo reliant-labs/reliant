@@ -108,8 +108,12 @@ type ToolCallResult struct {
 	MessageID *string
 	Content   string
 	IsError   bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// GrantedTools are the tools this result granted the call's thread — a
+	// load_tool result's loaded names, empty for every other result. Written
+	// with Content, so it always describes the result the model reads.
+	GrantedTools []string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
 
 // ErrToolCallIDInAnotherChat is returned by a tool call or result write whose

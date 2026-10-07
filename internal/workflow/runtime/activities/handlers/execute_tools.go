@@ -713,7 +713,22 @@ func (a *ExecuteToolsActivity) checkPriorTerminalResult(ctx context.Context, cha
 		// dangling-tool-call repair path uses -- do NOT re-execute.
 		return a.buildToolResult(toolCallID, toolName, InterruptedToolResultContent, "", true, nil, nil), true
 	}
-	return a.buildToolResult(toolCallID, toolName, result.Content, "", result.IsError, nil, nil), true
+	return a.buildToolResult(toolCallID, toolName, result.Content, recordedGrantMetadata(result.GrantedTools), result.IsError, nil, nil), true
+}
+
+// recordedGrantMetadata restores a replayed load_tool result's metadata from
+// the grants its row recorded, so the batch reports them to the workflow
+// (grantedTools) exactly as the original execution did. "" when it granted
+// nothing.
+func recordedGrantMetadata(granted []string) string {
+	if len(granted) == 0 {
+		return ""
+	}
+	encoded, err := json.Marshal(tools.LoadToolMetadata{LoadedTools: granted})
+	if err != nil {
+		return ""
+	}
+	return string(encoded)
 }
 
 // executeToolWithStatus handles tool execution with proper status emissions
@@ -842,7 +857,11 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 		startedAt:    &startedAt,
 		completedAt:  &completedAt,
 		errorMessage: errMsg,
-	}, &toolCallResultWrite{content: durableContent, isError: isError})
+	}, &toolCallResultWrite{
+		content:      durableContent,
+		isError:      isError,
+		grantedTools: grantedByResult(toolName, execResult.Metadata, isError),
+	})
 
 	return result
 }
@@ -881,6 +900,10 @@ func (a *ExecuteToolsActivity) trackDaemonPending(ctx context.Context, chatID st
 type toolCallResultWrite struct {
 	content string
 	isError bool
+	// grantedTools is what the result granted the call's thread (a load_tool
+	// result's loaded names). Recorded with the content so a run restarted
+	// from its checkpoint gets back the grants its history says it has.
+	grantedTools []string
 }
 
 // upsertTerminalToolCall writes a tool call's terminal STATUS and its RESULT as
@@ -927,11 +950,12 @@ func (a *ExecuteToolsActivity) upsertTerminalToolCall(
 		}
 		now := time.Now()
 		return a.repo.UpsertToolCallResult(txCtx, tec.getChatID(), &core.ToolCallResult{
-			ToolCallID: tec.toolCallID,
-			Content:    res.content,
-			IsError:    res.isError,
-			CreatedAt:  now,
-			UpdatedAt:  now,
+			ToolCallID:   tec.toolCallID,
+			Content:      res.content,
+			IsError:      res.isError,
+			GrantedTools: res.grantedTools,
+			CreatedAt:    now,
+			UpdatedAt:    now,
 		})
 	}); err != nil {
 		// Best-effort: never fail the tool call over its own bookkeeping. The

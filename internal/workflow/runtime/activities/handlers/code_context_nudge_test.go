@@ -204,6 +204,7 @@ func TestNudge_DoesNotEnterDurableContent(t *testing.T) {
 
 	require.Contains(t, body, "durableContent := result.Content",
 		"the pre-nudge content must be captured for the durable write")
-	assert.Contains(t, body, "&toolCallResultWrite{content: durableContent, isError: isError}",
+	// Whitespace-tolerant: gofmt aligns the literal's fields once it spans lines.
+	assert.Regexp(t, `&toolCallResultWrite\{\s*content:\s+durableContent,`, body,
 		"the success-path write must persist the command's real output, not the nudged copy")
 }

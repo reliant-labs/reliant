@@ -73,35 +73,6 @@ func (s *ChatService) notifyHistoryLimitRestart(ctx context.Context, chatID, wor
 	}
 }
 
-// resumeInputForInterruptedRun builds the engine resume parameter for a new
-// run whose predecessor was interrupted (failed/terminated/wedged/lost) rather
-// than completed or user-cancelled. It reads the position checkpoint written
-// at node-entry/loop-iteration boundaries. A missing checkpoint still returns
-// a non-nil (empty) ResumeInput: resume mode stays on and the engine applies
-// its fallbacks (workflow resume_node -> single top-level loop -> graph entry).
-func (s *ChatService) resumeInputForInterruptedRun(ctx context.Context, workflowID string) *v2.ResumeInput {
-	cp, err := s.database.GetWorkflowCheckpoint(ctx, workflowID)
-	if err != nil {
-		logging.Warn("Failed to load workflow checkpoint - resuming with engine fallbacks",
-			"workflowID", workflowID, "error", err)
-	}
-	resume := &v2.ResumeInput{}
-	if cp != nil {
-		resume.NodeID = cp.NodeID
-		resume.LoopIteration = int(cp.LoopIteration)
-	}
-	// Background spawns ran as goroutines inside the dead execution, so they
-	// died with it. The new run relaunches every one that never reported back,
-	// on its existing thread and tool call, from the durable rows.
-	spawns, err := v2.ResumableSpawnsFromDurableState(ctx, s.database, workflowID)
-	if err != nil {
-		logging.Warn("Failed to derive live background spawns - resuming without them",
-			"workflowID", workflowID, "error", err)
-	}
-	resume.Spawns = spawns
-	return resume
-}
-
 // saveIncomingMessages atomically persists the system and user messages a send
 // contributes to a thread. It deliberately does not inspect or drain the agent
 // mailbox: call_llm is the sole mailbox deliverer, immediately before reading
@@ -375,7 +346,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		Trigger:      launch.LoadChatTrigger(ctx, s.database, req.Msg.ChatId),
 		// A ghost (Temporal lost the running execution) is an infra failure,
 		// not user intent — the fresh execution resumes at position.
-		Resume: s.resumeInputForInterruptedRun(ctx, workflowID),
+		Resume: v2.ResumeInputFromDurableState(ctx, s.database, req.Msg.ChatId, workflowID),
 	}
 
 	// Step 6: Start fresh Temporal execution
@@ -663,7 +634,7 @@ func (s *ChatService) SendMessage(
 						"workflowID", workflowID, "chatID", req.Msg.ChatId)
 					// The paused run was lost (infra failure, not user
 					// intent) — start a new run that resumes at position.
-					resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
+					resumeInput = v2.ResumeInputFromDurableState(ctx, s.database, req.Msg.ChatId, workflowID)
 					resumeThread = existingWorkflow.Thread
 					// Fall through to start a new workflow below
 					break
@@ -891,7 +862,7 @@ func (s *ChatService) SendMessage(
 					// resolved and messages saved — fall through to coarse restart.
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
-					resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
+					resumeInput = v2.ResumeInputFromDurableState(ctx, s.database, req.Msg.ChatId, workflowID)
 					resumeThread = existingWorkflow.Thread
 					break
 				}
@@ -954,7 +925,7 @@ func (s *ChatService) SendMessage(
 				// checkpointed node instead of graph entry, so entry routers never
 				// re-classify the user's "continue" message. Used when there is no
 				// replayable history (ghost) or the reset guard gave up.
-				resumeInput = s.resumeInputForInterruptedRun(ctx, workflowID)
+				resumeInput = v2.ResumeInputFromDurableState(ctx, s.database, req.Msg.ChatId, workflowID)
 				resumeThread = existingWorkflow.Thread
 				logging.Info("Interrupted workflow detected - new run will resume at position",
 					"chatID", req.Msg.ChatId,

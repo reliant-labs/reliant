@@ -711,12 +711,13 @@ type ToolCall struct {
 }
 
 type ToolCallResult struct {
-	ToolCallID string         `json:"tool_call_id"`
-	MessageID  sql.NullString `json:"message_id"`
-	Content    string         `json:"content"`
-	IsError    bool           `json:"is_error"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
+	ToolCallID   string         `json:"tool_call_id"`
+	MessageID    sql.NullString `json:"message_id"`
+	Content      string         `json:"content"`
+	IsError      bool           `json:"is_error"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	GrantedTools []string       `json:"granted_tools"`
 }
 
 type Trigger struct {

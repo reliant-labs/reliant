@@ -88,8 +88,11 @@ type ResumeInput struct {
 	// on the relaunched spawns before its first iteration.
 	AwaitSpawnsFirst bool `json:"await_spawns_first,omitempty"`
 	// ToolGrants are the predecessor's load_tool grants, per thread, so a tool
-	// an agent loaded before a continue-as-new is still offered after it.
-	// Relaunched spawns keep their thread, and with it their grants.
+	// an agent loaded before the boundary is still offered after it. Filled by
+	// a continue-as-new handoff (the in-memory record) and by the coarse
+	// fresh restart from the durable tool results (see
+	// ToolGrantsFromDurableState). Relaunched spawns keep their thread, and
+	// with it their grants.
 	ToolGrants map[string][]string `json:"tool_grants,omitempty"`
 }
 
@@ -291,7 +294,9 @@ type ChildWorkflowTracker struct {
 	spawnCancelled func(toolCallID, childThread string) bool
 
 	// toolGrants records, per thread, every tool load_tool has granted in
-	// this run — the only record of a grant there is (tool_grants.go).
+	// this run (tool_capabilities.go). Each grant is also on its load_tool
+	// result's row, which is what a restart from the checkpoint rebuilds this
+	// from (ToolGrantsFromDurableState).
 	toolGrants map[string][]string
 }
 
@@ -581,8 +586,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	childTracker := &ChildWorkflowTracker{
 		children: make(map[string]bool),
 	}
-	// A continue-as-new successor starts with its predecessor's load_tool
-	// grants, so a loaded tool is still offered after the handoff.
+	// A resumed run starts with its predecessor's load_tool grants, so a
+	// loaded tool is still offered after the boundary: a continue-as-new
+	// carries them, and a coarse fresh restart rebuilds them from the durable
+	// tool results (ToolGrantsFromDurableState).
 	if input.Resume != nil {
 		childTracker.seedToolGrants(input.Resume.ToolGrants)
 	}

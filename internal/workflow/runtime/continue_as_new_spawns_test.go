@@ -45,6 +45,8 @@ type canSpawnEnv struct {
 	llmCalls map[string]int
 	// llmIterations[thread] records the loop iteration each call ran at.
 	llmIterations map[string][]int
+	// llmGrants[thread] records the load_tool grants each call was handed.
+	llmGrants map[string][][]string
 	// onLLM, when set, runs inside CallLLM (after counting) — used to flip
 	// the pressure seam at a precise point in a thread's progress.
 	onLLM func(thread string, n int)
@@ -61,6 +63,7 @@ func newCANSpawnEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment) *canSp
 		scripts:       map[string][]scriptedToolCallsResponse{},
 		llmCalls:      map[string]int{},
 		llmIterations: map[string][]int{},
+		llmGrants:     map[string][][]string{},
 	}
 	wf, err := wfyaml.ParseWorkflow([]byte(spawnBackgroundE2EYAML))
 	require.NoError(t, err)
@@ -131,6 +134,7 @@ func (e *canSpawnEnv) callLLM(input types.ActivityInput) (map[string]interface{}
 	e.llmCalls[thread]++
 	n := e.llmCalls[thread]
 	e.llmIterations[thread] = append(e.llmIterations[thread], input.Runtime.LoopIteration)
+	e.llmGrants[thread] = append(e.llmGrants[thread], input.Runtime.ToolGrants)
 	var resp scriptedToolCallsResponse
 	if script := e.scripts[thread]; len(script) > 0 {
 		resp = script[0]
