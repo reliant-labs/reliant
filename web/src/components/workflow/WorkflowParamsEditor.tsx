@@ -4,7 +4,6 @@ import { ToolsSelector } from './ToolsSelector'
 import { presetGrpc, type Preset } from '../../api/preset-grpc'
 import { useProjectStore } from '../../store/projectStore'
 import { useModels } from '../../store/globalDataStore'
-import { jsToProtoValue } from '../../api/proto-utils'
 import { formatValueForDisplay } from '../../lib/paramUtils'
 import type { Param } from '../../types/workflow'
 import {
@@ -12,6 +11,7 @@ import {
   getInputDescription,
   getInputExample,
   getInputDefault,
+  getInputIntegerDefault,
   getInputEnumValues,
   getInputPattern,
   getInputMinLength,
@@ -25,15 +25,11 @@ import {
   type InputDef,
 } from '../../lib/inputHelpers'
 
-// Helper to get the JS default value from a param (reads through config oneof)
+// Helper to get the JS default value from a param (reads through config oneof).
+// Defaults are written back as plain JS values too: setInputDefault (via
+// applyInputUpdates) converts them to the wire type of the param's config case.
 function getParamDefault(param: ParamLike): unknown {
   return getInputDefault(param as InputDef)
-}
-
-// Helper to convert a JS value to proto Value for the default field
-function toDefaultValue(val: unknown): unknown {
-  if (val === undefined || val === null || val === '') return undefined
-  return jsToProtoValue(val)
 }
 
 // ParamLike is a looser type for functions that access proto Input fields via helpers.
@@ -484,7 +480,7 @@ function EnumInput({ param, onUpdate }: TypeSpecificInputProps) {
             onChange={(e) => {
               const newDefault = e.target.value || undefined
               onUpdate({ 
-                default: toDefaultValue(newDefault),
+                default: newDefault,
               })
             }}
             className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
@@ -512,7 +508,7 @@ function BooleanDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
         onChange={(e) => {
           const newDefault = e.target.value === 'true' ? true : e.target.value === 'false' ? false : undefined
           onUpdate({ 
-            default: toDefaultValue(newDefault),
+            default: newDefault,
           })
         }}
         className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
@@ -528,7 +524,9 @@ function BooleanDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
 function ModelDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
   // Use the global models store so it updates when API keys change
   const { models, loading } = useModels()
-  const defaultVal = getParamDefault(param)
+  // The default is a ModelSelector; this select picks its exact model id.
+  const defaultSelector = getParamDefault(param) as { id?: unknown } | undefined
+  const defaultId = typeof defaultSelector?.id === 'string' ? defaultSelector.id : ''
 
   return (
     <div>
@@ -536,11 +534,11 @@ function ModelDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
         Default Model
       </label>
       <select
-        value={formatValueForDisplay(defaultVal ?? '')}
+        value={defaultId}
         onChange={(e) => {
           const newDefault = e.target.value || undefined
           onUpdate({ 
-            default: toDefaultValue(newDefault),
+            default: newDefault,
           })
         }}
         disabled={loading}
@@ -580,7 +578,7 @@ function ToolsDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
     setSelectedTools(tools)
     // Store as array directly
     onUpdate({ 
-      default: toDefaultValue(tools.length > 0 ? tools : undefined)
+      default: tools.length > 0 ? tools : undefined
     })
   }
 
@@ -643,7 +641,7 @@ function PresetMultiSelectInput({ param, onUpdate }: TypeSpecificInputProps) {
       : [...selectedPresets, presetName]
     setSelectedPresets(newSelection)
     onUpdate({ 
-      default: toDefaultValue(newSelection.length > 0 ? newSelection : undefined)
+      default: newSelection.length > 0 ? newSelection : undefined
     })
   }
 
@@ -697,7 +695,10 @@ function PresetMultiSelectInput({ param, onUpdate }: TypeSpecificInputProps) {
 
 function NumberDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
   const isInteger = param.type === 'integer'
-  
+  // An integer default is an int64: show the bigint itself, since a JS number
+  // would round past 2^53 and rewrite the digits being typed.
+  const defaultVal = isInteger ? getInputIntegerDefault(param as InputDef) : getParamDefault(param)
+
   return (
     <div>
       <label className="block text-xs font-medium text-foreground mb-1">
@@ -706,12 +707,12 @@ function NumberDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
       <input
         type="number"
         step={isInteger ? 1 : 'any'}
-        value={formatValueForDisplay(getParamDefault(param)) ?? ''}
+        value={defaultVal === undefined ? '' : String(defaultVal)}
         onChange={(e) => {
-          const val = e.target.value
-          const newDefault = val ? (isInteger ? parseInt(val, 10) : parseFloat(val)) : undefined
-          onUpdate({ 
-            default: toDefaultValue(newDefault),
+          // The text goes through as typed; setInputDefault parses it into
+          // the field's type (int64 exactly, from the digits).
+          onUpdate({
+            default: e.target.value || undefined,
           })
         }}
         className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
@@ -737,7 +738,7 @@ function StringDefaultInput({ param, onUpdate }: TypeSpecificInputProps) {
         onChange={(e) => {
           const newDefault = e.target.value || undefined
           onUpdate({ 
-            default: toDefaultValue(newDefault),
+            default: newDefault,
           })
         }}
         className="w-full px-3 py-2 border border-input rounded-md text-sm bg-background text-foreground focus:ring-2 focus:ring-ring/40 focus:border-ring transition-colors"
@@ -1042,7 +1043,7 @@ function ObjectSchemaDefinitionInput({ param, onUpdate }: TypeSpecificInputProps
           onChange={(e) => {
             try {
               const parsed = e.target.value ? JSON.parse(e.target.value) : undefined
-              onUpdate({ default: toDefaultValue(parsed) })
+              onUpdate({ default: parsed })
             } catch {
               // Invalid JSON, don't update
             }
