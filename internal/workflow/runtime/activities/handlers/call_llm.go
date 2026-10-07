@@ -332,9 +332,15 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 
 	// Defense-in-depth: warn if the conversation doesn't end with a user/tool message.
 	// This helps diagnose thread routing mismatches where SendMessage saves to a
-	// different thread than CallLLM reads from.
-	if len(history) > 0 {
-		if lastMsg := history[len(history)-1]; lastMsg.Role != message.User && lastMsg.Role != message.Tool && lastMsg.Role != message.Agent {
+	// different thread than CallLLM reads from. Trailing System messages are
+	// framing the run appended after the request (the greenfield guidance), not
+	// the end of the conversation, so the check looks past them.
+	tail := len(history) - 1
+	for tail >= 0 && history[tail].Role == message.System {
+		tail--
+	}
+	if tail >= 0 {
+		if lastMsg := history[tail]; lastMsg.Role != message.User && lastMsg.Role != message.Tool && lastMsg.Role != message.Agent {
 			logger.Warn("[CallLLM] Conversation does not end with user/tool message - possible thread mismatch",
 				"chatID", rtx.ChatID,
 				"thread", thread,

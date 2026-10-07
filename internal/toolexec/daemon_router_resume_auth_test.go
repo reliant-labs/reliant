@@ -5,65 +5,37 @@ import (
 	"context"
 	"testing"
 
-	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 )
 
-// authRecordingRegistryClient records the Authorization header of every
-// control-plane call, and reports the resolved daemon as suspended so the
-// router takes its resume branch.
-type authRecordingRegistryClient struct {
-	fakeRegistryClient
-	resolveAuth string
-	resumeAuth  string
-	resumed     bool
-}
-
-func (f *authRecordingRegistryClient) ResolveDaemon(_ context.Context, req *connect.Request[reliantv1.ResolveDaemonRequest]) (*connect.Response[reliantv1.ResolveDaemonResponse], error) {
-	f.resolveAuth = req.Header().Get("Authorization")
-	return connect.NewResponse(&reliantv1.ResolveDaemonResponse{
-		Found: true,
-		Daemon: &reliantv1.DaemonInfo{
-			DaemonId: "daemon-suspended",
-			Status:   reliantv1.DaemonStatus_DAEMON_STATUS_IDLE,
-		},
-	}), nil
-}
-
-func (f *authRecordingRegistryClient) ResumeDaemon(_ context.Context, req *connect.Request[reliantv1.ResumeDaemonRequest]) (*connect.Response[reliantv1.ResumeDaemonResponse], error) {
-	f.resumeAuth = req.Header().Get("Authorization")
-	f.resumed = true
-	return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
-}
-
-// TestEnsureAwake_ResumeCarriesTheCallersBearer: waking a suspended
-// daemon must authenticate as the user, exactly like resolving it does.
-//
-// The control plane's DaemonRegistryService adapter has no service-credential
-// path — its ResumeDaemon handler reads the owner from the forwarded Bearer
-// (svcdaemon.ResumeDaemon → auth.GetOwner) and rejects a call without one. The
-// resolve call already attached the user's JWT; the resume call that follows
-// it did not, so every automatic wake from the router was rejected as
-// unauthenticated and surfaced as "daemon could not be resumed" — the router's
-// whole suspended-daemon branch could never succeed.
+// TestEnsureAwake_ResumeCarriesTheCallersBearer: waking a suspended daemon
+// must authenticate as the user. control-plane's DaemonService/ResumeDaemon
+// has no service-credential path — it derives the owner from the forwarded
+// Bearer (svcdaemon.ownerForDaemon) and rejects a call without one — so a
+// resume sent without the user's token could never succeed.
 func TestEnsureAwake_ResumeCarriesTheCallersBearer(t *testing.T) {
 	const userID = "user-resume-auth"
 	auth.SetUserJWT(userID, "jwt-for-resume")
 	t.Cleanup(func() { auth.SetUserJWT(userID, "") })
 
-	registry := &authRecordingRegistryClient{}
-	router := NewNATSDaemonRouter(nil, WithControlPlaneClient(registry))
+	router, resumer := newSuspendedRouter(t, userID)
 
 	id, err := router.EnsureAwake(context.Background(), userID, nil)
 	require.NoError(t, err)
 	assert.Equal(t, "daemon-suspended", id)
+	assert.Equal(t, []resumeCall{{token: "jwt-for-resume", daemonID: "daemon-suspended"}}, resumer.calls,
+		"a suspended daemon must be resumed once, as the user")
+}
 
-	require.True(t, registry.resumed, "a suspended daemon must be resumed")
-	assert.Equal(t, "Bearer jwt-for-resume", registry.resolveAuth)
-	assert.Equal(t, "Bearer jwt-for-resume", registry.resumeAuth,
-		"ResumeDaemon must carry the same Bearer as ResolveDaemon; the control plane derives the owner from it")
+// With no JWT and no credentials source, nothing can authenticate a wake, so
+// no resume is attempted.
+func TestEnsureAwake_WithoutAnyCredentialSendsNoResume(t *testing.T) {
+	router, resumer := newSuspendedRouter(t, "user-signed-out")
+
+	_, err := router.EnsureAwake(context.Background(), "user-signed-out", pinned)
+	require.Error(t, err)
+	assert.Empty(t, resumer.calls)
 }

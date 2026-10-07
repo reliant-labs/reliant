@@ -64,7 +64,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	taskQueue := "trigger-slack-e2e-" + uuid.NewString()
 
 	launcher := launch.NewLauncher(repo, threads.NewService(repo), temporalClient,
-		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)), taskQueue, nil)
+		runs.NewService(repo, temporalClient, v2workflow.NewPauseService(temporalClient, repo)), taskQueue)
 	w := worker.New(temporalClient, taskQueue, temporaltest.WorkerOptions(worker.Options{}))
 	w.RegisterWorkflowWithOptions(triggers.TriggerEventFireWorkflow, workflow.RegisterOptions{Name: triggers.EventFireWorkflowName})
 	w.RegisterActivityWithOptions(triggers.NewEventFirer(repo, launcher).Fire, activity.RegisterOptions{Name: triggers.EventFireActivityName})

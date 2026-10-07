@@ -539,6 +539,10 @@ type Repository interface {
 	GetRootWorkflowStatusForChats(ctx context.Context, chatIDs []string) (map[string]WorkflowStatus, error) // Returns map of chatID -> root workflow status
 	CompareAndSwapWorkflowStatus(ctx context.Context, id string, newStatus, expectedStatus WorkflowStatus) (bool, error)
 	UpdateWorkflowStatus(ctx context.Context, id string, status WorkflowStatus) error
+	// LockChatRunControl blocks until it holds the chat's run-control lock,
+	// across every process sharing this database, and returns the func that
+	// releases it. See run_control_lock.go.
+	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
 	// SetWorkflowOutcome records the run's verdict (success/failure) as declared
 	// by the terminal node it reached. Orthogonal to status.
 	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error

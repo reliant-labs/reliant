@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	enums "go.temporal.io/api/enums/v1"
 
@@ -27,6 +28,44 @@ type Service struct {
 func NewService(repo Repository, temporal TemporalClient, pause PauseController) *Service {
 	return &Service{repo: repo, temporal: temporal, pause: pause}
 }
+
+// LockRunControl serializes the chat's run-control operations — pause, resume,
+// and SendMessage's choice between resuming a run and waking a running one —
+// and returns the func that ends the critical section.
+//
+// Each of those pairs a Temporal signal with a workflow-status write, in that
+// order, and the two cannot commit together. Unserialized, a send that reads
+// the status between a pause's signal and its write sees "running", routes the
+// message as a thread wake, and the wake never releases the pause gate. On
+// chat 264b5697 the user pressed ESC and sent ~420ms later; the send read the
+// row ~10ms before the pause wrote it, and the run sat paused with the message
+// unread until the user sent again. Holding this from the routing read through
+// delivery makes every pair of these operations take effect in the order the
+// server received them.
+//
+// It never fails. If the lock cannot be had (lock timeout, database trouble)
+// the caller proceeds unserialized — the behavior before the lock existed —
+// because refusing a pause or a send is worse than racing one. That is logged
+// loudly, since it is exactly the condition that strands messages.
+func (s *Service) LockRunControl(ctx context.Context, chatID string) (release func()) {
+	start := time.Now()
+	release, err := s.repo.LockChatRunControl(ctx, chatID)
+	if err != nil {
+		logging.Warn("[runs] Could not take the run-control lock; proceeding unserialized — a concurrent pause and send may be applied out of order",
+			"chatID", chatID, "waited", time.Since(start), "error", err)
+		return func() {}
+	}
+	if waited := time.Since(start); waited > runControlWaitWorthLogging {
+		logging.Info("[runs] Waited for another run-control operation on this chat",
+			"chatID", chatID, "waited", waited)
+	}
+	return release
+}
+
+// runControlWaitWorthLogging is long enough that an uncontended acquire (one
+// round trip) never logs, and short enough that waiting out a concurrent pause
+// always does — that line is the evidence a future race investigation needs.
+const runControlWaitWorthLogging = 50 * time.Millisecond
 
 // Pause stops the chat's run at its next step boundary, leaving it resumable.
 //

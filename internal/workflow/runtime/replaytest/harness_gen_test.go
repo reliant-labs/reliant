@@ -328,8 +328,10 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 	waitForWorkerPollers(t, s.Temporal, workersetup.TaskQueueName(taskQueueSuffix))
 
 	pause := workflow.NewPauseService(s.Temporal, s.Repo)
-	// No daemon router: the replay harness has no daemon, and the greenfield
-	// stack probe is skipped when it is nil.
+	// No daemon router: the replay harness has no daemon. A new chat's run
+	// still schedules the greenfield probe (StartChat asks for it on every
+	// first turn); the worker above has no router either, so the activity
+	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
 	approvalSvc := services.NewApprovalService(s.Repo, pause)

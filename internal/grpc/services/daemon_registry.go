@@ -300,8 +300,11 @@ func (s *DaemonRegistryService) ResumeDaemon(
 		return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
 	}
 
-	// For OSS, we can only report that the daemon is not routable.
-	// The control plane (commercial) can override this to actually wake cloud daemons.
+	// This service cannot wake a machine: resuming a suspended managed daemon
+	// is control-plane's (controlplane.v1.DaemonService/ResumeDaemon, which
+	// the router's EnsureAwake and the web client call directly). Nothing
+	// overrides this RPC any more — control-plane deleted its
+	// reliant.v1.DaemonRegistryService adapter (docs/design/one-daemon-list.md).
 	return connect.NewResponse(&reliantv1.ResumeDaemonResponse{
 		Resumed:      false,
 		ErrorMessage: fmt.Sprintf("daemon %s has no active attachment; automatic resume not available in OSS mode", req.Msg.DaemonId),

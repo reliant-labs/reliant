@@ -5,7 +5,8 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/fs"
+	"os"
+	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -41,24 +42,26 @@ type codePresenceRequest struct {
 type codePresenceResponse struct {
 	// HasCode is true when at least one source file was found.
 	HasCode bool `json:"has_code"`
-	// CodeFiles samples the source files found (bounded, relative paths).
-	// Empty when HasCode is false.
+	// CodeFiles names the source file that decided HasCode (a relative
+	// path). The scan stops at the first one, so this holds at most one
+	// entry. Empty when HasCode is false.
 	CodeFiles []string `json:"code_files,omitempty"`
 	// ConfigFiles samples non-code files that may still declare a stack —
-	// .gitignore, .vscode/*, .editorconfig, README, LICENSE. Present
-	// regardless of HasCode.
+	// .gitignore, .vscode/*, .editorconfig. Complete (up to the sample
+	// limit) when HasCode is false, which is the only case the caller reads
+	// it. When HasCode is true it holds only what the scan passed before
+	// stopping.
 	ConfigFiles []string `json:"config_files,omitempty"`
 	Error       string   `json:"error,omitempty"`
 }
 
-// codePresenceSampleLimit bounds both sample lists. The caller only needs
-// enough names to describe the directory to a model; a full listing of a large
-// repo would be a waste of a prompt and of the walk.
+// codePresenceSampleLimit bounds ConfigFiles. The caller only needs enough
+// names to describe the directory to a model.
 const codePresenceSampleLimit = 20
 
-// codePresenceScanLimit bounds the walk itself. A directory with tens of
-// thousands of files is emphatically not greenfield, and the answer is already
-// decided long before the walk would finish.
+// codePresenceScanLimit bounds the walk of a directory that holds no code. A
+// directory with thousands of non-code files is emphatically not greenfield,
+// and the answer is decided long before a full walk would finish.
 const codePresenceScanLimit = 2000
 
 // skippedScanDirs never contain a signal that changes the answer, and are the
@@ -127,7 +130,7 @@ var configFileNames = map[string]bool{
 	".editorconfig":  true,
 }
 
-func handleCodePresence(_ context.Context, payload []byte) ([]byte, error) {
+func handleCodePresence(ctx context.Context, payload []byte) ([]byte, error) {
 	var req codePresenceRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
@@ -136,83 +139,108 @@ func handleCodePresence(_ context.Context, payload []byte) ([]byte, error) {
 		return json.Marshal(codePresenceResponse{Error: "path is required"})
 	}
 
-	result, err := scanCodePresence(req.Path)
+	result, _, err := scanCodePresence(ctx, req.Path)
 	if err != nil {
 		return json.Marshal(codePresenceResponse{Error: err.Error()})
 	}
 	return json.Marshal(result)
 }
 
-// scanCodePresence walks path and classifies what it finds. Exported behavior
-// is the response; the walk itself is bounded on both file count and sample
-// size so an accidental call against a huge tree stays cheap.
-func scanCodePresence(root string) (codePresenceResponse, error) {
-	var resp codePresenceResponse
-	scanned := 0
+// codePresenceScanStats reports how much of the tree a scan touched. Tests
+// use it to pin the early exit; the handler ignores it.
+type codePresenceScanStats struct {
+	dirsRead     int
+	filesVisited int
+}
 
-	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+// scanCodePresence classifies the tree under root, stopping as soon as the
+// answer is decided.
+//
+// The question is "is there ANY code here", so the first code file settles it.
+// The walk used to keep going to collect a 20-file sample nobody reads, which
+// on a real repo meant up to 2000 files across hundreds of directory reads —
+// measured at 8-390ms on a busy laptop (2026-10-05), paid on the StartChat path
+// for every first message. Stopping at the first hit makes the occupied case,
+// which is nearly every case, a single directory read.
+//
+// The walk is breadth-first so that hit comes from the shallowest level: a
+// project's manifest or entry point sits at its root, while a depth-first walk
+// descends through every dotted directory (.claude/, .github/...) that sorts
+// ahead of it. Only a directory with NO code is walked to completion, and that
+// directory is small by definition — or it reaches codePresenceScanLimit and is
+// called occupied anyway.
+func scanCodePresence(ctx context.Context, root string) (codePresenceResponse, codePresenceScanStats, error) {
+	var (
+		resp  codePresenceResponse
+		stats codePresenceScanStats
+	)
+
+	// Directories to read, as slash-separated paths relative to root.
+	pending := []string{""}
+	for len(pending) > 0 {
+		if err := ctx.Err(); err != nil {
+			return codePresenceResponse{}, stats, fmt.Errorf("scan %s: %w", root, err)
+		}
+		relDir := pending[0]
+		pending = pending[1:]
+
+		entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(relDir)))
+		stats.dirsRead++
 		if err != nil {
+			if relDir == "" {
+				// The root itself is unreadable or missing. Reporting that as
+				// "no code" would inject greenfield guidance on the strength
+				// of a directory nobody looked at.
+				return codePresenceResponse{}, stats, fmt.Errorf("scan %s: %w", root, err)
+			}
 			// An unreadable subdirectory is not a reason to fail the whole
 			// probe — skip it and keep classifying what we can read.
-			if d != nil && d.IsDir() {
-				return fs.SkipDir
+			continue
+		}
+
+		// os.ReadDir sorts by name, so the scan — and the answer it reports —
+		// is deterministic for a given tree.
+		for _, entry := range entries {
+			name := entry.Name()
+			rel := path.Join(relDir, name)
+			if entry.IsDir() {
+				if !skippedScanDirs[strings.ToLower(name)] {
+					pending = append(pending, rel)
+				}
+				continue
 			}
-			return nil
-		}
-		if path == root {
-			return nil
-		}
 
-		name := d.Name()
-		if d.IsDir() {
-			if skippedScanDirs[strings.ToLower(name)] {
-				return fs.SkipDir
+			stats.filesVisited++
+			if stats.filesVisited > codePresenceScanLimit {
+				// Far past any plausible greenfield directory.
+				resp.HasCode = true
+				return resp, stats, nil
 			}
-			return nil
-		}
 
-		scanned++
-		if scanned > codePresenceScanLimit {
-			// Far past any plausible greenfield directory.
-			resp.HasCode = true
-			return fs.SkipAll
-		}
-
-		rel, relErr := filepath.Rel(root, path)
-		if relErr != nil {
-			rel = name
-		}
-		rel = filepath.ToSlash(rel)
-
-		// Config classification runs FIRST. An editor directory holds real
-		// file types — .vscode/settings.json is json, .idea/*.xml is xml —
-		// and the code test would otherwise claim them. Editor preferences
-		// are not an implementation, so a directory containing only them is
-		// still greenfield.
-		if isStackDeclaringConfig(rel, name) {
-			if len(resp.ConfigFiles) < codePresenceSampleLimit {
-				resp.ConfigFiles = append(resp.ConfigFiles, rel)
+			// Config classification runs FIRST. An editor directory holds
+			// real file types — .vscode/settings.json is json — and the code
+			// test would otherwise claim them. Editor preferences are not an
+			// implementation, so a directory containing only them is still
+			// greenfield.
+			if isStackDeclaringConfig(rel, name) {
+				if len(resp.ConfigFiles) < codePresenceSampleLimit {
+					resp.ConfigFiles = append(resp.ConfigFiles, rel)
+				}
+				continue
 			}
-			return nil
-		}
 
-		if isCodeFile(name) {
-			resp.HasCode = true
-			if len(resp.CodeFiles) < codePresenceSampleLimit {
-				resp.CodeFiles = append(resp.CodeFiles, rel)
+			if isCodeFile(name) {
+				resp.HasCode = true
+				resp.CodeFiles = []string{rel}
+				return resp, stats, nil
 			}
 		}
-		return nil
-	})
-	if err != nil {
-		return codePresenceResponse{}, fmt.Errorf("scan %s: %w", root, err)
 	}
 
-	// Deterministic output: the walk order is filesystem-dependent, and a
-	// stable list keeps the injected prompt stable for the same directory.
-	sort.Strings(resp.CodeFiles)
+	// Only reached when there is no code: the full config list is what the
+	// caller names in the guidance, so keep it stable for a given directory.
 	sort.Strings(resp.ConfigFiles)
-	return resp, nil
+	return resp, stats, nil
 }
 
 // isCodeFile reports whether a file name represents an implementation — source,

@@ -447,10 +447,21 @@ func (s *ChatService) SendMessage(
 	// saved to.
 	var lateRunThread string
 
-	// Check workflow status to decide: resume paused, send to running, or start new
-	// This must happen atomically to avoid race conditions
+	// The status read below decides between resuming a paused run and waking a
+	// running one, and that decision is only right if no pause or resume is
+	// half-applied while it is made and delivered. PauseChat signals Temporal
+	// before it writes the paused status; a send that read the row in that gap
+	// saw "running", only rang the thread-wake doorbell, and left the run
+	// paused with the message unread (chat 264b5697, stuck 4.5 minutes). So
+	// the read and everything it routes to run inside the run-control critical
+	// section. See runs.Service.LockRunControl.
+	releaseRunControl := s.runs.LockRunControl(ctx, req.Msg.ChatId)
+	defer releaseRunControl()
+
+	// Check workflow status to decide: resume paused, send to running, or start
+	// new. The transaction below only reads; what keeps the decision from going
+	// stale is the run-control lock held above, not the transaction.
 	if workflowID := chat.MainThreadID(); workflowID != "" {
-		// Use transaction to atomically check status and update
 		var existingWorkflow *db.Workflow
 
 		err := s.database.RunTx(ctx, func(txCtx context.Context) error {
@@ -519,6 +530,9 @@ func (s *ChatService) SendMessage(
 
 				// Discuss mode: lightweight LLM chat without resuming the workflow
 				if req.Msg.Discuss {
+					// It never touches the run, and it waits on an LLM call —
+					// holding the lock through that would stall ESC for no reason.
+					releaseRunControl()
 					return s.handleDiscussMode(ctx, req, chat, existingWorkflow, workflowID, userID, userContent, hasUserContent, systemMessages)
 				}
 
@@ -1037,17 +1051,16 @@ func (s *ChatService) SendMessage(
 	// before it could be woken (lateRunThread) — skip re-saving so they aren't
 	// doubled.
 	var savedMessageID string
+	var greenfieldProbe bool
 	if resumeMessagesSaved {
 		savedMessageID = resumePresavedMessageID
 	} else {
-		// A chat opening on a directory with no code is a greenfield request,
-		// and the stack is still undecided. Hand the model that observation
-		// plus the criteria for proposing forge, ahead of the user's first
-		// message so it is in view when the model reads the ask. No-ops on
-		// every later turn and whenever the project already holds code.
-		if guidance := s.launcher().MaybeGreenfieldGuidance(ctx, userID, chat); guidance != nil {
-			systemMessages = append([]*reliantv1.InputMessage{inputMessageFromSeed(*guidance)}, systemMessages...)
-		}
+		// A chat whose first turn this still is may be opening on a directory
+		// with no code, where the stack is undecided. The run finds out and
+		// seeds the guidance before its first LLM call; this only decides it
+		// is a first turn, and must do so before the message below is saved.
+		// A resume continues a conversation, so it never is one.
+		greenfieldProbe = resumeInput == nil && s.launcher().WantsGreenfieldProbe(ctx, chat)
 
 		saved, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 		if err != nil {
@@ -1089,6 +1102,8 @@ func (s *ChatService) SendMessage(
 		ExecContext:  execContext,
 		Trigger:      launch.LoadChatTrigger(ctx, s.database, req.Msg.ChatId),
 		Resume:       resumeInput,
+
+		GreenfieldProbe: greenfieldProbe,
 	}
 
 	workflowRun, err := s.tempClient.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)

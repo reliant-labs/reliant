@@ -53,7 +53,7 @@ type ChatService struct {
 // cannot disagree.
 func (s *ChatService) launcher() *launch.Launcher {
 	s.launcherOnce.Do(func() {
-		s.launcherImpl = launch.NewLauncher(s.database, threads.NewService(s.database), s.tempClient, s.runs, s.taskQueue, s.daemonRouter)
+		s.launcherImpl = launch.NewLauncher(s.database, threads.NewService(s.database), s.tempClient, s.runs, s.taskQueue)
 	})
 	return s.launcherImpl
 }

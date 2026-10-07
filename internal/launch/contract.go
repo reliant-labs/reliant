@@ -98,8 +98,11 @@ type Spec struct {
 	UserJWT string
 	// GenerateTitle starts GenerateTitleWorkflow from the first user message.
 	GenerateTitle bool
-	// GreenfieldProbe asks the daemon whether the working directory holds code
-	// and, when it does not, prepends the greenfield guidance message.
+	// GreenfieldProbe marks this start as the chat's first turn of new work.
+	// The run — not the launch — then asks the daemon whether the working
+	// directory holds code before its first LLM call, and seeds the greenfield
+	// guidance when it does not (WorkflowInput.GreenfieldProbe). Ignored for a
+	// NoMachine run, which has no directory to ask about.
 	GreenfieldProbe bool
 
 	// Guard runs INSIDE the launch transaction, before anything is written, so

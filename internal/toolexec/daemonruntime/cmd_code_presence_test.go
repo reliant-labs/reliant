@@ -4,8 +4,11 @@ package daemonruntime
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"testing"
 )
 
@@ -85,7 +88,7 @@ func TestScanCodePresence(t *testing.T) {
 			dir := t.TempDir()
 			writeFiles(t, dir, tt.files...)
 
-			got, err := scanCodePresence(dir)
+			got, _, err := scanCodePresence(context.Background(), dir)
 			if err != nil {
 				t.Fatalf("scanCodePresence: %v", err)
 			}
@@ -110,7 +113,7 @@ func TestScanCodePresenceSkipsDependencyAndVCSDirs(t *testing.T) {
 		".venv/lib/python3.12/site-packages/foo.py",
 	)
 
-	got, err := scanCodePresence(dir)
+	got, _, err := scanCodePresence(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("scanCodePresence: %v", err)
 	}
@@ -127,7 +130,7 @@ func TestScanCodePresenceReportsStackDeclaringConfig(t *testing.T) {
 	dir := t.TempDir()
 	writeFiles(t, dir, ".gitignore", ".vscode/settings.json", "README.md")
 
-	got, err := scanCodePresence(dir)
+	got, _, err := scanCodePresence(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("scanCodePresence: %v", err)
 	}
@@ -202,22 +205,110 @@ func TestCodePresenceRejectsEmptyPath(t *testing.T) {
 	}
 }
 
-// Sample lists are bounded: the caller puts them in a prompt, and a full
+// The config sample is bounded: the caller puts it in a prompt, and a full
 // listing would be both useless and expensive.
-func TestScanCodePresenceBoundsSamples(t *testing.T) {
+func TestScanCodePresenceBoundsConfigSample(t *testing.T) {
 	dir := t.TempDir()
 	for i := 0; i < codePresenceSampleLimit*3; i++ {
-		writeFiles(t, dir, filepath.Join("src", "file"+string(rune('a'+i%26))+string(rune('a'+i/26))+".go"))
+		writeFiles(t, dir, fmt.Sprintf(".vscode/settings-%03d.json", i))
 	}
 
-	got, err := scanCodePresence(dir)
+	got, _, err := scanCodePresence(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("scanCodePresence: %v", err)
+	}
+	if got.HasCode {
+		t.Fatalf("an editor-config-only directory must stay greenfield; found %v", got.CodeFiles)
+	}
+	if len(got.ConfigFiles) != codePresenceSampleLimit {
+		t.Errorf("ConfigFiles = %d entries, want exactly the %d-entry sample", len(got.ConfigFiles), codePresenceSampleLimit)
+	}
+}
+
+// The probe answers "is there ANY code", so the first code file must end the
+// scan. It runs on the StartChat path for every first message, and walking on
+// to sample more files cost up to 2000 files and hundreds of directory reads
+// on a real repo (measured 8-390ms on a busy laptop) for names nobody reads.
+func TestScanCodePresenceStopsAtFirstCodeFile(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, "README.md", "go.mod")
+	// A large tree the answer does not depend on.
+	for d := 0; d < 40; d++ {
+		for f := 0; f < 10; f++ {
+			writeFiles(t, dir, fmt.Sprintf("pkg/sub%02d/file%02d.go", d, f))
+		}
+	}
+
+	got, stats, err := scanCodePresence(context.Background(), dir)
 	if err != nil {
 		t.Fatalf("scanCodePresence: %v", err)
 	}
 	if !got.HasCode {
-		t.Fatal("expected HasCode for a directory full of .go files")
+		t.Fatal("a directory with go.mod at its root has code")
 	}
-	if len(got.CodeFiles) > codePresenceSampleLimit {
-		t.Errorf("CodeFiles = %d entries, want at most %d", len(got.CodeFiles), codePresenceSampleLimit)
+	if want := []string{"go.mod"}; !reflect.DeepEqual(got.CodeFiles, want) {
+		t.Errorf("CodeFiles = %v, want %v (the file that decided the answer)", got.CodeFiles, want)
+	}
+	if stats.dirsRead != 1 {
+		t.Errorf("read %d directories; code at the root must be decided by the root alone", stats.dirsRead)
+	}
+	if stats.filesVisited > 2 {
+		t.Errorf("visited %d files; the scan must stop at the first code file", stats.filesVisited)
+	}
+}
+
+// Breadth-first: a code file at the root decides the answer before any
+// subdirectory is read, even one that sorts first and holds code of its own.
+// A depth-first walk descends through every dotted directory (.claude/,
+// .github/...) ahead of the project's own manifest.
+func TestScanCodePresencePrefersShallowestCode(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, ".claude/agents/reviewer.json", ".github/workflows/ci.yml", "main.go")
+
+	got, stats, err := scanCodePresence(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("scanCodePresence: %v", err)
+	}
+	if want := []string{"main.go"}; !reflect.DeepEqual(got.CodeFiles, want) {
+		t.Errorf("CodeFiles = %v, want %v", got.CodeFiles, want)
+	}
+	if stats.dirsRead != 1 {
+		t.Errorf("read %d directories, want 1", stats.dirsRead)
+	}
+}
+
+// Code that only exists several levels below prose still counts.
+func TestScanCodePresenceFindsNestedCode(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, "README.md", "docs/guide.md", "src/app/deep/handler.py")
+
+	got, _, err := scanCodePresence(context.Background(), dir)
+	if err != nil {
+		t.Fatalf("scanCodePresence: %v", err)
+	}
+	if want := []string{"src/app/deep/handler.py"}; !got.HasCode || !reflect.DeepEqual(got.CodeFiles, want) {
+		t.Errorf("got HasCode=%v CodeFiles=%v, want HasCode=true CodeFiles=%v", got.HasCode, got.CodeFiles, want)
+	}
+}
+
+// A directory nobody could read must not come back as "no code here" — that
+// would inject greenfield guidance for a path that does not exist.
+func TestScanCodePresenceMissingRootIsAnError(t *testing.T) {
+	_, _, err := scanCodePresence(context.Background(), filepath.Join(t.TempDir(), "does-not-exist"))
+	if err == nil {
+		t.Fatal("scanning a missing directory must fail, not report greenfield")
+	}
+}
+
+// The probe runs under the caller's deadline; a cancelled caller stops the
+// scan rather than finishing a walk nobody will read.
+func TestScanCodePresenceHonorsCancellation(t *testing.T) {
+	dir := t.TempDir()
+	writeFiles(t, dir, "README.md")
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	if _, _, err := scanCodePresence(ctx, dir); !errors.Is(err, context.Canceled) {
+		t.Fatalf("err = %v, want context.Canceled", err)
 	}
 }
