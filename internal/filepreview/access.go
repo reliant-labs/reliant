@@ -132,7 +132,7 @@ func ValidatePathScoped(basePath, requestedPath string, scope PathScope) (string
 	// `C:\Users\sean\proj` into `/cwd/C:\Users\sean\proj`, filepath.IsAbs
 	// judged every requested path relative, and the join below then accepted
 	// `..\secret.txt` — the traversal this function exists to refuse.
-	absBasePath := basePath
+	var absBasePath string
 	if ospath.IsAbs(basePath) {
 		absBasePath = ospath.Clean(basePath)
 	} else {

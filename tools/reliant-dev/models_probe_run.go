@@ -25,7 +25,7 @@ import (
 )
 
 const (
-	probeDefaultDBURL = "postgres://postgres:postgres@localhost:5434/reliant?sslmode=disable"
+	probeDefaultDBURL = "postgres://postgres:postgres@localhost:5434/reliant?sslmode=disable" //nolint:gosec // G101: the local dev database
 	probeOwnerUserID  = "a6e15ec0-d1be-40c2-9c17-8d775613c904"
 	probePrompt       = "Reply with exactly: PONG"
 )
@@ -487,7 +487,7 @@ environment. Cost is a handful of tiny prompts per cell.`,
 				for _, c := range localCells {
 					fmt.Fprintf(w, "%s\t%s\n", c.Kind, c.Label())
 				}
-				w.Flush()
+				_ = w.Flush()
 				fmt.Fprintf(cmd.ErrOrStderr(), "%d text cells, %d image cells (dry run)\n", len(cells), len(imageCells))
 				return nil
 			}
@@ -594,7 +594,7 @@ func printProbeTable(cmd *cobra.Command, outcomes []probeOutcome) {
 		}
 		fmt.Fprintf(w, "%s\t%s\t%s\t%s\t%d\t%d\t%d\t%s\n", o.Status, o.Class, o.Label, o.Effective, o.OutputTokens, o.ThinkingLen, o.LatencyMs, excerpt(detail, 110))
 	}
-	w.Flush()
+	_ = w.Flush()
 	t := tallyOutcomes(outcomes)
 	fmt.Fprintf(cmd.OutOrStdout(), "\n%d cells: %d pass, %d fail", t.Total, t.Passed, t.Failed)
 	for class, n := range t.ByClass {

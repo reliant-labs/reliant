@@ -37,6 +37,31 @@ linters:
           - staticcheck
         text: "SA1019"
       
+      # DEFERRED MIGRATION, not an endorsement: golang.org/x/net/http2 is
+      # deprecated in favour of net/http's own HTTP/2 support. Moving the
+      # gRPC server, the daemon gateway's h2c transport and the tool-exec
+      # client over changes how h2c prior-knowledge and the ping/idle timers
+      # are configured, and needs the network tests, so it is its own change.
+      - linters:
+          - staticcheck
+        text: "SA1019: .*golang.org/x/net/http2"
+
+      # Same: worker.Options.BuildID -> WorkerDeploymentOptions.Version moves
+      # Temporal worker versioning to the Worker Deployments API, which has
+      # server-side rollout semantics and must not ride along with a lint fix.
+      - linters:
+          - staticcheck
+        text: "SA1019: .*worker.Options.*BuildID"
+
+      # These tool results are read by the model, not by Go callers: they are
+      # deliberately multi-sentence, capitalised and end in the instruction the
+      # model should follow, which ST1005 (written for errors that get wrapped)
+      # would strip.
+      - path: internal/llm/tools/
+        linters:
+          - staticcheck
+        text: "ST1005"
+
       # Allow unchecked errors in test files
       - path: _test\.go
         linters:

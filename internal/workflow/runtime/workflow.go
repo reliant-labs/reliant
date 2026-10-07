@@ -5,10 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"sort"
 	"strings"
 	"time"
+
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"

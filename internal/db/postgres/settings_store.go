@@ -318,10 +318,10 @@ func (s *settingStore) BackfillAPIKeys(ctx context.Context, batch int) (int, err
 // read: a missing row means "not connected", and a row that does not open is
 // an error, never a downgrade.
 const (
-	claudeTokensTable      = "claude_auth_tokens"
-	codexTokensTable       = "codex_auth_tokens"
-	copilotTokensTable     = "copilot_auth_tokens"
-	antigravityTokensTable = "antigravity_auth_tokens"
+	claudeTokensTable      = "claude_auth_tokens"      //nolint:gosec // G101: a table name, not a credential
+	codexTokensTable       = "codex_auth_tokens"       //nolint:gosec // G101: a table name, not a credential
+	copilotTokensTable     = "copilot_auth_tokens"     //nolint:gosec // G101: a table name, not a credential
+	antigravityTokensTable = "antigravity_auth_tokens" //nolint:gosec // G101: a table name, not a credential
 )
 
 var errOAuthTokenVaultDisabled = errors.New("provider sign-in tokens require the credential vault; none is configured")

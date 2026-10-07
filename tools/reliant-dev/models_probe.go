@@ -62,8 +62,8 @@ type probeCell struct {
 // Label is the human-readable cell identity used in the table and filters.
 func (c probeCell) Label() string {
 	var id string
-	switch {
-	case c.Kind == cellTag:
+	switch c.Kind {
+	case cellTag:
 		id = "tag:" + c.Tag
 	default:
 		id = c.Model + "@" + c.Provider

@@ -49,7 +49,7 @@ const (
 	// quota / billing exhaustion. It deliberately does not mention Reliant credit:
 	// BYO provider keys and provider subscriptions have their own billing
 	// relationship, while reliant-managed credit uses a separate marker path.
-	ProviderCreditExhaustedSummary = "AI provider quota or credits are exhausted — check provider billing or switch providers"
+	ProviderCreditExhaustedSummary = "AI provider quota or credits are exhausted — check provider billing or switch providers" //nolint:gosec // G101: user-facing message text, not a credential
 
 	// ProviderLongContextCreditsRequiredSummary is more specific than the generic
 	// quota summary because the provider is telling the user how to recover:

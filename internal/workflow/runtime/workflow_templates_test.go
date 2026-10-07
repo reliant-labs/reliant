@@ -2,8 +2,9 @@
 package runtime
 
 import (
-	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 	"testing"
+
+	wfcel "github.com/reliant-labs/reliant/internal/workflow/cel"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"

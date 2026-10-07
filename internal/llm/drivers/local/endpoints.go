@@ -177,8 +177,6 @@ func ValidateExtraBody(raw string) (map[string]json.RawMessage, error) {
 	return obj, nil
 }
 
-func isOnlineProbe(p *reliantv1.LocalModelEndpoint) bool { return p == nil || p.GetError() == "" }
-
 // SynthesizeEndpoint builds the catalog models for one configured endpoint.
 // Hidden models are skipped. A model the user configured but the server did
 // not list is still offered (not every server lists everything).

@@ -36,7 +36,7 @@ func protoDescriptorOf(t reflect.Type) protoreflect.MessageDescriptor {
 	if t == nil {
 		return nil
 	}
-	if t.Kind() != reflect.Ptr {
+	if t.Kind() != reflect.Pointer {
 		t = reflect.PointerTo(t)
 	}
 	if !t.Implements(protoMessageType) {

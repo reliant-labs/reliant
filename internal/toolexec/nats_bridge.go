@@ -975,14 +975,12 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 	defer fetchCancel()
 
 	var dispatched int
-	for {
+	for fetchCtx.Err() == nil {
 		// Bound total time spent looping over fetch batches to the drain
 		// budget, independent of how long any individual dispatch below
 		// takes (dispatch now runs on its own context — see
 		// pendingCommandDispatchTimeout).
-		if fetchCtx.Err() != nil {
-			break
-		}
+
 		// Each individual Fetch call is capped at 2s so a slow/empty stream
 		// doesn't stall past the fetchCtx budget by more than one poll.
 		msgs, err := consumer.Fetch(100, jetstream.FetchMaxWait(2*time.Second))

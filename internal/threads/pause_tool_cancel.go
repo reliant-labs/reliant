@@ -57,10 +57,7 @@ func (s *Service) CancelChatToolCalls(ctx context.Context, opts CancelChatToolCa
 	}
 
 	outcome := s.cancelToolCalls(ctx, opts.UserID, inFlight, pauseToolCancelReason)
-	result := CancelChatToolCallsResult{
-		CancelledToolCalls:     outcome.CancelledToolCalls,
-		UndeliverableToolCalls: outcome.UndeliverableToolCalls,
-	}
+	result := CancelChatToolCallsResult(outcome)
 
 	logging.Info("Pause cancelled in-flight tool calls",
 		"chatID", opts.ChatID,

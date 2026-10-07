@@ -324,11 +324,11 @@ func omniError(err error) (int, error) {
 	}
 	message := strings.TrimSpace(api.Message)
 	kind := KindFailed
-	switch {
-	case api.StatusCode == http.StatusTooManyRequests:
+	switch api.StatusCode {
+	case http.StatusTooManyRequests:
 		kind = KindQuota
 		message = "video quota exhausted for this provider; try again later or switch model: " + message
-	case api.StatusCode == http.StatusBadRequest:
+	case http.StatusBadRequest:
 		kind = KindInvalid
 	}
 	return api.StatusCode, &Error{Kind: kind, Message: message}

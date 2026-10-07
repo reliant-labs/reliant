@@ -47,11 +47,10 @@ func TestCiphertextOpensOnlyWithRightAAD(t *testing.T) {
 	e := newEnv(t)
 	ctx := context.Background()
 	a := e.connect("alice", "a")
-	b := e.connect("alice", "b")
 	// second connect with the same GitHub account reconnects in place; use a
 	// different account for a distinct connection.
 	e.gh.accountID, e.gh.login = 999, "other"
-	b = e.connect("alice", "b")
+	b := e.connect("alice", "b")
 	require.NotEqual(t, a.ID, b.ID)
 
 	secrets, err := e.store.GetSecrets(ctx, "alice", a.ID)

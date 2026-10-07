@@ -1370,7 +1370,7 @@ func extractInputStringAtDepth(input interface{}, jsonName, goName string, depth
 	}
 
 	val := reflect.ValueOf(input)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return ""
 		}
@@ -1408,7 +1408,7 @@ func extractInputStringAtDepth(input interface{}, jsonName, goName string, depth
 
 	for i := 0; i < val.NumField(); i++ {
 		fieldVal := val.Field(i)
-		if fieldVal.Kind() == reflect.Ptr {
+		if fieldVal.Kind() == reflect.Pointer {
 			if fieldVal.IsNil() {
 				continue
 			}
@@ -1945,7 +1945,7 @@ func (r *ActivityRegistry) GetOutputDefaults(activityName string) (map[string]in
 
 	// Create zero value of the output type
 	var zeroValue reflect.Value
-	if outputType.Kind() == reflect.Ptr {
+	if outputType.Kind() == reflect.Pointer {
 		zeroValue = reflect.New(outputType.Elem())
 	} else {
 		zeroValue = reflect.New(outputType).Elem()

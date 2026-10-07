@@ -20,7 +20,7 @@ func RegisterFieldExpectations(configExample interface{}, expectations map[strin
 	defer typeRegistryLock.Unlock()
 
 	t := reflect.TypeOf(configExample)
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -39,7 +39,7 @@ func GetExpectedFieldTypeByStruct(configType reflect.Type, fieldName string) *Fi
 	typeRegistryLock.RLock()
 	defer typeRegistryLock.RUnlock()
 
-	if configType.Kind() == reflect.Ptr {
+	if configType.Kind() == reflect.Pointer {
 		configType = configType.Elem()
 	}
 

@@ -2,8 +2,9 @@
 package tools
 
 import (
-	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"log/slog"
+
+	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"

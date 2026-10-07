@@ -239,6 +239,8 @@ func (s *LocalStore) UpdateForUser(
 		sets = append(sets, fmt.Sprintf("scopes = $%d", len(args)))
 	}
 
+	// sets holds only fixed "column = $N" fragments built above; every value is a bound argument.
+	//nolint:gosec // G202: fixed column fragments, values are bound
 	row := s.db.QueryRowContext(ctx, `UPDATE access_tokens SET `+strings.Join(sets, ", ")+`
 		WHERE id = $1 AND acting_user_id = $2 AND revoked_at IS NULL
 		RETURNING id, name, token_prefix, scopes, resource_kind, resource_id, ephemeral, created_at, expires_at, last_used_at`,
