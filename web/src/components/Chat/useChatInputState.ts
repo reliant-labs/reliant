@@ -51,15 +51,16 @@ export function useChatInputState({
 
   // Workflow selection state - tracks which workflow is selected.
   // null means use user's default workflow (from preferences).
-  // For new chats, onboarding/starter cards can hint a one-time selection via
-  // chatParamsStore.tempNewChatWorkflow.
+  // For new chats, the selection is mirrored in
+  // chatParamsStore.tempNewChatWorkflow so it survives a NewChatView remount.
   const [selectedWorkflow, setSelectedWorkflow] = useState<string | null>(
     () => useChatParamsStore.getState().tempNewChatWorkflow,
   );
 
-  // Subscribe to tempNewChatWorkflow so external updates (e.g. WorkflowStarterCards
-  // clicks) propagate to the composer. Without this subscription, the initial
-  // useState reads the value once and never reacts to changes.
+  // Subscribe to tempNewChatWorkflow so store-side changes (the reset in
+  // transferTempToChat / clearTempNewChatParams) propagate to the composer.
+  // Without this subscription, the initial useState reads the value once and
+  // never reacts to changes.
   const tempNewChatWorkflow = useChatParamsStore(
     (state) => state.tempNewChatWorkflow,
   );

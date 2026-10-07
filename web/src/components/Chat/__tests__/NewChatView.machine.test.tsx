@@ -91,7 +91,6 @@ vi.mock("../../Worktrees/CreateWorktreeModal", () => ({ CreateWorktreeModal: () 
 vi.mock("../../Worktrees/DiscoverWorktreesModal", () => ({ DiscoverWorktreesModal: () => null }));
 vi.mock("../../ui/Tooltip", () => ({ Tooltip: ({ children }: any) => <>{children}</> }));
 vi.mock("../../icons/ReliantIcon", () => ({ ReliantIcon: () => null }));
-vi.mock("../../Onboarding/WorkflowStarterCards", () => ({ WorkflowStarterCards: () => null }));
 vi.mock("@/lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/analytics", () => ({ trackEvent: vi.fn() }));
 vi.mock("../../../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() } }));

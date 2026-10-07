@@ -1,8 +1,6 @@
 /**
  * The empty state of the workflow editor's chat: what to ask the agent about
- * THIS workflow. It replaces the new-chat starter cards there, because each of
- * those starts a different workflow (research/WORKFLOW_EDITOR_UX_REVIEW.md,
- * issue 8).
+ * THIS workflow (research/WORKFLOW_EDITOR_UX_REVIEW.md, issue 8).
  *
  * A suggestion fills the composer rather than sending, so the user can finish
  * the sentence or adjust it first.

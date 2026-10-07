@@ -12,7 +12,7 @@
  * starter picked — got no tour until that query came back AND they answered
  * the starter question, which is the visible lag the user reported.
  *
- * Removing the blocking dialog (see NewChatView.starterPicker) removed the
+ * Removing the blocking dialog (see NewChatView.emptyState) removed the
  * only reason for the gate, so the gate is gone and the tour no longer waits
  * on the chat list at all. The scenario below is the exact state that used to
  * render nothing.

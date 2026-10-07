@@ -5,8 +5,7 @@
  * No chat is bound to the workflow: the panel's chat id is UI state owned by
  * the caller (the route's `chat` search param). The composer is prefilled with
  * a visible reference to the workflow so the agent knows which one to load,
- * and the empty state suggests things to ask about this workflow in place of
- * the new-chat starter cards.
+ * and the empty state suggests things to ask about this workflow.
  *
  * Where the chat runs is NewChatView's rule (lib/chatMachine.ts): the user's
  * machine when they have a usable one, otherwise no machine. Building a

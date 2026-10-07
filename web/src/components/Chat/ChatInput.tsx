@@ -530,11 +530,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         }
         // If workflow doesn't match, persistedPresets stays empty - fresh start for new workflow
       } else {
-        // New chat (no chatId): always read the latest temp state so external
-        // writers (WorkflowStarterCards) can configure workflow + params +
-        // presets atomically. Previously this branch cleared temp state on
-        // workflow change, which wiped the params/presets a starter card
-        // had just set.
+        // New chat (no chatId): always read the latest temp state. The
+        // composer mirrors its params/presets there (setTempNewChatParams /
+        // setTempNewChatPresets below) so they survive a NewChatView remount;
+        // clearing it here on workflow change would wipe them.
         //
         // The manual WorkflowSelector path is responsible for clearing temp
         // params/presets itself when the user switches workflows interactively
@@ -1753,7 +1752,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                             } else {
                               // New chat: also clear temp params/presets so the
                               // workflow-change effect doesn't reapply stale values
-                              // from a previous workflow (e.g. a starter card).
+                              // from a previous workflow.
                               // Note: we keep tempNewChatWorkflow in sync with the
                               // user's manual selection so the subscription in
                               // useChatInputState doesn't snap us back.
