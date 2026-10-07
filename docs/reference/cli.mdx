@@ -184,6 +184,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge registry login`](#reliant-forge-registry-login) | docker login to every registry the env's workloads declare |
 | [`reliant forge registry ref`](#reliant-forge-registry-ref) | Print the digest-pinned refs `forge env build <env> --push` pushed |
 | [`reliant forge release`](#reliant-forge-release) | Inspect and verify release ledgers |
+| [`reliant forge release bundle`](#reliant-forge-release-bundle) | Pull an environment's recorded bundle for a release, and optionally diff it against the live clusters |
 | [`reliant forge release verify`](#reliant-forge-release-verify) | Prove every artifact a release names actually exists and matches |
 | [`reliant forge release where`](#reliant-forge-release-where) | Show which environments are currently bound to a release |
 | [`reliant forge scaffold`](#reliant-forge-scaffold) | Scaffold code: bare, everything the protos imply; with a noun, exactly one thing |
@@ -906,6 +907,7 @@ reliant forge build [environment] [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services |
 | `--gate-json` | `string` | - | Also write this build's result to `FILE` as a gate document, for `forge gate record` or `forge env deploy --gate`. A FILE, not a stdout mode: the build log and the exit code are unchanged. |
@@ -3081,6 +3083,7 @@ reliant forge env build <environment> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--bundle-envs` | `string` | - | Write a bundle for each of these envs (comma-separated) from this one build, instead of only for the env argument. A release is env-agnostic and a bundle is not, so this is how one cut produces the manifests for every env it will ship to — each pinned to the same release and the same source. Each env is rendered; each bundle is pushed beside its images for a control-plane env, or written to this machine's ledger otherwise. |
 | `--debug` | `bool` | - | Build with debug symbols for Delve |
 | `--docker` | `bool` | - | Build Docker images for all services (implied by --push and --release) |
@@ -3427,6 +3430,7 @@ reliant forge env deploy <environment> [version] [flags]
 |------|------|---------|-------------|
 | `--acknowledge-destructive` | `stringSlice` | `[]` | Accept the named stop-class finding codes (comma-separated), e.g. stateful_deletion. REQUIRED for every destructive change the plan reports, and --yes does not cover them: --yes is the flag that ends up hard-coded in CI, and one that covered destructive changes would silently pre-approve every future one. The codes are not knowable in advance — run --plan-only to see them |
 | `--actor` | `string` | - | Name the automation recording this (e.g. ci); default is the local user |
+| `--allow-version-skew` | `bool` | - | Run even though this forge is not the forge_version forge.yaml pins (also FORGE_ALLOW_VERSION_SKEW=1) |
 | `--approve` | `string` | - | Proceed only if the plan is EXACTLY this digest (from an earlier --plan-only). The stronger form of --yes, for a two-stage pipeline where a human reviews stage one's plan: a plan that changed between the stages is refused (exit 3, plan_stale) rather than re-approved blind. The digest also travels on the write, and the server recomputes the plan under the environment's row lock before admitting it |
 | `--dry-run` | `bool` | - | Print manifests without applying (env-cluster guard still runs) |
 | `--expect-current` | `string` | - | Promotion id the env must still be on (default: the one the plan read); `unbound` = --expect-unbound. Exit 3 if it moved |
@@ -3438,6 +3442,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--frontends-only` | `bool` | - | Deploy ONLY the env's shippable frontend(s) — build + ship to Firebase Hosting or a static-site bucket, skipping the entire k8s apply (Services, Operators, CronJobs, gateways). The inverse of --skip-frontend; the native 'ship just the frontend' path that doesn't touch kubectl. Mutually exclusive with --skip-frontend and --target. |
 | `--gate` | `stringArray` | `[]` | Pre-deploy evidence frozen onto the entry: a gate JSON file, or name=…,status=passed|failed|skipped|error[,url=…] (repeatable) |
 | `--json` | `bool` | - | Emit machine-readable JSON describing the whole invocation — mode (explain/dry_run/apply), the declared-cluster guard verdict, the target cluster + namespace, the preflight findings, per-image digest-vs-tag pinning, the resource identities applied, and the per-resource rollout outcome (ready / failed / timed_out / not_waited). Works with --explain and --dry-run, which is how a UI previews a deploy. Same exit codes as text mode; the human output moves to stderr so stdout carries exactly one JSON document. |
+| `--live-diff` | `bool` | - | Print the release bundle's diff against each live cluster with the plan (client-side kubectl diff; writes nothing; does not show fields the bundle stops setting). What a reviewer reads before --approve |
 | `--namespace` | `string` | - | Override namespace from environment config |
 | `--no-digest` | `bool` | - | Deploy by the mutable :tag even when the build state captured an immutable image digest. By default forge pins the manifest to `<image>`@sha256:... so a re-tagged/cached layer can't ship; this escape hatch restores tag-based references. |
 | `--no-run` | `bool` | - | Record no run, even inside CI |
@@ -3447,6 +3452,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--plan` | `bool` | - | Compute and print the full change set WITHOUT writing the binding or applying anything |
 | `--plan-only` | `bool` | - | Build, push and cut as usual, print the plan, and STOP without writing the promotion (exit 0). The first stage of a two-stage pipeline |
 | `--prune` | `bool` | - | Delete forge-managed Deployments in the namespace that the current KCL render no longer produces (opt-in) |
+| `--rerecord-bundle` | `bool` | - | Replace the release's recorded bundle with this checkout's render. Without it, a render whose objects differ from the bundle recorded for the release is refused: a release's bundle is what a reviewer approved and what deploys |
 | `--rollout` | `string` | `wait` | What to do after the manifests land: 'wait' (wait for every Deployment/Job and FAIL if any does not become ready — the default), 'warn' (wait and report, but exit 0), or 'skip' (apply and return immediately). |
 | `--rollout-fail-fast` | `bool` | - | Stop at the FIRST resource that fails instead of waiting for the rest. Default reports every failure, which is usually what you want when diagnosing a bad deploy. |
 | `--rollout-order` | `stringArray` | `[]` | Wait for these applications FIRST, in this order, before the rest (repeatable). A wait ordering, not an apply ordering — Kubernetes converges concurrently — so it controls what a phased deploy reports first: put the migration or the API server here and its failure surfaces before its dependents time out. |
@@ -3454,6 +3460,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--run-id` | `string` | - | CI run this write belongs to (default: detected from the CI environment, e.g. github:`<repo>`/`<run>`/`<attempt>`) |
 | `--run-url` | `string` | - | Link to the CI run, for a human reading the ledger (default: detected from the CI environment) |
 | `--skip-frontend` | `bool` | - | Run the k8s apply but skip the Frontend (e.g. Firebase) build+deploy dispatch. The k8s-only path for the whole backend bundle without enumerating every --target. |
+| `--skip-hub-check` | `bool` | - | Record a hub-converged env's promotion even when its control plane's hub reports the reconciler failing. Without it, such a deploy is refused before anything is recorded |
 | `--skip-preflight` | `bool` | - | Skip the deploy preflight (verify referenced Secret keys + container images exist on the live target BEFORE applying). Default-on for remote/cloud clusters; bypass at your own risk. |
 | `--supersede` | `bool` | - | Deploy even though the current promotion is still rolling out (recorded on the new entry); without it that is exit 4 |
 | `--tag` | `string` | - | Override the image tag (priority: --tag > .forge/state/build-`<env>`.json > git describe --tags --always --dirty) |
@@ -4003,6 +4010,7 @@ is usable as a CI gate.
 Examples:
   cli forge env render dev                              # every object, cluster-annotated
   cli forge env render dev --list                       # one line per object (kind/name/cluster)
+  cli forge env render prod --count                     # objects per cluster, and per kind on each
   cli forge env render dev --cluster k3d-cp-daemon      # only what that cluster receives
   cli forge env render prod --kind Deployment,Job       # only those kinds
   cli forge env render prod --target workspace-proxy    # only that app's objects
@@ -4018,6 +4026,7 @@ reliant forge env render <environment> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--cluster` | `string` | - | Print ONLY the objects that land on this cluster (the kubectl context named by forge.K8sCluster.cluster) |
+| `--count` | `bool` | - | Print how many objects land on each cluster (and per kind on each), instead of the YAML stream |
 | `--fail-on-write` | `bool` | - | Exit non-zero if any file in the project changed while rendering (the render is not guaranteed side-effect-free — see the command description) |
 | `--kind` | `stringSlice` | `[]` | Print only these kinds (comma-separated or repeated; case-insensitive) |
 | `--list` | `bool` | - | Print one line per object (cluster, kind, namespace, name) instead of the YAML stream |
@@ -6336,8 +6345,51 @@ reliant forge release
 
 | Command | Description |
 |---------|-------------|
+| [`bundle`](#reliant-forge-release-bundle) | Pull an environment's recorded bundle for a release, and optionally diff it against the live clusters |
 | [`verify`](#reliant-forge-release-verify) | Prove every artifact a release names actually exists and matches |
 | [`where`](#reliant-forge-release-where) | Show which environments are currently bound to a release |
+
+---
+
+#### reliant forge release bundle
+
+Pull an environment's recorded bundle for a release, and optionally diff it against the live clusters
+
+Pull the bundle recorded for a release (or a bundle digest) and unpack it.
+
+The bundle is the one recorded for the release — the bundle a plan is computed
+from and the bundle a deploy applies — so this is how you read exactly what a
+deploy would ship:
+
+  `<dir>`/manifests/`<cluster>`/…   the rendered objects, one file each
+  `<dir>`/bundle.json             the bundle document: release, pins, provenance, shape
+
+--live-diff runs a client-side kubectl diff of every cluster's manifests
+against that cluster:
+
+  kubectl --context `<cluster>` diff -R -f `<dir>`/manifests/`<cluster>`
+
+It writes nothing to any cluster, and it is deliberately NOT the server-side
+form: --server-side is a server-side apply request, which takes field
+ownership, so a read-only diff never sends one. Each cluster's diff goes to
+`<dir>`/diff/`<cluster>`.diff and the summary names every object that would
+change.
+
+What a client-side diff cannot show: a field the bundle STOPS setting. forge
+applies server-side, which removes such a field; a client-side diff has no
+record of what forge set before, so it reports added and changed fields only.
+
+```
+reliant forge release bundle <environment> <version|sha256:digest> [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--dir` | `string` | - | Where to unpack it (default .forge/bundles/`<env>`/\<version or digest>) |
+| `--json` | `bool` | - | Emit the result as JSON |
+| `--live-diff` | `bool` | - | Also diff every cluster's manifests against that live cluster (client-side kubectl diff; writes nothing; does not show fields the bundle stops setting) |
 
 ---
 
