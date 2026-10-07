@@ -164,15 +164,18 @@ test:
 	@$(MAKE) stop 2>/dev/null || true
 	@echo "$(GREEN)✅ Tests complete$(NC)"
 
-## test-short: Inner-loop Go tests: -short, cached, no race, DB-backed tests skip. Scope it: make test-short PKG=./internal/foo/...
+## test-short: Inner-loop Go tests: -short, cached, no race, DB-backed tests skip. Scope it: make test-short PKGS=./internal/foo/...
 # Deliberately no `make stop` (it would stop other agents' environments), no
 # -count=1 (the test cache is correct for hermetic tests) and no -race.
+# The scope variable is PKGS, not PKG: PKG is the version package the -ldflags
+# above stamp, so reading it here made a bare `make test-short` test only
+# internal/version (TestMakeTestShortCoversTheRepoByDefault pins this).
 # The cache keys only on files/env the TEST PROCESS reads. A test that execs a
 # child (go, git, node, cat...) which reads repo files that are not go:embed'd
 # and not written into t.TempDir() must either skip under testing.Short() or
 # read those inputs itself (os.ReadFile) — otherwise a cached `ok` goes stale.
 test-short:
-	$(GOTEST) -short -timeout 60s $(or $(PKG),./...)
+	$(GOTEST) -short -timeout 60s $(or $(PKGS),./...)
 
 ## test-race: Run tests with race detection
 test-race:
