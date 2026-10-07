@@ -53,7 +53,9 @@ func TestStory06_StartChatValidationFailsClean(t *testing.T) {
 				_, err := h.TryStartChat("builtin://does-not-exist", "hello", nil)
 				return err
 			},
-			errHas: "not found",
+			// workflowref names the missing builtin rather than saying
+			// "not found" (#627); the code is still InvalidArgument.
+			errHas: `no builtin workflow is named "does-not-exist"`,
 		},
 		{
 			name: "empty message",
