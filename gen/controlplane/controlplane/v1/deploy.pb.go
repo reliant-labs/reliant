@@ -5755,7 +5755,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xff\a\n" +
+	"updated_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xd4\a\n" +
 	"\x11DeployEnvironment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12:\n" +
@@ -5782,7 +5782,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"declaredBy\x12;\n" +
 	"\vdeclared_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"declaredAt\x121\n" +
-	"\x05holds\x18\x17 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holdsJ\x04\b\x0e\x10\x0fJ\x04\b\x10\x10\x11J\x04\b\x12\x10\x13J\x04\b\x13\x10\x14R\x0fimage_push_baseR\fcapabilities\"\x9a\x05\n" +
+	"\x05holds\x18\x17 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holdsJ\x04\b\x12\x10\x13J\x04\b\x13\x10\x14\"\x9a\x05\n" +
 	"\x15DeployEnvironmentSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindR\x04kind\x12*\n" +
@@ -5865,7 +5865,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
-	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc8\x04\n" +
+	"updated_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"\xc2\x04\n" +
 	"\n" +
 	"Deployment\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x15\n" +
@@ -5883,7 +5883,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	" \x01(\x0e2\x1f.controlplane.v1.DeployRunStateR\brunState\x12\x1a\n" +
 	"\bartifact\x18\f \x01(\tR\bartifact\x120\n" +
 	"\x14applied_promotion_id\x18\r \x01(\tR\x12appliedPromotionId\x12*\n" +
-	"\x11applied_bundle_id\x18\x0e \x01(\tR\x0fappliedBundleIdJ\x04\b\x06\x10\a\"\x9d\x02\n" +
+	"\x11applied_bundle_id\x18\x0e \x01(\tR\x0fappliedBundleId\"\x9d\x02\n" +
 	"\x0eDeployArtifact\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x16\n" +
 	"\x06digest\x18\x02 \x01(\tR\x06digest\x12\x1c\n" +
@@ -6126,7 +6126,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x05class\x18\x02 \x01(\tR\x05class\x12\x18\n" +
 	"\asection\x18\x03 \x01(\tR\asection\x12\x18\n" +
 	"\asubject\x18\x04 \x01(\tR\asubject\x12\x16\n" +
-	"\x06detail\x18\x05 \x01(\tR\x06detail\"\xf7\x03\n" +
+	"\x06detail\x18\x05 \x01(\tR\x06detail\"\xf1\x03\n" +
 	"\x15DeployLiveEnvironment\x12D\n" +
 	"\venvironment\x18\x01 \x01(\v2\".controlplane.v1.DeployEnvironmentR\venvironment\x12M\n" +
 	"\x11current_promotion\x18\x02 \x01(\v2 .controlplane.v1.DeployPromotionR\x10currentPromotion\x12G\n" +
@@ -6134,14 +6134,14 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x0ecurrent_bundle\x18\x04 \x01(\v2\x1d.controlplane.v1.DeployBundleR\rcurrentBundle\x129\n" +
 	"\x05phase\x18\x06 \x01(\x0e2#.controlplane.v1.DeployRolloutPhaseR\x05phase\x12?\n" +
 	"\bsessions\x18\a \x03(\v2#.controlplane.v1.DeployLocalSessionR\bsessions\x122\n" +
-	"\x05drift\x18\t \x01(\v2\x1c.controlplane.v1.DeployDriftR\x05driftJ\x04\b\x05\x10\x06J\x04\b\b\x10\t\"\xd9\x01\n" +
+	"\x05drift\x18\t \x01(\v2\x1c.controlplane.v1.DeployDriftR\x05driftJ\x04\b\b\x10\t\"\xd3\x01\n" +
 	"\vDeployDrift\x12\x14\n" +
 	"\x05state\x18\x01 \x01(\tR\x05state\x12\x1b\n" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x12;\n" +
 	"\vobserved_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"observedAt\x12<\n" +
 	"\aobjects\x18\x05 \x03(\v2\".controlplane.v1.DeployDriftObjectR\aobjects\x12\x16\n" +
-	"\x06detail\x18\x06 \x01(\tR\x06detailJ\x04\b\x03\x10\x04\"\xd3\x01\n" +
+	"\x06detail\x18\x06 \x01(\tR\x06detail\"\xd3\x01\n" +
 	"\x11DeployDriftObject\x12\x18\n" +
 	"\acluster\x18\x01 \x01(\tR\acluster\x12\x12\n" +
 	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x1c\n" +
@@ -6220,7 +6220,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x1eDEPLOY_RECONCILE_POLICY_PINNED\x10\x03*_\n" +
 	"\x13DeployPromotionKind\x12%\n" +
 	"!DEPLOY_PROMOTION_KIND_UNSPECIFIED\x10\x00\x12!\n" +
-	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01*\xc0\x02\n" +
+	"\x1dDEPLOY_PROMOTION_KIND_PROMOTE\x10\x01*\x9b\x02\n" +
 	"\x12DeployResourceKind\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_UNSPECIFIED\x10\x00\x12\"\n" +
 	"\x1eDEPLOY_RESOURCE_KIND_CPU_MILLI\x10\x01\x12 \n" +
@@ -6229,7 +6229,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"#DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB\x10\a\x12%\n" +
 	"!DEPLOY_RESOURCE_KIND_CDN_REQUESTS\x10\b\x12$\n" +
 	" DEPLOY_RESOURCE_KIND_STORAGE_GIB\x10\n" +
-	"\"\x04\b\x05\x10\x05*\x1dDEPLOY_RESOURCE_KIND_VCLUSTER*p\n" +
+	"*p\n" +
 	"\x0fDeployLogStream\x12!\n" +
 	"\x1dDEPLOY_LOG_STREAM_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_LOG_STREAM_BUILD\x10\x01\x12\x1d\n" +

@@ -81,12 +81,6 @@ service ClusterService {
 enum ClusterProvider {
   CLUSTER_PROVIDER_UNSPECIFIED = 0;
   CLUSTER_PROVIDER_BYO = 1;
-
-  // 2 and 3 were VCLUSTER_SHARED / VCLUSTER_PRIVATE, Reliant-provisioned
-  // tenant vClusters. Deleted with the vCluster model: there was never a
-  // provisioner, so no row ever carried either value.
-  reserved 2, 3;
-  reserved "CLUSTER_PROVIDER_VCLUSTER_SHARED", "CLUSTER_PROVIDER_VCLUSTER_PRIVATE";
 }
 
 // ClusterConnection is whether the platform can currently reach the cluster.
@@ -100,12 +94,6 @@ enum ClusterConnection {
   CLUSTER_CONNECTION_WAITING = 1;
   CLUSTER_CONNECTION_CONNECTED = 2;
   CLUSTER_CONNECTION_STALE = 3;
-
-  // 4 was FAILED, reachable only as a vCluster's failed PROVISIONING phase.
-  // Deleted with the vCluster model: we do not provision a customer's
-  // cluster, so there is no provisioning of ours to fail.
-  reserved 4;
-  reserved "CLUSTER_CONNECTION_FAILED";
 }
 
 // ClusterAuth is HOW the platform authenticates to a cluster's API server.
@@ -193,10 +181,6 @@ message Cluster {
   // Live environments that target this cluster. Non-empty blocks removal.
   repeated string environment_ids = 9;
   google.protobuf.Timestamp created_at = 10;
-  // 5-8 were the agent's last heartbeat and reported facts; 11 was the
-  // bootstrap expiry. Deleted with the agent: nothing reports them.
-  reserved 5, 6, 7, 8, 11;
-  reserved "last_seen_at", "kubernetes_version", "agent_version", "node_count", "bootstrap_expires_at";
 
   // How the platform authenticates to this cluster.
   ClusterAuth auth = 12;

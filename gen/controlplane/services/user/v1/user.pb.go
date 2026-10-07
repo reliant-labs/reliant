@@ -768,9 +768,9 @@ var File_services_user_v1_user_proto protoreflect.FileDescriptor
 const file_services_user_v1_user_proto_rawDesc = "" +
 	"\n" +
 	"\x1bservices/user/v1/user.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/shared.proto\x1a\x1cgoogle/protobuf/struct.proto\"\x17\n" +
-	"\x15GetCurrentUserRequest\"X\n" +
+	"\x15GetCurrentUserRequest\"C\n" +
 	"\x16GetCurrentUserResponse\x12)\n" +
-	"\x04user\x18\x01 \x01(\v2\x15.controlplane.v1.UserR\x04userJ\x04\b\x02\x10\x03R\rorganizations\"I\n" +
+	"\x04user\x18\x01 \x01(\v2\x15.controlplane.v1.UserR\x04user\"I\n" +
 	"\x14UpdateProfileRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1d\n" +
 	"\n" +

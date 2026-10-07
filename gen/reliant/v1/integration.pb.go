@@ -1916,7 +1916,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	"\aactions\x18\b \x03(\v2\x16.reliant.v1.ActionSpecR\aactions\x123\n" +
 	"\btriggers\x18\t \x03(\v2\x17.reliant.v1.TriggerSpecR\btriggers\x12\x1a\n" +
 	"\bkeywords\x18\n" +
-	" \x03(\tR\bkeywords\"\x92\x04\n" +
+	" \x03(\tR\bkeywords\"\xeb\x03\n" +
 	"\x0eConnectionSpec\x12\x19\n" +
 	"\bbase_url\x18\x02 \x01(\tR\abaseUrl\x12#\n" +
 	"\rallowed_hosts\x18\x03 \x03(\tR\fallowedHosts\x12W\n" +
@@ -1929,7 +1929,7 @@ const file_reliant_v1_integration_proto_rawDesc = "" +
 	" \x01(\v2\x19.reliant.v1.IdentityProbeR\x05probe\x1aA\n" +
 	"\x13DefaultHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\x06\x10\aR\x04typeR\x13optional_auth_kinds\"\xe5\x01\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe5\x01\n" +
 	"\n" +
 	"AuthMethod\x120\n" +
 	"\x06oauth2\x18\x01 \x01(\v2\x16.reliant.v1.OAuth2AuthH\x00R\x06oauth2\x121\n" +

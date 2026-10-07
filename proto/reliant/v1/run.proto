@@ -287,12 +287,6 @@ message ListRunsRequest {
   // 200.
   int32 limit = 4;
 
-  // Offset paging is gone: the cross-cutting list pages by page_token, and the
-  // session and parent lists are one chat's runs, which are never numerous
-  // enough to need it.
-  reserved 5;
-  reserved "offset";
-
   // ---- Cross-cutting filters ----
   //
   // Ignored when session_id or parent_id is set. Every one is optional or

@@ -1835,12 +1835,12 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\tsender_id\x18\x10 \x01(\tR\bsenderId\x1a9\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8e\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xd2\x01\n" +
 	"\vIntegration\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12;\n" +
 	"\amethods\x18\x06 \x03(\v2!.reliant.v1.IntegrationAuthMethodR\amethods\x12S\n" +
-	"\x11connection_params\x18\a \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParamsJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\tauth_kindR\tavailableR\x12unavailable_reason\"\xaf\x02\n" +
+	"\x11connection_params\x18\a \x03(\v2&.reliant.v1.IntegrationConnectionParamR\x10connectionParams\"\xaf\x02\n" +
 	"\x15IntegrationAuthMethod\x122\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1e.reliant.v1.ConnectionAuthKindR\x04kind\x12\x1c\n" +
 	"\tavailable\x18\x02 \x01(\bR\tavailable\x12-\n" +
@@ -1944,14 +1944,14 @@ const file_reliant_v1_connection_proto_rawDesc = "" +
 	"\x05limit\x18\x02 \x01(\x05R\x05limit\x12\x1b\n" +
 	"\tbefore_id\x18\x03 \x01(\x03R\bbeforeId\"S\n" +
 	"\x1cListConnectionEventsResponse\x123\n" +
-	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ConnectionEventR\x06events*\x8c\x02\n" +
+	"\x06events\x18\x01 \x03(\v2\x1b.reliant.v1.ConnectionEventR\x06events*\xe0\x01\n" +
 	"\x12ConnectionAuthKind\x12$\n" +
 	" CONNECTION_AUTH_KIND_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bCONNECTION_AUTH_KIND_OAUTH2\x10\x01\x12 \n" +
 	"\x1cCONNECTION_AUTH_KIND_API_KEY\x10\x03\x12\x1e\n" +
 	"\x1aCONNECTION_AUTH_KIND_BASIC\x10\x04\x12\x1d\n" +
 	"\x19CONNECTION_AUTH_KIND_NONE\x10\x05\x12\"\n" +
-	"\x1eCONNECTION_AUTH_KIND_DELEGATED\x10\x06\"\x04\b\x02\x10\x02*$CONNECTION_AUTH_KIND_GITHUB_APP_USER*\x96\x01\n" +
+	"\x1eCONNECTION_AUTH_KIND_DELEGATED\x10\x06*\x96\x01\n" +
 	"\x10ConnectionStatus\x12!\n" +
 	"\x1dCONNECTION_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CONNECTION_STATUS_ACTIVE\x10\x01\x12\"\n" +

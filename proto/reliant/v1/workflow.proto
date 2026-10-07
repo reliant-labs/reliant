@@ -92,11 +92,7 @@ message WorkflowListItem {
   map<string, string> outputs = 10; // Workflow outputs - CEL expressions
   optional string updated_at = 11;  // Last update timestamp
   bool is_hidden = 12; // Whether the workflow is hidden from the hub
-  reserved 13; // Removed: builder_chat_id (workflows are not bound to a chat)
-  reserved "builder_chat_id";
   bool has_preset_groups = 14; // True if workflow has any tags (top-level or group) that can have presets
-  reserved 15; // Removed: is_valid (a cached verdict; see status + validation_errors)
-  reserved "is_valid";
   optional string draft_id = 16; // Draft ID for user workflows (stable ID for lookups, not present for builtin/project)
   // Lifecycle. Builtin and project workflows are always COMPLETE.
   WorkflowDraftStatus status = 17;
@@ -204,9 +200,6 @@ message GetWorkflowResponse {
   Workflow workflow = 1;
   string source = 2;             // Source of the workflow: "builtin", "project", or "user"
   optional string draft_id = 3; // Draft ID for this workflow (if user-owned)
-  reserved 4;                    // Removed: builder_chat_id (workflows are not bound to a chat)
-  reserved "builder_chat_id";
-  reserved 5;                    // Removed: updated_at (replaced by version)
   optional string parse_error = 6; // If the stored YAML couldn't be parsed, contains the error message
   optional string raw_definition = 7; // Raw YAML definition (only set when parse_error is present)
   int64 version = 8;             // Current version number for OCC (0 for builtins)
@@ -258,9 +251,6 @@ message SaveWorkflowRequest {
   // Field 3 removed (was publish)
   ConfigScope scope = 4;             // Where to save: global, project, or worktree
   optional string worktree_id = 5;   // Required if scope is worktree
-  reserved 6;                        // Removed: builder_chat_id (workflows are not bound to a chat)
-  reserved "builder_chat_id";
-  reserved 7;                        // Removed: expected_updated_at (replaced by version)
   optional int64 expected_version = 8; // OCC: expected version number - fails if workflow was modified since
   optional string source_path = 9;   // If set, write YAML back to this file (for project workflow edits)
   optional string draft_id = 10;     // If provided, update this draft by ID (allows renames)
@@ -279,9 +269,6 @@ message SaveWorkflowResponse {
   repeated ValidationError validation_errors = 6; // This request's validation findings (errors, then warnings)
   string id = 7;                     // Database ID of the saved workflow
   string slug = 8;                   // Runtime reference slug
-  reserved 9;                        // Removed: builder_chat_id (workflows are not bound to a chat)
-  reserved "builder_chat_id";
-  reserved 10;                       // Removed: updated_at (replaced by version)
   int64 version = 11;                // Current version number for OCC
   string yaml_definition = 12;       // Canonical YAML definition of the saved workflow
   WorkflowDraftStatus status = 13;   // Resulting status (unset when nothing was stored)

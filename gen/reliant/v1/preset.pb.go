@@ -1342,7 +1342,7 @@ var File_reliant_v1_preset_proto protoreflect.FileDescriptor
 const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\n" +
 	"\x17reliant/v1/preset.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xd6\x02\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\"\xbc\x02\n" +
 	"\n" +
 	"PresetInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
@@ -1355,8 +1355,7 @@ const file_reliant_v1_preset_proto_rawDesc = "" +
 	"\tis_hidden\x18\b \x01(\bR\bisHidden\x1aQ\n" +
 	"\vParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
-	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01J\x04\b\t\x10\n" +
-	"R\x12recommended_skills\"Z\n" +
+	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"Z\n" +
 	"\x12ListPresetsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12%\n" +

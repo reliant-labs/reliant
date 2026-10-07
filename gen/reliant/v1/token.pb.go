@@ -768,7 +768,7 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1f\n" +
 	"\vttl_seconds\x18\x02 \x01(\x03R\n" +
 	"ttlSeconds\x12)\n" +
-	"\x04kind\x18\x03 \x01(\x0e2\x15.reliant.v1.TokenKindR\x04kind\"\xc2\x02\n" +
+	"\x04kind\x18\x03 \x01(\x0e2\x15.reliant.v1.TokenKindR\x04kind\"\xb0\x02\n" +
 	"\tTokenInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12!\n" +
@@ -783,8 +783,7 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\tdaemon_id\x18\t \x01(\tR\bdaemonId\x12)\n" +
 	"\x04kind\x18\n" +
 	" \x01(\x0e2\x15.reliant.v1.TokenKindR\x04kind\x12\x16\n" +
-	"\x06scopes\x18\v \x03(\tR\x06scopesJ\x04\b\a\x10\bR\n" +
-	"revoked_at\"V\n" +
+	"\x06scopes\x18\v \x03(\tR\x06scopes\"V\n" +
 	"\x13CreateTokenResponse\x12)\n" +
 	"\x04info\x18\x01 \x01(\v2\x15.reliant.v1.TokenInfoR\x04info\x12\x14\n" +
 	"\x05token\x18\x02 \x01(\tR\x05token\">\n" +

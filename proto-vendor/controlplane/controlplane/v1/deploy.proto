@@ -207,12 +207,6 @@ enum DeployResourceKind {
   // MiB held for the tick.
   DEPLOY_RESOURCE_KIND_MEM_MIB = 2;
 
-  // 5 was VCLUSTER, the per-hour per-cluster floor. Deleted with the
-  // vCluster model: nothing ever wrote a row of this kind, and a connected
-  // cluster's compute is the customer's and carries no floor of ours.
-  reserved 5;
-  reserved "DEPLOY_RESOURCE_KIND_VCLUSTER";
-
   // Mebibytes, not GiB (see the migration's quantity comment).
   DEPLOY_RESOURCE_KIND_EGRESS_GIB = 6;
   DEPLOY_RESOURCE_KIND_CDN_EGRESS_GIB = 7;
@@ -339,54 +333,10 @@ message DeployEnvironment {
   // What the platform may do about drift here. Defaults to OBSERVE.
   DeployReconcilePolicy reconcile_policy = 13;
 
-  // Tag 14 ("image_push_base") was removed when the push base became the
-  // CLIENT's to compose rather than the server's to advertise (ADR-0003 F1).
-  //
-  // It carried `<registry_base>/<org_id>`, derived from
-  // ociregistry.TenantSubtree so the advertised value and the enforced one
-  // could not disagree. forge read it off every environment, cached it per
-  // env under .forge/state, and resolved a bare hosted image against the
-  // cached copy. Three costs, all structural: the base was unknowable before
-  // the first successful AUTHENTICATED call, so a fresh checkout could not
-  // render; a stale record silently weakened forge's own off-base check
-  // rather than failing it; and "the server said" plus "the client wrote it
-  // down" are two sources of one fact. forge now composes
-  // `<registry_host>/<organization>/<project>` from its own declaration, with
-  // the host a forge default.
-  //
-  // ENFORCEMENT DID NOT MOVE, and that is the distinction to keep: only the
-  // DERIVATION did. ociregistry.Admit still gates publish, and the registry
-  // realm still mints a token scoped to the authenticated row's org and
-  // refuses any repository outside that subtree — so a client that composes
-  // the wrong base is refused at its first push, by the party that actually
-  // knows. Deps.RegistryBase remains, because that is what both enforce with.
-  //
-  // RESERVED RATHER THAN RECYCLED, for the reason tag 16 below records:
-  // reusing 14 would not fail, it would decode as whatever the new field is
-  // and be read as a registry subtree by any client still on a forge release
-  // that consumed it — the quietest possible wire bug.
-  reserved 14;
-  reserved "image_push_base";
-
   // The forge project this environment belongs to (forge.yaml `name`).
   // Environment identity is (org, project, name): two projects in one org
   // may each have a `prod`. Empty is a valid project.
   string project = 15;
-
-  // Tag 16 (capabilities / "custom_domains") was removed when custom domains
-  // became an org-scoped RESOURCE with its own service
-  // (domain.v1.DomainService) rather than a field on a Workload or
-  // StaticSite spec. It existed so a client could refuse to declare a domain
-  // against a target that would silently drop it; with no spec field to
-  // declare, a hosted spec refuses `domains` outright and there is nothing
-  // to negotiate.
-  //
-  // RESERVED RATHER THAN RECYCLED because a forge release briefly READ this
-  // tag. Reusing 16 for something else would not fail — it would decode as
-  // whatever the new field is and be interpreted as a capability list by any
-  // client still on that release, which is the quietest possible wire bug.
-  reserved 16;
-  reserved "capabilities";
 
   // READ-ONLY and DERIVED: true when a promotion to this environment will
   // actually move bytes without a client-side deploy — this control plane runs
@@ -843,12 +793,6 @@ message Deployment {
   // declaration a forge project checks in, so a redeploy of an unchanged
   // project must not resume a workload somebody suspended.
   DeployRunState run_state = 10;
-
-  // Tag 6 is unused and its history is unknown — it predates the records we
-  // have, so nothing here can say what a client on an old release might
-  // decode it as. RESERVED rather than recycled: an unknown tag is exactly
-  // the case where reuse is unsafe, because the failure is silent.
-  reserved 6;
 
   // The release ARTIFACT KEY whose digest this deployment runs, matching
   // forge's Artifacts map key (the same key forge computes for its plan, so
@@ -1824,17 +1768,6 @@ message DeployLiveEnvironment {
   // on a hosted environment the row's applied_bundle_id. See
   // Deployment.applied_bundle_id for why these are two pointers.
   DeployBundle current_bundle = 4;
-  // Tag 5 was `latest_apply` (DeployApply): the newest attempt a CLIENT
-  // reported it was making. Nothing applies any more, so there is no such
-  // attempt to show — the reconciler converges the intent above and the
-  // control plane observes the result. `drift` below carries that
-  // observation, and the timeline is ListConvergences.
-  //
-  // RESERVED rather than removed outright, because this message SURVIVES: a
-  // deployed client that still sends or reads tag 5 as a DeployApply must
-  // never find a different type there. The messages that were deleted whole
-  // need no tombstone; a tag inside a living message does.
-  reserved 5; // latest_apply — deleted with the imperative apply model
 
   DeployRolloutPhase phase = 6;
   repeated DeployLocalSession sessions = 7;
@@ -1866,11 +1799,6 @@ message DeployDrift {
   // The bundle the comparison was made against: the one this environment's
   // current promotion names.
   string bundle_id = 2;
-
-  // Tag 3 was `apply_id`. There are no applies to compare against any more —
-  // the comparison is intent (the promoted bundle above) versus the
-  // reconciler's observed revision. Reserved because this message survives.
-  reserved 3; // apply_id — deleted with the imperative apply model
 
   google.protobuf.Timestamp observed_at = 4;
 

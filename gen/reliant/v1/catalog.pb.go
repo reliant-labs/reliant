@@ -2920,7 +2920,7 @@ var File_reliant_v1_catalog_proto protoreflect.FileDescriptor
 const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/catalog.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1breliant/v1/connection.proto\"\xe9\x04\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1breliant/v1/connection.proto\"\xbc\x04\n" +
 	"\tModelInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -2938,7 +2938,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x10supports_caching\x18\x0e \x01(\bR\x0fsupportsCaching\x12:\n" +
 	"\x19supported_thinking_levels\x18\x0f \x03(\tR\x17supportedThinkingLevels\x121\n" +
 	"\x14supports_temperature\x18\x10 \x01(\bR\x13supportsTemperature\x122\n" +
-	"\x05local\x18\x11 \x01(\v2\x1c.reliant.v1.LocalModelSourceR\x05localJ\x04\b\a\x10\bJ\x04\b\b\x10\tR\x0ecost_per_1m_inR\x0fcost_per_1m_out\"\xb0\x01\n" +
+	"\x05local\x18\x11 \x01(\v2\x1c.reliant.v1.LocalModelSourceR\x05local\"\xb0\x01\n" +
 	"\x10LocalModelSource\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12!\n" +
 	"\fmachine_name\x18\x02 \x01(\tR\vmachineName\x12\x1f\n" +
@@ -2958,7 +2958,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x1bListModelsByProviderRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"M\n" +
 	"\x1cListModelsByProviderResponse\x12-\n" +
-	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\"\xec\x03\n" +
+	"\x06models\x18\x01 \x03(\v2\x15.reliant.v1.ModelInfoR\x06models\"\xbf\x03\n" +
 	"\x12AvailableModelInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12\x1a\n" +
@@ -2974,8 +2974,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x0esupports_tools\x18\f \x01(\bR\rsupportsTools\x12)\n" +
 	"\x10supports_caching\x18\r \x01(\bR\x0fsupportsCaching\x12\x12\n" +
 	"\x04tags\x18\x0e \x03(\tR\x04tags\x12\x18\n" +
-	"\aenabled\x18\x0f \x01(\bR\aenabledJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"R\x0ecost_per_1m_inR\x0fcost_per_1m_out\"\x1c\n" +
+	"\aenabled\x18\x0f \x01(\bR\aenabled\"\x1c\n" +
 	"\x1aListAvailableModelsRequest\"U\n" +
 	"\x1bListAvailableModelsResponse\x126\n" +
 	"\x06models\x18\x01 \x03(\v2\x1e.reliant.v1.AvailableModelInfoR\x06models\"\\\n" +
@@ -2986,7 +2985,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x10ListToolsRequest\"U\n" +
 	"\x11ListToolsResponse\x12*\n" +
 	"\x05tools\x18\x01 \x03(\v2\x14.reliant.v1.ToolInfoR\x05tools\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xb0\x05\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\x9d\x05\n" +
 	"\x0eNodeInputField\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x12 \n" +
@@ -3012,7 +3011,7 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"_min_valueB\f\n" +
 	"\n" +
 	"_max_valueB\x14\n" +
-	"\x12_cleanup_semanticsJ\x04\b\v\x10\fR\vplaceholder\"_\n" +
+	"\x12_cleanup_semantics\"_\n" +
 	"\x0fNodeFieldOption\x12\x14\n" +
 	"\x05value\x18\x01 \x01(\tR\x05value\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12 \n" +

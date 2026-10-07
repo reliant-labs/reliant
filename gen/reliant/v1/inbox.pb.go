@@ -1084,9 +1084,9 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x06reason\x18\x01 \x01(\tR\x06reason\x12\x19\n" +
 	"\bevent_id\x18\x02 \x01(\tR\aeventId\x121\n" +
 	"\x14consecutive_failures\x18\x03 \x01(\x05R\x13consecutiveFailures\"\x12\n" +
-	"\x10InboxRunFinished\"C\n" +
+	"\x10InboxRunFinished\"4\n" +
 	"\x17DismissInboxItemRequest\x12\x19\n" +
-	"\bitem_ids\x18\x02 \x03(\tR\aitemIdsJ\x04\b\x01\x10\x02R\aitem_id\"\x1a\n" +
+	"\bitem_ids\x18\x02 \x03(\tR\aitemIds\"\x1a\n" +
 	"\x18DismissInboxItemResponse\"4\n" +
 	"\x17RestoreInboxItemRequest\x12\x19\n" +
 	"\bitem_ids\x18\x01 \x03(\tR\aitemIds\"\x1a\n" +

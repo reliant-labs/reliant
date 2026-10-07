@@ -11,7 +11,6 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // ChatState represents the user-facing lifecycle state of a chat
 enum ChatState {
   CHAT_STATE_UNSPECIFIED = 0;
-  reserved 1; // was CHAT_STATE_NEEDS_ATTENTION, now use unread field
   CHAT_STATE_IDLE = 2;
   CHAT_STATE_ARCHIVED = 3;
 }
@@ -277,32 +276,20 @@ message Chat {
   string title = 3;
   string project_id = 4;
   optional string worktree_id = 5;
-  reserved 6;                          // was: model (now workflow param)
-  reserved 7;                          // was: agent (now workflow param)
   optional string workflow_name = 8;   // YAML workflow name
-  reserved 9;                          // was: temperature (now workflow param)
-  reserved 10;                         // was: max_tokens (now workflow param)
-  reserved 11;                         // was: auto_approve (now workflow param inputs.mode)
-  reserved 12;                         // was: is_planning_mode (now workflow param inputs.mode)
   ChatState state = 13;
-  reserved 14;                         // was: branched_from_chat_id (removed - use workflow fork)
-  reserved 15;                         // was: branched_at_ordinal (removed - use workflow fork)
-  reserved 16;                         // was: parent_context_sequence (removed - use workflow fork)
   optional string workflow_id = 17;    // Temporal workflow ID
   optional string run_id = 18;         // Temporal run ID
   string created_at = 19;
   string updated_at = 20;
   string last_active = 21;
   optional string last_message_at = 22; // When last message was sent/received (for activity sorting)
-  reserved 23;                         // was: workflow_status (ChatWorkflowStatus), split into workflow_state + workflow_stop_reason
-  reserved 24; // was: is_busy (now derived from workflow_status == 'running')
   map<string, string> selected_presets = 25; // Preset selections per target ("" = workflow-level, "Agent A" = group)
   // needs_recovery is true when the Temporal workflow was lost and the user needs to send a new message to continue
   // This is set when GetChat detects DB says running but Temporal workflow doesn't exist
   bool needs_recovery = 26;
   ChatActivity activity = 27; // Computed activity state (from chats_with_activity view)
   bool unread = 28; // Whether this chat has unseen content (decoupled from activity/state)
-  reserved 29; // was: can_discuss (removed: always enabled when paused)
   optional string active_daemon_id = 30; // Active daemon for this session (UI-selectable)
   // Source of truth for chat activity. Always read as a pair: the state says
   // whether a run is going, the stop reason says why a stopped one stopped.
@@ -338,7 +325,6 @@ message Message {
   string chat_id = 2;
   int64 seq = 3;
   string thread = 4;
-  reserved 5;                          // removed: context_sequence (internal only)
   MessageRole role = 6;
   optional string model = 7;
   optional string agent = 8;
@@ -423,16 +409,9 @@ message InputMessage {
 // StartChatRequest starts a chat's root run.
 message StartChatRequest {
   string project_id = 1;
-  reserved 2;                          // was: first_message - use messages instead
   optional string title = 3;
   optional string worktree_id = 4;
-  reserved 5;                          // was: agent - use workflow_params instead
   string workflow = 6;                 // Workflow name (optional - defaults to user preference or builtin://agent)
-  reserved 7;                          // was: model - use workflow_params instead
-  reserved 8;                          // was: temperature (never read by the server; use workflow_params)
-  reserved 9;                          // was: max_tokens (never read by the server; use workflow_params)
-  reserved 10;                         // was: auto_approve - use mode or workflow_params instead
-  reserved 11;                         // was: is_planning_mode - use mode or workflow_params instead
   repeated string attachments = 12;    // Attachment IDs
   map<string, google.protobuf.Value> workflow_params = 13;  // Workflow input parameters
   optional string mode = 14;           // Execution mode; becomes workflow_params.mode
@@ -481,7 +460,6 @@ message StartChatResponse {
   Chat chat = 1;
   string workflow_id = 2;
   string run_id = 3;
-  reserved 4;                          // was: draft_id (no server code ever set it)
 }
 
 // ListChatsRequest lists chats for a project
@@ -520,9 +498,6 @@ message GetChatResponse {
 message UpdateChatRequest {
   string chat_id = 1;
   optional string title = 2;
-  reserved 3;                          // was: auto_approve - use UpdateWorkflowParams instead
-  reserved 4;                          // was: temperature - use UpdateWorkflowParams instead
-  reserved 5;                          // was: max_tokens - use UpdateWorkflowParams instead
   optional string worktree_id = 6;
   optional string workflow_name = 7;   // Workflow to use - only changeable before chat starts (status=pending)
 }
@@ -587,21 +562,15 @@ message ListArchivedChatsResponse {
 // SendMessageRequest sends messages to a chat
 message SendMessageRequest {
   string chat_id = 1;
-  reserved 2;                          // was: content - use messages instead
   repeated string attachments = 3;     // Attachment IDs
-  reserved 4;                          // was: agent - use workflow_params instead
   optional string workflow = 5;        // Switch to this workflow (only allowed before chat starts)
-  reserved 6;                          // was: is_planning_mode - use mode or workflow_params instead
-  reserved 7;                          // was: model_override - use workflow_params instead
   optional double temperature = 8;     // Per-message temperature
   optional int64 max_tokens = 9;       // Per-message max tokens
-  reserved 10;                         // was: auto_approve - use mode or workflow_params instead
   map<string, google.protobuf.Value> workflow_params = 11;  // Workflow input parameters
   optional string mode = 12;           // Execution mode
   optional string target_thread = 13;  // Target thread ID for the message (defaults to main thread if not specified)
   map<string, string> selected_presets = 14; // Update preset selections (persisted with chat)
   repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
-  reserved 16;  // was: yield_id
   bool discuss = 17;              // If true, chat with LLM without resuming paused workflow
   // Client-chosen UUID for the user message. When the message is queued for a
   // running thread (see SendMessageResponse.queued) it becomes the queued
@@ -864,8 +833,6 @@ message BranchChatRequest {
   // A branch of a chat that already has no machine stays without one unless
   // it names a worktree.
   optional bool no_machine = 8;
-  reserved 2; // was: ordinal (deprecated, use message_id)
-  reserved 6; // was: thread (deprecated, use message_id)
 }
 
 // BranchChatResponse returns the created branch chat
@@ -987,7 +954,6 @@ message WorkflowExecution {
   string id = 1;
   string workflow_name = 2;
   string thread = 3;
-  reserved 4; // was: status (ChatWorkflowStatus), split into state + stop_reason
   optional string parent_id = 5;
   string created_at = 6;
   optional string completed_at = 7;
@@ -997,7 +963,6 @@ message WorkflowExecution {
   optional int32 iteration = 11;         // For loop iterations
   optional string spawned_by_node_id = 12; // Node ID that spawned this child workflow
   optional string forked_from_thread = 13; // Thread this was forked from (if fork, not new)
-  reserved 14; // was thread_statuses — a hardcoded is_active:true stub no client read
   optional string thread_title = 15; // Human-readable title for the thread
   optional string parent_thread = 16; // Parent thread ID (set for both fork and new child threads)
   // Origin is HOW this workflow's thread came to exist: "main", "spawn",

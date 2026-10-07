@@ -4215,7 +4215,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x05error\x18\a \x01(\tR\x05error\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xec\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\xe0\x02\n" +
 	"\x0eDaemonRegister\x12\x1a\n" +
 	"\bhostname\x18\x03 \x01(\tR\bhostname\x12\x1a\n" +
 	"\bplatform\x18\x04 \x01(\tR\bplatform\x12\x1f\n" +
@@ -4230,7 +4230,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\tdaemon_id\x18\v \x01(\tR\bdaemonId\x1a9\n" +
 	"\vLabelsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x01\x10\x02J\x04\b\x02\x10\x03J\x04\b\a\x10\b\"\x80\x02\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\a\x10\b\"\x80\x02\n" +
 	"\fToolResponse\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x18\n" +
@@ -4271,7 +4271,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x17local_model_http_cancel\x18\x12 \x01(\v2 .reliant.v1.LocalModelHTTPCancelH\x00R\x14localModelHttpCancel\x12O\n" +
 	"\x13local_model_refresh\x18\x13 \x01(\v2\x1d.reliant.v1.LocalModelRefreshH\x00R\x11localModelRefreshB\t\n" +
 	"\amessage\"\x0e\n" +
-	"\fGatewayHello\"\xfc\x01\n" +
+	"\fGatewayHello\"\xf6\x01\n" +
 	"\vToolRequest\x12\x1d\n" +
 	"\n" +
 	"request_id\x18\x01 \x01(\tR\trequestId\x12\x1b\n" +
@@ -4283,7 +4283,7 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x10content_block_id\x18\x05 \x01(\tR\x0econtentBlockId\x12!\n" +
 	"\fcontext_json\x18\x06 \x01(\tR\vcontextJson\x12\x1d\n" +
 	"\n" +
-	"timeout_ms\x18\b \x01(\x05R\ttimeoutMsJ\x04\b\a\x10\b\"/\n" +
+	"timeout_ms\x18\b \x01(\x05R\ttimeoutMs\"/\n" +
 	"\x0fServerHeartbeat\x12\x1c\n" +
 	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"\x9b\x01\n" +
 	"\x0fRegistrationAck\x12\x1a\n" +

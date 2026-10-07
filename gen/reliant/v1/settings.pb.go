@@ -5171,7 +5171,7 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x17UpdateShortcutsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x17\n" +
-	"\x15GetPreferencesRequest\"\xe5\a\n" +
+	"\x15GetPreferencesRequest\"\xdf\a\n" +
 	"\x16GetPreferencesResponse\x12+\n" +
 	"\x11streaming_enabled\x18\x01 \x01(\bR\x10streamingEnabled\x122\n" +
 	"\x15worktree_archive_mode\x18\x03 \x01(\tR\x13worktreeArchiveMode\x12I\n" +
@@ -5193,7 +5193,7 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x13hidden_preset_slugs\x18\x10 \x03(\tR\x11hiddenPresetSlugs\x1a=\n" +
 	"\x0fAdditionalEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\x02\x10\x03\"\x91\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8b\n" +
 	"\n" +
 	"\x18UpdatePreferencesRequest\x120\n" +
 	"\x11streaming_enabled\x18\x01 \x01(\bH\x00R\x10streamingEnabled\x88\x01\x01\x127\n" +
@@ -5227,7 +5227,7 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x17_default_workflow_scopeB\x13\n" +
 	"\x11_default_workflowB\x19\n" +
 	"\x17_hide_builtin_workflowsB\x17\n" +
-	"\x15_hide_builtin_presetsJ\x04\b\x02\x10\x03\"O\n" +
+	"\x15_hide_builtin_presets\"O\n" +
 	"\x19UpdatePreferencesResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"{\n" +

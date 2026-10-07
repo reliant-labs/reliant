@@ -139,10 +139,6 @@ message CelDaemonSelector {
 // Thread behavior: For workflow nodes with thread.mode "fork" or "new", the
 // save_message saves to the PARENT workflow's thread, not the child's thread.
 message SaveMessageConfig {
-  // Tag 1 was `CelString condition`. The condition is now raw CEL like every
-  // other condition field; the old tag is reserved so a stored config in the
-  // old shape fails to decode instead of silently mis-decoding.
-  reserved 1;
   // Condition is a raw CEL expression (no {{ }}) over output, inputs, workflow
   // and iter that must evaluate to bool; the message is saved only when true.
   DirectCelBool condition = 8 [(reliant) = {description: "Raw CEL condition (no {{ }}) that must return bool; the message is saved only when true"}];
@@ -197,7 +193,6 @@ message InjectConfig {
     deprecated = true,
     (reliant) = {hidden: true}
   ];
-  reserved 4; // was: repeated CelString files (never shipped)
   // Attachments to include in the injected message.
   repeated InjectAttachment attachments = 5 [(reliant) = {description: "Attachments to include"}];
 }
@@ -254,8 +249,6 @@ message Node {
   // If omitted or evaluates to true, the node runs.
   // On Join nodes, the only valid values are the literals "all" and "any".
   DirectCelBool condition = 3;
-
-  reserved 4; // thread moved to SubWorkflowArgs
 
   // Timeout overrides the default activity timeout for this node.
   // Format: Go duration string (e.g., "5m", "1h30m", "30s").
@@ -335,14 +328,6 @@ message Node {
 // API surface and break stored workflows. Keeping the schema in a generated Go
 // catalog gets the same build-time rejection without that coupling.
 message ToolsConfig {
-  // Field 1 was `filter`, the original name for preloaded_tools. It is gone
-  // rather than deprecated: two names for one list is what caused the outage.
-  // The rename was done correctly everywhere that EXPANDED the list, and
-  // missed in the one place that decided whether tools were enabled at all,
-  // which then read every migrated workflow as "no tools". An alias nobody is
-  // obliged to read is an alias somebody will forget.
-  reserved 1;
-
   // PreloadedTools are the tools handed to the model up front, with full
   // schemas, in its tool array. Names, tags ("tag:search"), globs, and
   // !exclusions.
@@ -464,8 +449,6 @@ message CallLLMArgs {
     description: "Tool configuration: filter, spawn, and permission"
     category: "Tools"
   }];
-  // Fields 6, 7, 8, 11 removed — replaced by tools_config.
-  reserved 6, 7, 8, 11;
   // ResponseTool defines a custom structured output tool.
   ResponseTool response_tool = 9;
   // Messages injects messages for ad-hoc LLM calls without a thread.
@@ -751,9 +734,6 @@ message CompactArgs {
     icon: "Minimize2"
   };
 
-  // Field 1 removed (triggering_message — never read at runtime).
-  reserved 1;
-
   // Model used to summarize the conversation. Wire the agent loop's own model
   // here: summarizing a thread with a SMALLER-window model than the one that
   // filled it cannot work, because the history that tripped the compaction
@@ -792,11 +772,6 @@ message ApprovalArgs {
     example: "30m"
     type_hint: "duration"
   }];
-
-  // Reserved field numbers for removed fields.
-  reserved 2; // description (removed: never rendered in UI)
-  reserved 4; // actions (removed: broken end-to-end, default approve/deny always used)
-  reserved 5; // metadata (removed: never used)
 }
 
 // AskQuestionArgs configures an ask_question node — pauses for user input.
@@ -1077,7 +1052,6 @@ message LoopArgs {
   // Loop continues while true. Required for sequential loops.
   // Has access to: outputs.* (sub-workflow output), iter.iteration (0-indexed count).
   DirectCelBool while = 6 [(reliant) = {description: "CEL condition: loop continues while true"}];
-  reserved 7; // was: yield
 
   // === Parallel loop fields ===
 
@@ -1520,10 +1494,6 @@ message CallLLMOutput {
   // where a user watching a long answer actually types.
   bool pending_inbox = 14 [(reliant) = {visibility_contexts: "advanced"}];
 
-  // Fields 15 (aborted) and 16 (stop_kind) were folded into stop_reason.
-  reserved 15, 16;
-  reserved "aborted", "stop_kind";
-
   // MessageID is the pre-allocated assistant message id this call streamed
   // under (delta identity protocol). Echoed back from
   // RuntimeContext.AssistantMessageID so the workflow can carry it into the
@@ -1871,7 +1841,6 @@ message Workflow {
   repeated string entry = 9;
   // APIVersion specifies the schema version. Optional, for future compatibility.
   string api_version = 10;
-  reserved 11; // was: discuss (removed: always enabled when paused)
   // Daemon specifies the default daemon for tool execution in this workflow.
   // Can be overridden per-node. Supports string shorthand ("local"),
   // structured object ({type: "cloud"}), or CEL expression ("{{ params.daemon }}").

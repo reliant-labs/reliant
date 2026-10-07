@@ -2117,7 +2117,7 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"\x16WorkflowExecutionEvent\x12E\n" +
 	"\n" +
 	"event_type\x18\x01 \x01(\x0e2&.reliant.v1.WorkflowExecutionEventTypeR\teventType\x12>\n" +
-	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\xb9\x05\n" +
+	"\bworkflow\x18\x02 \x01(\v2\".reliant.v1.WorkflowExecutionStateR\bworkflow*\xb3\x05\n" +
 	"\x0eChatUpdateType\x12 \n" +
 	"\x1cCHAT_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18CHAT_UPDATE_TYPE_MESSAGE\x10\x01\x12\x1d\n" +
@@ -2139,7 +2139,7 @@ const file_reliant_v1_streaming_proto_rawDesc = "" +
 	"!CHAT_UPDATE_TYPE_SKILL_INVOCATION\x10\x11\x12\x1d\n" +
 	"\x19CHAT_UPDATE_TYPE_QUESTION\x10\x12\x12%\n" +
 	"!CHAT_UPDATE_TYPE_STREAM_FINALIZED\x10\x13\x12+\n" +
-	"'CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED\x10\x14\"\x04\b\f\x10\f*\xee\x06\n" +
+	"'CHAT_UPDATE_TYPE_AGENT_MESSAGES_DRAINED\x10\x14*\xee\x06\n" +
 	"\x0eUserUpdateType\x12 \n" +
 	"\x1cUSER_UPDATE_TYPE_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"USER_UPDATE_TYPE_CHAT_STATE_CHANGE\x10\x01\x12(\n" +

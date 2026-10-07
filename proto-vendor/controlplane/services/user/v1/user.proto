@@ -60,8 +60,6 @@ message GetCurrentUserRequest {}
 
 message GetCurrentUserResponse {
   User user = 1;
-  reserved 2; // was: repeated Organization organizations (removed with OrgService)
-  reserved "organizations";
 }
 
 message UpdateProfileRequest {

@@ -40,9 +40,6 @@ message IntegrationManifest {
 // Adding a provider is data: the auth methods, the identity probe and the
 // per-connection params below are everything the connections layer needs.
 message ConnectionSpec {
-  reserved 1, 6;
-  reserved "type", "optional_auth_kinds";
-
   // BaseUrl is the https origin (and optional path prefix) request `path`s
   // resolve against. Every request host must be this host or in allowed_hosts.
   //

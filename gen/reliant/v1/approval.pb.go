@@ -877,7 +877,7 @@ var File_reliant_v1_approval_proto protoreflect.FileDescriptor
 const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/approval.proto\x12\n" +
-	"reliant.v1\"\xa1\a\n" +
+	"reliant.v1\"\x8f\a\n" +
 	"\bApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12=\n" +
@@ -917,9 +917,7 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\r_action_takenB\r\n" +
 	"\v_tool_inputB\x13\n" +
 	"\x11_integration_nameB\x13\n" +
-	"\x11_integration_iconJ\x04\b\t\x10\n" +
-	"J\x04\b\n" +
-	"\x10\vJ\x04\b\x12\x10\x13\"5\n" +
+	"\x11_integration_icon\"5\n" +
 	"\x1aListApprovalsByChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"g\n" +
 	"\x1bListApprovalsByChatResponse\x122\n" +
