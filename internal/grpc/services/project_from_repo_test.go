@@ -131,6 +131,33 @@ func TestCreateProjectFromRepo_RefusedClonePersistsNothing(t *testing.T) {
 	assert.Empty(t, projects, "a refused clone must not leave a project behind")
 }
 
+// TestCreateProjectFromRepo_DeletedMachinePersistsNothing pins the exact prod
+// failure of 2026-10-07 14:38:49: the clone was dispatched to cda8a89b, a
+// machine the control plane had deleted the day before, and came back
+// not_found. Nothing may be persisted, and NotFound must reach the client
+// unflattened — it is what tells the UI the machine is gone, so it can drop
+// it as a target and say so.
+func TestCreateProjectFromRepo_DeletedMachinePersistsNothing(t *testing.T) {
+	cp := &cloneStubControlPlane{err: connect.NewError(
+		connect.CodeNotFound, errors.New(`daemon "cda8a89b-d15c-455d-a506-4c40335e4278" not found`))}
+	svc, repo, cleanup := newFromRepoService(t, cp)
+	defer cleanup()
+
+	userID := "user-from-repo-" + uuid.NewString()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+
+	_, err := svc.CreateProjectFromRepo(ctx, connect.NewRequest(&reliantv1.CreateProjectFromRepoRequest{
+		CloneUrl: "https://github.com/reliant-labs/forge.git",
+		DaemonId: "cda8a89b-d15c-455d-a506-4c40335e4278",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+
+	projects, err := repo.ListProjects(ctx, db.ProjectFilters{UserID: userID})
+	require.NoError(t, err)
+	assert.Empty(t, projects, "a clone dispatched to a deleted machine must not leave a project behind")
+}
+
 func TestCreateProjectFromRepo_CompletedCloneIsRecordedAsInstalled(t *testing.T) {
 	cp := &cloneStubControlPlane{result: controlplane.CloneRepoResult{
 		ClonedPath: "/home/workspace/projects/widgets",

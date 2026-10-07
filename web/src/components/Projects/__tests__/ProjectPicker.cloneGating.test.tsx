@@ -106,6 +106,7 @@ vi.mock("@/store/apiKeySetupStore", () => ({
 }));
 
 import { ProjectPicker } from "../ProjectPicker";
+import { markMachineGone, resetGoneMachinesForTest } from "@/lib/goneMachines";
 import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
 
 const DAEMON_STATUS_ACTIVE = DaemonStatus.ACTIVE;
@@ -116,7 +117,10 @@ function daemon(id: string, status: number, extra: Record<string, unknown> = {})
   return {
     daemonId: id,
     status,
-    hostname: id,
+    // The control plane's name for the machine; a managed machine's hostname
+    // is its pod's and is never what the UI calls it.
+    name: id,
+    hostname: `ws-ws-${id}`,
     // Cloud rows only: the picker filters the one list by daemon type, and a
     // self-hosted machine is not a clone target.
     daemonType: "managed",
@@ -147,6 +151,7 @@ function renderPicker() {
 beforeEach(() => {
   vi.clearAllMocks();
   registryDaemons = [];
+  resetGoneMachinesForTest();
 });
 
 describe("ProjectPicker clone gating — failed-only daemons", () => {
@@ -241,5 +246,38 @@ describe("ProjectPicker clone gating — an active daemon", () => {
         clone.compareDocumentPosition(openFolder) & Node.DOCUMENT_POSITION_FOLLOWING,
       ).toBeTruthy();
     }
+  });
+});
+
+// MACHINE_LIST_BUGS_2026-10-07: the registry still listed cda8a89b, deleted in
+// the control plane the day before; it was the most recently created machine,
+// so the clone went to it and came back not_found. Once the control plane has
+// said a machine is gone, it is never the default target again.
+describe("ProjectPicker clone target — a machine the control plane says is gone", () => {
+  beforeEach(() => {
+    registryDaemons = [
+      daemon("ghost", DaemonStatus.PENDING, { createdAt: { seconds: 2_000n, nanos: 0 } }),
+      daemon("live", DAEMON_STATUS_SUSPENDED, { createdAt: { seconds: 1_000n, nanos: 0 } }),
+    ];
+  });
+
+  it("defaults to the most recent machine while nothing says it is gone", async () => {
+    renderPicker();
+    const clone = await findSettledCloneButton();
+    expect(clone).toHaveTextContent(/ghost/);
+  });
+
+  it("never defaults to a machine marked gone", async () => {
+    markMachineGone("ghost");
+    renderPicker();
+    const clone = await findSettledCloneButton();
+    expect(clone).toHaveTextContent(/live/);
+    expect(clone).not.toHaveTextContent(/ghost/);
+  });
+
+  it("does not promise a clone in the button's description", async () => {
+    renderPicker();
+    const clone = await findSettledCloneButton();
+    expect(clone).not.toHaveTextContent(/will clone when|it'll clone when/i);
   });
 });

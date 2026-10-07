@@ -5,6 +5,7 @@ import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { cn } from "../../lib/utils";
 import { useGlobalUpdatesStore } from "../../store/globalUpdatesStore";
 import { Tooltip } from "../ui/Tooltip";
+import { machineDisplayName } from "@/lib/machineName";
 
 const RECENT_HEARTBEAT_SECONDS = 60;
 
@@ -60,7 +61,7 @@ export function DaemonStatusDot() {
         ? "recent"
         : "offline";
 
-  const meta = getStatusMeta(status, activeDaemon?.hostname || activeDaemon?.daemonId, heartbeatAgeSeconds);
+  const meta = getStatusMeta(status, activeDaemon ? machineDisplayName(activeDaemon) : undefined, heartbeatAgeSeconds);
 
   return (
     <Tooltip content={meta.label} placement="bottom" delay={300}>

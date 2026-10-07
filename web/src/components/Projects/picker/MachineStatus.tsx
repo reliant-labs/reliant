@@ -20,6 +20,7 @@ import { cloudDaemonStatusLabel } from "../cloudDaemonStatusLabel";
 import { isLocalDaemonType } from "../addProjectActions";
 import { isCloudDaemon } from "./format";
 import { pickerButton } from "./buttonStyles";
+import { machineDisplayName } from "@/lib/machineName";
 
 /**
  * The picker's machine ("daemon" internally) status, in one of three shapes:
@@ -66,10 +67,11 @@ const STRIP = "flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border bor
 
 /** The connected machine, in one line. */
 export function MachineStatusStrip({
-  hostname,
+  name,
   daemonType,
 }: {
-  hostname: string;
+  /** The machine's display name — lib/machineName, never a raw hostname. */
+  name: string;
   daemonType: string | undefined;
 }) {
   const [connectOpen, setConnectOpen] = useState(false);
@@ -77,7 +79,7 @@ export function MachineStatusStrip({
     <div className={STRIP} data-testid="machine-status-strip">
       <StatusDot variant="active" size="md" />
       <div className="flex min-w-0 flex-1 items-center gap-2 text-sm">
-        <span className="truncate font-medium text-ink">{hostname || "Machine"}</span>
+        <span className="truncate font-medium text-ink">{name || "Machine"}</span>
         <Badge label={machineKindLabel(daemonType)} variant="neutral" size="sm" />
         <span className="hidden text-xs text-ink-muted sm:inline">
           Connected. Projects open on this machine.
@@ -179,7 +181,7 @@ export function NoActiveMachinePanel() {
     if (!isFailedDaemon(daemon)) return;
     if (
       !window.confirm(
-        `Delete ${daemon.hostname || "this machine"}? It failed to start and can't be recovered. You can create a new one afterwards.`,
+        `Delete ${machineDisplayName(daemon)}? It failed to start and can't be recovered. You can create a new one afterwards.`,
       )
     ) {
       return;
@@ -254,7 +256,7 @@ export function NoActiveMachinePanel() {
             const isSuspended = daemon.status === DaemonStatus.SUSPENDED;
             const isDeleting = deletingId === daemon.daemonId;
             const statusLabel = cloudDaemonStatusLabel(daemon, isResuming);
-            const name = daemon.hostname || "machine";
+            const name = machineDisplayName(daemon);
             // A failed machine's reason is the most useful thing on its row
             // ("Storage request exceeds your plan's limit"), so it is shown in
             // full in the danger tone. Anything else shows its last message,

@@ -194,6 +194,18 @@ message DaemonInfo {
   // offline so the UI can show what WOULD be available; callers gate on
   // `status` before offering a model for use.
   LocalModelInventory local_models = 21;
+
+  // The name the owner gave the machine ("default", "gpu-box"), mirrored from
+  // the control plane, which owns it. Empty until the control plane reports
+  // one (a build with no control plane, or a daemon that registered before
+  // any control-plane event reached this registry).
+  //
+  // This is what a machine is CALLED. `hostname` is where it runs: for a
+  // managed machine that is the pod's hostname ("ws-ws-2aab1465"), an
+  // implementation detail no user chose — showing it is how a machine named
+  // "default" came to be listed under a doubled ws- prefix. Display the name;
+  // fall back to the hostname only for a self-hosted machine without one.
+  string name = 22;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

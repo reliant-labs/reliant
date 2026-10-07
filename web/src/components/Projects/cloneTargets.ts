@@ -1,7 +1,10 @@
+import { Code, ConnectError } from "@connectrpc/connect";
+
 import {
   DaemonStatus,
   type DaemonInfo as CloudDaemon,
 } from "../../gen/reliant/v1/daemon_registry_pb";
+import { machineDisplayName } from "../../lib/machineName";
 
 /**
  * Which cloud daemons can accept a clone, and what to tell the user when none
@@ -151,27 +154,57 @@ export function cloneAvailability(daemons: CloudDaemon[]): CloneAvailability {
 }
 
 /**
- * The sub-label under "Clone repo". It states the honest outcome up front:
- * cloning onto a machine that is not running yet is QUEUED, not done, and
- * saying "cloned" there is the false success this replaces.
+ * The sub-label under "Clone repo" — also its tooltip.
+ *
+ * It names the action and the machine, and says honestly when the clone will
+ * QUEUE rather than start. It deliberately does not promise an outcome. The
+ * copy used to read "Queue a GitHub repo — it'll clone when <machine> is
+ * ready", and on 2026-10-07 that promise popped up beside the very error
+ * saying the clone had failed: closing the clone dialog returns focus to this
+ * button, the tooltip opens on focus, and the machine it named was a deleted
+ * one the clone had just been refused for. A description of what the button
+ * does cannot contradict what happened when it was pressed.
  */
 export function cloneDescription({
   cloneState,
   hasGitHubCredential,
-  fallbackHost,
 }: {
   cloneState: CloneAvailability;
   hasGitHubCredential: boolean;
-  fallbackHost?: string;
 }): string {
   if (cloneState.kind === "blocked") return cloneState.reason;
   if (!hasGitHubCredential) return "Connect GitHub to clone a repository";
 
-  const name =
-    cloneState.target.hostname || fallbackHost || "your machine";
+  const name = machineDisplayName(cloneState.target);
   return cloneState.immediate
     ? `Pull a GitHub repo onto ${name}`
-    : `Queue a GitHub repo — it'll clone when ${name} is ready`;
+    : `Queue a GitHub repo for ${name}, which isn't running yet`;
+}
+
+/**
+ * What to tell the user when the clone dispatch fails, as copy rather than a
+ * status code.
+ *
+ * NotFound is the case that matters: the control plane does not have the
+ * target machine (deleted, or not this user's). The raw text — `[not_found]
+ * daemon "cda8a89b-…" not found` — named a UUID and no way forward. The
+ * caller also stops offering the machine (lib/goneMachines).
+ */
+export function describeCloneError(err: unknown, machineName: string): string {
+  if (err instanceof ConnectError) {
+    if (err.code === Code.NotFound) {
+      return `${machineName} no longer exists — it may have been deleted. Choose another machine, or create one in Settings → Machines.`;
+    }
+    // The control plane's own message is already user-facing for these
+    // ("no git credential found for provider github" → connect GitHub).
+    return err.rawMessage || "Failed to clone repository";
+  }
+  return err instanceof Error ? err.message : "Failed to clone repository";
+}
+
+/** Whether a clone failure means the target machine is gone. */
+export function isCloneTargetGone(err: unknown): boolean {
+  return err instanceof ConnectError && err.code === Code.NotFound;
 }
 
 /**

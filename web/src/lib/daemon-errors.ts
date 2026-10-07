@@ -1,6 +1,10 @@
 import { ConnectError } from "@connectrpc/connect";
 
 import { DaemonWakingSchema } from "@/gen/reliant/v1/daemon_registry_pb";
+import {
+  ProjectCheckoutMissingSchema,
+  type ProjectCheckoutMissing,
+} from "@/gen/reliant/v1/filesystem_pb";
 
 /**
  * Transient "your machine hasn't connected yet" detection.
@@ -68,6 +72,25 @@ export function wakingDaemonId(error: unknown): string | null {
   if (!(error instanceof ConnectError)) return null;
   for (const detail of error.findDetails(DaemonWakingSchema)) {
     if (detail.daemonId) return detail.daemonId;
+  }
+  return null;
+}
+
+/**
+ * The project's directory does not exist on the machine a request reached —
+ * the server's ProjectCheckoutMissing detail on a NOT_FOUND — or null for any
+ * other error.
+ *
+ * Not a machine wait and not a failure. It is either a clone still landing
+ * (state CLONING: the window right after "Clone from GitHub", which used to
+ * render a raw "no such file or directory" 500) or a project that is simply
+ * not on this machine (ABSENT / CLONE_FAILED), which the user can fix by
+ * cloning it here.
+ */
+export function projectCheckoutMissing(error: unknown): ProjectCheckoutMissing | null {
+  if (!(error instanceof ConnectError)) return null;
+  for (const detail of error.findDetails(ProjectCheckoutMissingSchema)) {
+    return detail;
   }
   return null;
 }

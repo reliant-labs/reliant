@@ -6,7 +6,15 @@ import {
   type DaemonInfo as CloudDaemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { createDaemon } from "@/services/controlPlane/daemon";
-import { pickCloneTarget } from "@/components/Projects/cloneTargets";
+import {
+  cloneAvailability,
+  describeCloneError,
+  isCloneTargetGone,
+  isFailedDaemon,
+  pickCloneTarget,
+} from "@/components/Projects/cloneTargets";
+import { markMachineGone, withoutGoneMachines } from "@/lib/goneMachines";
+import { machineDisplayName } from "@/lib/machineName";
 
 /**
  * Add a GitHub repo as a project during onboarding.
@@ -57,12 +65,15 @@ const DAEMON_SIZE_SMALL = 1;
  *
  * Shares `pickCloneTarget` with the project picker so the two surfaces cannot
  * disagree about which machine "the user's machine" means: running first, then
- * most recently used. Falls back to the first daemon of any status, because
- * onboarding's machine is frequently still booting and the clone is durably
- * queued — refusing there would strand the user at the last step.
+ * most recently used. Falls back to the first machine whose status is not yet
+ * known, because onboarding's machine is frequently still booting and the
+ * clone is durably queued — refusing there would strand the user at the last
+ * step. Never a FAILED machine (nothing will drain its queue) and never one
+ * the control plane has said is gone (lib/goneMachines).
  */
 export function pickOnboardingDaemon(daemons: CloudDaemon[]): CloudDaemon | undefined {
-  return pickCloneTarget(daemons) ?? daemons[0];
+  const offered = withoutGoneMachines(daemons);
+  return pickCloneTarget(offered) ?? offered.find((d) => !isFailedDaemon(d));
 }
 
 export async function addRepoProject({
@@ -85,7 +96,14 @@ export async function addRepoProject({
     .listDaemons(create(ListDaemonsRequestSchema));
   const daemon = pickOnboardingDaemon(resp.daemons);
   if (!daemon) {
-    throw new Error("Your machine is still starting. Try again in a moment.");
+    // Say WHY there is no target — still starting, failed, or gone — rather
+    // than assuming the first.
+    const availability = cloneAvailability(withoutGoneMachines(resp.daemons));
+    throw new Error(
+      availability.kind === "blocked" && resp.daemons.length > 0
+        ? availability.reason
+        : "Your machine is still starting. Try again in a moment.",
+    );
   }
 
   // Best-effort, and deliberately before the clone: it tells the controller
@@ -107,19 +125,30 @@ export async function addRepoProject({
   // checkout will live. Errors propagate — the step shows them inline, and a
   // silent failure here is what left onboarding pointing at a project that
   // did not exist.
-  const result = await projectGrpc.createProjectFromRepo({
-    cloneUrl,
-    daemonId: daemon.daemonId,
-    name,
-    branch,
-    path,
-  });
+  let result: Awaited<ReturnType<typeof projectGrpc.createProjectFromRepo>>;
+  try {
+    result = await projectGrpc.createProjectFromRepo({
+      cloneUrl,
+      daemonId: daemon.daemonId,
+      name,
+      branch,
+      path,
+    });
+  } catch (err) {
+    // The control plane does not have this machine: stop offering it, and
+    // say so in words rather than as `[not_found] daemon "…" not found`.
+    if (isCloneTargetGone(err)) {
+      markMachineGone(daemon.daemonId);
+      throw new Error(describeCloneError(err, machineDisplayName(daemon)));
+    }
+    throw err;
+  }
 
   return {
     projectId: result.project?.id,
     clonedPath: result.projectDaemon?.path || path,
     daemonId: daemon.daemonId,
     queued: result.queued,
-    machineName: result.daemonName || daemon.hostname || "",
+    machineName: result.daemonName || machineDisplayName(daemon),
   };
 }

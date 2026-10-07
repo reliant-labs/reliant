@@ -17,6 +17,7 @@ import {
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
 import { Tooltip } from "../ui/Tooltip";
+import { machineDisplayName } from "@/lib/machineName";
 
 interface MachinePickerProps {
   value: ChatMachineChoice;
@@ -48,7 +49,7 @@ export function MachinePicker({ value, onChange, daemons, defaultDaemon, disable
   const selectedLabel = noMachine
     ? "No machine"
     : value === DEFAULT_MACHINE
-      ? defaultDaemon?.hostname || options[0]?.label || "Your machine"
+      ? (defaultDaemon ? machineDisplayName(defaultDaemon) : options[0]?.label) || "Your machine"
       : options.find((o) => o.value === value)?.label || "Your machine";
 
   const choose = (choice: ChatMachineChoice) => {

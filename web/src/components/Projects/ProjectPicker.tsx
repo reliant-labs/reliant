@@ -1,4 +1,5 @@
 import { useState, useEffect, memo, useMemo, useCallback, type ReactNode } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, FolderOpen, FolderPlus, GitFork, Loader2, Search, X } from "lucide-react";
 import { ConnectError, Code } from "@connectrpc/connect";
 
@@ -8,7 +9,9 @@ import { useApiKeySetupStore } from "../../store/apiKeySetupStore";
 import { cn } from "../../lib/utils";
 import { basename } from "../../lib/pathUtils";
 import { toast } from "../../lib/toast-manager";
-import { useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { invalidateDaemonList, useDaemonStatus } from "../../hooks/useDaemonStatus";
+import { machineDisplayName } from "../../lib/machineName";
+import { markMachineGone, useGoneMachinesVersion, withoutGoneMachines } from "../../lib/goneMachines";
 import { useGitHubCredential } from "../../hooks/useGitHubCredential";
 import { capabilities } from "../../services/controlPlane/capabilities";
 import type { GitRepo } from "../../services/controlPlane/git";
@@ -24,7 +27,13 @@ import { DirectoryPicker } from "./DirectoryPicker";
 import { RepoSelector } from "./RepoSelector";
 import { CloneTargetPicker } from "./CloneTargetPicker";
 import { addProjectLead } from "./addProjectActions";
-import { cloneAvailability, pickCloneTarget, cloneDescription } from "./cloneTargets";
+import {
+  cloneAvailability,
+  cloneDescription,
+  describeCloneError,
+  isCloneTargetGone,
+  pickCloneTarget,
+} from "./cloneTargets";
 import {
   SORT_DEFAULT_DIR,
   isCloudDaemon,
@@ -67,7 +76,8 @@ type Project = StoreProject;
 
 type CloneTarget = {
   daemonId: string;
-  hostname: string;
+  /** The machine's display name (lib/machineName). */
+  name: string;
 };
 
 interface ProjectPickerProps {
@@ -240,18 +250,24 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   const showConnectionInstructions = isWebMode && !activeDaemon && !daemonLoading;
 
   const { hasToken: hasGitHubCredential } = useGitHubCredential();
+  const queryClient = useQueryClient();
   // Cloud machines are the only valid clone targets — cloning requires a
-  // managed machine the control plane can reach.
+  // managed machine the control plane can reach. Machines the control plane
+  // has already said are gone this session are never offered again, even
+  // while the registry still lists them (lib/goneMachines).
+  const goneVersion = useGoneMachinesVersion();
   const cloudDaemons = useMemo(
-    () => daemons.filter((d) => isCloudDaemon(d.daemonType)),
-    [daemons],
+    () => withoutGoneMachines(daemons.filter((d) => isCloudDaemon(d.daemonType))),
+    // goneVersion re-runs the filter when a machine is marked gone.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [daemons, goneVersion],
   );
-  // Hostname lookup for naming machines in the clone status toast. Falls back
-  // to a short id slice when the row hasn't loaded yet.
-  const hostnameFor = useCallback(
+  // The display name for a machine in the clone status copy and toasts. Falls
+  // back to a short id slice when the row hasn't loaded yet.
+  const machineNameFor = useCallback(
     (daemonId: string) => {
       const d = daemons.find((x) => x.daemonId === daemonId);
-      return d?.hostname || `daemon ${daemonId.slice(0, 8)}`;
+      return d ? machineDisplayName(d) : `machine ${daemonId.slice(0, 8)}`;
     },
     [daemons],
   );
@@ -263,9 +279,9 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     if (!preferred) return null;
     return {
       daemonId: preferred.daemonId,
-      hostname: preferred.hostname || hostnameFor(preferred.daemonId),
+      name: machineDisplayName(preferred),
     };
-  }, [cloudDaemons, hostnameFor]);
+  }, [cloudDaemons]);
 
   // The machine the NEXT clone will use. Null means "whatever the default
   // resolves to"; a string means the user chose explicitly in the modal, and
@@ -293,8 +309,13 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
   // Which machine the next clone actually lands on: the user's explicit
   // choice when they made one, else the recency default, else any machine
   // that will eventually drain the queue.
+  //
+  // An explicit choice only counts while that machine is still on offer: one
+  // the control plane has since said is gone must not stay selected.
+  const chosenStillOffered =
+    chosenCloneDaemonId !== null && cloudDaemons.some((d) => d.daemonId === chosenCloneDaemonId);
   const effectiveCloneDaemonId =
-    chosenCloneDaemonId ??
+    (chosenStillOffered ? chosenCloneDaemonId : null) ??
     selectedCloneDaemon?.daemonId ??
     (cloneState.kind === "ready" ? cloneState.target.daemonId : null);
 
@@ -316,7 +337,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
         throw new Error("No daemon selected to clone into");
       }
       const branch = repo.defaultBranch || "main";
-      const targetHost = hostnameFor(targetDaemonId);
+      const targetHost = machineNameFor(targetDaemonId);
       setCloneStatus(`Queueing ${projectName} for ${targetHost}...`);
 
       const result = await projectGrpc.createProjectFromRepo({
@@ -347,7 +368,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       }
       setCloneStatus(null);
     },
-    [hostnameFor, loadProjects, onProjectSelected, selectProject],
+    [machineNameFor, loadProjects, onProjectSelected, selectProject],
   );
 
   const handleRepoSelectedFromModal = async (repo: GitRepo) => {
@@ -368,7 +389,15 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
       await cloneAndOpen(repo, destinationPath, projectName, targetDaemonId);
     } catch (err) {
       console.error("Clone-from-modal failed:", err);
-      toast.error(err instanceof Error ? err.message : "Failed to clone repository");
+      if (isCloneTargetGone(err)) {
+        // The control plane does not have this machine. Stop offering it
+        // now — the registry drops it on its own within minutes, but the
+        // next click must not go to the same dead machine — and refetch.
+        markMachineGone(targetDaemonId);
+        setChosenCloneDaemonId(null);
+        invalidateDaemonList(queryClient);
+      }
+      toast.error(describeCloneError(err, machineNameFor(targetDaemonId)));
       setCloneStatus(null);
     } finally {
       toast.dismiss(loadingToast);
@@ -450,7 +479,6 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
           description: cloneDescription({
             cloneState,
             hasGitHubCredential,
-            fallbackHost: selectedCloneDaemon?.hostname,
           }),
           icon: GitFork,
           onClick: () => setIsCloneModalOpen(true),
@@ -548,7 +576,7 @@ function ProjectPickerComponent({ onProjectSelected }: ProjectPickerProps) {
     machineSection = <NoActiveMachinePanel />;
   } else if (activeDaemon) {
     machineSection = (
-      <MachineStatusStrip hostname={activeDaemon.hostname} daemonType={activeDaemon.daemonType} />
+      <MachineStatusStrip name={machineDisplayName(activeDaemon)} daemonType={activeDaemon.daemonType} />
     );
   } else if (daemonLoading) {
     machineSection = <MachineStatusPending message="Checking your machine…" />;

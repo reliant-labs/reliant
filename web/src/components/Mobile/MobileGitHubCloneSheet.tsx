@@ -32,6 +32,7 @@ import { gitService } from "@/services/controlPlane/git";
 import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { cn } from "@/lib/utils";
 import { MOBILE_PRIMARY_ACTION } from "./MobileChrome";
+import { machineDisplayName } from "@/lib/machineName";
 
 /**
  * Only ACTIVE daemons are offered as a clone target. Suspended/Disconnected
@@ -124,7 +125,7 @@ export function MobileGitHubCloneSheet({
               <p className="text-sm font-medium text-foreground">Cloned successfully</p>
               <p className="break-all text-xs text-muted-foreground">{clonedPath}</p>
               <p className="text-xs text-muted-foreground">
-                on {selectedDaemon?.hostname || "the machine"}
+                on {selectedDaemon ? machineDisplayName(selectedDaemon) : "the machine"}
               </p>
             </div>
           ) : state === "cloning" ? (
@@ -178,7 +179,7 @@ export function MobileGitHubCloneSheet({
                         >
                           <Server className="h-4 w-4 shrink-0 text-muted-foreground" />
                           <span className="min-w-0 flex-1 truncate text-sm text-foreground">
-                            {daemon.hostname || `daemon ${daemon.daemonId.slice(0, 8)}`}
+                            {machineDisplayName(daemon)}
                           </span>
                           <span
                             className={cn(

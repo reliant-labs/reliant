@@ -8,6 +8,7 @@ import {
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { resumeErrorMessage, resumeErrorNeedsUpgrade } from "@/lib/daemon-resume";
+import { machineDisplayName } from "@/lib/machineName";
 
 const RESUME_POLL_MS = 3_000;
 const RESUME_GRACE_MS = 120_000;
@@ -184,7 +185,7 @@ interface ResumeButtonProps {
 
 function ResumeButton({ daemon, onResume, busy }: ResumeButtonProps) {
   return (
-    <Tooltip content={`Resume ${daemon.hostname}`} placement="top" delay={300} wrapperClassName="inline-flex">
+    <Tooltip content={`Resume ${machineDisplayName(daemon)}`} placement="top" delay={300} wrapperClassName="inline-flex">
 <button
       type="button"
       onClick={() => void onResume(daemon.daemonId)}
@@ -192,7 +193,7 @@ function ResumeButton({ daemon, onResume, busy }: ResumeButtonProps) {
       className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 font-medium text-amber-500 transition-colors hover:bg-amber-500/10 disabled:opacity-60"
     >
       <Play className="h-3.5 w-3.5" />
-      <span>{busy ? "Resuming…" : `Resume ${daemon.hostname}`}</span>
+      <span>{busy ? "Resuming…" : `Resume ${machineDisplayName(daemon)}`}</span>
     </button>
 </Tooltip>
   );
@@ -245,7 +246,7 @@ function PillDropdown({ suspended, onResume, busyId }: PillDropdownProps) {
                 disabled={busy}
                 className="flex w-full items-center justify-between gap-3 px-3 py-2 text-sm hover:bg-accent disabled:opacity-60"
               >
-                <span className="truncate">{d.hostname}</span>
+                <span className="truncate">{machineDisplayName(d)}</span>
                 <span className="inline-flex items-center gap-1 text-amber-500">
                   <Play className="h-3.5 w-3.5" />
                   {busy ? "Resuming…" : "Resume"}

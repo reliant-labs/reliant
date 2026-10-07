@@ -203,8 +203,13 @@ type Daemon struct {
 	// DaemonType is the type of daemon: "managed" (cloud-hosted) or
 	// "self_hosted" (user-run local daemon). Empty/nil if undetermined.
 	DaemonType *string
-	CreatedAt  time.Time
-	UpdatedAt  time.Time
+	// Name is the name the owner gave the machine, mirrored from the control
+	// plane (which owns it). Empty until the control plane has reported one —
+	// a daemon that registered here before any control-plane event, or a
+	// build with no control plane at all. Display falls back to Hostname.
+	Name      string
+	CreatedAt time.Time
+	UpdatedAt time.Time
 
 	// Lifecycle state mirrored from the control plane over
 	// daemon.v1.state.<id>.lifecycle. This service does NOT own these — the

@@ -114,6 +114,7 @@ import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { CardInset } from "@/components/forge-ui/card";
 import { CLOUD_PROJECT_ROOT, cloudPathForRepo } from "@/lib/cloudProjectPath";
 import { toast } from "@/lib/toast-manager";
+import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { useProjectStore } from "@/store/projectStore";
 import type { GitRepo } from "@/services/controlPlane/git";
 import { createMachine, type CreateMachineResult } from "./createMachine";
@@ -238,23 +239,10 @@ export function canRemoveDaemon(
   return { allowed: true };
 }
 
-// A UUID (v4-shaped, 36 chars with dashes at the standard offsets) is not a
-// name a person chose — it's what the control-plane falls back to when a
-// self-hosted daemon connects without registering one (see
-// control-plane/internal/natsio/daemon_event_consumer.go). Render something
-// readable instead: the hostname if we have one, else a short id-derived tag.
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-function looksLikeBareUuid(name: string): boolean {
-  return UUID_RE.test(name.trim());
-}
-
-export function daemonDisplayName(d: Pick<Daemon, "daemonId" | "hostname">): string {
-  const name = d.hostname?.trim() ?? "";
-  const isPlaceholder = !name || name === d.daemonId || looksLikeBareUuid(name);
-  if (!isPlaceholder) return name;
-  const shortId = (d.daemonId || "").slice(0, 8);
-  return shortId ? `Self-hosted machine (${shortId})` : "Self-hosted machine";
+// What a machine is called: the name its owner gave it, never a managed
+// machine's pod hostname. One rule for every surface — see lib/machineName.
+export function daemonDisplayName(d: NameableMachine): string {
+  return machineDisplayName(d);
 }
 
 // ── Size tiers (plan-gated) ─────────────────────────────────────────────────

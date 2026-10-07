@@ -38,6 +38,7 @@ import {
   MobileScreenBody,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { machineDisplayName } from "@/lib/machineName";
 
 const POLL_INTERVAL_MS = 5_000;
 
@@ -231,7 +232,7 @@ export function MobileDaemonScreen() {
 
   const header = (
     <MobileScreenHeader
-      title={daemon?.hostname || "Machine"}
+      title={daemon ? machineDisplayName(daemon) : "Machine"}
       leading={
         <Link
           to="/m/daemons"

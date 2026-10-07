@@ -19,6 +19,7 @@
 
 import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
 import { ProjectInstallState, type ProjectDaemonInfo } from "@/api/project-grpc";
+import { machineDisplayName } from "@/lib/machineName";
 
 export interface DaemonChoice {
   daemonId: string;
@@ -32,8 +33,11 @@ export interface DaemonChoice {
   ineligibleReason?: string;
 }
 
-export function daemonLabel(daemon: Pick<DaemonInfo, "daemonId" | "hostname"> | undefined, daemonId: string): string {
-  return daemon?.hostname || `daemon ${daemonId.slice(0, 8)}`;
+/** A registry row as far as naming needs it; name and type are optional. */
+type LabelledDaemon = Pick<DaemonInfo, "daemonId" | "hostname"> & Partial<Pick<DaemonInfo, "name" | "daemonType">>;
+
+export function daemonLabel(daemon: LabelledDaemon | undefined, daemonId: string): string {
+  return daemon ? machineDisplayName(daemon) : `daemon ${daemonId.slice(0, 8)}`;
 }
 
 /** Registry status in words. Online daemons are the ones a run can start on immediately. */
@@ -129,10 +133,10 @@ export const NO_MACHINE_LABEL = "No machine";
  */
 export function automationMachineLabel(
   trigger: { noMachine: boolean; daemonId: string; daemonName?: string },
-  daemon?: Pick<DaemonInfo, "daemonId" | "hostname">,
+  daemon?: LabelledDaemon,
 ): string {
   if (trigger.noMachine) return NO_MACHINE_LABEL;
-  return daemon?.hostname || trigger.daemonName || daemonLabel(undefined, trigger.daemonId);
+  return daemon ? machineDisplayName(daemon) : trigger.daemonName || daemonLabel(undefined, trigger.daemonId);
 }
 
 /**

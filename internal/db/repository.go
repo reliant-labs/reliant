@@ -388,11 +388,19 @@ type Repository interface {
 	// out-of-order delivery safe on a newest-wins stream with no redelivery.
 	// Returns whether the row was updated (false means stale or absent).
 	//
-	// Does NOT create the row. A lifecycle event for a daemon that has never
-	// registered has nothing to attach to, and inventing an identity row from
-	// a lifecycle event would make the registry's own table a projection of a
-	// stream it does not own.
+	// Does NOT create the row — UpsertDaemonIdentity does, and only from an
+	// event that carries the owner. A phase alone has no owner to attach a
+	// row to.
 	ApplyDaemonLifecycle(ctx context.Context, lc DaemonLifecycleUpdate) (bool, error)
+	// UpsertDaemonIdentity creates the registry row for a daemon the control
+	// plane reports, or fills in the name it carries. See daemon_registry.go.
+	UpsertDaemonIdentity(ctx context.Context, id DaemonIdentity) (bool, error)
+	// RemoveDaemon deletes a daemon's registry row and its attachment lease,
+	// returning the owner it belonged to. See daemon_registry.go.
+	RemoveDaemon(ctx context.Context, daemonID string) (userID string, removed bool, err error)
+	// ApplyDaemonRegistrySnapshot reconciles one owner's rows against the
+	// control plane's authoritative set. See daemon_registry.go.
+	ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error)
 	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
 	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
 	// UpdateDaemonAttachmentMemory records heartbeat-reported workspace memory

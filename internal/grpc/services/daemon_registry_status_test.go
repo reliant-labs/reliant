@@ -174,3 +174,44 @@ func TestDaemonToProto_ManagedUnknownPhaseIsUnknown(t *testing.T) {
 		}
 	}
 }
+
+// TestDaemonToProto_CarriesTheOwnersName: the registry is the one machine list
+// the UI reads, so it must carry the name the owner typed. Before, a managed
+// machine named "default" could only be shown as its pod hostname,
+// "ws-ws-2aab1465" (MACHINE_LIST_BUGS_2026-10-07).
+func TestDaemonToProto_CarriesTheOwnersName(t *testing.T) {
+	d := &db.Daemon{
+		ID: "2aab1465", UserID: "u-1", Name: "default",
+		Hostname: strp("ws-ws-2aab1465"), DaemonType: strp("managed"),
+	}
+	got := daemonToProto(d, nil)
+	if got.GetName() != "default" {
+		t.Errorf("name = %q, want the owner's %q", got.GetName(), "default")
+	}
+	if got.GetHostname() != "ws-ws-2aab1465" {
+		t.Errorf("hostname = %q; the pod hostname is still reported, just not as the name", got.GetHostname())
+	}
+}
+
+// TestDaemonAnswersToName: resolving a machine by name accepts the name its
+// owner gave it as well as its hostname.
+func TestDaemonAnswersToName(t *testing.T) {
+	named := &db.Daemon{ID: "a", Name: "default", Hostname: strp("ws-ws-a")}
+	unnamed := &db.Daemon{ID: "b", Hostname: strp("laptop.local")}
+	cases := []struct {
+		d    *db.Daemon
+		name string
+		want bool
+	}{
+		{named, "default", true},
+		{named, "ws-ws-a", true},
+		{named, "other", false},
+		{unnamed, "laptop.local", true},
+		{unnamed, "", false},
+	}
+	for _, c := range cases {
+		if got := daemonAnswersToName(c.d, c.name); got != c.want {
+			t.Errorf("daemonAnswersToName(%s, %q) = %v, want %v", c.d.ID, c.name, got, c.want)
+		}
+	}
+}

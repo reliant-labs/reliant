@@ -1,0 +1,13 @@
+-- +goose Up
+-- The name the owner gave the machine ("default", "gpu-box"), mirrored from the
+-- control plane, which owns it. Without it the registry — the one machine list
+-- the UI reads — could only show the pod hostname, so a managed machine the
+-- user named "default" was listed as "ws-ws-2aab1465" (MACHINE_LIST_BUGS_2026-10-07).
+--
+-- Empty until the control plane reports one: there is nothing to backfill from
+-- this side, and the control plane's registry snapshot fills every existing
+-- row within one sweep of deploy.
+--
+-- IF NOT EXISTS: migrations are replayed against databases built from
+-- schema.sql (see 20261004201053_add_local_models_to_daemons.sql).
+ALTER TABLE daemons ADD COLUMN IF NOT EXISTS name TEXT NOT NULL DEFAULT '';

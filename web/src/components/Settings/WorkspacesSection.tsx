@@ -11,6 +11,7 @@ import { WorktreeDetailView } from "../Worktrees/WorktreeDetailView";
 import { workspaceChip } from "../Worktrees/workspaceStyles";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { WorktreeSettings } from "./WorktreeSettings";
+import { machineDisplayName } from "@/lib/machineName";
 
 type WorkspacesTab = "active" | "archived" | "settings";
 
@@ -79,11 +80,11 @@ export function WorkspacesSection() {
                 <span className="sr-only">Project:</span>
                 {currentProject?.name ?? "No project open"}
               </span>
-              {activeDaemon?.hostname && (
+              {activeDaemon && (
                 <span className={workspaceChip} title="The machine these worktrees live on">
                   <Monitor className="h-3 w-3" aria-hidden="true" />
                   <span className="sr-only">Machine:</span>
-                  {activeDaemon.hostname}
+                  {machineDisplayName(activeDaemon)}
                 </span>
               )}
             </>

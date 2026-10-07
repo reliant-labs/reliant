@@ -34,6 +34,7 @@ import {
   MobileRowIcon,
   MobileScreenHeader,
 } from "./MobileChrome";
+import { machineDisplayName } from "@/lib/machineName";
 
 /** Matches the desktop daemon poll so the shared cache entry stays fresh. */
 const POLL_INTERVAL_MS = 5_000;
@@ -311,7 +312,7 @@ function DaemonRow({ daemon }: { daemon: Daemon }) {
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
             <span className="truncate text-sm font-medium text-foreground">
-              {daemon.hostname || "Unnamed machine"}
+              {machineDisplayName(daemon)}
             </span>
             {size && (
               <span className="shrink-0 rounded-md bg-primary/10 px-1.5 py-0.5 text-xs font-medium text-primary">

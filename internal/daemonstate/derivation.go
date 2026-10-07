@@ -30,6 +30,9 @@ type DerivationRepository interface {
 	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
 	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
 	ApplyDaemonLifecycle(ctx context.Context, lc db.DaemonLifecycleUpdate) (bool, error)
+	UpsertDaemonIdentity(ctx context.Context, id db.DaemonIdentity) (bool, error)
+	RemoveDaemon(ctx context.Context, daemonID string) (userID string, removed bool, err error)
+	ApplyDaemonRegistrySnapshot(ctx context.Context, snap db.RegistrySnapshotApply) (db.RegistrySnapshotResult, error)
 }
 
 const (
@@ -56,6 +59,29 @@ const (
 	// indexed DELETE on idx_daemon_attachment_last_activity) and not
 	// urgent: nothing reads a row this stale.
 	attachmentReapInterval = 5 * time.Minute
+
+	// registrySnapshotGrace is how long a row this registry created is
+	// protected from a snapshot that does not list it. The control plane
+	// learns of a self-hosted daemon only after the gateway registered it
+	// here (the connected event travels gateway → control plane), so a
+	// snapshot read in that gap is stale about exactly that daemon. Ten
+	// minutes is several snapshot periods: a daemon the control plane really
+	// does not know is still removed, one sweep later.
+	registrySnapshotGrace = 10 * time.Minute
+
+	// registryAttachmentFreshness is how recent an attachment lease must be
+	// for a row to count as connected and therefore real. Matches the
+	// registry's own attachment staleness threshold
+	// (services.daemonAttachmentStaleThreshold): a row the list reports as
+	// connected must not be the row a snapshot deletes.
+	registryAttachmentFreshness = 90 * time.Second
+
+	// registrySnapshotQueue makes every snapshot apply on exactly one
+	// replica. Unlike the per-daemon events — which every replica applies
+	// and the SQL guards make idempotent — a snapshot is a whole owner's set
+	// in one transaction, and N replicas racing it buys nothing but lock
+	// contention.
+	registrySnapshotQueue = "reliant-daemon-registry"
 )
 
 // Derivation is the reliant-side consumer of the daemon.v1.state.> subject.
@@ -110,6 +136,18 @@ func (d *Derivation) Start(ctx context.Context) error {
 		return fmt.Errorf("daemonstate: subscribe %s: %w", SubjectWildcard, err)
 	}
 	defer func() { _ = sub.Unsubscribe() }()
+
+	// The reconcile with the control plane's daemon set. Applied on the
+	// subscription goroutine rather than detached: snapshots arrive one per
+	// owner per sweep, and applying them in order keeps two snapshots for the
+	// same owner from interleaving.
+	snapSub, err := d.nc.QueueSubscribe(SubjectRegistrySnapshot, registrySnapshotQueue, func(msg *nats.Msg) {
+		d.handleSnapshot(ctx, msg)
+	})
+	if err != nil {
+		return fmt.Errorf("daemonstate: subscribe %s: %w", SubjectRegistrySnapshot, err)
+	}
+	defer func() { _ = snapSub.Unsubscribe() }()
 
 	// The reaper rides along with the consumer because this type is the
 	// single writer to daemon_attachment: expiring a lease is a write, and
@@ -194,6 +232,8 @@ func (d *Derivation) dispatch(ctx context.Context, evt Event) error {
 		return d.onDisconnected(ctx, evt)
 	case EventLifecycle:
 		return d.onLifecycle(ctx, evt)
+	case EventRemoved:
+		return d.onRemoved(ctx, evt)
 	default:
 		return fmt.Errorf("unknown event type %q", evt.Type)
 	}
@@ -211,16 +251,38 @@ func (d *Derivation) dispatch(ctx context.Context, evt Event) error {
 //     attachment-derived status, which is always correct if less specific —
 //     better than storing a phase no reader can interpret.
 //   - No row updated. Either the event is stale (superseded by a newer
-//     transition, which the SQL guard exists to drop) or the daemon has never
-//     registered here. The latter is the expected steady state for a managed
-//     machine mid-provision: control-plane creates its row and publishes
-//     PROVISIONING before the pod has run, let alone attached. The event is
-//     re-supplied on the next transition.
+//     transition, which the SQL guard exists to drop) or it carried no
+//     identity for a daemon that has never registered here. The registry
+//     snapshot fills that in.
+//
+// An event that carries the owner (HasIdentity) first upserts the identity
+// row, so it can CREATE the machine's registry row. The control plane sends
+// one at create time, which is what makes a machine appear in the list the
+// moment it is created, in its provisioning state and under its own name —
+// rather than minutes later, when its pod first reaches the gateway.
 func (d *Derivation) onLifecycle(ctx context.Context, evt Event) error {
 	if !ValidLifecyclePhase(evt.Phase) {
 		logging.Warn(logPrefix+" lifecycle event with unknown phase, dropping",
 			"daemonID", evt.DaemonID, "phase", string(evt.Phase))
 		return nil
+	}
+
+	created := false
+	if evt.HasIdentity() {
+		ident := db.DaemonIdentity{
+			DaemonID:   evt.DaemonID,
+			UserID:     evt.UserID,
+			Name:       evt.Name,
+			DaemonType: evt.DaemonType,
+		}
+		if evt.CreatedAt != nil {
+			ident.CreatedAt = *evt.CreatedAt
+		}
+		wrote, err := d.repo.UpsertDaemonIdentity(ctx, ident)
+		if err != nil {
+			return fmt.Errorf("upsert identity %s: %w", evt.DaemonID, err)
+		}
+		created = wrote
 	}
 
 	updated, err := d.repo.ApplyDaemonLifecycle(ctx, db.DaemonLifecycleUpdate{
@@ -235,7 +297,7 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt Event) error {
 	if err != nil {
 		return fmt.Errorf("apply lifecycle %s: %w", evt.DaemonID, err)
 	}
-	if !updated {
+	if !updated && !created {
 		logging.Debug(logPrefix+" lifecycle event did not apply (stale or daemon not registered)",
 			"daemonID", evt.DaemonID, "phase", string(evt.Phase), "at", evt.At)
 		return nil
@@ -247,6 +309,105 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt Event) error {
 		d.notify(ctx, evt.UserID, evt.DaemonID)
 	}
 	return nil
+}
+
+// onRemoved deletes the registry row of a daemon the control plane deleted.
+// Idempotent: a removal for a row that is already gone (or never existed) is
+// not an error. The owner's clients are told only when a row actually went,
+// using the owner the row itself recorded — the event need not carry one.
+func (d *Derivation) onRemoved(ctx context.Context, evt Event) error {
+	userID, removed, err := d.repo.RemoveDaemon(ctx, evt.DaemonID)
+	if err != nil {
+		return fmt.Errorf("remove daemon %s: %w", evt.DaemonID, err)
+	}
+	if !removed {
+		return nil
+	}
+	logging.Info(logPrefix+" removed daemon deleted by the control plane",
+		"daemonID", evt.DaemonID, "userID", userID)
+	if d.notify != nil {
+		d.notify(ctx, userID, evt.DaemonID)
+	}
+	return nil
+}
+
+// handleSnapshot applies one owner's authoritative daemon set. See
+// db.Repo.ApplyDaemonRegistrySnapshot for the guards that make removal safe.
+func (d *Derivation) handleSnapshot(ctx context.Context, msg *nats.Msg) {
+	var snap RegistrySnapshot
+	if err := json.Unmarshal(msg.Data, &snap); err != nil {
+		logging.Warn(logPrefix+" malformed registry snapshot, dropping", "error", err)
+		return
+	}
+	if snap.UserID == "" || snap.At.IsZero() {
+		logging.Warn(logPrefix + " registry snapshot missing user_id or at, dropping")
+		return
+	}
+	result, err := d.repo.ApplyDaemonRegistrySnapshot(ctx, snapshotApply(snap, time.Now().UTC()))
+	if err != nil {
+		logging.Warn(logPrefix+" registry snapshot failed; the next one retries",
+			"userID", snap.UserID, "error", err)
+		return
+	}
+	if !result.Changed() {
+		return
+	}
+	logging.Info(logPrefix+" registry snapshot reconciled daemons",
+		"userID", snap.UserID, "upserted", result.Upserted, "removed", result.Removed)
+	if d.notify != nil {
+		// One notification per owner: the client refetches the whole list,
+		// so naming each daemon would only multiply identical refetches.
+		daemonID := ""
+		if len(result.Removed) > 0 {
+			daemonID = result.Removed[0]
+		} else if len(result.Upserted) > 0 {
+			daemonID = result.Upserted[0]
+		}
+		d.notify(ctx, snap.UserID, daemonID)
+	}
+}
+
+// snapshotApply translates the wire snapshot into the repository's terms.
+// Daemons with no id are dropped; an entry with an unrecognised phase keeps
+// its identity but carries no lifecycle, the same rule onLifecycle applies.
+func snapshotApply(snap RegistrySnapshot, now time.Time) db.RegistrySnapshotApply {
+	apply := db.RegistrySnapshotApply{
+		UserID:            snap.UserID,
+		Daemons:           make([]db.RegistrySnapshotDaemon, 0, len(snap.Daemons)),
+		KeepCreatedAfter:  snap.At.Add(-registrySnapshotGrace),
+		KeepAttachedSince: now.Add(-registryAttachmentFreshness),
+	}
+	for _, rd := range snap.Daemons {
+		if rd.DaemonID == "" {
+			continue
+		}
+		entry := db.RegistrySnapshotDaemon{Identity: db.DaemonIdentity{
+			DaemonID:   rd.DaemonID,
+			UserID:     snap.UserID,
+			Name:       rd.Name,
+			DaemonType: rd.DaemonType,
+			CreatedAt:  rd.CreatedAt,
+		}}
+		if rd.Phase != "" && ValidLifecyclePhase(rd.Phase) {
+			changedAt := rd.CreatedAt
+			if rd.PhaseChangedAt != nil {
+				changedAt = *rd.PhaseChangedAt
+			}
+			if !changedAt.IsZero() {
+				entry.Lifecycle = &db.DaemonLifecycleUpdate{
+					DaemonID:        rd.DaemonID,
+					Phase:           string(rd.Phase),
+					Size:            rd.Size,
+					StatusMessage:   rd.StatusMessage,
+					ChangedAt:       changedAt,
+					LastOOMKilledAt: rd.LastOOMKilledAt,
+					OOMKillCount:    rd.OOMKillCount,
+				}
+			}
+		}
+		apply.Daemons = append(apply.Daemons, entry)
+	}
+	return apply
 }
 
 func (d *Derivation) onConnected(ctx context.Context, evt Event) error {

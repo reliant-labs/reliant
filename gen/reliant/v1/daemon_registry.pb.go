@@ -869,7 +869,18 @@ type DaemonInfo struct {
 	// daemon has never published one. The inventory is kept while the daemon is
 	// offline so the UI can show what WOULD be available; callers gate on
 	// `status` before offering a model for use.
-	LocalModels   *LocalModelInventory `protobuf:"bytes,21,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
+	LocalModels *LocalModelInventory `protobuf:"bytes,21,opt,name=local_models,json=localModels,proto3" json:"local_models,omitempty"`
+	// The name the owner gave the machine ("default", "gpu-box"), mirrored from
+	// the control plane, which owns it. Empty until the control plane reports
+	// one (a build with no control plane, or a daemon that registered before
+	// any control-plane event reached this registry).
+	//
+	// This is what a machine is CALLED. `hostname` is where it runs: for a
+	// managed machine that is the pod's hostname ("ws-ws-2aab1465"), an
+	// implementation detail no user chose — showing it is how a machine named
+	// "default" came to be listed under a doubled ws- prefix. Display the name;
+	// fall back to the hostname only for a self-hosted machine without one.
+	Name          string `protobuf:"bytes,22,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1051,6 +1062,13 @@ func (x *DaemonInfo) GetLocalModels() *LocalModelInventory {
 	return nil
 }
 
+func (x *DaemonInfo) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
@@ -1092,7 +1110,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1b\n" +
 	"\tbase_urls\x18\x02 \x03(\tR\bbaseUrls\"d\n" +
 	"\x1eSetLocalModelEndpointsResponse\x12B\n" +
-	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\x82\b\n" +
+	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\x96\b\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -1118,7 +1136,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x0eoom_kill_count\x18\x13 \x01(\x05R\foomKillCount\x129\n" +
 	"\n" +
 	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12B\n" +
-	"\flocal_models\x18\x15 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels*\xd1\x01\n" +
+	"\flocal_models\x18\x15 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\x12\x12\n" +
+	"\x04name\x18\x16 \x01(\tR\x04name*\xd1\x01\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
