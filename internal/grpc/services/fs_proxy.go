@@ -3,6 +3,7 @@ package services
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -31,11 +32,16 @@ type FileSystemProxyService struct {
 	reliantv1connect.UnimplementedFileSystemServiceHandler
 	router   toolexec.DaemonRouter
 	database db.Repository
+	wake     machineWake
 }
 
 // NewFileSystemProxyService creates a new FileSystemProxyService.
 func NewFileSystemProxyService(router toolexec.DaemonRouter, database db.Repository) *FileSystemProxyService {
-	return &FileSystemProxyService{router: router, database: database}
+	return &FileSystemProxyService{
+		router:   router,
+		database: database,
+		wake:     machineWake{router: router, owners: database},
+	}
 }
 
 func (s *FileSystemProxyService) getUserID(ctx context.Context) (string, error) {
@@ -81,9 +87,10 @@ func (s *FileSystemProxyService) requireProjectBase(ctx context.Context, project
 // is confined to, and the machine that directory is on.
 type workspaceScope struct {
 	basePath string
-	// daemonID is the machine holding basePath, or "" when default resolution
-	// picks it. See workspaceDaemonID.
-	daemonID string
+	// target is the machine holding basePath (daemonID "" when default
+	// resolution picks it), and whether the request was made for a chat with
+	// no machine. See workspaceDaemonID.
+	target wakeTarget
 }
 
 // resolveScope resolves the workspace root a request is scoped to and the
@@ -95,15 +102,17 @@ func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, proje
 	if err != nil {
 		return workspaceScope{}, err
 	}
-	daemonID, err := s.workspaceDaemonID(ctx, userID, projectID, worktreeID, chatID)
+	target, err := s.workspaceDaemonID(ctx, userID, projectID, worktreeID, chatID)
 	if err != nil {
 		return workspaceScope{}, err
 	}
-	return workspaceScope{basePath: basePath, daemonID: daemonID}, nil
+	return workspaceScope{basePath: basePath, target: target}, nil
 }
 
 // workspaceDaemonID returns the machine a workspace-scoped request must run
-// on, or "" to leave it to default resolution.
+// on (daemonID "" leaves it to default resolution), marked noMachine when the
+// request was made for a chat that has no machine: such a request must never
+// wake one (see machineWake).
 //
 // The files exist on one machine. For a request made for a chat (chat_id) it
 // is the chat's machine: its pinned daemon, else its worktree's owner
@@ -117,7 +126,7 @@ func (s *FileSystemProxyService) resolveScope(ctx context.Context, userID, proje
 // checkout. Without a chat, an owned worktree goes to its owner too. Anything
 // else (the main checkout, legacy rows that record no owner) keeps default
 // resolution.
-func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (string, error) {
+func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, projectID string, worktreeID, chatID *string) (wakeTarget, error) {
 	var worktree *db.Worktree
 	if worktreeID != nil && *worktreeID != "" {
 		wt, err := s.database.GetWorktree(ctx, *worktreeID)
@@ -126,7 +135,7 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 			// A missing row means "no owner", as it does for tool routing.
 		case err != nil:
 			logging.Error("[FSProxy] Failed to load worktree to route request", "error", err, "worktreeID", *worktreeID)
-			return "", connect.NewError(connect.CodeInternal, errors.New("failed to resolve the workspace's machine"))
+			return wakeTarget{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the workspace's machine"))
 		default:
 			worktree = wt
 		}
@@ -134,37 +143,37 @@ func (s *FileSystemProxyService) workspaceDaemonID(ctx context.Context, userID, 
 	owner := worktreeOwner(worktree)
 
 	if chatID == nil || *chatID == "" {
-		return owner, nil
+		return wakeTarget{daemonID: owner}, nil
 	}
 	chat, err := s.database.GetChat(ctx, *chatID)
 	switch {
 	case errors.Is(err, core.ErrChatNotFound):
 		// The UI can still name a chat it has just deleted. Degrade to the
 		// routing a request without a chat gets rather than fail the tree.
-		return owner, nil
+		return wakeTarget{daemonID: owner}, nil
 	case err != nil:
 		logging.Error("[FSProxy] Failed to load chat to route request", "error", err, "chatID", *chatID)
-		return "", connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
+		return wakeTarget{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
 	case chat.UserID != userID:
-		return "", connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
+		return wakeTarget{}, connect.NewError(connect.CodeNotFound, errors.New("chat not found"))
 	case chat.ProjectID != projectID:
 		// A chat from another project says nothing about this project's
 		// files. It is stale UI context (a project switch racing the tree),
 		// and ResolveBasePath ignores it the same way.
-		return owner, nil
+		return wakeTarget{daemonID: owner}, nil
 	}
 	if owner != "" && (chat.WorktreeID == nil || *chat.WorktreeID != worktree.ID) {
-		return owner, nil
+		return wakeTarget{daemonID: owner, noMachine: chat.NoMachine}, nil
 	}
 	daemonID, err := chatDaemonID(ctx, s.database, chat)
 	if err != nil {
 		logging.Error("[FSProxy] Failed to resolve the chat's machine", "error", err, "chatID", chat.ID)
-		return "", connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
+		return wakeTarget{}, connect.NewError(connect.CodeInternal, errors.New("failed to resolve the chat's machine"))
 	}
 	if daemonID != "" {
-		return daemonID, nil
+		return wakeTarget{daemonID: daemonID, noMachine: chat.NoMachine}, nil
 	}
-	return owner, nil
+	return wakeTarget{daemonID: owner, noMachine: chat.NoMachine}, nil
 }
 
 // resolve turns a client path into the absolute, confined path the daemon
@@ -208,20 +217,26 @@ func projectRelativePrefix(basePath, resolvedPath string) string {
 }
 
 // sendCommand is a helper that marshals the request, sends the daemon command
-// to daemonID ("" = default resolution), and unmarshals the response.
-func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID, daemonID, commandType string, req any, resp any, timeoutMs int32) error {
+// to the target machine (daemonID "" = default resolution), and unmarshals the
+// response. A machine found asleep is woken (machineWake) and the request fails
+// as waking, for the client to retry.
+func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string, target wakeTarget, commandType string, req any, resp any, timeoutMs int32) error {
 	payload, err := json.Marshal(req)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("marshal request: %w", err))
 	}
 
 	var respBytes []byte
-	if daemonID == "" {
+	if target.daemonID == "" {
 		respBytes, err = s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	} else {
-		respBytes, err = s.router.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payload, timeoutMs)
+		respBytes, err = s.router.SendDaemonCommandToDaemon(ctx, userID, target.daemonID, commandType, payload, timeoutMs)
 	}
 	if err != nil {
+		// An asleep machine is woken here. The error then carries the wake,
+		// which MachineWakingInterceptor turns into Unavailable + DaemonWaking
+		// whatever code is chosen below.
+		err = s.wake.afterFailure(ctx, userID, target, err)
 		// A daemon that exists but hasn't connected yet (still
 		// provisioning) is retryable, unlike every other daemon-command
 		// failure this helper maps to CodeInternal — CodeUnavailable is
@@ -270,7 +285,7 @@ func (s *FileSystemProxyService) GetFileTree(
 		Truncated bool              `json:"truncated"`
 		NodeCount int               `json:"node_count"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.get_tree", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -377,7 +392,7 @@ func (s *FileSystemProxyService) GetFileContent(
 		Truncated  bool   `json:"truncated"`
 		Size       int64  `json:"size"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_file", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -415,7 +430,7 @@ func (s *FileSystemProxyService) SaveFileContent(
 		BytesWritten int    `json:"bytes_written"`
 		ModTime      string `json:"mod_time"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -454,7 +469,7 @@ func (s *FileSystemProxyService) GetFileMetadata(
 		IsDir   bool      `json:"is_dir"`
 		Mode    string    `json:"mode"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.stat", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -498,46 +513,144 @@ func (s *FileSystemProxyService) GetFilePreviewInfo(
 		return nil, err
 	}
 
-	cmdReq := map[string]any{
-		"path": resolvedPath,
+	info, err := s.previewInfo(ctx, userID, scope.target, resolvedPath, req.Msg.Path)
+	if err != nil {
+		return nil, err
 	}
 
-	var cmdResp struct {
-		Name       string `json:"name"`
-		Path       string `json:"path"`
-		Size       int64  `json:"size"`
-		Modified   string `json:"modified"`
-		ViewerKind string `json:"viewer_kind"`
-		MIMEType   string `json:"mime_type"`
-		IsBinary   bool   `json:"is_binary"`
-		IsEditable bool   `json:"is_editable"`
-	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.preview_info", cmdReq, &cmdResp, 30000); err != nil {
+	return connect.NewResponse(&reliantv1.GetFilePreviewInfoResponse{
+		Info: &reliantv1.FilePreviewInfo{
+			Name:       info.Name,
+			Path:       info.Path,
+			Size:       info.Size,
+			Modified:   info.Modified,
+			ViewerKind: viewerKindFromString(info.ViewerKind),
+			MimeType:   info.MIMEType,
+			IsBinary:   info.IsBinary,
+			IsEditable: info.IsEditable,
+		},
+	}), nil
+}
+
+// fsProxyPreviewInfo mirrors the daemon's fs.preview_info response: the file's
+// stat plus internal/filepreview's classification of it, made on the daemon
+// from the file's name and first bytes.
+type fsProxyPreviewInfo struct {
+	Name       string `json:"name"`
+	Path       string `json:"path"`
+	Size       int64  `json:"size"`
+	Modified   string `json:"modified"`
+	ViewerKind string `json:"viewer_kind"`
+	MIMEType   string `json:"mime_type"`
+	IsBinary   bool   `json:"is_binary"`
+	IsEditable bool   `json:"is_editable"`
+}
+
+// previewInfo asks the machine holding resolvedPath to stat and classify it.
+// requestedPath is the client's path, used only in the log line.
+func (s *FileSystemProxyService) previewInfo(ctx context.Context, userID string, target wakeTarget, resolvedPath, requestedPath string) (*fsProxyPreviewInfo, error) {
+	var info fsProxyPreviewInfo
+	if err := s.sendCommand(ctx, userID, target, "fs.preview_info", map[string]any{"path": resolvedPath}, &info, 30000); err != nil {
 		// Requesting preview info for a directory is a client-input condition
 		// (e.g. the UI asking for a tree folder), not a server failure. Return
 		// the same typed error as the local FileSystemService so it stays out
 		// of ERROR logs / Sentry. The daemon-side error text is the contract
 		// here (cmd_fs.go returns "path is a directory: <path>").
 		if strings.Contains(err.Error(), "path is a directory") {
-			logging.Debug("[FSProxy] GetFilePreviewInfo requested for a directory",
-				"path", req.Msg.Path)
+			logging.Debug("[FSProxy] preview requested for a directory", "path", requestedPath)
 			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("path is a directory"))
 		}
 		return nil, err
 	}
+	return &info, nil
+}
 
-	return connect.NewResponse(&reliantv1.GetFilePreviewInfoResponse{
-		Info: &reliantv1.FilePreviewInfo{
-			Name:       cmdResp.Name,
-			Path:       cmdResp.Path,
-			Size:       cmdResp.Size,
-			Modified:   cmdResp.Modified,
-			ViewerKind: viewerKindFromString(cmdResp.ViewerKind),
-			MimeType:   cmdResp.MIMEType,
-			IsBinary:   cmdResp.IsBinary,
-			IsEditable: cmdResp.IsEditable,
-		},
+// maxFilePreviewBytes caps a binary preview. The whole file crosses the
+// daemon's NATS reply as base64 (a third larger, so well under the 64 MB
+// chunked-reply cap) and is held in memory here while the response is
+// written, so the cap is what keeps one preview from being a memory problem.
+// 25 MB covers screenshots, diagrams, PDFs, recordings and short clips; a
+// larger file is refused up front with a message that says why.
+const maxFilePreviewBytes int64 = 25 << 20
+
+// filePreviewTimeoutMs bounds the binary read: a full-size preview is a few
+// chunked NATS round trips, well inside this.
+const filePreviewTimeoutMs int32 = 60_000
+
+// GetFilePreview returns the raw bytes of a previewable file (image, PDF,
+// audio, video), read on the machine that holds it.
+//
+// It routes exactly as GetFilePreviewInfo does (resolveScope), so the preview
+// comes from the same disk the tree listed. The classification is the
+// daemon's fs.preview_info — internal/filepreview applied to the real file —
+// and only the four previewable kinds are served, as in the local
+// FileSystemService. The bytes come from fs.read_binary_file with the size cap
+// passed down, so the daemon refuses an oversized file before reading it.
+func (s *FileSystemProxyService) GetFilePreview(
+	ctx context.Context,
+	req *connect.Request[reliantv1.GetFilePreviewRequest],
+) (*connect.Response[reliantv1.GetFilePreviewResponse], error) {
+	userID, err := s.getUserID(ctx)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeUnauthenticated, err)
+	}
+	if strings.TrimSpace(req.Msg.Path) == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("path is required"))
+	}
+
+	scope, err := s.resolveScope(ctx, userID, req.Msg.ProjectId, req.Msg.WorktreeId, req.Msg.ChatId)
+	if err != nil {
+		return nil, err
+	}
+	resolvedPath, err := scope.resolve(req.Msg.Path)
+	if err != nil {
+		return nil, err
+	}
+
+	info, err := s.previewInfo(ctx, userID, scope.target, resolvedPath, req.Msg.Path)
+	if err != nil {
+		if strings.Contains(err.Error(), "file not found") {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("file not found: %s", req.Msg.Path))
+		}
+		return nil, err
+	}
+	switch filepreview.ViewerKind(info.ViewerKind) {
+	case filepreview.ViewerKindImage, filepreview.ViewerKindPDF, filepreview.ViewerKindAudio, filepreview.ViewerKindVideo:
+	default:
+		return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("file type is not previewable"))
+	}
+	if info.Size > maxFilePreviewBytes {
+		return nil, filePreviewTooLarge(info.Size)
+	}
+
+	var bin struct {
+		Data string `json:"data"`
+	}
+	cmdReq := map[string]any{"path": resolvedPath, "max_bytes": maxFilePreviewBytes}
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.read_binary_file", cmdReq, &bin, filePreviewTimeoutMs); err != nil {
+		// The file grew past the cap between the stat and the read.
+		if strings.Contains(err.Error(), "exceeds maximum of") {
+			return nil, filePreviewTooLarge(info.Size)
+		}
+		return nil, err
+	}
+	content, err := base64.StdEncoding.DecodeString(bin.Data)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode preview bytes: %w", err))
+	}
+
+	return connect.NewResponse(&reliantv1.GetFilePreviewResponse{
+		Content:     content,
+		ContentType: info.MIMEType,
+		Filename:    info.Name,
+		Size:        int64(len(content)),
 	}), nil
+}
+
+// filePreviewTooLarge is the refusal for a file over maxFilePreviewBytes.
+func filePreviewTooLarge(size int64) error {
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+		"file is too large to preview (%d MB; the limit is %d MB)", (size+(1<<20)-1)>>20, maxFilePreviewBytes>>20))
 }
 
 // CreateFileOrFolder creates a new file or folder.
@@ -566,7 +679,7 @@ func (s *FileSystemProxyService) CreateFileOrFolder(
 			"path": resolvedPath,
 		}
 		var cmdResp struct{}
-		if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.mkdir", cmdReq, &cmdResp, 30000); err != nil {
+		if err := s.sendCommand(ctx, userID, scope.target, "fs.mkdir", cmdReq, &cmdResp, 30000); err != nil {
 			return nil, err
 		}
 	} else {
@@ -579,7 +692,7 @@ func (s *FileSystemProxyService) CreateFileOrFolder(
 			BytesWritten int    `json:"bytes_written"`
 			ModTime      string `json:"mod_time"`
 		}
-		if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
+		if err := s.sendCommand(ctx, userID, scope.target, "fs.write_file", cmdReq, &cmdResp, 30000); err != nil {
 			return nil, err
 		}
 	}
@@ -618,7 +731,7 @@ func (s *FileSystemProxyService) DeleteFileOrFolder(
 	}
 
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.delete", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.delete", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -662,7 +775,7 @@ func (s *FileSystemProxyService) CopyFile(
 		Message     string `json:"message"`
 		Destination string `json:"destination"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.copy", cmdReq, &cmdResp, 30000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.copy", cmdReq, &cmdResp, 30000); err != nil {
 		return nil, err
 	}
 
@@ -725,7 +838,7 @@ func (s *FileSystemProxyService) SearchFiles(
 		Matches   []daemonSearchMatch `json:"matches"`
 		Truncated bool                `json:"truncated"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.search", cmdReq, &cmdResp, 60000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.search", cmdReq, &cmdResp, 60000); err != nil {
 		return nil, err
 	}
 
@@ -809,7 +922,7 @@ func (s *FileSystemProxyService) ReplaceInFiles(
 			Replacements int    `json:"replacements"`
 		} `json:"changes"`
 	}
-	if err := s.sendCommand(ctx, userID, scope.daemonID, "fs.find_replace", cmdReq, &cmdResp, 60000); err != nil {
+	if err := s.sendCommand(ctx, userID, scope.target, "fs.find_replace", cmdReq, &cmdResp, 60000); err != nil {
 		return nil, err
 	}
 
@@ -873,7 +986,7 @@ func (s *FileSystemProxyService) ListDirectory(
 		Entries []fsProxyDirEntry `json:"entries"`
 	}
 	// No workspace to follow: the project picker browses the default machine.
-	if err := s.sendCommand(ctx, userID, "", "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, wakeTarget{}, "fs.list_dir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 
@@ -930,7 +1043,7 @@ func (s *FileSystemProxyService) CreateDirectory(
 		"path": path,
 	}
 	var cmdResp struct{}
-	if err := s.sendCommand(ctx, userID, "", "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
+	if err := s.sendCommand(ctx, userID, wakeTarget{}, "fs.mkdir", cmdReq, &cmdResp, 5000); err != nil {
 		return nil, err
 	}
 

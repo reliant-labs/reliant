@@ -71,23 +71,23 @@ beforeEach(() => {
 })
 
 describe('buildInterceptors factory', () => {
-  it('produces a 7-stage authed chain in the documented order', async () => {
+  it('produces an 8-stage authed chain in the documented order', async () => {
     const { buildInterceptors } = await import('../transport')
     const chain = buildInterceptors({ withAuth: true })
-    // timeout → auth → daemon-last-seen → tracing → error-log → upgrade → unauth
-    expect(chain).toHaveLength(7)
+    // timeout → auth → daemon-last-seen → tracing → error-log → upgrade → machine-wake → unauth
+    expect(chain).toHaveLength(8)
     // Every entry must be a function (Connect Interceptor shape).
     for (const entry of chain) {
       expect(typeof entry).toBe('function')
     }
   })
 
-  it('produces a 5-stage unauthed chain that omits auth + 401-signout', async () => {
+  it('produces a 6-stage unauthed chain that omits auth + 401-signout', async () => {
     const { buildInterceptors } = await import('../transport')
     const authed = buildInterceptors({ withAuth: true })
     const unauthed = buildInterceptors({ withAuth: false })
-    // 7 - 2 (auth, unauth) = 5
-    expect(unauthed).toHaveLength(5)
+    // 8 - 2 (auth, unauth) = 6
+    expect(unauthed).toHaveLength(6)
     // The unauthed chain is a subset of the authed chain — every entry in
     // unauthed must also appear in authed at the same relative ordering. If
     // someone reorders authentication into the unauthed path the lengths
@@ -99,8 +99,8 @@ describe('buildInterceptors factory', () => {
 
   it('defaults withAuth to true when no option object is passed', async () => {
     const { buildInterceptors } = await import('../transport')
-    expect(buildInterceptors()).toHaveLength(7)
-    expect(buildInterceptors({})).toHaveLength(7)
+    expect(buildInterceptors()).toHaveLength(8)
+    expect(buildInterceptors({})).toHaveLength(8)
   })
 })
 

@@ -15,7 +15,7 @@
  * impossible: every transport calls `buildInterceptors(...)`.
  *
  * The chain order is:
- *   timeout → auth → daemon-last-seen → tracing → error-logging → upgrade-modal → 401-signout
+ *   timeout → auth → daemon-last-seen → tracing → error-logging → upgrade-modal → machine-wake → 401-signout
  *
  * Why this order:
  *   - timeout outermost so the full request lifecycle (incl. retries through
@@ -28,6 +28,9 @@
  *     real failure (tracing would otherwise mark OK and rethrow);
  *   - upgradeInterceptor opens the modal on ResourceExhausted + reason header
  *     before propagating;
+ *   - machineWakeInterceptor records a machine the server woke for the request
+ *     (DaemonWaking detail) so every machine wait says "Waking up…", then
+ *     propagates;
  *   - unauthInterceptor (401 → one refresh, else one sign-out) lives innermost so it doesn't gobble
  *     the timeout's DeadlineExceeded or the upgrade's ResourceExhausted.
  *
@@ -52,6 +55,7 @@ import * as Sentry from "@sentry/react";
 import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
+import { machineWakeInterceptor } from "./machineWakeInterceptor";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
   FILE_OPERATION_TIMEOUT_MS,
@@ -724,6 +728,7 @@ export function buildInterceptors(
     tracingInterceptor,
     errorInterceptor,
     upgradeInterceptor,
+    machineWakeInterceptor,
     ...(withAuth ? [unauthInterceptor] : []),
   ];
   return chain;

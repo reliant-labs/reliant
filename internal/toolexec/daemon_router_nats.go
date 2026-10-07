@@ -449,17 +449,36 @@ func selectorLogFields(selector *DaemonSelector) []any {
 }
 
 // DaemonWaker wakes a suspended daemon. It is held only by the callers that
-// are allowed to: run preflight and the attended send/start path. Tool-time
-// code holds DaemonRouter, which has no such method.
+// are allowed to: run preflight, the attended send/start path, and a signed-in
+// user's own file and worktree requests (services.machineWake). Tool-time code
+// holds DaemonRouter, which has no such method.
 type DaemonWaker interface {
 	EnsureAwake(ctx context.Context, userID string, selector *DaemonSelector) (daemonID string, err error)
 }
 
 var _ DaemonWaker = (*NATSDaemonRouter)(nil)
 
+// WakeResult is what a wake did.
+type WakeResult struct {
+	// DaemonID is the daemon the selector resolved to.
+	DaemonID string
+	// Resumed is true when the control plane accepted a request to resume the
+	// daemon: it was asleep, and is now on its way up. False when it was
+	// already up, or already on its way (provisioning, or woken by an earlier
+	// call).
+	Resumed bool
+}
+
 // EnsureAwake returns the id of the daemon for the selector, resuming it
-// through the control plane when it may be suspended (daemonRecord.wakeable).
-// It is the ONLY code in this router that resumes anything.
+// through the control plane when it may be suspended. See Wake.
+func (r *NATSDaemonRouter) EnsureAwake(ctx context.Context, userID string, selector *DaemonSelector) (string, error) {
+	res, err := r.Wake(ctx, userID, selector)
+	return res.DaemonID, err
+}
+
+// Wake is EnsureAwake, reporting whether it resumed the daemon
+// (daemonRecord.wakeable decides whether to ask). It is the ONLY code in this
+// router that resumes anything.
 //
 // The daemon is chosen from the registry's own records, exactly as resolution
 // chooses it; only the wake itself leaves this process, and an attached daemon
@@ -469,61 +488,63 @@ var _ DaemonWaker = (*NATSDaemonRouter)(nil)
 //
 // The token is the user's JWT, or, for a ctx marked by automationcred.Allow,
 // the delegated token bound to the selector's PINNED daemon.
-func (r *NATSDaemonRouter) EnsureAwake(ctx context.Context, userID string, selector *DaemonSelector) (string, error) {
+func (r *NATSDaemonRouter) Wake(ctx context.Context, userID string, selector *DaemonSelector) (WakeResult, error) {
 	if nomachine.Is(ctx) {
-		return "", nomachine.ErrNoMachine
+		return WakeResult{}, nomachine.ErrNoMachine
 	}
 	if r.resolver != nil {
 		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
-			return daemons[0].DaemonID, nil
+			return WakeResult{DaemonID: daemons[0].DaemonID}, nil
 		}
 	}
 	rec, found, sawDaemonRecord, err := r.lookupDaemonRecord(ctx, userID, selector)
 	if err != nil {
-		return "", err
+		return WakeResult{}, err
 	}
 	if !found || r.resumer == nil || !rec.wakeable() {
-		return routableDaemonID(userID, selector, rec, found, sawDaemonRecord)
+		daemonID, err := routableDaemonID(userID, selector, rec, found, sawDaemonRecord)
+		return WakeResult{DaemonID: daemonID}, err
 	}
 
-	err = r.resume(ctx, userID, selector, rec.id)
+	resumed, err := r.resume(ctx, userID, selector, rec.id)
 	if err != nil && rec.state != recordSuspended {
 		// Not known to be suspended: the resume only hedged against a lagging
 		// mirror, and its failure says nothing the NATS request will not. Route
 		// exactly as resolution would have.
 		logging.Info("[DaemonRouter] speculative resume of an unattached managed daemon failed; routing to it as-is",
 			"user_id", userID, "daemon_id", rec.id, "error", err)
-		return routableDaemonID(userID, selector, rec, found, sawDaemonRecord)
+		daemonID, err := routableDaemonID(userID, selector, rec, found, sawDaemonRecord)
+		return WakeResult{DaemonID: daemonID}, err
 	}
 	if err != nil {
-		return "", err
+		return WakeResult{}, err
 	}
-	return rec.id, nil
+	return WakeResult{DaemonID: rec.id, Resumed: resumed}, nil
 }
 
-// resume asks the control plane to wake daemonID. A FailedPrecondition refusal
-// means the control plane does not hold the daemon as suspended — it is
-// already up or on its way (the registry's mirror lagged, e.g. a second
-// message sent seconds after the first) — which is what the caller wanted, so
-// it is success.
-func (r *NATSDaemonRouter) resume(ctx context.Context, userID string, selector *DaemonSelector, daemonID string) error {
+// resume asks the control plane to wake daemonID, reporting whether it did. A
+// FailedPrecondition refusal means the control plane does not hold the daemon
+// as suspended — it is already up or on its way (the registry's mirror lagged,
+// e.g. a second message sent seconds after the first) — which is what the
+// caller wanted, so it is success, with nothing resumed.
+func (r *NATSDaemonRouter) resume(ctx context.Context, userID string, selector *DaemonSelector, daemonID string) (bool, error) {
 	pinned := ""
 	if selector != nil {
 		pinned = selector.ID
 	}
 	token, err := r.resumeToken(ctx, userID, pinned)
 	if err != nil {
-		return err
+		return false, err
 	}
 	if err := r.resumer.ResumeDaemon(ctx, token, daemonID); err != nil {
 		if connect.CodeOf(err) == connect.CodeFailedPrecondition {
 			logging.Info("[DaemonRouter] control plane does not hold the daemon as suspended; treating it as awake",
 				"user_id", userID, "daemon_id", daemonID, "error", err)
-			return nil
+			return false, nil
 		}
-		return fmt.Errorf("control plane ResumeDaemon(%s): %w", daemonID, err)
+		return false, fmt.Errorf("control plane ResumeDaemon(%s): %w", daemonID, err)
 	}
-	return nil
+	return true, nil
 }
 
 // resumeToken picks the credential a resume is sent with. The credentials

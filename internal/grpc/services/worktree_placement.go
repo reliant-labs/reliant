@@ -51,40 +51,44 @@ func chatDaemonID(ctx context.Context, worktrees chatWorktreeReader, chat *db.Ch
 // placeNewWorktree picks the daemon a new worktree is created on: the machine
 // of the chat it is created for (chatID), else the machine holding the
 // workspace it is created from (source), else, with no chat context at all,
-// the user's default machine.
+// the user's default machine. The result is marked noMachine when the chat has
+// no machine by design, so nothing done for it wakes one (see machineWake).
 //
 // A worktree exists on one machine, and the tools of every chat bound to it
 // route there. Placing it by default resolution alone moved a chat running on
 // machine B onto machine A the moment it branched into a new workspace.
 //
 // verb names the operation in the no-daemon error ("create", "import").
-func (s *WorktreeService) placeNewWorktree(ctx context.Context, userID, projectID string, chatID *string, source *db.Worktree, verb string) (string, error) {
+func (s *WorktreeService) placeNewWorktree(ctx context.Context, userID, projectID string, chatID *string, source *db.Worktree, verb string) (wakeTarget, error) {
+	noMachine := false
 	if chatID != nil && *chatID != "" {
 		chat, err := s.database.GetChat(ctx, *chatID)
 		if err != nil || chat == nil || chat.UserID != userID {
-			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+			return wakeTarget{}, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 		}
 		if chat.ProjectID != projectID {
-			return "", connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat belongs to a different project"))
+			return wakeTarget{}, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("chat belongs to a different project"))
 		}
 		daemonID, err := chatDaemonID(ctx, s.database, chat)
 		if err != nil {
 			logging.Error("Failed to resolve the chat's machine for worktree "+verb, "error", err, "chatID", chat.ID)
-			return "", connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the chat's machine"))
+			return wakeTarget{}, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the chat's machine"))
 		}
 		if daemonID != "" {
-			return daemonID, nil
+			return wakeTarget{daemonID: daemonID, noMachine: chat.NoMachine}, nil
 		}
+		noMachine = chat.NoMachine
 	}
 
 	if owner := worktreeOwner(source); owner != "" {
-		return owner, nil
+		return wakeTarget{daemonID: owner, noMachine: noMachine}, nil
 	}
 
 	daemonID, err := s.daemonRouter.ResolveDaemonID(ctx, userID)
 	if err != nil {
+		err = s.wake.afterFailure(ctx, userID, wakeTarget{noMachine: noMachine}, err)
 		logging.Error("Failed to resolve daemon for worktree "+verb, "error", err, "userID", userID)
-		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to %s worktree: %w", verb, err))
+		return wakeTarget{}, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to %s worktree: %w", verb, err))
 	}
-	return daemonID, nil
+	return wakeTarget{daemonID: daemonID, noMachine: noMachine}, nil
 }

@@ -39,6 +39,7 @@ import {
   DaemonStatus,
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
+import { machineWsStatus, presentMachineStatus } from "./machineWake";
 
 /** The user-facing noun for a daemon. Settings → Machines already uses it. */
 export const MACHINE_NOUN = "machine";
@@ -96,6 +97,14 @@ export interface DaemonWaitInput {
    * waiting provisions anything.
    */
   isCloud: boolean;
+  /**
+   * When a wake of `daemon` was recorded (`lib/machineWake`): the user
+   * resumed it, or a request found it asleep and the server woke it. Absent
+   * when nothing is waking it.
+   */
+  wakeStartedAt?: number;
+  /** The clock `wakeStartedAt` is read against. Defaults to now. */
+  now?: number;
 }
 
 /**
@@ -115,7 +124,7 @@ function statusMessage(daemon: Daemon | null | undefined): string | null {
  * the backend hasn't told us anything more specific.
  */
 export function classifyDaemonWait(input: DaemonWaitInput): DaemonWaitState {
-  const { daemon, elapsedMs, isCloud } = input;
+  const { daemon, elapsedMs, isCloud, wakeStartedAt, now = Date.now() } = input;
   const reason = statusMessage(daemon);
 
   // ── Terminal, and the backend said so ────────────────────────────────────
@@ -134,6 +143,36 @@ export function classifyDaemonWait(input: DaemonWaitInput): DaemonWaitState {
       showRetry: true,
       showManage: true,
     };
+  }
+
+  // ── Asleep, and being woken ──────────────────────────────────────────────
+  // Something woke this machine: the user pressed Resume, or a request found
+  // it asleep and the server woke it. Said as Settings → Machines says it, and
+  // retried. It comes BEFORE the suspended branch on purpose: right after a
+  // wake the registry can still read SUSPENDED, and treating that as "nothing
+  // is in flight" would stop the retry that completes the user's request.
+  // `presentMachineStatus` decides when the wake is over (up, failed, or still
+  // asleep past its grace period), and then the branches below apply as usual.
+  if (daemon && wakeStartedAt !== undefined) {
+    const wake = presentMachineStatus(
+      machineWsStatus(daemon.status),
+      daemon.lastStatusMessage,
+      wakeStartedAt,
+      now,
+    );
+    if (wake.label) {
+      return {
+        tone: elapsedMs >= DAEMON_WAIT_SLOW_MS ? "slow" : "waiting",
+        title: wake.label,
+        detail:
+          wake.progress ??
+          `Your ${MACHINE_NOUN} was asleep. It usually takes about a minute to wake, and this will load on its own.`,
+        reason: null,
+        shouldRetry: true,
+        showRetry: elapsedMs >= DAEMON_WAIT_SLOW_MS,
+        showManage: elapsedMs >= DAEMON_WAIT_STUCK_MS,
+      };
+    }
   }
 
   // ── Stopped, but recoverable ─────────────────────────────────────────────

@@ -74,6 +74,18 @@ message ResumeDaemonResponse {
   string error_message = 2; // Non-empty on failure
 }
 
+// DaemonWaking says a request found the machine it needed asleep, and woke it.
+//
+// IT TRAVELS AS A CONNECT ERROR DETAIL on an Unavailable error, not as a
+// response field: the request did not run. A client that ignores the detail
+// still sees the "no daemon connected" error its machine-wait handling already
+// retries; the detail adds WHICH machine is waking, so the UI can say "Waking
+// up…" about that machine instead of guessing it from the machine list.
+message DaemonWaking {
+  // The machine that was asked to wake.
+  string daemon_id = 1;
+}
+
 message RefreshLocalModelsRequest {
   string daemon_id = 1;
 }

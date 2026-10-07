@@ -16,9 +16,19 @@ import { ConnectError } from "@connectrpc/connect";
 import { logger } from '../lib/logger';
 import { singleflight } from '../lib/singleflight';
 import { subscribeToRefetch, type RefetchEvent } from './refetchStore';
+import { retryAcrossWake } from '../lib/daemon-retry';
 
 // Re-export CleanupMetadata from gRPC types
 export type { CleanupMetadata };
+
+/**
+ * Said once when a workspace action found its machine asleep: the server woke
+ * it, and the action finishes by itself once the machine is back, so this is
+ * news rather than an error.
+ */
+function announceMachineWaking() {
+  toast.info('Waking up your machine — this will finish on its own.');
+}
 
 export interface Worktree {
   id: string;
@@ -387,22 +397,29 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   createWorktree: async (data: CreateWorktreeInput) => {
     set({ isLoading: true, error: null });
     try {
-      if (!data.project_id || !data.name || !data.branch) {
+      const { project_id: projectId, name, branch } = data;
+      if (!projectId || !name || !branch) {
         throw new Error('project_id, name, and branch are required');
       }
 
-      const worktree = await worktreeGrpc.create(
-        data.project_id,
-        data.name,
-        data.branch,
-        {
-          baseBranch: data.base_branch,
-          baseBranches: data.base_branches,
-          chatId: data.chat_id,
-          copyFiles: data.copy_files,
-          force: data.force,
-          sourceWorktreeId: data.source_worktree_id,
-        }
+      // The server refuses to record a workspace on an asleep machine; it
+      // wakes the machine instead, and this retries once it is up.
+      const worktree = await retryAcrossWake(
+        () =>
+          worktreeGrpc.create(
+            projectId,
+            name,
+            branch,
+            {
+              baseBranch: data.base_branch,
+              baseBranches: data.base_branches,
+              chatId: data.chat_id,
+              copyFiles: data.copy_files,
+              force: data.force,
+              sourceWorktreeId: data.source_worktree_id,
+            }
+          ),
+        { onWaking: announceMachineWaking },
       );
 
       const storeWorktree = grpcToStore(worktree);
@@ -441,10 +458,14 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       const wasCurrentWorktree = useWorktreeStore.getState().currentWorktree?.id === id;
       const activeChatSnapshot = getArchivedWorktreeActiveChatSnapshot(id);
 
-      await worktreeGrpc.archive(id, {
-        deleteGitBranch: options?.deleteGitBranch,
-        deleteLocalDirectory: options?.deleteLocalDirectory,
-      });
+      await retryAcrossWake(
+        () =>
+          worktreeGrpc.archive(id, {
+            deleteGitBranch: options?.deleteGitBranch,
+            deleteLocalDirectory: options?.deleteLocalDirectory,
+          }),
+        { onWaking: announceMachineWaking },
+      );
 
       await clearArchivedWorktreeActiveChat(id, activeChatSnapshot);
 
@@ -517,10 +538,14 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       const currentProject = worktree?.project_id;
       const activeChatSnapshot = getArchivedWorktreeActiveChatSnapshot(id);
 
-      await worktreeGrpc.delete(id, {
-        deleteGitBranch: options?.deleteGitBranch,
-        deleteLocalDirectory: options?.deleteLocalDirectory,
-      });
+      await retryAcrossWake(
+        () =>
+          worktreeGrpc.delete(id, {
+            deleteGitBranch: options?.deleteGitBranch,
+            deleteLocalDirectory: options?.deleteLocalDirectory,
+          }),
+        { onWaking: announceMachineWaking },
+      );
 
       if (!isPermanentDelete) {
         await clearArchivedWorktreeActiveChat(id, activeChatSnapshot);

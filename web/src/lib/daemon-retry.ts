@@ -17,7 +17,7 @@
  * failure when the machine genuinely won't serve.
  */
 
-import { isDaemonConnectingError } from "./daemon-errors";
+import { isDaemonConnectingError, wakingDaemonId } from "./daemon-errors";
 import { DAEMON_WAIT_POLL_MS } from "./daemon-wait";
 
 /**
@@ -31,9 +31,9 @@ import { DAEMON_WAIT_POLL_MS } from "./daemon-wait";
  */
 export const DAEMON_ACTION_RETRY_MS = 120_000;
 
-export interface SendWithDaemonWaitOptions {
+export interface SendWithDaemonWaitOptions<T = void> {
   /** The action to perform. Re-invoked on each attempt. */
-  action: () => Promise<void>;
+  action: () => Promise<T>;
   /**
    * Called the first time the action is deferred, so the surface can show
    * that the message is waiting on the machine rather than sent.
@@ -68,21 +68,21 @@ const sleep = (ms: number, signal?: AbortSignal) =>
  * because those don't get better by asking again and the user needs to see
  * them immediately.
  */
-export async function sendWithDaemonWait({
+export async function sendWithDaemonWait<T = void>({
   action,
   onWaiting,
   onResolved,
   timeoutMs = DAEMON_ACTION_RETRY_MS,
   signal,
-}: SendWithDaemonWaitOptions): Promise<void> {
+}: SendWithDaemonWaitOptions<T>): Promise<T> {
   const startedAt = Date.now();
   let deferred = false;
 
   for (;;) {
     try {
-      await action();
+      const result = await action();
       if (deferred) onResolved?.();
-      return;
+      return result;
     } catch (error) {
       if (!isDaemonConnectingError(error)) throw error;
 
@@ -96,5 +96,43 @@ export async function sendWithDaemonWait({
       }
       await sleep(DAEMON_WAIT_POLL_MS, signal);
     }
+  }
+}
+
+export interface RetryAcrossWakeOptions {
+  /**
+   * Called once, when the first attempt found the machine asleep and the
+   * server woke it, so the surface can say "Waking up…" instead of failing.
+   */
+  onWaking?: (daemonId: string) => void;
+  /** Overall budget for the retries. Defaults to `DAEMON_ACTION_RETRY_MS`. */
+  timeoutMs?: number;
+  signal?: AbortSignal;
+}
+
+/**
+ * Run a one-shot action (a commit, a push, creating or deleting a workspace)
+ * that may find its machine asleep.
+ *
+ * When the server woke the machine for this action — the error names the
+ * machine it woke (`wakingDaemonId`) — the action did not run, so it is retried
+ * until the machine is up, within the same bound as `sendWithDaemonWait`. Any
+ * other failure is thrown at once, as before: in particular a machine that is
+ * offline and was NOT woken (a self-hosted laptop that is shut) does not hold
+ * the action for two minutes on a machine nothing is bringing back.
+ */
+export async function retryAcrossWake<T>(
+  action: () => Promise<T>,
+  { onWaking, timeoutMs = DAEMON_ACTION_RETRY_MS, signal }: RetryAcrossWakeOptions = {},
+): Promise<T> {
+  try {
+    return await action();
+  } catch (error) {
+    const daemonId = wakingDaemonId(error);
+    if (!daemonId) throw error;
+    onWaking?.(daemonId);
+    // The machine is mid cold start; asking again immediately only fails.
+    await sleep(DAEMON_WAIT_POLL_MS, signal);
+    return sendWithDaemonWait({ action, timeoutMs, signal });
   }
 }

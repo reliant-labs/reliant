@@ -1,4 +1,5 @@
-import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { fireEvent, screen, waitFor, within } from "@testing-library/react";
+import { renderWithQuery } from "../../../test/renderWithQuery";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ReactNode } from "react";
 import { RecentChanges } from "../RecentChanges";
@@ -119,7 +120,7 @@ describe("RecentChanges commit flow", () => {
       ]),
     );
 
-    render(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
+    renderWithQuery(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
     await screen.findByText("a.ts");
 
     typeMessage("Add things");
@@ -140,7 +141,7 @@ describe("RecentChanges commit flow", () => {
       ]),
     );
 
-    render(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
+    renderWithQuery(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
     await screen.findByText("staged.ts");
 
     expect(screen.getByRole("button", { name: "Commit 1 file" })).toBeInTheDocument();
@@ -158,7 +159,7 @@ describe("RecentChanges commit flow", () => {
     const nativeConfirm = vi.spyOn(window, "confirm");
     getChangesMock.mockResolvedValue(changes([{ path: "a.ts", status: FileChangeStatus.MODIFIED }]));
 
-    render(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
+    renderWithQuery(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
     await screen.findByText("a.ts");
 
     fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
@@ -182,7 +183,7 @@ describe("RecentChanges commit flow", () => {
     getChangesMock.mockResolvedValue(changes([{ path: "staged.ts", status: FileChangeStatus.STAGED }]));
     git.commitChanges.mockRejectedValue(new Error("pre-commit hook failed"));
 
-    render(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
+    renderWithQuery(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
     await screen.findByText("staged.ts");
 
     typeMessage("Broken");
@@ -200,7 +201,7 @@ describe("RecentChanges commit flow", () => {
       .mockRejectedValueOnce(new Error("daemon unreachable"))
       .mockResolvedValue(changes([{ path: "back.ts", status: FileChangeStatus.MODIFIED }]));
 
-    render(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
+    renderWithQuery(<RecentChanges worktreeId={worktreeId} projectId="project-1" onClose={() => {}} />);
 
     expect(await screen.findByText("Couldn't load changes")).toBeInTheDocument();
     expect(screen.getByText("daemon unreachable")).toBeInTheDocument();
@@ -212,7 +213,7 @@ describe("RecentChanges commit flow", () => {
 
   it("says the tree is clean when there are no changes", async () => {
     getChangesMock.mockResolvedValue(changes([]));
-    render(<RecentChanges worktreeId={nextWorktreeId()} projectId="project-1" onClose={() => {}} />);
+    renderWithQuery(<RecentChanges worktreeId={nextWorktreeId()} projectId="project-1" onClose={() => {}} />);
     expect(await screen.findByText("No changes")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Commit" })).toBeDisabled();
   });

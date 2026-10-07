@@ -1,4 +1,5 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, screen, waitFor } from "@testing-library/react";
+import { renderWithQuery } from "../../../test/renderWithQuery";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { RecentChanges } from "../RecentChanges";
 import { FileChangeStatus } from "../../../gen/reliant/v1/common_pb";
@@ -108,7 +109,7 @@ describe("RecentChanges", () => {
           }),
       );
 
-    const { rerender } = render(
+    const { rerender } = renderWithQuery(
       <RecentChanges worktreeId="wt-old" projectId="project-1" onClose={() => {}} />,
     );
 

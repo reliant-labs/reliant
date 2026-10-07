@@ -5,7 +5,10 @@ import { useViewerStore } from "../../../store/viewerStore";
 import { useProjectStore } from "../../../store/projectStore";
 import { useWorktreeStore } from "../../../store/worktreeStore";
 import { logger } from "../../../lib/logger";
+import { retryAcrossWake } from "../../../lib/daemon-retry";
 import { cn } from "../../../lib/utils";
+import { useDaemonWait } from "../../../hooks/useDaemonWait";
+import { DaemonWaitState } from "../../DaemonWaitState";
 import { Button } from "../../ui/Button";
 import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import { PRDialog } from "../../SourceControl/PRDialog";
@@ -126,7 +129,7 @@ export function RepoChangesPanel({
     setConfirm(null);
   }, [resetSelection]);
 
-  const { data, loading, loadError, refreshing, reload, refresh, retry } = useRepoChanges({
+  const { data, loading, loadError, waitingOnDaemon, refreshing, reload, refresh, retry } = useRepoChanges({
     worktreeId,
     projectId,
     repoId,
@@ -136,6 +139,16 @@ export function RepoChangesPanel({
   });
 
   const { existingPR, ghCliMissing } = useExistingPR(worktreeId, repoId, true, prRefreshKey);
+
+  // The machine isn't serving yet — asleep and being woken, or starting. The
+  // shared wait says so ("Waking up…") and reloads on its cadence until the
+  // machine answers.
+  const daemonWait = useDaemonWait({
+    waiting: waitingOnDaemon,
+    onRetry: useCallback(() => {
+      void reload();
+    }, [reload]),
+  });
 
   // ---- Derived file lists -----------------------------------------------
   const groups = useMemo(() => {
@@ -220,6 +233,18 @@ export function RepoChangesPanel({
   };
 
   // ---- Git writes -------------------------------------------------------
+  // A write that finds the machine asleep wakes it (the server does) and did
+  // not run; it is retried until the machine is up, with "Waking up…" shown
+  // meanwhile, rather than reported as a failure.
+  const [wakingForWrite, setWakingForWrite] = useState(false);
+  const acrossWake = async (write: () => Promise<void>) => {
+    try {
+      await retryAcrossWake(write, { onWaking: () => setWakingForWrite(true) });
+    } finally {
+      setWakingForWrite(false);
+    }
+  };
+
   const withPending = async (paths: string[], fn: () => Promise<void>) => {
     setPendingPaths((prev) => new Set([...prev, ...paths]));
     try {
@@ -238,7 +263,7 @@ export function RepoChangesPanel({
       if (!worktreeId || paths.length === 0) return;
       setOpError(null);
       try {
-        await gitApi.stageFiles(worktreeId, paths, repoId);
+        await acrossWake(() => gitApi.stageFiles(worktreeId, paths, repoId).then(() => undefined));
         await reload();
         setSelectedKeys(new Set());
       } catch (err) {
@@ -252,7 +277,7 @@ export function RepoChangesPanel({
       if (!worktreeId || paths.length === 0) return;
       setOpError(null);
       try {
-        await gitApi.unstageFiles(worktreeId, paths, repoId);
+        await acrossWake(() => gitApi.unstageFiles(worktreeId, paths, repoId).then(() => undefined));
         await reload();
         setSelectedKeys(new Set());
       } catch (err) {
@@ -266,7 +291,9 @@ export function RepoChangesPanel({
       if (!worktreeId || paths.length === 0) return;
       setOpError(null);
       try {
-        const result = await gitApi.revertFiles(worktreeId, paths, repoId);
+        const result = await retryAcrossWake(() => gitApi.revertFiles(worktreeId, paths, repoId), {
+          onWaking: () => setWakingForWrite(true),
+        }).finally(() => setWakingForWrite(false));
         if (result.message?.includes("error(s):")) {
           setOpError(result.message);
           logger.warn("Discard completed with errors", { message: result.message, files: paths });
@@ -325,7 +352,7 @@ export function RepoChangesPanel({
     setOp(kind);
     setOpError(null);
     try {
-      await fn(worktreeId);
+      await acrossWake(() => fn(worktreeId));
       logger.info(`git ${kind} succeeded`, { worktreeId, repoId });
     } catch (err) {
       setOpError(errorMessage(err, fallback));
@@ -503,7 +530,9 @@ export function RepoChangesPanel({
       onKeyDown={handleKeyDown}
       className={cn("flex flex-col gap-1 px-1.5 py-2 focus:outline-none", mode === "single" && "flex-1 overflow-y-auto")}
     >
-      {loadError && !data ? (
+      {waitingOnDaemon && daemonWait.state && !data ? (
+        <DaemonWaitState state={daemonWait.state} secondary onRetry={daemonWait.retryNow} />
+      ) : loadError && !data ? (
         <div role="alert" className="mx-1.5 flex flex-col items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
           <p className="text-sm font-semibold text-destructive">Couldn't load changes</p>
           <p className="break-words text-xs text-destructive/90">{loadError}</p>
@@ -602,6 +631,7 @@ export function RepoChangesPanel({
           op={op}
           disabled={!data}
           error={opError}
+          status={wakingForWrite ? "Waking up… this finishes once your machine is back." : null}
           onDismissError={() => setOpError(null)}
           onCommit={handleCommit}
           onPush={handlePush}
