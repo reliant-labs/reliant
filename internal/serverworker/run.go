@@ -24,7 +24,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/controlplane"
-	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/debugserver"
 	"github.com/reliant-labs/reliant/internal/drain"
@@ -363,6 +362,9 @@ func Run(ctx context.Context, opts Options) error {
 		// search_integrations / get_integration_schema execute here too, and
 		// read the run owner's connections to report what is connected.
 		CatalogSearch: catalogSearch,
+		// The worktree tool executes here, on a worker with no access to the
+		// user's files: its git work goes to the run's machine instead.
+		RunMachine: toolexec.NewRunMachine(router),
 	})
 	// Wire server-side tool execution so PlacementServer / PlacementAny
 	// tools execute in the worker process without a daemon round-trip.
@@ -370,10 +372,8 @@ func Run(ctx context.Context, opts Options) error {
 	serverExecutor.SetMCPContextBinder(toolexec.NewDaemonMCPContextBinder(router))
 	remoteExecutor.SetServerExecutor(serverExecutor)
 	// Per-request daemon clients via NATS for server-side tools that still
-	// need daemon filesystem/exec access.
-	remoteExecutor.SetDaemonClientFactory(func(userID string) daemon.Client {
-		return daemon.NewRemoteClient(router, userID)
-	})
+	// need daemon filesystem/exec access, bound to the run's machine.
+	remoteExecutor.SetDaemonClientFactory(toolexec.RemoteDaemonClients(router))
 
 	// -----------------------------------------------------------------
 	// 11. Start the worker

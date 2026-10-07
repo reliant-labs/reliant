@@ -233,7 +233,9 @@ export const filesystemGrpc = {
     // never collide. Depth 0 defers to the server default (2); -1 walks as deep
     // as the server's node budget allows. Neither is unbounded — the default
     // here is 1 so a caller that forgets gets the cheapest useful answer.
-    const cacheKey = `${projectId}:${worktreeId || 'main'}:${path}:${depth}`;
+    // The chat is in the key because the server reads from the chat's
+    // machine: the same path for two chats can be two different disks.
+    const cacheKey = `${projectId}:${worktreeId || 'main'}:${chatId || ''}:${path}:${depth}`;
 
     let promise = pendingFileTreeRequests.get(cacheKey);
     if (!promise) {
@@ -271,8 +273,9 @@ export const filesystemGrpc = {
     worktreeId?: string,
     chatId?: string
   ): Promise<string> {
-    // Create unique cache key for this request
-    const cacheKey = `${projectId}:${worktreeId || 'main'}:${path}`;
+    // Create unique cache key for this request. The chat is part of it for the
+    // same reason as in getFileTree: it decides which machine is read.
+    const cacheKey = `${projectId}:${worktreeId || 'main'}:${chatId || ''}:${path}`;
     
     // Check if this request is already in-flight
     const existingRequest = pendingRequests.get(cacheKey);

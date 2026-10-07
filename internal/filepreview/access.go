@@ -64,7 +64,10 @@ func ResolveBasePath(ctx context.Context, repo db.Repository, projectID string, 
 
 	if wtID == "" && chatID != nil && *chatID != "" {
 		chat, err := repo.GetChat(ctx, *chatID)
-		if err == nil && chat.WorktreeID != nil && *chat.WorktreeID != "" {
+		// A chat from another project says nothing about this project's
+		// files: it is stale UI context, e.g. a project switch racing the
+		// file tree, and must not scope the request to its worktree.
+		if err == nil && chat.ProjectID == projectID && chat.WorktreeID != nil && *chat.WorktreeID != "" {
 			wtID = *chat.WorktreeID
 		}
 	}

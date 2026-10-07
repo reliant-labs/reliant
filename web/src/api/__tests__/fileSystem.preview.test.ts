@@ -11,6 +11,9 @@ const mocks = vi.hoisted(() => ({
   useWorktreeStore: {
     getState: vi.fn(),
   },
+  useChatStore: {
+    getState: vi.fn(),
+  },
   triggerGitStatusRefresh: vi.fn(),
 }));
 
@@ -24,6 +27,10 @@ vi.mock("../../store/projectStore", () => ({
 
 vi.mock("../../store/worktreeStore", () => ({
   useWorktreeStore: mocks.useWorktreeStore,
+}));
+
+vi.mock("../../store/chatStore", () => ({
+  useChatStore: mocks.useChatStore,
 }));
 
 vi.mock("../../store/gitStatusStore", () => ({
@@ -42,6 +49,7 @@ describe("fileSystem preview transport", () => {
     mocks.useWorktreeStore.getState.mockReturnValue({
       worktrees: [{ id: "wt-1", path: "/workspace", name: "main" }],
     });
+    mocks.useChatStore.getState.mockReturnValue({ activeChatId: "chat-1" });
     mocks.filesystemGrpc.getFilePreview.mockResolvedValue({
       content: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
       contentType: "image/png",
@@ -61,6 +69,7 @@ describe("fileSystem preview transport", () => {
       "project-1",
       "photo.png",
       "wt-1",
+      "chat-1",
     );
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("image/png");
@@ -74,6 +83,7 @@ describe("fileSystem preview transport", () => {
       "project-1",
       "photo.png",
       undefined,
+      "chat-1",
     );
     expect(blob).toBeInstanceOf(Blob);
     expect(blob.type).toBe("image/png");

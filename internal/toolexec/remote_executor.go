@@ -46,9 +46,11 @@ func capLLMToolContent(content string) string {
 		formatByteSize(int64(len(content))))
 }
 
-// DaemonClientFactory creates a daemon.Client for a given user ID.
-// In distributed mode it creates a RemoteClient bound to the user's daemon via NATS.
-type DaemonClientFactory func(userID string) daemon.Client
+// DaemonClientFactory creates the daemon.Client a server-side tool uses for one
+// request: bound to the user's daemon that selector names (the run's machine,
+// as ExecuteTools chose it), or to default resolution for a nil selector. In
+// distributed mode it is a RemoteClient over NATS (RemoteDaemonClients).
+type DaemonClientFactory func(userID string, selector *DaemonSelector) daemon.Client
 
 // RemoteExecutor executes tools via server-side execution or daemon routing.
 type RemoteExecutor struct {
@@ -228,9 +230,13 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 	// A run with no machine gets none: the client resolves (and can wake) the
 	// user's default daemon, and tools that need one already report that it
 	// is missing.
+	//
+	// The client is bound to the run's selector: view, write and edit reach
+	// the user's files through it, and must reach the machine every other
+	// tool of the run executes on.
 	var daemonClient daemon.Client
 	if e.daemonFactory != nil && !nomachine.Is(ctx) {
-		daemonClient = e.daemonFactory(req.UserID)
+		daemonClient = e.daemonFactory(req.UserID, req.DaemonSelector)
 	}
 	// MCP tools bind a daemon-backed runtime from this context; carrying the
 	// run's selector keeps them on the daemon built-in tools use.

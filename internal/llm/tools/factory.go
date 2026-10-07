@@ -78,6 +78,10 @@ type ToolsOptions struct {
 	// import this package. Optional: nil means run_scenario reports that
 	// scenario execution is unavailable here (the daemon runtime).
 	ScenarioRunner ScenarioRunner
+	// RunMachine sends the worktree tool's git and filesystem work to the
+	// machine the run's tools execute on. Optional: nil means the worktree
+	// tool reports that creating and deleting worktrees is unavailable here.
+	RunMachine RunMachine
 }
 
 // ToolsFactory is a global factory for creating tool instances
@@ -394,7 +398,7 @@ func (f *ToolsFactory) ComponentLibrary() Tool {
 
 // Worktree tools
 func (f *ToolsFactory) Worktree() Tool {
-	return NewWorktreeTool(f.opts.Repo)
+	return NewWorktreeTool(f.opts.Repo, f.opts.RunMachine)
 }
 
 // Skill tools
