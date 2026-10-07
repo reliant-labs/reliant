@@ -155,11 +155,21 @@ test-e2e:
 	@echo "$(GREEN)✅ E2E stories complete$(NC)"
 
 ## replay-fixtures: Regenerate Temporal replay-compatibility history fixtures (see internal/workflow/runtime/replaytest/fixtures/README.md)
+# With DATABASE_URL set (environment or `make replay-fixtures DATABASE_URL=...`)
+# the generator uses that database and nothing is started. Only when it is
+# unset does this bring up the repo's docker compose Postgres on :5433 — a
+# shared server that an isolated run (an agent, a second worktree) must not
+# start or write to.
 replay-fixtures:
-	@echo "$(YELLOW)Regenerating replay-compatibility fixtures (Postgres via docker compose + ephemeral Temporal dev server)...$(NC)"
+	@echo "$(YELLOW)Regenerating replay-compatibility fixtures (ephemeral Temporal dev server + scripted LLM)...$(NC)"
 	@echo "$(YELLOW)NOTE: regenerating accepts a replay break for in-flight runs — read internal/workflow/runtime/replaytest/fixtures/README.md$(NC)"
+ifeq ($(strip $(DATABASE_URL)),)
+	@echo "$(YELLOW)DATABASE_URL is unset: bringing up Postgres via docker compose (localhost:5433)$(NC)"
 	docker compose up -d postgres
-	DATABASE_URL='$(E2E_DATABASE_URL)' $(GOTEST) -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
+else
+	@echo "$(YELLOW)Using DATABASE_URL; not starting docker compose$(NC)"
+endif
+	DATABASE_URL='$(or $(strip $(DATABASE_URL)),$(E2E_DATABASE_URL))' $(GOTEST) -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
 	@echo "$(YELLOW)Verifying regenerated fixtures replay cleanly against current code...$(NC)"
 	$(GOTEST) -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
 	@echo "$(GREEN)✅ Replay fixtures regenerated and verified — commit fixtures/*.json with your change$(NC)"

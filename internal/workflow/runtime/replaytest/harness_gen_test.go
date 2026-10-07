@@ -93,8 +93,9 @@ func TestMain(m *testing.M) {
 	// of the normal test suite — fail loudly instead of skipping.
 	if os.Getenv("DATABASE_URL") == "" {
 		fmt.Fprintln(os.Stderr, "replaytest generator: DATABASE_URL is required.")
-		fmt.Fprintln(os.Stderr, "Run via `make replay-fixtures` (brings up Postgres through docker compose), or set")
-		fmt.Fprintln(os.Stderr, "DATABASE_URL=postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable")
+		fmt.Fprintln(os.Stderr, "Set it to a Postgres database of your own, or run `make replay-fixtures`, which uses")
+		fmt.Fprintln(os.Stderr, "DATABASE_URL when set and otherwise brings up the repo's docker compose Postgres (localhost:5433).")
+		fmt.Fprintln(os.Stderr, "See internal/workflow/runtime/replaytest/fixtures/README.md.")
 		os.Exit(1)
 	}
 
