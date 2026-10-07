@@ -743,6 +743,16 @@ const olderMessagesInFlight = new Set<string>();
 // it.
 const chatStreamCursors = new Map<string, bigint>();
 
+// The pause RPC still in flight per chat. ESC fires pauseChat without
+// awaiting it, so a message typed right after would otherwise race the pause
+// to the server: if the send is routed first it wakes a "running" run, the
+// pause then lands, and the message sits unread until the user sends again.
+// sendMessage waits on this so a send never overtakes the pause the user
+// issued before it. The server serializes the two as well (runs.Service
+// LockRunControl); this keeps the order the user acted in from depending on
+// which request the server happens to receive first.
+const pausesInFlight = new Map<string, Promise<void>>();
+
 
 // Helper to check if content blocks indicate a streaming (incomplete) message
 function isMessageBlocksStreaming(contentBlocks: ContentBlock[]): boolean {
@@ -1085,72 +1095,64 @@ interface ChatStoreState {
  * If you're in a component and using useChatStore() directly, refactor to use
  * the hooks from './chatStoreHooks' instead!
  */
+// The local-only placeholder for a user message being sent, so it renders
+// before the server persists it. mergeMessages retires it (by the
+// "optimistic-user-" id prefix) when the persisted message arrives on the chat
+// stream — which only works if the placeholder is already in the cache by then.
+// seq 999998 sorts it just before the streaming message (999999).
+function buildOptimisticUserMessage(
+  content: string,
+  attachmentIds: string[] | undefined,
+  identity?: { id: string; sentAt: string },
+): Message {
+  const optimisticAttachments = getAttachmentsFromStore(attachmentIds || []);
+  const sentAt = identity?.sentAt ?? new Date().toISOString();
+  return {
+    id: identity?.id ?? `optimistic-user-${Date.now()}`,
+    chatId: "",
+    role: MessageRole.USER,
+    contentBlocks: [{ id: "", index: 0, type: ContentBlockType.TEXT, content }],
+    createdAt: sentAt,
+    updatedAt: sentAt,
+    streamingState: StreamingState.COMPLETE,
+    seq: BigInt(999998),
+    thread: "",
+    sequenceNumber: BigInt(0),
+    attachments: optimisticAttachments.length > 0 ? optimisticAttachments : [],
+  };
+}
+
 // Shared by startChat and startExistingChat: home the chat the server returned,
-// seed the optimistic first user message, flip activity to RUNNING and track it.
-//
-// `replace` is for a brand-new chat, whose message cache is empty. A started
-// existing chat (a branch) already holds inherited history in the cache, which
-// the optimistic message must be appended to, not replace.
+// flip activity to RUNNING and track the send. The optimistic first message is
+// each caller's job, because the two must write it at different times.
 function applyFirstSend(
   chat: Chat,
   projectId: string,
   firstMessage: string,
   attachmentIds: string[] | undefined,
-  mode: "replace" | "append",
 ): void {
   const chatId = chat.id;
 
-    // Home the new chat into the React Query caches immediately so both
-    // useChat / useActiveChat and list readers (sidebar/search/worktree views)
-    // show it without waiting for a stream-triggered list refetch.
-    seedChatDetail(chat);
-    upsertChatInListCache(projectId, chat);
-    void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
+  // Home the new chat into the React Query caches immediately so both
+  // useChat / useActiveChat and list readers (sidebar/search/worktree views)
+  // show it without waiting for a stream-triggered list refetch.
+  seedChatDetail(chat);
+  upsertChatInListCache(projectId, chat);
+  void queryClient.invalidateQueries({ queryKey: chatKeys.list(projectId) });
 
-    // Initialize state for the new chat
-    useChatStore.getState().initChatState(chat);
+  // Initialize state for the new chat
+  useChatStore.getState().initChatState(chat);
 
-    // Add optimistic user message immediately so the UI shows it right away
-    // This prevents the race condition where the chat renders before messages load
-    // The real message will replace this when it arrives via gRPC stream or loadMessages()
-    if (firstMessage) {
-      const optimisticAttachments = getAttachmentsFromStore(
-        attachmentIds || [],
-      );
-      const optimisticUserMessage: Message = {
-        id: `optimistic-user-${Date.now()}`,
-        chatId: "",
-        role: MessageRole.USER,
-        contentBlocks: [{ id: "", index: 0, type: ContentBlockType.TEXT, content: firstMessage }],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        streamingState: StreamingState.COMPLETE,
-        seq: BigInt(999998), // Just before streaming message (999999)
-        thread: "",
-        sequenceNumber: BigInt(0),
-        attachments:
-          optimisticAttachments.length > 0 ? optimisticAttachments : [],
-      };
+  // Optimistically mark as RUNNING so the thinking indicator shows immediately
+  // The backend will confirm via CHAT_ACTIVITY_CHANGED event shortly
+  useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
 
-      // Seed the optimistic user message into the RQ message cache (the single
-      // source of truth) so the UI shows it immediately.
-      if (mode === "replace") {
-        setMessagesInCache(chatId, [optimisticUserMessage]);
-      } else {
-        patchMessagesCache(chatId, (msgs) => [...msgs, optimisticUserMessage]);
-      }
-    }
-
-    // Optimistically mark as RUNNING so the thinking indicator shows immediately
-    // The backend will confirm via CHAT_ACTIVITY_CHANGED event shortly
-    useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
-
-    trackEvent("message_sent", {
-      chatId,
-      contentLength: firstMessage.length,
-      hasAttachments: (attachmentIds?.length ?? 0) > 0,
-      isFirstInChat: true,
-    });
+  trackEvent("message_sent", {
+    chatId,
+    contentLength: firstMessage.length,
+    hasAttachments: (attachmentIds?.length ?? 0) > 0,
+    isFirstInChat: true,
+  });
 }
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
@@ -1283,7 +1285,15 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       selectedPresets: selectedPresets,
     });
 
-    applyFirstSend(chat, projectId, firstMessage, attachmentIds, "replace");
+    applyFirstSend(chat, projectId, firstMessage, attachmentIds);
+    // Safe to seed after the request: a brand-new chat has no id until
+    // StartChat returns, so nothing is subscribed to it yet and no echo can
+    // beat this write. It replaces the empty list initChatState seeded.
+    if (firstMessage) {
+      setMessagesInCache(chat.id, [
+        buildOptimisticUserMessage(firstMessage, attachmentIds),
+      ]);
+    }
     return chat;
   },
 
@@ -1298,6 +1308,19 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     },
   ) => {
     const workflowParams = options?.workflowParams ?? {};
+
+    // Seed the placeholder BEFORE the request. This chat (a branch) is already
+    // open and subscribed, so the server's echo of the persisted message can
+    // arrive on the stream before StartChat resolves. Seeded after, the
+    // placeholder lands behind its own echo, nothing ever retires it, and the
+    // message renders twice until the next snapshot. Appended, not replaced:
+    // the cache holds the branch's inherited history. Same as sendMessage, a
+    // failed start leaves it in place as the recoverable copy of the text.
+    patchMessagesCache(chatId, (msgs) => [
+      ...msgs,
+      buildOptimisticUserMessage(firstMessage, attachmentIds),
+    ]);
+
     // The chat names its own project; the selected project may be a different
     // one (deep link, cross-project tab), and the server rejects a mismatch.
     const chat = await api.chatsV2.start({
@@ -1310,7 +1333,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       selectedPresets: options?.selectedPresets,
     });
 
-    applyFirstSend(chat, chat.projectId, firstMessage, attachmentIds, "append");
+    applyFirstSend(chat, chat.projectId, firstMessage, attachmentIds);
     return chat;
   },
 
@@ -1586,38 +1609,22 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // DON'T set busy=true optimistically - let WebSocket workflow_execution updates drive busy state
       // This prevents stuck state if backend crashes before creating workflow_execution
 
-      // Create optimistic user message so streaming response appears in the correct layer
-      // Uses seq 999998 (just before streaming's 999999) and a stable temp ID
-      // This will be replaced by the real message when it arrives via gRPC stream
-      const optimisticAttachments = getAttachmentsFromStore(
-        attachmentIds || [],
-      );
       // The id this message keeps wherever it is shown. If the run is
       // executing, the server queues the message under this id instead of
       // writing it to the transcript (see lib/pendingSends.ts).
       const clientMessageId = newClientMessageId();
       const optimisticId = `optimistic-user-${clientMessageId}`;
       const sentAt = new Date().toISOString();
-      const optimisticUserMessage: Message = {
-        id: optimisticId,
-        chatId: "",
-        role: MessageRole.USER,
-        contentBlocks: [{ id: "", index: 0, type: ContentBlockType.TEXT, content }],
-        createdAt: sentAt,
-        updatedAt: sentAt,
-        streamingState: StreamingState.COMPLETE,
-        seq: BigInt(999998), // Just before streaming message (999999)
-        thread: "",
-        sequenceNumber: BigInt(0),
-        attachments:
-          optimisticAttachments.length > 0 ? optimisticAttachments : [],
-      };
-
       // Append the optimistic user message to the RQ message cache (the single
-      // source of truth) to ensure correct layer grouping. It is replaced by
-      // the real message when it arrives via the gRPC stream (matched/removed
-      // by the "optimistic-user-" id prefix in processChatStreamUpdates).
-      patchMessagesCache(chatId, (msgs) => [...msgs, optimisticUserMessage]);
+      // source of truth) BEFORE the request, so the streamed echo of the
+      // persisted message always arrives after it and retires it.
+      patchMessagesCache(chatId, (msgs) => [
+        ...msgs,
+        buildOptimisticUserMessage(content, attachmentIds, {
+          id: optimisticId,
+          sentAt,
+        }),
+      ]);
       // Bump the chat timestamp when a message is sent, in the React Query
       // DETAIL cache only (projectId omitted → list untouched). The sidebar
       // renders from the RQ list, so patching the list would newly reorder
@@ -1631,6 +1638,12 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const workflowParams = options?.workflowParams || {};
 
       const isDiscuss = options?.discuss || get().discussMode[chatId];
+
+      // A pause issued just before this send must reach the server first, or
+      // the send can be routed as a wake and then stranded by the pause. The
+      // optimistic message is already on screen, so this wait is invisible.
+      // The pause settles either way (its rejection is handled in pauseChat).
+      await pausesInFlight.get(chatId);
 
       const sendOptions = {
         ...(options?.workflow !== undefined && { workflow: options.workflow }),
@@ -3461,13 +3474,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // after itself, exactly as the cancel does.
     get().clearStreamingState(chatId);
 
-    // Make the API call to actually pause the workflow
+    // Make the API call to actually pause the workflow. Registered so a send
+    // issued after this pause waits for it (see pausesInFlight).
+    const pausing = api.chatsV2.pause(chatId).then(
+      () => undefined,
+      (error) => {
+        logger.error("Failed to pause chat:", error);
+        // Revert optimistic update on error
+        get().refreshChat(chatId);
+      },
+    );
+    pausesInFlight.set(chatId, pausing);
     try {
-      await api.chatsV2.pause(chatId);
-    } catch (error) {
-      logger.error("Failed to pause chat:", error);
-      // Revert optimistic update on error
-      get().refreshChat(chatId);
+      await pausing;
+    } finally {
+      if (pausesInFlight.get(chatId) === pausing) pausesInFlight.delete(chatId);
     }
   },
 

@@ -25,17 +25,10 @@ type DaemonSelector struct {
 }
 
 // DaemonResolver resolves available daemons for a user given a selector.
-// The default OSS implementation only resolves currently connected daemons.
-// The control plane provides its own implementation that can query the DB.
+// The implementation here only resolves currently connected daemons; the
+// NATS router falls back to the registry's records (lookupDaemonRecord).
 type DaemonResolver interface {
 	ResolveDaemons(ctx context.Context, userID string, selector *DaemonSelector) ([]DaemonInfo, error)
-}
-
-// DaemonWakeup can wake a suspended or offline daemon.
-// The default OSS implementation is a no-op.
-// The control plane provides its own that can resume suspended cloud daemons.
-type DaemonWakeup interface {
-	WakeupDaemon(ctx context.Context, daemonID string) error
 }
 
 // ConnectedDaemonLister is the subset of ToolsDaemonService needed by
@@ -89,13 +82,5 @@ func labelsMatch(daemonLabels, selectorLabels map[string]string) bool {
 	return true
 }
 
-// NoopDaemonWakeup is the default OSS wakeup that does nothing.
-type NoopDaemonWakeup struct{}
-
-func (NoopDaemonWakeup) WakeupDaemon(_ context.Context, _ string) error {
-	return nil
-}
-
 // Compile-time interface checks.
 var _ DaemonResolver = (*ConnectedDaemonResolver)(nil)
-var _ DaemonWakeup = NoopDaemonWakeup{}

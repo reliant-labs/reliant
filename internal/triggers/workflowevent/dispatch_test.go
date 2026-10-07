@@ -85,7 +85,7 @@ func newFixture(t *testing.T) *fixture {
 	f.addUserProject(f.userID, f.projectID)
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: f.daemonID, UserID: f.userID}))
 
-	launcher := launch.NewLauncher(repo, threads.NewService(repo), f.starter, noopRunRecorder{}, "test-queue", nil)
+	launcher := launch.NewLauncher(repo, threads.NewService(repo), f.starter, noopRunRecorder{}, "test-queue")
 	f.dispatcher = NewDispatcher(repo, launcher, nil)
 	return f
 }

@@ -141,7 +141,7 @@ type daemonConnection struct {
 	// lastDetectedPortsKey is the encoding of the last heartbeat-reported
 	// detected-ports set persisted to daemon_attachment. Heartbeats arrive
 	// every 15s but the port set rarely changes; caching the last write
-	// avoids a per-heartbeat UPDATE. Only the receive loop touches it.
+	// avoids a per-heartbeat UPDATE. Only the inbound state worker touches it.
 	lastDetectedPortsKey string
 
 	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
@@ -151,7 +151,7 @@ type daemonConnection struct {
 	// inventoryWaiters receive the next inventory the daemon publishes.
 	inventoryWaiters []chan *reliantv1.LocalModelInventory
 	// lastInventoryJSON is the last stored inventory encoding; byte-identical
-	// republishes skip the DB write. Only the receive loop touches it.
+	// republishes skip the DB write. Only the inbound state worker touches it.
 	lastInventoryJSON string
 }
 
@@ -975,7 +975,12 @@ type receivedMessage struct {
 	err error
 }
 
-// handleIncoming handles incoming messages from the daemon.
+// inboundStateQueueSize bounds how many state-persisting messages from one
+// daemon may wait behind a slow write before the receive loop stops reading
+// (backpressure onto the daemon's stream).
+const inboundStateQueueSize = 128
+
+// handleIncoming reads one daemon's stream for the life of the connection.
 //
 // Receive runs in its own goroutine so the loop can also select on conn.done.
 // Checking done only between messages meant a connection closed by the
@@ -983,7 +988,33 @@ type receivedMessage struct {
 // the daemon's next heartbeat — up to a full heartbeat interval during which
 // the stream was closed on the gateway's books but still open on the wire, and
 // the daemon learned nothing about WHY it ended (it saw a bare EOF).
+//
+// It splits what the daemon sends into two classes. REPLIES — command and
+// tool responses, terminal/process/local-model output — are routed to their
+// waiters right here, and routing is a map lookup and a channel send. STATE —
+// heartbeat lease renewals, project discovery, config snapshots, filesystem
+// and failure announcements — is written to the database, and that runs on a
+// per-connection worker, in arrival order, so a slow write never sits in front
+// of a reply.
+//
+// Before the split, every message was handled inline in arrival order, so a
+// reply waited for any DB write the daemon had sent ahead of it: a 15s
+// heartbeat, an agent's FileSystemChanged, or a project-config snapshot that
+// reaches 10MB for a multi-repo project (on reconnect the gateway persisted 16
+// of them back to back, ~1s). A millisecond daemon command could take as long
+// as the slowest unrelated write queued in front of its reply.
 func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonConnection) error {
+	stateQueue := make(chan *reliantv1.DaemonMessage, inboundStateQueueSize)
+	streamEnded := make(chan struct{})
+	// Detached from the stream's context so state the gateway already
+	// received is still applied after the stream ends — a DaemonCommandFailed
+	// is the only trace a fire-and-forget clone failure ever leaves.
+	go s.runInboundStateWorker(context.WithoutCancel(ctx), conn, stateQueue, streamEnded)
+	defer func() {
+		close(streamEnded)
+		close(stateQueue)
+	}()
+
 	received := make(chan receivedMessage)
 	go func() {
 		for {
@@ -1036,173 +1067,223 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 			s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType)
 		}
 
-		switch m := msg.Message.(type) {
-		case *reliantv1.DaemonMessage_ToolResponse:
-			if resp := m.ToolResponse; resp != nil {
-				conn.pendingToolRequestsMu.Lock()
-				ch, ok := conn.pendingToolRequests[resp.RequestId]
-				if ok {
-					delete(conn.pendingToolRequests, resp.RequestId)
-				}
-				conn.pendingToolRequestsMu.Unlock()
-				if ok {
-					ch <- &toolexec.ToolExecutionResponse{
-						RequestID:    resp.RequestId,
-						Success:      resp.Success,
-						IsError:      resp.IsError,
-						Content:      resp.Content,
-						Metadata:     resp.Metadata,
-						ErrorMessage: resp.ErrorMessage,
-						ErrorCode:    resp.ErrorCode,
-						Backgrounded: resp.Backgrounded,
-						// The connection's identity is gateway-assigned, never
-						// asserted by the daemon, so it is the trustworthy
-						// answer to "which machine ran this".
-						DaemonID: conn.daemonID,
-					}
-				}
-			}
-
-		case *reliantv1.DaemonMessage_Heartbeat:
-			s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, time.Now().UTC(), m.Heartbeat)
-			// Renew the reachability lease (last_stream_activity) on the
-			// keepalive so an idle-but-connected daemon doesn't decay to
-			// "offline". We write daemon_attachment DIRECTLY here (the gateway
-			// already owns direct writes to this table — see teardownConnection's
-			// DeleteDaemonAttachment) instead of publishing a daemonstate event.
-			// A dedicated EventHeartbeat would land on the shared daemon.v1.state.*
-			// stream, whose authoritative consumer lives in the control-plane repo
-			// and STRICTLY rejects unknown event types ("daemon state event unknown
-			// type") — so it would both error-spam and, worse, drop the event
-			// without renewing the lease. A direct touch renews the lease
-			// unconditionally and never feeds the workspace idle-suspend timer
-			// (which keys off EventActivity), preserving the exclusion above.
-			if err := s.database.TouchDaemonAttachmentIfNewer(ctx, conn.daemonID, time.Now().UTC()); err != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
-			}
-			// Persist heartbeat-carried workspace memory telemetry on the
-			// attachment record so the daemon registry (and the UI behind it)
-			// can surface memory pressure. limit==0 means the daemon has no
-			// cgroup accounting (local/mac) — nothing to record.
-			if hb := m.Heartbeat; hb != nil && hb.MemoryLimitBytes > 0 {
-				if err := s.database.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
-					int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
-					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
-				}
-			}
-			// Persist heartbeat-carried detected listener ports on the
-			// attachment record (same flow as the memory telemetry above) so
-			// the daemon registry can surface preview affordances. Written
-			// only when the set changed — heartbeats are 15s apart but port
-			// churn is rare. UpsertDaemonAttachment resets the column on
-			// re-attach, matching the empty initial cache key here.
-			if hb := m.Heartbeat; hb != nil {
-				portsKey := fmt.Sprint(hb.DetectedPorts)
-				if portsKey != conn.lastDetectedPortsKey {
-					if err := s.database.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
-						logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon detected ports", "error", err, "daemonID", conn.daemonID)
-					} else {
-						conn.lastDetectedPortsKey = portsKey
-					}
-				}
-			}
-
-		case *reliantv1.DaemonMessage_ProjectDiscovery:
-			if err := s.handleProjectDiscovery(ctx, conn, m.ProjectDiscovery); err != nil {
-				logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project discovery", "error", err, "daemonID", conn.daemonID)
-			}
-
-		case *reliantv1.DaemonMessage_LoadProjectConfigsResponse:
-			if err := s.handleLoadProjectConfigsResponse(ctx, conn, m.LoadProjectConfigsResponse); err != nil {
-				logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle load project configs response", "error", err, "daemonID", conn.daemonID)
-			}
-
-		case *reliantv1.DaemonMessage_ProjectConfigDelta:
-			if err := s.handleProjectConfigDelta(ctx, conn, m.ProjectConfigDelta); err != nil {
-				logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project config delta", "error", err, "daemonID", conn.daemonID)
-			}
-
-		case *reliantv1.DaemonMessage_KillProcessResponse:
-			if resp := m.KillProcessResponse; resp != nil {
-				if resp.Success {
-					logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" Kill process succeeded", "processID", resp.ProcessId)
-				} else {
-					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Kill process failed", "processID", resp.ProcessId, "error", resp.ErrorMessage)
-				}
-			}
-
-		case *reliantv1.DaemonMessage_DaemonCommandResponse:
-			if resp := m.DaemonCommandResponse; resp != nil {
-				conn.pendingCommandsMu.Lock()
-				ch, ok := conn.pendingCommands[resp.RequestId]
-				if ok {
-					delete(conn.pendingCommands, resp.RequestId)
-				}
-				conn.pendingCommandsMu.Unlock()
-				if ok {
-					ch <- resp
-				} else {
-					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Received daemon command response with no pending request",
-						"requestID", resp.RequestId, "commandType", resp.CommandType)
-				}
-			}
-
-		case *reliantv1.DaemonMessage_TerminalOutput:
-			if out := m.TerminalOutput; out != nil {
-				evt := &toolexec.TerminalOutputEvent{
-					SessionID: out.GetSessionId(),
-					Data:      out.GetData(),
-				}
-				conn.dispatchTerminalEvent(evt)
-			}
-
-		case *reliantv1.DaemonMessage_TerminalSessionEvent:
-			if evt := m.TerminalSessionEvent; evt != nil {
-				outEvt := &toolexec.TerminalOutputEvent{
-					SessionID: evt.GetSessionId(),
-				}
-				switch evt.GetEventType() {
-				case reliantv1.TerminalSessionEvent_EVENT_TYPE_CLOSED:
-					outEvt.Closed = true
-				case reliantv1.TerminalSessionEvent_EVENT_TYPE_ERROR:
-					outEvt.Error = evt.GetMessage()
-				}
-				conn.dispatchTerminalEvent(outEvt)
-			}
-
-		case *reliantv1.DaemonMessage_ProcessOutputChunk:
-			if chunk := m.ProcessOutputChunk; chunk != nil {
-				evt := &toolexec.ProcessOutputEvent{
-					ProcessID:  chunk.GetProcessId(),
-					Data:       chunk.GetData(),
-					Stream:     chunk.GetStream(),
-					Sequence:   chunk.GetSequence(),
-					IsComplete: chunk.GetIsComplete(),
-					ExitCode:   chunk.GetExitCode(),
-				}
-				conn.dispatchProcessOutputEvent(evt)
-			}
-
-		case *reliantv1.DaemonMessage_LocalModelHttpChunk:
-			conn.dispatchLocalModelChunk(m.LocalModelHttpChunk)
-
-		case *reliantv1.DaemonMessage_LocalModelInventory:
-			s.handleLocalModelInventory(ctx, conn, m.LocalModelInventory)
-
-		case *reliantv1.DaemonMessage_FileSystemChanged:
-			if err := s.handleFileSystemChanged(ctx, conn, m.FileSystemChanged); err != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle filesystem changed", "error", err)
-			}
-
-		case *reliantv1.DaemonMessage_DaemonCommandFailed:
-			if err := s.handleDaemonCommandFailed(ctx, conn, m.DaemonCommandFailed); err != nil {
-				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle daemon command failure", "error", err)
-			}
-
-		default:
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Unknown message type", "userID", conn.userID)
+		if conn.routeInboundReply(msg) {
+			continue
+		}
+		select {
+		case stateQueue <- msg:
+		case <-conn.done:
+			return conn.closedReason()
+		case <-ctx.Done():
+			return nil
 		}
 	}
+}
+
+// runInboundStateWorker applies one connection's state messages in the order
+// the daemon sent them. It drains whatever the receive loop queued, including
+// after the stream ends, and exits when the queue is closed.
+func (s *ToolsDaemonService) runInboundStateWorker(ctx context.Context, conn *daemonConnection, queue <-chan *reliantv1.DaemonMessage, streamEnded <-chan struct{}) {
+	for msg := range queue {
+		s.applyInboundState(ctx, conn, msg, streamEnded)
+	}
+}
+
+// applyInboundState handles one state message. A panic is contained to the
+// message: this runs on its own goroutine, where an unrecovered panic would
+// take down the whole gateway rather than one stream.
+func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemonConnection, msg *reliantv1.DaemonMessage, streamEnded <-chan struct{}) {
+	defer func() {
+		if r := recover(); r != nil {
+			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Panic applying daemon state message",
+				"panic", r, "daemonID", conn.daemonID, "messageType", fmt.Sprintf("%T", msg.GetMessage()))
+		}
+	}()
+
+	switch m := msg.Message.(type) {
+	case *reliantv1.DaemonMessage_Heartbeat:
+		// A heartbeat says the daemon is alive NOW. One that was still
+		// queued when the stream ended would renew the lease and tell the UI
+		// the daemon is up after it has gone, so it is dropped.
+		select {
+		case <-streamEnded:
+			return
+		default:
+		}
+		s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, time.Now().UTC(), m.Heartbeat)
+		// Renew the reachability lease (last_stream_activity) on the
+		// keepalive so an idle-but-connected daemon doesn't decay to
+		// "offline". We write daemon_attachment DIRECTLY here (the gateway
+		// already owns direct writes to this table — see teardownConnection's
+		// DeleteDaemonAttachment) instead of publishing a daemonstate event.
+		// A dedicated EventHeartbeat would land on the shared daemon.v1.state.*
+		// stream, whose authoritative consumer lives in the control-plane repo
+		// and STRICTLY rejects unknown event types ("daemon state event unknown
+		// type") — so it would both error-spam and, worse, drop the event
+		// without renewing the lease. A direct touch renews the lease
+		// unconditionally and never feeds the workspace idle-suspend timer
+		// (which keys off EventActivity), preserving the exclusion above.
+		if err := s.database.TouchDaemonAttachmentIfNewer(ctx, conn.daemonID, time.Now().UTC()); err != nil {
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
+		}
+		// Persist heartbeat-carried workspace memory telemetry on the
+		// attachment record so the daemon registry (and the UI behind it)
+		// can surface memory pressure. limit==0 means the daemon has no
+		// cgroup accounting (local/mac) — nothing to record.
+		if hb := m.Heartbeat; hb != nil && hb.MemoryLimitBytes > 0 {
+			if err := s.database.UpdateDaemonAttachmentMemory(ctx, conn.daemonID,
+				int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
+			}
+		}
+		// Persist heartbeat-carried detected listener ports on the
+		// attachment record (same flow as the memory telemetry above) so
+		// the daemon registry can surface preview affordances. Written
+		// only when the set changed — heartbeats are 15s apart but port
+		// churn is rare. UpsertDaemonAttachment resets the column on
+		// re-attach, matching the empty initial cache key here.
+		if hb := m.Heartbeat; hb != nil {
+			portsKey := fmt.Sprint(hb.DetectedPorts)
+			if portsKey != conn.lastDetectedPortsKey {
+				if err := s.database.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {
+					logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon detected ports", "error", err, "daemonID", conn.daemonID)
+				} else {
+					conn.lastDetectedPortsKey = portsKey
+				}
+			}
+		}
+
+	case *reliantv1.DaemonMessage_ProjectDiscovery:
+		if err := s.handleProjectDiscovery(ctx, conn, m.ProjectDiscovery); err != nil {
+			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project discovery", "error", err, "daemonID", conn.daemonID)
+		}
+
+	case *reliantv1.DaemonMessage_LoadProjectConfigsResponse:
+		if err := s.handleLoadProjectConfigsResponse(ctx, conn, m.LoadProjectConfigsResponse); err != nil {
+			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle load project configs response", "error", err, "daemonID", conn.daemonID)
+		}
+
+	case *reliantv1.DaemonMessage_ProjectConfigDelta:
+		if err := s.handleProjectConfigDelta(ctx, conn, m.ProjectConfigDelta); err != nil {
+			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle project config delta", "error", err, "daemonID", conn.daemonID)
+		}
+
+	case *reliantv1.DaemonMessage_LocalModelInventory:
+		s.handleLocalModelInventory(ctx, conn, m.LocalModelInventory)
+
+	case *reliantv1.DaemonMessage_FileSystemChanged:
+		if err := s.handleFileSystemChanged(ctx, conn, m.FileSystemChanged); err != nil {
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle filesystem changed", "error", err)
+		}
+
+	case *reliantv1.DaemonMessage_DaemonCommandFailed:
+		if err := s.handleDaemonCommandFailed(ctx, conn, m.DaemonCommandFailed); err != nil {
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to handle daemon command failure", "error", err)
+		}
+
+	default:
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Unknown message type", "userID", conn.userID)
+	}
+}
+
+// routeInboundReply delivers a message that answers something already in
+// flight — a command or tool response, a chunk of streamed output — and
+// reports whether msg was one. It never touches the database, which is what
+// lets the receive loop run it inline without making a reply wait on a write.
+func (c *daemonConnection) routeInboundReply(msg *reliantv1.DaemonMessage) bool {
+	switch m := msg.Message.(type) {
+	case *reliantv1.DaemonMessage_ToolResponse:
+		if resp := m.ToolResponse; resp != nil {
+			c.pendingToolRequestsMu.Lock()
+			ch, ok := c.pendingToolRequests[resp.RequestId]
+			if ok {
+				delete(c.pendingToolRequests, resp.RequestId)
+			}
+			c.pendingToolRequestsMu.Unlock()
+			if ok {
+				ch <- &toolexec.ToolExecutionResponse{
+					RequestID:    resp.RequestId,
+					Success:      resp.Success,
+					IsError:      resp.IsError,
+					Content:      resp.Content,
+					Metadata:     resp.Metadata,
+					ErrorMessage: resp.ErrorMessage,
+					ErrorCode:    resp.ErrorCode,
+					Backgrounded: resp.Backgrounded,
+					// The connection's identity is gateway-assigned, never
+					// asserted by the daemon, so it is the trustworthy
+					// answer to "which machine ran this".
+					DaemonID: c.daemonID,
+				}
+			}
+		}
+
+	case *reliantv1.DaemonMessage_DaemonCommandResponse:
+		if resp := m.DaemonCommandResponse; resp != nil {
+			c.pendingCommandsMu.Lock()
+			ch, ok := c.pendingCommands[resp.RequestId]
+			if ok {
+				delete(c.pendingCommands, resp.RequestId)
+			}
+			c.pendingCommandsMu.Unlock()
+			if ok {
+				ch <- resp
+			} else {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Received daemon command response with no pending request",
+					"requestID", resp.RequestId, "commandType", resp.CommandType)
+			}
+		}
+
+	case *reliantv1.DaemonMessage_KillProcessResponse:
+		if resp := m.KillProcessResponse; resp != nil {
+			if resp.Success {
+				logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" Kill process succeeded", "processID", resp.ProcessId)
+			} else {
+				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Kill process failed", "processID", resp.ProcessId, "error", resp.ErrorMessage)
+			}
+		}
+
+	case *reliantv1.DaemonMessage_TerminalOutput:
+		if out := m.TerminalOutput; out != nil {
+			c.dispatchTerminalEvent(&toolexec.TerminalOutputEvent{
+				SessionID: out.GetSessionId(),
+				Data:      out.GetData(),
+			})
+		}
+
+	case *reliantv1.DaemonMessage_TerminalSessionEvent:
+		if evt := m.TerminalSessionEvent; evt != nil {
+			outEvt := &toolexec.TerminalOutputEvent{
+				SessionID: evt.GetSessionId(),
+			}
+			switch evt.GetEventType() {
+			case reliantv1.TerminalSessionEvent_EVENT_TYPE_CLOSED:
+				outEvt.Closed = true
+			case reliantv1.TerminalSessionEvent_EVENT_TYPE_ERROR:
+				outEvt.Error = evt.GetMessage()
+			}
+			c.dispatchTerminalEvent(outEvt)
+		}
+
+	case *reliantv1.DaemonMessage_ProcessOutputChunk:
+		if chunk := m.ProcessOutputChunk; chunk != nil {
+			c.dispatchProcessOutputEvent(&toolexec.ProcessOutputEvent{
+				ProcessID:  chunk.GetProcessId(),
+				Data:       chunk.GetData(),
+				Stream:     chunk.GetStream(),
+				Sequence:   chunk.GetSequence(),
+				IsComplete: chunk.GetIsComplete(),
+				ExitCode:   chunk.GetExitCode(),
+			})
+		}
+
+	case *reliantv1.DaemonMessage_LocalModelHttpChunk:
+		c.dispatchLocalModelChunk(m.LocalModelHttpChunk)
+
+	default:
+		return false
+	}
+	return true
 }
 
 // ReportToolResult is a unary RPC handler that was previously used by daemons
@@ -1340,10 +1421,10 @@ func (s *ToolsDaemonService) handleFileSystemChanged(ctx context.Context, conn *
 // learnForgeNameForProject reads forge.yaml's `name` off the daemon that just
 // finished a clone and persists it on the project row.
 //
-// Dispatched onto its own goroutine, NOT awaited: the response it waits for is
-// delivered by the very receive loop that called this, so waiting here would
-// deadlock until the command timed out and stall every other message from this
-// daemon in the meantime (see forge_name_learn.go). The settle it follows is
+// Dispatched onto its own goroutine, NOT awaited: this runs on the
+// connection's inbound state worker, and waiting on a daemon round trip there
+// would stall every other state message from this daemon until the command
+// returned or timed out (see forge_name_learn.go). The settle it follows is
 // already committed, so nothing depends on the answer.
 //
 // conn.done bounds the goroutine: a daemon that disconnects mid-read releases

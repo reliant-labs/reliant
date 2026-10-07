@@ -17,10 +17,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	daemonv1 "github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1"
+	"github.com/reliant-labs/reliant/gen/controlplane/services/daemon/v1/controlplanev1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationcred"
+	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
@@ -29,15 +31,16 @@ import (
 
 // enforcingControlPlane behaves like control-plane#582: a daemon-bound
 // daemon:resume token works for its own daemon only, and only when daemon_id is
-// sent. Resuming flips the daemon from suspended to active.
+// sent. It serves controlplane.v1.DaemonService/ResumeDaemon, the one call
+// reliant makes to wake a machine; the daemon's lifecycle itself is read from
+// reliant's own daemons records.
 type enforcingControlPlane struct {
-	reliantv1connect.UnimplementedDaemonRegistryServiceHandler
-	mu        sync.Mutex
-	token     string
-	daemonID  string
-	suspended bool
-	resolves  int
-	resumes   int
+	controlplanev1connect.UnimplementedDaemonServiceHandler
+	mu       sync.Mutex
+	token    string
+	daemonID string
+	requests int // every call received, authorized or not
+	resumes  int
 }
 
 func (c *enforcingControlPlane) authorize(h http.Header, daemonID string) error {
@@ -53,47 +56,47 @@ func (c *enforcingControlPlane) authorize(h http.Header, daemonID string) error 
 	return nil
 }
 
-func (c *enforcingControlPlane) ResolveDaemon(_ context.Context, r *connect.Request[reliantv1.ResolveDaemonRequest]) (*connect.Response[reliantv1.ResolveDaemonResponse], error) {
+func (c *enforcingControlPlane) ResumeDaemon(_ context.Context, r *connect.Request[daemonv1.ResumeDaemonRequest]) (*connect.Response[daemonv1.ResumeDaemonResponse], error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	c.resolves++
+	c.requests++
 	if err := c.authorize(r.Header(), r.Msg.GetDaemonId()); err != nil {
 		return nil, err
 	}
-	status := reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
-	if c.suspended {
-		status = reliantv1.DaemonStatus_DAEMON_STATUS_IDLE
-	}
-	return connect.NewResponse(&reliantv1.ResolveDaemonResponse{
-		Found: true, Daemon: &reliantv1.DaemonInfo{DaemonId: c.daemonID, Status: status}}), nil
+	c.resumes++
+	return connect.NewResponse(&daemonv1.ResumeDaemonResponse{}), nil
 }
 
-func (c *enforcingControlPlane) ResumeDaemon(_ context.Context, r *connect.Request[reliantv1.ResumeDaemonRequest]) (*connect.Response[reliantv1.ResumeDaemonResponse], error) {
+func (c *enforcingControlPlane) resumeCount() int {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if err := c.authorize(r.Header(), r.Msg.GetDaemonId()); err != nil {
-		return nil, err
-	}
-	c.suspended = false
-	c.resumes++
-	return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
+	return c.resumes
+}
+
+func (c *enforcingControlPlane) requestCount() int {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.requests
 }
 
 type automationHarness struct {
-	repo      *db.Repo
-	cp        *enforcingControlPlane
-	activity  *PreflightDaemonCheckActivity
-	userID    string
-	daemonID  string
-	chatID    string
-	toolCalls *int
-	router    *toolexec.NATSDaemonRouter
-	mu        *sync.Mutex
+	repo        *db.Repo
+	cp          *enforcingControlPlane
+	activity    *PreflightDaemonCheckActivity
+	userID      string
+	daemonID    string
+	chatID      string
+	suspendedAt time.Time
+	toolCalls   *int
+	router      *toolexec.NATSDaemonRouter
+	mu          *sync.Mutex
 }
 
 // newAutomationHarness wires the REAL router, executor, preflight activity and
 // database to an in-process NATS server, a fake daemon that answers the tool
-// call, and the binding-enforcing control plane. No user JWT is ever set.
+// call, and the binding-enforcing control plane. The daemon's record says it
+// is suspended, as the control plane's lifecycle mirror would. No user JWT is
+// ever set.
 func newAutomationHarness(t *testing.T, launchKind core.TriggerEventKind) *automationHarness {
 	t.Helper()
 	return newAutomationHarnessWithChat(t, launchKind, nil)
@@ -119,9 +122,23 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, automationcred.Provider(daemonID), "rlat_stored"))
 	auth.SetUserJWT(userID, "") // unattended: no JWT
 
-	cp := &enforcingControlPlane{token: "rlat_stored", daemonID: daemonID, suspended: true}
+	// A managed machine the control plane has parked: its record is the
+	// registry's, and its phase is the control plane's lifecycle, mirrored.
+	managed := "managed"
+	now := time.Now().UTC()
+	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{
+		ID: daemonID, UserID: userID, DaemonType: &managed, CreatedAt: now, UpdatedAt: now,
+	}))
+	suspendedAt := now
+	applied, err := repo.ApplyDaemonLifecycle(ctx, db.DaemonLifecycleUpdate{
+		DaemonID: daemonID, Phase: string(daemonstate.LifecyclePhaseSuspended), ChangedAt: suspendedAt,
+	})
+	require.NoError(t, err)
+	require.True(t, applied)
+
+	cp := &enforcingControlPlane{token: "rlat_stored", daemonID: daemonID}
 	mux := http.NewServeMux()
-	mux.Handle(reliantv1connect.NewDaemonRegistryServiceHandler(cp))
+	mux.Handle(controlplanev1connect.NewDaemonServiceHandler(cp))
 	cpSrv := httptest.NewServer(mux)
 	t.Cleanup(cpSrv.Close)
 
@@ -140,7 +157,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 
 	router := toolexec.NewNATSDaemonRouter(nc,
 		toolexec.WithDatabase(repo),
-		toolexec.WithControlPlaneClient(reliantv1connect.NewDaemonRegistryServiceClient(http.DefaultClient, cpSrv.URL)),
+		toolexec.WithDaemonResumer(controlplane.NewDaemonClient(cpSrv.URL)),
 		toolexec.WithControlPlaneCredentials(automationcred.NewResolver(repo)))
 
 	projectID, chatID := uuid.NewString(), uuid.NewString()
@@ -159,7 +176,8 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	require.True(t, created)
 
 	return &automationHarness{
-		repo: repo, cp: cp, router: router, userID: userID, daemonID: daemonID, chatID: chatID, toolCalls: &calls, mu: &mu,
+		repo: repo, cp: cp, router: router, userID: userID, daemonID: daemonID, chatID: chatID,
+		suspendedAt: suspendedAt, toolCalls: &calls, mu: &mu,
 		activity: NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router)),
 	}
 }
@@ -176,6 +194,17 @@ func (h *automationHarness) preflight(t *testing.T) (PreflightDaemonCheckOutput,
 	var out PreflightDaemonCheckOutput
 	require.NoError(t, val.Get(&out))
 	return out, nil
+}
+
+// markReady mirrors the lifecycle event the control plane publishes once the
+// resumed machine is back up — newer than the suspension, so it wins.
+func (h *automationHarness) markReady(t *testing.T) {
+	t.Helper()
+	applied, err := h.repo.ApplyDaemonLifecycle(context.Background(), db.DaemonLifecycleUpdate{
+		DaemonID: h.daemonID, Phase: string(daemonstate.LifecyclePhaseReady), ChangedAt: h.suspendedAt.Add(time.Second),
+	})
+	require.NoError(t, err)
+	require.True(t, applied, "a later lifecycle event must replace the suspension")
 }
 
 // Every launch a stored trigger makes — a schedule, a webhook delivery, a
@@ -196,16 +225,17 @@ func TestUnattendedFireWithoutJWTResumesPinnedDaemonOnce(t *testing.T) {
 			require.NoError(t, err)
 			assert.True(t, out.DaemonAvailable)
 
-			assert.Equal(t, 1, h.cp.resumes, "the daemon is resumed exactly once")
+			assert.Equal(t, 1, h.cp.resumeCount(), "the daemon is resumed exactly once")
 			assert.Equal(t, h.daemonID, out.DaemonID)
 
 			// The woken daemon now answers a tool call, and that call wakes
 			// nothing. Tool time holds no credential at all — the token is
 			// wake-only — so this also shows the run needs none after preflight.
+			h.markReady(t)
 			_, err = h.router.SendToolRequestSyncWithSelector(context.Background(), h.userID,
 				&toolexec.ToolExecutionRequest{RequestID: "r1", ToolName: "ping"}, &toolexec.DaemonSelector{ID: h.daemonID})
 			require.NoError(t, err)
-			assert.Equal(t, 1, h.cp.resumes, "tool-time traffic never resumes")
+			assert.Equal(t, 1, h.cp.resumeCount(), "tool-time traffic never resumes")
 			h.mu.Lock()
 			defer h.mu.Unlock()
 			assert.Equal(t, 1, *h.toolCalls, "the tool call reached the woken daemon")
@@ -227,7 +257,7 @@ func TestAttendedRunWithoutJWTDoesNotUseAutomationToken(t *testing.T) {
 
 			_, err := h.preflight(t)
 			require.Error(t, err)
-			assert.Zero(t, h.cp.resumes, "an attended run must not wake the daemon with the stored token")
+			assert.Zero(t, h.cp.resumeCount(), "an attended run must not wake the daemon with the stored token")
 		})
 	}
 }
@@ -248,8 +278,8 @@ func TestNoMachineUnattendedRunNeverWakes(t *testing.T) {
 			require.NoError(t, err)
 			assert.False(t, out.DaemonAvailable)
 			assert.Empty(t, out.DaemonID)
-			assert.Zero(t, h.cp.resolves, "a no-machine run never asks the control plane for a daemon")
-			assert.Zero(t, h.cp.resumes, "a no-machine run never wakes one")
+			assert.Zero(t, h.cp.requestCount(), "a no-machine run never calls the control plane")
+			assert.Zero(t, h.cp.resumeCount(), "a no-machine run never wakes one")
 		})
 	}
 }

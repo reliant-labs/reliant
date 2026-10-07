@@ -31,6 +31,7 @@ type Repository interface {
 	GetPendingQuestionByChatID(ctx context.Context, chatID string) (*db.Question, error)
 	ResolveQuestion(ctx context.Context, id string, responseData *string) error
 	EmitQuestionUpdate(ctx context.Context, chatID string, update db.QuestionUpdate) error
+	LockChatRunControl(ctx context.Context, chatID string) (release func(), err error)
 }
 
 // TemporalClient is the subset of the Temporal SDK client this service needs.

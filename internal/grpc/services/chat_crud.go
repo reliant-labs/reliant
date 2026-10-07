@@ -883,6 +883,14 @@ func (s *ChatService) PauseChat(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("chat has no workflow"))
 	}
 
+	// From here to the paused-status write is one critical section: a
+	// SendMessage that arrives while it runs waits, then sees the run paused
+	// and resumes it. Taken before the tool cancel, not just around the
+	// signal, so the order the server received the two requests in is the
+	// order they take effect. See runs.Service.LockRunControl.
+	release := s.runs.LockRunControl(ctx, req.Msg.ChatId)
+	defer release()
+
 	// Kill the tools BEFORE freeing the workflow to re-dispatch. The pause
 	// signal below cancels the ExecuteTools activity at its next step
 	// boundary, which frees the workflow to move on -- if that happened
@@ -944,6 +952,12 @@ func (s *ChatService) ResumeChat(
 	if chat.WorkflowID == nil || *chat.WorkflowID == "" {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("chat has no workflow"))
 	}
+
+	// A resume is a signal plus a status write, like a pause; interleaved
+	// with one, the row can end up saying the opposite of what the run is
+	// doing. See runs.Service.LockRunControl.
+	release := s.runs.LockRunControl(ctx, req.Msg.ChatId)
+	defer release()
 
 	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId)
 	if err != nil {
