@@ -11,7 +11,7 @@
 #   services/deploy/v1/deploy.proto -> web/src/gen/controlplane/services/deploy/v1/deploy_pb.ts
 #   services/billing/v1/billing.proto -> gen/controlplane/services/billing/v1/*.go
 #
-# Regenerate with:  npm run proto:generate:controlplane
+# Regenerate with:  make proto-generate-controlplane
 # (after `node .github/scripts/sync-controlplane-proto.mjs` when the contract changed)
 version: v2
 managed:
@@ -41,17 +41,22 @@ plugins:
   # A second copy would register forge/v1/forge.proto twice and panic at init.
   # buf.validate is excluded for the same reason: protovalidate's descriptor is
   # already registered by the BSR package this module links.
-  - remote: buf.build/protocolbuffers/go:v1.36.12
+  #
+  # Every plugin is local and pinned, exactly as in buf.gen.yaml (see its
+  # header). protoc-gen-es runs at v2.12.0 here and v2.15.0 there: they write
+  # different directories, and the two outputs were generated at those
+  # versions. Moving this one to v2.15.0 is a regeneration, not a config edit.
+  - local: [go, tool, protoc-gen-go]
     out: gen/controlplane
     exclude_types: [forge.v1, buf.validate]
     opt:
       - paths=source_relative
-  - remote: buf.build/connectrpc/go:v1.21.0
+  - local: [go, tool, protoc-gen-connect-go]
     out: gen/controlplane
     exclude_types: [forge.v1, buf.validate]
     opt:
       - paths=source_relative
-  - remote: buf.build/bufbuild/es:v2.12.0
+  - local: [node, tools/protoc-gen-es/node_modules/protoc-gen-es-v2.12.0/bin/protoc-gen-es]
     out: web/src/gen/controlplane
     # forge/v1/forge.proto is imported for method annotations only; it has to be
     # emitted too or the generated descriptors reference a file that is absent.

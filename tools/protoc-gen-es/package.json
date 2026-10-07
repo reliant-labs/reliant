@@ -1,0 +1,10 @@
+{
+  "name": "reliant-protoc-gen-es",
+  "private": true,
+  "description": "Version-pinned protoc-gen-es for `make proto-generate`. One alias per version a buf.gen*.yaml template runs; the alias name carries the version so the template path names it too. See CONTRIBUTING.md, 'Code generation'.",
+  "license": "BUSL-1.1",
+  "devDependencies": {
+    "protoc-gen-es-v2.12.0": "npm:@bufbuild/protoc-gen-es@2.12.0",
+    "protoc-gen-es-v2.15.0": "npm:@bufbuild/protoc-gen-es@2.15.0"
+  }
+}

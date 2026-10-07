@@ -80,9 +80,6 @@ jobs:
       # the jobs. A new top-level directory nobody thought about makes this
       # true and everything runs, which is the safe direction to be wrong in.
       non_gomod: ${{ steps.filter.outputs.non_gomod }}
-      # true when the PR touches an input of the TS/shortcuts generators (or
-      # their committed output). Gates only the TS half of `generate-drift`.
-      gen_inputs: ${{ steps.gen_inputs.outputs.gen_inputs }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -149,37 +146,6 @@ jobs:
             echo "go.mod/go.sum ONLY — the pure-Node jobs will skip."
             echo "Every Go job still runs: compiling and testing against the"
             echo "new dependency is the point of a version bump."
-          fi
-
-      # Its own step, not folded into the one above, so it computes its range
-      # independently and can default to "run" on ANY failure: no `-e`, and an
-      # event with no PR base (a push) runs everything.
-      - name: Classify generator inputs
-        id: gen_inputs
-        env:
-          BASE_REF: ${{ github.base_ref }}
-          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-        run: |
-          set -uo pipefail
-          run_all() { echo "gen_inputs=true" >> "$GITHUB_OUTPUT"; echo "$1 — the TS drift check runs."; exit 0; }
-
-          [ -n "${BASE_REF}" ] && [ -n "${HEAD_SHA}" ] || run_all "no PR base/head"
-          base="$(git merge-base "origin/${BASE_REF}" "${HEAD_SHA}")" || run_all "merge-base failed"
-          changed="$(git diff --name-only "${base}" "${HEAD_SHA}")" || run_all "diff failed"
-          [ -n "${changed}" ] || run_all "empty diff"
-
-          # Everything `make proto-generate generate-shortcuts` reads, plus
-          # what it writes: a hand edit to committed generated code is drift
-          # too. The workflow itself is listed so a change to this gate is
-          # proven on its own PR.
-          inputs='^(proto/|proto-vendor/|buf\.(gen[^/]*\.ya?ml|ya?ml|lock)$|web/src/gen/|config/shortcuts\.yaml$|tools/docgen/shortcuts/|web/src/store/shortcutsData\.generated\.ts$|generated/docs-source/settings/keyboard-shortcuts\.generated\.md$|Makefile$|go\.(mod|sum)$|\.github/workflows/pr-ci\.yml$)'
-          if echo "${changed}" | grep -qE "${inputs}"; then
-            echo "--- generator inputs touched ---"
-            echo "${changed}" | grep -E "${inputs}"
-            echo "gen_inputs=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "gen_inputs=false" >> "$GITHUB_OUTPUT"
-            echo "No proto, buf template, shortcut or generated-TS file changed — the TS drift check skips."
           fi
 
   # Catches what the pre-commit hook would have, for the cases where it did not
@@ -263,29 +229,37 @@ jobs:
   #
   # This runs in PARALLEL with the test jobs rather than in front of them, so
   # it costs wall-clock only if it is the slowest job (it is not — measured
-  # ~14s of generate locally, against 190s of Go tests).
+  # 20-65s for a full `make generate-all` locally, against 190s of Go tests).
   #
   # It is a hard gate: if regenerating produces a diff, the fix is to commit
   # that diff in the change that caused it.
+  #
+  # It runs `make generate-all` — EVERY generator, the exact command a
+  # contributor runs — on every PR and every push to main, with no path filter.
+  # Two consequences that used to be false:
+  #
+  #   - Nothing it runs is remote. The buf plugins are local `go tool` /
+  #     tools/protoc-gen-es binaries pinned in this repo, and buf itself is
+  #     the Makefile's pinned build, so the Buf Schema Registry's rate limit
+  #     (`resource_exhausted`) can no longer fail it, and no BUF_API_KEY is
+  #     needed. A path filter existed only to spare the BSR.
+  #   - The docs references are gated too: cli.md (forge's command tree, so a
+  #     forge pin bump changes it), models.md/.mdx, tools.md and the rest of
+  #     `make generate`. Ungated, they drifted on main and every contributor
+  #     who ran `make generate` inherited someone else's diff.
+  #
+  # DELIBERATELY NOT GATED on the `changes` job: a forge bump "only" touches
+  # go.mod, but it CHANGES CODEGEN OUTPUT (cli.md, at minimum) — a real failure
+  # mode this repo hit — and this job is the only thing that catches it.
   generate-drift:
     name: Generated code is up to date
-    # The GO half is DELIBERATELY NOT GATED on the `changes` job, even though
-    # a version bump "only" touches go.mod. A forge bump CHANGES CODEGEN OUTPUT
-    # — that is a real failure mode this repo hit, not a hypothetical — and
-    # this job is the only thing that catches it. It is the single most
-    # important job to keep on a dependency bump.
-    #
-    # `needs: changes` is only for the TS step's path filter. `!cancelled()`
-    # keeps the job (and so the Go half) running even if `changes` fails, and
-    # the TS step treats a missing output as "run" — a broken classifier can
-    # only make this job do MORE.
-    needs: changes
-    if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
+      # The Makefile pins GOTOOLCHAIN to go.mod's version for generation, so
+      # this must install that same version or `go` would download it again.
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
@@ -300,39 +274,35 @@ jobs:
           restore-keys: |
             go-build-drift-${{ runner.os }}-
 
-      # buf-setup-action checks the runner tool cache (tc.find) before it
-      # asks the GitHub releases API where to download from. Restoring that
-      # directory skips the API call and the download — the API call is what
-      # rate-limited control-plane's buf install. The remote plugins run on
-      # the BSR, so the CLI is the only buf artifact there is to cache.
-      - name: Cache buf CLI
+      # protoc-gen-es is a node script, pinned by tools/protoc-gen-es's
+      # lockfile; `make` runs `npm ci` there itself.
+      - name: Set up Node
+        uses: actions/setup-node@v6
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: tools/protoc-gen-es/package-lock.json
+
+      # The Makefile builds buf and sqlc from source at the versions it pins,
+      # into versioned paths it skips when present. Caching those two files
+      # makes that a no-op on every run but the first after a bump.
+      - name: Read pinned generator versions
+        id: pins
+        run: |
+          set -euo pipefail
+          echo "buf=$(sed -n 's/^BUF_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
+          echo "sqlc=$(sed -n 's/^SQLC_VERSION := //p' Makefile)" >> "$GITHUB_OUTPUT"
+
+      - name: Cache pinned buf and sqlc
         uses: actions/cache@v4
         with:
-          path: ${{ runner.tool_cache }}/buf/1.57.0
-          key: buf-cli-${{ runner.os }}-${{ runner.arch }}-1.57.0
+          path: |
+            ~/go/bin/buf-${{ steps.pins.outputs.buf }}
+            ~/go/bin/sqlc-${{ steps.pins.outputs.sqlc }}
+          key: gen-bins-${{ runner.os }}-${{ runner.arch }}-buf-${{ steps.pins.outputs.buf }}-sqlc-${{ steps.pins.outputs.sqlc }}
 
-      - name: Install buf
-        uses: bufbuild/buf-setup-action@v1
-        with:
-          version: '1.57.0'
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          buf_api_token: ${{ secrets.BUF_API_KEY }}
-
-      - name: Generate Go code
-        run: make generate-go
-
-      # The committed TypeScript: web/src/gen/** from buf.gen.yaml's es
-      # plugin, and web/src/store/shortcutsData.generated.ts. `make
-      # generate-go` never touched either, so both drifted unchecked — while
-      # the web and e2e jobs' comments said this job verified them. (It did
-      # cover web/src/gen/controlplane/, which proto-generate-go regenerates.)
-      # `make proto-generate` is the exact command a contributor runs. Every
-      # buf plugin is remote, so this needs no npm install; the whole step is
-      # a few seconds. It skips only when `changes` positively reports that
-      # no generator input changed.
-      - name: Generate TypeScript code
-        if: needs.changes.outputs.gen_inputs != 'false'
-        run: make proto-generate generate-shortcuts
+      - name: Regenerate everything
+        run: make generate-all
 
       # The published docs are generated too: the CLI/tools/models/types
       # references, the changelog page and the Mintlify .mdx conversions. If a
@@ -352,7 +322,7 @@ jobs:
           set -euo pipefail
           drift="$(git status --porcelain --untracked-files=all)"
           if [ -n "${drift}" ]; then
-            echo "::error::Generated code is out of date. Run 'make generate-go proto-generate generate-shortcuts' and commit the result."
+            echo "::error::Generated code is out of date. Run 'make generate-all' and commit the result."
             echo "${drift}"
             echo "--- full diff (tracked files) ---"
             git diff

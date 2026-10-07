@@ -8,7 +8,7 @@
 #     build never touches the running process — Air only swaps on success,
 #     so mid-edit broken trees don't take the api server down
 #   - no buf-generate pre_cmd: codegen on every save is slow and surprising;
-#     run `buf generate` explicitly when protos change
+#     run `make proto-generate` explicitly when protos change
 # Env (PORT, DATABASE_URL, …) comes from forge's host phase, not from here.
 root = "."
 testdata_dir = "testdata"

@@ -9,7 +9,7 @@ PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 echo "🚀 Quick Installing Reliant..."
 
-# Ensure web dependencies are installed (needed for protoc-gen-es)
+# Ensure web dependencies are installed
 cd "$PROJECT_ROOT"
 if [ ! -d "web/node_modules" ]; then
     echo "📦 Installing web dependencies..."
@@ -31,9 +31,9 @@ go run tools/docgen/celref/main.go internal/workflow/v3 internal/workflow/v3/ref
 go run tools/docgen/refcheck/main.go
 go run tools/docgen/shortcuts/main.go config/shortcuts.yaml web/src/store/shortcutsData.generated.ts generated/docs-source/settings/keyboard-shortcuts.generated.md
 
-# Generate protobuf code
+# Generate protobuf code (pinned buf + local plugins)
 echo "📦 Generating protobuf code..."
-PATH="$PROJECT_ROOT/web/node_modules/.bin:$PATH" buf generate
+make proto-generate
 
 # Build V2 backend
 echo "📦 Building V2 backend..."

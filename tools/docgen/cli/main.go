@@ -32,34 +32,43 @@ func main() {
 	}
 
 	outputFile := os.Args[1]
-
-	// The reference is committed, so it must not depend on who generated it.
-	// Some help text resolves a real path at construction time (the shared
-	// credentials file: $FORGE_HOME, $XDG_CONFIG_HOME, else $HOME/.config/…),
-	// which baked the generating developer's home directory into cli.md.
-	// With all three unset, those resolvers fall back to their portable
-	// "~/.config/forge/credentials.json" spelling.
-	for _, name := range []string{"HOME", "FORGE_HOME", "XDG_CONFIG_HOME"} {
-		if err := os.Unsetenv(name); err != nil {
-			fmt.Fprintf(os.Stderr, "Error clearing %s: %v\n", name, err)
-			os.Exit(1)
-		}
+	cmdCount, err := generate(outputFile)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		os.Exit(1)
 	}
+
+	fmt.Printf("Generated CLI reference: %s (%d commands)\n", outputFile, cmdCount)
+}
+
+// generate writes the CLI reference to outputFile and returns how many
+// commands it documents. It CLEARS the process environment first.
+func generate(outputFile string) (int, error) {
+	// The reference is committed, so it must not depend on who generated it,
+	// and the command tree reads the environment while it is BUILT: flag
+	// defaults like --server (RELIANT_SERVER_URL), --port (TOOLS_DAEMON_PORT)
+	// and --tls-cert (TLS_CERT_FILE) come from env first, and some help text
+	// resolves a real path ($FORGE_HOME, $XDG_CONFIG_HOME, else
+	// $HOME/.config/…). Run inside a dev stack, that baked
+	// `http://localhost:8090` into cli.md as the --server default.
+	//
+	// So build the tree from an EMPTY environment, not a list of known
+	// offenders — the next flag that reads an env var would slip past a list.
+	// What remains documents the binary's compiled-in defaults (the hosted
+	// endpoints, ~/.config/forge/credentials.json), which is what a user who
+	// installs it gets.
+	os.Clearenv()
 
 	root := commands.NewRootCmd()
 	markdown, cmdCount := generateMarkdown(root)
 
 	if err := os.MkdirAll(filepath.Dir(outputFile), 0755); err != nil {
-		fmt.Fprintf(os.Stderr, "Error creating output directory: %v\n", err)
-		os.Exit(1)
+		return 0, fmt.Errorf("creating output directory: %w", err)
 	}
-
 	if err := os.WriteFile(outputFile, []byte(markdown), 0644); err != nil {
-		fmt.Fprintf(os.Stderr, "Error writing output: %v\n", err)
-		os.Exit(1)
+		return 0, fmt.Errorf("writing output: %w", err)
 	}
-
-	fmt.Printf("Generated CLI reference: %s (%d commands)\n", outputFile, cmdCount)
+	return cmdCount, nil
 }
 
 func generateMarkdown(root *cobra.Command) (string, int) {

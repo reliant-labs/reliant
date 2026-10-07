@@ -417,29 +417,27 @@ try {
 
     Write-ColorOutput "Dependencies ready" "Green"
 
-    # Generate protobuf code
+    # Generate protobuf code through `make proto-generate`, which brings its
+    # own pinned buf and local plugins (CONTRIBUTING.md, "Code generation").
+    # Generated code is committed, so a machine without make runs against the
+    # checked-in output rather than regenerating it some other way.
     Write-Step "Generating protobuf code..."
     Push-Location $PROJECT_ROOT
-    if (Test-Command "buf") {
-        # Add Go bin and node_modules/.bin to PATH for protoc plugins
-        $goBin = Join-Path $env:USERPROFILE "go\bin"
-        $nodeBin = "$WEB_DIR\node_modules\.bin"
-        $env:PATH = "$goBin;$nodeBin;$env:PATH"
-
-        # Run buf generate - temporarily allow errors since buf outputs info to stderr
+    if (Test-Command "make") {
+        # Temporarily allow errors since buf outputs info to stderr
         $prevErrorAction = $ErrorActionPreference
         $ErrorActionPreference = "Continue"
-        & buf generate 2>&1 | Out-File -Append $LOG_FILE -Encoding UTF8
-        $bufExitCode = $LASTEXITCODE
+        & make proto-generate 2>&1 | Out-File -Append $LOG_FILE -Encoding UTF8
+        $genExitCode = $LASTEXITCODE
         $ErrorActionPreference = $prevErrorAction
-        if ($bufExitCode -ne 0) {
+        if ($genExitCode -ne 0) {
             Write-ColorOutput "Failed to generate protobuf code. Check $LOG_FILE for details" "Red"
             Get-Content $LOG_FILE -Tail 20
             exit 1
         }
         Write-ColorOutput "Protobuf code generated" "Green"
     } else {
-        Write-ColorOutput "buf not installed, skipping proto generation..." "Yellow"
+        Write-ColorOutput "make not installed, skipping proto generation (generated code is committed)..." "Yellow"
     }
     Pop-Location
 

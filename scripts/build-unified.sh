@@ -160,7 +160,6 @@ mkdir -p "$DIST_DIR"
 mkdir -p "$RESOURCES_DIR/bin"
 mkdir -p "$ELECTRON_DIR/build"
 
-# Install web dependencies early (needed for protoc-gen-es used by buf generate)
 print_step "Installing web dependencies..."
 cd "$WEB_DIR"
 if [ ! -d "node_modules" ]; then
@@ -168,23 +167,16 @@ if [ ! -d "node_modules" ]; then
     run_cmd npm ci --legacy-peer-deps
 fi
 
-# Generate protobuf code
+# Generate protobuf code with the pinned buf and local plugins
+# (CONTRIBUTING.md, "Code generation").
 print_step "Generating protobuf code..."
 cd "$PROJECT_ROOT"
-if command_exists buf; then
-    # Add web/node_modules/.bin to PATH for protoc-gen-es
-    export PATH="$WEB_DIR/node_modules/.bin:$PATH"
-    if [[ "$VERBOSE" == "true" ]]; then
-        buf generate
-    else
-        buf generate > /dev/null 2>&1
-    fi
-    print_success "Protobuf code generated"
+if [[ "$VERBOSE" == "true" ]]; then
+    make proto-generate
 else
-    print_error "buf not installed - proto generation skipped"
-    echo "Install buf: https://buf.build/docs/installation"
-    exit 1
+    make proto-generate > /dev/null 2>&1
 fi
+print_success "Protobuf code generated"
 
 # Function to build Go backend for specific platform
 build_backend_for_platform() {

@@ -3,6 +3,8 @@
 # tree without generated code.
 #
 # Usage: scripts/proto-generate-atomic.sh <buf-template> <out-dir> [<out-dir>...]
+# Run it through `make proto-generate-controlplane`, which supplies the pinned
+# buf ($BUF), the pinned plugins and the pinned Go toolchain.
 #
 # The out-dirs are the template's plugin `out:` directories, relative to the
 # repo root. They are regenerated WHOLESALE: anything not produced by this run
@@ -46,7 +48,9 @@ mkdir -p tmp
 staging=$(mktemp -d "$repo_root/tmp/proto-generate.XXXXXX")
 trap 'rm -rf "$staging"' EXIT
 
-PATH="$repo_root/web/node_modules/.bin:$PATH" buf generate --template "$template" -o "$staging"
+# BUF is the Makefile's pinned buf binary (`make proto-generate-controlplane`);
+# the templates' plugins are all local and resolve relative to the repo root.
+"${BUF:-buf}" generate --template "$template" -o "$staging"
 
 for dir in "$@"; do
   if [[ ! -d "$staging/$dir" ]] || [[ -z "$(ls -A "$staging/$dir")" ]]; then

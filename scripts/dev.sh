@@ -282,33 +282,17 @@ fi
 
 echo -e "${GREEN}✅ Dependencies ready${NC}"
 
-# Verify protoc-gen-es was installed (required for buf generate)
-if [ ! -x "$WEB_DIR/node_modules/.bin/protoc-gen-es" ]; then
-    echo -e "${RED}❌ protoc-gen-es not found in web/node_modules/.bin${NC}"
-    echo -e "${RED}   Try: cd web && npm install @bufbuild/protoc-gen-es${NC}"
-    exit 1
-fi
-
-# Generate protobuf code
+# Generate protobuf code. `make proto-generate` brings its own pinned buf and
+# local plugins (CONTRIBUTING.md, "Code generation"), so nothing here reaches
+# the Buf Schema Registry and no proxy workaround is needed.
 print_step "Generating protobuf code..."
 cd "$PROJECT_ROOT"
-if command_exists buf; then
-    # Temporarily unset proxy variables for buf generate (npx doesn't play nice with Proxyman)
-    # Add web/node_modules/.bin to PATH for protoc-gen-es
-    BUF_PATH="$PROJECT_ROOT/web/node_modules/.bin:$(command -v buf | xargs dirname):$PATH"
-    # Run buf in a clean environment to avoid Proxyman proxy/TLS vars interfering
-    env -i HOME="$HOME" USER="${USER:-$(whoami)}" TMPDIR="${TMPDIR:-/tmp}" \
-        PATH="$BUF_PATH" \
-        buf generate 2>&1 | tee -a "$LOG_FILE"
-    if [ ${PIPESTATUS[0]} -ne 0 ]; then
-        echo -e "${RED}❌ Failed to generate protobuf code${NC}"
-        exit 1
-    fi
-    echo -e "${GREEN}✅ Protobuf code generated${NC}"
-else
-    echo -e "${YELLOW}⚠️  buf not installed, skipping proto generation...${NC}"
-    echo "buf not found, skipping proto generation" >> "$LOG_FILE"
+make proto-generate 2>&1 | tee -a "$LOG_FILE"
+if [ ${PIPESTATUS[0]} -ne 0 ]; then
+    echo -e "${RED}❌ Failed to generate protobuf code${NC}"
+    exit 1
 fi
+echo -e "${GREEN}✅ Protobuf code generated${NC}"
 
 # Generate docs, shortcuts, and presets from sources of truth
 # Source: config/shortcuts.yaml -> web/src/store/shortcutsData.generated.ts

@@ -127,9 +127,21 @@ fi
 echo "==> GOWORK=off go build ./..."
 GOWORK=off go build ./...
 
+# ── Regenerate what the pin feeds ────────────────────────────────────────
+# A forge bump changes generated output: cli.md embeds forge's whole command
+# tree, and MVS can raise google.golang.org/protobuf or connect, which are the
+# protoc plugins' versions. CI's "Generated code is up to date" gate fails a
+# pin bump that does not carry that output, so produce it here, through the
+# same pinned `make` target CI runs.
+echo "==> make generate-all"
+make --no-print-directory generate-all
+
 echo
 echo "pinned forge -> ${source_desc} (${sha})"
 printf '  %-40s %s -> %s\n' "${FORGE_MOD}" "${before_forge:-<absent>}" "${after_forge}"
 echo
-echo "Files changed: go.mod, go.sum. Review and commit them yourself —"
-echo "this script deliberately does not commit (see dev-docs/pinning.md)."
+echo "Files changed (go.mod, go.sum and any regenerated output):"
+git status --short
+echo
+echo "Review and commit them yourself — this script deliberately does not"
+echo "commit (see dev-docs/pinning.md)."
