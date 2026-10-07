@@ -7900,7 +7900,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vdescription\x18\x03 \x01(\tR\vdescription\"G\n" +
 	"\x13NodeRouterCandidate\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\"\xef\n" +
+	"\vdescription\x18\x02 \x01(\tR\vdescription\"\xca\n" +
 	"\n" +
 	"\n" +
 	"RouterArgs\x12h\n" +
@@ -7924,7 +7924,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:^\x8a\xb5\x18Z\n" +
-	"\x06router\x12\x06Router\x1a7Route to a workflow or node based on LLM classification \x01*\x04flow2\aGitForkJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06R\x06promptR\x0finclude_history\"`\n" +
+	"\x06router\x12\x06Router\x1a7Route to a workflow or node based on LLM classification \x01*\x04flow2\aGitFork\"`\n" +
 	"\x04Edge\x12\x12\n" +
 	"\x04from\x18\x01 \x01(\tR\x04from\x12*\n" +
 	"\x05cases\x18\x02 \x03(\v2\x14.reliant.v1.EdgeCaseR\x05cases\x12\x18\n" +

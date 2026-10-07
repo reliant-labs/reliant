@@ -186,7 +186,6 @@ message DaemonRegister {
   string platform = 4; // OS platform (darwin, linux, windows)
   string working_dir = 5; // Current working directory
   repeated string capabilities = 6; // Supported tools/features
-  reserved 7;
   string name = 8; // Human-friendly daemon name (default: hostname)
   map<string, string> labels = 9; // User-defined labels for daemon selection
   string daemon_type = 10; // Daemon type: "local" or "cloud"
