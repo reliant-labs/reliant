@@ -24,15 +24,20 @@
  *
  * "New workspace" is a labeled action under the groups, next to the thing it
  * creates. It is not a second header icon competing with compose.
+ *
+ * Each group's folder button opens that workspace's Files and Git, the same
+ * `MobileWorkspaceSheet` a chat's header opens, so a workspace can be looked
+ * at without starting or opening a chat in it.
  */
 
-import { useCallback, useMemo, useState } from "react";
+import { Suspense, lazy, useCallback, useMemo, useState } from "react";
 import { Link, useNavigate } from "@tanstack/react-router";
 import {
   AlertCircle,
   Archive,
   ChevronDown,
   ChevronRight,
+  FolderGit2,
   GitBranch,
   GitBranchPlus,
   Loader2,
@@ -53,6 +58,23 @@ import {
   MobileScreenHeader,
 } from "./MobileChrome";
 import { MobileCreateWorkspaceSheet } from "./MobileCreateWorkspaceSheet";
+
+// Lazy: the sheet brings the file tree, git status and plan panels, and this
+// list is the landing screen whose chunk gates first paint. The chat screen
+// imports the same module, so warming that route (MobileNavigationFeedback)
+// usually has it cached before anyone taps.
+const MobileWorkspaceSheet = lazy(() =>
+  import("./MobileWorkspaceSheet").then((m) => ({ default: m.MobileWorkspaceSheet })),
+);
+
+/** Stands in for the workspace sheet while its chunk loads, so the tap visibly lands. */
+function WorkspaceSheetFallback() {
+  return (
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center bg-background">
+      <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+    </div>
+  );
+}
 import { useCapability } from "../../lib/surfaceContext";
 import { ChatState } from "../../gen/reliant/v1/chat_pb";
 // The DOMAIN Chat (types/chat), not the raw protobuf one: it is
@@ -71,6 +93,8 @@ interface ChatGroup {
   worktreeName: string;
   worktreeBranch: string;
   isMain: boolean;
+  /** False for the fallback group of chats whose worktree is gone. */
+  hasWorktree: boolean;
   chats: Chat[];
   hasActivity: boolean;
   lastActivityAt: number;
@@ -103,6 +127,7 @@ function buildGroups(
         worktreeName: worktree?.name ?? "Unknown workspace",
         worktreeBranch: worktree?.branch ?? "",
         isMain: worktree?.is_main ?? false,
+        hasWorktree: !!worktree,
         chats: [chat],
         hasActivity: false,
         lastActivityAt: 0,
@@ -119,6 +144,7 @@ function buildGroups(
       worktreeName: mainWorktree.name,
       worktreeBranch: mainWorktree.branch,
       isMain: true,
+      hasWorktree: true,
       chats: [],
       hasActivity: false,
       lastActivityAt: 0,
@@ -225,6 +251,8 @@ interface GroupHeaderProps {
   isCollapsed: boolean;
   onToggle: () => void;
   onArchive: () => void;
+  /** Absent when the workspace can't be browsed (its worktree is gone). */
+  onBrowse?: () => void;
 }
 
 /**
@@ -238,7 +266,7 @@ interface GroupHeaderProps {
  * one. It can't live on the scroller as a `space-y`, because Virtuoso renders
  * group headers and items as flat siblings.
  */
-function GroupHeader({ group, isCollapsed, onToggle, onArchive }: GroupHeaderProps) {
+function GroupHeader({ group, isCollapsed, onToggle, onArchive, onBrowse }: GroupHeaderProps) {
   const capsBottom = isCollapsed || group.chats.length === 0;
 
   return (
@@ -291,6 +319,20 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive }: GroupHeaderPro
           </span>
         </button>
 
+        {/* Files and Git without opening a chat. Same glyph and same sheet as
+            the chat header's "Open workspace", so it reads as the same place
+            reached from somewhere else. */}
+        {onBrowse && (
+          <button
+            type="button"
+            onClick={onBrowse}
+            aria-label={`Files and Git for ${group.worktreeName}`}
+            className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center rounded-md text-muted-foreground active:bg-foreground/5"
+          >
+            <FolderGit2 className="h-4 w-4" />
+          </button>
+        )}
+
         {!group.isMain && (
           <button
             type="button"
@@ -309,6 +351,7 @@ function GroupHeader({ group, isCollapsed, onToggle, onArchive }: GroupHeaderPro
 export function MobileChatList() {
   const navigate = useNavigate();
   const currentProjectId = useProjectStore((s) => s.currentProject?.id);
+  const currentProjectPath = useProjectStore((s) => s.currentProject?.path);
   const { data: chats, isLoading } = useChatList(currentProjectId);
   const worktrees = useWorktreeStore((s) => s.worktrees);
   const sortOrder = useSortOrder();
@@ -319,6 +362,7 @@ export function MobileChatList() {
   const [confirmingArchive, setConfirmingArchive] = useState<ChatGroup | null>(null);
   const [isArchiving, setIsArchiving] = useState(false);
   const [creatingWorkspace, setCreatingWorkspace] = useState(false);
+  const [browsing, setBrowsing] = useState<ChatGroup | null>(null);
   const canCreateWorkspace = useCapability("worktreeCreate");
 
   const groups = useMemo(
@@ -440,6 +484,7 @@ export function MobileChatList() {
                 isCollapsed={collapsed[group.worktreeId] ?? false}
                 onToggle={() => toggleGroup(group.worktreeId)}
                 onArchive={() => setConfirmingArchive(group)}
+                onBrowse={group.hasWorktree ? () => setBrowsing(group) : undefined}
               />
             );
           }}
@@ -450,6 +495,18 @@ export function MobileChatList() {
           }}
           components={listComponents}
         />
+      )}
+
+      {browsing && (
+        <Suspense fallback={<WorkspaceSheetFallback />}>
+          <MobileWorkspaceSheet
+            isOpen
+            onClose={() => setBrowsing(null)}
+            worktreeId={browsing.worktreeId}
+            projectPath={currentProjectPath}
+            title={browsing.worktreeName}
+          />
+        </Suspense>
       )}
 
       {creatingWorkspace && currentProjectId && (

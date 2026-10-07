@@ -69,6 +69,21 @@ describe("MobileWorkspaceSheet", () => {
     expect(screen.getByTestId("plan-panel")).toBeInTheDocument();
   });
 
+  it("drops the Plan tab when opened for a workspace with no chat", () => {
+    // TasksPanel falls back to the ACTIVE chat without a chatId, so a Plan tab
+    // here would show some other chat's plan under this workspace's name.
+    render(
+      <SurfaceProvider surface="mobile">
+        <MobileWorkspaceSheet isOpen onClose={vi.fn()} worktreeId="wt-1" title="feature-x" />
+      </SurfaceProvider>,
+    );
+    expect(screen.getByText("feature-x")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Files" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Git" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Plan" })).not.toBeInTheDocument();
+    expect(screen.queryByTestId("plan-panel")).not.toBeInTheDocument();
+  });
+
   it("switches to the Packages tab", async () => {
     const user = userEvent.setup();
     render(

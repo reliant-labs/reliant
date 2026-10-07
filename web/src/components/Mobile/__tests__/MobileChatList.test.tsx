@@ -78,6 +78,22 @@ vi.mock("../MobileCreateWorkspaceSheet", () => ({
   ),
 }));
 
+vi.mock("../MobileWorkspaceSheet", () => ({
+  MobileWorkspaceSheet: ({
+    worktreeId,
+    chatId,
+    title,
+  }: {
+    worktreeId?: string;
+    chatId?: string;
+    title?: string;
+  }) => (
+    <div role="dialog" aria-label="Workspace panels">
+      {title}:{worktreeId}:{chatId ?? "no-chat"}
+    </div>
+  ),
+}));
+
 const { MobileChatList } = await import("../MobileChatList");
 const { SurfaceProvider } = await import("../../../lib/surfaceContext");
 
@@ -300,6 +316,32 @@ describe("MobileChatList", () => {
         queryKey: ["chats", "list"],
       }),
     );
+  });
+
+  it("opens a workspace's Files and Git without a chat", async () => {
+    const user = userEvent.setup();
+    useChatList.mockReturnValue({
+      data: [chat({ id: "c1", title: "Branch chat", worktreeId: "wt-feature" })],
+      isLoading: false,
+    });
+    renderList();
+
+    await user.click(screen.getByRole("button", { name: "Files and Git for feature-x" }));
+    expect(await screen.findByRole("dialog", { name: "Workspace panels" })).toHaveTextContent(
+      "feature-x:wt-feature:no-chat",
+    );
+  });
+
+  it("offers no Files and Git for chats whose workspace is gone", () => {
+    useChatList.mockReturnValue({
+      data: [chat({ id: "c1", title: "Orphan", worktreeId: "wt-deleted" })],
+      isLoading: false,
+    });
+    renderList();
+    expect(screen.getByText("Unknown workspace")).toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Files and Git for Unknown workspace" }),
+    ).not.toBeInTheDocument();
   });
 
   it("shows the archive in progress and ignores a second tap", async () => {
