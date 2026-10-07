@@ -400,9 +400,9 @@ func (s *WorktreeService) CreateWorktree(
 	}
 	ownerDaemonID := placement.daemonID
 	// The checkouts are made after this returns, so an asleep machine would
-	// leave a row that fails in the background. Wake it now instead, and let
-	// the client's retry (idempotency_key makes that safe) create the
-	// worktree on a machine that is up.
+	// leave a row that fails in the background. Wake it now instead: nothing
+	// has been recorded yet, so the client's retry creates the worktree, once,
+	// on a machine that is up.
 	if err := s.wakeIfAsleep(ctx, userID, placement, project.Path); err != nil {
 		return nil, err
 	}
