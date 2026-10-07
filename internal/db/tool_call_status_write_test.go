@@ -152,11 +152,9 @@ func TestUpsertToolCallStatusTerminalIsOneWay(t *testing.T) {
 		"a non-terminal write must not move a terminal call back to running")
 	require.NotNil(t, got.CompletedAt)
 
-	// One terminal status may still correct another: a cancel that lands after
-	// a FAILURE is a real transition, not a stale one. (The one pairing that is
-	// not a correction -- completed downgraded to cancelled -- has its own test
-	// below; a finished tool's result must not be erased by a cancel aimed at
-	// one of its siblings.)
+	// Nor may a later TERMINAL write rewrite it: the first terminal write is
+	// the call's outcome (pinTerminalOutcome). A cancel landing after a
+	// failure describes a call that was already over.
 	failedCallID := "toolu_" + uuid.New().String()
 	require.NoError(t, UpsertToolCallStatus(ctx, repo, &core.ToolCall{
 		ID:          failedCallID,
@@ -182,8 +180,66 @@ func TestUpsertToolCallStatusTerminalIsOneWay(t *testing.T) {
 
 	got, err = repo.GetToolCall(ctx, failedCallID)
 	require.NoError(t, err)
-	require.Equal(t, core.ToolCallStatusCancelled, got.Status,
-		"terminal-to-terminal transitions must still be recorded")
+	require.Equal(t, core.ToolCallStatusFailed, got.Status,
+		"the first terminal write wins")
+}
+
+// Cleanup's orphan sweep re-closing a row that was already closed moved its
+// completed_at (3 rows in 15 days of dev-stack data), and an abandoned
+// activity attempt can now finish after its re-dispatch reported the call
+// interrupted. Neither may rewrite the outcome the first terminal write
+// recorded -- but either may still fill in a column that write did not know.
+func TestUpsertToolCallStatusFirstTerminalWriteWins(t *testing.T) {
+	repo, _, cleanup := setupTestRepo(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	f := setupToolCallFixture(t, repo)
+	callID := "toolu_" + uuid.New().String()
+	closedAt := time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond)
+	interrupted := "interrupted"
+
+	require.NoError(t, UpsertToolCallStatus(ctx, repo, &core.ToolCall{
+		ID:           callID,
+		ChatID:       f.chatID,
+		ToolName:     "bash",
+		Status:       core.ToolCallStatusFailed,
+		ErrorMessage: &interrupted,
+		CompletedAt:  &closedAt,
+		RequestedAt:  closedAt,
+		CreatedAt:    closedAt,
+		UpdatedAt:    closedAt,
+	}))
+
+	for _, late := range []core.ToolCallStatus{
+		core.ToolCallStatusCompleted, // the abandoned attempt finishing late
+		core.ToolCallStatusCancelled, // Cleanup re-closing an orphan
+	} {
+		lateAt := time.Now().UTC()
+		lateErr := "late writer"
+		require.NoError(t, UpsertToolCallStatus(ctx, repo, &core.ToolCall{
+			ID:           callID,
+			ChatID:       f.chatID,
+			MessageID:    &f.messageID,
+			ToolName:     "bash",
+			Status:       late,
+			ErrorMessage: &lateErr,
+			CompletedAt:  &lateAt,
+			RequestedAt:  lateAt,
+			CreatedAt:    lateAt,
+			UpdatedAt:    lateAt,
+		}))
+
+		got, err := repo.GetToolCall(ctx, callID)
+		require.NoError(t, err)
+		require.Equal(t, core.ToolCallStatusFailed, got.Status, "late %v must not replace the first outcome", late)
+		require.NotNil(t, got.CompletedAt)
+		require.True(t, got.CompletedAt.Equal(closedAt),
+			"late %v moved completed_at from %s to %s", late, closedAt, got.CompletedAt)
+		require.Equal(t, interrupted, *got.ErrorMessage)
+		require.NotNil(t, got.MessageID, "a late write may still fill in what the first one did not know")
+		require.Equal(t, f.messageID, *got.MessageID)
+	}
 }
 
 // Cancelling one tool must not erase a sibling that already finished.

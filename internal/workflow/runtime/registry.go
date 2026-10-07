@@ -475,6 +475,10 @@ type ActivityWrapper[I any, O any] struct {
 	messageWriter func() MessageWriter
 	// messageWriteRetry is how that writer's failed writes are retried.
 	messageWriteRetry messageWriteRetry
+	// outlivesHeartbeatRPCFailure runs the activity under
+	// shieldFromSpuriousHeartbeatCancel, so a heartbeat RPC that merely timed
+	// out does not cancel its work. Set from heartbeatRPCFailureSurvivor.
+	outlivesHeartbeatRPCFailure bool
 }
 
 // writer returns the injected message writer, or nil.
@@ -549,6 +553,17 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	var helpers sync.WaitGroup
 	defer helpers.Wait()
 	workerStopCh := activity.GetWorkerStopChannel(ctx)
+	if w.outlivesHeartbeatRPCFailure {
+		var releaseShield func()
+		ctx, releaseShield = shieldFromSpuriousHeartbeatCancel(ctx, workerStopCh, &helpers, func(cause error) {
+			logging.Warn("[ActivityWrapper] Heartbeat RPC failed; activity keeps running instead of abandoning its work",
+				"activityType", activityType,
+				"activityID", activityID,
+				"attemptNumber", attemptNumber,
+				"cause", cause)
+		})
+		defer releaseShield()
+	}
 	ctx, cancelForWorkerStop := context.WithCancel(ctx)
 	defer cancelForWorkerStop()
 	if workerStopCh != nil {
@@ -1855,7 +1870,7 @@ func registerActivityInternal[TInput any, TOutput any](
 	kind lifecycle.WorkKind,
 ) {
 	name := act.Name()
-	wrappedFn := wrapActivity(registry, name, act.Execute, kind)
+	wrappedFn := wrapActivity(registry, name, act.Execute, kind, outlivesHeartbeatRPCFailure(act))
 
 	// Store the wrapped function and output type
 	registry.activities[name] = wrappedFn
@@ -1882,6 +1897,7 @@ func wrapActivity[TInput any, TOutput any](
 	name string,
 	execute func(context.Context, TInput) (TOutput, error),
 	kind lifecycle.WorkKind,
+	outlivesHeartbeatRPCFailure bool,
 ) func(context.Context, TInput) (TOutput, error) {
 	// Create an ActivityWrapper that handles:
 	// - Heartbeating for fast cancellation detection
@@ -1890,6 +1906,7 @@ func wrapActivity[TInput any, TOutput any](
 	// - Structured logging and observability
 	wrapper := NewActivityWrapper(name, execute, registry.repo)
 	wrapper.workKind = kind
+	wrapper.outlivesHeartbeatRPCFailure = outlivesHeartbeatRPCFailure
 	wrapper.messageWriter = func() MessageWriter { return registry.messageWriter }
 	wrapper.messageWriteRetry = registry.messageWriteRetry
 
