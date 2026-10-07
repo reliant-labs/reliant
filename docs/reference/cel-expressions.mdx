@@ -76,7 +76,7 @@ Text without `{{}}` is passed through as-is:
 
 ```yaml
 role: user
-action: CallLLM
+type: call_llm
 content: This is a literal string with no expressions
 ```
 
@@ -105,8 +105,8 @@ inputs:
 
 nodes:
   - id: call_llm
-    action: CallLLM
-    inputs:
+    type: call_llm
+    args:
       model: "{{inputs.model}}"
       temperature: "{{inputs.temperature}}"
 ```
@@ -269,7 +269,7 @@ Used in `save_message` blocks to reference the current activity's output.
 
 ```yaml
 - id: call_llm
-  action: CallLLM
+  type: call_llm
   save_message:
     role: "{{output.message.role}}"
     content: "{{output.message.text}}"
@@ -283,7 +283,8 @@ Note: Token counts (`input_tokens`, `output_tokens`, etc.) and thinking are auto
 Used in loop `while` conditions to reference the sub-workflow's declared outputs.
 
 ```yaml
-loop:
+- id: retry
+  type: loop
   while: outputs.exit_code != 0 && iter.iteration < 10
   inline:
     outputs:

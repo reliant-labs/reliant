@@ -24,24 +24,42 @@ Workflows automate that choreography. You define the steps, the agents, and the 
   <Tab title="With a Reliant workflow">
     ```yaml
     # .reliant/workflows/code-review.yaml
+    name: code-review
+    entry: [security_review, style_review]   # both start at once
+
     nodes:
       - id: security_review
-        workflow: builtin://agent
+        type: workflow
+        ref: builtin://agent
+        thread:
+          mode: new
         args:
           system_prompt: "Review for security issues..."
 
       - id: style_review
-        workflow: builtin://agent
+        type: workflow
+        ref: builtin://agent
+        thread:
+          mode: new
         args:
           system_prompt: "Review for code quality..."
 
       - id: reviews_done
-        join: all           # wait for both
+        type: join          # wait for both
 
       - id: summarize
-        workflow: builtin://agent
+        type: workflow
+        ref: builtin://agent
         args:
           system_prompt: "Synthesize the reviews..."
+
+    edges:
+      - from: security_review
+        default: reviews_done
+      - from: style_review
+        default: reviews_done
+      - from: reviews_done
+        default: summarize
     ```
     Two agents review in parallel, a third summarizes. One click, every time.
   </Tab>

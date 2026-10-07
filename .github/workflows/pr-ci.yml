@@ -334,6 +334,16 @@ jobs:
         if: needs.changes.outputs.gen_inputs != 'false'
         run: make proto-generate generate-shortcuts
 
+      # The published docs are generated too: the CLI/tools/models/types
+      # references, the changelog page and the Mintlify .mdx conversions. If a
+      # change makes them stale, the fix is to commit the regenerated pages.
+      - name: Generate docs
+        run: >
+          make generate-scenario-schema generate-cli generate-tools-ref
+          generate-types generate-models generate-presets
+          generate-workflow-builder-skill generate-changelog
+          generate-mintlify-reference
+
       # `git status`, not `git diff`: a generator that emits a NEW file (a new
       # proto, a new control-plane service) leaves it untracked, and `git diff`
       # cannot see untracked files.

@@ -38,8 +38,8 @@ The LLM returns:
 ```yaml
 # This will fail if 'bash' isn't in the tools list
 - id: call_llm
-  action: CallLLM
-  inputs:
+  type: call_llm
+  args:
     tools: ["view", "edit"]  # bash not included!
     # If LLM tries to call 'bash', it will error
 ```
@@ -189,11 +189,13 @@ tool_filter: ["tag:default"]
 ```yaml
 # Problem: Large tool results fill context
 - id: search
-  run: grep -r "pattern" .  # Could return megabytes
+  type: run
+  command: grep -r "pattern" .  # Could return megabytes
 
 # Solution: Limit results or filter
 - id: search
-  run: grep -r "pattern" . | head -100
+  type: run
+  command: grep -r "pattern" . | head -100
 ```
 
 ### 3. Infinite Loops
