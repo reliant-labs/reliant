@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -218,18 +219,35 @@ func (s *TerminalProxyService) StreamTerminal(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.create", payload, 30000)
 	if err != nil {
+		// The daemon refused the directory (see terminal.resolveWorkingDir).
+		// It is the caller's to fix or wait for, not a server fault.
+		if terminal.IsWorkingDirUnavailable(err) {
+			logging.Warn("[Terminal] Stream working directory unavailable",
+				"requested_working_dir", createReq.GetWorkingDir(), "user_id", userID, "error", err)
+			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("create terminal session: %w", err))
+		}
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("create terminal session: %w", err))
 	}
 
 	var createResp struct {
 		SessionID string `json:"session_id"`
 		PID       int32  `json:"pid"`
+		// Where the shell actually started. Empty only from a daemon that
+		// predates reporting it.
+		WorkingDir string `json:"working_dir"`
 	}
 	if err := json.Unmarshal(respBytes, &createResp); err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal create response: %w", err))
 	}
 
 	sessionID := createResp.SessionID
+	logging.Info("[Terminal] Stream session created",
+		"session_id", sessionID,
+		"pid", createResp.PID,
+		"user_id", userID,
+		"requested_working_dir", createReq.GetWorkingDir(),
+		"working_dir", createResp.WorkingDir,
+	)
 	// This stream owns the session, so it closes it however the stream ends:
 	// an explicit CloseSession, a client hangup, or an early return below.
 	defer closeDaemonTerminalSession(ctx, s.router, userID, sessionID)

@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
 )
 
@@ -52,6 +53,9 @@ type terminalCreateRequest struct {
 type terminalCreateResponse struct {
 	SessionID string `json:"session_id"`
 	PID       int    `json:"pid"`
+	// WorkingDir is where the shell actually started. The api-server has no
+	// filesystem, so this is the only way it can record that.
+	WorkingDir string `json:"working_dir"`
 }
 
 func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
@@ -71,6 +75,8 @@ func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
 	// control is enforced at the stream/routing level, not inside the manager.
 	session, err := tm.CreateSession(req.WorkingDir, "")
 	if err != nil {
+		logging.Warn("[Terminal] Session not created",
+			"requested_working_dir", req.WorkingDir, "error", err)
 		return nil, fmt.Errorf("create session: %w", err)
 	}
 
@@ -78,10 +84,17 @@ func handleTerminalCreate(_ context.Context, payload []byte) ([]byte, error) {
 	if session.CMD != nil && session.CMD.Process != nil {
 		pid = session.CMD.Process.Pid
 	}
+	logging.Info("[Terminal] Session created",
+		"session_id", session.ID,
+		"pid", pid,
+		"requested_working_dir", req.WorkingDir,
+		"working_dir", session.WorkingDir,
+	)
 
 	resp := terminalCreateResponse{
-		SessionID: session.ID,
-		PID:       pid,
+		SessionID:  session.ID,
+		PID:        pid,
+		WorkingDir: session.WorkingDir,
 	}
 	return json.Marshal(resp)
 }

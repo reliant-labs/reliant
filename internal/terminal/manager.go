@@ -11,7 +11,6 @@ package terminal
 import (
 	"fmt"
 	"io"
-	"os"
 	"sort"
 	"sync"
 	"time"
@@ -58,7 +57,18 @@ func NewManager() *Manager {
 //
 // At the session cap, the least-recently-active session is closed to make
 // room. See defaultMaxSessions.
+//
+// A workingDir the shell cannot start in fails with ErrWorkingDirUnavailable
+// rather than starting the shell somewhere else; see resolveWorkingDir. The
+// session's WorkingDir is where the shell actually started.
 func (m *Manager) CreateSession(workingDir string, userID string) (*Session, error) {
+	// Before anything else: a request that is going to be refused must not
+	// evict a live session to make room for itself.
+	workingDir, err := resolveWorkingDir(workingDir)
+	if err != nil {
+		return nil, err
+	}
+
 	m.createMu.Lock()
 	defer m.createMu.Unlock()
 
@@ -70,21 +80,6 @@ func (m *Manager) CreateSession(workingDir string, userID string) (*Session, err
 
 	// Get default shell for the OS
 	shell, args := GetDefaultShell()
-
-	// Validate working directory
-	if workingDir == "" {
-		var err error
-		workingDir, err = os.Getwd()
-		if err != nil {
-			workingDir = GetHomeDir()
-		}
-	}
-
-	// Verify working directory exists
-	if _, err := os.Stat(workingDir); os.IsNotExist(err) {
-		logging.Warn("[Terminal] Working directory does not exist, using HOME", "dir", workingDir)
-		workingDir = GetHomeDir()
-	}
 
 	// Create PTY
 	ptty, err := pty.New()
