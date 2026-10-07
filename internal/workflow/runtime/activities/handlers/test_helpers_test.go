@@ -37,6 +37,9 @@ type ExecuteToolsInput struct {
 	// Capabilities is the producing call_llm turn's capability set, as the
 	// runtime copies it onto the node. nil is a batch with no recorded set.
 	Capabilities *reliantv1.ToolCapabilities `json:"-"`
+	// RefusedToolCalls are the calls the workflow refused (a mutating
+	// integration action the user did not approve), by id, with the reason.
+	RefusedToolCalls map[string]string `json:"-"`
 }
 
 // V3 returns the ActivityInput for Temporal's test framework.
@@ -73,6 +76,7 @@ func (t ExecuteToolsInput) V3() ActivityInput {
 					ExpectedResponseTools: t.ExpectedResponseTools,
 					CompactionThreshold:   compactionThreshold,
 					Capabilities:          t.Capabilities,
+					RefusedToolCalls:      t.RefusedToolCalls,
 				},
 			},
 		},

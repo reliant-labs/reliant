@@ -277,10 +277,10 @@ function NodeRouterCandidateCard({
         )}
       </div>
 
-      {/* Node ID */}
+      {/* Step ID */}
       <div>
         <label className="cpv2-card-field-label">
-          Node ID
+          Step ID
         </label>
         <input
           type="text"
@@ -302,7 +302,7 @@ function NodeRouterCandidateCard({
           onChange={(e) => onUpdate(index, { description: e.target.value })}
           className="cpv2-card-field-textarea transition-colors"
           rows={2}
-          placeholder="When should the router select this node?"
+          placeholder="When should the router select this step?"
           disabled={isReadOnly}
         />
       </div>
@@ -327,7 +327,7 @@ function ModeToggle({
         Workflow
       </ModePill>
       <ModePill active={mode === "node"} onClick={() => !disabled && onChange("node")}>
-        Node
+        Step
       </ModePill>
     </ModeGroup>
   );
@@ -484,7 +484,7 @@ export function RouterStepConfig({
         </Section>
       ) : (
         <Section>
-          <SectionLabel>Candidate Nodes</SectionLabel>
+          <SectionLabel>Candidate steps</SectionLabel>
           <CardList>
             {nodes.map((candidate, index) => (
               <NodeRouterCandidateCard
@@ -557,14 +557,14 @@ export function RouterStepConfig({
           </div>
 
           <div>
-            <FieldLabel>{mode === "node" ? "Fallback Node" : "Fallback Preset"}</FieldLabel>
+            <FieldLabel>{mode === "node" ? "Fallback step" : "Fallback preset"}</FieldLabel>
             <FieldInput
               type="text"
               value={fallback}
               onChange={(e) =>
                 onUpdate(withRouterArgs(step, { fallback: e.target.value }))
               }
-              placeholder={mode === "node" ? "Node ID to use if routing fails" : "Preset name to use if routing fails"}
+              placeholder={mode === "node" ? "Step ID to use if routing fails" : "Preset name to use if routing fails"}
               disabled={isReadOnly}
             />
           </div>

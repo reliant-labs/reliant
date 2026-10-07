@@ -112,7 +112,7 @@ func (w *Watcher) poll() {
 	w.mu.Unlock()
 
 	if changed {
-		logging.Info("[netports] Detected listener set changed", "ports", ports)
+		logging.Debug("[netports] Detected listener set changed", "ports", ports)
 		select {
 		case w.changed <- struct{}{}:
 		default:

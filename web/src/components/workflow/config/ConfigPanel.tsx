@@ -37,11 +37,15 @@ import { RunStepConfig } from "./RunStepConfig";
 import { ActionStepConfig } from "./ActionStepConfig";
 import { IntegrationActionConfig } from "./IntegrationActionConfig";
 import { getActionUses, isIntegrationActionStep } from "../../../lib/actionNodeArgs";
+import { useCatalogEntry } from "../../../hooks/connection-queries";
+import { CELCurrentNodeProvider } from "../CELCompletionContext";
 import { WorkflowStepConfig } from "./WorkflowStepConfig";
 import { JoinStepConfig } from "./JoinStepConfig";
 import { LoopStepConfig } from "./LoopStepConfig";
 import { RouterStepConfig } from "./RouterStepConfig";
 import { NodeOutputsPanel } from "./NodeOutputsPanel";
+import { NodeFindingsScope, useNodeFindings } from "../WorkflowFindingsContext";
+import { humanizeField, type LocatedFinding } from "../workflowFindings";
 import { ConfigPanelTabBar, type ConfigTab } from "./ConfigPanelTabBar";
 
 import { getCatalogClient } from "../../../api/grpc-client";
@@ -175,6 +179,13 @@ export function ConfigPanel({
     setActiveTab("config");
   }, [step.id]);
 
+  // The canvas's problems with this step. Picking one in the header's
+  // problems list lands here: show the Config tab, where its field is.
+  const { findings: stepFindings, focus: findingFocus } = useNodeFindings(step.id);
+  useEffect(() => {
+    if (findingFocus) setActiveTab("config");
+  }, [findingFocus]);
+
   // Node ID editing state
   const [isEditingId, setIsEditingId] = useState(false);
   const [editedId, setEditedId] = useState(step.id);
@@ -212,7 +223,7 @@ export function ConfigPanel({
       return;
     }
     if (trimmedId !== step.id && existingNodeIds.includes(trimmedId)) {
-      setIdError("A node with this ID already exists");
+      setIdError("A step with this ID already exists");
       return;
     }
 
@@ -245,6 +256,11 @@ export function ConfigPanel({
     },
     [handleIdSave, handleIdCancel],
   );
+
+  // An integration action is titled by what it is ("Slack · Post message"),
+  // not its ref. IntegrationActionConfig reads the same cached entry.
+  const integrationUses = isIntegrationActionStep(step) ? getActionUses(step) : "";
+  const integrationEntry = useCatalogEntry(integrationUses && !integrationUses.includes("{{") ? integrationUses : undefined).data;
 
   // Fetch catalog nodes for output fields. Shared with ActionStepConfig via
   // props so we don't fire two identical listNodes RPCs per panel open.
@@ -345,7 +361,10 @@ export function ConfigPanel({
       return getStepCommand(step) || "Run";
     }
     if (isIntegrationActionStep(step)) {
-      return getActionUses(step) || "Action";
+      if (integrationEntry) {
+        return `${integrationEntry.summary.integration.displayName} · ${integrationEntry.summary.displayName}`;
+      }
+      return integrationUses || "Action";
     }
     if (isActionStep(step)) {
       // Format snake_case type to Title Case (e.g., "call_llm" -> "Call LLM")
@@ -408,6 +427,9 @@ export function ConfigPanel({
   );
 
   return (
+    <NodeFindingsScope nodeId={step.id ?? ""}>
+      {/* Insert data offers the outputs of the steps before this one. */}
+      <CELCurrentNodeProvider value={step.id ?? null}>
     <ConfigurationPanel
       title={isReadOnly ? `${getStepTitle()} (View Only)` : getStepTitle()}
       subtitle={step.id}
@@ -466,6 +488,8 @@ export function ConfigPanel({
           {idError && <p className="cpv2-field-hint !text-destructive-ink">{idError}</p>}
         </div>
       )}
+
+      <StepProblems findings={stepFindings} />
 
       {/* ============ CONFIG TAB ============ */}
       {activeTab === "config" && (
@@ -558,7 +582,7 @@ export function ConfigPanel({
           <div className="cpv2-section">
             <div className="cpv2-info-banner">
               <Info className="w-3.5 h-3.5" />
-              <span>Adds a message to the thread <strong>before</strong> this node executes.</span>
+              <span>Adds a message to the thread <strong>before</strong> this step runs.</span>
             </div>
           </div>
           <NodeThreadConfigEditor
@@ -682,5 +706,40 @@ export function ConfigPanel({
         </>
       )}
     </ConfigurationPanel>
+      </CELCurrentNodeProvider>
+    </NodeFindingsScope>
+  );
+}
+
+/**
+ * The canvas's problems with this step, at the top of its panel: every one,
+ * including those no single field owns ("not connected", "inside its steps").
+ * A field's own problem also shows under that field.
+ */
+function StepProblems({ findings }: { findings: LocatedFinding[] }) {
+  if (findings.length === 0) return null;
+  const errors = findings.filter((f) => !f.warning).length;
+  return (
+    <div className="cpv2-section" data-testid="step-problems">
+      <div
+        role="status"
+        className={errors > 0 ? "cpv2-step-problems cpv2-step-problems--error" : "cpv2-step-problems"}
+      >
+        <p className="font-medium">
+          {errors > 0
+            ? `${errors} problem${errors === 1 ? "" : "s"} with this step`
+            : `${findings.length} warning${findings.length === 1 ? "" : "s"} for this step`}
+        </p>
+        <ul className="mt-1 space-y-1">
+          {findings.map((finding, index) => (
+            <li key={index}>
+              {humanizeField(finding.field) && <span className="font-medium">{humanizeField(finding.field)}: </span>}
+              {finding.text}
+              {finding.suggestion && <span className="block opacity-80">{finding.suggestion}</span>}
+            </li>
+          ))}
+        </ul>
+      </div>
+    </div>
   );
 }

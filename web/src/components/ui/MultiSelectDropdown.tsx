@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { ChevronDown, Search, Check, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 
@@ -28,6 +29,8 @@ export function MultiSelectDropdown({
   disabled = false,
 }: MultiSelectDropdownProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Escape closes the list, and only the list (useEscapeLayer).
+  const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
   const [searchQuery, setSearchQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -125,6 +128,7 @@ export function MultiSelectDropdown({
       {/* Dropdown */}
       {isOpen && (
         <div
+          {...escapeLayer}
           className="absolute left-0 right-0 top-full mt-1 z-50 bg-popover border border-border rounded-lg shadow-lg overflow-hidden"
           onClick={(e) => e.stopPropagation()}
         >

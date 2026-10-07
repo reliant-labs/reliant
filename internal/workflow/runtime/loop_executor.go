@@ -125,7 +125,28 @@ type InlineLoopExecutor struct {
 	// thread's (relaunched) background spawns before taking a turn: the
 	// predecessor was parked there, not about to call the LLM.
 	awaitSpawnsFirst bool
+
+	// turnBaseline is the thread's detached-spawn counters as they stood
+	// just before the current iteration ran — before its call_llm read the
+	// mailbox. The loop-exit gate measures progress from here, not from the
+	// moment it is reached; see awaitLiveDetachedSpawnsOrHandoff. Nil until
+	// the first iteration, and consumed by the gate.
+	turnBaseline *detachedSpawnBaseline
 }
+
+// detachedSpawnBaseline is a snapshot of a thread's two monotonic
+// "something for you to react to" counters (ChildWorkflowTracker's
+// detachedCompletions and threadWakes).
+type detachedSpawnBaseline struct {
+	completions int
+	wakes       int
+}
+
+// gateMeasuresFromTurnStartChangeID gates the loop-exit gate measuring child
+// progress from the start of the turn rather than from the gate
+// (workflow.GetVersion): histories recorded before the fix must replay the
+// exit they took.
+const gateMeasuresFromTurnStartChangeID = "detached-spawn-gate-turn-baseline"
 
 // threadForError is the thread this loop's failures belong to, or "" when the
 // loop has no execution context to read one from.
@@ -335,9 +356,10 @@ func (e *InlineLoopExecutor) GetThread() string {
 // no background spawns costs nothing extra.
 //
 // Returns true if the loop should re-enter (at least one detached spawn for
-// THIS thread finished since the loop started waiting, so its mailbox result
-// may now be there to react to) or false if there is nothing left to wait on
-// (no live detached spawns for this thread).
+// THIS thread finished since the turn that just ended began — while it ran
+// or while this waits — so its mailbox result may now be there to react to)
+// or false if there is nothing left to wait on (no live detached spawns for
+// this thread, and none that finished during the turn).
 //
 // The wait is UNBOUNDED by design. It previously carried a 4-minute ceiling
 // borrowed from shell_wait, on the theory that a wedged child must not park the
@@ -382,7 +404,47 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 		return false, nil
 	}
 	thread := e.GetThread()
-	if thread == "" || !e.childTracker.hasLiveDetachedSpawns(thread) {
+	if thread == "" {
+		return false, nil
+	}
+	startCompletions, startWakes := e.gateBaseline(thread)
+
+	if !e.childTracker.hasLiveDetachedSpawns(thread) {
+		// Nothing left to wait on — but a spawn that finished DURING the turn
+		// that just ended still earns one more. Its report may have been
+		// enqueued after that turn read its mailbox, and then nothing has
+		// delivered it: exiting here would end the run with the agent's result
+		// unread. That window is real, not theoretical: the child's tail is
+		// several activities long (report, child status, tool-call status), and
+		// the parent's own post-turn bookkeeping gives it room to finish before
+		// the parent arrives. Measuring from the gate — the old behavior — saw
+		// no progress, because the completion had already happened, and exited.
+		// See TestBackground_SpawnFinishingMidTurnStillGetsATurn.
+		//
+		// If the report did make it into that turn after all, the extra turn
+		// drains nothing and call_llm yields without calling the provider.
+		//
+		// Cancellation still wins: re-entering would only reach the boundary
+		// check that stops the thread.
+		if e.pauseCtrl.IsCancelled() {
+			return false, nil
+		}
+		if e.childTracker.detachedCompletionCount(thread) > startCompletions {
+			return true, nil
+		}
+		// The same goes for a wake. A user message (SendMessage or
+		// SendAgentMessage: a mailbox row, then the doorbell) that landed after
+		// the turn's pending_inbox probe was seen by nothing — the probe is the
+		// turn's last look. The doorbell is the one record of it, and this
+		// branch used to return before reading it, so the run ended with the
+		// message unanswered. A wake for input the turn did see costs one turn
+		// that drains nothing and yields without calling the provider.
+		// Versioned: a history that exited here must replay the exit. See
+		// TestLateUserMessageE2E.
+		if e.childTracker.threadWakeCount(thread) > startWakes &&
+			workflow.GetVersion(e.ctx, lateUserWakeChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+			return true, nil
+		}
 		return false, nil
 	}
 
@@ -434,8 +496,6 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 		return handoffErr != nil
 	}
 
-	startCompletions := e.childTracker.detachedCompletionCount(thread)
-	startWakes := e.childTracker.threadWakeCount(thread)
 	threadInterrupt := resolveThreadInterrupt(e.makeThreadInterrupt, e.threadInterrupt, thread)
 	startInterruptEpoch := threadInterrupt.Epoch()
 	if err := workflow.Await(e.ctx, func() bool {
@@ -488,6 +548,34 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 	return threadInterrupt.InterruptedSince(startInterruptEpoch) ||
 		e.childTracker.detachedCompletionCount(thread) > startCompletions ||
 		e.childTracker.threadWakeCount(thread) > startWakes, nil
+}
+
+// gateBaseline returns the completion and wake counts the loop-exit gate
+// measures progress from, consuming the turn's snapshot.
+//
+// That is the counts as they stood when the turn that just ended began, not
+// when the gate is reached. The turn read the mailbox and history near its
+// start, so a child that finished, or a wake (mailbox row, user message) that
+// arrived, after that point is something the turn could not have seen — and
+// it must count as a reason to take another turn whether it landed before
+// the gate or after. Only the "after" half used to count: a completion that
+// beat the parent to the gate was lost (the run exited with the report
+// unread), and a wake that did was missed until some child finished.
+//
+// With no turn behind it — the resume-time wait before the first iteration,
+// or a caller outside the loop — the baseline is simply "now".
+func (e *InlineLoopExecutor) gateBaseline(thread string) (completions, wakes int) {
+	completions = e.childTracker.detachedCompletionCount(thread)
+	wakes = e.childTracker.threadWakeCount(thread)
+	turn := e.turnBaseline
+	e.turnBaseline = nil
+	if turn == nil || (turn.completions == completions && turn.wakes == wakes) {
+		return completions, wakes
+	}
+	if workflow.GetVersion(e.ctx, gateMeasuresFromTurnStartChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
+		return completions, wakes
+	}
+	return turn.completions, turn.wakes
 }
 
 // parkSpawn records a background spawn as parked at iteration for the
@@ -579,7 +667,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 		return &TerminalError{Message: "project path not set, cannot load presets"}
 	}
 
-	e.logger.Info("[InlineLoop] Loading presets for loop iteration",
+	e.logger.Debug("[InlineLoop] Loading presets for loop iteration",
 		"loopID", e.loopID,
 		"iteration", e.iteration,
 		"presets", presets,
@@ -604,7 +692,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 			return fmt.Errorf("resolve preset template %q for group %q: %w", rawName, groupName, err)
 		}
 		if presetName != rawName {
-			e.logger.Info("[InlineLoop] Resolved preset template",
+			e.logger.Debug("[InlineLoop] Resolved preset template",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
 				"group", groupName,
@@ -639,7 +727,7 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 			}
 		}
 
-		e.logger.Info("[InlineLoop] Applied preset params",
+		e.logger.Debug("[InlineLoop] Applied preset params",
 			"loopID", e.loopID,
 			"preset", presetName,
 			"group", groupName,
@@ -744,7 +832,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		}
 		e.resolvedItems = items
 		e.resolvedKeys = keys
-		e.logger.Info("[InlineLoop] Resolved items for sequential loop",
+		e.logger.Debug("[InlineLoop] Resolved items for sequential loop",
 			"loopID", e.loopID,
 			"itemCount", len(items),
 		)
@@ -776,7 +864,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 		)
 	}
 
-	e.logger.Info("[InlineLoop] About to enter main loop",
+	e.logger.Debug("[InlineLoop] About to enter main loop",
 		"loopID", e.loopID,
 		"iteration", e.iteration,
 		"subWorkflowNodes", len(e.subWorkflow.GetNodes()),
@@ -837,7 +925,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 			break
 		}
 
-		e.logger.Info("[InlineLoop] Starting iteration",
+		e.logger.Debug("[InlineLoop] Starting iteration",
 			"loopID", e.loopID,
 			"iteration", e.iteration,
 		)
@@ -881,6 +969,18 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 			if e.childTracker.handoffRequested {
 				return nil, e.parkSpawn(spawnRec, e.iteration, false)
 			}
+		}
+
+		// What this turn is about to be able to see. A spawn that finishes
+		// after this point may report after the turn has read its mailbox;
+		// the loop-exit gate uses this to give such a report a turn.
+		if e.childTracker != nil {
+			thread := e.GetThread()
+			e.turnBaseline = &detachedSpawnBaseline{
+				completions: e.childTracker.detachedCompletionCount(thread),
+				wakes:       e.childTracker.threadWakeCount(thread),
+			}
+			e.childTracker.recordTurnStart(thread)
 		}
 
 		// Execute this iteration
@@ -936,7 +1036,7 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 				)
 				continue
 			}
-			e.logger.Info("[InlineLoop] While condition no longer satisfied, exiting",
+			e.logger.Debug("[InlineLoop] While condition no longer satisfied, exiting",
 				"loopID", e.loopID,
 				"iteration", e.iteration-1,
 				"while", model.DirectCelExpr(model.GetLoopArgs(e.loopStep.Node).GetWhile()),
@@ -985,7 +1085,7 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 			wf.Name = e.workflowIdentity()
 		}
 		e.subWorkflow = wf
-		e.logger.Info("[InlineLoop] Using inline sub-workflow",
+		e.logger.Debug("[InlineLoop] Using inline sub-workflow",
 			"loopID", e.loopID,
 			"workflowIdentity", e.workflowIdentity(),
 			"nodeCount", len(wf.GetNodes()),
@@ -1027,7 +1127,7 @@ func (e *InlineLoopExecutor) loadSubWorkflow() error {
 	}
 
 	e.subWorkflow = wf
-	e.logger.Info("[InlineLoop] Loaded external sub-workflow",
+	e.logger.Debug("[InlineLoop] Loaded external sub-workflow",
 		"loopID", e.loopID,
 		"workflowIdentity", e.workflowIdentity(),
 		"workflowRef", workflowRef,
@@ -1071,7 +1171,7 @@ func (e *InlineLoopExecutor) bodyScope() *LoopScope {
 // celWorkflow is the `workflow` namespace for this loop's own expressions
 // (items, key, while, presets).
 func (e *InlineLoopExecutor) celWorkflow() *model.WorkflowContext {
-	return workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, e.workflowInputs))
+	return workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, e.workflowInputs, e.execContext))
 }
 
 // enclosingIter is the `iter` of the loop ENCLOSING this one — the scope this
@@ -1175,7 +1275,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 	if err != nil {
 		return nil, err
 	}
-	e.logger.Info("[InlineLoop] Built iteration inputs",
+	e.logger.Debug("[InlineLoop] Built iteration inputs",
 		"loopID", e.loopID,
 		"iteration", e.iteration,
 		"inputPolicy", e.inputPolicy(),
@@ -1184,7 +1284,8 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 	// Create state machine for sub-workflow
 	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
-		WithLoopScope(e.bodyScope)
+		WithLoopScope(e.bodyScope).
+		WithExecContext(e.execContext)
 
 	// Create step executor for this iteration
 	// Derive iteration-specific execution context
@@ -1267,13 +1368,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			recordJoinSatisfied(e.ctx, joinNodePath(e.nodePath(), joinID))
 		}, workflow.Now(e.ctx))
 		// Find triggered steps
-		if len(events) > 0 {
-			e.logger.Info("[InlineLoop] First event details",
-				"loopID", e.loopID,
-				"eventID", events[0].ID,
-				"eventStepID", events[0].StepID,
-			)
-		}
 		backfillNodeOutputsFromEvents(events, iterNodeOutputs)
 		triggeredSteps, err := iterStateMachine.FindTriggeredNodes(events, iterNodeOutputs, iterInputs)
 		if err != nil {
@@ -1283,7 +1377,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		for i, ts := range triggeredSteps {
 			triggeredIDs[i] = ts.Node.GetId()
 		}
-		e.logger.Info("[InlineLoop] Found triggered steps",
+		e.logger.Debug("[InlineLoop] Found triggered steps",
 			"loopID", e.loopID,
 			"iteration", e.iteration,
 			"triggeredCount", len(triggeredSteps),
@@ -1302,7 +1396,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 			// Check node condition - if false, skip execution
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				e.ctx, step.Node, iterNodeOutputs, iterInputs,
-				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
+				e.workflowID, e.chatID, e.workflowIdentity(), e.execContext, e.logger,
 				e.bodyScope(),
 				e.nodePath(),
 			)
@@ -1316,7 +1410,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 			// Handle nested loops inline (recursively)
 			if step.Node.GetType() == model.NodeTypeLoop {
-				e.logger.Info("[InlineLoop] Executing nested loop",
+				e.logger.Debug("[InlineLoop] Executing nested loop",
 					"loopID", e.loopID,
 					"iteration", e.iteration,
 					"nestedLoopID", step.Node.GetId(),
@@ -1384,7 +1478,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 			// Handle workflow nodes inline
 			if step.Node.GetType() == model.NodeTypeWorkflow {
-				e.logger.Info("[InlineLoop] Executing inline workflow",
+				e.logger.Debug("[InlineLoop] Executing inline workflow",
 					"loopID", e.loopID,
 					"iteration", e.iteration,
 					"stepID", step.Node.GetId(),
@@ -1393,34 +1487,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 				// Use helpers for consistent context building
 				nestedIterCtx := e.buildIterCtx()
-
-				// DEBUG: Log node outputs before evaluating config (for inject debugging)
-				if model.NodeInjectConfig(step.Node) != nil {
-					e.logger.Info("[InlineLoop] BEFORE EvaluateNodeConfig for step with inject",
-						"loopID", e.loopID,
-						"iteration", e.iteration,
-						"stepID", step.Node.GetId(),
-						"injectContent", model.NodeInjectConfig(step.Node).GetContent(),
-						"iterNodeOutputsKeys", getMapKeys(iterNodeOutputs),
-					)
-					// Log each node output's response_text
-					for nodeID, output := range iterNodeOutputs {
-						if m, ok := output.(map[string]interface{}); ok {
-							if rt, ok := m["response_text"]; ok {
-								rtStr := fmt.Sprintf("%v", rt)
-								if len(rtStr) > 200 {
-									rtStr = rtStr[:200] + "..."
-								}
-								e.logger.Info("[InlineLoop] Node output available for inject",
-									"nodeID", nodeID,
-									// Same reason as the nodeOutputs log below: an
-									// assistant turn can quote a secret it just read.
-									"response_text", redactString(rtStr),
-								)
-							}
-						}
-					}
-				}
 
 				// Evaluate node config
 				evalResult, err := EvaluateNodeConfig(
@@ -1440,38 +1506,6 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					)
 					// Fail fast - CEL evaluation errors should halt the workflow, not silently continue
 					return nil, fmt.Errorf("step %s config evaluation failed: %w", step.Node.GetId(), err)
-				}
-
-				// Debug: Log inject details when present
-				if ic := model.NodeInjectConfig(evalResult); ic != nil && model.NodeInjectConfig(step.Node) != nil {
-					nodeOutputsDebug := make(map[string]string)
-					for k, v := range iterNodeOutputs {
-						if m, ok := v.(map[string]interface{}); ok {
-							if rt, ok := m["response_text"]; ok {
-								if rtStr, ok := rt.(string); ok {
-									if len(rtStr) > 100 {
-										nodeOutputsDebug[k+".response_text"] = rtStr[:100] + "..."
-									} else {
-										nodeOutputsDebug[k+".response_text"] = rtStr
-									}
-								} else {
-									nodeOutputsDebug[k+".response_text"] = fmt.Sprintf("<type:%T>", rt)
-								}
-							} else {
-								nodeOutputsDebug[k] = "<no response_text>"
-							}
-						} else {
-							nodeOutputsDebug[k] = fmt.Sprintf("<type:%T>", v)
-						}
-					}
-					e.logger.Info("[InlineLoop] Inject message evaluation",
-						"loopID", e.loopID,
-						"iteration", e.iteration,
-						"stepID", step.Node.GetId(),
-						"contentLength", len(model.CelStringValue(ic.GetContent())),
-						"nodeOutputsKeys", getMapKeys(iterNodeOutputs),
-						"nodeOutputsDebug", nodeOutputsDebug,
-					)
 				}
 
 				// Create inline workflow executor
@@ -1572,7 +1606,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 						}
 						saveInput := types.ActivityInput{Runtime: rtx, Node: buildSaveMessageNode(flatInput)}
 						_ = workflow.ExecuteActivity(activityCtx, "SaveMessage", saveInput).Get(e.ctx, nil)
-						e.logger.Info("[InlineLoop] Pre-saved inject message to inherited thread",
+						e.logger.Debug("[InlineLoop] Pre-saved inject message to inherited thread",
 							"stepID", step.Node.GetId(),
 							"thread", childExecCtx.Thread,
 						)
@@ -1638,30 +1672,11 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					}
 				}
 
-				// Debug: Log what we're storing with more detail
-				respText := ""
-				respTextType := "<missing>"
-				if rt, ok := inlineOutput["response_text"]; ok {
-					respTextType = fmt.Sprintf("%T", rt)
-					if rtStr, ok := rt.(string); ok {
-						if len(rtStr) > 200 {
-							respText = rtStr[:200] + "..."
-						} else {
-							respText = rtStr
-						}
-					} else if rt == nil {
-						respText = "<nil>"
-					}
-				}
-				e.logger.Info("[InlineLoop] Stored workflow output",
+				e.logger.Debug("[InlineLoop] Stored workflow output",
 					"loopID", e.loopID,
 					"iteration", e.iteration,
 					"stepID", step.Node.GetId(),
 					"outputKeys", getMapKeys(inlineOutput),
-					"responseTextType", respTextType,
-					// Preview of an assistant turn, which can quote a secret it
-					// just read — redact as the nodeOutputs log does.
-					"responseTextPreview", redactString(respText),
 				)
 
 				// Create completion event
@@ -1708,7 +1723,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				continue
 			}
 
-			e.logger.Info("[InlineLoop] Executing step",
+			e.logger.Debug("[InlineLoop] Executing step",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
 				"stepID", step.Node.GetId(),
@@ -1721,17 +1736,16 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 
 		// Check completion
 		if len(runningSteps) == 0 && len(events) == 0 {
-			e.logger.Info("[InlineLoop] Iteration complete, evaluating outputs",
+			// Keys only: node outputs carry LLM text and tool results, which
+			// stay in the DB and never go to logs.
+			e.logger.Debug("[InlineLoop] Iteration complete, evaluating outputs",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
-				"outputDefs", e.subWorkflow.GetOutputs(),
-				// Node outputs hold tool results / file contents, which may carry
-				// secrets read from files. Redact before logging.
-				"nodeOutputs", redactValue(iterNodeOutputs),
+				"nodeOutputsKeys", getMapKeys(iterNodeOutputs),
 			)
 
 			// Build workflow context for output evaluation
-			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs)
+			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs, e.execContext)
 
 			// Evaluate sub-workflow outputs
 			outputs, err := EvaluateDeclaredOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext, e.subWorkflow, e.logger)
@@ -1744,11 +1758,10 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				return nil, fmt.Errorf("failed to evaluate sub-workflow outputs: %w", err)
 			}
 
-			e.logger.Info("[InlineLoop] Outputs evaluated",
+			e.logger.Debug("[InlineLoop] Outputs evaluated",
 				"loopID", e.loopID,
 				"iteration", e.iteration,
-				// Evaluated outputs may carry tool-result/file content; redact.
-				"outputs", redactValue(outputs),
+				"outputKeys", getMapKeys(outputs),
 			)
 
 			return outputs, nil
@@ -1822,7 +1835,7 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				// This handles rate limits, transient errors, etc. that exhaust
 				// Temporal's retry budget.
 				if stepEvent.RetryExhausted {
-					e.logger.Info("[InlineLoop] *** RETRY EXHAUSTION DETECTED *** Activity exhausted retries, triggering pause",
+					e.logger.Warn("[InlineLoop] Activity exhausted retries; pausing until resume",
 						"loopID", e.loopID,
 						"iteration", e.iteration,
 						"stepID", running.StepID,
@@ -1920,8 +1933,7 @@ func (e *InlineLoopExecutor) evaluateWhileCondition(outputs map[string]interface
 		"loopID", e.loopID,
 		"iteration", e.iteration-1,
 		"while", whileExpr,
-		// Outputs may carry tool-result/file content; redact before logging.
-		"outputs", redactValue(outputs),
+		"outputKeys", getMapKeys(outputs),
 	)
 
 	// outputs is declared to CEL iff the field is non-nil, and a while

@@ -29,7 +29,7 @@ import (
 func TestLoopOutputsWithCELNull(t *testing.T) {
 	t.Parallel()
 	workflowContext := buildWorkflowContext("test-wf-id", "test-wf", "test-chat",
-		map[string]interface{}{"response_tool_name": "submit_response"})
+		map[string]interface{}{"response_tool_name": "submit_response"}, nil)
 
 	tests := []struct {
 		name        string

@@ -59,6 +59,7 @@ const {
   resolveMenuAccelerators,
 } = require("./menu-accelerators");
 const WindowManager = require("./window-manager");
+const { pickWindowToSurface, shouldHideOnClose } = require("./window-surfacing");
 const BrowserManager = require("./browser-manager");
 const windowConfig = require("./window-config");
 const { shouldOpenExternally } = require("./navigation-policy");
@@ -87,6 +88,7 @@ const {
 } = require("./backend-auth");
 const windowStateClient = require("./window-state-client");
 const Sentry = require("@sentry/electron/main");
+const { sentryMainOptions } = require("./sentry-scrub");
 const { StatsigClient } = require("@statsig/js-client");
 const { autoUpdater } = require("electron-updater");
 const electronLog = require("electron-log");
@@ -372,22 +374,15 @@ function initializeSentry() {
       // Set environment based on release type for filtering in Sentry dashboard
       const sentryEnvironment = isPrerelease ? "prerelease" : "production";
 
-      Sentry.init({
+      // sentryMainOptions enforces the same privacy policy as the renderer and
+      // the backend: identifiers, types and stacks leave the app; user
+      // content (console arguments, error payloads, emails, IPs) does not.
+      Sentry.init(sentryMainOptions({
         dsn: process.env.SENTRY_DSN,
         environment: sentryEnvironment,
         release: `reliant@${currentVersion}`,
-        beforeSend(event, hint) {
-          // Double-check privacy settings before sending
-          if (!getCrashReportingEnabled()) {
-            return null;
-          }
-          // Filter out sensitive information if needed
-          if (event.user) {
-            delete event.user.ip_address;
-          }
-          return event;
-        },
-      });
+        isEnabled: getCrashReportingEnabled,
+      }));
       sentryInitialized = true;
       log.info(`[Sentry] Initialized (environment: ${sentryEnvironment}, release: reliant@${currentVersion})`);
     } catch (error) {
@@ -764,21 +759,34 @@ function getChatMenuState(chat) {
   return "Idle";
 }
 
-function ensureMainWindowVisible() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    if (mainWindow.isMinimized()) {
-      mainWindow.restore();
+// Reliant's own windows (not checkout/login popups), most recently focused first.
+function appWindowsByRecency() {
+  if (windowManager) {
+    return windowManager.getWindowsByRecency();
+  }
+  return mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : [];
+}
+
+// Brings Reliant forward for the tray and the dock: the window the user was
+// last in if it is open, otherwise the one they closed to the tray, otherwise a
+// new one. NOT `mainWindow` — that is only the most recently created window, and
+// surfacing it resurrected windows the user had closed. See window-surfacing.js.
+function surfaceAppWindow() {
+  const window = pickWindowToSurface(appWindowsByRecency());
+  if (window) {
+    if (window.isMinimized()) {
+      window.restore();
     }
-    mainWindow.show();
-    mainWindow.focus();
-    return Promise.resolve(mainWindow);
+    window.show();
+    window.focus();
+    return Promise.resolve(window);
   }
 
   return createWindow().then(() => mainWindow);
 }
 
-function sendToMainWindow(channel, payload) {
-  ensureMainWindowVisible()
+function sendToSurfacedWindow(channel, payload) {
+  surfaceAppWindow()
     .then((window) => {
       if (!window || window.isDestroyed()) {
         return;
@@ -821,21 +829,21 @@ function refreshTrayMenu() {
     {
       label: "Show Reliant",
       click: () => {
-        ensureMainWindowVisible();
+        surfaceAppWindow();
       },
     },
     {
       label: "New Chat",
       enabled: trayStatus.canCreateChat,
       click: () => {
-        sendToMainWindow("create-new-tab");
+        sendToSurfacedWindow("create-new-tab");
       },
     },
     {
       label: "Resume Last Chat",
       enabled: trayStatus.hasChats && trayStatus.canCreateChat,
       click: () => {
-        sendToMainWindow("resume-last-chat");
+        sendToSurfacedWindow("resume-last-chat");
       },
     },
   ];
@@ -851,7 +859,7 @@ function refreshTrayMenu() {
     ? trayStatus.recentChats.map((chat) => ({
         label: `${truncateLabel(chat.title, 34)} • ${getChatMenuState(chat)}`,
         enabled: trayStatus.canCreateChat,
-        click: () => sendToMainWindow("tray:go-to-chat", { chatId: chat.id }),
+        click: () => sendToSurfacedWindow("tray:go-to-chat", { chatId: chat.id }),
       }))
     : [{ label: "No recent chats", enabled: false }];
 
@@ -868,7 +876,7 @@ function refreshTrayMenu() {
           trayStatus.currentWorktreeId === workspace.id,
         enabled: Boolean(trayStatus.currentProjectName),
         click: () =>
-          sendToMainWindow("tray:switch-workspace", {
+          sendToSurfacedWindow("tray:switch-workspace", {
             workspaceId: workspace.isMain ? "__main__" : workspace.id,
           }),
       }))
@@ -879,7 +887,7 @@ function refreshTrayMenu() {
     .map((workflow) => ({
       label: truncateLabel(workflow.name.replace("builtin://", ""), 40),
       enabled: Boolean(trayStatus.currentProjectName),
-      click: () => sendToMainWindow("tray:open-workflow", { workflowName: workflow.name }),
+      click: () => sendToSurfacedWindow("tray:open-workflow", { workflowName: workflow.name }),
     }));
 
   const createdWorkflowItems = trayStatus.workflows
@@ -887,7 +895,7 @@ function refreshTrayMenu() {
     .map((workflow) => ({
       label: truncateLabel(workflow.name, 40),
       enabled: Boolean(trayStatus.currentProjectName),
-      click: () => sendToMainWindow("tray:open-workflow", { workflowName: workflow.name }),
+      click: () => sendToSurfacedWindow("tray:open-workflow", { workflowName: workflow.name }),
     }));
 
   const workflowsSubmenu = [
@@ -922,24 +930,24 @@ function refreshTrayMenu() {
           label: "Current Chat",
           enabled: Boolean(trayStatus.activeChatId) && trayStatus.canCreateChat,
           click: () =>
-            sendToMainWindow("tray:go-to-chat", {
+            sendToSurfacedWindow("tray:go-to-chat", {
               chatId: trayStatus.activeChatId,
             }),
         },
         {
           label: "Workflow Hub",
           enabled: Boolean(trayStatus.currentProjectName),
-          click: () => sendToMainWindow("tray:go-to-workflow-hub"),
+          click: () => sendToSurfacedWindow("tray:go-to-workflow-hub"),
         },
         {
           label: "Settings",
           enabled: true,
-          click: () => sendToMainWindow("tray:go-to-settings"),
+          click: () => sendToSurfacedWindow("tray:go-to-settings"),
         },
         {
           label: "Project Picker",
           enabled: true,
-          click: () => sendToMainWindow("tray:go-to-project-picker"),
+          click: () => sendToSurfacedWindow("tray:go-to-project-picker"),
         },
       ],
     },
@@ -1023,6 +1031,18 @@ async function createWindow(options = {}) {
     titleBarStyle: windowConfig.getTitleBarStyle('inset'), // Main window uses hiddenInset
     backgroundColor: "#111111", // avoids white flash if we show early
   });
+
+  // Register with WindowManager immediately, not after the load below: the
+  // tray, the dock and the close-to-tray decision all read its window list,
+  // and a window still loading is already a window the user can be shown.
+  if (windowManager) {
+    windowManager.registerWindow(mainWindow, {
+      worktreeId: null,
+      projectId: null,
+      projectName: "Reliant",
+    });
+    log.debug("[Window] Registered new window with WindowManager");
+  }
 
   // ---- External links (register before load) ----
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -1338,7 +1358,7 @@ async function createWindow(options = {}) {
     );
 
     if (isReady && port) {
-      log.info("Backend ready, sending port to frontend:", port);
+      log.debug("Backend ready, sending port to frontend:", port);
       mainWindow.webContents.send("backend-port", port);
     } else if (!isReady) {
       log.info("Backend not ready yet, waiting...");
@@ -1382,9 +1402,9 @@ async function createWindow(options = {}) {
 
     // Check for updates after window is fully loaded (only in packaged app)
     if (app.isPackaged) {
-      log.info("[AutoUpdater] Window loaded, scheduling update check...");
+      log.debug("[AutoUpdater] Window loaded, scheduling update check...");
       setTimeout(() => {
-        log.info("[AutoUpdater] Running update check from did-finish-load...");
+        log.debug("[AutoUpdater] Running update check from did-finish-load...");
         autoUpdater.checkForUpdates().then(result => {
           log.info("[AutoUpdater] Check completed:", result);
         }).catch(err => {
@@ -1474,17 +1494,26 @@ async function createWindow(options = {}) {
   const currentWindow = mainWindow;
 
   currentWindow.on("closed", () => {
-    // Only clear mainWindow if this is the current main window
+    // Only reassign mainWindow if this is the current main window. Hand the
+    // role to the window the user was most recently in: other windows can
+    // outlive this one, and a live app with no mainWindow drops deep links and
+    // OAuth callbacks, or opens a fresh window instead of using the open one.
     if (mainWindow === currentWindow) {
-      mainWindow = null;
+      mainWindow = appWindowsByRecency().find((window) => window !== currentWindow) || null;
     }
   });
 
-  // macOS: close -> hide to tray
+  // macOS: closing the LAST open window hides it to the tray; closing any other
+  // window really closes it. Hiding every closed window kept them all alive,
+  // and the tray then brought one back. See window-surfacing.js.
   // CRITICAL: Use currentWindow (captured in closure) instead of mainWindow
   // to ensure we're checking the correct window instance
   currentWindow.on("close", (event) => {
-    if (!isQuitting && process.platform === "darwin") {
+    const hide = shouldHideOnClose(currentWindow, appWindowsByRecency(), {
+      platform: process.platform,
+      isQuitting,
+    });
+    if (hide) {
       event.preventDefault();
       currentWindow.hide();
     }
@@ -1535,17 +1564,6 @@ async function createWindow(options = {}) {
     log.debug("[Window] Page URL:", mainWindow.webContents.getURL());
   }
 
-  // Register window with WindowManager if available
-  // This ensures all windows are properly tracked, including those created from menu
-  if (windowManager && currentWindow) {
-    windowManager.registerWindow(currentWindow, {
-      worktreeId: null,
-      projectId: null,
-      projectName: "Reliant",
-    });
-    log.debug("[Window] Registered new window with WindowManager");
-  }
-
   // Initialize browser manager for this window
   const windowBrowserManager = new BrowserManager();
   windowBrowserManager.initialize(currentWindow);
@@ -1572,7 +1590,7 @@ function createTray() {
     tray.setToolTip("Reliant");
 
     tray.on("click", () => {
-      ensureMainWindowVisible();
+      surfaceAppWindow();
     });
   } catch (error) {
     log.error("Failed to create tray:", error);
@@ -1657,7 +1675,7 @@ ipcMain.on("log-from-renderer", (event, level, ...args) => {
 });
 
 ipcMain.handle("get-backend-port", async () => {
-  log.info("[IPC] get-backend-port called");
+  log.debug("[IPC] get-backend-port called");
   if (!backendManager) {
     log.warn("[IPC] backendManager not initialized, waiting for it...");
     // Wait a bit for backend manager to be initialized
@@ -1670,7 +1688,7 @@ ipcMain.handle("get-backend-port", async () => {
 
   // First check if we already have a port
   let port = backendManager.getPort();
-  log.info("[IPC] Current backend port:", port, "type:", typeof port);
+  log.debug("[IPC] Current backend port:", port, "type:", typeof port);
 
   // If no port yet, backend might still be starting
   if (!port) {
@@ -1688,7 +1706,7 @@ ipcMain.handle("get-backend-port", async () => {
 
   // Check if backend is actually ready to receive requests
   const isReady = await backendManager.isReady();
-  log.info("[IPC] Backend ready check:", isReady);
+  log.debug("[IPC] Backend ready check:", isReady);
 
   if (isReady && port) {
     log.info(
@@ -1824,7 +1842,7 @@ function startNotificationPolling() {
             // Send IPC message to trigger navigation
             try {
               mostRecentNotification.sender.send("notification-click", mostRecentNotification.tag);
-              log.info("[Notification] ✅ Polling-based IPC message sent", { tag: mostRecentNotification.tag });
+              log.debug("[Notification] ✅ Polling-based IPC message sent", { tag: mostRecentNotification.tag });
               // Clear the recent notification
               mostRecentNotification = null;
               appWasFocusedWhenNotificationShown = false;
@@ -1858,7 +1876,7 @@ function startNotificationPolling() {
 
 // Function to handle notification clicks
 function handleNotificationClick(tag, sender) {
-  log.info("[Notification] handleNotificationClick called", { tag });
+  log.debug("[Notification] handleNotificationClick called", { tag });
 
   if (tag && activeNotifications.has(tag)) {
     const notifData = activeNotifications.get(tag);
@@ -1879,7 +1897,7 @@ function handleNotificationClick(tag, sender) {
     }
     // Send IPC message to renderer to trigger navigation
     // This MUST happen even if window is already focused
-    log.info("[Notification] Sending notification-click IPC message to renderer", {
+    log.debug("[Notification] Sending notification-click IPC message to renderer", {
       tag,
       windowId: window?.id,
       isFocused: window?.isFocused(),
@@ -1888,7 +1906,7 @@ function handleNotificationClick(tag, sender) {
     // Send the IPC message - this should work regardless of focus state
     try {
       (notifData.sender || sender).send("notification-click", tag);
-      log.info("[Notification] ✅ IPC message sent successfully", { tag });
+      log.debug("[Notification] ✅ IPC message sent successfully", { tag });
     } catch (error) {
       log.error("[Notification] ❌ Failed to send IPC message", { tag, error });
     }
@@ -2191,7 +2209,7 @@ ipcMain.handle("open-terminal", async (event, directoryPath) => {
 
 // Open external URL
 ipcMain.handle("open-external", async (event, url) => {
-  log.debug("[IPC] open-external:", url);
+  log.debug("[IPC] open-external");
 
   try {
     await shell.openExternal(url);
@@ -2246,12 +2264,12 @@ ipcMain.handle("shortcuts:update", async (_event, bindings) => {
 });
 
 ipcMain.handle("get-privacy-settings", async () => {
-  log.info("[IPC] get-privacy-settings");
+  log.debug("[IPC] get-privacy-settings");
   const settings = {
     crashReportingEnabled: getCrashReportingEnabled(),
     analyticsEnabled: getAnalyticsEnabled(),
   };
-  log.info("[IPC] Returning privacy settings:", settings);
+  log.debug("[IPC] Returning privacy settings:", settings);
   return settings;
 });
 
@@ -2801,7 +2819,7 @@ ipcMain.handle("browser:set-bounds", async (event, bounds, paneId) => {
     return { success: false, error: "Browser manager not initialized" };
   }
 
-  log.info("[IPC] browser:set-bounds called", { bounds, paneId });
+  log.debug("[IPC] browser:set-bounds called", { bounds, paneId });
   browserManager.setBounds(bounds, paneId);
   return { success: true };
 });
@@ -4078,19 +4096,16 @@ if (gotTheLock) {
 
   // Handle second instance (when deep link is clicked)
   app.on("second-instance", (event, commandLine, workingDirectory) => {
-    log.info("[DeepLink] second-instance event received");
-    log.info("[DeepLink] commandLine args:", commandLine);
-
+    // Never log the command line or the link itself: a deep link carries
+    // whatever the caller put in its query string.
     const url = commandLine.find((arg) => arg.startsWith("reliant://"));
+    log.info("[DeepLink] second-instance event received", { hasDeepLink: Boolean(url) });
     if (url) {
-      log.info("[DeepLink] Found deep link in second instance:", url);
       handleDeepLink(url);
-    } else {
-      log.info("[DeepLink] No deep link found in command line args");
     }
 
     if (mainWindow) {
-      log.info("[DeepLink] Focusing existing main window");
+      log.debug("[DeepLink] Focusing existing main window");
       if (mainWindow.isMinimized()) mainWindow.restore();
       mainWindow.focus();
     } else {
@@ -4100,20 +4115,19 @@ if (gotTheLock) {
 
   // Handle protocol on macOS (open-url event)
   app.on("open-url", (event, url) => {
-    log.info("[DeepLink] open-url event received:", url);
+    log.info("[DeepLink] open-url event received");
     event.preventDefault();
 
     // If app is not ready yet, wait for it
     if (!app.isReady()) {
-      log.info("[DeepLink] App not ready, storing for later");
+      log.debug("[DeepLink] App not ready, storing for later");
       app.whenReady().then(() => {
         handleDeepLink(url);
       });
     } else {
       // Focus existing window first, before handling the deep link
-      log.info("[DeepLink] App ready, focusing window and handling");
       if (mainWindow) {
-        log.info("[DeepLink] mainWindow exists, focusing");
+        log.debug("[DeepLink] mainWindow exists, focusing");
         if (mainWindow.isMinimized()) mainWindow.restore();
         mainWindow.show();
         mainWindow.focus();
@@ -4127,10 +4141,9 @@ if (gotTheLock) {
 
 // Handle deep links - MUST be defined before app.whenReady()
 function handleDeepLink(url) {
-  log.info("[DeepLink] handleDeepLink called with:", url);
   try {
     const urlObj = new URL(url);
-    log.info("[DeepLink] Parsed URL - hostname:", urlObj.hostname, "pathname:", urlObj.pathname);
+    log.info("[DeepLink] Handling deep link", { hostname: urlObj.hostname });
 
     if (urlObj.hostname === "open") {
       const projectPath = decodeURIComponent(
@@ -4152,7 +4165,7 @@ function handleDeepLink(url) {
       log.warn("[DeepLink] Unknown deep link hostname:", urlObj.hostname);
     }
   } catch (error) {
-    log.error("[DeepLink] Error parsing URL:", error);
+    log.error("[DeepLink] Error parsing URL:", error?.message);
   }
 }
 
@@ -4180,7 +4193,7 @@ if (process.argv.includes("--disable-gpu") || process.env.RELIANT_DISABLE_GPU ==
 // App event handlers
 app.whenReady().then(async () => {
   const appStartTime = Date.now();
-  log.info("[App] ═══ App Ready Event Fired ═══");
+  log.info("[App] Ready event fired");
   log.debug("[App] Platform:", process.platform);
   log.debug("[App] Electron version:", process.versions.electron);
   log.debug("[App] Node version:", process.versions.node);
@@ -4356,7 +4369,7 @@ app.whenReady().then(async () => {
     log.warn("[Window] Failed to restore window state:", error.message);
   }
 
-  log.info(`[App] ✓✓✓ TOTAL APP.WHENREADY TIME: ${Date.now() - appStartTime}ms`);
+  log.info(`[App] Startup complete in ${Date.now() - appStartTime}ms`);
 
   // Log update configuration
   log.info(`[AutoUpdater] app.isPackaged: ${app.isPackaged}`);
@@ -4368,23 +4381,13 @@ app.whenReady().then(async () => {
     log.info("[AutoUpdater] Automatic checks enabled - will check after window loads");
   }
 
+  // Dock click: same rule as the tray — focus the window in use, and only
+  // create one when there is none to bring back.
   app.on("activate", () => {
-    const windows = BrowserWindow.getAllWindows();
-    log.debug("[App] activate event - Current window count:", windows.length);
-    log.debug("[App] activate event - mainWindow exists:", !!mainWindow);
-
-    // Only create a new window if there are truly no windows
-    if (windows.length === 0) {
-      log.debug("[App] No windows exist, creating new window");
-      createWindow();
-    } else {
-      // Focus the main window or the first available window
-      const windowToFocus = mainWindow || windows[0];
-      if (windowToFocus.isMinimized()) windowToFocus.restore();
-      windowToFocus.show();
-      windowToFocus.focus();
-      log.debug("[App] Focused existing window");
-    }
+    log.debug("[App] activate event - app window count:", appWindowsByRecency().length);
+    surfaceAppWindow().catch((error) => {
+      log.error("[App] Failed to surface a window on activate:", error);
+    });
   });
 });
 
@@ -4394,11 +4397,11 @@ app.on("certificate-error", (event, webContents, url, error, certificate, callba
   // Only trust certs for localhost connections to our backend
   const parsedUrl = new URL(url);
   if (parsedUrl.hostname === "localhost" || parsedUrl.hostname === "127.0.0.1") {
-    log.info("[TLS] Trusting self-signed certificate for local backend:", url);
+    log.debug("[TLS] Trusting self-signed certificate for local backend:", parsedUrl.origin);
     event.preventDefault();
     callback(true); // Trust the certificate
   } else {
-    log.warn("[TLS] Rejecting certificate for non-local URL:", url);
+    log.warn("[TLS] Rejecting certificate for non-local URL:", parsedUrl.origin);
     callback(false); // Don't trust external self-signed certs
   }
 });

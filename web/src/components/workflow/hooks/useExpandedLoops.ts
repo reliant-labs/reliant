@@ -58,6 +58,11 @@ export interface UseExpandedLoopsResult {
   getSelectedIteration: (nodeId: string) => number
   /** Collapse all loops */
   collapseAll: () => void
+  /**
+   * Keep each expanded loop on the newest iteration the run has reached
+   * (by loop node ID), unless the user picked an iteration themselves.
+   */
+  followLatestIterations: (latest: Record<string, number>) => void
 }
 
 /**
@@ -259,25 +264,22 @@ export function useExpandedLoops(
     setExpandedLoops(new Map())
   }, [])
 
-  // Live tracking: auto-update to current iteration when loop is running
-  useEffect(() => {
-    if (!loopIterationSteps) return
-    
+  // Live tracking: follow the newest iteration while the loop runs. The caller
+  // decides what "newest" is — step rows only exist once a step FINISHES, so
+  // the iteration a run has just entered is known from the live stream, which
+  // this hook does not read.
+  const followLatestIterations = useCallback((latest: Record<string, number>) => {
     setExpandedLoops(prev => {
       let changed = false
       const next = new Map(prev)
-      
+
       for (const [nodeId, state] of next) {
         // Skip if user has manually selected an iteration
         if (manuallySelected.has(nodeId)) continue
-        
-        const iterations = loopIterationSteps[nodeId]
-        if (!iterations || iterations.length === 0) continue
-        
-        // Find the latest iteration number
-        const latestIteration = Math.max(...iterations.map(i => i.iteration))
-        
-        // Update if different
+
+        const latestIteration = latest[nodeId]
+        if (latestIteration === undefined) continue
+
         if (state.selectedIteration !== latestIteration) {
           changed = true
           next.set(nodeId, {
@@ -286,10 +288,10 @@ export function useExpandedLoops(
           })
         }
       }
-      
+
       return changed ? next : prev
     })
-  }, [loopIterationSteps, manuallySelected])
+  }, [manuallySelected])
 
   // Reset manually selected when loop is collapsed
   useEffect(() => {
@@ -315,6 +317,7 @@ export function useExpandedLoops(
     setSelectedIteration,
     getSelectedIteration,
     collapseAll,
+    followLatestIterations,
   }), [
     expandedLoops,
     expandLoop,
@@ -324,5 +327,6 @@ export function useExpandedLoops(
     setSelectedIteration,
     getSelectedIteration,
     collapseAll,
+    followLatestIterations,
   ])
 }

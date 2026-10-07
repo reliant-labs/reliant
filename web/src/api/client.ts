@@ -37,6 +37,7 @@ export const api = {
           is_hidden: w.isHidden || false,
           title: w.title,
           status: w.status, // "draft" | "complete"; builtin/project are always complete
+          automation_only: w.automationOnly || false,
           // The graph travels on the wire already, and dropping it here made
           // the app contradict itself one tap apart: the catalog row read
           // `step_count` and said "17 steps", while the detail screen read
@@ -393,6 +394,7 @@ export const api = {
         selected_presets?: Record<string, string>;
 
         discuss?: boolean; // If true, chat with LLM without resuming paused workflow
+        client_message_id?: string; // The id the client gave this message
       }
     ) => {
       const messages: Array<{ role: MessageRole; content: string }> = [];
@@ -412,12 +414,17 @@ export const api = {
         target_thread: options?.target_thread,
         selected_presets: options?.selected_presets,
         discuss: options?.discuss,
+        client_message_id: options?.client_message_id,
       });
       // Return workflow metadata for state updates
       return {
         chatId: result.chat_id,
         workflowId: result.workflow_id,
         runId: result.run_id,
+        messageId: result.message_id,
+        // The message was queued for the thread's next turn, not saved to
+        // history: messageId is the queued row's id.
+        queued: result.queued,
       };
     },
 

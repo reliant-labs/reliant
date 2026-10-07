@@ -29,6 +29,7 @@ import type { WorkflowExecution, StepExecution } from '../../Chat/ExecutionSideb
 import {
   useNodeExecutionStatus,
   nodeExecutionKey,
+  type LoopScopedNodeExecution,
   type StreamNodeStatus,
 } from './useNodeExecutionStatus'
 
@@ -49,6 +50,30 @@ export interface LoopExecutionInfo {
 export interface ExecutionStatusResult {
   statusMap: Record<string, NodeExecutionStatus>
   loopInfo: Record<string, LoopExecutionInfo>
+  /**
+   * Stream executions of nodes inside loops, for buildLoopChildStatus. Not
+   * folded into statusMap: a loop body's nodes are not root nodes, and their
+   * status only means something per iteration.
+   */
+  loopScoped: LoopScopedNodeExecution[]
+  /** Newest node event sequence of the run's workflow (see reduceNodeExecutions). */
+  latestSequence: number | undefined
+}
+
+/**
+ * Whether a loop-scoped execution is what the run is doing now: running, or
+ * the last thing the run did (the gap between two activities of one node).
+ */
+function isBusy(entry: LoopScopedNodeExecution, latestSequence: number | undefined): boolean {
+  return entry.status === 'running' || entry.sequence === latestSequence
+}
+
+/** Whether an execution ran inside `scopeNodeId` — directly, or anywhere below it. */
+function ranInside(entry: LoopScopedNodeExecution, scopeNodeId: string): boolean {
+  return (
+    entry.loopNodeId === scopeNodeId ||
+    (entry.nodePath !== undefined && entry.nodePath.startsWith(scopeNodeId + '.'))
+  )
 }
 
 /**
@@ -76,11 +101,14 @@ function buildExecutionStatusResult(
   execution: WorkflowExecution | undefined,
   workflowNodeIds: string[] | undefined,
   streamStatusByKey: Record<string, StreamNodeStatus>,
+  loopScoped: LoopScopedNodeExecution[],
+  latestSequenceByWorkflow: Record<string, number>,
 ): ExecutionStatusResult {
-  const emptyResult: ExecutionStatusResult = { statusMap: {}, loopInfo: {} }
   if (!execution) {
-    return emptyResult
+    return { statusMap: {}, loopInfo: {}, loopScoped, latestSequence: undefined }
   }
+  const latestSequence = latestSequenceByWorkflow[execution.id]
+  const scopedHere = loopScoped.filter((entry) => entry.workflowId === execution.id)
 
   const statusMap: Record<string, NodeExecutionStatus> = {}
   const loopInfo: Record<string, LoopExecutionInfo> = {}
@@ -173,6 +201,18 @@ function buildExecutionStatusResult(
       continue
     }
 
+    // A loop or sub-workflow node has no activity of its own, so no event of
+    // its own: it is running exactly while something inside it is. Its step
+    // rows only ever say completed/failed (they are written as steps finish),
+    // which is why a running loop used to be drawn as already done.
+    if (
+      execution.status === 'running' &&
+      scopedHere.some((entry) => ranInside(entry, nodeId) && isBusy(entry, latestSequence))
+    ) {
+      statusMap[nodeId] = 'running'
+      continue
+    }
+
     // --- Factual tree fallback (no position inference) ---
     const childWorkflow = childWorkflowByNode.get(nodeId)
     const directStep = directStepByNode.get(nodeId)
@@ -190,7 +230,7 @@ function buildExecutionStatusResult(
     // inference before Phase 2; deliberately removed).
   }
 
-  return { statusMap, loopInfo }
+  return { statusMap, loopInfo, loopScoped: scopedHere, latestSequence }
 }
 
 /**
@@ -231,10 +271,12 @@ export function useExecutionStatus(
   nodeIds?: string[],
   chatId?: string | null,
 ): Record<string, NodeExecutionStatus> {
-  const { statusByKey } = useNodeExecutionStatus(chatId ?? null)
+  const { statusByKey, loopScoped, latestSequenceByWorkflow } = useNodeExecutionStatus(chatId ?? null)
   return useMemo(
-    () => buildExecutionStatusResult(execution, nodeIds, statusByKey).statusMap,
-    [execution, nodeIds, statusByKey]
+    () =>
+      buildExecutionStatusResult(execution, nodeIds, statusByKey, loopScoped, latestSequenceByWorkflow)
+        .statusMap,
+    [execution, nodeIds, statusByKey, loopScoped, latestSequenceByWorkflow]
   )
 }
 
@@ -248,10 +290,10 @@ export function useExtendedExecutionStatus(
   nodeIds?: string[],
   chatId?: string | null,
 ): ExecutionStatusResult {
-  const { statusByKey } = useNodeExecutionStatus(chatId ?? null)
+  const { statusByKey, loopScoped, latestSequenceByWorkflow } = useNodeExecutionStatus(chatId ?? null)
   return useMemo(
-    () => buildExecutionStatusResult(execution, nodeIds, statusByKey),
-    [execution, nodeIds, statusByKey]
+    () => buildExecutionStatusResult(execution, nodeIds, statusByKey, loopScoped, latestSequenceByWorkflow),
+    [execution, nodeIds, statusByKey, loopScoped, latestSequenceByWorkflow]
   )
 }
 
@@ -345,4 +387,260 @@ export function findLoopIterationSteps(
   }
   
   return iterations.sort((a, b) => a.iteration - b.iteration)
+}
+
+// ---------------------------------------------------------------------------
+// Loop bodies
+//
+// An expanded loop draws its sub-workflow's nodes once, and shows one
+// iteration at a time. Everything below answers "what is the state of child
+// node X in iteration N of loop L" from the two sources that know:
+//   - step rows (findLoopIterationSteps), written when a step FINISHES — the
+//     record of what happened, including exit codes;
+//   - the loop-scoped node_execution stream (LoopScopedNodeExecution), which
+//     is the only thing that knows a step is running NOW.
+// ---------------------------------------------------------------------------
+
+/**
+ * Resolve a step id recorded inside a loop body to the body node it belongs
+ * to. Step ids carry suffixes ("lint-save", "review_checkpoint" is its own
+ * node), so this tries an exact match first and then progressively looser
+ * ones. Exact-first is what keeps "review_checkpoint" from resolving to
+ * "review".
+ */
+export function resolveLoopChildNodeId(stepId: string, childNodeIds: Set<string>): string | null {
+  if (childNodeIds.has(stepId)) return stepId
+
+  for (const childId of childNodeIds) {
+    if (
+      stepId.startsWith(childId + '-') ||
+      stepId.startsWith(childId + '_') ||
+      childId.startsWith(stepId + '-') ||
+      childId.startsWith(stepId + '_')
+    ) {
+      return childId
+    }
+  }
+
+  const baseName = stepId.split('-')[0].split('_')[0]
+  if (childNodeIds.has(baseName)) return baseName
+
+  const withoutSuffix = stepId.replace(/-(save|result|output|input)$/i, '')
+  if (childNodeIds.has(withoutSuffix)) return withoutSuffix
+
+  for (const part of stepId.split(/[-_]/)) {
+    if (childNodeIds.has(part)) return part
+  }
+
+  for (const childId of childNodeIds) {
+    if (stepId.includes(childId) || childId.includes(stepId)) return childId
+  }
+  return null
+}
+
+/**
+ * The step executions of one node inside a loop body.
+ *
+ * A body node is drawn with a loop-scoped id ("attempt:review"), which matches
+ * nothing in the root workflow — that is why the details panel said "Not yet
+ * executed" for every node inside a loop, including the reviewer whose
+ * verdict is the point of the run. Rows are matched on the loop they ran in
+ * and, when given, the iteration being viewed.
+ */
+export function findLoopChildStepExecutions(
+  execution: WorkflowExecution | undefined,
+  loopNodeId: string,
+  childNodeId: string,
+  childNodeIds: string[],
+  iteration?: number,
+): StepExecution[] {
+  if (!execution) return []
+  const ids = new Set(childNodeIds)
+  ids.add(childNodeId)
+  return execution.steps
+    .filter(
+      (step) =>
+        step.loopNodeId === loopNodeId &&
+        (iteration === undefined || step.loopIteration === iteration) &&
+        resolveLoopChildNodeId(step.stepId, ids) === childNodeId,
+    )
+    .sort((a, b) => b.createdAt - a.createdAt)
+}
+
+export interface LoopChildStatusInput {
+  /** The run's workflow id — loop-scoped stream entries are matched on it. */
+  workflowId: string | undefined
+  /**
+   * The expanded loop's diagram id. A loop nested in another expanded loop is
+   * drawn as "outer:inner"; its own id is the last segment.
+   */
+  loopNodeId: string
+  /** Ids of the loop body's nodes. */
+  childNodeIds: string[]
+  /** This loop's step rows, grouped by iteration (findLoopIterationSteps). */
+  iterations: LoopIterationInfo[]
+  /** Loop-scoped stream executions (useExtendedExecutionStatus). */
+  loopScoped: LoopScopedNodeExecution[]
+  /** A finished loop has no running children, whatever a stale event says. */
+  loopIsRunning: boolean
+  /** Newest node event sequence of the run (ExecutionStatusResult.latestSequence). */
+  latestSequence: number | undefined
+  /**
+   * A parallel loop runs its iterations at once, so an activity that does
+   * not name this loop's iteration cannot be placed in one.
+   */
+  parallel?: boolean
+}
+
+export interface LoopChildStatus {
+  /** Status of each body node, per iteration. */
+  byIteration: Map<number, Record<string, NodeExecutionStatus>>
+  /** Per-iteration rollup, index = iteration number (0..latestIteration). */
+  iterationStatuses: NodeExecutionStatus[]
+  /** The newest iteration the run has reached — the one to follow live. */
+  latestIteration: number | undefined
+}
+
+const CHILD_STATUS_RANK: Record<NodeExecutionStatus, number> = {
+  pending: 0,
+  completed: 1,
+  failed: 2,
+  running: 3,
+}
+
+/** Where a stream entry sits relative to the loop: which body node, and how deep. */
+function placeInLoop(
+  entry: LoopScopedNodeExecution,
+  loopPath: string[],
+  ownLoopId: string,
+  childIds: Set<string>,
+): { childId: string; direct: boolean } | null {
+  if (entry.nodePath) {
+    const segments = entry.nodePath.split('.')
+    for (let start = 0; start + loopPath.length < segments.length; start++) {
+      if (loopPath.every((segment, i) => segments[start + i] === segment)) {
+        const childIndex = start + loopPath.length
+        const childId = segments[childIndex]
+        if (!childIds.has(childId)) return null
+        return { childId, direct: childIndex === segments.length - 1 }
+      }
+    }
+    return null
+  }
+  // Events written before the server sent node_path: only this loop's own
+  // scope can be placed, by the step id.
+  if (entry.loopNodeId !== ownLoopId) return null
+  const childId = resolveLoopChildNodeId(entry.nodeId, childIds)
+  return childId ? { childId, direct: true } : null
+}
+
+/**
+ * The state of every node in a loop body, per iteration.
+ *
+ * Rows are the record of what finished — and the only source of a run step's
+ * exit code, so a row's "failed" is never overridden by the stream's
+ * lifecycle "completed". The stream adds what rows cannot know: that a step is
+ * running right now. Two kinds of stream entry contribute:
+ *
+ *  - Entries scoped to THIS loop carry their iteration, so they are placed
+ *    exactly: lint/test/build running in iteration 2 light up in iteration 2.
+ *  - Entries from deeper inside a body node — the reviewer's own agent loop,
+ *    say — are scoped to that inner loop, not this one, so they carry no
+ *    iteration of ours. Their node_path still says WHICH body node they are
+ *    in. A body node runs once per iteration, so such an entry belongs to the
+ *    newest iteration unless that node has already finished there, in which
+ *    case it is the start of the next one. Not done for parallel loops, whose
+ *    iterations run side by side.
+ *
+ * A body node with a deep entry is running while that entry is, and also
+ * between its activities — while the run's newest node event is still its
+ * own — so it does not flicker off for the moment the engine takes to
+ * schedule its next step.
+ */
+export function buildLoopChildStatus(input: LoopChildStatusInput): LoopChildStatus {
+  const { workflowId, loopNodeId, iterations, loopScoped, loopIsRunning, latestSequence, parallel } = input
+  const childIds = new Set(input.childNodeIds)
+  const loopPath = loopNodeId.split(':')
+  const ownLoopId = loopPath[loopPath.length - 1]
+  const byIteration = new Map<number, Record<string, NodeExecutionStatus>>()
+
+  const merge = (iteration: number, childId: string, status: NodeExecutionStatus) => {
+    if (iteration < 0) return
+    const statuses = byIteration.get(iteration) ?? {}
+    const current = statuses[childId]
+    if (!current || CHILD_STATUS_RANK[status] > CHILD_STATUS_RANK[current]) {
+      statuses[childId] = status
+    }
+    byIteration.set(iteration, statuses)
+  }
+  const isFinishedAt = (iteration: number, childId: string) => {
+    const status = byIteration.get(iteration)?.[childId]
+    return status === 'completed' || status === 'failed'
+  }
+
+  let latestIteration: number | undefined
+  const reach = (iteration: number) => {
+    if (iteration >= 0 && (latestIteration === undefined || iteration > latestIteration)) {
+      latestIteration = iteration
+    }
+  }
+
+  // 1. Rows: what finished, per iteration.
+  for (const iteration of iterations) {
+    for (const step of iteration.steps) {
+      const childId = resolveLoopChildNodeId(step.stepId, childIds)
+      if (childId) merge(iteration.iteration, childId, step.status)
+    }
+    if (iteration.steps.length > 0) reach(iteration.iteration)
+  }
+
+  // 2. Stream entries placed in this loop's body.
+  const placed: Array<{ entry: LoopScopedNodeExecution; childId: string; direct: boolean; ours: boolean }> = []
+  for (const entry of loopScoped) {
+    if (workflowId && entry.workflowId !== workflowId) continue
+    const place = placeInLoop(entry, loopPath, ownLoopId, childIds)
+    if (!place) continue
+    const ours = entry.loopNodeId === ownLoopId
+    placed.push({ entry, ...place, ours })
+    if (ours) reach(entry.iteration)
+  }
+
+  // Entries that name our iteration: placed exactly. A deep entry only ever
+  // says "this body node is busy", never that it finished.
+  for (const { entry, childId, direct, ours } of placed) {
+    if (!ours) continue
+    if (entry.status === 'running') {
+      if (loopIsRunning) merge(entry.iteration, childId, 'running')
+    } else if (direct) {
+      merge(entry.iteration, childId, entry.status)
+    }
+  }
+
+  // Entries from deeper loops: placed by body node, in the open iteration.
+  if (loopIsRunning && !parallel) {
+    const open = latestIteration ?? 0
+    for (const { entry, childId, ours } of placed) {
+      if (ours) continue
+      if (!isBusy(entry, latestSequence)) continue
+      const iteration = isFinishedAt(open, childId) ? open + 1 : open
+      merge(iteration, childId, 'running')
+      reach(iteration)
+    }
+  }
+
+  const iterationStatuses: NodeExecutionStatus[] = []
+  if (latestIteration !== undefined) {
+    for (let i = 0; i <= latestIteration; i++) {
+      const statuses = Object.values(byIteration.get(i) ?? {})
+      // An iteration with a step still running is running, even if a check in
+      // it already failed — that is the normal shape of a review iteration.
+      if (statuses.length === 0) iterationStatuses.push('pending')
+      else if (statuses.includes('running')) iterationStatuses.push('running')
+      else if (statuses.includes('failed')) iterationStatuses.push('failed')
+      else if (statuses.every((s) => s === 'completed')) iterationStatuses.push('completed')
+      else iterationStatuses.push('pending')
+    }
+  }
+
+  return { byIteration, iterationStatuses, latestIteration }
 }

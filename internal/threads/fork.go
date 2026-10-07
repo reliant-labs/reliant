@@ -111,7 +111,7 @@ func (s *Service) forkThreadInternal(ctx context.Context, opts ForkThreadOpts, w
 	}
 
 	// FORK-DEBUG: Log forked thread and context window creation
-	logging.Info("[FORK-DEBUG] forkThreadInternal created forked thread and CW",
+	logging.Debug("[Fork] forkThreadInternal created forked thread and CW",
 		"threadID", createdThread.ID,
 		"parentThreadID", opts.ParentThreadID,
 		"forkAtMessageID", opts.ForkAtMessageID,

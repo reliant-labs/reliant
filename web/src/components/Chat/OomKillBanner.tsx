@@ -3,10 +3,10 @@
  * current machine's daemon pod was recently OOM-killed.
  *
  * Data path: the workspace operator records OOMKilled container terminations
- * on the Workspace CR status → the control-plane state reconciler mirrors
- * them onto the daemon row → `controlplane.v1.DaemonService.ListDaemons`
- * exposes `lastOomKilledAt` / `oomKillCount` → the shared `useDaemonList`
- * query (same source as ResumeDaemonPill) delivers them here.
+ * on the Workspace CR status → the control plane publishes them as a daemon
+ * lifecycle event → the registry mirrors them onto the daemon row and the
+ * gateway announces the change on the user stream → the shared `useDaemonList`
+ * query (same source as ResumeDaemonPill) refetches and delivers them here.
  *
  * Without this, an OOM kill looks like a silent disconnect/reconnect blip:
  * the kubelet restarts the container in place, so nothing else in the UI
@@ -30,10 +30,6 @@ const DISMISS_KEY = "reliant.oomKillBanner.dismissed";
  *  that has been healthy since shouldn't nag forever. The control-plane sync
  *  runs every ~5 minutes, so the window comfortably covers propagation lag. */
 const RECENT_WINDOW_MS = 30 * 60 * 1000;
-
-/** Poll faster than useDaemonList's default (mount/focus only) while the
- *  banner is mounted so a fresh kill surfaces without a tab refocus. */
-const POLL_INTERVAL_MS = 60_000;
 
 function readDismissed(): string {
   if (typeof window === "undefined") return "";
@@ -74,9 +70,10 @@ function machineDescriptor(d: Daemon): string {
 
 export function OomKillBanner() {
   const navigate = useNavigate();
-  const { data: daemons = [] } = useDaemonList({
-    refetchInterval: POLL_INTERVAL_MS,
-  });
+  // No poll of its own: an OOM kill reaches the registry as a control-plane
+  // lifecycle event, and the gateway announces it on the user stream, which
+  // refetches this shared list.
+  const { data: daemons = [] } = useDaemonList();
   const { activeDaemon } = useDaemonStatus();
   const [dismissedSig, setDismissedSig] = useState<string>(() => readDismissed());
 

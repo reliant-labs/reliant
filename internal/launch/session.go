@@ -90,15 +90,39 @@ func (l *Launcher) ResolveChatWorktreeID(ctx context.Context, projectID string, 
 	}
 }
 
+// Checkout is the directory a chat's runs operate in, as the runtime's
+// workflow.path / workflow.worktree_path / workflow.branch report it.
+type Checkout struct {
+	// Path is the working directory: the chat's worktree, or the project.
+	Path string
+	// WorktreePath and Branch are set only when Path is a worktree reliant
+	// created for the chat. They stay empty for the project's main checkout,
+	// whose current branch is not tracked (the main worktree row records the
+	// default branch at project creation, not what is checked out now).
+	WorktreePath string
+	Branch       string
+}
+
 // GetEffectiveWorkingPath returns the working directory path for a chat.
 // If the chat has a worktree, it returns the worktree path.
 // Otherwise, it returns the project path.
 // This ensures tools execute in the correct directory based on the chat's context.
 func (l *Launcher) GetEffectiveWorkingPath(ctx context.Context, chat *db.Chat) string {
+	return l.GetEffectiveCheckout(ctx, chat).Path
+}
+
+// GetEffectiveCheckout is GetEffectiveWorkingPath plus, for a chat in a
+// worktree, that worktree and its branch.
+func (l *Launcher) GetEffectiveCheckout(ctx context.Context, chat *db.Chat) Checkout {
 	// First try to get worktree path if the chat has one
 	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
 		if worktree, err := l.repo.GetWorktree(ctx, *chat.WorktreeID); err == nil && worktree != nil {
-			return worktree.Path
+			checkout := Checkout{Path: worktree.Path}
+			if !worktree.IsMain {
+				checkout.WorktreePath = worktree.Path
+				checkout.Branch = worktree.Branch
+			}
+			return checkout
 		} else {
 			// A worktree-bound chat whose worktree can't be resolved must NOT
 			// silently degrade to the project (main) checkout — that runs the
@@ -113,11 +137,11 @@ func (l *Launcher) GetEffectiveWorkingPath(ctx context.Context, chat *db.Chat) s
 	// Fall back to project path
 	if chat.ProjectID != "" {
 		if project, err := l.repo.GetProject(ctx, chat.ProjectID); err == nil && project != nil {
-			return project.Path
+			return Checkout{Path: project.Path}
 		}
 	}
 
-	return ""
+	return Checkout{}
 }
 
 // NormalizeWorkflowSlug produces a URL-safe slug from a workflow name.
@@ -180,7 +204,7 @@ func NormalizeModelInputs(inputs map[string]interface{}, schemas map[string]*rel
 					selector, normalized := NormalizeLegacyModelSelectorString(s)
 					if normalized != nil {
 						inputs[name] = normalized
-						logging.Info("[normalizeModelInputs] Converted string model to object", "input", name, "model", selector, "providers", normalized["providers"])
+						logging.Debug("[normalizeModelInputs] Converted string model to object", "input", name, "model", selector, "providers", normalized["providers"])
 					}
 				}
 			}

@@ -24,7 +24,7 @@ func LogCallAttempt(serverName, toolName string, attemptIndex int, total int, at
 }
 
 func LogCallSuccess(serverName, toolName string, attemptIndex int, total int, envelope compat.EnvelopeName) {
-	logging.Info("MCP tool call succeeded",
+	logging.Debug("MCP tool call succeeded",
 		"server", serverName,
 		"tool", toolName,
 		"attempt", attemptIndex+1,

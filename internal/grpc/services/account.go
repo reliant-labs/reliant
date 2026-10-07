@@ -37,7 +37,7 @@ import (
 // longer exists.
 var retainedElsewhere = []string{
 	"Your invoices and billing history are kept as financial records, with your personal details removed.",
-	"If you have a paid subscription or unspent credit, deletion will stop and ask you to resolve that first.",
+	"If you have a paid subscription, deletion will stop and ask you to cancel it first.",
 	"Your sign-in identity is removed, so you will be signed out everywhere and this email can be used to sign up again.",
 }
 
@@ -122,6 +122,23 @@ func (s *AccountService) PreviewAccountDeletion(
 			fmt.Errorf("could not read account contents"))
 	}
 
+	// The wallet quote comes from the control plane, which owns the wallet.
+	// A preview that cannot get it FAILS rather than omitting it: the dialog
+	// must state the refund and the forfeiture in dollars before the user
+	// confirms, and a dialog silently missing that line reads as "nothing
+	// happens to your money".
+	var wallet *reliantv1.AccountDeletionWalletQuote
+	if s.controlPlane != nil {
+		quote, cpErr := s.controlPlane.PreviewAccountDeletionWallet(ctx,
+			bearerToken(req.Header().Get("Authorization")))
+		if cpErr != nil {
+			logging.Error("[AccountService] control-plane wallet quote failed", "user_id", userID, "error", cpErr)
+			return nil, connect.NewError(connect.CodeUnavailable,
+				fmt.Errorf("could not load your wallet balance; please try again"))
+		}
+		wallet = walletQuoteToProto(quote)
+	}
+
 	return connect.NewResponse(&reliantv1.PreviewAccountDeletionResponse{
 		ProjectCount:           counts.Projects,
 		ChatCount:              counts.Chats,
@@ -130,6 +147,7 @@ func (s *AccountService) PreviewAccountDeletion(
 		HasProviderCredentials: counts.HasProviderCredentials,
 		ConfirmEmail:           email,
 		RetainedElsewhere:      retainedElsewhere,
+		Wallet:                 wallet,
 	}), nil
 }
 
@@ -163,26 +181,41 @@ func (s *AccountService) DeleteAccount(
 
 	// CONTROL PLANE FIRST, then the local purge.
 	//
-	// If the control plane refuses (a paid subscription, prepaid credit),
-	// nothing has been destroyed and the user can clear the blocker and retry.
+	// If the control plane refuses (a paid subscription), nothing has been
+	// destroyed and the user can clear the blocker and retry. A wallet balance
+	// does not refuse: the control plane refunds the paid part to the card
+	// and forfeits promotional credit as part of deleting the account.
 	// If it succeeds and the purge below then fails, the user is locked out of
 	// the platform but their data is still here and the operation is
 	// retryable. The reverse order has an unacceptable failure: every chat and
 	// project destroyed, and the billing still running.
+	resp := &reliantv1.DeleteAccountResponse{}
 	if s.controlPlane != nil {
-		blockers, cpErr := s.controlPlane.DeleteCurrentUserAccount(ctx,
+		result, cpErr := s.controlPlane.DeleteCurrentUserAccount(ctx,
 			bearerToken(req.Header().Get("Authorization")))
 		if cpErr != nil {
 			logging.Error("[AccountService] control-plane deletion failed", "user_id", userID, "error", cpErr)
+			if connect.CodeOf(cpErr) == connect.CodeUnavailable {
+				// A refund's outcome could not be confirmed with the payment
+				// provider. Nothing irreversible happened and retrying replays
+				// the same refund rather than issuing another.
+				return nil, connect.NewError(connect.CodeUnavailable,
+					fmt.Errorf("we could not confirm your refund with our payment provider; nothing was deleted, please try again in a minute"))
+			}
 			return nil, connect.NewError(connect.CodeInternal,
 				fmt.Errorf("could not delete your platform account; nothing was deleted"))
 		}
-		if len(blockers) > 0 {
+		if len(result.Blockers) > 0 {
 			// FailedPrecondition with the blocker's own sentence: the user
 			// gets "cancel your subscription first", not a generic error.
 			return nil, connect.NewError(connect.CodeFailedPrecondition,
-				errors.New(blockers[0].Detail))
+				errors.New(result.Blockers[0].Detail))
 		}
+		resp.RefundedCents = result.RefundedCents
+		resp.RefundDestinations = refundDestinationsToProto(result.RefundDestinations)
+		resp.ForfeitedPromoCents = result.ForfeitedPromoCents
+		resp.RefundPending = result.RefundPending
+		resp.RefundOwedCents = result.RefundOwedCents
 	}
 
 	deleted, err := accountpurge.Purge(ctx, s.db, userID)
@@ -194,9 +227,33 @@ func (s *AccountService) DeleteAccount(
 			fmt.Errorf("account deletion failed; nothing was deleted"))
 	}
 
-	logging.Warn("[AccountService] account deleted", "user_id", userID, "rows", deleted)
+	logging.Warn("[AccountService] account deleted", "user_id", userID, "rows", deleted,
+		"refund_pending", resp.RefundPending)
 
-	return connect.NewResponse(&reliantv1.DeleteAccountResponse{
-		DeletedRowCount: deleted,
-	}), nil
+	resp.DeletedRowCount = deleted
+	return connect.NewResponse(resp), nil
+}
+
+func walletQuoteToProto(q *controlplane.AccountDeletionWalletQuote) *reliantv1.AccountDeletionWalletQuote {
+	if q == nil {
+		return nil
+	}
+	return &reliantv1.AccountDeletionWalletQuote{
+		RefundCents:         q.RefundCents,
+		Destinations:        refundDestinationsToProto(q.Destinations),
+		UnrefundableCents:   q.UnrefundableCents,
+		ForfeitedPromoCents: q.ForfeitedPromoCents,
+	}
+}
+
+func refundDestinationsToProto(in []controlplane.RefundDestination) []*reliantv1.RefundDestination {
+	out := make([]*reliantv1.RefundDestination, 0, len(in))
+	for _, d := range in {
+		out = append(out, &reliantv1.RefundDestination{
+			CardBrand:   d.CardBrand,
+			CardLast4:   d.CardLast4,
+			AmountCents: d.AmountCents,
+		})
+	}
+	return out
 }

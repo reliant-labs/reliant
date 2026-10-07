@@ -1,7 +1,8 @@
 // Copyright (c) 2025 Reliant Labs
 
 import { Tooltip } from "../ui/Tooltip";
-import { useState, useRef, useEffect, useMemo } from "react";
+import { useCallback, useState, useRef, useEffect, useMemo } from "react";
+import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import {
   Wrench,
   ChevronDown,
@@ -46,8 +47,10 @@ interface ToolsSelectorProps {
 
 const QUICK_EXPRESSIONS: Array<{ token: string; description: string }> = [
   {
-    token: "tag:default",
-    description: "Recommended built-in tool set",
+    // Tool tags are namespaced (internal/llm/tools/registry.go); there is
+    // no bare `tag:default`, so offering it granted nothing.
+    token: "tag:coding:default",
+    description: "The coding agent's starting tool set",
   },
   {
     token: "tag:mcp",
@@ -55,7 +58,7 @@ const QUICK_EXPRESSIONS: Array<{ token: string; description: string }> = [
   },
   {
     token: "tag:search",
-    description: "grep / glob and other discovery tools",
+    description: "Search tools",
   },
   {
     token: "tag:web",
@@ -108,7 +111,8 @@ function isValidToolToken(token: string): boolean {
   }
 
   if (token.startsWith("tag:")) {
-    return /^tag:[a-zA-Z0-9_-]+$/.test(token);
+    // Namespaced tags (tag:coding:default) are tags too.
+    return /^tag:[a-zA-Z0-9_-]+(:[a-zA-Z0-9_-]+)*$/.test(token);
   }
 
   // MCP explicit tool name or MCP wildcard
@@ -135,6 +139,8 @@ export function ToolsSelector({
 }: ToolsSelectorProps) {
   const value = useMemo(() => normalizeSelection(rawValue), [rawValue]);
   const [isOpen, setIsOpen] = useState(false);
+  // Escape closes the list, and only the list (useEscapeLayer).
+  const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
   const [tools, setTools] = useState<ToolInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [customToken, setCustomToken] = useState("");
@@ -323,6 +329,7 @@ export function ToolsSelector({
                 <button
                   type="button"
                   onClick={() => removeToken(token)}
+                  aria-label={`Remove ${token}`}
                   className="hover:bg-black/10 rounded-full p-0.5"
                 >
                   <X className="w-3 h-3" />
@@ -356,7 +363,7 @@ export function ToolsSelector({
 
         {/* Dropdown - opens upward since tools are at bottom */}
         {isOpen && (
-          <div className="absolute bottom-full left-0 right-0 mb-1 z-50 rounded-md border border-border bg-card shadow-lg">
+          <div {...escapeLayer} className="absolute bottom-full left-0 right-0 mb-1 z-50 rounded-md border border-border bg-card shadow-lg">
             <div className="py-2 max-h-80 overflow-y-auto">
               {/* Quick expressions */}
               <div className="px-3 pb-2 border-b border-border/70">

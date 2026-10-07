@@ -3,6 +3,7 @@ import { cn } from "../../lib/utils";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 import { CombinedGeneralSettings } from "./CombinedGeneralSettings";
 import { ToolPreferences } from "./ToolPreferences";
+import { ActionApprovalSettings } from "./ActionApprovalSettings";
 import { LocalModelsSection } from "./LocalModelsSection";
 import { reliantAIAvailable } from "../../services/controlPlane/reliantAI";
 
@@ -30,7 +31,9 @@ type AITab = "providers" | "local" | "tools" | "reliant";
  * Single "AI" settings section with internal tabs:
  *   - "Your providers" → bring-your-own provider keys ({@link CombinedGeneralSettings}).
  *   - "Tools"          → global bindings for tools that resolve a model on the
- *                        user's behalf ({@link ToolPreferences}).
+ *                        user's behalf ({@link ToolPreferences}), and the
+ *                        integration actions you always allow
+ *                        ({@link ActionApprovalSettings}).
  *   - "Reliant AI"     → Reliant-managed keys/credits/spend (ReliantAISection).
  *
  * The Reliant AI tab only renders when the managed-AI surface is wired up
@@ -60,8 +63,11 @@ export function AISettings({ providers, onProvidersUpdate }: AISettingsProps) {
   // user's behalf and are never chosen by the agent. Same card treatment as
   // the providers tab so the two read as siblings.
   const toolsContent = (
-    <div className="mx-auto max-w-[700px] rounded-xl border border-border/50 bg-card p-6 shadow-sm">
+    <div className="mx-auto max-w-[700px] space-y-8 rounded-xl border border-border/50 bg-card p-6 shadow-sm">
       <ToolPreferences providers={providers} />
+      <div className="border-t border-border/60 pt-6">
+        <ActionApprovalSettings />
+      </div>
     </div>
   );
 

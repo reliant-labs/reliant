@@ -2,6 +2,7 @@
 package wfcel
 
 import (
+	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -94,8 +95,8 @@ func TestExtractFieldInfo_CallLLMArgs_Annotations(t *testing.T) {
 		if f.Label != "System prompt" {
 			t.Errorf("label: want %q, got %q", "System prompt", f.Label)
 		}
-		if f.Placeholder == nil || *f.Placeholder != "Optional instructions for model behavior" {
-			t.Errorf("placeholder mismatch: got %v", f.Placeholder)
+		if !strings.HasPrefix(f.Example, "You are a careful code reviewer.") {
+			t.Errorf("example mismatch: got %q", f.Example)
 		}
 		if len(f.VisibilityContexts) != 1 || f.VisibilityContexts[0] != "advanced" {
 			t.Errorf("visibility_contexts: want [advanced], got %v", f.VisibilityContexts)
@@ -119,8 +120,8 @@ func TestExtractFieldInfo_CallLLMArgs_Annotations(t *testing.T) {
 		if f.Label != "Model" {
 			t.Errorf("label: want %q, got %q", "Model", f.Label)
 		}
-		if f.Placeholder == nil || *f.Placeholder != "e.g. flagship, fast, cheap, or explicit model ID" {
-			t.Errorf("placeholder mismatch: got %v", f.Placeholder)
+		if f.Example != "flagship" {
+			t.Errorf("example mismatch: got %q", f.Example)
 		}
 		if len(f.VisibilityContexts) != 1 || f.VisibilityContexts[0] != "basic" {
 			t.Errorf("visibility_contexts: want [basic], got %v", f.VisibilityContexts)

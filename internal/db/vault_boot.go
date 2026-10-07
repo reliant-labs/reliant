@@ -13,8 +13,9 @@ import (
 )
 
 // BootVault resolves the vault key per the boot policy (hosted: required;
-// self-hosted: generated and persisted), enables api_keys sealing, and seals
-// any legacy plaintext rows. Both composition roots call it right after the
+// self-hosted: generated and persisted), enables credential sealing (api_keys
+// and the provider sign-in token tables), and seals any legacy plaintext
+// api_keys rows. Both composition roots call it right after the
 // repo is built, so a missing or malformed key stops startup.
 func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir string) (*vault.Vault, error) {
 	v, err := vault.Boot(ctx, vault.BootOptions{
@@ -40,8 +41,8 @@ func (r *Repo) Connections() core.ConnectionStore {
 // sealAPIKeys enables sealing, backfills legacy rows, and finalizes the
 // api_keys contract. Readers are sealed-only, so a row left unsealed would be
 // unreadable; refuse to start rather than serve with it.
-func sealAPIKeys(ctx context.Context, repo *Repo, sealer postgresstore.APIKeySealer) error {
-	if err := repo.EnableAPIKeySealing(sealer); err != nil {
+func sealAPIKeys(ctx context.Context, repo *Repo, sealer postgresstore.CredentialSealer) error {
+	if err := repo.EnableCredentialSealing(sealer); err != nil {
 		return err
 	}
 	sealed, err := repo.BackfillAPIKeys(ctx, 200)

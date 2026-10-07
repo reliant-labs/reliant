@@ -127,6 +127,7 @@ func (h *HooksReceiver) serve(w http.ResponseWriter, r *http.Request) {
 		DedupeKey:  trigger.ID + ":" + deliveryKey(r.Header, body, now),
 		OccurredAt: now,
 		Payload:    payload,
+		Sender:     webhookSender(trigger),
 	}, triggers.AcceptOptions{})
 	if err != nil {
 		logging.Error("webhook delivery could not be recorded", "trigger_id", trigger.ID, "error", err)
@@ -142,6 +143,14 @@ func (h *HooksReceiver) serve(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Cache-Control", "no-store")
 	w.WriteHeader(http.StatusAccepted)
 	_, _ = w.Write(append(reply, '\n'))
+}
+
+// webhookSender is a generic webhook's trigger.sender. A webhook names no
+// person: what is known is that the caller held this trigger's credential
+// (its token, or its HMAC secret), so the sender is the trigger itself and
+// verified means exactly that. authenticate has already checked it.
+func webhookSender(trigger *core.Trigger) *core.TriggerSender {
+	return &core.TriggerSender{Kind: core.TriggerSenderKindWebhook, ID: trigger.ID, DisplayName: trigger.Name, Verified: true}
 }
 
 // authenticate resolves the trigger and checks the request carries one of

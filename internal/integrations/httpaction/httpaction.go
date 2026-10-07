@@ -98,18 +98,18 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	}
 	connVars, connValues := connectionVars(m, cred)
 	req := a.GetRequest()
-	timeout := defaultTimeout
-	if s := req.GetTimeoutSeconds(); s > 0 {
-		timeout = time.Duration(s) * time.Second
+	vars := map[string]any{"params": params, "connection": connVars}
+	opts, err := renderOptions(req, vars)
+	if err != nil {
+		return nil, err
 	}
 	maxBytes := int64(defaultMaxBytes)
 	if b := req.GetMaxResponseBytes(); b > 0 {
 		maxBytes = b
 	}
-	ctx, cancel := context.WithTimeout(ctx, timeout)
+	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	defer cancel()
 
-	vars := map[string]any{"params": params, "connection": connVars}
 	method, err := tmpl.RenderString(req.GetMethod(), vars, tmpl.Options{})
 	if err != nil {
 		return nil, fmt.Errorf("request.method: %w", err)
@@ -168,13 +168,21 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 	var body []byte
 	bodyType := "application/json"
 	if hasBody {
-		if req.GetBodyFormat() == manifest.BodyFormatForm {
+		switch opts.bodyFormat {
+		case manifest.BodyFormatForm:
 			if body, err = encodeForm(rendered); err != nil {
 				return nil, err
 			}
 			bodyType = "application/x-www-form-urlencoded"
-		} else if body, err = json.Marshal(rendered); err != nil {
-			return nil, err
+		case manifest.BodyFormatText:
+			if body, err = encodeText(rendered); err != nil {
+				return nil, err
+			}
+			bodyType = "text/plain; charset=utf-8"
+		default:
+			if body, err = json.Marshal(rendered); err != nil {
+				return nil, err
+			}
 		}
 	}
 	headers := http.Header{}
@@ -227,6 +235,9 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		return nil
 	}
 	r2 := &http.Client{Transport: r.client.Transport, CheckRedirect: func(next *http.Request, via []*http.Request) error {
+		if opts.redirects == manifest.RedirectsReturn {
+			return http.ErrUseLastResponse
+		}
 		if len(via) >= 5 {
 			return errors.New("too many redirects")
 		}
@@ -267,18 +278,24 @@ func (r *Runner) run(ctx context.Context, m *reliantv1.IntegrationManifest, a *r
 		if followed != nil {
 			u = *followed
 		}
-		pgResp, err := r.do(ctx, r2, method, &u, headers, body, maxBytes, allowed, anyHost, cred)
+		pgResp, err := r.do(ctx, r2, method, &u, headers, body, maxBytes, allowed, anyHost, cred, opts.responseFormat)
 		if err != nil {
 			return nil, err
 		}
 		last = pgResp
-		if pgResp.status < 200 || pgResp.status >= 300 {
+		// A 3xx the caller asked to see (redirects: return) is the answer,
+		// not a failure: its status and Location are what they wanted.
+		returnedRedirect := opts.redirects == manifest.RedirectsReturn && pgResp.status >= 300 && pgResp.status < 400
+		if (pgResp.status < 200 || pgResp.status >= 300) && !returnedRedirect {
 			return errorResult(req, pgResp)
 		}
 		// A provider that reports failure in a 2xx body (Slack's ok:false)
 		// declares a guarded rule for it; any other 2xx is a success.
 		if rule := matchErrorRule(req, pgResp); rule != nil {
 			return ruleResult(rule, pgResp), nil
+		}
+		if opts.responseFormat == manifest.ResponseFormatJSON && pgResp.jsonErr != nil && !returnedRedirect {
+			return notJSONResult(pgResp), nil
 		}
 		if pg == nil {
 			break
@@ -325,9 +342,85 @@ type page struct {
 	headers http.Header
 	raw     []byte
 	parsed  any
+	// jsonErr is why a non-empty body did not parse as JSON (nil when it did,
+	// or when the response format said not to try).
+	jsonErr error
 }
 
-func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *url.URL, headers http.Header, body []byte, maxBytes int64, allowed map[string]bool, anyHost bool, cred Credential) (*page, error) {
+// requestOptions are the per-call knobs a request spec may template, so the
+// generic HTTP action can hand them to its caller: how long to wait, how to
+// encode the body, how to read the response, and whether to follow a
+// redirect. Each resolves to its default when the spec leaves it empty.
+type requestOptions struct {
+	timeout        time.Duration
+	bodyFormat     string
+	responseFormat string
+	redirects      string
+}
+
+func renderOptions(req *reliantv1.HttpRequestSpec, vars map[string]any) (requestOptions, error) {
+	opts := requestOptions{timeout: defaultTimeout}
+	if s := req.GetTimeoutSeconds(); s > 0 {
+		opts.timeout = time.Duration(s) * time.Second
+	}
+	if expr := req.GetTimeoutExpr(); expr != "" {
+		v, err := tmpl.EvalExpr(expr, vars)
+		if err != nil {
+			return opts, fmt.Errorf("request.timeout_expr: %w", err)
+		}
+		seconds, ok := v.(float64)
+		if !ok || seconds < 1 || seconds > manifest.MaxTimeoutSeconds {
+			return opts, fmt.Errorf("request.timeout_expr must yield 1..%d seconds, got %v", manifest.MaxTimeoutSeconds, v)
+		}
+		opts.timeout = time.Duration(seconds * float64(time.Second))
+	}
+	var err error
+	if opts.bodyFormat, err = renderEnum("request.body_format", req.GetBodyFormat(), vars, manifest.BodyFormats); err != nil {
+		return opts, err
+	}
+	if opts.responseFormat, err = renderEnum("request.response_format", req.GetResponseFormat(), vars, manifest.ResponseFormats); err != nil {
+		return opts, err
+	}
+	if opts.redirects, err = renderEnum("request.redirects", req.GetRedirects(), vars, manifest.RedirectModes); err != nil {
+		return opts, err
+	}
+	return opts, nil
+}
+
+// renderEnum renders an enum-like field (a literal or a template) and checks
+// the result; empty is allowed[0], the default.
+func renderEnum(name, value string, vars map[string]any, allowed []string) (string, error) {
+	rendered, err := tmpl.RenderString(value, vars, tmpl.Options{})
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", name, err)
+	}
+	if err := manifest.CheckEnum(name, rendered, allowed); err != nil {
+		return "", err
+	}
+	if rendered == "" {
+		return allowed[0], nil
+	}
+	return rendered, nil
+}
+
+// notJSONResult is the failure for response_format json: the caller said the
+// body is JSON, so a body that is not is a permanent error with a snippet of
+// what came back, rather than a silent null downstream.
+func notJSONResult(p *page) *Result {
+	message := "the response is not JSON"
+	if ct := p.headers.Get("Content-Type"); ct != "" {
+		message += " (Content-Type " + ct + ")"
+	}
+	if snippet := strings.TrimSpace(string(p.raw)); snippet != "" {
+		if len(snippet) > 300 {
+			snippet = snippet[:300] + "…"
+		}
+		message += ": " + snippet
+	}
+	return &Result{Content: message, IsError: true, StatusCode: p.status}
+}
+
+func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *url.URL, headers http.Header, body []byte, maxBytes int64, allowed map[string]bool, anyHost bool, cred Credential, responseFormat string) (*page, error) {
 	if err := checkURL(u, allowed, anyHost); err != nil {
 		return nil, err
 	}
@@ -358,9 +451,9 @@ func (r *Runner) do(ctx context.Context, client *http.Client, method string, u *
 		return nil, fmt.Errorf("response body exceeds the %d byte limit", maxBytes)
 	}
 	p := &page{status: resp.StatusCode, headers: resp.Header, raw: raw}
-	if len(bytes.TrimSpace(raw)) > 0 {
+	if responseFormat != manifest.ResponseFormatText && len(bytes.TrimSpace(raw)) > 0 {
 		var parsed any
-		if json.Unmarshal(raw, &parsed) == nil {
+		if p.jsonErr = json.Unmarshal(raw, &parsed); p.jsonErr == nil {
 			p.parsed = parsed
 		}
 	}
@@ -422,7 +515,7 @@ func allowedHosts(m *reliantv1.IntegrationManifest, base *url.URL) map[string]bo
 // the host must be allowed (unless the connection takes any public host, in
 // which case the dialer is the backstop against private addresses).
 func checkURL(u *url.URL, allowed map[string]bool, anyHost bool) error {
-	if u.Scheme != "https" && !(u.Scheme == "http" && anyHost) {
+	if u.Scheme != "https" && (u.Scheme != "http" || !anyHost) {
 		return fmt.Errorf("scheme %q is not allowed", u.Scheme)
 	}
 	if u.User != nil || u.Hostname() == "" {
@@ -562,6 +655,19 @@ func encodeForm(v any) ([]byte, error) {
 		}
 	}
 	return []byte(form.Encode()), nil
+}
+
+// encodeText sends a body verbatim: a string as-is, a number or boolean in
+// its JSON spelling. An object or list has no single text form, so it is
+// refused rather than JSON-encoded behind the caller's back.
+func encodeText(v any) ([]byte, error) {
+	switch t := v.(type) {
+	case string:
+		return []byte(t), nil
+	case float64, bool:
+		return []byte(scalarString(t)), nil
+	}
+	return nil, fmt.Errorf("a text body must render to a string, got %T (use body_format json for objects and lists)", v)
 }
 
 func formScalar(v any) (string, error) {

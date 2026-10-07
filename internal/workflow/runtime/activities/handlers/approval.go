@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/triggers/runevents"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"go.temporal.io/sdk/activity"
@@ -45,6 +46,14 @@ type ApprovalCreateInput struct {
 	NodePath string `json:"node_path,omitempty" reliant:"-"`
 	Title    string `json:"title" reliant:"-"`
 	Timeout  string `json:"timeout,omitempty" reliant:"-"` // Duration string, e.g. "1h"
+	// ToolName, ToolCallID and ToolInput are set when the approval asks about
+	// one tool call — a mutating integration action in an attended run
+	// (runtime's action approval gate). The row is then a TOOL approval titled
+	// from the action and its parameters, and a user who chose "always allow"
+	// for the action is not asked at all.
+	ToolName   string `json:"tool_name,omitempty" reliant:"-"`
+	ToolCallID string `json:"tool_call_id,omitempty" reliant:"-"`
+	ToolInput  string `json:"tool_input,omitempty" reliant:"-"`
 }
 
 // ApprovalCreateOutput is the output from the ApprovalCreate activity.
@@ -116,16 +125,15 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 	// Build a unique entity ID that includes the workflow ID to prevent cross-workflow collisions.
 	entityID := fmt.Sprintf("%s:%s", workflowID, activityID)
 
-	logger.Info("[ApprovalCreate] Creating approval record",
+	logger.Debug("[ApprovalCreate] Creating approval record",
 		"chatID", input.ChatID,
-		"title", input.Title,
 		"workflowID", workflowID,
 		"entityID", entityID)
 
 	// IDEMPOTENCY: Check if we already created this approval using the workflow-scoped entity ID.
 	existingApproval, err := a.repo.GetApprovalByEntityID(ctx, entityID)
 	if err == nil && existingApproval != nil {
-		logger.Info("[ApprovalCreate] Found existing approval",
+		logger.Debug("[ApprovalCreate] Found existing approval",
 			"approvalID", existingApproval.ID,
 			"entityID", entityID,
 			"status", existingApproval.Status)
@@ -152,14 +160,49 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		}, nil
 	}
 
+	// A tool approval the user already answered "always allow" for this
+	// action is resolved without a row, so nothing is shown and nothing waits.
+	if input.ToolName != "" && a.alwaysAllowed(ctx, input.ChatID, input.ToolName) {
+		logger.Info("[ApprovalCreate] Action is always allowed by its user",
+			"chatID", input.ChatID, "tool", input.ToolName, "toolCallID", input.ToolCallID)
+		return ApprovalCreateOutput{
+			AlreadyResolved: true,
+			Status:          "approved",
+			ActionTaken:     tools.ActionApprovalAlwaysAllow,
+		}, nil
+	}
+
 	// Generate approval ID and create record
 	approvalID := uuid.New().String()
+
+	approvalType := reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP
+	title := input.Title
 
 	// Build metadata with workflow context for signaling
 	metadata := map[string]interface{}{}
 	if workflowID != "" {
 		metadata["workflow_id"] = workflowID
 		metadata["run_id"] = activityInfo.WorkflowExecution.RunID
+	}
+	// A tool approval carries what the card shows: the action, its
+	// integration, and the call's parameters in full.
+	var toolUpdate map[string]interface{}
+	if input.ToolName != "" {
+		approvalType = reliantv1.ApprovalType_APPROVAL_TYPE_TOOL
+		if title == "" {
+			title = tools.ActionApprovalTitle(input.ToolName, input.ToolInput)
+		}
+		action, _ := tools.MutatingIntegrationActionInfo(input.ToolName)
+		toolUpdate = map[string]interface{}{
+			"tool_name":        input.ToolName,
+			"tool_call_id":     input.ToolCallID,
+			"input":            input.ToolInput,
+			"integration_name": action.Integration,
+			"integration_icon": action.Icon,
+		}
+		for k, v := range toolUpdate {
+			metadata[k] = v
+		}
 	}
 	var metadataJSON *string
 	if len(metadata) > 0 {
@@ -185,10 +228,10 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 	approval := &db.Approval{
 		ID:                 approvalID,
 		ChatID:             input.ChatID,
-		ApprovalType:       int32(reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP),
+		ApprovalType:       int32(approvalType),
 		EntityID:           entityID,
 		Status:             int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING),
-		Title:              input.Title,
+		Title:              title,
 		Metadata:           metadataJSON,
 		TemporalWorkflowID: temporalWorkflowID,
 		CreatedAt:          time.Now().UTC(),
@@ -216,8 +259,14 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 			"approval_type": "workflow_step",
 			"activity_id":   activityID,
 			"status":        "pending",
-			"title":         input.Title,
+			"title":         title,
 			"created_at":    approval.CreatedAt.Format(time.RFC3339),
+		}
+		if toolUpdate != nil {
+			updateData["approval_type"] = "tool"
+			for k, v := range toolUpdate {
+				updateData[k] = v
+			}
 		}
 
 		updateDataJSON, err := json.Marshal(updateData)
@@ -236,7 +285,7 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 			WorkflowID:  input.WorkflowID,
 			BlockerID:   approvalID,
 			BlockerKind: "approval",
-			Prompt:      input.Title,
+			Prompt:      title,
 		}, approval.CreatedAt); err != nil {
 			return fmt.Errorf("failed to record run event: %w", err)
 		}
@@ -255,6 +304,20 @@ func (a *ApprovalCreateActivity) Execute(ctx context.Context, input ApprovalCrea
 		ApprovalID:      approvalID,
 		AlreadyResolved: false,
 	}, nil
+}
+
+// alwaysAllowed reports whether the chat's user has a standing "always allow"
+// for toolName. Any failure to read it means asking, never running unasked.
+func (a *ApprovalCreateActivity) alwaysAllowed(ctx context.Context, chatID, toolName string) bool {
+	chat, err := a.repo.GetChat(ctx, chatID)
+	if err != nil || chat == nil || chat.UserID == "" {
+		return false
+	}
+	setting, err := a.repo.GetSetting(ctx, chat.UserID, nil, tools.ActionApprovalSettingKey(toolName))
+	if err != nil || setting == nil {
+		return false
+	}
+	return tools.AllowsAlways(setting.Value)
 }
 
 // ============================================================================

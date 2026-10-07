@@ -91,7 +91,7 @@ type TriggerSummary struct {
 type ActivateTriggerParams struct {
 	Workflow     string            `json:"workflow" jsonschema:"required,description=The workflow that declares the trigger: a slug from list_workflows or builtin://<name>."`
 	Trigger      string            `json:"trigger" jsonschema:"required,description=The declared trigger's name (triggers[].name in the workflow's YAML)."`
-	Message      string            `json:"message" jsonschema:"required,description=The prompt each run it starts begins with. Say what to do with the event; the event itself is attached to the run as trigger.payload."`
+	Message      string            `json:"message,omitempty" jsonschema:"description=The prompt each run it starts begins with. Say what to do with the event; the event itself is attached to the run as trigger.payload. Optional when the declared trigger has a prompt: (it is used instead); set it to override that prompt."`
 	Name         string            `json:"name,omitempty" jsonschema:"description=A name for this activation, unique per project. Defaults to '<workflow> / <trigger>'."`
 	ProjectID    string            `json:"project_id,omitempty" jsonschema:"description=Project the runs execute in. Defaults to the project of the run you are executing in."`
 	DaemonID     string            `json:"daemon_id,omitempty" jsonschema:"description=Daemon every run executes its tools on. Defaults to the daemon of the run you are executing in."`
@@ -155,10 +155,6 @@ func (a *activateTriggerTool) Execute(rctx *rctx.ToolContext, params ActivateTri
 	if workflow == "" || declared == "" {
 		return NewTextErrorResponse("workflow and trigger are required: name the workflow and the trigger it declares (triggers[].name)."), nil
 	}
-	if strings.TrimSpace(params.Message) == "" {
-		return NewTextErrorResponse("message is required: it is the prompt every run this trigger starts begins with."), nil
-	}
-
 	req := ActivateTriggerRequest{
 		OwnerUserID:     caller.userID,
 		Workflow:        workflow,

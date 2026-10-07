@@ -255,8 +255,8 @@ export function NodeThreadConfigEditor({
           <HelpPopover
             content={
               isInLoop
-                ? 'Adds a message to the thread BEFORE node execution.\n\nIn loops:\n• Inherit mode: First iteration only\n• New/Fork + memo (default): First iteration only\n• New/Fork + memo:false: Every iteration (fresh thread each time)'
-                : 'Adds a message to the thread BEFORE node execution.\n\n• Inherit: Added on first execution only\n• New: First message in the new thread\n• Fork: Added after copied messages'
+                ? 'Adds a message to the thread BEFORE the step runs.\n\nIn loops:\n• Inherit mode: First iteration only\n• New/Fork + memo (default): First iteration only\n• New/Fork + memo:false: Every iteration (fresh thread each time)'
+                : 'Adds a message to the thread BEFORE the step runs.\n\n• Inherit: Added on first execution only\n• New: First message in the new thread\n• Fork: Added after copied messages'
             }
           />
           {hasInjectConfig && (

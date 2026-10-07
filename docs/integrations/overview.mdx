@@ -1,0 +1,70 @@
+---
+title: "Integrations"
+description: "Connect GitHub, Gmail, Slack, Twilio and any HTTP API so workflows can act on them and react to them"
+---
+
+An **integration** connects Reliant to an outside service. Once connected, a workflow can do two things with it: **act** (create an issue, send an email, post a message) and **listen** (start a run when an issue is opened or an email arrives). Integrations run on Reliant's servers, not on a [machine](/machines/overview), which is what lets them work in [no-machine runs](/automations/no-machine-runs).
+
+| Integration | Acts | Listens for |
+|-------------|------|-------------|
+| [GitHub](/integrations/github) | Issues, pull requests, repositories, code search, Actions | Issues, comments, pull requests, reviews, pushes, workflow runs |
+| [Gmail](/integrations/gmail) | Send, search and read email, list labels | New email in the inbox |
+| [Slack](/integrations/slack) | Post, reply, edit, react, read history, look up people and channels | Messages, @-mentions of the bot, reactions |
+| [Twilio](/integrations/twilio) | Send SMS, MMS and WhatsApp; read messages and numbers | Incoming messages |
+| [HTTP](/integrations/http) | Any request to a public URL | Nothing; use a [webhook](/automations/webhooks) |
+
+## Connecting an account
+
+A **connection** is an account you have authorised, such as your GitHub login or a Slack workspace. You make one without leaving what you are doing: the workflow builder has a **Connect** dialog when you add an integration step, and the **Activate** dialog for an integration automation asks which connection it should listen through. Depending on the integration you either sign in through the service's own consent screen (GitHub, Gmail, Slack) or paste credentials (Twilio's Account SID and Auth Token, or an API key for the HTTP integration). Reliant checks the connection works before saving it and labels it with the account's name, such as the Slack workspace or Gmail address.
+
+You can keep several connections to one integration, for example two Slack workspaces. A step names the one it wants with `connection:`; leave it out to use your default for that integration. An integration trigger only receives events that arrive through the connection it was activated with.
+
+## Using an integration in a workflow
+
+An action is a step of type `action`. `uses:` names the integration, the action and a version, and `with:` holds its parameters:
+
+```yaml
+name: comment-on-issue
+entry: [comment]
+inputs:
+  issue_number:
+    type: integer
+    default: 1
+nodes:
+  - id: comment
+    type: action
+    uses: github/issue.comment@1
+    with:
+      owner: acme
+      repo: shopfront
+      issue_number: "{{ inputs.issue_number }}"
+      body: "Thanks for the report. We are looking into it."
+```
+
+A result is available to later steps as `nodes.<id>.<field>`. To start a run from an event, declare an integration trigger. Its `events` are the integration's event names, and `match` narrows by the attributes each integration lists:
+
+```yaml
+triggers:
+  - name: new-issue
+    integration:
+      integration: github
+      events: [issues.opened]
+      match:
+        repository: acme/shopfront
+```
+
+The event's data arrives as `trigger.payload`, with the provider's own payload under `trigger.payload.data`. Treat it as untrusted: it comes from an outside sender. See [Automations](/automations/overview) for filters, inputs and prompts.
+
+## Agents can use them too
+
+Actions are also offered to agents as tools. An agent can look up what exists with `search_integrations` and read an action's or trigger's exact parameters with `get_integration_schema`, which also prints a ready-to-paste `triggers:` entry. Load the workflow tools with `load_tool` (`tag:workflow`) in a chat, or ask the **workflow_builder** preset to do it for you. See [Improve Reliant itself](/guides/self-improvement).
+
+## Errors you can act on
+
+Each integration classifies the service's errors so a workflow can tell a retry from a dead end. Rate limits and server errors are retried; a revoked token tells you to reconnect; a missing permission or a missing repository tells you what to check.
+
+## Related topics
+
+- [Automations](/automations/overview)
+- [No-machine runs](/automations/no-machine-runs)
+- [Webhooks](/automations/webhooks)

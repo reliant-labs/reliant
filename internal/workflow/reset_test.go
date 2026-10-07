@@ -667,7 +667,7 @@ func TestResetInterruptedWorkflow_Terminated_UsesLastWFT(t *testing.T) {
 // separates a descendant the replay is about to redo from one whose
 // completion is already in the replayed history. Without it a resume cannot
 // revive its own sub-agents and they read as failed while working. See
-// ResetResult and docs/incidents/2026-09-29-reconciler-false-wedge.md.
+// ResetResult and dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 
 // wftCompletedAt is a WorkflowTaskCompleted event that carries a real
 // EventTime, which is what a live Temporal history always has.

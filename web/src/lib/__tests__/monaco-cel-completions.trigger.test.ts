@@ -24,6 +24,14 @@ describe('trigger.* completions', () => {
     }
   })
 
+  it('offers trigger.sender and its keys, for an "Only from" filter', () => {
+    expect(labelsAt('trigger.')).toContain('sender')
+    const labels = labelsAt('trigger.sender.')
+    for (const field of ['kind', 'id', 'display_name', 'verified']) {
+      expect(labels).toContain(field)
+    }
+  })
+
   it('offers the trigger namespace at the top level wherever the runtime binds it', () => {
     for (const celContext of ['default', 'loop_while', 'edge_condition', 'save_message'] as const) {
       expect(labelsAt('', celContext)).toContain('trigger')

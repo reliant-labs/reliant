@@ -416,7 +416,7 @@ func configuredProviderIDs(availableDrivers models.AvailableDrivers) []string {
 // tool-call blocks survive on a tool-less request.
 func prepareHistoryForLLM(chatID string, history []message.Message, systemPrompts []string, availableTools []tools.Tool, contextWindow int64) []message.Message {
 	if message.TrimMessagesToFitContextWindow(history, systemPrompts, wrapToolsForEstimation(availableTools), contextWindow) {
-		logging.Info("[LLMRequest] Trimmed history to fit context window",
+		logging.Debug("[LLMRequest] Trimmed history to fit context window",
 			"chatID", chatID,
 			"contextWindow", contextWindow)
 	}

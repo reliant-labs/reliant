@@ -12,7 +12,10 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"strings"
 	"sync"
+
+	"github.com/reliant-labs/reliant/internal/runenv"
 )
 
 var (
@@ -34,18 +37,31 @@ func SetOutput(w io.Writer) {
 	logOutput = w
 }
 
-// GetLogLevel returns the current log level from environment or default
+// GetLogLevel returns the current log level from environment or default.
+//
+// Prod never logs DEBUG, and nothing overrides that: RELIANT_LOG_LEVEL=debug,
+// DEBUG=true and RELIANT_DEV_DEBUG=true are all held at INFO there, because
+// DEBUG lines are where request bodies and tool payloads end up.
+// RELIANT_LOG_LEVEL=INFO/WARN/ERROR is honoured in every environment, since it
+// can only make prod quieter. The refusal is reported once, as a WARN, when
+// the logger is installed (see install) — this function runs before that
+// logger exists, so it has nowhere to say it.
+//
+// "Prod" is runenv's resolution, the one telemetry and auth use. It fails
+// closed, so a pod with neither RELIANT_ENV nor NODE_ENV set — which is how
+// prod runs — is prod. This used to test RELIANT_ENV for "prod"/"production"
+// itself; prod never sets it, so the guard never fired where it mattered.
 func GetLogLevel() slog.Level {
-	// Check if we're in production - never allow debug in prod
-	env := os.Getenv("RELIANT_ENV")
-	isProd := env == "production" || env == "prod"
+	return capLevel(requestedLevel())
+}
 
-	level := os.Getenv("RELIANT_LOG_LEVEL")
-	switch level {
+// requestedLevel is the level the environment variables ask for, before any
+// environment cap. Precedence and spellings are the ones dev has always had:
+// one of RELIANT_LOG_LEVEL's four upper-case values wins; otherwise
+// DEBUG=true or RELIANT_DEV_DEBUG=true selects DEBUG; otherwise INFO.
+func requestedLevel() slog.Level {
+	switch os.Getenv("RELIANT_LOG_LEVEL") {
 	case "DEBUG":
-		if isProd {
-			return slog.LevelInfo // Downgrade debug to info in production
-		}
 		return slog.LevelDebug
 	case "INFO":
 		return slog.LevelInfo
@@ -53,16 +69,40 @@ func GetLogLevel() slog.Level {
 		return slog.LevelWarn
 	case "ERROR":
 		return slog.LevelError
-	default:
-		// In production, default to INFO regardless of DEBUG flags
-		if isProd {
-			return slog.LevelInfo
-		}
-		if os.Getenv("DEBUG") == "true" || os.Getenv("RELIANT_DEV_DEBUG") == "true" {
-			return slog.LevelDebug
-		}
+	}
+	if os.Getenv("DEBUG") == "true" || os.Getenv("RELIANT_DEV_DEBUG") == "true" {
+		return slog.LevelDebug
+	}
+	return slog.LevelInfo
+}
+
+// capLevel holds prod at INFO or quieter. Every other environment gets the
+// level it asked for.
+func capLevel(level slog.Level) slog.Level {
+	if level < slog.LevelInfo && runenv.IsProd() {
 		return slog.LevelInfo
 	}
+	return level
+}
+
+// debugRequest names the setting asking for DEBUG ("DEBUG=true"), or "" when
+// none is. It follows requestedLevel's precedence — an explicit
+// RELIANT_LOG_LEVEL=INFO/WARN/ERROR outranks the DEBUG flags, so they are not
+// a request at all — except that any capitalisation of RELIANT_LOG_LEVEL=debug
+// counts. A request prod refuses must be reported however it was spelled.
+func debugRequest() string {
+	switch level := os.Getenv("RELIANT_LOG_LEVEL"); {
+	case strings.EqualFold(strings.TrimSpace(level), "debug"):
+		return "RELIANT_LOG_LEVEL=" + level
+	case level == "INFO" || level == "WARN" || level == "ERROR":
+		return ""
+	}
+	for _, flag := range []string{"DEBUG", "RELIANT_DEV_DEBUG"} {
+		if os.Getenv(flag) == "true" {
+			return flag + "=true"
+		}
+	}
+	return ""
 }
 
 // ParseLogLevel parses a string log level to slog.Level

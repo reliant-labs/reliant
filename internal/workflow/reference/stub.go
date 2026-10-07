@@ -106,6 +106,10 @@ type NodeFieldInfo struct {
 	Required    bool
 	Description string
 	EnumValues  []string
+	// Example is what a value looks like, as YAML would hold it.
+	Example string
+	// TypeHint names the kind of value when Type undersells it.
+	TypeHint string
 }
 
 // nodeTypes is the registry of node type documentation.
@@ -226,17 +230,16 @@ func populateCELNamespaces() {
 	// Static namespace: workflow — fields from model.WorkflowContext
 	CELNamespaces = append(CELNamespaces, CELNamespace{
 		Name:        "workflow",
-		Description: "Workflow execution context (id, name, run_id, etc.)",
+		Description: "Workflow execution context (id, name, path, etc.)",
 		IsDynamic:   false,
 		Fields: []CELField{
 			{Name: "id", Type: "string", Description: "Workflow execution ID (unique per run)"},
 			{Name: "name", Type: "string", Description: "Workflow definition name"},
 			{Name: "run_id", Type: "string", Description: "Workflow run ID (Temporal run ID)"},
-			{Name: "session_id", Type: "string", Description: "Session ID for the workflow"},
-			{Name: "path", Type: "string", Description: "Working directory path"},
-			{Name: "worktree_path", Type: "string", Description: "Git worktree path (if in a worktree)"},
-			{Name: "branch", Type: "string", Description: "Current git branch (empty if not in git repo)"},
-			{Name: "mode", Type: "string", Description: "Execution mode (auto, manual, plan)"},
+			{Name: "path", Type: "string", Description: "Absolute working directory of the current scope: the chat's worktree or project, or a sub-workflow's project.path. Reading it in a run with no project directory is an error, not \"\"; test with has(workflow.path)"},
+			{Name: "worktree_path", Type: "string", Description: "The chat's worktree, when the current scope runs in it (empty in the project's main checkout)"},
+			{Name: "branch", Type: "string", Description: "That worktree's git branch (empty in the project's main checkout, whose branch is not tracked; test with has(workflow.branch))"},
+			{Name: "mode", Type: "string", Description: "Execution mode (auto, manual, plan), from inputs.mode"},
 		},
 	})
 
@@ -259,7 +262,7 @@ func populateCELNamespaces() {
 		{"nodes", "Output from completed nodes (nodes.<id>.<field>)"},
 		{"output", "Current activity output (for save_message context)"},
 		{"outputs", "Loop iteration outputs for while condition evaluation"},
-		{"trigger", "The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>). Interactive chats have kind chat.start"},
+		{"trigger", "The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}). Interactive chats have kind chat.start"},
 		{"thread", "Current thread context (token_count, message_count)"},
 	}
 
@@ -391,13 +394,19 @@ func protoKindToSimpleType_inner(fd protoreflect.FieldDescriptor) string {
 	}
 }
 
-// getProtoFieldComment extracts the leading comment from a proto field descriptor.
+// getProtoFieldComment describes a proto field: its leading comment when the
+// descriptor carries source info, else its (reliant) description annotation.
 func getProtoFieldComment(fd protoreflect.FieldDescriptor) string {
-	// Proto field descriptors from source info carry comments, but the
-	// generated descriptor doesn't always have them. Fall back to empty.
+	// Generated descriptors carry no source info, so in the running binary
+	// the annotation is the description that actually reaches get_schema.
 	loc := fd.ParentFile().SourceLocations().ByDescriptor(fd)
 	if loc.LeadingComments != "" {
 		return cleanProtoComment(loc.LeadingComments)
+	}
+	if opts := fd.Options(); opts != nil {
+		if meta, ok := proto.GetExtension(opts, reliantv1.E_Reliant).(*reliantv1.FieldMeta); ok && meta != nil {
+			return meta.GetDescription()
+		}
 	}
 	return ""
 }
@@ -482,6 +491,8 @@ func protoFieldsToNodeFields(md protoreflect.MessageDescriptor) []NodeFieldInfo 
 			Required:    !f.IsRepeated && f.DefaultValue == "",
 			Description: f.Description,
 			EnumValues:  f.EnumValues,
+			Example:     f.Example,
+			TypeHint:    f.TypeHint,
 		})
 	}
 	return result

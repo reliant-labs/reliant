@@ -32,6 +32,7 @@ import { AnonSignInNudge } from './components/AnonSignInNudge'
 import { Toaster } from './lib/toast'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
+import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -209,6 +210,10 @@ function RootShell() {
       <ContextualTipsLayer />
       <GitHubSyncStatus />
       <OnboardingWizard />
+      {/* A deploy this session saw queued on billing goes out while the user
+          is usually elsewhere (billing, a chat): the watch lives here, and
+          loads its forge code only while it has something to watch. */}
+      <QueuedDeployWatch pathname={pathname} />
     </SurfaceProvider>
   );
 }
@@ -497,8 +502,9 @@ const settingsSectionRoutes = createSettingsSectionRoutes(() => authenticatedLay
 })
 
 // The workflow BUILDER keeps its own full-screen chrome (WorkflowHeader):
-// /workflow/new                → new blank workflow (static segment, takes
-//                                precedence over the dynamic one below)
+// /workflow/new                → the New workflow dialog; Create makes the
+//                                draft (static segment, takes precedence over
+//                                the dynamic one below)
 // /workflow/$workflowName      → opens a named workflow. workflowName is the
 //                                full identifier — e.g. `builtin://get-it-right`
 //                                or a user workflow's name. URL-encoding is

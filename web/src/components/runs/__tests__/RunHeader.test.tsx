@@ -13,10 +13,16 @@ import { ChatActivity, WorkflowState, WorkflowStopReason } from "@/gen/reliant/v
 import type { Chat } from "@/api/client";
 import type { LaunchEvent } from "@/api/run-grpc";
 import { RunHeader, type RunHeaderActions } from "../RunHeader";
-import { renderRunsAt } from "./runTestUtils";
+import { githubTriggerTypes, renderRunsAt } from "./runTestUtils";
 
 vi.mock("@/hooks/useDaemonStatus", () => ({
   useDaemonStatus: () => ({ daemons: [{ daemonId: "d-1", hostname: "laptop" }] }),
+}));
+
+// The catalog's trigger types name an integration event.
+vi.mock("@/api/catalog-search-grpc", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/catalog-search-grpc")>()),
+  catalogSearchGrpc: { search: async () => githubTriggerTypes() },
 }));
 
 function chat(overrides: Partial<Chat> = {}): Chat {
@@ -119,7 +125,8 @@ describe("RunHeader", () => {
     {
       launchKind: "integration",
       event: launchEvent({ kind: "integration", integration: "github", providerEvent: "issues.opened" }),
-      line: /^Started by deploy-hook on github: issues\.opened$/,
+      // The integration and its event read by their catalog names.
+      line: /^Started by deploy-hook on GitHub: Issue opened$/,
       name: "deploy-hook",
     },
     {
@@ -134,7 +141,8 @@ describe("RunHeader", () => {
       <RunHeader chat={chat({ launchKind, triggerId: "trig-2" })} triggerName={name} event={event} actions={handlers} />,
       "/workflows/runs/chat-1",
     );
-    expect((await screen.findByTestId("run-started-by")).textContent).toMatch(line);
+    const startedBy = await screen.findByTestId("run-started-by");
+    await waitFor(() => expect(startedBy.textContent).toMatch(line));
     expect(screen.getByRole("link", { name })).toHaveAttribute("href", "/workflows/automations/trig-2");
   });
 

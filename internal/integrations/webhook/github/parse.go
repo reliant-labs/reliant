@@ -38,7 +38,7 @@ const (
 	ProviderID = "github"
 	// SecretEnv names the App's webhook secret, a deployment secret shared
 	// with the App's webhook configuration.
-	SecretEnv = "RELIANT_GITHUB_WEBHOOK_SECRET"
+	SecretEnv = "RELIANT_GITHUB_WEBHOOK_SECRET" //nolint:gosec // G101: the NAME of an env var, not a secret
 
 	// EventHeader names the event type of a delivery.
 	EventHeader = "X-GitHub-Event"
@@ -62,6 +62,9 @@ type Event struct {
 	OccurredAt  time.Time
 	Attributes  map[string]string
 	Data        map[string]any
+	// Sender is trigger.sender: the delivery's `sender`, the account that
+	// caused the event (see Sender).
+	Sender *core.TriggerSender
 }
 
 // Parsed is what one delivery carries.
@@ -230,7 +233,29 @@ func events(event string, body *payload, receivedAt time.Time) []Event {
 		OccurredAt:  occurredAt(body.raw, receivedAt),
 		Attributes:  attrs,
 		Data:        capData(data),
+		Sender:      sender(body),
 	}}
+}
+
+// sender is a delivery's trigger.sender: GitHub's `sender`, the account that
+// opened, pushed, commented or reviewed. GitHub wrote it into a body whose
+// X-Hub-Signature-256 the provider verified before parsing, so it is
+// verified.
+//
+// The id is the login, lowercased: logins are case-insensitive on GitHub,
+// and an allowlist written as "octocat" must match a delivery that says
+// "Octocat". The display name keeps GitHub's casing. The numeric account id
+// stays in trigger.payload.data.sender.id; a login can be renamed and later
+// claimed by someone else, which an allowlist of logins accepts as the cost
+// of being readable.
+func sender(body *payload) *core.TriggerSender {
+	login := senderLogin(body)
+	return &core.TriggerSender{
+		Kind:        core.TriggerSenderKindGitHub,
+		ID:          strings.ToLower(login),
+		DisplayName: login,
+		Verified:    login != "",
+	}
 }
 
 // isAppComment is a comment written by a GitHub App, ours included. A

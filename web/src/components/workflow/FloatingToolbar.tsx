@@ -69,11 +69,11 @@ export function FloatingToolbar({
       {!isReadOnly && (
         <>
           {onLockToggle && (
-            <Tooltip content={isLocked ? "Unlock Nodes" : "Lock Nodes"} placement="top" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content={isLocked ? "Unlock steps" : "Lock steps"} placement="top" delay={300} wrapperClassName="inline-flex">
 <button
               onClick={onLockToggle}
               className={toolbarButtonClass(isLocked)}
-              aria-label={isLocked ? "Unlock Nodes" : "Lock Nodes"}
+              aria-label={isLocked ? "Unlock steps" : "Lock steps"}
             >
               {isLocked ? <Lock className="w-4 h-4" /> : <Unlock className="w-4 h-4" />}
             </button>
@@ -147,11 +147,11 @@ export function FloatingToolbar({
           )}
 
           {!isReadOnly && onOrganizeNodes && (
-            <Tooltip content="Organize Nodes" placement="top" delay={300} wrapperClassName="inline-flex">
+            <Tooltip content="Organize steps" placement="top" delay={300} wrapperClassName="inline-flex">
 <button
               onClick={onOrganizeNodes}
               className={toolbarButtonClass()}
-              aria-label="Organize Nodes"
+              aria-label="Organize steps"
             >
               <Wand2 className="w-4 h-4" />
             </button>

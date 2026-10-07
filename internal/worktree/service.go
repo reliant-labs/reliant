@@ -89,7 +89,7 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 		trace.WithAttributes(attribute.String("name", name)))
 	defer span.End()
 
-	s.logger.Info("creating worktree", "name", name, "branch", opts.Branch)
+	s.logger.Debug("creating worktree", "name", name, "branch", opts.Branch)
 
 	// Exact paths, validated before any git work so a bad entry is an error
 	// rather than a worktree that silently lacks its .env.
@@ -123,19 +123,19 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 
 	// Handle force option - clean up existing resources
 	if opts.Force {
-		s.logger.Info("force mode enabled, cleaning up existing resources", "name", name)
+		s.logger.Debug("force mode enabled, cleaning up existing resources", "name", name)
 
 		// 0. Prune git worktrees first to clear any missing but registered worktrees
-		s.logger.Info("force mode: pruning git worktrees to clear stale entries")
+		s.logger.Debug("force mode: pruning git worktrees to clear stale entries")
 		pruneCmd := exec.CommandContext(ctx, "git", "worktree", "prune", "-v")
 		pruneCmd.Dir = s.currentRepo
 		if output, err := pruneCmd.CombinedOutput(); err != nil {
-			s.logger.Warn("force mode: git worktree prune failed", "error", err, "output", string(output))
+			s.logger.Warn("force mode: git worktree prune failed", "error", err, "output", gitOutputForLog(output))
 		}
 
 		// 1. Remove from metadata if exists
 		if _, exists := s.metadata.Worktrees[worktreeID]; exists {
-			s.logger.Info("force mode: removing existing worktree from metadata", "worktreeID", worktreeID)
+			s.logger.Debug("force mode: removing existing worktree from metadata", "worktreeID", worktreeID)
 			delete(s.metadata.Worktrees, worktreeID)
 			if s.metadata.CurrentID == worktreeID {
 				s.metadata.CurrentID = ""
@@ -144,11 +144,11 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 
 		// 2. Remove git worktree if exists
 		if _, err := os.Stat(worktreePath); err == nil {
-			s.logger.Info("force mode: removing existing git worktree", "path", worktreePath)
+			s.logger.Debug("force mode: removing existing git worktree", "path", worktreePath)
 			removeCmd := exec.CommandContext(ctx, "git", "worktree", "remove", worktreePath, "--force")
 			removeCmd.Dir = s.currentRepo
 			if output, err := removeCmd.CombinedOutput(); err != nil {
-				s.logger.Warn("force mode: git worktree remove failed, trying direct deletion", "error", err, "output", string(output))
+				s.logger.Warn("force mode: git worktree remove failed, trying direct deletion", "error", err, "output", gitOutputForLog(output))
 			}
 			// Force delete the directory
 			if err := os.RemoveAll(worktreePath); err != nil {
@@ -161,11 +161,11 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 			branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", opts.Branch)
 			branchCheckCmd.Dir = s.currentRepo
 			if branchCheckCmd.Run() == nil {
-				s.logger.Info("force mode: deleting existing branch", "branch", opts.Branch)
+				s.logger.Debug("force mode: deleting existing branch", "branch", opts.Branch)
 				delBranchCmd := exec.CommandContext(ctx, "git", "branch", "-D", opts.Branch)
 				delBranchCmd.Dir = s.currentRepo
 				if output, err := delBranchCmd.CombinedOutput(); err != nil {
-					s.logger.Warn("force mode: failed to delete branch", "error", err, "output", string(output))
+					s.logger.Warn("force mode: failed to delete branch", "error", err, "output", gitOutputForLog(output))
 				}
 			}
 		}
@@ -218,7 +218,7 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 	var addCmd *exec.Cmd
 	if branchExists {
 		// Branch exists - use -B to force reset it to base branch
-		s.logger.Info("branch already exists, using -B to reset", "branch", branch, "baseBranch", baseBranch)
+		s.logger.Debug("branch already exists, using -B to reset", "branch", branch, "baseBranch", baseBranch)
 		addCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-B", branch, worktreePath, baseBranch)
 	} else {
 		// Branch doesn't exist - create it with -b
@@ -228,7 +228,7 @@ func (s *service) Create(ctx context.Context, name string, opts CreateOptions) (
 	addCmd.Dir = s.currentRepo
 	output, err := addCmd.CombinedOutput()
 	if err != nil {
-		s.logger.Error("git worktree add failed", "error", err, "output", string(output))
+		s.logger.Error("git worktree add failed", "error", err, "output", gitOutputForLog(output))
 
 		// Parse specific git errors
 		outputStr := string(output)
@@ -283,7 +283,7 @@ func (s *service) Import(ctx context.Context, path string, opts ImportOptions) (
 		trace.WithAttributes(attribute.String("path", path)))
 	defer span.End()
 
-	s.logger.Info("importing worktree", "path", path)
+	s.logger.Debug("importing worktree", "path", path)
 
 	// Validate path exists
 	absPath, err := filepath.Abs(path)
@@ -448,7 +448,7 @@ func (s *service) Delete(ctx context.Context, name string) error {
 	output, err := cmd.CombinedOutput()
 	if err != nil {
 		// Try to clean up anyway
-		s.logger.Warn("git worktree remove failed, attempting cleanup", "error", err, "output", string(output))
+		s.logger.Warn("git worktree remove failed, attempting cleanup", "error", err, "output", gitOutputForLog(output))
 	}
 
 	// Remove from metadata
@@ -499,7 +499,7 @@ func (s *service) Complete(ctx context.Context, name string, opts CompleteOption
 		cmd = exec.CommandContext(ctx, "git", "push", "-u", "origin", wt.Branch)
 		cmd.Dir = wt.Path
 		if output, err := cmd.CombinedOutput(); err != nil {
-			s.logger.Error("failed to push branch", "error", err, "output", string(output))
+			s.logger.Error("failed to push branch", "error", err, "output", gitOutputForLog(output))
 			return fmt.Errorf("failed to push branch: %w", err)
 		}
 	}
@@ -507,7 +507,7 @@ func (s *service) Complete(ctx context.Context, name string, opts CompleteOption
 	// Create PR if requested
 	if opts.CreatePR {
 		// This would integrate with gh CLI or GitHub API
-		s.logger.Info("PR creation requested", "title", opts.PRTitle, "body", opts.PRBody)
+		s.logger.Info("PR creation requested", "worktreeID", wt.ID, "branch", wt.Branch)
 	}
 
 	// Update status
@@ -553,7 +553,7 @@ func (s *service) Cleanup(ctx context.Context, opts CleanupOptions) ([]string, e
 		}
 
 		if shouldClean {
-			s.logger.Info("cleaning up worktree", "id", id, "status", string(wt.Status))
+			s.logger.Debug("cleaning up worktree", "id", id, "status", string(wt.Status))
 
 			if err := s.Delete(ctx, wt.Name); err != nil {
 				if !opts.Force {
@@ -672,7 +672,7 @@ func (s *service) saveMetadata() error {
 // copypath. Entries were validated by Create before any git work.
 func (s *service) copyFiles(srcDir, dstDir string, paths []string) {
 	result := copypath.Copy(srcDir, dstDir, paths)
-	s.logger.Info("copied paths to worktree", "copied", result.Copied, "missing", result.Missing)
+	s.logger.Debug("copied paths to worktree", "copied", result.Copied, "missing", result.Missing)
 	for _, failure := range result.Failed {
 		s.logger.Warn("failed to copy path to worktree", "path", failure.Path, "error", failure.Err)
 	}

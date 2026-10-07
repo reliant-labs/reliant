@@ -518,7 +518,7 @@ Status: %s`,
 		}
 	}
 
-	logging.Info("Task updated", "task_id", task.ID, "status", task.Status)
+	logging.Debug("Task updated", "task_id", task.ID, "status", task.Status)
 	return NewTextResponse(responseText), nil
 }
 
@@ -641,6 +641,6 @@ Status: %s`,
 		}
 	}
 
-	logging.Info("Subtask created", "task_id", subtask.ID, "parent_id", parentTask.ID)
+	logging.Debug("Subtask created", "task_id", subtask.ID, "parent_id", parentTask.ID)
 	return NewTextResponse(responseText), nil
 }

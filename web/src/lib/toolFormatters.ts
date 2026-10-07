@@ -1015,6 +1015,60 @@ export function isRunLinkTool(toolName: string): boolean {
   return RUN_LINK_TOOLS.includes(baseName as typeof RUN_LINK_TOOLS[number]);
 }
 
+/**
+ * Tools that change a workflow's YAML definition. Drawn as a YAML diff, the
+ * way a file edit is, rather than as their raw JSON arguments.
+ */
+export const WORKFLOW_EDIT_TOOLS = ['create_workflow', 'edit_workflow', 'write_workflow'] as const;
+
+function workflowEditToolName(toolName: string): typeof WORKFLOW_EDIT_TOOLS[number] | undefined {
+  const lower = toolName.toLowerCase();
+  const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;
+  return WORKFLOW_EDIT_TOOLS.find((name) => name === baseName);
+}
+
+export function isWorkflowEditTool(toolName: string): boolean {
+  return workflowEditToolName(toolName) !== undefined;
+}
+
+/** The YAML before and after a workflow-editing call. */
+export interface WorkflowEditDiff {
+  original: string;
+  modified: string;
+}
+
+/**
+ * The YAML change a workflow-editing call makes: old_string → new_string for
+ * edit_workflow, the whole definition added for create_workflow and
+ * write_workflow. Null when the arguments carry no YAML (create_workflow with
+ * no content uses the default template) or the tool is not one of them.
+ */
+export function workflowEditDiff(toolName: string, input: ToolInput | undefined): WorkflowEditDiff | null {
+  const tool = workflowEditToolName(toolName);
+  if (!tool) return null;
+
+  let args: Record<string, unknown> = {};
+  if (typeof input === 'string') {
+    try {
+      const parsed: unknown = JSON.parse(input);
+      if (parsed && typeof parsed === 'object') args = parsed as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  } else if (input) {
+    args = input;
+  }
+  const text = (key: string) => (typeof args[key] === 'string' ? (args[key] as string) : '');
+
+  if (tool === 'edit_workflow') {
+    const original = text('old_string');
+    const modified = text('new_string');
+    return original || modified ? { original, modified } : null;
+  }
+  const content = text('content');
+  return content ? { original: '', modified: content } : null;
+}
+
 export function isGenerateVideoTool(toolName: string): boolean {
   const lower = toolName.toLowerCase();
   const baseName = lower.startsWith('mcp__') ? lower.split('__').pop() || lower : lower;

@@ -674,7 +674,7 @@ type ReviveSubtreeLiveAtRow struct {
 // running at the reset point never re-executes that activity: it is in the
 // replayed history. So the children stayed "failed" while actively working,
 // and the UI showed live agents as failed. Measured: six of them, chat
-// abe58f03, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+// abe58f03, dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 //
 // The predicate is a time window, because the reset point is the only thing
 // that distinguishes work the new run will redo from work it will merely

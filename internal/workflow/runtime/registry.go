@@ -567,12 +567,6 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Extract step_id - try from input first, fall back to parsing activityID
 	// The workflow engine uses activityID format "stepID-timestamp" (e.g., "tally-1234567890")
 	inputInfo := extractActivityInputInfo(input)
-	logging.Info("[ActivityWrapper] Extracted input info",
-		"activityType", activityType,
-		"loopNodeID", inputInfo.LoopNodeID,
-		"loopIteration", inputInfo.LoopIteration,
-		"stepID", inputInfo.StepID,
-	)
 	stepID := inputInfo.StepID
 	if stepID == "" {
 		// Parse step ID from activity ID (format: "stepID-timestamp")
@@ -584,12 +578,14 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Extract chat_id for node execution events
 	chatID := extractChatID(input)
 
-	logging.Info("[ActivityWrapper] Activity execution started",
+	logging.Debug("[ActivityWrapper] Activity execution started",
 		"activityType", activityType,
 		"activityID", activityID,
 		"attemptNumber", attemptNumber,
 		"workflowID", workflowID,
-		"stepID", stepID)
+		"stepID", stepID,
+		"loopNodeID", inputInfo.LoopNodeID,
+		"loopIteration", inputInfo.LoopIteration)
 
 	// Belt-and-suspenders: if Temporal is executing AGENT work for this
 	// workflow, the workflow IS running. Ensure the DB agrees. This is a fast
@@ -612,7 +608,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	startTime := time.Now()
 
 	// Emit node execution "started" event for UI streaming
-	w.emitNodeExecutionEvent(ctx, "started", false, stepID, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
+	w.emitNodeExecutionEvent(ctx, "started", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, nil, nil, nil, nil)
 
 	// Start heartbeat goroutine for fast cancellation detection.
 	// See activityHeartbeatInterval / activityHeartbeatTimeout for the cadence
@@ -724,7 +720,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			endTime := time.Now()
 			duration := endTime.Sub(startTime).Milliseconds()
 			errMsg := panicErr.Error()
-			w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &duration, nil, &errMsg)
+			w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &duration, nil, &errMsg)
 
 			// Re-panic to propagate to Temporal
 			panic(r)
@@ -847,7 +843,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 
 		// Emit node execution "failed" event for UI streaming
 		errMsg := execErr.Error()
-		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
+		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 
 		return zeroOutput, execErr
 	}
@@ -878,7 +874,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, saveErr, maxAttempts)
 		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, saveErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
 		errMsg := saveErr.Error()
-		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
+		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 		return zeroOutput, saveErr
 	}
 
@@ -887,7 +883,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// workflow.
 	clearMessageOnlyFields(&result)
 
-	logging.Info("[ActivityWrapper] Activity execution completed",
+	logging.Debug("[ActivityWrapper] Activity execution completed",
 		"activityType", activityType,
 		"activityID", activityID,
 		"success", true,
@@ -917,7 +913,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	}
 	// `skipped` is stamped on the output by the activity that records the skip,
 	// so this reads the output rather than matching on an activity name.
-	w.emitNodeExecutionEvent(ctx, "completed", model.IsSkippedOutput(resultMap), stepID, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, exitCode, nil)
+	w.emitNodeExecutionEvent(ctx, "completed", model.IsSkippedOutput(resultMap), stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, exitCode, nil)
 
 	return result, nil
 }
@@ -1092,25 +1088,14 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 	err error,
 	maxAttempts int32,
 ) {
-	logging.Info("[ActivityWrapper] writeErrorEvent called",
-		"activityType", activityType,
-		"activityID", activityID,
-		"attemptNumber", attemptNumber,
-		"error", err.Error())
-
 	// Extract chat_id from input if available
 	chatID := extractChatID(input)
 	if chatID == "" {
-		logging.Info("[ActivityWrapper] Skipping error event write - no chat_id in input",
+		logging.Debug("[ActivityWrapper] Skipping error event write - no chat_id in input",
 			"activityType", activityType,
 			"activityID", activityID)
 		return
 	}
-
-	logging.Info("[ActivityWrapper] Extracted chat_id for error event",
-		"chatID", chatID,
-		"activityType", activityType,
-		"activityID", activityID)
 
 	errorID := activityErrorEventID(workflowID, activityID)
 
@@ -1142,8 +1127,8 @@ func (w *ActivityWrapper[I, O]) writeErrorEvent(
 		errorData["error_summary"] = summary
 	}
 	// Scope the error to the thread that produced it. Omitted entirely when
-	// the activity has no thread, so the timeline's "no thread means
-	// chat-scoped" branch still applies rather than matching on "".
+	// the activity has no thread: absent means chat-level work, which the
+	// timeline files under the main thread.
 	if thread := extractThread(input); thread != "" {
 		errorData["thread"] = thread
 	}
@@ -1235,6 +1220,9 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 	// for a reviewer that never ran.
 	skipped bool,
 	nodeID string,
+	// scope is where in the graph this node ran: its enclosing loop and
+	// iteration, and its dotted node path.
+	scope activityInputInfo,
 	nodeType string,
 	chatID string,
 	workflowID string,
@@ -1302,6 +1290,21 @@ func (w *ActivityWrapper[I, O]) emitNodeExecutionEvent(
 	if errorMessage != nil {
 		nodeState.ErrorMessage = errorMessage
 	}
+	// A node inside a loop runs once per iteration under the same node id, so
+	// the event names the loop and the iteration it belongs to. Without them
+	// iteration 2's "started" is indistinguishable from a late replay of
+	// iteration 1's, which is why the viewer never showed a loop body running.
+	if scope.LoopNodeID != "" {
+		loopNodeID, iteration := scope.LoopNodeID, scope.LoopIteration
+		nodeState.ParentNodeID = &loopNodeID
+		nodeState.Iteration = &iteration
+	}
+	// The node path attributes an activity deep inside a sub-workflow (a
+	// reviewer's call_llm, say) to the loop-body node that contains it, which
+	// is the node the diagram draws.
+	if scope.NodePath != "" {
+		nodeState.Metadata = map[string]string{"node_path": scope.NodePath}
+	}
 
 	// Use a background context with timeout for the DB write
 	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
@@ -1367,7 +1370,7 @@ func extractInputStringAtDepth(input interface{}, jsonName, goName string, depth
 	}
 
 	val := reflect.ValueOf(input)
-	if val.Kind() == reflect.Ptr {
+	if val.Kind() == reflect.Pointer {
 		if val.IsNil() {
 			return ""
 		}
@@ -1405,7 +1408,7 @@ func extractInputStringAtDepth(input interface{}, jsonName, goName string, depth
 
 	for i := 0; i < val.NumField(); i++ {
 		fieldVal := val.Field(i)
-		if fieldVal.Kind() == reflect.Ptr {
+		if fieldVal.Kind() == reflect.Pointer {
 			if fieldVal.IsNil() {
 				continue
 			}
@@ -1425,19 +1428,34 @@ func extractInputStringAtDepth(input interface{}, jsonName, goName string, depth
 // extractThread pulls the thread an activity was working on out of its input,
 // so the error event it produces can be scoped to that thread.
 //
-// Without it every activity error is chat-global, and the timeline shows it in
-// EVERY thread of the chat — including spawns that started long after the
-// error and never saw it. Observed: a run of DrainAgentMessages failures
-// rendered at the top of a spawn thread that did not exist when they happened.
-// InterleavedTimeline already scopes an error that carries a thread; nothing
-// was filling the field in.
+// Without it an activity error carries no thread and cannot be shown on the
+// thread that raised it. Observed: runs of DrainAgentMessages and later
+// EnqueueAgentMessage failures rendered at the top of a spawn thread that did
+// not exist when they happened.
+//
+// An input that implements ThreadScopedInput answers for itself; every other
+// input is read by its "thread" field.
 //
 // Returns "" when the input has no thread, which is the honest answer for a
-// genuinely chat-scoped activity. The timeline keeps showing those everywhere
-// rather than guessing a thread — guessing is what produced the wrong-thread
-// render to begin with.
+// genuinely chat-level activity (title generation, the daemon preflight). The
+// timeline files those under the main thread — so an activity that runs on a
+// spawn and reports "" has its failure shown on the wrong thread.
 func extractThread(input interface{}) string {
+	if scoped, ok := input.(ThreadScopedInput); ok {
+		return scoped.ActivityThread()
+	}
 	return extractInputString(input, "thread", "Thread")
+}
+
+// ThreadScopedInput is implemented by an activity input that knows which
+// thread ran it but does not carry it in a field named "thread".
+//
+// The case that needs it holds two threads: EnqueueAgentMessage names
+// from_thread_id and to_thread_id, and only the activity knows it runs on the
+// sender. A field lookup cannot pick between them, and guessing by field name
+// would quietly pick wrong the next time an input grew a second thread.
+type ThreadScopedInput interface {
+	ActivityThread() string
 }
 
 // activityInputInfo holds common fields extracted from activity inputs for tracking.
@@ -1447,6 +1465,11 @@ type activityInputInfo struct {
 	WorkflowID    string
 	LoopNodeID    string // The loop node that spawned this activity (if any)
 	LoopIteration int    // The iteration index within the loop (0-indexed, -1 if not in loop)
+	// NodePath is the node's fully-qualified dotted graph position
+	// ("attempt.review.agent_loop.call_llm"), when the input carries one. It
+	// is what lets a consumer of the node event attribute an activity deep in
+	// a sub-workflow to the loop-body node that contains it.
+	NodePath string
 }
 
 // extractActivityInputInfo extracts common fields from a typed input using JSON.
@@ -1504,6 +1527,20 @@ func extractActivityInputInfo(input interface{}) activityInputInfo {
 		case int64:
 			info.LoopIteration = int(v)
 		}
+	}
+	// types.RuntimeContext marshals loop_iteration with omitempty, so a v3
+	// input in a loop's FIRST iteration arrives with a loop_node_id and no
+	// loop_iteration at all. Read literally that is the "not in a loop" -1,
+	// and every iteration-0 step row and node event was filed under -1: the
+	// workflow viewer could not find iteration 0's steps, and the timeline's
+	// "-save" sibling join (which matches loop_iteration exactly) dropped
+	// them. A loop node id is the authoritative "in a loop" signal, so an
+	// absent iteration beside it can only mean 0.
+	if info.LoopNodeID != "" && info.LoopIteration < 0 {
+		info.LoopIteration = 0
+	}
+	if nodePath, ok := m["node_path"].(string); ok {
+		info.NodePath = nodePath
 	}
 	return info
 }
@@ -1584,7 +1621,7 @@ func toMapInterface(v interface{}) map[string]interface{} {
 func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflowID, stepID, activityType string, output interface{}, execErr error, durationMs int64, loopNodeID string, loopIteration int) {
 	// Skip if we don't have the required IDs
 	if workflowID == "" || stepID == "" {
-		logging.Info("[ActivityWrapper] Skipping step execution write - missing workflow_id or step_id",
+		logging.Debug("[ActivityWrapper] Skipping step execution write - missing workflow_id or step_id",
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType)
@@ -1609,7 +1646,7 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflow
 			"stepID", stepID,
 			"activityType", activityType)
 	} else {
-		logging.Info("[ActivityWrapper] Step execution recorded",
+		logging.Debug("[ActivityWrapper] Step execution recorded",
 			"workflowID", workflowID,
 			"stepID", stepID,
 			"activityType", activityType,
@@ -1831,13 +1868,8 @@ func wrapActivity[TInput any, TOutput any](
 	// The function signature matches what Temporal expects for typed activities
 	return func(ctx context.Context, input TInput) (TOutput, error) {
 		// Pre-execution middleware (logging)
+		// Start/complete are logged once, by ActivityWrapper.Execute.
 		logger := getActivityLogger(ctx)
-		activityInfo := activity.GetInfo(ctx)
-		logger.Info("[Workflow Runtime Registry] Activity starting",
-			"activity", name,
-			"activity_id", activityInfo.ActivityID,
-			"attempt", activityInfo.Attempt,
-		)
 
 		// Execute the activity wrapper (handles middleware)
 		output, err := wrapper.Execute(ctx, input)
@@ -1862,8 +1894,6 @@ func wrapActivity[TInput any, TOutput any](
 			// Temporal will handle retry logic based on error type
 			return output, classified
 		}
-
-		logger.Info("[Workflow Runtime Registry] Activity completed", "activity", name)
 
 		return output, nil
 	}
@@ -1915,7 +1945,7 @@ func (r *ActivityRegistry) GetOutputDefaults(activityName string) (map[string]in
 
 	// Create zero value of the output type
 	var zeroValue reflect.Value
-	if outputType.Kind() == reflect.Ptr {
+	if outputType.Kind() == reflect.Pointer {
 		zeroValue = reflect.New(outputType.Elem())
 	} else {
 		zeroValue = reflect.New(outputType).Elem()

@@ -639,7 +639,7 @@ func (c *ClaudeCodeClient) Model() models.Model {
 }
 
 func (c *ClaudeCodeClient) ValidateKey(ctx context.Context) error {
-	logging.Info("Validating ClaudeCode API key with Claude 3.5 Haiku model...")
+	logging.Debug("Validating ClaudeCode API key with Claude 3.5 Haiku model...")
 	testMessages := []message.Message{
 		{
 			Role: message.User,

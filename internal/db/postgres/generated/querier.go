@@ -44,7 +44,7 @@ type Querier interface {
 	// exit (terminate, reap, a status write that races past the thread's own
 	// "completed" activity call) leaves the thread at running (2) forever, with
 	// completed_at NULL. Measured on the live DB (see
-	// docs/incidents/2026-08-12-spawn-history-cap.md): 288 threads stranded at
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md): 288 threads stranded at
 	// status=2 under an already-terminal workflow -- 174 whose workflow completed,
 	// 64 cancelled, 50 failed.
 	//
@@ -233,7 +233,7 @@ type Querier interface {
 	DismissInboxItems(ctx context.Context, arg DismissInboxItemsParams) error
 	EnqueueAgentMessage(ctx context.Context, arg EnqueueAgentMessageParams) error
 	// The stranded-background-spawn sweep's write half (spec §7.1). ON CONFLICT
-	// against idx_agent_messages_one_terminal_report_per_spawn is what makes this
+	// against idx_agent_messages_one_terminal_report_per_chat_spawn is what makes this
 	// safe under concurrency: two reconciler passes racing each other, or a
 	// sweep racing the detached spawn goroutine's own (delayed) report, both
 	// attempt this same INSERT, and Postgres serializes them at the row lock --
@@ -253,7 +253,7 @@ type Querier interface {
 	// A REAL terminal spawn report. Unlike EnqueueAgentMessageIfAbsent (the
 	// reconciler's placeholder write, DO NOTHING), a real report replaces a
 	// placeholder the reconciler synthesized for the same tool_call_id -- see
-	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	//
 	// It is re-queued even if the placeholder was already delivered: the parent
 	// was told "result lost, go check spawn_status" and should also receive the
@@ -269,9 +269,15 @@ type Querier interface {
 	// references agent_messages.id, so the change is safe.
 	//
 	// WHERE agent_messages.synthesized is what protects a real report: against one,
-	// the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows =
-	// already reported, an idempotent no-op). xmax = 0 is true only for a fresh
-	// insert, distinguishing inserted from superseded.
+	// the DO UPDATE matches nothing and RETURNING yields no row (sql.ErrNoRows: the
+	// slot is held, and the caller reads it with GetTerminalSpawnReport to tell a
+	// retry from a different spawn). The thread predicates keep a placeholder for
+	// one spawn from being superseded by a different spawn that reused its id in
+	// the same chat. xmax = 0 is true only for a fresh insert, distinguishing
+	// inserted from superseded.
+	//
+	// The slot is (chat_id, tool_call_id), not tool_call_id: the id is the model
+	// provider's, so two chats can each have a spawn under it.
 	EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReportParams) (EnqueueSpawnReportRow, error)
 	// Releases the lease and records the outcome. refreshed_at moves only on
 	// success; last_error is cleared on success.
@@ -468,6 +474,10 @@ type Querier interface {
 	GetStepExecutionsForChat(ctx context.Context, arg GetStepExecutionsForChatParams) ([]GetStepExecutionsForChatRow, error)
 	GetTask(ctx context.Context, id string) (Task, error)
 	GetTaskDependency(ctx context.Context, id string) (TaskDependency, error)
+	// The report holding one spawn's slot, read when a write to the slot was
+	// refused: the same sender is a retry (idempotent), a different one is a
+	// second spawn under the same id, whose report cannot be stored.
+	GetTerminalSpawnReport(ctx context.Context, arg GetTerminalSpawnReportParams) (AgentMessage, error)
 	GetThread(ctx context.Context, id string) (Thread, error)
 	GetThreadByWorkflow(ctx context.Context, workflowID sql.NullString) (Thread, error)
 	// Get the token count from the most recent message with token data at or before maxSeq.
@@ -489,6 +499,12 @@ type Querier interface {
 	GetThreadWithParent(ctx context.Context, id string) (GetThreadWithParentRow, error)
 	GetToolCall(ctx context.Context, id string) (ToolCall, error)
 	GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error)
+	// The result of the call one assistant message carries. History recovery
+	// reads this rather than GetToolCallResult: an id alone can name another
+	// chat's call, but a call's message is its own, and message ids are ours.
+	// Branched chats included — an inherited message keeps its id, and so does
+	// the call record pointing at it.
+	GetToolCallResultForMessage(ctx context.Context, arg GetToolCallResultForMessageParams) (ToolCallResult, error)
 	// Joins the display names so a trigger can be shown without a second lookup.
 	// LEFT JOINs: a daemon id is not a foreign key, and an absent name must not
 	// hide the trigger.
@@ -880,6 +896,14 @@ type Querier interface {
 	// writer has to remember to set.
 	ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCall, error)
+	// Every grant a tool call recorded in one chat, per thread: what a load_tool
+	// result granted, written with that result (UpsertToolCallResult). The coarse
+	// fresh restart rebuilds each thread's grants from these rows, because the
+	// dead execution's in-memory record of them died with it. A chat is one root
+	// execution and its sub-agents, each on its own thread, so the thread keys
+	// the grants exactly as the workflow keys them. Ordered so the merge is
+	// deterministic.
+	ListToolGrantsForChat(ctx context.Context, chatID string) ([]ListToolGrantsForChatRow, error)
 	// Newest first, keyset on (occurred_at, id) so a firing recorded mid-pagination
 	// can neither repeat nor be skipped; two fires can share an occurred_at, and id
 	// breaks the tie. Served by idx_trigger_events_trigger_occurred_id.
@@ -987,7 +1011,7 @@ type Querier interface {
 	// completed/failed/cancelled arms) must call this too, and a forgotten one
 	// strands the thread forever: nothing else ever revisits a threads row, and
 	// the 288-row measurement in
-	// docs/incidents/2026-08-12-spawn-history-cap.md is exactly what that
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md is exactly what that
 	// omission looks like at scale -- 174 completed, 64 cancelled, 50 failed
 	// workflows, each with a thread still reporting running.
 	//
@@ -1052,7 +1076,7 @@ type Querier interface {
 	// running at the reset point never re-executes that activity: it is in the
 	// replayed history. So the children stayed "failed" while actively working,
 	// and the UI showed live agents as failed. Measured: six of them, chat
-	// abe58f03, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	// abe58f03, dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 	//
 	// The predicate is a time window, because the reset point is the only thing
 	// that distinguishes work the new run will redo from work it will merely
@@ -1256,8 +1280,26 @@ type Querier interface {
 	// Activities that create/update a tool call retry on failure, so the write
 	// must be idempotent: a retry re-sending the same id updates the row in
 	// place instead of erroring on the primary key.
-	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) error
-	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) error
+	//
+	// Only in place for the SAME chat. The id is the model provider's, and a
+	// provider can hand two chats the same one; the row belongs to whichever chat
+	// recorded it first. A write for another chat updates nothing (0 rows), which
+	// the store reports as core.ErrToolCallIDInAnotherChat. chat_id was never in
+	// the SET list, so before this guard such a write produced a row that still
+	// claimed the first chat while carrying the second chat's thread, input and
+	// status.
+	UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) (int64, error)
+	// A result belongs to its call (the foreign key), and so to the call's chat.
+	// The EXISTS is what makes the writer prove it is that chat: a result written
+	// for chat B under an id chat A's call holds would otherwise satisfy the
+	// foreign key against A's call and replace A's result. Writes nothing (0 rows)
+	// when the call is not this chat's or does not exist; the store reports both
+	// as core.ErrToolCallIDInAnotherChat.
+	//
+	// granted_tools travels with content: a rewrite of the result (an error
+	// replacing it, a repair) replaces what the call granted, so the grants
+	// always describe the result the model reads.
+	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) (int64, error)
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
 	UpsertTriggerRegistration(ctx context.Context, arg UpsertTriggerRegistrationParams) error

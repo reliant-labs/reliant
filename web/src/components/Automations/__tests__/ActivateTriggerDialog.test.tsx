@@ -21,6 +21,8 @@ import {
   type CreateTriggerRequest,
 } from "@/gen/reliant/v1/trigger_pb";
 import { DaemonInfoSchema, DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ConnectionSchema, ConnectionStatus, ListConnectionsResponseSchema } from "@/gen/reliant/v1/connection_pb";
+import { SearchCatalogResponseSchema } from "@/gen/reliant/v1/catalog_pb";
 import { ProjectDaemonSchema, ProjectInstallState } from "@/gen/reliant/v1/project_pb";
 import { triageWorkflowResponse, presetsResponse, worktreesResponse, WORKFLOW_LIST } from "@/components/workflow/run/__tests__/runFormFixtures";
 import { renderAtRoute } from "./automationTestUtils";
@@ -34,9 +36,14 @@ const getDefaultPresetsBatch = vi.fn();
 const listWorktrees = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
+const listConnections = vi.fn();
+const searchCatalog = vi.fn();
+const getCatalogEntry = vi.fn();
 
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
+    connection: () => ({ listConnections }),
+    catalog: () => ({ searchCatalog, getCatalogEntry }),
     trigger: () => ({ createTrigger, rotateWebhookToken }),
     workflow: () => ({ getWorkflow, listWorkflows }),
     preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
@@ -202,5 +209,93 @@ describe("ActivateTriggerDialog", () => {
     fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Go" } });
     await user.click(screen.getByRole("button", { name: "Activate" }));
     expect(await screen.findByText(/does not declare a trigger named "nightly"/)).toHaveAttribute("role", "alert");
+  });
+
+  it("needs no prompt when the declared trigger has one: empty follows the workflow's", async () => {
+    const user = userEvent.setup();
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-2", name: "Triage · nightly", workflowTrigger: "nightly" }) }));
+    const { onClose } = render({ ...scheduleDeclared, prompt: "Summarise everything before {{ trigger.scheduled_for }}." } as DeclaredTrigger);
+
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    const prompt = screen.getByLabelText("Prompt");
+    expect(prompt).toHaveValue("");
+    expect(prompt).toHaveAttribute("placeholder", "Summarise everything before {{ trigger.scheduled_for }}.");
+    await user.click(screen.getByRole("button", { name: "Activate" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.message).toBe("");
+    expect(definition.source).toEqual({ case: "workflowTrigger", value: "nightly" });
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("in personal mode (a built-in), creates a row with the picked source INLINE, not a declaration", async () => {
+    const user = userEvent.setup();
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-3", name: "Agent · schedule" }) }));
+    const onClose = vi.fn();
+    renderAtRoute(
+      <ActivateTriggerDialog
+        open
+        mode="personal"
+        onClose={onClose}
+        workflowRef="builtin://agent"
+        workflowTitle="Agent"
+        declared={{ name: "schedule", filter: "", inputs: {}, source: { case: "schedule", value: { cron: ["0 9 * * 1-5"], timezone: "UTC" } } } as unknown as DeclaredTrigger}
+        defaultProjectId="proj-1"
+      />,
+    );
+
+    expect(await screen.findByRole("form", { name: "Add a personal trigger" })).toBeInTheDocument();
+    // The source is editable here: there is no declaration to hold it.
+    expect(screen.getByText("When it runs")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Review yesterday's PRs" } });
+    // A personal trigger maps no inputs from an event, so the workflow's
+    // required ones are the activator's to fill.
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "daily" } });
+    await user.click(screen.getByRole("button", { name: "Add trigger" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.workflow).toBe("builtin://agent");
+    expect(definition.source.case).toBe("schedule");
+    expect(definition.source.value).toMatchObject({ cron: ["0 9 * * 1-5"], timezone: "UTC" });
+    expect(definition.message).toBe("Review yesterday's PRs");
+    await waitFor(() => expect(onClose).toHaveBeenCalled());
+  });
+
+  it("in personal mode, 'Only from' writes the new row's own filter", async () => {
+    const user = userEvent.setup();
+    listConnections.mockResolvedValue(
+      create(ListConnectionsResponseSchema, {
+        connections: [create(ConnectionSchema, { id: "conn_slack", integrationId: "slack", name: "Acme", senderId: "U0ME", status: ConnectionStatus.ACTIVE, isDefault: true })],
+      }),
+    );
+    searchCatalog.mockResolvedValue(create(SearchCatalogResponseSchema, { entries: [] }));
+    getCatalogEntry.mockRejectedValue(new Error("not in this test's catalog"));
+    createTrigger.mockResolvedValue(create(CreateTriggerResponseSchema, { trigger: create(TriggerSchema, { id: "t-4", name: "Agent · mention" }) }));
+    renderAtRoute(
+      <ActivateTriggerDialog
+        open
+        mode="personal"
+        onClose={vi.fn()}
+        workflowRef="builtin://agent"
+        workflowTitle="Agent"
+        declared={{ name: "mention", filter: "", inputs: {}, source: { case: "integration", value: { integration: "slack", events: ["app_mention"], match: {} } } } as unknown as DeclaredTrigger}
+        defaultProjectId="proj-1"
+      />,
+    );
+
+    await user.click(await screen.findByRole("button", { name: "Add me (U0ME)" }));
+    await user.type(screen.getByLabelText("Add a sender"), "U0TEAMMATE{Enter}");
+    await waitFor(() => expect(screen.getByLabelText("Runs on")).toHaveValue("daemon-1"));
+    fireEvent.change(screen.getByLabelText("Prompt"), { target: { value: "Answer the mention" } });
+    fireEvent.change(await screen.findByLabelText("Label"), { target: { value: "slack" } });
+    await user.click(screen.getByRole("button", { name: "Add trigger" }));
+
+    await waitFor(() => expect(createTrigger).toHaveBeenCalledTimes(1));
+    const definition = (createTrigger.mock.calls[0]![0] as CreateTriggerRequest).trigger!;
+    expect(definition.source.case).toBe("integration");
+    expect(definition.filter).toBe('trigger.sender.verified && trigger.sender.id in ["U0ME", "U0TEAMMATE"]');
   });
 });

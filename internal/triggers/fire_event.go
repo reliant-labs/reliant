@@ -152,6 +152,7 @@ func (f *EventFirer) Fire(ctx context.Context, in EventFireInput) (*FireOutput, 
 		DedupeKey:  ev.DedupeKey,
 		OccurredAt: ev.OccurredAt,
 		Payload:    ev.Payload,
+		Sender:     ev.Sender,
 	}, spec)
 
 	switch {
@@ -205,13 +206,17 @@ func (f *EventFirer) settle(ctx context.Context, ev *core.TriggerEvent, outcome 
 // labelled, untrusted data.
 func (f *EventFirer) buildSpec(trigger *core.Trigger, ev *core.TriggerEvent, decl *Declaration) (launch.Spec, error) {
 	values := trigger.Params
+	root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload, Sender: ev.Sender}.Root()
 	if decl != nil {
-		root := FilterInput{Kind: string(ev.Kind), TriggerID: trigger.ID, EventID: ev.ID, OccurredAt: ev.OccurredAt, Payload: ev.Payload}.Root()
 		merged, err := MergeDeclaredInputs(trigger.Params, decl.Inputs, root)
 		if err != nil {
 			return launch.Spec{}, fmt.Errorf("the declared trigger's inputs could not be read from this event: %w", err)
 		}
 		values = merged
+	}
+	prompt, err := SeedPrompt(trigger, decl, root)
+	if err != nil {
+		return launch.Spec{}, err
 	}
 	params, err := paramsToProto(values)
 	if err != nil {
@@ -234,7 +239,7 @@ func (f *EventFirer) buildSpec(trigger *core.Trigger, ev *core.TriggerEvent, dec
 		Presets:   trigger.Presets,
 		Params:    params,
 		Messages: []launch.SeedMessage{
-			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: seedWithEvent(trigger.Message, ev)},
+			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: seedWithEvent(prompt, ev)},
 			{
 				// Context for the model only, and deliberately free of any
 				// event content: an attacker controls the payload, and a

@@ -11,7 +11,7 @@ import (
 // workflow and the spawn tool call terminal: the reconciler sweep reads
 // "terminal child + no report" as stranded, so the opposite order lets it
 // write a placeholder that then collides with the real report. See
-// docs/incidents/2026-10-04-spawn-report-collision.md.
+// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 func (s *SpawnBackgroundE2ESuite) TestBackground_ReportPrecedesTerminalStatus() {
 	env := s.NewTestWorkflowEnvironment()
 	e := newSpawnE2EEnv(s.T(), env, []scriptedToolCallsResponse{

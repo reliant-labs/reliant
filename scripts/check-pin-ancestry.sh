@@ -3,7 +3,7 @@
 #
 # ── Why this exists ──────────────────────────────────────────────────────
 #
-# Pre-launch we pin forge by COMMIT (docs/development/pinning.md). A
+# Pre-launch we pin forge by COMMIT (dev-docs/pinning.md). A
 # cross-repo change normally lands like this: pin forge's PR-head commit, get
 # this repo's CI green, merge both. If forge SQUASH-merges, that PR-head
 # commit never reaches forge's main — main gets a new commit with the same
@@ -151,7 +151,7 @@ check() {
   echo "  FAIL  ${label} ${declared}: ${ref} is NOT on ${where}"
   echo "        Only a branch or PR ref keeps it alive (a squash-merged PR head?), or it is gone."
   echo "        Fix: ${fix}"
-  annotate "${file}" "Dangling ${name} pin" "${label} ${declared} names ${ref}, which is not on ${where}. Only a branch or PR ref keeps it alive (typically a PR head that was squash-merged), so the pin can stop resolving at any time. Fix: ${fix}. See docs/development/pinning.md."
+  annotate "${file}" "Dangling ${name} pin" "${label} ${declared} names ${ref}, which is not on ${where}. Only a branch or PR ref keeps it alive (typically a PR head that was squash-merged), so the pin can stop resolving at any time. Fix: ${fix}. See dev-docs/pinning.md."
   FAILED=1
 }
 

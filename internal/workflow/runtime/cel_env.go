@@ -29,8 +29,6 @@ import (
 type CELContextBuilder struct {
 	workflowID   string
 	workflowName string
-	path         string
-	branch       string
 	inputs       map[string]interface{}
 	nodeOutputs  map[string]interface{}
 	execContext  *ExecutionContext
@@ -53,13 +51,6 @@ func (b *CELContextBuilder) WithWorkflow(id, name string) *CELContextBuilder {
 	return b
 }
 
-// WithEnvironment sets the workspace environment.
-func (b *CELContextBuilder) WithEnvironment(path, branch string) *CELContextBuilder {
-	b.path = path
-	b.branch = branch
-	return b
-}
-
 // WithInputs sets the workflow inputs.
 func (b *CELContextBuilder) WithInputs(inputs map[string]interface{}) *CELContextBuilder {
 	if inputs != nil {
@@ -76,7 +67,8 @@ func (b *CELContextBuilder) WithNodeOutputs(nodeOutputs map[string]interface{}) 
 	return b
 }
 
-// WithExecContext sets the execution context for CEL evaluation.
+// WithExecContext sets the execution context for CEL evaluation. It is also
+// where the scope's environment comes from: workflow.path is ctx.ProjectPath.
 func (b *CELContextBuilder) WithExecContext(ctx *ExecutionContext) *CELContextBuilder {
 	b.execContext = ctx
 	return b
@@ -106,12 +98,10 @@ func (b *CELContextBuilder) resolutionContext() *wfcel.NodeResolutionContext {
 		Inputs: normalizeNumericTypes(b.inputs),
 		Nodes:  normalizeNumericTypes(b.nodeOutputs),
 		Iter:   b.iter,
-		Workflow: workflowContextToTyped(map[string]interface{}{
-			workflowContextKeyID:     b.workflowID,
-			workflowContextKeyName:   b.workflowName,
-			workflowContextKeyPath:   b.path,
-			workflowContextKeyBranch: b.branch,
-		}),
+		// The same workflow namespace every other evaluation site builds, so a
+		// node's config sees workflow.path/mode/branch exactly as its
+		// condition, save_message and outputs do.
+		Workflow: workflowContextToTyped(buildWorkflowContext(b.workflowID, b.workflowName, "", b.inputs, b.execContext)),
 	}
 	if b.outputs != nil {
 		rc.Outputs = normalizeNumericTypes(b.outputs)
@@ -208,6 +198,9 @@ func (b *CELContextBuilder) evalSingleCEL(expr string, env *cel.Env, evalCtx map
 		return nil, fmt.Errorf("failed to create CEL program: %w", err)
 	}
 
+	if err := wfcel.CheckWorkflowPathReference(env, ast, evalCtx); err != nil {
+		return nil, err
+	}
 	out, _, err := prg.Eval(evalCtx)
 	if err != nil {
 		return nil, fmt.Errorf("CEL evaluation error: %w", err)
@@ -236,6 +229,9 @@ func (b *CELContextBuilder) EvalBool(expr string) (bool, error) {
 		return false, fmt.Errorf("failed to create CEL program: %w", err)
 	}
 
+	if err := wfcel.CheckWorkflowPathReference(env, ast, evalCtx); err != nil {
+		return false, err
+	}
 	out, _, err := prg.Eval(evalCtx)
 	if err != nil {
 		return false, fmt.Errorf("CEL evaluation error: %w", err)

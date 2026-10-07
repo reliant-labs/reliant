@@ -38,7 +38,11 @@ func (f *fakeControlPlaneClient) MintLLMKey(_ context.Context, jwt, deviceName s
 
 // DeleteCurrentUserAccount satisfies controlplane.Client. The settings tests
 // never exercise account deletion; account.go's own tests cover that path.
-func (f *fakeControlPlaneClient) DeleteCurrentUserAccount(context.Context, string) ([]controlplane.AccountDeletionBlocker, error) {
+func (f *fakeControlPlaneClient) DeleteCurrentUserAccount(context.Context, string) (*controlplane.AccountDeletionResult, error) {
+	return &controlplane.AccountDeletionResult{}, nil
+}
+
+func (f *fakeControlPlaneClient) PreviewAccountDeletionWallet(context.Context, string) (*controlplane.AccountDeletionWalletQuote, error) {
 	return nil, nil
 }
 

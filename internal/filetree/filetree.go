@@ -312,7 +312,7 @@ func (w *walker) include(name string, isDir bool, segs []string, m matcher) bool
 	if !w.showHidden && strings.HasPrefix(name, ".") {
 		return false
 	}
-	if m.match(segs, isDir) && !(w.showHidden && isDir && strings.HasPrefix(name, ".")) {
+	if m.match(segs, isDir) && (!w.showHidden || !isDir || !strings.HasPrefix(name, ".")) {
 		return false
 	}
 	return true

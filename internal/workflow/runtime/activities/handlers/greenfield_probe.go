@@ -340,6 +340,12 @@ func BuildGreenfieldGuidance(configFiles []string) string {
 	b.WriteString("needs a waitlist or a checkout. Run `reliant forge skill load deploy/static-site` ")
 	b.WriteString("for that path instead of the service sequence.\n\n")
 
+	b.WriteString("Publishing defaults to Reliant hosting: a new forge project's staging and prod are ")
+	b.WriteString("already bound to it, and `reliant forge env deploy <env>` ships it. A static site alone ")
+	b.WriteString("has a free tier; hosted services and the managed database need billing, and without it ")
+	b.WriteString("the deploy is queued (exit 7) and goes live once the user sets billing up — hand them ")
+	b.WriteString("the link it prints. Run `reliant forge skill load deploy/hosting` before deploying.\n\n")
+
 	b.WriteString("Propose it, do not impose it. For an app it commits the project to Go, Postgres ")
 	b.WriteString("and Connect RPC, with Next.js or React Native on top; for a static site, to a ")
 	b.WriteString("Next.js (or Vite) frontend inside a forge project. Opinionated, and silence about ")

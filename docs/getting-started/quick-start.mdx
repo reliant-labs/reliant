@@ -3,42 +3,54 @@ title: "Quick Start"
 description: "Get up and running with Reliant in minutes"
 ---
 
-Get Reliant running, chat with your codebase, and run your first workflow.
+Sign in, set up a machine and a model, and run your first workflow. Setup takes a few minutes; most of it is choices, and you can change any of them later in Settings.
 
-## 1. Connect an AI provider
+## 1. Sign in and walk through setup
 
-Open **Settings → AI**.
+Open the [web app](https://app.reliantlabs.io) or launch the [desktop app](/getting-started/installation) and sign in. Reliant then guides you through setup. The progress bar shows the steps: **Machine**, **Model**, **Payment**, **Project** and **GitHub**.
 
-1. Select your provider: Claude Code, Codex, Anthropic, OpenAI, OpenRouter, and others.
-2. Authenticate:
-   - Most providers: enter an API key, then click **Test Connection** and **Add Provider**.
-   - Claude Code or Codex: click **Login** and complete OAuth in your browser.
+### Machine
 
-<Tip>
-Using the web UI instead of the desktop app? Run `reliant auth serve` in your terminal first — OAuth needs a localhost helper. See [Provider Authentication](/settings/api-keys#oauth-in-web-mode) for details.
-</Tip>
+Reliant's servers run your agents, but the agents do their work (reading files, running commands, running tests) on a **machine** you choose. See [Key Concepts](/getting-started/concepts#machine-and-daemon) for how that fits together.
 
-## 2. Open a project
+- **A Reliant cloud machine** runs in Reliant Cloud. There is nothing to install, it starts for you, and it's reachable from any device, including your phone. Machines come in five sizes, Compute Small through Compute 2XL, at $15, $35, $79, $159 and $299 per month. Your plan's price is shown beside each size.
+- **Use your own computer** runs the agents' tools on the computer you're sitting at. In the desktop app, Reliant connects it for you. From the web app, setup shows the instructions for connecting it.
 
-Click **Open Existing Project** and select your code folder. Reliant indexes your files automatically.
+### Model
 
-Or click **Create New Project** to start fresh.
+Choose where the AI comes from:
 
-## 3. Start chatting
+- **Reliant** is the managed option. You add credit to a wallet and pay as you go; there is no API key to find or paste.
+- **A subscription you already have**: sign in with Claude Code, Codex (ChatGPT), GitHub Copilot or Antigravity.
+- **Your own API key** for Anthropic, OpenAI or OpenRouter.
 
-Type a message and press Enter:
+[AI Providers](/settings/api-keys) covers each option, including what it costs.
+
+### Payment
+
+This step only appears when something you chose costs money, a paid cloud machine or Reliant wallet credit. If you picked your own computer and your own provider, you skip it. If you have a coupon, you can redeem it here.
+
+### Project and GitHub
+
+For a cloud machine, you choose where to start. **Start something new** has Reliant set up a project from scratch and get to work on your first idea. **Connect GitHub** lets you pick one of your repositories, and Reliant copies it onto your machine to work on it. You can add more projects later from **Projects**, so this is only where you start.
+
+If you chose your own computer, setup finishes after the model step. Add a project from **Projects** whenever you're ready.
+
+## 2. Start chatting
+
+Once setup finishes you land in the app. The navigation bar has **Chats**, **Files**, **Changes**, **Projects** and **Workspaces**. Open a chat, type a message and press Enter:
 
 - "Explain the structure of this project"
 - "What does the main file do?"
 - "Add input validation to the signup form"
 
-This is the default **agent** workflow running. Your message goes to the LLM, the LLM calls tools (read files, search code, make edits, run commands), results go back to the LLM, and it loops until the task is done. So far this is like any other ADE.
+This is the default **agent** workflow running. Your message goes to the model, the model calls tools on your machine (read files, search code, make edits, run commands), the results go back to the model, and it loops until the task is done. If your machine is a cloud machine that was asleep, it wakes automatically and the first message may take a little longer.
 
-## 4. Run a built-in workflow
+## 3. Run a built-in workflow
 
 This is where Reliant gets different. Instead of manually driving each step, pick a workflow and let agents execute a defined process.
 
-Click the **workflow selector** (defaults to "Agent") and try one of these:
+Click the **workflow selector** in the chat input (it defaults to "Agent") and try one of these:
 
 | Workflow | When to use it | What happens |
 | --- | --- | --- |
@@ -49,7 +61,7 @@ Click the **workflow selector** (defaults to "Agent") and try one of these:
 
 Select a workflow, type your request, and watch multiple agents collaborate on the task. The full list is on the [home page](/#what-ships-with-reliant).
 
-## 5. Build your own workflow
+## 4. Build your own workflow
 
 Create a YAML file in your project to define a custom process:
 
@@ -68,7 +80,8 @@ inputs:
 
 nodes:
   - id: review
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
     args:
@@ -82,7 +95,8 @@ nodes:
         Be specific. Reference exact code.
 
   - id: refactor
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
       inject:
@@ -95,7 +109,8 @@ nodes:
       mode: auto
 
   - id: verify
-    run: npm test
+    type: run
+    command: npm test
 
 edges:
   - from: review
@@ -108,14 +123,6 @@ This workflow: criticizes the code → refactors based on its own critique → r
 
 See [Creating Custom Workflows](/workflows/custom-workflows) for the full guide.
 
-## The interface
-
-| Area | Purpose |
-| --- | --- |
-| **Navigation Bar** | Chats, Worktrees, Workflows, Settings |
-| **Sidebar** | Context for the selected navigation item |
-| **Chat Area** | Message input at bottom, history above |
-
 ## Execution modes
 
 Control how much autonomy the agent has with **Auto** (full autonomy), **Manual** (approve each action), or **Plan** (read-only exploration). You can switch modes mid-conversation — a common pattern is to start in Plan mode to analyze, then switch to Auto to execute.
@@ -124,7 +131,7 @@ See [Execution Modes](/workflows/overview#execution-modes) for details.
 
 ## Optional: memory files
 
-Memory files provide persistent context to the AI across conversations.
+Memory files provide persistent context to the AI across conversations. They live on the machine your agents run on, so a cloud machine has its own, separate from your laptop's.
 
 **Global**: `~/.reliant/reliant.md`
 

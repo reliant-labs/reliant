@@ -1,0 +1,31 @@
+---
+title: "Import from Claude Code / Cursor"
+description: "Bring instructions, MCP servers, rules and commands from another coding tool into Reliant"
+---
+
+If you already have a setup in Claude Code, Cursor, Codex or Windsurf, you do not have to rebuild it. **Import from Claude Code / Cursor** inspects those tools' configuration, tells you what it found, and, only after you approve, writes the useful parts as Reliant files.
+
+It reads on the [machine](/machines/overview) the chat runs on, so run it on the computer where your old tool's configuration lives.
+
+## What it does
+
+1. **Discover.** It looks in the project and your home directory for instruction and memory files, MCP configuration, rule and skill folders, and custom command folders. It reports what it found, what it would carry over, what it would skip, and any conflicts or ambiguity. Nothing is written yet.
+2. **Approve.** You are asked to approve the migration, and the prompt lists which categories are enabled. If you decline, it stops having written nothing. The approval waits up to 24 hours.
+3. **Migrate.** Four independent steps run for the categories you enabled.
+
+| Category | Reads (examples) | Writes |
+|----------|------------------|--------|
+| Instructions and memory | `CLAUDE.md`, `.claude/CLAUDE.md`, `.cursorrules`, `AGENTS.md`, `AGENTS.override.md`, `.windsurfrules` | A merged project `reliant.md`. An existing one is merged into, not overwritten |
+| MCP servers | `~/.claude.json`, `.mcp.json`, `.cursor/mcp.json`, `.windsurf/mcp.json` | `.reliant/mcp.json`, merged with what is there; broken source files are skipped |
+| Skills | `.cursor/rules/`, `.windsurf/rules/`, `.codex/skills/` | `.reliant/skills/<name>/SKILL.md` for rules better as opt-in than always-on |
+| Workflows | Custom command folders | Reusable commands judged worth keeping are turned into Reliant workflows |
+
+Each step reports the exact files it read and wrote, so you can review them with `git diff`.
+
+## Choosing what to import
+
+The workflow has four switches, each on by default: `import_memory`, `import_mcp`, `import_skills` and `generate_workflows`. Turn off any you do not want before you start.
+
+## Afterwards
+
+Check `reliant.md` for anything tool-specific that no longer applies, and read [Memories](/settings/memories), [MCP servers](/settings/mcp-servers) and [Skills](/features/skills) for how Reliant uses what was written.

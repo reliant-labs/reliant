@@ -76,7 +76,7 @@ func ResolveVideoGenerator(ctx context.Context, userID string, selector models.M
 	}
 	config.BaseURL = baseURL
 
-	logging.Info("Resolved video generation model",
+	logging.Debug("Resolved video generation model",
 		"model", config.ModelID, "api_model", config.APIModel, "driver", config.Driver)
 
 	return newVideoGenClient(config)

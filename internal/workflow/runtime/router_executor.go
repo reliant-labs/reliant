@@ -195,7 +195,7 @@ func (r *RouterExecutor) Execute() (map[string]interface{}, error) {
 		"nodeID", r.node.GetId(),
 		"selectedWorkflow", r.decision.Workflow,
 		"selectedPreset", r.decision.Preset,
-		"reasoning", r.decision.Reasoning,
+		"reasoningLen", len(r.decision.Reasoning),
 	)
 
 	// Update the thread title and routing metadata now that we know the selected workflow/preset.
@@ -376,7 +376,7 @@ func (r *RouterExecutor) executeNodeRouting(args *reliantv1.RouterArgs) (map[str
 	r.logger.Info("[Router] Node routing decision made",
 		"nodeID", r.node.GetId(),
 		"selectedNode", decision.SelectedNode,
-		"reasoning", decision.Reasoning,
+		"reasoningLen", len(decision.Reasoning),
 	)
 
 	return map[string]interface{}{
@@ -735,7 +735,7 @@ func (r *RouterExecutor) executeSelectedWorkflow() (map[string]interface{}, erro
 			if err := workflow.ExecuteActivity(activityCtx, "SaveMessage", saveInput).Get(r.ctx, nil); err != nil {
 				return nil, fmt.Errorf("failed to save router inject message: %w", err)
 			}
-			r.logger.Info("[Router] Saved routed prompt to child thread",
+			r.logger.Debug("[Router] Saved routed prompt to child thread",
 				"thread", r.execContext.Thread,
 				"promptLength", len(prompt),
 			)
@@ -890,7 +890,7 @@ func routerThreadTitle(decision *routerDecision) string {
 func (r *RouterExecutor) celScope() *wfcel.RouterOutputContext {
 	return &wfcel.RouterOutputContext{
 		Inputs:   r.workflowInputs,
-		Workflow: workflowContextToTyped(buildWorkflowContext(r.workflowID, r.workflowName, r.chatID, r.workflowInputs)),
+		Workflow: workflowContextToTyped(buildWorkflowContext(r.workflowID, r.workflowName, r.chatID, r.workflowInputs, r.execContext)),
 	}
 }
 

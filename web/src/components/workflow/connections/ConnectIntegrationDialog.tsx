@@ -13,8 +13,11 @@
  *     basic       and never comes back).
  *   - delegated   nothing to connect: the deployment provides it.
  *
- * An unavailable method is listed with its reason, never hidden, so an
- * operator can see what to configure.
+ * An unavailable method is listed in plain words, never hidden, and when no
+ * method is available the dialog says the integration can't be connected
+ * here instead of offering a dead Connect. The precise reason (which env vars
+ * are unset) is for whoever runs the deployment: it is in the server log, and
+ * shown here only on a dev deployment.
  */
 
 import { useEffect, useRef, useState, type FormEvent } from "react";
@@ -29,6 +32,7 @@ import { invalidateConnectionQueries, useCatalogEntry, useCreateApiKeyConnection
 import type { Connection } from "../../../api/connection-grpc";
 import { ConnectionOAuthCancelled, connectWithOAuth, connectsThroughSystemBrowser } from "../../../lib/connection-oauth";
 import { IntegrationIcon } from "../palette/IntegrationIcon";
+import { getIsDev } from "../../../lib/constants";
 
 export interface ConnectIntegrationTarget {
   /** Any catalog ref of the integration; its entry carries the connection methods. */
@@ -54,6 +58,22 @@ const METHOD_LABEL: Record<AuthMethod["kind"], string> = {
   none: "No credential",
   unknown: "Other",
 };
+
+/** What an end user is told about a method this deployment hasn't set up. */
+export function unavailableMethodMessage(kind: AuthMethod["kind"], displayName: string): string {
+  switch (kind) {
+    case "oauth2":
+      return `${displayName} sign-in isn't available on this deployment yet.`;
+    case "api_key":
+      return "Connecting with an API key isn't available on this deployment yet.";
+    case "basic":
+      return "Connecting with a username and password isn't available on this deployment yet.";
+    case "delegated":
+      return `Connecting ${displayName} through your Reliant account isn't available on this deployment yet.`;
+    default:
+      return "This way of connecting isn't available on this deployment yet.";
+  }
+}
 
 function currentPath(): string {
   if (typeof window === "undefined") return "/";
@@ -145,6 +165,10 @@ function ConnectBody({
   const fieldLabels = active ? Object.entries(active.fieldLabels) : [];
   const keyFields: Array<[string, string]> =
     fieldLabels.length > 0 ? fieldLabels : active?.kind === "basic" ? [["username", "Username"], ["password", "Password"]] : [["api_key", "API key"]];
+  const unavailable = methods.filter((m) => !m.available);
+  // Env-var names mean something to whoever runs this deployment, and nothing
+  // to anyone else; a dev deployment is run by the person looking at it.
+  const operatorReasons = getIsDev() ? unavailable.filter((m) => m.unavailableReason) : [];
 
   return (
     <Modal
@@ -165,6 +189,22 @@ function ConnectBody({
         </div>
       ) : methods.length === 0 ? (
         <p className="text-sm text-muted-foreground">{target.displayName} needs no connection.</p>
+      ) : !active ? (
+        <div className="space-y-4">
+          <div role="alert" className="space-y-1 text-sm">
+            <p className="font-medium text-foreground">{target.displayName} can't be connected on this deployment yet.</p>
+            <p className="text-muted-foreground">
+              None of the ways to connect it are set up here. Whoever runs this Reliant deployment can turn one on; until then, steps that use{" "}
+              {target.displayName} can be built but won't run.
+            </p>
+          </div>
+          <OperatorReasons methods={operatorReasons} />
+          <div className="flex justify-end border-t border-border pt-4">
+            <Button type="button" variant="outline" onClick={onClose}>
+              Close
+            </Button>
+          </div>
+        </div>
       ) : (
         <div className="space-y-5">
           {methods.length > 1 && (
@@ -189,26 +229,18 @@ function ConnectBody({
             </div>
           )}
 
-          {methods.some((m) => !m.available) && (
+          {unavailable.length > 0 && (
             <CardInset>
               <ul className="space-y-1 text-xs text-muted-foreground">
-                {methods
-                  .filter((m) => !m.available)
-                  .map((m) => (
-                    <li key={m.kind}>
-                      <span className="font-medium text-foreground">{METHOD_LABEL[m.kind]}</span> isn't set up on this deployment
-                      {m.unavailableReason ? `: ${m.unavailableReason}` : "."}
-                    </li>
-                  ))}
+                {unavailable.map((m) => (
+                  <li key={m.kind}>{unavailableMethodMessage(m.kind, target.displayName)}</li>
+                ))}
               </ul>
+              <OperatorReasons methods={operatorReasons} />
             </CardInset>
           )}
 
-          {!active ? (
-            <p role="alert" className="text-sm text-foreground">
-              No way to connect {target.displayName} is configured here yet.
-            </p>
-          ) : active.kind === "delegated" ? (
+          {active.kind === "delegated" ? (
             <p className="text-sm text-foreground">
               Reliant connects {target.displayName} for you through your signed-in account. There is nothing to set up.
             </p>
@@ -306,6 +338,23 @@ function ConnectBody({
         </div>
       )}
     </Modal>
+  );
+}
+
+/** The operator's version (which settings are missing), on a dev deployment only. */
+function OperatorReasons({ methods }: { methods: AuthMethod[] }) {
+  if (methods.length === 0) return null;
+  return (
+    <details className="mt-2 text-xs text-muted-foreground">
+      <summary className="cursor-pointer select-none">Setup details (dev deployment)</summary>
+      <ul className="mt-1 space-y-1 font-mono">
+        {methods.map((m) => (
+          <li key={m.kind}>
+            {METHOD_LABEL[m.kind]}: {m.unavailableReason}
+          </li>
+        ))}
+      </ul>
+    </details>
   );
 }
 

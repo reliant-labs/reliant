@@ -145,10 +145,7 @@ func (s *Service) InterruptThread(ctx context.Context, opts InterruptThreadOpts)
 	}
 
 	outcome := s.cancelToolCalls(ctx, opts.UserID, executing, interruptToolCancelReason)
-	result := InterruptThreadResult{
-		CancelledToolCalls:     outcome.CancelledToolCalls,
-		UndeliverableToolCalls: outcome.UndeliverableToolCalls,
-	}
+	result := InterruptThreadResult(outcome)
 
 	// A cancel push that failed to reach the daemon must not strand the
 	// workflow un-interrupted -- signal regardless of outcome above.
@@ -226,7 +223,7 @@ func (s *Service) recordToolCallCancelled(ctx context.Context, call *db.ToolCall
 		if err := s.repo.UpsertToolCall(txCtx, &updated); err != nil {
 			return err
 		}
-		return s.repo.UpsertToolCallResult(txCtx, &db.ToolCallResult{
+		return s.repo.UpsertToolCallResult(txCtx, call.ChatID, &db.ToolCallResult{
 			ToolCallID: call.ID,
 			Content:    CancelledToolResultContent,
 			IsError:    true,

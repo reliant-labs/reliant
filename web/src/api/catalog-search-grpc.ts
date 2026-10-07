@@ -15,9 +15,11 @@ import { grpcClient } from "./grpc-client";
 import {
   CatalogEntryKind,
   GetCatalogEntryRequestSchema,
+  ListCatalogIntegrationsRequestSchema,
   SearchCatalogRequestSchema,
   type CatalogEntry as ProtoCatalogEntry,
   type CatalogEntrySummary as ProtoCatalogEntrySummary,
+  type CatalogIntegration as ProtoCatalogIntegration,
 } from "../gen/reliant/v1/catalog_pb";
 import { ConnectionAuthKind } from "../gen/reliant/v1/connection_pb";
 import { asJsonSchema, type JsonSchema } from "../lib/jsonSchema";
@@ -49,12 +51,16 @@ export interface CatalogEntrySummary {
   connected: boolean;
   /** The action changes external state. */
   mutates: boolean;
+  /** A trigger's provider event types ("issues.opened"); empty for an action. */
+  events: string[];
 }
 
 export interface CatalogEntry {
   summary: CatalogEntrySummary;
   description: string;
   paramsSchema?: JsonSchema;
+  /** The params in the manifest's declared order (paramsSchema's keys arrive unordered). */
+  paramOrder: string[];
   outputSchema?: JsonSchema;
   payloadSchema?: JsonSchema;
   connection: {
@@ -87,12 +93,46 @@ export interface CatalogSearchPage {
   categoryFacets: CatalogFacet[];
 }
 
+/** One integration in a browse: enough to draw its row before it is expanded. */
+export interface CatalogIntegrationListing {
+  integration: CatalogIntegration;
+  /** How many of its entries are of the browsed kinds. */
+  entryCount: number;
+  /** The caller can use it now (see CatalogEntrySummary.connected). */
+  connected: boolean;
+}
+
+export interface CatalogIntegrationsQuery {
+  kinds?: CatalogKind[];
+  category?: string;
+  pageSize?: number;
+  pageToken?: string;
+}
+
+export interface CatalogIntegrationsPage {
+  /** Connected first, then by display name. */
+  integrations: CatalogIntegrationListing[];
+  nextPageToken: string;
+  totalSize: number;
+  categoryFacets: CatalogFacet[];
+}
+
 function kindFromProto(kind: CatalogEntryKind): CatalogKind {
   return kind === CatalogEntryKind.TRIGGER ? "trigger" : "action";
 }
 
 function kindToProto(kind: CatalogKind): CatalogEntryKind {
   return kind === "trigger" ? CatalogEntryKind.TRIGGER : CatalogEntryKind.ACTION;
+}
+
+function integrationFromProto(proto: ProtoCatalogIntegration | undefined): CatalogIntegration {
+  return {
+    id: proto?.id ?? "",
+    version: proto?.version ?? 0,
+    displayName: proto?.displayName || proto?.id || "",
+    icon: proto?.icon ?? "",
+    category: proto?.category ?? "",
+  };
 }
 
 export function catalogSummaryFromProto(proto: ProtoCatalogEntrySummary): CatalogEntrySummary {
@@ -102,19 +142,14 @@ export function catalogSummaryFromProto(proto: ProtoCatalogEntrySummary): Catalo
     id: proto.id,
     displayName: proto.displayName || proto.id,
     summary: proto.summary,
-    integration: {
-      id: proto.integration?.id ?? "",
-      version: proto.integration?.version ?? 0,
-      displayName: proto.integration?.displayName || proto.integration?.id || "",
-      icon: proto.integration?.icon ?? "",
-      category: proto.integration?.category ?? "",
-    },
+    integration: integrationFromProto(proto.integration),
     authKinds: proto.authKinds
       .filter((kind) => kind !== ConnectionAuthKind.UNSPECIFIED)
       .map(authKindFromProto),
     connectionRequired: proto.connectionRequired,
     connected: proto.connected,
     mutates: proto.mutates,
+    events: [...(proto.events ?? [])],
   };
 }
 
@@ -124,6 +159,7 @@ export function catalogEntryFromProto(proto: ProtoCatalogEntry): CatalogEntry {
     summary: catalogSummaryFromProto(proto.summary),
     description: proto.description,
     paramsSchema: asJsonSchema(proto.paramsSchema),
+    paramOrder: [...(proto.paramOrder ?? [])],
     outputSchema: asJsonSchema(proto.outputSchema),
     payloadSchema: asJsonSchema(proto.payloadSchema),
     connection: {
@@ -157,6 +193,29 @@ export const catalogSearchGrpc = {
     );
     return {
       entries: response.entries.map(catalogSummaryFromProto),
+      nextPageToken: response.nextPageToken,
+      totalSize: response.totalSize,
+      categoryFacets: response.categoryFacets.map((facet) => ({ value: facet.value, count: facet.count })),
+    };
+  },
+
+  /** Browse by integration: one row per integration, connected first. */
+  async listIntegrations(q: CatalogIntegrationsQuery, signal?: AbortSignal): Promise<CatalogIntegrationsPage> {
+    const response = await grpcClient.catalog().listCatalogIntegrations(
+      create(ListCatalogIntegrationsRequestSchema, {
+        kinds: (q.kinds ?? []).map(kindToProto),
+        category: q.category ?? "",
+        pageSize: q.pageSize ?? 20,
+        pageToken: q.pageToken ?? "",
+      }),
+      { signal },
+    );
+    return {
+      integrations: response.integrations.map((listing) => ({
+        integration: integrationFromProto(listing.integration),
+        entryCount: listing.entryCount,
+        connected: listing.connected,
+      })),
       nextPageToken: response.nextPageToken,
       totalSize: response.totalSize,
       categoryFacets: response.categoryFacets.map((facet) => ({ value: facet.value, count: facet.count })),

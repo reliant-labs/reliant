@@ -64,6 +64,24 @@ export interface EventMap {
   // same React commit the transcript entries appear in.
   "agentMailbox:drained": { chatId: string; thread: string; messageIds: string[] };
 
+  // A message the composer sent was QUEUED in this thread's mailbox (its run
+  // was executing) rather than saved to history. Published by
+  // chatStore.sendMessage in the same synchronous batch that drops the
+  // optimistic transcript entry, so the message moves from the transcript to
+  // the pending-queue strip in one React commit. Shaped like a
+  // QueuedAgentMessageView row.
+  "agentMailbox:queued": {
+    chatId: string;
+    thread: string;
+    message: {
+      id: string;
+      body: string;
+      created_at: string;
+      sender_kind: number;
+      attachments: string[];
+    };
+  };
+
   // Daemon
   "daemon:heartbeat": undefined;
 

@@ -21,7 +21,7 @@ import (
 // status has never implied anything about the thread rows those workflows
 // own — measured on the live DB: 288 threads stranded at status=2 under an
 // already-terminal workflow (see
-// docs/incidents/2026-08-12-spawn-history-cap.md). That measurement is
+// dev-docs/incidents/2026-08-12-spawn-history-cap.md). That measurement is
 // exactly what a forgotten (or Temporal-terminate-skipped) cascade call site
 // looks like at scale, and it is a strictly WORSE failure than the workflow
 // case alone: ListThreadsWithOrphanedAgentMessages only matches threads

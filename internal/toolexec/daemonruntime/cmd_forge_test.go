@@ -591,7 +591,7 @@ func TestForgeResponseStructsCarryNoSecretValueFields(t *testing.T) {
 
 	var walk func(t *testing.T, typ reflect.Type, path string, seen map[reflect.Type]bool)
 	walk = func(t *testing.T, typ reflect.Type, path string, seen map[reflect.Type]bool) {
-		for typ.Kind() == reflect.Ptr || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
+		for typ.Kind() == reflect.Pointer || typ.Kind() == reflect.Slice || typ.Kind() == reflect.Array {
 			typ = typ.Elem()
 		}
 		if typ.Kind() != reflect.Struct || seen[typ] {

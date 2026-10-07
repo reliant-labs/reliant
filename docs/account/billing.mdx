@@ -1,0 +1,63 @@
+---
+title: "Billing, wallet & Reliant AI"
+description: "What you can buy, how Reliant AI credit works, the service fee on top-ups, and auto-recharge"
+---
+
+Reliant sells two separate things, and they are billed separately.
+
+**Compute plans** pay for [cloud machines](/machines/cloud). They are a monthly subscription, charged by card, with the size of the plan setting the biggest machine you can run. There is no free plan.
+
+**Reliant AI credit** pays for model usage when you choose Reliant AI as your provider instead of connecting your own subscription or API key (see [AI providers](/settings/api-keys)). You hold this credit in your **wallet** and use it up as you chat.
+
+Everything lives under **Settings → Billing**, in three tabs: **Overview**, **Plans** and **Usage**.
+
+## The wallet and Reliant AI
+
+Reliant AI usage is billed at the model provider's own price. Reliant adds nothing to the cost of the tokens you use. Each request draws the cost down from your wallet balance; when the balance reaches zero, requests through Reliant AI stop until you add credit. Chats that use your own API key or subscription never touch the wallet.
+
+Because spend is bounded by the credit you add rather than by a plan limit, the way to put a ceiling on it is to cap automatic top-ups, described below. The **Reliant AI** panel in **Settings → General → AI** shows your balance and what you have spent this period.
+
+### Adding credit and the service fee
+
+You add credit by topping up the wallet. A top-up carries a **5% service fee**: if you buy $25 of credit you receive exactly $25 of credit and are charged $26.25. The fee is Reliant's charge for selling wallet credit and it applies whatever card you pay with. The order summary shows the credit, the fee and the total before you pay, so the amount you see is the amount taken.
+
+The fee applies only to top-ups. It is not added to compute plans, which cost their listed monthly price, and it is not added to model usage.
+
+### Coupons
+
+A coupon can add wallet credit or machine time. Coupon credit is promotional: it is granted without any payment, so there is no fee on it, and it is counted as spent before your paid credit. That ordering matters on [account deletion](#deleting-your-account), where paid credit is refunded and promotional credit is not.
+
+## Auto-recharge
+
+Auto-recharge tops the wallet up for you so a long unattended run does not stop when credit runs out. In **Settings → Billing** choose **Top up automatically, up to a monthly limit** and set three numbers:
+
+| Setting | Meaning |
+|---------|---------|
+| When my balance drops below | The threshold that triggers a top-up |
+| Add this much credit | The credit to buy each time |
+| Never spend more than | A monthly ceiling on automatic top-ups |
+
+The monthly limit is required, and it is the control to reach for if you want a hard ceiling on Reliant AI spend: once automatic top-ups in a month would pass it, they stop and resume next month. Automatic top-ups are ordinary top-ups, so each one carries the same 5% fee on its credit, and the ceiling counts what is actually charged. The alternative, **Only top up when I say so**, never charges automatically; requests simply fail once the balance is gone.
+
+If the card is declined, or your bank needs to verify a charge, Billing shows a banner saying so. Automatic top-ups stay on, but cannot go through until the card is updated.
+
+## Plans and machine time
+
+The **Plans** tab shows the five compute plans and your current one; prices and sizes are in [Cloud machines & plans](/machines/cloud). Receipts, your payment method and cancellation are in the billing portal linked from **Overview**. The **Usage** tab shows machine hours used against your included 160, any extra time, and coupon minutes remaining.
+
+## Deleting your account
+
+You can delete your account in **Settings → Account → Delete account**. The confirmation screen states, in dollars, what will happen to your money before you confirm.
+
+- **An active subscription must be cancelled first.** Deletion is blocked while a paid compute plan is active; cancel it in the billing portal, then delete.
+- **Unused paid credit is refunded.** The face value of unused credit you bought goes back to the card you paid with. The service fee you paid on it is not refunded. Card refunds usually take 5 to 10 business days to appear.
+- **Promotional credit is forfeited.** Credit that came from coupons is not refunded.
+- **If a refund cannot be sent automatically,** the account is still deleted and the amount owed is recorded for Reliant support, who refund it to your original payment method.
+
+What else is deleted and what is kept is covered in [Privacy & security](/help/privacy).
+
+## Related topics
+
+- [Cloud machines & plans](/machines/cloud)
+- [AI providers](/settings/api-keys)
+- [Privacy & security](/help/privacy)

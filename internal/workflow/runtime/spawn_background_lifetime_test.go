@@ -445,7 +445,7 @@ func terminalDrainTestWorkflow(mode string, tracker *ChildWorkflowTracker) func(
 	return func(ctx workflow.Context) (result *WorkflowResult, retErr error) {
 		workflowID := workflow.GetInfo(ctx).WorkflowExecution.ID
 		defer func() {
-			handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr, "", false, tracker)
+			handleWorkflowCompletion(ctx, workflowID, "chat-1", "test-workflow", "", "thread-1", "", retErr, "", false, tracker, nil)
 		}()
 
 		switch mode {

@@ -6,6 +6,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/reliant-labs/reliant/internal/db/core"
 )
 
 func TestCompileFilterRejectsWhatCannotRun(t *testing.T) {
@@ -40,6 +42,49 @@ func TestCompileFilterAcceptsTheTriggerRoot(t *testing.T) {
 		_, err := CompileFilter(expr)
 		assert.NoError(t, err, expr)
 	}
+}
+
+// The "Only from" shapes, and every key of trigger.sender, compile against
+// the trigger environment.
+func TestCompileFilterAcceptsTheSender(t *testing.T) {
+	for _, expr := range []string{
+		`trigger.sender.verified && trigger.sender.id in ["U123"]`,
+		`trigger.sender.id == "octocat"`,
+		`(trigger.payload.data.issue.number > 1) && trigger.sender.verified && trigger.sender.id in ["octocat", "hubot"]`,
+		`trigger.sender.kind == "email" && trigger.sender.display_name != ""`,
+	} {
+		_, err := CompileFilter(expr)
+		assert.NoError(t, err, expr)
+	}
+}
+
+// A sender filter evaluates against what the receiver recorded; an event
+// with no sender (one recorded before senders existed) is the empty,
+// unverified one, so an allowlist rejects it instead of erroring.
+func TestSenderFilterMatchesOnlyAVerifiedAllowlistedSender(t *testing.T) {
+	f, err := CompileFilter(`trigger.sender.verified && trigger.sender.id in ["U123"]`)
+	require.NoError(t, err)
+	for name, tc := range map[string]struct {
+		sender *core.TriggerSender
+		want   bool
+	}{
+		"allowlisted and verified": {&core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: "U123", Verified: true}, true},
+		"allowlisted, unverified":  {&core.TriggerSender{Kind: core.TriggerSenderKindSMS, ID: "U123", Verified: false}, false},
+		"someone else":             {&core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: "U999", Verified: true}, false},
+		"no sender recorded":       {nil, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			hit, err := f.Match(FilterInput{Kind: "integration", Sender: tc.sender})
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, hit)
+		})
+	}
+
+	login, err := CompileFilter(`trigger.sender.id == "octocat"`)
+	require.NoError(t, err)
+	hit, err := login.Match(FilterInput{Kind: "integration", Sender: &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "octocat", Verified: true}})
+	require.NoError(t, err)
+	assert.True(t, hit)
 }
 
 func TestFilterMatchEvaluatesOverThePayload(t *testing.T) {

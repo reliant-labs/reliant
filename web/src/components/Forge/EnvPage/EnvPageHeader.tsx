@@ -139,6 +139,9 @@ const TONE_DOT: Record<HeadlineTone, string> = {
   progress: "bg-primary motion-safe:animate-pulse",
   problem: "bg-destructive",
   quiet: "border border-muted-foreground/60",
+  // A ring around a fill: waiting is neither the hollow "nothing yet" nor a
+  // solid verdict, and the shape says so without the hue.
+  waiting: "bg-warning ring-2 ring-warning/30",
 };
 
 const TONE_TEXT: Record<HeadlineTone, string> = {
@@ -146,6 +149,7 @@ const TONE_TEXT: Record<HeadlineTone, string> = {
   progress: "text-foreground",
   problem: "text-destructive-ink",
   quiet: "text-muted-foreground",
+  waiting: "text-warning-ink",
 };
 
 /**

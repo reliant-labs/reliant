@@ -42,6 +42,13 @@ service CatalogService {
   // what a connection to its integration requires. An unknown ref is
   // NOT_FOUND.
   rpc GetCatalogEntry(GetCatalogEntryRequest) returns (GetCatalogEntryResponse) {}
+
+  // ListCatalogIntegrations browses the catalog by integration: one row per
+  // integration that has an entry of the requested kinds, the ones the caller
+  // can use now first. It is paged like SearchCatalog, so a picker browsing
+  // hundreds of integrations holds only what it has scrolled to;
+  // SearchCatalog with `integration` set lists one integration's entries.
+  rpc ListCatalogIntegrations(ListCatalogIntegrationsRequest) returns (ListCatalogIntegrationsResponse) {}
 }
 
 // ModelInfo represents information about an LLM model
@@ -227,8 +234,9 @@ message NodeInputField {
   optional double max_value = 9;
   // Human-readable short label for form controls.
   string label = 10;
-  // Optional placeholder text for text-like controls.
-  optional string placeholder = 11;
+  // Field 11 was placeholder, replaced by example (16).
+  reserved 11;
+  reserved "placeholder";
   // Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
   repeated string visibility_contexts = 12;
   // Optional cleanup behavior hint for UI/client preprocessing.
@@ -237,6 +245,31 @@ message NodeInputField {
   bool is_cel = 14;
   // Per-field grouping category (e.g., "Model Settings", "Tools").
   string category = 15;
+  // What a value looks like, as an author writes it: a literal or a
+  // {{ expression }}. Shown as the empty input's placeholder. FieldMeta.example.
+  string example = 16;
+  // The kind of value in a few words ("list of tool calls"), when the type
+  // undersells it. FieldMeta.type_hint.
+  string type_hint = 17;
+  // Sub-fields of a message-typed OUTPUT field (or of its items, when the
+  // field is repeated), e.g. call_llm's tool_calls[].name. Empty on inputs
+  // and on dynamic objects (google.protobuf.Struct), whose keys are unknown.
+  repeated NodeInputField children = 18;
+  // Options are the values a picker offers for this field, when the set is
+  // known to the server but is not a fixed enum: the tools a "node_tool"
+  // field may name, from the tool registry. A picker keeps a way to enter a
+  // value by hand, so an option list is a suggestion, not a validation rule.
+  repeated NodeFieldOption options = 19;
+}
+
+// NodeFieldOption is one value a field's picker offers.
+message NodeFieldOption {
+  // Value is what the field stores.
+  string value = 1;
+  // Label is how the picker names it; empty means the value.
+  string label = 2;
+  // Description is one line saying what picking it does.
+  string description = 3;
 }
 
 // NodeInfo represents a workflow node available for the builder
@@ -381,6 +414,12 @@ message CatalogEntrySummary {
   bool connected = 9;
   // Mutates is set on an action that changes external state.
   bool mutates = 10;
+  // Events are the provider event types a trigger fires on ("issues.opened"),
+  // as its TriggerSpec lists them; empty for an action. A run started by an
+  // integration event records the event type, and this is what lets a client
+  // name that event with the trigger's display_name ("Issue opened") from one
+  // search, without fetching every entry.
+  repeated string events = 11;
 }
 
 // CatalogFacet counts the matches that carry one value of a facet.
@@ -426,6 +465,43 @@ message SearchCatalogResponse {
   repeated CatalogFacet category_facets = 4;
 }
 
+message ListCatalogIntegrationsRequest {
+  // Kinds keeps only integrations with at least one entry of these kinds,
+  // and counts only those entries. Empty means every kind.
+  repeated CatalogEntryKind kinds = 1;
+  // Category keeps only integrations in this category. Empty means every
+  // category.
+  string category = 2;
+  // PageSize defaults to 20; larger values are capped at 100.
+  int32 page_size = 3;
+  // PageToken is a previous response's next_page_token. It is only valid for
+  // the same filters.
+  string page_token = 4;
+}
+
+// CatalogIntegrationListing is one integration in a browse listing.
+message CatalogIntegrationListing {
+  CatalogIntegration integration = 1;
+  // EntryCount is how many of the integration's entries are of the requested
+  // kinds.
+  int32 entry_count = 2;
+  // Connected reports whether the caller can use the integration now, as
+  // CatalogEntrySummary.connected does for one entry.
+  bool connected = 3;
+}
+
+message ListCatalogIntegrationsResponse {
+  // Integrations are the page: connected first, then by display name.
+  repeated CatalogIntegrationListing integrations = 1;
+  // NextPageToken fetches the next page; empty on the last.
+  string next_page_token = 2;
+  // TotalSize is how many integrations match every filter.
+  int32 total_size = 3;
+  // CategoryFacets count the matching integrations per category, applying
+  // every filter except category. Largest first, then by category.
+  repeated CatalogFacet category_facets = 4;
+}
+
 message GetCatalogEntryRequest {
   // Ref is a CatalogEntrySummary.ref, e.g. "github/user.get@1".
   string ref = 1;
@@ -453,6 +529,10 @@ message CatalogEntry {
   // ToolName is the agent tool this action is also exposed as (for example
   // "github__user_get"); empty when it is not exposed to agents.
   string tool_name = 7;
+  // ParamOrder is the action's params in the order its manifest declares
+  // them. ParamsSchema is a Struct, so its keys arrive in no meaningful order;
+  // a form lists required params first, then the rest, each in this order.
+  repeated string param_order = 8;
 }
 
 // CatalogConnectionRequirement is what using an entry asks of a connection.

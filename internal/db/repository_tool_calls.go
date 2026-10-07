@@ -52,19 +52,38 @@ func (r *Repo) UpsertToolCall(ctx context.Context, call *ToolCall) error {
 	return store.UpsertToolCall(ctx, call)
 }
 
-func (r *Repo) UpsertToolCallResult(ctx context.Context, result *ToolCallResult) error {
+// UpsertToolCallResult records the result of chatID's call. See
+// core.ToolCallStore: a call recorded for another chat is never written.
+func (r *Repo) UpsertToolCallResult(ctx context.Context, chatID string, result *ToolCallResult) error {
 	if result == nil {
 		return fmt.Errorf("tool call result cannot be nil")
 	}
 	if result.ToolCallID == "" {
 		return fmt.Errorf("tool call ID is required")
 	}
+	if chatID == "" {
+		return fmt.Errorf("chat ID is required")
+	}
 
 	store, err := r.toolCalls(ctx)
 	if err != nil {
 		return err
 	}
-	return store.UpsertToolCallResult(ctx, result)
+	return store.UpsertToolCallResult(ctx, chatID, result)
+}
+
+// GetToolCallResultForMessage reads the result of the call that assistant
+// message messageID carries, or nil.
+func (r *Repo) GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error) {
+	if toolCallID == "" || messageID == "" {
+		return nil, fmt.Errorf("tool call ID and message ID are required")
+	}
+
+	store, err := r.toolCalls(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return store.GetToolCallResultForMessage(ctx, toolCallID, messageID)
 }
 
 func (r *Repo) GetToolCall(ctx context.Context, id string) (*ToolCall, error) {

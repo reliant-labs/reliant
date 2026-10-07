@@ -5,7 +5,9 @@ description: "Build your own workflows to automate multi-step tasks and enforce 
 
 Reliant workflows let you automate complex multi-step tasks, enforce development processes, and coordinate multiple agents. There are three ways to create workflows, from fully visual to fully manual.
 
-![Workflow Builder UI showing a TDD loop workflow](/images/screenshots/workflow-builder-tdd.png)
+<Frame caption="A workflow on the builder canvas. Example data.">
+  <img src="/images/v2/p1-workflow-canvas-ci-triage.png" alt="The workflow builder showing a CI triage workflow" />
+</Frame>
 
 ## When to Create Custom Workflows
 
@@ -106,7 +108,8 @@ entry: [main_step]
 # 4. Nodes - the execution units
 nodes:
   - id: main_step
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     args:
       model: "{{inputs.model}}"
 
@@ -188,7 +191,8 @@ Nodes are the execution units. Each node has an `id` and a type that determines 
 ```yaml
 # Reference an external workflow
 - id: run_agent
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   args:
     model: "{{inputs.model}}"
 
@@ -209,7 +213,7 @@ Nodes are the execution units. Each node has an `id` and a type that determines 
 
 ```yaml
 - id: save_result
-  action: SaveMessage
+  type: save_message
   args:
     role: assistant
     content: "Analysis complete!"
@@ -219,17 +223,18 @@ Nodes are the execution units. Each node has an `id` and a type that determines 
 
 ```yaml
 - id: run_tests
-  run: npm test
+  type: run
+  command: npm test
 ```
 
 **Loop nodes** repeat a sub-workflow while a condition is true:
 
 ```yaml
 - id: retry_loop
-  loop:
-    while: outputs.exit_code != 0 && iter.iteration < 5
-    inline:
-      # ... inline workflow definition
+  type: loop
+  while: outputs.exit_code != 0 && iter.iteration < 5
+  inline:
+    # ... inline workflow definition
 ```
 
 ### Edges
@@ -294,10 +299,12 @@ inputs:
 
 The simplest approach uses the built-in agent workflow with a custom system prompt:
 
+{/* docs-validate: skip — tutorial step; the finished workflow is validated in Step 4 */}
 ```yaml
 nodes:
   - id: review
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
     args:
@@ -344,7 +351,8 @@ inputs:
 
 nodes:
   - id: review
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
     args:
@@ -390,21 +398,23 @@ Loops use **do-while** semantics: the sub-workflow runs at least once, then `ite
 
 ```yaml
 - id: fix_tests
-  loop:
-    while: outputs.exit_code != 0 && iter.iteration < 5 # Continue while failing AND under 5 iterations
-    inline:
-      # The sub-workflow definition
-      entry: [attempt_fix]
-      inputs:
-        # Sub-workflow inputs
-      outputs:
-        exit_code: "{{nodes.run_tests.exit_code}}"
-      nodes:
-        - id: attempt_fix
-          workflow: builtin://agent
-          # ...
-        - id: run_tests
-          run: npm test
+  type: loop
+  while: outputs.exit_code != 0 && iter.iteration < 5 # Continue while failing AND under 5 iterations
+  inline:
+    # The sub-workflow definition
+    entry: [attempt_fix]
+    inputs:
+      # Sub-workflow inputs
+    outputs:
+      exit_code: "{{nodes.run_tests.exit_code}}"
+    nodes:
+      - id: attempt_fix
+        type: workflow
+        ref: builtin://agent
+        # ...
+      - id: run_tests
+        type: run
+        command: npm test
 ```
 
 | Field | Required | Description |
@@ -469,7 +479,7 @@ After a loop completes, you can access both user-defined outputs and system fiel
 ```yaml
 # Example: Access loop outputs in subsequent nodes
 - id: report
-  action: SaveMessage
+  type: save_message
   args:
     role: assistant
     content: |
@@ -506,55 +516,49 @@ inputs:
 
 nodes:
   - id: fix_loop
-    loop:
-      while: outputs.exit_code != 0 && iter.iteration < inputs.max_attempts
-      inline:
-        entry: [fix_code]
-        inputs:
-          model:
-            type: model
-            default: ""
+    type: loop
+    while: outputs.exit_code != 0 && iter.iteration < inputs.max_attempts
+    inline:
+      entry: [fix_code]
+      inputs:
+        model:
+          type: model
+          default: ""
 
-        outputs:
-          exit_code: "{{nodes.run_tests.exit_code}}"
-          stderr: "{{nodes.run_tests.stderr}}"
+      outputs:
+        exit_code: "{{nodes.run_tests.exit_code}}"
+        stderr: "{{nodes.run_tests.stderr}}"
 
-        nodes:
-          - id: fix_code
-            workflow: builtin://agent
-            thread:
-              mode: inherit
-              inject:
-                role: user
-                content: "Run the tests and fix any failures."
-            args:
-              model: "{{inputs.model}}"
-              mode: auto
+      nodes:
+        - id: fix_code
+          type: workflow
+          ref: builtin://agent
+          thread:
+            mode: fork
+            memo: false  # Fresh fork each iteration
+            inject:
+              role: user
+              content: |
+                Run the tests and fix any failures.
+                {{iter.iteration > 0 && has(outputs.stderr) ? 'Previous attempt failed with:\n' + outputs.stderr + '\nPlease fix these issues.' : ''}}
+          args:
+            model: "{{inputs.model}}"
+            mode: auto
 
-          - id: run_tests
-            run: npm test
+        - id: run_tests
+          type: run
+          command: npm test
 
-        edges:
-          - from: fix_code
-            default: run_tests
+      edges:
+        - from: fix_code
+          default: run_tests
 
-    thread:
-      mode: fork
-      memo: false  # Fresh fork each iteration
-      inject:
-        role: user
-        condition: "iter.iteration > 0"  # Only inject after first iteration
-        content: |
-          Previous attempt failed with:
-          {{outputs.stderr}}
-
-          Please fix these issues.
     args:
       model: "{{inputs.model}}"
 
   # Announce result
   - id: report
-    action: SaveMessage
+    type: save_message
     args:
       role: assistant
       content: |
@@ -570,7 +574,7 @@ edges:
 **Key points:**
 - `thread: mode: fork` gives each iteration the original user request
 - `memo: false` ensures a fresh fork each time (no accumulated context from failed attempts)
-- `inject.condition: "iter.iteration > 0"` only adds error feedback after the first iteration fails
+- The `iter.iteration > 0 && has(outputs.stderr)` guard in the injected message only adds error feedback after the first iteration has produced output
 - The agent sees: original request + targeted error feedback (not the full messy history)
 
 ## Conditional Nodes
@@ -582,18 +586,31 @@ Sometimes you want to skip a node entirely based on workflow inputs or previous 
 Add a `condition` field with a CEL expression. If it evaluates to false, the node is skipped:
 
 ```yaml
+inputs:
+  phases:
+    type: array
+    default: ["research", "implement"]
+
+entry: [research_phase]
+
 nodes:
   - id: research_phase
-    condition: inputs.phases.contains('research')
-    workflow: builtin://agent
+    condition: "'research' in inputs.phases"
+    type: workflow
+    ref: builtin://agent
     args:
       system_prompt: "You are a research assistant..."
 
   - id: implementation_phase
-    condition: inputs.phases.contains('implement')
-    workflow: builtin://agent
+    condition: "'implement' in inputs.phases"
+    type: workflow
+    ref: builtin://agent
     args:
       system_prompt: "You are an implementation assistant..."
+
+edges:
+  - from: research_phase
+    default: implementation_phase
 ```
 
 When a node is skipped:
@@ -642,7 +659,8 @@ condition: inputs.mode == 'full' && nodes.lint.exit_code == 0
 # Node condition: skip the whole node
 - id: optional_review
   condition: inputs.require_review
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
 
 # Edge condition: route to different nodes
 edges:
@@ -711,11 +729,12 @@ entry: [run_tests]
 
 nodes:
   - id: run_tests
-    run: npm test
+    type: run
+    command: npm test
 
   - id: success_report
-    action: SaveMessage
-    inputs:
+    type: save_message
+    args:
       role: assistant
       content: |
         ✅ All tests passing!
@@ -725,7 +744,8 @@ nodes:
         ```
 
   - id: failure_analysis
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
       inject:
@@ -736,7 +756,7 @@ nodes:
           ```
           {{nodes.run_tests.stderr}}
           ```
-    inputs:
+    args:
       mode: auto
       system_prompt: |
         You are a debugging assistant. Analyze test failures and provide
@@ -797,8 +817,9 @@ Access group inputs with the `inputs.GroupName.field` syntax:
 
 ```yaml
 - id: review
-  workflow: builtin://agent
-  inputs:
+  type: workflow
+  ref: builtin://agent
+  args:
     model: "{{inputs.Reviewer.model}}"
     system_prompt: "{{inputs.Reviewer.system_prompt}}"
 ```
@@ -818,20 +839,23 @@ Thread configuration controls how agents share context:
 ```yaml
 # Shared context - critic sees proposer's work
 - id: critic
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: inherit
 
 # Isolated - parallel agents don't interfere
 - id: racer_1
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: new
     key: racer_1
 
 # Forked - starts with context, then independent
 - id: alternative
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: fork
 ```
@@ -842,7 +866,8 @@ Use `thread.inject` to add context when an agent starts:
 
 ```yaml
 - id: critic
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: inherit
     inject:
@@ -902,23 +927,25 @@ inputs:
 
 nodes:
   - id: initial_review
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
-    inputs:
+    args:
       model: "{{inputs.model}}"
       mode: auto
       system_prompt: "{{inputs.Reviewer.system_prompt}}"
 
   - id: validate_review
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
       inject:
         role: user
         content: |
           Please validate the above code review. Is it thorough and accurate?
-    inputs:
+    args:
       model: "{{inputs.model}}"
       mode: auto
       system_prompt: "{{inputs.Validator.system_prompt}}"
@@ -940,7 +967,8 @@ Use the `presets` field on workflow or loop nodes:
 
 ```yaml
 - id: research_agent
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   presets: research # Apply the "research" preset
   args:
     model: "{{inputs.model}}" # Args override preset values
@@ -954,7 +982,8 @@ If a sub-workflow has input groups, use a map to target specific groups:
 
 ```yaml
 - id: dual_agent
-  workflow: review-and-fix
+  type: workflow
+  ref: review-and-fix
   presets:
     default: thorough # For ungrouped inputs
     Reviewer: careful # For Reviewer group
@@ -980,7 +1009,8 @@ The `default` key targets ungrouped inputs (or inputs matching the workflow's `p
 ```yaml
 # Combine presets with args
 - id: agent
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   presets: research # Base configuration
   args:
     model: "{{inputs.model}}" # Dynamic override
@@ -1076,23 +1106,28 @@ A node with `type: parallel` and `branches:` desugars into multiple branch nodes
 <CodeGroup>
 
 ```yaml Before (explicit)
+entry: [research, design]
 nodes:
   - id: research
     type: workflow
     ref: builtin://agent
+    thread:
+      mode: new
     args:
       system_prompt: Research the problem
   - id: design
     type: workflow
     ref: builtin://agent
+    thread:
+      mode: new
     args:
       system_prompt: Design the solution
   - id: explore_done
     type: join
-    condition: all
+  - id: next_step
+    type: run
+    command: echo "Both explorations finished"
 edges:
-  - from: trigger
-    default: [research, design]
   - from: research
     default: explore_done
   - from: design
@@ -1102,6 +1137,7 @@ edges:
 ```
 
 ```yaml After (parallel sugar)
+entry: [explore_done]
 nodes:
   - id: explore_done
     type: parallel
@@ -1109,16 +1145,21 @@ nodes:
       - id: research
         type: workflow
         ref: builtin://agent
+        thread:
+          mode: new
         args:
           system_prompt: Research the problem
       - id: design
         type: workflow
         ref: builtin://agent
+        thread:
+          mode: new
         args:
           system_prompt: Design the solution
+  - id: next_step
+    type: run
+    command: echo "Both explorations finished"
 edges:
-  - from: trigger
-    default: explore_done
   - from: explore_done
     default: next_step
 ```
@@ -1147,9 +1188,13 @@ sequence:
       - id: research
         type: workflow
         ref: builtin://agent
+        thread:
+          mode: new
       - id: design
         type: workflow
         ref: builtin://agent
+        thread:
+          mode: new
   - id: synthesize
     type: workflow
     ref: builtin://agent
@@ -1171,7 +1216,8 @@ This makes it easy to capture summaries from forked workflows back into the orch
 
 ```yaml
 - id: plan
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: fork
   save_message:
@@ -1185,7 +1231,8 @@ The plan agent runs in a forked thread, but the summary is saved to the parent w
 
 ````yaml
 - id: run_tests
-  run: npm test
+  type: run
+  command: npm test
   save_message:
     role: assistant
     content: |
@@ -1203,7 +1250,8 @@ Use the `condition` field to save messages only in certain cases:
 
 ````yaml
 - id: run_tests
-  run: npm test
+  type: run
+  command: npm test
   save_message:
     condition: output.exit_code != 0 # Only save on failure
     role: assistant
@@ -1241,17 +1289,19 @@ Use the `condition` field to save messages only in certain cases:
 ```yaml
 # Inline: compact, output-focused
 - id: analyze
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   save_message:
     role: assistant
     content: "{{output.response_text}}"
 
 # Separate: explicit, can combine data
 - id: analyze
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
 
 - id: save_result
-  action: SaveMessage
+  type: save_message
   args:
     role: assistant
     content: |
@@ -1329,7 +1379,8 @@ edges:
 Loops execute at least once, then check the condition:
 
 ```yaml
-loop:
+- id: three_times
+  type: loop
   while: iter.iteration < 3  # Runs exactly 3 times (0, 1, 2)
 ```
 
@@ -1410,13 +1461,15 @@ edges:
 
 # CORRECT: Each gets its own thread
 - id: agent_a
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: fork
     key: agent_a
 
 - id: agent_b
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: fork
     key: agent_b
@@ -1443,7 +1496,7 @@ When using `response_tool`, you must execute the tool call to get the structured
 ```yaml
 # Define response tool on CallLLM
 - id: review
-  action: CallLLM
+  type: call_llm
   args:
     response_tool:
       name: verdict
@@ -1453,7 +1506,7 @@ When using `response_tool`, you must execute the tool call to get the structured
 
 # MUST execute to get the data
 - id: execute
-  action: ExecuteTools
+  type: execute_tools
   args:
     tool_calls: "{{nodes.review.tool_calls}}"
 

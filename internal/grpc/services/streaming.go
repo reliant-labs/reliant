@@ -165,7 +165,7 @@ func (s *StreamingService) StreamUserUpdates(
 			return connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
 		}
 
-		logging.Info(LOG_PREFIX_STREAM_USER+" Subscribing to chat detail events",
+		logging.Debug(LOG_PREFIX_STREAM_USER+" Subscribing to chat detail events",
 			"userID", userID, "chatID", subscribeChatID[:8])
 
 		// Subscribe to the streaming hub for ephemeral events (streaming deltas)
@@ -198,7 +198,7 @@ func (s *StreamingService) StreamUserUpdates(
 				return err
 			}
 			if chatCursorNeedsSnapshot(chatSinceSeq, chatLatestSeq) {
-				logging.Info(LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
+				logging.Debug(LOG_PREFIX_STREAM_CHAT+" Cursor not replayable, sending snapshot",
 					"chatID", subscribeChatID[:8], "chatSinceSeq", chatSinceSeq, "chatLatestSeq", chatLatestSeq)
 				useSnapshot = true
 			}
@@ -832,7 +832,7 @@ func (s *StreamingService) buildChatSnapshot(ctx context.Context, chatID string)
 	}
 
 	if messagesSkipped > 0 {
-		logging.Info(LOG_PREFIX_STREAM_CHAT+" Snapshot built",
+		logging.Debug(LOG_PREFIX_STREAM_CHAT+" Snapshot built",
 			"chatID", chatID[:8], "messages", len(assembledMessages), "skipped", messagesSkipped)
 	}
 

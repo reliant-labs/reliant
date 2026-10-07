@@ -4,6 +4,7 @@ const log = require('./logger');
 const windowConfig = require('./window-config');
 const { shouldOpenExternally } = require('./navigation-policy');
 const { APP_INDEX_URL } = require('./app-protocol');
+const { orderByRecentFocus } = require('./window-surfacing');
 // Note: Window state persistence is now handled in main.js via the backend API
 // Each worktree stores its own window state in ./data/window-state.json
 
@@ -11,7 +12,28 @@ class WindowManager {
   constructor() {
     this.windows = new Map(); // Map of window ID to window metadata
     this.worktreeWindows = new Map(); // Map of worktree ID to window ID
+    this.focusSequence = 0; // Monotonic stamp for lastFocusedAt; see trackFocus
     this.setupIpcHandlers();
+  }
+
+  // Stamps the window as most recently used now, and again every time it gains
+  // focus, so the tray and dock bring back the window the user was actually in
+  // rather than whichever was created last.
+  trackFocus(window) {
+    const windowId = window.id;
+    const stamp = () => {
+      const metadata = this.windows.get(windowId);
+      if (metadata) {
+        metadata.lastFocusedAt = ++this.focusSequence;
+      }
+    };
+    stamp();
+    window.on('focus', stamp);
+  }
+
+  // Reliant's own windows, most recently focused first.
+  getWindowsByRecency() {
+    return orderByRecentFocus(this.getAllWindows());
   }
 
   async createWindow(options = {}) {
@@ -106,6 +128,7 @@ class WindowManager {
       window,
       isNewWindow
     });
+    this.trackFocus(window);
 
     // Note: Window state persistence is now handled in main.js via the backend API
 
@@ -204,6 +227,7 @@ class WindowManager {
       projectId: metadata.projectId,
       projectName: metadata.projectName
     });
+    this.trackFocus(window);
 
     // Set up window cleanup - only once per window
     window.on('closed', () => {

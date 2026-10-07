@@ -438,6 +438,11 @@ func (b *Broker) Complete(ctx context.Context, p CompleteParams) (*Completion, e
 	if err != nil {
 		return nil, newError(CodeUnavailable, "could not identify the %s account", prov.DisplayName)
 	}
+	// Who authorized, when only the exchange says (Slack's authed_user: its
+	// probe answers as the bot). It wins over the probe's answer.
+	if sender := prov.exchangeSenderID(token.Raw); sender != "" {
+		who.SenderID = sender
+	}
 
 	plain := []plainField{{field: core.SecretFieldAccessToken, value: token.AccessToken}}
 	if token.RefreshToken != "" {
@@ -504,7 +509,7 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 		kind := core.ConnectionEventReconnected
 		ev := userEvent(kind, flow.UserID)
 		conn, err := b.store.ReauthorizeConnection(ctx, flow.UserID, id, core.ConnectionUpdate{
-			AccountLabel: who.AccountLabel, ExternalAccountID: who.ExternalAccountID, Scopes: scopes,
+			AccountLabel: who.AccountLabel, ExternalAccountID: who.ExternalAccountID, SenderID: who.SenderID, Scopes: scopes,
 			OAuthClient: prov.ClientID, AccessExpiresAt: expires,
 		}, sealed, ev)
 		return conn, mapStoreErr(err)
@@ -527,6 +532,9 @@ func (b *Broker) upsert(ctx context.Context, flow *core.OAuthFlow, prov *Provide
 	}
 	if who.ExternalAccountID != "" {
 		conn.ExternalAccountID = &who.ExternalAccountID
+	}
+	if who.SenderID != "" {
+		conn.SenderID = &who.SenderID
 	}
 	client := prov.ClientID
 	conn.OAuthClient = &client

@@ -294,7 +294,7 @@ func hasField(output any, fieldName string) bool {
 		return false
 	}
 	v := reflect.ValueOf(output)
-	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return false
 		}
@@ -335,7 +335,7 @@ func getFieldNames(output any) []string {
 		return nil
 	}
 	v := reflect.ValueOf(output)
-	for v.Kind() == reflect.Ptr || v.Kind() == reflect.Interface {
+	for v.Kind() == reflect.Pointer || v.Kind() == reflect.Interface {
 		if v.IsNil() {
 			return nil
 		}

@@ -107,7 +107,7 @@ func NewClient(opts llm.DriverOptions) *ReliantClient {
 		opts.Model.APIModel = apiModel
 	}
 
-	logging.Info("Reliant driver client configured",
+	logging.Debug("Reliant driver client configured",
 		"base_url", opts.BaseURL,
 		"api_key_prefix", apiKeyPrefixForLog(opts.ApiKey),
 		"api_key_type", apiKeyTypeForLog(opts.ApiKey),
@@ -511,11 +511,6 @@ func (c *ReliantClient) preparedParams(messages []openai.ChatCompletionMessagePa
 func (c *ReliantClient) SendMessages(ctx context.Context, prompts []string, messages []message.Message, toolList []tools.Tool) (response *llm.DriverResponse, err error) {
 	params := c.preparedParams(c.ConvertMessages(prompts, messages), c.ConvertTools(toolList))
 
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
-	}
-
 	attempts := 0
 	for {
 		attempts++
@@ -577,11 +572,6 @@ func (c *ReliantClient) StreamResponse(ctx context.Context, prompts []string, me
 	params := c.preparedParams(c.ConvertMessages(prompts, messages), c.ConvertTools(toolList))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
-	}
-
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
 	}
 
 	attempts := 0
@@ -1019,16 +1009,20 @@ func (c *ReliantClient) toolCalls(completion openai.ChatCompletion) []message.To
 	var toolCalls []message.ToolCall
 
 	if len(completion.Choices) > 0 && len(completion.Choices[0].Message.ToolCalls) > 0 {
+		// The id is ours (see llm.NewToolCallID): the gateway relays the
+		// upstream provider's, which may repeat across responses. The one part
+		// of it the next request needs is a Gemini thought signature LiteLLM
+		// appends to it, and that is carried over onto ours. Streamed deltas
+		// were accumulated by index, so nothing else needs the gateway's id.
 		for _, call := range completion.Choices[0].Message.ToolCalls {
-			if call.ID == "" || call.Function.Name == "" {
-				logging.Warn("Skipping empty/invalid tool call",
-					"id", call.ID,
-					"name", call.Function.Name)
+			if call.Function.Name == "" {
+				logging.Warn("Skipping tool call with no tool name",
+					"id", call.ID)
 				continue
 			}
 
 			toolCall := message.ToolCall{
-				ID:       call.ID,
+				ID:       llm.NewToolCallIDKeepingThoughtSignature(call.ID),
 				Name:     call.Function.Name,
 				Input:    call.Function.Arguments,
 				Type:     "function",

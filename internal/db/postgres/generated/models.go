@@ -47,15 +47,15 @@ type AgentMessage struct {
 }
 
 type AntigravityAuthToken struct {
-	ID           string         `json:"id"`
-	UserID       string         `json:"user_id"`
-	AccessToken  string         `json:"access_token"`
-	RefreshToken sql.NullString `json:"refresh_token"`
-	ExpiresAt    sql.NullTime   `json:"expires_at"`
-	IDToken      sql.NullString `json:"id_token"`
-	Scope        sql.NullString `json:"scope"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	ExpiresAt          sql.NullTime   `json:"expires_at"`
+	Scope              sql.NullString `json:"scope"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	AccessTokenSealed  []byte         `json:"access_token_sealed"`
+	RefreshTokenSealed []byte         `json:"refresh_token_sealed"`
+	IDTokenSealed      []byte         `json:"id_token_sealed"`
 }
 
 type ApiKey struct {
@@ -191,29 +191,29 @@ type ChatsWithActivity struct {
 }
 
 type ClaudeAuthToken struct {
-	ID               string         `json:"id"`
-	UserID           string         `json:"user_id"`
-	AccessToken      string         `json:"access_token"`
-	RefreshToken     sql.NullString `json:"refresh_token"`
-	ExpiresAt        sql.NullTime   `json:"expires_at"`
-	AccountUuid      sql.NullString `json:"account_uuid"`
-	AccountEmail     sql.NullString `json:"account_email"`
-	OrganizationUuid sql.NullString `json:"organization_uuid"`
-	OrganizationName sql.NullString `json:"organization_name"`
-	Scope            sql.NullString `json:"scope"`
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	ExpiresAt          sql.NullTime   `json:"expires_at"`
+	AccountUuid        sql.NullString `json:"account_uuid"`
+	AccountEmail       sql.NullString `json:"account_email"`
+	OrganizationUuid   sql.NullString `json:"organization_uuid"`
+	OrganizationName   sql.NullString `json:"organization_name"`
+	Scope              sql.NullString `json:"scope"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	AccessTokenSealed  []byte         `json:"access_token_sealed"`
+	RefreshTokenSealed []byte         `json:"refresh_token_sealed"`
 }
 
 type CodexAuthToken struct {
-	ID           string         `json:"id"`
-	UserID       string         `json:"user_id"`
-	AccessToken  string         `json:"access_token"`
-	RefreshToken sql.NullString `json:"refresh_token"`
-	IDToken      sql.NullString `json:"id_token"`
-	AccountID    sql.NullString `json:"account_id"`
-	CreatedAt    time.Time      `json:"created_at"`
-	UpdatedAt    time.Time      `json:"updated_at"`
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	AccountID          sql.NullString `json:"account_id"`
+	CreatedAt          time.Time      `json:"created_at"`
+	UpdatedAt          time.Time      `json:"updated_at"`
+	AccessTokenSealed  []byte         `json:"access_token_sealed"`
+	RefreshTokenSealed []byte         `json:"refresh_token_sealed"`
+	IDTokenSealed      []byte         `json:"id_token_sealed"`
 }
 
 type CommandFavorite struct {
@@ -247,6 +247,7 @@ type Connection struct {
 	UpdatedAt       time.Time       `json:"updated_at"`
 	DeletedAt       sql.NullTime    `json:"deleted_at"`
 	Params          json.RawMessage `json:"params"`
+	SenderID        sql.NullString  `json:"sender_id"`
 }
 
 type ConnectionEvent struct {
@@ -323,13 +324,13 @@ type ContextWindow struct {
 }
 
 type CopilotAuthToken struct {
-	ID                 string         `json:"id"`
-	UserID             string         `json:"user_id"`
-	GithubAccessToken  string         `json:"github_access_token"`
-	GithubRefreshToken sql.NullString `json:"github_refresh_token"`
-	Tier               sql.NullString `json:"tier"`
-	CreatedAt          time.Time      `json:"created_at"`
-	UpdatedAt          time.Time      `json:"updated_at"`
+	ID                       string         `json:"id"`
+	UserID                   string         `json:"user_id"`
+	Tier                     sql.NullString `json:"tier"`
+	CreatedAt                time.Time      `json:"created_at"`
+	UpdatedAt                time.Time      `json:"updated_at"`
+	GithubAccessTokenSealed  []byte         `json:"github_access_token_sealed"`
+	GithubRefreshTokenSealed []byte         `json:"github_refresh_token_sealed"`
 }
 
 type Daemon struct {
@@ -710,12 +711,13 @@ type ToolCall struct {
 }
 
 type ToolCallResult struct {
-	ToolCallID string         `json:"tool_call_id"`
-	MessageID  sql.NullString `json:"message_id"`
-	Content    string         `json:"content"`
-	IsError    bool           `json:"is_error"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
+	ToolCallID   string         `json:"tool_call_id"`
+	MessageID    sql.NullString `json:"message_id"`
+	Content      string         `json:"content"`
+	IsError      bool           `json:"is_error"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	GrantedTools []string       `json:"granted_tools"`
 }
 
 type Trigger struct {
@@ -744,18 +746,19 @@ type Trigger struct {
 }
 
 type TriggerEvent struct {
-	ID            string          `json:"id"`
-	TriggerID     sql.NullString  `json:"trigger_id"`
-	UserID        string          `json:"user_id"`
-	Kind          string          `json:"kind"`
-	DedupeKey     string          `json:"dedupe_key"`
-	OccurredAt    time.Time       `json:"occurred_at"`
-	Payload       json.RawMessage `json:"payload"`
-	Outcome       string          `json:"outcome"`
-	OutcomeDetail string          `json:"outcome_detail"`
-	ChatID        sql.NullString  `json:"chat_id"`
-	CreatedAt     time.Time       `json:"created_at"`
-	RunStatus     sql.NullString  `json:"run_status"`
+	ID            string                `json:"id"`
+	TriggerID     sql.NullString        `json:"trigger_id"`
+	UserID        string                `json:"user_id"`
+	Kind          string                `json:"kind"`
+	DedupeKey     string                `json:"dedupe_key"`
+	OccurredAt    time.Time             `json:"occurred_at"`
+	Payload       json.RawMessage       `json:"payload"`
+	Outcome       string                `json:"outcome"`
+	OutcomeDetail string                `json:"outcome_detail"`
+	ChatID        sql.NullString        `json:"chat_id"`
+	CreatedAt     time.Time             `json:"created_at"`
+	RunStatus     sql.NullString        `json:"run_status"`
+	Sender        pqtype.NullRawMessage `json:"sender"`
 }
 
 type TriggerRegistration struct {

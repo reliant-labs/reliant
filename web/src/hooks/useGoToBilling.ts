@@ -23,9 +23,11 @@ import { useNavigate } from "@tanstack/react-router";
  *
  * @param from Originating surface, so billing can offer a route back. Passing
  *   "onboarding" is what closes the dead end where a user who detoured from the
- *   compute step had no way back into the wizard.
+ *   compute step had no way back into the wizard. "forge" is an environment
+ *   whose deploy is queued on billing: the way back is that environment's
+ *   page, where the deploy can be watched going out.
  */
-export function useGoToBilling(from?: "onboarding"): () => void {
+export function useGoToBilling(from?: "onboarding" | "forge"): () => void {
   const navigate = useNavigate();
 
   return () => {
@@ -36,10 +38,8 @@ export function useGoToBilling(from?: "onboarding"): () => void {
     // gave before the detour. Round-tripping pathname+search is the same thing
     // ProjectChoiceStep and GitHubConnectStep already do for the GitHub OAuth
     // hop, which is the other place onboarding leaves the app and comes back.
-    const returnTo =
-      from === "onboarding"
-        ? `${window.location.pathname}${window.location.search}`
-        : undefined;
+    // An environment page needs its search too: it names the project.
+    const returnTo = from ? `${window.location.pathname}${window.location.search}` : undefined;
 
     void navigate({
       to: "/settings/$section",

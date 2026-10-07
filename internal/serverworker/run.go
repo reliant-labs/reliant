@@ -185,6 +185,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
+	drivers.InstallReliantKeyHealer(ctx, repo, tokenauthority.ControlPlaneURL(), strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")), 0)
 
 	// -----------------------------------------------------------------
 	// 5. Temporal client
@@ -271,8 +272,7 @@ func Run(ctx context.Context, opts Options) error {
 	analytics.SetPrivacyChecker(repo)
 
 	// Telemetry — Sentry in prod (when SENTRY_DSN is set), noop in dev/test.
-	telemetry.SetReporter(telemetry.NewReporterFromEnv(
-		config.IsDevelopmentEnvironment() || config.IsTestEnvironment()))
+	telemetry.SetReporter(telemetry.NewReporterFromEnv())
 
 	// -----------------------------------------------------------------
 	// 10. Tool execution routing via NATS

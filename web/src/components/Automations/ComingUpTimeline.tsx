@@ -76,7 +76,7 @@ export function ComingUpTimeline({ triggers, now: nowOverride }: { triggers: Tri
         <div className="px-5 py-4" aria-hidden="true">
           <div className="grid grid-cols-[minmax(0,10rem)_minmax(0,1fr)] gap-x-4 gap-y-1.5">
             <div />
-            <div className="relative h-4 text-2xs text-muted-foreground">
+            <div className="relative h-4 text-xs text-muted-foreground">
               <span className="absolute left-0">Now</span>
               {marks.map((mark) => (
                 <span key={mark.at} className="absolute -translate-x-1/2" style={{ left: position(mark.at) }}>

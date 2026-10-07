@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
+	"github.com/reliant-labs/reliant/internal/runenv"
 )
 
 // Defaults for the workspace proxy, matching control-plane's proxy URL
@@ -76,7 +76,7 @@ func isPreviewablePort(p daemon.PortInfo) bool {
 // When neither is configured it falls back by environment: dev/test to the
 // loopback proxy path (no wildcard DNS locally), else the default prod
 // subdomain. These defaults preserve the historical behavior byte-for-byte.
-func PreviewURLTemplate(env config.Environment, daemonID string) string {
+func PreviewURLTemplate(env runenv.Environment, daemonID string) string {
 	if daemonID == "" {
 		return ""
 	}
@@ -88,7 +88,7 @@ func PreviewURLTemplate(env config.Environment, daemonID string) string {
 	if base == "" {
 		// Nothing configured: keep the historical env-derived defaults.
 		switch env {
-		case config.EnvironmentDev, config.EnvironmentTest:
+		case runenv.Dev, runenv.Test:
 			return fmt.Sprintf("http://%s/proxy/%s/{port}/", defaultDevProxyHost, daemonID)
 		default:
 			base = defaultWorkspaceBaseDomain
@@ -109,7 +109,7 @@ func PreviewURLTemplate(env config.Environment, daemonID string) string {
 // a REMOTE daemon, or "" when there is no proxy to build one for (local daemon
 // or unknown identity) — in which case the caller falls back to the loopback.
 // It is PreviewURLTemplate with the {port} placeholder substituted.
-func proxyPreviewURL(env config.Environment, daemonID string, port int) string {
+func proxyPreviewURL(env runenv.Environment, daemonID string, port int) string {
 	if port <= 0 {
 		return ""
 	}
@@ -132,7 +132,7 @@ func previewURLsForProcess(p *daemon.ProcessInfo) []string {
 	if p == nil || p.Status != "running" || len(p.Ports) == 0 {
 		return nil
 	}
-	env := config.GetEnvironment()
+	env := runenv.Get()
 	var lines []string
 	seen := make(map[int]bool)
 	for _, port := range p.Ports {

@@ -123,8 +123,8 @@ func TestSendMessage_RunningWorkflowWakesTargetThread(t *testing.T) {
 	require.True(t, ok, "signal payload must be a ThreadWakeSignal")
 	assert.Equal(t, fx.rootThreadID, sig.Thread,
 		"the payload names which thread's gate should wake")
-	assert.Equal(t, threadwake.ReasonUserMessage, sig.Reason,
-		"the reason distinguishes this from a mailbox row, which has a different delivery path")
+	assert.Equal(t, threadwake.ReasonMailbox, sig.Reason,
+		"a message to a running thread is queued for its next turn, so the wake is for a mailbox row")
 }
 
 // A paused run takes the resume branch, and resuming is NOT sufficient on its
@@ -216,8 +216,10 @@ func TestSendMessage_WakeFailureStillSavesMessage(t *testing.T) {
 	require.NoError(t, err, "a doorbell that cannot be rung must not fail the send")
 	require.NotEmpty(t, resp.Msg.MessageId)
 
-	assert.Contains(t, transcriptBodies(t, ctx, repo, fx.chatID), "keep this",
-		"the message must be durable even when the wake failed")
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1, "the message must be durable even when the wake failed")
+	assert.Equal(t, "keep this", queued[0].Body)
 }
 
 type failingWakeTemporalClient struct {

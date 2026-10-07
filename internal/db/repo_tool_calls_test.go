@@ -175,12 +175,12 @@ func TestUpsertToolCallResultIsIdempotent(t *testing.T) {
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	}
-	require.NoError(t, repo.UpsertToolCallResult(ctx, result))
+	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, result))
 
 	result.Content = "second"
 	result.IsError = true
 	result.UpdatedAt = time.Now().UTC()
-	require.NoError(t, repo.UpsertToolCallResult(ctx, result))
+	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, result))
 
 	results, err := repo.ListToolCallResultsByMessageIDs(ctx, []string{f.messageID})
 	require.NoError(t, err)
@@ -201,14 +201,14 @@ func TestToolCallResultRequiresExistingCall(t *testing.T) {
 	f := setupToolCallFixture(t, repo)
 	now := time.Now().UTC()
 
-	err := repo.UpsertToolCallResult(ctx, &ToolCallResult{
+	err := repo.UpsertToolCallResult(ctx, f.chatID, &ToolCallResult{
 		ToolCallID: "toolu_does_not_exist",
 		MessageID:  &f.messageID,
 		Content:    "orphan",
 		CreatedAt:  now,
 		UpdatedAt:  now,
 	})
-	require.Error(t, err, "a result for a nonexistent call must be rejected by the foreign key")
+	require.Error(t, err, "a result for a nonexistent call must be rejected")
 }
 
 // Deleting the call must take its result with it; a result that outlives its
@@ -223,7 +223,7 @@ func TestDeletingToolCallCascadesToResult(t *testing.T) {
 	require.NoError(t, repo.UpsertToolCall(ctx, call))
 
 	now := time.Now().UTC()
-	require.NoError(t, repo.UpsertToolCallResult(ctx, &ToolCallResult{
+	require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, &ToolCallResult{
 		ToolCallID: call.ID,
 		MessageID:  &f.messageID,
 		Content:    "result",
@@ -259,7 +259,7 @@ func TestListToolCallsByMessageIDsMatchesEveryID(t *testing.T) {
 		require.NoError(t, repo.UpsertToolCall(ctx, call))
 
 		now := time.Now().UTC()
-		require.NoError(t, repo.UpsertToolCallResult(ctx, &ToolCallResult{
+		require.NoError(t, repo.UpsertToolCallResult(ctx, f.chatID, &ToolCallResult{
 			ToolCallID: call.ID,
 			MessageID:  &f.messageID,
 			Content:    "ok",

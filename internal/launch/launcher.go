@@ -109,6 +109,15 @@ func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, er
 	if ev.OccurredAt.IsZero() {
 		ev.OccurredAt = time.Now().UTC()
 	}
+	// An event kind with nobody behind it launches an unattended run whatever
+	// the caller set. Unattended decides more than whether the run may ask a
+	// question: an unattended run is withheld the tools that change workflows,
+	// start standing work or act through an integration
+	// (tools.UnattendedWithholding), so a launch path that forgot to set it
+	// must fail closed rather than hand a trigger's payload an attended run.
+	if ev.Kind.Unattended() {
+		spec.Unattended = true
+	}
 	spec.Params = paramsWithMode(spec.Params, spec.Mode)
 
 	if spec.ChatID != "" {
@@ -211,7 +220,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 
 	// Validate workflow tree BEFORE creating chat to avoid runtime graph failures and orphaned chats.
 	// Uses runtime-equivalent loader semantics: builtin:// and usable workflow drafts only.
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, ev); err != nil {
 		return nil, err
 	}
 	if spec.NoMachine {
@@ -247,23 +256,6 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	chat.WorktreeID = worktreeID
 	if spec.DaemonID != "" {
 		chat.ActiveDaemonID = &spec.DaemonID
-	}
-
-	// DEBUG: Log raw proto tools value before any processing
-	if toolsProto, ok := spec.Params["tools"]; ok {
-		logging.Info("[Launch] Raw proto tools param",
-			"chatID", chatID,
-			"asInterface", toolsProto.AsInterface(),
-			"protoString", toolsProto.String(),
-		)
-	} else {
-		logging.Info("[Launch] No tools param in workflowParams", "chatID", chatID, "paramKeys", func() []string {
-			keys := make([]string, 0, len(spec.Params))
-			for k := range spec.Params {
-				keys = append(keys, k)
-			}
-			return keys
-		}())
 	}
 
 	// Build and validate workflow inputs BEFORE creating chat
@@ -312,10 +304,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		Prompt:      seed.userContent,
 	})
 	if pending != nil {
-		// The adopted row keeps its identity and the time the source says
-		// the event happened; only its payload gains the start record.
+		// The adopted row keeps its identity, the time the source says the
+		// event happened and the sender intake recorded; only its payload
+		// gains the start record.
 		eventRow.ID = pending.ID
 		eventRow.OccurredAt = pending.OccurredAt
+		eventRow.Sender = pending.Sender
 	}
 
 	// The event row is inserted before the chat, so the (kind, dedupe_key)
@@ -524,7 +518,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 	// it would run. A pending chat has produced nothing, so its workflow can
 	// still change; this is the one place the system allows it.
 	workflowName, _, _ := effectiveStart(chat, spec)
-	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, draftRootFor(ev, workflowName)); err != nil {
+	if err := l.validateWorkflowTree(ctx, userID, workflowName, project.ID, ev); err != nil {
 		return nil, err
 	}
 	if noMachine {
@@ -857,6 +851,7 @@ func newEventRow(ev Event, userID, chatID, workflowName string, worktreeID *stri
 		DedupeKey:  ev.DedupeKey,
 		OccurredAt: ev.OccurredAt,
 		Payload:    payload,
+		Sender:     ev.Sender,
 		Outcome:    core.TriggerEventLaunched,
 		ChatID:     &chatID,
 	}
@@ -878,8 +873,8 @@ func (l *Launcher) buildInputs(
 	params map[string]*structpb.Value,
 ) (map[string]interface{}, error) {
 	// Use worktree path if chat is in a worktree, otherwise project path
-	workingPath := l.GetEffectiveWorkingPath(ctx, chat)
-	initialData := l.BuildWorkflowInputs(ctx, userID, workingPath, chat.ProjectID, workflowName, presets, params)
+	checkout := l.GetEffectiveCheckout(ctx, chat)
+	initialData := l.BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, presets, params)
 
 	// Validate resolved inputs (catches empty model after defaults resolution)
 	if validationErrors := l.ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
@@ -1117,6 +1112,7 @@ func TriggerInfoFromEvent(row *core.TriggerEvent) *v2.TriggerInfo {
 		EventID:    row.ID,
 		OccurredAt: row.OccurredAt.UTC().Format(time.RFC3339),
 		Payload:    row.Payload,
+		Sender:     row.Sender,
 	}
 	if row.TriggerID != nil {
 		info.TriggerID = *row.TriggerID

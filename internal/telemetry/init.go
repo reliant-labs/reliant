@@ -12,26 +12,28 @@ package telemetry
 import (
 	"os"
 	"strconv"
+
+	"github.com/reliant-labs/reliant/internal/runenv"
 )
 
 // NewReporterFromEnv builds the process error reporter based on the runtime
 // environment and Sentry env vars. It centralizes the "prod yes, dev no" policy
 // so every server entrypoint stays a single call.
 //
-// devOrTest is supplied by the caller (via config.IsDevelopmentEnvironment /
-// config.IsTestEnvironment) rather than read here — telemetry cannot import
-// config without an import cycle (config -> logging -> telemetry).
+// The environment is runenv's resolution — the same one the logger's DEBUG
+// guard and auth use — so a pod with neither RELIANT_ENV nor NODE_ENV set,
+// which is how prod runs, reports.
 //
 // A NoopReporter is returned (Sentry stays dark) when ANY of the following hold:
-//   - devOrTest is true (dev/test)
+//   - the environment is dev or test
 //   - SENTRY_ENABLED is explicitly "false"
 //   - SENTRY_DSN is empty
 //
 // Otherwise a live SentryReporter is returned. This mirrors the gating the
 // Electron main process (app.isPackaged) and web frontend (isDev) already use.
-func NewReporterFromEnv(devOrTest bool) ErrorReporter {
+func NewReporterFromEnv() ErrorReporter {
 	// Never report from dev or test runs.
-	if devOrTest {
+	if !runenv.IsProd() {
 		return NewNoopReporter()
 	}
 

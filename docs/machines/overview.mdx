@@ -1,0 +1,48 @@
+---
+title: "Machines"
+description: "Where your code lives and your commands run: your own computer or a Reliant cloud machine"
+---
+
+A **machine** is the place your project actually lives. Reliant's servers run the conversation and call the model, but anything that touches your code happens on a machine: reading and editing files, running shell commands, running tests, using git, and starting your [MCP servers](/settings/mcp-servers). The program that does this work is called the **tools daemon**, and you will see "daemon" in the CLI and in some settings. In the app it is simply a machine.
+
+There are two kinds, and you can use both at once.
+
+**Your own computer** is a laptop, workstation, home server or any other computer you control. The desktop app starts a daemon on it for you, or you can run one yourself with the CLI. Your repository stays on that computer. See [Your own computer](/machines/your-computer).
+
+**A Reliant cloud machine** is a computer we run for you, in one of five sizes, that sleeps when you are not using it and wakes when a run needs it. It is billed through a compute plan. See [Cloud machines & plans](/machines/cloud).
+
+<Frame caption="Settings → Machines, with a cloud machine running. Example data.">
+  <img src="/images/v2/p2-machines-cloud-active.png" alt="The Machines settings page listing a running cloud machine" />
+</Frame>
+
+## When to use which
+
+Choose your own computer for a project when the project is already checked out there, when it needs hardware or network access only that computer has, or when you want the work to happen next to your editor. Choose a cloud machine when you want runs to keep going while your laptop is closed, when you want to start work from the web or your phone, or when an [automation](/automations/overview) has to fire at 3 a.m. on a schedule. You can have both and give different projects different machines.
+
+## What lives on the machine
+
+Because the daemon is the thing that reads your files, several pieces of configuration belong to the machine rather than to your account:
+
+- Your project files and git history, including any [worktrees](/features/worktrees).
+- [Memory files](/settings/memories): `~/.reliant/reliant.md` is the one on *that* machine, so a cloud machine has its own, separate from your laptop's.
+- [MCP servers](/settings/mcp-servers). They are started by the daemon, so a server that needs `npx` or `uvx` needs it installed on the machine that runs it.
+- [Model configuration](/settings/model-config) and any [local models](/settings/api-keys).
+
+What a machine sends back to Reliant is covered in [Privacy & security](/help/privacy): whatever an agent reads or a command prints is stored with the chat and sent to your model provider.
+
+## One machine per project
+
+Every chat in a project runs on that project's machine. You do not pick a machine each time you start a chat: the project has one, and its files, git history and worktrees live there. Different projects can live on different machines, for example one on your laptop and another on a cloud machine.
+
+[Automations](/automations/overview) are the exception. An automation can run its project's work on a different machine from the one your chats use, which is how a scheduled job can use a cloud machine that is awake at 3 a.m. while you work interactively on your laptop. A workflow can also pin a machine itself with `daemon:`. The rules are in [Choosing a machine in workflows](/machines/choosing).
+
+<Frame caption="A cloud machine running a chat. Example data.">
+  <img src="/images/v2/p2-chat-running-on-cloud-machine.png" alt="A chat running on a cloud machine" />
+</Frame>
+
+## Related topics
+
+- [Your own computer](/machines/your-computer): install, register and run a daemon.
+- [Cloud machines & plans](/machines/cloud): sizes, hours, waking and suspending.
+- [Choosing a machine in workflows](/machines/choosing): the `daemon:` field and selection order.
+- [Billing, wallet & Reliant AI](/account/billing)

@@ -77,6 +77,12 @@ type RuntimeContext struct {
 	// continue-as-new. See research/TOOL_CAPABILITIES.md.
 	ToolGrants []string `json:"tool_grants,omitempty"`
 
+	// Unattended is the run's runtime.IsUnattended: nobody is attending it. A
+	// trigger-fired run and every sub-workflow and spawned sub-agent of one
+	// carry it; a person's turn never does. call_llm resolves the turn's
+	// capability set with it, so it is set on call_llm nodes only.
+	Unattended bool `json:"unattended,omitempty"`
+
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
 

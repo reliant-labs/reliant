@@ -1,5 +1,6 @@
-import { useState, useRef, useEffect } from 'react'
-import { ChevronDown, Check, Loader2 } from 'lucide-react'
+import { useCallback, useState, useRef, useEffect } from 'react'
+import { useEscapeLayer } from '../../hooks/useEscapeLayer'
+import { ChevronDown, Check, Loader2, Search } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { useModels, useGlobalDataStore } from '../../store/globalDataStore'
 
@@ -29,7 +30,9 @@ export function ModelDropdown({
   placeholder = 'Select model...',
 }: ModelDropdownProps) {
   const [isOpen, setIsOpen] = useState(false)
+  const [query, setQuery] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const searchRef = useRef<HTMLInputElement>(null)
   const { models, loading: isLoading } = useModels()
   const isInitialized = useGlobalDataStore((state) => state.isInitialized)
   const isPrefetching = useGlobalDataStore((state) => state.isPrefetching)
@@ -44,9 +47,14 @@ export function ModelDropdown({
     return modelBaseId === currentId
   })
 
+  // Escape closes the list (and only the list: see useEscapeLayer).
+  const closeList = useCallback(() => setIsOpen(false), [])
+  const escapeLayer = useEscapeLayer(isOpen, closeList)
+
   // Close dropdown when clicking outside
   useEffect(() => {
     if (!isOpen) return
+    searchRef.current?.focus()
     const handleClickOutside = (event: MouseEvent) => {
       if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
         setIsOpen(false)
@@ -56,8 +64,12 @@ export function ModelDropdown({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [isOpen])
 
-  // Group models by provider
-  const groupedModels = models.reduce<Record<string, typeof models>>((groups, model) => {
+  // Group the configured models by provider, narrowed by the search.
+  const q = query.trim().toLowerCase()
+  const matchingModels = q
+    ? models.filter((m) => [m.name, m.id, m.provider ?? ''].some((text) => text.toLowerCase().includes(q)))
+    : models
+  const groupedModels = matchingModels.reduce<Record<string, typeof models>>((groups, model) => {
     const provider = model.provider || 'Other'
     if (!groups[provider]) groups[provider] = []
     groups[provider].push(model)
@@ -77,7 +89,10 @@ export function ModelDropdown({
       <button
         type="button"
         onClick={() => {
-          if (!disabled && !isActuallyLoading) setIsOpen(!isOpen)
+          if (!disabled && !isActuallyLoading) {
+            setQuery('')
+            setIsOpen(!isOpen)
+          }
         }}
         disabled={disabled || isActuallyLoading}
         className={cn(
@@ -96,12 +111,26 @@ export function ModelDropdown({
       </button>
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 mt-1 z-[1000] rounded-[6px] border border-border bg-card shadow-lg overflow-hidden">
+        <div {...escapeLayer} className="absolute top-full left-0 right-0 mt-1 z-[1000] rounded-[6px] border border-border bg-card shadow-lg overflow-hidden">
+          {models.length > 0 && (
+            <div className="flex items-center gap-2 border-b border-border px-2.5 py-2">
+              <Search className="h-3.5 w-3.5 flex-shrink-0 text-muted-foreground" aria-hidden />
+              <input
+                ref={searchRef}
+                type="search"
+                aria-label="Search models"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search models"
+                className="w-full bg-transparent text-xs text-foreground placeholder:text-muted-foreground focus:outline-none"
+              />
+            </div>
+          )}
           <div className="py-1 max-h-64 overflow-y-auto">
             {providers.map((provider) => (
               <div key={provider}>
                 {providers.length > 1 && (
-                  <div className="px-3 py-1 text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
+                  <div className="px-3 py-1 text-xs font-semibold uppercase tracking-wider text-muted-foreground">
                     {provider}
                   </div>
                 )}
@@ -132,6 +161,9 @@ export function ModelDropdown({
                 })}
               </div>
             ))}
+            {models.length > 0 && matchingModels.length === 0 && (
+              <p className="px-3 py-3 text-xs text-muted-foreground">No configured model matches “{query}”.</p>
+            )}
             {models.length === 0 && !isActuallyLoading && (
               <div className="px-4 py-6 text-center space-y-2">
                 <p className="text-sm text-muted-foreground">No models configured</p>

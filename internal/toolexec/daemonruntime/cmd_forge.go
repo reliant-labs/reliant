@@ -140,10 +140,7 @@ func runForgeSelfExec(ctx context.Context, projectDir string, args []string) (fo
 	ctx, cancel := context.WithTimeout(ctx, forgeInvocationTimeout)
 	defer cancel()
 
-	// --silence-experimental keeps forge's experimental banner off stderr.
-	// It is a root persistent flag and is present in the pinned forge, so
-	// unlike --json it cannot itself trigger an unknown-flag failure.
-	full := append([]string{"forge", "--silence-experimental"}, args...)
+	full := append([]string{"forge"}, args...)
 	cmd := exec.CommandContext(ctx, self, full...)
 	cmd.Dir = projectDir
 

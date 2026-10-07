@@ -4,6 +4,8 @@ package services
 import (
 	"context"
 	"fmt"
+	"regexp"
+	"strconv"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -20,6 +22,9 @@ type workflowCheck struct {
 	// parseErr is set when the definition could not be parsed at all.
 	parseErr error
 	result   *validation.Result
+	// workflow is the parsed definition, used to place findings on the node
+	// they are about (an edge finding names the edge by index).
+	workflow *reliantv1.Workflow
 }
 
 func (c workflowCheck) valid() bool {
@@ -31,29 +36,95 @@ func (c workflowCheck) valid() bool {
 // client can tell them apart without a proto change.
 func (c workflowCheck) protoErrors(warnings bool) []*reliantv1.ValidationError {
 	if c.parseErr != nil {
-		return []*reliantv1.ValidationError{{Type: "conversion_error", Message: c.parseErr.Error()}}
+		return []*reliantv1.ValidationError{{Type: "conversion_error", Message: c.parseErr.Error(), Detail: c.parseErr.Error()}}
 	}
 	if c.result == nil {
 		return nil
 	}
 	var out []*reliantv1.ValidationError
 	for _, e := range c.result.Errors() {
-		out = append(out, &reliantv1.ValidationError{
-			Type:       string(e.Category),
-			Message:    e.Error(),
-			Suggestion: e.Suggestion,
-		})
+		out = append(out, c.protoFinding(string(e.Category), e))
 	}
 	if warnings {
 		for _, w := range c.result.Warnings() {
-			out = append(out, &reliantv1.ValidationError{
-				Type:       "warning:" + string(w.Category),
-				Message:    w.Error(),
-				Suggestion: w.Suggestion,
-			})
+			out = append(out, c.protoFinding("warning:"+string(w.Category), w))
 		}
 	}
 	return out
+}
+
+func (c workflowCheck) protoFinding(findingType string, e *validation.Error) *reliantv1.ValidationError {
+	nodeID, field := locateFinding(e.Path, e.Field, c.workflow)
+	location := append(append([]string{}, e.Path...), nonEmpty(e.Field)...)
+	return &reliantv1.ValidationError{
+		Type:       findingType,
+		Message:    e.Error(),
+		Suggestion: e.Suggestion,
+		NodeId:     nodeID,
+		Field:      field,
+		Detail:     e.Message,
+		Path:       strings.Join(location, "."),
+	}
+}
+
+func nonEmpty(s string) []string {
+	if s == "" {
+		return nil
+	}
+	return []string{s}
+}
+
+// nodePathSegment is how the validator names a node in a path: "[2](call_llm)".
+var nodePathSegment = regexp.MustCompile(`^\[(\d+)\]\((.*)\)$`)
+
+// edgePathSegment is how the validator names an edge in a path: "[3]".
+var edgePathSegment = regexp.MustCompile(`^\[(\d+)\]$`)
+
+// locateFinding places a validation finding on the top-level node it is
+// about, and the field within that node. Paths look like
+//
+//	[<workflow>, nodes, [1](call_llm), system_prompt]                 field "system_prompt"
+//	[<workflow>, nodes, [0](loop), inline, nodes, [2](x)] + "model"   field "inline.nodes.[2](x).model"
+//	[<workflow>, edges, [3], cases, [0], condition]                   the edge's source node
+//
+// with the validator's own Field appended. Workflow-level findings (entry,
+// inputs, triggers) have no node.
+func locateFinding(path []string, field string, wf *reliantv1.Workflow) (nodeID, nodeField string) {
+	rest := append(append([]string{}, path...), nonEmpty(field)...)
+	if len(rest) > 0 {
+		rest = rest[1:] // the workflow's own name
+	}
+	if len(rest) < 2 {
+		return "", ""
+	}
+	switch rest[0] {
+	case "nodes":
+		if m := nodePathSegment.FindStringSubmatch(rest[1]); m != nil {
+			return m[2], strings.Join(rest[2:], ".")
+		}
+		// Some checks name the node bare: [<workflow>, nodes, summarize].
+		if !strings.HasPrefix(rest[1], "[") {
+			return rest[1], strings.Join(rest[2:], ".")
+		}
+	case "edges":
+		m := edgePathSegment.FindStringSubmatch(rest[1])
+		if m == nil || wf == nil {
+			return "", ""
+		}
+		index, err := strconv.Atoi(m[1])
+		if err != nil || index >= len(wf.GetEdges()) {
+			return "", ""
+		}
+		return edgeSourceNode(wf.GetEdges()[index].GetFrom()), ""
+	}
+	return "", ""
+}
+
+// edgeSourceNode is the node an edge leaves: `from` names a node, or an
+// event on one ("build.failed").
+func edgeSourceNode(from string) string {
+	node, _, _ := strings.Cut(from, ".")
+	return node
 }
 
 // summary is a one-line description of the errors for a response message.
@@ -83,7 +154,7 @@ func (s *WorkflowService) validateWorkflowDefinition(ctx context.Context, userID
 	if err != nil {
 		return workflowCheck{parseErr: err}
 	}
-	return workflowCheck{result: result}
+	return workflowCheck{result: result, workflow: self}
 }
 
 // errorCount is the number of validation errors (a parse failure counts as one).

@@ -767,10 +767,10 @@ func (x *CloneRepoResponse) GetDaemonName() string {
 
 type ListGitReposRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Provider      string                 `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	Provider      *string                `protobuf:"bytes,1,opt,name=provider,proto3,oneof" json:"provider,omitempty"`
 	Page          int32                  `protobuf:"varint,2,opt,name=page,proto3" json:"page,omitempty"`
 	PerPage       int32                  `protobuf:"varint,3,opt,name=per_page,json=perPage,proto3" json:"per_page,omitempty"`
-	Sort          string                 `protobuf:"bytes,4,opt,name=sort,proto3" json:"sort,omitempty"`
+	Sort          *string                `protobuf:"bytes,4,opt,name=sort,proto3,oneof" json:"sort,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -806,8 +806,8 @@ func (*ListGitReposRequest) Descriptor() ([]byte, []int) {
 }
 
 func (x *ListGitReposRequest) GetProvider() string {
-	if x != nil {
-		return x.Provider
+	if x != nil && x.Provider != nil {
+		return *x.Provider
 	}
 	return ""
 }
@@ -827,8 +827,8 @@ func (x *ListGitReposRequest) GetPerPage() int32 {
 }
 
 func (x *ListGitReposRequest) GetSort() string {
-	if x != nil {
-		return x.Sort
+	if x != nil && x.Sort != nil {
+		return *x.Sort
 	}
 	return ""
 }
@@ -1052,12 +1052,14 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\x06queued\x18\x02 \x01(\bR\x06queued\x12\x1b\n" +
 	"\tdaemon_id\x18\x03 \x01(\tR\bdaemonId\x12\x1f\n" +
 	"\vdaemon_name\x18\x04 \x01(\tR\n" +
-	"daemonName\"t\n" +
-	"\x13ListGitReposRequest\x12\x1a\n" +
-	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x12\n" +
+	"daemonName\"\x94\x01\n" +
+	"\x13ListGitReposRequest\x12\x1f\n" +
+	"\bprovider\x18\x01 \x01(\tH\x00R\bprovider\x88\x01\x01\x12\x12\n" +
 	"\x04page\x18\x02 \x01(\x05R\x04page\x12\x19\n" +
-	"\bper_page\x18\x03 \x01(\x05R\aperPage\x12\x12\n" +
-	"\x04sort\x18\x04 \x01(\tR\x04sort\"a\n" +
+	"\bper_page\x18\x03 \x01(\x05R\aperPage\x12\x17\n" +
+	"\x04sort\x18\x04 \x01(\tH\x01R\x04sort\x88\x01\x01B\v\n" +
+	"\t_providerB\a\n" +
+	"\x05_sort\"a\n" +
 	"\x14ListGitReposResponse\x12.\n" +
 	"\x05repos\x18\x01 \x03(\v2\x18.controlplane.v1.GitRepoR\x05repos\x12\x19\n" +
 	"\bhas_more\x18\x02 \x01(\bR\ahasMore\"J\n" +
@@ -1152,6 +1154,7 @@ func file_services_git_credential_v1_git_credential_proto_init() {
 	if File_services_git_credential_v1_git_credential_proto != nil {
 		return
 	}
+	file_services_git_credential_v1_git_credential_proto_msgTypes[9].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

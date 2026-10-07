@@ -8,7 +8,7 @@ import { getNodeIcon, getNodeColor, getNodeDisplayName, getNodeTheme } from '../
 import { getActionUses, isIntegrationActionStep } from '../../../lib/actionNodeArgs'
 import { refIntegration, type CatalogEntry } from '../../../api/catalog-search-grpc'
 import { connectionKeys } from '../../../hooks/connection-queries'
-import { IntegrationIcon } from '../palette/IntegrationIcon'
+import { IntegrationLogoTile } from '../../icons/IntegrationLogo'
 
 interface ActionNodeProps {
   data: {
@@ -77,14 +77,14 @@ export const ActionNode = memo(({ data, selected }: ActionNodeProps) => {
         {/* Header with icon and activity type name */}
         <div className="flex items-center gap-2">
           {integrationHeader ? (
-            <IntegrationIcon hint={integrationHeader.icon} />
+            <IntegrationLogoTile icon={integrationHeader.icon} />
           ) : (
             <div className={`w-8 h-8 rounded-lg ${colors.bg} flex items-center justify-center flex-shrink-0`}>
               <Icon className="w-4 h-4 text-white" />
             </div>
           )}
           <div className="flex-1 min-w-0">
-            <div className={`text-2xs font-bold uppercase tracking-wide truncate ${integrationHeader ? 'text-foreground' : colors.text}`}>{displayName}</div>
+            <div className={`text-xs font-bold uppercase tracking-wide truncate ${integrationHeader ? 'text-foreground' : colors.text}`}>{displayName}</div>
             <div className="font-medium text-muted-foreground text-xs leading-tight truncate">{label}</div>
           </div>
         </div>

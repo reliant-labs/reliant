@@ -84,6 +84,10 @@ var responseFieldAllowList = map[string]bool{
 	// param whose name reads like a credential, and a secret goes in
 	// connection_secrets through CreateApiKeyConnectionRequest.fields.
 	"reliant.v1.Connection.params": true,
+	// A provider's public id for a person (a Slack user id, a GitHub login,
+	// an email address), never a credential: it is what their events carry
+	// in the clear as trigger.sender.id.
+	"reliant.v1.Connection.sender_id": true,
 }
 
 func walkMessage(md protoreflect.MessageDescriptor, seen map[protoreflect.FullName]bool, visit func(protoreflect.FieldDescriptor)) {

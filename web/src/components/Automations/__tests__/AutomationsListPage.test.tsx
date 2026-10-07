@@ -60,7 +60,7 @@ vi.mock("@/store/projectStore", () => {
   });
   const useProjectStore = Object.assign(
     (selector?: (s: ReturnType<typeof snapshot>) => unknown) => {
-      projectStoreSelector();
+      projectStoreSelector(selector);
       return selector ? selector(snapshot()) : snapshot();
     },
     { getState: snapshot },
@@ -142,6 +142,20 @@ describe("AutomationsListPage", () => {
     expect(listTriggers.mock.calls[0]![0].projectId).toBeUndefined();
   });
 
+  it("says No machine for an automation that runs with no machine, never a daemon", async () => {
+    // A no-machine automation has an empty daemonId by design
+    // (research/DAEMONLESS_RUNS.md), not a daemon whose name is missing.
+    listTriggers.mockResolvedValue({
+      triggers: [protoTrigger({ daemonId: "", daemonName: "", noMachine: true })],
+    });
+
+    renderAtRoute(<AutomationsListPage />);
+
+    const row = await screen.findByTestId("automation-row-trig-1");
+    expect(within(row).getByText("Reliant · No machine")).toBeInTheDocument();
+    expect(within(row).queryByText(/daemon/i)).not.toBeInTheDocument();
+  });
+
   it("names come from the trigger itself, with no store or daemon lookup", async () => {
     listTriggers.mockResolvedValue({ triggers: [protoTrigger()] });
 
@@ -150,7 +164,13 @@ describe("AutomationsListPage", () => {
     const row = await screen.findByTestId("automation-row-trig-1");
     // On the very first render with data, not after some store fills in.
     expect(within(row).getByText("Reliant · MacBook")).toBeInTheDocument();
-    expect(projectStoreSelector).not.toHaveBeenCalled();
+    // The page reads the store for the CURRENT project only (whose library
+    // it lists not-yet-active triggers from), never for a row's names: the
+    // store's project list is empty here, so a name taken from it would be
+    // blank.
+    for (const [selector] of projectStoreSelector.mock.calls) {
+      expect(String(selector)).not.toMatch(/projects\b/);
+    }
     expect(listDaemons).not.toHaveBeenCalled();
   });
 

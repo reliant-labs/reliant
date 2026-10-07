@@ -136,12 +136,12 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
   const owed = lines.filter((line) => !line.covered);
 
   /**
-   * The processing fee, quoted BY THE SERVER.
+   * The top-up service fee, quoted BY THE SERVER.
    *
    * Fetched only when credit is actually owed: a coupon that covered the credit
-   * leaves no card payment to process, so there is no processing cost to
-   * recover and no fee to show. Compute alone is never fee'd either — see the
-   * note on `creditOwed` below.
+   * means no credit is being bought, so there is no purchase for the fee to
+   * apply to and no fee to show. Compute alone never carries the fee either —
+   * see the note on `creditOwed` below.
    *
    * The number is never computed here. `useWalletTopupQuote` returns what the
    * server derived from the same function that builds the Stripe charge, so the
@@ -312,7 +312,7 @@ export function OnboardingCheckout(props: OnboardingCheckoutProps) {
  * chargeback and a support ticket rather than a disclosure.
  *
  * It renders only when non-zero, so a couponed or compute-only checkout — both
- * of which involve no processing cost to recover — shows no fee line at all
+ * of which buy no credit, so carry no service fee — shows no fee line at all
  * rather than a $0.00 row inviting the question.
  */
 function OrderSummary({
@@ -393,7 +393,7 @@ function OrderSummary({
             />
             <span className="min-w-0 flex-1">
               <span className="flex flex-wrap items-center gap-2 text-sm font-medium text-foreground">
-                Processing fee
+                Service fee
                 {feePercent > 0 && (
                   <span className="rounded-full bg-muted px-2 py-0.5 text-2xs font-semibold text-muted-foreground">
                     {feePercent}%
@@ -401,8 +401,8 @@ function OrderSummary({
                 )}
               </span>
               <span className="block text-xs text-muted-foreground">
-                Covers card processing on the credit above. Your full credit
-                lands in your balance.
+                Charged on the credit above. Your full credit lands in your
+                balance.
               </span>
             </span>
             <span className="shrink-0 text-sm font-semibold text-foreground">

@@ -49,11 +49,15 @@ type InputFieldInfo struct {
 	Min                *float64 // Minimum value for numeric fields from reliant:"min=..."
 	Max                *float64 // Maximum value for numeric fields from reliant:"max=..."
 	Label              string   // Short UI label from proto metadata
-	Placeholder        *string  // Optional helper text for text-like controls
+	Example            string   // What a value looks like (a literal or a {{ }} expression)
+	TypeHint           string   // The kind of value, when the type undersells it ("list of tool calls")
 	VisibilityContexts []string // Optional UI visibility contexts (basic/advanced/debug)
 	CleanupSemantics   *string  // Optional cleanup behavior hint for clients
 	IsCEL              bool     // True if this field supports CEL expressions (CelX wrapper)
 	Category           string   // Per-field grouping category from proto annotation
+	// Children are a message-typed output field's sub-fields (its items'
+	// fields when repeated). Always empty on inputs.
+	Children []InputFieldInfo
 }
 
 // ActivityWithMetadata is implemented by activities that should appear in the workflow builder
@@ -113,7 +117,7 @@ func GetActivityMetadata(name string) (ActivityMetadata, bool) {
 			inputFields = extractInputFields(typeInfo.InputType)
 		}
 		if typeInfo.OutputDescriptor != nil {
-			outputFields = extractInputFieldsFromProto(typeInfo.OutputDescriptor)
+			outputFields = extractOutputFieldsFromProto(typeInfo.OutputDescriptor, 0)
 		} else if typeInfo.OutputType != nil {
 			outputFields = extractInputFields(typeInfo.OutputType)
 		}
@@ -182,7 +186,7 @@ func extractInputFields(t reflect.Type) []InputFieldInfo {
 	}
 
 	// Handle pointer types
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -267,6 +271,72 @@ var protoTypeToSchemaType = map[string]string{
 	"model_selector": "model",
 }
 
+// maxOutputFieldDepth bounds how far extractOutputFieldsFromProto descends
+// into nested messages (tool_calls[].name is depth 1). It also cuts any
+// recursive message type short.
+const maxOutputFieldDepth = 2
+
+// extractOutputFieldsFromProto lists an activity's OUTPUT fields as the
+// builder's Outputs tab shows them. Unlike inputs, message-typed fields are
+// kept, because they are what downstream steps read most (call_llm's
+// message, tool_calls and response_data): a message is an "object" with its
+// sub-fields as children, a repeated field is an "array" whose children are
+// its items' fields, and a google.protobuf.Struct is an "object" with none,
+// since its keys are only known at run time. Hidden and message-only fields
+// are left out; "advanced" ones keep their visibility context so the UI can
+// put them behind a disclosure.
+func extractOutputFieldsFromProto(md protoreflect.MessageDescriptor, depth int) []InputFieldInfo {
+	infos := wfcel.ExtractFieldInfoMap(md)
+	descriptors := md.Fields()
+	var fields []InputFieldInfo
+	for i := 0; i < descriptors.Len(); i++ {
+		fd := descriptors.Get(i)
+		f, ok := infos[string(fd.Name())]
+		if !ok || f.Hidden {
+			continue // a synthetic oneof or a message-only field
+		}
+		info := InputFieldInfo{
+			Name:               f.Name,
+			Type:               outputSchemaType(fd, f),
+			Description:        f.Description,
+			Label:              f.Label,
+			VisibilityContexts: append([]string(nil), f.VisibilityContexts...),
+		}
+		if f.DefaultValue != "" {
+			info.Default = f.DefaultValue
+		}
+		if fd.Kind() == protoreflect.MessageKind && !fd.IsMap() && !isDynamicMessage(fd.Message()) && depth < maxOutputFieldDepth {
+			info.Children = extractOutputFieldsFromProto(fd.Message(), depth+1)
+		}
+		fields = append(fields, info)
+	}
+	return fields
+}
+
+func outputSchemaType(fd protoreflect.FieldDescriptor, f wfcel.FieldInfo) string {
+	switch {
+	case fd.IsMap():
+		return "map"
+	case fd.IsList():
+		return "array"
+	case f.Type == "message":
+		return "object"
+	}
+	if mapped, ok := protoTypeToSchemaType[f.Type]; ok {
+		return mapped
+	}
+	return f.Type
+}
+
+// isDynamicMessage reports a message whose shape is only known at run time.
+func isDynamicMessage(md protoreflect.MessageDescriptor) bool {
+	switch md.FullName() {
+	case "google.protobuf.Struct", "google.protobuf.Value", "google.protobuf.ListValue":
+		return true
+	}
+	return false
+}
+
 // extractInputFieldsFromProto uses protoreflect and wfcel.ExtractFieldInfo to build
 // InputFieldInfo from proto message descriptors. This replaces Go reflect-based
 // extraction for proto types, using proto annotations as the single source of truth.
@@ -299,7 +369,8 @@ func extractInputFieldsFromProto(md protoreflect.MessageDescriptor) []InputField
 			Min:                f.MinValue,
 			Max:                f.MaxValue,
 			Label:              f.Label,
-			Placeholder:        f.Placeholder,
+			Example:            f.Example,
+			TypeHint:           f.TypeHint,
 			VisibilityContexts: append([]string(nil), f.VisibilityContexts...),
 			CleanupSemantics:   f.CleanupSemantics,
 			IsCEL:              f.IsCEL || f.IsDirect,
@@ -417,7 +488,7 @@ func mapGoTypeToSchema(t reflect.Type) string {
 		return "array"
 	case reflect.Map, reflect.Struct:
 		return "object"
-	case reflect.Ptr:
+	case reflect.Pointer:
 		return mapGoTypeToSchema(t.Elem())
 	default:
 		return "any"

@@ -1,15 +1,49 @@
 import { useCallback, useEffect } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
 import { create } from "@bufbuild/protobuf";
 import { grpcClient } from "../api/grpc-client";
 import { DaemonStatus, ListDaemonsRequestSchema } from "../gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo } from "../gen/reliant/v1/daemon_registry_pb";
 import { logger } from "../lib/logger";
-export const DAEMON_LIST_QUERY_KEY = ["reliant", "daemonRegistry", "list"] as const;
-const POLL_INTERVAL_MS = 5_000;
 
 /**
- * Tracks the local Reliant daemon registry's daemon list.
+ * THE daemon list. Every reader of ListDaemons — this hook, useDaemonList, the
+ * project picker's no-machine panel — shares this one cache entry, so a screen
+ * full of readers costs one request, not one per hook.
+ */
+export const DAEMON_LIST_QUERY_KEY = ["reliant", "daemonRegistry", "list"] as const;
+
+/**
+ * Safety net, not the freshness mechanism.
+ *
+ * The list is kept current by push: the gateway announces every attach and
+ * detach, and every control-plane lifecycle transition it applies, as a
+ * `daemons` refetch on the user stream (see globalUpdatesStore), and the
+ * desktop app reports its own daemon connecting. A 5s poll used to do this job
+ * and cost ~12 requests a minute per open window to learn, almost always,
+ * nothing. What is left for the poll is whatever slips past every signal — an
+ * event lost while the stream was down for less than a reconnect — and a
+ * minute bounds that without spending a request every few seconds.
+ *
+ * One timer per query, however many readers are mounted: React Query re-arms
+ * every observer's interval when the query fetches, so they share a phase.
+ */
+export const DAEMON_LIST_FALLBACK_POLL_MS = 60_000;
+
+/**
+ * Mark every daemon-list cache stale; observed ones refetch at once.
+ *
+ * Also covers the onboarding gate's attempt-scoped list
+ * (["onboarding", "daemons", "gate", …]), which waits on a daemon appearing
+ * and has to hear about it the moment it does.
+ */
+export function invalidateDaemonList(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+  void queryClient.invalidateQueries({ queryKey: ["onboarding", "daemons"] });
+}
+
+/**
+ * Tracks the user's daemon list (the registry's ListDaemons).
  *
  * Eight-plus components mount this hook simultaneously (ModernApp,
  * NewChatView, TabbedViewerPanel, DaemonStatusDot, ProjectPicker,
@@ -19,19 +53,17 @@ const POLL_INTERVAL_MS = 5_000;
  * fan-out per cycle in practice.
  *
  * The implementation is now a single shared React Query keyed by
- * `reliant.daemonRegistry.list`. TanStack dedupes concurrent fetches and
- * gates polling on at least one observer being mounted, so the network
- * traffic falls back to a single 5s tick regardless of how many components
- * consume the hook.
+ * DAEMON_LIST_QUERY_KEY, refreshed by push and backstopped by a slow poll —
+ * see DAEMON_LIST_FALLBACK_POLL_MS.
  */
-async function fetchDaemonList(): Promise<DaemonInfo[]> {
+export async function fetchDaemonList(): Promise<DaemonInfo[]> {
   // Let failures THROW. React Query keeps the last successful result on
   // error, so a transient RPC failure (auth-token refresh, proxy hiccup,
   // api-server restart) leaves the UI showing the last-known daemon state.
   // The old `catch { return [] }` resolved errors to an empty list, which
   // REPLACED the cache — one failed poll flipped every consumer to
-  // "daemon disconnected" for at least a full 5s poll cycle even though
-  // the daemon was connected the whole time.
+  // "daemon disconnected" for at least a full poll cycle even though the
+  // daemon was connected the whole time.
   const resp = await grpcClient
     .daemonRegistry()
     .listDaemons(create(ListDaemonsRequestSchema));
@@ -42,9 +74,9 @@ export function useDaemonStatus() {
   const queryClient = useQueryClient();
 
   // Refetch the moment the desktop app reports its daemon connected, rather
-  // than waiting for the next 5s poll.
+  // than waiting for the gateway's announcement or the fallback poll.
   //
-  // The poll alone is not sufficient after sign-in: it sets
+  // The poll alone was not sufficient after sign-in even at 5s: it sets
   // `refetchIntervalInBackground: false`, and OAuth backgrounds the window by
   // design when consent goes to the system browser. Measured on a real prod
   // sign-in, the daemon connected ~1.2s after the restart while the UI sat on
@@ -86,35 +118,33 @@ export function useDaemonStatus() {
       logger.warn("[DaemonStatus] daemon-connected event -> invalidating", {
         atMs: Date.now(),
       });
-      void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+      invalidateDaemonList(queryClient);
     });
   }, [queryClient]);
 
   const { data, isLoading } = useQuery<DaemonInfo[]>({
     queryKey: DAEMON_LIST_QUERY_KEY,
     queryFn: fetchDaemonList,
-    refetchInterval: POLL_INTERVAL_MS,
-    // Stop polling when the document is hidden (matches the old impl's
-    // visibilitychange listener) and resume on focus.
+    refetchInterval: DAEMON_LIST_FALLBACK_POLL_MS,
+    // A hidden window has no one reading the list; focus catches it up.
     refetchIntervalInBackground: false,
     refetchOnWindowFocus: "always",
-    // Daemons rarely flap; the 5s poll is what keeps the UI fresh, and it runs
-    // on its own schedule regardless of staleness. Matching staleTime to the
-    // poll interval closes the mount storm without widening that bound: the
-    // dozen consumers listed above mount at staggered moments as the user
-    // navigates, and with staleTime 0 every one of them found the cache
-    // instantly stale and issued its OWN request on mount. The data can still
-    // only ever be POLL_INTERVAL_MS old, because the poll is what bounds it.
+    // Push is what keeps this fresh, and an invalidation marks the entry stale
+    // explicitly, so cached data is trustworthy until then. Matching staleTime
+    // to the fallback poll closes the mount storm: the dozen consumers listed
+    // above mount at staggered moments as the user navigates, and with
+    // staleTime 0 every one of them found the cache instantly stale and issued
+    // its OWN request on mount.
     //
-    // The paths that need an answer sooner than the next tick are unaffected:
-    // refetchOnWindowFocus "always" refetches irrespective of staleness, and
-    // `refresh()` below invalidates, which marks the entry stale explicitly.
-    staleTime: POLL_INTERVAL_MS,
+    // The paths that need an answer sooner are unaffected: refetchOnWindowFocus
+    // "always" refetches irrespective of staleness, and `refresh()` and every
+    // push signal invalidate.
+    staleTime: DAEMON_LIST_FALLBACK_POLL_MS,
     placeholderData: [],
   });
 
   const refresh = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+    invalidateDaemonList(queryClient);
   }, [queryClient]);
 
   const daemons = data ?? [];

@@ -80,6 +80,7 @@ nodes:
 		"test-loop-workflow",
 		"test-chat-id",
 		inputsWithDefaults,
+		nil,
 	)
 	t.Logf("workflowContext keys: ")
 	for k := range workflowContext {

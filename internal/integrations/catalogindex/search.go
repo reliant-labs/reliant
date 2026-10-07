@@ -193,14 +193,16 @@ func facets(counts map[string]int) []Facet {
 	return out
 }
 
-func (q Query) pageSize() int {
+func (q Query) pageSize() int { return clampPageSize(q.PageSize) }
+
+func clampPageSize(n int) int {
 	switch {
-	case q.PageSize <= 0:
+	case n <= 0:
 		return DefaultPageSize
-	case q.PageSize > MaxPageSize:
+	case n > MaxPageSize:
 		return MaxPageSize
 	}
-	return q.PageSize
+	return n
 }
 
 // normalized is a parsed query.

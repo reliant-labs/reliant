@@ -27,20 +27,28 @@ managed:
     # resolve to forge's package rather than a rewritten path under gen/.
     - file_option: go_package
       path: forge/v1/forge.proto
+    # buf/validate/validate.proto is protovalidate's option-definition file,
+    # imported by control-plane protos for `(buf.validate.field)` rules. Its own
+    # go_package is the BSR module this repo already links, so generated Go must
+    # import THAT rather than a rewritten copy under gen/controlplane/.
+    - file_option: go_package
+      path: buf/validate/validate.proto
 inputs:
   - directory: proto-vendor/controlplane
 plugins:
   # Go: forge/v1/forge.proto is excluded because it already has a Go home,
   # github.com/reliant-labs/forge/pkg/forgepb, which the generated code imports.
   # A second copy would register forge/v1/forge.proto twice and panic at init.
+  # buf.validate is excluded for the same reason: protovalidate's descriptor is
+  # already registered by the BSR package this module links.
   - remote: buf.build/protocolbuffers/go:v1.36.12
     out: gen/controlplane
-    exclude_types: [forge.v1]
+    exclude_types: [forge.v1, buf.validate]
     opt:
       - paths=source_relative
   - remote: buf.build/connectrpc/go:v1.21.0
     out: gen/controlplane
-    exclude_types: [forge.v1]
+    exclude_types: [forge.v1, buf.validate]
     opt:
       - paths=source_relative
   - remote: buf.build/bufbuild/es:v2.12.0

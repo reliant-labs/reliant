@@ -41,6 +41,7 @@ func withoutMachineTools(access tools.ToolAccess) tools.ToolAccess {
 		Preloaded:   withoutMachineToolNames(access.Preloaded),
 		Loadable:    withoutMachineToolNames(access.Loadable),
 		LoadableAll: access.LoadableAll,
+		Named:       access.Named,
 	}
 	if len(access.Preloaded) > 0 || access.LoadableAll || len(access.Loadable) > 0 {
 		narrowed.Preloaded = withRequestMachine(narrowed.Preloaded)

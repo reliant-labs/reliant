@@ -65,18 +65,23 @@ type UserServiceClient interface {
 	// can be deleted, and what they must resolve first if not. Changes nothing.
 	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
 	// DeleteCurrentUserAccount tombstones the caller's control-plane account:
-	// it cancels the free compute plan, tears down active daemons, and scrubs +
-	// tombstones the user row so the auth bridge refuses every subsequent
-	// request from that identity.
+	// it settles the prepaid wallet (paid credit refunded to the card that paid
+	// for it, promotional credit forfeited), cancels the free compute plan,
+	// tears down active daemons, and scrubs + tombstones the user row so the
+	// auth bridge refuses every subsequent request from that identity.
 	//
 	// The row is NOT removed. Billing records (usage, wallet ledger, invoices)
 	// reference it and are retained as financial records; the tombstone is also
 	// what makes the lockout work, since the auth bridge recreates a MISSING
 	// user row on the deleted user's very next request.
 	//
-	// Refuses with FAILED_PRECONDITION while the caller has a paid subscription
-	// or prepaid credit — nothing is destroyed in that case, and the response
-	// names the blocker so the client can link to the remedy.
+	// Refuses while the caller has a paid subscription — nothing is destroyed
+	// in that case, and the response names the blocker so the client can link
+	// to the remedy. A wallet balance never blocks deletion.
+	//
+	// UNAVAILABLE means a refund's outcome could not be confirmed with Stripe:
+	// nothing else was deleted, and retrying is safe (it replays the same
+	// refund rather than issuing another).
 	DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error)
 }
 
@@ -167,18 +172,23 @@ type UserServiceHandler interface {
 	// can be deleted, and what they must resolve first if not. Changes nothing.
 	PreviewAccountDeletion(context.Context, *connect.Request[v1.PreviewAccountDeletionRequest]) (*connect.Response[v1.PreviewAccountDeletionResponse], error)
 	// DeleteCurrentUserAccount tombstones the caller's control-plane account:
-	// it cancels the free compute plan, tears down active daemons, and scrubs +
-	// tombstones the user row so the auth bridge refuses every subsequent
-	// request from that identity.
+	// it settles the prepaid wallet (paid credit refunded to the card that paid
+	// for it, promotional credit forfeited), cancels the free compute plan,
+	// tears down active daemons, and scrubs + tombstones the user row so the
+	// auth bridge refuses every subsequent request from that identity.
 	//
 	// The row is NOT removed. Billing records (usage, wallet ledger, invoices)
 	// reference it and are retained as financial records; the tombstone is also
 	// what makes the lockout work, since the auth bridge recreates a MISSING
 	// user row on the deleted user's very next request.
 	//
-	// Refuses with FAILED_PRECONDITION while the caller has a paid subscription
-	// or prepaid credit — nothing is destroyed in that case, and the response
-	// names the blocker so the client can link to the remedy.
+	// Refuses while the caller has a paid subscription — nothing is destroyed
+	// in that case, and the response names the blocker so the client can link
+	// to the remedy. A wallet balance never blocks deletion.
+	//
+	// UNAVAILABLE means a refund's outcome could not be confirmed with Stripe:
+	// nothing else was deleted, and retrying is safe (it replays the same
+	// refund rather than issuing another).
 	DeleteCurrentUserAccount(context.Context, *connect.Request[v1.DeleteCurrentUserAccountRequest]) (*connect.Response[v1.DeleteCurrentUserAccountResponse], error)
 }
 

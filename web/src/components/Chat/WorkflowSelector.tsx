@@ -8,6 +8,7 @@ import { useWorkflows } from "../../store/globalDataStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { getWorkflowDisplayName, normalizeWorkflowRef } from "../workflow/useWorkflowInputs";
 import { workflowDisplayName } from "../../lib/workflowDisplayName";
+import { isChatLaunchable } from "../../api/workflow-grpc";
 
 // Workflow refs appear in two formats: bare names from ListWorkflows ("agent")
 // and URIs from starter cards / preferences ("builtin://agent"). Every ref
@@ -84,6 +85,8 @@ export function WorkflowSelector({
     const seen = new Set<string>();
     const unique = workflows.filter(w => {
       if (isWorkflowHidden(w.name)) return false;
+      // A workflow whose Chat trigger is off cannot be started from a chat.
+      if (!isChatLaunchable(w)) return false;
       const normalizedName = w.name.toLowerCase().trim();
       if (seen.has(normalizedName)) {
         return false; // Skip duplicate

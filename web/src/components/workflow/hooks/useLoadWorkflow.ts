@@ -31,7 +31,7 @@ import type { Edge, Node } from "@xyflow/react";
 import type { Workflow } from "../../../types/workflow";
 import { workflowToFlowElements } from "../../../lib/workflow-flow";
 import { workflowGrpc, type ValidationError } from "../../../api/workflow-grpc";
-import type { ValidationStatus } from "../ValidationStatusBadge";
+import type { ValidationStatus } from "../workflowFindings";
 import type { InlineEditContext } from "./useInlineEditStack";
 
 export interface UseLoadWorkflowArgs {

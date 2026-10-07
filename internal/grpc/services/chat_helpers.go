@@ -14,7 +14,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/launch"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 )
 
 // activeWorkflowNameForResume returns the workflow name to (re)start for an
@@ -81,7 +80,7 @@ func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID
 	for key, newValue := range incomingParams {
 		currentValue, exists := currentInputs[key]
 		if !exists {
-			logging.Debug("Param change detected: new param", "key", key, "value", newValue)
+			logging.Debug("Param change detected: new param", "key", key)
 			return true
 		}
 		newJSON, errNew := json.Marshal(newValue)
@@ -92,7 +91,7 @@ func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID
 			return true
 		}
 		if string(newJSON) != string(curJSON) {
-			logging.Debug("Param change detected: value changed", "key", key, "old", string(curJSON), "new", string(newJSON))
+			logging.Debug("Param change detected: value changed", "key", key)
 			return true
 		}
 	}
@@ -288,22 +287,6 @@ func (s *ChatService) trackMessageSent(ctx context.Context, userID string, chat 
 			})
 		}
 	}
-}
-
-// defaultNewWorkflowTemplate returns the starter template for new workflow drafts.
-// Uses the embedded builtin://agent workflow so new workflows start with a working agent pattern.
-// Any changes to internal/workflow/builtin/agent.yaml automatically become the new default.
-// The caller should replace "name: agent" with the desired workflow name.
-func defaultNewWorkflowTemplate() string {
-	data, err := builtin.BuiltinWorkflowsFS.ReadFile("agent.yaml")
-	if err != nil {
-		// Fallback to minimal workflow if embedded file fails (shouldn't happen)
-		logging.Error("Failed to read embedded agent.yaml", "error", err)
-		return `name: agent
-description: ""
-nodes: []`
-	}
-	return string(data)
 }
 
 // extractMessagesFromInput separates user and system messages from the input messages array.

@@ -1,0 +1,19 @@
+-- +goose Up
+--
+-- CONTRACT: drop the chat-blind spawn report slot.
+--
+-- 20261006204431_scope_spawn_report_slot_to_chat added
+-- idx_agent_messages_one_terminal_report_per_chat_spawn (chat_id,
+-- tool_call_id), and the current code arbitrates on it. It kept this index
+-- because the release before it names it in ON CONFLICT (tool_call_id). While
+-- it exists, a chat's report under a tool call id ANOTHER chat already
+-- reported under trips it, and the writer fails with
+-- core.ErrSpawnReportSlotTaken instead of delivering the report.
+--
+-- Run this only once no deployment runs that previous release: its report
+-- writers would fail against a schema without this index. After it, a report
+-- under an id another chat used is delivered to its own parent.
+--
+-- IF EXISTS so a replay is a no-op (TestRenumberWindowDatabaseMigratesOnPlainStartup
+-- re-runs every migration after its window against a migrated schema).
+DROP INDEX IF EXISTS idx_agent_messages_one_terminal_report_per_spawn;

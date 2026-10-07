@@ -8,6 +8,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/sqlc-dev/pqtype"
+
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 )
@@ -173,6 +175,10 @@ func (s *triggerStore) CreateTriggerEvent(ctx context.Context, ev *core.TriggerE
 	if err != nil {
 		return false, fmt.Errorf("marshal trigger event payload: %w", err)
 	}
+	sender, err := triggerSenderToJSON(ev.Sender)
+	if err != nil {
+		return false, fmt.Errorf("marshal trigger event sender: %w", err)
+	}
 
 	affected, err := s.q.CreateTriggerEvent(ctx, pgdb.CreateTriggerEventParams{
 		ID:            ev.ID,
@@ -186,6 +192,7 @@ func (s *triggerStore) CreateTriggerEvent(ctx context.Context, ev *core.TriggerE
 		OutcomeDetail: ev.OutcomeDetail,
 		ChatID:        triggerPtrToNullString(ev.ChatID),
 		CreatedAt:     ev.CreatedAt,
+		Sender:        sender,
 	})
 	if err != nil {
 		return false, fmt.Errorf("failed to create trigger event: %w", err)
@@ -699,6 +706,13 @@ func triggerEventFromPG(row pgdb.TriggerEvent) (*core.TriggerEvent, error) {
 	if err := triggerJSONToMap(row.Payload, &payload); err != nil {
 		return nil, fmt.Errorf("unmarshal trigger event payload (event %s): %w", row.ID, err)
 	}
+	var sender *core.TriggerSender
+	if row.Sender.Valid && len(row.Sender.RawMessage) > 0 {
+		sender = &core.TriggerSender{}
+		if err := json.Unmarshal(row.Sender.RawMessage, sender); err != nil {
+			return nil, fmt.Errorf("unmarshal trigger event sender (event %s): %w", row.ID, err)
+		}
+	}
 
 	return &core.TriggerEvent{
 		ID:            row.ID,
@@ -713,7 +727,20 @@ func triggerEventFromPG(row pgdb.TriggerEvent) (*core.TriggerEvent, error) {
 		ChatID:        triggerNullStringToPtr(row.ChatID),
 		CreatedAt:     row.CreatedAt,
 		RunStatus:     row.RunStatus.String,
+		Sender:        sender,
 	}, nil
+}
+
+// triggerSenderToJSON is the sender column: NULL for no sender.
+func triggerSenderToJSON(sender *core.TriggerSender) (pqtype.NullRawMessage, error) {
+	if sender == nil {
+		return pqtype.NullRawMessage{}, nil
+	}
+	encoded, err := json.Marshal(sender)
+	if err != nil {
+		return pqtype.NullRawMessage{}, err
+	}
+	return pqtype.NullRawMessage{RawMessage: encoded, Valid: true}, nil
 }
 
 func (s *triggerStore) SetLaunchEventRunStatus(ctx context.Context, chatID, status string) error {

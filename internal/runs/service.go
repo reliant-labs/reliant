@@ -405,7 +405,7 @@ func (s *Service) Reconcile(ctx context.Context, workflowID string, dbStatus, te
 			"workflowID", workflowID, "error", err)
 	}
 	// Threads are not a workflows row and need their own cascade call — see
-	// docs/incidents/2026-08-12-spawn-history-cap.md.
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md.
 	if err := s.repo.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, reason); err != nil {
 		logging.Warn("[runs] Failed to cascade reconciled terminal status to threads",
 			"workflowID", workflowID, "error", err)

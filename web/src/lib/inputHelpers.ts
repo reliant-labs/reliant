@@ -95,6 +95,20 @@ export function getInputUI(input: InputDef): string | undefined {
   return getBase(input)?.ui;
 }
 
+/** Get the example (what a value looks like) from an input's base */
+export function getInputExample(input: InputDef): string | undefined {
+  return getBase(input)?.example || undefined;
+}
+
+/**
+ * Whether an input is for the runtime, not for a person or an event to fill:
+ * `ui: hidden` inputs, and preset inputs, which a workflow wires itself.
+ * Forms that map values into inputs leave these out by default.
+ */
+export function isInternalInput(input: InputDef): boolean {
+  return getInputUI(input) === "hidden" || input?.type === "preset";
+}
+
 /** Get the default value, unwrapping proto Value wrappers and bigint→number */
 export function getInputDefault(input: InputDef): unknown {
   const cv = getConfigValue(input);
@@ -266,6 +280,11 @@ export function setInputUI(input: InputDef, ui: string): InputDef {
   return updateBase(input, { ui });
 }
 
+/** Set the example (what a value looks like) on an input */
+export function setInputExample(input: InputDef, example: string): InputDef {
+  return updateBase(input, { example });
+}
+
 /** Set the default value on an input */
 export function setInputDefault(input: InputDef, defaultValue: unknown): InputDef {
   return updateConfigValue(input, { default: defaultValue });
@@ -395,16 +414,18 @@ export function setInputTags(input: InputDef, tags: string[]): InputDef {
 /** Create a new Input with the correct config.case for the given type */
 export function createInput(type: string, init?: Record<string, unknown>): InputDef {
   const configCase = TYPE_TO_CASE[type];
-  const base = init?.description || init?.ui
-    ? { description: init.description ?? "", ui: init.ui ?? "" }
-    : { description: "", ui: "" };
+  const base = {
+    description: (init?.description as string | undefined) ?? "",
+    ui: (init?.ui as string | undefined) ?? "",
+    example: (init?.example as string | undefined) ?? "",
+  };
 
   const configValue: Record<string, unknown> = { base };
 
   // Apply any init values to the config value
   if (init) {
     for (const [key, value] of Object.entries(init)) {
-      if (key === "description" || key === "ui" || key === "type") continue;
+      if (key === "description" || key === "ui" || key === "example" || key === "type") continue;
       configValue[key] = value;
     }
   }
@@ -448,7 +469,7 @@ function updateBase(input: InputDef, updates: Partial<InputBase>): InputDef {
       ...input.config,
       value: {
         ...cv,
-        base: { ...(cv.base as InputBase || { description: "", ui: "" }), ...updates },
+        base: { ...(cv.base as InputBase || { description: "", ui: "", example: "" }), ...updates },
       },
     },
   } as InputDef;
@@ -481,6 +502,7 @@ export function changeInputType(input: InputDef, newType: string): InputDef {
   return createInput(newType, {
     description: desc ?? "",
     ui: ui ?? "",
+    example: getInputExample(input) ?? "",
   });
 }
 
@@ -505,6 +527,9 @@ export function applyInputUpdates(
         break;
       case "ui":
         result = setInputUI(result, value as string);
+        break;
+      case "example":
+        result = setInputExample(result, (value as string | undefined) ?? "");
         break;
       case "default":
         result = setInputDefault(result, value);

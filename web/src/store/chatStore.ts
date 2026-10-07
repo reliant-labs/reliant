@@ -12,7 +12,8 @@ import {
   StreamingState,
   ChatState,
 } from "../gen/reliant/v1/chat_pb";
-import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, ApprovalType } from "../gen/reliant/v1/approval_pb";
+import { parseApprovalParams } from "../api/approval-grpc";
 import type { ToolResultsByCallId } from "../lib/messageProcessor";
 import {
   foldToolResultImages,
@@ -100,6 +101,14 @@ import type { Attachment } from "../api/client";
 import { logger } from "../lib/logger";
 import { singleflight } from "../lib/singleflight";
 import { queryClient } from "../lib/query-client";
+import { notifyManager } from "@tanstack/react-query";
+import { initEventBus } from "../lib/events";
+import {
+  beginPendingSend,
+  endPendingSend,
+  newClientMessageId,
+} from "../lib/pendingSends";
+import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import {
   approvalKeys,
   upsertApprovalInCache,
@@ -166,6 +175,26 @@ function toApprovalStatus(
     default:
       return ApprovalStatus.PENDING;
   }
+}
+
+/**
+ * What a streamed approval carries for the action approval card. Only the
+ * fields the update actually has: a status-only update (approved, denied) is
+ * merged over the cached approval and must not blank the card's content.
+ */
+function toolApprovalFields(update: ToolApprovalUpdate): Partial<ToolApprovalRequest> {
+  const fields: Partial<ToolApprovalRequest> = {};
+  if (update.title) fields.title = update.title;
+  // ApprovalCreate sends the name; Approve/Deny echo the row's enum value.
+  const kind: unknown = update.approval_type;
+  if (kind === "tool" || kind === ApprovalType.TOOL) fields.approval_type = ApprovalType.TOOL;
+  else if (kind === "workflow_step" || kind === ApprovalType.WORKFLOW_STEP) fields.approval_type = ApprovalType.WORKFLOW_STEP;
+  if (update.tool_name) fields.tool_name = update.tool_name;
+  if (update.tool_call_id) fields.tool_call_id = update.tool_call_id;
+  if (update.input) fields.params = parseApprovalParams(update.input);
+  if (update.integration_name) fields.integration_name = update.integration_name;
+  if (update.integration_icon) fields.integration_icon = update.integration_icon;
+  return fields;
 }
 
 // ============================================================================
@@ -1074,15 +1103,17 @@ interface ChatStoreState {
 function buildOptimisticUserMessage(
   content: string,
   attachmentIds: string[] | undefined,
+  identity?: { id: string; sentAt: string },
 ): Message {
   const optimisticAttachments = getAttachmentsFromStore(attachmentIds || []);
+  const sentAt = identity?.sentAt ?? new Date().toISOString();
   return {
-    id: `optimistic-user-${Date.now()}`,
+    id: identity?.id ?? `optimistic-user-${Date.now()}`,
     chatId: "",
     role: MessageRole.USER,
     contentBlocks: [{ id: "", index: 0, type: ContentBlockType.TEXT, content }],
-    createdAt: new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
+    createdAt: sentAt,
+    updatedAt: sentAt,
     streamingState: StreamingState.COMPLETE,
     seq: BigInt(999998),
     thread: "",
@@ -1578,12 +1609,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // DON'T set busy=true optimistically - let WebSocket workflow_execution updates drive busy state
       // This prevents stuck state if backend crashes before creating workflow_execution
 
+      // The id this message keeps wherever it is shown. If the run is
+      // executing, the server queues the message under this id instead of
+      // writing it to the transcript (see lib/pendingSends.ts).
+      const clientMessageId = newClientMessageId();
+      const optimisticId = `optimistic-user-${clientMessageId}`;
+      const sentAt = new Date().toISOString();
       // Append the optimistic user message to the RQ message cache (the single
       // source of truth) BEFORE the request, so the streamed echo of the
       // persisted message always arrives after it and retires it.
       patchMessagesCache(chatId, (msgs) => [
         ...msgs,
-        buildOptimisticUserMessage(content, attachmentIds),
+        buildOptimisticUserMessage(content, attachmentIds, {
+          id: optimisticId,
+          sentAt,
+        }),
       ]);
       // Bump the chat timestamp when a message is sent, in the React Query
       // DETAIL cache only (projectId omitted → list untouched). The sidebar
@@ -1616,16 +1656,48 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             selected_presets: options.selectedPresets,
           }),
         ...(isDiscuss && { discuss: true }),
+        client_message_id: clientMessageId,
       };
 
-      const response = await api.chatsV2.sendMessage(
-        chatId,
-        content,
-        attachmentIds,
-        Object.keys(sendOptions).length > 0 ? sendOptions : undefined,
-      );
+      let response: Awaited<ReturnType<typeof api.chatsV2.sendMessage>>;
+      beginPendingSend(clientMessageId);
+      try {
+        response = await api.chatsV2.sendMessage(
+          chatId,
+          content,
+          attachmentIds,
+          sendOptions,
+        );
+      } finally {
+        endPendingSend(clientMessageId);
+      }
 
-      logger.log("Message sent successfully:", response);
+      // Queued, not saved: the run was executing, so the message waits in the
+      // thread's mailbox for its next turn and is shown in the pending-queue
+      // strip, not the transcript. Drop the optimistic entry and hand the row
+      // to the strip in ONE batch, so no render shows it twice or not at all.
+      if (response.queued) {
+        const thread =
+          options?.targetThread || getChatFromCache(chatId)?.workflowId || "";
+        notifyManager.batch(() => {
+          patchMessagesCache(chatId, (msgs) =>
+            msgs.filter((m) => m.id !== optimisticId),
+          );
+          initEventBus().emit("agentMailbox:queued", {
+            chatId,
+            thread,
+            message: {
+              id: response.messageId,
+              body: content,
+              created_at: sentAt,
+              sender_kind: QUEUED_SENDER_KIND_HUMAN,
+              attachments: attachmentIds ?? [],
+            },
+          });
+        });
+      }
+
+      logger.debug("Message sent successfully", { chatId: chatId.slice(0, 8) });
 
       const existingMessages = getMessagesFromCache(chatId);
       const isFirstInChat = existingMessages.filter(
@@ -3117,6 +3189,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             created_at: approvalUpdate.created_at,
             responded_at: approvalUpdate.responded_at,
             action_taken: approvalUpdate.action_taken, // Which action was clicked
+            ...toolApprovalFields(approvalUpdate),
           };
           upsertApprovalInCache(chatId, approval);
         });

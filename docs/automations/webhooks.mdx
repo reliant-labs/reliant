@@ -1,0 +1,73 @@
+---
+title: "Webhooks"
+description: "Start a run when something POSTs to a URL Reliant gives the automation"
+---
+
+A webhook automation gets its own URL. Anything that can send an HTTP POST (your CI, a monitoring tool, Zapier, a script) can start a run by calling it.
+
+```yaml
+triggers:
+  - name: deploy-finished
+    webhook: {}
+    filter: "trigger.payload.body.status == 'failed'"
+```
+
+## Calling it
+
+When you activate the trigger, the app shows its **Webhook URL** and a token, once. Three ways in; any one is enough:
+
+1. **Token in the path:** `POST <your Reliant URL>/hooks/<trigger id>/<token>`. This is for senders that cannot set headers, such as Zapier. Treat the whole URL like the token.
+2. **Bearer token:** `POST <your Reliant URL>/hooks/<trigger id>` with `Authorization: Bearer <token>`.
+3. **Signed body:** if you configure HMAC, a delivery with a valid signature is accepted.
+
+```yaml
+triggers:
+  - name: signed
+    webhook:
+      hmac:
+        header: X-Hub-Signature-256
+        algorithm: sha256
+        prefix: "sha256="
+        encoding: hex
+```
+
+The signature is an HMAC of the raw body under a shared secret you set when activating, so the definition can be shared without it. `header` defaults to `X-Signature-256`, `algorithm` to `sha256` (`sha1` and `sha512` also work), `encoding` to `hex` (or `base64`). Configuring HMAC adds a way in; the token still works.
+
+The token is stored hashed and shown once. If it leaks, **rotate** it from the automation's page: the old token stops working immediately.
+
+## What the run sees
+
+`trigger.payload` has four fields: `body` (the parsed JSON, or the raw text if it is not JSON), `headers`, `query` and `content_type`. Headers and query entries that carry secrets are removed. Payloads are untrusted data from an outside sender, so guard optional fields with `has()` in filters.
+
+## Responses, retries and duplicates
+
+| Response | Meaning |
+|----------|---------|
+| `202` | Accepted. The run starts asynchronously |
+| `404` | Unknown trigger, wrong token or bad signature (all the same answer, so ids are not revealed) |
+| `409` | The trigger is disabled |
+| `413` | Body larger than 1 MiB |
+| `503` | The delivery could not be recorded; retry |
+
+Deliveries are de-duplicated so a sender's retry does not start a second run. The key is the first of `Idempotency-Key`, `X-Idempotency-Key`, `X-Request-Id` or `X-Delivery-Id` that you send. With none, an identical body within the same minute counts as a retry.
+
+## Testing
+
+Send a request with `curl`, then read the result in the automation's history, which records each delivery and what it did:
+
+```bash
+curl -X POST "$URL/hooks/$TRIGGER_ID" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Idempotency-Key: test-1" \
+  -H "Content-Type: application/json" \
+  -d '{"status": "failed"}'
+```
+
+<Frame caption="A webhook delivery that started a run. Example data.">
+  <img src="/images/v2/p2-automation-webhook-fired.png" alt="An automation history entry for a webhook delivery that launched a run" />
+</Frame>
+
+## Related topics
+
+- [Automations overview](/automations/overview)
+- [HTTP integration](/integrations/http), for calling out rather than in

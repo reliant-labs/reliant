@@ -116,6 +116,10 @@ func validateTriggers(wf *reliantv1.Workflow, opts *ValidationOptions, integrati
 		}
 		validateTriggerInputs(wt.GetInputs(), declaredInputs, path, result)
 		warnUnmappedRequiredInputs(wt.GetInputs(), declaredInputs, path, result)
+		if err := triggerspec.CompilePrompt(wt.GetPrompt()); err != nil {
+			result.AddErrorWithSuggestion(CategoryTrigger, path, "prompt", strings.TrimPrefix(err.Error(), "prompt: "),
+				"a prompt reads only `trigger` (e.g. Triage #{{ trigger.payload.data.issue.number }}); the run's inputs and nodes do not exist yet")
+		}
 	}
 }
 

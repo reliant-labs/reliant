@@ -39,6 +39,21 @@ import (
 type OpenaiClient struct {
 	Options llm.DriverOptions
 	Client  openai.Client
+
+	// MintToolCallIDs gives every tool call an id of ours (llm.NewToolCallID)
+	// instead of the one the server returned. Set by drivers that relay
+	// another host's ids through this client (OpenRouter): those ids can be
+	// missing or repeat across responses. OpenAI's own ids are unique, and
+	// left as sent.
+	MintToolCallIDs bool
+}
+
+// toolCallID is the id a tool call the server returned as providerID gets.
+func (o *OpenaiClient) toolCallID(providerID string) string {
+	if o.MintToolCallIDs || providerID == "" {
+		return llm.NewToolCallID()
+	}
+	return providerID
 }
 
 // Name returns the name of the driver
@@ -344,11 +359,6 @@ func (o *OpenaiClient) SendMessages(ctx context.Context, prompts []string, messa
 	}
 
 	params := o.preparedParams(o.ConvertMessages(prompts, messages), o.ConvertTools(tools))
-	// Debug logging temporarily disabled due to config migration
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
-	}
 	attempts := 0
 	for {
 		attempts++
@@ -409,12 +419,6 @@ func (o *OpenaiClient) StreamResponse(ctx context.Context, prompts []string, mes
 	params := o.preparedParams(o.ConvertMessages(prompts, messages), o.ConvertTools(tools))
 	params.StreamOptions = openai.ChatCompletionStreamOptionsParam{
 		IncludeUsage: openai.Bool(true),
-	}
-
-	// Debug logging temporarily disabled due to config migration
-	if false { // Debug disabled
-		jsonData, _ := json.Marshal(params)
-		logging.Debug("Prepared messages", "messages", string(jsonData))
 	}
 
 	attempts := 0
@@ -565,17 +569,19 @@ func (o *OpenaiClient) toolCalls(completion openai.ChatCompletion) []message.Too
 	var toolCalls []message.ToolCall
 
 	if len(completion.Choices) > 0 && len(completion.Choices[0].Message.ToolCalls) > 0 {
+		// This Chat Completions path also serves OpenRouter's upstreams, whose
+		// ids get minted (see MintToolCallIDs). Deltas were accumulated by
+		// index, so nothing here needs the server's id.
 		for _, call := range completion.Choices[0].Message.ToolCalls {
-			// Skip empty or invalid tool calls
-			if call.ID == "" || call.Function.Name == "" {
-				logging.Warn("Skipping empty/invalid tool call",
-					"id", call.ID,
-					"name", call.Function.Name)
+			// Skip tool calls that name no tool
+			if call.Function.Name == "" {
+				logging.Warn("Skipping tool call with no tool name",
+					"id", call.ID)
 				continue
 			}
 
 			toolCall := message.ToolCall{
-				ID:       call.ID,
+				ID:       o.toolCallID(call.ID),
 				Name:     call.Function.Name,
 				Input:    call.Function.Arguments,
 				Type:     "function",
@@ -882,7 +888,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 	for _, out := range resp.Output {
 		if fc := out.AsFunctionCall(); fc.Type == "function_call" && fc.CallID != "" {
 			toolCalls = append(toolCalls, message.ToolCall{
-				ID:       fc.CallID,
+				ID:       o.toolCallID(fc.CallID),
 				Name:     fc.Name,
 				Input:    fc.Arguments,
 				Type:     "function",
@@ -1049,8 +1055,13 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 						toolCallsByID[itemID] = tc
 					}
 					// Ensure the ID we expose to our system matches the tool_call_id used for tool outputs.
-					// That must be call_id.
-					tc.ID = fc.CallID
+					// That must be call_id -- or ours, when this client mints
+					// (the input we send back pairs function_call and
+					// function_call_output by whichever id the transcript has;
+					// no previous_response_id or stored reasoning item refers
+					// to the server's). The item id above only keyed the
+					// argument deltas of this stream.
+					tc.ID = o.toolCallID(fc.CallID)
 					tc.Name = fc.Name
 					if tc.Input == "" {
 						tc.Input = fc.Arguments

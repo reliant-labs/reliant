@@ -60,7 +60,7 @@ func TestBuildWorkflowInputs_EmptyToolsOverridesPreset(t *testing.T) {
 	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
-		projectPath,
+		launch.Checkout{Path: projectPath},
 		"",
 		"builtin://agent",
 		map[string]string{"default": "general"},
@@ -96,7 +96,7 @@ func TestBuildWorkflowInputs_EmptySpawnPresetsOverridesPreset(t *testing.T) {
 	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
-		projectPath,
+		launch.Checkout{Path: projectPath},
 		"",
 		"builtin://agent",
 		map[string]string{"default": "general"},
@@ -123,7 +123,7 @@ func TestBuildWorkflowInputs_NonEmptyToolsStillOverridePreset(t *testing.T) {
 	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
-		projectPath,
+		launch.Checkout{Path: projectPath},
 		"",
 		"builtin://agent",
 		map[string]string{"default": "general"},
@@ -144,7 +144,7 @@ func TestBuildWorkflowInputs_WorkflowBuilderPresetUsesProviderNeutralFlagshipMod
 	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
-		projectPath,
+		launch.Checkout{Path: projectPath},
 		"",
 		"builtin://agent",
 		map[string]string{"": "workflow_builder"},
@@ -379,7 +379,7 @@ func TestBuildWorkflowInputs_LoadsUserPresetToolsFromDatabase(t *testing.T) {
 	initialInputs := service.launcher().BuildWorkflowInputs(
 		ctx,
 		userID,
-		projectPath,
+		launch.Checkout{Path: projectPath},
 		projectID,
 		"builtin://agent",
 		map[string]string{"default": "general-mcp-copy"},
@@ -481,7 +481,7 @@ func TestBuildWorkflowInputs_EmptyNestedListsOverridePresetGroupValues(t *testin
 	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-1",
-		projectPath,
+		launch.Checkout{Path: projectPath},
 		"",
 		"builtin://agent",
 		map[string]string{"default": "general"},
@@ -598,7 +598,7 @@ func TestBuildWorkflowInputs_NormalizesBuiltinNestedLegacyModelSelector(t *testi
 	initialInputs := service.launcher().BuildWorkflowInputs(
 		context.Background(),
 		"user-builtin-model-normalize",
-		projectPath,
+		launch.Checkout{Path: projectPath},
 		"",
 		"builtin://agent",
 		map[string]string{"default": "general"},
@@ -609,4 +609,31 @@ func TestBuildWorkflowInputs_NormalizesBuiltinNestedLegacyModelSelector(t *testi
 	require.True(t, ok)
 	require.Equal(t, "gpt-5.4-mini", modelValue["id"])
 	require.Equal(t, []interface{}{"codex"}, modelValue["providers"])
+}
+
+// The chat's checkout reaches the runtime as engine-injected inputs: project_path
+// is workflow.path; worktree_path and worktree_branch are workflow.worktree_path
+// and workflow.branch, set only for a chat in a reliant-created worktree. A
+// client cannot supply any of them.
+func TestBuildWorkflowInputs_InjectsTheChatCheckout(t *testing.T) {
+	service := &ChatService{}
+	projectPath := t.TempDir()
+	spoof := map[string]*structpb.Value{
+		"project_path":    structpb.NewStringValue("/"),
+		"worktree_path":   structpb.NewStringValue("/"),
+		"worktree_branch": structpb.NewStringValue("evil"),
+	}
+
+	inWorktree := service.launcher().BuildWorkflowInputs(context.Background(), "user-1",
+		launch.Checkout{Path: projectPath, WorktreePath: projectPath, Branch: "feature/x"},
+		"", "builtin://agent", nil, spoof)
+	require.Equal(t, projectPath, inWorktree["project_path"])
+	require.Equal(t, projectPath, inWorktree["worktree_path"])
+	require.Equal(t, "feature/x", inWorktree["worktree_branch"])
+
+	mainCheckout := service.launcher().BuildWorkflowInputs(context.Background(), "user-1",
+		launch.Checkout{Path: projectPath}, "", "builtin://agent", nil, spoof)
+	require.Equal(t, projectPath, mainCheckout["project_path"])
+	require.NotContains(t, mainCheckout, "worktree_path")
+	require.NotContains(t, mainCheckout, "worktree_branch")
 }

@@ -450,7 +450,7 @@ func TestResponseSizeLimit(t *testing.T) {
 	r := newRunner()
 	r.client.Transport.(*http.Transport).TLSClientConfig = srv.Client().Transport.(*http.Transport).TLSClientConfig
 	res, err := r.Run(context.Background(), m, a, nil)
-	if err == nil && !(res.IsError && strings.Contains(res.Content, "exceeds")) {
+	if err == nil && (!res.IsError || !strings.Contains(res.Content, "exceeds")) {
 		t.Fatalf("oversized response must be an error: %+v", res)
 	}
 }

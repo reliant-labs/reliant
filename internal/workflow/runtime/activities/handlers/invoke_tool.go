@@ -52,11 +52,11 @@ func NewInvokeToolActivity(repo db.Repository, toolExecutor toolexec.ToolExecuto
 func (a *InvokeToolActivity) Name() string { return "InvokeTool" }
 
 // DisplayName returns the human-readable name for UI.
-func (a *InvokeToolActivity) DisplayName() string { return "Invoke Tool" }
+func (a *InvokeToolActivity) DisplayName() string { return "Run Tool" }
 
 // Description returns what the activity does.
 func (a *InvokeToolActivity) Description() string {
-	return "Invoke a single tool directly from the graph"
+	return "Run one tool you pick, with parameters you set; no LLM involved"
 }
 
 // Category returns the activity category for UI grouping.
@@ -119,7 +119,7 @@ func (a *InvokeToolActivity) Execute(ctx context.Context, input ActivityInput) (
 		Data:          structuredToolData(result.Metadata),
 	}
 
-	activity.GetLogger(ctx).Info("[InvokeTool] Completed",
+	activity.GetLogger(ctx).Debug("[InvokeTool] Completed",
 		"stepID", rtx.StepID,
 		"tool", toolName,
 		"isError", result.IsError,

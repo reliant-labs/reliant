@@ -8,6 +8,7 @@
  */
 
 import { create } from "zustand";
+import { notifyManager } from "@tanstack/react-query";
 // Phase 12: Use gRPC streaming service instead of WebSocket
 import { UserStreamingService } from "../api/streaming-grpc";
 import type { UserUpdate, ChatUpdate, ConnectionStatus, ContextUsageInfo, MessagePaginationInfo } from "../types/streaming";
@@ -27,7 +28,7 @@ import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
-import { DAEMON_LIST_QUERY_KEY } from "../hooks/useDaemonStatus";
+import { invalidateDaemonList } from "../hooks/useDaemonStatus";
 import { useGlobalDataStore } from "./globalDataStore";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat } from "../hooks/chat-queries";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
@@ -64,6 +65,41 @@ function publishDrainedMailboxRows(chatId: string, updates: ChatUpdate[]): void 
       messageIds: update.message_ids,
     });
   }
+}
+
+/**
+ * How long a daemon may go without a heartbeat before the daemon list is
+ * re-read on that account.
+ *
+ * Every attach, detach and lifecycle change is announced on the user stream,
+ * except one: a gateway that dies outright never runs its disconnect path, so
+ * its daemons just stop heartbeating. The registry keeps reporting such a
+ * daemon as attached until its lease is 90s stale (daemonAttachmentStaleThreshold
+ * on the server), then quietly reports it offline — with no event. Waiting out
+ * that window plus a margin, then reading once, catches the flip when it
+ * happens, which is what the old 5s poll found and the 60s fallback poll alone
+ * would find up to a minute late.
+ */
+const DAEMON_HEARTBEAT_SILENCE_MS = 95_000;
+const heartbeatSilenceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+/** (Re)arm the silence watchdog for one daemon. Exported for tests. */
+export function noteDaemonHeartbeat(daemonId: string): void {
+  const existing = heartbeatSilenceTimers.get(daemonId);
+  if (existing) clearTimeout(existing);
+  heartbeatSilenceTimers.set(
+    daemonId,
+    setTimeout(() => {
+      heartbeatSilenceTimers.delete(daemonId);
+      invalidateDaemonList(queryClient);
+    }, DAEMON_HEARTBEAT_SILENCE_MS),
+  );
+}
+
+/** Drop every pending silence watchdog. Exported for tests. */
+export function resetDaemonHeartbeatWatchdogs(): void {
+  for (const timer of heartbeatSilenceTimers.values()) clearTimeout(timer);
+  heartbeatSilenceTimers.clear();
 }
 
 // Timestamp when the app started - only notify for events after this
@@ -394,6 +430,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
             set({ daemonLastSeen: ts });
             setDaemonLastSeen(ts);
           }
+          if (data?.daemon_id) {
+            noteDaemonHeartbeat(data.daemon_id as string);
+          }
           // detected_ports is present (possibly empty) on real heartbeats and
           // absent on synthetic connection events — only update when carried,
           // so a reconnect blip doesn't clear a still-valid port set.
@@ -438,6 +477,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
         logger.warn(`${LOG_PREFIX} Failed to refresh chats on reconnect`, { error: err });
       });
       try { queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
+      // Daemon-list announcements are ephemeral, so any sent while the stream
+      // was down are gone; read the list once instead.
+      invalidateDaemonList(queryClient);
     }
   },
 
@@ -460,15 +502,18 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       return;
     }
 
-    // Route incremental chat updates (merge semantics)
-    useChatStore.getState().processChatStreamUpdates(chatId, updates);
-
-    // Then announce the mailbox rows this batch drained. AFTER the messages
-    // are committed, and in the same synchronous task: the two land in one
-    // React commit, so the strip never renders empty against a transcript
-    // that has not shown the message yet. The reverse order would open
-    // exactly that gap.
-    publishDrainedMailboxRows(chatId, updates);
+    // Route incremental chat updates (merge semantics), then announce the
+    // mailbox rows this batch drained. AFTER the messages are committed, and
+    // in one React Query batch: both cache writes reach their observers in
+    // the same flush, so the strip never renders empty against a transcript
+    // that has not shown the message yet, nor shows it alongside the
+    // transcript. Outside a batch each write schedules its own notification
+    // and a render can land between them. The reverse order would open the
+    // empty gap outright.
+    notifyManager.batch(() => {
+      useChatStore.getState().processChatStreamUpdates(chatId, updates);
+      publishDrainedMailboxRows(chatId, updates);
+    });
   },
 
   handleChatSnapshot: (updates) => {
@@ -478,14 +523,15 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       return;
     }
 
-    // Route snapshot updates (replace semantics — prevents cross-chat message leaking)
-    useChatStore.getState().processChatStreamUpdates(chatId, updates, true);
-
-    // A reconnect replays the drain announcements alongside the messages they
-    // describe. Publishing them here too means a client that was offline
-    // through a drain still retires those rows on the way back, instead of
-    // showing them until the next poll.
-    publishDrainedMailboxRows(chatId, updates);
+    // Route snapshot updates (replace semantics — prevents cross-chat message
+    // leaking). A reconnect replays the drain announcements alongside the
+    // messages they describe; publishing them here too means a client that
+    // was offline through a drain still retires those rows on the way back,
+    // instead of showing them until the next poll. One batch, as above.
+    notifyManager.batch(() => {
+      useChatStore.getState().processChatStreamUpdates(chatId, updates, true);
+      publishDrainedMailboxRows(chatId, updates);
+    });
   },
 
 
@@ -1215,10 +1261,16 @@ function handleNotification(update: UserUpdate) {
  */
 function handleRefetch(update: UserUpdate) {
   const rawType = update.data?.type as string | undefined;
+  if (rawType === "daemons") {
+    // A daemon attached, detached or changed lifecycle phase. This is what
+    // keeps the daemon list fresh; there is no fast poll behind it.
+    invalidateDaemonList(queryClient);
+    return;
+  }
   if (rawType === "daemon_local_models") {
     // A daemon's local model inventory changed: the Local models section
     // reads it from the daemon list, and the picker lists the models.
-    void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
+    invalidateDaemonList(queryClient);
     void useGlobalDataStore.getState().refetchModels();
     return;
   }

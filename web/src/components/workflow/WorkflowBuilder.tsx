@@ -13,7 +13,7 @@ import {
 import type { Connection, Edge, Node } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import "./workflow-theme.css";
-import { nodeTypes } from "./nodes";
+import { nodeTypes as baseNodeTypes } from "./nodes";
 import { edgeTypes } from "./edges";
 import { ConfigPanel } from "./config";
 import { EdgeConfigPanel } from "./EdgeConfigPanel";
@@ -73,18 +73,21 @@ import {
   PencilRuler,
 } from "lucide-react";
 import { Tooltip } from "../ui/Tooltip";
-import { DraftStatusBadge } from "./DraftStatusBadge";
-import {
-  markCompleteBlockers,
-  splitFindings,
-  type DraftStatus,
-} from "./workflowDraftStatus";
+import { splitFindings, type DraftStatus } from "./workflowDraftStatus";
 import { WorkflowInfoPopover } from "./WorkflowInfoPopover";
-// Auto-save removed - using explicit save only
+import { WorkflowStatusChip } from "./WorkflowStatusChip";
 import {
-  ValidationStatusBadge,
+  findingsByNode,
+  locateFindings,
+  publishBlockers,
+  summarizeWorkflowStatus,
+  type LocatedFinding,
   type ValidationStatus,
-} from "./ValidationStatusBadge";
+} from "./workflowFindings";
+import { WorkflowFindingsProvider, type FindingFocus } from "./WorkflowFindingsContext";
+import { useLiveValidation } from "./hooks/useLiveValidation";
+import { withFindingMarkers, withProblemMarkers } from "./nodes/problemMarkers";
+import { workflowDisplayName } from "../../lib/workflowDisplayName";
 import { YamlEditorModal } from "./YamlEditorModal";
 import type { ValidationError } from "../../api/workflow-grpc";
 import { Modal } from "../ui/Modal";
@@ -106,18 +109,19 @@ import {
 } from "./CELCompletionContext";
 import { WorkflowMutationProvider } from "./WorkflowMutationContext";
 import { WorkflowNodeCallbacksProvider } from "./WorkflowNodeCallbacksContext";
-import { StepPalette } from "./palette/StepPalette";
+import { StepPalette, type PaletteFocus } from "./palette/StepPalette";
+import { toolCallsDefaultForEdge } from "./executeToolsDefaults";
+import { CanvasInsertProvider, useCanvasInsertion } from "./canvas/CanvasInsertContext";
+import { NodeOutputAddButtons } from "./canvas/NodeOutputAddButtons";
+import { SelectionActions } from "./canvas/SelectionActions";
+import { buildFlowEdge, readableStepId, withNodeAriaLabels } from "./canvas/insertPlacement";
+import { getNodeDisplayName } from "../../lib/node-metadata";
 import { DeclaredTriggerPanel } from "./config/DeclaredTriggerPanel";
 import { ActivateTriggerDialog } from "../Automations/ActivateTriggerDialog";
 import { useTriggers } from "../../hooks/trigger-queries";
 import { declaredRailLines } from "../../lib/triggerRail";
-import {
-  defaultSource,
-  findingsForTrigger,
-  newDeclaredTrigger,
-  uniqueTriggerName,
-  type DeclaredTrigger,
-} from "../../lib/declaredTriggers";
+import { findingsForTrigger, type DeclaredTrigger } from "../../lib/declaredTriggers";
+import { useAddTrigger } from "./hooks/useAddTrigger";
 import { ConnectIntegrationDialog, type ConnectIntegrationTarget } from "./connections/ConnectIntegrationDialog";
 import {
   catalogSearchGrpc,
@@ -135,6 +139,9 @@ import {
   withActionParam,
 } from "../../lib/actionNodeArgs";
 import { actionParamDefaults } from "../../lib/jsonSchemaFields";
+
+// Every node type, able to show its validation problems on the canvas.
+const nodeTypes = withProblemMarkers(baseNodeTypes);
 
 /** Result of a save operation */
 export interface SaveResult {
@@ -161,9 +168,10 @@ interface WorkflowBuilderProps {
    * or null when nothing was saved. A save that fails must not start a run.
    */
   onSaveForTestRun?: (workflow: Workflow) => Promise<string | null>;
-  /** Saves the canvas. `intent` overrides the stored status (e.g. "draft"
-   * to take a complete workflow back to work in progress). */
-  onSave?: (workflow: Workflow, intent?: DraftStatus) => void | Promise<void | SaveResult>;
+  /** Saves the canvas. `intent` overrides the stored status ("complete" to
+   * publish it in the same step, "draft" to unpublish it). `asCopy` stores it
+   * as a NEW workflow instead of updating this one (Duplicate). */
+  onSave?: (workflow: Workflow, intent?: DraftStatus, opts?: { asCopy?: boolean }) => void | Promise<void | SaveResult>;
   /** Lifecycle of the stored workflow; builtin/project are "complete". */
   draftStatus?: DraftStatus;
   /** Marks the stored workflow complete (validated server-side) or moves it to draft. */
@@ -176,8 +184,6 @@ interface WorkflowBuilderProps {
   onBack?: () => void;
   /** Whether this workflow is a builtin template (cannot be saved directly) */
   isBuiltin?: boolean;
-  /** Whether this is a new workflow (to clear stale chat state) */
-  isNewWorkflow?: boolean;
   /** Workflow source type - determines if editable */
   source?: "builtin" | "user" | "project";
   /** Current version number for OCC (0 for new/builtin workflows) */
@@ -207,12 +213,6 @@ interface WorkflowBuilderProps {
    * per workflow load via a ref guard.
    */
   drillIntoNodeId?: string;
-  /**
-   * Navigate to a different workflow by name. Used after "Create a Copy"
-   * succeeds so the user lands in the new copy instead of staring at the
-   * source (now stale) URL.
-   */
-  onNavigateToWorkflow?: (workflowName: string) => void;
 }
 
 function WorkflowBuilderInner({
@@ -225,7 +225,6 @@ function WorkflowBuilderInner({
   initialName,
   onBack,
   isBuiltin = false,
-  isNewWorkflow = false,
   source = "user",
   version,
   createdAt,
@@ -238,7 +237,6 @@ function WorkflowBuilderInner({
   yamlDefinition,
   onYamlDefinitionChange,
   drillIntoNodeId,
-  onNavigateToWorkflow,
 }: WorkflowBuilderProps) {
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [nodes, setNodes, onNodesChange] = useNodesState<Node>([]);
@@ -279,6 +277,8 @@ function WorkflowBuilderInner({
   const [paletteOpen, setPaletteOpen] = useState(false);
   // "+ Add trigger" opens the same palette on its Triggers kind.
   const [paletteKind, setPaletteKind] = useState<"action" | "trigger">("action");
+  // Where the palette opens: set by the sidebar's integration shortcuts.
+  const [paletteFocus, setPaletteFocus] = useState<PaletteFocus | undefined>(undefined);
   // The declared trigger whose editor is open (by index), and the one being
   // activated. A catalog ref remembered per trigger name gives the editor the
   // payload schema and event list of the type it was added from.
@@ -338,7 +338,10 @@ function WorkflowBuilderInner({
   // indistinguishable from user edits — now they aren't.
   const [hasModifications, setHasModifications] = useState(false);
 
-  // Validation state - tracks backend validation results
+  const [isSaving, setIsSaving] = useState(false);
+
+  // Validation state: findings for the canvas as shown — from the load, the
+  // last save, or (while there are unsaved edits) live validation.
   const [validationStatus, setValidationStatus] =
     useState<ValidationStatus>("unknown");
   const [validationErrors, setValidationErrors] = useState<ValidationError[]>(
@@ -614,7 +617,7 @@ function WorkflowBuilderInner({
 
     // Re-center the viewport after ReactFlow applies new positions
     setTimeout(() => fitViewWithPanels(true), 0);
-    toast.success("Nodes organized");
+    toast.success("Steps organized");
   }, [
     isBuiltinWorkflow,
     nodes,
@@ -656,33 +659,26 @@ function WorkflowBuilderInner({
     onBack?.();
   }, [onBack]);
 
-  const deselectNodeAndStartPanel = useCallback((nodeId: string | null) => {
-    setSelectedNodeId(nodeId);
-    if (nodeId === null) {
-      setShowStartPanel(false);
-      setSelectedDeclared(null);
-    }
+  const closeSidePanels = useCallback(() => {
+    setSelectedNodeId(null);
+    setSelectedEdgeId(null);
+    setShowSettingsEditor(false);
+    setShowStartPanel(false);
+    setSelectedDeclared(null);
   }, []);
+  const closeTestRunPanel = useCallback(() => setShowTestRunPanel(false), []);
 
-  // Keyboard shortcuts (Ctrl/Cmd+Z undo, +Shift+Z / +Y redo, and Escape
-  // deselect/exit-inline/back) — see ./hooks/useWorkflowKeyboardShortcuts.
+  // Keyboard shortcuts: Ctrl/Cmd+Z undo, +Shift+Z / +Y redo, and Escape,
+  // which closes the innermost open thing and NEVER leaves the builder —
+  // see ./hooks/useWorkflowKeyboardShortcuts.
   useWorkflowKeyboardShortcuts({
     onUndo: handleUndo,
     onRedo: handleRedo,
-    onEscape: handleBackClick,
-    isEditingLoop,
-    exitLoopEdit,
-    isBuiltinWorkflow,
-    // The start panel counts as a selection, so Escape closes it before it
-    // falls back to leaving the builder.
-    hasSelectedNode: !!selectedNodeId || showStartPanel || selectedDeclared !== null,
-    hasSelectedEdge: !!selectedEdgeId,
-    showSettingsEditor,
-    setSelectedNodeId: deselectNodeAndStartPanel,
-    setSelectedEdgeId,
-    setShowSettingsEditor,
-    showTemplateModal,
-    showExitConfirmModal,
+    hasOpenPanel:
+      !!selectedNodeId || !!selectedEdgeId || showSettingsEditor || showStartPanel || selectedDeclared !== null,
+    closePanels: closeSidePanels,
+    hasTestRunPanel: showTestRunPanel,
+    closeTestRunPanel,
   });
 
   // Recompute sibling layout info when the edge topology changes. Keying on
@@ -760,33 +756,24 @@ function WorkflowBuilderInner({
       takeSnapshot(nodes, edges);
       setHasModifications(true);
 
-      const newEdgeId = `edge-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
-
-      // Determine sourceEvent for edge data
-      // For event nodes (like workflow start), preserve the eventType
-      // This is needed for buildWorkflow to correctly convert edges back to workflow format
-      const sourceNodeData = sourceNode.data as { eventType?: string };
-      const sourceEvent =
-        isEntryFlowNodeType(sourceNode.type) && sourceNodeData.eventType
-          ? sourceNodeData.eventType
-          : undefined;
-
-      const newEdge: Edge = {
-        id: newEdgeId,
-        source: sourceId,
-        target: targetId,
-        sourceHandle: sourceHandle || undefined,
-        type: "custom",
-        data: {
-          sourceEvent,
-        },
-      };
+      // The start node's event rides on the edge as sourceEvent, which is how
+      // buildWorkflow converts it back (shared with canvas inserts).
+      const newEdge = buildFlowEdge(sourceNode, targetId, sourceHandle);
 
       setEdges((eds) => [...eds, newEdge]);
 
+      // Wiring Run LLM Tool Calls after a Call LLM fills in which calls it
+      // runs — the one value that step nearly always takes.
+      const prefilled = toolCallsDefaultForEdge(sourceId, targetId, nodes, edges);
+      if (prefilled) {
+        setNodes((nds) =>
+          nds.map((node) => (node.id === targetId ? { ...node, data: { ...node.data, step: prefilled } } : node)),
+        );
+      }
+
       return newEdge;
     },
-    [nodes, edges, setEdges, takeSnapshot],
+    [nodes, edges, setEdges, setNodes, takeSnapshot],
   );
 
   const onConnect = useCallback(
@@ -817,20 +804,51 @@ function WorkflowBuilderInner({
     setSelectedNodeId(node.id);
   }, []);
 
-  // Navigate to a node by ID (used by validation error clicks)
-  const navigateToNode = useCallback(
+  // "Take me to this problem": select its step, open its panel, and ask the
+  // field it is about to scroll into view and take focus. A trigger's
+  // problem opens that trigger's editor.
+  const [findingFocus, setFindingFocus] = useState<FindingFocus | null>(null);
+  // A step as the problems list names it: "Call LLM · summarize".
+  const describeNode = useCallback(
     (nodeId: string) => {
-      if (nodes.some((n) => n.id === nodeId)) {
+      const step = (nodes.find((n) => n.id === nodeId)?.data as FlowNodeData | undefined)?.step as Step | undefined;
+      if (!step?.type) return nodeId;
+      if (isIntegrationActionStep(step)) return `${getActionUses(step) || "Action"} · ${nodeId}`;
+      return `${getNodeDisplayName(step.type)} · ${nodeId}`;
+    },
+    [nodes],
+  );
+  const canSelectFinding = useCallback(
+    (finding: LocatedFinding) =>
+      finding.nodeId !== undefined
+        ? nodes.some((n) => n.id === finding.nodeId)
+        : finding.triggerIndex !== undefined && !isEditingLoop,
+    [nodes, isEditingLoop],
+  );
+  const selectFinding = useCallback(
+    (finding: LocatedFinding) => {
+      if (finding.nodeId && nodes.some((n) => n.id === finding.nodeId)) {
         setShowSettingsEditor(false);
-        setSelectedNodeId(nodeId);
+        setSelectedDeclared(null);
         setSelectedEdgeId(null);
+        setSelectedNodeId(finding.nodeId);
         setChatPanelOpen(false);
+        setFindingFocus((prev) => ({ nodeId: finding.nodeId!, fieldKey: finding.fieldKey, seq: (prev?.seq ?? 0) + 1 }));
+        return;
+      }
+      if (finding.triggerIndex !== undefined) {
+        // The same as picking the trigger on the rail.
+        setSelectedNodeId(null);
+        setSelectedEdgeId(null);
+        setShowSettingsEditor(false);
+        setChatPanelOpen(false);
+        setSelectedDeclared(finding.triggerIndex);
       }
     },
     [nodes],
   );
 
-  const handleSave = useCallback(async (intent?: DraftStatus) => {
+  const handleSave = useCallback(async (intent?: DraftStatus, opts?: { asCopy?: boolean }) => {
     if (isBuiltinWorkflow) {
       toast.error(
         'Use "Create a Copy" to create your own copy of this workflow',
@@ -848,39 +866,52 @@ function WorkflowBuilderInner({
 
     const builtWorkflow = buildWorkflow();
 
+    // The page hands the saved workflow back as initialWorkflow; claim its
+    // name as loaded FIRST, so that hand-back (a rename changes the name) is
+    // not mistaken for a different workflow and reloaded over the canvas —
+    // which would drop any edit made while the save was in flight.
+    const previousLoadedName = loadedWorkflowName;
+    setLoadedWorkflowName(builtWorkflow.name);
     setIsSaving(true);
     try {
-      const result = await onSave?.(builtWorkflow, intent);
+      const result = await onSave?.(builtWorkflow, intent, opts);
 
       // Show the findings for what was just saved (or refused) inline. The
-      // badge counts errors only; warnings ride along in the popover.
+      // chip counts errors only; warnings ride along in the problems list.
       if (result && typeof result === "object") {
         const findings = result.validationErrors || [];
         setValidationErrors(findings);
         setValidationStatus(
           splitFindings(findings).errors.length === 0 ? "valid" : "invalid",
         );
-        if (result.rejected) {
+        if (result.rejected || !result.success) {
           // Nothing was stored: keep the edits dirty so they aren't lost.
+          setLoadedWorkflowName(previousLoadedName);
           return;
         }
       }
 
-      setLoadedWorkflowName(builtWorkflow.name);
       setHasModifications(false);
       setSavedTriggersJson(JSON.stringify(builtWorkflow.triggers ?? []));
 
-      const savedAsDraft =
-        result && typeof result === "object" && result.status === "draft";
-      toast.success(savedAsDraft ? "Saved as draft" : "Workflow saved", {
-        duration: 2000,
-      });
+      const savedStatus = result && typeof result === "object" ? result.status : undefined;
+      toast.success(
+        opts?.asCopy
+          ? "Saved as a new workflow"
+          : intent === "complete" && savedStatus === "complete"
+            ? "Saved and published — it can run now"
+            : savedStatus === "draft"
+              ? "Draft saved"
+              : "Saved",
+        { duration: 2500 },
+      );
     } catch (error) {
       console.error("Save failed:", error);
+      setLoadedWorkflowName(previousLoadedName);
     } finally {
       setIsSaving(false);
     }
-  }, [buildWorkflow, onSave, workflow.name, isBuiltinWorkflow, nodes, edges]);
+  }, [buildWorkflow, onSave, workflow.name, isBuiltinWorkflow, loadedWorkflowName]);
 
   // Save-then-run for the Test run panel. Nothing runs unless the draft was
   // stored: an unnamed canvas, a rejected save and a failed save all end here.
@@ -909,10 +940,26 @@ function WorkflowBuilderInner({
   // A running test paints its node statuses onto the canvas.
   const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
   const testRunStatuses = useBuilderTestRun(testRunChatId, nodeIds);
-  const displayedNodes = useMemo(() => withTestRunStatus(nodes, testRunStatuses), [nodes, testRunStatuses]);
+  // The canvas's problems, on the steps they are about. Inside a loop or
+  // inline body the canvas is that body, which top-level findings don't map
+  // onto, so markers wait until the user is back on the workflow. Markers go
+  // on last so a step's accessible name ends with its problems.
+  const locatedFindings = useMemo(() => locateFindings(validationErrors), [validationErrors]);
+  const findingsOnCanvas = useMemo(
+    () => (isEditingLoop ? new Map<string, LocatedFinding[]>() : findingsByNode(locatedFindings)),
+    [locatedFindings, isEditingLoop],
+  );
+  const displayedNodes = useMemo(
+    () =>
+      withFindingMarkers(
+        withNodeAriaLabels(withTestRunStatus(nodes, testRunStatuses), edges, getNodeDisplayName),
+        findingsOnCanvas,
+      ),
+    [nodes, edges, testRunStatuses, findingsOnCanvas],
+  );
 
-  // Offered by a rejected save of a complete workflow: store the canvas as a
-  // draft instead (it stops being runnable until marked complete again).
+  // Offered by a rejected save of a published workflow: store the canvas as a
+  // draft instead (it stops being runnable until it is published again).
   useEffect(() => {
     if (!saveAsDraftRef) return;
     saveAsDraftRef.current = () => handleSave("draft");
@@ -922,14 +969,18 @@ function WorkflowBuilderInner({
   }, [saveAsDraftRef, handleSave]);
 
   const [isChangingStatus, setIsChangingStatus] = useState(false);
-  const markCompleteReasons = useMemo(
+  const findingCounts = useMemo(() => {
+    const { errors, warnings } = splitFindings(validationErrors);
+    return { errors: validationStatus === "invalid" ? errors.length : 0, warnings: warnings.length };
+  }, [validationErrors, validationStatus]);
+  const publishReasons = useMemo(
     () =>
-      markCompleteBlockers({
-        errors: validationStatus === "invalid" ? validationErrors : [],
-        hasUnsavedChanges: hasModifications,
-        isSaving: isChangingStatus,
+      publishBlockers({
+        errorCount: findingCounts.errors,
+        isBusy: isChangingStatus || isSaving,
+        validating: validationStatus === "validating",
       }),
-    [validationStatus, validationErrors, hasModifications, isChangingStatus],
+    [findingCounts.errors, isChangingStatus, isSaving, validationStatus],
   );
 
   const handleSetStatus = useCallback(
@@ -949,6 +1000,14 @@ function WorkflowBuilderInner({
     },
     [onSetStatus],
   );
+
+  // Publish: one deliberate act. Unsaved edits are saved and published in
+  // the same request (the server refuses it if they have problems), so the
+  // user never has to Save, wait, then Publish.
+  const handlePublish = useCallback(() => {
+    if (hasModifications) void handleSave("complete");
+    else void handleSetStatus("complete");
+  }, [hasModifications, handleSave, handleSetStatus]);
 
   // Save and exit handler
   const handleSaveAndExit = useCallback(async () => {
@@ -1005,34 +1064,51 @@ function WorkflowBuilderInner({
       return;
     }
 
-    // Update the workflow name - this will make it no longer a "builtin"
-    setWorkflow((w) => ({ ...w, name: normalizedName }));
+    // The copy is its own workflow: a new name, and a title that tells it
+    // apart from the original in every list.
+    const sourceTitle = (workflow.title || workflow.name || "").trim();
+    const copyTitle = sourceTitle ? `Copy of ${sourceTitle}` : normalizedName;
+    setWorkflow((w) => ({ ...w, name: normalizedName, title: copyTitle }));
     setShowTemplateModal(false);
 
-    // Build and save the workflow with the new name
     const builtWorkflow = buildWorkflow();
     builtWorkflow.name = normalizedName;
+    builtWorkflow.title = copyTitle;
 
+    const previousLoadedName = loadedWorkflowName;
     try {
-      await onSave?.(builtWorkflow);
+      // asCopy: store a NEW workflow. Saving with this draft's id would
+      // rename the original instead of copying it. The page then moves the
+      // URL to the copy, so a refresh opens the copy, not the source.
       setLoadedWorkflowName(normalizedName);
+      const result = await onSave?.(builtWorkflow, "draft", { asCopy: true });
+      if (result && typeof result === "object" && !result.success) {
+        setLoadedWorkflowName(previousLoadedName);
+        return;
+      }
       setHasModifications(false);
-      toast.success(`Created "${normalizedName}" from template`, {
-        duration: 3000,
-      });
-      // Navigate to the new copy so the URL matches the workflow now in view.
-      // Without this, the URL still points at the source workflow and a
-      // refresh would reload the original instead of the user's copy.
-      onNavigateToWorkflow?.(normalizedName);
+      toast.success(`Created "${copyTitle}"`, { duration: 3000 });
     } catch (error) {
-      console.error("Failed to save template:", error);
+      console.error("Failed to save copy:", error);
+      setLoadedWorkflowName(previousLoadedName);
     }
-  }, [templateName, buildWorkflow, onSave, onNavigateToWorkflow, nodes, edges]);
+  }, [templateName, buildWorkflow, onSave, workflow.title, workflow.name, loadedWorkflowName]);
 
   // Derived persistence representation. Re-computed when nodes/edges/workflow
   // change — but consumers should depend on stable structural keys (see
   // CEL context below) rather than this object on every keystroke.
   const currentWorkflow = useMemo(() => buildWorkflow(), [buildWorkflow]);
+
+  // While there are unsaved edits, validate the canvas itself (debounced), so
+  // the status chip and the step markers describe what is on screen. Inside a
+  // loop body the canvas is the body, not the workflow, so it waits.
+  useLiveValidation({
+    projectId: currentProject?.id,
+    workflow: currentWorkflow,
+    enabled: hasModifications && !isBuiltinWorkflow && !isEditingLoop,
+    setStatus: setValidationStatus,
+    setFindings: setValidationErrors,
+  });
 
   // Get list of existing node IDs for validation (used by ConfigPanel to prevent duplicates)
   const existingNodeIds = useMemo(() => nodes.map((node) => node.id), [nodes]);
@@ -1154,16 +1230,19 @@ function WorkflowBuilderInner({
     setAutomationDialog({ trigger });
   }, []);
   const canEditDefinition = !isBuiltinWorkflow && !isEditingLoop;
+  // One "Add trigger" everywhere: the palette's Triggers kind. What a pick
+  // becomes depends on the workflow (useAddTrigger): a declaration on one
+  // you can edit, a personal trigger on a built-in.
   const handleAddTrigger = useCallback(() => {
-    if (canEditDefinition) {
-      setPaletteKind("trigger");
-      setPaletteOpen(true);
-      return;
-    }
-    // A read-only workflow's definition can't gain a declaration, but the
-    // caller can still schedule it as an ad hoc automation.
-    setAutomationDialog({});
-  }, [canEditDefinition]);
+    setPaletteKind("trigger");
+    setPaletteFocus(undefined);
+    setPaletteOpen(true);
+  }, []);
+  // The Chat trigger: on unless the definition is automation-only.
+  const handleSetChatEnabled = useCallback((enabled: boolean) => {
+    setHasModifications(true);
+    setWorkflow((w) => ({ ...w, automationOnly: !enabled }));
+  }, []);
   const handleEditDeclared = useCallback((index: number) => {
     setSelectedDeclared(index);
     setSelectedNodeId(null);
@@ -1179,17 +1258,20 @@ function WorkflowBuilderInner({
     () => ({
       workflowRef: savedWorkflowName,
       projectId: currentProject?.id ?? "",
-      canAddTrigger: !isNewWorkflow && savedWorkflowName !== "" && !!currentProject?.id,
+      canAddTrigger: savedWorkflowName !== "" && !!currentProject?.id,
       canEditDefinition,
       declared,
       findingsFor,
       unsavedDeclared,
+      selectedDeclared,
+      chatEnabled: !workflow.automationOnly,
+      onSetChatEnabled: handleSetChatEnabled,
       onEditTrigger: handleEditTrigger,
       onAddTrigger: handleAddTrigger,
       onEditDeclared: handleEditDeclared,
       onActivateDeclared: setActivatingDeclared,
     }),
-    [savedWorkflowName, currentProject?.id, isNewWorkflow, canEditDefinition, declared, findingsFor, unsavedDeclared, handleEditTrigger, handleAddTrigger, handleEditDeclared],
+    [savedWorkflowName, currentProject?.id, canEditDefinition, declared, findingsFor, unsavedDeclared, selectedDeclared, workflow.automationOnly, handleSetChatEnabled, handleEditTrigger, handleAddTrigger, handleEditDeclared],
   );
   // The caller's activations, for the editor's Activations section (the
   // rail reads the same cached list).
@@ -1269,7 +1351,6 @@ function WorkflowBuilderInner({
     ],
   );
 
-  const [isSaving, setIsSaving] = useState(false);
   useWorkflowDraftSync({
     projectId: currentProject?.id,
     draftId,
@@ -1405,58 +1486,59 @@ function WorkflowBuilderInner({
     [],
   );
 
-  /** Place a prepared step at the viewport centre, select it and open its panel. */
-  const insertStep = useCallback(
-    (step: Step) => {
-      // Take snapshot BEFORE adding node
-      takeSnapshot(nodes, edges);
-      setHasModifications(true);
-
-      const id = step.id!;
-      const stepType = step.type ?? "";
-      // Place new node at the center of the current viewport
+  // Every added step lands connected: at the "+" that asked for it, after the
+  // selected node, or after the end of the main path (./canvas).
+  const canvasInsertion = useCanvasInsertion({
+    enabled: !isBuiltinWorkflow,
+    nodes,
+    edges,
+    setNodes,
+    setEdges,
+    takeSnapshot,
+    markDirty: () => setHasModifications(true),
+    selectedNodeId,
+    paletteOpen,
+    openPalette: () => {
+      setPaletteKind("action");
+      setPaletteFocus(undefined);
+      setPaletteOpen(true);
+    },
+    createEdge,
+    // Only a canvas with nothing to attach to places a node freely.
+    fallbackPosition: () => {
       const wrapper = reactFlowWrapper.current;
-      const vpCenterX = (wrapper?.clientWidth ?? 1200) / 2;
-      const vpCenterY = (wrapper?.clientHeight ?? 800) / 2;
-      const flowCenter = screenToFlowPosition({ x: vpCenterX, y: vpCenterY });
-      const candidateNode: Node = {
-        id: `_candidate_${id}`,
-        type: 'actionNode',
-        position: flowCenter,
-        data: { label: '' },
-      };
-      const position = findNonOverlappingPosition(candidateNode, nodes);
+      return screenToFlowPosition({ x: (wrapper?.clientWidth ?? 1200) / 2, y: (wrapper?.clientHeight ?? 800) / 2 });
+    },
+  });
 
-      // Determine React Flow node type
-      const flowNodeType = STRUCTURAL_TYPES.has(stepType)
-        ? `${stepType}Node`
-        : "actionNode";
-
-      const newNode: Node = {
-        id,
-        type: flowNodeType,
-        position,
-        data: {
-          step,
-          label: id,
-        },
-      };
-
-      setNodes((nds) => nds.concat(newNode));
+  /** Add a prepared node, connected; select it and open its panel. */
+  const placeNode = useCallback(
+    (node: Node) => {
+      const inserted = canvasInsertion.insertNode(node);
       // Auto-select the newly created node to open config panel
-      setSelectedNodeId(newNode.id);
+      setSelectedNodeId(inserted.id);
       setSelectedEdgeId(null);
       setShowSettingsEditor(false);
       // Close chat panel when config panel opens
       setChatPanelOpen(false);
     },
-    [setNodes, nodes, edges, takeSnapshot, STRUCTURAL_TYPES, screenToFlowPosition, findNonOverlappingPosition],
+    [canvasInsertion],
+  );
+
+  /** Add a prepared step, connected; select it and open its panel. */
+  const insertStep = useCallback(
+    (step: Step) => {
+      const stepType = step.type ?? "";
+      const flowNodeType = STRUCTURAL_TYPES.has(stepType) ? `${stepType}Node` : "actionNode";
+      placeNode({ id: step.id!, type: flowNodeType, position: { x: 0, y: 0 }, data: { step, label: step.id! } });
+    },
+    [placeNode, STRUCTURAL_TYPES],
   );
 
   const addStep = useCallback(
     (stepType: string) => {
-      // Use a CEL-safe ID prefix (e.g., call_llm_123, run_456)
-      const id = `${stepType}_${Date.now()}`;
+      // A readable, unique, CEL-safe id: call_llm, then call_llm_2.
+      const id = readableStepId(stepType, nodes.map((n) => n.id));
 
       // Build step with args oneof initialized
       // Note: position is stored in workflow.ui.positions, not on step
@@ -1479,7 +1561,7 @@ function WorkflowBuilderInner({
 
       insertStep(step);
     },
-    [insertStep],
+    [insertStep, nodes],
   );
 
   /**
@@ -1522,27 +1604,14 @@ function WorkflowBuilderInner({
   );
 
   const addSwitch = useCallback(() => {
-    takeSnapshot(nodes, edges);
-    setHasModifications(true);
-
-    const id = `switch_${Date.now()}`;
-    // Place new switch at the center of the current viewport
-    const wrapperEl = reactFlowWrapper.current;
-    const switchVpCenterX = (wrapperEl?.clientWidth ?? 1200) / 2;
-    const switchVpCenterY = (wrapperEl?.clientHeight ?? 800) / 2;
-    const switchFlowCenter = screenToFlowPosition({ x: switchVpCenterX, y: switchVpCenterY });
-    const switchCandidateNode: Node = {
-      id: `_candidate_${id}`,
-      type: 'switchNode',
-      position: switchFlowCenter,
-      data: { label: '' },
-    };
-    const position = findNonOverlappingPosition(switchCandidateNode, nodes);
-
-    const newNode: Node = {
+    // A Switch is canvas-only (it compiles into edge conditions), so its id
+    // never reaches YAML; the case ids are handle ids. Both only need to be
+    // unique.
+    const id = readableStepId("switch", nodes.map((n) => n.id));
+    placeNode({
       id,
       type: "switchNode",
-      position,
+      position: { x: 0, y: 0 },
       data: {
         label: "Switch",
         cases: [
@@ -1551,22 +1620,26 @@ function WorkflowBuilderInner({
         ],
       },
       draggable: canDragNodes,
-    };
-
-    setNodes((nds) => nds.concat(newNode));
-    // Auto-select the newly created switch to open config panel
-    setSelectedNodeId(newNode.id);
-    setSelectedEdgeId(null);
-    setShowSettingsEditor(false);
-    // Close chat panel when config panel opens
-    setChatPanelOpen(false);
-  }, [setNodes, nodes, edges, takeSnapshot, canDragNodes, screenToFlowPosition, findNonOverlappingPosition]);
+    });
+  }, [placeNode, nodes, canDragNodes]);
 
   const openStepPalette = useCallback(() => {
     if (isBuiltinWorkflow) return;
     setPaletteKind("action");
+    setPaletteFocus(undefined);
     setPaletteOpen(true);
   }, [isBuiltinWorkflow]);
+
+  /** The sidebar's integration shortcuts: one integration expanded, or the list. */
+  const openStepPaletteOnIntegration = useCallback(
+    (integrationId?: string) => {
+      if (isBuiltinWorkflow) return;
+      setPaletteKind("action");
+      setPaletteFocus(integrationId ? { integration: integrationId } : "integrations");
+      setPaletteOpen(true);
+    },
+    [isBuiltinWorkflow],
+  );
 
   /** Declare a trigger and open its editor. */
   const declareTrigger = useCallback(
@@ -1581,47 +1654,14 @@ function WorkflowBuilderInner({
     [workflow.triggers, handleEditDeclared],
   );
 
-  const choosePaletteBuiltinTrigger = useCallback(
-    (source: "schedule" | "webhook" | "workflow_event") => {
-      const base = source === "workflow_event" ? "after-workflow" : source;
-      declareTrigger(newDeclaredTrigger({ name: uniqueTriggerName(base, declared), source: defaultSource(source) }));
-    },
-    [declareTrigger, declared],
-  );
-
-  /**
-   * Declare an integration trigger from a catalog trigger type: its events
-   * are the type's event list (the payload schema's `event` enum).
-   */
-  const choosePaletteTrigger = useCallback(
-    async (entry: CatalogEntrySummary) => {
-      let full = queryClient.getQueryData<CatalogEntry>(connectionKeys.catalogEntry(entry.ref));
-      if (!full) {
-        try {
-          full = await queryClient.fetchQuery({
-            queryKey: connectionKeys.catalogEntry(entry.ref),
-            queryFn: () => catalogSearchGrpc.get(entry.ref),
-            staleTime: 5 * 60_000,
-          });
-        } catch {
-          full = undefined;
-        }
-      }
-      const events = ((full?.payloadSchema?.properties?.event?.enum ?? []) as unknown[]).map(String);
-      declareTrigger(
-        newDeclaredTrigger({
-          name: uniqueTriggerName(entry.id.replace(/\./g, "-"), declared),
-          description: entry.summary,
-          source: {
-            case: "integration",
-            value: { integration: entry.integration.id, events, match: {}, pollInterval: "" },
-          } as NonNullable<DeclaredTrigger["source"]>,
-        }),
-        entry.ref,
-      );
-    },
-    [declareTrigger, declared, queryClient],
-  );
+  // One "Add trigger" picker: a declaration on a workflow you can edit, a
+  // personal trigger on a built-in.
+  const addTrigger = useAddTrigger({
+    canEditDefinition,
+    declared,
+    declare: declareTrigger,
+    closePalette: useCallback(() => setPaletteOpen(false), []),
+  });
 
   useWorkflowBuilderShortcuts({ onOpenStepPalette: openStepPalette });
   const paletteShortcutLabel = useStepPaletteShortcutLabel();
@@ -1691,6 +1731,7 @@ function WorkflowBuilderInner({
             onAddStep={addStep}
             onAddSwitch={addSwitch}
             onOpenPalette={openStepPalette}
+            onOpenIntegration={openStepPaletteOnIntegration}
             paletteShortcutLabel={paletteShortcutLabel}
           />
         )}
@@ -1699,11 +1740,11 @@ function WorkflowBuilderInner({
         <div className="rounded-2xl border border-border/80 bg-card/95 p-3 shadow-xl shadow-black/10 backdrop-blur-sm">
           <div className="grid grid-cols-2 gap-2 text-center">
             <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Steps</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Steps</div>
               <div className="text-lg font-semibold leading-none text-foreground">{nodes.length}</div>
             </div>
             <div className="rounded-lg bg-muted/50 px-3 py-2">
-              <div className="text-2xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Edges</div>
+              <div className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Edges</div>
               <div className="text-lg font-semibold leading-none text-foreground">{edges.length}</div>
             </div>
           </div>
@@ -1717,14 +1758,32 @@ function WorkflowBuilderInner({
           <div className="bg-primary/10 border-b border-primary/30 px-4 py-2.5 flex items-center justify-between">
             <div className="flex items-center gap-2.5">
               <Lock className="w-4 h-4 text-primary shrink-0" />
-              <span className="text-primary text-sm font-semibold">
-                View Only
-              </span>
-              <span className="text-primary/60 text-sm">—</span>
-              <span className="text-primary/90 text-sm">
-                This is a {source === "project" ? "project" : "built-in"} template. Click <strong className="text-primary">"Create a Copy"</strong> to create an
-                editable copy.
-              </span>
+              {source === "project" ? (
+                // A project workflow is a file in the repo, versioned and shared
+                // with the team. It is edited where it lives, not copied.
+                <>
+                  <span className="text-primary text-sm font-semibold">
+                    In your repo
+                  </span>
+                  <span className="text-primary/60 text-sm">—</span>
+                  <span className="text-primary/90 text-sm">
+                    Defined in this project's{" "}
+                    <code className="font-mono text-xs text-primary">.reliant/workflows/</code>.
+                    Edit the YAML file there to change it for everyone on the repo.
+                  </span>
+                </>
+              ) : (
+                <>
+                  <span className="text-primary text-sm font-semibold">
+                    View Only
+                  </span>
+                  <span className="text-primary/60 text-sm">—</span>
+                  <span className="text-primary/90 text-sm">
+                    This is a built-in workflow. Click <strong className="text-primary">"Create a Copy"</strong> to create an
+                    editable copy.
+                  </span>
+                </>
+              )}
             </div>
             <a
               href="https://docs.reliantlabs.io/workflows"
@@ -1765,36 +1824,31 @@ function WorkflowBuilderInner({
                 </button>
               )
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex min-w-0 items-center gap-2">
               {isEditingName && !isEditingLoop ? (
+                // The header edits the TITLE, the name people see. The slug
+                // (`name:`, what references and URLs use) is in Workflow info.
                 <input
                   type="text"
-                  value={workflow.name ?? ""}
+                  aria-label="Workflow title"
+                  value={workflow.title ?? ""}
                   onChange={(e) => {
-                    setWorkflow((w) => ({ ...w, name: e.target.value }));
+                    setWorkflow((w) => ({ ...w, title: e.target.value }));
                     setHasModifications(true);
                   }}
                   onBlur={() => {
-                    // Apply normalization on blur
-                    setWorkflow((w) => ({
-                      ...w,
-                      name: normalizeName(w.name ?? ""),
-                    }));
+                    setWorkflow((w) => ({ ...w, title: (w.title ?? "").trim() }));
                     setIsEditingName(false);
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === "Enter") {
-                      // Apply normalization on Enter
-                      setWorkflow((w) => ({
-                        ...w,
-                        name: normalizeName(w.name ?? ""),
-                      }));
+                    if (e.key === "Enter" || e.key === "Escape") {
+                      setWorkflow((w) => ({ ...w, title: (w.title ?? "").trim() }));
                       setIsEditingName(false);
                     }
                   }}
                   autoFocus
                   className="text-2xl font-bold border-none outline-none focus:ring-0 bg-transparent text-foreground flex-shrink-0"
-                  placeholder="Workflow Name"
+                  placeholder={workflow.name || "Workflow title"}
                   style={{
                     width: "auto",
                     minWidth: "200px",
@@ -1803,25 +1857,40 @@ function WorkflowBuilderInner({
                 />
               ) : (
                 <>
-                  <h1 className="text-2xl font-bold text-foreground">
-                    {workflow.name}
-                  </h1>
+                  <div className="min-w-0">
+                    <h1 className="truncate text-2xl font-bold text-foreground" data-testid="workflow-title">
+                      {workflowDisplayName({ name: workflow.name ?? "", title: workflow.title })}
+                    </h1>
+                    {!isEditingLoop && workflow.name && (
+                      <button
+                        type="button"
+                        onClick={() => setShowInfoPopover(true)}
+                        className="block max-w-[28rem] truncate font-mono text-xs text-muted-foreground hover:text-foreground"
+                        title={isBuiltinWorkflow ? "Workflow slug" : "Workflow slug — change it in Workflow info"}
+                        data-testid="workflow-slug"
+                      >
+                        {workflow.name}
+                      </button>
+                    )}
+                  </div>
                   {/* Hide edit button for builtins and when editing loops */}
                   {!isEditingLoop && !isBuiltinWorkflow && (
                     <button
                       onClick={() => setIsEditingName(true)}
                       className="p-1 hover:bg-muted rounded transition-colors self-center"
-                      title="Edit workflow name"
+                      title="Rename"
+                      aria-label="Rename workflow"
                     >
                       <Pencil className="w-5 h-5 text-muted-foreground" />
                     </button>
                   )}
-                  {/* Info button - shows workflow description and metadata */}
+                  {/* Info button - title, slug, description and metadata */}
                   {!isEditingLoop && (
                     <button
                       onClick={() => setShowInfoPopover(true)}
                       className="p-1 hover:bg-muted rounded transition-colors self-center"
                       title="Workflow info"
+                      aria-label="Workflow info"
                     >
                       <Info className="w-5 h-5 text-muted-foreground" />
                     </button>
@@ -1829,23 +1898,22 @@ function WorkflowBuilderInner({
                 </>
               )}
             </div>
-            {/* Validation Status Badge - show validation state */}
+            {/* One status chip: lifecycle + the canvas's state, live. */}
             {!isEditingLoop && (
-              <ValidationStatusBadge
-                status={validationStatus}
-                errors={validationErrors}
-                onNodeClick={navigateToNode}
+              <WorkflowStatusChip
                 className="ml-2"
-              />
-            )}
-            {!isEditingLoop && !isBuiltinWorkflow && draftStatus === "draft" && (
-              <DraftStatusBadge
-                errorCount={
-                  validationStatus === "invalid"
-                    ? splitFindings(validationErrors).errors.length
-                    : 0
-                }
-                className="ml-2"
+                summary={summarizeWorkflowStatus({
+                  source,
+                  draftStatus,
+                  hasUnsavedChanges: hasModifications && !isBuiltinWorkflow,
+                  validationStatus,
+                  errorCount: findingCounts.errors,
+                  warningCount: findingCounts.warnings,
+                })}
+                findings={locatedFindings}
+                describeNode={describeNode}
+                canSelect={canSelectFinding}
+                onSelect={selectFinding}
               />
             )}
           </div>
@@ -1929,7 +1997,7 @@ function WorkflowBuilderInner({
                   className={headerButtonClass}
                 >
                   <Settings2 className="w-4 h-4" />
-                  Parameters
+                  Inputs
                 </button>
                 <button
                   onClick={handleUseAsTemplate}
@@ -1939,45 +2007,48 @@ function WorkflowBuilderInner({
                   Duplicate
                 </button>
                 {onSetStatus && draftStatus === "complete" && (
-                  <Tooltip content="Take this workflow out of service to make edits that may be invalid along the way. It won't run until you mark it complete again.">
+                  <Tooltip content="Take it out of service, to make edits that may not work along the way. It won't run until you publish it again.">
                     <button
                       onClick={() => void handleSetStatus("draft")}
-                      disabled={isChangingStatus}
+                      disabled={isChangingStatus || isSaving}
                       className={headerButtonClass}
-                      data-testid="workflow-move-to-draft"
+                      data-testid="workflow-unpublish"
                     >
                       <PencilRuler className="w-4 h-4" />
-                      Move to draft
+                      Unpublish
                     </button>
                   </Tooltip>
                 )}
                 <button
                   onClick={() => void handleSave()}
-                  disabled={!hasModifications}
+                  disabled={!hasModifications || isSaving}
                   className={
                     draftStatus === "draft" ? secondaryHeaderButtonClass : primaryHeaderButtonClass
                   }
+                  data-testid="workflow-save"
                 >
-                  {draftStatus === "draft" ? "Save draft" : "Save"}
+                  {isSaving ? "Saving…" : "Save"}
                 </button>
                 {onSetStatus && draftStatus === "draft" && (
                   <Tooltip
                     content={
-                      markCompleteReasons.length > 0
-                        ? `Can't mark complete yet: ${markCompleteReasons.join(" ")}`
-                        : "Validate and make this workflow runnable"
+                      publishReasons.length > 0
+                        ? `Can't publish yet: ${publishReasons.join(" ")}`
+                        : hasModifications
+                          ? "Save your changes and make this workflow runnable"
+                          : "Make this workflow runnable: by chat, Run, and its triggers"
                     }
                   >
                     {/* The wrapper keeps the tooltip working while the button is disabled. */}
                     <span className="inline-flex">
                       <button
-                        onClick={() => void handleSetStatus("complete")}
-                        disabled={markCompleteReasons.length > 0}
+                        onClick={handlePublish}
+                        disabled={publishReasons.length > 0}
                         className={primaryHeaderButtonClass}
-                        data-testid="workflow-mark-complete"
+                        data-testid="workflow-publish"
                       >
                         <CheckCircle2 className="w-4 h-4" />
-                        Mark complete
+                        Publish
                       </button>
                     </span>
                   </Tooltip>
@@ -1993,6 +2064,7 @@ function WorkflowBuilderInner({
           className={`flex-1 bg-background ${interactionMode === "select" ? "selection-mode" : "pan-mode"} ${isViewReady ? "opacity-100" : "opacity-0"}`}
           data-onboarding="workflow-canvas"
         >
+          <CanvasInsertProvider value={canvasInsertion.api}>
           <ReactFlow
             nodes={displayedNodes}
             edges={edges}
@@ -2051,6 +2123,10 @@ function WorkflowBuilderInner({
               variant={"dots" as BackgroundVariant}
             />
 
+            {/* "+" on unconnected outputs, and the selection's Add / Connect bar. */}
+            <NodeOutputAddButtons />
+            <SelectionActions />
+
             {/* Floating Toolbar - Bottom Center */}
             <Panel position="bottom-center" className="mb-4">
               <FloatingToolbar
@@ -2076,6 +2152,7 @@ function WorkflowBuilderInner({
               />
             </Panel>
           </ReactFlow>
+          </CanvasInsertProvider>
         </div>
       </div>
 
@@ -2097,6 +2174,7 @@ function WorkflowBuilderInner({
           : 0;
 
         return (
+          <WorkflowFindingsProvider byNode={findingsOnCanvas} focus={findingFocus}>
           <CELCompletionProvider value={celCompletionContext}>
             {/* Config Panel - view-only for builtin workflows. Mutation
                 callbacks (update/delete/rename) come from
@@ -2242,6 +2320,7 @@ function WorkflowBuilderInner({
               />
             )}
           </CELCompletionProvider>
+          </WorkflowFindingsProvider>
         );
       })()}
 
@@ -2369,17 +2448,25 @@ function WorkflowBuilderInner({
       <WorkflowInfoPopover
         isOpen={showInfoPopover}
         onClose={() => setShowInfoPopover(false)}
+        title={workflow.title ?? ""}
+        slug={workflow.name ?? ""}
+        savedSlug={savedWorkflowName}
         description={workflow.description ?? ""}
-        onDescriptionChange={
-          source === "user"
-            ? (desc: string) => {
-                setWorkflow((w) => ({ ...w, description: desc }));
+        onChange={
+          source === "user" && !isBuiltinWorkflow
+            ? (patch) => {
+                setWorkflow((w) => ({
+                  ...w,
+                  ...(patch.title !== undefined && { title: patch.title }),
+                  ...(patch.slug !== undefined && { name: patch.slug }),
+                  ...(patch.description !== undefined && { description: patch.description }),
+                }));
                 setHasModifications(true);
               }
             : undefined
         }
+        normalizeSlug={normalizeName}
         createdAt={createdAt}
-        isEditable={source === "user"}
       />
 
       {/* YAML Editor Modal */}
@@ -2403,7 +2490,7 @@ function WorkflowBuilderInner({
         <Modal
           isOpen={showScenarioPanel}
           onClose={() => setShowScenarioPanel(false)}
-          title="Test Scenarios"
+          title="Tests"
           size="lg"
         >
           <div className="h-[500px]">
@@ -2421,12 +2508,13 @@ function WorkflowBuilderInner({
         key={paletteKind}
         open={paletteOpen}
         initialKind={paletteKind}
+        initialFocus={paletteFocus}
         allowKindSwitch={canEditDefinition}
         onClose={() => setPaletteOpen(false)}
         onChooseBuiltin={choosePaletteBuiltin}
         onChooseAction={choosePaletteAction}
-        onChooseTrigger={(entry) => void choosePaletteTrigger(entry)}
-        onChooseBuiltinTrigger={choosePaletteBuiltinTrigger}
+        onChooseTrigger={(entry) => void addTrigger.chooseCatalog(entry)}
+        onChooseBuiltinTrigger={addTrigger.chooseBuiltin}
         onConnect={connectFromPalette}
       />
       {activatingDeclared !== null && declared[activatingDeclared] && (
@@ -2442,21 +2530,26 @@ function WorkflowBuilderInner({
       )}
       <ConnectIntegrationDialog target={connectTarget} onClose={() => setConnectTarget(null)} />
 
-      {/* Automation dialog, opened from the trigger rail. Allowed for
-          read-only and builtin workflows too: a trigger is its own row and
-          does not edit the definition. */}
+      {addTrigger.personal && (
+        <ActivateTriggerDialog
+          open
+          mode="personal"
+          onClose={addTrigger.closePersonal}
+          workflowRef={workflowRefForTrigger(savedWorkflowName, source)}
+          workflowTitle={workflow.title || savedWorkflowName}
+          declared={addTrigger.personal.trigger}
+          catalogRef={addTrigger.personal.catalogRef}
+          defaultProjectId={currentProject?.id}
+        />
+      )}
+
+      {/* Edit one of the caller's trigger rows (a personal trigger or an
+          activation), from its card. Allowed on read-only and built-in
+          workflows too: a row does not edit the definition. */}
       <AutomationFormDialog
         open={automationDialog !== null}
         onClose={() => setAutomationDialog(null)}
         trigger={automationDialog?.trigger}
-        prefill={
-          automationDialog && !automationDialog.trigger
-            ? {
-                workflow: workflowRefForTrigger(savedWorkflowName, source),
-                projectId: currentProject?.id,
-              }
-            : undefined
-        }
       />
     </div>
     </TriggerRailProvider>

@@ -58,7 +58,7 @@ Automatic message saving after node completion
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `condition` | bool | No | Raw CEL condition (no {`{ }`}) that must return bool; the message is saved only when true |
+| `condition` | bool | No | Raw CEL condition (no \{`{ }`\}) that must return bool; the message is saved only when true |
 | `role` | string | No | - |
 | `content` | string | No | - |
 | `tool_calls` | string | No | - |
@@ -73,13 +73,13 @@ Sub-workflow invocation configuration
 
 | Field | Type | Required | Description |
 |-------|------|----------|-------------|
-| `ref` | string | No | Workflow reference (builtin://name or project://name) |
+| `ref` | string | No | The workflow to run: builtin://`<name>` for a built-in, project://`<name>` for one in this project |
 | `inline` | message | No | - |
-| `args` | map | No | Input values for the sub-workflow |
-| `presets` | map | No | Preset configurations for sub-workflow inputs |
+| `args` | map | No | Values for the sub-workflow's inputs, keyed by input name |
+| `presets` | map | No | A preset to apply per input group, as group: preset. Use default for ungrouped inputs |
 | `project` | message | No | Working directory override for sub-workflow |
 | `thread` | message | No | Thread mode: inherit (default), new, or fork |
-| `passthrough` | string | No | Input names to forward from parent to child workflow |
+| `passthrough` | string | No | Inputs of this workflow to hand to the sub-workflow under the same name |
 
 ---
 

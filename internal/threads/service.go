@@ -82,7 +82,7 @@ type Repository interface {
 	// UpsertToolCall / UpsertToolCallResult let a cancel record its outcome
 	// durably at the moment the user asks for it -- see cancelToolCalls.
 	UpsertToolCall(ctx context.Context, call *db.ToolCall) error
-	UpsertToolCallResult(ctx context.Context, result *db.ToolCallResult) error
+	UpsertToolCallResult(ctx context.Context, chatID string, result *db.ToolCallResult) error
 
 	// Attachment operations
 	GetAttachment(ctx context.Context, id string) (*db.Attachment, error)
@@ -244,7 +244,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 
 	// FORK-DEBUG: Log resolved fork point
 	if fork != nil {
-		logging.Info("[FORK-DEBUG] CreateWorkflowWithThread resolved fork point",
+		logging.Debug("[Fork] CreateWorkflowWithThread resolved fork point",
 			"parentThreadID", fork.parentThreadID,
 			"forkAtMessageID", fork.forkAtMessageID,
 			"forkAtContextWindowID", fork.forkAtContextWindowID,

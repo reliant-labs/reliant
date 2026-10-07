@@ -22,8 +22,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	wfruntime "github.com/reliant-labs/reliant/internal/workflow/runtime"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
 
 // TestGenerateFixture_AgentToolLoop pins the plain agent loop:
@@ -102,14 +105,22 @@ func TestGenerateFixture_StructuredAgentLoop(t *testing.T) {
 // one more call_llm turn after that to react to it. Four scripted turns
 // total: parent-turn-1 (spawn call) + {parent-exit-candidate, child's-turn}
 // in either order + parent's final turn (after mailbox delivery).
+//
+// The spawn must name a preset the parent was OFFERED. builtin://agent offers
+// spawn with its spawn_presets input, which defaults to general, researcher
+// and code_reviewer, and the turn's capability set refuses a spawn naming any
+// other preset at execution (#495). A refused spawn dispatches no child, so the
+// child's turn and the parent's reaction to it never happen. This scenario
+// used to name `implementer`, which builtin://agent has never declared; that
+// ran only because presets were not checked against the declaration, and
+// stopped exporting ("consumed 2 of 4 scripted turns") once they were.
 func TestGenerateFixture_Spawn(t *testing.T) {
+	spawnCall := ToolCall("call-spawn-1", "spawn", `{"preset":"general","prompt":"Echo something for the parent."}`)
 	script := NewScriptedLLM(
 		// Turn 1: parent delegates to a sub-agent via the spawn tool.
 		Turn{
-			Text: "I'll delegate this to a sub-agent.",
-			ToolCalls: []message.ToolCall{
-				ToolCall("call-spawn-1", "spawn", `{"preset":"implementer","prompt":"Echo something for the parent."}`),
-			},
+			Text:      "I'll delegate this to a sub-agent.",
+			ToolCalls: []message.ToolCall{spawnCall},
 		},
 		// Turns 2-3: race between the parent's exit-candidate turn and the
 		// spawned child's only turn — neither has tool calls, so either
@@ -130,6 +141,11 @@ func TestGenerateFixture_Spawn(t *testing.T) {
 	h.WaitTemporalWorkflowDone(workflowID)
 	h.WaitWorkflowStatus(workflowID, db.Completed())
 	assert.False(t, h.LLM.Exhausted(), "spawn must not over-consume the script")
+
+	// Checked before ExportHistory so a refused spawn fails with the refusal
+	// itself. Left to the turn count, it reads as an auxiliary request having
+	// stolen a turn, which is not what happened.
+	h.RequireToolCallStatus(spawnCall.ID, core.ToolCallStatusCompleted)
 
 	h.ExportHistory(workflowID, "spawn")
 }
@@ -349,4 +365,87 @@ func TestGenerateFixture_GreenfieldProbe(t *testing.T) {
 	assert.False(t, h.LLM.Exhausted())
 
 	h.ExportHistory(workflowID, "greenfield_probe")
+}
+
+// TestGenerateFixture_ActionApproval pins the action approval gate: a turn
+// calls a mutating integration action (http__request) in an attended run, so
+// the batch first raises an approval (ApprovalCreate + signal.approval.* +
+// timer); the person denies it, and the ExecuteTools activity refuses the call
+// (recorded FAILED) before the next turn completes the run.
+func TestGenerateFixture_ActionApproval(t *testing.T) {
+	script := NewScriptedLLM(
+		Turn{
+			Text: "I'll notify the webhook.",
+			ToolCalls: []message.ToolCall{
+				ToolCall("call-http-1", "http__request", `{"url":"https://example.com/hook","method":"POST","body":{"text":"replay-fixture"}}`),
+			},
+		},
+		Turn{Text: "Understood — I did not send it."},
+	)
+	h := newHarness(t, script)
+
+	created := h.StartChat("builtin://agent", "Tell the webhook we shipped", map[string]any{
+		"mode":  "auto",
+		"tools": []any{"http__request"},
+	})
+	chatID := created.Chat.Id
+	workflowID := created.WorkflowId
+
+	approval := h.WaitPendingApproval(chatID)
+	require.Equal(t, "POST request to https://example.com/hook?", approval.Title)
+	h.DenyApproval(approval.ID)
+
+	h.WaitTemporalWorkflowDone(workflowID)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	assert.False(t, h.LLM.Exhausted())
+
+	h.ExportHistory(workflowID, "action_approval")
+}
+
+// TestGenerateFixture_LateUserMessage pins the loop-exit gate re-entering for
+// a thread-wake that arrived after the agent's LAST turn began
+// (lateUserWakeChangeID): the run's only turn has no tool calls, nothing is
+// queued when it probes its mailbox, so pending_inbox is false and nothing is
+// live — and the gate still takes another turn, because the doorbell rang
+// since the turn started.
+//
+// The wake is rung on its own, without a mailbox row. That is the production
+// shape in which the input reached the in-flight turn anyway (queued between
+// the workflow recording the turn's start and call_llm's drain), and it is the
+// only way a generator can reach this gate: the scripted driver runs before
+// the turn's end-of-turn mailbox probe, so a row it queued would be caught by
+// pending_inbox instead — a different, older path. The second turn finds
+// history ending with the assistant and yields without calling the provider,
+// so the script holds one turn.
+//
+// What the gate does is the command sequence pinned here: the version marker
+// and the second CallLLM. Which input that turn then reads is payload.
+func TestGenerateFixture_LateUserMessage(t *testing.T) {
+	var h *Harness
+	chatIDs := make(chan string, 1)
+	wakeErr := make(chan error, 1)
+	script := NewScriptedLLM(
+		Turn{
+			Text: "Here is my answer.",
+			During: func() {
+				id := <-chatIDs
+				wakeErr <- h.Stack.Temporal.SignalWorkflow(h.Ctx, id, "", wfruntime.ThreadWakeSignalName,
+					wfruntime.ThreadWakeSignal{Thread: id, Reason: threadwake.ReasonMailbox})
+			},
+		},
+	)
+	h = newHarness(t, script)
+
+	created := h.StartChat("builtin://agent", "Answer a quick question for me", map[string]any{
+		"mode": "auto",
+	})
+	chatIDs <- created.Chat.Id
+	workflowID := created.WorkflowId
+
+	require.NoError(t, <-wakeErr, "the wake must reach the running workflow")
+	h.WaitTemporalWorkflowDone(workflowID)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	assert.False(t, h.LLM.Exhausted())
+
+	h.ExportHistory(workflowID, "late_user_message")
 }

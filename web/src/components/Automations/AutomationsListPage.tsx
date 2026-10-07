@@ -10,7 +10,7 @@
  * pinned under "Needs attention".
  */
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { CalendarClock, Plus } from "lucide-react";
 
@@ -19,6 +19,10 @@ import PageHeader from "../forge-ui/page_header";
 import { Button } from "../ui/Button";
 import { triggerErrorMessage } from "@/api/trigger-grpc";
 import { useTriggers } from "@/hooks/trigger-queries";
+import { useWorkflowLibrary } from "@/hooks/workflow-library-queries";
+import { inactiveDeclaredTriggers, type InactiveDeclaredTrigger } from "@/lib/triggerRail";
+import { useProjectStore } from "@/store/projectStore";
+import { InactiveDeclaredTriggers } from "./InactiveDeclaredTriggers";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { AutomationGroups, GroupBySwitch } from "./AutomationGroups";
 import { ComingUpTimeline } from "./ComingUpTimeline";
@@ -28,9 +32,20 @@ export function AutomationsListPage() {
   const triggersQuery = useTriggers();
   const [creating, setCreating] = useState(false);
   const [groupBy, setGroupBy] = useState<AutomationGroupBy>("workflow");
+  const projectId = useProjectStore((state) => state.currentProject?.id);
+  const library = useWorkflowLibrary(projectId);
 
   const triggers = triggersQuery.data ?? [];
   const hasTriggers = triggers.length > 0;
+  // What workflows declare and nothing activates yet. Drafts cannot be
+  // activated, so they are left out.
+  const inactive = useMemo(
+    () =>
+      triggersQuery.data && library.data
+        ? inactiveDeclaredTriggers(library.data.workflows.filter((w) => w.status !== "draft"), triggersQuery.data)
+        : [],
+    [triggersQuery.data, library.data],
+  );
 
   return (
     <div className="space-y-4">
@@ -38,7 +53,7 @@ export function AutomationsListPage() {
         <PageHeader
           className=""
           title="Automations"
-          subtitle="Runs that start on a schedule, with no one typing. Each run is recorded so you can review it afterwards."
+          subtitle="Runs that start on a schedule, a webhook or an app event, with no one typing. Each run is recorded so you can review it afterwards."
           actions={
             hasTriggers
               ? [
@@ -65,9 +80,13 @@ export function AutomationsListPage() {
           </Button>
         </Card>
       ) : !hasTriggers ? (
-        <EmptyAutomations onCreate={() => setCreating(true)} />
+        <>
+          <NotActiveYet items={inactive} projectId={projectId} />
+          <EmptyAutomations onCreate={() => setCreating(true)} />
+        </>
       ) : (
         <>
+          <NotActiveYet items={inactive} projectId={projectId} />
           <ComingUpTimeline triggers={triggers} />
           {/* The list's own control sits on the list, not in the page header. */}
           <div className="flex items-center justify-end">
@@ -82,6 +101,24 @@ export function AutomationsListPage() {
   );
 }
 
+/** The workflows' declared triggers nothing activates yet, each with Activate. */
+function NotActiveYet({ items, projectId }: { items: InactiveDeclaredTrigger[]; projectId?: string }) {
+  if (items.length === 0) return null;
+  return (
+    <section aria-label="Not active yet">
+      <Card padding="none" className="overflow-hidden">
+        <div className="border-b border-border/60 px-4 py-2.5">
+          <h2 className="text-sm font-semibold text-foreground">Not active yet</h2>
+          <p className="text-xs text-muted-foreground">
+            Triggers your workflows declare. Declaring one fires nothing; activate it to choose the project, machine and connection its runs use.
+          </p>
+        </div>
+        <InactiveDeclaredTriggers items={items} defaultProjectId={projectId} />
+      </Card>
+    </section>
+  );
+}
+
 function EmptyAutomations({ onCreate }: { onCreate: () => void }) {
   return (
     <Card padding="lg" className="flex flex-col items-center px-6 py-14 text-center">
@@ -90,8 +127,8 @@ function EmptyAutomations({ onCreate }: { onCreate: () => void }) {
       </div>
       <h2 className="mt-4 text-base font-semibold text-foreground">Nothing runs on its own yet</h2>
       <p className="mt-2 max-w-md text-sm text-muted-foreground">
-        An automation runs a workflow on a schedule, with no one typing: "every weekday at 9 AM,
-        triage new issues". Each run works unattended and is recorded for you to review.
+        An automation runs a workflow on a schedule, a webhook or an app event, with no one typing:
+        "every weekday at 9 AM, triage new issues". Each run works unattended and is recorded for you to review.
       </p>
       <div className="mt-6 flex flex-wrap items-center justify-center gap-3">
         <Button variant="primary" leftIcon={<Plus className="h-4 w-4" />} onClick={onCreate}>

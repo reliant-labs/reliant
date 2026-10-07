@@ -168,6 +168,7 @@ func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "typed last"))
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Msg.MessageId)
+	assert.False(t, resp.Msg.Queued, "a new run's message is saved to history, not queued")
 
 	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID),
 		"SendMessage must not duplicate call_llm's mailbox delivery")
@@ -211,11 +212,71 @@ func TestSendMessage_RunningWorkflowLeavesMailboxAlone(t *testing.T) {
 
 	remaining, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
-	require.Len(t, remaining, 1, "a running agent's mailbox must be left for its own drain boundary")
+	require.Len(t, remaining, 2, "a running agent's mailbox must be left for its own drain boundary")
 	assert.Equal(t, "queued for the live agent", remaining[0].Body)
+	assert.Equal(t, "sent while running", remaining[1].Body,
+		"a message to a running thread joins its queue, behind what was already there")
 
-	assert.Equal(t, []string{"sent while running"}, transcriptBodies(t, ctx, repo, fx.chatID),
-		"only the new message is persisted; the queued one arrives through the drain with its envelope")
+	assert.Empty(t, transcriptBodies(t, ctx, repo, fx.chatID),
+		"nothing is written into history mid-turn; both arrive through the drain, in order, with its envelope")
+}
+
+// The reason a message to a running thread is queued rather than written into
+// history: the thread may be mid-turn, and its reply is saved only when its
+// stream ends. A message written in between takes the earlier seq and sits
+// BEFORE the reply that never saw it, so history ends with the assistant and
+// the turn the wake buys yields instead of answering. Observed on a real
+// stack (Temporal dev server + production worker): the follow-up landed at
+// seq 1, the in-flight reply at seq 2, and the run ended with it unanswered.
+// Queued, it is drained at the next turn boundary — after the reply.
+func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
+	temporal := &wakeTestTemporalClient{absorbTestTemporalClient: absorbTestTemporalClient{
+		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}}
+	service := &ChatService{database: repo, tempClient: temporal, runs: runs.NewService(repo, temporal, nil)}
+
+	req := sendMessageRequest(t, fx.chatID, "one more thing")
+	clientID := uuid.NewString()
+	req.Msg.ClientMessageId = &clientID
+	resp, err := service.SendMessage(ctx, req)
+	require.NoError(t, err)
+
+	assert.NotContains(t, transcriptBodies(t, ctx, repo, fx.chatID), "one more thing",
+		"a message written into history now would be ordered before the in-flight reply")
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	assert.Equal(t, "one more thing", queued[0].Body)
+	assert.True(t, resp.Msg.Queued, "the receipt says the message was queued, not saved")
+	assert.Equal(t, clientID, queued[0].ID,
+		"the queued row carries the id the client chose, so its optimistic copy and the row are one item")
+	assert.Equal(t, clientID, resp.Msg.MessageId, "the receipt names the queued message")
+}
+
+// A client id that is not a UUID cannot name a row; the server picks one and
+// the send still goes through.
+func TestSendMessage_RunningWorkflowIgnoresAMalformedClientID(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
+	temporal := &wakeTestTemporalClient{absorbTestTemporalClient: absorbTestTemporalClient{
+		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}}
+	service := &ChatService{database: repo, tempClient: temporal, runs: runs.NewService(repo, temporal, nil)}
+
+	req := sendMessageRequest(t, fx.chatID, "steer")
+	bad := "not-a-uuid"
+	req.Msg.ClientMessageId = &bad
+	resp, err := service.SendMessage(ctx, req)
+	require.NoError(t, err)
+	_, parseErr := uuid.Parse(resp.Msg.MessageId)
+	require.NoError(t, parseErr)
+	assert.True(t, resp.Msg.Queued)
 }
 
 // TestSendMessage_LeavesEveryMailboxKindQueued verifies SendMessage does not

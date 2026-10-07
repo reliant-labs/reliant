@@ -271,6 +271,10 @@ func (l *testLogger) Info(msg string, keyvals ...interface{}) {
 	l.messages = append(l.messages, msg)
 }
 
+func (l *testLogger) Debug(msg string, keyvals ...interface{}) {
+	l.messages = append(l.messages, msg)
+}
+
 // A join whose source is another join must fire in the same pass: the inner
 // join's synthetic completion event is appended to the event list and has to be
 // fed back through RecordCompletion. A range loop fixes the slice length at

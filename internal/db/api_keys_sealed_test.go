@@ -27,7 +27,7 @@ func sealedRepo(t *testing.T) (*Repo, *sql.DB) {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	require.NoError(t, repo.EnableAPIKeySealing(vault.New(raw, vault.NewEnvKeyWrapper(ring))))
+	require.NoError(t, repo.EnableCredentialSealing(vault.New(raw, vault.NewEnvKeyWrapper(ring))))
 	return repo, raw
 }
 
@@ -163,7 +163,7 @@ func TestSetProviderAPIKeyRequiresVault(t *testing.T) {
 // racingSealer rewrites the plaintext of every row it seals, so the backfill's
 // compare-and-set on api_key can never apply.
 type racingSealer struct {
-	APIKeySealerForTest
+	CredentialSealerForTest
 	raw *sql.DB
 }
 
@@ -171,10 +171,10 @@ func (r racingSealer) Seal(ctx context.Context, tn vault.Tenant, pt, aad []byte)
 	if _, err := r.raw.ExecContext(ctx, `UPDATE api_keys SET api_key = api_key || 'x' WHERE api_key_sealed IS NULL`); err != nil {
 		return nil, err
 	}
-	return r.APIKeySealerForTest.Seal(ctx, tn, pt, aad)
+	return r.CredentialSealerForTest.Seal(ctx, tn, pt, aad)
 }
 
-type APIKeySealerForTest interface {
+type CredentialSealerForTest interface {
 	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
 	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)
 }
@@ -193,7 +193,7 @@ func TestBootRefusesWhenUnsealedRowRemainsAfterBackfill(t *testing.T) {
 	_, err = raw.ExecContext(ctx, `INSERT INTO api_keys (id, user_id, provider, api_key) VALUES ('l1','u1','openai','legacy')`)
 	require.NoError(t, err)
 
-	err = sealAPIKeys(ctx, repo, racingSealer{APIKeySealerForTest: real, raw: raw})
+	err = sealAPIKeys(ctx, repo, racingSealer{CredentialSealerForTest: real, raw: raw})
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "refusing to start")
 

@@ -23,12 +23,7 @@ const (
 // notYetMigrated lists files allowed to keep the SDK default, by module-relative
 // path, each with the reason. It is meant to be empty; an entry is a debt with
 // a named owner, not an exemption.
-var notYetMigrated = map[string]string{
-	// Rewritten by the open PR #498 (spawn gate lost wakeup). Migrating it
-	// here as well would conflict with that change; switch its embedded
-	// suite to temporaltest.WorkflowTestSuite once #498 lands.
-	"internal/workflow/runtime/spawn_background_e2e_test.go": "owned by PR #498",
-}
+var notYetMigrated = map[string]string{}
 
 // TestNoHarnessUsesTheSDKDeadlockDefault keeps the one-second default from
 // coming back one new test at a time. It rejects, anywhere in the module:

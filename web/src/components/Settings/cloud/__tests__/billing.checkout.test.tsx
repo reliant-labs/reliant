@@ -7,7 +7,7 @@
  * `cancelUrl` were both `window.location.href`, so a completed purchase and an
  * abandoned one returned to the identical URL and rendered identically.
  */
-import { render, screen } from "@testing-library/react";
+import { fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -166,5 +166,26 @@ describe("return from Stripe", () => {
     expect(
       screen.queryByRole("button", { name: /back to setup/i }),
     ).not.toBeInTheDocument();
+  });
+
+  // A deploy queued on billing sends its admin here from the environment's
+  // page. Buying the plan is the whole remedy — the deploy goes out on its
+  // own — and the way back is the page where it can be watched doing so.
+  it("offers the way back to an environment whose deploy is waiting on billing", () => {
+    routerState.search = { tab: "plans", from: "forge", returnTo: "/forge/env/prod?project=proj-1" };
+    renderSection();
+
+    expect(screen.getByTestId("billing-back-to-environment")).toHaveTextContent(/nothing to re-run/i);
+    fireEvent.click(screen.getByRole("button", { name: /back to environment/i }));
+    expect(routerState.navigate).toHaveBeenCalledWith({ href: "/forge/env/prod?project=proj-1" });
+    expect(screen.queryByRole("button", { name: /back to setup/i })).not.toBeInTheDocument();
+  });
+
+  it("never follows a returnTo off this origin", () => {
+    routerState.search = { from: "forge", returnTo: "//evil.example/forge" };
+    renderSection();
+
+    fireEvent.click(screen.getByRole("button", { name: /back to environment/i }));
+    expect(routerState.navigate).toHaveBeenCalledWith({ to: "/forge", search: {} });
   });
 });

@@ -38,6 +38,7 @@ import { usePreferencesStore } from "@/store/preferencesStore";
 import { useProjectStore } from "@/store/projectStore";
 import { workflowGrpc } from "@/api/workflow-grpc";
 import Card from "../../forge-ui/card";
+import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import DataTable from "../../forge-ui/data_table";
 import EmptyState from "../../forge-ui/empty_state";
 import PageHeader from "../../forge-ui/page_header";
@@ -48,6 +49,7 @@ import { workflowDisplayName } from "../../../lib/workflowDisplayName";
 import { normalizeWorkflowRef } from "../../workflow/useWorkflowInputs";
 import { splitFindings } from "../../workflow/workflowDraftStatus";
 import { FilterSearch, SelectFilter } from "../FilterMenu";
+import { WORKFLOW_SOURCE_LABEL } from "../WorkflowSourceBadge";
 import { libraryColumns, type LibraryTableRow, type WorkflowRowAction, type WorkflowRowItem } from "./WorkflowRow";
 import { libraryView } from "./libraryView";
 
@@ -268,6 +270,16 @@ function ImportConflictModal({
   );
 }
 
+/**
+ * What Delete removes, named so it cannot be mistaken for another row with
+ * the same title: the slug, where it lives, and whether it was published.
+ */
+function deleteDescription(workflow: WorkflowResponse): string {
+  const source = WORKFLOW_SOURCE_LABEL[workflow.source] ?? workflow.source;
+  const state = workflow.status === "draft" ? "draft" : "published workflow";
+  return `Deletes the ${state} ${workflow.name} (${source}). Automations that run it will stop finding it. This cannot be undone.`;
+}
+
 function LibraryBody({ projectId }: { projectId: string }) {
   const navigate = useNavigate();
   const [search, setSearch] = useLibrarySearch();
@@ -275,6 +287,8 @@ function LibraryBody({ projectId }: { projectId: string }) {
   const lastRuns = useLastRunPerWorkflow(projectId);
   const triggers = useTriggers(projectId);
   const [runRef, setRunRef] = useState<string | null>(null);
+  // The workflow whose Delete is being confirmed.
+  const [deleting, setDeleting] = useState<WorkflowResponse | null>(null);
 
   const deleteWorkflow = useDeleteWorkflow(projectId);
   const copyWorkflow = useCopyWorkflow(projectId);
@@ -354,8 +368,9 @@ function LibraryBody({ projectId }: { projectId: string }) {
           }),
       },
     ];
-    // A default must be runnable, so a draft cannot be one.
-    if (workflow.status !== "draft" && defaultWorkflow !== workflow.name) {
+    // A default must be runnable from a chat, so neither a draft nor a
+    // workflow whose Chat trigger is off can be one.
+    if (workflow.status !== "draft" && !workflow.automationOnly && defaultWorkflow !== workflow.name) {
       actions.push({
         label: "Set as default",
         onSelect: () =>
@@ -393,13 +408,7 @@ function LibraryBody({ projectId }: { projectId: string }) {
       actions.push({
         label: "Delete",
         destructive: true,
-        onSelect: () => {
-          if (!window.confirm(`Delete "${displayName}"? This cannot be undone.`)) return;
-          deleteWorkflow.mutate(workflow.filename, {
-            onSuccess: () => toast.success(`Deleted "${displayName}"`),
-            onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to delete"),
-          });
-        },
+        onSelect: () => setDeleting(workflow),
       });
     }
     return actions;
@@ -500,6 +509,26 @@ function LibraryBody({ projectId }: { projectId: string }) {
           {view.invalid.length > 0 && <InvalidSection workflows={view.invalid} />}
         </>
       )}
+
+      <ConfirmationDialog
+        open={deleting !== null}
+        title={deleting ? `Delete “${workflowDisplayName(deleting)}”?` : ""}
+        description={deleting ? deleteDescription(deleting) : undefined}
+        confirmLabel="Delete workflow"
+        loading={deleteWorkflow.isPending}
+        onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          if (!deleting) return;
+          const displayName = workflowDisplayName(deleting);
+          deleteWorkflow.mutate(deleting.filename, {
+            onSuccess: () => {
+              setDeleting(null);
+              toast.success(`Deleted “${displayName}”`);
+            },
+            onError: (error) => toast.error(error instanceof Error ? error.message : "Failed to delete"),
+          });
+        }}
+      />
 
       <RunWorkflowDialog
         open={runRef !== null}

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -150,6 +149,8 @@ func (s *WorkflowService) ListWorkflows(
 			Inputs:          protoWf.Inputs,
 			HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
 			Status:          reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
+			AutomationOnly:  protoWf.AutomationOnly,
+			Triggers:        protoWf.Triggers,
 		}
 	}
 
@@ -285,6 +286,8 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 		DraftId:          &draftID,
 		Status:           draftStatusToProto(draft.Status),
 		ValidationErrors: check.protoErrors(true),
+		AutomationOnly:   protoWf.AutomationOnly,
+		Triggers:         protoWf.Triggers,
 	}
 	if !draft.UpdatedAt.IsZero() {
 		updatedAt := draft.UpdatedAt.Format(time.RFC3339)
@@ -339,38 +342,12 @@ func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, pro
 			Inputs:          protoWf.Inputs,
 			HasPresetGroups: rpcWorkflowHasPresetGroups(protoWf),
 			Status:          reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
+			AutomationOnly:  protoWf.AutomationOnly,
+			Triggers:        protoWf.Triggers,
 		})
 	}
 
 	return items, invalidWorkflows
-}
-
-// Word lists for random workflow name generation (adjective-noun pattern)
-var workflowAdjectives = []string{
-	"swift", "bright", "calm", "bold", "keen",
-	"quick", "smart", "warm", "cool", "fresh",
-	"clear", "sharp", "brave", "wise", "fair",
-	"fast", "light", "quiet", "happy", "kind",
-	"pure", "soft", "strong", "true", "wild",
-	"free", "deep", "high", "new", "open",
-}
-
-var workflowNouns = []string{
-	"fox", "owl", "bear", "wolf", "hawk",
-	"deer", "lion", "tiger", "eagle", "falcon",
-	"raven", "crane", "swan", "otter", "seal",
-	"pine", "oak", "maple", "cedar", "birch",
-	"river", "lake", "cloud", "star", "moon",
-	"flame", "spark", "wave", "stone", "wind",
-}
-
-// generateRandomWorkflowName creates a random adjective-noun name with a short ID suffix
-// Example: "swift-fox-a1b2"
-func generateRandomWorkflowName() string {
-	adj := workflowAdjectives[rand.Intn(len(workflowAdjectives))]
-	noun := workflowNouns[rand.Intn(len(workflowNouns))]
-	suffix := uuid.New().String()[:4] // 4 chars for uniqueness
-	return fmt.Sprintf("%s-%s-%s", adj, noun, suffix)
 }
 
 // generateSlug creates a URL-safe slug from a workflow name
@@ -573,7 +550,7 @@ func (s *WorkflowService) SaveWorkflow(
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to write workflow to file via daemon: %w", err))
 		}
 
-		logging.Info("SaveWorkflow wrote to project file",
+		logging.Debug("SaveWorkflow wrote to project file",
 			"name", protoWf.Name,
 			"slug", slug,
 			"source_path", sourcePath,
@@ -810,8 +787,9 @@ func (s *WorkflowService) CopyWorkflow(
 	}), nil
 }
 
-// CreateWorkflowDraft creates an empty draft for the workflow builder.
-// Called when the user clicks "New Workflow" to give the canvas a draft to edit.
+// CreateWorkflowDraft creates a new draft for the workflow builder: blank, or
+// a copy of a built-in when the request names one as its template. It is
+// called once per "Create" in the New workflow dialog, never on page load.
 func (s *WorkflowService) CreateWorkflowDraft(
 	ctx context.Context,
 	req *connect.Request[reliantv1.CreateWorkflowDraftRequest],
@@ -821,16 +799,23 @@ func (s *WorkflowService) CreateWorkflowDraft(
 	}
 
 	userID := auth.MustGetUserID(ctx)
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
 	now := time.Now().UTC()
 
-	// Generate unique ID and random name for the new draft
 	draftID := uuid.New().String()
-	name := generateRandomWorkflowName() // e.g., "swift-fox-a1b2"
-	slug := name                         // Name is already slug-friendly
+	slug, title, err := s.uniqueNewWorkflowSlug(ctx, userID, req.Msg.ProjectId, req.Msg.GetTitle())
+	if err != nil {
+		return nil, err
+	}
+	name := slug // `name:` is the workflow's identity, and its slug
 
-	// Get the default workflow template (embedded agent.yaml) and set the random name
-	definition := defaultNewWorkflowTemplate()
-	definition = strings.Replace(definition, "name: agent", "name: "+name, 1)
+	definitionYAML, err := newWorkflowDefinition(name, title, req.Msg.GetTemplate())
+	if err != nil {
+		return nil, err
+	}
+	definition := string(definitionYAML)
 
 	// A new workflow is a draft unless the caller asks for complete, which
 	// is gated like any other transition to complete.
@@ -874,7 +859,105 @@ func (s *WorkflowService) CreateWorkflowDraft(
 		Slug:    slug,
 		Name:    name,
 		Status:  draftStatusToProto(status),
+		Title:   title,
 	}), nil
+}
+
+// untitledWorkflowTitle is a new workflow's title when the caller gave none.
+const untitledWorkflowTitle = "Untitled workflow"
+
+// uniqueNewWorkflowSlug picks a new workflow's slug from its title, unique
+// among everything the slug could collide with on save: the caller's drafts
+// (by slug and by name), the built-ins, and the project's workflow files.
+// When the slug needs a number, the title gets the same one ("Triage" →
+// "Triage 2" / triage-2), so two workflows never share a title by default.
+func (s *WorkflowService) uniqueNewWorkflowSlug(ctx context.Context, userID, projectID, requestedTitle string) (slug, title string, err error) {
+	title = strings.TrimSpace(requestedTitle)
+	if title == "" {
+		title = untitledWorkflowTitle
+	}
+	base := generateSlug(title)
+	if base == "" {
+		base = "workflow"
+	}
+	const maxNumbered = 100
+	for n := 1; n <= maxNumbered; n++ {
+		candidate := base
+		if n > 1 {
+			candidate = fmt.Sprintf("%s-%d", base, n)
+		}
+		taken, err := s.workflowSlugTaken(ctx, userID, projectID, candidate)
+		if err != nil {
+			return "", "", err
+		}
+		if !taken {
+			if n > 1 {
+				title = fmt.Sprintf("%s %d", title, n)
+			}
+			return candidate, title, nil
+		}
+	}
+	// A hundred workflows with the same title: fall back to a random suffix
+	// rather than failing the create. The DB's unique slug still guards it.
+	return base + "-" + uuid.New().String()[:6], title, nil
+}
+
+// workflowSlugTaken reports whether a new workflow could not be saved under
+// slug (see SaveWorkflow's naming-conflict checks, which this mirrors).
+func (s *WorkflowService) workflowSlugTaken(ctx context.Context, userID, projectID, slug string) (bool, error) {
+	if _, err := builtin.BuiltinWorkflowsFS.ReadFile(slug + ".yaml"); err == nil {
+		return true, nil
+	}
+	bySlug, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+	if err != nil {
+		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow: %w", err))
+	}
+	if bySlug != nil {
+		return true, nil
+	}
+	byName, err := s.database.GetWorkflowDraftByName(ctx, userID, slug)
+	if err != nil {
+		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check existing workflow name: %w", err))
+	}
+	if byName != nil {
+		return true, nil
+	}
+	projectWf, _, err := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, projectID, slug)
+	if err != nil {
+		return false, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load project workflow: %w", err))
+	}
+	return projectWf != nil, nil
+}
+
+// newWorkflowDefinition is a new draft's YAML: blank (no steps), or a copy of
+// the built-in named by template with this draft's own name and title and no
+// description. A copy that kept the built-in's title and description would
+// be indistinguishable from it in every list.
+func newWorkflowDefinition(name, title, template string) ([]byte, error) {
+	wf := &reliantv1.Workflow{}
+	if template != "" {
+		builtinName, ok := strings.CutPrefix(template, "builtin://")
+		if !ok || builtinName == "" {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("template must be a builtin:// ref, got %q", template))
+		}
+		data, err := builtin.BuiltinWorkflowsFS.ReadFile(builtinName + ".yaml")
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("unknown template %q", template))
+		}
+		parsed, err := wfyaml.ParseWorkflow(data)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse template %q: %w", template, err))
+		}
+		wf = parsed
+		wf.Description = ""
+	}
+	wf.Name = name
+	wf.Title = title
+	definition, err := rpcWorkflowToYAML(wf)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal new workflow: %w", err))
+	}
+	return definition, nil
 }
 
 // SetWorkflowStatus moves a stored workflow between draft and complete.
@@ -1298,9 +1381,17 @@ func (s *WorkflowService) ExportWorkflow(
 	}), nil
 }
 
-// ValidateWorkflow validates a workflow without saving it
-// It looks up the stored draft from the database and validates the actual YAML definition,
-// since the proto conversion from frontend can lose node-specific fields (like inline outputs).
+// ValidateWorkflow validates a workflow without saving it.
+//
+// It validates the definition in the REQUEST, converted exactly as
+// SaveWorkflow converts it for storage, so the findings describe what a save
+// of that canvas would store. That is what lets the builder show problems
+// while the edits are still unsaved. (It used to validate the stored draft
+// instead, which reported on the last save, not on the canvas.)
+//
+// A built-in is read-only and cannot be shadowed by a user workflow (saves
+// reject a built-in's slug), so a built-in is validated from its embedded
+// file.
 func (s *WorkflowService) ValidateWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ValidateWorkflowRequest],
@@ -1312,36 +1403,13 @@ func (s *WorkflowService) ValidateWorkflow(
 
 	userID := auth.MustGetUserID(ctx)
 
-	// For builtin workflows, load the YAML directly from the embedded filesystem
-	// This preserves all fields including inline workflow outputs
-	var yamlBytes []byte
-
-	// Try loading as builtin first (with or without builtin:// prefix)
 	builtinName := strings.TrimPrefix(protoWf.Name, "builtin://")
-	filename := builtinName + ".yaml"
-	data, builtinErr := builtin.BuiltinWorkflowsFS.ReadFile(filename)
-	if builtinErr == nil {
-		// Successfully loaded from builtin filesystem
-		yamlBytes = data
-	} else {
-		// Look up the stored draft from database - this has the complete YAML definition
-		// The proto sent from frontend loses node-specific fields like inline workflow outputs
-		slug := generateSlug(protoWf.Name)
-		draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
+	yamlBytes, builtinErr := builtin.BuiltinWorkflowsFS.ReadFile(builtinName + ".yaml")
+	if builtinErr != nil {
+		var err error
+		yamlBytes, err = rpcWorkflowToYAML(protoWf)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to look up workflow: %w", err))
-		}
-
-		if draft != nil && draft.Definition != "" {
-			// Use the stored definition - this preserves all fields
-			yamlBytes = []byte(draft.Definition)
-		} else {
-			// Fallback: workflow not yet saved, convert proto to YAML
-			// This may have lossy conversion but it's the best we can do for unsaved workflows
-			yamlBytes, err = rpcWorkflowToYAML(protoWf)
-			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal workflow to YAML: %w", err))
-			}
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to marshal workflow to YAML: %w", err))
 		}
 	}
 

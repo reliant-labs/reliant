@@ -1,7 +1,15 @@
--- name: UpsertToolCall :exec
+-- name: UpsertToolCall :execrows
 -- Activities that create/update a tool call retry on failure, so the write
 -- must be idempotent: a retry re-sending the same id updates the row in
 -- place instead of erroring on the primary key.
+--
+-- Only in place for the SAME chat. The id is the model provider's, and a
+-- provider can hand two chats the same one; the row belongs to whichever chat
+-- recorded it first. A write for another chat updates nothing (0 rows), which
+-- the store reports as core.ErrToolCallIDInAnotherChat. chat_id was never in
+-- the SET list, so before this guard such a write produced a row that still
+-- claimed the first chat while carrying the second chat's thread, input and
+-- status.
 INSERT INTO tool_calls (
     id, chat_id, thread_id, message_id, tool_name, input, status,
     error_message, child_workflow_id, background_process_id,
@@ -22,25 +30,69 @@ ON CONFLICT (id) DO UPDATE SET
     daemon_id = EXCLUDED.daemon_id,
     started_at = EXCLUDED.started_at,
     completed_at = EXCLUDED.completed_at,
-    updated_at = EXCLUDED.updated_at;
+    updated_at = EXCLUDED.updated_at
+WHERE tool_calls.chat_id = EXCLUDED.chat_id;
 
--- name: UpsertToolCallResult :exec
+-- name: UpsertToolCallResult :execrows
+-- A result belongs to its call (the foreign key), and so to the call's chat.
+-- The EXISTS is what makes the writer prove it is that chat: a result written
+-- for chat B under an id chat A's call holds would otherwise satisfy the
+-- foreign key against A's call and replace A's result. Writes nothing (0 rows)
+-- when the call is not this chat's or does not exist; the store reports both
+-- as core.ErrToolCallIDInAnotherChat.
+--
+-- granted_tools travels with content: a rewrite of the result (an error
+-- replacing it, a repair) replaces what the call granted, so the grants
+-- always describe the result the model reads.
 INSERT INTO tool_call_results (
-    tool_call_id, message_id, content, is_error, created_at, updated_at
-) VALUES (
-    $1, $2, $3, $4, $5, $6
+    tool_call_id, message_id, content, is_error, created_at, updated_at, granted_tools
+)
+SELECT
+    sqlc.arg(tool_call_id)::text, sqlc.narg(message_id)::text, sqlc.arg(content)::text,
+    sqlc.arg(is_error)::boolean, sqlc.arg(created_at)::timestamptz, sqlc.arg(updated_at)::timestamptz,
+    COALESCE(sqlc.narg(granted_tools)::text[], '{}')
+WHERE EXISTS (
+    SELECT 1 FROM tool_calls
+    WHERE id = sqlc.arg(tool_call_id)::text AND chat_id = sqlc.arg(chat_id)::text
 )
 ON CONFLICT (tool_call_id) DO UPDATE SET
     message_id = EXCLUDED.message_id,
     content = EXCLUDED.content,
     is_error = EXCLUDED.is_error,
-    updated_at = EXCLUDED.updated_at;
+    updated_at = EXCLUDED.updated_at,
+    granted_tools = EXCLUDED.granted_tools;
+
+-- name: ListToolGrantsForChat :many
+-- Every grant a tool call recorded in one chat, per thread: what a load_tool
+-- result granted, written with that result (UpsertToolCallResult). The coarse
+-- fresh restart rebuilds each thread's grants from these rows, because the
+-- dead execution's in-memory record of them died with it. A chat is one root
+-- execution and its sub-agents, each on its own thread, so the thread keys
+-- the grants exactly as the workflow keys them. Ordered so the merge is
+-- deterministic.
+SELECT tc.thread_id::text AS thread_id, r.granted_tools
+FROM tool_call_results r
+JOIN tool_calls tc ON tc.id = r.tool_call_id
+WHERE tc.chat_id = sqlc.arg(chat_id)::text
+  AND tc.thread_id IS NOT NULL AND tc.thread_id <> ''
+  AND cardinality(r.granted_tools) > 0
+ORDER BY tc.thread_id ASC, tc.id ASC;
 
 -- name: GetToolCall :one
 SELECT * FROM tool_calls WHERE id = $1;
 
 -- name: GetToolCallResult :one
 SELECT * FROM tool_call_results WHERE tool_call_id = $1;
+
+-- name: GetToolCallResultForMessage :one
+-- The result of the call one assistant message carries. History recovery
+-- reads this rather than GetToolCallResult: an id alone can name another
+-- chat's call, but a call's message is its own, and message ids are ours.
+-- Branched chats included — an inherited message keeps its id, and so does
+-- the call record pointing at it.
+SELECT r.* FROM tool_call_results r
+JOIN tool_calls tc ON tc.id = r.tool_call_id
+WHERE r.tool_call_id = $1 AND tc.message_id = $2;
 
 -- name: ListToolCallsByChat :many
 SELECT * FROM tool_calls
@@ -179,7 +231,7 @@ SELECT tc.id AS tool_call_id,
        w.stop_reason AS workflow_stop_reason,
        EXISTS (
            SELECT 1 FROM agent_messages m
-           WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
+           WHERE m.chat_id = tc.chat_id AND m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
        ) AS has_report
 FROM tool_calls tc
 JOIN workflows w ON w.id = tc.child_workflow_id
@@ -300,6 +352,6 @@ WHERE tc.tool_name = 'spawn'
   AND tc.status = 6
   AND NOT EXISTS (
       SELECT 1 FROM agent_messages m
-      WHERE m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
+      WHERE m.chat_id = tc.chat_id AND m.tool_call_id = tc.id AND m.kind IN (2, 3, 4)
   )
 ORDER BY t.depth ASC, tc.id ASC;

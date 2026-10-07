@@ -7,8 +7,10 @@ import {
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
-import { resumeErrorMessage } from "@/lib/daemon-resume";
+import { resumeErrorMessage, resumeErrorNeedsUpgrade } from "@/lib/daemon-resume";
 
+const RESUME_POLL_MS = 3_000;
+const RESUME_GRACE_MS = 120_000;
 const DISMISS_KEY = "reliant.resumeDaemonPill.dismissed";
 
 interface ResumeDaemonPillProps {
@@ -38,14 +40,34 @@ function writeDismissed(sig: string): void {
 
 export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillProps) {
   const goToBilling = useGoToBilling();
-  const { data: daemons = [] } = useDaemonList();
+  // Daemons whose Resume RPC succeeded. The registry's lifecycle mirror lags
+  // the real state (control-plane's reconciler writes it), so the list keeps
+  // saying "suspended" for a while after a successful resume; trust the RPC
+  // until the list catches up or RESUME_GRACE_MS passes.
+  const [resumedIds, setResumedIds] = useState<ReadonlySet<string>>(() => new Set());
+  const { data: daemons = [] } = useDaemonList({
+    refetchInterval: resumedIds.size > 0 ? RESUME_POLL_MS : false,
+  });
   const [dismissedSig, setDismissedSig] = useState<string>(() => readDismissed());
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ message: string; upgrade: boolean } | null>(null);
   // The hook routes reasoned-quota errors to the global UpgradeRequiredModal
   // and only fires onError for OTHER failures. Without that filter the pill
   // used to render "[resource_exhausted] …" under the modal.
   const resume = useResumeDaemon({
-    onError: (err) => setError(resumeErrorMessage(err)),
+    onSuccess: (id) => {
+      setError(null);
+      setResumedIds((prev) => new Set(prev).add(id));
+      window.setTimeout(() => {
+        setResumedIds((prev) => {
+          if (!prev.has(id)) return prev;
+          const next = new Set(prev);
+          next.delete(id);
+          return next;
+        });
+      }, RESUME_GRACE_MS);
+    },
+    onError: (err) =>
+      setError({ message: resumeErrorMessage(err), upgrade: resumeErrorNeedsUpgrade(err) }),
   });
 
   const { active, suspended } = useMemo(() => {
@@ -53,10 +75,22 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
     const s: Daemon[] = [];
     for (const d of daemons) {
       if (d.status === DaemonStatus.ACTIVE) a.push(d);
-      else if (d.status === DaemonStatus.SUSPENDED) s.push(d);
+      else if (d.status === DaemonStatus.SUSPENDED && !resumedIds.has(d.daemonId)) s.push(d);
     }
     return { active: a, suspended: s };
-  }, [daemons]);
+  }, [daemons, resumedIds]);
+
+  // Once the list stops reporting a resumed daemon as suspended, forget it so a
+  // later suspend shows the pill again.
+  useEffect(() => {
+    if (resumedIds.size === 0) return;
+    const stillSuspended = new Set(
+      daemons.filter((d) => d.status === DaemonStatus.SUSPENDED).map((d) => d.daemonId),
+    );
+    const settled = [...resumedIds].filter((id) => !stillSuspended.has(id));
+    if (settled.length === 0) return;
+    setResumedIds((prev) => new Set([...prev].filter((id) => stillSuspended.has(id))));
+  }, [daemons, resumedIds]);
 
   // Signature changes when a new daemon gets suspended → pill reappears even if
   // the user dismissed an earlier set.
@@ -68,14 +102,15 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
   }, [sig]);
 
   useEffect(() => {
-    if (suspended.length === 0) setError("");
+    if (suspended.length === 0) setError(null);
   }, [suspended.length]);
 
   if (active.length > 0 || suspended.length === 0) return null;
   if (dismissedSig && dismissedSig === sig) return null;
 
   const handleResume = (id: string) => {
-    setError("");
+    if (resume.isPending) return;
+    setError(null);
     resume.mutate(id);
   };
 
@@ -123,15 +158,17 @@ export function ResumeDaemonPill({ placement = "absolute" }: ResumeDaemonPillPro
         </div>
         {error && (
           <div className="max-w-[min(560px,calc(100vw-3rem))] rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-center text-xs leading-relaxed text-destructive-ink shadow-sm backdrop-blur">
-            <span>{error}</span>
-            <button
-              type="button"
-              onClick={handleUpgrade}
-              className="ml-2 inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
-            >
-              Upgrade plan
-              <ArrowUpRight className="h-3 w-3" />
-            </button>
+            <span>{error.message}</span>
+            {error.upgrade && (
+              <button
+                type="button"
+                onClick={handleUpgrade}
+                className="ml-2 inline-flex items-center gap-1 font-medium underline-offset-2 hover:underline"
+              >
+                Upgrade plan
+                <ArrowUpRight className="h-3 w-3" />
+              </button>
+            )}
           </div>
         )}
       </div>

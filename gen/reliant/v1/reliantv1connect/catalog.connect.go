@@ -59,6 +59,9 @@ const (
 	// CatalogServiceGetCatalogEntryProcedure is the fully-qualified name of the CatalogService's
 	// GetCatalogEntry RPC.
 	CatalogServiceGetCatalogEntryProcedure = "/reliant.v1.CatalogService/GetCatalogEntry"
+	// CatalogServiceListCatalogIntegrationsProcedure is the fully-qualified name of the
+	// CatalogService's ListCatalogIntegrations RPC.
+	CatalogServiceListCatalogIntegrationsProcedure = "/reliant.v1.CatalogService/ListCatalogIntegrations"
 )
 
 // CatalogServiceClient is a client for the reliant.v1.CatalogService service.
@@ -88,6 +91,12 @@ type CatalogServiceClient interface {
 	// what a connection to its integration requires. An unknown ref is
 	// NOT_FOUND.
 	GetCatalogEntry(context.Context, *connect.Request[v1.GetCatalogEntryRequest]) (*connect.Response[v1.GetCatalogEntryResponse], error)
+	// ListCatalogIntegrations browses the catalog by integration: one row per
+	// integration that has an entry of the requested kinds, the ones the caller
+	// can use now first. It is paged like SearchCatalog, so a picker browsing
+	// hundreds of integrations holds only what it has scrolled to;
+	// SearchCatalog with `integration` set lists one integration's entries.
+	ListCatalogIntegrations(context.Context, *connect.Request[v1.ListCatalogIntegrationsRequest]) (*connect.Response[v1.ListCatalogIntegrationsResponse], error)
 }
 
 // NewCatalogServiceClient constructs a client for the reliant.v1.CatalogService service. By
@@ -149,19 +158,26 @@ func NewCatalogServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 			connect.WithSchema(catalogServiceMethods.ByName("GetCatalogEntry")),
 			connect.WithClientOptions(opts...),
 		),
+		listCatalogIntegrations: connect.NewClient[v1.ListCatalogIntegrationsRequest, v1.ListCatalogIntegrationsResponse](
+			httpClient,
+			baseURL+CatalogServiceListCatalogIntegrationsProcedure,
+			connect.WithSchema(catalogServiceMethods.ByName("ListCatalogIntegrations")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
 // catalogServiceClient implements CatalogServiceClient.
 type catalogServiceClient struct {
-	listModels           *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
-	listModelsByProvider *connect.Client[v1.ListModelsByProviderRequest, v1.ListModelsByProviderResponse]
-	listAvailableModels  *connect.Client[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse]
-	listTools            *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
-	listNodes            *connect.Client[v1.ListNodesRequest, v1.ListNodesResponse]
-	getCELCompletions    *connect.Client[v1.GetCELCompletionsRequest, v1.GetCELCompletionsResponse]
-	searchCatalog        *connect.Client[v1.SearchCatalogRequest, v1.SearchCatalogResponse]
-	getCatalogEntry      *connect.Client[v1.GetCatalogEntryRequest, v1.GetCatalogEntryResponse]
+	listModels              *connect.Client[v1.ListModelsRequest, v1.ListModelsResponse]
+	listModelsByProvider    *connect.Client[v1.ListModelsByProviderRequest, v1.ListModelsByProviderResponse]
+	listAvailableModels     *connect.Client[v1.ListAvailableModelsRequest, v1.ListAvailableModelsResponse]
+	listTools               *connect.Client[v1.ListToolsRequest, v1.ListToolsResponse]
+	listNodes               *connect.Client[v1.ListNodesRequest, v1.ListNodesResponse]
+	getCELCompletions       *connect.Client[v1.GetCELCompletionsRequest, v1.GetCELCompletionsResponse]
+	searchCatalog           *connect.Client[v1.SearchCatalogRequest, v1.SearchCatalogResponse]
+	getCatalogEntry         *connect.Client[v1.GetCatalogEntryRequest, v1.GetCatalogEntryResponse]
+	listCatalogIntegrations *connect.Client[v1.ListCatalogIntegrationsRequest, v1.ListCatalogIntegrationsResponse]
 }
 
 // ListModels calls reliant.v1.CatalogService.ListModels.
@@ -204,6 +220,11 @@ func (c *catalogServiceClient) GetCatalogEntry(ctx context.Context, req *connect
 	return c.getCatalogEntry.CallUnary(ctx, req)
 }
 
+// ListCatalogIntegrations calls reliant.v1.CatalogService.ListCatalogIntegrations.
+func (c *catalogServiceClient) ListCatalogIntegrations(ctx context.Context, req *connect.Request[v1.ListCatalogIntegrationsRequest]) (*connect.Response[v1.ListCatalogIntegrationsResponse], error) {
+	return c.listCatalogIntegrations.CallUnary(ctx, req)
+}
+
 // CatalogServiceHandler is an implementation of the reliant.v1.CatalogService service.
 type CatalogServiceHandler interface {
 	// ListModels returns all available models filtered by user's configured API keys
@@ -231,6 +252,12 @@ type CatalogServiceHandler interface {
 	// what a connection to its integration requires. An unknown ref is
 	// NOT_FOUND.
 	GetCatalogEntry(context.Context, *connect.Request[v1.GetCatalogEntryRequest]) (*connect.Response[v1.GetCatalogEntryResponse], error)
+	// ListCatalogIntegrations browses the catalog by integration: one row per
+	// integration that has an entry of the requested kinds, the ones the caller
+	// can use now first. It is paged like SearchCatalog, so a picker browsing
+	// hundreds of integrations holds only what it has scrolled to;
+	// SearchCatalog with `integration` set lists one integration's entries.
+	ListCatalogIntegrations(context.Context, *connect.Request[v1.ListCatalogIntegrationsRequest]) (*connect.Response[v1.ListCatalogIntegrationsResponse], error)
 }
 
 // NewCatalogServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -288,6 +315,12 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 		connect.WithSchema(catalogServiceMethods.ByName("GetCatalogEntry")),
 		connect.WithHandlerOptions(opts...),
 	)
+	catalogServiceListCatalogIntegrationsHandler := connect.NewUnaryHandler(
+		CatalogServiceListCatalogIntegrationsProcedure,
+		svc.ListCatalogIntegrations,
+		connect.WithSchema(catalogServiceMethods.ByName("ListCatalogIntegrations")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.CatalogService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case CatalogServiceListModelsProcedure:
@@ -306,6 +339,8 @@ func NewCatalogServiceHandler(svc CatalogServiceHandler, opts ...connect.Handler
 			catalogServiceSearchCatalogHandler.ServeHTTP(w, r)
 		case CatalogServiceGetCatalogEntryProcedure:
 			catalogServiceGetCatalogEntryHandler.ServeHTTP(w, r)
+		case CatalogServiceListCatalogIntegrationsProcedure:
+			catalogServiceListCatalogIntegrationsHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -345,4 +380,8 @@ func (UnimplementedCatalogServiceHandler) SearchCatalog(context.Context, *connec
 
 func (UnimplementedCatalogServiceHandler) GetCatalogEntry(context.Context, *connect.Request[v1.GetCatalogEntryRequest]) (*connect.Response[v1.GetCatalogEntryResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.GetCatalogEntry is not implemented"))
+}
+
+func (UnimplementedCatalogServiceHandler) ListCatalogIntegrations(context.Context, *connect.Request[v1.ListCatalogIntegrationsRequest]) (*connect.Response[v1.ListCatalogIntegrationsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.CatalogService.ListCatalogIntegrations is not implemented"))
 }

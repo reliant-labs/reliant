@@ -53,7 +53,7 @@ func (e *InlineLoopExecutor) ExecuteParallel() (*reliantv1.LoopOutput, error) {
 	}
 
 	if len(items) == 0 {
-		e.logger.Info("[InlineLoop] Parallel loop has no items, returning empty results",
+		e.logger.Debug("[InlineLoop] Parallel loop has no items, returning empty results",
 			"loopID", e.loopID,
 		)
 		return &reliantv1.LoopOutput{
@@ -65,7 +65,7 @@ func (e *InlineLoopExecutor) ExecuteParallel() (*reliantv1.LoopOutput, error) {
 		}, nil
 	}
 
-	e.logger.Info("[InlineLoop] Parallel loop resolved items",
+	e.logger.Debug("[InlineLoop] Parallel loop resolved items",
 		"loopID", e.loopID,
 		"itemCount", len(items),
 	)
@@ -299,7 +299,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 	resolvedItem := e.resolveIterItem(item)
 
-	e.logger.Info("[InlineLoop] Starting parallel iteration",
+	e.logger.Debug("[InlineLoop] Starting parallel iteration",
 		"loopID", e.loopID,
 		"index", index,
 		"key", key,
@@ -320,7 +320,8 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 	// body's `outputs` is the empty map.
 	parallelScope := loopBodyScope(&model.IterContext{Iteration: index, Index: index, Item: resolvedItem, Key: key}, nil)
 	iterStateMachine := NewSimplifiedStateMachine(e.workflowID, e.subWorkflow).
-		WithLoopScope(func() *LoopScope { return parallelScope })
+		WithLoopScope(func() *LoopScope { return parallelScope }).
+		WithExecContext(e.execContext)
 
 	// Unique activity ID prefix for this iteration (prevents collision)
 	activityPrefix := fmt.Sprintf("%spar-%s-iter%d-", e.activityIDPrefix, e.loopID, index)
@@ -406,7 +407,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 			// Check node condition
 			skipped, skipEvt, condErr := skipNodeIfConditionFalse(
 				gCtx, step.Node, iterNodeOutputs, iterInputs,
-				e.workflowID, e.chatID, e.workflowIdentity(), e.logger,
+				e.workflowID, e.chatID, e.workflowIdentity(), e.execContext, e.logger,
 				parallelScope,
 				e.nodePath(),
 			)
@@ -646,7 +647,7 @@ func (e *InlineLoopExecutor) executeParallelIteration(
 
 		// Check completion
 		if len(runningSteps) == 0 && len(events) == 0 {
-			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs)
+			workflowContext := buildWorkflowContext(e.workflowID, e.workflowIdentity(), e.chatID, iterInputs, e.execContext)
 			outputs, err := EvaluateDeclaredOutputs(e.subWorkflow.GetOutputs(), iterNodeOutputs, workflowContext, e.subWorkflow, e.logger)
 			if err != nil {
 				result.Error = fmt.Errorf("failed to evaluate sub-workflow outputs: %w", err)

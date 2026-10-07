@@ -2600,6 +2600,11 @@ type SendMessageRequest struct {
 	SelectedPresets map[string]string          `protobuf:"bytes,14,rep,name=selected_presets,json=selectedPresets,proto3" json:"selected_presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Update preset selections (persisted with chat)
 	Messages        []*InputMessage            `protobuf:"bytes,15,rep,name=messages,proto3" json:"messages,omitempty"`                                                                                                                // Messages to send (user and system). At least one user message required.
 	Discuss         bool                       `protobuf:"varint,17,opt,name=discuss,proto3" json:"discuss,omitempty"`                                                                                                                 // If true, chat with LLM without resuming paused workflow
+	// Client-chosen UUID for the user message. When the message is queued for a
+	// running thread (see SendMessageResponse.queued) it becomes the queued
+	// row's id, so a client can key its optimistic copy by the id the queue
+	// will report from the moment it sends. Ignored when not a UUID.
+	ClientMessageId *string `protobuf:"bytes,18,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -2711,6 +2716,13 @@ func (x *SendMessageRequest) GetDiscuss() bool {
 	return false
 }
 
+func (x *SendMessageRequest) GetClientMessageId() string {
+	if x != nil && x.ClientMessageId != nil {
+		return *x.ClientMessageId
+	}
+	return ""
+}
+
 // SendMessageResponse confirms message sent
 type SendMessageResponse struct {
 	state          protoimpl.MessageState `protogen:"open.v1"`
@@ -2719,9 +2731,14 @@ type SendMessageResponse struct {
 	RunId          string                 `protobuf:"bytes,3,opt,name=run_id,json=runId,proto3" json:"run_id,omitempty"`
 	Status         string                 `protobuf:"bytes,4,opt,name=status,proto3" json:"status,omitempty"`                                             // 'processing'
 	WorkflowStatus *string                `protobuf:"bytes,5,opt,name=workflow_status,json=workflowStatus,proto3,oneof" json:"workflow_status,omitempty"` // Workflow status after operation (running, paused, etc.)
-	MessageId      string                 `protobuf:"bytes,6,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`                      // ID of the saved user message
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	// ID of the user message: the history row, or — when queued — the queued
+	// mailbox row, which becomes history when the thread's next turn drains it.
+	MessageId string `protobuf:"bytes,6,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	// True when the message was queued in the target thread's mailbox (the
+	// thread's run was executing) rather than written to its history.
+	Queued        bool `protobuf:"varint,7,opt,name=queued,proto3" json:"queued,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *SendMessageResponse) Reset() {
@@ -2794,6 +2811,13 @@ func (x *SendMessageResponse) GetMessageId() string {
 		return x.MessageId
 	}
 	return ""
+}
+
+func (x *SendMessageResponse) GetQueued() bool {
+	if x != nil {
+		return x.Queued
+	}
+	return false
 }
 
 // SendAgentMessageRequest queues a human message into a specific running
@@ -6046,7 +6070,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x18ListArchivedChatsRequest\"a\n" +
 	"\x19ListArchivedChatsResponse\x12.\n" +
 	"\x05chats\x18\x01 \x03(\v2\x18.reliant.v1.ArchivedChatR\x05chats\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\x95\x06\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\xdc\x06\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
 	"\vattachments\x18\x03 \x03(\tR\vattachments\x12\x1f\n" +
@@ -6059,7 +6083,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\rtarget_thread\x18\r \x01(\tH\x04R\ftargetThread\x88\x01\x01\x12^\n" +
 	"\x10selected_presets\x18\x0e \x03(\v23.reliant.v1.SendMessageRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
 	"\bmessages\x18\x0f \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x18\n" +
-	"\adiscuss\x18\x11 \x01(\bR\adiscuss\x1aY\n" +
+	"\adiscuss\x18\x11 \x01(\bR\adiscuss\x12/\n" +
+	"\x11client_message_id\x18\x12 \x01(\tH\x05R\x0fclientMessageId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -6070,8 +6095,9 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_temperatureB\r\n" +
 	"\v_max_tokensB\a\n" +
 	"\x05_modeB\x10\n" +
-	"\x0e_target_threadJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\vJ\x04\b\x10\x10\x11\"\xdf\x01\n" +
+	"\x0e_target_threadB\x14\n" +
+	"\x12_client_message_idJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\n" +
+	"\x10\vJ\x04\b\x10\x10\x11\"\xf7\x01\n" +
 	"\x13SendMessageResponse\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -6080,7 +6106,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x06status\x18\x04 \x01(\tR\x06status\x12,\n" +
 	"\x0fworkflow_status\x18\x05 \x01(\tH\x00R\x0eworkflowStatus\x88\x01\x01\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x06 \x01(\tR\tmessageIdB\x12\n" +
+	"message_id\x18\x06 \x01(\tR\tmessageId\x12\x16\n" +
+	"\x06queued\x18\a \x01(\bR\x06queuedB\x12\n" +
 	"\x10_workflow_status\"\x8b\x01\n" +
 	"\x17SendAgentMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +

@@ -41,7 +41,7 @@ func TestListStrandedSpawnToolCalls_MissesTerminalBackgroundedSpawn(t *testing.T
 	// stated failure mode: "the parent never learns this spawn finished").
 	insertTestSpawnToolCall(t, repo, "tc-background-stranded", chatID, chatID, &childWorkflowID, core.ToolCallStatusBackgrounded)
 	now := time.Now().UTC()
-	if err := repo.UpsertToolCallResult(ctx, &ToolCallResult{
+	if err := repo.UpsertToolCallResult(ctx, chatID, &ToolCallResult{
 		ToolCallID: "tc-background-stranded",
 		Content:    "Spawned \"reviewer\" as agent_id: wf-background-child-terminal (status: running)",
 		CreatedAt:  now,

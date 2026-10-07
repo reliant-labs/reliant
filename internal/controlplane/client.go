@@ -32,6 +32,38 @@ type AccountDeletionBlocker struct {
 	Detail string
 }
 
+// RefundDestination is wallet money going back to one card on deletion.
+type RefundDestination struct {
+	CardBrand   string
+	CardLast4   string
+	AmountCents int64
+}
+
+// AccountDeletionWalletQuote is what deleting the account would do to the
+// caller's wallet, as quoted by the control plane: paid credit refunded to the
+// card, promotional credit forfeited.
+type AccountDeletionWalletQuote struct {
+	RefundCents         int64
+	Destinations        []RefundDestination
+	UnrefundableCents   int64
+	ForfeitedPromoCents int64
+}
+
+// AccountDeletionResult is the control plane's answer to a deletion.
+type AccountDeletionResult struct {
+	// Blockers, when non-empty, mean the control plane REFUSED and destroyed
+	// nothing.
+	Blockers []AccountDeletionBlocker
+
+	RefundedCents       int64
+	RefundDestinations  []RefundDestination
+	RefundOwedCents     int64
+	ForfeitedPromoCents int64
+	// RefundPending: the account is deleted, but RefundOwedCents could not be
+	// refunded automatically and support will refund it by hand.
+	RefundPending bool
+}
+
 // ReliantProviderKeyName is the device name of the LLM gateway key reliant
 // holds on a user's behalf (persisted as the "reliant" provider credential).
 // One holder per user, so one name: re-syncing rotates THIS key and leaves the
@@ -76,14 +108,21 @@ type Client interface {
 	// caller holds that is bound to daemonID.
 	RevokeDaemonResumeTokens(ctx context.Context, jwt, daemonID string) error
 
-	// DeleteCurrentUserAccount asks the control plane to tombstone the
-	// caller's platform account (billing identity, daemons, PII), forwarding
-	// the caller's own JWT.
+	// PreviewAccountDeletionWallet asks the control plane what deleting the
+	// caller's account would refund and forfeit. Changes nothing.
+	PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error)
+
+	// DeleteCurrentUserAccount asks the control plane to settle the caller's
+	// wallet (refund paid credit, forfeit promotional credit) and tombstone
+	// their platform account (billing identity, daemons, PII), forwarding the
+	// caller's own JWT.
 	//
-	// A non-empty blocker slice means the control plane REFUSED and destroyed
+	// Non-empty Blockers means the control plane REFUSED and destroyed
 	// nothing — the caller must surface the blockers and stop. An error means
-	// the call itself failed.
-	DeleteCurrentUserAccount(ctx context.Context, jwt string) ([]AccountDeletionBlocker, error)
+	// the call itself failed; a connect.CodeUnavailable error means a refund's
+	// outcome could not be confirmed and nothing else was deleted, so the
+	// caller may retry.
+	DeleteCurrentUserAccount(ctx context.Context, jwt string) (*AccountDeletionResult, error)
 
 	// CloneRepoOntoDaemon asks the control plane to clone a repo onto one of
 	// the caller's daemons, using the git credential IT holds — reliant has
@@ -191,21 +230,58 @@ func (c *connectClient) CloneRepoOntoDaemon(ctx context.Context, jwt string, in 
 	}, nil
 }
 
-func (c *connectClient) DeleteCurrentUserAccount(ctx context.Context, jwt string) ([]AccountDeletionBlocker, error) {
+func (c *connectClient) PreviewAccountDeletionWallet(ctx context.Context, jwt string) (*AccountDeletionWalletQuote, error) {
+	req := connect.NewRequest(&userv1.PreviewAccountDeletionRequest{})
+	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
+	resp, err := c.userClient().PreviewAccountDeletion(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+	w := resp.Msg.GetWallet()
+	if w == nil {
+		return nil, nil
+	}
+	return &AccountDeletionWalletQuote{
+		RefundCents:         w.GetRefundCents(),
+		Destinations:        refundDestinations(w.GetDestinations()),
+		UnrefundableCents:   w.GetUnrefundableCents(),
+		ForfeitedPromoCents: w.GetForfeitedPromoCents(),
+	}, nil
+}
+
+func (c *connectClient) DeleteCurrentUserAccount(ctx context.Context, jwt string) (*AccountDeletionResult, error) {
 	req := connect.NewRequest(&userv1.DeleteCurrentUserAccountRequest{})
 	attachAuthorization(req, "Bearer "+strings.TrimSpace(jwt))
 	resp, err := c.userClient().DeleteCurrentUserAccount(ctx, req)
 	if err != nil {
 		return nil, err
 	}
-	var blockers []AccountDeletionBlocker
+	out := &AccountDeletionResult{RefundPending: resp.Msg.GetRefundPending()}
 	for _, b := range resp.Msg.GetBlockers() {
-		blockers = append(blockers, AccountDeletionBlocker{
+		out.Blockers = append(out.Blockers, AccountDeletionBlocker{
 			Reason: b.GetReason(),
 			Detail: b.GetDetail(),
 		})
 	}
-	return blockers, nil
+	if w := resp.Msg.GetWallet(); w != nil {
+		out.RefundedCents = w.GetRefundedCents()
+		out.RefundDestinations = refundDestinations(w.GetDestinations())
+		out.RefundOwedCents = w.GetRefundOwedCents()
+		out.ForfeitedPromoCents = w.GetForfeitedPromoCents()
+	}
+	return out, nil
+}
+
+func refundDestinations(in []*userv1.WalletRefundDestination) []RefundDestination {
+	out := make([]RefundDestination, 0, len(in))
+	for _, d := range in {
+		out = append(out, RefundDestination{
+			CardBrand:   d.GetCardBrand(),
+			CardLast4:   d.GetCardLast4(),
+			AmountCents: d.GetAmountCents(),
+		})
+	}
+	return out
 }
 
 func (c *connectClient) MintLLMKey(ctx context.Context, jwt, deviceName string) (LLMKey, error) {

@@ -241,6 +241,10 @@ export const proxyAuthSearchSchema = z.object({
 // onboarding tour to land the user inside a named loop/workflow node after the
 // builder loads.
 export const workflowSearchSchema = z.object({
+  // The project the workflow belongs to, so a refresh or a pasted link
+  // resolves it (useRouteProjectResolution) — the builder's routes never
+  // mount ModernApp, which is what restores a project anywhere else.
+  project: z.string().optional(),
   drill: z.string().optional(),
   tour: tourParam,
   // The chat shown in the editor's chat panel. UI state only: nothing on the
@@ -361,9 +365,10 @@ export const settingsSearchSchema = z.object({
   planId: z.string().optional(),
   // Where the user came from. `onboarding`: billing offers a route back —
   // previously `returnTo` hard-coded /settings/billing and a user who detoured
-  // mid-wizard had no way home. `connectors`: the retired /settings/connectors
-  // redirect, so Machines can say where Connectors went.
-  from: z.enum(["onboarding", "connectors"]).optional(),
+  // mid-wizard had no way home. `forge`: an environment whose deploy is queued
+  // on billing; the way back is its page. `connectors`: the retired
+  // /settings/connectors redirect, so Machines can say where Connectors went.
+  from: z.enum(["onboarding", "forge", "connectors"]).optional(),
   // The exact URL to return to, captured at the moment the user left. Carries
   // onboarding's `plan` search param — the wizard's ENTIRE state — so the trip
   // through billing (and Stripe, which is a full cold boot) is resumable.
@@ -407,16 +412,30 @@ export const mobileNewChatSearchSchema = z.object({
  * `env` is an environment name, on the two routes that have a per-environment
  * view. It moved out of component state so that a topology row can link into a
  * specific environment's status, and so a refresh keeps the selection.
+ *
+ * `forgeProject` is a FORGE project name (forge.yaml `name`) — the only name
+ * the control plane knows, so it is what a link the control plane writes
+ * carries: a queued deploy's action URL is
+ * `/forge/env/<env>?forgeProject=<name>`. ForgeLayout resolves it to the
+ * Reliant project that declares that name and replaces it with `project`.
+ * When none does — an org admin sent the link who has never opened the
+ * project here — it stays, and the forge screens read the control plane by
+ * that name alone (see useForgeScope). Every forge route accepts it so the
+ * sidebar's links keep it.
  */
+const forgeProjectParam = z.string().optional();
+
 export const forgeOverviewSearchSchema = z.object({
   project: z.string().optional(),
+  forgeProject: forgeProjectParam,
 });
 
 /**
  * /forge/domains. Carries `project` for the same reason every other forge
  * route does — a refresh must resolve the project without ModernApp.
  *
- * It carries NOTHING ELSE, and in particular no domain selection. The domain
+ * It carries NOTHING ELSE beyond that scope (and `forgeProject`, its
+ * control-plane spelling), and in particular no domain selection. The domain
  * list is ORG-scoped, so a link to one domain is not a link to a place in
  * this project; the expanded row is component state deliberately, because a
  * shared URL naming a domain id would open a blank row for a teammate in a
@@ -424,6 +443,7 @@ export const forgeOverviewSearchSchema = z.object({
  */
 export const forgeDomainsSearchSchema = z.object({
   project: z.string().optional(),
+  forgeProject: forgeProjectParam,
 });
 
 /**
@@ -432,6 +452,7 @@ export const forgeDomainsSearchSchema = z.object({
  */
 export const forgeEnvPageSearchSchema = z.object({
   project: z.string().optional(),
+  forgeProject: forgeProjectParam,
   /**
    * `secret` selects one secret's detail view in the Secrets section, for the
    * same reason the env is in the URL rather than state: a version history is

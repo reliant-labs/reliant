@@ -3,7 +3,7 @@ title: "Presets"
 description: "Reusable parameter bundles that configure workflow behavior"
 ---
 
-Presets are saved configurations of workflow parameters for switching between different agent behaviors. Instead of manually configuring model, temperature, tools, and system prompts each time you run a workflow, you select a preset that bundles all these settings together.
+Presets are saved configurations of workflow parameters for switching between different agent behaviors. Instead of manually configuring model, tools and system prompts each time you run a workflow, you select a preset that bundles all these settings together.
 
 ![Manage and view your saved agent configurations](/images/screenshots/presets-list.png)
 
@@ -31,7 +31,7 @@ In multi-group workflows, you may need to apply a preset to the workflow's top-l
   type: workflow
   ref: builtin://agent
   presets:
-    default: researcher  # Applies to top-level inputs (model, temperature, etc.)
+    default: researcher  # Applies to top-level inputs (model, tools, etc.)
     implementer: general # Applies to the implementer group
 ```
 
@@ -39,7 +39,7 @@ Because `default` has this special meaning, you can't name your own input groups
 
 ### Provider-Agnostic Model Selection
 
-Presets use tag-based model selection to work across different AI providers. Instead of hardcoding a specific model like `claude-4.6-opus`, presets specify what they need semantically:
+Presets use tag-based model selection to work across different AI providers. Instead of hardcoding a specific model, presets specify what they need semantically:
 
 ```yaml
 params:
@@ -47,7 +47,7 @@ params:
     tags: [flagship]  # Use the best available model
 ```
 
-When you run a workflow with this preset, Reliant selects the best matching model from your configured providers. If you have Anthropic configured, it uses Claude 4.6 Opus. If you have OpenAI or Codex instead, it uses GPT-5.3 Codex. This means the same presets work regardless of which providers you've set up.
+When you run a workflow with this preset, Reliant selects the best matching model from your configured providers. If you have Anthropic configured, it picks Anthropic's top model; if you have OpenAI, OpenAI's. This means the same presets work regardless of which providers you've set up.
 
 Available tags describe model characteristics:
 
@@ -70,28 +70,34 @@ If you need a specific model regardless of tags, you can still use explicit IDs:
 ```yaml
 params:
   model:
-    id: claude-4.6-opus  # Always use this specific model
+    id: your-model-id  # Always use this specific model (see the Models reference)
 ```
 
 See [LLM Guide](/reference/llm-guide) for complete details on model selection and available tags.
 
 ## Built-in Presets
 
-Reliant includes a suite of built-in presets for common development roles. These are available immediately without configuration.
+Reliant includes fifteen built-in presets. They are available immediately without configuration. Models are chosen by tag, so each resolves to whatever your providers offer: `flagship` is the best available, `moderate` is a balance of quality and cost, and `fast` is the quickest. Tools named `tag:...` are groups; `tag:coding:default` is the standard coding set (files, shell, search, web, planning).
 
-| Preset | Model | Key Tools | Purpose |
+| Preset | Model | Key tools | Purpose |
 |--------|-------|-----------|---------|
-| general | claude-4.6-opus | tag:default | Versatile coding assistant with discovery-first approach. Can spawn specialized agents. |
-| researcher | claude-4.6-opus | tag:search, tag:web, view | Codebase investigation and analysis. Methodical process: planning, architecture analysis, pattern recognition. |
-| planner | claude-4.6-opus | view, tag:search, create_plan | Strategic orchestration. Synthesizes research into step-by-step implementation plans. |
-| code_reviewer | claude-4.5-sonnet | tag:search, tag:web, view | Code quality feedback. Evaluates correctness, security, maintainability. Read-only. |
-| tester | claude-4.5-sonnet | view, write, edit, glob, grep, tag:shell | Test suite creation. Builds harnesses, writes unit/integration/E2E tests. |
-| reproducer | claude-4.5-sonnet | view, edit, tag:search, tag:shell, shell_list, shell_output, fetch | Runtime bug reproduction. Discovers entry points, adds logging, captures evidence. |
-| debug | claude-4.5-sonnet | view, tag:search, tag:shell | Debugging orchestrator. Spawns researchers, testers, reproducers to find root causes. |
-| refactor | claude-4.6-opus | view, edit, write, find_replace, move_code, grep, glob, tag:shell | Systematic code improvement. Strict methodology: assess, verify tests, transform incrementally. |
-| git | claude-4.5-sonnet | tag:shell, view, tag:search | Version control operations. Conventional commits, atomic changes. Loads the `conflict-resolver` skill for complex merge conflicts. |
-| documentation | claude-4.5-sonnet | view, write, edit, grep, glob, tag:shell, fetch | Technical writing. Narrative-driven docs that teach through explanation and example. |
-| ux | claude-4.5-sonnet | fetch, glob, grep, view, write, edit, tag:shell, get_plan, list_tasks, update_task, component_library | UI design and implementation. WCAG 2.1 AA compliant, various style modes. |
+| `general` | flagship | `tag:coding:default` | Versatile coding assistant with a discovery-first approach. Can spawn most of the other presets. |
+| `researcher` | flagship | `tag:shell`, `tag:web`, `view`, `code_context` | Codebase investigation and analysis. For understanding, not changing. |
+| `planner` | flagship | `view`, `tag:shell`, `code_context`, `create_plan` | Turns research into step-by-step implementation plans. Produces plans, not code. |
+| `implementer` | moderate | `tag:coding:default`, `prove_test` | Implements well-specified changes by following detailed instructions. |
+| `code_reviewer` | flagship | `tag:shell`, `tag:web`, `view`, `code_context` | Code review orchestrator. Spawns reviewers and produces a unified report; does not modify code. |
+| `tester` | moderate | `view`, `write`, `edit`, `tag:shell`, `code_context`, `prove_test` | Builds test harnesses and writes unit, integration and end-to-end tests. |
+| `debug` | flagship | `view`, `tag:shell`, `code_context` | Debugging orchestrator. Coordinates research and testing to isolate a bug without fixing it. |
+| `refactor` | moderate | `view`, `edit`, `write`, `find_replace`, `move_code`, `tag:shell`, `code_context` | Systematic structural improvement: assess, verify tests, transform incrementally. |
+| `git` | fast | `tag:shell`, `view` | Commits, branching and version control. Loads the conflict-resolver skill for hard merges. |
+| `documentation` | moderate | `view`, `write`, `edit`, `tag:shell`, `fetch` | Narrative-driven technical writing. |
+| `ux` | flagship | `fetch`, `view`, `write`, `edit`, `tag:shell`, planning tools, `component_library`, browser tools | UI design and implementation, with a browser to check the result. |
+| `forge` | flagship | `tag:coding:default`, `ask_user`, `tag:web`, browser tools | General-purpose agent for Forge app generation, able to spawn all the others. |
+| `forge_implementer` | moderate | `tag:coding:default`, `component_library`, `prove_test` | Implements one seam of a Forge app, with the component library preloaded. Has no browser, by design. |
+| `migrate` | flagship | `tag:coding:default` | Guides the move from Claude Code, Cursor, Codex or Windsurf. Used by [Import](/guides/import). |
+| `workflow_builder` | flagship | `tag:workflow`, `tag:shell`, `tag:web`, `skill`, `view` | Builds and edits workflows, with the `workflow-builder` skill loaded. Used by [Create a Workflow](/guides/create-a-workflow). |
+
+This table is generated from the preset files in the Reliant source (`make generate-presets`), so it tracks them exactly. The complete tool lists and spawn lists for each preset are in that generated reference.
 
 ### Detailed Examples
 
@@ -99,7 +105,7 @@ Reliant includes a suite of built-in presets for common development roles. These
 
 **refactor** handles structural code changes safely. It uses specialized tools like `find_replace` for renaming across files and `move_code` for relocating functions. The strict methodology requires: assess and plan the changes, verify tests pass before starting, execute incremental transformations, and verify behavior preservation after each step.
 
-**debug** coordinates the debugging process by spawning specialized agents rather than doing everything itself. It delegates investigation to researchers, test isolation to testers, and runtime evidence gathering to reproducers. The goal is identifying the root cause with high confidence before any fix is attempted.
+**debug** coordinates the debugging process by spawning specialized agents rather than doing everything itself. It delegates investigation to researchers and test isolation to testers. The goal is identifying the root cause with high confidence before any fix is attempted.
 
 ## Creating Custom Presets
 
@@ -112,11 +118,11 @@ tag: agent
 params:
   model:
     tags: [flagship]  # Use the best available model for thorough review
-  temperature: 0.2
+    temperature: 0.2
   tools:
     - tag:search
     - view
-    - bash
+    - shell
   system_prompt: |
     You are a meticulous code reviewer with extremely high standards.
 
@@ -139,7 +145,7 @@ tag: agent                  # Required: matches workflow/group tags
 params:                     # Required: parameter values to apply
   model:
     tags: [moderate]        # Tag-based selection (provider-agnostic)
-  temperature: 0.7
+    temperature: 0.7
   tools:
     - tool-name
     - tag:tool-group
@@ -151,13 +157,13 @@ The `tag` field determines which workflows and groups this preset can configure.
 
 ### Configurable Parameters
 
-**model**: The AI model to use. Specify by explicit ID (`{ id: "claude-4.6-opus" }`), by semantic tags (`{ tags: [flagship] }`), or constrain to a specific provider (`{ tags: [moderate], provider: "anthropic" }`). Tag-based selection makes presets provider-agnostic—they work with whatever providers you have configured. Available tags include `flagship`, `moderate`, `fast`, `cheap`, `reasoning`, and `codex` for code-optimized model selection where supported.
+**model**: The AI model to use. Specify by explicit ID (`{ id: "<model id>" }`, from the [Models reference](/reference/models)), by semantic tags (`{ tags: [flagship] }`), or constrain to a specific provider (`{ tags: [moderate], provider: "anthropic" }`). Tag-based selection makes presets provider-agnostic—they work with whatever providers you have configured. Available tags include `flagship`, `moderate`, `fast`, `cheap`, `reasoning`, and `codex` for code-optimized model selection where supported.
 
-**temperature**: Response randomness from 0.0 to 1.0. Lower values (0.1-0.3) produce focused, deterministic output for research and debugging. Higher values (0.7-1.0) increase creativity for brainstorming.
+**temperature**: A setting of the `model` block (`model: { tags: [flagship], temperature: 0.2 }`), not a parameter of its own. Response randomness from 0.0 to 1.0. Lower values (0.1-0.3) produce focused, deterministic output for research and debugging. Higher values (0.7-1.0) increase creativity for brainstorming.
 
 **system_prompt**: Instructions defining the agent's role, approach, and constraints. This is where you customize behavior most significantly.
 
-**tools**: Tools the agent can access. Specify by name (`view`, `edit`, `bash`) or by tag (`tag:search`, `tag:default`, `tag:mcp`).
+**tools**: Tools the agent can access. Specify by name (`view`, `edit`, `shell`) or by tag (`tag:search`, `tag:coding:default`, `tag:mcp`).
 
 **compaction_threshold**: Token count that triggers conversation compaction.
 
@@ -171,10 +177,10 @@ params:
     # Individual tools by name
     - view
     - edit
-    - bash
+    - shell
 
     # Tool groups by tag
-    - tag:default    # Standard editing and file tools
+    - tag:coding:default    # The standard coding set: files, shell, search, web, planning
     - tag:search     # grep, glob for code exploration
     - tag:web        # fetch for web requests
 ```
@@ -187,7 +193,7 @@ Tool filters also support advanced expressions:
 - `mcp__server__*` — include all MCP tools from a server via wildcard
 - `!mcp__server__tool` — remove a specific tool
 
-This means you can combine broad includes (`tag:default`) with precise exclusions for safer preset defaults.
+This means you can combine broad includes (`tag:coding:default`) with precise exclusions for safer preset defaults.
 
 ## Config-as-Code
 
@@ -219,7 +225,7 @@ Reliant uses a layered configuration system where higher-priority sources overri
 
 | Aspect | Database | File Config |
 |--------|----------|-------------|
-| **Storage** | SQLite in app data | `.reliant/` directory |
+| **Storage** | Reliant's database | `.reliant/` directory |
 | **Sharing** | Per-user | Via git |
 | **Editing** | Via UI | Via text editor |
 | **Use case** | Personal settings | Team standards |
@@ -245,9 +251,9 @@ tag: agent
 params:
   model:
     tags: [flagship]  # Use the best available model for complex debugging
-  temperature: 0.1
+    temperature: 0.1
   tools:
-    - tag:default
+    - tag:coding:default
     - tag:search
   system_prompt: |
     You are debugging a complex issue. Before attempting any fix:
@@ -281,9 +287,9 @@ tag: agent
 params:
   model:
     tags: [fast]  # Prioritize speed for simple tasks
-  temperature: 0.7
+    temperature: 0.7
   tools:
-    - tag:default
+    - tag:coding:default
   system_prompt: |
     Implement the requested feature efficiently.
 
@@ -306,11 +312,11 @@ tag: agent
 params:
   model:
     tags: [flagship, reasoning]  # Security requires deep analysis
-  temperature: 0.2
+    temperature: 0.2
   tools:
     - tag:search
     - view
-    - bash
+    - shell
   system_prompt: |
     You are a security auditor reviewing code for vulnerabilities.
 
@@ -367,7 +373,7 @@ Default presets automatically apply when you start a new chat:
 
 The easiest way to create a preset is to save your current configuration:
 
-1. Configure your workflow parameters (model, temperature, tools, system prompt)
+1. Configure your workflow parameters (model, tools, system prompt)
 2. Click **Save as Preset** in the parameters panel
 3. Enter a name and description
 4. Click **Save**
@@ -376,7 +382,7 @@ The preset saves to `.reliant/presets/` and becomes available immediately.
 
 ### What Gets Saved
 
-- Model, temperature, tools, system prompt
+- Model (including its temperature), tools, system prompt
 - Tag (inherited from current workflow/group)
 
 Only explicitly configured parameters are saved. Default values aren't included, so the preset works across different workflows sharing the same tag.

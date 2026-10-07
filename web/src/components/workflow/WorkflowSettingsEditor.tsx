@@ -46,7 +46,7 @@ export function WorkflowSettingsEditor({
   const hasEntry = entry !== undefined && (Array.isArray(entry) ? entry.length > 0 : entry !== '')
   const hasAdvanced = !!tag
   const tabs: ConfigTab[] = [
-    { id: 'params', label: paramCount > 0 ? `Params (${paramCount})` : 'Params' },
+    { id: 'params', label: paramCount > 0 ? `Inputs (${paramCount})` : 'Inputs' },
     { id: 'entry', label: 'Entry', hasBadge: hasEntry },
     { id: 'outputs', label: outputCount > 0 ? `Outputs (${outputCount})` : 'Outputs' },
     { id: 'advanced', label: 'Advanced', hasBadge: hasAdvanced },
@@ -54,8 +54,8 @@ export function WorkflowSettingsEditor({
 
   return (
     <ConfigurationPanel
-      title="Workflow Settings"
-      subtitle="Configure parameters, entry points, and outputs"
+      title="Inputs"
+      subtitle="Inputs, entry steps and outputs"
       subtitleMono={false}
       onClose={onClose}
       bottomOffset={bottomOffset}
@@ -134,28 +134,28 @@ function EntryEditor({
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground mb-3">
-          Select which node(s) should start when the workflow is triggered. 
-          Multiple nodes will run in parallel.
+          Select which step(s) run first when the workflow starts.
+          Multiple steps run in parallel.
         </p>
       </div>
 
       {nodeIds.length === 0 ? (
         <p className="text-sm text-muted-foreground italic">
-          No nodes in workflow. Add nodes to configure entry points.
+          No steps in this workflow. Add a step to choose where it starts.
         </p>
       ) : (
         <MultiSelectDropdown
           options={options}
           value={entryArray}
           onChange={handleChange}
-          placeholder="Select entry point(s)..."
-          emptyMessage="No nodes found"
+          placeholder="Select entry step(s)..."
+          emptyMessage="No steps found"
         />
       )}
 
       {entryArray.length > 1 && (
         <p className="text-xs text-muted-foreground mt-2">
-          {entryArray.length} nodes selected - they will run in parallel when triggered.
+          {entryArray.length} steps selected - they run in parallel when the workflow starts.
         </p>
       )}
     </div>

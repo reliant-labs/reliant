@@ -16,6 +16,7 @@ import { getStepWhile, getStepParallel, getStepItems, getStepKey, getStepOnFailu
 import type { NodeExecutionStatus } from '../../../lib/workflow-flow'
 import { buildHandleClassName } from './NodeStatusWrapper'
 import { normalizeWorkflowRef } from '../useWorkflowInputs'
+import { cn } from '../../../lib/utils'
 
 interface ExpandedLoopNodeData {
   step: LoopStep
@@ -49,13 +50,13 @@ interface ExpandedLoopNodeProps {
 function StatusDot({ status }: { status?: NodeExecutionStatus }) {
   switch (status) {
     case 'completed':
-      return <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500" />
+      return <CheckCircle2 className="w-3.5 h-3.5 text-success" />
     case 'running':
-      return <Loader2 className="w-3.5 h-3.5 text-sky-500 animate-spin" />
+      return <Loader2 className="w-3.5 h-3.5 text-info animate-spin" />
     case 'failed':
-      return <XCircle className="w-3.5 h-3.5 text-red-500" />
+      return <XCircle className="w-3.5 h-3.5 text-destructive" />
     default:
-      return <Circle className="w-3.5 h-3.5 text-violet-300" />
+      return <Circle className="w-3.5 h-3.5 text-muted-foreground" />
   }
 }
 
@@ -91,18 +92,21 @@ function IterationNavigator({
           if (canGoPrev) dispatchChange(selectedIteration - 1)
         }}
         disabled={!canGoPrev}
-        className={`p-0.5 rounded transition-colors ${
-          canGoPrev 
-            ? 'hover:bg-violet-200 text-violet-600' 
-            : 'text-violet-300 cursor-not-allowed'
-        }`}
+        className={cn(
+          'p-0.5 rounded transition-colors',
+          canGoPrev
+            ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            : 'text-muted-foreground/40 cursor-not-allowed',
+        )}
         title="Previous iteration"
       >
         <ChevronLeft className="w-4 h-4" />
       </button>
 
-      {/* Current iteration indicator with dropdown */}
-      <div className="flex items-center gap-1.5 px-2 py-0.5 bg-white rounded border border-violet-200">
+      {/* Current iteration indicator with dropdown. A recessed well in the
+          loop's bar: bg-background + border, the one pairing that reads as
+          inset in both light and dark (see forge-ui/card.tsx). */}
+      <div className="flex items-center gap-1.5 px-2 py-0.5 bg-background rounded border border-border">
         <StatusDot status={iterationStatuses[selectedIteration]} />
         <select
           value={selectedIteration}
@@ -111,11 +115,11 @@ function IterationNavigator({
             dispatchChange(Number(e.target.value))
           }}
           onClick={(e) => e.stopPropagation()}
-          className="text-xs font-medium text-violet-700 bg-transparent border-none cursor-pointer focus:outline-none pr-1"
+          className="text-xs font-medium text-foreground bg-transparent border-none cursor-pointer focus:outline-none pr-1"
           title="Select iteration"
         >
           {Array.from({ length: totalIterations }, (_, i) => (
-            <option key={i} value={i}>
+            <option key={i} value={i} className="bg-background text-foreground">
               {i + 1} of {totalIterations}
             </option>
           ))}
@@ -129,11 +133,12 @@ function IterationNavigator({
           if (canGoNext) dispatchChange(selectedIteration + 1)
         }}
         disabled={!canGoNext}
-        className={`p-0.5 rounded transition-colors ${
-          canGoNext 
-            ? 'hover:bg-violet-200 text-violet-600' 
-            : 'text-violet-300 cursor-not-allowed'
-        }`}
+        className={cn(
+          'p-0.5 rounded transition-colors',
+          canGoNext
+            ? 'text-muted-foreground hover:bg-muted hover:text-foreground'
+            : 'text-muted-foreground/40 cursor-not-allowed',
+        )}
         title="Next iteration"
       >
         <ChevronRight className="w-4 h-4" />
@@ -169,20 +174,24 @@ export const ExpandedLoopNode = memo(({ id, data, selected }: ExpandedLoopNodePr
   // Runtime max iterations (may come from custom params at runtime)
   const effectiveMax = maxIterations
 
-  // Determine border/background based on execution status
-  // Uses neutral violet colors for loop container to contrast with green action nodes
+  // Determine border/background based on execution status. Run states use the
+  // semantic status tokens, and tints are a low alpha of a mid-tone so they
+  // read as a tint on both a white and a pure-black canvas — a "-50" pastel is
+  // a light wash in dark mode, which is how this container used to glow.
+  // The idle border stays violet: that is the loop's identity colour, shared
+  // with the collapsed loop node.
   const getStatusStyles = () => {
     switch (executionStatus) {
       case 'running':
-        return 'border-sky-500 bg-sky-50/30 ring-2 ring-sky-200'
+        return 'border-info bg-info/5 ring-2 ring-info/30'
       case 'completed':
-        return 'border-violet-400 bg-violet-50/50'
+        return 'border-violet-400 dark:border-violet-500/70 bg-violet-500/5'
       case 'failed':
-        return 'border-red-500 bg-red-50/30 ring-2 ring-red-200'
+        return 'border-destructive bg-destructive/5 ring-2 ring-destructive/30'
       default:
         return selected 
-          ? 'border-violet-500 ring-2 ring-violet-200' 
-          : 'border-violet-300'
+          ? 'border-violet-500 ring-2 ring-violet-500/30' 
+          : 'border-violet-300 dark:border-violet-500/50'
     }
   }
 
@@ -230,7 +239,7 @@ export const ExpandedLoopNode = memo(({ id, data, selected }: ExpandedLoopNodePr
             </div>
             <div className="min-w-0">
               <div className="text-sm font-semibold text-violet-700 dark:text-violet-200 truncate">{label}</div>
-              <div className="text-2xs text-violet-500 dark:text-violet-400 truncate" title={subWorkflowName}>
+              <div className="text-xs text-violet-500 dark:text-violet-400 truncate" title={subWorkflowName}>
                 {normalizeWorkflowRef(subWorkflowName)}
               </div>
             </div>
@@ -282,22 +291,22 @@ export const ExpandedLoopNode = memo(({ id, data, selected }: ExpandedLoopNodePr
         {(stepWhile || stepItems || (isParallel && (stepKey || stepOnFailure))) && (
           <div className="px-3 py-1.5 bg-violet-50/70 dark:bg-violet-900/50 border-t border-violet-200 dark:border-violet-700 space-y-1">
             {stepItems && (
-              <div className="text-2xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepItems}>
+              <div className="text-xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepItems}>
                 items: {stepItems}
               </div>
             )}
             {stepWhile && (
-              <div className="text-2xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepWhile}>
+              <div className="text-xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepWhile}>
                 while: {stepWhile}
               </div>
             )}
             {isParallel && stepKey && (
-              <div className="text-2xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepKey}>
+              <div className="text-xs text-violet-600 dark:text-violet-400 font-mono truncate" title={stepKey}>
                 key: {stepKey}
               </div>
             )}
             {isParallel && stepOnFailure && (
-              <div className="text-2xs text-violet-600 dark:text-violet-400 truncate">
+              <div className="text-xs text-violet-600 dark:text-violet-400 truncate">
                 on_failure: {stepOnFailure}
               </div>
             )}

@@ -17,6 +17,7 @@ import {
 import type { CELFieldInfo } from '../gen/reliant/v1/catalog_pb'
 import { TRIGGER_CEL_FIELDS, TRIGGER_CEL_NAMESPACE } from './trigger-cel-fields'
 import { schemaAtPath, schemaProperties, schemaType, type JsonSchema } from './jsonSchema'
+import { outputFieldsForNodeType, type OutputField } from './nodeOutputFields'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -66,7 +67,7 @@ export interface ParsedCELContext {
 // `trigger` is bound wherever the runtime has workflow inputs (see the
 // Namespaces() of each context in internal/workflow/cel/types.go); the thread
 // context is the only one without it.
-const CONTEXT_NAMESPACES: Record<CELCompletionContext['celContext'], string[]> = {
+export const CONTEXT_NAMESPACES: Record<CELCompletionContext['celContext'], string[]> = {
   default: ['inputs', 'trigger', 'workflow', 'nodes', 'iter'],
   loop_while: ['outputs', 'iter', 'inputs', 'trigger'],
   edge_condition: ['inputs', 'trigger', 'workflow', 'nodes', 'iter', 'outputs'],
@@ -202,6 +203,17 @@ function extractChain(exprText: string): string {
       }
       parts.push(ident)
       continue
+    }
+
+    // Closing bracket ] — a list index like [0] reads through to the item, so
+    // `tool_calls[0].` completes tool_calls' item fields (the path Insert data
+    // inserts); it adds no segment.
+    if (ch === ']') {
+      const index = /\[\s*\d+\s*\]$/.exec(exprText.slice(0, i + 1))
+      if (index) {
+        i -= index[0].length
+        continue
+      }
     }
 
     // Closing bracket ] — might be bracket-access like ["my-id"]
@@ -364,7 +376,9 @@ export function resolveCompletions(
     const nodeId = parsed.path[1]
     const nodeType = ctx.nodeTypeMap[nodeId]
     if (nodeType) {
-      const schemaFields = getFieldCompletions(getNodeOutputSchema(nodeType))
+      // The fields the step's Outputs tab and Insert data list, from the same
+      // source (lib/nodeOutputFields), so the three never disagree.
+      const schemaFields = getOutputFieldCompletions(visibleOutputFields(outputFieldsForNodeType(nodeType)))
       // Merge declared output keys (e.g., from router outputs map)
       const declaredKeys = [...(ctx.nodeDeclaredOutputs?.[nodeId] ?? [])]
       // An action whose output schema is known also exposes `data`.
@@ -401,6 +415,21 @@ export function resolveCompletions(
     }
   }
 
+  // path = ["nodes", "<id>", "<field>"] — a message field's sub-fields
+  // (message.text, tool_calls[0].name), as Insert data offers them.
+  if (root === 'nodes' && parsed.path.length === 3) {
+    const nodeType = ctx.nodeTypeMap[parsed.path[1]]
+    const field = nodeType
+      ? visibleOutputFields(outputFieldsForNodeType(nodeType)).find((f) => f.name === parsed.path[2])
+      : undefined
+    if (field?.children?.length) {
+      return [
+        ...getOutputFieldCompletions(visibleOutputFields(field.children)),
+        ...getMemberFunctionCompletions(),
+      ]
+    }
+  }
+
   // path = ["nodes", "<id>", ...deeper]
   if (root === 'nodes' && parsed.path.length > 2) {
     return getMemberFunctionCompletions()
@@ -410,6 +439,24 @@ export function resolveCompletions(
   if (root === TRIGGER_CEL_NAMESPACE && parsed.path.length >= 2 && parsed.path[1] === 'payload' && ctx.triggerPayloadSchema) {
     return [
       ...getSchemaFieldCompletions(schemaAtPath(ctx.triggerPayloadSchema, parsed.path.slice(2))),
+      ...getMemberFunctionCompletions(),
+    ]
+  }
+
+  // path = ["trigger", "sender"] — a map whose keys are always present
+  const nested = root === TRIGGER_CEL_NAMESPACE && parsed.path.length === 2
+    ? TRIGGER_CEL_FIELDS.find((field) => field.name === parsed.path[1])?.fields
+    : undefined
+  if (nested) {
+    return [
+      ...nested.map((field) => ({
+        label: field.name,
+        kind: 'field' as const,
+        insertText: field.name,
+        detail: field.type,
+        documentation: field.description,
+        sortGroup: 1,
+      })),
       ...getMemberFunctionCompletions(),
     ]
   }
@@ -529,6 +576,22 @@ function getSchemaFieldCompletions(schema: JsonSchema | undefined): CompletionEn
     insertText: name,
     detail: schemaType(property) ?? 'any',
     documentation: property.description ?? '',
+    sortGroup: 1,
+  }))
+}
+
+/** Debug and plumbing outputs stay readable by hand but are not offered, as in Insert data. */
+function visibleOutputFields(fields: readonly OutputField[]): OutputField[] {
+  return fields.filter((field) => !field.advanced)
+}
+
+function getOutputFieldCompletions(fields: readonly OutputField[]): CompletionEntry[] {
+  return fields.map((f) => ({
+    label: f.name,
+    kind: 'field' as const,
+    insertText: f.name,
+    detail: f.type,
+    documentation: f.description,
     sortGroup: 1,
   }))
 }

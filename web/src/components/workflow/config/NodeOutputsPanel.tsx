@@ -14,18 +14,11 @@ import {
   getStepParallel,
 } from "../../../types/workflow";
 import type { NodeInputField } from "../../../gen/reliant/v1/catalog_pb";
+import { catalogToOutputFields, childPathPrefix, type OutputField } from "../../../lib/nodeOutputFields";
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
-
-interface OutputField {
-  name: string;
-  type: string;
-  description: string;
-  /** Sub-fields for nested/message types */
-  children?: OutputField[];
-}
 
 export interface NodeOutputsPanelProps {
   /** The step being configured */
@@ -35,22 +28,6 @@ export interface NodeOutputsPanelProps {
   /** Resolved outputs from a referenced workflow definition (keys are output names) */
   refOutputs?: Record<string, string>;
 }
-
-// ---------------------------------------------------------------------------
-// Known nested type definitions
-// ---------------------------------------------------------------------------
-
-const NESTED_TYPES: Record<string, OutputField[]> = {
-  MessageOutput: [
-    { name: "id", type: "string", description: "Message identifier" },
-    { name: "role", type: "string", description: "Message role" },
-    { name: "text", type: "string", description: "Message text content" },
-  ],
-  ThinkingOutput: [
-    { name: "content", type: "string", description: "Thinking content" },
-    { name: "signature", type: "string", description: "Thinking signature" },
-  ],
-};
 
 // ---------------------------------------------------------------------------
 // CopyButton
@@ -93,6 +70,8 @@ function OutputFieldRow({
   const [expanded, setExpanded] = useState(false);
   const celPath = `${celPrefix}.${field.name}`;
   const hasChildren = field.children && field.children.length > 0;
+  // A list's children are its items' fields: nodes.x.tool_calls[0].name.
+  const childPrefix = childPathPrefix(field, celPath);
 
   return (
     <>
@@ -103,6 +82,8 @@ function OutputFieldRow({
               <button
                 type="button"
                 onClick={() => setExpanded(!expanded)}
+                aria-expanded={expanded}
+                aria-label={`${expanded ? "Hide" : "Show"} the fields of ${field.name}`}
                 className="shrink-0 p-0 text-muted-foreground hover:text-foreground transition-colors"
               >
                 {expanded ? (
@@ -134,7 +115,7 @@ function OutputFieldRow({
             <OutputFieldRow
               key={child.name}
               field={child}
-              celPrefix={celPath}
+              celPrefix={childPrefix}
             />
           ))}
         </div>
@@ -146,21 +127,6 @@ function OutputFieldRow({
 // ---------------------------------------------------------------------------
 // Helpers to build output fields per node type
 // ---------------------------------------------------------------------------
-
-function catalogToOutputFields(
-  fields: NodeInputField[] | undefined
-): OutputField[] {
-  if (!fields || fields.length === 0) return [];
-  return fields.map((f) => {
-    const nested = NESTED_TYPES[f.type];
-    return {
-      name: f.name,
-      type: f.type,
-      description: f.description,
-      children: nested,
-    };
-  });
-}
 
 function inlineWorkflowOutputFields(step: Step): OutputField[] | null {
   const inline = getStepInline(step);
@@ -330,6 +296,9 @@ export function NodeOutputsPanel({
     fields = catalogToOutputFields(catalogOutputFields);
   }
 
+  const primaryFields = fields.filter((field) => !field.advanced);
+  const advancedFields = fields.filter((field) => field.advanced);
+
   return (
     <div className="cpv2-section">
       {/* Header */}
@@ -369,10 +338,11 @@ export function NodeOutputsPanel({
         </p>
       )}
 
-      {/* Output field rows */}
-      {fields.length > 0 && (
+      {/* Output field rows: what downstream steps read, then debug plumbing
+          behind a disclosure so it never leads the list. */}
+      {primaryFields.length > 0 && (
         <div>
-          {fields.map((field) => (
+          {primaryFields.map((field) => (
             <OutputFieldRow
               key={field.name}
               field={field}
@@ -380,6 +350,21 @@ export function NodeOutputsPanel({
             />
           ))}
         </div>
+      )}
+      {advancedFields.length > 0 && (
+        <details className="mt-3" data-testid="advanced-outputs">
+          <summary className="cursor-pointer select-none text-xs font-medium text-muted-foreground hover:text-foreground">
+            Advanced ({advancedFields.length})
+          </summary>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Correlation ids and loop plumbing, for debugging. Most workflows never read these.
+          </p>
+          <div className="mt-1">
+            {advancedFields.map((field) => (
+              <OutputFieldRow key={field.name} field={field} celPrefix={`nodes.${stepId}`} />
+            ))}
+          </div>
+        </details>
       )}
 
       {/* Fallback empty state */}

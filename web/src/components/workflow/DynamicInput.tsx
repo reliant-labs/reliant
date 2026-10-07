@@ -178,14 +178,14 @@ export function DynamicInput({
     suggestions.push({
       label: `nodes.${node.id}.output`,
       value: `nodes.${node.id}.output`,
-      category: "Nodes",
+      category: "Steps",
     });
     // Add common node properties
     if (node.type === "action") {
       suggestions.push({
         label: `nodes.${node.id}.response_text`,
         value: `nodes.${node.id}.response_text`,
-        category: "Nodes",
+        category: "Steps",
       });
     }
   });

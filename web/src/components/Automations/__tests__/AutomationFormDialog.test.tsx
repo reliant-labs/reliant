@@ -17,6 +17,7 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import {
   CreateTriggerResponseSchema,
+  IntegrationSourceSchema,
   ScheduleSourceSchema,
   TriggerOverlapPolicy,
   TriggerSchema,
@@ -46,8 +47,11 @@ const listWorktrees = vi.fn();
 const listDaemons = vi.fn();
 const listProjectDaemons = vi.fn();
 
+const listConnections = vi.fn(async () => ({ connections: [] }));
+
 vi.mock("@/api/grpc-client", () => ({
   grpcClient: {
+    connection: () => ({ listConnections }),
     trigger: () => ({ createTrigger, updateTrigger }),
     workflow: () => ({ listWorkflows, getWorkflow }),
     preset: () => ({ listPresetsForWorkflow, getDefaultPresetsBatch }),
@@ -912,5 +916,30 @@ describe("AutomationFormDialog", () => {
       await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
       expect(updateTrigger.mock.calls[0]![0].trigger.noMachine).toBe(true);
     });
+  });
+
+  // A personal trigger with its own Slack source: its filter is the row's,
+  // edited here through "Only from", and an update sends it back.
+  it("edits a personal integration trigger's 'Only from', and keeps the rest of its filter", async () => {
+    const stored = storedTrigger();
+    stored.source = {
+      case: "integration",
+      value: create(IntegrationSourceSchema, { integration: "slack", events: ["app_mention"] }),
+    };
+    stored.filter = `(trigger.payload.data.channel == "C0GEN") && trigger.sender.verified && trigger.sender.id in ["U1"]`;
+    updateTrigger.mockResolvedValue(create(UpdateTriggerResponseSchema, { trigger: stored }));
+    const user = userEvent.setup();
+    renderAtRoute(<AutomationFormDialog open onClose={vi.fn()} trigger={triggerFromProto(stored)} />);
+
+    const allowed = await screen.findByRole("list", { name: "Allowed senders" });
+    expect(allowed).toHaveTextContent("U1");
+    await user.click(screen.getByRole("button", { name: "Remove U1" }));
+    await user.type(screen.getByLabelText("Add a sender"), "U2{Enter}");
+    await user.click(screen.getByRole("button", { name: "Save changes" }));
+
+    await waitFor(() => expect(updateTrigger).toHaveBeenCalledTimes(1));
+    const request = updateTrigger.mock.calls[0]![0];
+    expect(request.trigger.filter).toBe(`(trigger.payload.data.channel == "C0GEN") && trigger.sender.verified && trigger.sender.id in ["U2"]`);
+    expect(request.trigger.source.case).toBe("integration");
   });
 });

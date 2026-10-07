@@ -98,7 +98,7 @@ func (s *CatalogService) ListModels(
 	registry := models.MustGetRegistry().WithAvailability(availableDrivers.Availability)
 	allModels := registry.GetUserVisibleModels()
 
-	logging.Info("[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
+	logging.Debug("[ListModels] Building model list for user", "userID", userID, "totalModels", len(allModels), "availableDrivers", len(availableDrivers.Drivers))
 
 	// Build list of all model+driver combinations
 	// Key: "modelID@driverID" to ensure uniqueness
@@ -165,7 +165,7 @@ func (s *CatalogService) ListModels(
 	// Sort models: by provider, then by model priority within each provider
 	sortModelsByProvider(modelList)
 
-	logging.Info("[ListModels] Returning models", "count", len(modelList))
+	logging.Debug("[ListModels] Returning models", "count", len(modelList))
 
 	resp := &reliantv1.ListModelsResponse{
 		Models: modelList,
@@ -460,7 +460,7 @@ func (s *CatalogService) ListAvailableModels(
 		})
 	}
 
-	logging.Info("[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
+	logging.Debug("[ListAvailableModels] Returning available models", "userID", userID, "count", len(out))
 	return connect.NewResponse(&reliantv1.ListAvailableModelsResponse{Models: out}), nil
 }
 
@@ -579,6 +579,72 @@ var categoryDisplayNames = map[string]string{
 	"utility":             "Utility",
 }
 
+// outputFieldsToProto converts a node's output fields, with their nested
+// children and visibility contexts, for the builder's Outputs tab.
+func outputFieldsToProto(fields []schema.InputFieldInfo) []*reliantv1.NodeInputField {
+	out := make([]*reliantv1.NodeInputField, 0, len(fields))
+	for _, field := range fields {
+		protoField := &reliantv1.NodeInputField{
+			Name:               field.Name,
+			Type:               field.Type,
+			Description:        field.Description,
+			Label:              field.Label,
+			VisibilityContexts: field.VisibilityContexts,
+			Children:           outputFieldsToProto(field.Children),
+		}
+		if field.Default != nil {
+			protoField.DefaultValue = fmt.Sprintf("%v", field.Default)
+		}
+		out = append(out, protoField)
+	}
+	return out
+}
+
+// uiHintNodeTool marks a field that names a tool an invoke_tool node may run
+// ((reliant).ui_hint in workflow_v2.proto). ListNodes fills its options.
+const uiHintNodeTool = "node_tool"
+
+// nodeToolOptions are the tools an invoke_tool node may name — the ones that
+// opted in to node exposure — with the first sentence of each tool's own
+// description, for the editor's tool picker.
+func (s *CatalogService) nodeToolOptions() []*reliantv1.NodeFieldOption {
+	registry := map[string]tools.ToolDefinition{}
+	for _, def := range tools.GetToolRegistry() {
+		registry[def.Name] = def
+	}
+	// A description is static text, so a bare factory (a service built
+	// without one) is enough to read it.
+	factory := s.toolsFactory
+	if factory == nil {
+		factory = tools.NewToolsFactory(nil)
+	}
+	exposed := tools.NodeExposedTools()
+	options := make([]*reliantv1.NodeFieldOption, 0, len(exposed))
+	for _, exposure := range exposed {
+		option := &reliantv1.NodeFieldOption{Value: exposure.Tool}
+		if def, ok := registry[exposure.Tool]; ok {
+			if tool := def.Factory(factory); tool != nil {
+				option.Description = firstSentence(tool.Description())
+			}
+		}
+		options = append(options, option)
+	}
+	return options
+}
+
+// firstSentence is the text up to the first sentence end (or line break), for
+// a one-line picker description of a long agent-facing tool description.
+func firstSentence(text string) string {
+	text = strings.TrimSpace(text)
+	if i := strings.IndexAny(text, "\n"); i >= 0 {
+		text = text[:i]
+	}
+	if i := strings.Index(text, ". "); i >= 0 {
+		return text[:i+1]
+	}
+	return text
+}
+
 // ListNodes returns all workflow nodes available for the builder
 func (s *CatalogService) ListNodes(
 	ctx context.Context,
@@ -620,6 +686,8 @@ func (s *CatalogService) ListNodes(
 				VisibilityContexts: field.VisibilityContexts,
 				IsCel:              field.IsCEL,
 				Category:           field.Category,
+				Example:            field.Example,
+				TypeHint:           field.TypeHint,
 			}
 
 			// Set default value as string
@@ -634,29 +702,17 @@ func (s *CatalogService) ListNodes(
 			if field.Max != nil {
 				protoField.MaxValue = field.Max
 			}
-			if field.Placeholder != nil {
-				protoField.Placeholder = field.Placeholder
-			}
 			if field.CleanupSemantics != nil {
 				protoField.CleanupSemantics = field.CleanupSemantics
+			}
+			if field.UIHint == uiHintNodeTool {
+				protoField.Options = s.nodeToolOptions()
 			}
 
 			inputFields = append(inputFields, protoField)
 		}
 
-		// Convert output fields
-		outputFields := make([]*reliantv1.NodeInputField, 0, len(meta.OutputFields))
-		for _, field := range meta.OutputFields {
-			protoField := &reliantv1.NodeInputField{
-				Name:        field.Name,
-				Type:        field.Type,
-				Description: field.Description,
-			}
-			if field.Default != nil {
-				protoField.DefaultValue = fmt.Sprintf("%v", field.Default)
-			}
-			outputFields = append(outputFields, protoField)
-		}
+		outputFields := outputFieldsToProto(meta.OutputFields)
 
 		nodeResponses = append(nodeResponses, &reliantv1.NodeInfo{
 			Id:           meta.ID,

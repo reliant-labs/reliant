@@ -1,6 +1,16 @@
 const { WebContentsView } = require("electron");
 const log = require("./logger");
 
+// Origin only: a tab URL's path and query are the user's browsing (and can
+// carry tokens, e.g. an OAuth callback), so they never reach the log.
+function originForLog(url) {
+  try {
+    return new URL(url).origin;
+  } catch {
+    return "<unparseable>";
+  }
+}
+
 /**
  * BrowserManager - Manages WebContentsView instances for browser tabs
  */
@@ -88,7 +98,7 @@ class BrowserManager {
         return { success: false, error: "Tab already exists" };
       }
 
-      log.info("[BrowserManager] Creating tab", { tabId, url, paneId });
+      log.info("[BrowserManager] Creating tab", { tabId, origin: originForLog(url), paneId });
 
       // Create WebContentsView with security settings
       const view = new WebContentsView({
@@ -232,7 +242,7 @@ class BrowserManager {
         return { success: false, error: "Tab not found" };
       }
 
-      log.info("[BrowserManager] Navigating tab", { tabId, url });
+      log.debug("[BrowserManager] Navigating tab", { tabId, origin: originForLog(url) });
       await view.webContents.loadURL(url);
 
       return { success: true };
@@ -336,7 +346,7 @@ class BrowserManager {
 
     // URL changed
     webContents.on("did-navigate", (event, url) => {
-      log.debug("[BrowserManager] Navigation", { tabId, url });
+      log.debug("[BrowserManager] Navigation", { tabId, origin: originForLog(url) });
       sendUpdate({
         url,
         canGoBack: webContents.navigationHistory.canGoBack(),
@@ -382,7 +392,7 @@ class BrowserManager {
 
     // Handle new window requests
     webContents.setWindowOpenHandler(({ url }) => {
-      log.info("[BrowserManager] New window requested", { url });
+      log.debug("[BrowserManager] New window requested", { origin: originForLog(url) });
       // For now, prevent new windows - could create new tab instead
       return { action: "deny" };
     });

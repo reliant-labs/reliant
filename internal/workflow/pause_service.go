@@ -258,7 +258,7 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 		)
 	}
 	// Threads are not a workflows row and need their own cascade call — see
-	// docs/incidents/2026-08-12-spawn-history-cap.md.
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md.
 	if err := ps.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, reason); err != nil {
 		logging.Error("[PauseService] Failed to cascade terminal status to threads",
 			"workflowID", workflowID,
@@ -340,7 +340,7 @@ func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, sign
 // row stays at whatever the interruption stamped on it. Children spawned
 // AFTER the reset point do re-run "started" and revive themselves; children
 // that finished before it must stay finished. See
-// docs/incidents/2026-09-29-reconciler-false-wedge.md.
+// dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 //
 // Called BEFORE the root is marked Active, deliberately. The reconciler's
 // stranded-spawn repair exempts a subtree whose root is awaiting resume; the

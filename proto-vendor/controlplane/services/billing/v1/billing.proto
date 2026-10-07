@@ -67,8 +67,8 @@ service BillingService {
   }
 
   // GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
-  // Stripe, so the checkout page can disclose the processing fee before asking
-  // for a card.
+  // Stripe, so the checkout page can disclose the top-up service fee, and the
+  // total it makes, before asking for a card.
   //
   // THE REASON THIS IS AN RPC AND NOT CLIENT ARITHMETIC: a fee the browser
   // computes is a number the browser can change, and — more mundanely but more
@@ -384,7 +384,7 @@ message GetCurrentUserWalletTopupQuoteRequest {
 message GetCurrentUserWalletTopupQuoteResponse {
   // Lands in the wallet. What the user chose.
   int64 credit_cents = 1;
-  // The processing fee, already rounded to whole cents server-side.
+  // The service fee, already rounded to whole cents server-side.
   int64 fee_cents = 2;
   // What the card is charged. Always credit_cents + fee_cents.
   int64 total_cents = 3;

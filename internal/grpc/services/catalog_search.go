@@ -24,6 +24,7 @@ import (
 type catalogSearcher interface {
 	Search(ctx context.Context, userID string, q catalogindex.Query) (*catalogindex.Result, error)
 	Get(ctx context.Context, userID, ref string) (*catalogindex.Entry, bool, error)
+	ListIntegrations(ctx context.Context, userID string, q catalogindex.IntegrationQuery) (*catalogindex.IntegrationResult, error)
 }
 
 // integrationMethods reports, for one integration, each declared auth method
@@ -126,6 +127,48 @@ func (s *CatalogService) GetCatalogEntry(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(&reliantv1.GetCatalogEntryResponse{Entry: entry}), nil
 }
 
+func (s *CatalogService) ListCatalogIntegrations(ctx context.Context, req *connect.Request[reliantv1.ListCatalogIntegrationsRequest]) (*connect.Response[reliantv1.ListCatalogIntegrationsResponse], error) {
+	userID, err := connectionCaller(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if s.search == nil {
+		return nil, connect.NewError(connect.CodeUnimplemented, errors.New("integration catalog search is not configured"))
+	}
+	if req.Msg.GetPageSize() < 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("page_size must not be negative"))
+	}
+	q := catalogindex.IntegrationQuery{
+		Category: req.Msg.GetCategory(), PageSize: int(req.Msg.GetPageSize()), PageToken: req.Msg.GetPageToken(),
+	}
+	for _, k := range req.Msg.GetKinds() {
+		kind, ok := catalogKindFromProto(k)
+		if !ok {
+			return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kinds: %s is not a catalog entry kind", k))
+		}
+		q.Kinds = append(q.Kinds, kind)
+	}
+	res, err := s.search.ListIntegrations(ctx, userID, q)
+	if err != nil {
+		return nil, catalogSearchError(err)
+	}
+	out := &reliantv1.ListCatalogIntegrationsResponse{
+		Integrations:   make([]*reliantv1.CatalogIntegrationListing, 0, len(res.Integrations)),
+		NextPageToken:  res.NextPageToken,
+		TotalSize:      int32(res.Total),
+		CategoryFacets: make([]*reliantv1.CatalogFacet, 0, len(res.CategoryFacets)),
+	}
+	for _, l := range res.Integrations {
+		out.Integrations = append(out.Integrations, &reliantv1.CatalogIntegrationListing{
+			Integration: catalogIntegrationToProto(l.Manifest), EntryCount: int32(l.EntryCount), Connected: l.Connected,
+		})
+	}
+	for _, f := range res.CategoryFacets {
+		out.CategoryFacets = append(out.CategoryFacets, &reliantv1.CatalogFacet{Value: f.Value, Count: int32(f.Count)})
+	}
+	return connect.NewResponse(out), nil
+}
+
 func catalogSearchError(err error) error {
 	switch {
 	case errors.Is(err, catalogindex.ErrNotFound):
@@ -170,14 +213,19 @@ func CatalogEntrySummaryToProto(e *catalogindex.Entry, connected bool) *reliantv
 	return &reliantv1.CatalogEntrySummary{
 		Ref: e.Ref, Kind: catalogKindToProto(e.Kind), Id: e.ID,
 		DisplayName: e.DisplayName, Summary: e.Summary,
-		Integration: &reliantv1.CatalogIntegration{
-			Id: m.GetId(), Version: m.GetVersion(), DisplayName: m.GetDisplayName(),
-			Icon: m.GetIcon(), Category: m.GetCategory(),
-		},
+		Integration:        catalogIntegrationToProto(m),
 		AuthKinds:          authKinds,
 		ConnectionRequired: e.ConnectionRequired,
 		Connected:          connected,
 		Mutates:            e.Action.GetMutates(),
+		Events:             e.Trigger.GetEvents(),
+	}
+}
+
+func catalogIntegrationToProto(m *reliantv1.IntegrationManifest) *reliantv1.CatalogIntegration {
+	return &reliantv1.CatalogIntegration{
+		Id: m.GetId(), Version: m.GetVersion(), DisplayName: m.GetDisplayName(),
+		Icon: m.GetIcon(), Category: m.GetCategory(),
 	}
 }
 
@@ -190,6 +238,7 @@ func CatalogEntryToProto(e *catalogindex.Entry, connected bool) (*reliantv1.Cata
 		ToolName:    e.ToolName(),
 	}
 	if e.Kind == catalogindex.KindAction {
+		out.ParamOrder = e.Action.GetParamOrder()
 		params, output := e.Schemas()
 		var err error
 		if out.ParamsSchema, err = structpb.NewStruct(params); err != nil {

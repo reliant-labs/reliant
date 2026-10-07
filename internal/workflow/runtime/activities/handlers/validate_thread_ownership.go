@@ -55,7 +55,7 @@ func (a *ValidateThreadOwnershipActivity) Category() schema.ActivityCategory {
 // Execute validates that a thread belongs to the expected chat
 func (a *ValidateThreadOwnershipActivity) Execute(ctx context.Context, input ValidateThreadOwnershipInput) (ValidateThreadOwnershipOutput, error) {
 	logger := activity.GetLogger(ctx)
-	logger.Info("[ValidateThreadOwnership] Validating thread ownership",
+	logger.Debug("[ValidateThreadOwnership] Validating thread ownership",
 		"threadID", input.ThreadID,
 		"expectedChatID", input.ExpectedChatID)
 
@@ -83,7 +83,7 @@ func (a *ValidateThreadOwnershipActivity) Execute(ctx context.Context, input Val
 		}, nil
 	}
 
-	logger.Info("[ValidateThreadOwnership] Thread ownership validated successfully",
+	logger.Debug("[ValidateThreadOwnership] Thread ownership validated successfully",
 		"threadID", input.ThreadID,
 		"chatID", thread.ChatID)
 

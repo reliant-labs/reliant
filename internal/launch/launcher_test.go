@@ -264,7 +264,7 @@ func TestLaunchCreatesSessionAndStartsRun(t *testing.T) {
 	assert.Equal(t, "test-task-queue", call.options.TaskQueue)
 	// Temporal's 10s default times out replaying a large history, which is
 	// what stretched a background spawn's report window to minutes — see
-	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	assert.Equal(t, workflow.DynamicWorkflowTaskTimeout, call.options.WorkflowTaskTimeout)
 	assert.Equal(t, chatID, input.ChatID)
 	assert.Equal(t, "builtin://agent", input.WorkflowName)
@@ -328,6 +328,42 @@ func TestLaunchUnattendedSetsWorkflowInput(t *testing.T) {
 	_, input := starter.rootRun(t)
 	assert.True(t, v2.IsUnattended(input.Inputs),
 		"the runtime reads unattended off the root run's inputs and propagates it to every spawn")
+}
+
+// The run's unattended flag follows core.TriggerEventKind.Unattended, so a
+// launch path that forgets Spec.Unattended still launches a webhook's run
+// unattended — and so withheld the tools that change workflows — rather than
+// an attended one. Attended kinds are left as the caller set them.
+func TestLaunchUnattendedFollowsTheEventKind(t *testing.T) {
+	repo, ctx, projectID, _ := launchFixture(t)
+	for _, tc := range []struct {
+		kind       core.TriggerEventKind
+		unattended bool
+	}{
+		{core.TriggerEventKindWebhook, true},
+		{core.TriggerEventKindIntegration, true},
+		{core.TriggerEventKindSchedule, true},
+		{core.TriggerEventKindWorkflowEvent, true},
+		{core.TriggerEventKindAgentStartRun, false},
+		{core.TriggerEventKindChatStart, false},
+	} {
+		t.Run(string(tc.kind), func(t *testing.T) {
+			starter := &fakeStarter{}
+			launcher, _ := newTestLauncher(t, repo, starter)
+			ev := Event{Kind: tc.kind, DedupeKey: "evt-" + uuid.NewString(), OccurredAt: time.Now().UTC()}
+			if tc.kind == core.TriggerEventKindChatStart {
+				ev = chatStartEvent()
+			}
+			_, err := launcher.Launch(ctx, ev, Spec{
+				OwnerUserID: launchTestUserID, ProjectID: projectID, Workflow: "builtin://agent",
+				Params: mockModelParams(t), Messages: userSeed("go"),
+				// Unattended deliberately left unset.
+			})
+			require.NoError(t, err)
+			_, input := starter.rootRun(t)
+			assert.Equal(t, tc.unattended, v2.IsUnattended(input.Inputs))
+		})
+	}
 }
 
 // The interactive path asks for a title; a scheduled one supplies its own and

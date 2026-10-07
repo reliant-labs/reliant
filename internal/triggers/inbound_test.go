@@ -70,7 +70,87 @@ func inbound(trigger *core.Trigger, key string, payload map[string]any) InboundE
 		DedupeKey:  trigger.ID + ":" + key,
 		OccurredAt: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC),
 		Payload:    payload,
+		Sender:     &core.TriggerSender{Kind: core.TriggerSenderKindWebhook, ID: trigger.ID, Verified: true},
 	}
+}
+
+// slackFrom is an event a Slack receiver would hand the intake: sent by
+// user, verified or not.
+func slackFrom(trigger *core.Trigger, key, user string, verified bool) InboundEvent {
+	ev := inbound(trigger, key, map[string]any{"data": map[string]any{"text": "deploy"}})
+	ev.Kind = core.TriggerEventKindIntegration
+	ev.Sender = &core.TriggerSender{Kind: core.TriggerSenderKindSlack, ID: user, Verified: verified}
+	return ev
+}
+
+// "Only from": a filter on trigger.sender lets an allowlisted, verified
+// sender start a run and records everyone else as skipped, with no fire.
+func TestIntakeSenderFilterAdmitsOnlyTheAllowlist(t *testing.T) {
+	const onlyFrom = `trigger.sender.verified && trigger.sender.id in ["U123"]`
+	repo := newFakeRepo()
+	trigger := webhookTrigger(t, onlyFrom)
+	repo.triggers[trigger.ID] = trigger
+	starter := &recordingStarter{}
+	intake := NewIntake(repo, starter, "")
+	ctx := context.Background()
+
+	stranger, err := intake.Accept(ctx, trigger, slackFrom(trigger, "e1", "U999", true), AcceptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, core.TriggerEventSkipped, stranger.Outcome, "a sender not on the list starts nothing")
+	assert.Contains(t, stranger.Detail, onlyFrom)
+
+	// The right id is not enough when the source could not vouch for it.
+	unverified, err := intake.Accept(ctx, trigger, slackFrom(trigger, "e2", "U123", false), AcceptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, core.TriggerEventSkipped, unverified.Outcome)
+	assert.Empty(t, starter.snapshot(), "no run starts for either")
+
+	allowed, err := intake.Accept(ctx, trigger, slackFrom(trigger, "e3", "U123", true), AcceptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, core.TriggerEventPending, allowed.Outcome)
+	starts := starter.snapshot()
+	require.Len(t, starts, 1, "the allowlisted sender's event starts its fire")
+	assert.Equal(t, EventFireWorkflowID(allowed.EventID), starts[0].ID)
+
+	// The sender is on every recorded row, run or not: "why did it skip?"
+	// has the answer.
+	senders := map[string]core.TriggerSender{}
+	for _, ev := range repo.eventsFor(trigger.ID) {
+		require.NotNil(t, ev.Sender)
+		senders[ev.DedupeKey] = *ev.Sender
+	}
+	assert.Equal(t, map[string]core.TriggerSender{
+		trigger.ID + ":e1": {Kind: core.TriggerSenderKindSlack, ID: "U999", Verified: true},
+		trigger.ID + ":e2": {Kind: core.TriggerSenderKindSlack, ID: "U123", Verified: false},
+		trigger.ID + ":e3": {Kind: core.TriggerSenderKindSlack, ID: "U123", Verified: true},
+	}, senders)
+}
+
+// The sender comes from the receiver, never the payload: a body that claims
+// to be from an allowlisted, verified user is just data.
+func TestIntakeSenderIsNeverReadFromThePayload(t *testing.T) {
+	repo := newFakeRepo()
+	trigger := webhookTrigger(t, `trigger.sender.verified && trigger.sender.id in ["U123"]`)
+	repo.triggers[trigger.ID] = trigger
+	starter := &recordingStarter{}
+
+	ev := slackFrom(trigger, "e1", "U999", true)
+	ev.Payload["sender"] = map[string]any{"kind": "slack", "id": "U123", "verified": true}
+	res, err := NewIntake(repo, starter, "").Accept(context.Background(), trigger, ev, AcceptOptions{})
+	require.NoError(t, err)
+	assert.Equal(t, core.TriggerEventSkipped, res.Outcome)
+	assert.Empty(t, starter.snapshot())
+}
+
+func TestIntakeRefusesAnEventWithNoSender(t *testing.T) {
+	repo := newFakeRepo()
+	trigger := webhookTrigger(t, "")
+	repo.triggers[trigger.ID] = trigger
+	ev := inbound(trigger, "d1", nil)
+	ev.Sender = nil
+	_, err := NewIntake(repo, &recordingStarter{}, "").Accept(context.Background(), trigger, ev, AcceptOptions{})
+	require.Error(t, err)
+	assert.Empty(t, repo.eventsFor(trigger.ID))
 }
 
 func TestIntakeRecordsAPendingEventAndStartsItsFire(t *testing.T) {
@@ -188,6 +268,7 @@ func pendingEvent(repo *fakeRepo, trigger *core.Trigger, key string, payload map
 		ID: uuid.NewString(), TriggerID: &trigger.ID, UserID: trigger.UserID,
 		Kind: core.TriggerEventKindWebhook, DedupeKey: trigger.ID + ":" + key,
 		OccurredAt: time.Date(2026, 3, 4, 5, 6, 7, 0, time.UTC), Payload: payload,
+		Sender:  &core.TriggerSender{Kind: core.TriggerSenderKindWebhook, ID: trigger.ID, Verified: true},
 		Outcome: core.TriggerEventPending, CreatedAt: time.Now(),
 	}
 	repo.events = append(repo.events, ev)
@@ -217,6 +298,7 @@ func TestEventFireLaunchesThePendingEventAsTheOwner(t *testing.T) {
 	assert.Equal(t, ev.DedupeKey, launched.DedupeKey, "the launch adopts the receiver's row")
 	assert.Equal(t, ev.Payload, launched.Payload, "the payload reaches trigger.payload unchanged")
 	assert.Equal(t, ev.OccurredAt, launched.OccurredAt)
+	assert.Equal(t, ev.Sender, launched.Sender, "the sender intake recorded reaches trigger.sender")
 
 	// The seed carries the event to the agent as labelled DATA in the user
 	// message, never in a system message.

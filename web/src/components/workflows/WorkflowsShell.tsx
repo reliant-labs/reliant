@@ -34,11 +34,12 @@
  * never a dead end.
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-router";
 import { Activity, ArrowLeft, CalendarClock, Check, ChevronDown, Library, X } from "lucide-react";
 
 import SidebarLayout from "@/components/forge-ui/sidebar_layout";
+import { useRouteProjectResolution } from "@/hooks/useRouteProjectResolution";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { cn } from "@/lib/utils";
@@ -270,61 +271,6 @@ function ProjectSwitcher() {
 
 /** The resolution ladder in the header comment. Runs once per mount of the area. */
 function useWorkflowsProjectResolution() {
-  const navigate = useNavigate();
   const { pathname } = useLocation();
-  const search = useSearch({ strict: false }) as { project?: string };
-  const projectParam = search.project;
-
-  const currentProject = useProjectStore((state) => state.currentProject);
-  const loadProjects = useProjectStore((state) => state.loadProjects);
-  const selectProject = useProjectStore((state) => state.selectProject);
-  const restoreLastProject = useProjectStore((state) => state.restoreLastProject);
-  const attempted = useRef(false);
-
-  const syncProjectParam = useCallback(
-    (projectId: string) => {
-      if (!pathname.startsWith(WORKFLOWS_AREA_PATH)) return;
-      void navigate({
-        to: ".",
-        search: (prev: Record<string, unknown>) => ({ ...prev, project: projectId }),
-        replace: true,
-      });
-    },
-    [navigate, pathname],
-  );
-
-  useEffect(() => {
-    if (attempted.current) return;
-    attempted.current = true;
-    void (async () => {
-      try {
-        if (currentProject) {
-          if (projectParam !== currentProject.id) syncProjectParam(currentProject.id);
-          return;
-        }
-        await loadProjects();
-        if (projectParam) {
-          const match = useProjectStore.getState().projects.find((p) => p.id === projectParam);
-          if (match) {
-            await selectProject(match);
-            return;
-          }
-        }
-        if (await restoreLastProject()) {
-          const restoredId = useProjectStore.getState().currentProject?.id;
-          if (restoredId) syncProjectParam(restoredId);
-        }
-      } catch {
-        // Resolution is best-effort: every section renders without a project.
-      }
-    })();
-  }, [currentProject, projectParam, loadProjects, selectProject, restoreLastProject, syncProjectParam]);
-
-  // Keep the URL honest after the first resolution: a project selected later
-  // (the header's switcher, or a run's page selecting its run's project) must
-  // follow into the param, or a refresh would resolve back to the previous one.
-  useEffect(() => {
-    if (!currentProject || projectParam === currentProject.id) return;
-    syncProjectParam(currentProject.id);
-  }, [currentProject, projectParam, syncProjectParam]);
+  useRouteProjectResolution({ reflectInUrl: pathname.startsWith(WORKFLOWS_AREA_PATH) });
 }

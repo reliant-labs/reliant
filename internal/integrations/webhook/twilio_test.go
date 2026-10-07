@@ -343,6 +343,29 @@ func TestTwilioWhatsAppWithMedia(t *testing.T) {
 	}, data["media"])
 }
 
+// trigger.sender is the From number, and it is NOT verified even though the
+// delivery's Twilio signature was: the signature proves Twilio delivered the
+// message, not who sent it, and SMS caller id can be spoofed upstream.
+func TestTwilioSenderIsTheFromNumberAndNeverVerified(t *testing.T) {
+	env := newTwilioEnv(t)
+	env.connect(t, "alice-main", "alice", "conn-a", twAccountA, twTokenA, nil)
+	for sid, from := range map[string]string{"SM-sender-1": "+15551230000", "SM-sender-2": "whatsapp:+15551230001"} {
+		form := url.Values{"MessageSid": {sid}, "AccountSid": {twAccountA}, "From": {from}, "To": {"+15559870000"}, "Body": {"hi"}, "ProfileName": {"Ada"}}
+		require.Equal(t, http.StatusOK, env.deliver(t, form, twTokenA, twEvents).Code)
+	}
+	all := env.intake.all()
+	require.Len(t, all, 2)
+	got := map[string]core.TriggerSender{}
+	for _, call := range all {
+		require.NotNil(t, call.Event.Sender)
+		got[call.Event.Sender.ID] = *call.Event.Sender
+	}
+	assert.Equal(t, map[string]core.TriggerSender{
+		"+15551230000":          {Kind: core.TriggerSenderKindSMS, ID: "+15551230000", DisplayName: "Ada", Verified: false},
+		"whatsapp:+15551230001": {Kind: core.TriggerSenderKindSMS, ID: "whatsapp:+15551230001", DisplayName: "Ada", Verified: false},
+	}, got)
+}
+
 // A delivery that verified but routes to no trigger (a number nobody
 // listens to) is still acked with empty TwiML, so Twilio logs no error.
 func TestTwilioAcksAVerifiedDeliveryNoTriggerMatches(t *testing.T) {

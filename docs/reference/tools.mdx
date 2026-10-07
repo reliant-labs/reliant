@@ -1103,7 +1103,7 @@ before they run: they read the whole machine, take minutes, and starve every
 other agent on this disk.
 - To find something in the project → search a relative path, as above.
 - To find a DEPENDENCY's source on disk → ask the package manager, do not scan:
-  'go list -m -f "{`{.Dir}`}" `<module>`', 'go env GOMODCACHE', 'npm root'.
+  'go list -m -f "\{`{.Dir}`\}" `<module>`', 'go env GOMODCACHE', 'npm root'.
 - If you truly need a filesystem search, name a specific directory.
 
 #### ⛓️ CHAIN PROBES — ONE CALL ANSWERS MANY QUESTIONS
@@ -1756,6 +1756,7 @@ Create or update a test scenario with YAML content.
 Creates or updates a scenario with the given YAML definition and runs it.
 
 **Scenario YAML structure:**
+```yaml
 name: scenario_name
 description: What this scenario tests
 events:
@@ -1769,17 +1770,20 @@ expect:
   outcome: completed         # or "error" / "failed"
   reached: ["node1", "node2"]
   not_reached: ["node3"]
+```
 
 **Events — typed mode (usually shorter than a raw output map):**
+```yaml
   - node: call_llm
     type: llm_response       # llm_response | tool_result | tool_error | llm_error | user_input
     text: "Hello!"
-    tool_calls: [{name: bash, input: `{command: ls}`}]
+    tool_calls: [{name: bash, input: {command: ls}}]
   - node: execute_tools
     type: tool_result
     tool: bash
-    tool_output: `{result: "file.txt"}`
+    tool_output: {result: "file.txt"}
     is_error: false          # marks the tool result as failed
+```
 
 **Assertions — all optional:**
 - outcome: completed | error | failed
@@ -1789,7 +1793,7 @@ expect:
   that excludes skipped nodes — use it, not reached, to prove a branch ran.
 - skipped: nodes that must have been scheduled but skipped by a false condition.
 - error_contains / error_node: for outcome: error
-- node_outputs: {node_id: `{field: expected}`} — partial match on a node's output
+- node_outputs: \{node_id: `{field: expected}`\} — partial match on a node's output
 - outputs: `{name: expected}` — the workflow's declared outputs. Keys support
   dotted paths (e.g. "response.choice": "complete").
 
@@ -2095,7 +2099,7 @@ _Miscellaneous tools and utilities._
 | [`slack__message_reply`](#slack__message_reply) | integration | Post a reply in the thread of an existing message, identified by its channel and ts (a reply to a... |
 | [`slack__message_update`](#slack__message_update) | integration | Replace the text and/or blocks of a message the Reliant bot posted, identified by channel and ts.... |
 | [`slack__reaction_add`](#slack__reaction_add) | integration | Add an emoji reaction, as the bot, to the message at channel + ts. Name the emoji without colons ... |
-| [`slack__user_lookup_by_email`](#slack__user_lookup_by_email) | integration | Look up a member of the workspace by email address and return their user ID (for mentions as <@ID... |
+| [`slack__user_lookup_by_email`](#slack__user_lookup_by_email) | integration | Look up a member of the workspace by email address and return their user ID (for mentions as \<@ID... |
 | [`spawn_send`](#spawn_send) | - | Send a message to a running sub-agent you spawned, or to your own parent agent. |
 | [`spawn_status`](#spawn_status) | readonly | Check on the sub-agents you (the calling thread) have spawned — list them all, or inspect and o... |
 | [`spawn_stop`](#spawn_stop) | - | Stop a sub-agent you spawned, when its work is no longer needed. |
@@ -2578,7 +2582,7 @@ Add an emoji reaction, as the bot, to the message at channel + ts. Name the emoj
 
 **Tags:** `integration`
 
-Look up a member of the workspace by email address and return their user ID (for mentions as <@ID> and DMs), names and timezone. An address with no member is users_not_found.
+Look up a member of the workspace by email address and return their user ID (for mentions as `<@ID>` and DMs), names and timezone. An address with no member is users_not_found.
 
 ---
 

@@ -58,6 +58,7 @@ import {
   type SchedulePreset,
 } from "./scheduleForm";
 import { errorTextClass, fieldClass, hintClass, labelClass, textareaClass } from "../workflow/run/runFormStyles";
+import { OnlyFromControl } from "../workflow/config/OnlyFromControl";
 import { buildDaemonChoices, defaultDaemonId, NO_MACHINE, noMachineBlockerFor } from "./daemonChoices";
 import { validateTimezone } from "./timezone";
 
@@ -93,6 +94,11 @@ export interface AutomationFormDialogProps {
 
 /** A Go duration ("90s", "10m", "1h30m"); the server is the final judge. */
 const GO_DURATION = /^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$/;
+
+/** The integration of a personal trigger's own event source, for its "Only from". */
+function inlineIntegration(source: TriggerSource): string | undefined {
+  return source.kind === "passthrough" && source.arm.case === "integration" ? source.arm.value.integration : undefined;
+}
 
 /**
  * A source arm this build's generated code predates arrives with nothing to
@@ -194,6 +200,9 @@ function AutomationFormBody({
   const [overlap, setOverlap] = useState<OverlapPolicy>(initialSchedule?.overlap ?? "skip");
   const [catchupWindow, setCatchupWindow] = useState(initialSchedule?.catchupWindow ?? "");
   const [notifyOnComplete, setNotifyOnComplete] = useState(trigger?.notifyOnComplete ?? false);
+  // An inline event source's own filter, sent back on save (an update
+  // replaces it). An activation's belongs to its declaration.
+  const [filter, setFilter] = useState(trigger && trigger.source.kind !== "activation" ? (trigger.filter ?? "") : "");
   // Advanced settings open on their own when they hold something non-default,
   // so an edit never hides a value it is about to save.
   const [advancedOpen, setAdvancedOpen] = useState(
@@ -218,6 +227,7 @@ function AutomationFormBody({
     overlap,
     catchupWindow,
     notifyOnComplete,
+    filter,
   });
   // Workflow inputs change on their own too (RunWorkflowForm applies a
   // workflow's default presets asynchronously). Until the user interacts with
@@ -373,6 +383,7 @@ function AutomationFormBody({
     noMachine,
     notifyOnComplete,
     source: buildSource(),
+    filter: lockedSource && lockedSource.kind !== "activation" ? filter : undefined,
   });
 
   const onSubmit = async (event: FormEvent) => {
@@ -390,7 +401,9 @@ function AutomationFormBody({
       // no-machine trigger is left for the server to judge with its inputs.
       next.daemon = `No machine is not available: ${noMachineBlocker}. Choose a daemon.`;
     }
-    if (!message.trim()) next.message = "Write the prompt each run starts from.";
+    // An activation may leave its prompt empty to use its declared trigger's
+    // prompt template; the server refuses it when that declaration has none.
+    if (!message.trim() && lockedSource?.kind !== "activation") next.message = "Write the prompt each run starts from.";
     if (pendingWorkflow !== null) {
       next.inputs = "Confirm or cancel the workflow change first.";
     } else if (inputsStatus?.loading && workflow) {
@@ -448,6 +461,7 @@ function AutomationFormBody({
       overlap !== initial.overlap ||
       catchupWindow !== initial.catchupWindow ||
       notifyOnComplete !== initial.notifyOnComplete ||
+      filter !== initial.filter ||
       (daemonChosen.current &&
         daemonId !== (trigger?.noMachine ? NO_MACHINE : (trigger?.daemonId ?? ""))) ||
       (inputsTouched.current && JSON.stringify(inputs) !== inputsBaseline.current)
@@ -637,7 +651,9 @@ function AutomationFormBody({
               aria-describedby={describedBy(fieldId("message-hint"), errors.message && fieldId("message-error"))}
             />
             <p id={fieldId("message-hint")} className={hintClass}>
-              Each run starts from this message. Nobody will be watching, so say everything the agent needs.
+              {lockedSource?.kind === "activation"
+                ? "Leave empty to use the prompt the workflow's trigger declares; anything here overrides it."
+                : "Each run starts from this message. Nobody will be watching, so say everything the agent needs."}
             </p>
             {errors.message && (
               <p id={fieldId("message-error")} className={errorTextClass}>
@@ -733,7 +749,17 @@ function AutomationFormBody({
                 </>
               )}
             </p>
-          ) : (
+          ) : null}
+          {lockedSource && inlineIntegration(lockedSource) && (
+            <OnlyFromControl
+              integration={inlineIntegration(lockedSource)}
+              filter={filter}
+              onChange={setFilter}
+              connectionId={trigger?.connectionId}
+              classes={{ label: labelClass, input: fieldClass, hint: hintClass }}
+            />
+          )}
+          {lockedSource ? null : (
             <>
               <ScheduleFields
                 fieldId={fieldId}

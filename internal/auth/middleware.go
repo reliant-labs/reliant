@@ -241,7 +241,6 @@ func DomainWhitelist(allowedDomains []string) func(http.Handler) http.Handler {
 
 			if !domainSet[domain] {
 				logging.Warn("[Domain Whitelist] Rejected email domain",
-					"email", email,
 					"domain", domain,
 					"path", r.URL.Path,
 				)

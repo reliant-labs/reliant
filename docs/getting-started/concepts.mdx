@@ -3,7 +3,29 @@ title: "Key Concepts"
 description: "Understand Reliant's core terminology and architecture"
 ---
 
-Reliant has a few core concepts you need to understand, and several more that become relevant as you build more complex workflows.
+Reliant is a cloud service. Its servers run your agents and call the AI model, and a **daemon** on a machine you choose does the hands-on work with your code. Everything else in Reliant is built from the handful of concepts below.
+
+## How the pieces fit
+
+You use Reliant from the web app or the desktop app. When you send a message, Reliant's servers run the agent loop: they call the model, and whenever the model wants to read a file or run a command, they send that request to your machine's daemon and pass the result back to the model. Your repository stays on that machine. See [Privacy & Security](/help/privacy) for exactly what is stored where.
+
+### Machine and daemon
+
+A **machine** is where your agents' tools run, and the **daemon** is the small program on it that carries those tools out. A machine is either **your own computer** (or another computer you own, such as a workstation or server) or a **Reliant cloud machine** that Reliant hosts for you. Cloud machines suspend after a period of inactivity, don't bill for compute while suspended (the disk is still billed), and wake automatically when you next send a message. Manage them in **Settings → Machines**.
+
+**Related**: [Machines](/machines/overview)
+
+### Chat
+
+A **chat** is one conversation with an agent or a workflow, tied to a project. You can run many chats at once, each on its own branch or [worktree](/features/worktrees), and step away while they work.
+
+### Project
+
+A **project** is a code repository, or several, that your agents work in. A cloud machine gets its copy by cloning from GitHub, which you connect in **Settings → GitHub**.
+
+## The essentials
+
+These three concepts are all you need to start building workflows.
 
 ## The essentials
 
@@ -25,10 +47,12 @@ A **node** is a single step in a workflow. Each node does one thing:
 
 | Node Type | What it does |
 | --- | --- |
-| `workflow` | Runs an agent (the most common — calls `builtin://agent`) |
+| `workflow` | Runs another workflow, most often an agent (`builtin://agent`) |
 | `run` | Executes a shell command (e.g., `npm test`) |
-| `action` | Performs a built-in operation (`SaveMessage`, `CallLLM`, `Approval`) |
+| `action` | Performs a built-in operation, such as calling the model, running tools, compacting history, or asking for approval |
 | `loop` | Repeats a sub-workflow while a condition is true |
+
+There are more node kinds for routing, joining parallel branches and invoking tools directly. The [Nodes reference](/reference/nodes) lists every one.
 
 Nodes connect via **edges** that define execution flow — including conditional routing (e.g., "if tests pass, go to deploy; if they fail, go to fix").
 
@@ -68,7 +92,7 @@ Controls how much autonomy the agent has: **Auto** (full autonomy), **Manual** (
 
 ### Worktree (Workspace)
 
-A **worktree** is an isolated Git working directory. Reliant uses worktrees to let parallel agents work on separate branches without interfering, or to let you work on multiple branches simultaneously.
+A **worktree** is an isolated Git working directory on your machine. Reliant uses worktrees to let parallel agents work on separate branches without interfering, or to let you work on multiple branches simultaneously.
 
 In the UI, these appear as "Workspaces."
 

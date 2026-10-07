@@ -118,6 +118,23 @@ export function buildDaemonChoices(
  */
 export const NO_MACHINE = "__no_machine__";
 
+/** "Runs on" in words for an automation with no machine. */
+export const NO_MACHINE_LABEL = "No machine";
+
+/**
+ * Where an automation's runs execute, in words: its machine's name, or "No
+ * machine". A no-machine automation has an empty daemonId by design, so it is
+ * checked first — the daemon fallback would read it as an unnamed "daemon".
+ * `daemon` is the registry entry, when the caller has one.
+ */
+export function automationMachineLabel(
+  trigger: { noMachine: boolean; daemonId: string; daemonName?: string },
+  daemon?: Pick<DaemonInfo, "daemonId" | "hostname">,
+): string {
+  if (trigger.noMachine) return NO_MACHINE_LABEL;
+  return daemon?.hostname || trigger.daemonName || daemonLabel(undefined, trigger.daemonId);
+}
+
 /**
  * Why "No machine" cannot be offered for this workflow, or undefined when it
  * can. Mirrors WorkflowListItem.needs_machine, which the server computes at the

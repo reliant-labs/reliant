@@ -333,8 +333,8 @@ func (t *codeContextTool) Execute(tc *rctx.ToolContext, params CodeContextParams
 	// who calls it. The engine query is the same cost either way, and the
 	// caller asked a question about a symbol — the neighborhood is context they
 	// almost always want next.
-	graph := symbolGraph{}
 	externalHidden := 0
+	var graph symbolGraph
 	{
 		graph = engine.Resolve(ctx, root, decl, want)
 

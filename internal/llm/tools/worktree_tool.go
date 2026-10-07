@@ -9,6 +9,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/worktree"
 )
@@ -206,7 +207,7 @@ func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rctx
 		}
 		if err := w.repo.CreateWorktree(ctx, dbWorktree); err != nil {
 			// Log but don't fail - the git worktree was already created successfully
-			fmt.Printf("Warning: failed to persist worktree to database: %v\n", err)
+			logging.Warn("Failed to persist worktree to database", "worktreeID", wt.ID, "error", err)
 		}
 	}
 

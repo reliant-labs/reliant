@@ -125,9 +125,10 @@ func TestHTTP_CallbackForUnknownOrExpiredStateRendersAPage(t *testing.T) {
 		require.Contains(t, rec.Header().Get("Content-Type"), "text/html")
 	}
 
+	// Expired on the broker's clock, the one that decides it (see brokerClock).
+	now := brokerClock(t, e)
 	state := startAlice(t, e, connections.StartParams{})
-	_, err := e.raw.Exec(`UPDATE oauth_flows SET expires_at = now() - interval '1 second'`)
-	require.NoError(t, err)
+	*now = now.Add(connections.FlowTTL)
 	rec := do(mux, http.MethodGet, "/integrations/oauth/github/callback?code=<script>x</script>&state="+url.QueryEscape(state))
 	require.Equal(t, http.StatusBadRequest, rec.Code)
 	require.Empty(t, rec.Header().Get("Location"))

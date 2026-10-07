@@ -94,16 +94,28 @@ const IndexLockAdvice = "If no git process is actually running, this lock was le
 // probe. Conditions 2 and 4 narrow that window but do not close it. On
 // Windows the probe always answers Unknown, so nothing is ever removed there.
 func EnsureIndexWritable(ctx context.Context, dir string) {
+	ensureIndexWritable(ctx, dir, osutil.FileHolders)
+}
+
+// holderProbe answers condition 3: does a live process hold path open?
+//
+// Production passes osutil.FileHolders. It is a parameter so tests can give a
+// fixed answer: the real probe runs lsof, whose speed depends on how loaded
+// the host is, and a recovery test that waits on it is testing the machine
+// rather than this logic.
+type holderProbe func(ctx context.Context, path string) osutil.FileHoldState
+
+func ensureIndexWritable(ctx context.Context, dir string, probe holderProbe) {
 	gitDir, err := resolveGitDir(dir)
 	if err != nil || gitDir == "" {
 		return
 	}
-	clearStrandedIndexLock(ctx, filepath.Join(gitDir, IndexLockName))
+	clearStrandedIndexLock(ctx, filepath.Join(gitDir, IndexLockName), probe)
 }
 
 // clearStrandedIndexLock applies the conditions documented on
 // EnsureIndexWritable to one concrete lock path.
-func clearStrandedIndexLock(ctx context.Context, lockPath string) {
+func clearStrandedIndexLock(ctx context.Context, lockPath string, probe holderProbe) {
 	info, err := os.Stat(lockPath)
 	if err != nil {
 		return // no lock, or unreadable — either way, not ours to clear
@@ -114,7 +126,7 @@ func clearStrandedIndexLock(ctx context.Context, lockPath string) {
 		return
 	}
 
-	if osutil.FileHolders(ctx, lockPath) != osutil.FileHoldNotHeld {
+	if probe(ctx, lockPath) != osutil.FileHoldNotHeld {
 		return // held, or unknowable: leave it
 	}
 
@@ -135,7 +147,7 @@ func clearStrandedIndexLock(ctx context.Context, lockPath string) {
 	if !ok || secondIno != firstIno {
 		return // replaced or removed under us: a live git, not a stranded lock
 	}
-	if osutil.FileHolders(ctx, lockPath) != osutil.FileHoldNotHeld {
+	if probe(ctx, lockPath) != osutil.FileHoldNotHeld {
 		return
 	}
 

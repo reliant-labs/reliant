@@ -3,6 +3,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
+	"go.temporal.io/sdk/temporal"
 )
 
 // EnqueueAgentMessageInput is the input for the EnqueueAgentMessage activity.
@@ -25,6 +27,13 @@ type EnqueueAgentMessageInput struct {
 	// ToolCallID is the spawn call that owns the subject agent, when known.
 	ToolCallID string `json:"tool_call_id,omitempty"`
 }
+
+// ActivityThread is the thread this activity runs on: the sender. A
+// background spawn reports its outcome from its own goroutine, so a failure
+// here is that spawn's — not the parent's, and not every thread's. Without it
+// the input carries no "thread" and its errors were written thread-less, which
+// rendered them in a spawn view that did not yet exist when they happened.
+func (in EnqueueAgentMessageInput) ActivityThread() string { return in.FromThreadID }
 
 // EnqueueAgentMessageOutput reports the id of the enqueued row.
 type EnqueueAgentMessageOutput struct {
@@ -85,11 +94,24 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 
 	// Terminal spawn reports go through EnqueueSpawnReport: a reconciler may
 	// already have synthesized a placeholder for this spawn, and a plain INSERT
-	// would die on idx_agent_messages_one_terminal_report_per_spawn (23505),
+	// would die on idx_agent_messages_one_terminal_report_per_chat_spawn (23505),
 	// leaving the real outcome lost. See
-	// docs/incidents/2026-10-04-spawn-report-collision.md.
+	// dev-docs/incidents/2026-10-04-spawn-report-collision.md.
+	//
+	// The slot is (chat, tool call id). A slot held by a DIFFERENT spawn -- a
+	// provider reused the id in this chat -- is an error, not "already
+	// reported": the parent will not receive this report, and the failed
+	// activity is what says so (the spawn goroutine logs it and the run
+	// history keeps it).
 	if input.ToolCallID != "" && isTerminalSpawnReportKind(kind) {
 		outcome, err := a.repo.EnqueueSpawnReport(ctx, msg)
+		if errors.Is(err, core.ErrSpawnReportSlotTaken) {
+			logging.Error("[EnqueueAgentMessage] another spawn already reported under this tool call id; this report cannot be delivered",
+				"chat_id", input.ChatID, "tool_call_id", input.ToolCallID,
+				"from_thread_id", input.FromThreadID, "to_thread_id", input.ToThreadID, "error", err)
+			return EnqueueAgentMessageOutput{}, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("spawn report not delivered: %v", err), "SpawnReportSlotTaken", err)
+		}
 		if err != nil {
 			return EnqueueAgentMessageOutput{}, fmt.Errorf("failed to enqueue spawn report: %w", err)
 		}
@@ -99,7 +121,7 @@ func (a *EnqueueAgentMessageActivity) Execute(ctx context.Context, input Enqueue
 				"tool_call_id", input.ToolCallID)
 		case core.SpawnReportAlreadyReported:
 			// Idempotent: also what a retry after a lost commit response sees.
-			logging.Info("[EnqueueAgentMessage] spawn already reported; no-op",
+			logging.Debug("[EnqueueAgentMessage] spawn already reported; no-op",
 				"tool_call_id", input.ToolCallID)
 		}
 		return EnqueueAgentMessageOutput{ID: msg.ID}, nil

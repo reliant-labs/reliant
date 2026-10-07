@@ -1,144 +1,206 @@
 ---
-title: "Privacy & Security"
-description: "How Reliant handles your data and keeps your code secure"
+title: "Privacy & Security: what leaves your machine"
+description: "Where your code, prompts and chats go when you use Reliant, what we store, what your model provider sees, and how to delete it"
 ---
 
-Reliant is designed with privacy as a core principle. Your code and conversations stay on your machine—we don't have servers receiving your data.
+Reliant is a cloud service, and you need an account to use it. The desktop and web apps talk to Reliant's API and workflow servers in Google Cloud (us-central1), and those servers run the agent loop. They call the AI model. When the model wants to read a file or run a command, they send that tool call to a **daemon**: one running on your own machine, on any machine you own, or on a cloud machine we host for you. The daemon returns the result. Our servers store it in your chat and send it to the model as context. Model calls are always made from our servers, never from your device, whether you use your own API key, a provider login, or Reliant AI.
 
-## Local-First Architecture
+So your repository stays wherever the daemon runs. But **anything the agent reads, and anything a command prints, is sent to our servers, stored with your chat, and sent to your model provider.**
 
-**All data stays on your machine:**
+## How data flows
 
-| Data Type | Storage Location |
-| --- | --- |
-| Config | `~/.reliant/config.yaml` (all platforms) |
-| Conversations | `~/Library/Application Support/reliant` (macOS), `~/.local/share/reliant` (Linux) |
-| API keys | `~/Library/Application Support/reliant` (macOS), `~/.local/share/reliant` (Linux) |
-| Workflows | `.reliant/workflows/` in your project |
-| Presets | `.reliant/presets/` in your project |
-| Memories | `~/.reliant/reliant.md` (global), `reliant.md` (project) |
-| Worktrees | `~/.reliant/worktrees/` by default |
-| Your code | On your machine |
+```mermaid
+flowchart LR
+    subgraph device["Your computer"]
+        app["Reliant app<br/>desktop or web"]
+        localDaemon["Local daemon (optional)<br/>reads files, runs commands"]
+        repo[("Your repo")]
+    end
 
-## What Goes to AI Providers
+    subgraph cloud["Reliant cloud: Google Cloud, us-central1"]
+        api["API and workflow servers"]
+        db[("Database<br/>chats, tool output,<br/>attachments, credentials")]
+        cloudMachine["Cloud machine (optional)<br/>your repo on our disk"]
+        proxy["Reliant AI proxy"]
+    end
 
-When you chat with Reliant, messages are sent directly to your chosen AI provider (Anthropic, OpenAI, etc.). This includes:
+    byok["Your model provider<br/>your key or login"]
+    vertex["Google Vertex AI"]
 
-- Your messages and prompts
-- Relevant code context (files you reference or that tools read)
-- Tool call requests and results
-- System prompts from workflows/presets
+    app <-->|"prompts, replies"| api
+    api <--> db
+    localDaemon <-->|"tool calls and output"| api
+    localDaemon --- repo
+    api <-->|"tool calls and output"| cloudMachine
+    api -->|"prompt + context"| byok
+    api -->|"prompt + context"| proxy
+    proxy --> vertex
+```
 
-**You control which provider receives your data** by choosing your API provider in Settings → AI.
+A local daemon connects outbound to our gateway; it doesn't open any inbound ports on your machine. It only reads files and runs commands when the agent asks it to.
 
-### Provider Privacy Policies
+## What goes where
 
-Each provider has different data handling policies. Retention periods and training policies change over time, so always check the latest:
+| Data | Stays on your machine? | Stored by Reliant? | Sent to the model provider? |
+| --- | --- | --- | --- |
+| Files in your repo the agent never opens | Yes, with a local daemon | Only on a cloud machine, where the whole repo lives on its disk | No |
+| Files the agent reads, search results, diffs, command output | A copy stays on your machine | **Yes**, as tool output in your chat | **Yes** |
+| Your prompts and the model's replies | No | Yes | Yes |
+| Attachments you upload | No | Yes | Yes, when included in the conversation |
+| Memories (`reliant.md`), workflows and presets | Yes, as files where the daemon runs | Yes, copies with your project settings | Yes. Memories and workflow prompts are part of what the model sees |
+| Project details: paths, repo URLs, branch names | Yes | Yes | Often, because they appear in prompts and tool output |
+| Model API keys and provider logins | No | Yes, encrypted at the application layer. The connected account's email is stored, without that extra encryption, so we can show you which account is connected | Only to authenticate with that provider |
+| Integration credentials (GitHub, Gmail, Slack, Twilio) | No | Yes, encrypted at the application layer | No. The results of integration actions are sent, like any other tool output |
+| Secrets in your files or command output | Yes | **Yes, if the agent reads or prints them** | **Yes, if the agent reads or prints them** |
+| Your Reliant sign-in tokens (desktop) | Yes, in storage encrypted by your OS | No | No |
+| Analytics and crash reports | No | Sent to Statsig and Sentry (on by default; see [Telemetry](#telemetry)) | No |
 
-- **Anthropic**: [anthropic.com/legal/privacy](https://www.anthropic.com/legal/privacy)
-- **OpenAI**: [openai.com/policies/privacy-policy](https://openai.com/policies/privacy-policy)
-- **Google**: [ai.google.dev/terms](https://ai.google.dev/terms)
+<Warning>
+Secrets get no special handling. If the agent opens a `.env` file, prints an environment variable, or runs a command that echoes a token, that text becomes tool output. It is stored with your chat and sent to your model provider. Keep secrets out of the agent's reach, use approval modes for commands you haven't reviewed, and store deployment secrets with [Secrets](/features/secrets). If a key has been exposed, rotate it.
+</Warning>
 
-**Tip:** API usage typically has better privacy guarantees than consumer products. Review your provider's current privacy policy for specifics on data retention and training usage.
+### Local daemon vs. cloud machine
 
-## Project Isolation
+| | Local daemon | Cloud machine |
+| --- | --- | --- |
+| Where your code lives | Your disk | A persistent disk in Google Cloud (us-central1), inside its own lightweight VM (Kata Containers) |
+| What reaches our servers | Whatever the agent reads or a command prints | The same, plus the entire contents of the machine's disk |
+| Where commands run | Your machine | Our infrastructure |
+| When it's deleted | Whenever you choose | When you delete the machine. We may also delete a suspended machine's disk if you have no compute subscription (only after at least 14 days and two emails, the second at least 3 days before deletion), or if it stays suspended for at least 60 days (after an email warning) |
 
-Each project has isolated data:
+See [Machines](/machines/overview) for how to run a daemon on your own machines.
 
-- Separate chat history
-- Separate workflow configurations
-- Separate memory files (`reliant.md`)
+### Local models
 
-Worktrees share the parent repository's `.reliant/` directory but have isolated conversations.
+You can point Reliant at a model server running on your own hardware (Ollama, LM Studio, or any OpenAI-compatible endpoint) in `~/.reliant/config.yaml`; see [Model Configuration](/settings/model-config). Because model calls are made by our servers, the request is relayed through your daemon to the local server. That means the prompt and the reply still pass through our servers and are stored in your chat like any other. A local model keeps the *inference* on your hardware, not the conversation. It needs a daemon on the machine that can reach the model server.
 
-### Offline Mode
+### Other services the agent can reach
 
-Reliant works offline for:
+- **Integrations** you connect (GitHub, Gmail, Slack, Twilio, custom HTTP): what the agent sends goes to that service under your account.
+- **MCP servers** you configure get the tool calls the agent makes to them.
+- **Web search and fetch:** a web search sends the agent's query to a search provider (currently DuckDuckGo), and fetching a page sends a request to that site. These requests may come from our servers or from your daemon.
 
-- Viewing past conversations
-- Editing workflows
-- File operations
-- Local LLMs
+## Your model provider and training
+
+### No training
+
+We don't use your content to train or fine-tune AI models. That includes your prompts, code, files, tool outputs, chats, attachments, and anything from services you connect. This applies to every user on every plan.
+
+### Your own API key or provider login
+
+If you add your own API key, or sign in with a provider subscription (Claude, Codex, GitHub Copilot and others), our servers call that provider on your behalf, **under your account**. The provider's terms and privacy policy apply to what it receives, including whether it keeps the data or trains on it. API plans and consumer subscriptions are often treated differently, so check your provider's settings:
+
+- [Anthropic privacy policy](https://www.anthropic.com/legal/privacy)
+- [OpenAI privacy policy](https://openai.com/policies/privacy-policy)
+- [Google AI terms](https://ai.google.dev/terms)
+
+### Reliant AI
+
+If you use the optional Reliant AI provider:
+
+- Requests go through a proxy we run ourselves (LiteLLM) to **Google Vertex AI**. The proxy records the model, token counts and cost, for billing.
+- Google Cloud's terms don't allow Google to use these requests to train or fine-tune AI models without our permission, and we haven't given it.
+- To respond faster, Google may hold inputs and outputs in memory for up to 24 hours. Google may also log prompts for a limited time to detect abuse, as [Google describes](https://cloud.google.com/vertex-ai/generative-ai/docs/vertex-ai-zero-data-retention).
+- We use Vertex AI's global endpoint, so a request can be processed in any Google region, not only the US.
+
+Whichever provider you use, the conversation is also stored in your chat history on our servers.
 
 ## Telemetry
 
-**Enabled by default:** Reliant collects basic, anonymous usage telemetry (e.g. which features are used). This is not attached to any user information and is only used for product feature decisions.
+Both kinds of telemetry are **on by default**. To turn them off, go to **Settings → Privacy**.
 
-**Opt-in only:** Crash reporting is off by default. If you opt in, only:
+| Toggle | Sent to | What's included |
+| --- | --- | --- |
+| **Analytics and Usage Data** | Statsig | Product-usage events such as message sent, model call completed (model, token counts, latency) and project opened, tied to a device ID, your account ID and a session ID. Events record what you did, not what you wrote: a "message sent" event records the message's length, not its text. |
+| **Crash and Error Reporting** | Sentry | Crash and error reports: the error type, stack trace, app version and identifiers such as chat and run IDs. You're identified by an internal user ID, not your email or name. Request bodies, console output and custom data are removed, and error messages are cut to one short line with known credential formats redacted. That short line can still contain a fragment of text. Web session replays mask all on-screen text and form inputs, and block images, media and canvas. |
 
-- Crash stack traces (no code content)
-- Basic system info (OS version, Reliant version)
+Crash reports contain error details and stack traces; we don't upload memory dumps.
 
-are sent to help us fix bugs. You can opt out of both under Settings > Privacy.
+Turning off analytics also stops the analytics events our servers record about your account. The switches don't cover:
 
-## Public Docs Site Analytics
+- **Server logs.** They record identifiers (such as user, chat and run IDs, and sometimes your email address), counts, durations, status codes and IP addresses, not the content of your prompts, chats, tool inputs or outputs, or files. File paths can appear in error logs for file operations. Server logs and metrics are kept for 30 days.
+- **Server-side error reports**, which go to Sentry with the same shortening and credential redaction.
+- **Billing usage records:** the model, token count and cost of each request, which we need to bill you.
+- **Update checks:** the desktop app checks `downloads.reliantlabs.io` for updates, which sends your IP address and app version. Updates download only after you agree.
 
-The public docs site (`docs.reliantlabs.io`) is separate from the desktop app. The Mintlify docs experience includes browser-side analytics integrations for documentation usage.
+This docs site is hosted by Mintlify, which may collect usage analytics about it under [its privacy policy](https://www.mintlify.com/legal/privacy). Our marketing site, reliantlabs.io, has its own cookie choices under **Your privacy choices** in its footer; they don't apply to this docs site.
 
-Apollo remains enabled on the public docs site. Statsig is also supported for anonymous docs analytics when it is explicitly enabled in the runtime configuration for a deployment.
+## Deleting your data
 
-When Statsig is enabled, it collects anonymous documentation usage events such as:
+### Chats
 
-- Page views
-- Outbound link clicks
-- Docs search opens and submissions
+Deleting a chat **archives** it. Deleting the archived chat **permanently deletes** it, along with its messages, tool outputs and attachments.
 
-The Statsig docs integration stores:
+### Cloud machines
 
-- An anonymous visitor ID in `localStorage`
-- A session ID in `sessionStorage`
+Go to **Settings → Machines** and delete the machine. This deletes its disk and everything on it.
 
-These docs site analytics do **not** include your local code, project files, or desktop chat history. Statsig stays disabled by default for local development and preview environments unless it is explicitly turned on for testing.
+### Credentials and integrations
 
-## Enterprise Considerations
+You can remove API keys and provider logins, and disconnect integrations, in the app's settings at any time. For Gmail, we also revoke the token with Google. Data an integration already pulled into a chat stays there until you delete the chat.
 
-For organizations with strict security requirements:
+### Your account
 
-- **Self-hosted providers**: Use Azure OpenAI, AWS Bedrock, or local models
-- **Air-gapped environments**: Deploy with local LLM servers
-- **Audit logging**: Conversations are stored locally and can be reviewed
-- **SSO/SAML**: Coming soon
+Go to **Settings → Account → Delete account**, or email support@reliantlabs.io.
 
-## Deleting Your Data
+- **Before you can delete:** deletion is blocked while a paid subscription is active, so cancel it in the billing settings first. A wallet balance doesn't block deletion.
+- **Your wallet balance:** Wallet top-ups include a 5% service fee; coupon credits carry none. Reliant AI usage is billed at the provider's price. When you delete your account, we refund the face value of your unused paid credit to the card you paid with (the service fee isn't refunded), and promotional credit, such as credit from coupons, is forfeited. Promotional credit counts as spent before paid credit, so a coupon can't be turned into cash. The confirmation screen shows both amounts before you confirm. Card refunds usually take 5–10 business days to appear. If a refund can't go back to your card automatically, our support team refunds it for you.
+- **What's deleted:** your sign-in identity, chats and everything in them, projects, workflows, settings, credentials and cloud machines. If you host apps with us, delete them first, or ask support to remove them.
+- **What we keep:** invoices, usage records, subscription and wallet history, records of any refund made at deletion, and records at Stripe, as the law requires. We remove or replace your account identifiers in them where we can.
 
-### Clear Conversations
+### How long we keep things
 
-In the app: Settings → Data → Clear Chat History
+| Data | Retention |
+| --- | --- |
+| Chats, messages, tool outputs, attachments | Until you delete them |
+| Workflow run history | 7 days after the run ends |
+| Large stored workflow payloads | 30 days |
+| Credentials | Until you remove or disconnect them |
+| Cloud machine disks | Until you delete the machine, except as described in [Local daemon vs. cloud machine](#local-daemon-vs-cloud-machine) |
+| Hosted app databases | Until you delete them. **They are not backed up** |
+| Database backups | Nightly backups are kept for 7 days. Backups taken on demand, for example before maintenance, are deleted when they're no longer needed |
+| Server logs and metrics | 30 days |
+| Crash, error and analytics data (Sentry, Statsig) | According to each vendor's retention settings for our account |
+| Billing records, including refunds made at deletion | As long as tax and accounting law requires, typically 7 years |
 
-### Complete Removal
+The [Privacy Policy](https://reliantlabs.io/privacy#retention) has the complete list.
+
+### Clearing local app data
+
+These commands remove Reliant's files from your computer: your local config, the desktop app's data and sign-in state, and daemon credentials. They **don't** delete anything on our servers; delete your chats and account for that. Your project files (`reliant.md`, `.reliant/` in your repos) aren't touched.
+
+<Warning>
+`~/.reliant/` also contains the git worktrees Reliant creates (`~/.reliant/worktrees/`). Commit or push any work in them before deleting it.
+</Warning>
 
 ```bash
-# Remove user configuration (all platforms)
+# Local config, including worktrees (all platforms)
 rm -rf ~/.reliant/
 
-# macOS - Remove internal data and logs
+# macOS: desktop app data, daemon credentials, logs
 rm -rf ~/Library/Application\ Support/reliant
 rm -rf ~/Library/Logs/Reliant
 
-# Linux - Remove internal data and logs
-rm -rf ~/.local/share/reliant
-rm -rf ~/.local/state/reliant
-
-# Windows - Remove internal data
-del /s /q %APPDATA%\reliant
+# Linux
+rm -rf ~/.config/reliant
 ```
 
-Your code and project files are never modified by this process.
+```powershell
+# Windows
+Remove-Item -Recurse -Force "$env:APPDATA\reliant"
+```
 
-## Security Practices
+## Security practices
 
-### Code Modifications
+**Credentials.** API keys, provider sign-in tokens and integration credentials are encrypted at the application layer, with a key specific to your account, before they're written to our database.
 
-Reliant shows you exactly what changes will be made before applying them. In manual approval mode, every edit requires your confirmation.
+**Code modifications.** In manual approval mode, Reliant shows each edit before applying it and waits for your confirmation. In auto modes, edits are applied directly and shown in the conversation as they happen.
 
-### Tool Execution
+**Tool execution.** Shell commands and file operations are logged in the conversation, visible in the UI before execution, and controllable via approval modes.
 
-Shell commands and file operations are:
+## More detail
 
-- Logged in the conversation
-- Visible in the UI before execution
-- Controllable via approval modes
-
----
-
-**Questions?** Email [security@reliantlabs.io](mailto:security@reliantlabs.io) for security-related inquiries.
+- [Privacy Policy](https://reliantlabs.io/privacy): the full legal version, including your rights under GDPR and CCPA
+- [Subprocessors](https://reliantlabs.io/subprocessors): every company that processes data for us, and what each one processes
+- **Need a data processing agreement?** Email support@reliantlabs.io.
+- **Security issues:** email [security@reliantlabs.io](mailto:security@reliantlabs.io).

@@ -4,6 +4,7 @@ package tools
 import (
 	"encoding/json"
 	"fmt"
+	"path"
 	"strings"
 	"time"
 
@@ -343,6 +344,13 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		return NewTextErrorResponse(refusal), nil
 	}
 
+	// Refuse a recursive delete aimed at /, a system directory or a home
+	// directory. Workflow `run` steps reach the daemon through this tool too.
+	// See shell_destructive_guard.go.
+	if refusal := destructiveRootRefusal(params.Command); refusal != "" {
+		return NewTextErrorResponse(refusal), nil
+	}
+
 	// params.Timeout is in milliseconds per the JSON schema
 	maxTimeoutMs := int(MaxShellTimeout.Milliseconds())
 	defaultTimeoutMs := int(DefaultShellTimeout.Milliseconds())
@@ -365,6 +373,12 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	if workingDir == "" {
 		return NewTextErrorResponse("No project working directory available - ensure you're working within a project"), nil
 	}
+	// A project rooted at "/" is a broken context, not a project: every
+	// relative path in the command would then mean the whole machine.
+	if path.Clean(workingDir) == "/" {
+		return NewTextErrorResponse("refused: the project working directory resolved to /, which is not a project. " +
+			"This is a misconfigured project or worktree path; no command was run."), nil
+	}
 	startTime := time.Now()
 
 	// Best-effort detection: if command ends with & (not in quotes), treat as background
@@ -372,7 +386,7 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		params.RunInBackground = true
 		params.Command = strings.TrimSuffix(strings.TrimSpace(params.Command), "&")
 		params.Command = strings.TrimSpace(params.Command)
-		logging.Debug("[Shell] Detected trailing &, converting to background execution", "command", params.Command)
+		logging.Debug("[Shell] Detected trailing &, converting to background execution")
 	}
 
 	// Build the daemon request
@@ -449,30 +463,30 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 	originalStdoutSize := len(stdout)
 	originalStderrSize := len(stderr)
 
-	// Apply tail lines if specified
+	// Per-stream caps: stdout gets maxOutput, stderr half of it. tail_lines
+	// replaces them — it already chose what to keep, so only the budget below
+	// may still shorten it.
+	stdoutCap, stderrCap := maxOutput, maxOutput/2
 	if params.TailLines > 0 {
 		stdout = getTailLines(stdout, params.TailLines)
 		stderr = getTailLines(stderr, params.TailLines)
-	} else {
-		// Truncate stdout/stderr individually before JSON marshaling
-		// to keep the JSON envelope intact
-		stdout = truncateOutputWithLimit(stdout, maxOutput)
-		stderr = truncateOutputWithLimit(stderr, maxOutput/2)
+		stdoutCap, stderrCap = len(stdout), len(stderr)
 	}
 
 	if interrupted {
 		if stderr != "" {
 			stderr += "\n"
 		}
+		// At the END of stderr, which head+tail truncation always keeps.
 		stderr += "Command was aborted before completion"
 	}
 
-	// Ensure the JSON-encoded result fits the global output budget. Otherwise the
-	// generic tool_wrapper truncation head+tail-cuts the JSON *string*, corrupting
-	// the envelope (and appending a misleading "use offset parameter" hint the
-	// foreground shell tool doesn't support). Fitting it here keeps the model's
-	// tool result valid JSON.
-	stdout, stderr = fitShellOutputToBudget(stdout, stderr, exitCode, MaxOutputSize)
+	// Apply the caps AND fit the JSON-encoded result into the global output
+	// budget, in ONE truncation of each stream. Otherwise the generic
+	// tool_wrapper truncation head+tail-cuts the JSON *string*, corrupting the
+	// envelope (and appending a misleading "use offset parameter" hint the
+	// foreground shell tool doesn't support).
+	stdout, stderr = fitShellOutputToBudget(stdout, stderr, stdoutCap, stderrCap, exitCode, MaxOutputSize)
 
 	wasTruncated := len(stdout) < originalStdoutSize || len(stderr) < originalStderrSize
 
@@ -519,29 +533,38 @@ func truncateOutputWithLimit(content string, limit int) string {
 	return fmt.Sprintf("%s\n\n... [%d lines truncated] ...\n\n%s", start, truncatedLinesCount, end)
 }
 
-// fitShellOutputToBudget shrinks stdout/stderr (head+tail, always re-truncating
-// from the passed-in strings so markers never compound) until the JSON-encoded
-// ShellOutput fits within budget bytes.
+// fitShellOutputToBudget head+tail-truncates the command's stdout and stderr to
+// at most stdoutCap and stderrCap bytes, then shrinks them further until the
+// JSON-encoded ShellOutput fits within budget bytes.
 //
-// The per-stream caps applied earlier bound stdout and stderr individually, but
-// their sum plus the JSON envelope and escaping can still exceed MaxOutputSize —
-// at which point tool_wrapper's generic truncation cuts through the JSON string
-// and corrupts the envelope. Keeping the encoded result under budget means the
-// wrapper leaves it untouched and the model always receives valid JSON.
+// stdout and stderr must be the command's OUTPUT, not an already-truncated
+// copy of it: every truncation here cuts from these strings, so each stream
+// carries exactly one marker, and the marker's "[N lines truncated]" counts
+// lines of the real output. Truncating twice — capping first, then fitting
+// the capped text — left a single marker whose count described only the
+// second cut, so a run step's stored output could claim 17 lines were missing
+// when thousands were.
+//
+// The per-stream caps bound stdout and stderr individually, but their sum
+// plus the JSON envelope and escaping can still exceed MaxOutputSize — at
+// which point tool_wrapper's generic truncation cuts through the JSON string
+// and corrupts the envelope. Keeping the encoded result under budget means
+// the wrapper leaves it untouched and the model always receives valid JSON.
 //
 // Encoded length grows monotonically with content length, so scaling content
-// down by the overflow ratio converges in a few iterations; the bounded loop and
-// 1-byte floor guarantee termination.
-func fitShellOutputToBudget(stdout, stderr string, exitCode, budget int) (string, string) {
+// down by the overflow ratio converges in a few iterations; the bounded loop
+// and 1-byte floor guarantee termination.
+func fitShellOutputToBudget(stdout, stderr string, stdoutCap, stderrCap, exitCode, budget int) (string, string) {
 	encodedLen := func(o, e string) int {
 		b, _ := json.Marshal(ShellOutput{Stdout: o, Stderr: e, ExitCode: exitCode})
 		return len(b)
 	}
-	if encodedLen(stdout, stderr) <= budget {
-		return stdout, stderr
+	o := truncateOutputWithLimit(stdout, stdoutCap)
+	e := truncateOutputWithLimit(stderr, stderrCap)
+	if encodedLen(o, e) <= budget {
+		return o, e
 	}
 
-	o, e := stdout, stderr
 	for i := 0; i < 12; i++ {
 		enc := encodedLen(o, e)
 		if enc <= budget {

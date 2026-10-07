@@ -4,7 +4,6 @@ package logging
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"strings"
 
@@ -129,9 +128,12 @@ func (h *sentryHandler) reportToSentry(r slog.Record) {
 		tags["log_source"] = "slog"
 	}
 
-	// Add group prefix if any.
+	// Add group prefix if any. Group names come from code, not users, but
+	// they still pass the same tag check as everything else.
 	if len(h.groups) > 0 {
-		tags["log_group"] = fmt.Sprintf("%v", h.groups)
+		if group, ok := telemetry.TagValue("log_group", strings.Join(h.groups, ".")); ok {
+			tags["log_group"] = group
+		}
 	}
 
 	telemetry.CaptureExceptionWithContext(capturedErr, tags, extra)
@@ -151,11 +153,11 @@ func matchesAny(err error, patterns []string) bool {
 	return false
 }
 
-// collectAttr processes a single slog.Attr, extracting error values and
-// populating tags/extra maps.
+// collectAttr processes a single slog.Attr: an "error"/"err" attribute becomes
+// the captured error, and every other attribute goes through collectField.
 func (h *sentryHandler) collectAttr(a slog.Attr, tags map[string]string, extra map[string]interface{}, capturedErr *error) {
 	key := a.Key
-	val := a.Value
+	val := a.Value.Resolve()
 
 	// Check for error-typed attributes.
 	if key == "error" || key == "err" {
@@ -172,21 +174,47 @@ func (h *sentryHandler) collectAttr(a slog.Attr, tags map[string]string, extra m
 		}
 	}
 
-	// For group attrs, flatten into extra with dotted keys.
+	collectField(key, val, tags, extra)
+}
+
+// collectField decides what, if anything, one attribute contributes to the
+// Sentry event. It is an allowlist, not a length check: a short "command",
+// "file_path" or "prompt" is exactly the user content Sentry must never see,
+// and being under some length does not make a value an identifier.
+//
+//   - A key on telemetry's tag allowlist (identifiers such as chat_id or
+//     tool_call_id, enums such as provider, phase or status) whose value has
+//     the shape of one becomes a tag. telemetry.TagValue is the same check the
+//     BeforeSend scrubber applies, so the two lists cannot drift.
+//   - Any other number or flag goes to extra: it cannot carry content.
+//   - Everything else stays in the log line and never leaves the process.
+//
+// Group members are flattened under dotted keys (req.chat_id) and judged the
+// same way.
+func collectField(key string, val slog.Value, tags map[string]string, extra map[string]interface{}) {
 	if val.Kind() == slog.KindGroup {
-		attrs := val.Group()
-		for _, ga := range attrs {
-			groupKey := key + "." + ga.Key
-			extra[groupKey] = ga.Value.String()
+		for _, member := range val.Group() {
+			collectField(joinKey(key, member.Key), member.Value.Resolve(), tags, extra)
 		}
 		return
 	}
 
-	// Short string values make good tags; longer values go in extra.
-	s := val.String()
-	if len(s) <= 64 {
-		tags[key] = s
-	} else {
-		extra[key] = s
+	if tag, ok := telemetry.TagValue(key, val.String()); ok {
+		tags[key] = tag
+		return
 	}
+
+	switch val.Kind() {
+	case slog.KindInt64, slog.KindUint64, slog.KindFloat64, slog.KindBool:
+		extra[key] = val.Any()
+	}
+}
+
+// joinKey qualifies a group member's key. An empty group key inlines its
+// members, as slog's own handlers do.
+func joinKey(prefix, key string) string {
+	if prefix == "" {
+		return key
+	}
+	return prefix + "." + key
 }

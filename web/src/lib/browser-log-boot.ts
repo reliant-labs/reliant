@@ -20,10 +20,14 @@
  * during its own evaluation, before the later imports are evaluated at all.
  */
 import { installDevLogging } from "./browser-log-forward";
+import { installUpdateDepthStack } from "./updateDepthStack";
 
 // The literal `dev: true` inside the `if` is deliberate (forge's convention):
 // the bundler folds the condition and drops the whole call from a production
 // build, whereas `{ dev: import.meta.env.DEV }` would fold only the argument.
 if (import.meta.env.DEV) {
   installDevLogging({ dev: true });
+  // AFTER the forwarder, so it wraps the forwarder: the stack it appends is
+  // then part of what gets forwarded to the dev log, not only the console.
+  installUpdateDepthStack();
 }

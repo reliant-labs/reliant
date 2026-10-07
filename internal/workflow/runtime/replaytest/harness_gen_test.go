@@ -39,6 +39,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/configadapter"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
@@ -225,6 +226,7 @@ type Harness struct {
 
 	ChatSvc     *services.ChatService
 	QuestionSvc *services.QuestionService
+	ApprovalSvc *services.ApprovalService
 	Pause       *workflow.PauseService
 
 	Ctx context.Context
@@ -276,7 +278,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 	// harness has no daemon (DaemonRouter is nil), so without this the row
 	// keeps the seed id forever and Config.SnapshotSynced stays false — which
 	// is a hard blocker, not a cosmetic gap: a node that preloads skills
-	// (builtin://agent's `implementer` preset requests code-search) treats an
+	// (the spawn scenario's `general` child requests general-agent) treats an
 	// unsynced catalog as RETRYABLE, so CallLLM retries to its attempt limit
 	// and the workflow fails. Pushing an empty snapshot under a non-seed
 	// daemon id is the truthful hermetic answer: a daemon has reported, and
@@ -331,6 +333,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
+	approvalSvc := services.NewApprovalService(s.Repo, pause)
 
 	return &Harness{
 		T:           t,
@@ -341,6 +344,7 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 		LLM:         llmScript,
 		ChatSvc:     chatSvc,
 		QuestionSvc: questionSvc,
+		ApprovalSvc: approvalSvc,
 		Pause:       pause,
 		Ctx:         ctx,
 	}
@@ -402,6 +406,25 @@ func (h *Harness) StartChat(workflowRef, prompt string, params map[string]any) *
 	require.NoError(h.T, err, "StartChat")
 	require.NotNil(h.T, resp.Msg.Chat)
 	return resp.Msg
+}
+
+// SendMessage sends a follow-up user message to a started chat through the
+// production ChatService handler, with the same mock model StartChat uses.
+// It returns the error rather than failing the test, so it is safe to call
+// from a scripted turn's During hook, which runs on an activity goroutine.
+func (h *Harness) SendMessage(chatID, content string) error {
+	model, err := structpb.NewValue(map[string]any{"id": "mock"})
+	if err != nil {
+		return err
+	}
+	_, err = h.ChatSvc.SendMessage(h.Ctx, connect.NewRequest(&reliantv1.SendMessageRequest{
+		ChatId: chatID,
+		Messages: []*reliantv1.InputMessage{
+			{Role: reliantv1.MessageRole_MESSAGE_ROLE_USER, Content: content},
+		},
+		WorkflowParams: map[string]*structpb.Value{"model": model},
+	}))
+	return err
 }
 
 // ResolveQuestion answers a pending ask_question through the production
@@ -479,6 +502,44 @@ func (h *Harness) WaitWorkflowStatus(workflowID string, want db.WorkflowStatus) 
 	})
 }
 
+// WaitPendingApproval polls until the chat has a pending approval.
+func (h *Harness) WaitPendingApproval(chatID string) *db.Approval {
+	h.T.Helper()
+	var approval *db.Approval
+	h.eventually("pending approval on chat "+chatID, func() (bool, string) {
+		pending, err := h.Stack.Repo.ListPendingApprovalsByChat(h.Ctx, chatID)
+		if err != nil || len(pending) == 0 {
+			return false, fmt.Sprintf("pending approvals: %d, %v", len(pending), err)
+		}
+		approval = pending[0]
+		return true, ""
+	})
+	return approval
+}
+
+// DenyApproval answers a pending approval Deny through the production
+// ApprovalService handler.
+func (h *Harness) DenyApproval(approvalID string) {
+	h.T.Helper()
+	_, err := h.ApprovalSvc.Deny(h.Ctx, connect.NewRequest(&reliantv1.DenyRequest{RequestId: approvalID}))
+	require.NoError(h.T, err, "Deny")
+}
+
+// RequireToolCallStatus fails unless a scripted tool call's durable row ended
+// in want, and reports the row's recorded error. For a call the turn's
+// capability set refused, that error is the refusal itself.
+func (h *Harness) RequireToolCallStatus(toolCallID string, want core.ToolCallStatus) {
+	h.T.Helper()
+	tc, err := h.Stack.Repo.GetToolCall(h.Ctx, toolCallID)
+	require.NoError(h.T, err, "get tool call %s", toolCallID)
+	reason := "(no error recorded)"
+	if tc.ErrorMessage != nil {
+		reason = *tc.ErrorMessage
+	}
+	require.Equal(h.T, want, tc.Status, "tool call %s (%s) ended in status %d, want %d: %s",
+		toolCallID, tc.ToolName, tc.Status, want, reason)
+}
+
 // WaitPendingQuestion polls until the chat has a pending ask_question.
 func (h *Harness) WaitPendingQuestion(chatID string) *db.Question {
 	h.T.Helper()
@@ -532,9 +593,10 @@ func (h *Harness) ExportHistory(workflowID, name string) {
 
 	require.Equal(h.T, h.LLM.Scripted(), h.LLM.Consumed(),
 		"fixture %s: scenario consumed %d of %d scripted turns — the exported history "+
-			"would pin a shorter shape than this scenario describes. An auxiliary LLM "+
-			"request (title generation, compaction) most likely consumed a turn; see "+
-			"ScriptedLLM.StreamResponse.",
+			"would pin a shorter shape than this scenario describes. Either an auxiliary "+
+			"LLM request (title generation, compaction) consumed a turn — see "+
+			"ScriptedLLM.StreamResponse — or a scripted tool call was refused, so the "+
+			"turns it would have led to never ran; check that call's tool result.",
 		name, h.LLM.Consumed(), h.LLM.Scripted())
 
 	ctx, cancel := context.WithTimeout(h.Ctx, 30*time.Second)

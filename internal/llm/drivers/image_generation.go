@@ -117,7 +117,7 @@ func ResolveImageGenerator(ctx context.Context, userID string, selector models.M
 		return nil, err
 	}
 
-	logging.Info("Resolved image generation model",
+	logging.Debug("Resolved image generation model",
 		"model", config.ModelID,
 		"api_model", config.APIModel,
 		"driver", config.Driver,

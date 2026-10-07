@@ -523,7 +523,7 @@ export type GetCurrentUserWalletTopupQuoteResponse = Message<"controlplane.v1.Ge
   creditCents: bigint;
 
   /**
-   * The processing fee, already rounded to whole cents server-side.
+   * The service fee, already rounded to whole cents server-side.
    *
    * @generated from field: int64 fee_cents = 2;
    */
@@ -2345,8 +2345,8 @@ export const BillingService: GenService<{
   },
   /**
    * GetCurrentUserWalletTopupQuote prices a top-up WITHOUT minting anything at
-   * Stripe, so the checkout page can disclose the processing fee before asking
-   * for a card.
+   * Stripe, so the checkout page can disclose the top-up service fee, and the
+   * total it makes, before asking for a card.
    *
    * THE REASON THIS IS AN RPC AND NOT CLIENT ARITHMETIC: a fee the browser
    * computes is a number the browser can change, and — more mundanely but more

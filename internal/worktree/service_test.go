@@ -4,7 +4,6 @@ package worktree
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -14,13 +13,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
-
-// testService creates a minimal service with logger for unit tests
-func testService() *service {
-	return &service{
-		logger: slog.Default(),
-	}
-}
 
 func setupTestService(t *testing.T) (Service, string, string, func()) {
 	// Create temporary directories

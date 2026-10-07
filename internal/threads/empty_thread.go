@@ -36,7 +36,7 @@ import (
 // messages.
 //
 // The tell in the log is that the failing CallLLM produced NO
-// "[FORK-DEBUG] LoadCurrentMessages called" line at all — that statement sits
+// "[Fork] LoadCurrentMessages called" line at all — that statement sits
 // immediately after the error branch, so its absence proves the function
 // returned inside it.
 //

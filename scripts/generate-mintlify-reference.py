@@ -36,6 +36,10 @@ PAGE_CONFIG = {
         "title": "Models Reference",
         "description": "Available AI models and their capabilities",
     },
+    "cli": {
+        "title": "CLI Reference",
+        "description": "Every reliant command, subcommand and flag",
+    },
     "workflow-schema": {
         "title": "Workflow Schema Reference",
         "description": "Top-level workflow, edge, and edge-case schema reference",
@@ -91,6 +95,10 @@ def yaml_quote(value: str) -> str:
     return '"' + value.replace('\\', '\\\\').replace('"', '\\"') + '"'
 
 
+# Tool descriptions introduce raw YAML examples under these bold headings.
+YAML_EXAMPLE_HEADINGS = ("**Scenario YAML structure:**", "**Events — typed mode")
+
+
 def fence_example_blocks(body: str) -> str:
     lines = body.splitlines()
     out: list[str] = []
@@ -129,6 +137,21 @@ def fence_example_blocks(body: str) -> str:
             continue
 
         prev = previous_nonempty(i)
+        if (
+            not in_fence
+            and stripped
+            and i > 0
+            and lines[i - 1].strip().startswith(YAML_EXAMPLE_HEADINGS)
+        ):
+            block = []
+            while i < len(lines) and lines[i].strip() != "":
+                block.append(lines[i])
+                i += 1
+            out.append("```yaml")
+            out.extend(block)
+            out.append("```")
+            continue
+
         if not in_fence and should_start_example_block(line, prev):
             block: list[str] = []
             while i < len(lines) and lines[i].strip() != "":
@@ -148,12 +171,32 @@ def fence_example_blocks(body: str) -> str:
     return "\n".join(out)
 
 
+def escape_all_angles(body: str) -> str:
+    """Escape every `<` outside code. For pages generated from plain-text sources
+    (CLI help) that contain no JSX, where prose like `<step name>` must not parse as a tag."""
+    out: list[str] = []
+    in_fence = False
+    for line in body.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        parts = line.split("`")
+        for idx in range(0, len(parts), 2):
+            parts[idx] = re.sub(r"(?<!\\)<", r"\\<", parts[idx])
+        out.append("`".join(parts))
+    return "\n".join(out)
+
+
 def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
     bracketed_object_array_re = re.compile(r"\[\{[^{}\n]+\}\]")
     brace_token_re = re.compile(
         r"(?:[A-Za-z0-9_./*?\\-]+)?\{[^{}\n]*\}(?:[A-Za-z0-9_./*?\\-]+)?"
     )
-    angle_placeholder_re = re.compile(r"<[A-Za-z0-9_.:-]+(?:-[A-Za-z0-9_.:-]+)*>")
+    angle_placeholder_re = re.compile(r"<[@#!]?[A-Za-z0-9_.:-]+(?:-[A-Za-z0-9_.:-]+)*>")
 
     def wrap_segment(segment: str) -> str:
         protected: list[str] = []
@@ -184,7 +227,7 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
             out.append(line)
             continue
 
-        if in_fence or (("{" not in line or "}" not in line) and ("<" not in line or ">" not in line)):
+        if in_fence or (("{" not in line or "}" not in line) and "<" not in line and "{" not in line and "}" not in line):
             out.append(line)
             continue
 
@@ -192,7 +235,15 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
         for idx in range(0, len(parts), 2):
             if (("{" in parts[idx] and "}" in parts[idx]) or ("<" in parts[idx] and ">" in parts[idx])):
                 parts[idx] = wrap_segment(parts[idx])
-        out.append("`".join(parts))
+        # Braces left outside code (e.g. spanning inline code) would parse as MDX expressions.
+        resplit = "`".join(parts).split("`")
+        for idx in range(0, len(resplit), 2):
+            resplit[idx] = re.sub(r"(?<!\\)([{}])", r"\\\1", resplit[idx])
+            # A truncated or non-tag `<` (e.g. "<@ID...") would open a JSX tag.
+            resplit[idx] = re.sub(r"(?<!\\)<(?=[@#!])", r"\\<", resplit[idx])
+            # A `<` that cannot start a tag (heredocs like <<<"$X", "a < b").
+            resplit[idx] = re.sub(r"(?<!\\)<(?![A-Za-z/\\\\])", r"\\<", resplit[idx])
+        out.append("`".join(resplit))
 
     return "\n".join(out)
 
@@ -212,6 +263,8 @@ def convert_body(body: str, slug: str) -> str:
     body = ICON_RE.sub(lambda m: ICON_MAP.get(m.group(1), m.group(1)), body)
     body = fence_example_blocks(body)
     body = wrap_inline_mdx_sensitive_tokens(body)
+    if slug == "cli":
+        body = escape_all_angles(body)
 
     # Normalize excess blank lines introduced by comment/frontmatter stripping.
     body = re.sub(r"\n{3,}", "\n\n", body).strip() + "\n"

@@ -477,7 +477,7 @@ func runForgeDeploySelfExec(ctx context.Context, projectDir string, args []strin
 	ctx, cancel := context.WithTimeout(ctx, forgeDeployInvocationTimeout)
 	defer cancel()
 
-	full := append([]string{"forge", "--silence-experimental"}, args...)
+	full := append([]string{"forge"}, args...)
 	cmd := exec.CommandContext(ctx, self, full...)
 	cmd.Dir = projectDir
 

@@ -15,6 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/gmail"
 	"github.com/reliant-labs/reliant/internal/integrations/httpaction"
 	"github.com/reliant-labs/reliant/internal/integrations/manifest"
@@ -108,6 +109,39 @@ func TestPollReturnsExactlyTheNewMessages(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, res.Items)
 	assert.Equal(t, strconv.FormatUint(f.history, 10), res.Cursor)
+}
+
+// trigger.sender is the From address, verified only by Gmail's own
+// Authentication-Results: a From that matches the boss's address but failed
+// DMARC is a spoof, and it is recorded as unverified.
+func TestPollSenderIsVerifiedByGmailsDMARCResult(t *testing.T) {
+	f := newFakeGmail(t)
+	p := f.poller()
+	base, err := f.poll(p, "")
+	require.NoError(t, err)
+
+	mail := func(id, authResults string) {
+		f.addMessage(id, "th"+id, []string{"INBOX"}, map[string]string{
+			"From": "The Boss <Boss@Example.com>", "To": "me@example.com", "Subject": "wire the money",
+			"Authentication-Results": authResults,
+		}, nil)
+	}
+	mail("c0001", "mx.google.com;\r\n       dkim=pass header.i=@example.com header.s=s1 header.b=x;\r\n       "+
+		"dmarc=pass (p=REJECT sp=REJECT dis=NONE) header.from=example.com")
+	mail("c0002", "mx.google.com;\r\n       dkim=pass header.i=@evil.test header.s=s1 header.b=x;\r\n       "+
+		"spf=pass (google.com: domain of a@evil.test designates 198.51.100.7 as permitted sender) smtp.mailfrom=a@evil.test;\r\n       "+
+		"dmarc=fail (p=NONE sp=NONE dis=NONE) header.from=example.com")
+	f.reset()
+
+	res, err := f.poll(p, base.Cursor)
+	require.NoError(t, err)
+	require.Len(t, res.Items, 2)
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindEmail, ID: "boss@example.com", DisplayName: "The Boss", Verified: true}, res.Items[0].Sender)
+	assert.Equal(t, &core.TriggerSender{Kind: core.TriggerSenderKindEmail, ID: "boss@example.com", DisplayName: "The Boss", Verified: false}, res.Items[1].Sender,
+		"From matches but DMARC failed: the same address, never verified")
+	for _, get := range f.requests()[1:] {
+		assert.Contains(t, get.Query["metadataHeaders"], "Authentication-Results", "the result is read with the message's metadata")
+	}
 }
 
 func TestPollFollowsHistoryPagesAndDedupes(t *testing.T) {

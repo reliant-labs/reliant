@@ -99,7 +99,7 @@ export function AboutSection() {
     {
       icon: Slack,
       label: "Join Slack",
-      href: "https://join.slack.com/t/reliant-pn51441/shared_invite/zt-3g6mhfnhx-~CWMzNRZUylWHevlJXO89A",
+      href: "https://join.slack.com/t/reliant-pn51441/shared_invite/zt-4c7wet6o2-W_Tksw80LaRGxZqUz9GQdA",
     },
     {
       icon: FileText,

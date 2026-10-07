@@ -68,7 +68,7 @@ func (r *Repo) emitChatActivityChanged(ctx context.Context, chatID string, activ
 		return fmt.Errorf("failed to create activity event: %w", err)
 	}
 
-	logging.Info("[ActivityEvent] Emitted chat_activity_changed",
+	logging.Debug("[ActivityEvent] Emitted chat_activity_changed",
 		"chatID", chatID,
 		"activity", activity,
 	)

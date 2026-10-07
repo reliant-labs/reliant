@@ -386,21 +386,45 @@ func (a *CallLLMActivity) executeCore(ctx context.Context, rtx RuntimeContext, a
 	// cancelled would strand exactly the message the user just sent. Bounded so
 	// a dead pool cannot hold the unwind open.
 	//
-	// The residual race is a message queued microseconds AFTER this SELECT.
-	// That window cannot be closed here — any check has an after. It is closed
-	// on the other side instead, and was already: the enqueue rings the
-	// doorbell signal (notifyThreadWake) which wakes a parked thread,
-	// an idle thread's queue is absorbed by the user's next send, and a row
-	// that outlives every turn is marked undeliverable by the reconciler's
-	// resolveOrphanedAgentMessages rather than sitting queued forever. A
-	// missed-by-a-microsecond message is therefore late, never lost — whereas
-	// the old "assume yes" answer traded that for a chat that could not
-	// advance at all.
+	// The residual race is a message queued AFTER this SELECT. That window
+	// cannot be closed here — any check has an after — so it is closed by what
+	// runs after this turn, and which mechanism closes it depends on who
+	// queued the row:
+	//
+	//   - A background spawn's report rings no doorbell. It is written by
+	//     EnqueueAgentMessage from the spawn's detached goroutine, inside this
+	//     same workflow, and this thread is not parked when that happens — it
+	//     is mid-turn, or on its way to the loop-exit gate. What delivers it is
+	//     that gate (awaitLiveDetachedSpawnsOrHandoff in loop_executor.go): the
+	//     spawn's completion is counted in the workflow, and the gate measures
+	//     from the START of this turn rather than from when it is reached. A
+	//     spawn that finished after this probe — before the thread got to the
+	//     gate, or while it waits there — therefore buys one more turn, and
+	//     that turn's drain delivers the report. Measured from the gate, a
+	//     child that had already left the live set looked like no progress and
+	//     the run ended with its report unread; see
+	//     TestSpawnReportUnreadE2E/TestReportLandingAfterTheLastProbeIsStillDelivered.
+	//   - A row queued from outside the workflow (SendAgentMessage, spawn_send)
+	//     rings the thread-wake doorbell (notifyThreadWake). The gate counts it
+	//     from the turn's start the same way, so it re-enters a thread that
+	//     still has live spawns whether it landed mid-turn or after the thread
+	//     parked. A thread with NOTHING live exits without a turn for it (a
+	//     known gap, pinned by TestLateUserMessageE2E): the row waits for the
+	//     user's next send, whose run's first CallLLM drains it, unless the
+	//     reconciler resolves it first (below) — the finished run has stamped
+	//     the thread terminal.
+	//   - A row that outlives every turn is marked undeliverable by the
+	//     reconciler's resolveOrphanedAgentMessages rather than sitting queued
+	//     forever.
+	//
+	// A message that misses this probe is therefore late or reported
+	// undelivered, never silently lost — whereas the old "assume yes" answer
+	// traded that for a chat that could not advance at all.
 	probeCtx, cancelProbe := context.WithTimeout(context.WithoutCancel(ctx), pendingInboxProbeTimeout)
 	output.PendingInbox = a.hasQueuedAgentMessages(probeCtx, thread)
 	cancelProbe()
 
-	logger.Info("[CallLLM] Completed",
+	logger.Debug("[CallLLM] Completed",
 		"chatID", rtx.ChatID,
 		"toolCalls", len(output.ToolCalls),
 		"tokenCount", output.TokenCount,
@@ -901,7 +925,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Cap permission to parent's level for spawned workflows.
 	// A plan-mode parent should not spawn a child with mutating permission.
 	if rtx.ParentPermission != "" && !tools.PermissionAtLeast(rtx.ParentPermission, permission) {
-		activity.GetLogger(ctx).Info("[CallLLM] Capping child permission to parent level",
+		activity.GetLogger(ctx).Debug("[CallLLM] Capping child permission to parent level",
 			"child_permission", permission,
 			"parent_permission", rtx.ParentPermission,
 			"thread", thread)
@@ -1019,7 +1043,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 
 	if resolved.Definition != nil {
-		activity.GetLogger(ctx).Info("[CallLLM] Resolved model",
+		activity.GetLogger(ctx).Debug("[CallLLM] Resolved model",
 			"selector", modelSelector,
 			"modelID", resolved.Definition.ID,
 			"modelIDWithDriver", resolved.ModelID)
@@ -1036,7 +1060,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			effectiveCompactionThreshold = int32(models.CompactionThresholdForProvider(resolved.Definition, resolved.ProviderDriver))
 		}
 	} else {
-		activity.GetLogger(ctx).Info("[CallLLM] Using injected driver resolver",
+		activity.GetLogger(ctx).Debug("[CallLLM] Using injected driver resolver",
 			"modelID", resolved.Model.ID)
 
 		// No registry definition (injected driver resolver, e.g. in tests):
@@ -1056,7 +1080,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// empty thinking level on a reasoning model still engages reasoning at the
 	// driver's medium default. Logging this here lets a run confirm reasoning was
 	// actually requested (no token values or secrets are logged).
-	activity.GetLogger(ctx).Info("[CallLLM] Reasoning",
+	activity.GetLogger(ctx).Debug("[CallLLM] Reasoning",
 		"chatID", chat.ID,
 		"modelID", resolvedModelID,
 		"provider", resolved.ProviderDriver,
@@ -1094,6 +1118,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			Permission:   permission,
 			NoMachine:    chat.NoMachine,
 			ResponseTool: responseToolName,
+			Unattended:   rtx.Unattended,
 		})
 	} else {
 		toolFilter := model.CelStringListValue(tc.GetPreloadedTools())
@@ -1126,7 +1151,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 				}
 			}
 		} else {
-			activity.GetLogger(ctx).Info("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
+			activity.GetLogger(ctx).Debug("[CallLLM] Skipping spawn tool for spawn-spawned workflow", "thread", thread)
 		}
 
 		// MCP discovery runs on the run's daemon, resolved the way
@@ -1143,6 +1168,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			CanSpawnChildren: canSpawnChildren,
 			SpawnPresets:     spawnPresets,
 			ResponseTool:     responseToolName,
+			Unattended:       rtx.Unattended,
 		})
 		availableTools = toolsResult.Tools
 		caps = toolsResult.Capabilities
@@ -1159,7 +1185,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		for _, spawnConfig := range spawnConfigs {
 			if spawnTool := a.getSpawnToolFromFilterConfig(ctx, chat.ProjectID, spawnConfig); spawnTool != nil {
 				availableTools = append(availableTools, spawnTool)
-				activity.GetLogger(ctx).Info("[CallLLM] Added spawn tool from tools_config",
+				activity.GetLogger(ctx).Debug("[CallLLM] Added spawn tool from tools_config",
 					"workflow", spawnConfig.Workflow,
 					"presets", spawnConfig.Presets)
 			}
@@ -1346,7 +1372,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		if len(seededMsgs) > 0 {
 			history = insertSeededMessagesAfterFirstUserTurn(history, seededMsgs)
 		}
-		activity.GetLogger(ctx).Info("[CallLLM] Preload skills",
+		activity.GetLogger(ctx).Debug("[CallLLM] Preload skills",
 			"chatID", chat.ID,
 			"requested", len(requestedSkills),
 			"injected", len(injectedSkills),
@@ -1391,7 +1417,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			}
 			history = append(history, injectedMsg)
 		}
-		activity.GetLogger(ctx).Info("[CallLLM] Appended injected messages",
+		activity.GetLogger(ctx).Debug("[CallLLM] Appended injected messages",
 			"count", len(args.GetMessages()))
 	}
 
@@ -1427,7 +1453,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	}
 
 	toolNameDebug := summarizeToolNamesForLogging(availableTools)
-	activity.GetLogger(ctx).Info("[CallLLM] Starting stream",
+	activity.GetLogger(ctx).Debug("[CallLLM] Starting stream",
 		"chatID", chat.ID,
 		"thread", thread,
 		"contextSequence", rtx.ContextSequence,
@@ -1790,7 +1816,7 @@ streamLoop:
 			toolCallSignatures++
 		}
 	}
-	activity.GetLogger(ctx).Info("[CallLLM] Thinking captured",
+	activity.GetLogger(ctx).Debug("[CallLLM] Thinking captured",
 		"chatID", chat.ID,
 		"thread", thread,
 		"thinkingLen", len(thinkingText),
@@ -1961,6 +1987,7 @@ type toolRequest struct {
 	CanSpawnChildren bool
 	SpawnPresets     []string
 	ResponseTool     string
+	Unattended       bool // rtx.Unattended: nobody is attending the run
 }
 
 // availableToolsResult is a turn's resolved capability set and the tools
@@ -2034,12 +2061,6 @@ func validateToolNamesForLLMRequest(availableTools []tools.Tool) error {
 func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, scopePath string, worktreeDaemonID string, projectCfg *cfgpkg.Config, req toolRequest) availableToolsResult {
 	noMachine := chat != nil && chat.NoMachine
 
-	logInfo := func(msg string, keyvals ...interface{}) {
-		if !activity.IsActivity(ctx) {
-			return
-		}
-		activity.GetLogger(ctx).Info(msg, keyvals...)
-	}
 	logWarn := func(msg string, keyvals ...interface{}) {
 		if !activity.IsActivity(ctx) {
 			return
@@ -2142,14 +2163,17 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 		SpawnPresets:       req.SpawnPresets,
 		ResponseTool:       req.ResponseTool,
 		UsableIntegrations: usable,
+		Unattended:         req.Unattended,
 	})
 
-	logInfo("[CallLLM] Tool capabilities resolved",
+	logDebug("[CallLLM] Tool capabilities resolved",
 		"input_filter", req.Preloaded,
 		"offered", len(caps.Offered),
 		"grants", req.Grants,
 		"permission", caps.Permission,
 		"loadable_all", caps.LoadableAll,
+		"unattended", caps.Unattended,
+		"unattended_opt_in", caps.UnattendedOptIn,
 		"available_mcp_tools", len(mcpToolNames))
 
 	if projectScopedToolsFactory == nil {
@@ -3346,7 +3370,7 @@ func (a *CallLLMActivity) writeStreamingDelta(ctx context.Context, chatID string
 	if deltaType != "stream_cancelled" && ctx.Err() != nil {
 		func() {
 			defer func() { _ = recover() }() // safe outside activity context (tests)
-			activity.GetLogger(ctx).Info("[STREAMING_DELTA] Dropping delta - context cancelled",
+			activity.GetLogger(ctx).Debug("[STREAMING_DELTA] Dropping delta - context cancelled",
 				"delta_type", deltaType,
 				"chat_id", chatID)
 		}()

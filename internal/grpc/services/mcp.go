@@ -1001,7 +1001,7 @@ func (s *MCPService) InstallServer(
 	}
 
 	scope := req.Msg.Scope
-	logging.Info("InstallServer request received", "project_id", projectID, "name", name, "scope", scope.String())
+	logging.Debug("InstallServer request received", "project_id", projectID, "name", name, "scope", scope.String())
 
 	if s.daemonRouter == nil {
 		logging.Error("InstallServer: MCP manager is nil")
@@ -1634,7 +1634,7 @@ func (s *MCPService) UpdateServerConfig(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("server name is required"))
 	}
 
-	logging.Info("UpdateServerConfig request", "project_id", projectID, "name", name, "env_keys", len(req.Msg.Env))
+	logging.Debug("UpdateServerConfig request", "project_id", projectID, "name", name, "env_keys", len(req.Msg.Env))
 
 	scopedServers, err := s.readMergedScopedServers(ctx, projectID)
 	if err != nil {

@@ -3,134 +3,123 @@ title: "Troubleshooting"
 description: "Quick fixes for common issues"
 ---
 
-## Workflow Issues
+Reliant is a cloud service with a machine in the middle: the app talks to Reliant's servers, and your agents do their work through a daemon on a machine, either your own computer or a Reliant cloud machine. Most problems come down to one of those links, so this page is organized the same way.
 
-### Workflow seems stuck
+## Your machine
 
-1. **Check if paused** — Look for pause indicator in chat
-2. **Check approval mode** — Manual mode waits for approval on each tool
-3. **Cancel and retry** — Press `Cmd+.` or click stop, then try a different approach
-4. **Branch from earlier** — Click branch icon on any message to start fresh
+### "Your machine is offline"
+
+The chat input shows **"\<name\> is offline"** when the daemon on that chat's machine isn't connected.
+
+- **Your own computer:** make sure the desktop app is open, or that `reliant daemon start` is running on that machine. Check with `reliant daemon status`, and read its log with `reliant daemon logs`.
+- **A cloud machine:** open **Settings → Machines** and look at its status. A **Suspended** machine has the **Resume** button; a failed one can be removed and recreated.
+- **Anything else:** check that the computer has an internet connection and hasn't gone to sleep. A laptop that sleeps drops its daemon, and it reconnects on its own when it wakes.
+
+If a chat's machine has been deleted, the input says **"This chat's machine is no longer available."** Start a new chat on a machine you have.
+
+### "Waking your machine…"
+
+Cloud machines suspend after a period of inactivity (you can change the delay under **Auto-suspend after inactivity** in the machine's settings, in **Settings → Machines**). Sending a message wakes one automatically, and the chat shows **Waking \<name\>…** until it's ready. The chat shows **Waiting for your machine…** while it catches up.
+
+If a machine stays in **Waking up…** for many minutes, open **Settings → Machines**, check its status, and use **Resume** or suspend and resume it again. If it still won't start, email support with the machine's name.
+
+Suspended machines aren't billed for compute, but their disk is, so the **Machines** page shows a small charge beside suspended machines. Delete a machine you no longer need to stop it.
+
+### Tools work on the wrong computer
+
+Each chat runs on one machine, and files, memories and MCP servers all live on that machine. A cloud machine has its own `~/.reliant/` folder and its own copy of your repository, separate from your laptop's. If something you set up "isn't there", check which machine the chat is using.
+
+## Signing in and your account
+
+### I can't sign in, or I keep getting signed out
+
+Try signing out and back in (**Settings → Account → Sign out**). If a provider login (below) expired, you only need to reconnect that provider; you don't need to sign in to Reliant again.
+
+### The desktop app won't open or looks stuck
+
+1. Quit Reliant completely and open it again.
+2. Make sure you have the latest version (**Reliant → Check for Updates**), or reinstall from the [download page](/getting-started/installation). Your chats, projects and provider settings live in your account, so reinstalling doesn't lose them.
+3. As a fallback, use the [web app](https://app.reliantlabs.io), which has the same features.
+
+## Models and providers
+
+### "Session expired. Please reconnect"
+
+A provider login (Claude Code, Codex, Antigravity or GitHub Copilot) has expired. Open **Settings → AI → Your providers**, choose the provider and sign in again.
+
+### The login button doesn't appear (web app)
+
+Claude Code, Codex and Antigravity sign-in needs a small helper on your own computer. Run `reliant auth serve` in a terminal and leave it running; the button appears within a couple of seconds. See [AI Providers](/settings/api-keys#signing-in-from-the-web-app). The desktop app doesn't need this.
+
+### "Invalid API key"
+
+Check that the key is complete, belongs to the right provider, and hasn't been revoked. **Test Connection** in **Settings → AI** shows the provider's own error.
+
+### Rate limit or quota errors
+
+These come from your model provider. Wait a few minutes, switch to another model or provider, or check your limits with the provider. If you use Reliant AI, an "account issue" message usually means your wallet balance is empty; add credit in **Settings → Billing**.
+
+### A local model isn't listed or won't load
+
+Local models (Ollama, LM Studio and others) are reached through a daemon on the machine that runs the model server. Check that the daemon is online (see above), that the model server is running, and that **Settings → AI → Custom & local models** lists it. If Ollama answers but the agent behaves badly, raise its **Context length** setting. See [AI Providers](/settings/api-keys#local-models).
+
+### Responses are slow
+
+Check your provider's status page, try a smaller or faster model, and make sure you haven't hit a rate limit. A machine that is still waking up also delays the first response.
+
+## Billing
+
+### My run was blocked or won't start
+
+Runs that need a cloud machine or Reliant AI credit stop when there's nothing to charge. Check **Settings → Billing** for an empty wallet or a failed payment, add credit or update your card, then resend the message.
+
+## GitHub and projects
+
+### I can't clone or open a pull request
+
+Open **Settings → GitHub**. If it says the token expired or needs reconnecting, use **Reconnect**. Cloning a repository onto a cloud machine, and pushing or opening pull requests, use that connection. On your own computer, pushes and pull requests also use the GitHub CLI (`gh`), so install it and run `gh auth login` there. See [Git Integration](/features/git-integration).
+
+## Workflows
+
+### A workflow seems stuck
+
+1. **Check if it's paused.** Look for the pause indicator in the chat.
+2. **Check the approval mode.** In Manual mode, the workflow waits for you to approve each tool call.
+3. **Stop and retry.** Press `Esc` or click stop, then try a different approach.
+4. **Branch from earlier.** Click the branch icon on any message to start fresh from that point.
 
 See [Threads & Branching](/features/threads) for details.
 
-### AI responses are slow
+### A workflow fails repeatedly
 
-- Check your API provider's status page
-- Try a smaller/faster model
-- Check rate limits haven't been exceeded
-- Verify stable internet connection
+Reliant pauses instead of crashing. Read the error message, fix the cause (a permission, the network, a provider limit), then resume.
 
-### Workflow fails repeatedly
+### A chat is in a bad state
 
-Reliant pauses instead of crashing. Check the error message, fix the issue (permissions, network, API), then click resume.
-
-## Application Issues
-
-### Something not working right
-
-Reinstall Reliant:
-
-```bash
-# Uninstall
-brew uninstall --cask reliant
-
-# Clear app data
-rm -rf ~/Library/Application\ Support/reliant
-rm -rf ~/Library/Logs/Reliant
-
-# Reinstall
-brew install --cask reliant
-```
-
-Your API keys (stored in system keychain) are preserved.
-
-### App won't start
-
-1. Check if another instance is running
-2. Try launching from terminal to see errors
-3. Reset app data (see above)
-4. Reinstall from scratch
-
-## API Issues
-
-### OAuth login button not showing (Claude Code / Codex)
-
-If you're using the **web UI** and the OAuth login button doesn't appear, the local OAuth helper isn't running.
-
-**Fix**: Run `reliant auth serve` in your terminal and keep it running while you complete the login. The UI will detect it and show the login button.
-
-This is only needed in web mode — the desktop app handles OAuth automatically.
-
-### "Invalid API key" error
-
-1. Verify key is correct (no extra spaces)
-2. Check key hasn't expired or been revoked
-3. Test in provider's dashboard/playground
-4. Try regenerating the key
-
-### Rate limit errors
-
-- Wait a few minutes and retry
-- Switch to a different model
-- Check your plan's limits with the provider
+If an agent is confused or repeating errors, branch from an earlier message where things were working. Click the branch icon on any message.
 
 ## Logs
 
-Logs help diagnose issues. Find them at:
+For a daemon on your own computer, the log is a single command away:
 
-| Platform | Location |
-|----------|----------|
-| **macOS** | `~/Library/Logs/Reliant/` |
-| **Linux** | `~/.local/share/reliant/logs/` |
-| **Windows** | `%APPDATA%\Reliant\logs\` |
-
-Check `reliant.log` for recent activity. Logs rotate to prevent large files.
-
-## Known Issues
-
-### Chat gets into a bad state
-
-Occasionally a chat may get into an inconsistent state (agent confused, repeated errors, or unexpected behavior).
-
-**Fix**: Branch from an earlier message where things were working. Click the branch icon on any message to start a fresh conversation from that point.
-
-### Refresh doesn't work (macOS)
-
-`Cmd+R` to refresh the page is currently disabled in the packaged app. This is intentional to prevent accidental data loss.
-
-**Workaround**: Close and reopen the tab, or restart the app if needed.
-
-### Auto-updater may fail to open new version
-
-After downloading an update, you may see "The application 'Reliant' can't be opened." This happens when background processes from the previous version are still running.
-
-**Workaround**:
 ```bash
-# Kill any orphaned Reliant processes
-pkill -f reliant-backend
-pkill -f "Reliant.app"
-
-# Then open the app manually
-open /Applications/Reliant.app
+reliant daemon logs
 ```
 
-If issues persist, do a clean reinstall (see "Something not working right" above).
+This prints the last 50 lines and follows new output. If you run several daemons on one computer, `reliant daemon ls` lists them. For problems with the app itself rather than the daemon, mention what you were doing when you contact support. Cloud machine logs aren't available on your computer; tell support the machine name and the time it happened.
 
-### Local model loading is broken
+## Get help
 
-Local model loading (e.g., Ollama, LM Studio) is currently not working. We're aware of the issue and working on a fix. In the meantime, please use cloud-based API providers.
+Still stuck? Email [support@reliantlabs.io](mailto:support@reliantlabs.io) with:
 
-## Get Help
-
-**Still stuck?** Email support@reliantlabs.io with:
-- Reliant version (Help → About)
+- Your Reliant version (**Settings → About**)
 - What you were trying to do
 - What happened instead
-- Relevant log snippets
+- The machine involved (your computer or the cloud machine's name)
+- Any relevant output from `reliant daemon logs`
 
-We typically respond within 24-48 hours.
+We typically respond within 24–48 hours.
 
 ---
 
-**See also**: [FAQ](/help/faq) • [Feedback & Support](/help/feedback)
+**See also**: [FAQ](/help/faq) • [Machines](/machines/overview) • [Feedback & Support](/help/feedback)

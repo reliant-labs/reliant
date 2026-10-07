@@ -409,6 +409,9 @@ func (s *ToolsDaemonService) teardownConnection(conn *daemonConnection, reason s
 		if err := s.database.DeleteDaemonAttachment(context.Background(), daemonID); err != nil {
 			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID, "reason", reason)
 		}
+		// After the delete, so a client refetching on this signal already
+		// reads the daemon as detached.
+		s.publishDaemonListChanged(userID, daemonID)
 	}
 }
 
@@ -484,6 +487,54 @@ func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, d
 			CreatedAt:  ts,
 		},
 	})
+}
+
+// daemonListRefetchType is the ephemeral REFETCH payload type published when
+// something ListDaemons reports for a user changed: a daemon attached,
+// detached, or moved lifecycle phase. Web clients refetch the daemon list on
+// it instead of polling ListDaemons every few seconds.
+const daemonListRefetchType = "daemons"
+
+// publishDaemonListChanged tells the user's web clients to refetch the daemon
+// list. Ephemeral like the heartbeat (never persisted, never replayed): a
+// client that was disconnected when it fired refetches on reconnect instead,
+// and keeps a slow fallback poll for anything that slips past both.
+func (s *ToolsDaemonService) publishDaemonListChanged(userID, daemonID string) {
+	if s.userUpdateHub == nil || userID == "" {
+		return
+	}
+	data, _ := json.Marshal(map[string]string{"type": daemonListRefetchType, "daemon_id": daemonID})
+	s.userUpdateHub.Publish(context.Background(), streaming.UpdateEvent[db.UserUpdate]{
+		Key: userID,
+		Payload: db.UserUpdate{
+			UserID:     userID,
+			UpdateType: db.UserUpdateRefetch,
+			EntityType: db.EntityTypeSystem,
+			EntityID:   daemonID,
+			Data:       data,
+			CreatedAt:  time.Now().UTC(),
+		},
+	})
+}
+
+// PublishDaemonListChanged is publishDaemonListChanged for state this service
+// learns about second-hand — the daemonstate derivation applying a
+// control-plane lifecycle event. Those events may omit the owner, so an empty
+// userID is resolved from the registry row; a daemon with no row has nothing
+// a client could list, and is skipped.
+func (s *ToolsDaemonService) PublishDaemonListChanged(ctx context.Context, userID, daemonID string) {
+	if userID == "" {
+		if s.database == nil || daemonID == "" {
+			return
+		}
+		d, err := s.database.GetDaemon(ctx, daemonID)
+		if err != nil || d == nil {
+			logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" No registry row to announce a daemon change for", "daemonID", daemonID, "error", err)
+			return
+		}
+		userID = d.UserID
+	}
+	s.publishDaemonListChanged(userID, daemonID)
 }
 
 // errDaemonSuperseded ends the stream of a connection whose daemonID slot was
@@ -748,6 +799,9 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	// Publish an immediate heartbeat so the frontend knows the daemon is
 	// online without waiting for the first periodic heartbeat (up to 15s).
 	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
+	// The registry rows (daemons + daemon_attachment) were written above, so
+	// a client refetching on this signal already reads the daemon as attached.
+	s.publishDaemonListChanged(userID, daemonID)
 
 	// Send cloud-refactor registration acknowledgment containing config pull hints.
 	regAck := &reliantv1.ServerMessage{
@@ -885,6 +939,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 	s.notifyConnected(userID, daemonID, conn.name, conn.hostname, conn.platform)
 	s.statePublisher.Connected(daemonID, userID, conn.daemonType)
 	s.publishDaemonHeartbeat(context.Background(), userID, daemonID, time.Now().UTC(), nil)
+	s.publishDaemonListChanged(userID, daemonID)
 
 	// Start sender and heartbeat goroutines.
 	go s.runSender(conn)
@@ -1182,7 +1237,7 @@ func (c *daemonConnection) routeInboundReply(msg *reliantv1.DaemonMessage) bool 
 	case *reliantv1.DaemonMessage_KillProcessResponse:
 		if resp := m.KillProcessResponse; resp != nil {
 			if resp.Success {
-				logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Kill process succeeded", "processID", resp.ProcessId)
+				logging.Debug(LOG_PREFIX_TOOLS_DAEMON+" Kill process succeeded", "processID", resp.ProcessId)
 			} else {
 				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Kill process failed", "processID", resp.ProcessId, "error", resp.ErrorMessage)
 			}

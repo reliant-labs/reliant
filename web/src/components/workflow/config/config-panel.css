@@ -13,6 +13,11 @@
    notch from the panel's original sizes, which ran 9-13px and read as far too
    small next to the rest of the UI. The bulk of the panel (labels, inputs, field
    text) now sits at 0.9286rem ≈ 13.9px at the default `lg`.
+
+   The floor is 0.8125rem — Tailwind's `text-xs` here, 12.2px at the default
+   `lg` — for every label, caption and type hint, never smaller
+   (research/WORKFLOW_EDITOR_UX_REVIEW.md §1 issue 10). Small uppercase labels
+   at 10-11px were the review's legibility finding; labelFloor.test.ts holds it.
    ========================================================================== */
 
 /* The cpv2 tokens, alone, for cpv2 primitives rendered outside the floating
@@ -198,7 +203,7 @@
 }
 
 .cpv2-panel-subtitle {
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   color: hsl(var(--muted-foreground) / 0.75);
   line-height: 1.25;
   overflow: hidden;
@@ -321,7 +326,7 @@
 }
 
 .cpv2-section-label {
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.6px;
@@ -518,7 +523,7 @@
 }
 
 .cpv2-fi-hint {
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   color: hsl(var(--muted-foreground) / 0.6);
   font-weight: 400;
 }
@@ -537,15 +542,22 @@
   color: hsl(var(--muted-foreground));
 }
 
+/* What kind of value a field takes ("list of tool calls"), beside its label. */
+.cpv2-field-label .cpv2-field-type {
+  font-size: 0.8125rem;
+  font-weight: 400;
+  color: hsl(var(--muted-foreground) / 0.75);
+}
+
 .cpv2-field-default {
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   color: hsl(var(--muted-foreground) / 0.6);
   font-weight: 400;
 }
 
 /* --- CEL toggle button --- */
 .cpv2-cel-toggle {
-  font-size: 0.7143rem;
+  font-size: 0.8125rem;
   font-weight: 700;
   letter-spacing: 0.3px;
   padding: 1px 5px;
@@ -615,7 +627,7 @@
 .cpv2-tag.dashed { border-style: dashed; }
 
 .cpv2-tag-x {
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   opacity: 0.5;
   margin-left: 2px;
   cursor: pointer;
@@ -672,7 +684,7 @@
 }
 
 .cpv2-dr-sublabel {
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   color: hsl(var(--muted-foreground));
 }
 
@@ -704,6 +716,18 @@
   cursor: pointer;
   transition: all var(--cpv2-transition);
   text-transform: capitalize;
+}
+/* The Fixed / Expression toggle beside a field label: text, not bare glyphs,
+   and a 24px target. */
+.cpv2-mode-pill.cpv2-mode-pill-compact {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-height: 24px;
+  padding: 2px 8px;
+  font-size: 0.8125rem;
+  text-transform: none;
 }
 .cpv2-mode-pill:hover { border-color: hsl(var(--border) / 0.8); color: hsl(var(--foreground)); }
 .cpv2-mode-pill.active {
@@ -873,7 +897,7 @@
 }
 
 .cpv2-pgh-preset {
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   color: var(--cpv2-accent);
   font-weight: 500;
   padding: 2px 6px;
@@ -958,7 +982,7 @@
 
 .cpv2-trigger-payload-type {
   margin-left: auto;
-  font-size: 0.7857rem;
+  font-size: 0.8125rem;
   color: hsl(var(--muted-foreground) / 0.72);
 }
 
@@ -973,4 +997,41 @@
  * the trigger payload panel; 380px is .config-panel-v2's width. */
 .cpv2-test-run--docked .config-panel-v2 {
   right: calc(0.75rem + 380px + 0.75rem);
+}
+
+/* --- Validation on the field (WorkflowFindingsContext) ---
+ * Owned by ProtoFieldRenderer's finding lines and the panel's problem list.
+ * The outline is on the field's own control, so it reads at a glance; the
+ * message under it says what is wrong. */
+.cpv2-field--invalid .cpv2-field-input,
+.cpv2-field--invalid .cpv2-field-textarea,
+.cpv2-field--invalid .cpv2-field-select,
+.cpv2-field--invalid .cpv2-cel-field {
+  border-color: hsl(var(--destructive));
+}
+
+.cpv2-field-error {
+  font-size: 0.9286rem;
+  line-height: 1.4;
+  color: hsl(var(--destructive-ink));
+}
+
+.cpv2-field-error--warning {
+  color: hsl(var(--warning-ink));
+}
+
+.cpv2-step-problems {
+  border: 1px solid hsl(var(--warning) / 0.4);
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.9286rem;
+  line-height: 1.4;
+  color: hsl(var(--warning-ink));
+  background: hsl(var(--warning) / 0.06);
+}
+
+.cpv2-step-problems--error {
+  border-color: hsl(var(--destructive) / 0.4);
+  color: hsl(var(--destructive-ink));
+  background: hsl(var(--destructive) / 0.06);
 }

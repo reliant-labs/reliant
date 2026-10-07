@@ -214,7 +214,7 @@ func runEmbeddedForge(t *testing.T, dir string, args ...string) string {
 	var stdout, stderr bytes.Buffer
 	parent.SetOut(&stdout)
 	parent.SetErr(&stderr)
-	parent.SetArgs(append([]string{"forge", "--silence-experimental"}, args...))
+	parent.SetArgs(append([]string{"forge"}, args...))
 	require.NoError(t, parent.Execute(), "forge %v: %s", args, stderr.String())
 	return stdout.String()
 }

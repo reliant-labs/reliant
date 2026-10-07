@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"crypto/subtle"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -17,7 +18,7 @@ type settingStore struct {
 	q      pgdb.Querier
 	db     pgdb.DBTX
 	bind   func(string) string
-	sealer APIKeySealer
+	sealer CredentialSealer
 }
 
 // NewSettingStore creates the Postgres settings store implementation.
@@ -132,16 +133,18 @@ func (s *settingStore) DeleteSetting(ctx context.Context, id string) error {
 	return s.q.DeleteSetting(ctx, id)
 }
 
-// APIKeySealer is the slice of the credential vault the api_keys store needs.
-// Declared here, where it is consumed.
-type APIKeySealer interface {
+// CredentialSealer is the slice of the credential vault this store needs for
+// api_keys and the provider sign-in token tables. Declared here, where it is
+// consumed.
+type CredentialSealer interface {
 	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
 	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)
 }
 
-// SetSealer enables the api_keys vault. The sealed column is the only source
-// of truth, so the store refuses to read or write provider keys without one.
-func (s *settingStore) SetSealer(sealer APIKeySealer) { s.sealer = sealer }
+// SetSealer enables the credential vault. Sealed columns are the only source
+// of truth, so without one the store refuses to read or write provider API
+// keys and provider sign-in tokens.
+func (s *settingStore) SetSealer(sealer CredentialSealer) { s.sealer = sealer }
 
 var errAPIKeyVaultDisabled = errors.New("api keys require the credential vault; none is configured")
 
@@ -308,61 +311,185 @@ func (s *settingStore) BackfillAPIKeys(ctx context.Context, batch int) (int, err
 	}
 }
 
+// Provider sign-in tokens (Claude, Codex, GitHub Copilot, Antigravity) are
+// sealed with the same vault as api_keys. Each column's ciphertext is bound to
+// its table, user and column, so a value copied to another row, another user or
+// another column does not open. There is no plaintext column and no fallback
+// read: a missing row means "not connected", and a row that does not open is
+// an error, never a downgrade.
+const (
+	claudeTokensTable      = "claude_auth_tokens"      //nolint:gosec // G101: a table name, not a credential
+	codexTokensTable       = "codex_auth_tokens"       //nolint:gosec // G101: a table name, not a credential
+	copilotTokensTable     = "copilot_auth_tokens"     //nolint:gosec // G101: a table name, not a credential
+	antigravityTokensTable = "antigravity_auth_tokens" //nolint:gosec // G101: a table name, not a credential
+)
+
+var errOAuthTokenVaultDisabled = errors.New("provider sign-in tokens require the credential vault; none is configured")
+
+func oauthTokenAAD(table, userID, column string) []byte {
+	return []byte(table + "\x00" + userID + "\x00" + column)
+}
+
+// tokenCodec seals and opens the token columns of one user's row. The first
+// failure sticks, so a caller can handle several columns and check once.
+type tokenCodec struct {
+	ctx    context.Context
+	sealer CredentialSealer
+	table  string
+	userID string
+	err    error
+}
+
+func (s *settingStore) tokenCodec(ctx context.Context, table, userID string) *tokenCodec {
+	c := &tokenCodec{ctx: ctx, sealer: s.sealer, table: table, userID: userID}
+	if s.sealer == nil {
+		c.err = errOAuthTokenVaultDisabled
+	}
+	return c
+}
+
+func (c *tokenCodec) seal(column, plaintext string) []byte {
+	if c.err != nil {
+		return nil
+	}
+	sealed, err := c.sealer.Seal(c.ctx, vault.UserTenant(c.userID), []byte(plaintext), oauthTokenAAD(c.table, c.userID, column))
+	if err != nil {
+		c.err = fmt.Errorf("sealing %s.%s: %w", c.table, column, err)
+		return nil
+	}
+	return sealed
+}
+
+func (c *tokenCodec) open(column string, sealed []byte) string {
+	if c.err != nil {
+		return ""
+	}
+	pt, err := c.sealer.Open(c.ctx, vault.UserTenant(c.userID), sealed, oauthTokenAAD(c.table, c.userID, column))
+	if err != nil {
+		c.err = fmt.Errorf("opening %s.%s: %w", c.table, column, err)
+		return ""
+	}
+	defer clear(pt)
+	return string(pt)
+}
+
+// maxSealedSwapAttempts bounds how often a compare-and-swap re-reads after
+// another writer changed the row between its read and its update.
+const maxSealedSwapAttempts = 3
+
+// compareAndSwapSealedRefresh is compare-and-swap over a sealed refresh token.
+//
+// The comparison cannot happen in SQL: sealing is randomized, so equal
+// plaintexts never produce equal ciphertexts. So the stored token is read,
+// opened and compared here (in constant time), and update is conditioned on
+// the exact ciphertext that was read — the witness. Every write re-seals, so
+// the witness changes whenever the row does, which makes "the row still holds
+// the witness" atomic with the comparison. If another writer got in between,
+// the update matches nothing and the decision is made again against what that
+// writer stored.
+func (s *settingStore) compareAndSwapSealedRefresh(ctx context.Context, table, column, userID, expected string, update func(witness []byte) (sql.Result, error)) (bool, error) {
+	//nolint:gosec // G201: table and column are package constants, never input.
+	query := s.bind(fmt.Sprintf("SELECT %s_sealed FROM %s WHERE user_id = ?", column, table))
+	for range maxSealedSwapAttempts {
+		var witness []byte
+		if err := s.db.QueryRowContext(ctx, query, userID).Scan(&witness); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return false, nil
+			}
+			return false, err
+		}
+		c := s.tokenCodec(ctx, table, userID)
+		stored := c.open(column, witness)
+		if c.err != nil {
+			return false, c.err
+		}
+		if subtle.ConstantTimeCompare([]byte(stored), []byte(expected)) != 1 {
+			return false, nil
+		}
+		res, err := update(witness)
+		if err != nil {
+			return false, err
+		}
+		affected, err := res.RowsAffected()
+		if err != nil {
+			return false, err
+		}
+		if affected > 0 {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 func (s *settingStore) GetCodexAuthTokens(ctx context.Context, userID string) (*core.CodexAuthTokens, error) {
-	query := s.bind(`SELECT access_token, refresh_token, id_token, account_id
+	query := s.bind(`SELECT access_token_sealed, refresh_token_sealed, id_token_sealed, account_id
 		FROM codex_auth_tokens
 		WHERE user_id = ?`)
 	row := s.db.QueryRowContext(ctx, query, userID)
 
 	var tokens core.CodexAuthTokens
-	if err := row.Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.IDToken, &tokens.AccountID); err != nil {
+	var access, refresh, idToken []byte
+	if err := row.Scan(&access, &refresh, &idToken, &tokens.AccountID); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	c := s.tokenCodec(ctx, codexTokensTable, userID)
+	tokens.AccessToken = c.open("access_token", access)
+	tokens.RefreshToken = c.open("refresh_token", refresh)
+	tokens.IDToken = c.open("id_token", idToken)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return &tokens, nil
 }
 
 func (s *settingStore) SetCodexAuthTokens(ctx context.Context, userID string, tokens core.CodexAuthTokens) error {
+	c := s.tokenCodec(ctx, codexTokensTable, userID)
+	access := c.seal("access_token", tokens.AccessToken)
+	refresh := c.seal("refresh_token", tokens.RefreshToken)
+	idToken := c.seal("id_token", tokens.IDToken)
+	if c.err != nil {
+		return c.err
+	}
 	now := time.Now().UTC()
 	id := uuid.New().String()
-	query := s.bind(`INSERT INTO codex_auth_tokens (id, user_id, access_token, refresh_token, id_token, account_id, created_at, updated_at)
+	query := s.bind(`INSERT INTO codex_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, id_token_sealed, account_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
-		   access_token = excluded.access_token,
-		   refresh_token = excluded.refresh_token,
-		   id_token = excluded.id_token,
+		   access_token_sealed = excluded.access_token_sealed,
+		   refresh_token_sealed = excluded.refresh_token_sealed,
+		   id_token_sealed = excluded.id_token_sealed,
 		   account_id = excluded.account_id,
 		   updated_at = excluded.updated_at`)
-	_, err := s.db.ExecContext(ctx, query, id, userID, tokens.AccessToken, tokens.RefreshToken, tokens.IDToken, tokens.AccountID, now, now)
+	_, err := s.db.ExecContext(ctx, query, id, userID, access, refresh, idToken, tokens.AccountID, now, now)
 	return err
 }
 
 // CompareAndSwapCodexAuthTokens persists tokens only if the stored refresh
-// token still equals expectedRefreshToken. See core.SettingStore for semantics.
-// The conditional UPDATE is atomic, so two processes racing to persist a
+// token still equals expectedRefreshToken. See core.SettingStore for semantics
+// and compareAndSwapSealedRefresh for why two processes racing to persist a
 // rotation cannot both win.
 func (s *settingStore) CompareAndSwapCodexAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.CodexAuthTokens) (bool, error) {
-	now := time.Now().UTC()
+	c := s.tokenCodec(ctx, codexTokensTable, userID)
+	access := c.seal("access_token", tokens.AccessToken)
+	refresh := c.seal("refresh_token", tokens.RefreshToken)
+	idToken := c.seal("id_token", tokens.IDToken)
+	if c.err != nil {
+		return false, c.err
+	}
 	query := s.bind(`UPDATE codex_auth_tokens SET
-		   access_token = ?,
-		   refresh_token = ?,
-		   id_token = ?,
+		   access_token_sealed = ?,
+		   refresh_token_sealed = ?,
+		   id_token_sealed = ?,
 		   account_id = ?,
 		   updated_at = ?
-		 WHERE user_id = ? AND refresh_token = ?`)
-	res, err := s.db.ExecContext(ctx, query,
-		tokens.AccessToken, tokens.RefreshToken, tokens.IDToken, tokens.AccountID,
-		now, userID, expectedRefreshToken)
-	if err != nil {
-		return false, err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	return affected > 0, nil
+		 WHERE user_id = ? AND refresh_token_sealed = ?`)
+	return s.compareAndSwapSealedRefresh(ctx, codexTokensTable, "refresh_token", userID, expectedRefreshToken,
+		func(witness []byte) (sql.Result, error) {
+			return s.db.ExecContext(ctx, query, access, refresh, idToken, tokens.AccountID, time.Now().UTC(), userID, witness)
+		})
 }
 
 func (s *settingStore) DeleteCodexAuthTokens(ctx context.Context, userID string) error {
@@ -372,32 +499,45 @@ func (s *settingStore) DeleteCodexAuthTokens(ctx context.Context, userID string)
 }
 
 func (s *settingStore) GetCopilotAuthTokens(ctx context.Context, userID string) (*core.CopilotAuthTokens, error) {
-	query := s.bind(`SELECT user_id, github_access_token, github_refresh_token, tier, created_at, updated_at
+	query := s.bind(`SELECT user_id, github_access_token_sealed, github_refresh_token_sealed, tier, created_at, updated_at
 		FROM copilot_auth_tokens
 		WHERE user_id = ?`)
 	row := s.db.QueryRowContext(ctx, query, userID)
 
 	var tokens core.CopilotAuthTokens
-	if err := row.Scan(&tokens.UserID, &tokens.GitHubAccessToken, &tokens.GitHubRefreshToken, &tokens.Tier, &tokens.CreatedAt, &tokens.UpdatedAt); err != nil {
+	var access, refresh []byte
+	if err := row.Scan(&tokens.UserID, &access, &refresh, &tokens.Tier, &tokens.CreatedAt, &tokens.UpdatedAt); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	c := s.tokenCodec(ctx, copilotTokensTable, userID)
+	tokens.GitHubAccessToken = c.open("github_access_token", access)
+	tokens.GitHubRefreshToken = c.open("github_refresh_token", refresh)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return &tokens, nil
 }
 
 func (s *settingStore) SetCopilotAuthTokens(ctx context.Context, userID string, tokens core.CopilotAuthTokens) error {
+	c := s.tokenCodec(ctx, copilotTokensTable, userID)
+	access := c.seal("github_access_token", tokens.GitHubAccessToken)
+	refresh := c.seal("github_refresh_token", tokens.GitHubRefreshToken)
+	if c.err != nil {
+		return c.err
+	}
 	now := time.Now().UTC()
 	id := uuid.New().String()
-	query := s.bind(`INSERT INTO copilot_auth_tokens (id, user_id, github_access_token, github_refresh_token, tier, created_at, updated_at)
+	query := s.bind(`INSERT INTO copilot_auth_tokens (id, user_id, github_access_token_sealed, github_refresh_token_sealed, tier, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
-		   github_access_token = excluded.github_access_token,
-		   github_refresh_token = excluded.github_refresh_token,
+		   github_access_token_sealed = excluded.github_access_token_sealed,
+		   github_refresh_token_sealed = excluded.github_refresh_token_sealed,
 		   tier = excluded.tier,
 		   updated_at = excluded.updated_at`)
-	_, err := s.db.ExecContext(ctx, query, id, userID, tokens.GitHubAccessToken, tokens.GitHubRefreshToken, tokens.Tier, now, now)
+	_, err := s.db.ExecContext(ctx, query, id, userID, access, refresh, tokens.Tier, now, now)
 	return err
 }
 
@@ -408,29 +548,42 @@ func (s *settingStore) DeleteCopilotAuthTokens(ctx context.Context, userID strin
 }
 
 func (s *settingStore) GetClaudeAuthTokens(ctx context.Context, userID string) (*core.ClaudeAuthTokens, error) {
-	query := s.bind(`SELECT access_token, refresh_token, expires_at, account_uuid, account_email, organization_uuid, organization_name, scope
+	query := s.bind(`SELECT access_token_sealed, refresh_token_sealed, expires_at, account_uuid, account_email, organization_uuid, organization_name, scope
 		FROM claude_auth_tokens
 		WHERE user_id = ?`)
 	row := s.db.QueryRowContext(ctx, query, userID)
 
 	var tokens core.ClaudeAuthTokens
-	if err := row.Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.ExpiresAt, &tokens.AccountUUID, &tokens.AccountEmail, &tokens.OrganizationUUID, &tokens.OrganizationName, &tokens.Scope); err != nil {
+	var access, refresh []byte
+	if err := row.Scan(&access, &refresh, &tokens.ExpiresAt, &tokens.AccountUUID, &tokens.AccountEmail, &tokens.OrganizationUUID, &tokens.OrganizationName, &tokens.Scope); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	c := s.tokenCodec(ctx, claudeTokensTable, userID)
+	tokens.AccessToken = c.open("access_token", access)
+	tokens.RefreshToken = c.open("refresh_token", refresh)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return &tokens, nil
 }
 
 func (s *settingStore) SetClaudeAuthTokens(ctx context.Context, userID string, tokens core.ClaudeAuthTokens) error {
+	c := s.tokenCodec(ctx, claudeTokensTable, userID)
+	access := c.seal("access_token", tokens.AccessToken)
+	refresh := c.seal("refresh_token", tokens.RefreshToken)
+	if c.err != nil {
+		return c.err
+	}
 	now := time.Now().UTC()
 	id := uuid.New().String()
-	query := s.bind(`INSERT INTO claude_auth_tokens (id, user_id, access_token, refresh_token, expires_at, account_uuid, account_email, organization_uuid, organization_name, scope, created_at, updated_at)
+	query := s.bind(`INSERT INTO claude_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, expires_at, account_uuid, account_email, organization_uuid, organization_name, scope, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
-		   access_token = excluded.access_token,
-		   refresh_token = excluded.refresh_token,
+		   access_token_sealed = excluded.access_token_sealed,
+		   refresh_token_sealed = excluded.refresh_token_sealed,
 		   expires_at = excluded.expires_at,
 		   account_uuid = excluded.account_uuid,
 		   account_email = excluded.account_email,
@@ -438,19 +591,24 @@ func (s *settingStore) SetClaudeAuthTokens(ctx context.Context, userID string, t
 		   organization_name = excluded.organization_name,
 		   scope = excluded.scope,
 		   updated_at = excluded.updated_at`)
-	_, err := s.db.ExecContext(ctx, query, id, userID, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, tokens.AccountUUID, tokens.AccountEmail, tokens.OrganizationUUID, tokens.OrganizationName, tokens.Scope, now, now)
+	_, err := s.db.ExecContext(ctx, query, id, userID, access, refresh, tokens.ExpiresAt, tokens.AccountUUID, tokens.AccountEmail, tokens.OrganizationUUID, tokens.OrganizationName, tokens.Scope, now, now)
 	return err
 }
 
 // CompareAndSwapClaudeAuthTokens persists tokens only if the stored refresh
-// token still equals expectedRefreshToken. See core.SettingStore for semantics.
-// The conditional UPDATE is atomic, so two processes racing to persist a
+// token still equals expectedRefreshToken. See core.SettingStore for semantics
+// and compareAndSwapSealedRefresh for why two processes racing to persist a
 // rotation cannot both win.
 func (s *settingStore) CompareAndSwapClaudeAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.ClaudeAuthTokens) (bool, error) {
-	now := time.Now().UTC()
+	c := s.tokenCodec(ctx, claudeTokensTable, userID)
+	access := c.seal("access_token", tokens.AccessToken)
+	refresh := c.seal("refresh_token", tokens.RefreshToken)
+	if c.err != nil {
+		return false, c.err
+	}
 	query := s.bind(`UPDATE claude_auth_tokens SET
-		   access_token = ?,
-		   refresh_token = ?,
+		   access_token_sealed = ?,
+		   refresh_token_sealed = ?,
 		   expires_at = ?,
 		   account_uuid = ?,
 		   account_email = ?,
@@ -458,19 +616,14 @@ func (s *settingStore) CompareAndSwapClaudeAuthTokens(ctx context.Context, userI
 		   organization_name = ?,
 		   scope = ?,
 		   updated_at = ?
-		 WHERE user_id = ? AND refresh_token = ?`)
-	res, err := s.db.ExecContext(ctx, query,
-		tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt,
-		tokens.AccountUUID, tokens.AccountEmail, tokens.OrganizationUUID, tokens.OrganizationName, tokens.Scope,
-		now, userID, expectedRefreshToken)
-	if err != nil {
-		return false, err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	return affected > 0, nil
+		 WHERE user_id = ? AND refresh_token_sealed = ?`)
+	return s.compareAndSwapSealedRefresh(ctx, claudeTokensTable, "refresh_token", userID, expectedRefreshToken,
+		func(witness []byte) (sql.Result, error) {
+			return s.db.ExecContext(ctx, query,
+				access, refresh, tokens.ExpiresAt,
+				tokens.AccountUUID, tokens.AccountEmail, tokens.OrganizationUUID, tokens.OrganizationName, tokens.Scope,
+				time.Now().UTC(), userID, witness)
+		})
 }
 
 func (s *settingStore) DeleteClaudeAuthTokens(ctx context.Context, userID string) error {
@@ -480,62 +633,78 @@ func (s *settingStore) DeleteClaudeAuthTokens(ctx context.Context, userID string
 }
 
 func (s *settingStore) GetAntigravityAuthTokens(ctx context.Context, userID string) (*core.AntigravityAuthTokens, error) {
-	query := s.bind(`SELECT access_token, refresh_token, expires_at, id_token, scope
+	query := s.bind(`SELECT access_token_sealed, refresh_token_sealed, expires_at, id_token_sealed, scope
 		FROM antigravity_auth_tokens
 		WHERE user_id = ?`)
 	row := s.db.QueryRowContext(ctx, query, userID)
 
 	var tokens core.AntigravityAuthTokens
-	if err := row.Scan(&tokens.AccessToken, &tokens.RefreshToken, &tokens.ExpiresAt, &tokens.IDToken, &tokens.Scope); err != nil {
+	var access, refresh, idToken []byte
+	if err := row.Scan(&access, &refresh, &tokens.ExpiresAt, &idToken, &tokens.Scope); err != nil {
 		if err == sql.ErrNoRows {
 			return nil, nil
 		}
 		return nil, err
 	}
+	c := s.tokenCodec(ctx, antigravityTokensTable, userID)
+	tokens.AccessToken = c.open("access_token", access)
+	tokens.RefreshToken = c.open("refresh_token", refresh)
+	tokens.IDToken = c.open("id_token", idToken)
+	if c.err != nil {
+		return nil, c.err
+	}
 	return &tokens, nil
 }
 
 func (s *settingStore) SetAntigravityAuthTokens(ctx context.Context, userID string, tokens core.AntigravityAuthTokens) error {
+	c := s.tokenCodec(ctx, antigravityTokensTable, userID)
+	access := c.seal("access_token", tokens.AccessToken)
+	refresh := c.seal("refresh_token", tokens.RefreshToken)
+	idToken := c.seal("id_token", tokens.IDToken)
+	if c.err != nil {
+		return c.err
+	}
 	now := time.Now().UTC()
 	id := uuid.New().String()
-	query := s.bind(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token, refresh_token, expires_at, id_token, scope, created_at, updated_at)
+	query := s.bind(`INSERT INTO antigravity_auth_tokens (id, user_id, access_token_sealed, refresh_token_sealed, expires_at, id_token_sealed, scope, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET
-		   access_token = excluded.access_token,
-		   refresh_token = excluded.refresh_token,
+		   access_token_sealed = excluded.access_token_sealed,
+		   refresh_token_sealed = excluded.refresh_token_sealed,
 		   expires_at = excluded.expires_at,
-		   id_token = excluded.id_token,
+		   id_token_sealed = excluded.id_token_sealed,
 		   scope = excluded.scope,
 		   updated_at = excluded.updated_at`)
-	_, err := s.db.ExecContext(ctx, query, id, userID, tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, tokens.IDToken, tokens.Scope, now, now)
+	_, err := s.db.ExecContext(ctx, query, id, userID, access, refresh, tokens.ExpiresAt, idToken, tokens.Scope, now, now)
 	return err
 }
 
 // CompareAndSwapAntigravityAuthTokens persists tokens only if the stored
 // refresh token still equals expectedRefreshToken. See core.SettingStore for
-// semantics. The conditional UPDATE is atomic, so two processes racing to
+// semantics and compareAndSwapSealedRefresh for why two processes racing to
 // persist a refresh cannot both win.
 func (s *settingStore) CompareAndSwapAntigravityAuthTokens(ctx context.Context, userID string, expectedRefreshToken string, tokens core.AntigravityAuthTokens) (bool, error) {
-	now := time.Now().UTC()
+	c := s.tokenCodec(ctx, antigravityTokensTable, userID)
+	access := c.seal("access_token", tokens.AccessToken)
+	refresh := c.seal("refresh_token", tokens.RefreshToken)
+	idToken := c.seal("id_token", tokens.IDToken)
+	if c.err != nil {
+		return false, c.err
+	}
 	query := s.bind(`UPDATE antigravity_auth_tokens SET
-		   access_token = ?,
-		   refresh_token = ?,
+		   access_token_sealed = ?,
+		   refresh_token_sealed = ?,
 		   expires_at = ?,
-		   id_token = ?,
+		   id_token_sealed = ?,
 		   scope = ?,
 		   updated_at = ?
-		 WHERE user_id = ? AND refresh_token = ?`)
-	res, err := s.db.ExecContext(ctx, query,
-		tokens.AccessToken, tokens.RefreshToken, tokens.ExpiresAt, tokens.IDToken, tokens.Scope,
-		now, userID, expectedRefreshToken)
-	if err != nil {
-		return false, err
-	}
-	affected, err := res.RowsAffected()
-	if err != nil {
-		return false, err
-	}
-	return affected > 0, nil
+		 WHERE user_id = ? AND refresh_token_sealed = ?`)
+	return s.compareAndSwapSealedRefresh(ctx, antigravityTokensTable, "refresh_token", userID, expectedRefreshToken,
+		func(witness []byte) (sql.Result, error) {
+			return s.db.ExecContext(ctx, query,
+				access, refresh, tokens.ExpiresAt, idToken, tokens.Scope,
+				time.Now().UTC(), userID, witness)
+		})
 }
 
 func (s *settingStore) DeleteAntigravityAuthTokens(ctx context.Context, userID string) error {

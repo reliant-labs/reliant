@@ -9,7 +9,7 @@ This abstraction provides powerful flexibility. Your workflows continue to work 
 
 You can customize this behavior in your **global config** at `~/.reliant/config.yaml` by changing which models are preferred for each tag, adding custom models such as local models running through Ollama, and configuring provider endpoints.
 
-> Note: Model configuration lives in `~/.reliant/config.yaml` rather than project-level config because Reliant runs as a single server that can have multiple project windows open simultaneously. Global model configuration ensures consistent behavior across all projects.
+> Note: Model configuration lives in `~/.reliant/config.yaml` rather than project-level config, and it is read on the [machine](/machines/overview) where your agents' tools run. Each machine has its own file, so a cloud machine is configured separately from your laptop, and every project on a machine shares one model configuration.
 
 ## Understanding Tag-Based Selection
 
@@ -239,6 +239,8 @@ Common base URLs:
 - **vLLM**: `http://localhost:8000/v1`
 
 The URL should include `/v1` if the server requires it, but should not include trailing slashes or endpoint paths like `/chat/completions`.
+
+Reliant's servers make all model calls, so a local model is reached through a daemon running on the machine that can see the model server (usually your own machine, via `reliant daemon start`). The prompt and reply are relayed through our servers and stored in your chat like any other; see [Privacy & Security](/help/privacy#local-models).
 
 ### Running Ollama
 

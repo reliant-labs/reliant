@@ -111,6 +111,11 @@ export interface LifecyclePlan {
    * rather than being implied by a greyed-out control.
    */
   disabledReason: string | null
+  /**
+   * Plain-language next step shown beside the failure reason, or null.
+   * Set for a FAILED machine, whose way back is Suspend then Resume.
+   */
+  recoveryHint: string | null
 }
 
 /** The subset of a Daemon this policy reads. */
@@ -132,7 +137,7 @@ export function lifecyclePlan(
   restartStage: RestartStage | null,
 ): LifecyclePlan {
   if (EXTERNAL_DAEMON_TYPES.includes(machine.daemonType)) {
-    return { managed: false, offer: [], disabledReason: null }
+    return { managed: false, offer: [], disabledReason: null, recoveryHint: null }
   }
 
   if (restartStage) {
@@ -141,22 +146,29 @@ export function lifecyclePlan(
       offer: machine.status === MACHINE_STATUS_SUSPENDED ? ['resume'] : ['suspend', 'restart'],
       disabledReason:
         restartStage === 'stopping' ? 'Stopping the machine…' : 'Starting the machine…',
+      recoveryHint: null,
     }
   }
 
   switch (machine.status) {
     case MACHINE_STATUS_SUSPENDED:
-      return { managed: true, offer: ['resume'], disabledReason: null }
+      return { managed: true, offer: ['resume'], disabledReason: null, recoveryHint: null }
 
-    // ResumeDaemon only accepts a SUSPENDED daemon, so Resume on a failed
-    // machine is a button whose single outcome is an error. Offer it (it is
-    // the action a user will look for) but disabled, carrying the reason.
+    // ResumeDaemon only accepts a SUSPENDED daemon, so Resume is not offered
+    // here — it would be a button whose single outcome is an error.
+    // SuspendDaemon DOES accept a failed machine (control-plane
+    // TestSuspendDaemon_FromFailedIsAllowed): it moves the Workspace to
+    // Suspended, the pod is torn down, and Resume then retries the start.
+    // That is the user's way out of a wedged start (a missing disk, an
+    // attach that never completes). Restart is deliberately NOT offered: it
+    // aborts when it sees FAILED while waiting for the stop.
     case MACHINE_STATUS_FAILED:
       return {
         managed: true,
-        offer: ['resume'],
-        disabledReason:
-          'This machine failed and cannot be resumed. Delete it and create a new one.',
+        offer: ['suspend'],
+        disabledReason: null,
+        recoveryHint:
+          'To try again, suspend this machine, then resume it. If it fails the same way, contact support.',
       }
 
     // Mid-transition. Suspending a machine that is still coming up races the
@@ -166,6 +178,7 @@ export function lifecyclePlan(
         managed: true,
         offer: ['suspend', 'restart'],
         disabledReason: 'This machine is still starting.',
+        recoveryHint: null,
       }
 
     // ACTIVE, and DISCONNECTED — which is not a transition: the pod is up and
@@ -182,9 +195,9 @@ export function lifecyclePlan(
         machine.status === MACHINE_STATUS_DISCONNECTED &&
         (machine.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED) === LIFECYCLE_PHASE_UNSPECIFIED
       ) {
-        return { managed: true, offer: ['suspend', 'restart', 'resume'], disabledReason: null }
+        return { managed: true, offer: ['suspend', 'restart', 'resume'], disabledReason: null, recoveryHint: null }
       }
-      return { managed: true, offer: ['suspend', 'restart'], disabledReason: null }
+      return { managed: true, offer: ['suspend', 'restart'], disabledReason: null, recoveryHint: null }
   }
 }
 

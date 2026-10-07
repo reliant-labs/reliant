@@ -10,6 +10,7 @@ package reconciliation
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	commonpb "go.temporal.io/api/common/v1"
 	"go.temporal.io/api/enums/v1"
 	failurepb "go.temporal.io/api/failure/v1"
+	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
 
@@ -72,7 +74,7 @@ import (
 // sluggish host rather than on a bug, and on 2026-09-29 the wedge detector
 // terminated a healthy chat (and its six in-flight sub-agents) because its
 // workflow tasks were merely TIMING OUT on an overloaded laptop. See
-// docs/incidents/2026-09-29-reconciler-false-wedge.md. Detection still runs
+// dev-docs/incidents/2026-09-29-reconciler-false-wedge.md. Detection still runs
 // and still logs; with interventions disabled each path logs one WARN per
 // streak and takes no action. Everything else — lost-workflow repair, status
 // drift / silent-termination repair, orphan reaps, stranded-spawn repairs,
@@ -344,7 +346,7 @@ type ReconcilerConfig struct {
 	// sub-agents running inline in the same Temporal execution — because an
 	// overloaded laptop made its workflow tasks TIME OUT. The run had zero
 	// WORKFLOW_TASK_FAILED events; it was slow, not stuck. Full write-up:
-	// docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	// dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 	//
 	// The code is kept rather than deleted so it can be brought back. Before
 	// re-enabling, the wedge detector must distinguish
@@ -1780,7 +1782,7 @@ func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passSta
 // live path — strands the thread at running (2) / paused (6) forever,
 // exactly as an unforgotten workflow cascade strands a workflow descendant.
 // Measured on the live DB before this fix existed: 288 threads stranded this
-// way (see docs/incidents/2026-08-12-spawn-history-cap.md), which also made
+// way (see dev-docs/incidents/2026-08-12-spawn-history-cap.md), which also made
 // their own orphaned mailboxes invisible to
 // ListThreadsWithOrphanedAgentMessages (it only matches threads already in a
 // terminal status) — so this backstop is what makes that sweep reachable at
@@ -1851,7 +1853,7 @@ func (r *Reconciler) repairStrandedSpawnToolCalls(ctx context.Context, stats *pa
 	repaired := 0
 	for _, call := range stranded {
 		now := time.Now().UTC()
-		if err := r.repo.UpsertToolCallResult(ctx, &db.ToolCallResult{
+		if err := r.repo.UpsertToolCallResult(ctx, call.ChatID, &db.ToolCallResult{
 			ToolCallID: call.ID,
 			Content:    handlers.InterruptedToolResultContent,
 			IsError:    true,
@@ -1925,7 +1927,7 @@ func mailboxKindForTerminalWorkflowStatus(status core.WorkflowStatus) core.Agent
 //
 // Idempotent and safe under concurrency: the insert goes through
 // EnqueueAgentMessageIfAbsent, which is backed by
-// idx_agent_messages_one_terminal_report_per_spawn (a real DB constraint,
+// idx_agent_messages_one_terminal_report_per_chat_spawn (a real DB constraint,
 // not a check-then-insert in this code) — see the migration and query
 // comments for the full reasoning. inserted=false here is the everyday
 // "someone already reported this" outcome, not a failure, so it is neither
@@ -2040,6 +2042,16 @@ func (r *Reconciler) repairStrandedBackgroundSpawns(ctx context.Context, stats *
 			CreatedAt:    time.Now().UTC(),
 			Synthesized:  true,
 		})
+		if errors.Is(err, core.ErrSpawnReportSlotTaken) {
+			// Another spawn in this chat reported under the same
+			// provider-chosen id, so this one's outcome has nowhere to go.
+			// Said once, loudly, and the call is still closed: leaving it
+			// backgrounded would only repeat this every pass.
+			logging.Error("[Reconciler] Stranded background spawn's report slot is held by another spawn; its outcome cannot be delivered",
+				"chatID", call.ChatID, "toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)
+			r.closeStrandedBackgroundSpawnCall(ctx, call)
+			continue
+		}
 		if err != nil {
 			logging.Error("[Reconciler] Failed to enqueue stranded background spawn completion",
 				"toolCallID", call.ToolCallID, "childThreadID", call.ChildThreadID, "error", err)
@@ -2198,19 +2210,28 @@ func strandedBackgroundSpawnBody(call *db.StrandedBackgroundSpawn, recipientDead
 // A message is delivered only by CallLLM, which drains the thread's mailbox
 // before it reads history. A human (SendAgentMessage) or peer agent
 // (spawn_send) can queue into a thread that is genuinely running and whose
-// loop then exits before another CallLLM — an inherent race that no enqueue-time
-// liveness check can close, because the thread really was live at enqueue
-// time. The live path now resolves the mailbox as the thread goes terminal
-// (ThreadStatusActivity.resolveMailbox); this is the backstop for the rows
-// that predate it and for the case where the process dies between writing the
-// thread's terminal status and resolving its mailbox.
-//
-// Nothing else revisits these rows. The drain only runs for a thread taking a
-// step, and a terminal thread takes none — so a stranded row is not merely
-// late, it is permanently unreachable. Observed on real data: two human
+// loop then exits before another CallLLM. Observed on real data: two human
 // messages queued at 00:06:31 and 00:06:51 into a thread that completed at
 // 00:06:56, still queued with delivered_at NULL, with the user told both
 // would be read at the agent's next turn.
+//
+// For the chat's ROOT thread that race is now closed where it happens, not
+// here. Every enqueue rings the thread-wake doorbell; the run gives a wake
+// that landed after its last turn a turn of its own (the loop-exit gate) or
+// continues as a fresh run for it (late_wake.go); and a doorbell that reaches
+// no run makes the sender re-send the text as a message, which starts one.
+// Those runs do the delivering. What is left for this sweep is the
+// genuinely unreachable: a sub-agent that finished with mail in its box (the
+// live path, ThreadStatusActivity.resolveMailbox, resolves those as the
+// thread goes terminal; this catches what it missed), rows older than that
+// path, and runs that died without their bookkeeping.
+//
+// Which is why it must not touch a thread whose run is still open. A root
+// run that delivers a late row has stamped the thread terminal ("completed")
+// first, and keeps it so until its successor starts and revives it; the row
+// is in flight across exactly that gap, under the same workflow ID. So a
+// thread whose owning workflow Temporal reports RUNNING is skipped, and so is
+// one Temporal cannot answer for — see mailboxMayStillBeDelivered.
 //
 // Deliberately mirrors repairStrandedSpawnToolCalls and
 // repairStrandedBackgroundSpawns: same backstop role, same durable evidence,
@@ -2236,6 +2257,9 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 
 	resolved := 0
 	for _, threadID := range threadIDs {
+		if r.mailboxMayStillBeDelivered(ctx, threadID) {
+			continue
+		}
 		rows, err := r.repo.MarkQueuedAgentMessagesUndeliveredForThread(ctx, threadID)
 		if err != nil {
 			logging.Error("[Reconciler] Failed to resolve orphaned agent messages",
@@ -2260,6 +2284,38 @@ func (r *Reconciler) resolveOrphanedAgentMessages(ctx context.Context, stats *pa
 		)
 	}
 	return resolved, nil
+}
+
+// mailboxMayStillBeDelivered reports whether a terminal thread's queued rows
+// could yet be drained, because the workflow that owns the thread is still
+// open in Temporal: finishing, or continued as a fresh run that has not yet
+// revived the thread. Fails closed — a workflow Temporal cannot answer for is
+// treated as open, and the thread is revisited next pass. Only a workflow
+// Temporal does not have, or reports closed, is final.
+func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID string) bool {
+	if r.tempClient == nil {
+		return false
+	}
+	ownerID := threadID
+	if thread, err := r.repo.GetThread(ctx, threadID); err == nil && thread != nil && thread.WorkflowID != nil && *thread.WorkflowID != "" {
+		ownerID = *thread.WorkflowID
+	}
+	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, ownerID, "")
+	if err != nil {
+		var notFound *serviceerror.NotFound
+		if errors.As(err, &notFound) || strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "NotFound") {
+			return false
+		}
+		logging.Warn("[Reconciler] Could not ask Temporal whether a thread's run is still open; leaving its mailbox for the next pass",
+			"threadID", threadID, "workflowID", ownerID, "error", err)
+		return true
+	}
+	if desc.GetWorkflowExecutionInfo().GetStatus() == enums.WORKFLOW_EXECUTION_STATUS_RUNNING {
+		logging.Info("[Reconciler] Leaving a terminal thread's queued mail: its run is still open and may deliver it",
+			"threadID", threadID, "workflowID", ownerID)
+		return true
+	}
+	return false
 }
 
 // ReconcileRunningWorkflows reconciles all workflows with status running OR
@@ -2348,7 +2404,7 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 		return reconciled, errors
 	}
 
-	logging.Info("[Reconciler] Reconciling workflows",
+	logging.Debug("[Reconciler] Reconciling workflows",
 		"running", len(allWorkflows),
 	)
 
@@ -2441,7 +2497,7 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 // activity. Measured on the incident this was written for: the WorkflowError
 // activity fired exactly once across a 51,199-event history that ended in
 // termination, and the user watched agents that were already dead appear to
-// keep running (docs/incidents/2026-08-12-spawn-history-cap.md).
+// keep running (dev-docs/incidents/2026-08-12-spawn-history-cap.md).
 //
 // The reconciler is the only component that ever observes the death, so it is
 // the only place the error can come from. It shares the activity's writer

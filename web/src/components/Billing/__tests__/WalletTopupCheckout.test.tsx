@@ -53,17 +53,33 @@ vi.mock("../useWalletTopupIntent", () => ({
  * The real hook is a react-query call, and this suite mounts the component
  * without a QueryClientProvider — so it is mocked here for the same reason
  * `useWalletTopupIntent` above is. The quote's own arithmetic belongs to the
- * server and is pinned in control-plane's processing_fee_test.go; the fee's
- * DISPLAY is pinned in WalletTopupCheckout.fee.test.tsx.
+ * server and is pinned in control-plane's service_fee_test.go; the fee's
+ * DISPLAY is pinned in the "total up front" tests below.
+ *
+ * `mockQuote.current` lets a test hand the page a quote that is NOT 5% of the
+ * credit, which is the only way to prove the page renders the server's numbers
+ * rather than recomputing ones that happen to match.
  */
+type QuoteStub = {
+  creditCents: bigint;
+  feeCents: bigint;
+  totalCents: bigint;
+  feePercent: bigint;
+};
+const mockQuote: { current: ((creditCents: number) => QuoteStub) | null } = {
+  current: null,
+};
+function fivePercentQuote(creditCents: number): QuoteStub {
+  return {
+    creditCents: BigInt(creditCents),
+    feeCents: BigInt(Math.floor((creditCents * 5) / 100)),
+    totalCents: BigInt(creditCents + Math.floor((creditCents * 5) / 100)),
+    feePercent: 5n,
+  };
+}
 vi.mock("@/hooks/useCloudBillingQueries", () => ({
   useWalletTopupQuote: (creditCents: number) => ({
-    data: {
-      creditCents: BigInt(creditCents),
-      feeCents: BigInt(Math.floor((creditCents * 5) / 100)),
-      totalCents: BigInt(creditCents + Math.floor((creditCents * 5) / 100)),
-      feePercent: 5n,
-    },
+    data: (mockQuote.current ?? fivePercentQuote)(creditCents),
     isLoading: false,
   }),
 }));
@@ -110,6 +126,7 @@ function renderPage(overrides: {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  mockQuote.current = null;
   mockIntentState.current = {
     status: "ready",
     clientSecret: "pi_test_secret",
@@ -124,12 +141,13 @@ describe("WalletTopupCheckout — the page is ours", () => {
     renderPage();
     // Our controls, around Stripe's card fields.
     //
-    // The heading states the CREDIT ($25.00 — what lands in the balance) while
-    // the button names the CHARGE ($26.25 — credit plus the processing fee).
-    // The two deliberately differ, and the button carries the larger one
-    // because it is the last number read before paying and the one that
+    // The headline states the CREDIT ($25.00 — what lands in the balance) and
+    // the total; the button names the CHARGE ($26.25 — credit plus the service
+    // fee), because it is the last number read before paying and the one that
     // reaches the card statement.
-    expect(screen.getByText(/adding \$25\.00 of credit/i)).toBeInTheDocument();
+    expect(screen.getByTestId("topup-total-headline")).toHaveTextContent(
+      /^Add \$25\.00 of credit/,
+    );
     expect(
       screen.getByRole("button", { name: /^Pay \$26\.25$/ }),
     ).toBeInTheDocument();
@@ -188,6 +206,55 @@ describe("WalletTopupCheckout — the page is ours", () => {
     expect(screen.getByText("Cloud machine")).toBeInTheDocument();
     expect(screen.getByText("coupon applied")).toBeInTheDocument();
     expect(screen.getByText("AI credit")).toBeInTheDocument();
+  });
+});
+
+describe("WalletTopupCheckout — the total, including the service fee, is shown before payment", () => {
+  it("leads with the total and names the fee as a service fee", () => {
+    renderPage();
+    // Before anything is clicked: no payment has been attempted, and the user
+    // can already read what their card will be charged and why.
+    expect(mockConfirmPayment).not.toHaveBeenCalled();
+    expect(screen.getByTestId("topup-total-headline")).toHaveTextContent(
+      "Add $25.00 of credit — $26.25 total (includes 5% service fee)",
+    );
+
+    const breakdown = screen.getByTestId("topup-cost-breakdown");
+    expect(breakdown).toHaveTextContent("Service fee (5%)");
+    expect(breakdown).toHaveTextContent("$1.25");
+    expect(screen.getByTestId("topup-total-charged")).toHaveTextContent("$26.25");
+    // A service fee, not a card surcharge: nothing on the page frames it as
+    // payment processing.
+    expect(breakdown).not.toHaveTextContent(/processing/i);
+    expect(screen.getByTestId("topup-total-headline")).not.toHaveTextContent(/processing/i);
+  });
+
+  it("shows the server's total and rate, never ones it computed itself", () => {
+    // 40% on $25.00 is a quote no client-side 5% could produce.
+    mockQuote.current = (credit) => ({
+      creditCents: BigInt(credit),
+      feeCents: 999n,
+      totalCents: BigInt(credit) + 999n,
+      feePercent: 40n,
+    });
+    renderPage();
+    expect(screen.getByTestId("topup-total-headline")).toHaveTextContent(
+      "Add $25.00 of credit — $34.99 total (includes 40% service fee)",
+    );
+    expect(screen.getByRole("button", { name: /^Pay \$34\.99$/ })).toBeInTheDocument();
+  });
+
+  it("states only the credit when there is no fee, rather than a $0 fee", () => {
+    mockQuote.current = (credit) => ({
+      creditCents: BigInt(credit),
+      feeCents: 0n,
+      totalCents: BigInt(credit),
+      feePercent: 0n,
+    });
+    renderPage();
+    expect(screen.getByTestId("topup-total-headline")).toHaveTextContent(
+      /^Add \$25\.00 of credit$/,
+    );
   });
 });
 

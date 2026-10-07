@@ -51,8 +51,8 @@ nodes:
         tags: [flagship]
     save_message:
       role: user
-      content: "{{inputs.message.text}}"
-      attachments: "{{inputs.screenshots}}"
+      content: "{{inputs.message}}"
+      attachments: "{{inputs.screenshots.map(id, string(id))}}"
 ```
 
 The caller must pass an array of attachment IDs for the `screenshots` key. The value is referenced in CEL as `inputs.screenshots` and must resolve to a `[]string` of attachment IDs.
@@ -77,7 +77,7 @@ Every node supports a `save_message` hook that runs after the node completes. It
       tags: [fast]
   save_message:
     role: user
-    content: "{{inputs.message.text}}"
+    content: "{{inputs.message}}"
     attachments: "{{has(inputs.attachments) ? inputs.attachments : null}}"
 ```
 
@@ -112,7 +112,7 @@ The [`save_message` node](/reference/nodes#save-message) takes the same fields a
   type: save_message
   args:
     role: user
-    content: "{{inputs.message.text}}"
+    content: "{{inputs.message}}"
     attachments: "{{has(inputs.attachments) ? inputs.attachments : null}}"
 ```
 
@@ -216,19 +216,31 @@ There are two recommended patterns for "forward whatever the user sent into a su
 **Option 1: Save onto the parent thread, use `mode: inherit` (or `fork`) on the child.** The child sees the parent's thread history, including the message that carries the attachments.
 
 ```yaml
+inputs:
+  message:
+    type: message
+  attachments:
+    type: attachments
+
+entry: [stash]
+
 nodes:
   - id: stash
     type: save_message
     args:
       role: user
-      content: "{{inputs.message.text}}"
-      attachments: "{{has(inputs.attachments) ? inputs.attachments : null}}"
+      content: "{{inputs.message}}"
+      attachments: "{{inputs.attachments}}"
 
   - id: analyst
     type: workflow
     ref: builtin://agent
     thread:
       mode: inherit   # or: fork
+
+edges:
+  - from: stash
+    default: analyst
 ```
 
 This is the right answer most of the time. The attachments live on a real thread message; the child inherits (or forks) the thread and reads them the same way any other participant would.
@@ -241,7 +253,7 @@ This is the right answer most of the time. The attachments live on a real thread
   ref: builtin://agent
   save_message:
     role: user
-    content: "{{inputs.message.text}}"
+    content: "{{inputs.message}}"
     attachments: "{{has(inputs.attachments) ? inputs.attachments : null}}"
   thread:
     mode: fork

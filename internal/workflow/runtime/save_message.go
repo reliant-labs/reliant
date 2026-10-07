@@ -513,7 +513,7 @@ const (
 // assistant turn should be impossible upstream (except the deliberate
 // assistant-tail yield in call_llm), so it stays greppable at WARN.
 func logSaveMessageSkip(logger interface {
-	Info(string, ...interface{})
+	Debug(string, ...interface{})
 	Warn(string, ...interface{})
 }, stepID string, skip saveMessageSkip) {
 	if skip == saveSkipContentFree {
@@ -523,7 +523,7 @@ func logSaveMessageSkip(logger interface {
 			"stepID", stepID)
 		return
 	}
-	logger.Info("[SaveMessage] Skipping save", "stepID", stepID, "reason", string(skip))
+	logger.Debug("[SaveMessage] Skipping save", "stepID", stepID, "reason", string(skip))
 }
 
 // resolveSaveMessage is THE save_message decision, made identically by the
@@ -651,20 +651,20 @@ func ExecuteSaveMessageForNode(
 		}
 	}
 	return executeSaveMessageInline(ctx, node, output,
-		buildSaveMessageWorkflowContext(workflowID, workflowName, chatID, inputs, thread),
+		buildSaveMessageWorkflowContext(workflowID, workflowName, chatID, inputs, thread, execContext),
 		chatID, workflowID, loopNodeID, loopIteration, iterCtx, "")
 }
 
 // buildSaveMessageWorkflowContext is the workflow context a save_message sees:
 // buildWorkflowContext with inputs.thread set to the executing thread. The
 // inputs map is copied, never mutated — it is shared with the rest of the run.
-func buildSaveMessageWorkflowContext(workflowID, workflowName, chatID string, inputs map[string]interface{}, thread string) map[string]interface{} {
+func buildSaveMessageWorkflowContext(workflowID, workflowName, chatID string, inputs map[string]interface{}, thread string, execCtx *ExecutionContext) map[string]interface{} {
 	if thread != "" {
 		withThread := copyMap(inputs)
 		withThread["thread"] = thread
 		inputs = withThread
 	}
-	return buildWorkflowContext(workflowID, workflowName, chatID, inputs)
+	return buildWorkflowContext(workflowID, workflowName, chatID, inputs, execCtx)
 }
 
 // executeSaveMessageInline performs a save_message from the workflow: resolve
@@ -717,7 +717,7 @@ func executeSaveMessageInline(
 		saveInput.LoopIteration = loopIteration
 	}
 
-	logger.Info("[SaveMessage] Executing inline SaveMessage",
+	logger.Debug("[SaveMessage] Executing inline SaveMessage",
 		"stepID", nid,
 		"role", saveInput.Role,
 		"thread", saveInput.Thread,
@@ -753,7 +753,7 @@ func executeSaveMessageInline(
 		return nil, fmt.Errorf("inline SaveMessage failed: %w", err)
 	}
 
-	logger.Info("[SaveMessage] Inline SaveMessage completed",
+	logger.Debug("[SaveMessage] Inline SaveMessage completed",
 		"stepID", nid,
 		"messageID", saveOutput["message_id"],
 		"thread", saveInput.Thread,

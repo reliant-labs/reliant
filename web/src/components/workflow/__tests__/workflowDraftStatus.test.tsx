@@ -3,9 +3,10 @@
  *
  * Users can store INVALID work in progress as a draft and later mark it
  * complete; validation blocks becoming complete/runnable, not every save.
- * These pin the UI-side rules: when "Mark complete" is disabled (and why),
- * which workflows count as runnable for pickers, how a rejected save of a
- * complete workflow is recognized, and the Draft badge.
+ * These pin the UI-side rules: which workflows count as runnable for
+ * pickers, how a rejected save of a published (complete) workflow is
+ * recognized, and the Draft badge. When Publish is disabled is
+ * workflowFindings' publishBlockers.
  */
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
@@ -16,7 +17,6 @@ import {
   draftStatusToProto,
   isCompleteSaveRejection,
   isRunnable,
-  markCompleteBlockers,
   splitFindings,
 } from "../workflowDraftStatus";
 
@@ -37,24 +37,6 @@ describe("draft status mapping", () => {
 describe("splitFindings", () => {
   it("separates blocking errors from warning:* findings", () => {
     expect(splitFindings([error, warning])).toEqual({ errors: [error], warnings: [warning] });
-  });
-});
-
-describe("markCompleteBlockers", () => {
-  it("is enabled for a saved, error-free draft (warnings do not block)", () => {
-    expect(markCompleteBlockers({ errors: [warning], hasUnsavedChanges: false })).toEqual([]);
-  });
-
-  it("lists every reason it is disabled, in the order to address them", () => {
-    expect(
-      markCompleteBlockers({ errors: [error, error, warning], hasUnsavedChanges: true, isSaving: true }),
-    ).toEqual(["Wait for the save to finish.", "Save your changes first.", "Fix 2 validation errors."]);
-  });
-
-  it("uses the singular for one error", () => {
-    expect(markCompleteBlockers({ errors: [error], hasUnsavedChanges: false })).toEqual([
-      "Fix 1 validation error.",
-    ]);
   });
 });
 

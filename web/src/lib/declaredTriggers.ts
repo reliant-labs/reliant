@@ -17,6 +17,7 @@
  */
 
 import type { Workflow } from "../types/workflow";
+import { describeIntegrationEvents, RAW_EVENT_NAMING, type IntegrationEventNaming } from "./integrationEventNames";
 
 /** One declared trigger, as the builder holds it (the proto init shape). */
 export type DeclaredTrigger = NonNullable<Workflow["triggers"]>[number];
@@ -111,6 +112,15 @@ export function withFilter(trigger: DeclaredTrigger, filter: string): DeclaredTr
   return { ...trigger, filter } as DeclaredTrigger;
 }
 
+/** The declaration's prompt template ("" when activations write their own). */
+export function promptOf(trigger: DeclaredTrigger): string {
+  return (trigger as { prompt?: string }).prompt ?? "";
+}
+
+export function withPrompt(trigger: DeclaredTrigger, prompt: string): DeclaredTrigger {
+  return { ...trigger, prompt } as DeclaredTrigger;
+}
+
 /** Set (or with "" remove) the mapping for one workflow input. */
 export function withInput(trigger: DeclaredTrigger, input: string, template: string): DeclaredTrigger {
   const inputs = { ...(trigger.inputs ?? {}) } as Record<string, string>;
@@ -157,7 +167,29 @@ export interface NewDeclaredTriggerSpec {
 }
 
 export function newDeclaredTrigger(spec: NewDeclaredTriggerSpec): DeclaredTrigger {
-  return { name: spec.name, description: spec.description ?? "", filter: "", inputs: {}, source: spec.source } as DeclaredTrigger;
+  return { name: spec.name, description: spec.description ?? "", filter: "", inputs: {}, prompt: "", source: spec.source } as DeclaredTrigger;
+}
+
+/** A trigger for a built-in kind picked from the palette, named uniquely among `existing`. */
+export function triggerFromBuiltin(kind: "schedule" | "webhook" | "workflow_event", existing: readonly DeclaredTrigger[]): DeclaredTrigger {
+  const base = kind === "workflow_event" ? "after-workflow" : kind;
+  return newDeclaredTrigger({ name: uniqueTriggerName(base, existing), source: defaultSource(kind) });
+}
+
+/**
+ * A trigger for a catalog trigger type picked from the palette. Its events
+ * are the type's event list (the payload schema's `event` enum).
+ */
+export function triggerFromCatalog(
+  entry: { id: string; summary: string; integration: { id: string } },
+  events: string[],
+  existing: readonly DeclaredTrigger[],
+): DeclaredTrigger {
+  return newDeclaredTrigger({
+    name: uniqueTriggerName(entry.id.replace(/\./g, "-"), existing),
+    description: entry.summary,
+    source: { case: "integration", value: { integration: entry.integration.id, events, match: {}, pollInterval: "" } } as DeclaredSource,
+  });
 }
 
 /** The default source for a built-in kind. */
@@ -230,12 +262,13 @@ export function findingFieldLabel(field: string): string {
 
 /**
  * A declared source in words, for a rail line: "Weekdays at 09:00",
- * "GitHub: issues.opened", "Webhook", "When deploy fails".
+ * "GitHub: Issue opened", "Webhook", "When deploy fails". Integration events
+ * read by their catalog names when `naming` has them (useIntegrationEventNaming).
  */
 export function describeDeclaredSource(
   trigger: DeclaredTrigger,
   describeSchedule: (schedule: { cron: string[]; interval?: string; timezone: string }) => string,
-  integrationName: (id: string) => string = (id) => id,
+  naming: IntegrationEventNaming = RAW_EVENT_NAMING,
 ): string {
   switch (sourceCase(trigger)) {
     case "schedule": {
@@ -244,11 +277,8 @@ export function describeDeclaredSource(
     }
     case "webhook":
       return "Webhook";
-    case "integration": {
-      const source = integrationOf(trigger)!;
-      const events = source.events.length > 2 ? `${source.events.slice(0, 2).join(", ")} +${source.events.length - 2}` : source.events.join(", ");
-      return `${integrationName(source.integration) || "Integration"}${events ? `: ${events}` : ""}`;
-    }
+    case "integration":
+      return describeIntegrationEvents(integrationOf(trigger)!, naming);
     case "workflowEvent": {
       const event = workflowEventOf(trigger)!;
       const outcomes = event.outcomes.length ? event.outcomes.join(" or ") : "finishes, fails or blocks";

@@ -228,6 +228,16 @@
   transition: background 0.2s ease;
 }
 
+/* The dot stays 12px, but the target a pointer has to hit to start or end a
+   connection is 28px: a pseudo-element counts as its handle for hit-testing.
+   It stops short of the output "+" beside it (12px away). */
+.react-flow__handle::after {
+  content: "";
+  position: absolute;
+  inset: -8px;
+  border-radius: 9999px;
+}
+
 /* Smooth animation for collision detection repositioning */
 .react-flow__node.auto-repositioning {
   transition: transform 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) !important;
@@ -277,12 +287,13 @@
 }
 
 /* Pulsing border animation for running nodes */
+/* The running glow follows the --info status token, like the running border. */
 @keyframes pulse-border {
   0%, 100% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.9), 0 0 10px 2px rgba(59, 130, 246, 0.5);
+    box-shadow: 0 0 0 0 hsl(var(--info) / 0.9), 0 0 10px 2px hsl(var(--info) / 0.5);
   }
   50% {
-    box-shadow: 0 0 0 6px rgba(59, 130, 246, 0.6), 0 0 20px 4px rgba(59, 130, 246, 0.4);
+    box-shadow: 0 0 0 6px hsl(var(--info) / 0.6), 0 0 20px 4px hsl(var(--info) / 0.4);
   }
 }
 
@@ -320,4 +331,13 @@
 .react-flow__edge path[marker-end],
 .react-flow__edge path[marker-start] {
   z-index: 20 !important;
+}
+/* Validation problems on a step (nodes/problemMarkers.tsx): a ring on the
+   node's own surface, which keeps its border radius, plus the count badge. */
+.react-flow__node.wf-node--has-problems > :first-child {
+  box-shadow: 0 0 0 2px hsl(var(--destructive) / 0.7);
+}
+
+.react-flow__node.wf-node--has-warnings > :first-child {
+  box-shadow: 0 0 0 2px hsl(var(--warning) / 0.6);
 }

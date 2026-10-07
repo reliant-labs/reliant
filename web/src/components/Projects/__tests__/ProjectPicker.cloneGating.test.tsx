@@ -55,9 +55,11 @@ vi.mock("@/services/controlPlane/daemon", async (importOriginal) => ({
 
 // Web mode with no ACTIVE registry daemon: activeDaemon undefined is exactly
 // the condition that used to blank the whole action card.
-vi.mock("@/hooks/useDaemonStatus", async () => {
+// Partial: useDaemonList shares this module's cache key and fetcher.
+vi.mock("@/hooks/useDaemonStatus", async (importOriginal) => {
   const { DaemonStatus } = await import("@/gen/reliant/v1/daemon_registry_pb");
   return {
+    ...(await importOriginal<typeof import("@/hooks/useDaemonStatus")>()),
     useDaemonStatus: () => ({
       daemons: registryDaemons,
       activeDaemon: (registryDaemons as Array<{ status: number }>).find(

@@ -1,6 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
-import { useState, useRef, useEffect } from "react";
+import { useCallback, useState, useRef, useEffect } from "react";
+import { useEscapeLayer } from "../../hooks/useEscapeLayer";
 import { createPortal } from "react-dom";
 import { Layers, ChevronDown, Check, MoreVertical, Star, Edit, Trash2, Save, Code2 } from "lucide-react";
 import { cn } from "../../lib/utils";
@@ -59,6 +60,8 @@ export function PresetPicker({
   saveTooltip = "Save as preset",
 }: PresetPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
+  // Escape closes the list, and only the list (useEscapeLayer).
+  const escapeLayer = useEscapeLayer(isOpen, useCallback(() => setIsOpen(false), []));
   const [defaultPresetName, setDefaultPresetName] = useState<string | null>(null);
   const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -208,6 +211,7 @@ export function PresetPicker({
   const dropdownContent = isOpen && canInteract && dropdownPosition && (
     <div
       ref={dropdownRef}
+      {...escapeLayer}
       className="fixed z-[9999] rounded-md border border-border bg-card shadow-lg"
       style={{
         top: dropdownPosition.top,
@@ -352,7 +356,7 @@ export function PresetPicker({
             <>
               <Code2 className="w-4 h-4 flex-shrink-0 text-violet-500" />
               <span className="flex items-center gap-2 flex-1 min-w-0">
-                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-2xs font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
+                <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs font-semibold uppercase tracking-wide bg-violet-500/20 text-violet-700 dark:text-violet-300 border border-violet-500/30 flex-shrink-0">
                   Expression
                 </span>
                 <span className="truncate font-mono text-xs text-muted-foreground">

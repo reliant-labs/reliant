@@ -117,6 +117,9 @@ func evaluateRaw(expr string, ctx CELEvalContext) (interface{}, error) {
 	}
 
 	activation := ctx.Activation()
+	if err := CheckWorkflowPathReference(env, ast, activation); err != nil {
+		return nil, err
+	}
 	out, _, err := prg.Eval(activation)
 	if err != nil {
 		return nil, fmt.Errorf("CEL evaluation error: %w", err)

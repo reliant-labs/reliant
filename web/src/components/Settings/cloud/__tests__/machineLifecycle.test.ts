@@ -62,15 +62,14 @@ describe('lifecyclePlan', () => {
     expect(plan.disabledReason).toBeNull()
   })
 
-  // A FAILED machine is the one case where the button is shown but refused.
-  // ResumeDaemon rejects anything whose status is not SUSPENDED
-  // (connect.CodeFailedPrecondition, "daemon is not suspended"), so an
-  // enabled Resume here would be a button whose only outcome is an error
-  // toast. Disabling it WITH the reason says the same thing before the click.
-  it('offers Resume disabled, with a reason, on a failed machine', () => {
+  // A wedged start (e.g. its disk is gone) lands FAILED. ResumeDaemon only
+  // accepts SUSPENDED, so the way out is Suspend, then Resume. Before this the
+  // plan offered only a dead Resume and the user had no action at all.
+  it('offers an enabled Suspend, and an honest recovery hint, on a failed machine', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_FAILED), null)
-    expect(plan.offer).toEqual(['resume'])
-    expect(plan.disabledReason).toMatch(/failed/i)
+    expect(plan.offer).toEqual(['suspend'])
+    expect(plan.disabledReason).toBeNull()
+    expect(plan.recoveryHint).toMatch(/suspend.*resume/i)
   })
 
   it('disables the actions with a reason while a machine is still starting', () => {

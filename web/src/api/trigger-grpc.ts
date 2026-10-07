@@ -20,7 +20,7 @@
  * renaming a webhook trigger cannot turn it into an empty schedule.
  */
 
-import { create } from "@bufbuild/protobuf";
+import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { Code, ConnectError } from "@connectrpc/connect";
 
 import { grpcClient } from "./grpc-client";
@@ -40,6 +40,9 @@ import {
   TriggerHealthStatus,
   TriggerOverlapPolicy,
   UpdateTriggerRequestSchema,
+  IntegrationSourceSchema,
+  WebhookSourceSchema,
+  WorkflowEventSourceSchema,
   type ScheduleSource as ProtoScheduleSource,
   type Trigger as ProtoTrigger,
   type TriggerDefinition as ProtoTriggerDefinition,
@@ -162,6 +165,11 @@ export interface Trigger {
   /** The connection an integration trigger listens through. */
   connectionId?: string;
   /**
+   * The CEL filter an event must pass. An activation's is its declaration's,
+   * shown here as the server last projected it and never sent back.
+   */
+  filter?: string;
+  /**
    * Webhook triggers: the URL to POST to. A bare `/hooks/<id>` path when the
    * server has no PUBLIC_URL; see webhookUrlForDisplay.
    */
@@ -228,6 +236,12 @@ export interface TriggerDefinitionInput {
    * means the owner's default for the integration.
    */
   connectionId?: string;
+  /**
+   * An inline event source's CEL filter. Replaced on update, so an edit sends
+   * the stored one back; never set for an activation, whose filter is its
+   * declaration's (the server refuses one).
+   */
+  filter?: string;
 }
 
 // ============================================
@@ -349,6 +363,7 @@ export function triggerFromProto(proto: ProtoTrigger): Trigger {
     source: sourceFromProto(proto.source, proto.workflowTrigger || undefined),
     workflowTrigger: proto.workflowTrigger || undefined,
     connectionId: proto.connectionId || undefined,
+    filter: proto.filter || undefined,
     webhookUrl: proto.webhookUrl || undefined,
   };
 }
@@ -375,6 +390,7 @@ export function definitionToProto(input: TriggerDefinitionInput): ProtoTriggerDe
     noMachine: input.noMachine ?? false,
     notifyOnComplete: input.notifyOnComplete,
     connectionId: input.connectionId || undefined,
+    filter: input.source.kind === "activation" ? "" : (input.filter ?? "").trim(),
   });
   // Assigned rather than passed to create(): a passthrough arm is the decoded
   // message the server sent, and goes back as that same object.
@@ -412,6 +428,43 @@ function sourceToProto(source: TriggerSource): ProtoTriggerDefinition["source"] 
 }
 
 /**
+ * The inline source for a trigger row that carries its own WHEN — a personal
+ * trigger on a workflow whose definition can't gain a declaration (a
+ * built-in). The palette builds the same declaration shape for both models,
+ * so one editor serves both; this is where the personal one becomes a row's
+ * source. Webhook, integration and workflow-event arms are built as real
+ * messages, because the update carries them back verbatim.
+ */
+export function inlineTriggerSource(source: { case?: string; value?: unknown } | undefined): TriggerSource {
+  const value = (source?.value ?? {}) as Record<string, unknown>;
+  switch (source?.case) {
+    case "schedule": {
+      const schedule = value as { cron?: string[]; interval?: string; timezone?: string };
+      return {
+        kind: "schedule",
+        schedule: {
+          cron: [...(schedule.cron ?? [])].filter((c) => c.trim() !== ""),
+          interval: schedule.interval || undefined,
+          timezone: schedule.timezone || "UTC",
+          overlap: "skip",
+        },
+      };
+    }
+    case "webhook":
+      return { kind: "passthrough", arm: { case: "webhook", value: create(WebhookSourceSchema, value as MessageInitShape<typeof WebhookSourceSchema>) } };
+    case "integration":
+      return { kind: "passthrough", arm: { case: "integration", value: create(IntegrationSourceSchema, value as MessageInitShape<typeof IntegrationSourceSchema>) } };
+    case "workflowEvent":
+      return {
+        kind: "passthrough",
+        arm: { case: "workflowEvent", value: create(WorkflowEventSourceSchema, value as MessageInitShape<typeof WorkflowEventSourceSchema>) },
+      };
+    default:
+      return { kind: "unknown" };
+  }
+}
+
+/**
  * The definition a stored trigger currently has. Start every update from this,
  * then override what the user changed — UpdateTrigger replaces the whole row.
  */
@@ -429,6 +482,8 @@ export function definitionFromTrigger(trigger: Trigger): TriggerDefinitionInput 
     notifyOnComplete: trigger.notifyOnComplete,
     source: trigger.source,
     connectionId: trigger.connectionId,
+    // An activation's filter is its declaration's: not the row's to send.
+    filter: trigger.source.kind === "activation" ? undefined : trigger.filter,
   };
 }
 

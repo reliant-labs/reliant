@@ -46,6 +46,7 @@ const ENV: LiveEnv = {
   drift: { state: "not-reported" },
   driftDetail: "",
   provenance: "",
+  holds: [],
 };
 
 function promotion(id: string, version: string, createdAt: string): CloudPromotion {

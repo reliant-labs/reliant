@@ -4,15 +4,23 @@
  *
  * No chat is bound to the workflow: the panel's chat id is UI state owned by
  * the caller (the route's `chat` search param). The composer is prefilled with
- * a visible reference to the workflow so the agent knows which one to load.
+ * a visible reference to the workflow so the agent knows which one to load,
+ * and the empty state suggests things to ask about this workflow in place of
+ * the new-chat starter cards.
+ *
+ * Where the chat runs is NewChatView's rule (lib/chatMachine.ts): the user's
+ * machine when they have a usable one, otherwise no machine. Building a
+ * workflow needs none — the workflow tools all run on the server.
  */
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { Maximize2, Plus, X } from "lucide-react";
 import { ReliantIcon } from "../icons/ReliantIcon";
 import { cn } from "../../lib/utils";
 import { NewChatView } from "../Chat/NewChatView";
+import type { ComposerPrefill } from "../Chat/ChatInput";
 import { ChatContainer } from "../Chat/ChatContainer";
+import { BuilderChatEmptyState } from "./BuilderChatEmptyState";
 import { useRunRoute } from "../runs/RunRouteLoader";
 import { LoadingSpinner } from "../Layout/LoadingSpinner";
 import { useProjectStore } from "../../store/projectStore";
@@ -155,34 +163,64 @@ function NewChatWithWorkflowReference({
   onChatCreated: (chatId: string) => void;
 }) {
   const projectId = useProjectStore((state) => state.currentProject?.id);
-  const prefill = useMemo(
-    () => (workflowSlug ? workflowReferencePrefill(workflowSlug) : ""),
-    [workflowSlug],
+  if (!workflowSlug || !projectId) return <LoadingSpinner />;
+  // Keyed by the reference: a new workflow gets a fresh composer and a fresh
+  // reference.
+  const reference = workflowReferencePrefill(workflowSlug);
+  return (
+    <WorkflowNewChat
+      key={reference}
+      projectId={projectId}
+      workflowSlug={workflowSlug}
+      reference={reference}
+      onChatCreated={onChatCreated}
+    />
   );
-  const [ready, setReady] = useState(false);
+}
 
-  // ChatInput seeds from the project's new-chat draft on mount, so the draft
-  // is written first. A draft the user typed is theirs; only an empty draft or
-  // a stale reference to another workflow is replaced.
-  useEffect(() => {
-    if (!projectId) return;
-    const drafts = useWorkspaceStateStore.getState();
-    const existing = drafts.getNewChatDraft(projectId);
-    if (prefill && (existing === "" || WORKFLOW_REFERENCE_PATTERN.test(existing))) {
-      drafts.setNewChatDraft(projectId, prefill);
-    }
-    setReady(true);
-    return () => {
-      const latest = useWorkspaceStateStore.getState();
-      if (prefill && latest.getNewChatDraft(projectId) === prefill) {
-        latest.clearNewChatDraft(projectId);
-      }
-    };
-  }, [projectId, prefill]);
+function WorkflowNewChat({
+  projectId,
+  workflowSlug,
+  reference,
+  onChatCreated,
+}: {
+  projectId: string;
+  workflowSlug: string;
+  reference: string;
+  onChatCreated: (chatId: string) => void;
+}) {
+  // The reference is handed to the composer directly. It used to go through
+  // the new-chat draft, which the composer reads when it mounts; but when the
+  // slug changed (New workflow lands on /workflow/new, then on the draft's
+  // slug) the composer re-mounted and read the draft before the new reference
+  // was written, so it opened empty. A draft the user typed is theirs; only an
+  // empty draft or a stale reference to another workflow is replaced.
+  const [composerPrefill, setComposerPrefill] = useState<ComposerPrefill | undefined>(() => {
+    const existing = useWorkspaceStateStore.getState().getNewChatDraft(projectId);
+    return existing === "" || WORKFLOW_REFERENCE_PATTERN.test(existing) ? { text: reference, id: 0 } : undefined;
+  });
 
-  // ChatInput reads the draft once on mount, so wait for the slug and re-mount
-  // if the reference changes.
-  if (!workflowSlug) return <LoadingSpinner />;
-  if (!ready) return null;
-  return <NewChatView key={prefill} tabId="workflow-editor" onChatCreated={onChatCreated} />;
+  // The composer saves what it shows as the project's new-chat draft. A bare
+  // reference to this workflow means nothing on the app's own new-chat screen.
+  useEffect(
+    () => () => {
+      const drafts = useWorkspaceStateStore.getState();
+      if (drafts.getNewChatDraft(projectId) === reference) drafts.clearNewChatDraft(projectId);
+    },
+    [projectId, reference],
+  );
+
+  const pickSuggestion = (text: string) =>
+    setComposerPrefill((previous) => ({ text: reference + text, id: (previous?.id ?? 0) + 1 }));
+
+  return (
+    <NewChatView
+      tabId="workflow-editor"
+      onChatCreated={onChatCreated}
+      composerPrefill={composerPrefill}
+      emptyState={({ noMachine }) => (
+        <BuilderChatEmptyState workflowSlug={workflowSlug} noMachine={noMachine} onPick={pickSuggestion} />
+      )}
+    />
+  );
 }

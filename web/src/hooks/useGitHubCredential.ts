@@ -34,6 +34,8 @@ export const GITHUB_CREDENTIAL_QUERY_KEY = ["gitCredential", "github"] as const;
 
 export function useGitHubCredential(): {
   hasToken: boolean;
+  /** The GitHub login the token belongs to; unset when the provider could not be reached. */
+  accountLogin?: string;
   scopes: string;
   /** GitHub's installation flow — where a user adds an account or widens a
    *  "selected repositories" installation. Undefined when the control plane
@@ -88,6 +90,7 @@ export function useGitHubCredential(): {
 
   return {
     hasToken: data?.hasToken ?? false,
+    accountLogin: data?.accountLogin,
     scopes: data?.scopes ?? "",
     installUrl: data?.installUrl,
     installations: data?.installations ?? [],

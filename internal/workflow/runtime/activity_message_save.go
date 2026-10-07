@@ -226,7 +226,7 @@ func (w *ActivityWrapper[I, O]) saveActivityMessage(
 	}
 	durationMs := time.Since(start).Milliseconds()
 
-	logging.Info("[ActivityWrapper] Saved node message",
+	logging.Debug("[ActivityWrapper] Saved node message",
 		"activityType", activityType,
 		"stepID", stepID,
 		"messageID", saveOutput.GetMessageId(),
@@ -236,7 +236,7 @@ func (w *ActivityWrapper[I, O]) saveActivityMessage(
 	saveStepID := stepID + "-save"
 	w.writeStepExecution(ctx, workflowID, saveStepID, "SaveMessage", saveOutput, nil, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
 	end := time.Now()
-	w.emitNodeExecutionEvent(ctx, "completed", false, saveStepID, "SaveMessage", inputInfo.ChatID, workflowID, info.ActivityID, &start, &end, &durationMs, nil, nil)
+	w.emitNodeExecutionEvent(ctx, "completed", false, saveStepID, inputInfo, "SaveMessage", inputInfo.ChatID, workflowID, info.ActivityID, &start, &end, &durationMs, nil, nil)
 	return nil
 }
 
@@ -301,8 +301,8 @@ func resolveDelegatedSaveMessage(
 // logSaveMessageSkip takes, so the worker and workflow report skips alike.
 type packageLogger struct{}
 
-func (packageLogger) Info(msg string, kv ...interface{}) { logging.Info(msg, kv...) }
-func (packageLogger) Warn(msg string, kv ...interface{}) { logging.Warn(msg, kv...) }
+func (packageLogger) Debug(msg string, kv ...interface{}) { logging.Debug(msg, kv...) }
+func (packageLogger) Warn(msg string, kv ...interface{})  { logging.Warn(msg, kv...) }
 
 // resultForSave returns the result in the form activityResultMap expects:
 // a proto message value (not pointer) is addressed so it marshals with

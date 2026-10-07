@@ -128,7 +128,45 @@ func (p *Provider) identify(ctx context.Context, doer HTTPDoer, params map[strin
 			who.AccountLabel = identityString(label)
 		}
 	}
+	if expr := probe.GetSenderId(); expr != "" {
+		if sender, err := tmpl.EvalExpr(expr, vars); err == nil {
+			who.SenderID = identityString(sender)
+		}
+	}
 	return who, nil
+}
+
+// exchangeSenderID evaluates the oauth2 method's sender_id over the token
+// endpoint's answer, with every token removed first: the expression is
+// catalog-fixed, but nothing that is not needed should reach an evaluator.
+// "" when the method declares none or the answer lacks it.
+func (p *Provider) exchangeSenderID(raw map[string]any) string {
+	expr := oauthSpec(p).GetSenderId()
+	if expr == "" || raw == nil {
+		return ""
+	}
+	sender, err := tmpl.EvalExpr(expr, map[string]any{"response": withoutTokens(raw)})
+	if err != nil {
+		return ""
+	}
+	return identityString(sender)
+}
+
+// withoutTokens is a copy of a token response with every field whose name
+// mentions a token dropped, at any depth (Slack nests the installing user's
+// own access and refresh tokens under authed_user).
+func withoutTokens(m map[string]any) map[string]any {
+	out := make(map[string]any, len(m))
+	for k, v := range m {
+		if strings.Contains(strings.ToLower(k), "token") {
+			continue
+		}
+		if nested, ok := v.(map[string]any); ok {
+			v = withoutTokens(nested)
+		}
+		out[k] = v
+	}
+	return out
 }
 
 // identityString renders a probe result: ids are often JSON numbers, which

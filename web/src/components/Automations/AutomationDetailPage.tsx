@@ -37,12 +37,13 @@ import {
   useTriggerEvents,
 } from "@/hooks/trigger-queries";
 import { describeSchedule, describeTriggerSource } from "@/lib/cronText";
+import { useIntegrationEventNaming } from "@/hooks/connection-queries";
 import { formatAbsoluteTime, formatRelativeTime } from "@/lib/relativeTime";
 import { AutomationFormDialog } from "./AutomationFormDialog";
 import { OutcomeBadge } from "./OutcomeBadge";
 import { RunStatusBadge } from "../ui/RunStatusIndicator";
 import { useLaunchedRunStatus } from "./useLaunchedRunStatus";
-import { daemonLabel, daemonStatusLabel } from "./daemonChoices";
+import { automationMachineLabel, daemonStatusLabel } from "./daemonChoices";
 import { BrokenActivationNotice } from "./BrokenActivationNotice";
 import { runStatusFromDisplayState } from "@/lib/runStatus";
 import type { RunDisplayState } from "@/gen/reliant/v1/run_pb";
@@ -78,6 +79,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
   });
   const fire = useFireTrigger();
   const setEnabled = useSetTriggerEnabled();
+  const naming = useIntegrationEventNaming();
   const deleteTrigger = useDeleteTrigger();
   const [editing, setEditing] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
@@ -177,13 +179,15 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
         <div className="min-w-0">
           <h1 className="truncate text-2xl font-semibold tracking-tight text-foreground">{trigger.name}</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {projectName ?? "Unknown project"} on{" "}
-            {daemonLabel(
+            {/* "Reliant on MacBook", but "Reliant · No machine": no machine is not a place to run on. */}
+            {projectName ?? "Unknown project"}
+            {trigger.noMachine ? " · " : " on "}
+            {automationMachineLabel(
+              trigger,
               daemons.find((d) => d.daemonId === trigger.daemonId),
-              trigger.daemonId,
             )}{" "}
             ·{" "}
-            {describeTriggerSource(trigger.source)}
+            {describeTriggerSource(trigger.source, naming)}
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -270,6 +274,7 @@ export function AutomationDetail({ triggerId }: { triggerId: string }) {
 
 function DefinitionList({ trigger }: { trigger: Trigger }) {
   const schedule = triggerSchedule(trigger);
+  const naming = useIntegrationEventNaming();
   const { daemons } = useDaemonStatus();
   const daemon = daemons.find((d) => d.daemonId === trigger.daemonId);
   const inputCount = Object.keys(trigger.presets).length + Object.keys(trigger.params).length;
@@ -282,10 +287,16 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
       label: "Runs on",
       value: (
         <span>
-          {daemonLabel(daemon, trigger.daemonId)}
+          {automationMachineLabel(trigger, daemon)}
           <span className="text-muted-foreground">
             {" "}
-            ({daemon ? daemonStatusLabel(daemon.status) : "not in your daemon list"})
+            (
+            {trigger.noMachine
+              ? "web & integrations only"
+              : daemon
+                ? daemonStatusLabel(daemon.status)
+                : "not in your daemon list"}
+            )
           </span>
         </span>
       ),
@@ -301,7 +312,7 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
           </span>
         </span>
       ) : (
-        describeTriggerSource(trigger.source)
+        describeTriggerSource(trigger.source, naming)
       ),
     },
     {
@@ -366,7 +377,7 @@ function DefinitionList({ trigger }: { trigger: Trigger }) {
 function LaunchedRunCell({ chatId, displayState }: { chatId?: string; displayState?: RunDisplayState }) {
   const { status, unavailable } = useLaunchedRunStatus(displayState ? undefined : chatId);
   if (!chatId) return <span className="text-muted-foreground">—</span>;
-  if (displayState) return <RunStatusBadge status={runStatusFromDisplayState(displayState)} />;
+  if (displayState) return <RunStatusBadge status={runStatusFromDisplayState(displayState)} size="md" />;
   if (unavailable) return <span className="text-xs text-muted-foreground">Unavailable</span>;
   if (!status) {
     return (
@@ -375,7 +386,7 @@ function LaunchedRunCell({ chatId, displayState }: { chatId?: string; displaySta
       </span>
     );
   }
-  return <RunStatusBadge status={status} />;
+  return <RunStatusBadge status={status} size="md" />;
 }
 
 interface EventHistoryProps {

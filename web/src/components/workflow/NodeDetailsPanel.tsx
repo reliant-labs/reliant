@@ -10,6 +10,7 @@
  */
 
 import { memo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   X,
   ChevronDown,
@@ -55,6 +56,45 @@ import type { LoopIterationInfo } from "./hooks/useExecutionStatus";
 import { getNodeDisplayName } from "../../lib/node-metadata";
 import { unwrapProtoInputs } from "../../lib/protoValueUtils";
 import { getActionArgsRecord, hasTypedArgs } from "../../lib/actionStepArgs";
+import { getMessageClient } from "../../api/grpc-client";
+import { messageText } from "../../lib/transcript";
+import { MarkdownRenderer } from "../Chat/MarkdownRenderer";
+
+/**
+ * The message a node wrote, when its step saved one — for a reviewer, its
+ * verdict ("## Review (Attempt 1): refactor …"), which is the most useful
+ * thing a Get It Right run produces. The step row carries only the message
+ * id, so the text is fetched on demand.
+ */
+function SavedMessageSection({ messageId }: { messageId: string }) {
+  const { data, isLoading, isError } = useQuery({
+    queryKey: ["workflow-node-saved-message", messageId],
+    queryFn: async () => {
+      const res = await getMessageClient().getMessage({ messageId });
+      return res.message ? messageText(res.message) : "";
+    },
+    staleTime: Infinity,
+  });
+
+  if (isLoading) {
+    return (
+      <Section title="Result" defaultOpen={true}>
+        <div className="flex items-center gap-2 text-xs text-muted-foreground">
+          <Loader2 className="w-3 h-3 animate-spin" />
+          Loading…
+        </div>
+      </Section>
+    );
+  }
+  if (isError || !data) return null;
+  return (
+    <Section title="Result" defaultOpen={true}>
+      <div className="text-xs max-h-96 overflow-y-auto">
+        <MarkdownRenderer content={data} />
+      </div>
+    </Section>
+  );
+}
 
 interface NodeDetailsPanelProps {
   /** The selected node's data */
@@ -299,6 +339,10 @@ export const NodeDetailsPanel = memo(function NodeDetailsPanel({
           curr.createdAt > latest.createdAt ? curr : latest,
         )
       : null;
+
+  // The newest message this node saved (a "-save" sibling step).
+  const savedMessageId = stepExecutions.find((exec) => exec.savedMessageId)
+    ?.savedMessageId;
 
   // Calculate total duration across all executions
   const totalDuration = stepExecutions.reduce(
@@ -630,6 +674,8 @@ export const NodeDetailsPanel = memo(function NodeDetailsPanel({
             </p>
           )}
         </Section>
+
+        {savedMessageId && <SavedMessageSection messageId={savedMessageId} />}
 
         {/* Output Section - from step execution */}
         {latestExecution?.outputJson && (

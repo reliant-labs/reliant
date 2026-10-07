@@ -109,13 +109,13 @@ func ValidateJSONWithRepair(toolName, jsonStr string, schemaJSON []byte) (string
 	// Telemetry: log every repair, even if re-validation still fails — the
 	// signal we want is "how often do models stringify values".
 	if len(repairedPaths) > 0 {
-		logging.Info("Repaired stringified JSON in tool input",
+		logging.Debug("Repaired stringified JSON in tool input",
 			"tool", toolName,
 			"properties", strings.Join(repairedPaths, ", "),
 		)
 	}
 	if len(renamedKeys) > 0 {
-		logging.Info("Repaired aliased property name in tool input",
+		logging.Debug("Repaired aliased property name in tool input",
 			"tool", toolName,
 			"renames", strings.Join(renamedKeys, ", "),
 		)

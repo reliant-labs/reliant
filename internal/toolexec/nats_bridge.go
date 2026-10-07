@@ -160,7 +160,7 @@ func (b *NATSToolBridge) assembleRequest(subject string, msg *nats.Msg, onError 
 		return nil, false
 	}
 	if full != msg {
-		logging.Info("[NATSToolBridge] Reassembled chunked request",
+		logging.Debug("[NATSToolBridge] Reassembled chunked request",
 			"subject", subject, "requestBytes", len(full.Data))
 	}
 	return full, true
@@ -462,10 +462,11 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			// surfaces as garbage. A bare "invalid payload" cannot distinguish
 			// a malformed command from a chunked stream that reassembled to the
 			// wrong bytes, and the envelope is far too large to log — so report
-			// the size and the edges, which is what tells the two apart.
+			// the size and the framing, which is what tells the two apart.
+			opens, closes := payloadFraming(msg.Data)
 			logging.Error("[NATSToolBridge] daemon.command payload did not parse",
 				"requestBytes", len(msg.Data), "error", err,
-				"head", payloadEdge(msg.Data, true), "tail", payloadEdge(msg.Data, false))
+				"jsonOpens", opens, "jsonCloses", closes)
 			errResp, _ := json.Marshal(map[string]any{
 				"success": false,
 				"error_message": fmt.Sprintf("invalid payload (%d bytes): %v",
@@ -608,7 +609,7 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 			"commandType", req.CommandType, "requestID", req.RequestID,
 			"replyBytes", len(respData), "error", err)
 	case chunks > 1:
-		logging.Info("[NATSToolBridge] Chunked oversize daemon command reply",
+		logging.Debug("[NATSToolBridge] Chunked oversize daemon command reply",
 			"commandType", req.CommandType, "requestID", req.RequestID,
 			"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
 	}
@@ -662,7 +663,7 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 			"toolName", request.ToolName, "requestID", request.RequestID,
 			"replyBytes", len(respData), "error", err)
 	case chunks > 1:
-		logging.Info("[NATSToolBridge] Chunked oversize tool sync reply",
+		logging.Debug("[NATSToolBridge] Chunked oversize tool sync reply",
 			"toolName", request.ToolName, "requestID", request.RequestID,
 			"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
 	}
@@ -740,7 +741,7 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 	}
 
 	subject := daemonSubject(terminalOutputSubject, userID, daemonID) + "." + sessionID
-	logging.Info("[NATSToolBridge] Starting terminal output forwarder",
+	logging.Debug("[NATSToolBridge] Starting terminal output forwarder",
 		"userID", userID, "sessionID", sessionID, "subject", subject)
 
 	b.wg.Add(1)
@@ -784,7 +785,7 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 	}
 
 	subject := processOutputSubject + "." + userID + "." + processID
-	logging.Info("[NATSToolBridge] Starting process output forwarder",
+	logging.Debug("[NATSToolBridge] Starting process output forwarder",
 		"userID", userID, "processID", processID, "subject", subject)
 
 	b.wg.Add(1)
@@ -974,14 +975,12 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 	defer fetchCancel()
 
 	var dispatched int
-	for {
+	for fetchCtx.Err() == nil {
 		// Bound total time spent looping over fetch batches to the drain
 		// budget, independent of how long any individual dispatch below
 		// takes (dispatch now runs on its own context — see
 		// pendingCommandDispatchTimeout).
-		if fetchCtx.Err() != nil {
-			break
-		}
+
 		// Each individual Fetch call is capped at 2s so a slow/empty stream
 		// doesn't stall past the fetchCtx budget by more than one poll.
 		msgs, err := consumer.Fetch(100, jetstream.FetchMaxWait(2*time.Second))

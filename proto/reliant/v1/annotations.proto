@@ -16,7 +16,9 @@ message FieldMeta {
   // Pipe-separated enum values (e.g., "none|low|medium|high|xhigh").
   string enum_values = 2;
 
-  // UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar".
+  // UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar",
+  // or "node_tool" (a picker over the tools an invoke_tool node may name; the
+  // catalog fills NodeInputField.options from the tool registry).
   string ui_hint = 3;
 
   // If true, field is internal/runtime-only — not shown in UI or docs.
@@ -37,8 +39,11 @@ message FieldMeta {
   // Human-readable short label for form controls.
   string label = 9;
 
-  // Optional placeholder text for text-like controls.
-  optional string placeholder = 10;
+  // Field 10 was placeholder: free text for the input's empty state, which
+  // drifted between an example and an instruction. Example (16) is the value
+  // the empty input shows; an instruction belongs in the description.
+  reserved 10;
+  reserved "placeholder";
 
   // Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
   repeated string visibility_contexts = 11;
@@ -60,6 +65,20 @@ message FieldMeta {
   // cleared too. Reaching the workflow through a parent that is itself not
   // message_only is not an exemption.
   bool message_only = 15;
+
+  // Example is what a value looks like, written as an author would write it
+  // in YAML: a literal ("30m", "feature/login") or, for a field that is
+  // normally wired from another node, the expression a typical workflow uses
+  // ("{{nodes.call_llm.tool_calls}}"). The editor shows it as the empty
+  // input's placeholder, and the workflow reference prints it.
+  string example = 16;
+
+  // TypeHint names the kind of value in a few words when the field's proto
+  // type undersells it: a CelString that must evaluate to a list of tool
+  // calls is "list of tool calls", a duration string is "duration". The
+  // editor shows it beside the label. Leave it empty when the widget already
+  // says it (a number box, a toggle, a dropdown).
+  string type_hint = 17;
 }
 
 // NodeMeta describes metadata for a workflow node args message.

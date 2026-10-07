@@ -80,7 +80,7 @@ func (c *client) Initialize(ctx context.Context) error {
 		return nil
 	}
 
-	logging.Info("Initializing MCP client", "name", c.name)
+	logging.Debug("Initializing MCP client", "name", c.name)
 
 	// Create the appropriate transport based on config type
 	var transport mcp.Transport
@@ -205,7 +205,7 @@ func (c *client) Initialize(ctx context.Context) error {
 	}
 
 	c.initialized = true
-	logging.Info("MCP client initialized successfully", "name", c.name)
+	logging.Debug("MCP client initialized successfully", "name", c.name)
 
 	return nil
 }
@@ -542,7 +542,7 @@ func (c *client) Close() error {
 		return nil
 	}
 
-	logging.Info("Closing MCP client", "name", c.name)
+	logging.Debug("Closing MCP client", "name", c.name)
 
 	if c.session != nil {
 		if err := c.session.Close(); err != nil {
@@ -655,7 +655,7 @@ func sanitizeMCPSubprocessEnv(env []string) []string {
 		sanitized = append(sanitized, entry)
 	}
 
-	logging.Info("Sanitized MCP subprocess environment to bypass local proxy/TLS interception for child process", "original_env_count", len(env), "sanitized_env_count", len(sanitized))
+	logging.Debug("Sanitized MCP subprocess environment to bypass local proxy/TLS interception for child process", "original_env_count", len(env), "sanitized_env_count", len(sanitized))
 	return sanitized
 }
 

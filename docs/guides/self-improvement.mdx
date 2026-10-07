@@ -1,0 +1,40 @@
+---
+title: "Improve Reliant itself"
+description: "How agents turn what they learn into memories, skills and workflows that make the next run better"
+---
+
+Reliant gets better at *your* work by writing things down. There are three places a lesson can live, and choosing the right one is most of the skill.
+
+| Write a... | When the lesson is... | It lives in |
+|------------|----------------------|-------------|
+| **Memory** | Always true for this project or for you: conventions, commands, things to never do | `reliant.md`, `reliant.local.md` |
+| **Skill** | Specialised know-how needed only for some tasks, which should be loaded on demand | `.reliant/skills/<name>/SKILL.md` |
+| **Workflow** | A process with steps: do this, check that, branch, repeat, on a schedule or event | A workflow, in the builder or `.reliant/workflows` |
+
+A rule of thumb: if you would want it in the agent's head on every task, it is a memory; if you would want it only when a certain kind of task comes up, it is a skill; if it is a procedure the agent *runs*, it is a workflow. Keep memories short, since they are read every time.
+
+<Frame caption="An agent writing a skill and a memory from a correction. Example data.">
+  <img src="/images/v2/p1-self-improve-skill-and-memory.png" alt="An agent saving a correction as a skill and a memory" />
+</Frame>
+
+## Memories
+
+Memory files are plain markdown, so an agent updates them the way it edits any file. Ask it to "remember that we use pnpm, not npm" and it adds the line to `reliant.md` in the project (shared with your team) or `reliant.local.md` (just you). Memories live on the machine the project lives on; see [Memories](/settings/memories) for the files and how they are combined.
+
+## Skills
+
+A skill is a folder with a `SKILL.md`: a name, a description that says when to use it, and the instructions. Agents see the descriptions and load a skill with the `skill` tool when a task matches, so a long playbook costs nothing until it is needed. An agent can write a new skill by creating the file, and you can preload skills into an agent with the `skills` input. See [Skills](/features/skills) for the format and where Reliant looks.
+
+## Workflows
+
+An agent can create and edit workflows directly: ask for one in any chat, with the workflow tools loaded, or start [Create a Workflow](/guides/create-a-workflow) for a guided build. Workflows it writes are validated before they become runnable, tested with scenarios, and can be put on a schedule or an event with an [automation](/automations/overview). To import what you already have elsewhere, use [Import from Claude Code / Cursor](/guides/import).
+
+## Turning a correction into a habit
+
+When you correct an agent twice for the same thing, say so: "that's a rule for this repo, write it down." It will choose between a memory and a skill. When you find yourself asking for the same sequence of steps repeatedly, ask it to make a workflow from the conversation. Review what it writes the same way you review its code: these files steer every later run.
+
+## Related topics
+
+- [Memories](/settings/memories) and [Skills](/features/skills)
+- [Create a Workflow](/guides/create-a-workflow)
+- [Presets](/workflows/presets)

@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/annotations.proto.
  */
 export const file_reliant_v1_annotations: GenFile = /*@__PURE__*/
-  fileDesc("ChxyZWxpYW50L3YxL2Fubm90YXRpb25zLnByb3RvEgpyZWxpYW50LnYxIv8CCglGaWVsZE1ldGESEwoLZGVzY3JpcHRpb24YASABKAkSEwoLZW51bV92YWx1ZXMYAiABKAkSDwoHdWlfaGludBgDIAEoCRIOCgZoaWRkZW4YBCABKAgSEAoIY2F0ZWdvcnkYBSABKAkSFQoNZGVmYXVsdF92YWx1ZRgGIAEoCRIWCgltaW5fdmFsdWUYByABKAFIAIgBARIWCgltYXhfdmFsdWUYCCABKAFIAYgBARINCgVsYWJlbBgJIAEoCRIYCgtwbGFjZWhvbGRlchgKIAEoCUgCiAEBEhsKE3Zpc2liaWxpdHlfY29udGV4dHMYCyADKAkSHgoRY2xlYW51cF9zZW1hbnRpY3MYDCABKAlIA4gBARIQCghyZXF1aXJlZBgOIAEoCBIUCgxtZXNzYWdlX29ubHkYDyABKAhCDAoKX21pbl92YWx1ZUIMCgpfbWF4X3ZhbHVlQg4KDF9wbGFjZWhvbGRlckIUChJfY2xlYW51cF9zZW1hbnRpY3MifwoITm9kZU1ldGESEQoJbm9kZV90eXBlGAEgASgJEhQKDGRpc3BsYXlfbmFtZRgCIAEoCRITCgtkZXNjcmlwdGlvbhgDIAEoCRIVCg1pc19zdHJ1Y3R1cmFsGAQgASgIEhAKCGNhdGVnb3J5GAUgASgJEgwKBGljb24YBiABKAk6UwoHcmVsaWFudBIdLmdvb2dsZS5wcm90b2J1Zi5GaWVsZE9wdGlvbnMY0IYDIAEoCzIVLnJlbGlhbnQudjEuRmllbGRNZXRhUgdyZWxpYW50iAEBOlcKCW5vZGVfbWV0YRIfLmdvb2dsZS5wcm90b2J1Zi5NZXNzYWdlT3B0aW9ucxjRhgMgASgLMhQucmVsaWFudC52MS5Ob2RlTWV0YVIIbm9kZU1ldGGIAQFCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw", [file_google_protobuf_descriptor]);
+  fileDesc("ChxyZWxpYW50L3YxL2Fubm90YXRpb25zLnByb3RvEgpyZWxpYW50LnYxIowDCglGaWVsZE1ldGESEwoLZGVzY3JpcHRpb24YASABKAkSEwoLZW51bV92YWx1ZXMYAiABKAkSDwoHdWlfaGludBgDIAEoCRIOCgZoaWRkZW4YBCABKAgSEAoIY2F0ZWdvcnkYBSABKAkSFQoNZGVmYXVsdF92YWx1ZRgGIAEoCRIWCgltaW5fdmFsdWUYByABKAFIAIgBARIWCgltYXhfdmFsdWUYCCABKAFIAYgBARINCgVsYWJlbBgJIAEoCRIbChN2aXNpYmlsaXR5X2NvbnRleHRzGAsgAygJEh4KEWNsZWFudXBfc2VtYW50aWNzGAwgASgJSAKIAQESEAoIcmVxdWlyZWQYDiABKAgSFAoMbWVzc2FnZV9vbmx5GA8gASgIEg8KB2V4YW1wbGUYECABKAkSEQoJdHlwZV9oaW50GBEgASgJQgwKCl9taW5fdmFsdWVCDAoKX21heF92YWx1ZUIUChJfY2xlYW51cF9zZW1hbnRpY3NKBAgKEAtSC3BsYWNlaG9sZGVyIn8KCE5vZGVNZXRhEhEKCW5vZGVfdHlwZRgBIAEoCRIUCgxkaXNwbGF5X25hbWUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSFQoNaXNfc3RydWN0dXJhbBgEIAEoCBIQCghjYXRlZ29yeRgFIAEoCRIMCgRpY29uGAYgASgJOlMKB3JlbGlhbnQSHS5nb29nbGUucHJvdG9idWYuRmllbGRPcHRpb25zGNCGAyABKAsyFS5yZWxpYW50LnYxLkZpZWxkTWV0YVIHcmVsaWFudIgBATpXCglub2RlX21ldGESHy5nb29nbGUucHJvdG9idWYuTWVzc2FnZU9wdGlvbnMY0YYDIAEoCzIULnJlbGlhbnQudjEuTm9kZU1ldGFSCG5vZGVNZXRhiAEBQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM", [file_google_protobuf_descriptor]);
 
 /**
  * FieldMeta provides metadata for workflow proto fields.
@@ -39,7 +39,9 @@ export type FieldMeta = Message<"reliant.v1.FieldMeta"> & {
   enumValues: string;
 
   /**
-   * UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar".
+   * UI rendering hint: "textarea", "dropdown", "slider", "model", "toolbar",
+   * or "node_tool" (a picker over the tools an invoke_tool node may name; the
+   * catalog fills NodeInputField.options from the tool registry).
    *
    * @generated from field: string ui_hint = 3;
    */
@@ -88,13 +90,6 @@ export type FieldMeta = Message<"reliant.v1.FieldMeta"> & {
   label: string;
 
   /**
-   * Optional placeholder text for text-like controls.
-   *
-   * @generated from field: optional string placeholder = 10;
-   */
-  placeholder?: string | undefined;
-
-  /**
    * Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
    *
    * @generated from field: repeated string visibility_contexts = 11;
@@ -130,6 +125,28 @@ export type FieldMeta = Message<"reliant.v1.FieldMeta"> & {
    * @generated from field: bool message_only = 15;
    */
   messageOnly: boolean;
+
+  /**
+   * Example is what a value looks like, written as an author would write it
+   * in YAML: a literal ("30m", "feature/login") or, for a field that is
+   * normally wired from another node, the expression a typical workflow uses
+   * ("{{nodes.call_llm.tool_calls}}"). The editor shows it as the empty
+   * input's placeholder, and the workflow reference prints it.
+   *
+   * @generated from field: string example = 16;
+   */
+  example: string;
+
+  /**
+   * TypeHint names the kind of value in a few words when the field's proto
+   * type undersells it: a CelString that must evaluate to a list of tool
+   * calls is "list of tool calls", a duration string is "duration". The
+   * editor shows it beside the label. Leave it empty when the widget already
+   * says it (a number box, a toggle, a dropdown).
+   *
+   * @generated from field: string type_hint = 17;
+   */
+  typeHint: string;
 };
 
 /**

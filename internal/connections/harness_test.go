@@ -62,6 +62,7 @@ connection:
     path: /user
     external_id: string(response.id)
     label: response.login
+    sender_id: response.login
 actions:
   - id: user.get
     placement: server

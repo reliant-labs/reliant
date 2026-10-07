@@ -6,6 +6,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 )
@@ -319,4 +320,48 @@ func DeleteDaemonCredentials(serverURL, sub string) error {
 		}
 	}
 	return writeStore(store)
+}
+
+// ListDaemonCredentials returns every stored daemon credential, in a stable
+// order: origins sorted, and within an origin the account a no-account lookup
+// resolves to first, then the rest sorted. Callers that must choose one
+// credential among many (forge's credential helper outside a daemon) get the
+// same "default first" answer ReadDaemonCredentials gives, without guessing.
+//
+// Each entry's Sub is its store account, so the result can be fed back into
+// ReadDaemonCredentials.
+func ListDaemonCredentials() ([]*DaemonCredentials, error) {
+	store, err := readStore()
+	if err != nil {
+		return nil, err
+	}
+	origins := make([]string, 0, len(store.Origins))
+	for origin := range store.Origins {
+		origins = append(origins, origin)
+	}
+	sort.Strings(origins)
+
+	var out []*DaemonCredentials
+	for _, origin := range origins {
+		accounts := make([]string, 0, len(store.Origins[origin]))
+		for account := range store.Origins[origin] {
+			accounts = append(accounts, account)
+		}
+		def := store.resolveAccount(origin, "")
+		sort.Slice(accounts, func(i, j int) bool {
+			if (accounts[i] == def) != (accounts[j] == def) {
+				return accounts[i] == def
+			}
+			return accounts[i] < accounts[j]
+		})
+		for _, account := range accounts {
+			creds := *store.Origins[origin][account]
+			if creds.ServerURL == "" {
+				creds.ServerURL = origin
+			}
+			creds.Sub = account
+			out = append(out, &creds)
+		}
+	}
+	return out, nil
 }

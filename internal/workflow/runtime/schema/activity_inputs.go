@@ -170,7 +170,7 @@ func getFieldDefaults(t reflect.Type) map[string]interface{} {
 	}
 
 	// Handle pointer types
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -243,7 +243,7 @@ func getFieldNames(t reflect.Type) []string {
 	}
 
 	// Handle pointer types
-	if t.Kind() == reflect.Ptr {
+	if t.Kind() == reflect.Pointer {
 		t = t.Elem()
 	}
 
@@ -317,7 +317,7 @@ func ListActivities() []string {
 // zero values for primitives. This ensures CEL operations like size() and 'in' work safely.
 func getZeroValue(v reflect.Value) interface{} {
 	switch v.Kind() {
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		return nil
 	case reflect.Slice:
 		// Return empty slice instead of nil for CEL-safe operations like size()

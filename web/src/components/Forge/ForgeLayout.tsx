@@ -44,6 +44,20 @@
  *      d. all of it came back empty    → render ForgeProjectPicker. A picker,
  *                                        never a dead-end sentence.
  *
+ *    Ahead of all of them, one rung for a link the CONTROL PLANE wrote — a
+ *    queued deploy's action URL, `/forge/env/<env>?forgeProject=<name>`. The
+ *    control plane knows only forge's name for the project, so:
+ *
+ *      0. the `forgeProject` param     → loadProjects(), then selectProject
+ *                                        the row whose forge_project_name it
+ *                                        is, and swap the param for `project`.
+ *                                        When NO row declares it, the param
+ *                                        stays and the screens read the control
+ *                                        plane by that name alone, with no
+ *                                        daemon (forgeScope.ts) — the person a
+ *                                        link was sent to may never have
+ *                                        opened the project here.
+ *
  *    The URL is the source of truth once resolved, matching the reasoning on
  *    `projectRoute` in routes.tsx. Syncing is `replace: true` so reflecting the
  *    param does not push a history entry the user has to press Back through.
@@ -55,10 +69,12 @@ import { Outlet, useLocation, useNavigate, useSearch } from "@tanstack/react-rou
 import { useProjectStore, type Project } from "@/store/projectStore";
 import { useForgeRoster } from "@/hooks/forge-queries";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
+import { isQueued, queuedOnLabel } from "@/services/forge/live";
 
 import { ForgeCloseButton, ForgeProjectSwitcher } from "./ForgeHeader";
 import { ForgeProjectPicker } from "./ForgeProjectPicker";
 import { ForgeShell } from "./ForgeShell";
+import { forgeScopeOf } from "./forgeScope";
 
 export function ForgeLayout() {
   const navigate = useNavigate();
@@ -66,8 +82,9 @@ export function ForgeLayout() {
 
   // `strict: false` because this one component renders under every forge
   // route, whose search schemas differ.
-  const search = useSearch({ strict: false }) as { project?: string };
+  const search = useSearch({ strict: false }) as { project?: string; forgeProject?: string };
   const projectParam = search.project;
+  const forgeProjectParam = search.forgeProject?.trim() || undefined;
 
   const currentProject = useProjectStore((state) => state.currentProject);
   const loadProjects = useProjectStore((state) => state.loadProjects);
@@ -107,6 +124,24 @@ export function ForgeLayout() {
 
     void (async () => {
       try {
+        // (0) A control-plane link: the URL names the FORGE project.
+        if (forgeProjectParam) {
+          await loadProjects();
+          const match = useProjectStore
+            .getState()
+            .projects.find((candidate) => (candidate.forge_project_name ?? "").trim() === forgeProjectParam);
+          if (match) {
+            if (useProjectStore.getState().currentProject?.id !== match.id) await selectProject(match);
+            void navigate({
+              to: ".",
+              search: (prev: Record<string, unknown>) => ({ ...prev, project: match.id, forgeProject: undefined }),
+              replace: true,
+            });
+          }
+          // No match: the param stays, and the screens read by it.
+          return;
+        }
+
         // (a) The store already knows. Nothing to fetch; just make the URL say so.
         if (currentProject) {
           if (projectParam !== currentProject.id) syncProjectParam(currentProject.id);
@@ -144,6 +179,8 @@ export function ForgeLayout() {
   }, [
     currentProject,
     projectParam,
+    forgeProjectParam,
+    navigate,
     loadProjects,
     selectProject,
     restoreLastProject,
@@ -182,12 +219,22 @@ export function ForgeLayout() {
     return () => window.removeEventListener("keydown", handleKeyDown, true);
   }, [onClose]);
 
+  // Choosing a Reliant project is choosing the scope outright: a control-plane
+  // link's `forgeProject` must not keep overriding it.
   const onProjectSelected = useCallback(
-    (project: Project) => syncProjectParam(project.id),
-    [syncProjectParam]
+    (project: Project) => {
+      void navigate({
+        to: ".",
+        search: (prev: Record<string, unknown>) => ({ ...prev, project: project.id, forgeProject: undefined }),
+        replace: true,
+      });
+    },
+    [navigate]
   );
 
-  const showPicker = resolved && !currentProject;
+  // A forge project named by the URL is a scope on its own (forgeScope.ts),
+  // so it needs no Reliant project and never shows the picker.
+  const showPicker = resolved && !currentProject && !forgeProjectParam;
 
   /**
    * The nav's environment list — the SAME roster the Overview reads (backend
@@ -195,19 +242,28 @@ export function ForgeLayout() {
    * same cached queries, so the sidebar and the Overview cannot disagree about
    * which environments exist.
    */
-  const projectId = projectParam ?? currentProject?.id ?? null;
-  const roster = useForgeRoster(showPicker ? null : projectId);
+  const scope = forgeScopeOf({ project: projectParam, forgeProject: forgeProjectParam }, currentProject?.id);
+  const roster = useForgeRoster(showPicker ? null : scope.projectId, scope.forgeProject);
   const navEnvs = useMemo(
-    () => roster.envs.map((env) => ({ name: env.name, lifecycle: env.lifecycle, source: env.source })),
+    () =>
+      roster.envs.map((env) => ({
+        name: env.name,
+        lifecycle: env.lifecycle,
+        source: env.source,
+        queuedOn: env.live && isQueued(env.live) ? queuedOnLabel(env.live.holds) : undefined,
+      })),
     [roster.envs]
   );
 
   /**
-   * The project carries across every nav link. Built here rather than in the
+   * The scope carries across every nav link. Built here rather than in the
    * shell, because only the layout knows the current params — the shell is
    * deliberately stateless so a preview can render it too.
    */
-  const navSearch = projectParam ? new URLSearchParams({ project: projectParam }).toString() : "";
+  const navParams = new URLSearchParams();
+  if (projectParam) navParams.set("project", projectParam);
+  if (forgeProjectParam) navParams.set("forgeProject", forgeProjectParam);
+  const navSearch = navParams.toString();
 
   // The chrome lives in ForgeShell so the dev preview harnesses render the
   // SAME sidebar and header the product does. A harness that drew the screen

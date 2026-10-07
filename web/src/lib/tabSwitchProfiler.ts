@@ -67,7 +67,7 @@ class TabSwitchProfiler {
       completed: false,
     };
 
-    logger.info(`[TabSwitchProfiler] ========== SESSION START: ${chatId.slice(0, 8)}... ==========`);
+    logger.debug(`[TabSwitchProfiler] Session start: ${chatId.slice(0, 8)}...`);
     this.addEvent('session-start', { chatId });
   }
 
@@ -82,7 +82,7 @@ class TabSwitchProfiler {
 
     this.addEvent(name, data);
 
-    logger.info(`[TabSwitchProfiler] +${elapsed.toFixed(0)}ms - ${name}`, data || '');
+    logger.debug(`[TabSwitchProfiler] +${elapsed.toFixed(0)}ms - ${name}`, data || '');
   }
 
   /**
@@ -99,14 +99,8 @@ class TabSwitchProfiler {
 
     // Log summary
     const sessionChatId = this.currentSession.chatId.slice(0, 8);
-    logger.info(`[TabSwitchProfiler] ========== SESSION END: ${sessionChatId}... ==========`);
-    logger.info(`[TabSwitchProfiler] TOTAL TIME: ${totalDuration.toFixed(0)}ms`);
-
-    // Log each event with timing
-    this.currentSession.events.forEach(event => {
-      const elapsed = event.timestamp - this.currentSession!.startTime;
-      logger.info(`[TabSwitchProfiler]   ${elapsed.toFixed(0).padStart(5)}ms - ${event.name}`);
-    });
+    // One summary line; the per-event timings were already logged by mark().
+    logger.info(`[TabSwitchProfiler] Tab switch to ${sessionChatId}... took ${totalDuration.toFixed(0)}ms (${this.currentSession.events.length} events)`);
 
     if (totalDuration > 500) {
       logger.warn(`[TabSwitchProfiler] SLOW TAB SWITCH: ${totalDuration.toFixed(0)}ms for ${sessionChatId}...`);

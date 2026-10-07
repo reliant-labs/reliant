@@ -19,6 +19,7 @@ import { loadRunContext } from "@/components/runs/loadRunContext";
 import { Modal } from "../../ui/Modal";
 import { Button } from "../../ui/Button";
 import { getWorkflowDisplayName } from "../useWorkflowInputs";
+import { RunFormError } from "./RunFormError";
 import { RunWorkflowForm, type RunWorkflowFormStatus } from "./RunWorkflowForm";
 import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormStyles";
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
@@ -129,14 +130,7 @@ function RunWorkflowDialogBody({
   return (
     <Modal isOpen onClose={starting ? () => undefined : onClose} title={title} size="lg">
       <form onSubmit={onSubmit} noValidate className="space-y-5" aria-label={title}>
-        {formError && (
-          <div
-            role="alert"
-            className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink"
-          >
-            {formError}
-          </div>
-        )}
+        {formError && <RunFormError message={formError} onNavigate={onClose} />}
 
         <div>
           <label htmlFor="run-workflow-prompt" className={labelClass}>

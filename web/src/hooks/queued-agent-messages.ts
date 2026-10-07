@@ -2,11 +2,23 @@
  * The pending mailbox of a thread.
  *
  * A queued message is not in the transcript — it sits in agent_messages until
- * the loop executor drains it at its next step boundary. Nothing streams it to
- * the client, so the only way the UI can know it exists is to ask. This polls
- * while the agent is running and stops the moment it isn't, with one final
- * read on the running→idle edge so a drained queue actually clears instead of
- * leaving stale rows on screen.
+ * the loop executor drains it at its next step boundary. The rows themselves
+ * are not streamed, but every change to them is announced, so this reads the
+ * mailbox on the announcement instead of polling for it:
+ *
+ *   - a row ARRIVING (the composer, spawn_send, a spawn's report, the
+ *     reconciler) is announced by the server as a chat-scoped `agent_mailbox`
+ *     refetch, and this re-reads the mailbox;
+ *   - a row DRAINED by the agent is announced with its ids, and retired here
+ *     directly (below);
+ *   - a row the USER claims is forgotten locally (forget());
+ *   - a thread going terminal is read once on the running→idle edge, so a
+ *     queue the agent can no longer drain clears instead of lingering.
+ *
+ * A 2.5s poll used to do the first job, ~24 requests a minute for every chat
+ * with a working agent, to find a new row perhaps once in that minute. What
+ * remains is a slow fallback poll while the agent works, for an announcement
+ * lost while the stream was down.
  *
  * Forgetting a message has to outlive the requests that predate it. A poll
  * already in flight when the user claims a row answers with a snapshot taken
@@ -27,7 +39,7 @@
  * Only the first used to be signalled. The drain published nothing, so a
  * message the agent took became a transcript message immediately while the
  * strip went on showing it until some later poll happened to omit it — the
- * same words on screen twice, for up to QUEUE_POLL_INTERVAL_MS. Polling faster
+ * same words on screen twice, for up to a poll interval. Polling faster
  * would only narrow that window; nothing about it would make the overlap
  * impossible.
  *
@@ -41,6 +53,15 @@
  * Both paths deliberately share ONE tombstone mechanism. They race the same
  * in-flight polls in the same way, and a second, subtly different suppression
  * scheme would be a second thing to get wrong.
+ *
+ * A row also ARRIVES from the composer's ordinary send. SendMessage to a chat
+ * whose run is executing queues the message here instead of writing it to the
+ * transcript, and answers queued=true with the row's id — an id the client
+ * chose before sending (lib/pendingSends.ts). Until that answer the message is
+ * the send's optimistic transcript entry, so a read that already sees the row
+ * leaves it out; on the answer, the optimistic entry is dropped and the row
+ * taken ("agentMailbox:queued") in one commit. Sent, queued, picked up: the
+ * message is on screen exactly once in each.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -53,8 +74,15 @@ import { chatGrpc, type QueuedAgentMessageView } from "../api/chat-grpc";
 // is idempotent — it returns the existing singleton when there is one and
 // never replaces it — so the app still gets the bus Providers built.
 import { initEventBus } from "../lib/events";
+import { isPendingSend } from "../lib/pendingSends";
+import { subscribeToRefetch } from "../store/refetchStore";
 
-const QUEUE_POLL_INTERVAL_MS = 2_500;
+/**
+ * Safety net while the agent works — see the header. One timer per mailbox
+ * however many readers mount (the strip and the composer both do): React Query
+ * re-arms every observer's interval when the query fetches.
+ */
+export const QUEUE_FALLBACK_POLL_MS = 60_000;
 
 export const queuedAgentMessageKeys = {
   all: ["queuedAgentMessages"] as const,
@@ -75,9 +103,9 @@ export interface UseQueuedAgentMessagesResult {
 }
 
 /**
- * @param isRunning gates polling. Pass the same signal the composer uses for
- * "the agent is busy" (useIsChatRunning) — an idle agent will never drain the
- * mailbox, so polling it is pure noise.
+ * @param isRunning gates the fallback poll. Pass the same signal the composer
+ * uses for "the agent is busy" (useIsChatRunning) — an idle agent will never
+ * drain the mailbox, so polling it is pure noise.
  */
 export function useQueuedAgentMessages(
   chatId: string | undefined,
@@ -125,10 +153,15 @@ export function useQueuedAgentMessages(
         }
       }
 
-      return response.messages.filter((m) => !tombstones.current.has(m.id));
+      // A row that is one of this client's in-flight sends is already on
+      // screen as that send's optimistic transcript entry; it joins the strip
+      // only when SendMessage answers that it was queued (below).
+      return response.messages.filter(
+        (m) => !tombstones.current.has(m.id) && !isPendingSend(m.id),
+      );
     },
     enabled,
-    refetchInterval: isRunning ? QUEUE_POLL_INTERVAL_MS : false,
+    refetchInterval: isRunning ? QUEUE_FALLBACK_POLL_MS : false,
     // A backgrounded tab has no one reading the strip, and the queue is only
     // actionable while the user is looking at it.
     refetchIntervalInBackground: false,
@@ -181,6 +214,34 @@ export function useQueuedAgentMessages(
       forgetIds(payload.messageIds);
     });
   }, [chatId, threadId, enabled, forgetIds]);
+
+  // The composer's send was queued rather than saved: take the row now, in the
+  // same commit that drops its optimistic transcript entry, instead of on the
+  // next read. A tombstoned id is one the agent already drained — the response
+  // can lose that race — and it is in the transcript, so it is not re-added.
+  useEffect(() => {
+    if (!enabled) return;
+    return initEventBus().on("agentMailbox:queued", (payload) => {
+      if (payload.chatId !== chatId || payload.thread !== threadId) return;
+      if (tombstones.current.has(payload.message.id)) return;
+      queryClient.setQueryData<QueuedAgentMessageView[]>(queryKey, (prev) => {
+        const rows = prev ?? [];
+        if (rows.some((m) => m.id === payload.message.id)) return rows;
+        return [...rows, payload.message];
+      });
+    });
+  }, [chatId, threadId, enabled, queryClient, queryKey]);
+
+  // A row arrived in this chat's mailboxes. The announcement is chat-scoped
+  // (the server does not say which thread), so every observed thread of the
+  // chat re-reads; in practice that is the one thread on screen.
+  useEffect(() => {
+    if (!enabled) return;
+    return subscribeToRefetch("agent_mailbox", (event) => {
+      if (event.entityId && event.entityId !== chatId) return;
+      void queryClient.invalidateQueries({ queryKey });
+    });
+  }, [chatId, enabled, queryKey, queryClient]);
 
   const refresh = useCallback(async () => {
     if (!enabled) return;

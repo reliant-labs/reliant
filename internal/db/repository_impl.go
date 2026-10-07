@@ -4748,15 +4748,16 @@ func generateID() string {
 
 // apiKeySealing is the optional sealing surface of the api_keys store.
 type apiKeySealing interface {
-	SetSealer(postgresstore.APIKeySealer)
+	SetSealer(postgresstore.CredentialSealer)
 	BackfillAPIKeys(ctx context.Context, batch int) (int, error)
 	CountUnsealedAPIKeys(ctx context.Context) (int64, error)
 	ValidateAPIKeysSealedConstraint(ctx context.Context) error
 }
 
-// EnableAPIKeySealing gives the api_keys store its vault; without one provider
-// keys cannot be read or written. Call once at boot, before serving.
-func (r *Repo) EnableAPIKeySealing(sealer postgresstore.APIKeySealer) error {
+// EnableCredentialSealing gives the settings store its vault; without one,
+// provider API keys and provider sign-in tokens (Claude, Codex, Copilot,
+// Antigravity) cannot be read or written. Call once at boot, before serving.
+func (r *Repo) EnableCredentialSealing(sealer postgresstore.CredentialSealer) error {
 	s, ok := r.settings.(apiKeySealing)
 	if !ok {
 		return fmt.Errorf("settings store does not support api key sealing")
@@ -4766,7 +4767,7 @@ func (r *Repo) EnableAPIKeySealing(sealer postgresstore.APIKeySealer) error {
 }
 
 // BackfillAPIKeys seals legacy plaintext api_keys rows. Idempotent; returns the
-// number of rows sealed. Requires EnableAPIKeySealing.
+// number of rows sealed. Requires EnableCredentialSealing.
 func (r *Repo) BackfillAPIKeys(ctx context.Context, batch int) (int, error) {
 	s, ok := r.settings.(apiKeySealing)
 	if !ok {
@@ -4791,4 +4792,23 @@ func (r *Repo) ValidateAPIKeysSealedConstraint(ctx context.Context) error {
 		return fmt.Errorf("settings store does not support api key sealing")
 	}
 	return s.ValidateAPIKeysSealedConstraint(ctx)
+}
+
+// ListUserIDsWithProviderKey returns every user holding a stored key for
+// provider, without opening (decrypting) any of them.
+func (r *Repo) ListUserIDsWithProviderKey(ctx context.Context, provider string) ([]string, error) {
+	rows, err := r.DB.QueryContext(ctx, "SELECT user_id FROM api_keys WHERE provider = $1 ORDER BY user_id", provider)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		ids = append(ids, id)
+	}
+	return ids, rows.Err()
 }

@@ -227,7 +227,7 @@ func seedArrayParamFixture(t *testing.T, repo *Repo, ctx context.Context) arrayP
 			ToolName: "shell", Status: core.ToolCallStatusCompleted, CompletedAt: &now,
 			RequestedAt: now, CreatedAt: now, UpdatedAt: now,
 		}))
-		require.NoError(t, repo.UpsertToolCallResult(ctx, &ToolCallResult{
+		require.NoError(t, repo.UpsertToolCallResult(ctx, chatID, &ToolCallResult{
 			ToolCallID: toolCallID, MessageID: &messageID, Content: "ok",
 			CreatedAt: now, UpdatedAt: now,
 		}))

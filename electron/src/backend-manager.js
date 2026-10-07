@@ -1782,7 +1782,7 @@ class BackendManager {
         if (isWindows) {
           backendEnv.Path = backendEnv.PATH; // Windows uses both PATH and Path
         }
-        log.info('[BackendManager] Production PATH set to:', backendEnv.PATH);
+        log.debug('[BackendManager] Production PATH set', { entries: pathParts.length });
 
         // Ensure critical environment variables are set for MCP servers
         if (!isWindows) {

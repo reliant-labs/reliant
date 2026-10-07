@@ -36,8 +36,20 @@ func NewSentryReporter(config SentryConfig) (*SentryReporter, error) {
 		return nil, nil
 	}
 
-	dsn := config.DSN
+	if err := sentry.Init(clientOptions(config)); err != nil {
+		return nil, err
+	}
 
+	reporter := &SentryReporter{
+		initialized: true,
+	}
+
+	return reporter, nil
+}
+
+// clientOptions builds the SDK options. It is separate from NewSentryReporter
+// so the privacy hooks can be exercised without initializing the global hub.
+func clientOptions(config SentryConfig) sentry.ClientOptions {
 	// Determine environment based on version if not specified
 	environment := config.Environment
 	if environment == "" {
@@ -63,8 +75,8 @@ func NewSentryReporter(config SentryConfig) (*SentryReporter, error) {
 		}
 	}
 
-	err := sentry.Init(sentry.ClientOptions{
-		Dsn:              dsn,
+	return sentry.ClientOptions{
+		Dsn:              config.DSN,
 		Environment:      environment,
 		Release:          release,
 		Debug:            config.Debug,
@@ -73,21 +85,16 @@ func NewSentryReporter(config SentryConfig) (*SentryReporter, error) {
 		Tags: map[string]string{
 			"component": "backend",
 		},
-		BeforeSend: func(event *sentry.Event, hint *sentry.EventHint) *sentry.Event {
-			// Add any pre-send filtering or enrichment here
-			return event
+		// Both hooks enforce the policy in scrub.go: identifiers, types and
+		// stacks leave the process; user content does not. Transactions are
+		// sampled in production, so they are scrubbed too.
+		BeforeSend: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			return scrubEvent(event)
 		},
-	})
-
-	if err != nil {
-		return nil, err
+		BeforeSendTransaction: func(event *sentry.Event, _ *sentry.EventHint) *sentry.Event {
+			return scrubEvent(event)
+		},
 	}
-
-	reporter := &SentryReporter{
-		initialized: true,
-	}
-
-	return reporter, nil
 }
 
 // CaptureException captures an error with Sentry

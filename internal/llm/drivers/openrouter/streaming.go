@@ -162,7 +162,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 				// Parse JSON
 				var event map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					logging.Debug("Failed to parse SSE event", "error", err, "data", data)
+					logging.Debug("Failed to parse SSE event", "error", err, "dataLen", len(data))
 					continue
 				}
 
@@ -211,10 +211,12 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 								// Get or create the tool call at this index
 								currentToolCall := toolCallsByIndex[index]
 								if currentToolCall == nil {
-									// New tool call at this index
-									toolCallID, _ := toolCallMap["id"].(string)
+									// New tool call at this index. Its id is
+									// ours (see llm.NewToolCallID), minted
+									// here before tool_use_start announces
+									// it; deltas are matched by index.
 									currentToolCall = &message.ToolCall{
-										ID: toolCallID,
+										ID: llm.NewToolCallID(),
 									}
 									toolCallsByIndex[index] = currentToolCall
 
@@ -414,6 +416,10 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 		// Track reasoning_details for Gemini thought signatures
 		reasoningByID := make(map[string]ReasoningDetail)
 		var reasoning reasoningAccumulator
+		// Tool call ids are ours (see llm.NewToolCallID). reasoning_details
+		// are keyed by the id the upstream SENT, and only within this
+		// response, so keep that per minted id until the response ends.
+		upstreamID := make(map[string]string)
 
 		for scanner.Scan() {
 			line := scanner.Text()
@@ -435,7 +441,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 				// Parse JSON
 				var event map[string]interface{}
 				if err := json.Unmarshal([]byte(data), &event); err != nil {
-					logging.Debug("Failed to parse SSE event", "error", err, "data", data)
+					logging.Debug("Failed to parse SSE event", "error", err, "dataLen", len(data))
 					continue
 				}
 
@@ -509,8 +515,9 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 								if currentToolCall == nil {
 									toolCallID, _ := toolCallMap["id"].(string)
 									currentToolCall = &message.ToolCall{
-										ID: toolCallID,
+										ID: llm.NewToolCallID(),
 									}
+									upstreamID[currentToolCall.ID] = toolCallID
 									toolCallsByIndex[index] = currentToolCall
 
 									if function, ok := toolCallMap["function"].(map[string]interface{}); ok {
@@ -562,7 +569,7 @@ func (c *Client) streamWithGeminiSupport(ctx context.Context, prompts []string, 
 								toolCall.Finished = true
 
 								// Associate reasoning_details (thought signature) with tool call
-								if rd, ok := reasoningByID[toolCall.ID]; ok {
+								if rd, ok := reasoningByID[upstreamID[toolCall.ID]]; ok {
 									if rd.Type == "reasoning.encrypted" && rd.Data != "" {
 										toolCall.ThoughtSignature = rd.Data
 										logging.Debug("OpenRouter Gemini stream associated thought signature",

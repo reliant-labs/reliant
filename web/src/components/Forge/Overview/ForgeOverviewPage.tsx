@@ -35,16 +35,18 @@ import { isPlacedKind } from "@/services/forge/live";
 import type { RosterEnv } from "@/services/forge/roster";
 import { useProjectStore } from "@/store/projectStore";
 
+import { forgeScopeOf } from "../forgeScope";
 import { CloudNotice } from "../SourceNotices";
 import { EnvironmentTable, type EnvironmentRow } from "./EnvironmentTable";
 
 export function ForgeOverviewPage() {
   const navigate = useNavigate();
-  const { project: projectParam } = useSearch({ from: "/_authenticated/_forge/forge" });
+  const { project: projectParam, forgeProject: forgeProjectParam } = useSearch({ from: "/_authenticated/_forge/forge" });
   const currentProject = useProjectStore((state) => state.currentProject);
-  const projectId = projectParam ?? currentProject?.id ?? null;
+  const scope = forgeScopeOf({ project: projectParam, forgeProject: forgeProjectParam }, currentProject?.id);
+  const projectId = scope.projectId;
 
-  const roster = useForgeRoster(projectId);
+  const roster = useForgeRoster(projectId, scope.forgeProject);
   const backendEnvs = useMemo(
     () => roster.envs.filter((env) => env.source === "backend" && env.live).map((env) => env.live!),
     [roster.envs]
@@ -74,10 +76,10 @@ export function ForgeOverviewPage() {
       void navigate({
         to: "/forge/env/$env",
         params: { env },
-        search: { project: projectId ?? undefined },
+        search: { project: projectParam ?? projectId ?? undefined, forgeProject: scope.forgeProject ?? undefined },
       });
     },
-    [navigate, projectId]
+    [navigate, projectId, projectParam, scope.forgeProject]
   );
 
   const forgeProject = roster.projectName.name;

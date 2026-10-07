@@ -399,12 +399,8 @@ func TestGeminiClient_SatisfiesTheSameCallSurfaceAsTheOpenAIClient(t *testing.T)
 		GenerateImage(ctx context.Context, request Request) (*Response, error)
 	}
 
-	var openAIShaped imageGenerator = newTestClient(t, Config{BaseURL: "https://example.test/v1"})
-	var native imageGenerator = newGeminiWithModels(Config{}, nil)
-
-	if openAIShaped == nil || native == nil {
-		t.Fatal("both clients must satisfy the tool's one-method call surface")
-	}
+	var _ imageGenerator = newTestClient(t, Config{BaseURL: "https://example.test/v1"})
+	var _ imageGenerator = newGeminiWithModels(Config{}, nil)
 }
 
 // TestGeminiClient_FakeSDKNeedsNoNetwork pins that geminiImageModels is a real

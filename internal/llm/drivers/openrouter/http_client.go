@@ -204,17 +204,11 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Log the request for debugging
-	bodyLen := len(requestBody)
-	previewLen := 500
-	if bodyLen < previewLen {
-		previewLen = bodyLen
-	}
 	logging.Debug("OpenRouter request with cache control",
 		"model", request.Model,
 		"hasTools", len(convertedTools) > 0,
 		"messageCount", len(request.Messages),
-		"bodyPreview", string(requestBody)[:previewLen])
+		"bodySize", len(requestBody))
 
 	// Send request with retry logic for transient errors
 	httpClient := llm.ResilientHTTPClient()
@@ -236,12 +230,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
-		bodyLen2 := len(body)
-		previewLen2 := 500
-		if bodyLen2 < previewLen2 {
-			previewLen2 = bodyLen2
-		}
-		logging.Debug("OpenRouter response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
+		logging.Debug("OpenRouter response", "status", resp.StatusCode, "bodySize", len(body))
 
 		if resp.StatusCode == http.StatusOK {
 			break
@@ -296,11 +285,14 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 		}
 	}
 
-	// Convert tool calls with thought signatures
+	// Convert tool calls with thought signatures. The id is ours (see
+	// llm.NewToolCallID), not the upstream's, which may be missing or
+	// repeated. The upstream's id is still what reasoning_details are keyed
+	// by in THIS response, so the signature is matched on it here.
 	var toolCalls []message.ToolCall
 	for _, tc := range choice.Message.ToolCalls {
 		toolCall := message.ToolCall{
-			ID:       tc.ID,
+			ID:       llm.NewToolCallID(),
 			Name:     tc.Function.Name,
 			Input:    tc.Function.Arguments,
 			Type:     tc.Type,
@@ -409,18 +401,12 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		return nil, fmt.Errorf("failed to marshal request: %w", err)
 	}
 
-	// Log the request for debugging
-	bodyLen := len(requestBody)
-	previewLen := 500
-	if bodyLen < previewLen {
-		previewLen = bodyLen
-	}
 	logging.Debug("OpenRouter Gemini request",
 		"model", request.Model,
 		"hasTools", len(convertedTools) > 0,
 		"messageCount", len(request.Messages),
 		"hasReasoning", request.Reasoning != nil,
-		"bodyPreview", string(requestBody)[:previewLen])
+		"bodySize", len(requestBody))
 
 	// Send request with retry logic for transient errors
 	httpClient := llm.ResilientHTTPClient()
@@ -442,12 +428,7 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 			return nil, fmt.Errorf("failed to read response: %w", err)
 		}
 
-		bodyLen2 := len(body)
-		previewLen2 := 500
-		if bodyLen2 < previewLen2 {
-			previewLen2 = bodyLen2
-		}
-		logging.Debug("OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", bodyLen2, "preview", string(body[:previewLen2]))
+		logging.Debug("OpenRouter Gemini response", "status", resp.StatusCode, "bodySize", len(body))
 
 		if resp.StatusCode == http.StatusOK {
 			break
@@ -501,11 +482,14 @@ func (c *Client) sendWithGeminiSupport(ctx context.Context, prompts []string, me
 		}
 	}
 
-	// Convert tool calls with thought signatures
+	// Convert tool calls with thought signatures. The id is ours (see
+	// llm.NewToolCallID), not the upstream's, which may be missing or
+	// repeated. The upstream's id is still what reasoning_details are keyed
+	// by in THIS response, so the signature is matched on it here.
 	var toolCalls []message.ToolCall
 	for _, tc := range choice.Message.ToolCalls {
 		toolCall := message.ToolCall{
-			ID:       tc.ID,
+			ID:       llm.NewToolCallID(),
 			Name:     tc.Function.Name,
 			Input:    tc.Function.Arguments,
 			Type:     tc.Type,

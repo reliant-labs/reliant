@@ -42,10 +42,14 @@ docker run -d --name "$CONTAINER" \
   -e POSTGRES_DB=schema_dump \
   -P "$PG_IMAGE" >/dev/null
 
-# Wait for the server to accept connections. pg_isready reports readiness of the
-# server itself, so this cannot race ahead of a still-initialising cluster.
+# Wait for the server to accept connections, over TCP. The image's entrypoint
+# first runs a TEMPORARY server for initdb that listens on the unix socket only
+# (listen_addresses=''), then stops it and starts the real one. A socket check
+# passes against the temporary server, and the migrations below then hit it
+# while it shuts down ("FATAL: the database system is shutting down"). Only
+# the real server listens on TCP, so a TCP check cannot be fooled.
 for _ in $(seq 1 60); do
-  if docker exec "$CONTAINER" pg_isready -U postgres -d schema_dump >/dev/null 2>&1; then
+  if docker exec "$CONTAINER" pg_isready -h 127.0.0.1 -U postgres -d schema_dump >/dev/null 2>&1; then
     ready=1
     break
   fi

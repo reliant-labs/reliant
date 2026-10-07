@@ -104,11 +104,11 @@ events:
           confidence: 8
           rationale: "Candidate 2 has the most complete implementation with proper OAuth and password auth support, plus good test coverage."
           synthesis_instructions: ""
-  # apply_winner runs rsync command
+  # apply_winner applies the winning candidate's changes with git apply
   - node: apply_winner
     output:
       exit_code: 0
-      stdout: "sent 1234 bytes  received 56 bytes\n"
+      stdout: "Applied candidate #2 to the project. Review with: git status && git diff\n"
       stderr: ""
 
 expect:

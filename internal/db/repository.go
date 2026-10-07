@@ -165,12 +165,20 @@ type Repository interface {
 	// Tool Calls
 	// Upserts rather than creates: the callers are Temporal activities, which
 	// retry, so a repeated write of the same call must converge on one row.
+	//
+	// A tool call id is the model provider's and can repeat across chats, so
+	// both writes are chat-scoped: a row another chat's call recorded is never
+	// replaced, and the write fails with core.ErrToolCallIDInAnotherChat.
 	UpsertToolCall(ctx context.Context, call *ToolCall) error
-	UpsertToolCallResult(ctx context.Context, result *ToolCallResult) error
+	UpsertToolCallResult(ctx context.Context, chatID string, result *ToolCallResult) error
 	GetToolCall(ctx context.Context, id string) (*ToolCall, error)
 	// GetToolCallResult reads the recorded result for a single call, or nil
 	// if none was ever written.
 	GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error)
+	// GetToolCallResultForMessage reads the result of the call that
+	// assistant message messageID carries, or nil: the lookup to use when
+	// the caller has the message and not the chat's word for whose call it is.
+	GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error)
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
 	// Batch reads for the message read path — one query per page of messages,
 	// not one per message.
@@ -207,6 +215,10 @@ type Repository interface {
 	// in a root execution that has not reported back — the spawns a coarse
 	// fresh restart of that root must relaunch.
 	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*LiveBackgroundSpawn, error)
+	// ListToolGrants returns, per thread, every tool a recorded tool result
+	// in chatID granted — the load_tool grants a coarse fresh restart of the
+	// chat's run must hand back to each thread.
+	ListToolGrants(ctx context.Context, chatID string) ([]*ToolGrant, error)
 	// SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool
 	// call that started it, for one chat. threads has no
 	// spawned_by_tool_call_id column, so the reconnect snapshot recovers the
@@ -280,6 +292,8 @@ type Repository interface {
 	SetProviderAPIKey(ctx context.Context, userID string, provider, apiKey string) error
 	DeleteProviderAPIKey(ctx context.Context, userID string, provider string) error
 	GetProviderAPIKeys(ctx context.Context, userID string) (map[string]string, error)
+	ListUserIDsWithProviderKey(ctx context.Context, provider string) ([]string, error)
+	LockProviderKey(ctx context.Context, userID, provider string) (func(), error)
 
 	GetCodexAuthTokens(ctx context.Context, userID string) (*core.CodexAuthTokens, error)
 	SetCodexAuthTokens(ctx context.Context, userID string, tokens core.CodexAuthTokens) error
@@ -325,7 +339,7 @@ type Repository interface {
 	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 	// EnqueueSpawnReport writes a real terminal spawn report, superseding a
 	// reconciler placeholder for the same tool call. See
-	// core.AgentMessageStore and docs/incidents/2026-10-04-spawn-report-collision.md.
+	// core.AgentMessageStore and dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 	EnqueueSpawnReport(ctx context.Context, msg *AgentMessage) (SpawnReportOutcome, error)
 	// EnqueueAgentMessageIfAbsent is the conditional insert the stranded-
 	// background-spawn reconciler sweep uses so two concurrent passes cannot
@@ -562,7 +576,7 @@ type Repository interface {
 	// history). Without this call the chat resumes with live agents whose
 	// rows read failed, and the reconciler's stranded-spawn sweep then
 	// writes false "the parent had already exited" reports against them.
-	// Measured: six of each, docs/incidents/2026-09-29-reconciler-false-wedge.md.
+	// Measured: six of each, dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 	//
 	// `at` is the reset point's event time; it is what separates work the
 	// new run will redo from work it will only replay. Paused rows are out
@@ -624,7 +638,7 @@ type Repository interface {
 	// ending abnormally (terminate, reap, any write path that forgets this
 	// call) leaves its thread at running (2) forever. Measured on the live
 	// DB: 288 threads stranded this way (see
-	// docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
+	// dev-docs/incidents/2026-08-12-spawn-history-cap.md), which also makes their
 	// own orphaned mailboxes invisible to ListThreadsWithOrphanedAgentMessages
 	// (it only matches threads already in a terminal status).
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason WorkflowStopReason) error

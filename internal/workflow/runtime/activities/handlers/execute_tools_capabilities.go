@@ -75,25 +75,38 @@ func (a *ExecuteToolsActivity) refuseToolCall(ctx context.Context, rtx RuntimeCo
 	return result
 }
 
-// grantedTools is every tool this batch's load_tool calls granted, read from
-// their result metadata — the grant's only record until the workflow writes it
-// into its per-thread state.
+// grantedTools is every tool this batch's load_tool calls granted, for the
+// workflow to record in its per-thread state.
 func grantedTools(results []message.ToolResult) []string {
 	seen := make(map[string]bool)
 	var granted []string
 	for _, r := range results {
-		if r.Name != tools.ToolLoadTool || r.IsError || r.Metadata == "" {
-			continue
-		}
-		var metadata tools.LoadToolMetadata
-		if err := json.Unmarshal([]byte(r.Metadata), &metadata); err != nil {
-			continue
-		}
-		for _, name := range metadata.LoadedTools {
-			if name != "" && !seen[name] {
+		for _, name := range grantedByResult(r.Name, r.Metadata, r.IsError) {
+			if !seen[name] {
 				seen[name] = true
 				granted = append(granted, name)
 			}
+		}
+	}
+	return granted
+}
+
+// grantedByResult is what one tool result granted its thread: a successful
+// load_tool result's loaded names, read from its metadata. It is the one rule
+// for a grant, so the batch's report to the workflow (grantedTools) and the
+// durable result row a coarse restart rebuilds grants from cannot disagree.
+func grantedByResult(toolName, metadata string, isError bool) []string {
+	if toolName != tools.ToolLoadTool || isError || metadata == "" {
+		return nil
+	}
+	var loaded tools.LoadToolMetadata
+	if err := json.Unmarshal([]byte(metadata), &loaded); err != nil {
+		return nil
+	}
+	granted := make([]string, 0, len(loaded.LoadedTools))
+	for _, name := range loaded.LoadedTools {
+		if name != "" {
+			granted = append(granted, name)
 		}
 	}
 	return granted

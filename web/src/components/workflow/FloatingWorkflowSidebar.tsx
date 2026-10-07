@@ -10,24 +10,27 @@ import {
   Search,
 } from 'lucide-react'
 import {
+  ADVANCED_GROUP,
+  builderGroupKey,
   ensureNodesCached,
   getCachedNodes,
   getNodeIcon,
   getNodeBgColor,
   getCategoryLabel,
   groupPaletteNodes,
-  categoryGroupKey,
   type NodeInfo,
   type PaletteGroupKey,
 } from '../../lib/node-metadata'
 import { cn } from '../../lib/utils'
+import { IntegrationLogoTile } from '../icons/IntegrationLogo'
+import { useCatalogIntegrations } from './palette/useCatalogSearch'
 
 interface FloatingWorkflowSidebarProps {
   onAddStep: (type: string) => void
   onAddSwitch: () => void
   /**
-   * Which section a node is listed under. Defaults to its category; the
-   * integrations work passes one that prefers the node's integration.
+   * Which section a node is listed under. Defaults to its category, with the
+   * agent building blocks apart under Advanced (builderGroupKey).
    */
   groupKey?: PaletteGroupKey<NodeInfo>
   /**
@@ -35,25 +38,40 @@ interface FloatingWorkflowSidebarProps {
    * searchable. The list below stays as a quick-add shelf of built-ins.
    */
   onOpenPalette?: () => void
+  /**
+   * Open the palette on one integration, expanded to its actions; with no id,
+   * on the integrations list.
+   */
+  onOpenIntegration?: (integrationId?: string) => void
   /** The palette's shortcut, as shown to the user ("⌘K"). */
   paletteShortcutLabel?: string
 }
 
+/** How many integrations the shelf shows before "All integrations". */
+const SHELF_INTEGRATIONS = 4
+
 export function FloatingWorkflowSidebar({
   onAddStep,
   onAddSwitch,
-  groupKey = categoryGroupKey,
+  groupKey = builderGroupKey,
   onOpenPalette,
+  onOpenIntegration,
   paletteShortcutLabel,
 }: FloatingWorkflowSidebarProps) {
   const [nodes, setNodes] = useState<NodeInfo[]>(getCachedNodes)
   const [loadingNodes, setLoadingNodes] = useState(true)
   const [expandedCategories, setExpandedCategories] = useState<Record<string, boolean>>({
+    'integrations': true,
     'control_flow': true,
     'agentic': true,
     'utility': true,
     'git': true,
+    // The building blocks the Agent step already runs: one click away, not in the way.
+    [ADVANCED_GROUP]: false,
   })
+  // The user's usable integrations come first, so the shelf's first page is
+  // what they are most likely to add from.
+  const integrations = useCatalogIntegrations({ kind: 'action', pageSize: SHELF_INTEGRATIONS, enabled: !!onOpenIntegration })
 
   useEffect(() => {
     let cancelled = false
@@ -65,9 +83,10 @@ export function FloatingWorkflowSidebar({
   }, [])
 
   // The generic `action` node is added by choosing an action in the palette,
-  // which sets its `uses`; added bare it would run nothing.
+  // which sets its `uses`; added bare it would run nothing. Control-flow nodes
+  // have their own section above, which also carries the canvas-only Switch.
   const groups = useMemo(
-    () => groupPaletteNodes(nodes.filter((node) => node.id !== 'action'), groupKey),
+    () => groupPaletteNodes(nodes.filter((node) => node.id !== 'action' && node.category !== 'flow'), groupKey),
     [nodes, groupKey],
   )
 
@@ -140,9 +159,61 @@ export function FloatingWorkflowSidebar({
           <Search className="h-4 w-4 flex-shrink-0" aria-hidden />
           <span className="flex-1 font-medium">Add step…</span>
           {paletteShortcutLabel && (
-            <kbd className="rounded border border-border/60 px-1 font-mono text-2xs text-muted-foreground">{paletteShortcutLabel}</kbd>
+            <kbd className="rounded border border-border/60 px-1 font-mono text-xs text-muted-foreground">{paletteShortcutLabel}</kbd>
           )}
         </button>
+      )}
+      {onOpenIntegration && (integrations.isLoading || integrations.isError || integrations.integrations.length > 0) && (
+        <div className="space-y-1.5">
+          <button
+            type="button"
+            onClick={() => toggleCategory('integrations')}
+            className={categoryButtonClass}
+          >
+            {expandedCategories['integrations'] !== false ? <ChevronDown className="w-3 h-3" /> : <ChevronRight className="w-3 h-3" />}
+            Integrations
+          </button>
+          {expandedCategories['integrations'] !== false && (
+            <div className="space-y-1 pb-2">
+              {integrations.isLoading ? (
+                <div role="status" className="px-2 py-1 text-xs text-muted-foreground">Loading integrations…</div>
+              ) : integrations.isError ? (
+                <div role="alert" className="flex items-center gap-2 px-2 py-1 text-xs">
+                  <span className="text-muted-foreground">Couldn't load integrations.</span>
+                  <button type="button" onClick={integrations.refetch} className="font-medium text-primary hover:underline">
+                    Retry
+                  </button>
+                </div>
+              ) : (
+                <>
+                  {integrations.integrations.map(({ integration, connected }) => (
+                    <button
+                      key={integration.id}
+                      type="button"
+                      onClick={() => onOpenIntegration(integration.id)}
+                      className={nodeButtonClass}
+                    >
+                      <IntegrationLogoTile icon={integration.icon || integration.id} />
+                      <span className="min-w-0 flex-1 truncate text-sm font-medium leading-none text-foreground">{integration.displayName}</span>
+                      {connected && (
+                        <span className="h-1.5 w-1.5 flex-shrink-0 rounded-full bg-success" aria-label="Connected" role="img" />
+                      )}
+                    </button>
+                  ))}
+                  {integrations.totalSize > integrations.integrations.length && (
+                    <button
+                      type="button"
+                      onClick={() => onOpenIntegration()}
+                      className="w-full rounded-md px-2 py-1 text-left text-xs font-medium text-primary transition-colors hover:bg-muted/60"
+                    >
+                      All {integrations.totalSize} integrations…
+                    </button>
+                  )}
+                </>
+              )}
+            </div>
+          )}
+        </div>
       )}
       <div className="space-y-1.5">
         <button

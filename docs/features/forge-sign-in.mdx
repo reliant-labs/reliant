@@ -1,0 +1,28 @@
+---
+title: "Forge sign-in"
+description: "Hosted Forge commands use your Reliant sign-in, on your computer and on cloud machines"
+---
+
+If you are signed in to Reliant, forge is signed in too. Hosted forge commands — `forge env deploy`, `forge secret`, `forge domain`, `forge cloud`, `forge release`, `forge env promote|verify|start|stop` — work without `forge login`, both when you run them as `reliant forge …` and when an agent runs them in a shell on a daemon, local or managed.
+
+How it works:
+
+1. A running daemon exports `FORGE_CREDENTIAL_HELPER` to the shells it starts for your agents, pointing at `reliant auth forge-credential` and pinned to that daemon. `reliant forge …` sets the same helper for itself.
+2. When forge has no credential of its own, it asks the helper for one, naming the control plane the environment declares.
+3. The helper exchanges your Reliant session (the daemon's credential, or your `reliant auth login`) with the Reliant server for a **short-lived token** — valid for at most an hour, carrying only deploy, secret and domain permission, and only what your session itself holds. The server refuses to mint one for any control plane other than its own, so a repository cannot point forge somewhere else to collect a token.
+4. forge uses that token. Your session credential never leaves Reliant's own files, and tokens are cached in `~/.reliant/forge-token-cache.json` (readable only by you) so forge does not mint one per command.
+
+forge's own sources still come first, in this order: `--token`, the environment's token variable (CI), a stored `forge login`, then your Reliant session. `forge cloud status <env>` shows which one a command will use — never the token itself.
+
+Third-party connectors that run commands on your daemon do **not** receive the helper: only your own agents can deploy as you.
+
+<Note>
+A session needs deploy permission to be exchanged — a token can never grant authority it does not hold. Sign-ins from this release on ask for it (limited to what your organization grants you). If forge says your Reliant credential "cannot authorize" a deploy, run `reliant auth login` once, or grant the daemon's credential deploy, secret and domain permission in **Settings → Access Tokens**.
+</Note>
+
+**forge asks you to sign in on a machine:** forge prints the helper's own reason. "Not signed in to Reliant" means the machine has no session: sign in to the app or run `reliant auth login`. "Cannot authorize" means the session lacks deploy permission (see the note above).
+
+## Related topics
+
+- [Deploy & host with Forge](/features/deploy-and-host)
+- [Machines overview](/machines/overview)

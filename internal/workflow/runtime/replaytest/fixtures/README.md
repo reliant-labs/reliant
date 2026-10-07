@@ -35,6 +35,8 @@ fixtures make that class of change fail at **test time** instead.
 | `compaction.json` | `builtin://agent` (tiny `compaction_threshold`) | Compaction edge: token count exceeds threshold after execute_tools → compact node (summary LLM request, new context window) → post-compaction turn → completion. |
 | `greenfield_probe.json` | `builtin://agent` | A chat's first turn: the start event carries `GreenfieldProbe: true`, and the run schedules the `GreenfieldProbe` activity after preflight/status bookkeeping and before its first CallLLM. Fixtures recorded before that field existed (every other one, until regenerated) decode it as false and schedule no probe — which is why the probe needs no version gate. |
 | `spawn.json` | `builtin://agent` | Spawn: a spawn tool call dispatches the child agent detached (`dispatchSpawnBackground`), settling immediately with a handle; the parent's loop blocks without spinning (`InlineLoopExecutor.awaitLiveDetachedSpawns`) until the detached child's completion lands in its mailbox, then reacts to it on its next turn. |
+| `action_approval.json` | `builtin://agent` (`tools: [http__request]`) | Action approval gate: an attended turn calls a mutating integration action, so the batch first raises an approval (`ApprovalCreate`, a timer, `signal.approval.*`); it is denied, and `ExecuteTools` refuses the call (`refused_tool_calls`) before the next turn completes the run. |
+| `late_user_message.json` | `builtin://agent` | Late wake: a `thread_wake` signal lands while the run's only (tool-less) turn is in flight, with nothing queued for its `pending_inbox` probe and nothing live. The loop-exit gate re-enters for it (`late-user-wake-gets-a-turn` version marker, a second `CallLLM`) instead of completing. A history recorded before that change — one `CallLLM`, then completion, with the signal unanswered — must keep replaying that way; that is what the version marker is for. |
 
 ## When `TestReplayFixtures` fails
 
@@ -57,7 +59,12 @@ structure, changing side effects, or changing any branch condition that gates
 the above. Things that do NOT break replay: activity *implementation* changes,
 changes to values that don't alter the command sequence, logging.
 
-### Do not add a version gate
+### Do not add a version gate (unless asked)
+
+`late-user-wake-gets-a-turn` (`late_user_message.json`) is a deliberate
+exception, requested explicitly: the change it gates decides whether a user's
+message is answered, so an in-flight run must not wedge over it. Everything
+below still applies to everything else.
 
 `workflow.GetVersion` keeps old histories on the old code path by keeping the
 old code path. **We do not do that here.** This product has not launched, so
@@ -137,8 +144,8 @@ jq -r '.events[] | select(.eventType=="EVENT_TYPE_ACTIVITY_TASK_SCHEDULED")
 
 `newHarness` writes a `project_configs` row under a non-seed daemon id, standing
 in for the daemon's config push. Without it `Config.SnapshotSynced` stays false,
-and a node that preloads skills (the `implementer` preset requests
-`code-search`) treats the empty catalog as *not yet known* and therefore
+and a node that preloads skills (the spawn scenario's `general` child requests
+`general-agent`) treats the empty catalog as *not yet known* and therefore
 RETRYABLE — so `CallLLM` retries to its limit and the workflow fails. The
 generator has no daemon, so an empty snapshot from a real-looking daemon is the
 truthful answer: a daemon has reported, and this project genuinely has no skills.
@@ -154,7 +161,14 @@ scenarios (verified by generating twice and diffing), with one known benign
 exception: in `router_dispatch.json` a fire-and-forget `SaveMessage`
 activity's STARTED/COMPLETED events race workflow completion, so they may or
 may not appear at the tail of the history. The workflow's command sequence is
-identical either way and both variants replay cleanly. Whitespace/key-order
+identical either way and both variants replay cleanly. `spawn.json` is the
+other exception, and there the command order itself varies: the parent's
+exit-candidate turn races the child's only turn (see
+`TestGenerateFixture_Spawn`), so the two threads' activities interleave
+differently from one generation to the next. Every interleaving replays
+cleanly against the same code — 24 independent generations were replayed to
+check — so a reordered `spawn.json` diff is not a change by itself; compare its
+activity mix instead. Whitespace/key-order
 of the JSON is normalized at export. Review regeneration diffs by event-type
 sequence, e.g.:
 

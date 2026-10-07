@@ -154,6 +154,7 @@ const ensureEnvironment = vi.fn((input: { spec: Record<string, unknown> }) => {
       promotedByUserId: "",
       phase: "unspecified",
       provenance: "feat-x@def5678, unmerged, dirty",
+      holds: [],
     },
   ];
   return Promise.resolve({ environment: { id: "cp-staging" } });

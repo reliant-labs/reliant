@@ -1,11 +1,15 @@
 import { normalizeCelBoolean, normalizeCelString } from '../lib/celAdapter'
 
-export type ProtoFieldWidget = 'text' | 'textarea' | 'select' | 'checkbox' | 'model' | 'tools' | 'number'
+export type ProtoFieldWidget = 'text' | 'textarea' | 'select' | 'checkbox' | 'model' | 'tools' | 'number' | 'picker'
 export type ProtoFieldValueKind = 'string' | 'boolean' | 'model' | 'stringList'
 
 export interface ProtoFieldOption {
   value: string
   label: string
+  /** One line saying what picking it does ('picker' widget). */
+  description?: string
+  /** Heading the option is listed under ('picker' widget). */
+  group?: string
 }
 
 export type ProtoFieldContext = Record<string, unknown>
@@ -13,9 +17,29 @@ export type ProtoFieldContext = Record<string, unknown>
 export interface ProtoFieldSchema {
   key: string
   label: string
+  /** What the field is for, printed under the input. */
   description?: string
+  /**
+   * More detail behind the label's ? (a default, a range). Printed under the
+   * input instead when there is no description; never shown twice.
+   */
   helpText?: string
+  /** The empty input's text. Defaults to `example`; set it only to override. */
   placeholder?: string
+  /**
+   * What a value looks like, as the author types it: a literal ("SM0123…")
+   * or an expression ("{{nodes.call_llm.tool_calls}}"). The empty input shows
+   * it, and an expression example is also what `{}` mode shows.
+   */
+  example?: string
+  /** The kind of value in a few words ("list of tool calls"), beside the label. */
+  typeHint?: string
+  /**
+   * A regular expression a fixed value must match (an integration param's
+   * JSON Schema `pattern`). A value that doesn't gets a format hint under the
+   * input; it is not blocked, since the server validates.
+   */
+  pattern?: string
   widget: ProtoFieldWidget
   /** For 'number' widget: true = integer (step=1, parseInt), false = float (step=any, parseFloat) */
   isInteger?: boolean
@@ -99,7 +123,7 @@ export function normalizeProtoFieldValue(schema: ProtoFieldSchema, value: unknow
     return value
   }
 
-  if (schema.valueKind === 'stringList' || schema.valueKind === 'string' || schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'select' || schema.widget === 'tools') {
+  if (schema.valueKind === 'stringList' || schema.valueKind === 'string' || schema.widget === 'text' || schema.widget === 'textarea' || schema.widget === 'select' || schema.widget === 'tools' || schema.widget === 'picker') {
     const stringFallback = typeof schema.defaultValue === 'string' ? schema.defaultValue : ''
     return normalizeCelString(value, stringFallback)
   }

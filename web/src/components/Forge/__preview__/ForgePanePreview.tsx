@@ -19,7 +19,10 @@
  * control plane for any of them, which is what produced "Not built yet" on
  * every tab.
  *
- *   /forge-pane-preview?scenario=registered|unregistered|daemon-offline&path=/forge/env/prod
+ * `queued` and `queued-member` put the hosted env's newest deploy in the
+ * queue on billing, as the viewer who can set it up and as one who cannot.
+ *
+ *   /forge-pane-preview?scenario=registered|unregistered|daemon-offline|queued|queued-member&path=/forge/env/prod
  */
 
 import { useEffect, useMemo, useState } from "react";
@@ -40,7 +43,7 @@ import { ForgeLayout } from "../ForgeLayout";
 import { ForgeOverviewPage } from "../Overview/ForgeOverviewPage";
 import { forgeEnvPageSearchSchema, forgeOverviewSearchSchema } from "@/routeSchemas";
 
-type Scenario = "registered" | "unregistered" | "daemon-offline";
+type Scenario = "registered" | "unregistered" | "daemon-offline" | "queued" | "queued-member";
 
 const PROJECT: Project = {
   id: "cp-project",
@@ -162,8 +165,38 @@ function diffFor(env: string) {
 
 const ts = (iso: string) => iso;
 
+/**
+ * The hosted env's newest deploy, QUEUED on billing: accepted and recorded,
+ * waiting for a compute plan, while the previous release keeps running.
+ */
+function queuedHostedDeploy(scenario: Scenario) {
+  if (scenario !== "queued" && scenario !== "queued-member") return null;
+  return {
+    promotion: {
+      id: "promo-h3",
+      releaseVersion: "20261006.120000-7e57ab1e0a11",
+      promotedByActor: "sean",
+      createdAt: ts("2026-10-06T12:00:00Z"),
+    },
+    holds: [
+      {
+        kind: "DEPLOY_HOLD_KIND_BILLING",
+        promotionId: "promo-h3",
+        reason: "this runs compute (2 workloads) and the organization has no active compute plan",
+        fix:
+          "Subscribe to a Reliant Compute plan in Reliant → Settings → Billing (an org admin can). " +
+          "The deploy starts automatically once the plan is active; nothing needs to be re-run.",
+        actionUrl: "https://app.reliant.dev/forge/env/hosted?forgeProject=control-plane",
+        callerCanResolve: scenario === "queued",
+        heldSince: ts("2026-10-06T12:00:00Z"),
+      },
+    ],
+  };
+}
+
 function liveEnvironments(scenario: Scenario) {
   if (scenario === "unregistered") return [];
+  const queued = queuedHostedDeploy(scenario);
   return [
     {
       environment: { id: "env-dev", name: "dev", project: "control-plane", kind: "DEPLOY_ENVIRONMENT_KIND_LOCAL", createdAt: ts("2026-09-01T10:00:00Z") },
@@ -209,16 +242,21 @@ function liveEnvironments(scenario: Scenario) {
         name: "hosted",
         project: "control-plane",
         kind: "DEPLOY_ENVIRONMENT_KIND_PERSISTENT",
-        currentPromotionId: "promo-h2",
+        currentPromotionId: queued ? queued.promotion.id : "promo-h2",
+        ...(queued ? { holds: queued.holds } : {}),
       },
-      currentPromotion: {
-        id: "promo-h2",
-        releaseVersion: HOSTED_PROMOTIONS[0]!.releaseVersion,
-        promotedByActor: "sean",
-        createdAt: HOSTED_PROMOTIONS[0]!.createdAt,
-      },
-      phase: "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
-      drift: { state: "in_sync", observedAt: ts("2026-10-05T20:31:02Z") },
+      currentPromotion: queued
+        ? queued.promotion
+        : {
+            id: "promo-h2",
+            releaseVersion: HOSTED_PROMOTIONS[0]!.releaseVersion,
+            promotedByActor: "sean",
+            createdAt: HOSTED_PROMOTIONS[0]!.createdAt,
+          },
+      phase: queued ? "DEPLOY_ROLLOUT_PHASE_HELD" : "DEPLOY_ROLLOUT_PHASE_SUCCEEDED",
+      // Queued, the previous release is still what runs — so it does not
+      // match the queued intent, which is true and is what the State panel says.
+      drift: { state: queued ? "drifted" : "in_sync", observedAt: ts("2026-10-05T20:31:02Z") },
     },
   ];
 }

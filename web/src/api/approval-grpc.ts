@@ -3,9 +3,18 @@
 import { grpcClient } from "./grpc-client";
 import { create } from "@bufbuild/protobuf";
 import type { Approval as ProtoApproval } from "../gen/reliant/v1/approval_pb";
-import { ApprovalStatus } from "../gen/reliant/v1/approval_pb";
+import { ApprovalStatus, ApprovalType } from "../gen/reliant/v1/approval_pb";
 
-export { ApprovalStatus };
+export { ApprovalStatus, ApprovalType };
+
+/**
+ * The action_taken an approval of an integration action records when the
+ * person chose "Always allow": the server also remembers the decision for that
+ * action, and asks no more until it is revoked in Settings.
+ */
+export const ALWAYS_ALLOW_ACTION = "always_allow";
+/** The action_taken for "Allow once". */
+export const ALLOW_ONCE_ACTION = "allow_once";
 import {
   ListApprovalsByChatRequestSchema,
   ApproveRequestSchema,
@@ -28,12 +37,34 @@ export interface ToolApprovalRequest {
   responded_by?: string;
   denial_reason?: string;
   action_taken?: string;  // Which action button was clicked
-  // Tool call parameters surfaced to the permission UI. Not currently populated
-  // by protoToFrontend (the proto Approval message doesn't carry the args), so
-  // it stays optional until the proto is extended or the join is wired up.
-  // The live approval UI renders inline in ToolExecution, which reads the tool
-  // call's own input rather than this field.
+  /** The question the approval asks, e.g. "Post message in #general?". */
+  title?: string;
+  /**
+   * TOOL: one call to an integration action that changes something, asked
+   * about before it runs (rendered by ActionApprovalCard). WORKFLOW_STEP: a
+   * workflow's approval node.
+   */
+  approval_type?: ApprovalType;
+  /** A tool approval's call parameters, parsed from the JSON the call carried. */
   params?: Record<string, unknown> | string;
+  /** A tool approval's integration, e.g. "Slack". */
+  integration_name?: string;
+  /** The integration's manifest icon, for IntegrationLogo, e.g. "slack". */
+  integration_icon?: string;
+}
+
+/** A tool call's parameters as the card shows them: an object when they parse. */
+export function parseApprovalParams(input?: string): Record<string, unknown> | string | undefined {
+  if (!input) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(input);
+    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+      return parsed as Record<string, unknown>;
+    }
+  } catch {
+    // Not JSON: shown as written.
+  }
+  return input;
 }
 
 // Convert proto Approval to frontend ToolApprovalRequest
@@ -51,6 +82,11 @@ function protoToFrontend(proto: ProtoApproval): ToolApprovalRequest {
     responded_at: proto.resolvedAt,
     denial_reason: proto.denialReason,
     action_taken: proto.actionTaken,
+    title: proto.title,
+    approval_type: proto.approvalType,
+    params: parseApprovalParams(proto.toolInput),
+    integration_name: proto.integrationName,
+    integration_icon: proto.integrationIcon,
   };
 }
 

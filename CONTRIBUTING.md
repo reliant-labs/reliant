@@ -19,6 +19,31 @@ npm run dev            # starts Go backend + Vite + Electron with hot reload
 
 Ports are dynamically allocated — check `.dev-ports.sh` for current values.
 
+To create a production build of the desktop app:
+
+```bash
+npm run build
+```
+
+### Building only the Go CLI
+
+If you only need the `reliant` CLI (no Electron/UI):
+
+```bash
+git clone https://github.com/reliant-labs/reliant.git
+cd reliant
+make generate
+make build
+```
+
+The binary is written to `dist/reliant`; move it somewhere on your `$PATH`, for example `sudo mv dist/reliant /usr/local/bin/reliant`. The binary targets Reliant's hosted platform by default, so it needs no flags:
+
+```bash
+reliant daemon start --token
+```
+
+To check that a rebuilt CLI is the one on your `PATH`, run `reliant --version`.
+
 ## Running Tests
 
 ```bash

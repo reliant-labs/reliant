@@ -353,7 +353,7 @@ func (e *StepExecutor) Start(triggeredStep *core.TriggeredNode) *RunningStep {
 
 	// Determine step type and dispatch
 	stepType := node.GetType()
-	logging.Info("[StepExecutor] Starting step",
+	logging.Debug("[StepExecutor] Starting step",
 		"stepID", node.GetId(),
 		"stepType", stepType,
 	)
@@ -617,11 +617,11 @@ func (e *StepExecutor) executeSaveMessage(running *RunningStep, output map[strin
 		return nil, nil
 	}
 
-	e.logger.Info("[StepExecutor] Executing inline save_message",
+	e.logger.Debug("[StepExecutor] Executing inline save_message",
 		"stepID", node.GetId(),
 	)
 
-	workflowContext := buildSaveMessageWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.GetThread())
+	workflowContext := buildSaveMessageWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.GetThread(), e.execContext)
 	saveOutput, err := executeSaveMessageInline(
 		e.ctx,
 		node,
@@ -652,7 +652,7 @@ func (e *StepExecutor) nodeScope() *wfcel.NodeResolutionContext {
 	scope := &wfcel.NodeResolutionContext{
 		Inputs:   e.workflowInputs,
 		Nodes:    e.nodeOutputs,
-		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)),
+		Workflow: workflowContextToTyped(buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)),
 		Outputs:  e.loopOutputs,
 	}
 	if e.loopNodeID != "" {
@@ -805,7 +805,7 @@ func (e *StepExecutor) startAction(
 			delegated = rtx.SaveMessage != nil
 		}
 
-		logging.Info("[StepExecutor] startAction ExecuteTools",
+		logging.Debug("[StepExecutor] startAction ExecuteTools",
 			"stepID", node.GetId(),
 			"loopNodeID", rtx.LoopNodeID,
 			"loopIteration", rtx.LoopIteration,
@@ -922,7 +922,7 @@ func (e *StepExecutor) startRun(node *reliantv1.Node, evalResult *reliantv1.Node
 		}
 	}
 
-	logging.Info("[StepExecutor] startRun",
+	logging.Debug("[StepExecutor] startRun",
 		"stepID", node.GetId(),
 		"loopNodeID", e.loopNodeID,
 		"loopIteration", e.loopIteration,
@@ -1072,6 +1072,11 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 	// callable on the next, whichever worker runs either.
 	if model.NodeType(node) == model.NodeTypeCallLLM {
 		rtx.ToolGrants = e.childTracker.toolGrantsFor(rtx.Thread)
+		// Whether anyone is attending decides which tools the turn may be
+		// handed. Read off this executor's inputs, which every sub-workflow,
+		// loop body and spawned sub-agent inherits unattended into
+		// (propagateUnattended).
+		rtx.Unattended = IsUnattended(e.workflowInputs)
 	}
 
 	// Loop context
@@ -1216,7 +1221,7 @@ func (e *StepExecutor) saveMessageRequest(node *reliantv1.Node) *types.SaveMessa
 	if config == nil {
 		return nil
 	}
-	workflowContext := buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs)
+	workflowContext := buildWorkflowContext(e.workflowID, e.workflowName, e.chatID, e.workflowInputs, e.execContext)
 	req := &types.SaveMessageRequest{
 		Config:    config,
 		Inputs:    e.saveMessageInputs(node),

@@ -73,7 +73,7 @@ export const EventNode = memo(({ data, selected }: EventNodeProps) => {
         {/* Content */}
         <div className="flex-1 min-w-0">
           <div className={cn(
-            "text-2xs font-bold uppercase tracking-wide",
+            "text-xs font-bold uppercase tracking-wide",
             isStartEvent ? "text-green-600" : "text-orange-600"
           )}>
             {isStartEvent ? 'START' : 'EVENT'}

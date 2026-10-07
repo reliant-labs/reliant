@@ -4,6 +4,7 @@ import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import { useWorkflows } from "../../store/globalDataStore";
 import { isRunnable } from "../workflow/workflowDraftStatus";
+import { isChatLaunchable } from "../../api/workflow-grpc";
 
 interface AgentSelectorProps {
   // Current selection (agent name or workflow name)
@@ -30,6 +31,7 @@ export function AgentSelector({
 
   // Use cached workflows from global store
   const { workflows, loading: workflowsLoading } = useWorkflows();
+  const chatWorkflows = workflows.filter((workflow) => isRunnable(workflow) && isChatLaunchable(workflow));
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -138,15 +140,15 @@ export function AgentSelector({
                 </div>
               </button>
 
-              {/* Workflows Section - only show usable workflows (valid and not hidden) */}
-              {workflows.filter(isRunnable).length > 0 && (
+              {/* Workflows Section - only workflows a chat can start (runnable, Chat trigger on) */}
+              {chatWorkflows.length > 0 && (
                 <>
                   <div
                     className="px-3 py-1.5 text-2xs font-semibold uppercase tracking-wide text-muted-foreground border-t border-border/30 bg-muted/30"
                   >
                     Workflows
                   </div>
-                  {workflows.filter(isRunnable).map((workflow) => {
+                  {chatWorkflows.map((workflow) => {
                     const isSelected = value === workflow.name;
                     return (
                       <button

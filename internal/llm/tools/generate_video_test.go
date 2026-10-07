@@ -150,7 +150,7 @@ func TestGenerateVideo_ResumesPersistedJobInsteadOfSubmitting(t *testing.T) {
 	repo := newFakeAttachmentRepo()
 	jobs := newFakeVideoJobs()
 	require.NoError(t, jobs.Create(context.Background(), &videojobs.Job{
-		ToolCallID: "tc-1", UserID: "test-user", Driver: "gemini", ModelID: "veo-3.1-generate",
+		ToolCallID: "tc-1", UserID: "test-user", ChatID: "chat-1", Driver: "gemini", ModelID: "veo-3.1-generate",
 		APIModel: "veo-3.1-generate-preview", ProviderJob: "operations/already-running", State: videojobs.StateSubmitted,
 	}))
 	generator := &fakeVideoGenerator{caps: veoCaps()}

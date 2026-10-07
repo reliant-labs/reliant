@@ -165,7 +165,7 @@ func TestRepairStrandedBackgroundSpawns_IdempotentAcrossPasses(t *testing.T) {
 }
 
 // TestRepairStrandedBackgroundSpawns_DeadParentGetsUndeliveredReport is the
-// regression for the incident on chat 0dc5167e (docs/incidents/
+// regression for the incident on chat 0dc5167e (dev-docs/incidents/
 // 2026-08-12-spawn-history-cap.md, Gap 2): Temporal terminated the parent for
 // exceeding its history-count cap, which killed both of its detached spawn
 // goroutines mid-flight, and this repair then wrote two reports addressed to
@@ -300,7 +300,7 @@ func TestRepairStrandedBackgroundSpawns_ClosesToolCallWhenReportAlreadyExists(t 
 
 // TestRepairStrandedBackgroundSpawns_UndeliverableIsIdempotent runs the
 // undeliverable path twice. The unique index
-// (idx_agent_messages_one_terminal_report_per_spawn) makes the second insert
+// (idx_agent_messages_one_terminal_report_per_chat_spawn) makes the second insert
 // a no-op, and UpsertToolCallStatus refuses to walk an already-terminal row
 // backwards, so a second pass must add no rows and count no second anomaly.
 // This is what makes the fix safe against ordering with the sibling

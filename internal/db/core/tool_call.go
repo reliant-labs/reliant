@@ -2,6 +2,7 @@ package core
 
 import (
 	"context"
+	"errors"
 	"time"
 )
 
@@ -107,9 +108,26 @@ type ToolCallResult struct {
 	MessageID *string
 	Content   string
 	IsError   bool
-	CreatedAt time.Time
-	UpdatedAt time.Time
+	// GrantedTools are the tools this result granted the call's thread — a
+	// load_tool result's loaded names, empty for every other result. Written
+	// with Content, so it always describes the result the model reads.
+	GrantedTools []string
+	CreatedAt    time.Time
+	UpdatedAt    time.Time
 }
+
+// ErrToolCallIDInAnotherChat is returned by a tool call or result write whose
+// id is held by a call recorded for a different chat.
+//
+// The id is the model provider's, not ours, and nothing makes a provider pick
+// ids that are unique across conversations: a local OpenAI-compatible server
+// can answer `call_0` in every chat it serves. The row belongs to the chat that
+// recorded it first, and a second chat's write is refused rather than merged
+// into it — merging is what used to carry one chat's input, status and output
+// into another chat's transcript. The refused chat's call still runs and its
+// result still reaches its own conversation (that lives in its messages); it
+// only goes without the durable status row.
+var ErrToolCallIDInAnotherChat = errors.New("tool call id is already used by a call in another chat")
 
 // ToolCallStore is the shared contract for tool call persistence across
 // drivers.
@@ -117,16 +135,25 @@ type ToolCallStore interface {
 	// UpsertToolCall writes a tool call, replacing any existing row with the
 	// same id. Upsert rather than insert because the callers are Temporal
 	// activities, which retry: a retry that re-sent the same call must
-	// converge on the same row instead of failing on the primary key.
+	// converge on the same row instead of failing on the primary key. A row
+	// recorded for another chat is never replaced: the write fails with
+	// ErrToolCallIDInAnotherChat.
 	UpsertToolCall(ctx context.Context, call *ToolCall) error
-	// UpsertToolCallResult writes a result, replacing any existing row for
-	// the same call. Same retry-idempotency reasoning as UpsertToolCall.
-	UpsertToolCallResult(ctx context.Context, result *ToolCallResult) error
+	// UpsertToolCallResult writes a result for chatID's call, replacing any
+	// existing row for the same call. Same retry-idempotency reasoning as
+	// UpsertToolCall. Fails with ErrToolCallIDInAnotherChat unless the call
+	// exists and is chatID's: a result belongs to its call's chat, and the
+	// writer has to prove it is that chat.
+	UpsertToolCallResult(ctx context.Context, chatID string, result *ToolCallResult) error
 	GetToolCall(ctx context.Context, id string) (*ToolCall, error)
 	// GetToolCallResult reads the recorded result for a single call, or nil
 	// if none was ever written (e.g. a terminal call whose result write lost
 	// a race, or a historical Cancelled row that predates durable status).
 	GetToolCallResult(ctx context.Context, toolCallID string) (*ToolCallResult, error)
+	// GetToolCallResultForMessage reads the result of the call that
+	// assistant message messageID carries, or nil. The id alone can name
+	// another chat's call; the message cannot.
+	GetToolCallResultForMessage(ctx context.Context, toolCallID, messageID string) (*ToolCallResult, error)
 	ListToolCallsByChat(ctx context.Context, chatID string) ([]*ToolCall, error)
 	// ListToolCallsByMessageIDs and ListToolCallResultsByMessageIDs are the
 	// batch reads the message read path needs: loading a page of messages

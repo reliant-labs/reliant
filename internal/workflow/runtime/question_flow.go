@@ -59,7 +59,6 @@ func executeAskQuestionSignalFlow(ctx workflow.Context, input askQuestionExecuti
 			"stepID", input.StepID,
 			"loopNodeID", input.LoopNodeID,
 			"loopIteration", input.LoopIteration,
-			"metadata", input.Metadata,
 		)
 		return autoResolveUnattendedQuestion(), nil
 	}
@@ -94,7 +93,7 @@ func executeAskQuestionSignalFlow(ctx workflow.Context, input askQuestionExecuti
 	}
 
 	if createOutput.AlreadyResolved {
-		input.Logger.Info("[AskQuestion] Already resolved (replay)", "stepID", input.StepID, "questionID", createOutput.QuestionID)
+		input.Logger.Debug("[AskQuestion] Already resolved (replay)", "stepID", input.StepID, "questionID", createOutput.QuestionID)
 		return parseQuestionResponse(createOutput.ResponseData), nil
 	}
 

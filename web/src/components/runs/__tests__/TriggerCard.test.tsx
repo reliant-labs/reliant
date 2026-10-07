@@ -8,13 +8,19 @@
  * an older run with no launch event still says what it can.
  */
 
-import { describe, expect, it } from "vitest";
-import { screen } from "@testing-library/react";
+import { describe, expect, it, vi } from "vitest";
+import { screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 import type { LaunchEvent } from "@/api/run-grpc";
 import { TriggerCard } from "../TriggerCard";
-import { renderRunsAt } from "./runTestUtils";
+import { githubTriggerTypes, renderRunsAt } from "./runTestUtils";
+
+// The catalog's trigger types name an integration event.
+vi.mock("@/api/catalog-search-grpc", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/api/catalog-search-grpc")>()),
+  catalogSearchGrpc: { search: async () => githubTriggerTypes() },
+}));
 
 function scheduleEvent(overrides: Partial<LaunchEvent> = {}): LaunchEvent {
   return {
@@ -178,7 +184,7 @@ describe("TriggerCard", () => {
         integration: "github",
         providerEvent: "pull_request.opened",
       },
-      line: /Started by On push on github: pull_request\.opened/,
+      line: /Started by On push on GitHub: Pull request opened/,
     },
     {
       launchKind: "workflow_event",
@@ -200,7 +206,7 @@ describe("TriggerCard", () => {
         "/workflows/runs/chat-1",
       );
       const card = await screen.findByTestId("trigger-card");
-      expect(card.textContent).toMatch(line);
+      await waitFor(() => expect(card.textContent).toMatch(line));
       expect(screen.getByRole("link", { name: "On push" })).toHaveAttribute("href", "/workflows/automations/trig-2");
     },
   );

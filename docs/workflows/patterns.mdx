@@ -33,8 +33,8 @@ Long-running agents accumulate large contexts. Two techniques help:
 
 ```yaml
 - id: compact
-  action: Compact
-  inputs:
+  type: compact
+  args:
 
 edges:
   - from: execute_tools
@@ -47,10 +47,10 @@ edges:
 
 ```yaml
 - id: filter_results
-  action: CallLLM
-  inputs:
-    tools: false
-    ephemeral: true
+  type: call_llm
+  args:
+    tools_config:
+      preloaded_tools: []
     system_prompt: |
       Extract only information relevant to completing the task.
       Keep: file paths, line numbers, error messages, relevant code.
@@ -75,15 +75,26 @@ edges:
 Add a secondary agent that reviews the primary agent's actions before execution:
 
 ```yaml
+inputs:
+  model:
+    type: model
+    default: ""
+  task:
+    type: string
+    default: ""
+
+entry: [main_agent]
+
 nodes:
   - id: main_agent
-    action: CallLLM
-    inputs:
+    type: call_llm
+    args:
+      model: "{{inputs.model}}"
 
   - id: audit_check
-    action: CallLLM
-    inputs:
-      tool_filter: [audit_result]
+    type: call_llm
+    args:
+      model: "{{inputs.model}}"
       response_tool:
         name: audit_result
         description: Report audit findings
@@ -109,17 +120,32 @@ nodes:
             Use audit_result to report whether the agent is on track.
 
   - id: execute_audit
-    action: ExecuteTools
-    inputs:
+    type: execute_tools
+    args:
       tool_calls: "{{nodes.audit_check.tool_calls}}"
 
+  - id: execute_tools
+    type: execute_tools
+    args:
+      tool_calls: "{{nodes.main_agent.tool_calls}}"
+
+  - id: guidance
+    type: save_message
+    args:
+      role: user
+      content: "{{nodes.execute_audit.response_data.audit_result != null ? nodes.execute_audit.response_data.audit_result.value : ''}}"
+
 edges:
+  - from: main_agent
+    default: audit_check
+  - from: audit_check
+    default: execute_audit
   - from: execute_audit
     cases:
       - to: execute_tools
-        condition: nodes.execute_audit.response_data.audit_result.choice == 'approved'
+        condition: nodes.execute_audit.response_data.audit_result != null && nodes.execute_audit.response_data.audit_result.choice == 'approved'
       - to: guidance
-        condition: nodes.execute_audit.response_data.audit_result.choice == 'denied'
+        condition: nodes.execute_audit.response_data.audit_result != null && nodes.execute_audit.response_data.audit_result.choice == 'denied'
 ```
 
 The `response_tool` feature creates structured output you can branch on. The tool defines a JSON `schema` for the expected output format. A common pattern uses `choice` (enum) and `value` (explanation) properties. Response data is available via `nodes.<execute_tools_node>.response_data.<tool_name>`. If the audit fails, use `.value` to get the guidance and inject it for the primary agent to try again.
@@ -128,13 +154,14 @@ The `response_tool` feature creates structured output you can branch on. The too
 
 ### Tool Restrictions
 
-Control available tools based on mode using `tool_filter`:
+Control which tools the model starts with, based on mode, using `tools_config.preloaded_tools`:
 
 ```yaml
 - id: call_llm
-  action: CallLLM
-  inputs:
-    tool_filter: "{{inputs.mode == 'plan' ? ['tag:plan'] : inputs.tools}}"
+  type: call_llm
+  args:
+    tools_config:
+      preloaded_tools: "{{inputs.mode == 'plan' ? ['tag:coding:plan'] : inputs.tools}}"
 ```
 
 Filter options: tags (`['tag:default']`), specific tools (`['view', 'grep']`), or exclusions.
@@ -149,8 +176,8 @@ Response tools force the LLM to produce structured output you can programmatical
 
 ```yaml
 - id: classify
-  action: CallLLM
-  inputs:
+  type: call_llm
+  args:
     response_tool:
       name: classification
       description: Classify the user's request
@@ -161,8 +188,8 @@ Response tools force the LLM to produce structured output you can programmatical
         other: "Doesn't fit other categories"
 
 - id: execute_classify
-  action: ExecuteTools
-  inputs:
+  type: execute_tools
+  args:
     tool_calls: "{{nodes.classify.tool_calls}}"
 
 edges:
@@ -247,13 +274,16 @@ Use edges to route from an agent's completion to the next node:
 ```yaml
 nodes:
   - id: implement
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
 
   - id: lint
-    run: make lints
+    type: run
+    command: make lints
 
   - id: test
-    run: make test
+    type: run
+    command: make test
 
 edges:
   - from: implement
@@ -268,7 +298,8 @@ Reference previous node outputs using `nodes.<node_id>.<field>`:
 
 ```yaml
 - id: implement
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     inject:
       role: user
@@ -301,26 +332,28 @@ Repeat while a condition is true using `loop`:
 
 ```yaml
 - id: implement_loop
-  loop:
-    while: outputs.exit_code != 0 && iter.iteration < 3
-    inline:
-      entry: [implement]
-      outputs:
-        exit_code: "{{nodes.verify.exit_code}}"
-        stderr: "{{nodes.verify.stderr}}"
-      nodes:
-        - id: implement
-          workflow: builtin://agent
-          thread:
-            mode: inherit  # Agent sees full history including previous errors
-            inject:
-              role: user
-              content: "{{inputs.task}}"
-        - id: verify
-          run: make test
-      edges:
-        - from: implement
-          default: verify
+  type: loop
+  while: outputs.exit_code != 0 && iter.iteration < 3
+  inline:
+    entry: [implement]
+    outputs:
+      exit_code: "{{nodes.verify.exit_code}}"
+      stderr: "{{nodes.verify.stderr}}"
+    nodes:
+      - id: implement
+        type: workflow
+        ref: builtin://agent
+        thread:
+          mode: inherit  # Agent sees full history including previous errors
+          inject:
+            role: user
+            content: "{{inputs.task}}"
+      - id: verify
+        type: run
+        command: make test
+    edges:
+      - from: implement
+        default: verify
 ```
 
 Key loop features: `while` (continue condition with iteration limits), `iter.iteration` (current iteration, 0-indexed), `outputs.*` (current iteration's results in while condition).
@@ -372,9 +405,22 @@ flowchart TD
 Launch multiple agents simultaneously, then wait for all to complete:
 
 ```yaml
+entry: [create_worktree_1, create_worktree_2]  # start both at once
+
 nodes:
+  - id: create_worktree_1
+    type: create_worktree
+    args:
+      name: "parallel-1-{{workflow.id}}"
+
+  - id: create_worktree_2
+    type: create_worktree
+    args:
+      name: "parallel-2-{{workflow.id}}"
+
   - id: impl_1
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: new
       inject:
@@ -382,23 +428,29 @@ nodes:
         content: "Implement in {{nodes.create_worktree_1.path}}"
 
   - id: impl_2
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: new
+      inject:
+        role: user
+        content: "Implement in {{nodes.create_worktree_2.path}}"
 
   - id: implementations_done
-    join: all
+    type: join
 
 edges:
-  - from: start
-    default: [impl_1, impl_2]
+  - from: create_worktree_1
+    default: impl_1
+  - from: create_worktree_2
+    default: impl_2
   - from: impl_1
     default: implementations_done
   - from: impl_2
     default: implementations_done
 ```
 
-The `join: all` node waits until all incoming edges complete. Use worktrees for isolated working directories.
+A `type: join` node waits until all incoming edges complete. Use worktrees for isolated working directories.
 
 **When to use:** Competitive implementations, exploring multiple approaches, reducing wall-clock time.
 
@@ -517,30 +569,32 @@ Alternating agents on the same thread see each other's work:
 
 ```yaml
 - id: debate_loop
-  loop:
-    while: iter.iteration < inputs.rounds
-    inline:
-      entry: [proposer_turn]
-      nodes:
-        - id: proposer_turn
-          workflow: builtin://agent
-          thread: { mode: inherit }
-          inputs:
-            system_prompt: "You are the PROPOSER. Create and refine plans."
+  type: loop
+  while: iter.iteration < inputs.rounds
+  inline:
+    entry: [proposer_turn]
+    nodes:
+      - id: proposer_turn
+        type: workflow
+        ref: builtin://agent
+        thread: { mode: inherit }
+        args:
+          system_prompt: "You are the PROPOSER. Create and refine plans."
 
-        - id: critic_turn
-          workflow: builtin://agent
-          thread:
-            mode: inherit
-            inject:
-              role: user
-              content: "Challenge this plan: What could go wrong?"
-          inputs:
-            system_prompt: "You are the CRITIC. Find flaws and risks."
+      - id: critic_turn
+        type: workflow
+        ref: builtin://agent
+        thread:
+          mode: inherit
+          inject:
+            role: user
+            content: "Challenge this plan: What could go wrong?"
+        args:
+          system_prompt: "You are the CRITIC. Find flaws and risks."
 
-      edges:
-        - from: proposer_turn
-          default: critic_turn
+    edges:
+      - from: proposer_turn
+        default: critic_turn
 ```
 
 **When to use:** Planning/design review, stress-testing ideas, multi-perspective quality improvement.
@@ -574,15 +628,23 @@ inputs:
     inputs:
       model: { type: model, default: { tags: [flagship] } }
 
+entry: [impl]
+
 nodes:
   - id: impl
-    workflow: builtin://agent
-    inputs:
+    type: workflow
+    ref: builtin://agent
+    args:
       model: "{{inputs.Implementer.model}}"
   - id: review
-    workflow: builtin://agent
-    inputs:
+    type: workflow
+    ref: builtin://agent
+    args:
       model: "{{inputs.Reviewer.model}}"
+
+edges:
+  - from: impl
+    default: review
 ```
 
 **When to use:** Cheaper models for routine work, expensive for complex decisions.

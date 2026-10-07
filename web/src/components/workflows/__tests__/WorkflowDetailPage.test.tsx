@@ -16,7 +16,9 @@ import userEvent from "@testing-library/user-event";
 import { create } from "@bufbuild/protobuf";
 
 import { RunDisplayState } from "@/gen/reliant/v1/run_pb";
-import { CelStringSchema, NodeSchema, SubWorkflowArgsSchema } from "@/gen/reliant/v1/workflow_v2_pb";
+import { CelStringSchema, NodeSchema, SubWorkflowArgsSchema, WorkflowSchema } from "@/gen/reliant/v1/workflow_v2_pb";
+import { GetWorkflowResponseSchema } from "@/gen/reliant/v1/workflow_pb";
+import { ScheduleSourceSchema, WorkflowTriggerSchema } from "@/gen/reliant/v1/trigger_pb";
 import { getWorkflowByName, presetsResponse } from "../../workflow/run/__tests__/runFormFixtures";
 import { libraryResponse, protoRun, protoTrigger, renderWorkflowsPage } from "./workflowsTestUtils";
 
@@ -126,6 +128,45 @@ describe("WorkflowDetailPage", () => {
     expect(within(automations).queryByText("Other")).toBeNull();
   });
 
+  it("lists a schedule the YAML declares but nobody activated, instead of 'Nothing runs this workflow'", async () => {
+    // ci-triage declares `triggers: - schedule: cron [0 6 * * 1-5]` and has
+    // no activation, so nothing runs it YET — but the page used to say
+    // nothing runs it at all, which reads as if the YAML was ignored.
+    mocks.listTriggers.mockResolvedValue({ triggers: [], lastUserUpdateSequence: "0" });
+    mocks.getWorkflow.mockImplementation(async (request: { name: string }) =>
+      request.name === "triage"
+        ? create(GetWorkflowResponseSchema, {
+            source: "project",
+            workflow: create(WorkflowSchema, {
+              name: "triage",
+              inputs: {},
+              triggers: [
+                create(WorkflowTriggerSchema, {
+                  name: "weekday-morning",
+                  source: { case: "schedule", value: create(ScheduleSourceSchema, { cron: ["0 6 * * 1-5"], timezone: "UTC" }) },
+                }),
+              ],
+            }),
+          })
+        : getWorkflowByName(request),
+    );
+    renderDetail();
+
+    const declared = await screen.findByTestId("workflow-detail-declared-triggers");
+    expect(within(declared).getByText("Declared in the workflow · not active")).toBeInTheDocument();
+    expect(within(declared).getByRole("button", { name: "Activate" })).toBeInTheDocument();
+    expect(screen.queryByText("Nothing runs this workflow on its own.")).toBeNull();
+  });
+
+  it("a workflow whose Chat trigger is off cannot be run from here, and says why", async () => {
+    const library = libraryResponse();
+    library.workflows[1] = { ...library.workflows[1]!, automationOnly: true } as (typeof library.workflows)[number];
+    mocks.listWorkflows.mockResolvedValue(library);
+    renderDetail();
+    expect(await screen.findByText(/Its Chat trigger is off/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
+  });
+
   it("shows the presets that fit it, and its inputs", async () => {
     renderDetail();
     const presets = await screen.findByRole("list", { name: "Presets for this workflow" });
@@ -168,7 +209,7 @@ describe("WorkflowDetailPage", () => {
     renderDetail("my-draft");
     await screen.findByRole("heading", { level: 1, name: "My Draft" });
     expect(screen.getByRole("button", { name: "Run…" })).toBeDisabled();
-    expect(screen.getByText("Drafts cannot run until they are marked complete.")).toBeInTheDocument();
+    expect(screen.getByText("Drafts can't run until they are published. Open it in the editor to publish it.")).toBeInTheDocument();
   });
 
   it("Used by lists the workflows that call this one through ref:, from the loaded library", async () => {

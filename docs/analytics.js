@@ -1,40 +1,10 @@
 (function () {
-  const APOLLO_APP_ID = '69b209f75a57e5000def369c';
   const STATSIG_CONFIG_GLOBAL = 'RELIANT_DOCS_STATSIG_CONFIG';
   const STATSIG_SDK_URL = 'https://cdn.jsdelivr.net/npm/@statsig/js-client@3/build/statsig-js-client.min.js';
   const VISITOR_STORAGE_KEY = 'reliant.docs.statsig.visitor_id';
   const SESSION_STORAGE_KEY = 'reliant.docs.statsig.session_id';
 
-  initApollo();
   initStatsig();
-
-  function initApollo() {
-    try {
-      const cacheBuster = Math.random().toString(36).substring(7);
-      const script = document.createElement('script');
-
-      script.src = 'https://assets.apollo.io/micro/website-tracker/tracker.iife.js?nocache=' + cacheBuster;
-      script.async = true;
-      script.defer = true;
-      script.onload = function () {
-        if (!window.trackingFunctions || typeof window.trackingFunctions.onLoad !== 'function') {
-          console.warn('[Reliant Docs][Apollo] Tracking functions unavailable after script load');
-          return;
-        }
-
-        window.trackingFunctions.onLoad({
-          appId: APOLLO_APP_ID,
-        });
-      };
-      script.onerror = function () {
-        console.warn('[Reliant Docs][Apollo] Failed to load tracker');
-      };
-
-      document.head.appendChild(script);
-    } catch (error) {
-      console.warn('[Reliant Docs][Apollo] Initialization failed', error);
-    }
-  }
 
   function initStatsig() {
     window.reliantStatsig = createDisabledStatsigState();

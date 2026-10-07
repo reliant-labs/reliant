@@ -5,7 +5,7 @@
 -- fabricated because the real one never arrived. A real report supersedes a
 -- synthesized one (EnqueueSpawnReport); a real report is never overwritten.
 -- From here on the COLUMN is the contract -- nothing may infer it from body
--- text. See docs/incidents/2026-10-04-spawn-report-collision.md.
+-- text. See dev-docs/incidents/2026-10-04-spawn-report-collision.md.
 --
 -- IF NOT EXISTS because migrations are replayed against databases whose schema
 -- already has this column (access_tokens_renumber_repair_test.go); the backfill

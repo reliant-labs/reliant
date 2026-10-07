@@ -12,10 +12,13 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/converter"
 	"go.temporal.io/sdk/testsuite"
 
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	types "github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
+	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -81,11 +84,121 @@ type spawnE2EEnv struct {
 	// across the parent and any spawned child), so the turn a stub serves is
 	// determined by that counter rather than by a separate cursor.
 	script []scriptedToolCallsResponse
+
+	// callLLMRuntimes is the RuntimeContext every CallLLM was handed, parent
+	// and spawned children alike, in call order.
+	callLLMRuntimes []types.RuntimeContext
+
+	// callLLMByThread counts CallLLM turns per thread, so a test can tell the
+	// parent's turns from the background child's.
+	callLLMByThread map[string]int
+
+	// parentThread is the thread DynamicWorkflow runs the parent loop on. Set
+	// by execute; empty means "unknown" and disables the holds below.
+	parentThread string
+
+	// Interleaving holds. The test environment runs every activity on its own
+	// goroutine, so whether the background child finishes before, during or
+	// after the parent's turn is otherwise decided by the Go scheduler — and
+	// the parent loop's behavior legitimately differs between those cases.
+	// A test that depends on one of them pins it here instead of hoping.
+	//
+	// childTurnWaitsFor holds the child's CallLLM until the named milestone;
+	// parentTurnWaitsFor holds the parent's turn N CallLLM likewise.
+	childTurnWaitsFor  string
+	parentTurnWaitsFor map[int]string
+
+	// wakeDuringParentTurn > 0 rings the parent thread's wake doorbell (a
+	// user message arriving) while the parent's turn N is in flight. The
+	// signal is posted before that turn's result, so the workflow sees the
+	// wake first.
+	wakeDuringParentTurn int
+
+	// milestones are reached in one of two ways. "started" milestones are
+	// closed by the stub itself, on entry. The rest are closed by the env's
+	// OnActivityCompleted listener, which runs on the test dispatcher after an
+	// activity's result is handed to the workflow and BEFORE the workflow
+	// task that reacts to it — so a stub waiting on one resumes, and its own
+	// result is delivered, only after the workflow has fully acted on that
+	// activity.
+	milestones  map[string]chan struct{}
+	milestoneOf map[string]string // activity ID -> milestone its delivery reaches
+	testDone    chan struct{}     // closed by t.Cleanup
+}
+
+// milestoneChildSettled is reached once the spawn's terminal tool status has
+// been delivered: its detached goroutine has finished and left the live
+// registry.
+const milestoneChildSettled = "child-settled"
+
+func milestoneParentTurnStarted(turn int) string {
+	return fmt.Sprintf("parent-turn-%d-started", turn)
+}
+
+func milestoneParentTurnDelivered(turn int) string {
+	return fmt.Sprintf("parent-turn-%d-delivered", turn)
+}
+
+// milestone returns the channel for name, creating it on first use. Callers
+// hold e.mu.
+func (e *spawnE2EEnv) milestone(name string) chan struct{} {
+	ch, ok := e.milestones[name]
+	if !ok {
+		ch = make(chan struct{})
+		e.milestones[name] = ch
+	}
+	return ch
+}
+
+// awaitMilestone blocks an activity stub until name is reached. A workflow
+// that never gets there stalls, and the test environment fails the test on
+// its own (its 3s no-progress timeout, with the workflow's stack); the stub is
+// then released by the test's cleanup rather than left blocked behind it.
+func (e *spawnE2EEnv) awaitMilestone(name string) {
+	e.mu.Lock()
+	ch := e.milestone(name)
+	e.mu.Unlock()
+	select {
+	case <-ch:
+	case <-e.testDone:
+	}
+}
+
+// execute runs DynamicWorkflow for chatID, recording the parent's thread so
+// per-thread turn counts and the interleaving holds can find it.
+func (e *spawnE2EEnv) execute(chatID string) {
+	input := spawnE2EWorkflowInput(chatID)
+	e.mu.Lock()
+	e.parentThread = input.ExecContext.Thread
+	e.mu.Unlock()
+	e.env.ExecuteWorkflow(DynamicWorkflow, input)
 }
 
 func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script []scriptedToolCallsResponse) *spawnE2EEnv {
 	t.Helper()
-	e := &spawnE2EEnv{t: t, env: env, script: script, toolResultsBy: map[string][]interface{}{}}
+	e := &spawnE2EEnv{
+		t:               t,
+		env:             env,
+		script:          script,
+		toolResultsBy:   map[string][]interface{}{},
+		callLLMByThread: map[string]int{},
+		milestones:      map[string]chan struct{}{},
+		milestoneOf:     map[string]string{},
+		testDone:        make(chan struct{}),
+	}
+	t.Cleanup(func() { close(e.testDone) })
+
+	env.SetOnActivityCompletedListener(func(info *activity.Info, _ converter.EncodedValue, err error) {
+		if err != nil {
+			return
+		}
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if name, ok := e.milestoneOf[info.ActivityID]; ok {
+			delete(e.milestoneOf, info.ActivityID)
+			close(e.milestone(name))
+		}
+	})
 
 	wf, err := wfyaml.ParseWorkflow([]byte(spawnBackgroundE2EYAML))
 	require.NoError(t, err)
@@ -124,10 +237,15 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		activity.RegisterOptions{Name: "Cleanup"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+		func(ctx context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 			e.mu.Lock()
 			e.toolStatuses = append(e.toolStatuses, input)
 			e.events = append(e.events, fmt.Sprintf("tool-status:%v:%v", input["tool_call_id"], input["status"]))
+			// The spawn's terminal status is the last thing its detached
+			// goroutine waits on before leaving the live registry.
+			if input["tool_call_id"] == "tc1" && input["status"] == "completed" {
+				e.milestoneOf[activity.GetInfo(ctx).ActivityID] = milestoneChildSettled
+			}
 			e.mu.Unlock()
 			return map[string]interface{}{"success": true}, nil
 		},
@@ -197,8 +315,8 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		activity.RegisterOptions{Name: "ExecuteTools"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input types.ActivityInput) (map[string]interface{}, error) {
-			return e.callLLMStub(input)
+		func(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {
+			return e.callLLMStub(ctx, input)
 		},
 		activity.RegisterOptions{Name: "CallLLM"},
 	)
@@ -206,10 +324,35 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 	return e
 }
 
-func (e *spawnE2EEnv) callLLMStub(_ types.ActivityInput) (map[string]interface{}, error) {
+func (e *spawnE2EEnv) callLLMStub(ctx context.Context, input types.ActivityInput) (map[string]interface{}, error) {
+	thread := input.Runtime.Thread
+	e.mu.Lock()
+	e.callLLMByThread[thread]++
+	turn := e.callLLMByThread[thread]
+	isParent := e.parentThread != "" && thread == e.parentThread
+	var waitFor string
+	wake := false
+	if isParent {
+		close(e.milestone(milestoneParentTurnStarted(turn)))
+		e.milestoneOf[activity.GetInfo(ctx).ActivityID] = milestoneParentTurnDelivered(turn)
+		waitFor = e.parentTurnWaitsFor[turn]
+		wake = e.wakeDuringParentTurn == turn
+	} else if e.parentThread != "" {
+		waitFor = e.childTurnWaitsFor
+	}
+	e.mu.Unlock()
+
+	if waitFor != "" {
+		e.awaitMilestone(waitFor)
+	}
+	if wake {
+		e.env.SignalWorkflow(ThreadWakeSignalName, ThreadWakeSignal{Thread: thread, Reason: threadwake.ReasonUserMessage})
+	}
+
 	idx := int(atomic.AddInt32(&e.callLLMCount, 1)) - 1
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	e.callLLMRuntimes = append(e.callLLMRuntimes, input.Runtime)
 	if idx >= len(e.script) {
 		// Script exhausted: no tool calls, loop ends.
 		return map[string]interface{}{"response_text": "done", "tool_calls": nil}, nil
@@ -242,6 +385,13 @@ func (e *spawnE2EEnv) callLLMInvocations() int {
 	return int(atomic.LoadInt32(&e.callLLMCount))
 }
 
+// parentTurns is how many CallLLM turns the parent loop took.
+func (e *spawnE2EEnv) parentTurns() int {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.callLLMByThread[e.parentThread]
+}
+
 func spawnToolCall(id, prompt string) map[string]interface{} {
 	input := map[string]interface{}{"preset": "general", "prompt": prompt}
 	inputJSON, _ := json.Marshal(input)
@@ -270,7 +420,7 @@ func spawnE2EWorkflowInput(chatID string) WorkflowInput {
 
 type SpawnBackgroundE2ESuite struct {
 	suite.Suite
-	testsuite.WorkflowTestSuite
+	temporaltest.WorkflowTestSuite
 }
 
 func TestSpawnBackgroundE2E(t *testing.T) {
@@ -290,12 +440,12 @@ func (s *SpawnBackgroundE2ESuite) TestBackground_LoopWaitsForDetachedSpawnThenDe
 		{toolCalls: nil}, // turn 2: no tool calls — this is where a naive impl would exit
 	})
 
-	// After the background spawn's own inline child agent runs (it too hits
-	// the scripted CallLLM and gets "no tool calls" on its first turn,
-	// finishing immediately), the detached goroutine's completion should
-	// unblock the parent's wait within the test env's virtual clock.
+	// The child's one turn is held until the parent's turn 2 has been
+	// delivered, so the child is still live when the parent reaches the
+	// loop-exit gate and the parent genuinely has to wait for it.
+	e.childTurnWaitsFor = milestoneParentTurnDelivered(2)
 
-	env.ExecuteWorkflow(DynamicWorkflow, spawnE2EWorkflowInput("chat-bg-lifetime"))
+	e.execute("chat-bg-lifetime")
 
 	require.True(s.T(), env.IsWorkflowCompleted())
 	require.NoError(s.T(), env.GetWorkflowError())
@@ -303,7 +453,8 @@ func (s *SpawnBackgroundE2ESuite) TestBackground_LoopWaitsForDetachedSpawnThenDe
 	// The parent must have taken a THIRD call_llm turn: turn 1 (spawns),
 	// turn 2 (no tool calls — the exit candidate), turn 3 (after the
 	// detached spawn's mailbox completion was drained and delivered).
-	require.GreaterOrEqual(s.T(), e.callLLMInvocations(), 3,
+	// Counted per thread: the child's own turn must not stand in for it.
+	require.Equal(s.T(), 3, e.parentTurns(),
 		"the loop must not exit at turn 2; it must wait for the detached spawn and react to its result")
 
 	// The background spawn's tool call must have gone through "backgrounded"
@@ -327,18 +478,91 @@ func (s *SpawnBackgroundE2ESuite) TestBackground_LoopWaitsForDetachedSpawnThenDe
 // turn 3 after delivery) plus 1 for the spawned child's own single turn = 4.
 // Any polling implementation would burn additional turns proportional to
 // however long the detached goroutine took to finish.
+//
+// The child is held until the parent's turn 2 has been delivered, so the
+// parent is parked at the gate while the child runs — the situation the
+// no-spin rule is about. Left to the scheduler, the child could instead
+// finish during the parent's turn 2, which is a different case (see
+// TestBackground_SpawnFinishingMidTurnStillGetsATurn).
 func (s *SpawnBackgroundE2ESuite) TestBackground_NoSpin() {
 	env := s.NewTestWorkflowEnvironment()
 	e := newSpawnE2EEnv(s.T(), env, []scriptedToolCallsResponse{
 		{toolCalls: []map[string]interface{}{spawnToolCall("tc1", "research something")}},
 		{toolCalls: nil},
 	})
+	e.childTurnWaitsFor = milestoneParentTurnDelivered(2)
 
-	env.ExecuteWorkflow(DynamicWorkflow, spawnE2EWorkflowInput("chat-bg-nospin"))
+	e.execute("chat-bg-nospin")
 
 	require.True(s.T(), env.IsWorkflowCompleted())
 	require.NoError(s.T(), env.GetWorkflowError())
 
 	require.Equal(s.T(), 4, e.callLLMInvocations(),
 		"exactly parent-turn-1 + parent-turn-2 + parent-turn-3 + child's-one-turn — no extra turns from polling while blocked")
+	require.Equal(s.T(), 3, e.parentTurns(), "the parent takes exactly three turns")
+}
+
+// TestBackground_SpawnFinishingMidTurnStillGetsATurn pins the interleaving
+// the loop-exit gate used to lose: the background child finishes WHILE the
+// parent's last turn is still in flight, so by the time the parent reaches
+// the gate there is nothing live to wait on.
+//
+// That turn read its mailbox before the child reported, so the report is
+// still undelivered. The gate must re-enter once more to deliver it rather
+// than exit on "nothing live". It used to snapshot the completion count at
+// the gate itself — after the completion had already happened — so it saw
+// no progress and exited, and the parent finished without ever reacting to
+// its agent's result. This was TestBackground_NoSpin's flake (3 turns
+// instead of 4) whenever the scheduler happened to run the child first.
+func (s *SpawnBackgroundE2ESuite) TestBackground_SpawnFinishingMidTurnStillGetsATurn() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSpawnE2EEnv(s.T(), env, []scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{spawnToolCall("tc1", "research something")}},
+		{toolCalls: nil},
+	})
+	// The child runs only once the parent's turn 2 is under way, and that
+	// turn does not return until the child has finished and left the live
+	// registry. Both halves matter: a child that finished BEFORE turn 2
+	// began would have had its report drained by turn 2 itself, and then
+	// exiting after turn 2 is the right answer.
+	e.childTurnWaitsFor = milestoneParentTurnStarted(2)
+	e.parentTurnWaitsFor = map[int]string{2: milestoneChildSettled}
+
+	e.execute("chat-bg-midturn")
+
+	require.True(s.T(), env.IsWorkflowCompleted())
+	require.NoError(s.T(), env.GetWorkflowError())
+
+	require.Equal(s.T(), 3, e.parentTurns(),
+		"a spawn that finished during turn 2 must still earn the parent a turn 3 to deliver its result")
+	require.Equal(s.T(), 4, e.callLLMInvocations(),
+		"and exactly one: three parent turns plus the child's one")
+}
+
+// TestBackground_WakeDuringTurnIsNotMissed is the same lost wakeup for the
+// doorbell: a user message lands on the parent's thread while its last turn
+// is in flight and a background child is still running. That turn read
+// history before the message arrived, so the gate must re-enter for it at
+// once. Measuring from the gate, it saw no new wake and parked until the
+// child happened to finish — the "blocked on its sub-agent" chat that the
+// doorbell was added to fix, still reachable through this window.
+func (s *SpawnBackgroundE2ESuite) TestBackground_WakeDuringTurnIsNotMissed() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSpawnE2EEnv(s.T(), env, []scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{spawnToolCall("tc1", "research something")}},
+		{toolCalls: nil},
+	})
+	// The doorbell rings during turn 2, and the child is held until the
+	// parent has started turn 3, so only the wake can produce turn 3. A
+	// parent that parks instead waits on a child that is waiting on it.
+	e.wakeDuringParentTurn = 2
+	e.childTurnWaitsFor = milestoneParentTurnStarted(3)
+
+	e.execute("chat-bg-wake")
+
+	require.True(s.T(), env.IsWorkflowCompleted())
+	require.NoError(s.T(), env.GetWorkflowError())
+
+	require.Equal(s.T(), 4, e.parentTurns(),
+		"turn 1 spawns, turn 2 is in flight when the message lands, turn 3 answers it, turn 4 reacts to the child's report")
 }

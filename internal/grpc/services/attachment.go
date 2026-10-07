@@ -143,9 +143,8 @@ func (s *AttachmentService) UploadAttachment(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save attachment"))
 	}
 
-	logging.Info("File uploaded successfully via gRPC",
+	logging.Debug("File uploaded successfully via gRPC",
 		"attachmentID", attachmentID,
-		"filename", filename,
 		"size", len(content),
 		"mime_type", mimeType,
 		"hash", fileHash,
@@ -227,7 +226,7 @@ func (s *AttachmentService) DeleteAttachment(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to delete attachment"))
 	}
 
-	logging.Info("Attachment deleted via gRPC", "attachmentID", attachmentID, "userID", userID)
+	logging.Debug("Attachment deleted via gRPC", "attachmentID", attachmentID, "userID", userID)
 
 	return connect.NewResponse(&reliantv1.DeleteAttachmentResponse{
 		Message: "Attachment deleted successfully",
@@ -307,10 +306,8 @@ func (s *AttachmentService) CreateFileReference(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create file reference"))
 	}
 
-	logging.Info("File reference created via gRPC",
+	logging.Debug("File reference created via gRPC",
 		"attachmentID", attachmentID,
-		"filename", filename,
-		"path", filePath,
 		"size", len(content),
 		"mime_type", mimeType,
 		"userID", userID)

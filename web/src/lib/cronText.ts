@@ -18,6 +18,7 @@
  */
 
 import { sourceKindLabel, type TriggerSource } from "@/api/trigger-grpc";
+import { describeIntegrationEvents, RAW_EVENT_NAMING, type IntegrationEventNaming } from "./integrationEventNames";
 
 const WEEKDAY_NAMES = [
   "Sunday",
@@ -286,10 +287,15 @@ export function describeSchedule(schedule: ScheduleText): string {
 }
 
 /**
- * One line for what makes a trigger fire: the schedule in words, or the kind
- * of source when this client has no editor for it yet.
+ * One line for what makes a trigger fire: the schedule in words, an
+ * integration's events by their catalog names ("GitHub: Issue opened"), or
+ * the kind of source when this client has no words for it yet.
  */
-export function describeTriggerSource(source: TriggerSource): string {
-  if (source.kind === "activation") return source.declared ? describeTriggerSource(source.declared) : sourceKindLabel(source);
-  return source.kind === "schedule" ? describeSchedule(source.schedule) : sourceKindLabel(source);
+export function describeTriggerSource(source: TriggerSource, naming: IntegrationEventNaming = RAW_EVENT_NAMING): string {
+  if (source.kind === "activation") return source.declared ? describeTriggerSource(source.declared, naming) : sourceKindLabel(source);
+  if (source.kind === "schedule") return describeSchedule(source.schedule);
+  if (source.kind === "passthrough" && source.arm.case === "integration") {
+    return describeIntegrationEvents(source.arm.value, naming);
+  }
+  return sourceKindLabel(source);
 }

@@ -41,6 +41,10 @@ triggers:
     filter: "trigger.payload.body.ok == true"
     inputs:
       issue_number: "{{ trigger.payload.body.n }}"
+  - name: templated
+    description: Prompt written by the workflow's author
+    webhook: {}
+    prompt: "Look at delivery {{ trigger.event_id }}."
 entry: [a]
 nodes:
   - id: a
@@ -275,7 +279,7 @@ func TestActivateTriggerErrors(t *testing.T) {
 	e := setup(t, "https://api.example.com")
 	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nope", Message: "x"})
 	assert.True(t, resp.IsError)
-	assert.Contains(t, resp.Content, `does not declare a trigger named "nope" (it declares: nightly, hook)`)
+	assert.Contains(t, resp.Content, `does not declare a trigger named "nope" (it declares: nightly, hook, templated)`)
 
 	resp = e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "hook", Message: "x",
 		Params: map[string]any{"issue_number": 3}})
@@ -285,6 +289,14 @@ func TestActivateTriggerErrors(t *testing.T) {
 	resp = e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "nightly"})
 	assert.True(t, resp.IsError)
 	assert.Contains(t, resp.Content, "message is required")
+}
+
+// A declared trigger with a prompt template needs no message from whoever
+// activates it: the author already said what each run is for.
+func TestActivateTriggerUsesTheDeclarationsPrompt(t *testing.T) {
+	e := setup(t, "https://api.example.com")
+	resp := e.call(t, e.activate, tools.ActivateTriggerParams{Workflow: "triage", Trigger: "templated"})
+	require.False(t, resp.IsError, resp.Content)
 }
 
 func TestListTriggersScopedToAWorkflowShowsBrokenHealth(t *testing.T) {

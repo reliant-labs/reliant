@@ -17,7 +17,7 @@ import (
 // schema keeps ciphertext in connection_secrets precisely so that cannot happen.
 const connectionColumns = `id, owner_kind, user_id, org_id, integration_id, auth_kind, name,
 	account_label, external_account_id, scopes, oauth_client, auth_header, status, status_reason,
-	is_default, access_expires_at, last_used_at, created_at, updated_at, deleted_at, params`
+	is_default, access_expires_at, last_used_at, created_at, updated_at, deleted_at, params, sender_id`
 
 type connectionStore struct{ db *sql.DB }
 
@@ -30,13 +30,14 @@ func scanConnection(r rowScanner) (*core.Connection, error) {
 	var (
 		c                                           core.Connection
 		orgID, label, extID, client, header, reason sql.NullString
+		senderID                                    sql.NullString
 		accessExp, lastUsed, deleted                sql.NullTime
 		scopes                                      pq.StringArray
 		params                                      []byte
 	)
 	err := r.Scan(&c.ID, &c.OwnerKind, &c.UserID, &orgID, &c.IntegrationID, &c.AuthKind, &c.Name,
 		&label, &extID, &scopes, &client, &header, &c.Status, &reason,
-		&c.IsDefault, &accessExp, &lastUsed, &c.CreatedAt, &c.UpdatedAt, &deleted, &params)
+		&c.IsDefault, &accessExp, &lastUsed, &c.CreatedAt, &c.UpdatedAt, &deleted, &params, &senderID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, core.ErrConnectionNotFound
@@ -45,6 +46,7 @@ func scanConnection(r rowScanner) (*core.Connection, error) {
 	}
 	c.OrgID, c.AccountLabel, c.ExternalAccountID = nullStr(orgID), nullStr(label), nullStr(extID)
 	c.OAuthClient, c.AuthHeader, c.StatusReason = nullStr(client), nullStr(header), nullStr(reason)
+	c.SenderID = nullStr(senderID)
 	c.Scopes = []string(scopes)
 	if c.Scopes == nil {
 		c.Scopes = []string{}
@@ -193,11 +195,11 @@ func (s *connectionStore) CreateConnection(ctx context.Context, c *core.Connecti
 		_, err = tx.ExecContext(ctx, `
 			INSERT INTO connections (id, owner_kind, user_id, org_id, integration_id, auth_kind, name,
 				account_label, external_account_id, scopes, oauth_client, auth_header, status, status_reason,
-				is_default, access_expires_at, params)
-			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)`,
+				is_default, access_expires_at, params, sender_id)
+			VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18)`,
 			c.ID, c.OwnerKind, c.UserID, strPtrArg(c.OrgID), c.IntegrationID, c.AuthKind, c.Name,
 			strPtrArg(c.AccountLabel), strPtrArg(c.ExternalAccountID), scopes, strPtrArg(c.OAuthClient), strPtrArg(c.AuthHeader),
-			c.Status, strPtrArg(c.StatusReason), c.IsDefault, timePtrArg(c.AccessExpiresAt), params)
+			c.Status, strPtrArg(c.StatusReason), c.IsDefault, timePtrArg(c.AccessExpiresAt), params, strPtrArg(c.SenderID))
 		if err != nil {
 			if isUniqueViolation(err, "connections_name") {
 				return core.ErrConnectionNameTaken
@@ -225,10 +227,10 @@ func (s *connectionStore) ReauthorizeConnection(ctx context.Context, userID, id 
 		res, err := tx.ExecContext(ctx, `
 			UPDATE connections
 			   SET account_label = $3, external_account_id = $4, scopes = $5, oauth_client = $6,
-			       access_expires_at = $7, status = 'active', status_reason = NULL, updated_at = now()
+			       access_expires_at = $7, sender_id = $8, status = 'active', status_reason = NULL, updated_at = now()
 			 WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`,
 			id, userID, emptyToNil(upd.AccountLabel), emptyToNil(upd.ExternalAccountID), scopes,
-			emptyToNil(upd.OAuthClient), timePtrArg(upd.AccessExpiresAt))
+			emptyToNil(upd.OAuthClient), timePtrArg(upd.AccessExpiresAt), emptyToNil(upd.SenderID))
 		if err != nil {
 			return err
 		}
@@ -361,10 +363,10 @@ func (s *connectionStore) DeleteConnection(ctx context.Context, userID, id strin
 	})
 }
 
-func (s *connectionStore) RecordTestResult(ctx context.Context, userID, id, accountLabel string) error {
+func (s *connectionStore) RecordTestResult(ctx context.Context, userID, id, accountLabel, senderID string) error {
 	res, err := s.db.ExecContext(ctx,
-		`UPDATE connections SET account_label = COALESCE($3, account_label), updated_at = now()
-		  WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, id, userID, emptyToNil(accountLabel))
+		`UPDATE connections SET account_label = COALESCE($3, account_label), sender_id = COALESCE($4, sender_id), updated_at = now()
+		  WHERE id = $1 AND user_id = $2 AND deleted_at IS NULL`, id, userID, emptyToNil(accountLabel), emptyToNil(senderID))
 	if err != nil {
 		return err
 	}

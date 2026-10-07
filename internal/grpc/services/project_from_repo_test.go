@@ -39,7 +39,11 @@ func (s *cloneStubControlPlane) MintLLMKey(context.Context, string, string) (con
 	return controlplane.LLMKey{}, nil
 }
 
-func (s *cloneStubControlPlane) DeleteCurrentUserAccount(context.Context, string) ([]controlplane.AccountDeletionBlocker, error) {
+func (s *cloneStubControlPlane) DeleteCurrentUserAccount(context.Context, string) (*controlplane.AccountDeletionResult, error) {
+	return &controlplane.AccountDeletionResult{}, nil
+}
+
+func (s *cloneStubControlPlane) PreviewAccountDeletionWallet(context.Context, string) (*controlplane.AccountDeletionWalletQuote, error) {
 	return nil, nil
 }
 

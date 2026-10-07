@@ -207,6 +207,7 @@ triggers:
     filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')"
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
+    prompt: "Triage issue #{{ trigger.payload.data.issue.number }}: label it, ask for a repro if one is missing."
   - name: nightly
     schedule: {cron: ["0 9 * * 1-5"], timezone: America/New_York}   # 5-field cron, or interval: 1h
   - name: deploy-hook
@@ -223,6 +224,14 @@ An event whose payload a filter or input cannot read is recorded as a FAILED fir
 fields with `has()` or a ternary. Each `inputs` key must be a declared workflow input; a value set there wins
 over the activation's params (activation refuses a param it would override).
 
+**`prompt`** is the message every run the trigger starts begins from, a `{{ }}` template over `trigger` like
+`inputs`. Write it so activating needs no prompt: an activation's own `message` overrides it, and with
+neither, activation is refused. The event is still attached after it as untrusted data.
+
+**Chat is a trigger too, on by default.** Set top-level `automation_only: true` for a workflow only its
+`triggers:` should start: chat pickers stop offering it and starting it from a chat is refused
+(a builder test run still works). Leave it unset for anything a person starts by chatting.
+
 What `trigger.payload` holds, by source:
 
 | Source | trigger.payload |
@@ -233,6 +242,13 @@ What `trigger.payload` holds, by source:
 | workflow_event | `run_id`, `chat_id`, `workflow_name`, `outcome`, `summary`, `error` |
 
 The payload is untrusted data from outside. Read it in templates; never paste it into a system prompt.
+
+**`trigger.sender`** is who sent the event, set by the receiver from what the source authenticated, never from the
+payload: `kind` (slack, github, email, sms, webhook, workflow, schedule, user), `id`, `display_name`, `verified`.
+Slack's `id` is the user id, GitHub's the lowercased login, email's the lowercased address (verified only when
+Gmail's DMARC, or DKIM aligned with the From domain, passed), sms the From number (never verified). To let only
+certain people start runs, filter on it and require `verified`:
+`trigger.sender.verified && trigger.sender.id in ["U123", "U456"]`.
 
 **The loop for an integration trigger:** `search_integrations(kind: trigger)` → `get_integration_schema`
 (its events, the `match` attributes, the payload schema, and a ready `triggers:` block) → write it with
@@ -331,8 +347,8 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 | `output.*` | Current activity output (for save_message context) | workflow-specific |
 | `outputs.*` | Loop iteration outputs for while condition evaluation | workflow-specific |
 | `thread.*` | Current thread context (token_count, message_count) | workflow-specific |
-| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>). Interactive chats have kind chat.start | workflow-specific |
-| `workflow.*` | Workflow execution context (id, name, run_id, etc.) | `id`, `name`, `run_id`, `session_id`, `path`, `worktree_path`, `branch`, `mode` |
+| `trigger.*` | The event that started this run, fixed at launch (trigger.kind, trigger.name, trigger.scheduled_for, trigger.payload.<x>, trigger.sender.{kind,id,display_name,verified}). Interactive chats have kind chat.start | workflow-specific |
+| `workflow.*` | Workflow execution context (id, name, path, etc.) | `id`, `name`, `run_id`, `path`, `worktree_path`, `branch`, `mode` |
 
 #### `iter` fields
 
@@ -344,14 +360,13 @@ existing workflow requires its `id` (returned by `create_workflow`, or listed by
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `workflow.branch` | `string` | Current git branch (empty if not in git repo) |
+| `workflow.branch` | `string` | That worktree's git branch (empty in the project's main checkout, whose branch is not tracked; test with has(workflow.branch)) |
 | `workflow.id` | `string` | Workflow execution ID (unique per run) |
-| `workflow.mode` | `string` | Execution mode (auto, manual, plan) |
+| `workflow.mode` | `string` | Execution mode (auto, manual, plan), from inputs.mode |
 | `workflow.name` | `string` | Workflow definition name |
-| `workflow.path` | `string` | Working directory path |
+| `workflow.path` | `string` | Absolute working directory of the current scope: the chat's worktree or project, or a sub-workflow's project.path. Reading it in a run with no project directory is an error, not ""; test with has(workflow.path) |
 | `workflow.run_id` | `string` | Workflow run ID (Temporal run ID) |
-| `workflow.session_id` | `string` | Session ID for the workflow |
-| `workflow.worktree_path` | `string` | Git worktree path (if in a worktree) |
+| `workflow.worktree_path` | `string` | The chat's worktree, when the current scope runs in it (empty in the project's main checkout) |
 
 ### Key functions
 
@@ -426,7 +441,7 @@ condition: "nodes.check.exit_code == 0"
 | `get-it-right` | Get It Right — for complex brownfield codebases where LLMs paper-mache code on top. The insight: sometimes you need to try and fail to truly understand the codebase. |
 | `landing-page` | Build a polished landing page by chaining two get-it-right review loops and ending in a plain handoff agent that serves the page and hands the user a URL. |
 | `migrate` | Guided migration workflow for importing useful configuration from Claude Code, Cursor, Codex, or Windsurf into Reliant. |
-| `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner copies via rsync, synthesize merges best parts. |
+| `parallel-compete` | 3 agents implement in parallel worktrees, reviewer picks winner or synthesizes. Thread mode: new (isolated context). Each worktree is independent. Apply path: use_winner applies the winner's changes to the project with git apply, synthesize merges best parts. |
 | `pitch-deck` | Generate an investor pitch deck from a company website with competitive research and founder interview. Includes parallel per-slide write+review pipeline and visual review via puppeteer screenshots + image attachments. |
 | `scope-conversation` | Reusable scoping conversation sub-workflow. |
 | `structured-agent` | Agent that requires structured output via response tool. Unlike builtin://agent which returns once the model is done (stop_reason), this loops until the response tool is called. If LLM responds without tools, a reminder is injected. Access output via output.response (structured data) and output.completed (boolean). |
@@ -457,8 +472,8 @@ condition: "nodes.check.exit_code == 0"
 | `call_llm` | Send a prompt to a language model and get a response |
 | `compact` | Conversation context to reduce token usage |
 | `create_worktree` | Create a git worktree for isolated development |
-| `execute_tools` | Execute tool calls from an LLM response |
-| `invoke_tool` | Invoke a single tool directly from the graph |
+| `execute_tools` | Run the tool calls an upstream Call LLM step returned |
+| `invoke_tool` | Run one tool you pick, with parameters you set; no LLM involved |
 | `join` | Wait for parallel branches to complete before continuing |
 | `loop` | Execute a sub-workflow in a loop with conditions |
 | `router` | Route to a workflow or node based on LLM classification |
@@ -513,9 +528,10 @@ Defines a complete workflow with nodes, edges, inputs, and outputs.
 | `daemon` | CelDaemonSelector | No | - |
 | `resume_node` | string | No | - |
 | `transition_to` | string | No | - |
-| `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`)}. Declaring one fires nothing; activate it with activate_trigger. See the workflow-builder skill's Triggers section.* |
+| `triggers` | WorkflowTrigger[] | No | *WHEN the workflow runs: a list of {name, description, one source (schedule \| webhook \| integration \| workflow_event), filter (raw CEL over `trigger`), inputs (templates over `trigger`), prompt (template over `trigger`: the message each run starts from)}. Declaring one fires nothing; activate it with activate_trigger. See the workflow-builder skill's Triggers section.* |
 | `title` | string | No | - |
 | `hidden` | boolean | No | - |
+| `automation_only` | boolean | No | *The Chat trigger turned off: true keeps the workflow out of chat pickers and refuses a chat start of it, so only its triggers (or a builder test run) start it. Unset means a chat can start it.* |
 
 ## Edge
 

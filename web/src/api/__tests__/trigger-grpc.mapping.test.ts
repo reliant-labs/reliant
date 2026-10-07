@@ -133,6 +133,20 @@ describe("source round-trip", () => {
     expect(definition.source).toEqual(webhookArm);
   });
 
+  // UpdateTrigger replaces the whole row: an edit that dropped the filter
+  // would silently clear a personal trigger's "Only from".
+  it("sends an inline event source's filter back on update", () => {
+    const filter = 'trigger.sender.verified && trigger.sender.id in ["U123"]';
+    const trigger = triggerFromProto(proto({ source: webhookArm, filter }));
+    expect(trigger.filter).toBe(filter);
+    expect(definitionToProto({ ...definitionFromTrigger(trigger), name: "Renamed" }).filter).toBe(filter);
+  });
+
+  it("never sends an activation's filter, which is its declaration's", () => {
+    const stored = triggerFromProto(proto({ workflowTrigger: "new-issue", filter: "trigger.payload.data.issue.number > 0" }));
+    expect(definitionToProto(definitionFromTrigger(stored)).filter).toBe("");
+  });
+
   it("still edits a schedule source", () => {
     const trigger = triggerFromProto(proto());
     const definition = definitionToProto(definitionFromTrigger(trigger));

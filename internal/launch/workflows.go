@@ -100,7 +100,7 @@ func (l *Launcher) ResolveDefaultWorkflow(ctx context.Context, userID string, re
 func (l *Launcher) BuildWorkflowInputs(
 	ctx context.Context,
 	userID string,
-	projectPath string,
+	checkout Checkout,
 	projectID string,
 	workflowName string,
 	selectedPresets map[string]string,
@@ -113,7 +113,7 @@ func (l *Launcher) BuildWorkflowInputs(
 	for k := range userParams {
 		userParamKeys = append(userParamKeys, k)
 	}
-	logging.Info("[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys)
+	logging.Debug("[buildWorkflowInputs] Starting", "workflow", workflowName, "selectedPresets", selectedPresets, "userParamKeys", userParamKeys)
 	if len(selectedPresets) > 0 {
 		loadPreset := l.createDBPresetLoaderFull(ctx, userID, projectID)
 		for groupName, presetName := range selectedPresets {
@@ -126,10 +126,10 @@ func (l *Launcher) BuildWorkflowInputs(
 				continue
 			}
 			initialData = preset.ApplyToInputs(p, initialData, groupName)
-			logging.Info("[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", initialData["tools"])
+			logging.Debug("[buildWorkflowInputs] Applied preset", "preset", presetName, "group", groupName, "tools_after_preset", initialData["tools"])
 		}
 	} else {
-		logging.Info("[buildWorkflowInputs] No presets selected")
+		logging.Debug("[buildWorkflowInputs] No presets selected")
 	}
 
 	// User-provided params override preset values.
@@ -146,10 +146,6 @@ func (l *Launcher) BuildWorkflowInputs(
 		}
 		v := value.AsInterface()
 
-		if key == "tools" {
-			logging.Info("[buildWorkflowInputs] User param tools override", "value", v, "type", fmt.Sprintf("%T", v))
-		}
-
 		// If value is a map, merge it with existing group map.
 		if mapVal, ok := v.(map[string]interface{}); ok {
 			if existing, ok := initialData[key].(map[string]interface{}); ok {
@@ -163,8 +159,6 @@ func (l *Launcher) BuildWorkflowInputs(
 			initialData[key] = v
 		}
 	}
-
-	logging.Info("[buildWorkflowInputs] After user params", "tools", initialData["tools"])
 
 	// Apply workflow schema defaults (e.g. model: { id: gpt-4o }) so validation and execution
 	// see the same inputs the workflow defines. Required inputs without defaults remain absent
@@ -181,12 +175,18 @@ func (l *Launcher) BuildWorkflowInputs(
 		NormalizeModelInputs(initialData, protoInputs)
 	}
 
-	logging.Info("[buildWorkflowInputs] Final resolved", "tools", initialData["tools"])
+	logging.Debug("[buildWorkflowInputs] Final resolved", "tools", initialData["tools"])
 
 	// Add project_path to workflow inputs so spawned workflows can load presets
 	// This flows through: workflow.go -> StepExecutor -> executeSpawnInline -> InlineWorkflowExecutor
-	if projectPath != "" {
-		initialData["project_path"] = projectPath
+	// It is also workflow.path; worktree_path and worktree_branch are
+	// workflow.worktree_path and workflow.branch (runtime addScopeEnvironment).
+	if checkout.Path != "" {
+		initialData["project_path"] = checkout.Path
+	}
+	if checkout.WorktreePath != "" {
+		initialData["worktree_path"] = checkout.WorktreePath
+		initialData["worktree_branch"] = checkout.Branch
 	}
 
 	return initialData
@@ -219,8 +219,7 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 		}
 	}
 
-	projectPath := l.GetEffectiveWorkingPath(ctx, chat)
-	return l.BuildWorkflowInputs(ctx, userID, projectPath, chat.ProjectID, workflowName, effectivePresets, requestParams)
+	return l.BuildWorkflowInputs(ctx, userID, l.GetEffectiveCheckout(ctx, chat), chat.ProjectID, workflowName, effectivePresets, requestParams)
 }
 
 // LoadWorkflowInputsForBuild loads workflow input schemas as proto types for ApplyDefaults.
@@ -451,12 +450,14 @@ func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, project
 // A workflow that cannot be LOADED is an invalid argument; one that loads but
 // does not validate is a failed precondition.
 func (l *Launcher) ValidateCreateChatWorkflowTree(ctx context.Context, userID, workflowName, projectID string) error {
-	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, "")
+	return l.validateWorkflowTree(ctx, userID, workflowName, projectID, Event{Kind: core.TriggerEventKindChatStart})
 }
 
-// validateWorkflowTree is ValidateCreateChatWorkflowTree with the one workflow
-// (draftRoot) that may be a draft; see draftRootFor.
-func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID, draftRoot string) error {
+// validateWorkflowTree is ValidateCreateChatWorkflowTree for the launch of ev:
+// its kind decides which workflow may be a draft (see draftRootFor) and
+// whether the workflow's Chat trigger must be on.
+func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowName, projectID string, ev Event) error {
+	draftRoot := draftRootFor(ev, workflowName)
 	wf, err := l.loadCreateChatWorkflowForValidation(ctx, userID, workflowName, projectID, draftRoot)
 	if err != nil {
 		var lookupErr *WorkflowLookupError
@@ -465,6 +466,9 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 			return &InternalError{Reason: "failed to look up workflow", Err: err}
 		}
 		return &ValidationError{Kind: ValidationInvalidArgument, Reason: err.Error()}
+	}
+	if err := refuseChatStart(ev.Kind, workflowName, wf); err != nil {
+		return err
 	}
 
 	validationOpts := &validation.ValidationOptions{
@@ -484,6 +488,22 @@ func (l *Launcher) validateWorkflowTree(ctx context.Context, userID, workflowNam
 	}
 
 	return nil
+}
+
+// refuseChatStart refuses a chat start of a workflow whose Chat trigger is
+// off (Workflow.automation_only). Only an interactive chat start is refused:
+// its triggers, an agent's start_run and a builder test run still start it.
+// Chat pickers leave such a workflow out, so this is the backstop for a
+// client that did not, or for a workflow switched off since it was picked.
+func refuseChatStart(kind core.TriggerEventKind, workflowName string, wf *reliantv1.Workflow) error {
+	if kind != core.TriggerEventKindChatStart || !wf.GetAutomationOnly() {
+		return nil
+	}
+	return &ValidationError{
+		Kind: ValidationFailedPrecondition,
+		Reason: fmt.Sprintf("workflow '%s' cannot be started from a chat: its Chat trigger is off (automation_only), so only its triggers start it. "+
+			"Turn its Chat trigger back on in the builder to start it here", workflowName),
+	}
 }
 
 // ValidateNoMachine reports whether workflowName can run in a chat with no

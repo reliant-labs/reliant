@@ -95,9 +95,12 @@ type RunMessenger interface {
 // RunDelivery is what a delivery did. It never claims more than happened: a
 // saved message is not a read message.
 type RunDelivery struct {
-	// Delivered is true when the message was durably saved to the run's
+	// Delivered is true when the message was durably saved for the run's
 	// thread. False means the run was not live and nothing was written.
 	Delivered bool
+	// MessageID identifies the saved message. For a run that is executing it
+	// is the queued mailbox row the thread's next turn delivers, not yet a
+	// row of its history.
 	MessageID string
 }
 

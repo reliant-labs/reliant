@@ -111,7 +111,7 @@ func (s *ChatService) UpdateWorkflowParams(
 		"chatID", req.Msg.ChatId,
 		"workflowID", workflowID,
 		"threadID", req.Msg.ThreadId,
-		"params", stateUpdate)
+		"paramCount", len(stateUpdate))
 
 	return connect.NewResponse(&reliantv1.UpdateWorkflowParamsResponse{
 		Success: true,

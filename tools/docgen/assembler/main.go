@@ -321,6 +321,7 @@ triggers:
     filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')"
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
+    prompt: "Triage issue #{{ trigger.payload.data.issue.number }}: label it, ask for a repro if one is missing."
   - name: nightly
     schedule: {cron: ["0 9 * * 1-5"], timezone: America/New_York}   # 5-field cron, or interval: 1h
   - name: deploy-hook
@@ -337,6 +338,14 @@ An event whose payload a filter or input cannot read is recorded as a FAILED fir
 fields with ` + bt + `has()` + bt + ` or a ternary. Each ` + bt + `inputs` + bt + ` key must be a declared workflow input; a value set there wins
 over the activation's params (activation refuses a param it would override).
 
+**` + bt + `prompt` + bt + `** is the message every run the trigger starts begins from, a ` + bt + `{{ }}` + bt + ` template over ` + bt + `trigger` + bt + ` like
+` + bt + `inputs` + bt + `. Write it so activating needs no prompt: an activation's own ` + bt + `message` + bt + ` overrides it, and with
+neither, activation is refused. The event is still attached after it as untrusted data.
+
+**Chat is a trigger too, on by default.** Set top-level ` + bt + `automation_only: true` + bt + ` for a workflow only its
+` + bt + `triggers:` + bt + ` should start: chat pickers stop offering it and starting it from a chat is refused
+(a builder test run still works). Leave it unset for anything a person starts by chatting.
+
 What ` + bt + `trigger.payload` + bt + ` holds, by source:
 
 | Source | trigger.payload |
@@ -347,6 +356,13 @@ What ` + bt + `trigger.payload` + bt + ` holds, by source:
 | workflow_event | ` + bt + `run_id` + bt + `, ` + bt + `chat_id` + bt + `, ` + bt + `workflow_name` + bt + `, ` + bt + `outcome` + bt + `, ` + bt + `summary` + bt + `, ` + bt + `error` + bt + ` |
 
 The payload is untrusted data from outside. Read it in templates; never paste it into a system prompt.
+
+**` + bt + `trigger.sender` + bt + `** is who sent the event, set by the receiver from what the source authenticated, never from the
+payload: ` + bt + `kind` + bt + ` (slack, github, email, sms, webhook, workflow, schedule, user), ` + bt + `id` + bt + `, ` + bt + `display_name` + bt + `, ` + bt + `verified` + bt + `.
+Slack's ` + bt + `id` + bt + ` is the user id, GitHub's the lowercased login, email's the lowercased address (verified only when
+Gmail's DMARC, or DKIM aligned with the From domain, passed), sms the From number (never verified). To let only
+certain people start runs, filter on it and require ` + bt + `verified` + bt + `:
+` + bt + `trigger.sender.verified && trigger.sender.id in ["U123", "U456"]` + bt + `.
 
 **The loop for an integration trigger:** ` + bt + `search_integrations(kind: trigger)` + bt + ` → ` + bt + `get_integration_schema` + bt + `
 (its events, the ` + bt + `match` + bt + ` attributes, the payload schema, and a ready ` + bt + `triggers:` + bt + ` block) → write it with

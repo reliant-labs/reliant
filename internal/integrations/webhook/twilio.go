@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -243,10 +244,27 @@ func (p *TwilioProvider) Parse(_ context.Context, req *Request) (*Delivery, erro
 			Attributes: map[string]string{
 				"from": from, "to": to, "channel": channel, "num_media": strconv.Itoa(numMedia),
 			},
-			Data: data,
+			Data:   data,
+			Sender: twilioSender(from, f.Get("ProfileName")),
 		}},
 		Ack: &Response{ContentType: "text/xml", Body: twilioEmptyTwiML},
 	}, nil
+}
+
+// twilioSender is an inbound message's trigger.sender: its From number,
+// exactly as Twilio sent it (E.164, or "whatsapp:+…").
+//
+// It is NOT verified, though the request's Twilio signature passed. The
+// signature proves Twilio delivered the message, not who sent it: SMS has no
+// end-to-end attestation of the originating number (STIR/SHAKEN covers voice
+// calls only), a number can be spoofed upstream of Twilio, and Twilio says it
+// cannot detect that when it happens outside its own platform
+// (stackoverflow.com/q/53796583, answered by Twilio). WhatsApp's sender is
+// attested by Meta rather than Twilio, which Twilio does not document as a
+// guarantee, so it is treated the same. A filter can still read the number;
+// an allowlist that requires a verified sender will not pass it.
+func twilioSender(from, profileName string) *core.TriggerSender {
+	return &core.TriggerSender{Kind: core.TriggerSenderKindSMS, ID: from, DisplayName: profileName, Verified: false}
 }
 
 func atoiOrZero(s string) int {

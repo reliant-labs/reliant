@@ -67,7 +67,7 @@ var WorkflowExecutionTimeout = func() time.Duration {
 // worker took up to 42.5s per task; at 10s each such task timed out and was
 // retried from scratch, stalling the whole run for minutes. That stall is
 // what let a reconciler pass mistake a finishing background spawn for a lost
-// one (docs/incidents/2026-10-04-spawn-report-collision.md).
+// one (dev-docs/incidents/2026-10-04-spawn-report-collision.md).
 //
 // 60s covers the worst task observed with margin and stays under Temporal's
 // 120s ceiling. Continue-as-new and reset inherit it from the run they
@@ -85,7 +85,9 @@ const (
 // and should not be validated against the workflow's input schema.
 // These are internal values used by the workflow engine, not user-provided inputs.
 var RuntimeInjectedInputs = map[string]bool{
-	"project_path":       true, // Used for preset loading in spawned workflows
+	"project_path":       true, // Used for preset loading in spawned workflows; workflow.path
+	"worktree_path":      true, // The chat's worktree, when it has one; workflow.worktree_path
+	"worktree_branch":    true, // That worktree's branch; workflow.branch
 	"chat_id":            true, // Injected after validation
 	"workflow_id":        true, // Injected after validation
 	"unique_activity_id": true, // Injected after validation

@@ -288,8 +288,8 @@ func (e *EventsReceiver) route(ctx context.Context, providerID string, events []
 		errs         []error
 	)
 	for _, ev := range events {
-		if ev.AccountKey == "" || ev.DeliveryID == "" || ev.Type == "" {
-			logging.Warn("integration event is missing its account, delivery id or type; dropped",
+		if ev.AccountKey == "" || ev.DeliveryID == "" || ev.Type == "" || ev.Sender == nil {
+			logging.Warn("integration event is missing its account, delivery id, type or sender; dropped",
 				"provider", providerID, "type", ev.Type)
 			continue
 		}
@@ -390,6 +390,7 @@ func toInbound(providerID string, trigger *core.Trigger, ev Event) triggers.Inbo
 		DedupeKey:  trigger.ID + ":" + ev.DeliveryID,
 		OccurredAt: ev.OccurredAt,
 		Payload:    inboundPayload(providerID, ev, attrs),
+		Sender:     ev.Sender,
 	}
 }
 

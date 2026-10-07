@@ -453,15 +453,6 @@ func (s *callbackServer) handleResult(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(result)
 }
 
-func waitForResult(ctx context.Context, resultCh <-chan *Result) (*Result, error) {
-	select {
-	case result := <-resultCh:
-		return result, nil
-	case <-ctx.Done():
-		return nil, fmt.Errorf("OAuth callback cancelled: %w", ctx.Err())
-	}
-}
-
 func validateOAuthResult(res *Result) error {
 	if res == nil {
 		return fmt.Errorf("OAuth callback returned no result")
