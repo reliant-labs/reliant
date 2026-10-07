@@ -78,10 +78,14 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 		timeoutMs = defaultExecTimeout
 	}
 
-	execCtx, cancel := context.WithTimeout(ctx, time.Duration(timeoutMs)*time.Millisecond)
-	defer cancel()
+	// Not context.WithTimeout: that deadline runs on the monotonic clock, which
+	// stops while the machine sleeps, and its deferred cancel would kill a
+	// command adopted into the background below. Shared with
+	// LocalClient.RunCommand — see daemon.ExecDeadline.
+	deadline := daemon.StartExecDeadline(ctx, time.Duration(timeoutMs)*time.Millisecond)
+	defer deadline.Release()
 
-	cmd := buildExecCommand(execCtx, req)
+	cmd := buildExecCommand(deadline.Context(), req)
 
 	if req.WorkingDir != "" {
 		cmd.Dir = req.WorkingDir
@@ -149,18 +153,23 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 			WaitErrCh:  waitCh,
 		})
 		if backgrounded {
-			// Adopted: the background manager owns the command now, so the
-			// grace timer stays armed rather than being stopped here.
+			// Adopted: the background manager owns the command now. Release
+			// the foreground deadline so neither the timeout nor this return
+			// stops it; the grace timer stays armed rather than being stopped.
+			deadline.Release()
 			return json.Marshal(bgResp)
 		}
 		err = <-waitCh
 	}
+	// Finished: nothing may stop it now, and Err() below stays the reason it
+	// was stopped, if it was.
+	deadline.Release()
 	stopGrace()
 	duration := time.Since(start)
 
 	// Shared with LocalClient.RunCommand so the two exec paths cannot drift on
 	// what a failure looks like — see daemon.ClassifyExecOutcome.
-	outcome := daemon.ClassifyExecOutcome(err, execCtx.Err(), stderrBuf.String(), memReader, oomSnap)
+	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stderrBuf.String(), memReader, oomSnap)
 
 	resp := daemon.CommandResult{
 		Stdout:           stdoutBuf.String(),

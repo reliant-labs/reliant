@@ -130,9 +130,9 @@ type ExecOutcome struct {
 // "your directory is gone" from "your command produced no output". So the
 // error text is appended to stderr: it is the only channel the caller has.
 //
-// cmdErr is the error from Start/Wait; ctxErr is the exec context's Err()
-// (context.DeadlineExceeded marks a timeout); stderr is the child's captured
-// stderr so far.
+// cmdErr is the error from Start/Wait; ctxErr is why the command was stopped,
+// from ExecDeadline.Err() (anything wrapping context.DeadlineExceeded marks a
+// timeout); stderr is the child's captured stderr so far.
 func ClassifyExecOutcome(cmdErr, ctxErr error, stderr string, mem OOMChecker, snap cgroupmem.OOMSnapshot) ExecOutcome {
 	out := ExecOutcome{Stderr: stderr}
 	if cmdErr == nil {
@@ -194,7 +194,13 @@ func ClassifyExecOutcome(cmdErr, ctxErr error, stderr string, mem OOMChecker, sn
 		} else {
 			out.ExitCode = 1
 		}
-		out.Stderr = appendStderr(out.Stderr, cmdErr.Error())
+		out.Stderr = appendStderr(out.Stderr, waitErrorText(cmdErr, out.TimedOut))
+	}
+
+	// A wall-clock timeout fires after far less runtime than the timeout, so
+	// it needs saying why, or the command reads as having timed out early.
+	if errors.Is(ctxErr, ErrWallClockDeadline) {
+		out.Stderr = appendStderr(out.Stderr, WallClockTimeoutMessage)
 	}
 
 	// A SIGKILL-shaped failure (exit -1: shell itself killed; exit 137: shell
@@ -211,6 +217,21 @@ func ClassifyExecOutcome(cmdErr, ctxErr error, stderr string, mem OOMChecker, sn
 	}
 
 	return out
+}
+
+// waitErrorText is the explanation for a Start/Wait error that is not the
+// child's own exit status.
+//
+// A command stopped at its deadline surfaces from os/exec as the exec
+// context's own Err(). ExecDeadline stops a command by cancelling that context
+// with a cause, so that Err() is context.Canceled — the mechanism, not the
+// reason — whichever clock the deadline fired on. Name the reason, so a
+// timeout reads the same as it did when the context was a plain deadline.
+func waitErrorText(cmdErr error, timedOut bool) string {
+	if timedOut && (errors.Is(cmdErr, context.Canceled) || errors.Is(cmdErr, context.DeadlineExceeded)) {
+		return context.DeadlineExceeded.Error()
+	}
+	return cmdErr.Error()
 }
 
 // appendStderr joins an explanation onto captured stderr, newline-separated,
