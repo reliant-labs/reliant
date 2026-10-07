@@ -10,6 +10,13 @@ interface UseUndoRedoOptions {
   maxHistorySize?: number
 }
 
+// A deep copy, so later edits to the live canvas don't reach history. Nodes
+// carry their step proto, whose int64 fields are bigints: structuredClone
+// copies those exactly, where a JSON round-trip throws on them.
+function copyOf<T>(value: T): T {
+  return structuredClone(value)
+}
+
 export function useUndoRedo(options: UseUndoRedoOptions = {}) {
   const { maxHistorySize = 50 } = options
 
@@ -26,7 +33,7 @@ export function useUndoRedo(options: UseUndoRedoOptions = {}) {
     }
 
     setPast((prev) => {
-      const newPast = [...prev, { nodes: JSON.parse(JSON.stringify(nodes)), edges: JSON.parse(JSON.stringify(edges)) }]
+      const newPast = [...prev, { nodes: copyOf(nodes), edges: copyOf(edges) }]
       // Limit history size
       if (newPast.length > maxHistorySize) {
         return newPast.slice(newPast.length - maxHistorySize)
@@ -47,7 +54,7 @@ export function useUndoRedo(options: UseUndoRedoOptions = {}) {
     const newPast = past.slice(0, past.length - 1)
 
     setPast(newPast)
-    setFuture((prev) => [...prev, { nodes: JSON.parse(JSON.stringify(currentNodes)), edges: JSON.parse(JSON.stringify(currentEdges)) }])
+    setFuture((prev) => [...prev, { nodes: copyOf(currentNodes), edges: copyOf(currentEdges) }])
 
     // Allow recording new changes after a short delay
     setTimeout(() => {
@@ -66,7 +73,7 @@ export function useUndoRedo(options: UseUndoRedoOptions = {}) {
     const newFuture = future.slice(0, future.length - 1)
 
     setFuture(newFuture)
-    setPast((prev) => [...prev, JSON.parse(JSON.stringify(next))])
+    setPast((prev) => [...prev, copyOf(next)])
 
     // Allow recording new changes after a short delay
     setTimeout(() => {

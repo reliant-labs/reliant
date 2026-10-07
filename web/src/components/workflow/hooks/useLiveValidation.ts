@@ -11,16 +11,26 @@
  * - Latest wins: a slow response for an older canvas is dropped.
  */
 import { useEffect, useRef } from "react";
+import { toJsonString } from "@bufbuild/protobuf";
 
 import { workflowGrpc, type ValidationError } from "../../../api/workflow-grpc";
+import { WorkflowSchema } from "../../../gen/reliant/v1/workflow_v2_pb";
+import { toWorkflowMessage } from "../../../lib/workflowProto";
 import type { Workflow } from "../../../types/workflow";
 import type { ValidationStatus } from "../workflowFindings";
 
 export const LIVE_VALIDATION_DEBOUNCE_MS = 800;
 
-/** What validation reads: the definition without the canvas layout. */
+/**
+ * What validation reads: the definition without the canvas layout, as the
+ * proto JSON of the message ValidateWorkflow is sent. Proto JSON, not
+ * JSON.stringify: int64 fields (an integer input's default/min/max, CelInt
+ * literals) are bigints, which JSON.stringify throws on.
+ */
 export function validationKey(workflow: Workflow): string {
-  return JSON.stringify({ ...workflow, ui: undefined });
+  const message = toWorkflowMessage(workflow);
+  message.ui = undefined;
+  return toJsonString(WorkflowSchema, message);
 }
 
 export interface UseLiveValidationArgs {
@@ -48,7 +58,22 @@ export function useLiveValidation({
   useEffect(() => {
     if (!enabled || !projectId) return;
     const timer = setTimeout(() => {
-      const key = validationKey(workflow);
+      const fail = (error: unknown) => {
+        console.error("Live validation failed:", error);
+        // Retry the same canvas on the next change rather than never.
+        lastKeyRef.current = null;
+        setStatus("unknown");
+      };
+      let key: string;
+      try {
+        key = validationKey(workflow);
+      } catch (error) {
+        // A canvas the request could not encode either. Say so rather than
+        // leave the last result standing as if it described this canvas.
+        requestSeqRef.current += 1;
+        fail(error);
+        return;
+      }
       if (key === lastKeyRef.current) return;
       lastKeyRef.current = key;
       const seq = ++requestSeqRef.current;
@@ -62,10 +87,7 @@ export function useLiveValidation({
         })
         .catch((error) => {
           if (seq !== requestSeqRef.current) return;
-          console.error("Live validation failed:", error);
-          // Retry the same canvas on the next change rather than never.
-          lastKeyRef.current = null;
-          setStatus("unknown");
+          fail(error);
         });
     }, debounceMs);
     return () => clearTimeout(timer);
