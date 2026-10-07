@@ -37,7 +37,9 @@ We optimize for **distributed** mode:
 
 - **Postgres (optional):** set `DATABASE_DRIVER=postgres` + `DATABASE_URL`
   - This repo's own `docker-compose.yml` Postgres, published on `localhost:5433`
-    (`make postgres-up`). `scripts/dev.sh` and `make test-e2e` target this one.
+    (`make postgres-up`). `scripts/dev.sh` targets this one, and so do the Make
+    test targets when `DATABASE_URL` is unset. A bare `go test` never does —
+    see "Testing while iterating".
   - Not to be confused with the control-plane dev stack's Postgres on
     `localhost:5434`, a **separate server** that also hosts a `reliant`
     database. `reliant-dev workflow analyze` and `scripts/wf-supervise` read
@@ -310,8 +312,16 @@ make test-short PKG=./internal/<pkg>/...   # -short, cached, no -race, 60s/pkg
 - **Never `make test` / `make test-all`** — they run `make stop`, which stops
   other agents' environments. For the full lane run `go test ./internal/<pkg>/...`
   (no `-short`) once at the end; CI runs everything.
+- **DB-backed tests use `DATABASE_URL` and only `DATABASE_URL`.** Unset, a bare
+  `go test` skips them loudly and connects to nothing; `REQUIRE_TEST_DB=1`
+  makes that a failure. The Make test targets pass `DATABASE_URL` for you —
+  yours if set, otherwise the compose Postgres on 5433, a server shared with
+  everyone on this machine. So give them a database of your own:
+  `DATABASE_URL='postgres://postgres:postgres@localhost:<port>/<your_db>?sslmode=disable'`.
+  Never 5434 (the control-plane stack's real data).
 - `-short` skips DB-backed tests (the shared Postgres is the bottleneck). When
-  you change SQL or a repo method: `REQUIRE_TEST_DB=1 make test-short PKG=...`.
+  you change SQL or a repo method:
+  `DATABASE_URL=<your db> REQUIRE_TEST_DB=1 make test-short PKG=...`.
 - No `-count=1` or `-race` in the inner loop — they defeat the test cache,
   which is correct for hermetic tests. Never set a private `GOCACHE`.
 - The cache only sees files the test process itself reads. A test that execs a

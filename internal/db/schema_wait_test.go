@@ -145,7 +145,10 @@ func dsnForOpenDB(t *testing.T, db *sql.DB) string {
 
 	base := strings.TrimSpace(os.Getenv("DATABASE_URL"))
 	if base == "" {
-		base = defaultTestDSN
+		// SetupTestDB hands out a database only when DATABASE_URL is set, so
+		// this is unreachable — and guessing a server here would open a pool
+		// on one nobody chose.
+		t.Fatal("DATABASE_URL is unset, yet a test database is open")
 	}
 	u, err := url.Parse(base)
 	if err != nil {

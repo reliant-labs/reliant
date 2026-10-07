@@ -125,6 +125,37 @@ docker-build:
 	@echo "$(YELLOW)Run with: docker run $(DOCKER_REGISTRY)/reliant:$(DOCKER_TAG) <command>$(NC)"
 	@echo "$(YELLOW)  e.g. docker run $(DOCKER_REGISTRY)/reliant:$(DOCKER_TAG) server api$(NC)"
 
+# ----------------------------------------------------------------------------
+# Which Postgres the Go tests use
+# ----------------------------------------------------------------------------
+# DB-backed tests read DATABASE_URL and nothing else. With it unset they skip,
+# or fail under REQUIRE_TEST_DB=1 (resolveTestDSN in internal/db/testutil.go);
+# they never pick a server on their own. The convenient default lives HERE
+# instead, where choosing it is visible: every target that runs Go tests exports
+# TEST_DATABASE_URL as DATABASE_URL, so `make postgres-up && make test` is still
+# the whole setup.
+#
+# A DATABASE_URL you set always wins, from the environment or the command line
+# (`make test DATABASE_URL=...`). Only when it is unset do these targets use
+# this repo's compose Postgres (`make postgres-up`). On a shared machine that
+# server is everyone's — point DATABASE_URL at a database of your own. And never
+# at the control-plane dev stack's Postgres (5434): it is a different server
+# whose `reliant` database holds real data.
+COMPOSE_DATABASE_URL := postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable
+CALLER_DATABASE_URL := $(strip $(DATABASE_URL))
+TEST_DATABASE_URL := $(or $(CALLER_DATABASE_URL),$(COMPOSE_DATABASE_URL))
+
+test test-short test-race test-coverage test-e2e replay-fixtures test-all test-full-ci: export DATABASE_URL := $(TEST_DATABASE_URL)
+
+# Targets that cannot run without a live server (test-e2e, replay-fixtures)
+# start the compose Postgres — but only when it is the one they will use. A
+# caller who chose their own database gets nothing started.
+ifeq ($(CALLER_DATABASE_URL),)
+START_TEST_POSTGRES = @echo "$(YELLOW)DATABASE_URL is unset: starting the compose Postgres (make postgres-up)$(NC)" && docker compose up -d postgres
+else
+START_TEST_POSTGRES = @echo "$(YELLOW)Using your DATABASE_URL; not starting docker compose$(NC)"
+endif
+
 ## test: Run all tests
 test:
 	@echo "$(YELLOW)Running tests...$(NC)"
@@ -157,29 +188,25 @@ test-coverage:
 	@echo "$(GREEN)✅ Coverage report generated: coverage.html$(NC)"
 
 ## test-e2e: Run hermetic story e2e tests (e2e/stories: real Postgres + ephemeral Temporal dev server + scripted LLM)
-E2E_DATABASE_URL ?= postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable
+# Database: see "Which Postgres the Go tests use" above. With DATABASE_URL set
+# that database is used and nothing is started; only when it is unset does
+# this bring up the compose Postgres.
 test-e2e:
-	@echo "$(YELLOW)Running e2e stories (bringing up Postgres via docker compose)...$(NC)"
-	docker compose up -d postgres
-	DATABASE_URL='$(E2E_DATABASE_URL)' $(GOTEST) -tags e2e -count=1 -timeout=10m -v ./e2e/stories/
+	@echo "$(YELLOW)Running e2e stories...$(NC)"
+	$(START_TEST_POSTGRES)
+	$(GOTEST) -tags e2e -count=1 -timeout=10m -v ./e2e/stories/
 	@echo "$(GREEN)✅ E2E stories complete$(NC)"
 
 ## replay-fixtures: Regenerate Temporal replay-compatibility history fixtures (see internal/workflow/runtime/replaytest/fixtures/README.md)
 # With DATABASE_URL set (environment or `make replay-fixtures DATABASE_URL=...`)
 # the generator uses that database and nothing is started. Only when it is
-# unset does this bring up the repo's docker compose Postgres on :5433 — a
-# shared server that an isolated run (an agent, a second worktree) must not
-# start or write to.
+# unset does this bring up the repo's compose Postgres — a shared server that
+# an isolated run (an agent, a second worktree) must not start or write to.
 replay-fixtures:
 	@echo "$(YELLOW)Regenerating replay-compatibility fixtures (ephemeral Temporal dev server + scripted LLM)...$(NC)"
 	@echo "$(YELLOW)NOTE: regenerating accepts a replay break for in-flight runs — read internal/workflow/runtime/replaytest/fixtures/README.md$(NC)"
-ifeq ($(strip $(DATABASE_URL)),)
-	@echo "$(YELLOW)DATABASE_URL is unset: bringing up Postgres via docker compose (localhost:5433)$(NC)"
-	docker compose up -d postgres
-else
-	@echo "$(YELLOW)Using DATABASE_URL; not starting docker compose$(NC)"
-endif
-	DATABASE_URL='$(or $(strip $(DATABASE_URL)),$(E2E_DATABASE_URL))' $(GOTEST) -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
+	$(START_TEST_POSTGRES)
+	$(GOTEST) -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
 	@echo "$(YELLOW)Verifying regenerated fixtures replay cleanly against current code...$(NC)"
 	$(GOTEST) -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
 	@echo "$(GREEN)✅ Replay fixtures regenerated and verified — commit fixtures/*.json with your change$(NC)"
@@ -423,6 +450,8 @@ postgres-up:
 	@echo "$(YELLOW)Starting local Postgres via docker-compose.yml...$(NC)"
 	docker compose up -d postgres
 	@echo "$(GREEN)✅ Postgres started on localhost:5433 (use per-worktree DB names in dev)$(NC)"
+	@echo "   Go tests: make test passes this server for you. For a bare go test:"
+	@echo "   DATABASE_URL='$(COMPOSE_DATABASE_URL)' go test ./..."
 
 ## postgres-down: Stop local Postgres container
 postgres-down:

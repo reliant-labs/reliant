@@ -90,7 +90,8 @@ const testDBPrefix = "rlnttest_"
 
 // NewTestRepo creates a test Repo for use in unit tests.
 // It requires DATABASE_URL to be set in the environment pointing to a Postgres instance.
-// Tests are skipped if DATABASE_URL is not set.
+// Tests are skipped if DATABASE_URL is not set (failed, under REQUIRE_TEST_DB=1);
+// there is no default server. See resolveTestDSN.
 func NewTestRepo(t *testing.T) *Repo {
 	t.Helper()
 	repo, cleanup := SetupTestDB(t)
@@ -100,7 +101,8 @@ func NewTestRepo(t *testing.T) *Repo {
 
 // SetupTestDB returns a Repo backed by this package's isolated test database,
 // reset to an empty state (plus the seeded "test-project"). It requires
-// DATABASE_URL to be set; tests are skipped otherwise.
+// DATABASE_URL to be set; tests are skipped otherwise, or failed under
+// REQUIRE_TEST_DB=1.
 //
 // Exported for use by other packages that need to test against a real database.
 func SetupTestDB(t *testing.T) (*Repo, func()) {
@@ -196,20 +198,17 @@ func dropTestDB(name string) {
 	_, _ = adminDB.Exec(fmt.Sprintf(`DROP DATABASE IF EXISTS %s WITH (FORCE)`, quoteIdent(name)))
 }
 
-// defaultTestDSN points at this repo's own docker-compose Postgres
-// (`make postgres-up`), published on 5433. It matches E2E_DATABASE_URL in the
-// Makefile.
+// resolveTestDSN returns the DSN for DB-backed tests: DATABASE_URL, and
+// nothing else.
 //
-// 5433 and ONLY 5433. The control-plane dev stack runs a SEPARATE Postgres on
-// 5434 that also hosts a `reliant` database, and it holds real data. This
-// harness resets state with TRUNCATE ... CASCADE across every table in the
-// public schema, so a default aimed at the wrong port would turn a routine
-// test run into data loss.
-const defaultTestDSN = "postgres://postgres:postgres@localhost:5433/reliant?sslmode=disable" //nolint:gosec // G101: the throwaway local test database
-
-// resolveTestDSN returns the DSN for DB-backed tests.
+// There is deliberately no default server. A default makes a bare `go test`
+// create and drop databases on whatever answers at that address — on a shared
+// machine, a server other people and agents depend on, and one nobody chose.
+// Choosing it is the caller's decision. The Makefile's test targets make it
+// visibly (they pass this repo's compose Postgres unless you set your own), so
+// the one-command path survives without the harness guessing.
 //
-// Skipping when no database is reachable is a deliberate convenience for
+// Skipping when there is no database is a deliberate convenience for
 // contributors without a local Postgres — but a SILENT skip reports `ok` for a
 // package whose tests never ran, which is indistinguishable from passing. That
 // is how an untested change ships. So: the skip is loud, and CI can forbid it
@@ -221,27 +220,47 @@ func resolveTestDSN(t *testing.T) string {
 		t.Skip(reason)
 	}
 
-	dsn := strings.TrimSpace(os.Getenv("DATABASE_URL"))
-	source := "DATABASE_URL"
-	if dsn == "" {
-		dsn = defaultTestDSN
-		source = "default (DATABASE_URL unset)"
-	}
-
-	if err := probeDSN(dsn); err != nil {
-		msg := fmt.Sprintf(
-			"no test database reachable via %s (%s): %v\n"+
-				"Start one with `make postgres-up`, or set DATABASE_URL.",
-			source, redactDSN(dsn), err)
+	dsn, unavailable := testDBTarget(os.Getenv("DATABASE_URL"), probeTestDB)
+	if unavailable != "" {
 		if requireTestDB() {
-			t.Fatalf("REQUIRE_TEST_DB=1 but %s", msg)
+			t.Fatalf("REQUIRE_TEST_DB=1 but %s", unavailable)
 		}
 		// Loud on purpose: this line is the only signal that an `ok` package
 		// result covers zero assertions.
-		t.Skipf("SKIPPING DB-BACKED TEST — %s", msg)
+		t.Skipf("SKIPPING DB-BACKED TEST — %s", unavailable)
 	}
 	return dsn
 }
+
+// testDBTarget decides which database DB-backed tests use, given the raw value
+// of DATABASE_URL. It returns that DSN, or a non-empty explanation of why there
+// is none. probe runs only against a DSN the caller actually set, so with
+// DATABASE_URL unset nothing is dialed at all.
+func testDBTarget(databaseURL string, probe func(dsn string) error) (dsn, unavailable string) {
+	dsn = strings.TrimSpace(databaseURL)
+	if dsn == "" {
+		return "", "DATABASE_URL is not set, and DB-backed tests never pick a database server on their own.\n" +
+			provideTestDBHint
+	}
+	if err := probe(dsn); err != nil {
+		return "", fmt.Sprintf("no test database reachable at DATABASE_URL (%s): %v\n%s",
+			redactDSN(dsn), err, provideTestDBHint)
+	}
+	return dsn, ""
+}
+
+// provideTestDBHint ends every "no test database" message, so the skip line
+// itself says how to get the tests to run.
+const provideTestDBHint = "Provide one explicitly:\n" +
+	"  make postgres-up                # this repo's compose Postgres; prints the DATABASE_URL to use\n" +
+	"  DATABASE_URL=<dsn> go test ...  # that DSN, or a database of your own\n" +
+	"or run `make test` (also test-short, test-race, test-coverage), which passes the compose DSN unless you set DATABASE_URL."
+
+// probeTestDB checks that an explicitly configured test database is reachable.
+// It is a variable only so tests can substitute a probe that records instead of
+// dialing, which is how they prove an unconfigured run never touches the
+// network.
+var probeTestDB = probeDSN
 
 // shortModeDBSkipReason returns why a DB-backed test is skipped in this mode,
 // or "" when it should run.
