@@ -65,67 +65,9 @@ sudo apt install ./Reliant-latest-linux-amd64.deb
 
 ## Command line tool
 
-The `reliant` CLI is what runs a daemon on a machine you own, such as a workstation, a server or a Raspberry Pi, so your agents can work there. You don't need it if you use the desktop app or a Reliant cloud machine. The CLI is built from source (see below); once you have the binary, `reliant daemon start` connects the machine to your account. See [Remote Daemons](/features/remote-daemons) for the full walkthrough.
+The `reliant` CLI is what runs a daemon on a machine you own, such as a workstation, a server or a Raspberry Pi, so your agents can work there. You don't need it if you only use the web app or a Reliant cloud machine. The desktop installs include it and put it on your `PATH`: the Debian package and Windows installer do so at install time, and the other desktop installs do it the first time you open the app. Run `reliant --version` to check, then `reliant daemon start` to connect the machine to your account. See [Your own computer](/machines/your-computer) for the full walkthrough.
 
-## Build from Source
-
-Reliant's source is available on [GitHub](https://github.com/reliant-labs/reliant) under the Business Source License 1.1 (see the [License FAQ](/license-faq)). You can build the full Electron desktop app or just the Go backend CLI.
-
-### Prerequisites
-
-- **Go** 1.25+ (see `go.mod`)
-- **Node.js** 18+
-- **Make**
-
-### Electron Desktop App
-
-Clone and run the full desktop application with hot reload:
-
-```bash
-git clone https://github.com/reliant-labs/reliant.git
-cd reliant
-npm install
-make generate
-npm run dev
-```
-
-To create a production build:
-
-```bash
-npm run build
-```
-
-### Go CLI Only
-
-If you only need the backend CLI (no Electron/UI):
-
-```bash
-git clone https://github.com/reliant-labs/reliant.git
-cd reliant
-make generate
-make build
-```
-
-The binary is output to `dist/reliant`. Move it somewhere on your `$PATH`:
-
-```bash
-sudo mv dist/reliant /usr/local/bin/reliant
-```
-
-Or build directly with `go install`:
-
-```bash
-go install github.com/reliant-labs/reliant/cmd/reliant@latest
-```
-
-Either way the binary targets Reliant's hosted platform by default, so it works
-with no flags and no environment:
-
-```bash
-reliant daemon start --token
-```
-
-> See [CONTRIBUTING.md](https://github.com/reliant-labs/reliant/blob/main/CONTRIBUTING.md) for the full development setup guide.
+Reliant's source is on [GitHub](https://github.com/reliant-labs/reliant) under the Business Source License 1.1 (see the [License FAQ](/license-faq)). To build it yourself, follow [CONTRIBUTING.md](https://github.com/reliant-labs/reliant/blob/main/CONTRIBUTING.md).
 
 ## After installing
 
@@ -139,7 +81,7 @@ The desktop app updates itself. To check manually, use **Reliant → Check for U
 brew upgrade --cask reliant
 ```
 
-The web app is always current. If you built the CLI from source, pull and rebuild.
+The web app is always current. 
 
 ## Uninstalling
 

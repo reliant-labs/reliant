@@ -1,0 +1,55 @@
+---
+title: "HTTP"
+description: "Call any public API from a workflow"
+---
+
+The HTTP integration is the escape hatch for services that have no integration of their own. It sends a request to a public `http(s)` URL and returns the status, headers and body. It needs no connection: the caller supplies the URL and any headers.
+
+Reliant refuses requests to private, loopback, link-local and cloud-metadata addresses, checked after DNS resolution, so a workflow cannot be pointed at your internal network or at a machine's metadata service.
+
+## The action
+
+`http/request@1` takes:
+
+| Parameter | Default | Meaning |
+|-----------|---------|---------|
+| `url` | required | The address to call, with any query string |
+| `method` | `GET` | `GET`, `POST`, `PUT`, `PATCH` or `DELETE` |
+| `headers` | | Request headers, name to value |
+| `query` | | Extra query-string parameters |
+| `body` | | An object or list for a JSON or form body, or a string for a text body |
+| `body_type` | `json` | `json`, `form` (a flat object, sent URL-encoded) or `text` |
+| `timeout` | `30` | Seconds to wait for the whole response, 1 to 120 |
+| `response_format` | `auto` | `auto` fills `json` when the body is JSON; `json` fails the step if it is not; `text` never parses |
+| `follow_redirects` | `true` | Follow up to 5 redirects; turn off to receive the redirect itself |
+| `connection` | | A saved API-key or basic-auth connection for the `http` integration |
+
+It returns `status`, `headers` (names lower-cased), `json` (the parsed body, or null) and `text` (the raw body). Responses are limited to 1 MiB.
+
+```yaml
+name: ping-status
+description: Check a public status endpoint
+entry: [check]
+
+nodes:
+  - id: check
+    type: action
+    uses: http/request@1
+    with:
+      url: https://status.example.com/api/v2/status.json
+      method: GET
+      timeout: 10
+```
+
+## Credentials
+
+To authenticate, save an API-key or basic-auth connection for the `http` integration and name it with `connection:`. The credential is sent only to the host the request started at, so a redirect to another site does not carry it along. An API-key connection picks its header from a fixed list, because this integration does not know any particular API.
+
+## Calling in rather than out
+
+HTTP only makes outgoing requests. To start a run from an incoming request, use a [webhook](/automations/webhooks).
+
+## Related topics
+
+- [Integrations overview](/integrations/overview)
+- [Webhooks](/automations/webhooks)

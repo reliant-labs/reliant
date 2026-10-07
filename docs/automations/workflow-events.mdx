@@ -1,0 +1,37 @@
+---
+title: "Workflow events"
+description: "Start a run when another of your workflows finishes, fails or blocks"
+---
+
+A workflow-event automation chains workflows without wiring them together. It fires when a run of one of *your* workflows reaches an outcome, which makes it the natural place for "if the nightly job fails, do something about it".
+
+```yaml
+name: failure-follow-up
+description: Open a follow-up when a Get It Right run fails
+entry: [follow_up]
+
+triggers:
+  - name: run-failed
+    workflow_event:
+      workflows: [builtin://get-it-right]
+      outcomes: [failed]
+
+nodes:
+  - id: follow_up
+    type: workflow
+    ref: builtin://agent
+```
+
+| Field | Meaning |
+|-------|---------|
+| `workflows` | Which workflows' runs to watch, as a slug or `builtin://<name>`. Empty means any of your workflows |
+| `outcomes` | `finished`, `failed` or `blocked` (waiting on an approval or a question). Empty means all three |
+
+A workflow-event trigger never fires on a run that it started itself, or on that run's descendants, so two workflows cannot trigger each other forever. If a name in `workflows` does not resolve yet, validation warns that the trigger matches nothing until the workflow exists.
+
+Use `filter` to narrow further, in the same way as for any other kind, and see [Automations](/automations/overview) for the shared fields.
+
+## Related topics
+
+- [Automations overview](/automations/overview)
+- [Built-in workflows](/guides/overview)

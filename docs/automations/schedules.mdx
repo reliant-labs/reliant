@@ -1,0 +1,61 @@
+---
+title: "Schedules"
+description: "Run a workflow on a cron expression or a fixed interval"
+---
+
+A schedule fires on a clock. You can declare one in a workflow's `triggers:` block, or create one directly with `reliant trigger create`.
+
+## Declaring a schedule
+
+```yaml
+triggers:
+  - name: weekday-digest
+    schedule:
+      cron: ["0 9 * * 1-5"]
+      timezone: America/New_York
+      overlap: skip
+```
+
+| Field | Meaning |
+|-------|---------|
+| `cron` | One or more 5-field cron expressions. Several are a union: it fires whenever any of them matches |
+| `interval` | Fire every interval, as a duration like `30m` or `1h`; at least one minute. Combined with `cron` as a union |
+| `timezone` | IANA zone the cron expressions are read in. Empty means UTC |
+| `overlap` | What to do if the previous run is still going: `skip` (default) or `allow` |
+| `catchup_window` | How late a fire missed during an outage may still run. Default 10 minutes |
+
+`skip` records a skipped firing in the history instead of starting a second run on top of the first. `allow` starts a concurrent run, which can pile up if each run takes longer than the gap between fires. The short catch-up window is deliberate: after an outage you get at most the last few minutes' runs, not a replay of everything you missed.
+
+## From the CLI
+
+```bash
+# Every weekday at 9am, in the project in the working directory
+reliant trigger create --name "morning audit" --cron "0 9 * * 1-5" \
+  --daemon my-workstation \
+  --message "Review yesterday's CI failures and open issues for anything actionable."
+
+# Every 30 minutes, with a workflow and an input
+reliant trigger create --name sweep --interval 30m --workflow builtin://agent \
+  --daemon my-workstation --param depth=2 --message "Sweep the dependency tree."
+```
+
+`--daemon` (a machine id or hostname) and `--message` are required. `--project` defaults to the working directory. `--preset`, `--param`, `--timezone`, `--overlap`, `--catchup-window` and `--disabled` are optional.
+
+Manage them afterwards with:
+
+```bash
+reliant trigger list            # add --all for every project
+reliant trigger get sweep
+reliant trigger events sweep    # firings, newest first
+reliant trigger fire sweep      # run it now
+reliant trigger disable sweep   # pause; enable to resume
+reliant trigger delete sweep
+```
+
+A manual `fire` skips the enabled and overlap checks. Deleting a trigger keeps its firing history; the runs it started still exist.
+
+## Related topics
+
+- [Automations overview](/automations/overview)
+- [No-machine runs](/automations/no-machine-runs)
+- [Cloud machines & plans](/machines/cloud), for what happens when the machine is asleep at fire time

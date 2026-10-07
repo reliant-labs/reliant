@@ -1,0 +1,56 @@
+---
+title: "Best of Three"
+description: "Three agents implement the same task in separate worktrees; a reviewer picks the best or combines them"
+---
+
+When a task has several reasonable solutions, the cheapest way to find the good one is to try three. **Best of Three** has three agents implement it in parallel, each in its own isolated copy of your project, then a reviewer reads all three and either picks one or combines their best parts.
+
+## How a run goes
+
+1. **Improve the prompt.** One model call rewrites your request into a clearer specification with acceptance criteria and edge cases, and the result is saved to the chat.
+2. **Three candidates.** Each gets its own git worktree, branched from where your chat's checkout is now, and works from the same specification. One failing does not stop the others.
+3. **Review.** A reviewer opens all three worktrees, reads the code, and decides: **use winner** (one is clearly best) or **synthesize** (the best answer combines pieces), with a confidence from 1 to 10 and a rationale.
+4. **Apply.** The winner is applied to your project, or for synthesize an agent works in your project to merge what the reviewer asked for.
+5. **Verify.** Your test and build commands run on the result.
+
+<Frame caption="The reviewer's verdict between three candidates. Example data.">
+  <img src="/images/v2/p1-best-of-three-judge-verdict.png" alt="A reviewer choosing between three candidate implementations" />
+</Frame>
+
+## How the winner is applied
+
+This step touches your files, so it is deliberately cautious. Applying a winner does not copy the candidate over your project. It takes only the candidate's *changes* and applies them as a patch with `git apply`.
+
+For each git checkout in the candidate (the project root, or each nested repository), the workflow computes everything the candidate changed since it started, committed or not, as a binary-safe diff from the point it branched. It leaves out gitignored files and the `.env` files that were copied in so the candidate could run. It then **checks every patch against your project before applying any**. If any patch would not apply cleanly, nothing is changed and the step fails with a message saying so.
+
+Several things protect your own work:
+
+- Only files the candidate changed are touched. Your other files, and anything the candidate did not modify, are left alone.
+- Paths outside the project are refused by `git apply` itself.
+- The step refuses to run unless the destination is your chat's checkout (never `/` or your home directory) and the source is one of this run's candidate worktrees.
+- Nothing is committed. The changes land as ordinary uncommitted edits, and the step finishes by telling you to run `git status` and `git diff`.
+
+If your checkout has uncommitted edits to the same lines the winner changed, the apply is refused. Commit or stash your work, or move it aside, and re-run the apply, or take the candidate's worktree yourself: the final message lists all three paths.
+
+When the reviewer chooses **synthesize**, an agent works directly in your checkout instead, starting from the base candidate and following the reviewer's instructions. It is told never to use `rsync --delete` or `rm -r`, but this path is an agent making edits rather than a patch, so review it as you would any agent's work.
+
+## Inputs
+
+| Input | Default | What it does |
+|-------|---------|--------------|
+| `test_command` | `npm test` | Run after applying; empty to skip |
+| `build_command` | `npm run build` | Run after applying; empty to skip |
+| `implementer` | | Group of settings for the three candidates: `model`, `max_turns` (200), `tools`, `system_prompt`, `spawn_presets`, `skills` |
+| `mode`, `model` | `auto`, flagship | Execution mode and model for the other phases |
+
+The defaults assume an npm project, so set both commands for anything else. They run only after the result has been applied.
+
+## Cost and clean-up
+
+Three candidates cost roughly three times one implementation, plus a review. The candidate worktrees stay on disk under `~/.reliant/worktrees` after the run so you can look at the losers; remove them from **Workspaces** when you are done.
+
+## Related topics
+
+- [Built-in workflows](/guides/overview)
+- [Get It Right](/guides/get-it-right)
+- [Worktrees](/features/worktrees)

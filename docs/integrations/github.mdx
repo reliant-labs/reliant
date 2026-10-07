@@ -1,0 +1,89 @@
+---
+title: "GitHub"
+description: "Act on repositories, issues and pull requests, and start runs when they change"
+---
+
+The GitHub integration lets a workflow or agent act on GitHub as you, and start a run when something happens in a repository. It is separate from the [GitHub connection used to clone and push](/features/git-integration); both can be connected, and neither needs the other.
+
+## Access
+
+Reliant acts through the Reliant GitHub App, signed in as you. What it can do is the intersection of the App's permissions and what you can see, and only in repositories where the App is installed. GitHub answers a repository the App cannot reach with "not found" rather than "forbidden", so a **not found** error on a repository you know exists usually means the App is not installed there. A fine-grained personal access token is also accepted as a connection.
+
+## Actions
+
+| Action | What it does |
+|--------|--------------|
+| `user.get` | The account the connection acts as |
+| `issue.create` | Open an issue with a title, body, labels and assignees |
+| `issue.get` | Read an issue (or a pull request's conversation) |
+| `issue.comment` | Comment on an issue or pull request |
+| `issue.update` | Change state, labels, assignees, title or body |
+| `pr.get` | Read a pull request: head and base, mergeability |
+| `pr.list_files` | The files a pull request changes, with diff hunks |
+| `pr.review.create` | Submit a review: comment, approve or request changes |
+| `repo.list_for_user` | Repositories the connection can see |
+| `repo.get` | A repository's metadata, including its default branch |
+| `repo.get_content` | Read a file, or list a directory, at a branch, tag or commit |
+| `repo.get_tree` | Every file path in a repository or directory |
+| `code.search` | GitHub code search |
+| `workflow.dispatch` | Run an Actions workflow that has a `workflow_dispatch` trigger |
+
+Use them as `github/<action>@1`. Repository parameters are `owner` and `repo`, the two halves of `owner/repo`.
+
+## Events
+
+| Trigger | `events` value |
+|---------|----------------|
+| Issue opened, closed, edited, labeled, assigned | `issues.opened`, `issues.closed`, `issues.edited`, `issues.labeled`, `issues.assigned` |
+| Comment on an issue or pull request | `issue_comment.created` |
+| Pull request opened, updated, closed or merged, ready for review, review requested | `pull_request.opened`, `pull_request.synchronize`, `pull_request.closed`, `pull_request.ready_for_review`, `pull_request.review_requested` |
+| Review submitted | `pull_request_review.submitted` |
+| Push | `push` |
+| Actions run finished | `workflow_run.completed` |
+
+You can narrow a trigger with `match`. Every event carries `repository` (`owner/name`), `installation_id`, `sender` and `action`; individual events add more, such as `label` and `assignee` on labeled and assigned issues, `merged` on closed pull requests, `branch` and `tag` on pushes, `conclusion` on finished runs, and `mentions_reliant` and `is_pull_request` on comments.
+
+## Example: review each new pull request
+
+```yaml
+name: pr-reviewer
+description: Review each pull request when it is opened and comment on it
+entry: [review]
+
+inputs:
+  pull_number:
+    type: integer
+    default: 0
+    description: The pull request to review (set by the trigger)
+  repo_full_name:
+    type: string
+    default: ""
+    description: owner/name of the repository (set by the trigger)
+
+triggers:
+  - name: pr-opened
+    integration:
+      integration: github
+      events: [pull_request.opened]
+      match:
+        repository: acme/shopfront
+    inputs:
+      pull_number: "{{ trigger.payload.data.pull_request.number }}"
+      repo_full_name: "{{ trigger.payload.data.repository.full_name }}"
+    prompt: "Review pull request #{{ trigger.payload.data.pull_request.number }} in {{ trigger.payload.data.repository.full_name }}"
+
+nodes:
+  - id: review
+    type: workflow
+    ref: builtin://agent
+    args:
+      tools: ["tag:web"]
+```
+
+The agent here is limited to web tools so the example needs no machine. Give it the integration's tools or a machine with a checkout if it should read the diff and post the review itself.
+
+## Related topics
+
+- [Integrations overview](/integrations/overview)
+- [Git & GitHub](/features/git-integration), for cloning and opening pull requests from a workspace
+- [Automations](/automations/overview)
