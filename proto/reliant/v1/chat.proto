@@ -255,6 +255,11 @@ service ChatService {
   
   // GetWorkflowExecutions returns the workflow execution tree for a chat
   rpc GetWorkflowExecutions(GetWorkflowExecutionsRequest) returns (GetWorkflowExecutionsResponse) {}
+
+  // ListStepExecutions returns the full record of a chat's steps — resolved
+  // inputs, output and error per attempt — optionally scoped to one node.
+  // What the builder's Run tab inspects a step from.
+  rpc ListStepExecutions(ListStepExecutionsRequest) returns (ListStepExecutionsResponse) {}
   
   // GetThreadWorkflowInputs returns the workflow inputs for a specific thread
   rpc GetThreadWorkflowInputs(GetThreadWorkflowInputsRequest) returns (GetThreadWorkflowInputsResponse) {}
@@ -947,6 +952,22 @@ message StepExecution {
   //
   // Absent means "this step saved no message", which is every non-save step.
   optional string saved_message_id = 12;
+
+  // The debugging record of this attempt. Sent only by ListStepExecutions;
+  // GetWorkflowExecutions leaves them empty.
+  //
+  // input_json is the node's resolved args — what its {{ }} expressions
+  // evaluated to — as JSON, with long strings cut and marked. Empty for
+  // activities that are not graph nodes, and for rows written before it was
+  // recorded.
+  string input_json = 13;
+  // Why this attempt failed. Empty when it did not.
+  string error_message = 14;
+  // Temporal's 1-based attempt number; 0 when not recorded. A retried step
+  // has one execution per attempt.
+  int32 attempt = 15;
+  // The node's dotted graph position ("agent.agent_loop.call_llm").
+  string node_path = 16;
 }
 
 // WorkflowExecution represents a workflow and its children
@@ -1034,6 +1055,21 @@ message GetWorkflowExecutionsResponse {
   optional WorkflowExecution root_workflow = 1;
   // All root workflows for this chat, sorted by created_at descending (newest first)
   repeated WorkflowExecution all_root_workflows = 2;
+}
+
+message ListStepExecutionsRequest {
+  string chat_id = 1;
+  // Scopes the result to one node and everything that ran inside it (an
+  // Agent step's own turns, a loop's body): "summarize", or "attempt.review"
+  // for a node inside a loop body. Empty means every step of the chat.
+  string node_path = 2;
+}
+
+message ListStepExecutionsResponse {
+  // Newest first, with output_json, input_json and error_message populated.
+  repeated StepExecution step_executions = 1;
+  // True when older executions were left out to bound the response.
+  bool truncated = 2;
 }
 
 // SetChatDaemonRequest sets the active daemon for a chat session.

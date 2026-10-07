@@ -785,6 +785,9 @@ type Repository interface {
 	// per-workflow loop over GetStepExecutionsByWorkflow.
 	GetStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
 	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
+	// ListStepExecutionRecordsForChat returns full step rows (inputs, output,
+	// error), newest first, optionally scoped to one node and what ran inside it.
+	ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error)
 	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
 
 	// Node Execution Events (for real-time UI streaming)

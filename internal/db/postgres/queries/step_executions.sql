@@ -2,9 +2,40 @@
 INSERT INTO step_executions (
     id, workflow_id, step_id, activity_name,
     output_json, exit_code, success, duration_ms,
-    loop_node_id, loop_iteration, created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+    loop_node_id, loop_iteration, created_at,
+    input_json, error_message, attempt, node_path
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 RETURNING *;
+
+-- name: ListStepExecutionRecordsForChat :many
+-- The full record of a chat's steps — inputs, output and error included — for
+-- ChatService/ListStepExecutions, which the builder's Run tab reads when the
+-- author inspects one step of a run.
+--
+-- This is the one read that ships output_json for internal activities too:
+-- CallLLM's output IS the step's answer and tool calls. It is affordable
+-- because it is scoped. Given a node_path, only that node and what ran inside
+-- it (an Agent step's own turns, a loop body) are read; the newest rows win
+-- when the limit cuts. Rows written before node_path existed fall back to
+-- their step id, so a node's older history still answers.
+SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
+       se.output_json, se.exit_code, se.success, se.duration_ms,
+       se.loop_node_id, se.loop_iteration, se.created_at,
+       se.input_json, se.error_message, se.attempt, se.node_path
+FROM step_executions se
+JOIN workflows w ON w.id = se.workflow_id
+WHERE w.chat_id = sqlc.arg('chat_id')
+  AND (
+      sqlc.arg('node_path')::text = ''
+      OR se.node_path = sqlc.arg('node_path')::text
+      -- starts_with, not LIKE: node ids are full of underscores, which LIKE
+      -- reads as wildcards.
+      OR starts_with(se.node_path, sqlc.arg('node_path')::text || '.')
+      OR (se.node_path IS NULL AND (se.step_id = sqlc.arg('node_path')::text
+                                    OR se.step_id = sqlc.arg('node_path')::text || '-save'))
+  )
+ORDER BY se.created_at DESC, se.id DESC
+LIMIT sqlc.arg('row_limit');
 
 -- name: GetStepExecution :one
 SELECT * FROM step_executions WHERE id = $1;

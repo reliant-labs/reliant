@@ -21,7 +21,13 @@ import {
   RouterProvider,
 } from "@tanstack/react-router";
 
-import { ChatSchema, StartChatResponseSchema } from "@/gen/reliant/v1/chat_pb";
+import {
+  ChatActivity,
+  ChatSchema,
+  StartChatResponseSchema,
+  WorkflowState,
+  WorkflowStopReason,
+} from "@/gen/reliant/v1/chat_pb";
 import { WORKFLOW_LIST, getWorkflowByName, presetsResponse, worktreesResponse } from "./runFormFixtures";
 
 const listWorkflows = vi.fn();
@@ -144,7 +150,10 @@ describe("BuilderTestRunPanel", () => {
       builderTest: true,
     });
     expect(request.messages[0].content).toBe("Triage the new issues");
-    expect(props.onStarted).toHaveBeenCalledWith("test-chat-1");
+    expect(props.onStarted).toHaveBeenCalledWith(
+      "test-chat-1",
+      expect.objectContaining({ prompt: "Triage the new issues", value: expect.objectContaining({ params: expect.objectContaining({ label: "bug" }) }) }),
+    );
   });
 
   it("does not start when the save fails", async () => {
@@ -210,5 +219,60 @@ describe("BuilderTestRunPanel", () => {
     expect(link).toHaveAttribute("href", "/workflows/runs/test-chat-1");
     expect(screen.getByRole("button", { name: "Run again" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/workflow");
+  });
+
+  it("reopens with the last run's message and inputs, so Run again repeats that run", async () => {
+    const user = userEvent.setup();
+    chatQuery.mockReturnValue({ data: { id: "test-chat-1" } });
+    const props = baseProps({
+      testChatId: "test-chat-1",
+      initialRequest: { prompt: "Triage the new issues", value: { presets: {}, params: { label: "bug" } } },
+    });
+    renderPanel(<BuilderTestRunPanel {...props} />);
+
+    expect(await screen.findByLabelText("Message")).toHaveValue("Triage the new issues");
+    expect(await screen.findByLabelText("Label")).toHaveValue("bug");
+    await user.click(screen.getByRole("button", { name: "Run again" }));
+
+    await waitFor(() => expect(startChat).toHaveBeenCalledTimes(1));
+    const request = startChat.mock.calls[0]![0];
+    expect(request.messages[0].content).toBe("Triage the new issues");
+    expect(request.workflowParams).toBeDefined();
+  });
+
+  it("names the step a finished run failed at and takes the author to it", async () => {
+    const user = userEvent.setup();
+    chatQuery.mockReturnValue({ data: { id: "test-chat-1" } });
+    const onGoToProblem = vi.fn();
+    renderPanel(
+      <BuilderTestRunPanel
+        {...baseProps({
+          testChatId: "test-chat-1",
+          failure: { label: "Slack · Post message · post", message: "channel_not_found" },
+          onGoToProblem,
+        })}
+      />,
+    );
+
+    const failure = await screen.findByTestId("test-run-failure");
+    expect(failure).toHaveTextContent("Slack · Post message · post failed");
+    expect(failure).toHaveTextContent("channel_not_found");
+    await user.click(screen.getByRole("button", { name: "Go to problem" }));
+    expect(onGoToProblem).toHaveBeenCalledTimes(1);
+  });
+
+  it("holds Run again back only while the run is executing, not while it is parked on a failed step", async () => {
+    const running = { workflowState: WorkflowState.ACTIVE, workflowStopReason: WorkflowStopReason.UNSPECIFIED, activity: ChatActivity.RUNNING };
+    chatQuery.mockReturnValue({ data: running });
+    renderPanel(<BuilderTestRunPanel {...baseProps({ testChatId: "test-chat-1" })} />);
+    expect(await screen.findByRole("button", { name: "Run again" })).toBeDisabled();
+  });
+
+  it("lets a paused run be run again, so a fix can be tried", async () => {
+    chatQuery.mockReturnValue({
+      data: { workflowState: WorkflowState.STOPPED, workflowStopReason: WorkflowStopReason.PAUSED, activity: ChatActivity.PAUSED },
+    });
+    renderPanel(<BuilderTestRunPanel {...baseProps({ testChatId: "test-chat-1" })} />);
+    expect(await screen.findByRole("button", { name: "Run again" })).toBeEnabled();
   });
 });

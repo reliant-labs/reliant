@@ -814,6 +814,17 @@ type Querier interface {
 	// fire workflow for them was never started (the receiver crashed between the
 	// insert and the start) or died. The redriver restarts their fires.
 	ListStalePendingTriggerEvents(ctx context.Context, arg ListStalePendingTriggerEventsParams) ([]TriggerEvent, error)
+	// The full record of a chat's steps — inputs, output and error included — for
+	// ChatService/ListStepExecutions, which the builder's Run tab reads when the
+	// author inspects one step of a run.
+	//
+	// This is the one read that ships output_json for internal activities too:
+	// CallLLM's output IS the step's answer and tool calls. It is affordable
+	// because it is scoped. Given a node_path, only that node and what ran inside
+	// it (an Agent step's own turns, a loop body) are read; the newest rows win
+	// when the limit cuts. Rows written before node_path existed fall back to
+	// their step id, so a node's older history still answers.
+	ListStepExecutionRecordsForChat(ctx context.Context, arg ListStepExecutionRecordsForChatParams) ([]ListStepExecutionRecordsForChatRow, error)
 	// The async-spawn counterpart to ListStrandedSpawnToolCalls above (spec:
 	// async-spawn-and-agent-messaging.md, §7.1). A background=true spawn
 	// (dispatchSpawnBackground/workflow.go) writes tool_calls.status = 6

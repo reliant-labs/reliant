@@ -47,6 +47,8 @@ import { NodeOutputsPanel } from "./NodeOutputsPanel";
 import { NodeFindingsScope, useNodeFindings } from "../WorkflowFindingsContext";
 import { humanizeField, type LocatedFinding } from "../workflowFindings";
 import { ConfigPanelTabBar, type ConfigTab } from "./ConfigPanelTabBar";
+import { useStepRun } from "../run/BuilderRunContext";
+import { StepRunFailureBanner, StepRunPanel } from "../run/StepRunPanel";
 
 import { getCatalogClient } from "../../../api/grpc-client";
 import type { NodeInfo } from "../../../gen/reliant/v1/catalog_pb";
@@ -167,21 +169,37 @@ export function ConfigPanel({
   const currentProject = useProjectStore((state) => state.currentProject);
   const projectId = currentProject?.id;
 
-  // Tab state
-  const [activeTab, setActiveTab] = useState("config");
+  // This step's part in the builder's test run, when there is one.
+  const stepRun = useStepRun(step.id);
+  const hasRunRef = useRef(!!stepRun);
+  hasRunRef.current = !!stepRun;
+
+  // The canvas's problems with this step. Picking one in the header's
+  // problems list (or "Go to problem" on a test run) lands here: show the
+  // Config tab, where its field is.
+  const { findings: stepFindings, focus: findingFocus } = useNodeFindings(step.id);
+
+  // Tab state: a step that ran in the test run opens on what it did — unless
+  // it was opened to take the author to one of its fields.
+  const [activeTab, setActiveTab] = useState(() => (stepRun && !findingFocus ? "run" : "config"));
 
   // Collapsible section state for Advanced tab
   const [isSaveMessageExpanded, setIsSaveMessageExpanded] = useState(false);
   const [isProjectExpanded, setIsProjectExpanded] = useState(false);
 
   // Reset tab when step changes
+  const findingFocusRef = useRef(findingFocus);
+  findingFocusRef.current = findingFocus;
   useEffect(() => {
-    setActiveTab("config");
+    setActiveTab(hasRunRef.current && !findingFocusRef.current ? "run" : "config");
   }, [step.id]);
 
-  // The canvas's problems with this step. Picking one in the header's
-  // problems list lands here: show the Config tab, where its field is.
-  const { findings: stepFindings, focus: findingFocus } = useNodeFindings(step.id);
+  // "Go to problem" on a run failure no field owns lands on the Run tab.
+  const runFocus = stepRun?.focus ?? null;
+  useEffect(() => {
+    if (runFocus) setActiveTab("run");
+  }, [runFocus]);
+
   useEffect(() => {
     if (findingFocus) setActiveTab("config");
   }, [findingFocus]);
@@ -313,6 +331,8 @@ export function ConfigPanel({
   const hasConditionConfig = !!getConditionExpression(step.condition);
   const hasAdvancedBadge = hasSaveMessageConfig || hasProjectConfig || hasConditionConfig;
 
+  const hasRun = !!stepRun;
+
   // Determine if Config tab has content
   const hasConfigContent = useMemo(() => {
     // Non-action step types always have config content, and an integration
@@ -330,6 +350,10 @@ export function ConfigPanel({
   const tabs = useMemo((): ConfigTab[] => {
     const result: ConfigTab[] = [];
 
+    if (hasRun) {
+      result.push({ id: "run", label: "Run" });
+    }
+
     if (hasConfigContent) {
       result.push({ id: "config", label: "Config" });
     }
@@ -346,7 +370,7 @@ export function ConfigPanel({
     result.push({ id: "outputs", label: "Outputs" });
 
     return result;
-  }, [step, hasConfigContent, hasThreadBadge, hasInjectBadge, hasAdvancedBadge]);
+  }, [step, hasRun, hasConfigContent, hasThreadBadge, hasInjectBadge, hasAdvancedBadge]);
 
   // If active tab is no longer available (e.g. Config hidden after catalog loads), select first tab
   useEffect(() => {
@@ -490,6 +514,10 @@ export function ConfigPanel({
       )}
 
       <StepProblems findings={stepFindings} />
+      {activeTab !== "run" && <StepRunFailureBanner nodeId={step.id ?? ""} onShowRun={() => setActiveTab("run")} />}
+
+      {/* ============ RUN TAB ============ */}
+      {activeTab === "run" && hasRun && <StepRunPanel nodeId={step.id ?? ""} />}
 
       {/* ============ CONFIG TAB ============ */}
       {activeTab === "config" && (

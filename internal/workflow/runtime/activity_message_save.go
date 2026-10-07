@@ -234,7 +234,15 @@ func (w *ActivityWrapper[I, O]) saveActivityMessage(
 		"thread", saveInput.Thread)
 
 	saveStepID := stepID + "-save"
-	w.writeStepExecution(ctx, workflowID, saveStepID, "SaveMessage", saveOutput, nil, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+	w.writeStepExecution(ctx, stepAttempt{
+		WorkflowID:   workflowID,
+		StepID:       saveStepID,
+		ActivityType: "SaveMessage",
+		Scope:        inputInfo,
+		Attempt:      int(info.Attempt),
+		Output:       saveOutput,
+		DurationMs:   durationMs,
+	})
 	end := time.Now()
 	w.emitNodeExecutionEvent(ctx, "completed", false, saveStepID, inputInfo, "SaveMessage", inputInfo.ChatID, workflowID, info.ActivityID, &start, &end, &durationMs, nil, nil)
 	return nil

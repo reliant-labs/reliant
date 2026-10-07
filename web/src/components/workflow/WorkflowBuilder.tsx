@@ -97,8 +97,11 @@ import type { BackgroundVariant, SelectionMode } from "@xyflow/react";
 import { WorkflowEditorChatPanel, type PanelSize } from "./WorkflowEditorChatPanel";
 import { useWorkflowDraftSync, type RemoteWorkflowState } from "./hooks/useWorkflowDraftSync";
 import { ScenarioPanel } from "./ScenarioPanel";
-import { BuilderTestRunPanel } from "./run/BuilderTestRunPanel";
-import { useBuilderTestRun, withTestRunStatus } from "./hooks/useBuilderTestRun";
+import { BuilderTestRunPanel, type TestRunRequest } from "./run/BuilderTestRunPanel";
+import { BuilderRunProvider, type RunFocus } from "./run/BuilderRunContext";
+import { runErrorFieldKey } from "./run/builderRun";
+import { useBuilderRun } from "./hooks/useBuilderTestRun";
+import { withBuilderRun, withBuilderRunEdges, withRunMarkers } from "./nodes/runMarkers";
 import { useProjectStore } from "../../store/projectStore";
 import { normalizeWorkflowRef } from "./useWorkflowInputs";
 import { celString, directCel } from "../../lib/celAdapter";
@@ -140,8 +143,9 @@ import {
 } from "../../lib/actionNodeArgs";
 import { actionParamDefaults } from "../../lib/jsonSchemaFields";
 
-// Every node type, able to show its validation problems on the canvas.
-const nodeTypes = withProblemMarkers(baseNodeTypes);
+// Every node type, able to show its validation problems and a test run's
+// state on the canvas.
+const nodeTypes = withProblemMarkers(withRunMarkers(baseNodeTypes));
 
 /** Result of a save operation */
 export interface SaveResult {
@@ -369,6 +373,9 @@ function WorkflowBuilderInner({
   // node's status as the run goes, stays visible.
   const [showTestRunPanel, setShowTestRunPanel] = useState(false);
   const [testRunChatId, setTestRunChatId] = useState<string | null>(null);
+  // What the last test run was started with: the panel reopens with it, and
+  // its inputs are the sample values for `inputs.*`.
+  const [lastTestRunRequest, setLastTestRunRequest] = useState<TestRunRequest | null>(null);
 
   // Get current project for the chat assistant
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -937,9 +944,11 @@ function WorkflowBuilderInner({
     }
   }, [onSaveForTestRun, buildWorkflow, workflow.name]);
 
-  // A running test paints its node statuses onto the canvas.
-  const nodeIds = useMemo(() => nodes.map((n) => n.id), [nodes]);
-  const testRunStatuses = useBuilderTestRun(testRunChatId, nodeIds);
+  // A test run is drawn on the canvas: each step's state, the path it took,
+  // each loop's iterations. Inside a loop or inline body the canvas is that
+  // body, which the run's top-level steps don't map onto.
+  const testRun = useBuilderRun(testRunChatId, nodes, edges);
+  const testRunView = isEditingLoop ? null : (testRun?.view ?? null);
   // The canvas's problems, on the steps they are about. Inside a loop or
   // inline body the canvas is that body, which top-level findings don't map
   // onto, so markers wait until the user is back on the workflow. Markers go
@@ -952,11 +961,48 @@ function WorkflowBuilderInner({
   const displayedNodes = useMemo(
     () =>
       withFindingMarkers(
-        withNodeAriaLabels(withTestRunStatus(nodes, testRunStatuses), edges, getNodeDisplayName),
+        withBuilderRun(withNodeAriaLabels(nodes, edges, getNodeDisplayName), testRunView),
         findingsOnCanvas,
       ),
-    [nodes, edges, testRunStatuses, findingsOnCanvas],
+    [nodes, edges, testRunView, findingsOnCanvas],
   );
+  const displayedEdges = useMemo(() => withBuilderRunEdges(edges, testRunView), [edges, testRunView]);
+
+  // "Go to problem" for a failed test run: select the step that failed and,
+  // when its error names a field, focus that field the way a validation
+  // finding does; otherwise open the step's Run tab, where the error is.
+  const [runFocus, setRunFocus] = useState<RunFocus | null>(null);
+  const focusStepField = useCallback((nodeId: string, fieldKey: string) => {
+    setShowSettingsEditor(false);
+    setSelectedDeclared(null);
+    setSelectedEdgeId(null);
+    setChatPanelOpen(false);
+    setSelectedNodeId(nodeId);
+    setFindingFocus((prev) => ({ nodeId, fieldKey, seq: (prev?.seq ?? 0) + 1 }));
+  }, []);
+  // A failed step is reported as soon as it fails: an attended run parks on
+  // the failure (paused) rather than ending, waiting for a fix.
+  const failedStepId = testRunView?.failed[0];
+  const failedStepError = failedStepId ? testRunView?.nodes[failedStepId]?.error : undefined;
+  const testRunFailure = useMemo(
+    () => (failedStepId ? { label: describeNode(failedStepId), message: failedStepError } : null),
+    [failedStepId, failedStepError, describeNode],
+  );
+  const goToRunProblem = useCallback(() => {
+    if (!failedStepId) return;
+    const fieldKey = runErrorFieldKey(failedStepError);
+    if (fieldKey) {
+      focusStepField(failedStepId, fieldKey);
+      return;
+    }
+    setShowSettingsEditor(false);
+    setSelectedDeclared(null);
+    setSelectedEdgeId(null);
+    setChatPanelOpen(false);
+    setSelectedNodeId(failedStepId);
+    setRunFocus((prev) => ({ nodeId: failedStepId, seq: (prev?.seq ?? 0) + 1 }));
+  }, [failedStepId, failedStepError, focusStepField]);
+  const testRunInputs = useMemo(() => lastTestRunRequest?.value.params ?? {}, [lastTestRunRequest]);
 
   // Offered by a rejected save of a published workflow: store the canvas as a
   // draft instead (it stops being runnable until it is published again).
@@ -2067,7 +2113,7 @@ function WorkflowBuilderInner({
           <CanvasInsertProvider value={canvasInsertion.api}>
           <ReactFlow
             nodes={displayedNodes}
-            edges={edges}
+            edges={displayedEdges}
             onNodesChange={handleNodesChange}
             onEdgesChange={handleEdgesChange}
             onConnect={onConnect}
@@ -2175,6 +2221,12 @@ function WorkflowBuilderInner({
 
         return (
           <WorkflowFindingsProvider byNode={findingsOnCanvas} focus={findingFocus}>
+          <BuilderRunProvider
+            run={isEditingLoop ? null : testRun}
+            inputs={testRunInputs}
+            focus={runFocus}
+            focusField={focusStepField}
+          >
           <CELCompletionProvider value={celCompletionContext}>
             {/* Config Panel - view-only for builtin workflows. Mutation
                 callbacks (update/delete/rename) come from
@@ -2271,7 +2323,14 @@ function WorkflowBuilderInner({
                 workflowRef={savedWorkflowName}
                 saveDraft={saveForTestRun}
                 testChatId={testRunChatId}
-                onStarted={setTestRunChatId}
+                initialRequest={lastTestRunRequest}
+                onStarted={(chatId, request) => {
+                  setTestRunChatId(chatId);
+                  setLastTestRunRequest(request);
+                }}
+                failure={testRunFailure}
+                onGoToProblem={goToRunProblem}
+                onClear={() => setTestRunChatId(null)}
                 onClose={() => setShowTestRunPanel(false)}
                 bottomOffset={configPanelBottomOffset}
                 topOffset={configPanelTopOffset}
@@ -2320,6 +2379,7 @@ function WorkflowBuilderInner({
               />
             )}
           </CELCompletionProvider>
+          </BuilderRunProvider>
           </WorkflowFindingsProvider>
         );
       })()}

@@ -78,6 +78,20 @@ type StepExecution struct {
 	// which one" without loading OutputJSON, which is TOASTed and can be
 	// megabytes per row.
 	SavedMessageID sql.NullString `json:"saved_message_id"`
+
+	// The debugging record of this attempt (migration 20261007011605): what
+	// the step was given and how it ended. NULL on rows written before it.
+	//
+	// InputJSON is the node's resolved args as JSON, bounded by the writer;
+	// NULL for activities that are not graph nodes.
+	InputJSON sql.NullString `json:"input_json"`
+	// ErrorMessage is why this attempt failed; NULL when it did not.
+	ErrorMessage sql.NullString `json:"error_message"`
+	// Attempt is Temporal's 1-based attempt number. A retried step writes one
+	// row per attempt.
+	Attempt sql.NullInt32 `json:"attempt"`
+	// NodePath is the node's dotted graph position ("agent.agent_loop.call_llm").
+	NodePath sql.NullString `json:"node_path"`
 }
 
 // ChatStepExecution is one step of one workflow of a chat, as the chat's
@@ -160,6 +174,10 @@ type WorkflowStore interface {
 	// renders: user-facing steps plus their "-save" siblings that recorded a
 	// message. The BASIC view of GetWorkflowExecutions.
 	GetBasicStepExecutionsForChat(ctx context.Context, chatID string) ([]*ChatStepExecution, error)
+	// ListStepExecutionRecordsForChat returns full rows — inputs, output and
+	// error — newest first, at most limit. A non-empty nodePath scopes them to
+	// that node and everything that ran inside it.
+	ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*StepExecution, error)
 	DeleteStepExecutionsByWorkflow(ctx context.Context, workflowID string) error
 
 	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)

@@ -295,8 +295,46 @@ func (s *workflowStore) CreateStepExecution(ctx context.Context, exec *core.Step
 		LoopNodeID:    exec.LoopNodeID,
 		LoopIteration: exec.LoopIteration,
 		CreatedAt:     exec.CreatedAt,
+		InputJson:     exec.InputJSON,
+		ErrorMessage:  exec.ErrorMessage,
+		Attempt:       exec.Attempt,
+		NodePath:      exec.NodePath,
 	})
 	return err
+}
+
+// ListStepExecutionRecordsForChat reads a chat's full step records, scoped to
+// a node when nodePath is set. See queries/step_executions.sql.
+func (s *workflowStore) ListStepExecutionRecordsForChat(ctx context.Context, chatID, nodePath string, limit int) ([]*core.StepExecution, error) {
+	rows, err := s.q.ListStepExecutionRecordsForChat(ctx, pgdb.ListStepExecutionRecordsForChatParams{
+		ChatID:   chatID,
+		NodePath: nodePath,
+		RowLimit: int32(limit),
+	})
+	if err != nil {
+		return nil, err
+	}
+	items := make([]*core.StepExecution, len(rows))
+	for i, row := range rows {
+		items[i] = stepExecutionFromPG(pgdb.StepExecution{
+			ID:            row.ID,
+			WorkflowID:    row.WorkflowID,
+			StepID:        row.StepID,
+			ActivityName:  row.ActivityName,
+			OutputJson:    row.OutputJson,
+			ExitCode:      row.ExitCode,
+			Success:       row.Success,
+			DurationMs:    row.DurationMs,
+			CreatedAt:     row.CreatedAt,
+			LoopNodeID:    row.LoopNodeID,
+			LoopIteration: row.LoopIteration,
+			InputJson:     row.InputJson,
+			ErrorMessage:  row.ErrorMessage,
+			Attempt:       row.Attempt,
+			NodePath:      row.NodePath,
+		})
+	}
+	return items, nil
 }
 
 func (s *workflowStore) GetStepExecution(ctx context.Context, id string) (*core.StepExecution, error) {
@@ -469,6 +507,10 @@ func stepExecutionFromPG(row pgdb.StepExecution) *core.StepExecution {
 		LoopIteration:  row.LoopIteration,
 		CreatedAt:      row.CreatedAt,
 		SavedMessageID: row.SavedMessageID,
+		InputJSON:      row.InputJson,
+		ErrorMessage:   row.ErrorMessage,
+		Attempt:        row.Attempt,
+		NodePath:       row.NodePath,
 	}
 }
 

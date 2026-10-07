@@ -78,6 +78,7 @@ describe('reduceNodeExecutions (stream-derived node status)', () => {
     expect(reduceNodeExecutions([])).toEqual({
       statusByKey: {},
       iterationByKey: {},
+      decidingEventByKey: {},
       loopScoped: [],
       latestSequenceByWorkflow: {},
     })
@@ -207,5 +208,27 @@ describe('reduceNodeExecutions (stream-derived node status)', () => {
       iteration: 1,
       maxIterations: 3,
     })
+  })
+})
+
+describe('reduceNodeExecutions decidingEventByKey', () => {
+  it('keeps the event that decided each status, so a caller can read what the coarse status cannot', () => {
+    const skipped = persistedEvent('review', 'completed', 4, { status: ProtoNodeExecutionStatus.SKIPPED })
+    const failed = liveEvent('post', NodeExecutionEventType.FAILED, 6, {
+      status: ProtoNodeExecutionStatus.FAILED,
+      error_message: 'channel_not_found',
+    })
+    const { decidingEventByKey, statusByKey } = reduceNodeExecutions([
+      persistedEvent('review', 'started', 3),
+      skipped,
+      liveEvent('post', NodeExecutionEventType.STARTED, 5),
+      failed,
+      // A late "started" never decides over a terminal event.
+      liveEvent('post', NodeExecutionEventType.STARTED, 7),
+    ])
+
+    expect(statusByKey[nodeExecutionKey(WF, 'review')]).toBe('completed')
+    expect(decidingEventByKey[nodeExecutionKey(WF, 'review')]).toBe(skipped)
+    expect(decidingEventByKey[nodeExecutionKey(WF, 'post')]).toBe(failed)
   })
 })

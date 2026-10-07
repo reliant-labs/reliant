@@ -1023,7 +1023,11 @@ CREATE TABLE public.step_executions (
 CASE
     WHEN ((step_id ~~ '%-save'::text) AND (output_json IS JSON OBJECT)) THEN ((output_json)::jsonb ->> 'message_id'::text)
     ELSE NULL::text
-END) STORED
+END) STORED,
+    input_json text,
+    error_message text,
+    attempt integer,
+    node_path text
 );
 
 --

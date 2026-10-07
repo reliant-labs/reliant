@@ -15,6 +15,7 @@ import {
 } from "../../../types/workflow";
 import type { NodeInputField } from "../../../gen/reliant/v1/catalog_pb";
 import { catalogToOutputFields, childPathPrefix, type OutputField } from "../../../lib/nodeOutputFields";
+import { RunSample } from "../run/BuilderRunContext";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -105,6 +106,7 @@ function OutputFieldRow({
               {field.description}
             </p>
           )}
+          <RunSample path={celPath} className="mt-0.5 block truncate text-xs text-muted-foreground" />
         </div>
         <CopyButton value={celPath} />
       </div>

@@ -17,9 +17,10 @@ const createStepExecution = `-- name: CreateStepExecution :one
 INSERT INTO step_executions (
     id, workflow_id, step_id, activity_name,
     output_json, exit_code, success, duration_ms,
-    loop_node_id, loop_iteration, created_at
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-RETURNING id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id
+    loop_node_id, loop_iteration, created_at,
+    input_json, error_message, attempt, node_path
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+RETURNING id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id, input_json, error_message, attempt, node_path
 `
 
 type CreateStepExecutionParams struct {
@@ -34,6 +35,10 @@ type CreateStepExecutionParams struct {
 	LoopNodeID    sql.NullString `json:"loop_node_id"`
 	LoopIteration sql.NullInt64  `json:"loop_iteration"`
 	CreatedAt     time.Time      `json:"created_at"`
+	InputJson     sql.NullString `json:"input_json"`
+	ErrorMessage  sql.NullString `json:"error_message"`
+	Attempt       sql.NullInt32  `json:"attempt"`
+	NodePath      sql.NullString `json:"node_path"`
 }
 
 func (q *Queries) CreateStepExecution(ctx context.Context, arg CreateStepExecutionParams) (StepExecution, error) {
@@ -49,6 +54,10 @@ func (q *Queries) CreateStepExecution(ctx context.Context, arg CreateStepExecuti
 		arg.LoopNodeID,
 		arg.LoopIteration,
 		arg.CreatedAt,
+		arg.InputJson,
+		arg.ErrorMessage,
+		arg.Attempt,
+		arg.NodePath,
 	)
 	var i StepExecution
 	err := row.Scan(
@@ -64,6 +73,10 @@ func (q *Queries) CreateStepExecution(ctx context.Context, arg CreateStepExecuti
 		&i.LoopNodeID,
 		&i.LoopIteration,
 		&i.SavedMessageID,
+		&i.InputJson,
+		&i.ErrorMessage,
+		&i.Attempt,
+		&i.NodePath,
 	)
 	return i, err
 }
@@ -78,7 +91,7 @@ func (q *Queries) DeleteStepExecutionsForWorkflow(ctx context.Context, workflowI
 }
 
 const getAllStepExecutionsForWorkflow = `-- name: GetAllStepExecutionsForWorkflow :many
-SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id FROM step_executions
+SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id, input_json, error_message, attempt, node_path FROM step_executions
 WHERE workflow_id = $1
 ORDER BY created_at ASC
 `
@@ -106,6 +119,10 @@ func (q *Queries) GetAllStepExecutionsForWorkflow(ctx context.Context, workflowI
 			&i.LoopNodeID,
 			&i.LoopIteration,
 			&i.SavedMessageID,
+			&i.InputJson,
+			&i.ErrorMessage,
+			&i.Attempt,
+			&i.NodePath,
 		); err != nil {
 			return nil, err
 		}
@@ -233,7 +250,7 @@ func (q *Queries) GetBasicStepExecutionsForChat(ctx context.Context, chatID stri
 }
 
 const getStepExecution = `-- name: GetStepExecution :one
-SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id FROM step_executions WHERE id = $1
+SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id, input_json, error_message, attempt, node_path FROM step_executions WHERE id = $1
 `
 
 func (q *Queries) GetStepExecution(ctx context.Context, id string) (StepExecution, error) {
@@ -252,12 +269,16 @@ func (q *Queries) GetStepExecution(ctx context.Context, id string) (StepExecutio
 		&i.LoopNodeID,
 		&i.LoopIteration,
 		&i.SavedMessageID,
+		&i.InputJson,
+		&i.ErrorMessage,
+		&i.Attempt,
+		&i.NodePath,
 	)
 	return i, err
 }
 
 const getStepExecutions = `-- name: GetStepExecutions :many
-SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id FROM step_executions
+SELECT id, workflow_id, step_id, activity_name, output_json, exit_code, success, duration_ms, created_at, loop_node_id, loop_iteration, saved_message_id, input_json, error_message, attempt, node_path FROM step_executions
 WHERE workflow_id = $1 AND step_id = $2
 ORDER BY created_at ASC
 `
@@ -290,6 +311,10 @@ func (q *Queries) GetStepExecutions(ctx context.Context, arg GetStepExecutionsPa
 			&i.LoopNodeID,
 			&i.LoopIteration,
 			&i.SavedMessageID,
+			&i.InputJson,
+			&i.ErrorMessage,
+			&i.Attempt,
+			&i.NodePath,
 		); err != nil {
 			return nil, err
 		}
@@ -407,6 +432,100 @@ func (q *Queries) GetStepExecutionsForChat(ctx context.Context, arg GetStepExecu
 			&i.CreatedAt,
 			&i.SavedMessageID,
 			&i.OutputJson,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listStepExecutionRecordsForChat = `-- name: ListStepExecutionRecordsForChat :many
+SELECT se.id, se.workflow_id, se.step_id, se.activity_name,
+       se.output_json, se.exit_code, se.success, se.duration_ms,
+       se.loop_node_id, se.loop_iteration, se.created_at,
+       se.input_json, se.error_message, se.attempt, se.node_path
+FROM step_executions se
+JOIN workflows w ON w.id = se.workflow_id
+WHERE w.chat_id = $1
+  AND (
+      $2::text = ''
+      OR se.node_path = $2::text
+      -- starts_with, not LIKE: node ids are full of underscores, which LIKE
+      -- reads as wildcards.
+      OR starts_with(se.node_path, $2::text || '.')
+      OR (se.node_path IS NULL AND (se.step_id = $2::text
+                                    OR se.step_id = $2::text || '-save'))
+  )
+ORDER BY se.created_at DESC, se.id DESC
+LIMIT $3
+`
+
+type ListStepExecutionRecordsForChatParams struct {
+	ChatID   string `json:"chat_id"`
+	NodePath string `json:"node_path"`
+	RowLimit int32  `json:"row_limit"`
+}
+
+type ListStepExecutionRecordsForChatRow struct {
+	ID            string         `json:"id"`
+	WorkflowID    string         `json:"workflow_id"`
+	StepID        string         `json:"step_id"`
+	ActivityName  string         `json:"activity_name"`
+	OutputJson    sql.NullString `json:"output_json"`
+	ExitCode      sql.NullInt64  `json:"exit_code"`
+	Success       sql.NullInt64  `json:"success"`
+	DurationMs    sql.NullInt64  `json:"duration_ms"`
+	LoopNodeID    sql.NullString `json:"loop_node_id"`
+	LoopIteration sql.NullInt64  `json:"loop_iteration"`
+	CreatedAt     time.Time      `json:"created_at"`
+	InputJson     sql.NullString `json:"input_json"`
+	ErrorMessage  sql.NullString `json:"error_message"`
+	Attempt       sql.NullInt32  `json:"attempt"`
+	NodePath      sql.NullString `json:"node_path"`
+}
+
+// The full record of a chat's steps — inputs, output and error included — for
+// ChatService/ListStepExecutions, which the builder's Run tab reads when the
+// author inspects one step of a run.
+//
+// This is the one read that ships output_json for internal activities too:
+// CallLLM's output IS the step's answer and tool calls. It is affordable
+// because it is scoped. Given a node_path, only that node and what ran inside
+// it (an Agent step's own turns, a loop body) are read; the newest rows win
+// when the limit cuts. Rows written before node_path existed fall back to
+// their step id, so a node's older history still answers.
+func (q *Queries) ListStepExecutionRecordsForChat(ctx context.Context, arg ListStepExecutionRecordsForChatParams) ([]ListStepExecutionRecordsForChatRow, error) {
+	rows, err := q.db.QueryContext(ctx, listStepExecutionRecordsForChat, arg.ChatID, arg.NodePath, arg.RowLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListStepExecutionRecordsForChatRow{}
+	for rows.Next() {
+		var i ListStepExecutionRecordsForChatRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.WorkflowID,
+			&i.StepID,
+			&i.ActivityName,
+			&i.OutputJson,
+			&i.ExitCode,
+			&i.Success,
+			&i.DurationMs,
+			&i.LoopNodeID,
+			&i.LoopIteration,
+			&i.CreatedAt,
+			&i.InputJson,
+			&i.ErrorMessage,
+			&i.Attempt,
+			&i.NodePath,
 		); err != nil {
 			return nil, err
 		}

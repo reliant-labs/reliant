@@ -10,9 +10,9 @@
  * is ATTENDED (research/WORKFLOW_UI.md §14.1 decision 11) and is tagged
  * builder.test, which keeps it out of the sidebar and the default Runs list.
  *
- * Node statuses are painted onto the canvas by the builder (see
- * useBuilderTestRun); this panel reports the run's own state and links to the
- * full run.
+ * The run is drawn on the canvas by the builder (see useBuilderTestRun);
+ * this panel reports the run's own state, takes the author to the step that
+ * failed, and keeps the inputs so "Run again" repeats the same run.
  */
 
 import { useState, type FormEvent } from "react";
@@ -33,6 +33,19 @@ import { errorTextClass, hintClass, labelClass, textareaClass } from "./runFormS
 import { EMPTY_RUN_VALUE, type RunWorkflowValue } from "./runWorkflowValues";
 import "../config/config-panel.css";
 
+/** What a test run was started with; "Run again" starts the next one with the same. */
+export interface TestRunRequest {
+  prompt: string;
+  value: RunWorkflowValue;
+}
+
+/** The step a finished test run failed at, as the panel names it. */
+export interface TestRunFailure {
+  /** "Call LLM · summarize" */
+  label: string;
+  message?: string;
+}
+
 export interface BuilderTestRunPanelProps {
   projectId: string;
   /** The workflow's saved name. Empty until it has been saved once. */
@@ -44,7 +57,15 @@ export interface BuilderTestRunPanelProps {
   saveDraft: () => Promise<string | null>;
   /** The test run's chat, once started; the builder follows it on the canvas. */
   testChatId: string | null;
-  onStarted: (chatId: string) => void;
+  /** The last run's message and inputs, so the panel reopens with them. */
+  initialRequest?: TestRunRequest | null;
+  onStarted: (chatId: string, request: TestRunRequest) => void;
+  /** The step the run failed at, when one did. */
+  failure?: TestRunFailure | null;
+  /** Select the failed step and, when its error names a field, that field. */
+  onGoToProblem?: () => void;
+  /** Take the run off the canvas. */
+  onClear?: () => void;
   onClose: () => void;
   bottomOffset?: number;
   topOffset?: number;
@@ -63,14 +84,18 @@ export function BuilderTestRunPanel({
   workflowRef,
   saveDraft,
   testChatId,
+  initialRequest,
   onStarted,
+  failure,
+  onGoToProblem,
+  onClear,
   onClose,
   bottomOffset,
   topOffset,
   docked = false,
 }: BuilderTestRunPanelProps) {
-  const [value, setValue] = useState<RunWorkflowValue>(EMPTY_RUN_VALUE);
-  const [prompt, setPrompt] = useState("");
+  const [value, setValue] = useState<RunWorkflowValue>(() => initialRequest?.value ?? EMPTY_RUN_VALUE);
+  const [prompt, setPrompt] = useState(() => initialRequest?.prompt ?? "");
   const [status, setStatus] = useState<RunWorkflowFormStatus>({
     loading: false,
     missingRequired: [],
@@ -89,6 +114,10 @@ export function BuilderTestRunPanel({
     ? runStatus({ state: chat.workflowState, stopReason: chat.workflowStopReason, activity: chat.activity })
     : null;
   const live = runState ? isLiveRunStatus(runState) : false;
+  // Only a run that is executing holds Run again back. A run parked on a
+  // failed step (paused) or waiting on a person is still live, but the next
+  // test run is a separate run, and starting it is how a fix gets tried.
+  const busy = runState?.key === "running" || runState?.key === "queued";
 
   const onSubmit = async (event: FormEvent) => {
     event.preventDefault();
@@ -119,7 +148,7 @@ export function BuilderTestRunPanel({
         selected_presets: value.presets,
         builder_test: true,
       });
-      onStarted(started.id);
+      onStarted(started.id, { prompt: prompt.trim(), value });
     } catch (error) {
       // Validation (an invalid definition, a missing input) comes back with
       // the server's own wording.
@@ -144,15 +173,40 @@ export function BuilderTestRunPanel({
           {formError && <RunFormError message={formError} />}
 
           {testChatId && (
-            <div className="flex flex-wrap items-center gap-2" data-testid="test-run-status">
-              {runState && <RunStatusBadge status={runState} size="md" />}
-              <Link
-                to="/workflows/runs/$runId"
-                params={{ runId: testChatId }}
-                className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
-              >
-                Watch full run
-              </Link>
+            <div className="space-y-2" data-testid="test-run-status">
+              <div className="flex flex-wrap items-center gap-2">
+                {runState && <RunStatusBadge status={runState} size="md" />}
+                <Link
+                  to="/workflows/runs/$runId"
+                  params={{ runId: testChatId }}
+                  className="text-sm font-medium text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                >
+                  Watch full run
+                </Link>
+                {onClear && !live && (
+                  <button
+                    type="button"
+                    onClick={onClear}
+                    className="ml-auto text-xs text-muted-foreground hover:text-foreground hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                  >
+                    Clear from canvas
+                  </button>
+                )}
+              </div>
+              {failure && (
+                <div
+                  data-testid="test-run-failure"
+                  className="rounded-md border border-destructive/40 bg-destructive/10 px-3 py-2 text-sm text-destructive-ink"
+                >
+                  <p className="font-medium">{failure.label} failed</p>
+                  {failure.message && <p className="mt-0.5 line-clamp-3 break-words">{failure.message}</p>}
+                  {onGoToProblem && (
+                    <Button type="button" variant="secondary" size="sm" className="mt-2" onClick={onGoToProblem}>
+                      Go to problem
+                    </Button>
+                  )}
+                </div>
+              )}
             </div>
           )}
 
@@ -192,9 +246,9 @@ export function BuilderTestRunPanel({
 
           <div className="flex items-center justify-between gap-2 border-t border-border/60 pt-3">
             <p className={cn(hintClass, "mt-0")}>
-              {live ? "Running now. Statuses show on the canvas." : "Saves the draft, then runs it. Tests stay out of your chat list."}
+              {busy ? "Running now. Statuses show on the canvas." : "Saves the draft, then runs it. Tests stay out of your chat list."}
             </p>
-            <Button type="submit" variant="primary" size="sm" loading={starting} disabled={live}>
+            <Button type="submit" variant="primary" size="sm" loading={starting} disabled={busy}>
               {testChatId ? "Run again" : "Run"}
             </Button>
           </div>
