@@ -1031,7 +1031,8 @@ func (s *WorkflowService) SetWorkflowStatus(
 
 // GetWorkflow returns a specific workflow by name/slug or draft ID
 // If draft_id is provided, it takes priority over name-based lookup.
-// Otherwise: Priority: 1) builtin, 2) project files, 3) user DB workflows
+// Otherwise the resolution order is a run's (workflowsource): builtin://, then
+// the caller's own workflows, then the project's.
 func (s *WorkflowService) GetWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetWorkflowRequest],
@@ -1095,22 +1096,28 @@ func (s *WorkflowService) GetWorkflow(
 	// A ref ("project://deploy") or a bare name: the slug it addresses.
 	slug := workflowref.ProjectSlug(workflowName)
 
-	// Try to load from project files first (if project_id provided)
+	// Decide user-vs-project with the rule a run resolves by (workflowsource):
+	// the caller's own workflow shadows the project's of the same name.
 	if req.Msg.ProjectId != "" {
 		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 			return nil, err
 		}
-		projectWf, yamlContent, err := launch.LoadProjectWorkflowBySlugFromDB(s.database, ctx, req.Msg.ProjectId, slug)
-		if err == nil && projectWf != nil {
-			return connect.NewResponse(&reliantv1.GetWorkflowResponse{
-				Workflow:       projectWf,
-				Source:         "project",
-				YamlDefinition: yamlContent,
-				Status:         reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
-			}), nil
-		}
+	}
+	resolved, resolveErr := workflowsource.Resolve(ctx, s.database, workflowsource.Options{
+		UserID: userID, ProjectID: req.Msg.ProjectId,
+	}, workflowName)
+	if resolveErr == nil && resolved.Source == workflowref.SourceProject {
+		return connect.NewResponse(&reliantv1.GetWorkflowResponse{
+			Workflow:       resolved.Workflow,
+			Source:         "project",
+			YamlDefinition: string(resolved.YAML),
+			Status:         reliantv1.WorkflowDraftStatus_WORKFLOW_DRAFT_STATUS_COMPLETE,
+		}), nil
 	}
 
+	// Otherwise the answer is the user's own workflow, whatever its state: a
+	// draft or an unparseable definition is shown (with its errors), not
+	// replaced by a project workflow of the same name.
 	// Look up user's workflow by slug
 	draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, slug)
 	if err != nil {
@@ -1118,6 +1125,9 @@ func (s *WorkflowService) GetWorkflow(
 	}
 
 	if draft == nil {
+		if resolveErr != nil && !errors.Is(resolveErr, workflowref.ErrNotFound) {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve workflow: %w", resolveErr))
+		}
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %s", workflowName))
 	}
 
