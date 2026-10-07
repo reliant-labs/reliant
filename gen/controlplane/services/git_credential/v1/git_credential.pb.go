@@ -396,7 +396,13 @@ type GetGitCredentialResponse struct {
 	// The App's URL slug (the <slug> in github.com/apps/<slug>), for clients
 	// that want to build their own links. Empty under the same conditions as
 	// install_url.
-	AppSlug       string `protobuf:"bytes,13,opt,name=app_slug,json=appSlug,proto3" json:"app_slug,omitempty"`
+	AppSlug string `protobuf:"bytes,13,opt,name=app_slug,json=appSlug,proto3" json:"app_slug,omitempty"`
+	// The GitHub numeric user id of the account account_login names, in
+	// decimal (a string so JSON clients never round it through a float). Unlike
+	// the login it never changes, so it is what clients match identities on —
+	// e.g. a webhook's sender.id. Empty under the same conditions as
+	// account_login.
+	AccountId     string `protobuf:"bytes,14,opt,name=account_id,json=accountId,proto3" json:"account_id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -518,6 +524,13 @@ func (x *GetGitCredentialResponse) GetInstallUrl() string {
 func (x *GetGitCredentialResponse) GetAppSlug() string {
 	if x != nil {
 		return x.AppSlug
+	}
+	return ""
+}
+
+func (x *GetGitCredentialResponse) GetAccountId() string {
+	if x != nil {
+		return x.AccountId
 	}
 	return ""
 }
@@ -1015,7 +1028,7 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\n" +
 	"avatar_url\x18\x03 \x01(\tR\tavatarUrl\x12#\n" +
 	"\rconfigure_url\x18\x04 \x01(\tR\fconfigureUrl\x121\n" +
-	"\x14repository_selection\x18\x05 \x01(\tR\x13repositorySelection\"\xec\x04\n" +
+	"\x14repository_selection\x18\x05 \x01(\tR\x13repositorySelection\"\x8b\x05\n" +
 	"\x18GetGitCredentialResponse\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\x12\x16\n" +
 	"\x06scopes\x18\x02 \x01(\tR\x06scopes\x12\x1b\n" +
@@ -1034,7 +1047,9 @@ const file_services_git_credential_v1_git_credential_proto_rawDesc = "" +
 	"\rinstallations\x18\v \x03(\v2#.controlplane.v1.GitAppInstallationR\rinstallations\x12\x1f\n" +
 	"\vinstall_url\x18\f \x01(\tR\n" +
 	"installUrl\x12\x19\n" +
-	"\bapp_slug\x18\r \x01(\tR\aappSlug\"8\n" +
+	"\bapp_slug\x18\r \x01(\tR\aappSlug\x12\x1d\n" +
+	"\n" +
+	"account_id\x18\x0e \x01(\tR\taccountId\"8\n" +
 	"\x1aDeleteGitCredentialRequest\x12\x1a\n" +
 	"\bprovider\x18\x01 \x01(\tR\bprovider\"\x1d\n" +
 	"\x1bDeleteGitCredentialResponse\"\x9c\x01\n" +

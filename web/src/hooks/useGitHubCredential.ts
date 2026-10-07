@@ -36,7 +36,7 @@ export function useGitHubCredential(): {
   hasToken: boolean;
   /** The GitHub login the token belongs to; unset when the provider could not be reached. */
   accountLogin?: string;
-  /** That account's GitHub user id; unset until control-plane reports it (GitCredentialStatus.accountId). */
+  /** That account's GitHub user id; unset when control-plane could not resolve it (GitCredentialStatus.accountId). */
   accountId?: string;
   scopes: string;
   /** GitHub's installation flow — where a user adds an account or widens a
