@@ -30,6 +30,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
@@ -223,40 +225,18 @@ func (l *Launcher) BuildStateUpdateForActiveWorkflow(
 }
 
 // LoadWorkflowInputsForBuild loads workflow input schemas as proto types for ApplyDefaults.
-// Uses the same resolution order as validation so builtin workflows also get defaults
-// and boundary normalization for nested model selectors.
+// It resolves the workflow as a run does (workflowsource), except that the
+// user's own workflow of that name counts complete or not: defaults are read
+// for whatever they are about to start.
 func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workflowName, projectID string) map[string]*reliantv1.Input {
-	if strings.HasPrefix(workflowName, "builtin://") {
-		name := strings.TrimPrefix(workflowName, "builtin://")
-		data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
-		if err != nil {
-			logging.Warn("Could not load builtin workflow inputs for build", "workflow", workflowName, "error", err)
-			return nil
-		}
-		wf, parseErr := wfyaml.ParseWorkflow(data)
-		if parseErr != nil {
-			logging.Warn("Could not parse builtin workflow inputs for build", "workflow", workflowName, "error", parseErr)
-			return nil
-		}
-		return wf.GetInputs()
+	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{
+		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
+	}, workflowName)
+	if err != nil {
+		logging.Warn("Could not load workflow inputs for build", "workflow", workflowName, "error", err)
+		return nil
 	}
-
-	// Try DB draft first
-	slug := strings.ToLower(strings.ReplaceAll(workflowName, " ", "-"))
-	draft, err := l.repo.GetWorkflowDraftBySlug(ctx, userID, slug)
-	if err == nil && draft != nil {
-		wf, parseErr := wfyaml.ParseWorkflow([]byte(draft.Definition))
-		if parseErr == nil {
-			return wf.GetInputs()
-		}
-	}
-
-	// Try stored project config (synced by daemon)
-	projectWf, _, lookupErr := LoadProjectWorkflowBySlugFromDB(l.repo, ctx, projectID, slug)
-	if lookupErr == nil && projectWf != nil {
-		return projectWf.GetInputs()
-	}
-	return nil
+	return resolved.Workflow.GetInputs()
 }
 
 // ValidateWorkflowInputs loads a workflow and validates the provided inputs against its schema.
@@ -266,22 +246,16 @@ func (l *Launcher) LoadWorkflowInputsForBuild(ctx context.Context, userID, workf
 // userID is the OWNER of the run, passed explicitly. It used to be read from
 // the request context, which a scheduled fire on the worker does not have.
 func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowName, projectID string, inputs map[string]interface{}) []error {
-	// Load workflow definition to get input schemas (builtin/project config first, then user draft from DB)
-	wf, err := l.LoadWorkflowForValidation(ctx, workflowName, projectID)
+	// Validate against the definition that will run: the one workflowsource
+	// resolves (the user's own of that name, else the project's).
+	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{
+		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
+	}, workflowName)
 	if err != nil {
-		// User workflows often exist only in DB; load by slug so we validate the same definition that will run
-		slug := strings.ToLower(strings.ReplaceAll(workflowName, " ", "-"))
-		draft, dbErr := l.repo.GetWorkflowDraftBySlug(ctx, userID, slug)
-		if dbErr != nil || draft == nil {
-			logging.Warn("Could not load workflow for input validation", "workflow", workflowName, "error", err)
-			return nil
-		}
-		wf, err = v2.ParseWorkflowProtoBytesNoValidation([]byte(draft.Definition))
-		if err != nil {
-			logging.Warn("Could not parse draft for input validation", "workflow", workflowName, "error", err)
-			return nil
-		}
+		logging.Warn("Could not load workflow for input validation", "workflow", workflowName, "error", err)
+		return nil
 	}
+	wf := resolved.Workflow
 
 	// Filter out runtime-injected inputs before validation
 	// These are internal values that shouldn't be validated against the workflow schema
@@ -332,32 +306,14 @@ func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowN
 	return errs
 }
 
-// LoadWorkflowForValidation loads a workflow by name for input validation.
-// Searches builtin workflows first, then stored project workflows from DB.
+// LoadWorkflowForValidation loads a builtin or project workflow by ref — not
+// one of the user's own — resolved by the one rule (workflowref).
 func (l *Launcher) LoadWorkflowForValidation(ctx context.Context, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	return loadBuiltinOrProjectWorkflow(ctx, l.repo, workflowName, projectID)
-}
-
-func loadBuiltinOrProjectWorkflow(ctx context.Context, repo ProjectWorkflowLoader, workflowName, projectID string) (*reliantv1.Workflow, error) {
-	// Handle builtin:// protocol
-	if strings.HasPrefix(workflowName, "builtin://") {
-		name := strings.TrimPrefix(workflowName, "builtin://")
-		data, err := builtin.BuiltinWorkflowsFS.ReadFile(name + ".yaml")
-		if err != nil {
-			return nil, fmt.Errorf("builtin workflow not found: %s", workflowName)
-		}
-		return v2.ParseWorkflowProtoBytesNoValidation(data)
+	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{ProjectID: projectID}, workflowName)
+	if err != nil {
+		return nil, fmt.Errorf("workflow '%s': %w", workflowName, err)
 	}
-
-	// Load from stored project config (synced by daemon)
-	// Normalize slug the same way as generateWorkflowSlug in load_workflow.go.
-	slug := NormalizeWorkflowSlug(workflowName)
-	projectWf, _, err := LoadProjectWorkflowBySlugFromDB(repo, ctx, projectID, slug)
-	if err == nil && projectWf != nil {
-		return projectWf, nil
-	}
-
-	return nil, fmt.Errorf("workflow not found: %s", workflowName)
+	return resolved.Workflow, nil
 }
 
 // WorkflowLookupError marks a failure to READ a workflow, as opposed to a
@@ -398,21 +354,9 @@ func (l *Launcher) loadCreateChatWorkflowForValidation(ctx context.Context, user
 }
 
 func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, workflowName, projectID, draftRoot string) (*reliantv1.Workflow, error) {
-	if strings.HasPrefix(workflowName, "builtin://") {
-		return loadBuiltinOrProjectWorkflow(ctx, repo, workflowName, projectID)
-	}
-
-	slug := NormalizeWorkflowSlug(workflowName)
-	var draft *db.WorkflowDraft
-	var err error
-	if draftRoot != "" && slug == NormalizeWorkflowSlug(draftRoot) {
-		draft, err = repo.GetWorkflowDraftBySlug(ctx, userID, slug)
-		if err == nil && (draft == nil || draft.IsHidden) {
-			return nil, fmt.Errorf("workflow '%s' not found", workflowName)
-		}
-	} else {
-		draft, err = repo.GetUsableWorkflowBySlug(ctx, userID, slug)
-	}
+	resolved, err := workflowsource.Resolve(ctx, repo, workflowsource.Options{
+		UserID: userID, ProjectID: projectID, DraftRoot: draftRoot,
+	}, workflowName)
 	if err != nil {
 		var notRunnable *db.WorkflowDraftNotRunnableError
 		if errors.As(err, &notRunnable) {
@@ -420,21 +364,13 @@ func resolveRunWorkflow(ctx context.Context, repo WorkflowResolver, userID, work
 			// store failure: final, and the message names the remedy.
 			return nil, err
 		}
-		return nil, &WorkflowLookupError{Err: fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)}
-	}
-	if draft != nil {
-		wf, parseErr := wfyaml.ParseWorkflow([]byte(draft.Definition))
-		if parseErr != nil {
-			return nil, fmt.Errorf("failed to parse workflow '%s': %w", workflowName, parseErr)
+		var storeErr *workflowsource.StoreError
+		if errors.As(err, &storeErr) {
+			return nil, &WorkflowLookupError{Err: fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)}
 		}
-		return wf, nil
+		return nil, fmt.Errorf("workflow '%s': %w", workflowName, err)
 	}
-
-	wf, err := loadBuiltinOrProjectWorkflow(ctx, repo, workflowName, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("workflow '%s' not found", workflowName)
-	}
-	return wf, nil
+	return resolved.Workflow, nil
 }
 
 func (l *Launcher) createChatWorkflowLoader(ctx context.Context, userID, projectID, draftRoot string) validation.WorkflowLoader {
@@ -617,32 +553,29 @@ type ProjectWorkflowLoader interface {
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)
 }
 
-// LoadProjectWorkflowBySlugFromDB loads a project workflow by slug from the stored config record.
-// Returns the workflow, its YAML content, and error. Returns nil, "", nil if not found.
+// LoadProjectWorkflowBySlugFromDB loads the project workflow NAMED slug from
+// the stored config record, through the same index the CLI builds from disk
+// (workflowsource.ProjectIndex). Returns the workflow, its YAML content, and
+// error; nil, "", nil if no project workflow has that name. Two files that
+// share the name are an error, not a pick.
 func LoadProjectWorkflowBySlugFromDB(repo ProjectWorkflowLoader, ctx context.Context, projectID string, slug string) (*reliantv1.Workflow, string, error) {
 	if projectID == "" || slug == "" {
 		return nil, "", nil
 	}
-
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
-	if err != nil {
+	index, err := workflowsource.ProjectIndex(ctx, repo, projectID)
+	if err != nil || index == nil {
+		return nil, "", err
+	}
+	entry, err := index.Lookup(slug)
+	if errors.Is(err, workflowref.ErrNotFound) {
 		return nil, "", nil
 	}
-
-	workflows, err := cfg.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse stored workflows: %w", err)
+		return nil, "", err
 	}
-
-	sw := cfg.FindStoredWorkflowBySlug(workflows, slug)
-	if sw == nil {
-		return nil, "", nil // Not found
-	}
-
-	protoWf, err := wfyaml.ParseWorkflow([]byte(sw.YAMLContent))
+	protoWf, err := wfyaml.ParseWorkflow(entry.Content)
 	if err != nil {
-		return nil, "", fmt.Errorf("failed to parse project workflow %s: %w", slug, err)
+		return nil, "", fmt.Errorf("failed to parse project workflow %s: %w", entry.Path, err)
 	}
-
-	return protoWf, sw.YAMLContent, nil
+	return protoWf, string(entry.Content), nil
 }

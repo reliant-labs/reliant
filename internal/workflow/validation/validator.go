@@ -42,6 +42,11 @@ type ValidationOptions struct {
 	// When empty, validation falls back to wf.name.
 	CanonicalWorkflowRef string
 
+	// RootLabel names the workflow under validation where an error traces a
+	// chain of refs from it ("content-weekly.yaml → project://content-next →
+	// ..."). The CLI passes the file it validates; empty means wf.name.
+	RootLabel string
+
 	// SkillResolver resolves the skill names a workflow declares against a real
 	// catalog. When provided, enables the skill-reference layer that fails a
 	// workflow naming a skill nothing resolves.

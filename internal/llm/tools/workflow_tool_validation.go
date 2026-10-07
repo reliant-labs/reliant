@@ -3,16 +3,15 @@ package tools
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"gopkg.in/yaml.v3"
 )
@@ -51,51 +50,18 @@ func validateWorkflowForTool(ctx context.Context, repo db.Repository, content st
 	return workflowToolCheck{result: result}
 }
 
-// workflowToolLoader resolves refs for validation: builtin:// from the
-// embedded catalog, anything else as one of the caller's complete workflows.
-// A ref that cannot be resolved returns (nil, nil) so validation continues —
-// structural validation reports unknown refs itself. The workflow being
-// validated resolves to itself, so self-spawning works while it is a draft.
+// workflowToolLoader resolves refs for validation by the one rule
+// (workflowsource.DraftLoader): builtin:// from the embedded catalog, anything
+// else as one of the caller's complete workflows. A project ref that names none
+// of theirs is left unresolved (nil, nil) — it may name a project workflow,
+// which run start validates in its project. The workflow being validated
+// resolves to itself, so self-spawning works while it is a draft.
 func workflowToolLoader(ctx context.Context, repo db.Repository, self *reliantv1.Workflow) v2.WorkflowLoader {
 	userID, _ := auth.GetUserIDFromContext(ctx)
-	selfSlug := ""
-	if self != nil {
-		selfSlug = generateSlugFromName(self.GetName())
-	}
-	return func(ref string) (*reliantv1.Workflow, error) {
-		if strings.HasPrefix(ref, "builtin://") {
-			data, err := builtin.BuiltinWorkflowsFS.ReadFile(strings.TrimPrefix(ref, "builtin://") + ".yaml")
-			if err != nil {
-				return nil, nil
-			}
-			return wfyaml.ParseWorkflow(data)
-		}
-		if repo == nil || userID == "" {
-			return nil, nil
-		}
-		slug := generateSlugFromName(ref)
-		if slug == "" {
-			return nil, nil
-		}
-		if slug == selfSlug {
-			return self, nil
-		}
-		// Resolve refs exactly as run start does: only a complete workflow
-		// loads. A draft child is an error here too, so "valid" never means
-		// "valid until someone runs it".
-		draft, err := repo.GetUsableWorkflowBySlug(ctx, userID, slug)
-		if err != nil {
-			var notRunnable *db.WorkflowDraftNotRunnableError
-			if errors.As(err, &notRunnable) {
-				return nil, err
-			}
-			return nil, nil
-		}
-		if draft == nil || draft.Definition == "" {
-			return nil, nil
-		}
-		return wfyaml.ParseWorkflow([]byte(draft.Definition))
-	}
+	// Resolve refs exactly as run start does (workflowsource): only a
+	// complete workflow loads, and a draft child is an error here too, so
+	// "valid" never means "valid until someone runs it".
+	return workflowsource.DraftLoader(ctx, repo, userID, self)
 }
 
 // rejection is the tool response text for a write validation blocked: every

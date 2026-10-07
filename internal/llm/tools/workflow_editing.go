@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	"gopkg.in/yaml.v3"
 )
 
@@ -516,28 +517,10 @@ func (t *writeWorkflowTool) Execute(ctx *rctx.ToolContext, args WriteWorkflowPar
 // HELPER FUNCTIONS
 // =============================================================================
 
-// generateSlugFromName creates a URL-safe slug from a workflow name
+// generateSlugFromName is the slug a workflow name is stored and compared
+// under — workflowref.Slug, the one slug every surface uses.
 func generateSlugFromName(name string) string {
-	// Convert to lowercase
-	slug := strings.ToLower(name)
-	// Replace spaces and underscores with hyphens
-	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = strings.ReplaceAll(slug, "_", "-")
-	// Remove any characters that aren't alphanumeric or hyphens
-	var result strings.Builder
-	for _, r := range slug {
-		if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '-' {
-			result.WriteRune(r)
-		}
-	}
-	slug = result.String()
-	// Remove consecutive hyphens
-	for strings.Contains(slug, "--") {
-		slug = strings.ReplaceAll(slug, "--", "-")
-	}
-	// Trim leading/trailing hyphens
-	slug = strings.Trim(slug, "-")
-	return slug
+	return workflowref.Slug(name)
 }
 
 // workflowSlugTakenMessage is what the model sees when a name maps to a slug the

@@ -9,11 +9,14 @@
 package core
 
 import (
+	"errors"
 	"fmt"
+	"slices"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	structpb "google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -97,11 +100,53 @@ func Compile(workflow *reliantv1.Workflow, options CompileOptions) (*Program, er
 		NodeOrder:            make([]string, 0),
 	}
 
-	if err := compileWorkflowSemantics(workflow, canonicalRef, "", options, semantics); err != nil {
+	root := refTrail{expanding: []string{workflowref.RefKey(canonicalRef)}}
+	if err := compileWorkflowSemantics(workflow, canonicalRef, "", options, semantics, root); err != nil {
 		return nil, err
 	}
 
 	return &Program{Workflow: workflow, Semantics: semantics}, nil
+}
+
+// ErrRefCycle is the cause of a RefError whose last ref names a workflow that
+// is already being expanded on the same chain.
+var ErrRefCycle = errors.New("reference cycle: a workflow cannot contain itself")
+
+// RefError is a workflow ref that could not be followed, with every ref that
+// led to it from the workflow being compiled. Compile is the walker that
+// follows refs transitively for every validator (the CLI's `workflow
+// validate` and the app's run-start and builder checks alike), so this is how
+// a broken ref two levels down is reported with the path that reaches it.
+type RefError struct {
+	// Chain is each ref followed from the root, as written; the last is the
+	// one that failed.
+	Chain []string
+	// Node is the qualified path ("to_b/to_c") of the node holding the
+	// failing ref, through every workflow on the chain.
+	Node string
+	Err  error
+}
+
+func (e *RefError) Error() string {
+	return strings.Join(e.Chain, " → ") + ": " + e.Err.Error()
+}
+
+func (e *RefError) Unwrap() error { return e.Err }
+
+// refTrail is where compilation is in the ref graph: the refs followed from
+// the root, and the identity of every workflow being expanded along them
+// (the root's included). An ancestor stack, not a visited set: two siblings
+// may ref the same workflow; only a workflow inside itself is a cycle.
+type refTrail struct {
+	chain     []string
+	expanding []string
+}
+
+func (t refTrail) enter(ref string) refTrail {
+	return refTrail{
+		chain:     append(slices.Clone(t.chain), ref),
+		expanding: append(slices.Clone(t.expanding), workflowref.RefKey(ref)),
+	}
 }
 
 func compileWorkflowSemantics(
@@ -110,6 +155,7 @@ func compileWorkflowSemantics(
 	pathPrefix string,
 	options CompileOptions,
 	semantics *CompiledSemantics,
+	trail refTrail,
 ) error {
 	for _, node := range workflow.GetNodes() {
 		if node == nil {
@@ -127,23 +173,30 @@ func compileWorkflowSemantics(
 			continue
 		}
 
-		contract, childInlineWorkflow, childCanonicalRef, err := buildSubWorkflowContract(
+		contract, childWorkflow, childCanonicalRef, childTrail, err := buildSubWorkflowContract(
 			node,
 			nodePath,
 			subWorkflow,
 			mode,
 			canonicalWorkflowRef,
 			options,
+			trail,
 		)
 		if err != nil {
+			var refErr *RefError
+			if len(trail.chain) > 0 && !errors.As(err, &refErr) {
+				// A defect inside a referenced workflow: say which chain of
+				// refs reached it.
+				return &RefError{Chain: trail.chain, Node: nodePath, Err: err}
+			}
 			return err
 		}
 
 		semantics.SubWorkflows[nodePath] = contract
 		semantics.NodeOrder = append(semantics.NodeOrder, nodePath)
 
-		if childInlineWorkflow != nil {
-			if err := compileWorkflowSemantics(childInlineWorkflow, childCanonicalRef, nodePath, options, semantics); err != nil {
+		if childWorkflow != nil {
+			if err := compileWorkflowSemantics(childWorkflow, childCanonicalRef, nodePath, options, semantics, childTrail); err != nil {
 				return err
 			}
 		}
@@ -152,6 +205,9 @@ func compileWorkflowSemantics(
 	return nil
 }
 
+// buildSubWorkflowContract builds a node's contract and returns the child
+// workflow to expand next (an inline body, or a loaded ref) with the trail it
+// is expanded under.
 func buildSubWorkflowContract(
 	node *reliantv1.Node,
 	nodePath string,
@@ -159,7 +215,8 @@ func buildSubWorkflowContract(
 	mode InvocationMode,
 	parentCanonicalRef string,
 	options CompileOptions,
-) (SubWorkflowContract, *reliantv1.Workflow, string, error) {
+	trail refTrail,
+) (SubWorkflowContract, *reliantv1.Workflow, string, refTrail, error) {
 	contract := SubWorkflowContract{
 		NodePath:          nodePath,
 		NodeID:            node.GetId(),
@@ -173,15 +230,16 @@ func buildSubWorkflowContract(
 		contract.InputPolicy = InputPolicyInlineInheritParentInputs
 		contract.LoadStrategy = LoadStrategyInlineEmbedded
 		contract.InputAssembly = []InputAssemblyStage{InputAssemblyStageInheritParentInputs}
-		return contract, subWorkflow.Inline, contract.WorkflowIdentity, nil
+		// An inline body is part of the workflow it sits in: no new hop.
+		return contract, subWorkflow.Inline, contract.WorkflowIdentity, trail, nil
 	}
 
 	ref := strings.TrimSpace(subWorkflow.Ref)
 	if ref == "" {
-		return SubWorkflowContract{}, nil, "", fmt.Errorf("node %q has empty workflow ref", node.GetId())
+		return SubWorkflowContract{}, nil, "", trail, fmt.Errorf("node %q has empty workflow ref", node.GetId())
 	}
 	if strings.Contains(ref, "::") {
-		return SubWorkflowContract{}, nil, "", fmt.Errorf("node %q has non-canonical workflow ref %q (contains ::)", node.GetId(), ref)
+		return SubWorkflowContract{}, nil, "", trail, fmt.Errorf("node %q has non-canonical workflow ref %q (contains ::)", node.GetId(), ref)
 	}
 
 	contract.WorkflowRef = ref
@@ -199,15 +257,19 @@ func buildSubWorkflowContract(
 	contract.Passthrough = subWorkflow.Passthrough
 
 	if options.WorkflowLoader != nil && !isTemplateWorkflowRef(ref) {
+		childTrail := trail.enter(ref)
+		if slices.Contains(trail.expanding, childTrail.expanding[len(childTrail.expanding)-1]) {
+			return SubWorkflowContract{}, nil, "", trail, &RefError{Chain: childTrail.chain, Node: nodePath, Err: ErrRefCycle}
+		}
 		childWorkflow, err := options.WorkflowLoader(ref)
 		if err != nil {
-			return SubWorkflowContract{}, nil, "", fmt.Errorf("load workflow %q for node %q: %w", ref, node.GetId(), err)
+			return SubWorkflowContract{}, nil, "", trail, &RefError{Chain: childTrail.chain, Node: nodePath, Err: err}
 		}
 		contract.DefaultInputs = extractInputDefaults(childWorkflow.GetInputs())
-		return contract, childWorkflow, contract.WorkflowIdentity, nil
+		return contract, childWorkflow, contract.WorkflowIdentity, childTrail, nil
 	}
 
-	return contract, nil, contract.WorkflowIdentity, nil
+	return contract, nil, contract.WorkflowIdentity, trail, nil
 }
 
 type subWorkflowArgs struct {

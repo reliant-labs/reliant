@@ -5,9 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"regexp"
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -18,6 +16,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"google.golang.org/protobuf/encoding/protojson"
 )
@@ -127,9 +127,17 @@ type workflowContext struct {
 	projectID    string
 	projectPath  string
 	worktreePath string
-	// draftRootSlug is the one workflow that may be loaded from an unfinished
+	// draftRoot is the one workflow that may be loaded from an unfinished
 	// draft: the root of a builder test run. Empty for every other chat.
-	draftRootSlug string
+	draftRoot string
+}
+
+// sourceOptions is whose workflows, in which project, a ref resolves against.
+func (c *workflowContext) sourceOptions() workflowsource.Options {
+	if c == nil {
+		return workflowsource.Options{}
+	}
+	return workflowsource.Options{UserID: c.userID, ProjectID: c.projectID, DraftRoot: c.draftRoot}
 }
 
 // resolveWorkflowContext resolves user, project, and path from a chat ID
@@ -152,7 +160,7 @@ func (a *LoadWorkflowActivity) resolveWorkflowContext(ctx context.Context, chatI
 		projectID: chat.ProjectID,
 	}
 	if chat.LaunchKind == string(core.TriggerEventKindBuilderTest) && chat.WorkflowName != nil {
-		wfCtx.draftRootSlug = generateWorkflowSlug(*chat.WorkflowName)
+		wfCtx.draftRoot = *chat.WorkflowName
 	}
 
 	if chat.ProjectID == "" {
@@ -187,166 +195,40 @@ func (a *LoadWorkflowActivity) loadWorkflowByName(ctx context.Context, workflowN
 	return loaded.Workflow, nil
 }
 
-// loadWorkflowByNameWithRaw loads a workflow and returns both raw YAML and parsed proto.
-// Checks: builtin -> user DB draft -> stored project config (synced by daemon).
+// loadWorkflowByNameWithRaw loads a workflow and returns both raw YAML and
+// parsed proto. It resolves the name by the one rule every surface shares
+// (workflowref, fed by workflowsource): builtin:// from the embedded
+// builtins; project:// or a bare name from the user's own workflows, then the
+// project's synced .reliant/workflows, by name:.
 func (a *LoadWorkflowActivity) loadWorkflowByNameWithRaw(ctx context.Context, workflowName string, wfCtx *workflowContext) ([]byte, *loadedWorkflow, error) {
-	if strings.HasPrefix(workflowName, "builtin://") {
-		return loadBuiltinWorkflowWithRaw(workflowName)
+	var store workflowsource.Store
+	if a.repo != nil {
+		store = a.repo
 	}
-
-	// Try user DB draft first
-	yamlData, loaded, dbErr := a.loadDBWorkflowWithRaw(ctx, workflowName, wfCtx)
-	if dbErr == nil {
-		return yamlData, loaded, nil
-	}
-
-	// Try stored project workflow (synced by daemon)
-	yamlData, loaded, err := a.loadStoredProjectWorkflowWithRaw(ctx, workflowName, wfCtx)
-	if err == nil {
-		return yamlData, loaded, nil
-	}
-
-	// A user workflow that exists but is still a draft is not runnable. Say
-	// so — "not found" would send the user looking for a workflow they can
-	// see in their list.
-	var notRunnable *db.WorkflowDraftNotRunnableError
-	if errors.As(dbErr, &notRunnable) {
-		return nil, nil, dbErr
-	}
-	return nil, nil, fmt.Errorf("workflow not found: %s", workflowName)
-}
-
-// loadDBWorkflowWithRaw loads a user workflow draft from the database.
-func (a *LoadWorkflowActivity) loadDBWorkflowWithRaw(ctx context.Context, workflowName string, wfCtx *workflowContext) ([]byte, *loadedWorkflow, error) {
-	if wfCtx == nil || wfCtx.userID == "" {
-		return nil, nil, fmt.Errorf("user ID required to load workflow: %s", workflowName)
-	}
-
-	if a.repo == nil {
-		return nil, nil, fmt.Errorf("repository not available")
-	}
-
-	slug := generateWorkflowSlug(workflowName)
-
-	// Only a complete workflow runs; a draft comes back as
-	// *db.WorkflowDraftNotRunnableError.
-	draft, err := a.repo.GetUsableWorkflowBySlug(ctx, wfCtx.userID, slug)
-	if wfCtx.draftRootSlug != "" && wfCtx.draftRootSlug == slug && draft == nil {
-		// A builder test run runs what the builder just saved, complete or
-		// not. Only the root: a `ref:` child still has to be complete.
-		var notRunnable *db.WorkflowDraftNotRunnableError
-		if err == nil || errors.As(err, &notRunnable) {
-			if saved, getErr := a.repo.GetWorkflowDraftBySlug(ctx, wfCtx.userID, slug); getErr == nil && saved != nil && !saved.IsHidden {
-				draft, err = saved, nil
-			}
-		}
-	}
+	resolved, err := workflowsource.Resolve(ctx, store, wfCtx.sourceOptions(), workflowName)
 	if err != nil {
-		return nil, nil, fmt.Errorf("failed to look up workflow '%s': %w", workflowName, err)
+		return nil, nil, fmt.Errorf("workflow %q: %w", workflowName, err)
 	}
 
-	if draft == nil {
-		return nil, nil, fmt.Errorf("user workflow draft not found: %s (slug: %s)", workflowName, slug)
-	}
-
-	yamlBytes := []byte(draft.Definition)
-	hasTemplates := bytes.Contains(yamlBytes, []byte("{{"))
-
-	// Parse YAML directly to proto
-	wf, err := wfyaml.ParseWorkflow(yamlBytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse stored workflow %s: %w", workflowName, err)
+	hasTemplates := bytes.Contains(resolved.YAML, []byte("{{"))
+	if resolved.Source == workflowref.SourceBuiltin {
+		return resolved.YAML, &loadedWorkflow{Workflow: resolved.Workflow, HasTemplates: hasTemplates}, nil
 	}
 
 	// Re-marshal to YAML for template resolution
-	yamlData, err := wfyaml.MarshalWorkflow(wf)
+	yamlData, err := wfyaml.MarshalWorkflow(resolved.Workflow)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to marshal workflow to YAML: %w", err)
 	}
-
-	return yamlData, &loadedWorkflow{
-		Workflow:     wf,
-		HasTemplates: hasTemplates,
-	}, nil
-}
-
-// loadStoredProjectWorkflowWithRaw loads a project workflow from the stored config record (synced by daemon).
-func (a *LoadWorkflowActivity) loadStoredProjectWorkflowWithRaw(ctx context.Context, workflowName string, wfCtx *workflowContext) ([]byte, *loadedWorkflow, error) {
-	if wfCtx == nil || wfCtx.projectID == "" {
-		return nil, nil, fmt.Errorf("workflow not found: %s (no project context)", workflowName)
-	}
-
-	if a.repo == nil {
-		return nil, nil, fmt.Errorf("repository not available")
-	}
-
-	record, err := a.repo.GetProjectConfigRecord(ctx, wfCtx.projectID)
-	if err != nil {
-		return nil, nil, fmt.Errorf("workflow not found: %s (no project config)", workflowName)
-	}
-
-	workflows, err := cfg.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
-	if err != nil {
-		return nil, nil, fmt.Errorf("workflow not found: %s (failed to parse stored workflows)", workflowName)
-	}
-
-	slug := strings.ToLower(strings.ReplaceAll(workflowName, " ", "-"))
-	sw := cfg.FindStoredWorkflowBySlug(workflows, slug)
-	if sw == nil {
-		return nil, nil, fmt.Errorf("workflow not found: %s (slug: %s)", workflowName, slug)
-	}
-
-	yamlBytes := []byte(sw.YAMLContent)
-	hasTemplates := bytes.Contains(yamlBytes, []byte("{{"))
-
-	wf, err := wfyaml.ParseWorkflow(yamlBytes)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse project workflow %s: %w", workflowName, err)
-	}
-
-	yamlData, err := wfyaml.MarshalWorkflow(wf)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to marshal workflow to YAML: %w", err)
-	}
-
-	return yamlData, &loadedWorkflow{
-		Workflow:     wf,
-		HasTemplates: hasTemplates,
-	}, nil
+	return yamlData, &loadedWorkflow{Workflow: resolved.Workflow, HasTemplates: hasTemplates}, nil
 }
 
 // loadBuiltinWorkflowWithRaw loads a builtin workflow and returns raw YAML + parsed proto.
-func loadBuiltinWorkflowWithRaw(workflowName string) ([]byte, *loadedWorkflow, error) {
-	name := strings.TrimPrefix(workflowName, "builtin://")
-
-	// Check for internal workflows (YAML defined inline, not in embedded files)
-	if yamlData := builtin.GetInternalWorkflowYAML(name); yamlData != nil {
-		protoWf, err := wfyaml.ParseWorkflow(yamlData)
-		if err != nil {
-			return nil, nil, fmt.Errorf("failed to parse internal workflow %s: %w", workflowName, err)
-		}
-		return yamlData, &loadedWorkflow{Workflow: protoWf}, nil
+func loadBuiltinWorkflowWithRaw(name string) ([]byte, *loadedWorkflow, error) {
+	if !strings.HasPrefix(name, workflowref.BuiltinScheme) {
+		name = workflowref.BuiltinScheme + name
 	}
-
-	filename := name + ".yaml"
-
-	data, err := builtin.BuiltinWorkflowsFS.ReadFile(filename)
-	if err != nil {
-		return nil, nil, fmt.Errorf("builtin workflow not found: %s (tried embedded %s)", workflowName, filename)
-	}
-
-	hasTemplates := bytes.Contains(data, []byte("{{"))
-
-	// Parse YAML directly to proto
-	wf, err := wfyaml.ParseWorkflow(data)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to parse builtin workflow %s: %w", workflowName, err)
-	}
-
-	return data, &loadedWorkflow{
-		Workflow:     wf,
-		HasTemplates: hasTemplates,
-	}, nil
+	return (&LoadWorkflowActivity{}).loadWorkflowByNameWithRaw(context.Background(), name, nil)
 }
 
 // createWorkflowLoader creates a validation.WorkflowLoader for tree validation.
@@ -354,17 +236,6 @@ func (a *LoadWorkflowActivity) createWorkflowLoader(ctx context.Context, wfCtx *
 	return func(workflowName string) (*reliantv1.Workflow, error) {
 		return a.loadWorkflowByName(ctx, workflowName, wfCtx)
 	}
-}
-
-func generateWorkflowSlug(name string) string {
-	slug := strings.ToLower(strings.TrimSpace(name))
-	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = strings.ReplaceAll(slug, "_", "-")
-	re := regexp.MustCompile(`[^a-z0-9-]`)
-	slug = re.ReplaceAllString(slug, "")
-	re = regexp.MustCompile(`-+`)
-	slug = re.ReplaceAllString(slug, "-")
-	return strings.Trim(slug, "-")
 }
 
 // createPresetLoader creates a PresetLoader function for validation.

@@ -359,3 +359,33 @@ In the workflow builder, use these tools to manage scenarios:
 | `run_scenario` | Re-run a scenario after workflow changes |
 
 Scenarios are stored alongside the workflow and run instantly without network calls or LLM API usage.
+
+### Scenarios in your project
+
+A project workflow's scenarios live in `.reliant/workflows/<name>/scenarios/`, one scenario per `.yaml` file, where `<name>` is the workflow's `name:` as a slug — not its file name. A workflow in `blog.yaml` that declares `name: blog-content-pipeline` keeps its scenarios in `blog-content-pipeline/scenarios/`:
+
+<Tree>
+  <Tree.Folder name=".reliant" defaultOpen>
+    <Tree.Folder name="workflows" defaultOpen>
+      <Tree.File name="blog.yaml" />
+      <Tree.Folder name="blog-content-pipeline" defaultOpen>
+        <Tree.Folder name="scenarios" defaultOpen>
+          <Tree.File name="drafts_from_brief.yaml" />
+          <Tree.File name="rejects_empty_brief.yaml" />
+        </Tree.Folder>
+      </Tree.Folder>
+    </Tree.Folder>
+  </Tree.Folder>
+</Tree>
+
+The app lists these scenarios, and the CLI runs the same ones:
+
+```bash
+reliant workflow scenario list                 # every project scenario
+reliant workflow scenario run                  # run them all; exit 1 on any failure
+reliant workflow scenario run .reliant/workflows/blog.yaml --verbose
+```
+
+A scenario file's `name:` defaults to its file name. A file holding several scenarios is an error — split it into one file per scenario. Scenarios in the retired layouts (`scenarios/<file>/` or `<file>_scenarios.yaml`) are also an error, and the message names the directory each file belongs in.
+
+A sub-workflow reference resolves the same way everywhere: `ref: project://blog-content-pipeline` names the workflow by its `name:`, in a chat, in a scenario, and in `reliant workflow validate`. `validate` follows every reference transitively, so a broken one is reported with the chain that reaches it — `content-weekly.yaml → project://content-next → project://blog: no project workflow is named "blog"; blog.yaml is named "blog-content-pipeline"` — and a reference cycle is an error.

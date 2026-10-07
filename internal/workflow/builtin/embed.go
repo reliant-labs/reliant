@@ -13,9 +13,11 @@ var BuiltinPresetsFS embed.FS
 var BuiltinScenariosFS embed.FS
 
 // BuiltinScenarioDirsFS embeds the per-workflow scenario directories
-// (scenarios/<workflow-name>/*.yaml). These are the same scenario files the
-// `reliant workflow scenario run` CLI discovers on disk; embedding them lets
-// `go test` run every scenario so they cannot silently rot.
+// (<workflow-name>/scenarios/*.yaml, one scenario per file) — the layout a
+// project's .reliant/workflows uses too (workflowref.ScenarioDir), so
+// `reliant workflow scenario run --dir internal/workflow/builtin` discovers the
+// same files. Embedding them lets `go test` run every scenario so they cannot
+// silently rot.
 //
-//go:embed scenarios/*/*.yaml
+//go:embed */scenarios/*.yaml
 var BuiltinScenarioDirsFS embed.FS

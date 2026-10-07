@@ -51,11 +51,15 @@ examples/
 
 ## Scenarios
 
-Test scenarios for each workflow live in subdirectories under `scenarios/`. Each directory contains multiple `.yaml` files that define inputs, simulated events, and expected outcomes.
+Test scenarios for each workflow live in subdirectories under `scenarios/`. Each directory contains `.yaml` files, one scenario per file, that define inputs, simulated events, and expected outcomes.
 
 Each directory is a symlink to the builtin scenarios it documents, so there is
 one copy and `go test ./internal/workflow/builtin/` runs it. Edit the files
-under `internal/workflow/builtin/scenarios/<workflow>/`.
+under `internal/workflow/builtin/<workflow>/scenarios/`.
+
+In your own project the layout is `.reliant/workflows/<name>/scenarios/`, next
+to the workflow, where `<name>` is the workflow's `name:` field — see
+[Testing Workflows](../docs/workflows/testing.mdx).
 
 | Directory | Description |
 |-----------|-------------|

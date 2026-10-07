@@ -1796,10 +1796,11 @@ func flattenMCPConfigs(mcpConfigs map[string][]byte) *string {
 }
 
 type storedWorkflowJSON struct {
-	Slug        string `json:"slug"`
-	Name        string `json:"name"`
-	YAMLContent string `json:"yaml_content"`
-	ContentHash string `json:"content_hash"`
+	Slug         string `json:"slug"`
+	Name         string `json:"name"`
+	RelativePath string `json:"relative_path,omitempty"`
+	YAMLContent  string `json:"yaml_content"`
+	ContentHash  string `json:"content_hash"`
 }
 
 type storedPresetJSON struct {
@@ -1822,10 +1823,11 @@ func flattenIndexedWorkflows(workflows []*reliantv1.IndexedWorkflow) *string {
 	items := make([]storedWorkflowJSON, 0, len(workflows))
 	for _, w := range workflows {
 		items = append(items, storedWorkflowJSON{
-			Slug:        w.Slug,
-			Name:        w.Name,
-			YAMLContent: string(w.YamlContent),
-			ContentHash: w.ContentHash,
+			Slug:         w.Slug,
+			Name:         w.Name,
+			RelativePath: w.RelativePath,
+			YAMLContent:  string(w.YamlContent),
+			ContentHash:  w.ContentHash,
 		})
 	}
 	encoded, err := json.Marshal(items)

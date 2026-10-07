@@ -15,6 +15,7 @@ import (
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -22,7 +23,7 @@ import (
 )
 
 // TestBuiltinWorkflowScenarios runs every builtin scenario — both
-// testdata/<workflow>_scenarios.yaml and scenarios/<workflow>/*.yaml — on the
+// testdata/<workflow>_scenarios.yaml and <workflow>/scenarios/*.yaml — on the
 // scenario runner, i.e. through the REAL DynamicWorkflow with only the
 // activity layer mocked. There is no allowlist of known failures: a scenario
 // that does not pass here is a scenario the runtime does not satisfy.
@@ -30,6 +31,7 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 	t.Parallel()
 	entries, err := builtin.BuiltinWorkflowsFS.ReadDir(".")
 	require.NoError(t, err, "Failed to read builtin workflows directory")
+	layout := builtinLayout(t)
 
 	ran := 0
 	for _, entry := range entries {
@@ -50,7 +52,7 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 		result := validation.StaticAnalysis(wf, builtinLoader)
 		require.NoError(t, result.AsError(), "Workflow validation failed for %s", workflowFile)
 
-		scenarios, err := loadScenariosForWorkflow(workflowName)
+		scenarios, err := loadScenariosForWorkflow(t, layout, workflowName)
 		if err != nil || len(scenarios) == 0 {
 			continue // no scenarios is fine
 		}
@@ -82,13 +84,31 @@ func TestBuiltinWorkflowScenarios(t *testing.T) {
 	require.NotZero(t, ran, "no builtin scenarios were found")
 }
 
+// builtinLayout lays the builtin workflows and their scenario directories out
+// with workflowref.NewLayout — the locator the CLI and the app use on a
+// project's .reliant/workflows — so the builtins obey the project layout.
+func builtinLayout(t *testing.T) *workflowref.Layout {
+	t.Helper()
+	files := map[string][]byte{}
+	for _, fsys := range []fs.FS{builtin.BuiltinWorkflowsFS, builtin.BuiltinScenarioDirsFS} {
+		require.NoError(t, fs.WalkDir(fsys, ".", func(p string, d fs.DirEntry, err error) error {
+			if err != nil || d.IsDir() {
+				return err
+			}
+			data, err := fs.ReadFile(fsys, p)
+			files[p] = data
+			return err
+		}))
+	}
+	return workflowref.NewLayout(files)
+}
+
 // loadScenariosForWorkflow loads all scenarios for a workflow from BOTH sources:
 //  1. testdata/<workflow>_scenarios.yaml (multi-document or wrapper format)
-//  2. scenarios/<workflow>/*.yaml (one or more scenarios per file)
-//
-// This mirrors the CLI's scenario discovery (findScenariosForWorkflow in
-// cmd/reliant/commands/workflow.go) so `go test` exercises every scenario.
-func loadScenariosForWorkflow(workflowName string) ([]*wfscenario.Scenario, error) {
+//  2. <workflow>/scenarios/*.yaml, one scenario per file, read exactly as
+//     `reliant workflow scenario run` reads a project's (the shared locator
+//     and wfscenario.ParseScenarioFile)
+func loadScenariosForWorkflow(t *testing.T, layout *workflowref.Layout, workflowName string) ([]*wfscenario.Scenario, error) {
 	var allScenarios []*wfscenario.Scenario
 
 	// Co-located testdata file
@@ -101,23 +121,12 @@ func loadScenariosForWorkflow(workflowName string) ([]*wfscenario.Scenario, erro
 		allScenarios = append(allScenarios, scenarios...)
 	}
 
-	// scenarios/<workflow>/ directory
-	scenarioDir := "scenarios/" + workflowName
-	if entries, err := builtin.BuiltinScenarioDirsFS.ReadDir(scenarioDir); err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
-				continue
-			}
-			data, err := builtin.BuiltinScenarioDirsFS.ReadFile(scenarioDir + "/" + entry.Name())
-			if err != nil {
-				return nil, err
-			}
-			scenarios, err := parseMultiDocYAML(data)
-			if err != nil {
-				return nil, fmt.Errorf("parse %s/%s: %w", scenarioDir, entry.Name(), err)
-			}
-			allScenarios = append(allScenarios, scenarios...)
+	for _, f := range layout.ScenariosFor(workflowref.Slug(workflowName)) {
+		sc, err := wfscenario.ParseScenarioFile(f.Content, f.Name)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", f.Path, err)
 		}
+		allScenarios = append(allScenarios, sc)
 	}
 
 	if len(allScenarios) == 0 {
@@ -207,25 +216,17 @@ func TestScenarioFilesAreValid(t *testing.T) {
 	}
 }
 
-// TestScenarioDirsMapToWorkflows verifies every scenarios/<name>/ directory
-// corresponds to an existing builtin workflow. Orphaned scenario directories
-// are dead tests that can never run — they must be updated or removed when a
-// workflow is renamed or deleted.
+// TestScenarioDirsMapToWorkflows verifies every <name>/scenarios/ directory
+// belongs to an existing builtin workflow, by the locator's own rule
+// (workflowref: the directory is the workflow's name: as a slug). Orphaned
+// scenario directories are dead tests that can never run — they must be
+// updated or removed when a workflow is renamed or deleted.
 func TestScenarioDirsMapToWorkflows(t *testing.T) {
 	t.Parallel()
-	entries, err := builtin.BuiltinScenarioDirsFS.ReadDir("scenarios")
-	if err != nil {
-		t.Skip("no scenarios directory embedded")
-	}
-
-	for _, entry := range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		workflowFile := entry.Name() + ".yaml"
-		if _, err := builtin.BuiltinWorkflowsFS.ReadFile(workflowFile); err != nil {
-			t.Errorf("scenarios/%s/ has no matching builtin workflow %s — update or remove these scenarios", entry.Name(), workflowFile)
-		}
+	layout := builtinLayout(t)
+	require.NotEmpty(t, layout.Scenarios, "no scenario directories embedded")
+	for _, problem := range layout.ScenarioProblems() {
+		t.Error(problem)
 	}
 }
 

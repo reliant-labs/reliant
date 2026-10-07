@@ -4,12 +4,14 @@ package builtin_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +26,7 @@ const exampleScenariosDir = "../../../examples/scenarios"
 //
 // examples/scenarios/ is user-facing documentation: it is the corpus someone
 // reads to learn what a scenario looks like. Nothing executed it, so it rotted
-// into a fork of internal/workflow/builtin/scenarios/ that was two refactors
+// into a fork of the builtin scenario directories that was two refactors
 // behind — fixtures calling a `bash` tool renamed to `shell`, and eleven agent
 // scenarios asserting a `max_turns_notification` node that agent.yaml has not
 // had since f2ab9317. Every one of those passed review because nothing ran it.
@@ -56,7 +58,7 @@ func TestExampleScenarios(t *testing.T) {
 		// collapsed to symlinks in dff9326a for exactly this reason.
 		require.Equalf(t, os.ModeSymlink, entry.Type()&os.ModeSymlink,
 			"examples/scenarios/%s must be a symlink to "+
-				"internal/workflow/builtin/scenarios/%s, not a copy — "+
+				"internal/workflow/builtin/%s/scenarios, not a copy — "+
 				"a second copy drifts from the one the suite runs",
 			entry.Name(), entry.Name())
 
@@ -72,8 +74,21 @@ func TestExampleScenarios(t *testing.T) {
 		require.NoError(t, validation.StaticAnalysis(wf, builtinLoader).AsError(),
 			"workflow validation failed for %s", workflowName)
 
-		scenarios, err := wfscenario.LoadScenariosFromDir(path)
-		require.NoError(t, err, "load scenarios from %s", path)
+		// One scenario per file, read as a project's are
+		// (wfscenario.ParseScenarioFile).
+		files, err := os.ReadDir(path)
+		require.NoError(t, err, "read %s", path)
+		var scenarios []*wfscenario.Scenario
+		for _, f := range files {
+			if f.IsDir() || !workflowref.IsYAML(f.Name()) {
+				continue
+			}
+			data, err := os.ReadFile(filepath.Join(path, f.Name()))
+			require.NoError(t, err)
+			sc, err := wfscenario.ParseScenarioFile(data, strings.TrimSuffix(f.Name(), filepath.Ext(f.Name())))
+			require.NoError(t, err, "%s/%s", path, f.Name())
+			scenarios = append(scenarios, sc)
+		}
 		require.NotEmptyf(t, scenarios, "examples/scenarios/%s/ contains no scenarios", workflowName)
 		ran += len(scenarios)
 

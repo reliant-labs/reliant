@@ -24,6 +24,7 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	wfscenario "github.com/reliant-labs/reliant/internal/workflow/scenario"
 	"github.com/reliant-labs/reliant/internal/workflow/scenario/runner"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
 // ScenarioService implements the ScenarioService RPC handlers
@@ -303,11 +304,11 @@ func (s *ScenarioService) RunScenario(
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("scenario not found: %s", filename))
 			}
 
-			var scenario wfscenario.Scenario
-			if err := yaml.Unmarshal([]byte(found.YAMLContent), &scenario); err != nil {
-				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to parse scenario: %w", err))
+			parsed, err := wfscenario.ParseScenarioFile([]byte(found.YAMLContent), found.Name)
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scenario %s: %w", found.Name, err))
 			}
-			simScenario = &scenario
+			simScenario = parsed
 
 			// Get the workflow - try DB first, then stored project config
 			draft, err := s.database.GetWorkflowDraftBySlug(ctx, userID, workflowSlug)
@@ -429,6 +430,11 @@ func (s *ScenarioService) UploadScenario(
 	if req.Msg.WorkflowSlug == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_slug required"))
 	}
+	if workflowref.Slug(req.Msg.WorkflowSlug) != req.Msg.WorkflowSlug {
+		// It names a directory: <slug>/scenarios/ is only found again under
+		// the workflow's slug, and anything else could escape the project.
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow_slug %q is not a workflow slug (want %q)", req.Msg.WorkflowSlug, workflowref.Slug(req.Msg.WorkflowSlug)))
+	}
 	if req.Msg.Filename == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("filename required"))
 	}
@@ -440,13 +446,16 @@ func (s *ScenarioService) UploadScenario(
 		return nil, err
 	}
 
-	// Validate the YAML is a valid scenario
-	var scenario wfscenario.Scenario
-	if err := yaml.Unmarshal([]byte(req.Msg.YamlContent), &scenario); err != nil {
+	// Sanitize filename - remove extension if provided and any path components
+	filename := filepath.Base(req.Msg.Filename)
+	filename = strings.TrimSuffix(filename, ".yaml")
+	filename = strings.TrimSuffix(filename, ".yml")
+
+	// Validate the YAML is one scenario, read the way every surface reads a
+	// project scenario file (wfscenario.ParseScenarioFile).
+	scenario, err := wfscenario.ParseScenarioFile([]byte(req.Msg.YamlContent), filename)
+	if err != nil {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid scenario YAML: %w", err))
-	}
-	if scenario.Name == "" {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("scenario must have a name"))
 	}
 
 	// Get the project path
@@ -455,16 +464,9 @@ func (s *ScenarioService) UploadScenario(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found: %s", req.Msg.ProjectId))
 	}
 
-	// Build the scenarios directory path
-	scenariosDir := filepath.Join(project.Path, ".reliant", "workflows", req.Msg.WorkflowSlug, "scenarios")
-
-	// Sanitize filename - remove extension if provided and any path components
-	filename := filepath.Base(req.Msg.Filename)
-	filename = strings.TrimSuffix(filename, ".yaml")
-	filename = strings.TrimSuffix(filename, ".yml")
-
-	// Build the full file path
-	filePath := filepath.Join(scenariosDir, filename+".yaml")
+	// Where the locator (workflowref) reads it back from:
+	// .reliant/workflows/<slug>/scenarios/<filename>.yaml.
+	filePath := filepath.Join(project.Path, filepath.FromSlash(workflowref.Dir), filepath.FromSlash(workflowref.ScenarioPath(req.Msg.WorkflowSlug, filename)))
 
 	// Write the file via daemon (fs.write_file auto-creates parent directories)
 	userID = auth.MustGetUserID(ctx)
@@ -480,7 +482,7 @@ func (s *ScenarioService) UploadScenario(
 	scenarioID := fmt.Sprintf("project:%s:%s", req.Msg.WorkflowSlug, filename)
 
 	// Convert to proto for response
-	protoScenario, err := scenarioToProtoScenario(&scenario, scenarioID, filePath)
+	protoScenario, err := scenarioToProtoScenario(scenario, scenarioID, filePath)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to convert scenario: %w", err))
 	}
@@ -801,13 +803,13 @@ func discoverProjectScenariosFromDB(repo db.Repository, ctx context.Context, pro
 
 	var scenarios []*reliantv1.Scenario
 	for _, stored := range workflowScenarios {
-		var simScenario wfscenario.Scenario
-		if err := yaml.Unmarshal([]byte(stored.YAMLContent), &simScenario); err != nil {
-			return nil, fmt.Errorf("failed to parse stored scenario %s: %w", stored.Name, err)
+		simScenario, err := wfscenario.ParseScenarioFile([]byte(stored.YAMLContent), stored.Name)
+		if err != nil {
+			return nil, fmt.Errorf("stored scenario %s: %w", stored.Name, err)
 		}
 
 		scenarioID := fmt.Sprintf("project:%s:%s", workflowSlug, stored.Name)
-		proto, err := scenarioToProtoScenario(&simScenario, scenarioID, "")
+		proto, err := scenarioToProtoScenario(simScenario, scenarioID, "")
 		if err != nil {
 			return nil, fmt.Errorf("failed to convert scenario %s: %w", stored.Name, err)
 		}

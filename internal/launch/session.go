@@ -18,6 +18,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
 // worktreeLookupLimit bounds the main-worktree scan in ResolveChatWorktreeID.
@@ -144,14 +145,12 @@ func (l *Launcher) GetEffectiveCheckout(ctx context.Context, chat *db.Chat) Chec
 	return Checkout{}
 }
 
-// NormalizeWorkflowSlug produces a URL-safe slug from a workflow name.
-// This MUST stay in sync with generateWorkflowSlug in
-// internal/workflow/runtime/activities/handlers/load_workflow.go.
+// NormalizeWorkflowSlug is the slug a workflow ref addresses among the
+// user's own workflows ("project://My Flow" and "my_flow" are both
+// "my-flow"), or "" for a ref that names none (a builtin). It is
+// workflowref's rule, the one every surface resolves refs by.
 func NormalizeWorkflowSlug(name string) string {
-	slug := strings.ToLower(strings.TrimSpace(name))
-	slug = strings.ReplaceAll(slug, " ", "-")
-	slug = strings.ReplaceAll(slug, "_", "-")
-	return slug
+	return workflowref.ProjectSlug(name)
 }
 
 func dbPresetToRuntimePreset(p *db.Preset) *preset.Preset {
