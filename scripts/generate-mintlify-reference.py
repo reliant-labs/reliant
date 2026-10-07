@@ -36,6 +36,10 @@ PAGE_CONFIG = {
         "title": "Models Reference",
         "description": "Available AI models and their capabilities",
     },
+    "cli": {
+        "title": "CLI Reference",
+        "description": "Every reliant command, subcommand and flag",
+    },
     "workflow-schema": {
         "title": "Workflow Schema Reference",
         "description": "Top-level workflow, edge, and edge-case schema reference",
@@ -167,6 +171,26 @@ def fence_example_blocks(body: str) -> str:
     return "\n".join(out)
 
 
+def escape_all_angles(body: str) -> str:
+    """Escape every `<` outside code. For pages generated from plain-text sources
+    (CLI help) that contain no JSX, where prose like `<step name>` must not parse as a tag."""
+    out: list[str] = []
+    in_fence = False
+    for line in body.splitlines():
+        if line.strip().startswith("```"):
+            in_fence = not in_fence
+            out.append(line)
+            continue
+        if in_fence:
+            out.append(line)
+            continue
+        parts = line.split("`")
+        for idx in range(0, len(parts), 2):
+            parts[idx] = re.sub(r"(?<!\\)<", r"\\<", parts[idx])
+        out.append("`".join(parts))
+    return "\n".join(out)
+
+
 def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
     bracketed_object_array_re = re.compile(r"\[\{[^{}\n]+\}\]")
     brace_token_re = re.compile(
@@ -217,6 +241,8 @@ def wrap_inline_mdx_sensitive_tokens(body: str) -> str:
             resplit[idx] = re.sub(r"(?<!\\)([{}])", r"\\\1", resplit[idx])
             # A truncated or non-tag `<` (e.g. "<@ID...") would open a JSX tag.
             resplit[idx] = re.sub(r"(?<!\\)<(?=[@#!])", r"\\<", resplit[idx])
+            # A `<` that cannot start a tag (heredocs like <<<"$X", "a < b").
+            resplit[idx] = re.sub(r"(?<!\\)<(?![A-Za-z/\\\\])", r"\\<", resplit[idx])
         out.append("`".join(resplit))
 
     return "\n".join(out)
@@ -237,6 +263,8 @@ def convert_body(body: str, slug: str) -> str:
     body = ICON_RE.sub(lambda m: ICON_MAP.get(m.group(1), m.group(1)), body)
     body = fence_example_blocks(body)
     body = wrap_inline_mdx_sensitive_tokens(body)
+    if slug == "cli":
+        body = escape_all_angles(body)
 
     # Normalize excess blank lines introduced by comment/frontmatter stripping.
     body = re.sub(r"\n{3,}", "\n\n", body).strip() + "\n"

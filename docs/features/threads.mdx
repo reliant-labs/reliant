@@ -41,7 +41,8 @@ flowchart LR
 
 ```yaml
 - id: call_helper
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread: inherit  # Share parent's thread
 ```
 
@@ -49,7 +50,8 @@ flowchart LR
 
 ```yaml
 - id: researcher
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: new
     inject:
@@ -61,7 +63,8 @@ flowchart LR
 
 ```yaml
 - id: reviewer
-  workflow: builtin://agent
+  type: workflow
+  ref: builtin://agent
   thread:
     mode: fork
     inject:

@@ -80,7 +80,8 @@ inputs:
 
 nodes:
   - id: review
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
     args:
@@ -94,7 +95,8 @@ nodes:
         Be specific. Reference exact code.
 
   - id: refactor
-    workflow: builtin://agent
+    type: workflow
+    ref: builtin://agent
     thread:
       mode: inherit
       inject:
@@ -107,7 +109,8 @@ nodes:
       mode: auto
 
   - id: verify
-    run: npm test
+    type: run
+    command: npm test
 
 edges:
   - from: review
