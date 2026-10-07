@@ -131,7 +131,8 @@
               "reference/models",
               "reference/tools",
               "reference/scenario-schema",
-              "reference/llm-guide"
+              "reference/llm-guide",
+              "reference/cli"
             ]
           },
           {
