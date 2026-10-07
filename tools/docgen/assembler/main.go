@@ -313,12 +313,12 @@ inputs:
   issue_number: {type: integer, default: 0}   # required inputs must be mapped by every trigger, or set per activation
 triggers:
   - name: new-issue                 # unique within the workflow: lowercase, digits, - and _
-    description: A new or reopened issue
+    description: A new issue
     integration:                    # exactly ONE source: schedule | webhook | integration | workflow_event
       integration: github
-      events: [issues.opened, issues.reopened]   # "issues.*" or "*" also match
+      events: [issues.opened]                    # "issues.*" or "*" also match
       match: {repository: acme/app}              # event attributes that must be equal
-    filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')"
+    filter: "!('wontfix' in trigger.payload.data.issue.labels)"
     inputs:
       issue_number: "{{ trigger.payload.data.issue.number }}"
     prompt: "Triage issue #{{ trigger.payload.data.issue.number }}: label it, ask for a repro if one is missing."
@@ -356,6 +356,10 @@ What ` + bt + `trigger.payload` + bt + ` holds, by source:
 | workflow_event | ` + bt + `run_id` + bt + `, ` + bt + `chat_id` + bt + `, ` + bt + `workflow_name` + bt + `, ` + bt + `outcome` + bt + `, ` + bt + `summary` + bt + `, ` + bt + `error` + bt + ` |
 
 The payload is untrusted data from outside. Read it in templates; never paste it into a system prompt.
+
+An integration's payload is declared (` + bt + `get_integration_schema` + bt + ` shows it), and validation type-checks the filter, inputs and
+prompt against it. Lists of names are strings, not objects: GitHub's ` + bt + `issue.labels` + bt + ` and ` + bt + `issue.assignees` + bt + `, and
+` + bt + `data.label` + bt + ` on ` + bt + `issues.labeled` + bt + `. Write ` + bt + `'wontfix' in trigger.payload.data.issue.labels` + bt + `, never ` + bt + `l.name` + bt + `.
 
 **` + bt + `trigger.sender` + bt + `** is who sent the event, set by the receiver from what the source authenticated, never from the
 payload: ` + bt + `kind` + bt + ` (slack, github, email, sms, webhook, workflow, schedule, user), ` + bt + `id` + bt + `, ` + bt + `display_name` + bt + `, ` + bt + `verified` + bt + `.

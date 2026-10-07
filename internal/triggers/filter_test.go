@@ -3,6 +3,7 @@ package triggers
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/integrations/webhook/github"
+	"github.com/reliant-labs/reliant/internal/triggers/triggerspec"
 )
 
 func TestCompileFilterRejectsWhatCannotRun(t *testing.T) {
@@ -39,7 +41,7 @@ func TestCompileFilterAcceptsTheTriggerRoot(t *testing.T) {
 		"   ",
 		"trigger.payload.action == 'opened'",
 		"trigger.kind == 'integration' && trigger.payload.data.issue.number > 10",
-		"has(trigger.payload.data.label) && trigger.payload.data.label.name in ['bug', 'p0']",
+		"has(trigger.payload.data.label) && trigger.payload.data.label in ['bug', 'p0']",
 		"size(trigger.payload.body.items) > 0",
 	} {
 		_, err := CompileFilter(expr)
@@ -177,4 +179,68 @@ func TestFilterOnAMissingKeyIsAnErrorNotAMiss(t *testing.T) {
 	require.NoError(t, err)
 	_, err = f.Match(FilterInput{Kind: "integration", Payload: map[string]any{"data": map[string]any{}}})
 	require.Error(t, err)
+}
+
+// gitHubIssueWithLabels is trigger.payload.data as the GitHub receiver
+// records an issue opened with these labels.
+func gitHubIssueWithLabels(t *testing.T, labels ...string) FilterInput {
+	t.Helper()
+	ls := make([]string, len(labels))
+	for i, l := range labels {
+		ls[i] = fmt.Sprintf(`{"id":%d,"name":%q,"color":"ededed"}`, i+1, l)
+	}
+	body := `{"action":"opened","issue":{"number":7,"title":"t","labels":[` + strings.Join(ls, ",") + `]},` +
+		`"repository":{"id":1,"full_name":"acme/app"},"installation":{"id":2},"sender":{"login":"octocat","id":1,"type":"User"}}`
+	parsed, err := github.Parse("issues", []byte(body), time.Now())
+	require.NoError(t, err)
+	require.Len(t, parsed.Events, 1)
+	return FilterInput{Kind: "integration", Payload: map[string]any{"data": parsed.Events[0].Data}}
+}
+
+// The receiver records issue.labels as label NAMES. So the "skip wontfix"
+// filter is a membership test, and the form docs used to show — reading
+// l.name — fails on every issue that has a label.
+func TestWontfixFilterOverARecordedGitHubIssue(t *testing.T) {
+	fixed, err := CompileFilter("!('wontfix' in trigger.payload.data.issue.labels)")
+	require.NoError(t, err)
+	for name, tc := range map[string]struct {
+		labels []string
+		want   bool
+	}{
+		"no labels":        {nil, true},
+		"other labels":     {[]string{"bug", "p1"}, true},
+		"labelled wontfix": {[]string{"bug", "wontfix"}, false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			hit, err := fixed.Match(gitHubIssueWithLabels(t, tc.labels...))
+			require.NoError(t, err)
+			assert.Equal(t, tc.want, hit)
+		})
+	}
+
+	old, err := CompileFilter("!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')")
+	require.NoError(t, err, "untyped, it compiles: only the declared shape can tell")
+	_, err = old.Match(gitHubIssueWithLabels(t, "bug"))
+	assert.Error(t, err, "a label is a string, so l.name cannot be read")
+}
+
+// triggerspec.Shape declares the `trigger` root closed. Every key the
+// runtime puts on it must be declared there, or validation would reject a
+// filter that runs.
+func TestFilterRootMatchesTheDeclaredShape(t *testing.T) {
+	shape, err := triggerspec.NewShape()
+	require.NoError(t, err)
+	root := FilterInput{
+		Kind: "integration", TriggerID: "t", EventID: "e", OccurredAt: time.Now(),
+		Payload: map[string]any{"data": map[string]any{}},
+		Sender:  &core.TriggerSender{Kind: core.TriggerSenderKindGitHub, ID: "1", DisplayName: "octocat", Verified: true},
+	}.Root()
+	for key := range root {
+		assert.Empty(t, shape.CheckFilter("has(trigger."+key+")"), "trigger.%s is not declared", key)
+	}
+	sender, ok := root["sender"].(map[string]any)
+	require.True(t, ok)
+	for key := range sender {
+		assert.Empty(t, shape.CheckFilter("has(trigger.sender."+key+")"), "trigger.sender.%s is not declared", key)
+	}
 }

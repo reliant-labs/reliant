@@ -7,6 +7,7 @@ import (
 	"crypto/sha1" //nolint:gosec // G505: builds the legacy SHA-1 header a test proves is NOT accepted
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"net/http"
 	"net/url"
 	"os"
@@ -15,8 +16,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/jsonschema-go/jsonschema"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/integrations/catalog"
+	"github.com/reliant-labs/reliant/internal/integrations/manifest"
 )
 
 const gitHubTestSecret = "whsec-test"
@@ -131,4 +138,51 @@ func TestRegistryFromEnvRegistersGitHubOnItsSecret(t *testing.T) {
 	body := []byte(`{}`)
 	assert.NoError(t, p.Verify(context.Background(), gitHubRequest("issues", "d", body, signGitHub("s3cret", body))),
 		"the secret is trimmed")
+}
+
+// Every event GitHub's manifest declares, recorded from its fixture,
+// validates against the trigger.payload schema the manifest declares for it.
+// Workflow validation type-checks a trigger's filter, inputs and prompt
+// against that schema (issue.labels is a list of label NAMES, so `l.name` is
+// rejected), so a normalizer that drifted from it would make validation
+// reject expressions that run, or accept ones that cannot.
+func TestGitHubPayloadsMatchTheManifestTriggers(t *testing.T) {
+	var m *reliantv1.IntegrationManifest
+	for _, cand := range catalog.MustBuiltin().Manifests() {
+		if cand.GetId() == "github" {
+			m = cand
+		}
+	}
+	require.NotNil(t, m, "the catalog ships the github manifest")
+
+	p := NewGitHubProvider(gitHubTestSecret)
+	for _, tr := range m.GetTriggers() {
+		for _, evType := range tr.GetEvents() {
+			t.Run(evType, func(t *testing.T) {
+				header, _, _ := strings.Cut(evType, ".")
+				d, err := p.Parse(context.Background(), gitHubRequest(header, "d-"+evType, gitHubFixture(t, evType), ""))
+				require.NoError(t, err)
+				require.Len(t, d.Events, 1)
+				require.Equal(t, evType, d.Events[0].Type)
+
+				payload := toInbound("github", &core.Trigger{ID: "t"}, d.Events[0]).Payload
+				schemaMap := manifest.TriggerPayloadSchema(m, tr)
+				// This pins TYPES, which is what validation checks against. Not
+				// attribute presence: the envelope requires every declared
+				// attribute, but a push sets branch or tag, never both.
+				delete(schemaMap["properties"].(map[string]any)["attributes"].(map[string]any), "required")
+				rawSchema, err := json.Marshal(schemaMap)
+				require.NoError(t, err)
+				var schema jsonschema.Schema
+				require.NoError(t, json.Unmarshal(rawSchema, &schema))
+				resolved, err := schema.Resolve(nil)
+				require.NoError(t, err)
+				raw, err := json.Marshal(payload)
+				require.NoError(t, err)
+				var asJSON any
+				require.NoError(t, json.Unmarshal(raw, &asJSON))
+				assert.NoError(t, resolved.Validate(asJSON), "payload of %s against %s's schema", evType, tr.GetId())
+			})
+		}
+	}
 }

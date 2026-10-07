@@ -30,7 +30,7 @@ function setup(canEditDefinition: boolean) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   // The catalog entry is already cached, as the palette leaves it: no RPC.
   queryClient.setQueryData(connectionKeys.catalogEntry(issueOpened.ref), {
-    payloadSchema: { properties: { event: { enum: ["issues.opened", "issues.reopened"] } } },
+    payloadSchema: { properties: { event: { enum: ["issues.opened", "issues.labeled"] } } },
   });
   const declare = vi.fn();
   const closePalette = vi.fn();
@@ -54,7 +54,7 @@ describe("useAddTrigger", () => {
     expect(declare).toHaveBeenCalledWith(
       expect.objectContaining({
         name: "issue-opened",
-        source: { case: "integration", value: expect.objectContaining({ integration: "github", events: ["issues.opened", "issues.reopened"] }) },
+        source: { case: "integration", value: expect.objectContaining({ integration: "github", events: ["issues.opened", "issues.labeled"] }) },
       }),
       "github/issue.opened@1",
     );

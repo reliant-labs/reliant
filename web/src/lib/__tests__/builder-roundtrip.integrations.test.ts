@@ -34,8 +34,8 @@ const canonical = {
     {
       name: 'new-issue',
       description: 'A new or reopened issue',
-      integration: { integration: 'github', events: ['issues.opened', 'issues.reopened'], match: { repository: 'reliant-labs/reliant' } },
-      filter: "!trigger.payload.data.issue.labels.exists(l, l.name == 'wontfix')",
+      integration: { integration: 'github', events: ['issues.opened', 'issues.labeled'], match: { repository: 'reliant-labs/reliant' } },
+      filter: "!('wontfix' in trigger.payload.data.issue.labels)",
       inputs: {
         issue_number: '{{ trigger.payload.data.issue.number }}',
         title: '#{{ trigger.payload.data.issue.number }}: {{ trigger.payload.data.issue.title }}',
