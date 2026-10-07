@@ -56,6 +56,9 @@ func proveTestCtx(dir string) *rctx.ToolContext {
 
 func requireGo(t *testing.T) {
 	t.Helper()
+	if testing.Short() {
+		t.Skip("compiles and runs a real `go test` twice; skipped under -short")
+	}
 	if _, err := exec.LookPath("go"); err != nil {
 		t.Skip("go not installed")
 	}

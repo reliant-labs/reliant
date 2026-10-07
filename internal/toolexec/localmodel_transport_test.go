@@ -381,6 +381,9 @@ func TestLocalModelTransport_AuthorizationIsTheSubject(t *testing.T) {
 }
 
 func TestLocalModelStream_IdleTimeout(t *testing.T) {
+	if testing.Short() {
+		t.Skip("the worker idle window carries the fixed 5s localModelWorkerIdleGrace; runs in make test")
+	}
 	// Daemon accepts and then says nothing.
 	mgr := &silentDaemonMgr{}
 	_, router := startBridgeAndRouter(t, mgr)

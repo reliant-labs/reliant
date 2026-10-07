@@ -64,6 +64,9 @@ func waitForLock(t *testing.T, repo string, within time.Duration) bool {
 // the bug ever stops reproducing the first one fails and tells us the premise
 // has changed.
 func TestCancelledIndexWrite_DoesNotStrandLock(t *testing.T) {
+	if testing.Short() {
+		t.Skip("builds a slow-to-stage repo and cancels real git index writes mid-flight (~3s); runs in make test")
+	}
 	tests := []struct {
 		name        string
 		graceful    bool

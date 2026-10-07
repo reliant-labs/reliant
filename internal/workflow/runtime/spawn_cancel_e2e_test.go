@@ -244,6 +244,9 @@ type SpawnCancelE2ESuite struct {
 
 func TestSpawnCancelE2E(t *testing.T) {
 	t.Parallel()
+	if testing.Short() {
+		t.Skip("drives full parent+spawn workflows through cancel in the Temporal test env (~17s); runs in make test")
+	}
 	suite.Run(t, new(SpawnCancelE2ESuite))
 }
 

@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -132,6 +132,16 @@ test:
 	$(GOTEST) -v -timeout=$(TEST_TIMEOUT) ./...
 	@$(MAKE) stop 2>/dev/null || true
 	@echo "$(GREEN)✅ Tests complete$(NC)"
+
+## test-short: Inner-loop Go tests: -short, cached, no race, DB-backed tests skip. Scope it: make test-short PKG=./internal/foo/...
+# Deliberately no `make stop` (it would stop other agents' environments), no
+# -count=1 (the test cache is correct for hermetic tests) and no -race.
+# The cache keys only on files/env the TEST PROCESS reads. A test that execs a
+# child (go, git, node, cat...) which reads repo files that are not go:embed'd
+# and not written into t.TempDir() must either skip under testing.Short() or
+# read those inputs itself (os.ReadFile) — otherwise a cached `ok` goes stale.
+test-short:
+	$(GOTEST) -short -timeout 60s $(or $(PKG),./...)
 
 ## test-race: Run tests with race detection
 test-race:

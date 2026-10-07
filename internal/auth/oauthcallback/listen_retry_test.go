@@ -35,6 +35,9 @@ func TestListenWithRetry_WaitsOutBriefHold(t *testing.T) {
 // A port held by something that is NOT going away must still fail — and fail
 // within the budget, not hang.
 func TestListenWithRetry_FailsOnPermanentHold(t *testing.T) {
+	if testing.Short() {
+		t.Skip("waits out the full 3s listenRetryBudget; runs in make test")
+	}
 	ln, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatalf("reserve: %v", err)

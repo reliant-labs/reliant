@@ -29,6 +29,7 @@ import (
 // process actually spends rather than an internal call count that could drift
 // from it.
 func TestGetProcessPortsForRoots_ScansTheOSAFixedNumberOfTimes(t *testing.T) {
+	skipRealPortScanUnderShort(t)
 	counts := installPortScanCounters(t)
 
 	// Three separate trees, each of which the old code would have walked and
@@ -50,6 +51,7 @@ func TestGetProcessPortsForRoots_ScansTheOSAFixedNumberOfTimes(t *testing.T) {
 // GetAllProcesses is the call exec.bg_list makes. Its port refresh must be
 // batched across every process it returns.
 func TestGetAllProcesses_RefreshesPortsWithOneBatchedScan(t *testing.T) {
+	skipRealPortScanUnderShort(t)
 	m := newTestBGManager()
 
 	// Real running processes, so refreshPortsBatch sees non-zero pids and does
@@ -84,6 +86,7 @@ func TestGetAllProcesses_RefreshesPortsWithOneBatchedScan(t *testing.T) {
 // A listening port must still be reported — batching must not lose the data it
 // was making cheaper to collect.
 func TestGetProcessPorts_StillReportsAListeningPort(t *testing.T) {
+	skipRealPortScanUnderShort(t)
 	m := newTestBGManager()
 
 	// Bind a port in a child of the shell, which is the case that needs the
@@ -205,6 +208,16 @@ func TestGetPortsForPids_AttributesPortsToOwningPID(t *testing.T) {
 		if pid != self && pid != os.Getppid() {
 			t.Errorf("ports attributed to pid %d, which was not requested", pid)
 		}
+	}
+}
+
+// skipRealPortScanUnderShort gates the tests that drive the real ps + lsof
+// scan. Each scan is ~65ms on an idle machine but several seconds on a loaded
+// macOS box, and these tests poll it, so they cost 20–35s apiece there.
+func skipRealPortScanUnderShort(t *testing.T) {
+	t.Helper()
+	if testing.Short() {
+		t.Skip("drives real ps/lsof port scans (seconds each on a loaded macOS box); runs in make test")
 	}
 }
 
