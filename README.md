@@ -47,10 +47,12 @@ brew install --cask reliant-labs/reliant/reliant
 
 ## Quick Start
 
-1. **Launch Reliant** and open a project folder
-2. **Configure an API key** in Settings → AI
-   - Have a Claude Code subscription? Run `claude setup-token` and use that key with Anthropic
-3. **Start chatting** — ask questions, request changes, explore your codebase
+1. **Sign in** at [app.reliantlabs.io](https://app.reliantlabs.io) or in the desktop app
+2. **Pick a machine** — a Reliant cloud machine, or your own computer
+3. **Pick a model** — your own API key, or Reliant's managed provider
+4. **Start chatting**, or run a built-in workflow like Get It Right
+
+See the [Quick Start](https://docs.reliantlabs.io/getting-started/quick-start) for the full walkthrough.
 
 ## Documentation
 
