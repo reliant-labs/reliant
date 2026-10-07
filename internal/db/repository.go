@@ -215,6 +215,10 @@ type Repository interface {
 	// in a root execution that has not reported back — the spawns a coarse
 	// fresh restart of that root must relaunch.
 	ListLiveBackgroundSpawns(ctx context.Context, rootWorkflowID string) ([]*LiveBackgroundSpawn, error)
+	// ListToolGrants returns, per thread, every tool a recorded tool result
+	// in chatID granted — the load_tool grants a coarse fresh restart of the
+	// chat's run must hand back to each thread.
+	ListToolGrants(ctx context.Context, chatID string) ([]*ToolGrant, error)
 	// SpawnToolCallIDsByChildThread maps child thread id -> the spawn tool
 	// call that started it, for one chat. threads has no
 	// spawned_by_tool_call_id column, so the reconnect snapshot recovers the

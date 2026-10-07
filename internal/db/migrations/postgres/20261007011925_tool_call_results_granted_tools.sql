@@ -1,0 +1,24 @@
+-- +goose Up
+
+-- tool_call_results.granted_tools: the tools this call granted its thread.
+--
+-- load_tool grants a tool by returning its name in the result's metadata, and
+-- that metadata reached exactly one place: the ExecuteTools output the
+-- workflow folds into its per-thread grants. Nothing durable recorded it. So a
+-- run restarted from its checkpoint (the coarse fresh restart after a
+-- history-limit death, a ghost, or a reset that could not replay) began with
+-- no grants, while the thread history it resumes from still told the model the
+-- tool was loaded. Its next call to the tool was refused as "not offered".
+--
+-- The grant is now written with the result, in the same transaction as the
+-- result content the model reads, and the restart rebuilds each thread's
+-- grants from these rows (runtime.ToolGrantsFromDurableState). A retried
+-- ExecuteTools answers a call that already finished from this row too, so the
+-- retry reports the grant instead of dropping it.
+--
+-- NOT NULL with an empty default: the previous release's INSERT omits the
+-- column and gets '{}', and no reader has to tell NULL from empty. Rows
+-- written before this column existed record no grants, so a restart of a run
+-- that loaded tools before the deploy rebuilds without them and the model
+-- reloads, as it did before.
+ALTER TABLE tool_call_results ADD COLUMN IF NOT EXISTS granted_tools text[] NOT NULL DEFAULT '{}';

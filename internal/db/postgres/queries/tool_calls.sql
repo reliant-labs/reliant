@@ -40,12 +40,17 @@ WHERE tool_calls.chat_id = EXCLUDED.chat_id;
 -- foreign key against A's call and replace A's result. Writes nothing (0 rows)
 -- when the call is not this chat's or does not exist; the store reports both
 -- as core.ErrToolCallIDInAnotherChat.
+--
+-- granted_tools travels with content: a rewrite of the result (an error
+-- replacing it, a repair) replaces what the call granted, so the grants
+-- always describe the result the model reads.
 INSERT INTO tool_call_results (
-    tool_call_id, message_id, content, is_error, created_at, updated_at
+    tool_call_id, message_id, content, is_error, created_at, updated_at, granted_tools
 )
 SELECT
     sqlc.arg(tool_call_id)::text, sqlc.narg(message_id)::text, sqlc.arg(content)::text,
-    sqlc.arg(is_error)::boolean, sqlc.arg(created_at)::timestamptz, sqlc.arg(updated_at)::timestamptz
+    sqlc.arg(is_error)::boolean, sqlc.arg(created_at)::timestamptz, sqlc.arg(updated_at)::timestamptz,
+    COALESCE(sqlc.narg(granted_tools)::text[], '{}')
 WHERE EXISTS (
     SELECT 1 FROM tool_calls
     WHERE id = sqlc.arg(tool_call_id)::text AND chat_id = sqlc.arg(chat_id)::text
@@ -54,7 +59,24 @@ ON CONFLICT (tool_call_id) DO UPDATE SET
     message_id = EXCLUDED.message_id,
     content = EXCLUDED.content,
     is_error = EXCLUDED.is_error,
-    updated_at = EXCLUDED.updated_at;
+    updated_at = EXCLUDED.updated_at,
+    granted_tools = EXCLUDED.granted_tools;
+
+-- name: ListToolGrantsForChat :many
+-- Every grant a tool call recorded in one chat, per thread: what a load_tool
+-- result granted, written with that result (UpsertToolCallResult). The coarse
+-- fresh restart rebuilds each thread's grants from these rows, because the
+-- dead execution's in-memory record of them died with it. A chat is one root
+-- execution and its sub-agents, each on its own thread, so the thread keys
+-- the grants exactly as the workflow keys them. Ordered so the merge is
+-- deterministic.
+SELECT tc.thread_id::text AS thread_id, r.granted_tools
+FROM tool_call_results r
+JOIN tool_calls tc ON tc.id = r.tool_call_id
+WHERE tc.chat_id = sqlc.arg(chat_id)::text
+  AND tc.thread_id IS NOT NULL AND tc.thread_id <> ''
+  AND cardinality(r.granted_tools) > 0
+ORDER BY tc.thread_id ASC, tc.id ASC;
 
 -- name: GetToolCall :one
 SELECT * FROM tool_calls WHERE id = $1;

@@ -42,7 +42,7 @@ func (q *Queries) GetToolCall(ctx context.Context, id string) (ToolCall, error) 
 }
 
 const getToolCallResult = `-- name: GetToolCallResult :one
-SELECT tool_call_id, message_id, content, is_error, created_at, updated_at FROM tool_call_results WHERE tool_call_id = $1
+SELECT tool_call_id, message_id, content, is_error, created_at, updated_at, granted_tools FROM tool_call_results WHERE tool_call_id = $1
 `
 
 func (q *Queries) GetToolCallResult(ctx context.Context, toolCallID string) (ToolCallResult, error) {
@@ -55,12 +55,13 @@ func (q *Queries) GetToolCallResult(ctx context.Context, toolCallID string) (Too
 		&i.IsError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.GrantedTools),
 	)
 	return i, err
 }
 
 const getToolCallResultForMessage = `-- name: GetToolCallResultForMessage :one
-SELECT r.tool_call_id, r.message_id, r.content, r.is_error, r.created_at, r.updated_at FROM tool_call_results r
+SELECT r.tool_call_id, r.message_id, r.content, r.is_error, r.created_at, r.updated_at, r.granted_tools FROM tool_call_results r
 JOIN tool_calls tc ON tc.id = r.tool_call_id
 WHERE r.tool_call_id = $1 AND tc.message_id = $2
 `
@@ -85,6 +86,7 @@ func (q *Queries) GetToolCallResultForMessage(ctx context.Context, arg GetToolCa
 		&i.IsError,
 		&i.CreatedAt,
 		&i.UpdatedAt,
+		pq.Array(&i.GrantedTools),
 	)
 	return i, err
 }
@@ -618,7 +620,7 @@ func (q *Queries) ListStrandedSpawnToolCalls(ctx context.Context) ([]ToolCall, e
 }
 
 const listToolCallResultsByMessageIDs = `-- name: ListToolCallResultsByMessageIDs :many
-SELECT tool_call_id, message_id, content, is_error, created_at, updated_at FROM tool_call_results
+SELECT tool_call_id, message_id, content, is_error, created_at, updated_at, granted_tools FROM tool_call_results
 WHERE message_id = ANY($1::text[])
 ORDER BY message_id, created_at ASC
 `
@@ -639,6 +641,7 @@ func (q *Queries) ListToolCallResultsByMessageIDs(ctx context.Context, messageId
 			&i.IsError,
 			&i.CreatedAt,
 			&i.UpdatedAt,
+			pq.Array(&i.GrantedTools),
 		); err != nil {
 			return nil, err
 		}
@@ -794,6 +797,51 @@ func (q *Queries) ListToolCallsByMessageIDs(ctx context.Context, messageIds []st
 	return items, nil
 }
 
+const listToolGrantsForChat = `-- name: ListToolGrantsForChat :many
+SELECT tc.thread_id::text AS thread_id, r.granted_tools
+FROM tool_call_results r
+JOIN tool_calls tc ON tc.id = r.tool_call_id
+WHERE tc.chat_id = $1::text
+  AND tc.thread_id IS NOT NULL AND tc.thread_id <> ''
+  AND cardinality(r.granted_tools) > 0
+ORDER BY tc.thread_id ASC, tc.id ASC
+`
+
+type ListToolGrantsForChatRow struct {
+	ThreadID     string   `json:"thread_id"`
+	GrantedTools []string `json:"granted_tools"`
+}
+
+// Every grant a tool call recorded in one chat, per thread: what a load_tool
+// result granted, written with that result (UpsertToolCallResult). The coarse
+// fresh restart rebuilds each thread's grants from these rows, because the
+// dead execution's in-memory record of them died with it. A chat is one root
+// execution and its sub-agents, each on its own thread, so the thread keys
+// the grants exactly as the workflow keys them. Ordered so the merge is
+// deterministic.
+func (q *Queries) ListToolGrantsForChat(ctx context.Context, chatID string) ([]ListToolGrantsForChatRow, error) {
+	rows, err := q.db.QueryContext(ctx, listToolGrantsForChat, chatID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListToolGrantsForChatRow{}
+	for rows.Next() {
+		var i ListToolGrantsForChatRow
+		if err := rows.Scan(&i.ThreadID, pq.Array(&i.GrantedTools)); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const upsertToolCall = `-- name: UpsertToolCall :execrows
 INSERT INTO tool_calls (
     id, chat_id, thread_id, message_id, tool_name, input, status,
@@ -876,30 +924,33 @@ func (q *Queries) UpsertToolCall(ctx context.Context, arg UpsertToolCallParams) 
 
 const upsertToolCallResult = `-- name: UpsertToolCallResult :execrows
 INSERT INTO tool_call_results (
-    tool_call_id, message_id, content, is_error, created_at, updated_at
+    tool_call_id, message_id, content, is_error, created_at, updated_at, granted_tools
 )
 SELECT
     $1::text, $2::text, $3::text,
-    $4::boolean, $5::timestamptz, $6::timestamptz
+    $4::boolean, $5::timestamptz, $6::timestamptz,
+    COALESCE($7::text[], '{}')
 WHERE EXISTS (
     SELECT 1 FROM tool_calls
-    WHERE id = $1::text AND chat_id = $7::text
+    WHERE id = $1::text AND chat_id = $8::text
 )
 ON CONFLICT (tool_call_id) DO UPDATE SET
     message_id = EXCLUDED.message_id,
     content = EXCLUDED.content,
     is_error = EXCLUDED.is_error,
-    updated_at = EXCLUDED.updated_at
+    updated_at = EXCLUDED.updated_at,
+    granted_tools = EXCLUDED.granted_tools
 `
 
 type UpsertToolCallResultParams struct {
-	ToolCallID string         `json:"tool_call_id"`
-	MessageID  sql.NullString `json:"message_id"`
-	Content    string         `json:"content"`
-	IsError    bool           `json:"is_error"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	ChatID     string         `json:"chat_id"`
+	ToolCallID   string         `json:"tool_call_id"`
+	MessageID    sql.NullString `json:"message_id"`
+	Content      string         `json:"content"`
+	IsError      bool           `json:"is_error"`
+	CreatedAt    time.Time      `json:"created_at"`
+	UpdatedAt    time.Time      `json:"updated_at"`
+	GrantedTools []string       `json:"granted_tools"`
+	ChatID       string         `json:"chat_id"`
 }
 
 // A result belongs to its call (the foreign key), and so to the call's chat.
@@ -908,6 +959,10 @@ type UpsertToolCallResultParams struct {
 // foreign key against A's call and replace A's result. Writes nothing (0 rows)
 // when the call is not this chat's or does not exist; the store reports both
 // as core.ErrToolCallIDInAnotherChat.
+//
+// granted_tools travels with content: a rewrite of the result (an error
+// replacing it, a repair) replaces what the call granted, so the grants
+// always describe the result the model reads.
 func (q *Queries) UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, upsertToolCallResult,
 		arg.ToolCallID,
@@ -916,6 +971,7 @@ func (q *Queries) UpsertToolCallResult(ctx context.Context, arg UpsertToolCallRe
 		arg.IsError,
 		arg.CreatedAt,
 		arg.UpdatedAt,
+		pq.Array(arg.GrantedTools),
 		arg.ChatID,
 	)
 	if err != nil {

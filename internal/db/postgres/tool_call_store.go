@@ -58,13 +58,14 @@ func (s *toolCallStore) UpsertToolCallResult(ctx context.Context, chatID string,
 		return fmt.Errorf("tool call result cannot be nil")
 	}
 	written, err := s.q.UpsertToolCallResult(ctx, pgdb.UpsertToolCallResultParams{
-		ToolCallID: result.ToolCallID,
-		MessageID:  toolCallPtrToNullString(result.MessageID),
-		Content:    result.Content,
-		IsError:    result.IsError,
-		CreatedAt:  result.CreatedAt,
-		UpdatedAt:  result.UpdatedAt,
-		ChatID:     chatID,
+		ToolCallID:   result.ToolCallID,
+		MessageID:    toolCallPtrToNullString(result.MessageID),
+		Content:      result.Content,
+		IsError:      result.IsError,
+		CreatedAt:    result.CreatedAt,
+		UpdatedAt:    result.UpdatedAt,
+		GrantedTools: result.GrantedTools,
+		ChatID:       chatID,
 	})
 	if err != nil {
 		return err
@@ -275,7 +276,7 @@ func toolCallFromPG(row pgdb.ToolCall) *core.ToolCall {
 }
 
 func toolCallResultFromPG(row pgdb.ToolCallResult) *core.ToolCallResult {
-	return &core.ToolCallResult{
+	result := &core.ToolCallResult{
 		ToolCallID: row.ToolCallID,
 		MessageID:  toolCallNullStringToPtr(row.MessageID),
 		Content:    row.Content,
@@ -283,6 +284,10 @@ func toolCallResultFromPG(row pgdb.ToolCallResult) *core.ToolCallResult {
 		CreatedAt:  row.CreatedAt,
 		UpdatedAt:  row.UpdatedAt,
 	}
+	if len(row.GrantedTools) > 0 {
+		result.GrantedTools = row.GrantedTools
+	}
+	return result
 }
 
 func toolCallPtrToNullString(s *string) sql.NullString {

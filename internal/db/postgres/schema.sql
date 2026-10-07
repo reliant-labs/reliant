@@ -1097,7 +1097,8 @@ CREATE TABLE public.tool_call_results (
     content text NOT NULL,
     is_error boolean DEFAULT false NOT NULL,
     created_at timestamp with time zone NOT NULL,
-    updated_at timestamp with time zone NOT NULL
+    updated_at timestamp with time zone NOT NULL,
+    granted_tools text[] DEFAULT '{}'::text[] NOT NULL
 );
 
 --

@@ -18,9 +18,11 @@ type LoadToolParams struct {
 }
 
 // LoadToolMetadata is what load_tool returns to the runtime: the tools it
-// granted. execute_tools unions it across the batch into
-// ExecuteToolsOutput.granted_tools, the workflow records that per thread, and
-// the thread's next call_llm offers them. There is no other record of a grant.
+// granted. execute_tools records it on the call's result row
+// (tool_call_results.granted_tools) and unions it across the batch into
+// ExecuteToolsOutput.granted_tools; the workflow records that per thread, and
+// the thread's next call_llm offers them. A run restarted from its checkpoint
+// rebuilds the per-thread record from the result rows.
 type LoadToolMetadata struct {
 	LoadedTools []string `json:"loaded_tools,omitempty"`
 }

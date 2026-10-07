@@ -901,6 +901,14 @@ type Querier interface {
 	// writer has to remember to set.
 	ListToolCallsByIDs(ctx context.Context, ids []string) ([]ToolCall, error)
 	ListToolCallsByMessageIDs(ctx context.Context, messageIds []string) ([]ToolCall, error)
+	// Every grant a tool call recorded in one chat, per thread: what a load_tool
+	// result granted, written with that result (UpsertToolCallResult). The coarse
+	// fresh restart rebuilds each thread's grants from these rows, because the
+	// dead execution's in-memory record of them died with it. A chat is one root
+	// execution and its sub-agents, each on its own thread, so the thread keys
+	// the grants exactly as the workflow keys them. Ordered so the merge is
+	// deterministic.
+	ListToolGrantsForChat(ctx context.Context, chatID string) ([]ListToolGrantsForChatRow, error)
 	// Newest first, keyset on (occurred_at, id) so a firing recorded mid-pagination
 	// can neither repeat nor be skipped; two fires can share an occurred_at, and id
 	// breaks the tie. Served by idx_trigger_events_trigger_occurred_id.
@@ -1292,6 +1300,10 @@ type Querier interface {
 	// foreign key against A's call and replace A's result. Writes nothing (0 rows)
 	// when the call is not this chat's or does not exist; the store reports both
 	// as core.ErrToolCallIDInAnotherChat.
+	//
+	// granted_tools travels with content: a rewrite of the result (an error
+	// replacing it, a repair) replaces what the call granted, so the grants
+	// always describe the result the model reads.
 	UpsertToolCallResult(ctx context.Context, arg UpsertToolCallResultParams) (int64, error)
 	// status_since moves only when status changes, so it is the start of the
 	// current status episode however often the source is polled.
