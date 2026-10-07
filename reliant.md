@@ -304,14 +304,14 @@ actually happened server-side, independent of any frontend logging.
 Run the fast tier, scoped to what you touched:
 
 ```bash
-make test-short PKG=./internal/<pkg>/...   # -short, cached, no -race, 60s/pkg
+make test-short PKGS=./internal/<pkg>/...  # -short, cached, no -race, 60s/pkg
 ```
 
 - **Never `make test` / `make test-all`** — they run `make stop`, which stops
   other agents' environments. For the full lane run `go test ./internal/<pkg>/...`
   (no `-short`) once at the end; CI runs everything.
 - `-short` skips DB-backed tests (the shared Postgres is the bottleneck). When
-  you change SQL or a repo method: `REQUIRE_TEST_DB=1 make test-short PKG=...`.
+  you change SQL or a repo method: `REQUIRE_TEST_DB=1 make test-short PKGS=...`.
 - No `-count=1` or `-race` in the inner loop — they defeat the test cache,
   which is correct for hermetic tests. Never set a private `GOCACHE`.
 - The cache only sees files the test process itself reads. A test that execs a
