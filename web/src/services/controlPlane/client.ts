@@ -54,7 +54,7 @@ export function getControlPlaneClient<T extends DescService>(
   // interceptors via buildInterceptors — see api/transport.ts
   const transport = createConnectTransport({
     baseUrl,
-    interceptors: buildInterceptors({ withAuth: true }),
+    interceptors: buildInterceptors({ withAuth: true, backend: "control-plane" }),
   });
 
   return createClient(service, transport);

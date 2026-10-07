@@ -19,6 +19,8 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { Interceptor } from '@connectrpc/connect'
+import type { TransportBackend } from '../transport'
 
 const mocks = vi.hoisted(() => ({
   createConnectTransport: vi.fn((options) => options),
@@ -101,6 +103,69 @@ describe('buildInterceptors factory', () => {
     const { buildInterceptors } = await import('../transport')
     expect(buildInterceptors()).toHaveLength(8)
     expect(buildInterceptors({})).toHaveLength(8)
+  })
+
+  it('omits exactly one stage (daemon-last-seen) from the control-plane chain', async () => {
+    const { buildInterceptors } = await import('../transport')
+    const reliantApi = buildInterceptors({ withAuth: true })
+    const controlPlane = buildInterceptors({ withAuth: true, backend: 'control-plane' })
+    expect(controlPlane).toHaveLength(reliantApi.length - 1)
+    for (const entry of controlPlane) {
+      expect(reliantApi).toContain(entry)
+    }
+  })
+})
+
+// x-daemon-last-seen is read only by the reliant api-server. A production
+// build calls both servers cross-origin, and the control-plane admin-server's
+// CORS preflight does not allow this header, so attaching it there made the
+// browser block every controlplane.v1 RPC once a machine heartbeated. These
+// run the real chain end to end and look at what reaches the wire.
+describe('x-daemon-last-seen scoping', () => {
+  type Next = Parameters<Interceptor>[0]
+
+  async function headersSent(backend: TransportBackend): Promise<Headers> {
+    const { buildInterceptors, setDaemonLastSeen } = await import('../transport')
+    const { setAuthTokenProvider } = await import('../authProvider')
+    setAuthTokenProvider({
+      getToken: async () => 'test-token',
+      hasSession: async () => true,
+      refresh: async () => null,
+    })
+    setDaemonLastSeen(1_700_000_000)
+
+    let sent: Headers | undefined
+    const wire = (async (req: { header: Headers }) => {
+      sent = new Headers(req.header)
+      return { stream: false, header: new Headers(), trailer: new Headers(), message: {} }
+    }) as unknown as Next
+    const run = buildInterceptors({ withAuth: true, backend }).reduceRight<Next>(
+      (next, interceptor) => interceptor(next),
+      wire,
+    )
+    await run({
+      stream: false,
+      service: { typeName: 'test.v1.TestService' },
+      method: { name: 'Ping' },
+      header: new Headers(),
+      signal: new AbortController().signal,
+      message: {},
+    } as unknown as Parameters<Next>[0])
+
+    if (!sent) throw new Error('the chain never reached the wire')
+    return sent
+  }
+
+  it('attaches it on reliant api-server transports', async () => {
+    const sent = await headersSent('reliant-api')
+    expect(sent.get('x-daemon-last-seen')).toBe('1700000000')
+    expect(sent.get('authorization')).toBe('Bearer test-token')
+  })
+
+  it('never sends it to the control plane', async () => {
+    const sent = await headersSent('control-plane')
+    expect(sent.has('x-daemon-last-seen')).toBe(false)
+    expect(sent.get('authorization')).toBe('Bearer test-token')
   })
 })
 
@@ -217,9 +282,9 @@ describe('transport call sites', () => {
     }
   })
 
-  it('services/controlPlane/client::getControlPlaneClient wires the authed factory chain', async () => {
+  it('services/controlPlane/client::getControlPlaneClient wires the authed control-plane chain', async () => {
     const { buildInterceptors } = await import('../transport')
-    const expected = buildInterceptors({ withAuth: true })
+    const expected = buildInterceptors({ withAuth: true, backend: 'control-plane' })
 
     // Use a real generated DescService so connect's createClient is happy
     // about `service.methods` being iterable.

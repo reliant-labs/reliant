@@ -509,27 +509,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		})
 	})
 
-	// Create CORS handler that wraps the entire mux
-	// MaxAge of 24 hours to cache preflight responses and reduce OPTIONS requests
-	corsOrigins := cfg.CORSAllowedOrigins
-	if len(corsOrigins) == 0 {
-		corsOrigins = []string{"*"}
-	}
-	allowCreds := true
-	for _, o := range corsOrigins {
-		if o == "*" {
-			allowCreds = false
-			break
-		}
-	}
-	corsHandler := cors.Handler(cors.Options{
-		AllowedOrigins:   corsOrigins,
-		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms", "X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage", "Range"},
-		ExposedHeaders:   []string{"Link", "Content-Range", "Accept-Ranges", "Content-Length"},
-		AllowCredentials: allowCreds,
-		MaxAge:           86400,
-	})
+	corsHandler := newCORSHandler(cfg.CORSAllowedOrigins)
 
 	// Create HTTP server
 	// If TLS certs are provided, use HTTPS (enables native HTTP/2)
@@ -580,6 +560,62 @@ func NewServer(cfg *Config) (*Server, error) {
 		router:          router,
 		worktreeSweeper: worktreeSweeper,
 	}, nil
+}
+
+// corsAllowedHeaders are the request headers a cross-origin browser may send.
+//
+// Every header the web client attaches to an RPC must be listed. In prod the
+// web app (app.reliantlabs.io) calls this server cross-origin
+// (api.reliantapi.com), so the browser preflights each RPC, and go-chi/cors
+// answers a preflight that names an unlisted header with a bare 200 and no
+// Access-Control-Allow-Headers. The browser then never sends the request and
+// reports a CORS error for the RPC itself — so one missing name takes down
+// every RPC that carries it.
+//
+// TestCORSAllowsEveryWebClientRequestHeader reads the web client's source and
+// fails when a header it sets is missing here.
+var corsAllowedHeaders = []string{
+	"Accept", "Authorization", "Content-Type", "Connect-Protocol-Version", "Connect-Timeout-Ms",
+	"X-CSRF-Token", "traceparent", "tracestate", "sentry-trace", "baggage", "Range",
+	// The last DAEMON_HEARTBEAT the web client saw (web/src/api/transport.ts),
+	// which lets the auth interceptor skip the IsDaemonOnline query. The client
+	// attaches it to every RPC once a cloud machine heartbeats; missing here,
+	// it made every web RPC fail CORS for any user with a running machine.
+	"X-Daemon-Last-Seen",
+}
+
+// corsExposedHeaders are the response headers cross-origin JavaScript may
+// read. The browser hides every other non-safelisted response header, so a
+// header the web client reads that is missing here reads as absent — the code
+// path keyed on it silently never runs.
+//
+// TestCORSExposesEveryHeaderTheWebClientReads reads the web client's source and
+// fails when a header it reads is missing here.
+var corsExposedHeaders = []string{
+	"Link", "Content-Range", "Accept-Ranges", "Content-Length",
+	// The billing/quota reason and upgrade link on a Connect error. The web
+	// client's upgradeInterceptor (web/src/api/upgradeInterceptor.ts) reads
+	// them on errors from every transport to open the upgrade and
+	// billing-email modals instead of a raw error toast.
+	"X-Reliant-Reason", "X-Reliant-Upgrade-Url",
+}
+
+// newCORSHandler builds the CORS middleware that wraps the entire mux. An
+// empty origin list allows any origin, without credentials (the CORS spec
+// forbids credentials with a wildcard origin). MaxAge caches preflights for
+// 24 hours to cut OPTIONS round trips.
+func newCORSHandler(origins []string) func(http.Handler) http.Handler {
+	if len(origins) == 0 {
+		origins = []string{"*"}
+	}
+	return cors.Handler(cors.Options{
+		AllowedOrigins:   origins,
+		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+		AllowedHeaders:   corsAllowedHeaders,
+		ExposedHeaders:   corsExposedHeaders,
+		AllowCredentials: !slices.Contains(origins, "*"),
+		MaxAge:           86400,
+	})
 }
 
 // ProjectService returns the project service so callers can wire it to
