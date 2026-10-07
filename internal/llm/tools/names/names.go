@@ -157,6 +157,7 @@ var AllToolNames = []string{
 	"slack__message_post", "slack__message_reply", "slack__message_update", "slack__reaction_add",
 	"slack__user_lookup_by_email", "slack__conversations_list", "slack__conversations_history",
 	"twilio__message_send", "twilio__message_get", "twilio__message_list", "twilio__phone_number_list",
+	"sentry__project_list", "sentry__issue_list", "sentry__issue_get", "sentry__event_get", "sentry__issue_update",
 	// Scenarios
 	ToolListScenarios, ToolViewScenario, ToolEditScenario, ToolWriteScenario, ToolDeleteScenario, ToolRunScenario,
 }

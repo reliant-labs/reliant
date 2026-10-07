@@ -572,6 +572,51 @@ var generatedToolParams = map[string]ToolParams{
 			"run_id": "identifies one run, which is chosen per call and cannot be known in advance",
 		},
 	},
+	"sentry__event_get": {
+		Bindable: map[string]struct{}{
+			"connection":  {},
+			"environment": {},
+			"event_id":    {},
+			"issue_id":    {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"sentry__issue_get": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+			"issue_id":   {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"sentry__issue_list": {
+		Bindable: map[string]struct{}{
+			"connection":   {},
+			"environment":  {},
+			"limit":        {},
+			"project":      {},
+			"query":        {},
+			"sort":         {},
+			"stats_period": {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"sentry__issue_update": {
+		Bindable: map[string]struct{}{
+			"assigned_to":     {},
+			"connection":      {},
+			"ignore_duration": {},
+			"issue_id":        {},
+			"priority":        {},
+			"status":          {},
+		},
+		Unbindable: map[string]string{},
+	},
+	"sentry__project_list": {
+		Bindable: map[string]struct{}{
+			"connection": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"shell": {
 		Bindable: map[string]struct{}{
 			"command":           {},

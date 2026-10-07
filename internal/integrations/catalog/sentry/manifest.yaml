@@ -1,0 +1,599 @@
+# Sentry. Authored from Sentry's API and integration-platform documentation
+# (docs.sentry.io/api, /api/auth, /api/ratelimits,
+# /organization/integrations/integration-platform and its webhooks pages),
+# fetched 2026-10. Design, phasing and open questions:
+# research/SENTRY_CONNECTOR.md.
+#
+# A connection is ONE Sentry organization on sentry.io (the US or DE region).
+# Its credential is a bearer token, normally an internal integration's token
+# (Settings > Developer Settings > New Internal Integration): org-wide, does
+# not expire, scoped to the permissions the integration was given. A user
+# auth token (User Settings > Personal Tokens) also works. Needed scopes:
+# org:read (the probe), project:read, event:read, and event:write for
+# issue.update.
+#
+# The organization slug is a connection param baked into base_url, so every
+# path below is relative to /api/0/organizations/<slug>. The region param
+# picks the region host (us.sentry.io / de.sentry.io), which Sentry
+# recommends for region-resident data (issues and events are). Self-hosted
+# Sentry is NOT expressible here: a curated manifest fixes the domain (the
+# SSRF rule), and self-hosted has an arbitrary one. See the design doc.
+#
+# Errors are JSON {"detail": "..."}. Shared vocabulary:
+#   401  bad or revoked token: reconnect.
+#   403  the token lacks the scope, or cannot see the project.
+#   404  not found, or not in this organization.
+#   429  rate limited (per caller and endpoint; X-Sentry-Rate-Limit-Reset is
+#        the epoch second the window resets): retryable.
+#   5xx  retryable.
+#
+# Pagination: Sentry pages with a Link header whose rel="next" entry is
+# ALWAYS present and says results="false" on the last page. The link_header
+# paginator follows any rel="next", so it would walk to max_pages on empty
+# pages. List actions here read one page (limit up to 100) until the
+# paginator honours results="false" (design doc, "Gaps").
+id: sentry
+version: 1
+display_name: Sentry
+description: Read and triage Sentry issues and the events behind them, and start runs when Sentry sees a new issue.
+icon: sentry
+category: engineering
+keywords: [errors, exceptions, crashes, stack trace, monitoring, observability, sentry, bugs, alerts]
+
+connection:
+  base_url: "https://{{ connection.params.region }}.sentry.io/api/0/organizations/{{ connection.params.organization }}"
+  connection_params:
+    - name: organization
+      display_name: Organization slug
+      description: >-
+        Your Sentry organization's slug, as in https://<slug>.sentry.io or
+        Settings > General Settings > Organization Slug.
+      pattern: "[a-z0-9][a-z0-9_-]{0,49}"
+    - name: region
+      display_name: Data region
+      description: >-
+        Where the organization's data is stored: us or de (Settings > General
+        Settings > Data Storage Location). Most organizations are us.
+      pattern: "us|de"
+      default_value: us
+  auth:
+    - api_key:
+        in: header
+        name: Authorization
+        prefix: "Bearer "
+        label: Auth token
+  # Retrieve an Organization: GET /api/0/organizations/<slug>/ (org:read).
+  # The org's numeric id is stable across slug renames, so it is the
+  # connection's external account. UNVERIFIED with an internal-integration
+  # token (docs/api/auth lists this endpoint among user-token ones while its
+  # own page asks only for org:read): if it refuses one, probe
+  # /projects/ instead and take the org id from the first project.
+  probe:
+    path: /
+    external_id: string(response.id)
+    label: response.name
+
+actions:
+  - id: project.list
+    display_name: List projects
+    summary: The organization's projects, for pickers and to find a project's slug.
+    description: >-
+      List the projects in the connected Sentry organization: id, slug, name
+      and platform. Use a slug to narrow List issues, and to match a trigger
+      to one project.
+    keywords: [projects, picker, slug, setup, services, apps]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        connection: &connection
+          type: string
+          description: >-
+            Id of a saved Sentry connection (an organization) to use. Omit to
+            use your default Sentry connection.
+    request:
+      method: GET
+      path: /projects/
+      query:
+        per_page: "100"
+      max_response_bytes: 5242880
+      errors: &sentry_errors
+        - status: 429
+          retryable: true
+          message: >-
+            Sentry rate limit exceeded{{ headers[?'x-sentry-rate-limit-reset'].hasValue() ?
+            '; the window resets at ' + string(timestamp(int(headers['x-sentry-rate-limit-reset']))) : '' }}.
+            Retry after backing off.
+        - status: 401
+          retryable: false
+          message: >-
+            Sentry rejected the token ({{ type(response) == map ? response.?detail.orValue('invalid token') : 'invalid token' }}):
+            it was revoked or mistyped. Reconnect Sentry in Settings with a current auth token.
+        - status: 403
+          retryable: false
+          message: >-
+            Sentry refused the request ({{ type(response) == map ? response.?detail.orValue('forbidden') : 'forbidden' }}).
+            The token lacks the scope this needs (org:read, project:read,
+            event:read, or event:write to change an issue), or cannot see the
+            project. Edit the internal integration's permissions in Sentry.
+        - status: 404
+          retryable: false
+          message: >-
+            Sentry returned not found: the issue, event or project does not
+            exist in this organization, or the organization slug or region on
+            the connection is wrong.
+        - status_min: 400
+          status_max: 499
+          retryable: false
+          message: "Sentry refused the request (HTTP {{ status }}): {{ type(response) == map ? response.?detail.orValue('bad request') : 'bad request' }}."
+        - status_min: 500
+          status_max: 599
+          retryable: true
+          message: "Sentry failed on its side (HTTP {{ status }}); retry."
+    output:
+      select: >-
+        response.map(p, {"id": p.id,
+         "slug": p.slug,
+         "name": p.?name.orValue(null),
+         "platform": p.?platform.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items:
+              type: object
+              properties:
+                id: { type: string }
+                slug: { type: string }
+                name: { type: [string, "null"] }
+                platform: { type: [string, "null"] }
+
+  - id: issue.list
+    display_name: List issues
+    summary: Search the organization's issues with Sentry's query syntax.
+    description: >-
+      Search issues with Sentry's search syntax (default is:unresolved), newest
+      activity first unless sort says otherwise. A short id (PROJ-123) as the
+      query finds that issue. Narrow to one project slug, one environment, or a
+      period such as 24h. Returns up to limit issues (at most 100) from the
+      first page.
+    keywords: [issues, errors, search, triage, unresolved, new errors, list]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      properties:
+        query:
+          type: string
+          maxLength: 1000
+          default: "is:unresolved"
+          title: Search query
+          description: >-
+            Sentry search syntax, e.g. "is:unresolved level:error" or
+            "is:unresolved firstSeen:-1h". An empty string returns every
+            status. A short id such as BACKEND-1A finds that issue.
+          examples: ["is:unresolved level:error firstSeen:-24h", "BACKEND-1A"]
+        project:
+          type: string
+          pattern: "^(-1|[0-9]+|[a-z0-9][a-z0-9_-]{0,99})$"
+          title: Project
+          description: Only issues in this project, by slug or numeric id. Omit for every project the token can see.
+          examples: ["backend"]
+        environment:
+          type: string
+          minLength: 1
+          maxLength: 64
+          title: Environment
+          description: Only issues seen in this environment.
+          examples: ["production"]
+        stats_period:
+          type: string
+          pattern: "^[0-9]{1,4}[smhdw]$"
+          title: Period
+          description: Only issues seen within this period, a number followed by s, m, h, d or w.
+          examples: ["24h", "14d"]
+        sort:
+          type: string
+          enum: [date, new, freq, user, trends, inbox, recommended]
+          default: date
+          title: Sort
+          description: date is last seen, new is first seen, freq is event count, user is users affected.
+        limit:
+          type: integer
+          minimum: 1
+          maximum: 100
+          default: 25
+          title: Limit
+          description: How many issues to return, 1 to 100.
+          examples: [25]
+        connection: *connection
+    request:
+      method: GET
+      path: /issues/
+      query:
+        query: "{{ params.query }}"
+        sort: "{{ params.sort }}"
+        limit: "{{ params.limit }}"
+        shortIdLookup: "1"
+      query_expr: >-
+        {?"project": params.?project,
+         ?"environment": params.?environment,
+         ?"statsPeriod": params.?stats_period}
+      max_response_bytes: 5242880
+      errors: *sentry_errors
+    output:
+      select: >-
+        response.map(i, {"id": i.id,
+         "shortId": i.?shortId.orValue(null),
+         "title": i.?title.orValue(null),
+         "culprit": i.?culprit.orValue(null),
+         "level": i.?level.orValue(null),
+         "status": i.?status.orValue(null),
+         "substatus": i.?substatus.orValue(null),
+         "priority": i.?priority.orValue(null),
+         "issueCategory": i.?issueCategory.orValue(null),
+         "issueType": i.?issueType.orValue(null),
+         "platform": i.?platform.orValue(null),
+         "project": i.?project.orValue(null),
+         "count": i.?count.orValue(null),
+         "userCount": i.?userCount.orValue(null),
+         "firstSeen": i.?firstSeen.orValue(null),
+         "lastSeen": i.?lastSeen.orValue(null),
+         "isUnhandled": i.?isUnhandled.orValue(null),
+         "permalink": i.?permalink.orValue(null)})
+      schema:
+        type: object
+        properties:
+          items:
+            type: array
+            items: &issue_summary_schema
+              type: object
+              properties:
+                id: { type: string, description: The numeric issue id the other actions take. }
+                shortId: { type: [string, "null"], description: "The human id, e.g. BACKEND-1A." }
+                title: { type: [string, "null"] }
+                culprit: { type: [string, "null"], description: Where Sentry thinks the error originates (a function or transaction). }
+                level: { type: [string, "null"], description: "fatal, error, warning, info or debug." }
+                status: { type: [string, "null"], description: "unresolved, resolved or ignored." }
+                substatus: { type: [string, "null"], description: "new, ongoing, regressed, escalating or archived_*." }
+                priority: { type: [string, "null"], description: "high, medium or low." }
+                issueCategory: { type: [string, "null"], description: "error, performance, outage, feedback, …" }
+                issueType: { type: [string, "null"] }
+                platform: { type: [string, "null"] }
+                project:
+                  type: [object, "null"]
+                  properties:
+                    id: { type: string }
+                    slug: { type: string }
+                    name: { type: string }
+                count: { type: [string, "null"], description: Events in the issue, as a decimal string. }
+                userCount: { type: [integer, "null"] }
+                firstSeen: { type: [string, "null"], description: ISO 8601. }
+                lastSeen: { type: [string, "null"], description: ISO 8601. }
+                isUnhandled: { type: [boolean, "null"], description: Whether any event was an unhandled exception. }
+                permalink: { type: [string, "null"], description: The issue's page in Sentry. }
+
+  - id: issue.get
+    display_name: Get issue
+    summary: One issue's details, counts, releases and tag summary.
+    description: >-
+      Fetch an issue by its numeric id: title, culprit, level, status,
+      priority, event and user counts, first and last seen, the releases it
+      first and last appeared in, assignee, and which tags it carries. For the
+      stack trace and breadcrumbs, read an event with Get event.
+    keywords: [issue, error, details, lookup, triage, release]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [issue_id]
+      properties:
+        issue_id: &issue_id
+          type: string
+          pattern: "^[0-9]{1,20}$"
+          title: Issue id
+          description: >-
+            The numeric issue id (from a trigger's data.issue.id, or List
+            issues), not the short id. Find a short id's issue with List issues.
+          examples: ["1234567890"]
+        connection: *connection
+    request:
+      method: GET
+      path: "/issues/{{ params.issue_id }}/"
+      max_response_bytes: 5242880
+      errors: *sentry_errors
+    output:
+      select: >-
+        {"id": response.id,
+         "shortId": response.?shortId.orValue(null),
+         "title": response.?title.orValue(null),
+         "culprit": response.?culprit.orValue(null),
+         "level": response.?level.orValue(null),
+         "status": response.?status.orValue(null),
+         "substatus": response.?substatus.orValue(null),
+         "priority": response.?priority.orValue(null),
+         "issueCategory": response.?issueCategory.orValue(null),
+         "issueType": response.?issueType.orValue(null),
+         "platform": response.?platform.orValue(null),
+         "project": response.?project.orValue(null),
+         "metadata": response.?metadata.orValue(null),
+         "count": response.?count.orValue(null),
+         "userCount": response.?userCount.orValue(null),
+         "firstSeen": response.?firstSeen.orValue(null),
+         "lastSeen": response.?lastSeen.orValue(null),
+         "isUnhandled": response.?isUnhandled.orValue(null),
+         "permalink": response.?permalink.orValue(null),
+         "assignedTo": response.?assignedTo.orValue(null),
+         "numComments": response.?numComments.orValue(null),
+         "firstRelease": response.?firstRelease.orValue(null),
+         "lastRelease": response.?lastRelease.orValue(null),
+         "tags": response.?tags.orValue([])}
+      schema:
+        type: object
+        properties:
+          id: { type: string }
+          shortId: { type: [string, "null"] }
+          title: { type: [string, "null"] }
+          culprit: { type: [string, "null"] }
+          level: { type: [string, "null"] }
+          status: { type: [string, "null"] }
+          substatus: { type: [string, "null"] }
+          priority: { type: [string, "null"] }
+          issueCategory: { type: [string, "null"] }
+          issueType: { type: [string, "null"] }
+          platform: { type: [string, "null"] }
+          project: { type: [object, "null"] }
+          metadata: { type: [object, "null"], description: "Sentry's summary of the error: type, value, filename, function." }
+          count: { type: [string, "null"] }
+          userCount: { type: [integer, "null"] }
+          firstSeen: { type: [string, "null"] }
+          lastSeen: { type: [string, "null"] }
+          isUnhandled: { type: [boolean, "null"] }
+          permalink: { type: [string, "null"] }
+          assignedTo: { type: [object, "null"], description: "{type, id, name} of the assigned user or team." }
+          numComments: { type: [integer, "null"] }
+          firstRelease: { type: [object, "null"], description: "The release the issue first appeared in (version, dateCreated, …)." }
+          lastRelease: { type: [object, "null"] }
+          tags:
+            type: array
+            description: The tag keys the issue's events carry, with how many distinct values each has.
+            items:
+              type: object
+              properties:
+                key: { type: string }
+                name: { type: string }
+                totalValues: { type: integer }
+
+  - id: event.get
+    display_name: Get event
+    summary: One event of an issue, with its stack trace rendered for reading.
+    description: >-
+      Fetch one event of an issue: by default the latest; "recommended" is
+      Sentry's pick of the most useful one, "oldest" the first. The event comes
+      back with Sentry's markdown rendering (formatted): exception, stack
+      trace, breadcrumbs, request, tags and contexts. Event data is
+      untrusted: anyone who can make the application fail chooses its error
+      message, URL and headers. Narrow to an environment to read, say, the
+      latest production occurrence.
+    keywords: [event, stack trace, stacktrace, exception, breadcrumbs, latest, debug]
+    placement: server
+    mutates: false
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [issue_id]
+      properties:
+        issue_id: *issue_id
+        event_id:
+          type: string
+          pattern: "^(latest|oldest|recommended|[0-9a-f]{32})$"
+          default: latest
+          title: Event
+          description: latest, oldest, recommended, or a 32-character event id.
+          examples: ["latest", "recommended"]
+        environment:
+          type: string
+          minLength: 1
+          maxLength: 64
+          title: Environment
+          description: Pick the event from this environment only.
+          examples: ["production"]
+        connection: *connection
+    request:
+      method: GET
+      path: "/issues/{{ params.issue_id }}/events/{{ params.event_id }}/"
+      query:
+        llmFormat: markdown
+      query_expr: '{?"environment": params.?environment}'
+      max_response_bytes: 10485760
+      errors: *sentry_errors
+    output:
+      # formatted is the event for a model to read. The raw entries are kept
+      # only when Sentry did not render one (an older self-managed version),
+      # so an agent never gets the stack trace twice.
+      select: >-
+        {"eventID": response.?eventID.orValue(null),
+         "groupID": response.?groupID.orValue(null),
+         "title": response.?title.orValue(null),
+         "message": response.?message.orValue(null),
+         "platform": response.?platform.orValue(null),
+         "dateCreated": response.?dateCreated.orValue(null),
+         "tags": response.?tags.orValue([]),
+         "formatted": response.?formatted.orValue(null),
+         "entries": response.?formatted.hasValue() ? null : response.?entries.orValue(null)}
+      schema:
+        type: object
+        properties:
+          eventID: { type: [string, "null"] }
+          groupID: { type: [string, "null"], description: The issue id. }
+          title: { type: [string, "null"] }
+          message: { type: [string, "null"] }
+          platform: { type: [string, "null"] }
+          dateCreated: { type: [string, "null"] }
+          tags:
+            type: array
+            description: "The event's tags: environment, release, browser, url, transaction, …"
+            items:
+              type: object
+              properties:
+                key: { type: string }
+                value: { type: string }
+          formatted: { type: [string, "null"], description: "The event rendered as markdown by Sentry: exception, frames, breadcrumbs, request, contexts." }
+          entries: { type: [array, "null"], description: "The raw event entries, only when formatted is absent." }
+
+  - id: issue.update
+    display_name: Update issue
+    summary: Resolve, ignore, reopen, assign or re-prioritise an issue.
+    description: >-
+      Change an issue: status resolved (now), resolvedInNextRelease (when the
+      next release ships), unresolved, or ignored (optionally for
+      ignore_duration minutes); assign it to a user or team; or set its
+      priority. Only the fields given change. Resolving tells Sentry to treat a
+      later event as a regression.
+    keywords: [resolve, ignore, archive, assign, priority, triage, close]
+    placement: server
+    mutates: true
+    tool:
+      expose: true
+    params:
+      type: object
+      additionalProperties: false
+      required: [issue_id]
+      properties:
+        issue_id: *issue_id
+        status:
+          type: string
+          enum: [resolved, resolvedInNextRelease, unresolved, ignored]
+          title: Status
+          description: The new status. ignored is shown as archived in Sentry.
+        ignore_duration:
+          type: integer
+          minimum: 1
+          maximum: 525600
+          title: Ignore for (minutes)
+          description: With status ignored, archive the issue for this many minutes only.
+          examples: [1440]
+        assigned_to:
+          type: string
+          maxLength: 200
+          title: Assignee
+          description: >-
+            user:<id>, team:<id>, a username or a member's email. An empty
+            string unassigns.
+          examples: ["team:42", "ann@example.com"]
+        priority:
+          type: string
+          enum: [high, medium, low]
+          title: Priority
+          description: The issue's new priority.
+        connection: *connection
+    request:
+      method: PUT
+      path: "/issues/{{ params.issue_id }}/"
+      body_expr: >-
+        {?"status": params.?status,
+         ?"ignoreDuration": params.?ignore_duration,
+         ?"assignedTo": params.?assigned_to,
+         ?"priority": params.?priority}
+      errors: *sentry_errors
+    output:
+      select: >-
+        {"id": params.issue_id,
+         "status": response.?status.orValue(null),
+         "assignedTo": response.?assignedTo.orValue(null),
+         "priority": response.?priority.orValue(null)}
+      schema:
+        type: object
+        properties:
+          id: { type: string }
+          status: { type: [string, "null"] }
+          assignedTo: { type: [object, "null"] }
+          priority: { type: [string, "null"] }
+
+# Triggers. Phase 1 delivers issue.created by POLLING List issues per trigger
+# (a Go poller beside internal/integrations/gmail); phase 2 adds Sentry's
+# webhook (internal integration "Issue" resource), which delivers the same
+# event type with the same dedupe key, so a trigger fed by both fires once per
+# issue. Neither is built yet: until a source is registered, activating a
+# Sentry trigger is refused with "no inbound source". Phase 2 adds
+# event_alert.triggered and issue.unresolved here (design doc).
+#
+# `data` is trigger.payload.data: a trimmed copy of Sentry's issue object in
+# Sentry's own field names (the webhook's data.issue and the API's issue are
+# the same serializer), untrusted. Every event sets each attribute; one Sentry
+# does not report is the empty string.
+triggers:
+  - id: issue.created
+    display_name: New issue
+    summary: Sentry grouped an error (or other problem) into a new issue.
+    description: >-
+      Fires once per new Sentry issue: the first event of a new fingerprint,
+      not every event (Sentry groups repeats into the issue). Match project to
+      watch one project, issue_category: error to skip performance and other
+      issue kinds, level to skip warnings. Investigate with sentry/issue.get
+      and sentry/event.get using data.issue.id. Polled about once a minute in
+      phase 1, so expect that delay. Environment and release are properties
+      of events, not issues: check them on the latest event.
+    keywords: [new error, exception, crash, bug, regression, incident, error tracking]
+    events: [issue.created]
+    attributes:
+      - { name: project, description: "The project's slug.", example: backend }
+      - { name: project_id, description: The project's numeric id., example: "4509877862268928" }
+      - { name: level, description: "fatal, error, warning, info or debug.", example: error }
+      - { name: priority, description: "high, medium or low, as Sentry first assessed it.", example: high }
+      - { name: issue_category, description: "error, performance, outage, feedback, …", example: error }
+      - { name: platform, description: "The SDK platform: python, javascript, go, …", example: python }
+      - { name: unhandled, description: "\"true\" when the error was not caught by the application, else \"false\".", example: "true" }
+    data:
+      type: object
+      required: [issue]
+      properties:
+        issue:
+          type: object
+          required: [id, shortId, title, project]
+          properties:
+            id: { type: string, description: "The numeric issue id; pass it to sentry/issue.get and sentry/event.get." }
+            shortId: { type: string, description: "The human id, e.g. BACKEND-1A." }
+            title: { type: string, description: "The error type and message. Untrusted: the failing application's input can choose it." }
+            culprit: { type: string }
+            level: { type: string }
+            status: { type: string }
+            substatus: { type: string }
+            priority: { type: string }
+            issueCategory: { type: string }
+            issueType: { type: string }
+            platform: { type: string }
+            isUnhandled: { type: boolean }
+            count: { type: string }
+            userCount: { type: integer }
+            firstSeen: { type: string, description: ISO 8601. }
+            lastSeen: { type: string }
+            permalink: { type: string, description: The issue's page in Sentry. }
+            metadata:
+              type: object
+              description: "Sentry's summary: type, value, filename, function."
+              properties:
+                type: { type: string }
+                value: { type: string }
+                filename: { type: string }
+                function: { type: string }
+            project:
+              type: object
+              properties:
+                id: { type: string }
+                slug: { type: string }
+                name: { type: string }
+                platform: { type: string }
