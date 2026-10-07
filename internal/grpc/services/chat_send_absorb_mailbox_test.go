@@ -168,6 +168,7 @@ func TestSendMessage_NonRunningWorkflowLeavesMailboxForCallLLM(t *testing.T) {
 	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "typed last"))
 	require.NoError(t, err)
 	require.NotEmpty(t, resp.Msg.MessageId)
+	assert.False(t, resp.Msg.Queued, "a new run's message is saved to history, not queued")
 
 	assert.Equal(t, []string{"typed last"}, transcriptBodies(t, ctx, repo, fx.chatID),
 		"SendMessage must not duplicate call_llm's mailbox delivery")
@@ -238,7 +239,10 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 	}}
 	service := &ChatService{database: repo, tempClient: temporal, runs: runs.NewService(repo, temporal, nil)}
 
-	resp, err := service.SendMessage(ctx, sendMessageRequest(t, fx.chatID, "one more thing"))
+	req := sendMessageRequest(t, fx.chatID, "one more thing")
+	clientID := uuid.NewString()
+	req.Msg.ClientMessageId = &clientID
+	resp, err := service.SendMessage(ctx, req)
 	require.NoError(t, err)
 
 	assert.NotContains(t, transcriptBodies(t, ctx, repo, fx.chatID), "one more thing",
@@ -247,7 +251,32 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 	require.NoError(t, err)
 	require.Len(t, queued, 1)
 	assert.Equal(t, "one more thing", queued[0].Body)
-	assert.Equal(t, queued[0].ID, resp.Msg.MessageId, "the receipt names the queued message")
+	assert.True(t, resp.Msg.Queued, "the receipt says the message was queued, not saved")
+	assert.Equal(t, clientID, queued[0].ID,
+		"the queued row carries the id the client chose, so its optimistic copy and the row are one item")
+	assert.Equal(t, clientID, resp.Msg.MessageId, "the receipt names the queued message")
+}
+
+// A client id that is not a UUID cannot name a row; the server picks one and
+// the send still goes through.
+func TestSendMessage_RunningWorkflowIgnoresAMalformedClientID(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Active())
+	temporal := &wakeTestTemporalClient{absorbTestTemporalClient: absorbTestTemporalClient{
+		exists: true, status: enums.WORKFLOW_EXECUTION_STATUS_RUNNING,
+	}}
+	service := &ChatService{database: repo, tempClient: temporal, runs: runs.NewService(repo, temporal, nil)}
+
+	req := sendMessageRequest(t, fx.chatID, "steer")
+	bad := "not-a-uuid"
+	req.Msg.ClientMessageId = &bad
+	resp, err := service.SendMessage(ctx, req)
+	require.NoError(t, err)
+	_, parseErr := uuid.Parse(resp.Msg.MessageId)
+	require.NoError(t, parseErr)
+	assert.True(t, resp.Msg.Queued)
 }
 
 // TestSendMessage_LeavesEveryMailboxKindQueued verifies SendMessage does not

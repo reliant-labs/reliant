@@ -101,6 +101,14 @@ import type { Attachment } from "../api/client";
 import { logger } from "../lib/logger";
 import { singleflight } from "../lib/singleflight";
 import { queryClient } from "../lib/query-client";
+import { notifyManager } from "@tanstack/react-query";
+import { initEventBus } from "../lib/events";
+import {
+  beginPendingSend,
+  endPendingSend,
+  newClientMessageId,
+} from "../lib/pendingSends";
+import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import {
   approvalKeys,
   upsertApprovalInCache,
@@ -1584,13 +1592,19 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       const optimisticAttachments = getAttachmentsFromStore(
         attachmentIds || [],
       );
+      // The id this message keeps wherever it is shown. If the run is
+      // executing, the server queues the message under this id instead of
+      // writing it to the transcript (see lib/pendingSends.ts).
+      const clientMessageId = newClientMessageId();
+      const optimisticId = `optimistic-user-${clientMessageId}`;
+      const sentAt = new Date().toISOString();
       const optimisticUserMessage: Message = {
-        id: `optimistic-user-${Date.now()}`,
+        id: optimisticId,
         chatId: "",
         role: MessageRole.USER,
         contentBlocks: [{ id: "", index: 0, type: ContentBlockType.TEXT, content }],
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
+        createdAt: sentAt,
+        updatedAt: sentAt,
         streamingState: StreamingState.COMPLETE,
         seq: BigInt(999998), // Just before streaming message (999999)
         thread: "",
@@ -1629,14 +1643,46 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             selected_presets: options.selectedPresets,
           }),
         ...(isDiscuss && { discuss: true }),
+        client_message_id: clientMessageId,
       };
 
-      const response = await api.chatsV2.sendMessage(
-        chatId,
-        content,
-        attachmentIds,
-        Object.keys(sendOptions).length > 0 ? sendOptions : undefined,
-      );
+      let response: Awaited<ReturnType<typeof api.chatsV2.sendMessage>>;
+      beginPendingSend(clientMessageId);
+      try {
+        response = await api.chatsV2.sendMessage(
+          chatId,
+          content,
+          attachmentIds,
+          sendOptions,
+        );
+      } finally {
+        endPendingSend(clientMessageId);
+      }
+
+      // Queued, not saved: the run was executing, so the message waits in the
+      // thread's mailbox for its next turn and is shown in the pending-queue
+      // strip, not the transcript. Drop the optimistic entry and hand the row
+      // to the strip in ONE batch, so no render shows it twice or not at all.
+      if (response.queued) {
+        const thread =
+          options?.targetThread || getChatFromCache(chatId)?.workflowId || "";
+        notifyManager.batch(() => {
+          patchMessagesCache(chatId, (msgs) =>
+            msgs.filter((m) => m.id !== optimisticId),
+          );
+          initEventBus().emit("agentMailbox:queued", {
+            chatId,
+            thread,
+            message: {
+              id: response.messageId,
+              body: content,
+              created_at: sentAt,
+              sender_kind: QUEUED_SENDER_KIND_HUMAN,
+              attachments: attachmentIds ?? [],
+            },
+          });
+        });
+      }
 
       logger.debug("Message sent successfully", { chatId: chatId.slice(0, 8) });
 

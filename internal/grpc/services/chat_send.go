@@ -748,7 +748,9 @@ func (s *ChatService) SendMessage(
 				var queuedMsg *db.AgentMessage
 				if hasUserContent || len(req.Msg.Attachments) > 0 {
 					queuedMsg = &db.AgentMessage{
-						ID:           uuid.New().String(),
+						// The client's own id for the message, so the copy it
+						// is already showing and the queued row are one item.
+						ID:           clientMessageID(req.Msg),
 						FromThreadID: chat.MainThreadID(),
 						ChatID:       req.Msg.ChatId,
 						ToThreadID:   targetThread,
@@ -845,6 +847,7 @@ func (s *ChatService) SendMessage(
 					Status:         "processing",
 					WorkflowStatus: &workflowStatus,
 					MessageId:      messageID,
+					Queued:         queuedMsg != nil,
 				}), nil
 
 			// The EXPIRED resume branch that used to sit here is gone with the
@@ -1135,7 +1138,19 @@ func (s *ChatService) SendMessage(
 		Status:         "processing",
 		WorkflowStatus: &workflowStatus,
 		MessageId:      savedMessageID,
+		// A run started for a message queued to a run that closed first: the
+		// row is still queued, and this run's first turn drains it.
+		Queued: lateRunThread != "",
 	}), nil
+}
+
+// clientMessageID is the id the client chose for its message, when it is one a
+// queued row can carry; otherwise a fresh one.
+func clientMessageID(req *reliantv1.SendMessageRequest) string {
+	if id, err := uuid.Parse(req.GetClientMessageId()); err == nil {
+		return id.String()
+	}
+	return uuid.New().String()
 }
 
 // SendAgentMessage queues a HUMAN message directly into a specific running
@@ -1183,6 +1198,21 @@ func (s *ChatService) SendAgentMessage(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
 	}
 
+	owningWorkflow := s.owningWorkflow(ctx, target)
+	isMainThread := req.Msg.ThreadId == chat.MainThreadID()
+
+	// A message to the chat's MAIN thread after its run ended is a message to
+	// the chat, and gets what SendMessage gives one: a run started to answer
+	// it. The composer routes a send to this queue for as long as it shows
+	// the run as working — including the instant the run finishes — so
+	// refusing here left the message in the composer to be sent a second
+	// time. Only a run that ended with no position to resume from qualifies
+	// (completed, or stopped by the user): those are the runs SendMessage
+	// starts afresh. A failed run is SendMessage's to resume, so it is still
+	// refused below.
+	restartMainRun := isMainThread && s.tempClient != nil && s.runs != nil && owningWorkflow != nil &&
+		owningWorkflow.Status.IsStopped() && !owningWorkflow.Status.Resumable()
+
 	// A terminal thread means the loop has exited. This is trustworthy in the
 	// closing direction because a thread is only revived by the run that
 	// starts on it (WorkflowStatusActivity's "started" arm calls
@@ -1194,7 +1224,7 @@ func (s *ChatService) SendAgentMessage(
 	// just written its own "completed" sits in exactly that state for the
 	// moment before its workflow follows, and reviving it would queue a
 	// message into an agent that really has stopped.
-	if core.ThreadStatusIsTerminal(target.Status) {
+	if !restartMainRun && core.ThreadStatusIsTerminal(target.Status) {
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: fmt.Sprintf(
@@ -1229,18 +1259,12 @@ func (s *ChatService) SendAgentMessage(
 	// PENDING and PAUSED count as live — see WorkflowStatus.Live. A message
 	// queued to either IS drained when the run starts or resumes, and
 	// refusing it would lose a message that would have arrived.
-	owningWorkflowID := target.ID
-	if target.WorkflowID != nil && *target.WorkflowID != "" {
-		owningWorkflowID = *target.WorkflowID
-	}
-	owningWorkflow, err := s.database.GetWorkflow(ctx, owningWorkflowID)
-	if err != nil || owningWorkflow == nil {
-		// Fail open. A thread whose workflow row we cannot read is not proof
-		// the agent is idle, and wrongly refusing loses the message outright,
-		// whereas wrongly accepting only reproduces today's late delivery.
-		logging.Warn("Could not read owning workflow for agent-message liveness check; allowing the queue",
-			"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId, "workflowID", owningWorkflowID)
-	} else if !owningWorkflow.Status.Live() {
+	//
+	// A workflow row that cannot be read fails open (owningWorkflow logs it):
+	// it is not proof the agent is idle, and wrongly refusing loses the
+	// message outright, whereas wrongly accepting only reproduces today's
+	// late delivery.
+	if !restartMainRun && owningWorkflow != nil && !owningWorkflow.Status.Live() {
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: fmt.Sprintf(
@@ -1248,6 +1272,19 @@ func (s *ChatService) SendAgentMessage(
 					"Send a normal message to the chat to start one.",
 				owningWorkflow.Status.Label()),
 		}), nil
+	}
+
+	// The ended run left the thread terminal, and a terminal thread with
+	// queued mail whose run Temporal reports closed is exactly what the
+	// reconciler's orphaned-mailbox sweep marks undelivered. Revive it before
+	// the row exists, so the sweep never sees the row in that shape; the run
+	// that drains it — this one's successor, or the one started below — would
+	// revive it anyway.
+	if restartMainRun {
+		if _, err := s.database.ReviveThread(ctx, req.Msg.ThreadId); err != nil {
+			logging.Warn("Could not revive the main thread before queueing to its ended run",
+				"error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
+		}
 	}
 
 	msg := &db.AgentMessage{
@@ -1272,12 +1309,21 @@ func (s *ChatService) SendAgentMessage(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to queue message"))
 	}
 
-	if req.Msg.ThreadId != chat.MainThreadID() {
+	switch {
+	case !isMainThread:
 		_ = s.notifyThreadWake(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox)
-	} else if s.wakeLiveRun(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox) {
-		// The chat's run closed between the liveness read above and this
-		// wake, so nothing will drain the row. Start a run for it rather
-		// than leave it for the reconciler to mark undelivered.
+	case restartMainRun && owningWorkflow.Status.StopReason == core.StopReasonCancelled:
+		// A stopped run exits without reading its doorbell, even while
+		// Temporal still has it open, so a wake would strand the row. Start
+		// the run directly, as SendMessage does for a stopped run.
+		return s.startRunForQueuedRow(ctx, chat, req.Msg.ThreadId, msg.ID)
+	case s.wakeLiveRun(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox):
+		// The chat's run has closed — before this RPC, or between the
+		// liveness read above and this wake — so nothing will drain the row.
+		// Start a run for it rather than leave it for the reconciler to mark
+		// undelivered. A completed run that is still open is inside its
+		// end-of-run check, which takes the wake and continues as a fresh
+		// run for it (late_wake.go), so it lands here only once it is closed.
 		return s.startRunForQueuedRow(ctx, chat, req.Msg.ThreadId, msg.ID)
 	}
 
@@ -1287,6 +1333,22 @@ func (s *ChatService) SendAgentMessage(
 		Success: true,
 		Message: "Queued for delivery. It will be read at that agent's next turn — it has not been read yet.",
 	}), nil
+}
+
+// owningWorkflow is the workflow row that owns a thread: the thread's own
+// workflow, or the one named after it. Nil when it cannot be read.
+func (s *ChatService) owningWorkflow(ctx context.Context, thread *db.Thread) *db.Workflow {
+	workflowID := thread.ID
+	if thread.WorkflowID != nil && *thread.WorkflowID != "" {
+		workflowID = *thread.WorkflowID
+	}
+	wf, err := s.database.GetWorkflow(ctx, workflowID)
+	if err != nil || wf == nil {
+		logging.Warn("Could not read owning workflow for agent-message liveness check; allowing the queue",
+			"error", err, "chatID", thread.ChatID, "threadID", thread.ID, "workflowID", workflowID)
+		return nil
+	}
+	return wf
 }
 
 // notifyThreadWake rings the thread-wake doorbell on the workflow that owns
@@ -1348,8 +1410,8 @@ func (s *ChatService) notifyThreadWake(ctx context.Context, chat *db.Chat, threa
 }
 
 // startRunForQueuedRow starts a run for a row queued to the chat's main thread
-// whose run closed before the doorbell reached it. The new run's first
-// call_llm drains the row.
+// whose run had ended, or closed before the doorbell reached it. The new run's
+// first call_llm drains the row.
 //
 // It is the run the closed one would have continued as had the doorbell
 // arrived a moment sooner (late_wake.go): the same workflow at graph entry on

@@ -53,6 +53,15 @@
  * Both paths deliberately share ONE tombstone mechanism. They race the same
  * in-flight polls in the same way, and a second, subtly different suppression
  * scheme would be a second thing to get wrong.
+ *
+ * A row also ARRIVES from the composer's ordinary send. SendMessage to a chat
+ * whose run is executing queues the message here instead of writing it to the
+ * transcript, and answers queued=true with the row's id — an id the client
+ * chose before sending (lib/pendingSends.ts). Until that answer the message is
+ * the send's optimistic transcript entry, so a read that already sees the row
+ * leaves it out; on the answer, the optimistic entry is dropped and the row
+ * taken ("agentMailbox:queued") in one commit. Sent, queued, picked up: the
+ * message is on screen exactly once in each.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";
@@ -65,6 +74,7 @@ import { chatGrpc, type QueuedAgentMessageView } from "../api/chat-grpc";
 // is idempotent — it returns the existing singleton when there is one and
 // never replaces it — so the app still gets the bus Providers built.
 import { initEventBus } from "../lib/events";
+import { isPendingSend } from "../lib/pendingSends";
 import { subscribeToRefetch } from "../store/refetchStore";
 
 /**
@@ -143,7 +153,12 @@ export function useQueuedAgentMessages(
         }
       }
 
-      return response.messages.filter((m) => !tombstones.current.has(m.id));
+      // A row that is one of this client's in-flight sends is already on
+      // screen as that send's optimistic transcript entry; it joins the strip
+      // only when SendMessage answers that it was queued (below).
+      return response.messages.filter(
+        (m) => !tombstones.current.has(m.id) && !isPendingSend(m.id),
+      );
     },
     enabled,
     refetchInterval: isRunning ? QUEUE_FALLBACK_POLL_MS : false,
@@ -199,6 +214,23 @@ export function useQueuedAgentMessages(
       forgetIds(payload.messageIds);
     });
   }, [chatId, threadId, enabled, forgetIds]);
+
+  // The composer's send was queued rather than saved: take the row now, in the
+  // same commit that drops its optimistic transcript entry, instead of on the
+  // next read. A tombstoned id is one the agent already drained — the response
+  // can lose that race — and it is in the transcript, so it is not re-added.
+  useEffect(() => {
+    if (!enabled) return;
+    return initEventBus().on("agentMailbox:queued", (payload) => {
+      if (payload.chatId !== chatId || payload.thread !== threadId) return;
+      if (tombstones.current.has(payload.message.id)) return;
+      queryClient.setQueryData<QueuedAgentMessageView[]>(queryKey, (prev) => {
+        const rows = prev ?? [];
+        if (rows.some((m) => m.id === payload.message.id)) return rows;
+        return [...rows, payload.message];
+      });
+    });
+  }, [chatId, threadId, enabled, queryClient, queryKey]);
 
   // A row arrived in this chat's mailboxes. The announcement is chat-scoped
   // (the server does not say which thread), so every observed thread of the

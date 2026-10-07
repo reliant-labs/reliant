@@ -41,8 +41,8 @@ type closingRunTemporalClient struct {
 	wakeErr     error
 	closed      bool
 	wakes       int
-	// lastInputs is what the closed run's get_workflow_inputs query answers;
-	// onStart runs as a run is started.
+	// lastInputs is what the run's get_workflow_inputs query answers, open or
+	// closed (Temporal answers both); onStart runs as a run is started.
 	lastInputs map[string]interface{}
 	onStart    func()
 	started    []startedRun
@@ -116,7 +116,7 @@ func (c *closingRunTemporalClient) ExecuteWorkflow(
 func (c *closingRunTemporalClient) QueryWorkflow(_ context.Context, _, _, query string, _ ...interface{}) (converter.EncodedValue, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if query == "get_workflow_inputs" && c.closed && c.lastInputs != nil {
+	if query == "get_workflow_inputs" && c.lastInputs != nil {
 		return jsonEncodedValue{v: c.lastInputs}, nil
 	}
 	return nil, assertNotFound{}
@@ -189,6 +189,7 @@ func TestSendMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T) {
 	assert.Equal(t, fx.rootThreadID, started[0].input.ExecContext.Thread, "on the thread the message was queued to")
 	assert.Nil(t, started[0].input.Resume, "a fresh run at graph entry")
 	assert.Equal(t, "run-new", resp.Msg.RunId)
+	assert.True(t, resp.Msg.Queued, "the row is still queued; the new run's first turn drains it")
 	assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
 		"the thread must be revived before the run starts, or the sweep can mark the row undelivered in between")
 
@@ -278,6 +279,132 @@ func TestSendAgentMessage_RunThatClosesBeforeItsWakeGetsARunStarted(t *testing.T
 	require.NoError(t, err)
 	require.Len(t, queued, 1, "the row stays queued for the new run's first call_llm to drain")
 	assert.Equal(t, "queued as it finished", queued[0].Body)
+}
+
+// The composer routes a send to its queue for as long as it shows the run as
+// working, and at the instant a run finishes it still does. On the browser
+// check, a send 0 ms after the reply ended went to SendAgentMessage, which
+// refused it ("This agent has already finished") and left it in the composer
+// for the user to send a second time. A message to the chat's MAIN thread
+// after its run ended is a message to the chat, and gets what SendMessage
+// gives one: a run started to answer it, the run the ended one would have
+// continued as.
+func TestSendAgentMessage_EndedMainRunGetsARunStarted(t *testing.T) {
+	for _, tc := range []struct {
+		name         string
+		runStatus    db.WorkflowStatus
+		threadStatus int32
+		// stillOpen is a run Temporal has not closed yet.
+		stillOpen bool
+	}{
+		{name: "completed run, thread stamped completed", runStatus: db.Completed(), threadStatus: db.ThreadStatusCompleted},
+		// The live-DB shape: the thread row never moved, only the run's did.
+		{name: "completed run, thread still reads running", runStatus: db.Completed(), threadStatus: db.ThreadStatusRunning},
+		// Stopped by the user and still stopping. A stopping run exits without
+		// reading its doorbell, so the run is started without ringing it.
+		{name: "cancelled run that is still stopping", runStatus: db.Cancelled(), threadStatus: db.ThreadStatusCancelled, stillOpen: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			repo, cleanup := db.SetupTestDB(t)
+			t.Cleanup(cleanup)
+			ctx, fx := setupAbsorbFixture(t, repo, "test-user", tc.runStatus)
+			if tc.threadStatus != db.ThreadStatusRunning {
+				now := time.Now().UTC()
+				_, err := repo.UpdateThreadStatus(ctx, fx.rootThreadID, tc.threadStatus, &now)
+				require.NoError(t, err)
+			}
+			threadStatusAtStart := int32(-1)
+			temporal := &closingRunTemporalClient{
+				closed: !tc.stillOpen,
+				lastInputs: map[string]interface{}{
+					"model":              map[string]interface{}{"id": "mock"},
+					v2.InputKeyLaunchRun: true,
+				},
+			}
+			temporal.onStart = func() {
+				thread, err := repo.GetThread(ctx, fx.rootThreadID)
+				require.NoError(t, err)
+				threadStatusAtStart = thread.Status
+			}
+
+			resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+				ChatId:   fx.chatID,
+				ThreadId: fx.rootThreadID,
+				Message:  "sent as the reply ended",
+			}))
+			require.NoError(t, err)
+			require.True(t, resp.Msg.Success,
+				"SENT TWICE: refused, so the message stays in the composer until the user sends it again: %s", resp.Msg.Message)
+
+			started := temporal.runsStarted()
+			require.Len(t, started, 1, "no run was started for the message")
+			assert.Equal(t, fx.chatID, started[0].options.ID, "the chat's own workflow ID")
+			assert.Equal(t, fx.rootThreadID, started[0].input.ExecContext.Thread)
+			assert.Nil(t, started[0].input.Resume, "a fresh run at graph entry")
+			assert.Equal(t, map[string]interface{}{"id": "mock"}, started[0].input.Inputs["model"], "the ended run's own inputs")
+			assert.NotContains(t, started[0].input.Inputs, v2.InputKeyLaunchRun, "a run a person's message started is not the launch run")
+			assert.Equal(t, db.ThreadStatusRunning, threadStatusAtStart,
+				"the thread must be revived before the run starts, or the sweep can mark the row undelivered in between")
+			if tc.stillOpen {
+				assert.Zero(t, temporal.wakes, "a stopping run never reads its doorbell; ringing it instead would strand the row")
+			}
+
+			queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+			require.NoError(t, err)
+			require.Len(t, queued, 1, "queued once, for the new run's first call_llm to drain")
+			assert.Equal(t, "sent as the reply ended", queued[0].Body)
+		})
+	}
+}
+
+// The control for a completed run: Temporal has not closed it yet, so it is
+// inside its end-of-run check, which reads the doorbell and continues as a
+// fresh run for it (late_wake.go). Starting a second run would terminate it
+// (TERMINATE_EXISTING), so the row is queued and the doorbell rung, as for a
+// live run.
+func TestSendAgentMessage_CompletedMainRunStillFinishingTakesTheWake(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Completed())
+	now := time.Now().UTC()
+	_, err := repo.UpdateThreadStatus(ctx, fx.rootThreadID, db.ThreadStatusCompleted, &now)
+	require.NoError(t, err)
+	temporal := &closingRunTemporalClient{lastInputs: map[string]interface{}{"model": map[string]interface{}{"id": "mock"}}}
+
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "sent as it finishes",
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success, resp.Msg.Message)
+	assert.Empty(t, temporal.runsStarted(), "a run that will read the wake must not be replaced")
+	assert.Equal(t, 1, temporal.wakes)
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+}
+
+// A failed run is not started over from here. SendMessage is what recovers a
+// failed run — it resumes it where it stopped — and a fresh run from graph
+// entry would bypass that, so the queue still refuses and the composer keeps
+// the text for a normal send.
+func TestSendAgentMessage_FailedMainRunIsStillRefused(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	ctx, fx := setupAbsorbFixture(t, repo, "test-user", db.Failed())
+	now := time.Now().UTC()
+	_, err := repo.UpdateThreadStatus(ctx, fx.rootThreadID, db.ThreadStatusFailed, &now)
+	require.NoError(t, err)
+	temporal := &closingRunTemporalClient{closed: true, lastInputs: map[string]interface{}{"model": map[string]interface{}{"id": "mock"}}}
+
+	resp, err := lateMessageService(repo, temporal).SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId: fx.chatID, ThreadId: fx.rootThreadID, Message: "after a failure",
+	}))
+	require.NoError(t, err)
+	assert.False(t, resp.Msg.Success)
+	assert.Empty(t, temporal.runsStarted())
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
+	require.NoError(t, err)
+	assert.Empty(t, queued, "nothing is left queued behind a refusal")
 }
 
 // If the closed run's inputs cannot be read, there is no run to start, and

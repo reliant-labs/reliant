@@ -209,6 +209,8 @@ export interface SendMessageOptions {
   target_thread?: string;
   selected_presets?: Record<string, string>; // Update preset selections
   discuss?: boolean; // If true, chat with LLM without resuming paused workflow
+  // The id the client gave this message; a queued row is created with it.
+  client_message_id?: string;
 }
 
 export interface ListMessagesOptions {
@@ -409,11 +411,13 @@ export const chatGrpc = {
     run_id: string;
     status: string;
     message_id: string;
+    queued: boolean;
   }> {
     const client = grpcClient.chat();
     const workflowParams = buildWorkflowParamsPayload(options.workflow_params);
 
     const request = create(SendMessageRequestSchema, {
+      clientMessageId: options.client_message_id,
       chatId,
       messages: options.messages.map(m => ({ role: m.role, content: m.content, displayStyle: m.display_style })),
       attachments: options.attachments || [],
@@ -433,6 +437,7 @@ export const chatGrpc = {
       run_id: response.runId,
       status: response.status,
       message_id: response.messageId,
+      queued: response.queued,
     };
   },
 
