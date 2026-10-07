@@ -17,7 +17,7 @@
  * trigger carries is in this form's state and goes back on save.
  */
 
-import { useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
+import { memo, useEffect, useId, useMemo, useRef, useState, type FormEvent } from "react";
 import { ChevronRight } from "lucide-react";
 
 import { Modal } from "../ui/Modal";
@@ -124,6 +124,25 @@ function timezoneOptions(): string[] {
   }
 }
 
+/**
+ * The Time zone field's suggestions: every IANA zone, about 420 options.
+ *
+ * Memoized on its id, which is stable for the dialog's lifetime, so the list is
+ * built once per open rather than on every render of the form — which is every
+ * keystroke in every field, and every query that settles. Rebuilt each time, it
+ * was the largest part of the form's render cost.
+ */
+const TimezoneSuggestions = memo(function TimezoneSuggestions({ id }: { id: string }) {
+  const zones = useMemo(timezoneOptions, []);
+  return (
+    <datalist id={id}>
+      {zones.map((zone) => (
+        <option key={zone} value={zone} />
+      ))}
+    </datalist>
+  );
+});
+
 interface FieldErrors {
   name?: string;
   project?: string;
@@ -196,7 +215,9 @@ function AutomationFormBody({
       ? formFromSchedule({ cron: initialSchedule.cron ?? [], interval: initialSchedule.interval })
       : DEFAULT_SCHEDULE_FORM,
   );
-  const [timezone, setTimezone] = useState(initialSchedule?.timezone ?? browserTimezone());
+  // Lazy: browserTimezone builds an Intl.DateTimeFormat, which is not free, and
+  // an eager argument would be evaluated (and thrown away) on every render.
+  const [timezone, setTimezone] = useState(() => initialSchedule?.timezone ?? browserTimezone());
   const [overlap, setOverlap] = useState<OverlapPolicy>(initialSchedule?.overlap ?? "skip");
   const [catchupWindow, setCatchupWindow] = useState(initialSchedule?.catchupWindow ?? "");
   const [notifyOnComplete, setNotifyOnComplete] = useState(trigger?.notifyOnComplete ?? false);
@@ -343,7 +364,6 @@ function AutomationFormBody({
   const noDaemons = daemonDataReady && daemons.length === 0 && !daemonId && !!noMachineBlocker;
   const noEligibleDaemons = daemonDataReady && daemons.length > 0 && !daemonChoices.some((c) => c.eligible);
 
-  const zones = useMemo(timezoneOptions, []);
   const createMutation = useCreateTrigger();
   const updateMutation = useUpdateTrigger();
   const saving = createMutation.isPending || updateMutation.isPending;
@@ -783,11 +803,7 @@ function AutomationFormBody({
                   aria-invalid={!!errors.timezone}
                   aria-describedby={describedBy(fieldId("timezone-hint"), errors.timezone && fieldId("timezone-error"))}
                 />
-                <datalist id={fieldId("timezones")}>
-                  {zones.map((zone) => (
-                    <option key={zone} value={zone} />
-                  ))}
-                </datalist>
+                <TimezoneSuggestions id={fieldId("timezones")} />
                 <p id={fieldId("timezone-hint")} className={hintClass}>
                   An IANA zone such as America/New_York. Times above are in this zone.
                 </p>

@@ -95,11 +95,43 @@ needed recovering.
 
 ## Regenerating
 
-`make replay-fixtures` — brings up Postgres via docker compose, runs the
-build-tagged generator (`go test -tags replayfixtures ./internal/workflow/runtime/replaytest/`,
-which boots an ephemeral Temporal dev server per run), rewrites every
-`fixtures/*.json`, then runs the untagged replay test to verify the new
-fixtures replay cleanly against the current code.
+`make replay-fixtures` — runs the build-tagged generator
+(`go test -tags replayfixtures ./internal/workflow/runtime/replaytest/`, which
+boots an ephemeral Temporal dev server per run and drives every scenario with
+the scripted LLM — no model is ever called), rewrites every `fixtures/*.json`,
+then runs the untagged replay test to verify the new fixtures replay cleanly
+against the current code.
+
+### Which Postgres it uses
+
+The generator needs a Postgres it can migrate and write to; `DATABASE_URL`
+decides which:
+
+- **`DATABASE_URL` set** — that database is used as-is and nothing is started.
+  This is the mode for anyone who must not touch shared infrastructure (an
+  agent, a second worktree): point it at an isolated database you created.
+
+  ```
+  DATABASE_URL='postgres://postgres:postgres@localhost:55434/reliant_mine?sslmode=disable' \
+    make replay-fixtures
+  ```
+
+  `make replay-fixtures DATABASE_URL=...` is equivalent.
+- **`DATABASE_URL` unset (or empty)** — `docker compose up -d postgres` brings
+  up this repo's compose Postgres, published on `localhost:5433`, and the
+  generator uses its `reliant` database. That server is shared by every
+  `scripts/dev.sh` stack on the machine, so prefer the first mode whenever you
+  have a database of your own.
+
+The two steps are also fine to run by hand, which is all the target does:
+
+```
+DATABASE_URL=... go test -tags replayfixtures -count=1 -timeout=10m -v ./internal/workflow/runtime/replaytest/
+go test -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
+```
+
+Add `-run TestGenerateFixture_PauseResume` (for example) to the first to
+regenerate a single fixture.
 
 Add a new fixture by adding a `TestGenerateFixture_*` scenario in
 `generate_gen_test.go` — prefer shapes that mirror an e2e story

@@ -6,6 +6,8 @@ on:
       - "internal/db/migrations/**"
       - "internal/db/postgres/schema.sql"
       - "scripts/check-migrations.sh"
+      - "cmd/check-migrations/**"
+      - "internal/db/migrationcheck/**"
       - "sqlc.yaml"
   push:
     branches:
@@ -14,6 +16,8 @@ on:
       - "internal/db/migrations/**"
       - "internal/db/postgres/schema.sql"
       - "scripts/check-migrations.sh"
+      - "cmd/check-migrations/**"
+      - "internal/db/migrationcheck/**"
       - "sqlc.yaml"
 
 jobs:
@@ -148,12 +152,11 @@ jobs:
 
           echo "✅ No root-level migrations found"
 
-      - name: Validate migration numbering (postgres)
-        run: bash ./scripts/check-migrations.sh
-
-      - name: Validate migration sequence
-        run: |
-          echo "✅ Sequence validation covered by scripts/check-migrations.sh"
+      # Filenames, real timestamps, unique versions and no `-- +goose Down`:
+      # the rules in internal/db/migrationcheck, shared with the internal/db
+      # tests. Plain sh + go run, so it is the same command locally on macOS.
+      - name: Validate migration names, versions and contents
+        run: sh ./scripts/check-migrations.sh
 
       - name: Validate Postgres migrations apply cleanly
         env:

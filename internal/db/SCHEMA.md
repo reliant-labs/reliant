@@ -66,7 +66,17 @@ snapshot that `sqlc` reads to generate type-safe Go code.
 
 ## Migration Numbering
 
-Migrations are numbered by timestamp prefix. CI (`.github/workflows/check-migrations.yml`)
+Migrations are numbered by timestamp prefix. Check a change locally with:
+
+```bash
+scripts/check-migrations.sh
+```
+
+It enforces the rules in `migrationcheck/` — a `YYYYMMDDHHMMSS_<name>.sql`
+filename, a real timestamp for every new version, no two files on one version,
+and no `-- +goose Down` section — and runs anywhere Go does, macOS's bash 3.2
+included. The `internal/db` tests hold the embedded migrations to the same
+rules. CI (`.github/workflows/check-migrations.yml`) runs the script and also
 validates that new migrations come after `main`'s highest number. If a rebase
 introduces a conflict, `scripts/fix-migration-conflicts.sh` renumbers the offending
 migrations; the `post-rebase` git hook (install via `scripts/install-git-hooks.sh`)

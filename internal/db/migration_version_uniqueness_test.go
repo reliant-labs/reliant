@@ -2,9 +2,9 @@
 package db
 
 import (
-	"io/fs"
-	"path"
 	"testing"
+
+	"github.com/reliant-labs/reliant/internal/db/migrationcheck"
 )
 
 // A goose version is a migration's ONLY identity in goose_db_version: the
@@ -26,32 +26,9 @@ import (
 // likely. This one rejects the collision itself, and unlike that test it has
 // no grandfather clause — a duplicate is unsafe at every version, including
 // the hand-numbered ones. The two together are cheap; the failure mode is not.
+//
+// The rule itself is migrationcheck.RuleUniqueVersion, shared with
+// scripts/check-migrations.sh.
 func TestMigrationVersionsAreUnique(t *testing.T) {
-	files, err := fs.Glob(FS, "migrations/postgres/*.sql")
-	if err != nil {
-		t.Fatalf("glob embedded migrations: %v", err)
-	}
-	if len(files) == 0 {
-		t.Fatal("expected embedded migrations, got none")
-	}
-
-	byVersion := make(map[string][]string, len(files))
-	for _, file := range files {
-		name := path.Base(file)
-		m := migrationVersion.FindStringSubmatch(name)
-		if m == nil {
-			// Filename shape is TestNewMigrationsCarryARealTimestamp's job.
-			continue
-		}
-		byVersion[m[1]] = append(byVersion[m[1]], name)
-	}
-
-	for version, names := range byVersion {
-		if len(names) > 1 {
-			t.Errorf("version %s is claimed by %d migrations (%v); goose records only the version, so a database "+
-				"that applied one of these reports the others as already applied and silently skips their SQL. "+
-				"Renumber the newer one with `goose -dir internal/db/migrations/postgres create <name> sql`",
-				version, len(names), names)
-		}
-	}
+	assertMigrationRule(t, migrationcheck.RuleUniqueVersion)
 }
