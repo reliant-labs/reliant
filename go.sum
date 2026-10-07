@@ -511,6 +511,8 @@ github.com/reliant-labs/forge v0.1.44-0.20261007060102-bc057f77ff35 h1:DJTQcvuXe
 github.com/reliant-labs/forge v0.1.44-0.20261007060102-bc057f77ff35/go.mod h1:F9/74NFWsIZsOMzE9qBmNdgH3VDpTSixLgbsrv0qzNg=
 github.com/reliant-labs/forge v0.1.44-0.20261007071025-15d66beacb97 h1:ZS8V4v0pp2G3NwZmuvxEFUlQge8lrhorvVquGiLYORc=
 github.com/reliant-labs/forge v0.1.44-0.20261007071025-15d66beacb97/go.mod h1:F9/74NFWsIZsOMzE9qBmNdgH3VDpTSixLgbsrv0qzNg=
+github.com/reliant-labs/forge v0.1.44-0.20261007072915-4cc72af5dc2b h1:R0czSGAHT0J9QSZor3qV1XZUPONZnvbmvea88+B7fqA=
+github.com/reliant-labs/forge v0.1.44-0.20261007072915-4cc72af5dc2b/go.mod h1:F9/74NFWsIZsOMzE9qBmNdgH3VDpTSixLgbsrv0qzNg=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec h1:W09IVJc94icq4NjY3clb7Lk8O1qJ8BdBEF8z0ibU0rE=
 github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec/go.mod h1:qqbHyh8v60DhA7CoWK5oRCqLrMHRGoxYCSS9EjAz6Eo=
 github.com/rivo/uniseg v0.1.0/go.mod h1:J6wj4VEh+S6ZtnVlnTBMWIodfgj8LQOQFoIToxlJtxc=
