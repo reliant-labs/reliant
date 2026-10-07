@@ -19,6 +19,7 @@ import { insertableData, matchesSearch, type InsertableGroup } from "../../lib/i
 import type { CELCompletionContext } from "../../lib/monaco-cel-completions";
 import { useCELCompletionContext, useCELCurrentNode } from "./CELCompletionContext";
 import { usePopoverPlacement } from "./usePopoverPlacement";
+import { RunSample } from "./run/BuilderRunContext";
 
 export interface InsertDataMenuProps {
   /** Insert a CEL path (`nodes.x.response_text`) into the field. */
@@ -210,6 +211,7 @@ export function InsertDataMenu({ onInsert, fieldLabel, celContext, disabled = fa
                       <span className="ml-auto flex-shrink-0 text-xs text-muted-foreground">{field.type}</span>
                     </span>
                     {field.description && <span className="line-clamp-2 pl-[18px] text-xs text-muted-foreground">{field.description}</span>}
+                    <RunSample path={field.path} className="block truncate pl-[18px] text-xs text-muted-foreground" />
                   </div>
                 ))}
               </div>

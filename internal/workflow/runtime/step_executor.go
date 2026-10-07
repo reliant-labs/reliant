@@ -1020,21 +1020,36 @@ func callLLMIdempotencyKey(workflowID, stepID, loopNodeID string, loopIteration 
 }
 
 // executeFailActivity returns a future that will fail with the given message.
-// node_path names the failing node's qualified position so the failure can be
-// attributed (the scenario runner reports it as the error node); the FailStep
-// handler itself ignores it.
 func (e *StepExecutor) executeFailActivity(node *reliantv1.Node, errorMsg string) workflow.Future {
 	return workflow.ExecuteActivity(
 		workflow.WithActivityOptions(e.getActivityCtx(), workflow.ActivityOptions{
 			StartToCloseTimeout: time.Second,
 		}),
 		"FailStep",
-		map[string]interface{}{
-			"chat_id":   e.chatID,
-			"error":     errorMsg,
-			"node_path": joinNodePath(e.nodePathPrefix, node.GetId()),
-		},
+		e.failStepInput(node, errorMsg),
 	)
+}
+
+// failStepInput is FailStep's input. Beyond the message, it names the failing
+// node exactly as a graph activity's runtime context does — step id, loop
+// scope and node_path — so the activity wrapper files the failure under that
+// node: a failed node event and a step row carrying the error. Without them a
+// step whose {{ }} expression failed to evaluate had no row and no event, and
+// the canvas could not say which step broke. The FailStep handler itself reads
+// only the message.
+func (e *StepExecutor) failStepInput(node *reliantv1.Node, errorMsg string) map[string]interface{} {
+	input := map[string]interface{}{
+		"chat_id":     e.chatID,
+		"workflow_id": e.workflowID,
+		"step_id":     node.GetId(),
+		"error":       errorMsg,
+		"node_path":   joinNodePath(e.nodePathPrefix, node.GetId()),
+	}
+	if e.loopNodeID != "" {
+		input["loop_node_id"] = e.loopNodeID
+		input["loop_iteration"] = e.loopIteration
+	}
+	return input
 }
 
 // ============================================================================

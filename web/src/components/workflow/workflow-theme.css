@@ -341,3 +341,18 @@
 .react-flow__node.wf-node--has-warnings > :first-child {
   box-shadow: 0 0 0 2px hsl(var(--warning) / 0.6);
 }
+
+/* A test run on the canvas (nodes/runMarkers.tsx). Running, done and failed
+   are the node's own status styling; these are the states it has none for. */
+.react-flow__node.wf-node--run-waiting > :first-child {
+  box-shadow: 0 0 0 3px hsl(var(--warning) / 0.7);
+}
+
+.react-flow__node.wf-node--run-skipped > :first-child {
+  border-style: dashed;
+  opacity: 0.6;
+}
+
+.react-flow__node.wf-node--run-unreached > :first-child {
+  opacity: 0.45;
+}

@@ -86,6 +86,13 @@ export interface NodeExecutionStatusResult {
   statusByKey: Record<string, StreamNodeStatus>
   /** Iteration info keyed by `${workflowId}:${nodeId}` (present only when carried). */
   iterationByKey: Record<string, StreamNodeIteration>
+  /**
+   * The event that decided each key's status, keyed like statusByKey. It says
+   * what the coarse status cannot: that a "completed" node was skipped, that
+   * an approval node's last act was raising its approval (it is waiting), and
+   * the error a failed node reported.
+   */
+  decidingEventByKey: Record<string, NodeExecutionUpdate>
   /** Executions of nodes inside loops, one per (workflow, loop, iteration, node). */
   loopScoped: LoopScopedNodeExecution[]
   /**
@@ -224,6 +231,7 @@ export function reduceNodeExecutions(
   updates: NodeExecutionUpdate[],
 ): NodeExecutionStatusResult {
   const best = new Map<string, Candidate>()
+  const decidingEventByKey: Record<string, NodeExecutionUpdate> = {}
   const iterationByKey: Record<string, StreamNodeIteration> = {}
   const iterationSeq = new Map<string, number>()
   const scopedBest = new Map<string, Candidate>()
@@ -273,6 +281,7 @@ export function reduceNodeExecutions(
 
     if (!prev) {
       best.set(key, { status, seq, terminal })
+      decidingEventByKey[key] = update
       continue
     }
     // Guard: a non-terminal event must never overwrite a terminal one.
@@ -280,11 +289,13 @@ export function reduceNodeExecutions(
     // Upgrade: a terminal event always wins over a non-terminal one.
     if (!prev.terminal && terminal) {
       best.set(key, { status, seq, terminal })
+      decidingEventByKey[key] = update
       continue
     }
     // Same terminal-ness: higher sequence_number wins (order-insensitive).
     if (seq >= prev.seq) {
       best.set(key, { status, seq, terminal })
+      decidingEventByKey[key] = update
     }
   }
 
@@ -300,7 +311,7 @@ export function reduceNodeExecutions(
     loopScoped.push({ ...info, status: candidate.status, sequence: candidate.seq })
   }
 
-  return { statusByKey, iterationByKey, loopScoped, latestSequenceByWorkflow }
+  return { statusByKey, iterationByKey, decidingEventByKey, loopScoped, latestSequenceByWorkflow }
 }
 
 /**

@@ -644,6 +644,10 @@ type StepExecution struct {
 	LoopNodeID     sql.NullString `json:"loop_node_id"`
 	LoopIteration  sql.NullInt64  `json:"loop_iteration"`
 	SavedMessageID sql.NullString `json:"saved_message_id"`
+	InputJson      sql.NullString `json:"input_json"`
+	ErrorMessage   sql.NullString `json:"error_message"`
+	Attempt        sql.NullInt32  `json:"attempt"`
+	NodePath       sql.NullString `json:"node_path"`
 }
 
 type Task struct {

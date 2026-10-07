@@ -758,6 +758,22 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	endTime := time.Now()
 	durationMs := endTime.Sub(startTime).Milliseconds()
 
+	// One row per attempt, whatever the outcome: what the step was given and
+	// how it ended. See stepAttempt.
+	recordAttempt := func(output interface{}, err error) {
+		w.writeStepExecution(ctx, stepAttempt{
+			WorkflowID:   workflowID,
+			StepID:       stepID,
+			ActivityType: activityType,
+			Scope:        inputInfo,
+			Attempt:      attemptNumber,
+			Args:         recordedArgs(input),
+			Output:       output,
+			Err:          err,
+			DurationMs:   durationMs,
+		})
+	}
+
 	// The worker going away is infrastructure churn, not a failure of this step,
 	// and whatever error the activity unwound with describes the cancellation
 	// rather than the cause. Rewrite it to an explicitly retryable
@@ -778,7 +794,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			"durationMs", durationMs,
 			"cause", context.Cause(ctx),
 			"error", execErr)
-		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, execErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+		recordAttempt(nil, execErr)
 		return zeroOutput, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("heartbeat RPC failed while running %s; retrying", activityType),
 			"HeartbeatCancel",
@@ -793,7 +809,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			"attemptNumber", attemptNumber,
 			"durationMs", durationMs,
 			"error", execErr)
-		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, execErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+		recordAttempt(nil, execErr)
 		return zeroOutput, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("worker shut down while running %s; retrying on the next worker", activityType),
 			"WorkerShutdown",
@@ -839,7 +855,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		}
 
 		// Best-effort: Write step execution record for history tracking
-		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, execErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+		recordAttempt(nil, execErr)
 
 		// Emit node execution "failed" event for UI streaming
 		errMsg := execErr.Error()
@@ -872,7 +888,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			"attemptNumber", attemptNumber,
 			"error", saveErr)
 		w.writeErrorEvent(ctx, input, activityType, activityID, attemptNumber, workflowID, saveErr, maxAttempts)
-		w.writeStepExecution(ctx, workflowID, stepID, activityType, nil, saveErr, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+		recordAttempt(nil, saveErr)
 		errMsg := saveErr.Error()
 		w.emitNodeExecutionEvent(ctx, "failed", false, stepID, inputInfo, activityType, chatID, workflowID, activityID, &startTime, &endTime, &durationMs, nil, &errMsg)
 		return zeroOutput, saveErr
@@ -891,7 +907,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 		"durationMs", durationMs)
 
 	// Best-effort: Write step execution record for history tracking
-	w.writeStepExecution(ctx, workflowID, stepID, activityType, result, nil, durationMs, inputInfo.LoopNodeID, inputInfo.LoopIteration)
+	recordAttempt(result, nil)
 
 	// Emit node execution "completed" event for UI streaming
 	// Try to extract exit_code from result for run steps
@@ -1618,7 +1634,8 @@ func toMapInterface(v interface{}) map[string]interface{} {
 
 // writeStepExecution writes a step execution record for workflow history tracking.
 // This enables CEL expressions to query step history (e.g., size(history.filter(exit_code != 0)) >= 3).
-func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflowID, stepID, activityType string, output interface{}, execErr error, durationMs int64, loopNodeID string, loopIteration int) {
+func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, attempt stepAttempt) {
+	workflowID, stepID, activityType := attempt.WorkflowID, attempt.StepID, attempt.ActivityType
 	// Skip if we don't have the required IDs
 	if workflowID == "" || stepID == "" {
 		logging.Debug("[ActivityWrapper] Skipping step execution write - missing workflow_id or step_id",
@@ -1628,7 +1645,7 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflow
 		return
 	}
 
-	exec := buildStepExecution(workflowID, stepID, activityType, output, execErr, durationMs, loopNodeID, loopIteration)
+	exec := buildStepExecution(attempt)
 	verdict := recordedVerdict{ExitCode: exec.ExitCode, Success: exec.Success}
 
 	// Use a background context with timeout for the DB write.
@@ -1651,45 +1668,57 @@ func (w *ActivityWrapper[I, O]) writeStepExecution(ctx context.Context, workflow
 			"stepID", stepID,
 			"activityType", activityType,
 			"success", verdict.Success.Bool,
-			"durationMs", durationMs)
+			"durationMs", attempt.DurationMs)
 	}
 }
 
 // buildStepExecution assembles the step_executions row for one activity
 // outcome. Split out from writeStepExecution so what the row CLAIMS is
 // testable without a database — the claim is the part that was wrong.
-func buildStepExecution(workflowID, stepID, activityType string, output interface{}, execErr error, durationMs int64, loopNodeID string, loopIteration int) *db.StepExecution {
+func buildStepExecution(attempt stepAttempt) *db.StepExecution {
 	// Marshal the output once and reuse it for both the stored JSON and the
 	// verdict, instead of round-tripping through encoding/json twice.
 	var outputJSON sql.NullString
 	var outputMap map[string]interface{}
-	if output != nil {
-		if jsonBytes, err := json.Marshal(output); err == nil {
+	if attempt.Output != nil {
+		if jsonBytes, err := json.Marshal(attempt.Output); err == nil {
 			outputJSON = sql.NullString{String: string(jsonBytes), Valid: true}
 			_ = json.Unmarshal(jsonBytes, &outputMap)
 		}
 	}
 
-	verdict := deriveRecordedVerdict(outputMap, execErr)
+	verdict := deriveRecordedVerdict(outputMap, attempt.Err)
 
 	var loopNodeIDSQL sql.NullString
 	var loopIterationSQL sql.NullInt64
-	if loopNodeID != "" {
-		loopNodeIDSQL = sql.NullString{String: loopNodeID, Valid: true}
-		loopIterationSQL = sql.NullInt64{Int64: int64(loopIteration), Valid: true}
+	if attempt.Scope.LoopNodeID != "" {
+		loopNodeIDSQL = sql.NullString{String: attempt.Scope.LoopNodeID, Valid: true}
+		loopIterationSQL = sql.NullInt64{Int64: int64(attempt.Scope.LoopIteration), Valid: true}
+	}
+	var attemptSQL sql.NullInt32
+	if attempt.Attempt > 0 {
+		attemptSQL = sql.NullInt32{Int32: int32(attempt.Attempt), Valid: true}
+	}
+	var nodePathSQL sql.NullString
+	if attempt.Scope.NodePath != "" {
+		nodePathSQL = sql.NullString{String: attempt.Scope.NodePath, Valid: true}
 	}
 
 	return &db.StepExecution{
 		ID:            uuid.New().String(),
-		WorkflowID:    workflowID,
-		StepID:        stepID,
-		ActivityName:  activityType,
+		WorkflowID:    attempt.WorkflowID,
+		StepID:        attempt.StepID,
+		ActivityName:  attempt.ActivityType,
 		OutputJSON:    outputJSON,
 		ExitCode:      verdict.ExitCode,
 		Success:       verdict.Success,
-		DurationMs:    sql.NullInt64{Int64: durationMs, Valid: true},
+		DurationMs:    sql.NullInt64{Int64: attempt.DurationMs, Valid: true},
 		LoopNodeID:    loopNodeIDSQL,
 		LoopIteration: loopIterationSQL,
+		InputJSON:     attempt.Args,
+		ErrorMessage:  recordedError(attempt.Err),
+		Attempt:       attemptSQL,
+		NodePath:      nodePathSQL,
 		// No .UTC(): created_at is timestamptz, so the offset is preserved and
 		// normalized on the way in and a local time stores the same instant.
 		// This site is where the two-basis bug was found — it wrote local time

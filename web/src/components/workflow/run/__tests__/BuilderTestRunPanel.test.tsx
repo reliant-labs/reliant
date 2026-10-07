@@ -144,7 +144,10 @@ describe("BuilderTestRunPanel", () => {
       builderTest: true,
     });
     expect(request.messages[0].content).toBe("Triage the new issues");
-    expect(props.onStarted).toHaveBeenCalledWith("test-chat-1");
+    expect(props.onStarted).toHaveBeenCalledWith(
+      "test-chat-1",
+      expect.objectContaining({ prompt: "Triage the new issues", value: expect.objectContaining({ params: expect.objectContaining({ label: "bug" }) }) }),
+    );
   });
 
   it("does not start when the save fails", async () => {
@@ -210,5 +213,45 @@ describe("BuilderTestRunPanel", () => {
     expect(link).toHaveAttribute("href", "/workflows/runs/test-chat-1");
     expect(screen.getByRole("button", { name: "Run again" })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe("/workflow");
+  });
+
+  it("reopens with the last run's message and inputs, so Run again repeats that run", async () => {
+    const user = userEvent.setup();
+    chatQuery.mockReturnValue({ data: { id: "test-chat-1" } });
+    const props = baseProps({
+      testChatId: "test-chat-1",
+      initialRequest: { prompt: "Triage the new issues", value: { presets: {}, params: { label: "bug" } } },
+    });
+    renderPanel(<BuilderTestRunPanel {...props} />);
+
+    expect(await screen.findByLabelText("Message")).toHaveValue("Triage the new issues");
+    expect(await screen.findByLabelText("Label")).toHaveValue("bug");
+    await user.click(screen.getByRole("button", { name: "Run again" }));
+
+    await waitFor(() => expect(startChat).toHaveBeenCalledTimes(1));
+    const request = startChat.mock.calls[0]![0];
+    expect(request.messages[0].content).toBe("Triage the new issues");
+    expect(request.workflowParams).toBeDefined();
+  });
+
+  it("names the step a finished run failed at and takes the author to it", async () => {
+    const user = userEvent.setup();
+    chatQuery.mockReturnValue({ data: { id: "test-chat-1" } });
+    const onGoToProblem = vi.fn();
+    renderPanel(
+      <BuilderTestRunPanel
+        {...baseProps({
+          testChatId: "test-chat-1",
+          failure: { label: "Slack · Post message · post", message: "channel_not_found" },
+          onGoToProblem,
+        })}
+      />,
+    );
+
+    const failure = await screen.findByTestId("test-run-failure");
+    expect(failure).toHaveTextContent("Slack · Post message · post failed");
+    expect(failure).toHaveTextContent("channel_not_found");
+    await user.click(screen.getByRole("button", { name: "Go to problem" }));
+    expect(onGoToProblem).toHaveBeenCalledTimes(1);
   });
 });

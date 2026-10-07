@@ -1,22 +1,37 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Node-status wiring for a builder test run: the new chat id reaches the update
- * subscription, and the statuses that stream in for THAT chat come back keyed
- * by node id. A stray event for another chat must not paint the canvas.
+ * Wiring for a builder test run: the new chat id reaches the update
+ * subscription, and what streams in for THAT chat comes back as the canvas's
+ * run — each step's state, the path taken. A stray event for another chat
+ * must not paint the canvas.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { renderHook } from "@testing-library/react";
-import type { Node } from "@xyflow/react";
+import type { Edge, Node } from "@xyflow/react";
 
 import { useChatStore } from "../../../store/chatStore";
 import { useGlobalUpdatesStore } from "../../../store/globalUpdatesStore";
 import { NodeExecutionEventType, NodeExecutionStatus } from "../../../gen/reliant/v1/streaming_pb";
+import { ChatActivity, WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 import type { NodeExecutionUpdate } from "../../../types/streaming";
-import { useBuilderTestRun, withTestRunStatus } from "./useBuilderTestRun";
 
-function event(chatId: string, nodeId: string, eventType: NodeExecutionEventType, seq: number): NodeExecutionUpdate {
+const chatQuery = vi.hoisted(() => ({ data: undefined as unknown }));
+vi.mock("../../../hooks/chat-queries", () => ({ useChat: () => chatQuery }));
+vi.mock("../../../hooks/useWorkflowExecutions", () => ({
+  useWorkflowExecutions: () => ({ allWorkflows: [], data: null, hasRunningWorkflow: false, isLoading: false, error: null }),
+}));
+
+import { useBuilderRun } from "./useBuilderTestRun";
+
+function event(
+  chatId: string,
+  nodeId: string,
+  eventType: NodeExecutionEventType,
+  seq: number,
+  overrides: Partial<NodeExecutionUpdate> = {},
+): NodeExecutionUpdate {
   return {
     update_type: "node_execution",
     event_type: eventType,
@@ -26,24 +41,33 @@ function event(chatId: string, nodeId: string, eventType: NodeExecutionEventType
     workflow_id: chatId,
     chat_id: chatId,
     sequence_number: seq,
+    ...overrides,
   } as NodeExecutionUpdate;
 }
 
-describe("useBuilderTestRun", () => {
+const step = (id: string): Node => ({ id, position: { x: 0, y: 0 }, data: { step: { id } } });
+const start: Node = { id: "workflow", type: "eventNode", position: { x: 0, y: 0 }, data: {} };
+const edge = (source: string, target: string): Edge => ({ id: `${source}->${target}`, source, target });
+
+describe("useBuilderRun", () => {
   const subscribe = vi.fn();
   const unsubscribe = vi.fn();
 
   beforeEach(() => {
     subscribe.mockReset();
     unsubscribe.mockReset();
+    chatQuery.data = undefined;
     useGlobalUpdatesStore.setState({ subscribeToChatDetails: subscribe, unsubscribeFromChatDetails: unsubscribe });
     useChatStore.setState({ nodeExecutions: {} });
   });
   afterEach(() => useChatStore.setState({ nodeExecutions: {} }));
 
   it("subscribes to the new chat id and does nothing without one", () => {
-    const { rerender } = renderHook(({ id }) => useBuilderTestRun(id, ["a"]), { initialProps: { id: null as string | null } });
+    const { result, rerender } = renderHook(({ id }) => useBuilderRun(id, [step("a")], []), {
+      initialProps: { id: null as string | null },
+    });
     expect(subscribe).not.toHaveBeenCalled();
+    expect(result.current).toBeNull();
 
     rerender({ id: "test-chat-1" });
     expect(subscribe).toHaveBeenCalledWith("test-chat-1");
@@ -55,7 +79,7 @@ describe("useBuilderTestRun", () => {
     // the connection changes, so if the test run doesn't hand the slot back,
     // the panel goes silent until a reload.
     useGlobalUpdatesStore.setState({ subscribedChatId: "panel-chat" });
-    const { rerender } = renderHook(({ id }) => useBuilderTestRun(id, ["a"]), {
+    const { rerender } = renderHook(({ id }) => useBuilderRun(id, [step("a")], []), {
       initialProps: { id: "test-chat-1" as string | null },
     });
     expect(subscribe).toHaveBeenLastCalledWith("test-chat-1");
@@ -67,14 +91,14 @@ describe("useBuilderTestRun", () => {
 
   it("restores nothing when no chat held the stream before the test run", () => {
     useGlobalUpdatesStore.setState({ subscribedChatId: null });
-    const { rerender } = renderHook(({ id }) => useBuilderTestRun(id, ["a"]), {
+    const { rerender } = renderHook(({ id }) => useBuilderRun(id, [step("a")], []), {
       initialProps: { id: "test-chat-1" as string | null },
     });
     rerender({ id: null });
     expect(subscribe).toHaveBeenCalledTimes(1);
   });
 
-  it("reports statuses for the test chat's own nodes by node id", () => {
+  it("reports the test chat's own steps by node id, before the execution tree arrives", () => {
     useChatStore.setState({
       nodeExecutions: {
         "test-chat-1": [
@@ -86,18 +110,45 @@ describe("useBuilderTestRun", () => {
       },
     });
 
-    const { result } = renderHook(() => useBuilderTestRun("test-chat-1", ["a", "b", "c"]));
-    expect(result.current).toEqual({ a: "completed", b: "running" });
+    const { result } = renderHook(() =>
+      useBuilderRun("test-chat-1", [start, step("a"), step("b"), step("c")], [edge("workflow", "a"), edge("a", "b"), edge("a", "c")]),
+    );
+    const view = result.current!.view;
+    expect(Object.fromEntries(Object.entries(view.nodes).map(([id, s]) => [id, s.status]))).toEqual({
+      a: "completed",
+      b: "running",
+    });
+    expect([...view.takenEdges].sort()).toEqual(["a->b", "workflow->a"]);
   });
 
-  it("paints statuses onto nodes and leaves untouched nodes identical", () => {
-    const nodes = [
-      { id: "a", position: { x: 0, y: 0 }, data: { label: "A" } },
-      { id: "b", position: { x: 0, y: 0 }, data: { label: "B" } },
-    ] as Node[];
-    const painted = withTestRunStatus(nodes, { a: "failed" });
-    expect(painted[0]!.data).toMatchObject({ label: "A", executionStatus: "failed" });
-    expect(painted[1]).toBe(nodes[1]);
-    expect(withTestRunStatus(nodes, {})).toBe(nodes);
+  it("shows an approval that is waiting on you, a skipped step, and the failure's error", () => {
+    chatQuery.data = {
+      workflowState: WorkflowState.ACTIVE,
+      workflowStopReason: WorkflowStopReason.UNSPECIFIED,
+      activity: ChatActivity.AWAITING_INPUT,
+    };
+    useChatStore.setState({
+      nodeExecutions: {
+        "test-chat-1": [
+          event("test-chat-1", "review", NodeExecutionEventType.COMPLETED, 2, { status: NodeExecutionStatus.SKIPPED }),
+          event("test-chat-1", "post", NodeExecutionEventType.FAILED, 3, {
+            status: NodeExecutionStatus.FAILED,
+            error_message: "channel_not_found",
+          }),
+          event("test-chat-1", "approve", NodeExecutionEventType.STARTED, 4, { node_type: "ApprovalCreate" }),
+          event("test-chat-1", "approve", NodeExecutionEventType.COMPLETED, 5, {
+            node_type: "ApprovalCreate",
+            status: NodeExecutionStatus.COMPLETED,
+          }),
+        ],
+      },
+    });
+
+    const { result } = renderHook(() => useBuilderRun("test-chat-1", [step("review"), step("post"), step("approve")], []));
+    const nodes = result.current!.view.nodes;
+    expect(nodes.review?.status).toBe("skipped");
+    expect(nodes.post).toEqual({ status: "failed", error: "channel_not_found" });
+    expect(nodes.approve?.status).toBe("waiting");
+    expect(result.current!.view.failed).toEqual(["post"]);
   });
 });

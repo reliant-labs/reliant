@@ -105,6 +105,9 @@ const (
 	// ChatServiceGetWorkflowExecutionsProcedure is the fully-qualified name of the ChatService's
 	// GetWorkflowExecutions RPC.
 	ChatServiceGetWorkflowExecutionsProcedure = "/reliant.v1.ChatService/GetWorkflowExecutions"
+	// ChatServiceListStepExecutionsProcedure is the fully-qualified name of the ChatService's
+	// ListStepExecutions RPC.
+	ChatServiceListStepExecutionsProcedure = "/reliant.v1.ChatService/ListStepExecutions"
 	// ChatServiceGetThreadWorkflowInputsProcedure is the fully-qualified name of the ChatService's
 	// GetThreadWorkflowInputs RPC.
 	ChatServiceGetThreadWorkflowInputsProcedure = "/reliant.v1.ChatService/GetThreadWorkflowInputs"
@@ -216,6 +219,10 @@ type ChatServiceClient interface {
 	ListChatPlans(context.Context, *connect.Request[v1.ListChatPlansRequest]) (*connect.Response[v1.ListChatPlansResponse], error)
 	// GetWorkflowExecutions returns the workflow execution tree for a chat
 	GetWorkflowExecutions(context.Context, *connect.Request[v1.GetWorkflowExecutionsRequest]) (*connect.Response[v1.GetWorkflowExecutionsResponse], error)
+	// ListStepExecutions returns the full record of a chat's steps — resolved
+	// inputs, output and error per attempt — optionally scoped to one node.
+	// What the builder's Run tab inspects a step from.
+	ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error)
 	// GetThreadWorkflowInputs returns the workflow inputs for a specific thread
 	GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error)
 	// SetChatDaemon sets the active daemon for a chat session.
@@ -406,6 +413,12 @@ func NewChatServiceClient(httpClient connect.HTTPClient, baseURL string, opts ..
 			connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
 			connect.WithClientOptions(opts...),
 		),
+		listStepExecutions: connect.NewClient[v1.ListStepExecutionsRequest, v1.ListStepExecutionsResponse](
+			httpClient,
+			baseURL+ChatServiceListStepExecutionsProcedure,
+			connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
+			connect.WithClientOptions(opts...),
+		),
 		getThreadWorkflowInputs: connect.NewClient[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse](
 			httpClient,
 			baseURL+ChatServiceGetThreadWorkflowInputsProcedure,
@@ -451,6 +464,7 @@ type chatServiceClient struct {
 	getChatUpdates           *connect.Client[v1.GetChatUpdatesRequest, v1.GetChatUpdatesResponse]
 	listChatPlans            *connect.Client[v1.ListChatPlansRequest, v1.ListChatPlansResponse]
 	getWorkflowExecutions    *connect.Client[v1.GetWorkflowExecutionsRequest, v1.GetWorkflowExecutionsResponse]
+	listStepExecutions       *connect.Client[v1.ListStepExecutionsRequest, v1.ListStepExecutionsResponse]
 	getThreadWorkflowInputs  *connect.Client[v1.GetThreadWorkflowInputsRequest, v1.GetThreadWorkflowInputsResponse]
 	setChatDaemon            *connect.Client[v1.SetChatDaemonRequest, v1.SetChatDaemonResponse]
 }
@@ -595,6 +609,11 @@ func (c *chatServiceClient) GetWorkflowExecutions(ctx context.Context, req *conn
 	return c.getWorkflowExecutions.CallUnary(ctx, req)
 }
 
+// ListStepExecutions calls reliant.v1.ChatService.ListStepExecutions.
+func (c *chatServiceClient) ListStepExecutions(ctx context.Context, req *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error) {
+	return c.listStepExecutions.CallUnary(ctx, req)
+}
+
 // GetThreadWorkflowInputs calls reliant.v1.ChatService.GetThreadWorkflowInputs.
 func (c *chatServiceClient) GetThreadWorkflowInputs(ctx context.Context, req *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error) {
 	return c.getThreadWorkflowInputs.CallUnary(ctx, req)
@@ -708,6 +727,10 @@ type ChatServiceHandler interface {
 	ListChatPlans(context.Context, *connect.Request[v1.ListChatPlansRequest]) (*connect.Response[v1.ListChatPlansResponse], error)
 	// GetWorkflowExecutions returns the workflow execution tree for a chat
 	GetWorkflowExecutions(context.Context, *connect.Request[v1.GetWorkflowExecutionsRequest]) (*connect.Response[v1.GetWorkflowExecutionsResponse], error)
+	// ListStepExecutions returns the full record of a chat's steps — resolved
+	// inputs, output and error per attempt — optionally scoped to one node.
+	// What the builder's Run tab inspects a step from.
+	ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error)
 	// GetThreadWorkflowInputs returns the workflow inputs for a specific thread
 	GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error)
 	// SetChatDaemon sets the active daemon for a chat session.
@@ -894,6 +917,12 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 		connect.WithSchema(chatServiceMethods.ByName("GetWorkflowExecutions")),
 		connect.WithHandlerOptions(opts...),
 	)
+	chatServiceListStepExecutionsHandler := connect.NewUnaryHandler(
+		ChatServiceListStepExecutionsProcedure,
+		svc.ListStepExecutions,
+		connect.WithSchema(chatServiceMethods.ByName("ListStepExecutions")),
+		connect.WithHandlerOptions(opts...),
+	)
 	chatServiceGetThreadWorkflowInputsHandler := connect.NewUnaryHandler(
 		ChatServiceGetThreadWorkflowInputsProcedure,
 		svc.GetThreadWorkflowInputs,
@@ -964,6 +993,8 @@ func NewChatServiceHandler(svc ChatServiceHandler, opts ...connect.HandlerOption
 			chatServiceListChatPlansHandler.ServeHTTP(w, r)
 		case ChatServiceGetWorkflowExecutionsProcedure:
 			chatServiceGetWorkflowExecutionsHandler.ServeHTTP(w, r)
+		case ChatServiceListStepExecutionsProcedure:
+			chatServiceListStepExecutionsHandler.ServeHTTP(w, r)
 		case ChatServiceGetThreadWorkflowInputsProcedure:
 			chatServiceGetThreadWorkflowInputsHandler.ServeHTTP(w, r)
 		case ChatServiceSetChatDaemonProcedure:
@@ -1087,6 +1118,10 @@ func (UnimplementedChatServiceHandler) ListChatPlans(context.Context, *connect.R
 
 func (UnimplementedChatServiceHandler) GetWorkflowExecutions(context.Context, *connect.Request[v1.GetWorkflowExecutionsRequest]) (*connect.Response[v1.GetWorkflowExecutionsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.GetWorkflowExecutions is not implemented"))
+}
+
+func (UnimplementedChatServiceHandler) ListStepExecutions(context.Context, *connect.Request[v1.ListStepExecutionsRequest]) (*connect.Response[v1.ListStepExecutionsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ChatService.ListStepExecutions is not implemented"))
 }
 
 func (UnimplementedChatServiceHandler) GetThreadWorkflowInputs(context.Context, *connect.Request[v1.GetThreadWorkflowInputsRequest]) (*connect.Response[v1.GetThreadWorkflowInputsResponse], error) {
