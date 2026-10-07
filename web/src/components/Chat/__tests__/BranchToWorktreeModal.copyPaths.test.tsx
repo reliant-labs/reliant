@@ -76,6 +76,18 @@ describe("BranchToWorktreeModal copy paths", () => {
     expect(createWorktreeModalProps.current?.sourceWorktreeBranch).toBeUndefined();
   });
 
+  // The server places a new workspace on the machine of the chat it is
+  // created for. Without the chat id it fell back to the user's default
+  // machine, and the branch chat followed its workspace there.
+  it("names the chat it branches from, so the workspace lands on that chat's machine", async () => {
+    listReposMock.mockResolvedValue({ repos: [] });
+    getGitStatusMock.mockResolvedValue(status({}));
+
+    render(<BranchToWorktreeModal isOpen onClose={vi.fn()} chatId="c1" messageId="m1" projectId="p1" sourceWorktreeId="wt-src" />);
+
+    await waitFor(() => expect(createWorktreeModalProps.current?.chatId).toBe("c1"));
+  });
+
   it("passes a single root repo's paths through unchanged", async () => {
     listReposMock.mockResolvedValue({ repos: [{ id: "r-root", relative_path: "" }] });
     getGitStatusMock.mockResolvedValue(status({ modified: ["src/a.ts"] }, "main"));

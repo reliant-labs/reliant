@@ -50,43 +50,46 @@ func NewWorktreeService(database db.Repository, tempClient client.Client, daemon
 	return &WorktreeService{database: database, tempClient: tempClient, daemonRouter: daemonRouter}
 }
 
-// sendWorktreeDaemonCommand sends a command to the user's daemon and unmarshals
-// the response, with the default (mutation) timeout budget.
-func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}) error {
-	return s.sendWorktreeDaemonCommandTimeout(ctx, userID, commandType, payload, resp, worktreeDaemonCommandTimeoutMs)
+// worktreeOwner is the daemon holding a worktree's checkout on disk, or "" when
+// the row names none — the main checkout, which every machine with the project
+// has, and rows from before ownership was recorded. "" leaves default
+// resolution.
+//
+// Every command about an existing worktree goes to its owner. The checkout
+// exists nowhere else, so sending one to the default daemon reports a missing
+// directory at best, and at worst acts on a same-named path on another machine.
+func worktreeOwner(worktree *db.Worktree) string {
+	if worktree == nil || worktree.DaemonID == nil {
+		return ""
+	}
+	return *worktree.DaemonID
 }
 
-// sendWorktreeDaemonCommandToDaemon pins a worktree command to a SPECIFIC
-// daemon. Worktree creation issues one command per nested repo; all must land
-// on the same daemon that will own the worktree on disk (and whose id is
-// recorded on the worktree row), so callers resolve the daemon once and pass
-// it here rather than letting each command re-resolve a default.
-func (s *WorktreeService) sendWorktreeDaemonCommandToDaemon(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}) error {
-	payloadBytes, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("marshal payload: %w", err)
-	}
-	respBytes, err := s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payloadBytes, worktreeDaemonCommandTimeoutMs)
-	if err != nil {
-		return fmt.Errorf("daemon command %s: %w", commandType, err)
-	}
-	if resp != nil {
-		if err := json.Unmarshal(respBytes, resp); err != nil {
-			return fmt.Errorf("unmarshal response for %s: %w", commandType, err)
-		}
-	}
-	return nil
+// sendWorktreeDaemonCommand sends a command to daemonID ("" = the user's
+// default daemon) and unmarshals the response, with the default (mutation)
+// timeout budget.
+//
+// Pass the daemon explicitly. Worktree creation issues one command per nested
+// repo, and all of them — plus the id recorded on the row — must name the same
+// machine, so it resolves the daemon once and passes it to every send.
+func (s *WorktreeService) sendWorktreeDaemonCommand(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}) error {
+	return s.sendWorktreeDaemonCommandTimeout(ctx, userID, daemonID, commandType, payload, resp, worktreeDaemonCommandTimeoutMs)
 }
 
 // sendWorktreeDaemonCommandTimeout is sendWorktreeDaemonCommand with an
 // explicit timeout — use worktreeReadCommandTimeoutMs for the polled read
 // paths so a slow daemon can't pin connections for the full mutation budget.
-func (s *WorktreeService) sendWorktreeDaemonCommandTimeout(ctx context.Context, userID, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
+func (s *WorktreeService) sendWorktreeDaemonCommandTimeout(ctx context.Context, userID, daemonID, commandType string, payload interface{}, resp interface{}, timeoutMs int32) error {
 	payloadBytes, err := json.Marshal(payload)
 	if err != nil {
 		return fmt.Errorf("marshal payload: %w", err)
 	}
-	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
+	var respBytes []byte
+	if daemonID == "" {
+		respBytes, err = s.daemonRouter.SendDaemonCommand(ctx, userID, commandType, payloadBytes, timeoutMs)
+	} else {
+		respBytes, err = s.daemonRouter.SendDaemonCommandToDaemon(ctx, userID, daemonID, commandType, payloadBytes, timeoutMs)
+	}
 	if err != nil {
 		return fmt.Errorf("daemon command %s: %w", commandType, err)
 	}
@@ -262,7 +265,7 @@ func (s *WorktreeService) validateWorktreeForGitOps(ctx context.Context, userID 
 		Exists bool   `json:"exists"`
 		Error  string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.validate_path", map[string]string{"path": worktree.Path}, &resp); err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("cannot access worktree directory: %v", err))
 	}
 	if !resp.Exists {
@@ -327,19 +330,6 @@ func (s *WorktreeService) CreateWorktree(
 		return nil, err
 	}
 
-	// Resolve the owning daemon ONCE up front. Every per-repo worktree.create
-	// (and the rollback/force-cleanup commands) must target this same daemon so
-	// the worktree's N nested checkouts all land on one machine, and that id is
-	// recorded on the row for tool execution to route back to (a branch chat's
-	// worktree exists on disk only here). Fail fast if no daemon is reachable —
-	// creating a worktree row that points at a directory on no daemon is worse
-	// than a clear up-front error.
-	ownerDaemonID, err := s.daemonRouter.ResolveDaemonID(ctx, userID)
-	if err != nil {
-		logging.Error("Failed to resolve daemon for worktree creation", "error", err, "userID", userID)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to create worktree: %w", err))
-	}
-
 	globalBase := ""
 	if req.Msg.BaseBranch != nil {
 		globalBase = *req.Msg.BaseBranch
@@ -347,18 +337,33 @@ func (s *WorktreeService) CreateWorktree(
 
 	// Resolve a source workspace if specified: copy_files are copied from its
 	// root instead of the live project root.
+	var sourceWorktree *db.Worktree
 	var sourceWorkspace string
 	if req.Msg.SourceWorktreeId != nil && *req.Msg.SourceWorktreeId != "" {
 		if err := s.worktreeBelongsToUser(ctx, *req.Msg.SourceWorktreeId, userID); err != nil {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("source worktree not found"))
 		}
-		sourceWorktree, err := s.database.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
+		sourceWorktree, err = s.database.GetWorktree(ctx, *req.Msg.SourceWorktreeId)
 		if err != nil {
 			logging.Warn("Source worktree not found, falling back to project paths",
 				"sourceWorktreeId", *req.Msg.SourceWorktreeId, "error", err)
+			sourceWorktree = nil
 		} else {
 			sourceWorkspace = sourceWorktree.Path
 		}
+	}
+
+	// Resolve the owning daemon ONCE up front: the chat's machine when the
+	// worktree is created for a chat (see placeNewWorktree). Every per-repo
+	// worktree.create (and the rollback/force-cleanup commands) must target
+	// this same daemon so the worktree's N nested checkouts all land on one
+	// machine, and that id is recorded on the row for tool execution to route
+	// back to (a branch chat's worktree exists on disk only here). Fail fast
+	// if no daemon is reachable — creating a worktree row that points at a
+	// directory on no daemon is worse than a clear up-front error.
+	ownerDaemonID, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, sourceWorktree, "create")
+	if err != nil {
+		return nil, err
 	}
 
 	// Build a human-readable workspace directory name (e.g.
@@ -491,7 +496,7 @@ func (s *WorktreeService) finishWorktreeCreate(
 	fail := func(reason error) {
 		for _, s2 := range successes {
 			repoPath := filepath.Join(project.Path, s2.repo.RelativePath)
-			_ = s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
+			_ = s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
 				"project_path":  repoPath,
 				"worktree_path": s2.worktreePath,
 			}, nil)
@@ -502,7 +507,7 @@ func (s *WorktreeService) finishWorktreeCreate(
 		// anything that stats it. Empty-only, for the same reason as the
 		// daemon-side rollback.
 		if workspaceRoot != "" {
-			_ = s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
+			_ = s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
 				"project_path":  project.Path,
 				"worktree_path": workspaceRoot,
 			}, nil)
@@ -549,7 +554,7 @@ func (s *WorktreeService) finishWorktreeCreate(
 
 		if req.Msg.Force {
 			// Stale-branch cleanup; the workspace dir itself is fresh per UUID.
-			_ = s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.force_cleanup", map[string]string{
+			_ = s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.force_cleanup", map[string]string{
 				"project_path":  repoPath,
 				"worktree_path": "",
 				"branch":        req.Msg.Branch,
@@ -572,7 +577,7 @@ func (s *WorktreeService) finishWorktreeCreate(
 			Error        string `json:"error,omitempty"`
 		}
 
-		err := s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.create", createReq{
+		err := s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.create", createReq{
 			ProjectPath: repoPath,
 			WorkspaceID: workspaceID,
 			SubPath:     repo.RelativePath,
@@ -696,7 +701,7 @@ func (s *WorktreeService) finishWorktreeCreate(
 			Failed  map[string]string `json:"failed"`
 			Error   string            `json:"error"`
 		}
-		err := s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.copy_paths", map[string]any{
+		err := s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.copy_paths", map[string]any{
 			"source_root": copySource,
 			"dest_root":   workspaceRoot,
 			"paths":       copyPaths,
@@ -996,11 +1001,11 @@ func (s *WorktreeService) DeleteWorktree(
 	deletedBranch := false
 
 	if req.Msg.DeleteLocalDirectory && project != nil && worktree.Path != "" {
-		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, project.ID, project.Path, worktree.Path)
+		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, worktreeOwner(worktree), project.ID, project.Path, worktree.Path)
 	}
 
 	if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
-		deletedBranch = s.cleanupWorktreeBranch(ctx, userID, project.Path, worktree.Branch)
+		deletedBranch = s.cleanupWorktreeBranch(ctx, userID, worktreeOwner(worktree), project.Path, worktree.Branch)
 	}
 
 	if isPermanentDelete {
@@ -1077,11 +1082,11 @@ func (s *WorktreeService) ArchiveWorktree(
 	deletedBranch := false
 
 	if req.Msg.DeleteLocalDirectory && project != nil && worktree.Path != "" {
-		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, project.ID, project.Path, worktree.Path)
+		deletedDir = s.cleanupWorktreeDirectory(ctx, userID, worktreeOwner(worktree), project.ID, project.Path, worktree.Path)
 	}
 
 	if req.Msg.DeleteGitBranch && project != nil && worktree.Branch != "" {
-		deletedBranch = s.cleanupWorktreeBranch(ctx, userID, project.Path, worktree.Branch)
+		deletedBranch = s.cleanupWorktreeBranch(ctx, userID, worktreeOwner(worktree), project.Path, worktree.Branch)
 	}
 
 	// Store cleanup metadata
@@ -1155,20 +1160,21 @@ func (s *WorktreeService) UnarchiveWorktree(
 // is recoverable via `git worktree prune` and shouldn't block teardown.
 //
 // projectID is used to enumerate nested repos; projectPath is the on-disk
-// project root used to derive each parent-repo's git dir.
-func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, projectID, projectPath, worktreePath string) bool {
+// project root used to derive each parent-repo's git dir. daemonID is the
+// worktree's owner (see worktreeOwner): the checkouts exist only there.
+func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, daemonID, projectID, projectPath, worktreePath string) bool {
 	repos, err := s.database.ListReposByProject(ctx, projectID)
 	if err != nil {
 		logging.Warn("Failed to list repos for worktree cleanup; falling back to single-step delete",
 			"error", err, "projectID", projectID)
-		return s.cleanupWorktreeDirectorySingle(ctx, userID, projectPath, worktreePath)
+		return s.cleanupWorktreeDirectorySingle(ctx, userID, daemonID, projectPath, worktreePath)
 	}
 
 	// Legacy single-repo (or pre-migration) project: one repo at the project
 	// root, or no Repo rows at all. The worktree path is itself the git
 	// checkout, so a single delete_directory call is correct.
 	if len(repos) <= 1 && (len(repos) == 0 || repos[0].RelativePath == "") {
-		return s.cleanupWorktreeDirectorySingle(ctx, userID, projectPath, worktreePath)
+		return s.cleanupWorktreeDirectorySingle(ctx, userID, daemonID, projectPath, worktreePath)
 	}
 
 	// Multi-repo: per-repo `git worktree remove`, then wipe the workspace dir.
@@ -1179,7 +1185,7 @@ func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, 
 		var resp struct {
 			Deleted bool `json:"deleted"`
 		}
-		if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
+		if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.delete_directory", map[string]string{
 			"project_path":  repoPath,
 			"worktree_path": checkoutPath,
 		}, &resp); err != nil {
@@ -1199,7 +1205,7 @@ func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, 
 		Deleted bool   `json:"deleted"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.remove_workspace_dir", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.remove_workspace_dir", map[string]string{
 		"workspace_path": worktreePath,
 	}, &wsResp); err != nil {
 		logging.Warn("Workspace dir removal failed (continuing)",
@@ -1216,11 +1222,11 @@ func (s *WorktreeService) cleanupWorktreeDirectory(ctx context.Context, userID, 
 	return allDeleted
 }
 
-func (s *WorktreeService) cleanupWorktreeDirectorySingle(ctx context.Context, userID, projectPath, worktreePath string) bool {
+func (s *WorktreeService) cleanupWorktreeDirectorySingle(ctx context.Context, userID, daemonID, projectPath, worktreePath string) bool {
 	var resp struct {
 		Deleted bool `json:"deleted"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_directory", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.delete_directory", map[string]string{
 		"project_path":  projectPath,
 		"worktree_path": worktreePath,
 	}, &resp); err != nil {
@@ -1230,11 +1236,13 @@ func (s *WorktreeService) cleanupWorktreeDirectorySingle(ctx context.Context, us
 	return resp.Deleted
 }
 
-func (s *WorktreeService) cleanupWorktreeBranch(ctx context.Context, userID, projectPath, branch string) bool {
+// cleanupWorktreeBranch deletes the worktree's branch from the project clone on
+// daemonID — the owner's clone, which is where creating the worktree made it.
+func (s *WorktreeService) cleanupWorktreeBranch(ctx context.Context, userID, daemonID, projectPath, branch string) bool {
 	var resp struct {
 		Deleted bool `json:"deleted"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.delete_branch", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, daemonID, "worktree.delete_branch", map[string]string{
 		"project_path": projectPath,
 		"branch":       branch,
 	}, &resp); err != nil {
@@ -1330,12 +1338,12 @@ func (s *WorktreeService) ImportWorktree(
 	}
 
 	// Resolve the daemon that will validate (and therefore owns on disk) the
-	// imported worktree, so the same id is recorded on the row and tool
-	// execution routes back to the machine the checkout actually lives on.
-	ownerDaemonID, err := s.daemonRouter.ResolveDaemonID(ctx, userID)
+	// imported worktree — the chat's machine when one is named — so the same
+	// id is recorded on the row and tool execution routes back to the machine
+	// the checkout actually lives on.
+	ownerDaemonID, err := s.placeNewWorktree(ctx, userID, req.Msg.ProjectId, req.Msg.ChatId, nil, "import")
 	if err != nil {
-		logging.Error("Failed to resolve daemon for worktree import", "error", err, "userID", userID)
-		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon available to import worktree: %w", err))
+		return nil, err
 	}
 
 	// Validate path exists and is a git worktree via daemon
@@ -1346,7 +1354,7 @@ func (s *WorktreeService) ImportWorktree(
 		BaseBranch string `json:"base_branch"`
 		Error      string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommandToDaemon(ctx, userID, ownerDaemonID, "worktree.import_validate", map[string]string{"path": req.Msg.Path}, &importResp); err != nil {
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.import_validate", map[string]string{"path": req.Msg.Path}, &importResp); err != nil {
 		logging.Error("Failed to validate import path via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate path"))
 	}
@@ -1461,7 +1469,9 @@ func (s *WorktreeService) DiscoverWorktrees(
 		Worktrees []discoverEntry `json:"worktrees"`
 		Error     string          `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.discover", map[string]string{"project_path": project.Path}, &discoverResp); err != nil {
+	// Project-level: the project clone, not any one worktree, so default
+	// resolution as before.
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, "", "worktree.discover", map[string]string{"project_path": project.Path}, &discoverResp); err != nil {
 		logging.Warn("Failed to discover worktrees via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to list git worktrees"))
 	}
@@ -1558,7 +1568,7 @@ func (s *WorktreeService) RecreateWorktree(
 		Output       string `json:"output,omitempty"`
 		Error        string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.recreate", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.recreate", map[string]string{
 		"project_path":  project.Path,
 		"worktree_path": worktree.Path,
 		"branch":        worktree.Branch,
@@ -1650,7 +1660,7 @@ func (s *WorktreeService) GetWorktreeChanges(
 		DefaultBranch string            `json:"default_branch"`
 		Error         string            `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_changes", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_changes", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 		"base_branch":   worktree.BaseBranch,
@@ -1736,7 +1746,7 @@ func (s *WorktreeService) GetWorktreeGitStatus(
 		Ahead          int32    `json:"ahead"`
 		Behind         int32    `json:"behind"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_status", map[string]string{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_status", map[string]string{
 		"worktree_path": repoPath,
 		"branch":        worktree.Branch,
 	}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {
@@ -1824,7 +1834,7 @@ func (s *WorktreeService) GetWorktreeCommits(
 		BaseBranch   string `json:"base_branch"`
 		Limit        int32  `json:"limit"`
 	}
-	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_commits", commitsReq{
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_commits", commitsReq{
 		WorktreePath: repoPath,
 		Branch:       worktree.Branch,
 		BaseBranch:   baseBranch,
@@ -1903,7 +1913,7 @@ func (s *WorktreeService) StageFiles(
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.stage", stageReq{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.stage", stageReq{
 		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &stageResp); err != nil {
@@ -1958,7 +1968,7 @@ func (s *WorktreeService) UnstageFiles(
 		Success bool   `json:"success"`
 		Error   string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.unstage", unstageReq{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.unstage", unstageReq{
 		WorktreePath: repoPath,
 		Files:        req.Msg.Files,
 	}, &unstageResp); err != nil {
@@ -2009,7 +2019,7 @@ func (s *WorktreeService) CommitWorktree(
 	}
 
 	// Commit via daemon
-	output, err := s.commitViaDaemon(ctx, userID, repoPath, req.Msg.Message)
+	output, err := s.commitViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath, req.Msg.Message)
 	if err != nil {
 		errStr := err.Error()
 		if strings.Contains(errStr, "nothing to commit") || strings.Contains(errStr, "nothing added to commit") {
@@ -2058,7 +2068,7 @@ func (s *WorktreeService) PushWorktree(
 	// Push via daemon. Branch is resolved daemon-side from HEAD, not from
 	// worktree.Branch — the user may have checked out a different branch in
 	// this repo since creation.
-	output, err := s.pushViaDaemon(ctx, userID, repoPath)
+	output, err := s.pushViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath)
 	if err != nil {
 		logging.Error("Failed to push changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to push: %s", err.Error()))
@@ -2101,7 +2111,7 @@ func (s *WorktreeService) PullWorktree(
 	}
 
 	// Pull via daemon. Branch resolved daemon-side from HEAD.
-	output, err := s.pullViaDaemon(ctx, userID, repoPath)
+	output, err := s.pullViaDaemon(ctx, userID, worktreeOwner(worktree), repoPath)
 	if err != nil {
 		logging.Error("Failed to pull changes", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to pull: %s", err.Error()))
@@ -2154,7 +2164,7 @@ func (s *WorktreeService) GetWorktreePR(
 		HeadRefOid string `json:"head_ref_oid,omitempty"`
 	}
 	// Branch is resolved daemon-side from HEAD, not from worktree.Branch.
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.get_pr", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.get_pr", map[string]string{
 		"worktree_path": repoPath,
 	}, &prResp); err != nil {
 		logging.Warn("Failed to check PR via daemon", "error", err)
@@ -2237,7 +2247,7 @@ func (s *WorktreeService) CreateWorktreePR(
 		AutoPushed    bool   `json:"auto_pushed"`
 		Error         string `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.create_pr", map[string]string{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.create_pr", map[string]string{
 		"worktree_path": repoPath,
 		"title":         req.Msg.Title,
 		"body":          body,
@@ -2318,7 +2328,7 @@ func (s *WorktreeService) RevertFiles(
 		Results []revertResult `json:"results"`
 		Error   string         `json:"error,omitempty"`
 	}
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "worktree.revert", map[string]interface{}{
+	if err := s.sendWorktreeDaemonCommand(ctx, userID, worktreeOwner(worktree), "worktree.revert", map[string]interface{}{
 		"worktree_path": repoPath,
 		"files":         req.Msg.Files,
 	}, &revertResp); err != nil {
@@ -2420,7 +2430,7 @@ func (s *WorktreeService) ListWorktreeRepoStatuses(
 			Behind         int32    `json:"behind"`
 			Error          string   `json:"error,omitempty"`
 		}
-		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, "worktree.git_status", map[string]string{
+		if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), "worktree.git_status", map[string]string{
 			"worktree_path": repoPath,
 			"branch":        worktree.Branch,
 		}, &statusResp, worktreeReadCommandTimeoutMs); err != nil {

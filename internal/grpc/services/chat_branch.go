@@ -200,6 +200,20 @@ func (s *ChatService) BranchChat(
 			activeDaemonID = wt.DaemonID
 		}
 	}
+	// A worktree no machine owns (the main checkout, which every machine with
+	// the project has) does not decide where the branch runs, so it stays on
+	// the machine its source chat runs on. Left unpinned it fell to the user's
+	// default machine: a chat on machine B branched onto machine A.
+	if activeDaemonID == nil && !noMachine {
+		sourceDaemonID, err := chatDaemonID(ctx, s.database, fromChat)
+		if err != nil {
+			logging.Error("Failed to resolve source chat's machine for branch", "error", err, "chatID", fromChat.ID)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resolve the source chat's machine"))
+		}
+		if sourceDaemonID != "" {
+			activeDaemonID = &sourceDaemonID
+		}
+	}
 
 	// Create new branched chat with pointer to parent (NO message copying)
 	// IMPORTANT: Set workflow_id = chat_id for root workflow identification
