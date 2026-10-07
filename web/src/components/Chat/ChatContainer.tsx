@@ -248,12 +248,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
     }
   }, [chatId, currentChat?.id]);
 
-  const handleToggleDiscuss = useCallback(() => {
-    if (!chatId) return;
-    const store = useChatStore.getState();
-    store.setDiscussMode(chatId, !store.discussMode[chatId]);
-  }, [chatId]);
-
   // --- Scroll-back paging ---
   // The initial snapshot is bounded to the newest messages, so older history is
   // fetched on demand when the user scrolls to the top of the timeline.
@@ -325,7 +319,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       workflowExecution={workflowExecution}
       workflowExecutions={workflowExecutions}
       isDiscussMode={isDiscussMode}
-      onToggleDiscuss={handleToggleDiscuss}
       hasPendingQuestion={!!pendingQuestion}
       onLoadOlderMessages={handleLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}

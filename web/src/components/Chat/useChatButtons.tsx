@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ArrowUp, CornerDownLeft, Paperclip, MessageCircle } from "lucide-react";
+import { ArrowUp, CornerDownLeft, Paperclip } from "lucide-react";
 import { ChatButton } from "./ChatButton";
 
 interface UseChatButtonsProps {
@@ -15,11 +15,6 @@ interface UseChatButtonsProps {
   onAttach: () => void;
   uploading: boolean;
 
-  // Discuss
-  isDiscussMode?: boolean;
-  onToggleDiscuss?: () => void;
-  isPaused?: boolean;
-
   // Responsiveness
   compact?: boolean;
 }
@@ -33,9 +28,6 @@ export function useChatButtons({
   disabled,
   onAttach,
   uploading,
-  isDiscussMode = false,
-  onToggleDiscuss,
-  isPaused = false,
   compact = false,
 }: UseChatButtonsProps) {
   const effectiveStreaming = isStreaming;
@@ -75,28 +67,6 @@ export function useChatButtons({
         <Paperclip className={compact ? "w-2.5 h-2.5" : "w-3 h-3"} />
       </ChatButton>
     ),
-
-    // Discuss button - shown when workflow is paused
-    discuss: isPaused && onToggleDiscuss ? (
-      <ChatButton
-        key="discuss"
-        onClick={onToggleDiscuss}
-        tooltip={isDiscussMode ? "Exit discussion mode" : "Discuss without resuming"}
-        compact={compact}
-        className={
-          isDiscussMode
-            ? "bg-blue-500/20 text-blue-600 dark:text-blue-400 border-blue-500/30 hover:bg-blue-500/30"
-            : "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20 hover:bg-blue-500/20"
-        }
-      >
-        <span className={compact ? "" : "inline-flex items-center gap-1"}>
-          {!compact && <span className="text-2xs">{isDiscussMode ? "End Discuss" : "Discuss"}</span>}
-          <MessageCircle className={compact ? "w-3 h-3" : "w-3 h-3"} />
-        </span>
-      </ChatButton>
-    ) : null,
-
-
 
     // Queue button - shown only while streaming with text typed, alongside Stop
     queueSend: effectiveStreaming && canSend && !disabled && onQueue ? (

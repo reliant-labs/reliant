@@ -51,7 +51,6 @@ import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesSt
 import { useChatStore } from "../../store/chatStore";
 import { useChat, getChatFromCache, patchChatCaches } from "../../hooks/chat-queries";
 import { answerQuestion, usePendingQuestion } from "../../hooks/approval-queries";
-import { isWorkflowPaused } from "../../lib/workflowLifecycle";
 import type { WorkflowExecution } from "./ExecutionSidebar/types";
 import { getThreadColor, formatNodeId, resolveThreadNameFromActiveThreads } from "./thread-views/threadUtils";
 import { useActiveThreads } from "../../store/threadActivityStore";
@@ -144,7 +143,6 @@ interface ChatInputProps {
   workflowExecution?: WorkflowExecution;  // Root workflow execution tree
   // Discuss mode
   isDiscussMode?: boolean;
-  onToggleDiscuss?: () => void;
   prefill?: ComposerPrefill;
 }
 
@@ -162,7 +160,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       selectedThreadId,
       workflowExecution,
       isDiscussMode,
-      onToggleDiscuss,
       prefill,
     },
     ref
@@ -1054,15 +1051,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       [attachmentsMap, attachmentSessionId]
     );
 
-    // Check if workflow is paused (for discuss mode button)
     const chatForStatusQuery = useChat(chatId || undefined);
     const chatForStatus = chatForStatusQuery.data;
-    const isPaused = chatForStatus
-      ? isWorkflowPaused(
-          chatForStatus.workflowState,
-          chatForStatus.workflowStopReason,
-        )
-      : false;
 
     // Thread color for border - non-main threads get their color
     const threadBorderColor = useMemo(() => {
@@ -1911,9 +1901,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
                         onAttach={handleAttachClick}
                         uploading={uploading}
-                        isDiscussMode={isDiscussMode}
-                        onToggleDiscuss={onToggleDiscuss}
-                        isPaused={isPaused}
                         compact={isCompact}
                       />
                     </div>
