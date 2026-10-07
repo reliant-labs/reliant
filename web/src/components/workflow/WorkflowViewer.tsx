@@ -27,6 +27,7 @@ import './workflow-theme.css'
 import { nodeTypes } from './nodes'
 import { edgeTypes } from './edges'
 import { workflowToFlowElements, mergeExpandedLoops, type FlowNodeData, type ExpandedLoopConfig } from '../../lib/workflow-flow'
+import { structurallyEqual } from '../../lib/structuralEqual'
 import type { Workflow, LoopStep, Step } from '../../types/workflow'
 import { getStepRef, getStepInline, getStepParallel } from '../../types/workflow'
 import type { WorkflowExecution, StepExecution } from '../Chat/ExecutionSidebar/types'
@@ -413,9 +414,11 @@ function WorkflowViewerInner({
       const dataChanged = baseNodes.some((baseNode) => {
         const oldNode = prevBaseNodes.find(p => p.id === baseNode.id)
         if (!oldNode) return false
+        // Not JSON.stringify: data carries the step proto, whose int64
+        // fields are bigints.
         return (
           oldNode.data?.executionStatus !== baseNode.data?.executionStatus ||
-          JSON.stringify(oldNode.data) !== JSON.stringify(baseNode.data)
+          !structurallyEqual(oldNode.data, baseNode.data)
         )
       })
       

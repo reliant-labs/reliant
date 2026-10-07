@@ -568,7 +568,6 @@ function WorkflowBuilderInner({
 
   // Track drag state only
   const isDraggingRef = useRef(false);
-  const dragStartNodesRef = useRef<Node[]>([]);
 
   // Undo handler
   const handleUndo = useCallback(() => {
@@ -1480,8 +1479,6 @@ function WorkflowBuilderInner({
   // Handle node drag start - take snapshot BEFORE drag
   const handleNodeDragStart = useCallback(() => {
     isDraggingRef.current = true;
-    // Save the state before drag starts
-    dragStartNodesRef.current = JSON.parse(JSON.stringify(nodes));
     // Take snapshot BEFORE drag (captures pre-drag state)
     takeSnapshot(nodes, edges);
     setHasModifications(true);

@@ -3,12 +3,12 @@
 
 import { grpcClient } from "./grpc-client";
 import { singleflight } from "../lib/singleflight";
-import { create, type MessageInitShape } from "@bufbuild/protobuf";
+import { create } from "@bufbuild/protobuf";
 import type {
   WorkflowListItem as ProtoWorkflowListItem,
   ValidationError,
 } from "../gen/reliant/v1/workflow_pb";
-import { WorkflowSchema } from "../gen/reliant/v1/workflow_v2_pb";
+import { toWorkflowMessage } from "../lib/workflowProto";
 import type {
   Workflow as PublicWorkflow,
   Step as PublicStep,
@@ -36,46 +36,6 @@ import {
 type Workflow = PublicWorkflow;
 type Step = PublicStep;
 type Edge = PublicEdge;
-
-/**
- * Recursively strips $typeName from an object tree.
- *
- * protobuf-es's create(Schema, init) short-circuits when init has a matching
- * $typeName — it returns the object as-is without processing nested fields.
- * When JS spread ({...protoMsg}) copies $typeName but leaves nested objects
- * as plain (no $typeName), serialization fails with "cannot use field X with
- * message undefined". Stripping $typeName forces create() to always take the
- * full recursive initMessage path.
- */
-function stripProtoMeta(obj: unknown): unknown {
-  if (obj == null || typeof obj !== 'object') return obj;
-  if (obj instanceof Uint8Array) return obj;
-  if (Array.isArray(obj)) return obj.map(stripProtoMeta);
-  const result: Record<string, unknown> = {};
-  for (const [key, value] of Object.entries(obj)) {
-    if (key === '$typeName' || key === '$unknown') continue;
-    result[key] = stripProtoMeta(value);
-  }
-  return result;
-}
-
-function toWorkflowInit(workflow: Workflow): MessageInitShape<typeof WorkflowSchema> {
-  // Strip $typeName from the entire object tree so create() always takes the
-  // full recursive initMessage path, properly constructing all nested messages.
-  const plain = stripProtoMeta(workflow) as Workflow;
-
-  // Normalize edge.default and edge case .to from string|string[] to string[]
-  // Proto expects repeated string fields; passing a bare string causes character-by-character iteration.
-  const normalizedEdges = (plain.edges || []).map(edge => ({
-    ...edge,
-    default: edge.default ? (Array.isArray(edge.default) ? edge.default : [edge.default]) : [],
-    cases: (edge.cases || []).map(c => ({
-      ...c,
-      to: c.to ? (Array.isArray(c.to) ? c.to : [c.to]) : [],
-    })),
-  }));
-  return { ...plain, edges: normalizedEdges } as MessageInitShape<typeof WorkflowSchema>;
-}
 
 // Re-export workflow types for consumers
 export type {
@@ -367,7 +327,7 @@ export const workflowGrpc = {
     const client = grpcClient.workflow();
     const request = create(ValidateWorkflowRequestSchema, {
       projectId,
-      workflow: create(WorkflowSchema, toWorkflowInit(workflow)),
+      workflow: toWorkflowMessage(workflow),
     });
     const response = await client.validateWorkflow(request);
     return {
@@ -395,7 +355,7 @@ export const workflowGrpc = {
     const client = grpcClient.workflow();
     const request = create(SaveWorkflowRequestSchema, {
       projectId,
-      workflow: create(WorkflowSchema, toWorkflowInit(workflow)),
+      workflow: toWorkflowMessage(workflow),
       expectedVersion: expectedVersion ? BigInt(expectedVersion) : undefined,
       sourcePath: sourcePath || undefined,
       draftId: draftId || undefined,
