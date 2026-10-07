@@ -50,8 +50,6 @@ message Approval {
   string title = 6;
   optional string description = 7;
   optional string denial_reason = 8;
-  reserved 9;  // was: actions (deprecated)
-  reserved 10; // was: metadata (deprecated)
   string created_at = 11;
   optional string resolved_at = 12;
   
@@ -61,7 +59,6 @@ message Approval {
   optional string message_id = 15;     // Message ID from metadata
   optional string workflow_id = 16;    // Workflow ID from metadata
   optional string run_id = 17;         // Run ID from metadata
-  reserved 18; // was: structured_actions (ApprovalAction, never populated)
   optional string action_taken = 19;   // Which action button was clicked (e.g., "Deploy Now")
 
   // Tool approvals (APPROVAL_TYPE_TOOL) ask about one call to an integration

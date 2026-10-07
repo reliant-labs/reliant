@@ -182,8 +182,6 @@ message LocalModelHTTPChunk {
 // The server derives user_id from the PAT used to authenticate the stream;
 // the daemon should not need to assert it.
 message DaemonRegister {
-  reserved 1; // was: daemon_id (now assigned by gateway from PAT binding)
-  reserved 2; // was: user_id (now derived server-side from PAT auth)
   string hostname = 3; // Machine hostname
   string platform = 4; // OS platform (darwin, linux, windows)
   string working_dir = 5; // Current working directory
@@ -297,7 +295,6 @@ message ToolRequest {
   string tool_call_id = 4; // ID from LLM tool call
   string content_block_id = 5; // Database content block ID
   string context_json = 6; // JSON-encoded execution context
-  reserved 7; // was: working_dir (deprecated, use context_json)
   int32 timeout_ms = 8; // Timeout in milliseconds
 }
 

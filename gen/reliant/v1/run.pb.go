@@ -1541,7 +1541,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\rGetRunRequest\x12\x15\n" +
 	"\x06run_id\x18\x01 \x01(\tR\x05runId\"3\n" +
 	"\x0eGetRunResponse\x12!\n" +
-	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\xce\x05\n" +
+	"\x03run\x18\x01 \x01(\v2\x0f.reliant.v1.RunR\x03run\"\xc0\x05\n" +
 	"\x0fListRunsRequest\x12\x1d\n" +
 	"\n" +
 	"session_id\x18\x01 \x01(\tR\tsessionId\x12\x1b\n" +
@@ -1568,7 +1568,7 @@ const file_reliant_v1_run_proto_rawDesc = "" +
 	"\v_trigger_idB\b\n" +
 	"\x06_queryB\r\n" +
 	"\v_page_tokenB\x11\n" +
-	"\x0f_parent_chat_idJ\x04\b\x05\x10\x06R\x06offset\"u\n" +
+	"\x0f_parent_chat_id\"u\n" +
 	"\x10ListRunsResponse\x12#\n" +
 	"\x04runs\x18\x01 \x03(\v2\x0f.reliant.v1.RunR\x04runs\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\x12&\n" +

@@ -3499,7 +3499,7 @@ var File_reliant_v1_workflow_proto protoreflect.FileDescriptor
 const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/workflow.proto\x12\n" +
-	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xec\a\n" +
+	"reliant.v1\x1a\x17reliant/v1/common.proto\x1a\x18reliant/v1/trigger.proto\x1a\x1creliant/v1/workflow_v2.proto\"\xc5\a\n" +
 	"\x10WorkflowListItem\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1a\n" +
 	"\bfilename\x18\x02 \x01(\tR\bfilename\x12 \n" +
@@ -3530,7 +3530,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\r\n" +
 	"\v_updated_atB\v\n" +
-	"\t_draft_idJ\x04\b\r\x10\x0eJ\x04\b\x0f\x10\x10R\x0fbuilder_chat_idR\bis_valid\"O\n" +
+	"\t_draft_id\"O\n" +
 	"\rHighlightSpan\x12\x14\n" +
 	"\x05start\x18\x01 \x01(\x05R\x05start\x12\x10\n" +
 	"\x03end\x18\x02 \x01(\x05R\x03end\x12\x16\n" +
@@ -3578,7 +3578,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"worktreeId\x88\x01\x01\x12\x1e\n" +
 	"\bdraft_id\x18\x04 \x01(\tH\x01R\adraftId\x88\x01\x01B\x0e\n" +
 	"\f_worktree_idB\v\n" +
-	"\t_draft_id\"\x9a\x04\n" +
+	"\t_draft_id\"\xfd\x03\n" +
 	"\x13GetWorkflowResponse\x120\n" +
 	"\bworkflow\x18\x01 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x12\x16\n" +
 	"\x06source\x18\x02 \x01(\tR\x06source\x12\x1e\n" +
@@ -3596,7 +3596,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\t_draft_idB\x0e\n" +
 	"\f_parse_errorB\x11\n" +
 	"\x0f_raw_definitionB\x0e\n" +
-	"\f_source_pathJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06R\x0fbuilder_chat_id\"\x80\x01\n" +
+	"\f_source_path\"\x80\x01\n" +
 	"\x15DeleteWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x12\n" +
@@ -3613,7 +3613,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\bworkflow\x18\x02 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\"e\n" +
 	"\x18ValidateWorkflowResponse\x12\x14\n" +
 	"\x05valid\x18\x01 \x01(\bR\x05valid\x123\n" +
-	"\x06errors\x18\x02 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x06errors\"\xc9\x03\n" +
+	"\x06errors\x18\x02 \x03(\v2\x1b.reliant.v1.ValidationErrorR\x06errors\"\xac\x03\n" +
 	"\x13SaveWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x120\n" +
@@ -3630,7 +3630,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\f_worktree_idB\x13\n" +
 	"\x11_expected_versionB\x0e\n" +
 	"\f_source_pathB\v\n" +
-	"\t_draft_idJ\x04\b\x06\x10\aJ\x04\b\a\x10\bR\x0fbuilder_chat_id\"\x9e\x03\n" +
+	"\t_draft_id\"\x81\x03\n" +
 	"\x14SaveWorkflowResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
@@ -3641,9 +3641,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x04slug\x18\b \x01(\tR\x04slug\x12\x18\n" +
 	"\aversion\x18\v \x01(\x03R\aversion\x12'\n" +
 	"\x0fyaml_definition\x18\f \x01(\tR\x0eyamlDefinition\x127\n" +
-	"\x06status\x18\r \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06statusJ\x04\b\t\x10\n" +
-	"J\x04\b\n" +
-	"\x10\vR\x0fbuilder_chat_id\"\x95\x02\n" +
+	"\x06status\x18\r \x01(\x0e2\x1f.reliant.v1.WorkflowDraftStatusR\x06status\"\x95\x02\n" +
 	"\x15ImportWorkflowRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12!\n" +

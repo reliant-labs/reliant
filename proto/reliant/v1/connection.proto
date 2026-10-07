@@ -61,8 +61,6 @@ service ConnectionService {
 }
 
 enum ConnectionAuthKind {
-  reserved 2;
-  reserved "CONNECTION_AUTH_KIND_GITHUB_APP_USER";
   CONNECTION_AUTH_KIND_UNSPECIFIED = 0;
   // Authorization code + PKCE, with refresh. A GitHub App user-to-server
   // token is one of these.
@@ -116,8 +114,6 @@ message Connection {
 
 // Integration is one catalog integration a connection can be made to.
 message Integration {
-  reserved 3, 4, 5;
-  reserved "auth_kind", "available", "unavailable_reason";
   string id = 1;
   string display_name = 2;
   // Methods are the ways to connect, most preferred first.

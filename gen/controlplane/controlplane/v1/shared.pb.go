@@ -3550,8 +3550,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"cpuRequest\x12\x1b\n" +
 	"\tcpu_limit\x18\x02 \x01(\tR\bcpuLimit\x12%\n" +
 	"\x0ememory_request\x18\x03 \x01(\tR\rmemoryRequest\x12!\n" +
-	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\xa3\n" +
-	"\n" +
+	"\fmemory_limit\x18\x04 \x01(\tR\vmemoryLimit\"\xc6\t\n" +
 	"\x06Daemon\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x19\n" +
@@ -3583,7 +3582,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x12last_oom_killed_at\x18\x1c \x01(\v2\x1a.google.protobuf.TimestampR\x0flastOomKilledAt\x12$\n" +
 	"\x0eoom_kill_count\x18\x1d \x01(\x05R\foomKillCount\x12N\n" +
 	"\x0flifecycle_phase\x18\x1f \x01(\x0e2%.controlplane.v1.DaemonLifecyclePhaseR\x0elifecyclePhase\x12O\n" +
-	"\x13default_port_access\x18\x1e \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultPortAccessJ\x04\b\a\x10\bJ\x04\b\x10\x10\x11J\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\fworkspace_idR\x0elast_heartbeatR\x0fworkspace_phaseR\bpod_nameR\x04slug\"\xe0\x01\n" +
+	"\x13default_port_access\x18\x1e \x01(\x0e2\x1f.controlplane.v1.PortAccessModeR\x11defaultPortAccess\"\xe0\x01\n" +
 	"\x0ePortAccessRule\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x1b\n" +
 	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\x12\x12\n" +
@@ -3608,7 +3607,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"updated_at\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\x121\n" +
 	"\x14onboarding_completed\x18\t \x01(\bR\x13onboardingCompleted\x12@\n" +
 	"\x0fonboarding_data\x18\n" +
-	" \x01(\v2\x17.google.protobuf.StructR\x0eonboardingData\"\xca\x02\n" +
+	" \x01(\v2\x17.google.protobuf.StructR\x0eonboardingData\"\xc4\x02\n" +
 	"\fOrganization\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x12\n" +
@@ -3621,7 +3620,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"created_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x129\n" +
 	"\n" +
 	"updated_at\x18\n" +
-	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAtJ\x04\b\x05\x10\x06\"O\n" +
+	" \x01(\v2\x1a.google.protobuf.TimestampR\tupdatedAt\"O\n" +
 	"\aProduct\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12 \n" +
@@ -3637,7 +3636,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x18notify_threshold_percent\x18\x01 \x01(\x01R\x16notifyThresholdPercent\x12.\n" +
 	"\x13overage_grace_hours\x18\x02 \x01(\x05R\x11overageGraceHours\x12,\n" +
 	"\x12suspend_on_overage\x18\x03 \x01(\bR\x10suspendOnOverage\x12A\n" +
-	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xb7\t\n" +
+	"\x1dnon_suspendable_dimension_ids\x18\x04 \x03(\tR\x1anonSuspendableDimensionIds\"\xb5\b\n" +
 	"\n" +
 	"PlanLimits\x12\x1b\n" +
 	"\tmax_seats\x18\x01 \x01(\x05R\bmaxSeats\x12%\n" +
@@ -3660,7 +3659,7 @@ const file_controlplane_v1_shared_proto_rawDesc = "" +
 	"\x17min_memory_gib_per_vcpu\x18\x1e \x01(\x01R\x13minMemoryGibPerVcpu\x124\n" +
 	"\x17max_memory_gib_per_vcpu\x18\x1f \x01(\x01R\x13maxMemoryGibPerVcpu\x12U\n" +
 	"\x14infra_overage_policy\x18  \x01(\v2#.controlplane.v1.InfraOveragePolicyR\x12infraOveragePolicy\x12=\n" +
-	"\x1bincluded_small_daemon_hours\x18\" \x01(\x03R\x18includedSmallDaemonHoursJ\x04\b\x1b\x10\x1cJ\x04\b\x1c\x10\x1dJ\x04\b\x1d\x10\x1eJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\rmax_vclustersR\"vcluster_floor_rate_cents_per_hourR\x0fmax_deploymentsR\rip_restrictedR\x0fmax_ips_per_key\"\xb4\x01\n" +
+	"\x1bincluded_small_daemon_hours\x18\" \x01(\x03R\x18includedSmallDaemonHours\"\xb4\x01\n" +
 	"\rDaemonPricing\x126\n" +
 	"\x05sizes\x18\x01 \x03(\v2 .controlplane.v1.DaemonSizePriceR\x05sizes\x12I\n" +
 	"\"suspended_disk_cents_per_gib_month\x18\x02 \x01(\tR\x1dsuspendedDiskCentsPerGibMonth\x12 \n" +

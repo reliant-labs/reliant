@@ -5540,9 +5540,9 @@ var File_services_deploy_v1_deploy_proto protoreflect.FileDescriptor
 const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\n" +
 	"\x1fservices/deploy/v1/deploy.proto\x12\x0fcontrolplane.v1\x1a\x1ccontrolplane/v1/deploy.proto\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\x18\n" +
-	"\x16GetDeployTenantRequest\"`\n" +
+	"\x16GetDeployTenantRequest\"P\n" +
 	"\x17GetDeployTenantResponse\x125\n" +
-	"\x06tenant\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployTenantR\x06tenantJ\x04\b\x02\x10\x03R\bclusters\"/\n" +
+	"\x06tenant\x18\x01 \x01(\v2\x1d.controlplane.v1.DeployTenantR\x06tenant\"/\n" +
 	"\x19CreateDeployTenantRequest\x12\x12\n" +
 	"\x04slug\x18\x01 \x01(\tR\x04slug\"S\n" +
 	"\x1aCreateDeployTenantResponse\x125\n" +

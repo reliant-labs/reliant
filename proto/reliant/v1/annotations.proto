@@ -39,12 +39,6 @@ message FieldMeta {
   // Human-readable short label for form controls.
   string label = 9;
 
-  // Field 10 was placeholder: free text for the input's empty state, which
-  // drifted between an example and an instruction. Example (16) is the value
-  // the empty input shows; an instruction belongs in the description.
-  reserved 10;
-  reserved "placeholder";
-
   // Optional UI visibility contexts (e.g., "basic", "advanced", "debug").
   repeated string visibility_contexts = 11;
 

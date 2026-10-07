@@ -5842,7 +5842,7 @@ var File_reliant_v1_chat_proto protoreflect.FileDescriptor
 const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"\x15reliant/v1/chat.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\xe6\t\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x17reliant/v1/common.proto\"\x9e\t\n" +
 	"\x04Chat\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\auser_id\x18\x02 \x01(\tR\x06userId\x12\x14\n" +
@@ -5889,15 +5889,13 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x11_active_daemon_idB\x0e\n" +
 	"\f_launch_kindB\r\n" +
 	"\v_trigger_idB\r\n" +
-	"\v_adopted_atJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\t\x10\n" +
-	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\fJ\x04\b\f\x10\rJ\x04\b\x0e\x10\x0fJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11J\x04\b\x17\x10\x18J\x04\b\x18\x10\x19J\x04\b\x1d\x10\x1e\"\xbd\x01\n" +
+	"\v_adopted_at\"\xbd\x01\n" +
 	"\fArchivedChat\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12(\n" +
 	"\rworktree_name\x18\x02 \x01(\tH\x00R\fworktreeName\x88\x01\x01\x123\n" +
 	"\x13worktree_deleted_at\x18\x03 \x01(\tH\x01R\x11worktreeDeletedAt\x88\x01\x01B\x10\n" +
 	"\x0e_worktree_nameB\x16\n" +
-	"\x14_worktree_deleted_at\"\xab\x06\n" +
+	"\x14_worktree_deleted_at\"\xa5\x06\n" +
 	"\aMessage\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12\x10\n" +
@@ -5928,7 +5926,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_workflow_idB\x10\n" +
 	"\x0e_display_styleB\n" +
 	"\n" +
-	"\b_node_idJ\x04\b\x05\x10\x06\"\xbc\x05\n" +
+	"\b_node_id\"\xbc\x05\n" +
 	"\fContentBlock\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05index\x18\x02 \x01(\x05R\x05index\x120\n" +
@@ -5978,7 +5976,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\xea\x06\n" +
+	"\x0e_display_style\"\xc0\x06\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -6010,14 +6008,12 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"_daemon_idB\r\n" +
 	"\v_no_machineB\x0f\n" +
-	"\r_builder_testJ\x04\b\x02\x10\x03J\x04\b\x05\x10\x06J\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\t\x10\n" +
-	"J\x04\b\n" +
-	"\x10\vJ\x04\b\v\x10\f\"w\n" +
+	"\r_builder_test\"q\n" +
 	"\x11StartChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
 	"workflowId\x12\x15\n" +
-	"\x06run_id\x18\x03 \x01(\tR\x05runIdJ\x04\b\x04\x10\x05\"\x8f\x01\n" +
+	"\x06run_id\x18\x03 \x01(\tR\x05runId\"\x8f\x01\n" +
 	"\x10ListChatsRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -6032,7 +6028,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x0eGetChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"7\n" +
 	"\x0fGetChatResponse\x12$\n" +
-	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\"\xd5\x01\n" +
+	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\"\xc3\x01\n" +
 	"\x11UpdateChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x19\n" +
 	"\x05title\x18\x02 \x01(\tH\x00R\x05title\x88\x01\x01\x12$\n" +
@@ -6041,7 +6037,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\rworkflow_name\x18\a \x01(\tH\x02R\fworkflowName\x88\x01\x01B\b\n" +
 	"\x06_titleB\x0e\n" +
 	"\f_worktree_idB\x10\n" +
-	"\x0e_workflow_nameJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\":\n" +
+	"\x0e_workflow_name\":\n" +
 	"\x12UpdateChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\"+\n" +
 	"\x10AdoptChatRequest\x12\x17\n" +
@@ -6070,7 +6066,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x18ListArchivedChatsRequest\"a\n" +
 	"\x19ListArchivedChatsResponse\x12.\n" +
 	"\x05chats\x18\x01 \x03(\v2\x18.reliant.v1.ArchivedChatR\x05chats\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xdc\x06\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\xb8\x06\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
 	"\vattachments\x18\x03 \x03(\tR\vattachments\x12\x1f\n" +
@@ -6096,8 +6092,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\v_max_tokensB\a\n" +
 	"\x05_modeB\x10\n" +
 	"\x0e_target_threadB\x14\n" +
-	"\x12_client_message_idJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\n" +
-	"\x10\vJ\x04\b\x10\x10\x11\"\xf7\x01\n" +
+	"\x12_client_message_id\"\xf7\x01\n" +
 	"\x13SendMessageResponse\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
@@ -6213,7 +6208,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x12source_worktree_id\x18\x01 \x01(\tH\x00R\x10sourceWorktreeId\x88\x01\x01\x12!\n" +
 	"\ffiles_copied\x18\x02 \x03(\tR\vfilesCopied\x12,\n" +
 	"\x12copy_files_enabled\x18\x03 \x01(\bR\x10copyFilesEnabledB\x15\n" +
-	"\x13_source_worktree_id\"\xd1\x02\n" +
+	"\x13_source_worktree_id\"\xc5\x02\n" +
 	"\x11BranchChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1d\n" +
 	"\n" +
@@ -6227,7 +6222,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x06_titleB\x0e\n" +
 	"\f_worktree_idB\x14\n" +
 	"\x12_workspace_contextB\r\n" +
-	"\v_no_machineJ\x04\b\x02\x10\x03J\x04\b\x06\x10\a\":\n" +
+	"\v_no_machine\":\n" +
 	"\x12BranchChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\"\xbf\x01\n" +
 	"\n" +
@@ -6317,7 +6312,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\f_duration_msB\x0f\n" +
 	"\r_loop_node_idB\x11\n" +
 	"\x0f_loop_iterationB\x13\n" +
-	"\x11_saved_message_id\"\xb1\a\n" +
+	"\x11_saved_message_id\"\xa5\a\n" +
 	"\x11WorkflowExecution\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12#\n" +
 	"\rworkflow_name\x18\x02 \x01(\tR\fworkflowName\x12\x16\n" +
@@ -6352,7 +6347,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x0e_parent_threadB\x11\n" +
 	"\x0f_origin_node_idB\n" +
 	"\n" +
-	"\b_outcomeJ\x04\b\x04\x10\x05J\x04\b\x0e\x10\x0f\"V\n" +
+	"\b_outcome\"V\n" +
 	"\x1eGetThreadWorkflowInputsRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\"\x89\x02\n" +
@@ -6375,11 +6370,11 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
 	"\tdaemon_id\x18\x02 \x01(\tR\bdaemonId\"=\n" +
 	"\x15SetChatDaemonResponse\x12$\n" +
-	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat*[\n" +
+	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat*U\n" +
 	"\tChatState\x12\x1a\n" +
 	"\x16CHAT_STATE_UNSPECIFIED\x10\x00\x12\x13\n" +
 	"\x0fCHAT_STATE_IDLE\x10\x02\x12\x17\n" +
-	"\x13CHAT_STATE_ARCHIVED\x10\x03\"\x04\b\x01\x10\x01*\x82\x01\n" +
+	"\x13CHAT_STATE_ARCHIVED\x10\x03*\x82\x01\n" +
 	"\rWorkflowState\x12\x1e\n" +
 	"\x1aWORKFLOW_STATE_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16WORKFLOW_STATE_PENDING\x10\x01\x12\x19\n" +

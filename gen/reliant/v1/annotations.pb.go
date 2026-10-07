@@ -337,7 +337,7 @@ var File_reliant_v1_annotations_proto protoreflect.FileDescriptor
 const file_reliant_v1_annotations_proto_rawDesc = "" +
 	"\n" +
 	"\x1creliant/v1/annotations.proto\x12\n" +
-	"reliant.v1\x1a google/protobuf/descriptor.proto\"\xb8\x04\n" +
+	"reliant.v1\x1a google/protobuf/descriptor.proto\"\xa5\x04\n" +
 	"\tFieldMeta\x12 \n" +
 	"\vdescription\x18\x01 \x01(\tR\vdescription\x12\x1f\n" +
 	"\venum_values\x18\x02 \x01(\tR\n" +
@@ -359,8 +359,7 @@ const file_reliant_v1_annotations_proto_rawDesc = "" +
 	"_min_valueB\f\n" +
 	"\n" +
 	"_max_valueB\x14\n" +
-	"\x12_cleanup_semanticsJ\x04\b\n" +
-	"\x10\vR\vplaceholder\"\xc1\x01\n" +
+	"\x12_cleanup_semantics\"\xc1\x01\n" +
 	"\bNodeMeta\x12\x1b\n" +
 	"\tnode_type\x18\x01 \x01(\tR\bnodeType\x12!\n" +
 	"\fdisplay_name\x18\x02 \x01(\tR\vdisplayName\x12 \n" +

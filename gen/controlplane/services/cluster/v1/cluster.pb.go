@@ -848,7 +848,7 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\n" +
 	"!services/cluster/v1/cluster.proto\x12\x0fcontrolplane.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"I\n" +
 	"\vHubIdentity\x12.\n" +
-	"\x13gcp_service_account\x18\x01 \x01(\tR\x11gcpServiceAccountJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\xf5\x03\n" +
+	"\x13gcp_service_account\x18\x01 \x01(\tR\x11gcpServiceAccountJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"\x84\x03\n" +
 	"\aCluster\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12<\n" +
@@ -862,8 +862,7 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x120\n" +
 	"\x04auth\x18\f \x01(\x0e2\x1c.controlplane.v1.ClusterAuthR\x04auth\x12\x18\n" +
 	"\aaddress\x18\r \x01(\tR\aaddress\x12#\n" +
-	"\rcloud_cluster\x18\x0e \x01(\tR\fcloudClusterJ\x04\b\x05\x10\x06J\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\v\x10\fR\flast_seen_atR\x12kubernetes_versionR\ragent_versionR\n" +
-	"node_countR\x14bootstrap_expires_at\"\x15\n" +
+	"\rcloud_cluster\x18\x0e \x01(\tR\fcloudCluster\"\x15\n" +
 	"\x13ListClustersRequest\"L\n" +
 	"\x14ListClustersResponse\x124\n" +
 	"\bclusters\x18\x01 \x03(\v2\x18.controlplane.v1.ClusterR\bclusters\"#\n" +
@@ -884,15 +883,15 @@ const file_services_cluster_v1_cluster_proto_rawDesc = "" +
 	"\x10token_expires_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\x0etokenExpiresAt\"\x8d\x01\n" +
 	"\x16ConnectClusterResponse\x122\n" +
 	"\acluster\x18\x01 \x01(\v2\x18.controlplane.v1.ClusterR\acluster\x12?\n" +
-	"\fhub_identity\x18\x02 \x01(\v2\x1c.controlplane.v1.HubIdentityR\vhubIdentity*\x9e\x01\n" +
+	"\fhub_identity\x18\x02 \x01(\v2\x1c.controlplane.v1.HubIdentityR\vhubIdentity*M\n" +
 	"\x0fClusterProvider\x12 \n" +
 	"\x1cCLUSTER_PROVIDER_UNSPECIFIED\x10\x00\x12\x18\n" +
-	"\x14CLUSTER_PROVIDER_BYO\x10\x01\"\x04\b\x02\x10\x02\"\x04\b\x03\x10\x03* CLUSTER_PROVIDER_VCLUSTER_SHARED*!CLUSTER_PROVIDER_VCLUSTER_PRIVATE*\xb8\x01\n" +
+	"\x14CLUSTER_PROVIDER_BYO\x10\x01*\x97\x01\n" +
 	"\x11ClusterConnection\x12\"\n" +
 	"\x1eCLUSTER_CONNECTION_UNSPECIFIED\x10\x00\x12\x1e\n" +
 	"\x1aCLUSTER_CONNECTION_WAITING\x10\x01\x12 \n" +
 	"\x1cCLUSTER_CONNECTION_CONNECTED\x10\x02\x12\x1c\n" +
-	"\x18CLUSTER_CONNECTION_STALE\x10\x03\"\x04\b\x04\x10\x04*\x19CLUSTER_CONNECTION_FAILED*\x87\x01\n" +
+	"\x18CLUSTER_CONNECTION_STALE\x10\x03*\x87\x01\n" +
 	"\vClusterAuth\x12\x1c\n" +
 	"\x18CLUSTER_AUTH_UNSPECIFIED\x10\x00\x12&\n" +
 	"\"CLUSTER_AUTH_WORKLOAD_IDENTITY_GCP\x10\x01\x12&\n" +

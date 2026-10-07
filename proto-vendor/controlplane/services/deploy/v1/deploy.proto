@@ -530,12 +530,6 @@ message GetDeployTenantRequest {}
 
 message GetDeployTenantResponse {
   DeployTenant tenant = 1;
-
-  // 2 was clusters, the tenant's provisioned vClusters. Deleted with the
-  // vCluster model; an org's clusters are ClusterService.ListClusters, which
-  // serves the connected ones this never could.
-  reserved 2;
-  reserved "clusters";
 }
 
 message CreateDeployTenantRequest {

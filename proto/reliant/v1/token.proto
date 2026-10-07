@@ -87,12 +87,6 @@ message CreateTokenRequest {
 // TokenInfo is a token's metadata. It never carries the secret or its hash.
 // Timestamps are RFC 3339; empty means unset.
 message TokenInfo {
-  // Tag 7 was `string revoked_at` (the retired PAT listing). Reserved, never
-  // reused: a new field on tag 7 would decode an old client's timestamp string
-  // as a different wire type.
-  reserved 7;
-  reserved "revoked_at";
-
   string id = 1;
   string name = 2;
   string token_prefix = 3;  // Display identifier, e.g. "rlat_A3f9Kd2p"

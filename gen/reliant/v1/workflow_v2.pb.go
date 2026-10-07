@@ -7591,7 +7591,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x11CelDaemonSelector\x12;\n" +
 	"\aliteral\x18\x01 \x01(\v2\x1f.reliant.v1.DaemonSelectorProtoH\x00R\aliteral\x12\x14\n" +
 	"\x04expr\x18\x02 \x01(\tH\x00R\x04exprB\a\n" +
-	"\x05value\"\xd7\x04\n" +
+	"\x05value\"\xd1\x04\n" +
 	"\x11SaveMessageConfig\x12\x96\x01\n" +
 	"\tcondition\x18\b \x01(\v2\x19.reliant.v1.DirectCelBoolB]\x82\xb5\x18Y\n" +
 	"WRaw CEL condition (no {{ }}) that must return bool; the message is saved only when trueR\tcondition\x12)\n" +
@@ -7602,14 +7602,14 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\ftool_results\x18\x05 \x01(\v2\x15.reliant.v1.CelStringR\vtoolResults\x12\x92\x01\n" +
 	"\vattachments\x18\x06 \x01(\v2\x15.reliant.v1.CelStringBY\x82\xb5\x18U\n" +
 	"SAttachment IDs to attach to the saved message. CEL expression must return []string.R\vattachments\x12B\n" +
-	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyleJ\x04\b\x01\x10\x02\"\xa4\x02\n" +
+	"\rdisplay_style\x18\a \x01(\v2\x15.reliant.v1.CelStringB\x06\x82\xb5\x18\x02 \x01R\fdisplayStyle\"\xa4\x02\n" +
 	"\fThreadConfig\x12X\n" +
 	"\x04mode\x18\x01 \x01(\tBD\x82\xb5\x18@\n" +
 	",Thread mode: inherit (default), new, or fork\x12\x10inherit|new|forkR\x04mode\x12_\n" +
 	"\x04memo\x18\x02 \x01(\v2\x13.reliant.v1.CelBoolB6\x82\xb5\x182\n" +
 	"0Whether to memoize thread across loop iterationsR\x04memo\x12Y\n" +
 	"\x06inject\x18\x03 \x01(\v2\x18.reliant.v1.InjectConfigB'\x82\xb5\x18#\n" +
-	"!Message injection into the threadR\x06inject\"\x9a\x04\n" +
+	"!Message injection into the threadR\x06inject\"\x94\x04\n" +
 	"\fInjectConfig\x12i\n" +
 	"\x04role\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB>\x82\xb5\x18:\n" +
 	"!Message role for injected message\x12\x15user|system|assistantR\x04role\x12P\n" +
@@ -7619,7 +7619,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"9UI display style for injected message; defaults to hidden\x12\x1binfo|warning|success|hiddenR\fdisplayStyle\x12N\n" +
 	"\x12legacy_attachments\x18\x03 \x01(\v2\x15.reliant.v1.CelStringB\b\x82\xb5\x18\x02 \x01\x18\x01R\x11legacyAttachments\x12\\\n" +
 	"\vattachments\x18\x05 \x03(\v2\x1c.reliant.v1.InjectAttachmentB\x1c\x82\xb5\x18\x18\n" +
-	"\x16Attachments to includeR\vattachmentsJ\x04\b\x04\x10\x05\"\x93\x01\n" +
+	"\x16Attachments to includeR\vattachments\"\x93\x01\n" +
 	"\x10InjectAttachment\x12\x10\n" +
 	"\x02id\x18\x01 \x01(\tH\x00R\x02id\x12\x14\n" +
 	"\x04path\x18\x02 \x01(\tH\x00R\x04path\x12\x14\n" +
@@ -7634,7 +7634,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x03tag\x18\x01 \x01(\tB\x1d\x82\xb5\x18\x19\n" +
 	"\x17Tag for preset matchingR\x03tag\x123\n" +
 	"\adefault\x18\x02 \x01(\tB\x19\x82\xb5\x18\x15\n" +
-	"\x13Default preset slugR\adefault\"\xd8\b\n" +
+	"\x13Default preset slugR\adefault\"\xd2\b\n" +
 	"\x04Node\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04type\x18\x02 \x01(\tR\x04type\x127\n" +
@@ -7659,7 +7659,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\vinvoke_tool\x18\x19 \x01(\v2\x1a.reliant.v1.InvokeToolArgsH\x00R\n" +
 	"invokeTool\x120\n" +
 	"\x06action\x18\x1a \x01(\v2\x16.reliant.v1.ActionArgsH\x00R\x06actionB\x06\n" +
-	"\x04argsJ\x04\b\x04\x10\x05\"\x8e\x03\n" +
+	"\x04args\"\x88\x03\n" +
 	"\vToolsConfig\x12B\n" +
 	"\x0fpreloaded_tools\x18\x05 \x01(\v2\x19.reliant.v1.CelStringListR\x0epreloadedTools\x12@\n" +
 	"\x0eloadable_tools\x18\x06 \x01(\v2\x19.reliant.v1.CelStringListR\rloadableTools\x12/\n" +
@@ -7671,7 +7671,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\n" +
 	"ToolsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
-	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01J\x04\b\x01\x10\x02\"\x8b\x0f\n" +
+	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\"\xf3\x0e\n" +
 	"\vCallLLMArgs\x12\x97\x01\n" +
 	"\x05model\x18\x01 \x01(\v2\x1c.reliant.v1.CelModelSelectorBc\x82\xb5\x18_\n" +
 	";A model tag (flagship, fast, cheap) or an explicit model ID*\x05ModelJ\x05ModelZ\x05basicp\x01\x82\x01\bflagshipR\x05model\x12\xd4\x01\n" +
@@ -7696,7 +7696,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"VSkills to preload into this call, by path, so the model starts with their instructions*\x06PromptJ\x06SkillsZ\badvanced\x82\x01\x17[forge/db, code-review]\x8a\x01\x13list of skill pathsR\x06skills\x12\xb9\x01\n" +
 	"\rcontinue_turn\x18\x0f \x01(\v2\x13.reliant.v1.CelBoolB\x7f\x82\xb5\x18{\n" +
 	"VCall the provider even though history ends with the assistant (continue a paused turn) \x01*\x06PromptJ\rContinue turnZ\badvancedR\fcontinueTurn:\\\x8a\xb5\x18X\n" +
-	"\bcall_llm\x12\bCall LLM\x1a4Send a prompt to a language model and get a response*\aagentic2\x03BotJ\x04\b\x06\x10\aJ\x04\b\a\x10\bJ\x04\b\b\x10\tJ\x04\b\v\x10\f\"\xa3\x01\n" +
+	"\bcall_llm\x12\bCall LLM\x1a4Send a prompt to a language model and get a response*\aagentic2\x03Bot\"\xa3\x01\n" +
 	"\fResponseTool\x12)\n" +
 	"\x04name\x18\x01 \x01(\v2\x15.reliant.v1.CelStringR\x04name\x127\n" +
 	"\vdescription\x18\x02 \x01(\v2\x15.reliant.v1.CelStringR\vdescription\x12/\n" +
@@ -7763,17 +7763,17 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\tWithEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01:\\\x8a\xb5\x18X\n" +
-	"\x06action\x12\x06Action\x1a7Run an integration action (for example an HTTP request)*\autility2\x04PlugJ\x04\b\x04\x10\x05\"\x9f\x02\n" +
+	"\x06action\x12\x06Action\x1a7Run an integration action (for example an HTTP request)*\autility2\x04PlugJ\x04\b\x04\x10\x05\"\x99\x02\n" +
 	"\vCompactArgs\x12\xa9\x01\n" +
 	"\x05model\x18\x02 \x01(\v2\x1c.reliant.v1.CelModelSelectorBu\x82\xb5\x18q\n" +
 	"VModel used to summarize the conversation (defaults to the built-in summarization tier)*\x05ModelJ\x05Model\x82\x01\bflagshipR\x05model:^\x8a\xb5\x18Z\n" +
-	"\acompact\x12\aCompact\x1a2Compact conversation context to reduce token usage*\aagentic2\tMinimize2J\x04\b\x01\x10\x02\"\xa4\x03\n" +
+	"\acompact\x12\aCompact\x1a2Compact conversation context to reduce token usage*\aagentic2\tMinimize2\"\x92\x03\n" +
 	"\fApprovalArgs\x12\xa1\x01\n" +
 	"\x05title\x18\x01 \x01(\v2\x15.reliant.v1.CelStringBt\x82\xb5\x18p\n" +
 	"CWhat the approver is asked to decide, shown as the approval's title\x82\x01(Deploy {{inputs.version}} to production?R\x05title\x12\x81\x01\n" +
 	"\atimeout\x18\x03 \x01(\v2\x15.reliant.v1.CelStringBP\x82\xb5\x18L\n" +
 	"9How long to wait for a decision before the step times out\x82\x01\x0330m\x8a\x01\bdurationR\atimeout:Z\x8a\xb5\x18V\n" +
-	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheckJ\x04\b\x02\x10\x03J\x04\b\x04\x10\x05J\x04\b\x05\x10\x06\"\x9e\x03\n" +
+	"\bapproval\x12\bApproval\x1a*Pause workflow execution for user approval*\autility2\vShieldCheck\"\x9e\x03\n" +
 	"\x0fAskQuestionArgs\x12\x93\x02\n" +
 	"\bmetadata\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xdf\x01\x82\xb5\x18\xda\x01\n" +
 	"XThe questions to ask, as JSON: a questions list, each with question text and its options\x82\x01v{\"type\":\"ask_user\",\"questions\":[{\"question\":\"Ship this change?\",\"options\":[{\"label\":\"Ship it\"},{\"label\":\"Not yet\"}]}]}\x8a\x01\x04JSONR\bmetadata:u\x8a\xb5\x18q\n" +
@@ -7858,7 +7858,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:F\x8a\xb5\x18B\n" +
-	"\bworkflow\x12\x05Agent\x1a\x1fInvoke an agent or sub-workflow \x01*\aagentic2\x03Bot\"\x8b\f\n" +
+	"\bworkflow\x12\x05Agent\x1a\x1fInvoke an agent or sub-workflow \x01*\aagentic2\x03Bot\"\x85\f\n" +
 	"\bLoopArgs\x12Q\n" +
 	"\x03ref\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB(\x82\xb5\x18$\n" +
 	" Workflow reference for loop body \x01R\x03ref\x12,\n" +
@@ -7891,7 +7891,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\fPresetsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01:R\x8a\xb5\x18N\n" +
-	"\x04loop\x12\x04Loop\x1a0Execute a sub-workflow in a loop with conditions \x01*\x04flow2\x06RepeatJ\x04\b\a\x10\b\"e\n" +
+	"\x04loop\x12\x04Loop\x1a0Execute a sub-workflow in a loop with conditions \x01*\x04flow2\x06Repeat\"e\n" +
 	"\bJoinArgs:Y\x8a\xb5\x18U\n" +
 	"\x04join\x12\x04Join\x1a8Wait for parallel branches to complete before continuing \x01*\x04flow2\x05Merge\"g\n" +
 	"\x17RouterWorkflowCandidate\x12\x10\n" +
@@ -8094,7 +8094,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x0eThinkingOutput\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\x12\x1c\n" +
 	"\tsignature\x18\x02 \x01(\tR\tsignature\x12\x1a\n" +
-	"\bredacted\x18\x03 \x01(\tR\bredacted\"\x93\a\n" +
+	"\bredacted\x18\x03 \x01(\tR\bredacted\"\xf3\x06\n" +
 	"\rCallLLMOutput\x123\n" +
 	"\amessage\x18\x01 \x01(\v2\x19.reliant.v1.MessageOutputR\amessage\x12#\n" +
 	"\rresponse_text\x18\x02 \x01(\tR\fresponseText\x126\n" +
@@ -8125,7 +8125,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rfinish_reason\x18\x11 \x01(\tB\x0e\x82\xb5\x18\n" +
 	"Z\badvancedR\ffinishReason\x12P\n" +
 	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x0e\x82\xb5\x18\n" +
-	"Z\badvancedR\fcapabilitiesJ\x04\b\x0f\x10\x10J\x04\b\x10\x10\x11R\aabortedR\tstop_kind\"\xca\x05\n" +
+	"Z\badvancedR\fcapabilities\"\xca\x05\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +
@@ -8276,7 +8276,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x14.reliant.v1.PositionR\x05value:\x028\x01\x1aW\n" +
 	"\rSwitchesEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x120\n" +
-	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xb8\x06\n" +
+	"\x05value\x18\x02 \x01(\v2\x1a.reliant.v1.SwitchMetadataR\x05value:\x028\x01\"\xb2\x06\n" +
 	"\bWorkflow\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12&\n" +
 	"\x05nodes\x18\x02 \x03(\v2\x10.reliant.v1.NodeR\x05nodes\x12&\n" +
@@ -8303,7 +8303,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x05value\x18\x02 \x01(\v2\x11.reliant.v1.InputR\x05value:\x028\x01\x1a:\n" +
 	"\fOutputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01J\x04\b\v\x10\fB:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_workflow_v2_proto_rawDescOnce sync.Once

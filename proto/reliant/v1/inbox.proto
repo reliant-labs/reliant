@@ -175,8 +175,6 @@ message InboxAutomationLaunchFailed {
 message InboxRunFinished {}
 
 message DismissInboxItemRequest {
-  reserved 1;
-  reserved "item_id";
   // One row, or a whole section ("Dismiss all").
   repeated string item_ids = 2;
 }

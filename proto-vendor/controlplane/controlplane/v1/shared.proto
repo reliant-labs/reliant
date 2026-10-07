@@ -141,9 +141,6 @@ message Daemon {
   DaemonType daemon_type = 5;
   DaemonStatus status = 6;
 
-  reserved 7; // was workspace_id (moved to DaemonInternal)
-  reserved "workspace_id";
-
   // Managed daemon fields
   string image = 8;
   ResourceRequirements resources = 9;
@@ -157,21 +154,9 @@ message Daemon {
 
   // Status/timing
   google.protobuf.Timestamp connected_at = 15;
-
-  reserved 16; // was last_heartbeat — the backing column was dropped in
-  reserved "last_heartbeat"; // migration 00046 (pull-architecture refactor);
-  // the field was never populated since. Live "last active"
-  // comes from the gateway via NATS pull at GetDaemon time.
-
   google.protobuf.Timestamp disconnected_at = 17;
   google.protobuf.Timestamp created_at = 18;
   google.protobuf.Timestamp updated_at = 19;
-
-  reserved 20, 21; // was workspace_phase, pod_name (moved to DaemonInternal)
-  reserved "workspace_phase", "pod_name";
-
-  reserved 22; // was slug (daemons are addressed by UUID id now)
-  reserved "slug";
 
   // Daemon enhancements
   DaemonSize size = 23;
@@ -245,7 +230,6 @@ message Organization {
   string name = 2;
   string slug = 3;
   string owner_id = 4;
-  reserved 5; // was litellm_team_id (internal implementation detail)
   string stripe_customer_id = 6;
   string settings = 7;
   int32 member_count = 8;
@@ -415,18 +399,6 @@ message PlanLimits {
   // the allowance above; a per-month rate here would be a 730x error.
   double storage_overage_rate_cents = 18;
 
-  // The vCluster cap and its per-hour floor, deleted with the vCluster
-  // model: hosted scope is Workload + ManagedDatabase + StaticSite, and a
-  // customer-owned cluster is reached through `forge cluster connect`, which
-  // meters no floor because the compute is the customer's.
-  reserved 27, 28;
-  reserved "max_vclusters", "vcluster_floor_rate_cents_per_hour";
-
-  // Field 29 was max_deployments, removed: limits are compute-based (CPU,
-  // memory, storage), never a count of deployments.
-  reserved 29;
-  reserved "max_deployments";
-
   // The memory:CPU ratio band a deployment's requests must fall inside,
   // in GiB per vCPU. A request outside the band is rounded UP on the
   // deficient axis at render time (ask 500m + 8Gi against a 4 GiB/vCPU
@@ -451,9 +423,6 @@ message PlanLimits {
   // from plans.limits, so the UI and the meter read one number. Zero for a
   // plan the catalog does not declare: no allowance, never "unlimited".
   int64 included_small_daemon_hours = 34;
-
-  reserved 5, 6;
-  reserved "ip_restricted", "max_ips_per_key";
 }
 
 // DaemonPricing is the per-daemon price list, projected from the one catalog
