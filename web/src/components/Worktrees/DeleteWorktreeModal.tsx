@@ -9,7 +9,7 @@ interface DeleteWorktreeModalProps {
   isOpen: boolean;
   onClose: () => void;
   worktree: Worktree | null;
-  onConfirmDelete: (options?: { deleteGitBranch: boolean; deleteLocalDirectory: boolean }) => void;
+  onConfirmDelete: (options?: { deleteGitBranch: boolean }) => void;
   chatCount?: number; // Number of chats that will be affected
 }
 
@@ -38,9 +38,6 @@ export function DeleteWorktreeModal({
   const [deleteGitBranch, setDeleteGitBranch] = useState(
     isArchived ? true : (preferences?.worktree.defaultDeleteBranch ?? false),
   );
-  const [deleteLocalDirectory, setDeleteLocalDirectory] = useState(
-    isArchived ? true : (preferences?.worktree.defaultDeleteDirectory ?? true),
-  );
 
   if (!worktree) return null;
 
@@ -65,7 +62,7 @@ export function DeleteWorktreeModal({
   const handleConfirm = async () => {
     setIsDeleting(true);
     try {
-      await onConfirmDelete({ deleteGitBranch, deleteLocalDirectory });
+      await onConfirmDelete({ deleteGitBranch });
       onClose();
     } catch (error) {
       console.error("Failed to delete worktree:", error);
@@ -124,18 +121,11 @@ export function DeleteWorktreeModal({
               </button>
             )}
           </div>
+          <p className="text-pretty text-xs text-muted-foreground">
+            The workspace's files are removed from disk automatically when nothing in them would be lost. If
+            something would be, they stay and you'll be offered a clean-up in your Inbox.
+          </p>
           <div className="divide-y divide-border/60 rounded-md border border-border/60 bg-background">
-            <CleanupOption
-              checked={deleteLocalDirectory}
-              onChange={setDeleteLocalDirectory}
-              title="Worktree directory"
-              description={
-                <>
-                  Delete <span className="break-all font-mono">{worktree.path}</span> from disk.
-                  Uncommitted changes in it are lost.
-                </>
-              }
-            />
             <CleanupOption
               checked={deleteGitBranch}
               onChange={setDeleteGitBranch}

@@ -489,7 +489,6 @@ func (s *SettingsService) GetPreferences(ctx context.Context, req *connect.Reque
 	}
 
 	streamingEnabled := boolPref("features.streaming_enabled", true)
-	worktreeDeleteDir := boolPref("worktree.default_delete_directory", true)
 	worktreeDeleteBranch := boolPref("worktree.default_delete_branch", false)
 	branchCopyUncommittedFilesDefault := boolPref("worktree.branch_copy_uncommitted_files_default", false)
 	hideBuiltinWorkflows := boolPref("ui.hide_builtin_workflows", false)
@@ -522,7 +521,6 @@ func (s *SettingsService) GetPreferences(ctx context.Context, req *connect.Reque
 	return connect.NewResponse(&reliantv1.GetPreferencesResponse{
 		StreamingEnabled:                  streamingEnabled,
 		WorktreeArchiveMode:               worktreeArchiveMode,
-		WorktreeDefaultDeleteDirectory:    worktreeDeleteDir,
 		WorktreeDefaultDeleteBranch:       worktreeDeleteBranch,
 		Additional:                        additional,
 		BranchCopyUncommittedFilesDefault: branchCopyUncommittedFilesDefault,
@@ -572,18 +570,6 @@ func (s *SettingsService) UpdatePreferences(ctx context.Context, req *connect.Re
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
 		}
 		markChanged("worktree.archive_cleanup_mode")
-	}
-
-	if req.Msg.WorktreeDefaultDeleteDirectory != nil {
-		value := "false"
-		if *req.Msg.WorktreeDefaultDeleteDirectory {
-			value = "true"
-		}
-		if err := s.upsertSetting(ctx, userID, nil, "worktree.default_delete_directory", value); err != nil {
-			logging.Error("Failed to update worktree.default_delete_directory", "error", err)
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to update preferences"))
-		}
-		markChanged("worktree.default_delete_directory")
 	}
 
 	if req.Msg.WorktreeDefaultDeleteBranch != nil {

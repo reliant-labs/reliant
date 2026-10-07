@@ -180,6 +180,9 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	// CreateWorktree gRPC handler so disk paths look the same regardless of
 	// where the worktree was kicked off.
 	workspaceID := worktreepath.WorkspaceDirName(project.Name, name)
+	// Fixed before any checkout so the daemon can write it into each
+	// checkout's lock reason (see worktreereclaim.LockReason).
+	worktreeID := uuid.New().String()
 
 	type repoCreateResult struct {
 		repo         *core.Repo
@@ -227,6 +230,7 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 				Branch:      branch,
 				BaseBranch:  baseBranch,
 				Force:       force,
+				WorktreeID:  worktreeID,
 			}, worktreeCreateDaemonTimeoutMs,
 		)
 		if err != nil {
@@ -336,7 +340,6 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		baseBranches = nil
 	}
 
-	worktreeID := uuid.New().String()
 	now := time.Now().UTC()
 	var chatIDPtr *string
 	if rtx.ChatID != "" {
@@ -575,6 +578,7 @@ type worktreeCreateDaemonRequest struct {
 	Branch      string `json:"branch"`
 	BaseBranch  string `json:"base_branch"`
 	Force       bool   `json:"force"`
+	WorktreeID  string `json:"worktree_id,omitempty"`
 }
 
 type worktreeCopyPathsDaemonRequest struct {

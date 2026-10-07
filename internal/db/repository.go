@@ -150,6 +150,11 @@ type Repository interface {
 	ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *Worktree) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error
+	ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error)
+	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error)
+	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
+	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error)
+	MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata, archived bool) bool) error
 	DeleteWorktree(ctx context.Context, id string) error
 	ArchiveWorktree(ctx context.Context, id string) error
 	UnarchiveWorktree(ctx context.Context, id string) error
@@ -403,6 +408,17 @@ type Repository interface {
 	// The inventory outlives a disconnect; liveness is separate.
 	SetDaemonLocalModels(ctx context.Context, daemonID string, inventoryJSON string) error
 	ListDaemonLocalModels(ctx context.Context, userID string) (map[string]string, error)
+	// TryAdvisoryLock takes a session-level Postgres advisory lock for key and
+	// reports whether this caller holds it. release must be called once, and
+	// frees both the lock and its connection.
+	// GetSettingValue returns a user-level setting and whether it is set.
+	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
+	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
+	// SetDaemonStorageState / ListDaemonStorageState store and read what each
+	// daemon last reported about the disk holding its worktrees (JSON). Like
+	// local models it outlives a disconnect; liveness is separate.
+	SetDaemonStorageState(ctx context.Context, daemonID string, stateJSON string) error
+	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
 	// Custom model endpoints (model_endpoints). Every method is scoped to
 	// userID; another user's id behaves exactly like a missing one.
 	CreateModelEndpoint(ctx context.Context, e *ModelEndpoint) error

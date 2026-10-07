@@ -26,11 +26,11 @@ import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { Link } from "@tanstack/react-router";
 import { useQueryClient } from "@tanstack/react-query";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HelpCircle, MonitorPause, Shield, X } from "lucide-react";
+import { AlertTriangle, CalendarX, CheckCircle2, ChevronDown, HardDrive, HelpCircle, MonitorPause, Shield, X } from "lucide-react";
 import { toast } from "sonner";
 
 import { api } from "@/api/client";
-import { InboxItemKind, type InboxItem as InboxItemData } from "@/gen/reliant/v1/inbox_pb";
+import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
 import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 import { answerQuestion } from "@/hooks/approval-queries";
 import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
@@ -45,6 +45,8 @@ import { CardInset } from "../forge-ui/card";
 import { ApprovalActions } from "../Chat/ApprovalActions";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
+import { formatBytes } from "@/lib/formatBytes";
+import { StorageAction, totalHeldBytes } from "./StorageAction";
 
 /** How long "Already handled" shows before the row leaves. */
 export const ALREADY_HANDLED_MS = 2000;
@@ -210,6 +212,8 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
       return <CalendarX className={cn(className, "text-destructive")} aria-label="Automation could not start" />;
     case InboxItemKind.RUN_FINISHED:
       return <CheckCircle2 className={cn(className, "text-success-ink")} aria-label="Run finished" />;
+    case InboxItemKind.STORAGE:
+      return <HardDrive className={cn(className, "text-warning-ink")} aria-label="Storage" />;
     default:
       return <CheckCircle2 className={className} aria-hidden="true" />;
   }
@@ -217,6 +221,9 @@ function KindIcon({ kind }: { kind: InboxItemKind }) {
 
 /** The run's (or the automation's) display name. */
 export function subjectName(item: InboxItemData): string {
+  if (item.payload.case === "storage") {
+    return `${machineName(item.payload.value.daemonName, item.payload.value.daemonId)} storage`;
+  }
   return item.chatTitle || item.triggerName || "Untitled run";
 }
 
@@ -280,6 +287,10 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
         .join(" · ");
       return text ? { node: text, title: text } : null;
     }
+    case "storage": {
+      const text = storageDetail(payload.value);
+      return text ? { node: text, title: text } : null;
+    }
     case "automationLaunchFailed": {
       const { reason, consecutiveFailures } = payload.value;
       const text = [consecutiveFailures > 1 ? `${consecutiveFailures} in a row` : "", reason ? sentenceCase(reason) : ""]
@@ -290,6 +301,21 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
     default:
       return null;
   }
+}
+
+/** "12 GB free of 500 GB · 3 workspaces kept (8.4 GB)". */
+export function storageDetail(storage: InboxStorageData): string {
+  const parts: string[] = [];
+  if (storage.diskTotalBytes > 0n) {
+    parts.push(`${formatBytes(storage.diskFreeBytes)} free of ${formatBytes(storage.diskTotalBytes)}`);
+  }
+  if (storage.held.length > 0) {
+    const size = totalHeldBytes(storage.held);
+    const noun = storage.held.length === 1 ? "workspace" : "workspaces";
+    parts.push(`${storage.held.length} ${noun} kept${size > 0 ? ` (${formatBytes(size)})` : ""}`);
+  }
+  if (!storage.online) parts.push("offline");
+  return parts.join(" · ");
 }
 
 /** A row opens downward only when its action needs more than a line. */
@@ -337,6 +363,10 @@ function InlineAction({ item, expanded, onToggle, onRaceOrError }: InlineActionP
         <Link to="/workflows/automations/$triggerId" params={{ triggerId: item.triggerId }} className={actionButtonClass}>
           Edit automation
         </Link>
+      );
+    case "storage":
+      return (
+        <StorageAction storage={payload.value} label={machineName(payload.value.daemonName, payload.value.daemonId)} />
       );
     case "runFinished":
       return item.chatId ? (

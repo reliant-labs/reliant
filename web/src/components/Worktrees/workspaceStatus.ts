@@ -175,6 +175,29 @@ export function sortArchivedWorkspaces(worktrees: Worktree[]): Worktree[] {
 export function cleanupSummary(worktree: Worktree): string {
   const meta = worktree.cleanup_metadata;
   if (!meta) return "Files kept";
-  const files = meta.directory_deleted ? "Files removed" : "Files kept";
-  return meta.branch_deleted ? `${files}, branch deleted` : files;
+  let files = "Files kept";
+  if (meta.directory_deleted) files = "Files removed";
+  else if (meta.held_reason) files = `Files kept (${heldReasonLabel(meta.held_reason)})`;
+  const saved = meta.snapshot_refs?.length ? ", unsaved work kept in a git ref" : "";
+  return meta.branch_deleted ? `${files}${saved}, branch deleted` : `${files}${saved}`;
+}
+
+const HELD_LABEL: Record<string, string> = {
+  dirty: "uncommitted changes",
+  unpushed: "commits not pushed",
+  in_use: "in use",
+  unverified: "could not be checked",
+  "too-large-to-snapshot": "too large to save",
+  unreachable_history: "has commits on no branch",
+  kept: "kept by your archive setting",
+  data: "contains data",
+  "nested-repository": "contains another repository",
+  "files-outside-checkout": "has files outside its repositories",
+  unmanaged: "not managed by Reliant",
+  quarantined: "parked in quarantine",
+};
+
+/** Why a machine kept an archived workspace's files, in plain words. */
+export function heldReasonLabel(reason: string): string {
+  return HELD_LABEL[reason] ?? reason;
 }

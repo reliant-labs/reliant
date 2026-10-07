@@ -44,6 +44,11 @@ import {
 export interface CleanupMetadata {
   directory_deleted: boolean;
   branch_deleted: boolean;
+  /** Why the machine kept the files ("dirty", "data", ...); empty once removed. */
+  held_reason?: string;
+  held_detail?: string;
+  /** Local git refs holding work saved before the files were removed. */
+  snapshot_refs?: string[];
 }
 
 export interface Worktree {
@@ -170,6 +175,9 @@ function protoCleanupMetadataToFrontend(proto: ProtoCleanupMetadata): CleanupMet
   return {
     directory_deleted: proto.directoryDeleted,
     branch_deleted: proto.branchDeleted,
+    held_reason: proto.heldReason || undefined,
+    held_detail: proto.heldDetail || undefined,
+    snapshot_refs: proto.snapshotRefs.length > 0 ? [...proto.snapshotRefs] : undefined,
   };
 }
 
@@ -296,18 +304,16 @@ export const worktreeGrpc = {
   // Delete a worktree (permanent delete if already archived, otherwise archives)
   async delete(
     worktreeId: string,
-    options?: { deleteLocalDirectory?: boolean; deleteGitBranch?: boolean }
-  ): Promise<{ message: string; deleted_directory: boolean; deleted_branch: boolean; is_permanent_delete: boolean }> {
+    options?: { deleteGitBranch?: boolean }
+  ): Promise<{ message: string; deleted_branch: boolean; is_permanent_delete: boolean }> {
     const client = grpcClient.worktree();
     const request = create(DeleteWorktreeRequestSchema, {
       worktreeId,
-      deleteLocalDirectory: options?.deleteLocalDirectory || false,
       deleteGitBranch: options?.deleteGitBranch || false,
     });
     const response = await client.deleteWorktree(request);
     return {
       message: response.message,
-      deleted_directory: response.deletedDirectory,
       deleted_branch: response.deletedBranch,
       is_permanent_delete: response.isPermanentDelete,
     };
@@ -316,18 +322,16 @@ export const worktreeGrpc = {
   // Archive a worktree
   async archive(
     worktreeId: string,
-    options?: { deleteLocalDirectory?: boolean; deleteGitBranch?: boolean }
-  ): Promise<{ message: string; deleted_directory: boolean; deleted_branch: boolean }> {
+    options?: { deleteGitBranch?: boolean }
+  ): Promise<{ message: string; deleted_branch: boolean }> {
     const client = grpcClient.worktree();
     const request = create(ArchiveWorktreeRequestSchema, {
       worktreeId,
-      deleteLocalDirectory: options?.deleteLocalDirectory || false,
       deleteGitBranch: options?.deleteGitBranch || false,
     });
     const response = await client.archiveWorktree(request);
     return {
       message: response.message,
-      deleted_directory: response.deletedDirectory,
       deleted_branch: response.deletedBranch,
     };
   },
@@ -374,7 +378,7 @@ export const worktreeGrpc = {
   },
 
   // Recreate an archived worktree from its branch
-  async recreate(worktreeId: string): Promise<{ message: string; path: string; branch: string }> {
+  async recreate(worktreeId: string): Promise<{ message: string; path: string; branch: string; snapshotWarning: string; snapshotRefs: string[] }> {
     const client = grpcClient.worktree();
     const request = create(RecreateWorktreeRequestSchema, { worktreeId });
     const response = await client.recreateWorktree(request);
@@ -382,6 +386,8 @@ export const worktreeGrpc = {
       message: response.message,
       path: response.path,
       branch: response.branch,
+      snapshotWarning: response.snapshotWarning,
+      snapshotRefs: response.snapshotRefs,
     };
   },
 

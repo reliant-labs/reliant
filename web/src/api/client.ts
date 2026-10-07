@@ -504,7 +504,6 @@ export const api = {
       const {
         streaming_enabled,
         worktree_archive_mode,
-        worktree_default_delete_directory,
         worktree_default_delete_branch,
         default_mcp_scope,
         default_workflow_scope,
@@ -518,9 +517,6 @@ export const api = {
       const result = await settingsGrpc.updatePreferences({
         streaming_enabled: streaming_enabled as boolean | undefined,
         worktree_archive_mode: worktree_archive_mode as string | undefined,
-        worktree_default_delete_directory: worktree_default_delete_directory as
-          | boolean
-          | undefined,
         worktree_default_delete_branch: worktree_default_delete_branch as
           | boolean
           | undefined,

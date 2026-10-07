@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -22,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/gitutil"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 func init() {
@@ -48,6 +50,8 @@ func init() {
 	RegisterCommand("worktree.create_pr", handleWorktreeCreatePR)
 	RegisterCommand("worktree.revert", handleWorktreeRevert)
 	RegisterCommand("worktree.get_default_branch", handleWorktreeGetDefaultBranch)
+	RegisterCommand("worktree.reconcile", handleWorktreeReconcile)
+	RegisterCommand("worktree.snapshot_remove", handleWorktreeSnapshotRemove)
 }
 
 // =============================================================================
@@ -147,6 +151,9 @@ type worktreeCreateRequest struct {
 	SubPath    string `json:"sub_path,omitempty"`
 	BaseBranch string `json:"base_branch"`
 	Force      bool   `json:"force"`
+	// WorktreeID is the id of the worktree row this checkout belongs to; it is
+	// written into the git lock reason. Empty skips locking.
+	WorktreeID string `json:"worktree_id,omitempty"`
 }
 
 type worktreeCreateResponse struct {
@@ -288,6 +295,17 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		})
 	}
 
+	// Mark the checkout reliant-owned. forge's storage reaper skips locked
+	// worktrees, so this lock is what protects a clean, idle, pushed checkout
+	// from being removed under an active chat. Failing to lock is not fatal to
+	// creation: the reconcile pass locks every active worktree on its next run.
+	if req.WorktreeID != "" {
+		if err := worktreereclaim.LockCheckout(ctx, worktreePath, req.WorktreeID); err != nil {
+			logging.Warn("worktree created but not locked; reconcile will retry",
+				"worktree_path", worktreePath, "error", err)
+		}
+	}
+
 	// A new workspace waits on this whole command; say how long git took, so
 	// a slow create can be told apart from a slow copy (worktree.copy_paths
 	// logs its own time).
@@ -380,6 +398,7 @@ func handleWorktreeForceCleanup(ctx context.Context, payload []byte) ([]byte, er
 
 	// Check if git worktree path exists and remove it
 	if _, err := os.Stat(req.WorktreePath); err == nil {
+		worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
 		removeCmd := exec.CommandContext(ctx, "git", "worktree", "remove", req.WorktreePath, "--force")
 		removeCmd.Dir = req.ProjectPath
 		_, _ = removeCmd.CombinedOutput()
@@ -422,6 +441,7 @@ func handleWorktreeDeleteDirectory(ctx context.Context, payload []byte) ([]byte,
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
 
+	worktreereclaim.UnlockForRemoval(ctx, req.WorktreePath)
 	removeCmd := exec.CommandContext(ctx, "git", "worktree", "remove", req.WorktreePath, "--force")
 	removeCmd.Dir = req.ProjectPath
 	if _, err := removeCmd.CombinedOutput(); err != nil {
@@ -644,10 +664,31 @@ func handleWorktreeDiscover(ctx context.Context, payload []byte) ([]byte, error)
 // worktree.recreate
 // =============================================================================
 
+// RecreateRepo is one repository of a workspace to rebuild.
+type worktreeRecreateRepo struct {
+	// RepoPath is the parent repository the checkout was created from.
+	RepoPath string `json:"repo_path"`
+	// Rel is the checkout's path under the workspace root ("" = the root itself).
+	Rel string `json:"rel"`
+	// Branch is the branch to check out. Empty falls back to the request's.
+	Branch string `json:"branch,omitempty"`
+	// SnapshotRefs are the refs an earlier clean-up saved this checkout's work
+	// to (the newest is applied); empty means look them up by worktree id.
+	SnapshotRefs []string `json:"snapshot_refs,omitempty"`
+}
+
 type worktreeRecreateRequest struct {
-	ProjectPath  string `json:"project_path"`
-	WorktreePath string `json:"worktree_path"`
-	Branch       string `json:"branch"`
+	// Single-repo form, kept for the simple case.
+	ProjectPath  string   `json:"project_path"`
+	WorktreePath string   `json:"worktree_path"`
+	Branch       string   `json:"branch"`
+	WorktreeID   string   `json:"worktree_id,omitempty"`
+	SnapshotRefs []string `json:"snapshot_refs,omitempty"`
+	// Fence is the archive being undone; the new lock retires it.
+	Fence string `json:"fence,omitempty"`
+	// Repos is the multi-repo form: every repository of the workspace, each
+	// rebuilt at WorktreePath/<rel>. When set it replaces ProjectPath.
+	Repos []worktreeRecreateRepo `json:"repos,omitempty"`
 }
 
 type worktreeRecreateResponse struct {
@@ -656,6 +697,18 @@ type worktreeRecreateResponse struct {
 	PathExists   bool   `json:"path_exists"`
 	Output       string `json:"output,omitempty"`
 	Error        string `json:"error,omitempty"`
+	// SnapshotApplied: saved work from an earlier clean-up was re-applied to
+	// EVERY checkout that had some. False when any apply failed, in which case
+	// the refs must be kept.
+	SnapshotApplied bool `json:"snapshot_applied,omitempty"`
+	// SnapshotFailed names the checkouts whose saved work could not be applied.
+	SnapshotFailed []string `json:"snapshot_failed,omitempty"`
+	// SnapshotBranchMoved names the checkouts whose saved work was NOT applied
+	// because the branch moved since it was saved. The work stays on its ref.
+	SnapshotBranchMoved []string `json:"snapshot_branch_moved,omitempty"`
+	// RestoredFromQuarantine names checkouts that were parked and moved back
+	// instead of being recreated.
+	RestoredFromQuarantine []string `json:"restored_from_quarantine,omitempty"`
 }
 
 func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error) {
@@ -663,43 +716,152 @@ func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error)
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-
+	repos := req.Repos
+	if len(repos) == 0 {
+		repos = []worktreeRecreateRepo{{RepoPath: req.ProjectPath, Rel: "", Branch: req.Branch, SnapshotRefs: req.SnapshotRefs}}
+	}
 	resp := worktreeRecreateResponse{}
 
-	// Check if branch exists
-	branchCheckCmd := exec.CommandContext(ctx, "git", "rev-parse", "--verify", req.Branch)
-	branchCheckCmd.Dir = req.ProjectPath
-	if err := branchCheckCmd.Run(); err != nil {
-		resp.BranchExists = false
-		resp.Error = fmt.Sprintf("branch '%s' no longer exists", req.Branch)
-		return json.Marshal(resp)
+	// Check everything BEFORE creating anything, so a missing branch in the
+	// third repo does not leave two checkouts behind.
+	for _, repo := range repos {
+		branch := firstNonEmptyStr(repo.Branch, req.Branch)
+		check := exec.CommandContext(ctx, "git", "rev-parse", "--verify", branch)
+		check.Dir = repo.RepoPath
+		if err := check.Run(); err != nil {
+			resp.BranchExists = false
+			resp.Error = fmt.Sprintf("branch '%s' no longer exists in %s", branch, repo.RepoPath)
+			return json.Marshal(resp)
+		}
 	}
 	resp.BranchExists = true
-
-	// Check if directory already exists
-	if _, err := os.Stat(req.WorktreePath); err == nil {
-		resp.PathExists = true
-		resp.Error = fmt.Sprintf("worktree directory '%s' already exists", req.WorktreePath)
-		return json.Marshal(resp)
+	// A checkout parked by an interrupted clean-up is moved back, not rebuilt:
+	// `git worktree add` would refuse (the branch is still checked out there).
+	recovered := map[string]bool{}
+	if req.WorktreeID != "" {
+		if rc, err := sharedWorktreeReclaimer(); err == nil {
+			back, _ := rc.RecoverQuarantined(ctx, req.WorktreeID)
+			for _, dest := range back {
+				recovered[dest] = true
+				resp.RestoredFromQuarantine = append(resp.RestoredFromQuarantine, dest)
+			}
+		}
+	}
+	for _, repo := range repos {
+		if recovered[filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel))] {
+			continue
+		}
+		if _, err := os.Stat(filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel))); err == nil {
+			resp.PathExists = true
+			resp.Error = fmt.Sprintf("worktree directory '%s' already exists", filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel)))
+			return json.Marshal(resp)
+		}
 	}
 
-	// Ensure parent directory exists
-	if err := os.MkdirAll(filepath.Dir(req.WorktreePath), 0755); err != nil {
-		resp.Error = fmt.Sprintf("failed to create parent directory: %v", err)
-		return json.Marshal(resp)
+	// created is parallel to repos; "" marks a checkout that was moved back
+	// from quarantine rather than created here.
+	created := make([]string, len(repos))
+	rollback := func() {
+		for i, dir := range created {
+			if dir == "" {
+				continue
+			}
+			worktreereclaim.UnlockForRemoval(ctx, dir)
+			// Run from the checkout's own repository: its parent directory is
+			// not a git repository.
+			rm := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", dir)
+			rm.Dir = repos[i].RepoPath
+			_, _ = rm.CombinedOutput()
+		}
+	}
+	for i, repo := range repos {
+		dest := filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel))
+		if recovered[dest] {
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
+			rollback()
+			resp.Error = fmt.Sprintf("failed to create parent directory: %v", err)
+			return json.Marshal(resp)
+		}
+		add := exec.CommandContext(ctx, "git", "worktree", "add", dest, firstNonEmptyStr(repo.Branch, req.Branch))
+		add.Dir = repo.RepoPath
+		if output, err := add.CombinedOutput(); err != nil {
+			rollback()
+			resp.Output = string(output)
+			resp.Error = fmt.Sprintf("failed to recreate worktree: %s", strings.TrimSpace(string(output)))
+			return json.Marshal(resp)
+		}
+		created[i] = dest
 	}
 
-	// Recreate git worktree from branch
-	worktreeCmd := exec.CommandContext(ctx, "git", "worktree", "add", req.WorktreePath, req.Branch)
-	worktreeCmd.Dir = req.ProjectPath
-	if output, err := worktreeCmd.CombinedOutput(); err != nil {
-		resp.Output = string(output)
-		resp.Error = fmt.Sprintf("failed to recreate worktree: %s", strings.TrimSpace(string(output)))
-		return json.Marshal(resp)
+	if req.WorktreeID != "" {
+		for _, dest := range created {
+			if dest == "" {
+				continue
+			}
+			if err := worktreereclaim.RestoreCheckout(ctx, dest, req.WorktreeID, req.Fence); err != nil {
+				logging.Warn("worktree recreated but not locked; reconcile will retry", "worktree_path", dest, "error", err)
+			}
+		}
 	}
 
+	// Put back the work each checkout had. Applied per checkout, from that
+	// checkout's own repository, and reported honestly: the refs are only safe
+	// to forget once EVERY one of them was re-applied.
+	resp.SnapshotApplied = true
+	anySnapshot := false
+	if req.WorktreeID != "" {
+		for i, repo := range repos {
+			if created[i] == "" {
+				continue
+			}
+			ref := worktreereclaim.LatestSnapshot(ctx, repo.RepoPath, req.WorktreeID, snapshotRefsFor(req.WorktreeID, repo, req.SnapshotRefs))
+			if ref == "" {
+				continue
+			}
+			anySnapshot = true
+			if err := worktreereclaim.ApplySnapshot(ctx, created[i], ref); err != nil {
+				resp.SnapshotApplied = false
+				if errors.Is(err, worktreereclaim.ErrBranchMoved) {
+					resp.SnapshotBranchMoved = append(resp.SnapshotBranchMoved, repo.Rel)
+					resp.Output += fmt.Sprintf("work saved at %s was not applied because the branch moved; it is still on that ref\n", ref)
+				} else {
+					resp.SnapshotFailed = append(resp.SnapshotFailed, repo.Rel)
+					resp.Output += fmt.Sprintf("saved work for %q was not re-applied: %v\n", repo.Rel, err)
+				}
+				logging.Warn("worktree recreated but its snapshot was not applied", "ref", ref, "error", err)
+				continue
+			}
+			if err := worktreereclaim.RetireAppliedRef(ctx, repo.RepoPath, ref); err != nil {
+				logging.Warn("snapshot applied but its ref could not be retired", "ref", ref, "error", err)
+			}
+		}
+	}
+	if !anySnapshot {
+		resp.SnapshotApplied = false
+	}
 	resp.Success = true
 	return json.Marshal(resp)
+}
+
+// snapshotRefsFor picks, from the refs recorded on the row, those that hold
+// this repo's checkout's work. It never looks at refs the row does not name.
+func snapshotRefsFor(worktreeID string, repo worktreeRecreateRepo, shared []string) []string {
+	refs := shared
+	if len(repo.SnapshotRefs) > 0 {
+		refs = repo.SnapshotRefs
+	}
+	return worktreereclaim.RefsForCheckout(worktreeID, repo.Rel, refs)
+}
+
+func firstNonEmptyStr(vals ...string) string {
+	for _, v := range vals {
+		if v != "" {
+			return v
+		}
+	}
+	return ""
 }
 
 // =============================================================================
@@ -1832,4 +1994,60 @@ func worktreeParseGitStatusPath(rawPath string) string {
 		}
 	}
 	return path
+}
+
+// =============================================================================
+// worktree.reconcile / worktree.snapshot_remove
+// =============================================================================
+//
+// The server sends the worktree rows this daemon owns and records what came
+// back; every decision about a directory is made here, because only the daemon
+// can see the filesystem. reconcile locks active worktrees and removes archived
+// ones that are provably safe; snapshot_remove is the user-confirmed path that
+// saves a held worktree's work to a local ref first.
+
+// worktreeReclaimers holds one Reclaimer per worktree root. It is keyed by
+// root because a Reclaimer carries per-path locks and caches that must be shared
+// by every request for that root, while the root itself follows $HOME.
+var (
+	worktreeReclaimersMu sync.Mutex
+	worktreeReclaimers   = map[string]*worktreereclaim.Reclaimer{}
+)
+
+func sharedWorktreeReclaimer() (*worktreereclaim.Reclaimer, error) {
+	root, err := worktreereclaim.DefaultRoot()
+	if err != nil {
+		return nil, err
+	}
+	worktreeReclaimersMu.Lock()
+	defer worktreeReclaimersMu.Unlock()
+	r := worktreeReclaimers[root]
+	if r == nil {
+		r = worktreereclaim.NewReclaimer(root)
+		worktreeReclaimers[root] = r
+		// Checkouts parked by a clean-up that a crash interrupted go back to
+		// their paths before anything else looks at this root.
+		r.RecoverQuarantined(context.Background(), "")
+	}
+	return r, nil
+}
+
+func handleWorktreeReconcile(ctx context.Context, payload []byte) ([]byte, error) {
+	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).Reconcile)
+}
+
+func handleWorktreeSnapshotRemove(ctx context.Context, payload []byte) ([]byte, error) {
+	return handleWorktreeReclaim(ctx, payload, (*worktreereclaim.Reclaimer).SnapshotRemove)
+}
+
+func handleWorktreeReclaim(ctx context.Context, payload []byte, op func(*worktreereclaim.Reclaimer, context.Context, worktreereclaim.Request) worktreereclaim.Response) ([]byte, error) {
+	var req worktreereclaim.Request
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	r, err := sharedWorktreeReclaimer()
+	if err != nil {
+		return nil, fmt.Errorf("worktree root unavailable: %w", err)
+	}
+	return json.Marshal(op(r, ctx, req))
 }

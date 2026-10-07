@@ -82,10 +82,73 @@ const (
 	ProjectInstallFailed ProjectInstallState = "failed"
 )
 
-// CleanupMetadata tracks what was cleaned up when archiving a worktree.
+// CleanupMetadata tracks what became of an archived worktree's directory.
+//
+// DirectoryDeleted is the settled state: the daemon removed the directory (or
+// found it already gone). Until then HeldReason, when set, says why the daemon
+// declined to remove it on its own ("dirty", "unpushed", ...), so the storage
+// inbox item can list it.
 type CleanupMetadata struct {
 	DirectoryDeleted bool `json:"directory_deleted"`
 	BranchDeleted    bool `json:"branch_deleted"`
+	// DeleteBranch asks for the branch to be deleted once the directory is
+	// gone: git refuses to delete a branch that is checked out.
+	DeleteBranch bool `json:"delete_branch,omitempty"`
+
+	HeldReason string `json:"held_reason,omitempty"`
+	HeldDetail string `json:"held_detail,omitempty"`
+	// Cleaning is true while a user-confirmed clean-up is running for this
+	// worktree. It only counts while CleaningUntil is in the future: the process
+	// running it renews the deadline every minute, so one that died (a restart
+	// mid-clean-up) stops counting within minutes instead of disabling Clean up
+	// until the next sweep. CleaningBy names that process for diagnostics.
+	Cleaning      bool       `json:"cleaning,omitempty"`
+	CleaningBy    string     `json:"cleaning_by,omitempty"`
+	CleaningUntil *time.Time `json:"cleaning_until,omitempty"`
+	// RetireFence is set when an unarchive could not reach the machine to retire
+	// that archive's fence. The sweep delivers it, and until it does the row is
+	// treated as live and nothing is removed.
+	RetireFence string `json:"retire_fence,omitempty"`
+	// Rechecks counts consecutive checks that found the same hold; the sweep
+	// backs off exponentially on it.
+	Rechecks int `json:"rechecks,omitempty"`
+	// LockedAt is when the daemon last confirmed it holds the reliant lock on a
+	// live worktree, so the sweep need not ask again for a day.
+	LockedAt *time.Time `json:"locked_at,omitempty"`
+	// SizeBytes is the held directory's size as last measured (a lower bound
+	// for very large trees).
+	SizeBytes int64 `json:"size_bytes,omitempty"`
+	// SnapshotRefs are the local refs the user's work was saved to before the
+	// directory was removed by a confirmed clean-up.
+	SnapshotRefs []string   `json:"snapshot_refs,omitempty"`
+	CheckedAt    *time.Time `json:"checked_at,omitempty"`
+}
+
+// CleaningNow reports whether a clean-up is genuinely running: flagged, and its
+// deadline not yet passed.
+func (m *CleanupMetadata) CleaningNow(now time.Time) bool {
+	return m != nil && m.Cleaning && m.CleaningUntil != nil && now.Before(*m.CleaningUntil)
+}
+
+// ReclaimCandidate is a worktree row a daemon may still hold a directory for,
+// with what the server needs to describe it to that daemon.
+type ReclaimCandidate struct {
+	Worktree    *Worktree
+	OwnerUserID string
+	ProjectPath string
+}
+
+// WorktreePath is the id and directory of one worktree row.
+type WorktreePath struct {
+	ID   string
+	Path string
+}
+
+// HeldWorktree is an archived worktree the daemon declined to remove.
+type HeldWorktree struct {
+	Worktree    *Worktree
+	ProjectName string
+	ProjectPath string
 }
 
 // Worktree represents a workspace-level git worktree.
@@ -218,6 +281,19 @@ type WorktreeStore interface {
 	ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error)
 	UpdateWorktree(ctx context.Context, worktree *Worktree) error
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *CleanupMetadata) error
+	// ListWorktreesForReclaim returns every non-main workspace that may still
+	// have a directory on its daemon: archived ones to remove, active ones to
+	// lock. Rows whose directory is already settled are excluded.
+	ListWorktreesForReclaim(ctx context.Context) ([]*ReclaimCandidate, error)
+	// AdoptWorktreeDaemon records daemonID on a row that has none. A no-op when
+	// the row already names a daemon.
+	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
+	// ListLiveWorktreePathsForUser returns the path of every unarchived row the
+	// user owns.
+	ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]WorktreePath, error)
+	// ListHeldWorktreesForUser returns the user's archived workspaces a daemon
+	// has recorded as held (not auto-removed) and not yet deleted.
+	ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*HeldWorktree, error)
 	DeleteWorktree(ctx context.Context, id string) error
 	ArchiveWorktree(ctx context.Context, id string) error
 	UnarchiveWorktree(ctx context.Context, id string) error

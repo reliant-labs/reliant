@@ -1556,6 +1556,80 @@ func (r *Repo) ListDaemonLocalModels(ctx context.Context, userID string) (map[st
 	return inventories, rows.Err()
 }
 
+// GetSettingValue returns a user-level setting's value, and whether it is set.
+func (r *Repo) GetSettingValue(ctx context.Context, userID, key string) (string, bool) {
+	setting, err := r.GetSetting(ctx, userID, nil, key)
+	if err != nil || setting == nil {
+		return "", false
+	}
+	return setting.Value, true
+}
+
+// TryAdvisoryLock takes a session-level advisory lock on a dedicated
+// connection, so exactly one replica at a time holds it. The lock dies with the
+// connection, so a crashed holder never strands it.
+//
+// Session-level locks need a connection that stays the same one for the
+// session. That holds on direct Postgres and with session-pooled pgbouncer; it
+// does NOT hold behind transaction-pooling pgbouncer, where the lock can be
+// taken on one backend and released (or silently lost) on another. If this
+// service is ever fronted by one, switch the sweep to a lease row with an expiry.
+func (r *Repo) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
+	conn, err := r.DB.SQLDB().Conn(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	var got bool
+	if err := conn.QueryRowContext(ctx, `SELECT pg_try_advisory_lock($1)`, key).Scan(&got); err != nil {
+		_ = conn.Close()
+		return nil, false, err
+	}
+	if !got {
+		_ = conn.Close()
+		return func() {}, false, nil
+	}
+	return func() {
+		_, _ = conn.ExecContext(context.WithoutCancel(ctx), `SELECT pg_advisory_unlock($1)`, key)
+		_ = conn.Close()
+	}, true, nil
+}
+
+// SetDaemonStorageState stores the daemon's last-reported disk state, replacing
+// the previous value.
+func (r *Repo) SetDaemonStorageState(ctx context.Context, daemonID string, stateJSON string) error {
+	if daemonID == "" {
+		return fmt.Errorf("daemon ID cannot be empty")
+	}
+	query := r.bindQuery(`UPDATE daemons SET storage_state = ? WHERE id = ?`)
+	if _, err := r.DB.ExecContext(ctx, query, stateJSON, daemonID); err != nil {
+		return fmt.Errorf("updating daemon storage state: %w", err)
+	}
+	return nil
+}
+
+// ListDaemonStorageState returns the stored disk state of every daemon the user
+// owns that has reported one, keyed by daemon ID.
+func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	query := r.bindQuery(`SELECT id, storage_state FROM daemons WHERE user_id = ? AND storage_state <> ''`)
+	rows, err := r.DB.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("listing daemon storage state for user %s: %w", userID, err)
+	}
+	defer rows.Close()
+	states := make(map[string]string)
+	for rows.Next() {
+		var daemonID, stateJSON string
+		if err := rows.Scan(&daemonID, &stateJSON); err != nil {
+			return nil, fmt.Errorf("scanning daemon storage state: %w", err)
+		}
+		states[daemonID] = stateJSON
+	}
+	return states, rows.Err()
+}
+
 func (r *Repo) DeleteDaemonAttachment(ctx context.Context, daemonID string) error {
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
@@ -1941,6 +2015,64 @@ func (r *Repo) UpdateWorktreeCleanupMetadata(ctx context.Context, id string, met
 	}
 
 	return r.worktrees.UpdateWorktreeCleanupMetadata(ctx, id, metadata)
+}
+
+func (r *Repo) ListWorktreesForReclaim(ctx context.Context) ([]*core.ReclaimCandidate, error) {
+	return r.worktrees.ListWorktreesForReclaim(ctx)
+}
+
+func (r *Repo) ListLiveWorktreePathsForUser(ctx context.Context, userID string) ([]core.WorktreePath, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.worktrees.ListLiveWorktreePathsForUser(ctx, userID)
+}
+
+// MergeWorktreeCleanupMetadata is a read-modify-write of one row's
+// cleanup_metadata under SELECT ... FOR UPDATE.
+func (r *Repo) MergeWorktreeCleanupMetadata(ctx context.Context, id string, fn func(m *CleanupMetadata, archived bool) bool) error {
+	if id == "" {
+		return fmt.Errorf("worktree ID cannot be empty")
+	}
+	tx, err := r.DB.SQLDB().BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+	var raw sql.NullString
+	var deletedAt sql.NullTime
+	if err := tx.QueryRowContext(ctx, `SELECT cleanup_metadata, deleted_at FROM worktrees WHERE id = $1 FOR UPDATE`, id).Scan(&raw, &deletedAt); err != nil {
+		return err
+	}
+	meta := CleanupMetadata{}
+	if raw.Valid && raw.String != "" {
+		_ = json.Unmarshal([]byte(raw.String), &meta)
+	}
+	if !fn(&meta, deletedAt.Valid) {
+		return nil
+	}
+	encoded, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `UPDATE worktrees SET cleanup_metadata = $2, updated_at = NOW() WHERE id = $1`, id, string(encoded)); err != nil {
+		return err
+	}
+	return tx.Commit()
+}
+
+func (r *Repo) AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error {
+	if id == "" || daemonID == "" {
+		return fmt.Errorf("worktree and daemon IDs cannot be empty")
+	}
+	return r.worktrees.AdoptWorktreeDaemon(ctx, id, daemonID)
+}
+
+func (r *Repo) ListHeldWorktreesForUser(ctx context.Context, userID string) ([]*core.HeldWorktree, error) {
+	if userID == "" {
+		return nil, fmt.Errorf("user ID cannot be empty")
+	}
+	return r.worktrees.ListHeldWorktreesForUser(ctx, userID)
 }
 
 func (r *Repo) DeleteWorktree(ctx context.Context, id string) error {

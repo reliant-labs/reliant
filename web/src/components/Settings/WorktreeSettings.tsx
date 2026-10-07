@@ -13,17 +13,17 @@ const ARCHIVE_MODES: Array<{ value: WorktreeArchiveMode; label: string; descript
   {
     value: "ask_me",
     label: "Ask every time",
-    description: "Show the cleanup choices each time you archive, defaulting to the options below.",
+    description: "Show the cleanup choices each time you archive. Files are removed automatically when nothing in them would be lost.",
   },
   {
     value: "always_cleanup",
     label: "Clean up automatically",
-    description: "Archive straight away and remove the files and branch as set below. No prompt.",
+    description: "Archive straight away, no prompt. Files are removed automatically when nothing in them would be lost, and the branch as set below.",
   },
   {
     value: "always_keep",
     label: "Keep everything",
-    description: "Archive straight away and leave the worktree directory and branch on disk.",
+    description: "Archive straight away and never remove files automatically. Anything kept still appears in your Inbox so you can clean it up yourself.",
   },
 ];
 
@@ -48,7 +48,6 @@ export function WorktreeSettings() {
   };
 
   const archiveMode = preferences?.worktree.archiveMode ?? "ask_me";
-  const deleteDirectory = preferences?.worktree.defaultDeleteDirectory ?? true;
   const deleteBranch = preferences?.worktree.defaultDeleteBranch ?? false;
   // "Keep everything" never touches files, so its cleanup defaults are moot.
   const cleanupDefaultsApply = archiveMode !== "always_keep";
@@ -58,7 +57,7 @@ export function WorktreeSettings() {
       <Card>
         <CardHeader
           title="When you archive a workspace"
-          description="Archiving always keeps the workspace record and its chats, so you can restore them. These settings decide what else happens to the worktree on disk."
+          description="Archiving always keeps the workspace record and its chats, so you can restore them. Reliant removes a workspace's files only when nothing in them would be lost; anything else stays on disk and shows up in your Inbox."
         />
 
         <fieldset className="flex flex-col gap-4" disabled={isSaving}>
@@ -104,25 +103,8 @@ export function WorktreeSettings() {
             </h4>
             <CardInset padding="none" className="divide-y divide-border/60">
               <PreferenceRow
-                title="Delete the worktree directory"
-                description={
-                  <>
-                    Remove the workspace's files from{" "}
-                    <span className="font-mono">~/.reliant/worktrees/</span> when it is archived.
-                    Uncommitted changes in it are lost.
-                  </>
-                }
-                checked={deleteDirectory}
-                disabled={isSaving || !cleanupDefaultsApply}
-                onChange={() =>
-                  updateSafely(() =>
-                    updateWorktreePrefs.mutateAsync({ defaultDeleteDirectory: !deleteDirectory }),
-                  )
-                }
-              />
-              <PreferenceRow
                 title="Delete the git branch"
-                description="Remove the workspace's branch from the repository when it is archived. Only turn this on if you merge or push branches before archiving."
+                description="Remove the workspace's branch from the repository once its files have been removed. Only turn this on if you merge or push branches before archiving."
                 warning={
                   deleteBranch && cleanupDefaultsApply
                     ? "Unpushed commits on a deleted branch can't be recovered from Reliant."

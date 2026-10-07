@@ -21,7 +21,6 @@ export type WorktreeArchiveMode = "ask_me" | "always_cleanup" | "always_keep";
 
 export interface WorktreePreferences {
   archiveMode: WorktreeArchiveMode;
-  defaultDeleteDirectory: boolean;
   defaultDeleteBranch: boolean;
   branchCopyUncommittedFilesDefault: boolean;
 }
@@ -71,7 +70,6 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   streamingEnabled: true,
   worktree: {
     archiveMode: "ask_me",
-    defaultDeleteDirectory: true,
     defaultDeleteBranch: false,
     branchCopyUncommittedFilesDefault: false,
   },
@@ -84,8 +82,6 @@ function mapApiPreferences(apiPrefs: any): UserPreferences {
     worktree: {
       archiveMode:
         (apiPrefs.worktree_archive_mode as WorktreeArchiveMode) ?? "ask_me",
-      defaultDeleteDirectory:
-        apiPrefs.worktree_default_delete_directory ?? true,
       defaultDeleteBranch:
         apiPrefs.worktree_default_delete_branch ?? false,
       branchCopyUncommittedFilesDefault:
@@ -126,9 +122,6 @@ export function useUpdatePreferences() {
       if (prefs.worktree) {
         if (prefs.worktree.archiveMode !== undefined)
           apiPrefs.worktree_archive_mode = prefs.worktree.archiveMode;
-        if (prefs.worktree.defaultDeleteDirectory !== undefined)
-          apiPrefs.worktree_default_delete_directory =
-            prefs.worktree.defaultDeleteDirectory;
         if (prefs.worktree.defaultDeleteBranch !== undefined)
           apiPrefs.worktree_default_delete_branch =
             prefs.worktree.defaultDeleteBranch;

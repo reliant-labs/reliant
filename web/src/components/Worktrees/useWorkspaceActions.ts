@@ -6,7 +6,7 @@ import { useChatStore } from "../../store/chatStore";
 import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import type { Chat } from "../../types/chat";
 
-type CleanupOptions = { deleteGitBranch: boolean; deleteLocalDirectory: boolean };
+type CleanupOptions = { deleteGitBranch: boolean };
 
 /**
  * Archive a workspace the way the user's cleanup settings say to.
@@ -31,11 +31,8 @@ export function useArchiveWorkspace() {
       }
       const options: CleanupOptions =
         mode === "always_cleanup"
-          ? {
-              deleteGitBranch: preferences?.worktree.defaultDeleteBranch ?? false,
-              deleteLocalDirectory: preferences?.worktree.defaultDeleteDirectory ?? true,
-            }
-          : { deleteGitBranch: false, deleteLocalDirectory: false };
+          ? { deleteGitBranch: preferences?.worktree.defaultDeleteBranch ?? false }
+          : { deleteGitBranch: false };
       void deleteWorktree(worktree.id, options);
     },
     [deleteWorktree, preferences],

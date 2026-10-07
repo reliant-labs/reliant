@@ -62,3 +62,56 @@ UPDATE worktrees SET
     cleanup_metadata = $1,
     updated_at = NOW()
 WHERE id = $2;
+
+-- name: ListWorktreesForReclaim :many
+-- Every workspace whose directory a daemon may still hold: not main, has a
+-- path, and not already known to be removed. Status 5 is CREATING and 6 is
+-- FAILED (WorktreeStatus in worktree.proto); neither has a directory yet. Archived rows are the ones to remove; the rest are locked as
+-- reliant-owned. owner_user_id lets the sweep find the daemon's connection.
+-- cleanup_metadata is only ever NULL or JSON we wrote, but the cast sits inside
+-- a CASE so a hand-edited value cannot fail the whole listing.
+SELECT
+    sqlc.embed(w),
+    p.user_id AS owner_user_id,
+    p.path AS project_path
+FROM worktrees w
+JOIN projects p ON p.id = w.project_id
+WHERE w.is_main = false
+  AND w.path <> ''
+  AND w.status NOT IN (5, 6)
+  AND (CASE WHEN w.cleanup_metadata IS NULL OR w.cleanup_metadata = '' THEN false
+            ELSE COALESCE((w.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false
+ORDER BY w.last_active DESC;
+
+-- name: ListHeldWorktreesForUser :many
+-- Archived workspaces the daemon declined to remove on its own, for the
+-- storage inbox item.
+SELECT
+    sqlc.embed(w),
+    p.name AS project_name,
+    p.path AS project_path
+FROM worktrees w
+JOIN projects p ON p.id = w.project_id
+WHERE p.user_id = $1
+  AND w.is_main = false
+  AND w.deleted_at IS NOT NULL
+  AND (CASE WHEN w.cleanup_metadata IS NULL OR w.cleanup_metadata = '' THEN ''
+            ELSE COALESCE(w.cleanup_metadata::jsonb ->> 'held_reason', '') END) <> ''
+  AND (CASE WHEN w.cleanup_metadata IS NULL OR w.cleanup_metadata = '' THEN false
+            ELSE COALESCE((w.cleanup_metadata::jsonb ->> 'directory_deleted')::boolean, false) END) = false
+ORDER BY w.deleted_at;
+
+-- name: AdoptWorktreeDaemon :exec
+-- A daemon that found a workspace's directory on its disk has proven it owns
+-- it. Rows created before daemon_id was recorded get it filled in here, once.
+UPDATE worktrees SET daemon_id = $1 WHERE id = $2 AND daemon_id IS NULL;
+
+
+-- name: ListLiveWorktreePathsForUser :many
+-- Every path one user's unarchived worktree rows claim. An archived row's
+-- directory may only be removed when none of the SAME user's live rows has a
+-- path that equals, contains or sits inside it. Scoped by user because another
+-- tenant's rows say nothing about this user's directories.
+SELECT w.id, w.path FROM worktrees w
+JOIN projects p ON p.id = w.project_id
+WHERE p.user_id = $1 AND w.deleted_at IS NULL AND w.path <> '';

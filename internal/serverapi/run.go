@@ -452,6 +452,13 @@ func Run(ctx context.Context, opts Options) error {
 		}()
 	}
 
+	// Settle archived worktrees' directories on their daemons: remove what is
+	// provably safe, record what is held, and lock live worktrees as
+	// reliant-owned. Every replica runs it; a daemon's answers are idempotent.
+	if sweeper := grpcSrv.WorktreeSweeper(); sweeper != nil {
+		go sweeper.Run(ctx, worktreeSweepInterval)
+	}
+
 	// Converge every trigger's Temporal Schedule onto its row, and drop
 	// schedules whose row is gone. The DB is the truth, so this repairs drift
 	// left by a write that landed while Temporal was unreachable — and an

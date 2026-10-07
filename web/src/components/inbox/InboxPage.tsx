@@ -61,6 +61,7 @@ const SECTION_TITLE: Record<InboxItemKind, string> = {
   [InboxItemKind.AUTOMATION_FAILING]: "Failing automations",
   [InboxItemKind.AUTOMATION_LAUNCH_FAILED]: "Automations that could not start",
   [InboxItemKind.RUN_FINISHED]: "Finished runs",
+  [InboxItemKind.STORAGE]: "Storage",
 };
 
 /** Section the items by kind, in kind (priority) order, keeping each kind's server order. */

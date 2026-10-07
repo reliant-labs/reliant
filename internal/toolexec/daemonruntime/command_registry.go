@@ -4,8 +4,10 @@ package daemonruntime
 import (
 	"context"
 	"fmt"
+	"runtime/debug"
 	"sync"
 
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/version"
 )
 
@@ -34,13 +36,24 @@ func (r *CommandRegistry) Register(commandType string, handler CommandHandler) {
 }
 
 // Handle dispatches a command to the registered handler.
-func (r *CommandRegistry) Handle(ctx context.Context, commandType string, payload []byte) ([]byte, error) {
+//
+// A handler that panics must not take the daemon with it: every command in the
+// process passes through here, so the panic is turned into an error reply for
+// that one command and the stack is logged. (A panic in a worktree classifier
+// once crashed the whole daemon, and with it every other command in flight.)
+func (r *CommandRegistry) Handle(ctx context.Context, commandType string, payload []byte) (result []byte, err error) {
 	r.mu.RLock()
 	handler, ok := r.handlers[commandType]
 	r.mu.RUnlock()
 	if !ok {
 		return nil, unknownCommandError(commandType)
 	}
+	defer func() {
+		if rec := recover(); rec != nil {
+			logging.Error("daemon command panicked", "commandType", commandType, "panic", fmt.Sprint(rec), "stack", string(debug.Stack()))
+			result, err = nil, fmt.Errorf("command %q failed internally: %v", commandType, rec)
+		}
+	}()
 	return handler(ctx, payload)
 }
 

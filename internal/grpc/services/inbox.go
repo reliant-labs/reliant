@@ -6,10 +6,12 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -21,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
+	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
 
 const defaultInboxLimit = 100
@@ -38,11 +41,12 @@ const (
 	inboxFailingPrefix           = "automation_failing:"
 	inboxLaunchFailedPrefix      = "automation_launch_failed:"
 	inboxRunFinishedPrefix       = "run_finished:"
+	inboxStoragePrefix           = "storage:"
 )
 
 var inboxItemPrefixes = []string{
 	inboxApprovalPrefix, inboxQuestionPrefix, inboxWaitingForMachinePrefix,
-	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix,
+	inboxFailingPrefix, inboxLaunchFailedPrefix, inboxRunFinishedPrefix, inboxStoragePrefix,
 }
 
 // maxInboxDismissBatch bounds one Dismiss/Restore call ("Dismiss all" on a
@@ -53,11 +57,22 @@ const maxInboxDismissBatch = 500
 type InboxService struct {
 	reliantv1connect.UnimplementedInboxServiceHandler
 	database db.Repository
+	// sweeper runs the confirmed storage cleanup on a machine's daemon. Nil
+	// when no daemon router is wired; CleanupStorage then reports unavailable.
+	sweeper *worktreesweep.Sweeper
+	// storageCache holds each user's storage view for storageViewTTL.
+	storageCache sync.Map
 }
 
 // NewInboxService creates a new InboxService.
 func NewInboxService(database db.Repository) *InboxService {
 	return &InboxService{database: database}
+}
+
+// WithSweeper enables the storage item's Clean up action.
+func (s *InboxService) WithSweeper(sweeper *worktreesweep.Sweeper) *InboxService {
+	s.sweeper = sweeper
+	return s
 }
 
 // ListInbox returns everything waiting on the caller, optionally within one
@@ -101,6 +116,12 @@ func (s *InboxService) ListInbox(
 		items = append(items, inboxItemFromPending(p))
 	}
 	items = append(items, failing...)
+	storage, err := s.storageItems(ctx, userID)
+	if err != nil {
+		// Disk state is advisory; a failure here must not blank the whole inbox.
+		logging.Warn("Failed to compute storage inbox items", "error", err)
+	}
+	items = append(items, storage...)
 
 	items, err = s.dropDismissed(ctx, userID, items)
 	if err != nil {
@@ -112,7 +133,8 @@ func (s *InboxService) ListInbox(
 	if projectID != "" {
 		scoped := items[:0]
 		for _, it := range items {
-			if it.ProjectId == projectID {
+			// A machine's storage is not any project's: it shows in every scope.
+			if it.ProjectId == projectID || it.Kind == reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE {
 				scoped = append(scoped, it)
 			} else {
 				resp.OtherProjectsCount++
@@ -446,4 +468,128 @@ func firstQuestionPrompt(metadata string) string {
 		return ""
 	}
 	return payload.Questions[0].Question
+}
+
+// storageItems returns one item per machine that is low on disk or holds
+// archived worktrees it declined to remove. Storage items are not tied to a
+// project, so they appear in the unscoped inbox only.
+func (s *InboxService) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
+	machines, err := s.storageView(ctx, userID)
+	if err != nil || len(machines) == 0 {
+		return nil, err
+	}
+	daemons, err := s.database.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	names := map[string]string{}
+	for _, d := range daemons {
+		if d.Hostname != nil {
+			names[d.ID] = *d.Hostname
+		}
+	}
+	var out []*reliantv1.InboxItem
+	for _, m := range machines {
+		payload := &reliantv1.InboxStorage{
+			DaemonId:   m.DaemonID,
+			DaemonName: names[m.DaemonID],
+			DiskLow:    m.DiskLow,
+			Online:     m.Online,
+		}
+		if m.Disk != nil {
+			payload.DiskFreeBytes, payload.DiskTotalBytes = m.Disk.FreeBytes, m.Disk.TotalBytes
+			payload.ReportedAt = m.Disk.ReportedAt.UTC().Format(time.RFC3339)
+		}
+		for _, h := range m.Held {
+			payload.Held = append(payload.Held, &reliantv1.HeldWorktree{
+				WorktreeId: h.WorktreeID, Name: h.Name, ProjectName: h.ProjectName, Path: h.Path,
+				Reason: h.Reason, Detail: h.Detail, SizeBytes: h.SizeBytes,
+				Removable: h.Removable, Cleaning: h.Cleaning,
+			})
+		}
+		out = append(out, &reliantv1.InboxItem{
+			Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE,
+			// The suffix changes when the picture changes (low disk starts, a
+			// new worktree is held), so a dismissal hides this state and not
+			// the next problem on the same machine.
+			ItemId:       inboxStoragePrefix + m.DaemonID + ":" + m.ItemSuffix,
+			WaitingSince: m.Since.UTC().Format(time.RFC3339Nano),
+			Payload:      &reliantv1.InboxItem_Storage{Storage: payload},
+		})
+	}
+	return out, nil
+}
+
+const storageViewTTL = 60 * time.Second
+
+type cachedStorageView struct {
+	at       time.Time
+	machines []*worktreesweep.MachineStorage
+}
+
+// storageView is StorageView with a short per-user cache: ListInbox backs the
+// nav badge, which polls, and the storage picture changes on the scale of
+// minutes. A clean-up or dismissal that must show at once calls dropStorageView.
+func (s *InboxService) storageView(ctx context.Context, userID string) ([]*worktreesweep.MachineStorage, error) {
+	if v, ok := s.storageCache.Load(userID); ok {
+		if c := v.(cachedStorageView); time.Since(c.at) < storageViewTTL {
+			return c.machines, nil
+		}
+	}
+	machines, err := worktreesweep.StorageView(ctx, s.database, userID)
+	if err != nil {
+		return nil, err
+	}
+	s.storageCache.Store(userID, cachedStorageView{at: time.Now(), machines: machines})
+	return machines, nil
+}
+
+// CleanupStorage runs the storage item's Clean up action on one machine.
+func (s *InboxService) CleanupStorage(
+	ctx context.Context,
+	req *connect.Request[reliantv1.CleanupStorageRequest],
+) (*connect.Response[reliantv1.CleanupStorageResponse], error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, fmt.Errorf("user ID not found in context"))
+	}
+	if req.Msg.DaemonId == "" || len(req.Msg.WorktreeIds) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("daemon_id and worktree_ids are required"))
+	}
+	if len(req.Msg.WorktreeIds) > maxInboxDismissBatch {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at most %d worktrees per call", maxInboxDismissBatch))
+	}
+	if s.sweeper == nil {
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("storage cleanup is not available"))
+	}
+	// The machine must be the caller's: Cleanup only ever acts on worktrees of
+	// projects the caller owns, but naming a stranger's daemon is rejected
+	// outright rather than quietly doing nothing.
+	daemon, err := s.database.GetDaemon(ctx, req.Msg.DaemonId)
+	if err != nil || daemon == nil || daemon.UserID != userID {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("machine not found"))
+	}
+
+	accepted, skipped, err := s.sweeper.StartCleanup(ctx, s.database, userID, req.Msg.DaemonId, req.Msg.WorktreeIds)
+	if errors.Is(err, worktreesweep.ErrOffline) {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("that machine is offline; reconnect it and try again"))
+	}
+	if err != nil {
+		logging.Error("Storage cleanup failed to start", "error", err, "daemonID", req.Msg.DaemonId)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("storage cleanup failed"))
+	}
+
+	s.storageCache.Delete(userID)
+	resp := &reliantv1.CleanupStorageResponse{}
+	for _, id := range accepted {
+		resp.Results = append(resp.Results, &reliantv1.CleanupStorageResult{
+			WorktreeId: id, Outcome: reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_ACCEPTED,
+		})
+	}
+	for _, r := range skipped {
+		resp.Results = append(resp.Results, &reliantv1.CleanupStorageResult{
+			WorktreeId: r.WorktreeID, Outcome: reliantv1.CleanupStorageOutcome_CLEANUP_STORAGE_OUTCOME_SKIPPED, Message: r.Message,
+		})
+	}
+	return connect.NewResponse(resp), nil
 }

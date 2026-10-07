@@ -1552,11 +1552,10 @@ func (*GetPreferencesRequest) Descriptor() ([]byte, []int) {
 }
 
 type GetPreferencesResponse struct {
-	state                          protoimpl.MessageState `protogen:"open.v1"`
-	StreamingEnabled               bool                   `protobuf:"varint,1,opt,name=streaming_enabled,json=streamingEnabled,proto3" json:"streaming_enabled,omitempty"`
-	WorktreeArchiveMode            string                 `protobuf:"bytes,3,opt,name=worktree_archive_mode,json=worktreeArchiveMode,proto3" json:"worktree_archive_mode,omitempty"`
-	WorktreeDefaultDeleteDirectory bool                   `protobuf:"varint,4,opt,name=worktree_default_delete_directory,json=worktreeDefaultDeleteDirectory,proto3" json:"worktree_default_delete_directory,omitempty"`
-	WorktreeDefaultDeleteBranch    bool                   `protobuf:"varint,5,opt,name=worktree_default_delete_branch,json=worktreeDefaultDeleteBranch,proto3" json:"worktree_default_delete_branch,omitempty"`
+	state                       protoimpl.MessageState `protogen:"open.v1"`
+	StreamingEnabled            bool                   `protobuf:"varint,1,opt,name=streaming_enabled,json=streamingEnabled,proto3" json:"streaming_enabled,omitempty"`
+	WorktreeArchiveMode         string                 `protobuf:"bytes,3,opt,name=worktree_archive_mode,json=worktreeArchiveMode,proto3" json:"worktree_archive_mode,omitempty"`
+	WorktreeDefaultDeleteBranch bool                   `protobuf:"varint,5,opt,name=worktree_default_delete_branch,json=worktreeDefaultDeleteBranch,proto3" json:"worktree_default_delete_branch,omitempty"`
 	// Additional arbitrary preferences stored as JSON
 	Additional map[string]string `protobuf:"bytes,6,rep,name=additional,proto3" json:"additional,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Default auto-approve setting for new chats (defaults to true)
@@ -1625,13 +1624,6 @@ func (x *GetPreferencesResponse) GetWorktreeArchiveMode() string {
 		return x.WorktreeArchiveMode
 	}
 	return ""
-}
-
-func (x *GetPreferencesResponse) GetWorktreeDefaultDeleteDirectory() bool {
-	if x != nil {
-		return x.WorktreeDefaultDeleteDirectory
-	}
-	return false
 }
 
 func (x *GetPreferencesResponse) GetWorktreeDefaultDeleteBranch() bool {
@@ -1719,11 +1711,10 @@ func (x *GetPreferencesResponse) GetHiddenPresetSlugs() []string {
 }
 
 type UpdatePreferencesRequest struct {
-	state                          protoimpl.MessageState `protogen:"open.v1"`
-	StreamingEnabled               *bool                  `protobuf:"varint,1,opt,name=streaming_enabled,json=streamingEnabled,proto3,oneof" json:"streaming_enabled,omitempty"`
-	WorktreeArchiveMode            *string                `protobuf:"bytes,3,opt,name=worktree_archive_mode,json=worktreeArchiveMode,proto3,oneof" json:"worktree_archive_mode,omitempty"`
-	WorktreeDefaultDeleteDirectory *bool                  `protobuf:"varint,4,opt,name=worktree_default_delete_directory,json=worktreeDefaultDeleteDirectory,proto3,oneof" json:"worktree_default_delete_directory,omitempty"`
-	WorktreeDefaultDeleteBranch    *bool                  `protobuf:"varint,5,opt,name=worktree_default_delete_branch,json=worktreeDefaultDeleteBranch,proto3,oneof" json:"worktree_default_delete_branch,omitempty"`
+	state                       protoimpl.MessageState `protogen:"open.v1"`
+	StreamingEnabled            *bool                  `protobuf:"varint,1,opt,name=streaming_enabled,json=streamingEnabled,proto3,oneof" json:"streaming_enabled,omitempty"`
+	WorktreeArchiveMode         *string                `protobuf:"bytes,3,opt,name=worktree_archive_mode,json=worktreeArchiveMode,proto3,oneof" json:"worktree_archive_mode,omitempty"`
+	WorktreeDefaultDeleteBranch *bool                  `protobuf:"varint,5,opt,name=worktree_default_delete_branch,json=worktreeDefaultDeleteBranch,proto3,oneof" json:"worktree_default_delete_branch,omitempty"`
 	// Additional arbitrary preferences
 	Additional map[string]string `protobuf:"bytes,6,rep,name=additional,proto3" json:"additional,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	// Default auto-approve setting for new chats
@@ -1788,13 +1779,6 @@ func (x *UpdatePreferencesRequest) GetWorktreeArchiveMode() string {
 		return *x.WorktreeArchiveMode
 	}
 	return ""
-}
-
-func (x *UpdatePreferencesRequest) GetWorktreeDefaultDeleteDirectory() bool {
-	if x != nil && x.WorktreeDefaultDeleteDirectory != nil {
-		return *x.WorktreeDefaultDeleteDirectory
-	}
-	return false
 }
 
 func (x *UpdatePreferencesRequest) GetWorktreeDefaultDeleteBranch() bool {
@@ -5171,11 +5155,10 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x17UpdateShortcutsResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"\x17\n" +
-	"\x15GetPreferencesRequest\"\xdf\a\n" +
+	"\x15GetPreferencesRequest\"\x94\a\n" +
 	"\x16GetPreferencesResponse\x12+\n" +
 	"\x11streaming_enabled\x18\x01 \x01(\bR\x10streamingEnabled\x122\n" +
-	"\x15worktree_archive_mode\x18\x03 \x01(\tR\x13worktreeArchiveMode\x12I\n" +
-	"!worktree_default_delete_directory\x18\x04 \x01(\bR\x1eworktreeDefaultDeleteDirectory\x12C\n" +
+	"\x15worktree_archive_mode\x18\x03 \x01(\tR\x13worktreeArchiveMode\x12C\n" +
 	"\x1eworktree_default_delete_branch\x18\x05 \x01(\bR\x1bworktreeDefaultDeleteBranch\x12R\n" +
 	"\n" +
 	"additional\x18\x06 \x03(\v22.reliant.v1.GetPreferencesResponse.AdditionalEntryR\n" +
@@ -5193,32 +5176,29 @@ const file_reliant_v1_settings_proto_rawDesc = "" +
 	"\x13hidden_preset_slugs\x18\x10 \x03(\tR\x11hiddenPresetSlugs\x1a=\n" +
 	"\x0fAdditionalEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x8b\n" +
-	"\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"\x95\t\n" +
 	"\x18UpdatePreferencesRequest\x120\n" +
 	"\x11streaming_enabled\x18\x01 \x01(\bH\x00R\x10streamingEnabled\x88\x01\x01\x127\n" +
-	"\x15worktree_archive_mode\x18\x03 \x01(\tH\x01R\x13worktreeArchiveMode\x88\x01\x01\x12N\n" +
-	"!worktree_default_delete_directory\x18\x04 \x01(\bH\x02R\x1eworktreeDefaultDeleteDirectory\x88\x01\x01\x12H\n" +
-	"\x1eworktree_default_delete_branch\x18\x05 \x01(\bH\x03R\x1bworktreeDefaultDeleteBranch\x88\x01\x01\x12T\n" +
+	"\x15worktree_archive_mode\x18\x03 \x01(\tH\x01R\x13worktreeArchiveMode\x88\x01\x01\x12H\n" +
+	"\x1eworktree_default_delete_branch\x18\x05 \x01(\bH\x02R\x1bworktreeDefaultDeleteBranch\x88\x01\x01\x12T\n" +
 	"\n" +
 	"additional\x18\x06 \x03(\v24.reliant.v1.UpdatePreferencesRequest.AdditionalEntryR\n" +
 	"additional\x125\n" +
-	"\x14default_auto_approve\x18\a \x01(\bH\x04R\x12defaultAutoApprove\x88\x01\x01\x12U\n" +
-	"%branch_copy_uncommitted_files_default\x18\b \x01(\bH\x05R!branchCopyUncommittedFilesDefault\x88\x01\x01\x127\n" +
-	"\x15default_planning_mode\x18\t \x01(\bH\x06R\x13defaultPlanningMode\x88\x01\x01\x12H\n" +
+	"\x14default_auto_approve\x18\a \x01(\bH\x03R\x12defaultAutoApprove\x88\x01\x01\x12U\n" +
+	"%branch_copy_uncommitted_files_default\x18\b \x01(\bH\x04R!branchCopyUncommittedFilesDefault\x88\x01\x01\x127\n" +
+	"\x15default_planning_mode\x18\t \x01(\bH\x05R\x13defaultPlanningMode\x88\x01\x01\x12H\n" +
 	"\x11default_mcp_scope\x18\n" +
-	" \x01(\x0e2\x17.reliant.v1.ConfigScopeH\aR\x0fdefaultMcpScope\x88\x01\x01\x12R\n" +
-	"\x16default_workflow_scope\x18\v \x01(\x0e2\x17.reliant.v1.ConfigScopeH\bR\x14defaultWorkflowScope\x88\x01\x01\x12.\n" +
-	"\x10default_workflow\x18\f \x01(\tH\tR\x0fdefaultWorkflow\x88\x01\x01\x129\n" +
-	"\x16hide_builtin_workflows\x18\r \x01(\bH\n" +
-	"R\x14hideBuiltinWorkflows\x88\x01\x01\x125\n" +
-	"\x14hide_builtin_presets\x18\x0e \x01(\bH\vR\x12hideBuiltinPresets\x88\x01\x01\x1a=\n" +
+	" \x01(\x0e2\x17.reliant.v1.ConfigScopeH\x06R\x0fdefaultMcpScope\x88\x01\x01\x12R\n" +
+	"\x16default_workflow_scope\x18\v \x01(\x0e2\x17.reliant.v1.ConfigScopeH\aR\x14defaultWorkflowScope\x88\x01\x01\x12.\n" +
+	"\x10default_workflow\x18\f \x01(\tH\bR\x0fdefaultWorkflow\x88\x01\x01\x129\n" +
+	"\x16hide_builtin_workflows\x18\r \x01(\bH\tR\x14hideBuiltinWorkflows\x88\x01\x01\x125\n" +
+	"\x14hide_builtin_presets\x18\x0e \x01(\bH\n" +
+	"R\x12hideBuiltinPresets\x88\x01\x01\x1a=\n" +
 	"\x0fAdditionalEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01B\x14\n" +
 	"\x12_streaming_enabledB\x18\n" +
-	"\x16_worktree_archive_modeB$\n" +
-	"\"_worktree_default_delete_directoryB!\n" +
+	"\x16_worktree_archive_modeB!\n" +
 	"\x1f_worktree_default_delete_branchB\x17\n" +
 	"\x15_default_auto_approveB(\n" +
 	"&_branch_copy_uncommitted_files_defaultB\x18\n" +

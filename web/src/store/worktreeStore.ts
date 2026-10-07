@@ -132,11 +132,11 @@ interface WorktreeStore {
   discoverWorktrees: (projectId: string) => Promise<void>;
   // ONLY archives (sets deleted_at). Never permanently deletes.
   // Optional cleanup: delete local directory and/or git branch
-  archiveWorktree: (id: string, options?: { deleteGitBranch?: boolean; deleteLocalDirectory?: boolean }) => Promise<void>;
+  archiveWorktree: (id: string, options?: { deleteGitBranch?: boolean }) => Promise<void>;
   // Archives worktree (sets deleted_at) if not already archived.
   // Permanently deletes from database if already archived.
   // Optional cleanup: delete local directory and/or git branch
-  deleteWorktree: (id: string, options?: { deleteGitBranch?: boolean; deleteLocalDirectory?: boolean }) => Promise<void>;
+  deleteWorktree: (id: string, options?: { deleteGitBranch?: boolean }) => Promise<void>;
   unarchiveWorktree: (id: string) => Promise<void>;
   updateWorktreeStatus: (id: string, status: Worktree['status']) => Promise<void>;
   restoreLastWorktree: (projectId: string) => boolean;
@@ -449,7 +449,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   // ONLY archives a worktree (sets deleted_at). Never permanently deletes.
   // This is the function that should be used by the UI archive button.
   // Options control whether to cleanup local directory and/or git branch
-  archiveWorktree: async (id: string, options?: { deleteGitBranch?: boolean; deleteLocalDirectory?: boolean }) => {
+  archiveWorktree: async (id: string, options?: { deleteGitBranch?: boolean }) => {
     set({ deletingId: id, error: null });
     try {
       // Get worktree info BEFORE archiving
@@ -462,7 +462,6 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
         () =>
           worktreeGrpc.archive(id, {
             deleteGitBranch: options?.deleteGitBranch,
-            deleteLocalDirectory: options?.deleteLocalDirectory,
           }),
         { onWaking: announceMachineWaking },
       );
@@ -507,8 +506,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
 
       // Show toast with cleanup info
       const cleanupParts = [];
-      if (options?.deleteLocalDirectory) cleanupParts.push('directory cleaned up');
-      if (options?.deleteGitBranch) cleanupParts.push('branch deleted');
+      if (options?.deleteGitBranch) cleanupParts.push('branch will be deleted once its files are removed');
       const cleanupMsg = cleanupParts.length > 0 ? ` (${cleanupParts.join(', ')})` : '';
       toast.success(`${worktreeName} archived${cleanupMsg}`, {
         duration: 4000,
@@ -527,7 +525,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   // - If not archived (deleted_at is NULL): Archives it (sets deleted_at)
   // - If already archived (deleted_at is set): Permanently deletes from database
   // Options control whether to cleanup local directory and/or git branch
-  deleteWorktree: async (id: string, options?: { deleteGitBranch?: boolean; deleteLocalDirectory?: boolean }) => {
+  deleteWorktree: async (id: string, options?: { deleteGitBranch?: boolean }) => {
     set({ deletingId: id, error: null });
     try {
       // Get worktree info BEFORE deleting
@@ -542,7 +540,6 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
         () =>
           worktreeGrpc.delete(id, {
             deleteGitBranch: options?.deleteGitBranch,
-            deleteLocalDirectory: options?.deleteLocalDirectory,
           }),
         { onWaking: announceMachineWaking },
       );
@@ -563,16 +560,14 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       // Show appropriate toast with cleanup info
       if (isPermanentDelete) {
         const cleanupParts = [];
-        if (options?.deleteLocalDirectory) cleanupParts.push('directory deleted');
-        if (options?.deleteGitBranch) cleanupParts.push('branch deleted');
+        if (options?.deleteGitBranch) cleanupParts.push('branch will be deleted once its files are removed');
         const cleanupMsg = cleanupParts.length > 0 ? ` (${cleanupParts.join(', ')})` : '';
         toast.success(`${worktreeName} deleted permanently${cleanupMsg}`, {
           duration: 4000,
         });
       } else {
         const cleanupParts = [];
-        if (options?.deleteLocalDirectory) cleanupParts.push('directory cleaned up');
-        if (options?.deleteGitBranch) cleanupParts.push('branch deleted');
+        if (options?.deleteGitBranch) cleanupParts.push('branch will be deleted once its files are removed');
         const cleanupMsg = cleanupParts.length > 0 ? ` (${cleanupParts.join(', ')})` : '';
         toast.success(`${worktreeName} archived${cleanupMsg}`, {
           duration: 4000,
@@ -631,7 +626,14 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       const worktree = useWorktreeStore.getState().worktrees.find(w => w.id === id);
       const worktreeName = worktree?.name || 'Workspace';
 
-      await worktreeGrpc.unarchive(id);
+      // A workspace whose files were removed has nothing to unarchive: rebuild
+      // it from its branch, which also puts back any work saved at removal.
+      let snapshotWarning = '';
+      if (worktree?.cleanup_metadata?.directory_deleted) {
+        snapshotWarning = (await worktreeGrpc.recreate(id)).snapshotWarning;
+      } else {
+        await worktreeGrpc.unarchive(id);
+      }
 
       // Reload worktrees and chats to get updated state
       if (worktree?.project_id) {
@@ -640,9 +642,15 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
         await useChatStore.getState().loadChats();
       }
 
-      toast.success(`${worktreeName} restored`, {
-        duration: 4000,
-      });
+      if (snapshotWarning) {
+        toast.warning(`${worktreeName} restored, but its saved work was not applied. ${snapshotWarning}`, {
+          duration: 15000,
+        });
+      } else {
+        toast.success(`${worktreeName} restored`, {
+          duration: 4000,
+        });
+      }
 
       set({ isLoading: false });
     } catch (error) {

@@ -56,10 +56,7 @@ export function ArchivedWorktreesPanel({ paddingClass = "p-3" }: ArchivedWorktre
     }
   };
 
-  const handleConfirmDelete = async (options?: {
-    deleteGitBranch: boolean;
-    deleteLocalDirectory: boolean;
-  }) => {
+  const handleConfirmDelete = async (options?: { deleteGitBranch: boolean }) => {
     if (worktreeToDelete) {
       await deleteWorktree(worktreeToDelete.id, options);
       setWorktreeToDelete(null);

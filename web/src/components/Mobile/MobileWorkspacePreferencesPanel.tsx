@@ -11,7 +11,7 @@
  */
 
 import { useState } from "react";
-import { Copy, FileX, FolderX, Info, Trash2 } from "lucide-react";
+import { Copy, FileX, Info, Trash2 } from "lucide-react";
 import { cn } from "../../lib/utils";
 import {
   usePreferences,
@@ -92,20 +92,6 @@ export function MobileWorkspacePreferencesPanel() {
 
       {preferences?.worktree.archiveMode === "always_cleanup" && (
         <div className="divide-y divide-border/60 bg-muted/10">
-          <MobileToggleRow
-            icon={<FolderX className="h-4 w-4" />}
-            label="Delete workspace directory"
-            description="Delete the workspace's files from disk when archiving."
-            checked={preferences?.worktree.defaultDeleteDirectory ?? true}
-            disabled={isSaving}
-            onChange={() =>
-              updateSafely(() =>
-                updateWorktreePrefs.mutateAsync({
-                  defaultDeleteDirectory: !preferences?.worktree.defaultDeleteDirectory,
-                }),
-              )
-            }
-          />
           <MobileToggleRow
             icon={<Trash2 className="h-4 w-4" />}
             label="Delete git branch"

@@ -18,7 +18,6 @@ const mocks = vi.hoisted(() => ({
   preferences: {
     worktree: {
       archiveMode: "ask_me",
-      defaultDeleteDirectory: true,
       defaultDeleteBranch: false,
       branchCopyUncommittedFilesDefault: false,
     },
@@ -244,14 +243,13 @@ describe("Settings → Workspaces", () => {
     expect(mocks.deleteWorktree).not.toHaveBeenCalled();
 
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByLabelText(/worktree directory/i)).toBeChecked();
+    expect(within(dialog).queryByLabelText(/worktree directory/i)).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText(/git branch/i)).not.toBeChecked();
     await user.click(within(dialog).getByRole("button", { name: "Archive workspace" }));
 
     await waitFor(() =>
       expect(mocks.deleteWorktree).toHaveBeenCalledWith("wt-feature", {
         deleteGitBranch: false,
-        deleteLocalDirectory: true,
       }),
     );
   });
@@ -266,7 +264,6 @@ describe("Settings → Workspaces", () => {
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
     expect(mocks.deleteWorktree).toHaveBeenCalledWith("wt-feature", {
       deleteGitBranch: false,
-      deleteLocalDirectory: false,
     });
   });
 
@@ -286,14 +283,13 @@ describe("Settings → Workspaces", () => {
     // rather than keeping the archive-time defaults from an earlier mount.
     await user.click(screen.getByTestId("delete-workspace-wt-old"));
     const dialog = await screen.findByRole("dialog");
-    expect(within(dialog).getByLabelText(/worktree directory/i)).toBeChecked();
+    expect(within(dialog).queryByLabelText(/worktree directory/i)).not.toBeInTheDocument();
     expect(within(dialog).getByLabelText(/git branch/i)).toBeChecked();
     await user.click(within(dialog).getByRole("button", { name: "Delete permanently" }));
 
     await waitFor(() =>
       expect(mocks.deleteWorktree).toHaveBeenCalledWith("wt-old", {
         deleteGitBranch: true,
-        deleteLocalDirectory: true,
       }),
     );
   });
@@ -306,7 +302,7 @@ describe("Settings → Workspaces", () => {
 
     const settings = screen.getByTestId("worktree-settings");
     expect(within(settings).getByRole("radio", { name: /ask every time/i })).toBeChecked();
-    expect(within(settings).getByText(/uncommitted changes in it are lost/i)).toBeInTheDocument();
+    expect(within(settings).queryByRole("switch", { name: /worktree directory/i })).not.toBeInTheDocument();
     expect(
       within(settings).getByRole("switch", { name: "Delete the git branch" }),
     ).toBeInTheDocument();
