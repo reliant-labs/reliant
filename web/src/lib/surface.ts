@@ -205,15 +205,15 @@ const MOBILE: SurfaceCapabilities = {
   workflowAuthoring: false,
   // Mobile is out of scope for the Runs area this round (decision 8).
   runsArea: false,
-  // Off until there is a mobile UI that reaches it. The RPC supports
-  // name-only creation, but nothing on the mobile surface opens that flow, and
-  // a capability that no screen honours is worse than one set false: it reads
-  // as shipped in review. Flip this back the same day the create sheet lands.
+  // `MobileCreateWorkspaceSheet`: a name and a base branch, opened from the
+  // chat list and from the new-chat screen's Workspace picker.
   //
-  // There is also an unresolved question to answer first: CreateWorktree is a
-  // 30-120s unary RPC with no completion event, so backgrounding the app
-  // mid-create loses the result. See the mobile scoping doc's pre-work list.
-  worktreeCreate: false,
+  // The backgrounding concern that held this off is resolved server-side:
+  // CreateWorktree now returns a CREATING row at once and finishes the
+  // checkout in the background, and the settle arrives as a sequenced
+  // `worktree_changes` refetch that is replayed on reconnect. The one gap
+  // left, a response lost after the server acted, is reconciled in the sheet.
+  worktreeCreate: true,
   worktreeManage: false,
   // Read-only status/diff via a chat drill-in sheet; no staging, commit, or
   // push until the cloud-daemon bearer-token work lands.

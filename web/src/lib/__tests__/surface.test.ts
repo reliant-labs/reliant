@@ -70,15 +70,20 @@ describe('surface capabilities', () => {
     // A capability set true with nothing behind it is worse than one set
     // false: it reads as shipped in review, and callers gate on it.
     //
-    // `worktreeCreate` — the RPC supports name-only creation but no mobile
-    // screen opens that flow.
     // `projectSwitching` — MobileShell picks the user's first project and
     // there is no picker, so a user with three projects can reach only one.
     //
-    // Both should flip back to true in the same change that adds the UI.
+    // It should flip back to true in the same change that adds the UI.
     const caps = capabilitiesFor('mobile')
-    expect(caps.worktreeCreate).toBe(false)
     expect(caps.projectSwitching).toBe(false)
+  })
+
+  it('lets mobile create a workspace without full workspace management', () => {
+    // MobileCreateWorkspaceSheet is the UI behind `worktreeCreate`. Archive,
+    // recreate, import and force-delete stay desktop-only.
+    const caps = capabilitiesFor('mobile')
+    expect(caps.worktreeCreate).toBe(true)
+    expect(caps.worktreeManage).toBe(false)
   })
 
   it('defers the iteration-2 mobile feature set', () => {

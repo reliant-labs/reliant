@@ -12,6 +12,10 @@ import { WorktreeStatus } from "../../gen/reliant/v1/worktree_pb";
 import { repoGrpc, type Repo } from "../../api/repo-grpc";
 import { logger } from "../../lib/logger";
 import { copyPathError, DEFAULT_COPY_PATHS, parseCopyPathsInput } from "../../lib/worktreeCopyPaths";
+import {
+  defaultBaseBranch as currentBranchAsBase,
+  normalizeWorkspaceName,
+} from "../../lib/workspaceNaming";
 
 interface CreateWorktreeModalProps {
   isOpen: boolean;
@@ -78,15 +82,7 @@ export function CreateWorktreeModal({
     if (sourceWorktreeBranch) {
       return sourceWorktreeBranch;
     }
-    const currentBranch = branches.find((b) => b.is_current && !b.is_remote);
-    if (currentBranch) {
-      // If in detached HEAD state, use the commit SHA instead of the name
-      if (currentBranch.is_detached && currentBranch.commit_sha) {
-        return currentBranch.commit_sha;
-      }
-      return currentBranch.name;
-    }
-    return "main";
+    return currentBranchAsBase(branches) ?? "main";
   }, [branches, sourceWorktreeBranch]);
 
   const [formData, setFormData] = useState({
@@ -146,10 +142,9 @@ export function CreateWorktreeModal({
     };
   }, [isOpen, projectId]);
 
-  // Helper function to normalize names (replace spaces with hyphens, trim trailing spaces)
-  const normalizeName = (value: string): string => {
-    return value.trim().replace(/\s+/g, "-");
-  };
+  // Shared with the mobile create sheet so both surfaces derive the same
+  // branch from the same typed name.
+  const normalizeName = normalizeWorkspaceName;
 
   // Transform branches into dropdown options with main/current at top
   const branchOptions = useMemo<DropdownOption[]>(() => {

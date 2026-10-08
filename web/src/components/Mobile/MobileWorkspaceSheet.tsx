@@ -1,8 +1,12 @@
 /**
- * Chat-header drill-in for the four workspace panels (Files / Git / Plan /
- * Packages) that only exist as desktop sidebar tabs today. These are
- * workspace context for the open chat, so they live behind the chat header
- * rather than in the (soon-to-be-removed) tab bar or a global nav item.
+ * Drill-in for the workspace panels (Files / Git / Plan / Packages) that only
+ * exist as desktop sidebar tabs today.
+ *
+ * Opened two ways: from a chat's header, as context for that chat, and from a
+ * workspace group on the chat list, with no chat at all. Without a chat there
+ * is no Plan tab. `TasksPanel` falls back to the *active* chat when it gets no
+ * chatId, so showing it here would display some other chat's plan under this
+ * workspace's name. Git stays read-only either way (`gitManagement` is off).
  *
  * Full-screen rather than a bottom sheet — a file tree or a diff needs the
  * whole viewport on a phone, not a fixed-height drawer.
@@ -26,6 +30,8 @@ interface MobileWorkspaceSheetProps {
   chatId?: string;
   worktreeId?: string;
   projectPath?: string;
+  /** The workspace's name, when opened from somewhere that doesn't already show it. */
+  title?: string;
 }
 
 const TABS: { id: WorkspaceTab; label: string; icon: React.ReactNode }[] = [
@@ -41,9 +47,11 @@ export function MobileWorkspaceSheet({
   chatId,
   worktreeId,
   projectPath,
+  title,
 }: MobileWorkspaceSheetProps) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("files");
   const fileViewerEnabled = useCapability("fileViewer");
+  const tabs = chatId ? TABS : TABS.filter((tab) => tab.id !== "plan");
 
   if (!isOpen) return null;
 
@@ -64,11 +72,11 @@ export function MobileWorkspaceSheet({
         >
           <X className="h-5 w-5" />
         </button>
-        <span className="text-sm font-medium">Workspace</span>
+        <span className="truncate text-sm font-medium">{title ?? "Workspace"}</span>
       </div>
 
       <div className="flex shrink-0 border-b border-border">
-        {TABS.map((tab) => (
+        {tabs.map((tab) => (
           <button
             key={tab.id}
             type="button"
@@ -103,7 +111,7 @@ export function MobileWorkspaceSheet({
             <EmptyTab label="No workspace selected." />
           ))}
 
-        {activeTab === "plan" && (
+        {activeTab === "plan" && chatId && (
           <div className="h-full min-h-0">
             <TasksPanel chatId={chatId} />
           </div>
