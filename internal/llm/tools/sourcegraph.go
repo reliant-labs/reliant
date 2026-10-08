@@ -1,9 +1,12 @@
 package tools
 
 import (
+	"errors"
+
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net/http"
 	"strings"
@@ -129,9 +132,7 @@ TIPS:
 
 func NewSourcegraphTool() Tool {
 	tool := &sourcegraphTool{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: newGuardedHTTPClient(30 * time.Second),
 	}
 	return NewToolWrapper[SourcegraphParams, ToolResponse](tool)
 }
@@ -170,9 +171,7 @@ func (t *sourcegraphTool) Execute(rctx *rctx.ToolContext, params SourcegraphPara
 		if params.Timeout > maxTimeout {
 			params.Timeout = maxTimeout
 		}
-		client = &http.Client{
-			Timeout: time.Duration(params.Timeout) * time.Second,
-		}
+		client = newGuardedHTTPClient(time.Duration(params.Timeout) * time.Second)
 	}
 
 	type graphqlRequest struct {
@@ -208,6 +207,9 @@ func (t *sourcegraphTool) Execute(rctx *rctx.ToolContext, params SourcegraphPara
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if errors.Is(err, netguard.ErrBlockedAddress) {
+			return NewTextErrorResponse(fmt.Sprintf("Failed to reach Sourcegraph: %v", err)), nil
+		}
 		return ToolResponse{}, fmt.Errorf("failed to fetch URL: %w", err)
 	}
 	defer func() {
