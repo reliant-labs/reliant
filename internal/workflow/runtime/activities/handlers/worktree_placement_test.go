@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -21,6 +22,11 @@ import (
 
 const activityDefaultDaemon = "daemon-default"
 
+// activityOwnedDaemons are the machines the fixture's user owns. A selector
+// naming any other id resolves to not-found, as the real router's
+// ownership-checked resolution does.
+var activityOwnedDaemons = map[string]bool{activityDefaultDaemon: true, "daemon-b": true}
+
 // placementRecordingRouter records the daemon each worktree command reached.
 // The embedded interface is nil: a method the activities are not expected to
 // call panics rather than quietly succeeding.
@@ -33,6 +39,15 @@ type placementRecordingRouter struct {
 
 func (r *placementRecordingRouter) ResolveDaemonID(context.Context, string) (string, error) {
 	return activityDefaultDaemon, nil
+}
+
+// ResolveDaemonIDForSelector is the only way toolexec.ResolveDaemonIDForSelector
+// resolves a non-nil selector: an id is never echoed back unverified.
+func (r *placementRecordingRouter) ResolveDaemonIDForSelector(_ context.Context, _ string, selector *toolexec.DaemonSelector) (string, error) {
+	if selector != nil && activityOwnedDaemons[selector.ID] {
+		return selector.ID, nil
+	}
+	return "", fmt.Errorf("no daemon available: the machine this request asked for is not connected")
 }
 
 func (r *placementRecordingRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
