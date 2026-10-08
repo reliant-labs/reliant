@@ -52,7 +52,8 @@ type selectorDaemonResolver interface {
 }
 
 // ResolveDaemonIDForSelector returns the daemon a command sent with selector
-// would reach: default resolution for nil, the id itself for an id selector.
+// would reach: default resolution for nil, otherwise the user's own daemon the selector matches
+// (an id selector naming a daemon the user does not own is not found).
 //
 // An operation that sends several commands AND records which daemon ran them
 // (creating a worktree: one checkout per repo, then the owner on the row)
@@ -62,9 +63,9 @@ func ResolveDaemonIDForSelector(ctx context.Context, router DaemonRouter, userID
 	if selector == nil {
 		return router.ResolveDaemonID(ctx, userID)
 	}
-	if selector.ID != "" {
-		return selector.ID, nil
-	}
+	// An id selector goes through the same ownership-checked resolution as any
+	// other: echoing it back would let a caller name another user's daemon,
+	// and a foreign id must read exactly like an absent one.
 	if resolver, ok := router.(selectorDaemonResolver); ok {
 		return resolver.ResolveDaemonIDForSelector(ctx, userID, selector)
 	}

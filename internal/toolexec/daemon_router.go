@@ -240,25 +240,27 @@ type DaemonConnectionInfoListener interface {
 // DaemonConnectionManager is the subset of ToolsDaemonService needed by NATSToolBridge.
 // This avoids importing the services package from toolexec.
 //
-// All methods that accept userID route to the user's default daemon (prefer
-// local, then most recently connected). For explicit daemon targeting, use
-// DaemonResolver to enumerate daemons first.
+// Every method that takes a daemonID targets THAT daemon's connection and
+// fails when it is not connected for userID: the NATS subject that carried the
+// request names the daemon, so another of the user's daemons must never act on
+// it. SendDaemonCommand is the one default-routing method left; no bridge
+// subject uses it.
 type DaemonConnectionManager interface {
 	IsDaemonOnline(ctx context.Context, userID string) bool
 	ListConnectedDaemons(userID string) []DaemonInfo
-	SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error
-	SendToolRequestSync(ctx context.Context, userID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
-	SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error
-	SendToolExecutionBackground(ctx context.Context, userID, requestID, toolCallID string) error
-	SendKillProcess(userID, processID string) error
+	SendToolRequest(ctx context.Context, userID, daemonID string, request *ToolExecutionRequest) error
+	SendToolRequestSync(ctx context.Context, userID, daemonID string, request *ToolExecutionRequest) (*ToolExecutionResponse, error)
+	SendToolExecutionCancel(ctx context.Context, userID, daemonID, requestID, reason string) error
+	SendToolExecutionBackground(ctx context.Context, userID, daemonID, requestID, toolCallID string) error
+	SendKillProcess(userID, daemonID, processID string) error
 	SendDaemonCommand(ctx context.Context, userID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error)
 	// SendDaemonCommandToDaemon runs a command on ONE named daemon of the
 	// user, never on another of their daemons.
 	SendDaemonCommandToDaemon(ctx context.Context, userID, daemonID string, req *reliantv1.DaemonCommandRequest) (*reliantv1.DaemonCommandResponse, error)
-	SendLoadProjectConfigs(ctx context.Context, userID string, projectPath string, requestID string) error
-	SendWatchProjectConfigs(ctx context.Context, userID string, projectPath string, includeInitial bool) error
-	SendTerminalInput(userID string, sessionID string, data []byte) error
-	SendTerminalResize(userID string, sessionID string, cols, rows uint32) error
-	SubscribeTerminalOutput(userID string, sessionID string) (<-chan *TerminalOutputEvent, func(), error)
-	SubscribeProcessOutput(userID string, processID string, newOnly bool) (<-chan *ProcessOutputEvent, func(), error)
+	SendLoadProjectConfigs(ctx context.Context, userID, daemonID string, projectPath string, requestID string) error
+	SendWatchProjectConfigs(ctx context.Context, userID, daemonID string, projectPath string, includeInitial bool) error
+	SendTerminalInput(userID, daemonID string, sessionID string, data []byte) error
+	SendTerminalResize(userID, daemonID string, sessionID string, cols, rows uint32) error
+	SubscribeTerminalOutput(userID, daemonID string, sessionID string) (<-chan *TerminalOutputEvent, func(), error)
+	SubscribeProcessOutput(userID, daemonID string, processID string, newOnly bool) (<-chan *ProcessOutputEvent, func(), error)
 }

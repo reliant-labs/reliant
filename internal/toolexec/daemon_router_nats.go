@@ -64,6 +64,10 @@ type NATSDaemonRouter struct {
 	resumer     DaemonResumer           // optional: wakes a suspended managed daemon (control plane)
 	credentials ControlPlaneCredentials // optional: token source for resumes
 
+	// inflight remembers which daemon each tool request went to, so a cancel
+	// or background for it reaches THAT daemon rather than the user's default.
+	inflight inflightDaemons
+
 	// jsOnce lazily initializes the JetStream context the first time
 	// EnqueueDaemonCommand is called. JetStream is only used for the
 	// pending-commands stream — the rest of the router is core NATS only,
@@ -154,6 +158,20 @@ func WithControlPlaneCredentials(c ControlPlaneCredentials) NATSRouterOption {
 // selector); see resolveDaemonID.
 func (r *NATSDaemonRouter) resolveDefaultDaemonID(ctx context.Context, userID string) (string, error) {
 	return r.resolveDaemonID(ctx, userID, nil)
+}
+
+// resolveFollowUpDaemonID picks the daemon for an operation that follows an
+// earlier request (cancel, background, kill, terminal I/O, config load).
+// Order: the daemon that request was sent to (requestID, when known), then the
+// run's selector carried in ctx, and only then the user's default — the case
+// where nothing about the run named a daemon at all.
+func (r *NATSDaemonRouter) resolveFollowUpDaemonID(ctx context.Context, userID string, requestIDs ...string) (string, error) {
+	for _, id := range requestIDs {
+		if daemonID, ok := r.inflight.lookup(userID, id); ok {
+			return daemonID, nil
+		}
+	}
+	return r.resolveDaemonID(ctx, userID, DaemonSelectorFromContext(ctx))
 }
 
 // ResolveDaemonID exposes the same default resolution SendDaemonCommand uses,
@@ -319,6 +337,10 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 		if !daemonRecordMatches(d, selector) {
 			continue
 		}
+		// Only a record the selector matches means "a machine for this
+		// request exists". Counting the user's other daemons would make an id
+		// they do not own (or that does not exist) read as "still starting".
+		sawDaemonRecord = true
 		candidate := daemonRecord{
 			id:      d.ID,
 			state:   daemonRecordStateOf(d, attached[d.ID]),
@@ -337,7 +359,6 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 			}
 		}
 	}
-	sawDaemonRecord = len(daemons) > 0
 	if lifecycleDown != nil {
 		return *lifecycleDown, true, sawDaemonRecord, nil
 	}
@@ -664,6 +685,7 @@ func (r *NATSDaemonRouter) SendToolRequest(ctx context.Context, userID string, r
 		return err
 	}
 	subject := daemonSubject(toolRequestSubject, userID, daemonID)
+	r.inflight.record(userID, daemonID, request.RequestID, request.ToolCallID)
 	msg := observability.NATSPublishMsg(ctx, subject, payload)
 	if err := r.nc.PublishMsg(msg); err != nil {
 		observability.NATSErrorsTotal.WithLabelValues("tools.request", "publish").Inc()
@@ -674,10 +696,15 @@ func (r *NATSDaemonRouter) SendToolRequest(ctx context.Context, userID string, r
 }
 
 func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, requestID, reason string) error {
-	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	daemonID, err := r.resolveFollowUpDaemonID(ctx, userID, requestID)
 	if err != nil {
 		return fmt.Errorf("resolving daemon for cancel: %w", err)
 	}
+	return r.sendCancelToDaemon(ctx, userID, daemonID, requestID, reason)
+}
+
+// sendCancelToDaemon publishes a cancel on one named daemon's subject.
+func (r *NATSDaemonRouter) sendCancelToDaemon(ctx context.Context, userID, daemonID, requestID, reason string) error {
 	payload, err := json.Marshal(map[string]string{
 		"request_id": requestID,
 		"reason":     reason,
@@ -700,7 +727,7 @@ func (r *NATSDaemonRouter) SendToolExecutionCancel(ctx context.Context, userID, 
 // execution is still running, and a request that arrives after the command
 // finished is simply a no-op there.
 func (r *NATSDaemonRouter) SendToolExecutionBackground(ctx context.Context, userID, requestID, toolCallID string) error {
-	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	daemonID, err := r.resolveFollowUpDaemonID(ctx, userID, requestID, toolCallID)
 	if err != nil {
 		return fmt.Errorf("resolving daemon for background: %w", err)
 	}
@@ -745,7 +772,7 @@ func (r *NATSDaemonRouter) SendKillProcess(ctx context.Context, userID, processI
 		return err
 	}
 
-	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	daemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("resolving daemon for kill: %w", err)
 	}
@@ -893,7 +920,7 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 		}
 		msg = res.msg
 	case <-ctx.Done():
-		_ = r.SendToolExecutionCancel(context.Background(), userID, requestID, "daemon command caller cancelled")
+		_ = r.sendCancelToDaemon(context.Background(), userID, daemonID, requestID, "daemon command caller cancelled")
 		observability.NATSErrorsTotal.WithLabelValues("daemon.command", "timeout").Inc()
 		return nil, fmt.Errorf("daemon command via NATS failed: %w", ctx.Err())
 	}
@@ -949,6 +976,7 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
 	resultCh := make(chan natsResult, 1)
 	start := time.Now()
+	forget := r.inflight.record(userID, resolvedDaemonID, request.RequestID, request.ToolCallID)
 	go func() {
 		// Chunk-aware request: transparently reassembles oversize replies
 		msg, err := requestWithChunkedReply(r.nc, reqMsg, timeout)
@@ -958,6 +986,9 @@ func (r *NATSDaemonRouter) SendToolRequestSync(ctx context.Context, userID strin
 	var msg *nats.Msg
 	select {
 	case res := <-resultCh:
+		if res.err == nil {
+			forget()
+		}
 		observability.NATSRequestDuration.WithLabelValues("tools.request.sync").Observe(time.Since(start).Seconds())
 		if res.err != nil {
 			observability.NATSErrorsTotal.WithLabelValues("tools.request.sync", "request").Inc()
@@ -1016,6 +1047,7 @@ func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, 
 	reqMsg := observability.NATSPublishMsg(ctx, subject, payload)
 	resultCh := make(chan natsResult, 1)
 	start := time.Now()
+	forget := r.inflight.record(userID, resolvedDaemonID, request.RequestID, request.ToolCallID)
 	go func() {
 		// Chunk-aware request: transparently reassembles oversize replies
 		msg, err := requestWithChunkedReply(r.nc, reqMsg, timeout)
@@ -1025,6 +1057,9 @@ func (r *NATSDaemonRouter) SendToolRequestSyncWithSelector(ctx context.Context, 
 	var msg *nats.Msg
 	select {
 	case res := <-resultCh:
+		if res.err == nil {
+			forget()
+		}
 		observability.NATSRequestDuration.WithLabelValues("tools.request.sync.selector").Observe(time.Since(start).Seconds())
 		if res.err != nil {
 			observability.NATSErrorsTotal.WithLabelValues("tools.request.sync.selector", "request").Inc()
@@ -1051,7 +1086,7 @@ func (r *NATSDaemonRouter) SendLoadProjectConfigs(ctx context.Context, userID st
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("resolving daemon for config load: %w", err)
 	}
@@ -1073,7 +1108,7 @@ func (r *NATSDaemonRouter) SendWatchProjectConfigs(ctx context.Context, userID s
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("resolving daemon for config watch: %w", err)
 	}
@@ -1095,7 +1130,7 @@ func (r *NATSDaemonRouter) SendTerminalInput(ctx context.Context, userID string,
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("resolving daemon for terminal input: %w", err)
 	}
@@ -1118,7 +1153,7 @@ func (r *NATSDaemonRouter) SendTerminalResize(ctx context.Context, userID string
 	if err != nil {
 		return err
 	}
-	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
 	if err != nil {
 		return fmt.Errorf("resolving daemon for terminal resize: %w", err)
 	}
@@ -1133,7 +1168,7 @@ func (r *NATSDaemonRouter) SendTerminalResize(ctx context.Context, userID string
 }
 
 func (r *NATSDaemonRouter) SubscribeTerminalOutput(ctx context.Context, userID string, sessionID string) (<-chan *TerminalOutputEvent, func(), error) {
-	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolving daemon for terminal output: %w", err)
 	}
@@ -1192,7 +1227,7 @@ func (r *NATSDaemonRouter) SubscribeProcessOutput(ctx context.Context, userID st
 	if err != nil {
 		return nil, nil, err
 	}
-	resolvedDaemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+	resolvedDaemonID, err := r.resolveFollowUpDaemonID(ctx, userID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("resolving daemon for process subscribe: %w", err)
 	}

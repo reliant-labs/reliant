@@ -140,7 +140,7 @@ func (m *payloadTestMgr) SendDaemonCommandToDaemon(ctx context.Context, userID, 
 	return m.SendDaemonCommand(ctx, userID, req)
 }
 
-func (m *payloadTestMgr) SendToolRequestSync(context.Context, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
+func (m *payloadTestMgr) SendToolRequestSync(context.Context, string, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return m.toolResp, nil
 }
 
