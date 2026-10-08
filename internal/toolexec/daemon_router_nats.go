@@ -1272,11 +1272,13 @@ func (r *NATSDaemonRouter) EnqueueDaemonCommand(ctx context.Context, userID, com
 		Payload     json.RawMessage          `json:"payload"`
 		TimeoutMs   int32                    `json:"timeout_ms"`
 		Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
+		UserID      string                   `json:"user_id"`
 	}{
 		RequestID:   "enq-" + newRequestID(),
 		CommandType: commandType,
 		Payload:     json.RawMessage(payload),
 		TimeoutMs:   timeoutMs,
+		UserID:      userID,
 		// Carried even though no connector path enqueues today: the drain side
 		// already decodes it, and an enqueued command that replayed
 		// unrestricted would be a policy bypass with a delay fuse. Cheaper to

@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -679,6 +680,48 @@ func resolveUnboundDaemonID(ctx context.Context, repo daemonHostnameLookup, user
 	return id
 }
 
+// assertedDaemonIDPattern is the shape of every legitimate daemon id: UUIDs
+// (control-plane svcdaemon mints uuid.New().String(); the gateway mints
+// uuid.NewString()). It is also what keeps an id safe to embed in NATS
+// subjects and consumer names without the lossy sanitizer.
+var assertedDaemonIDPattern = regexp.MustCompile(`^[A-Za-z0-9-]{1,64}$`)
+
+// validateAssertedDaemonID rejects (never sanitizes) a malformed client-asserted
+// daemon id. An empty id is fine: it means "none asserted".
+func validateAssertedDaemonID(id string) error {
+	id = strings.TrimSpace(id)
+	if id == "" || assertedDaemonIDPattern.MatchString(id) {
+		return nil
+	}
+	return connect.NewError(connect.CodeInvalidArgument,
+		fmt.Errorf("daemon_id must match [A-Za-z0-9-]{1,64}"))
+}
+
+func truncateForLog(s string) string {
+	if len(s) > 80 {
+		return s[:80] + "..."
+	}
+	return s
+}
+
+// rejectForeignDaemon refuses a registration whose daemon id belongs to
+// another user. It runs before any connection-map or NATS side effect.
+func (s *ToolsDaemonService) rejectForeignDaemon(ctx context.Context, userID, daemonID string) error {
+	ownerID := "unknown"
+	if d, err := s.database.GetDaemon(ctx, daemonID); err == nil && d != nil {
+		ownerID = d.UserID
+	} else {
+		s.mu.RLock()
+		if c := s.connections[daemonID]; c != nil {
+			ownerID = c.userID
+		}
+		s.mu.RUnlock()
+	}
+	logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Rejected daemon registration for a daemon id owned by another user",
+		"daemonID", daemonID, "requestingUserID", userID, "ownerUserID", ownerID)
+	return connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
+}
+
 // ConnectDaemon implements the bidirectional streaming RPC for daemon connections
 func (s *ToolsDaemonService) ConnectDaemon(
 	ctx context.Context,
@@ -702,6 +745,12 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed daemon registration identity validation",
 			"error", err,
 		)
+		return err
+	}
+
+	if err := validateAssertedDaemonID(reg.GetDaemonId()); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Rejected malformed client-asserted daemon_id",
+			"userID", userID, "assertedDaemonID", truncateForLog(reg.GetDaemonId()))
 		return err
 	}
 
@@ -738,6 +787,9 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		ProjectPaths: projectPathsJSON,
 		DaemonType:   normalizeRegisteredDaemonType(reg.GetDaemonType()),
 	}); err != nil {
+		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
+			return s.rejectForeignDaemon(ctx, userID, daemonID)
+		}
 		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to persist daemon registration", "error", err, "daemonID", daemonID)
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to persist daemon registration: %w", err))
 	}
@@ -782,6 +834,10 @@ func (s *ToolsDaemonService) ConnectDaemon(
 	// Register connection: keyed by daemonID, with secondary index by userID.
 	s.mu.Lock()
 	oldConn := s.connections[daemonID]
+	if oldConn != nil && oldConn.userID != userID {
+		s.mu.Unlock()
+		return s.rejectForeignDaemon(ctx, userID, daemonID)
+	}
 	s.connections[daemonID] = conn
 	if oldConn == nil {
 		// New daemon — add to user's daemon list.
@@ -888,6 +944,9 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		Capabilities: capabilitiesJSON,
 		DaemonType:   normalizeRegisteredDaemonType(reg.GetDaemonType()),
 	}); err != nil {
+		if errors.Is(err, db.ErrDaemonOwnedByAnotherUser) {
+			return nil, s.rejectForeignDaemon(ctx, userID, daemonID)
+		}
 		return nil, fmt.Errorf("failed to persist daemon registration: %w", err)
 	}
 
@@ -925,6 +984,10 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 	// Register connection.
 	s.mu.Lock()
 	oldConn := s.connections[daemonID]
+	if oldConn != nil && oldConn.userID != userID {
+		s.mu.Unlock()
+		return nil, s.rejectForeignDaemon(ctx, userID, daemonID)
+	}
 	s.connections[daemonID] = conn
 	if oldConn == nil {
 		s.userDaemons[userID] = append(s.userDaemons[userID], daemonID)
