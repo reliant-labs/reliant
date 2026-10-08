@@ -462,14 +462,21 @@ func newTestBridge(js jetstream.JetStream, mgr DaemonConnectionManager) *NATSToo
 	}
 }
 
+// pendingDrainUser is the connection user the drain tests below drain as, and
+// the owner makePendingMsg stamps.
+const pendingDrainUser = "user-1"
+
 func makePendingMsg(t *testing.T, requestID, commandType string, payload json.RawMessage, timeoutMs int32) *stubMsg {
 	t.Helper()
+	// Stamped for pendingDrainUser, the connection every drain test in this
+	// file drains as; an unstamped message is never dispatched.
 	data, err := json.Marshal(struct {
 		RequestID   string          `json:"request_id"`
 		CommandType string          `json:"command_type"`
 		Payload     json.RawMessage `json:"payload"`
 		TimeoutMs   int32           `json:"timeout_ms"`
-	}{requestID, commandType, payload, timeoutMs})
+		UserID      string          `json:"user_id"`
+	}{requestID, commandType, payload, timeoutMs, pendingDrainUser})
 	require.NoError(t, err)
 	return &stubMsg{data: data}
 }
@@ -483,7 +490,7 @@ func TestDrainPendingCommands_NilJetStream(t *testing.T) {
 	bridge := newTestBridge(nil, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -496,7 +503,7 @@ func TestDrainPendingCommands_StreamNotFound(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -509,7 +516,7 @@ func TestDrainPendingCommands_StreamLookupError(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -528,7 +535,7 @@ func TestDrainPendingCommands_NoPendingMessages(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -554,7 +561,7 @@ func TestDrainPendingCommands_DispatchesPendingMessages(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -588,7 +595,7 @@ func TestDrainPendingCommands_DispatchesToTheQueuesOwnDaemon(t *testing.T) {
 	bridge := newTestBridge(&stubJetStream{stream: &stubStream{consumer: consumer}}, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "cloud-daemon")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "cloud-daemon")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -615,7 +622,7 @@ func TestDrainPendingCommands_MessagesAreAcked(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	assert.True(t, msg1.wasAcked(), "msg1 should be acked after dispatch")
 	assert.True(t, msg2.wasAcked(), "msg2 should be acked after dispatch")
@@ -641,7 +648,7 @@ func TestDrainPendingCommands_DispatchErrorNaksNotAcks(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	assert.False(t, msg1.wasAcked(), "msg must NOT be acked on transient dispatch error")
 	assert.True(t, msg1.wasNaked(), "msg must be Nak'd for redelivery on dispatch error")
@@ -671,7 +678,7 @@ func TestDrainPendingCommands_PoisonMessageDroppedAfterMaxDeliveries(t *testing.
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	assert.True(t, msg1.wasAcked(), "poison msg should be acked (dropped) after max deliveries")
 	assert.False(t, msg1.wasNaked(), "poison msg should not be Nak'd again")
@@ -692,7 +699,7 @@ func TestDrainPendingCommands_SucceedsOnRetryAfterTransientFailure(t *testing.T)
 	stream1 := &stubStream{consumer: firstConsumer}
 	bridge1 := newTestBridge(&stubJetStream{stream: stream1}, failMgr)
 	defer bridge1.cancel()
-	bridge1.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge1.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	require.False(t, msg.wasAcked(), "first attempt must not ack")
 	require.True(t, msg.wasNaked(), "first attempt must Nak")
@@ -713,7 +720,7 @@ func TestDrainPendingCommands_SucceedsOnRetryAfterTransientFailure(t *testing.T)
 	stream2 := &stubStream{consumer: secondConsumer}
 	bridge2 := newTestBridge(&stubJetStream{stream: stream2}, okMgr)
 	defer bridge2.cancel()
-	bridge2.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge2.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	assert.True(t, msg.wasAcked(), "retry must ack on success")
 	assert.False(t, msg.wasNaked(), "retry must not Nak on success")
@@ -744,7 +751,7 @@ func TestDrainPendingCommands_SanitizesDaemonIDInFilterSubject(t *testing.T) {
 	const rawID = "team.alpha*1 x"
 	const wantToken = "team_alpha_1_x"
 
-	bridge.drainPendingCommands(context.Background(), "user-1", rawID)
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, rawID)
 
 	// The consumer must filter on the SANITIZED subject (matching what
 	// EnqueueDaemonCommand / control-plane publish to), else the message
@@ -775,7 +782,7 @@ func TestDrainPendingCommands_DeletesConsumerOnCleanDrain(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	require.Len(t, stream.deletedConsumers, 1, "clean drain should delete its consumer")
 	assert.Equal(t, "pending-drain-daemon-1", stream.deletedConsumers[0])
@@ -789,7 +796,7 @@ func TestDrainPendingCommands_ConsumerCreateError(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -815,7 +822,7 @@ func TestDrainPendingCommands_InvalidPayloadAcksAndContinues(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	assert.True(t, badMsg.wasAcked(), "invalid msg should be acked")
 	assert.True(t, goodMsg.wasAcked(), "valid msg should be acked")
@@ -846,7 +853,7 @@ func TestDrainPendingCommands_MultipleFetchBatches(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -885,7 +892,7 @@ func TestDrainPendingCommands_SlowDispatchOutlivesFetchBudget(t *testing.T) {
 	bridge := newTestBridge(js, mgr)
 	defer bridge.cancel()
 
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
@@ -916,7 +923,7 @@ func TestDrainPendingCommands_EmptyDrainReturnsPromptly(t *testing.T) {
 	defer bridge.cancel()
 
 	start := time.Now()
-	bridge.drainPendingCommands(context.Background(), "user-1", "daemon-1")
+	bridge.drainPendingCommands(context.Background(), pendingDrainUser, "daemon-1")
 	elapsed := time.Since(start)
 
 	assert.Less(t, elapsed, 1*time.Second,
@@ -960,7 +967,7 @@ func TestPollPendingCommands_PicksUpCommandEnqueuedWhileAlreadyConnected(t *test
 
 	done := make(chan struct{})
 	go func() {
-		bridge.pollPendingCommands(ctx, "user-1", "daemon-1")
+		bridge.pollPendingCommands(ctx, pendingDrainUser, "daemon-1")
 		close(done)
 	}()
 
@@ -1005,7 +1012,7 @@ func TestPollPendingCommands_StopsWhenContextCancelled(t *testing.T) {
 
 	done := make(chan struct{})
 	go func() {
-		bridge.pollPendingCommands(ctx, "user-1", "daemon-1")
+		bridge.pollPendingCommands(ctx, pendingDrainUser, "daemon-1")
 		close(done)
 	}()
 

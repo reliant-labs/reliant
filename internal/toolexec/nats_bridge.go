@@ -838,6 +838,9 @@ func sanitizePendingSubjectToken(s string) string {
 	return strings.NewReplacer(".", "_", ">", "_", "*", "_", " ", "_").Replace(s)
 }
 
+// pendingEnvelopeOwnerMatches reports whether a queued command may be
+// dispatched on a connection owned by connUserID.
+//
 // The envelope's user_id is compared with the draining connection's userID,
 // which is the token's introspected ActingUserID — the user's EXTERNAL id
 // (control-plane's access_token_internal Introspect converts it). Every
@@ -845,21 +848,11 @@ func sanitizePendingSubjectToken(s string) string {
 // enqueue does (it routes on the same userID), and control-plane's CloneRepo
 // stamps auth.GetExternalUserID, never its internal daemon.OwnerID.
 //
-// pendingEnvelopeUserIDRequired flips the drain from "accept a missing
-// user_id (logged)" to "Term() a missing user_id". Keep false until
-// control-plane's PublishPendingDaemonCommand stamps "user_id" on its
-// envelope, otherwise in-flight and rolling-deploy git.clone commands are
-// dropped.
-// TODO(daemon-identity): set to true once control-plane ships user_id.
-const pendingEnvelopeUserIDRequired = false
-
-// pendingEnvelopeOwnerMatches reports whether a queued command may be
-// dispatched on a connection owned by connUserID.
+// A missing user_id never matches. The daemon id in the subject is not an
+// owner: ids are client-chosen, so the subject alone cannot say whose command
+// this is, and a git.clone payload carries its owner's git token.
 func pendingEnvelopeOwnerMatches(envelopeUserID, connUserID string) bool {
-	if envelopeUserID == "" {
-		return !pendingEnvelopeUserIDRequired
-	}
-	return envelopeUserID == connUserID
+	return envelopeUserID != "" && envelopeUserID == connUserID
 }
 
 const (
@@ -1036,8 +1029,8 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				TimeoutMs   int32                    `json:"timeout_ms"`
 				Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
 				// UserID is the user the command was enqueued for
-				// (envelope field "user_id"). See pendingEnvelopeUserIDRequired.
-				UserID string `json:"user_id,omitempty"`
+				// (envelope field "user_id"). See pendingEnvelopeOwnerMatches.
+				UserID string `json:"user_id"`
 			}
 			if err := json.Unmarshal(msg.Data(), &envelope); err != nil {
 				logging.Warn("[NATSToolBridge] Failed to unmarshal pending command",
@@ -1047,16 +1040,12 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 			}
 
 			if !pendingEnvelopeOwnerMatches(envelope.UserID, userID) {
-				logging.Warn("[NATSToolBridge] Terminating pending command queued for a different user",
+				// envelopeUserID "" means the enqueuer never stamped an owner.
+				logging.Warn("[NATSToolBridge] Terminating pending command not queued for this connection's user",
 					"daemonID", daemonID, "connectionUserID", userID, "envelopeUserID", envelope.UserID,
 					"commandType", envelope.CommandType, "requestID", envelope.RequestID)
 				_ = msg.Term()
 				continue
-			}
-			if envelope.UserID == "" {
-				logging.Warn("[NATSToolBridge] Pending command has no user_id; dispatching on the strength of the daemon subject alone",
-					"daemonID", daemonID, "userID", userID,
-					"commandType", envelope.CommandType, "requestID", envelope.RequestID)
 			}
 
 			protoReq := &reliantv1.DaemonCommandRequest{
