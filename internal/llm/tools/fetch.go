@@ -2,7 +2,10 @@
 package tools
 
 import (
+	"errors"
+
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net/http"
 	"net/url"
@@ -103,9 +106,7 @@ RESPONSE METADATA:
 
 func NewFetchTool() Tool {
 	tool := &fetchTool{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: newGuardedHTTPClient(30 * time.Second),
 	}
 	return NewToolWrapper[FetchParams, ToolResponse](tool)
 }
@@ -144,9 +145,7 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 		if params.Timeout > maxTimeout {
 			params.Timeout = maxTimeout
 		}
-		client = &http.Client{
-			Timeout: time.Duration(params.Timeout) * time.Second,
-		}
+		client = newGuardedHTTPClient(time.Duration(params.Timeout) * time.Second)
 	}
 
 	req, err := http.NewRequestWithContext(rctx.Context, "GET", params.URL, nil)
@@ -158,6 +157,9 @@ func (t *fetchTool) Execute(rctx *rctx.ToolContext, params FetchParams) (ToolRes
 
 	resp, err := client.Do(req)
 	if err != nil {
+		if errors.Is(err, netguard.ErrBlockedAddress) {
+			return NewTextErrorResponse(fmt.Sprintf("Failed to fetch URL: %v", err)), nil
+		}
 		return ToolResponse{}, fmt.Errorf("failed to fetch URL: %w", err)
 	}
 	defer func() {

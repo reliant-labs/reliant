@@ -2,7 +2,10 @@
 package tools
 
 import (
+	"errors"
+
 	"fmt"
+	"github.com/reliant-labs/reliant/internal/netguard"
 	"io"
 	"net/http"
 	"net/url"
@@ -104,9 +107,7 @@ TIPS:
 
 func NewWebSearchTool() Tool {
 	tool := &webSearchTool{
-		client: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+		client: newGuardedHTTPClient(30 * time.Second),
 	}
 	return NewToolWrapper[WebSearchParams, ToolResponse](tool)
 }
@@ -142,6 +143,9 @@ func (t *webSearchTool) Execute(rctx *rctx.ToolContext, params WebSearchParams) 
 	// Perform the search using DuckDuckGo HTML
 	results, err := t.searchDuckDuckGo(rctx, params.Query)
 	if err != nil {
+		if errors.Is(err, netguard.ErrBlockedAddress) {
+			return NewTextErrorResponse(fmt.Sprintf("Search failed: %v", err)), nil
+		}
 		return ToolResponse{}, fmt.Errorf("search failed: %w", err)
 	}
 

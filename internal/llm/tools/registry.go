@@ -651,7 +651,7 @@ func GetToolRegistry() []ToolDefinition {
 		// Note: StateTransition is registered dynamically with flow context
 
 		// Metadata tools
-		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, PlacementAny},
+		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, PlacementDaemon},
 
 		// Component tools
 		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagReadOnly, TagCodingPlan}, PlacementAny},
@@ -713,13 +713,20 @@ func GetToolRegistry() []ToolDefinition {
 
 	// Only add project analyzer if not disabled
 	if !features.GetGlobalRegistry().EvaluateBool(context.Background(), "project_analyzer_disabled", false) {
-		tools = append(tools, ToolDefinition{
-			Name:      ToolProjectAnalyzer,
-			Factory:   (*ToolsFactory).ProjectAnalyzer,
-			Tags:      []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan},
-			Placement: PlacementAny,
-		})
+		tools = append(tools, projectAnalyzerDefinition())
 	}
 
 	return append(tools, integrationToolDefinitions()...)
+}
+
+// projectAnalyzerDefinition is split out so tests can inspect its placement
+// even while the feature flag keeps it out of the registry. It walks the
+// checkout on disk, so it must run on the daemon.
+func projectAnalyzerDefinition() ToolDefinition {
+	return ToolDefinition{
+		Name:      ToolProjectAnalyzer,
+		Factory:   (*ToolsFactory).ProjectAnalyzer,
+		Tags:      []ToolTag{TagAnalysis, TagReadOnly, TagCodingPlan},
+		Placement: PlacementDaemon,
+	}
 }

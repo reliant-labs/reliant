@@ -71,8 +71,6 @@ var machineBoundTools = map[string]string{
 	ToolSaveAttachment:   "its only job is writing a file to the user's disk",
 	ToolComponentLibrary: "installs components into the user's checkout",
 	ToolWorktree:         "creates and deletes git worktrees on disk",
-	ToolMetadataWriter:   "reads and writes .reliant/project-meta.yaml in the checkout",
-	ToolProjectAnalyzer:  "walks the checkout on disk",
 }
 
 // serverSafeTools are the any/server-placed tools that were checked and do
