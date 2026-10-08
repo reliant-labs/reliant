@@ -577,6 +577,15 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 			hasNext bool
 			openErr error
 		)
+		// anthropic-sdk-go's Stream does not close its body when it ends —
+		// unlike openai-go's, which closes itself on a terminal event — so the
+		// driver must, on every exit. Reads the variable at exit, so it
+		// closes whichever attempt was last opened.
+		defer func() {
+			if stream != nil {
+				_ = stream.Close()
+			}
+		}()
 		for attempt := 1; ; attempt++ {
 			stream = b.client.Messages.NewStreaming(ctx, params, option.WithMaxRetries(0))
 			if hasNext = stream.Next(); hasNext {
