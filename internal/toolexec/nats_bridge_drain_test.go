@@ -73,34 +73,34 @@ func (m *slowDaemonMgr) SendDaemonCommandToDaemon(ctx context.Context, userID, d
 
 func (m *recordingDaemonMgr) IsDaemonOnline(context.Context, string) bool { return true }
 func (m *recordingDaemonMgr) ListConnectedDaemons(string) []DaemonInfo    { return nil }
-func (m *recordingDaemonMgr) SendToolRequest(context.Context, string, *ToolExecutionRequest) error {
+func (m *recordingDaemonMgr) SendToolRequest(context.Context, string, string, *ToolExecutionRequest) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendToolRequestSync(context.Context, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
+func (m *recordingDaemonMgr) SendToolRequestSync(context.Context, string, string, *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	return nil, nil
 }
-func (m *recordingDaemonMgr) SendToolExecutionBackground(context.Context, string, string, string) error {
+func (m *recordingDaemonMgr) SendToolExecutionBackground(context.Context, string, string, string, string) error {
 	return nil
 }
 
-func (m *recordingDaemonMgr) SendToolExecutionCancel(context.Context, string, string, string) error {
+func (m *recordingDaemonMgr) SendToolExecutionCancel(context.Context, string, string, string, string) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendKillProcess(string, string) error { return nil }
-func (m *recordingDaemonMgr) SendLoadProjectConfigs(context.Context, string, string, string) error {
+func (m *recordingDaemonMgr) SendKillProcess(string, string, string) error { return nil }
+func (m *recordingDaemonMgr) SendLoadProjectConfigs(context.Context, string, string, string, string) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendWatchProjectConfigs(context.Context, string, string, bool) error {
+func (m *recordingDaemonMgr) SendWatchProjectConfigs(context.Context, string, string, string, bool) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SendTerminalInput(string, string, []byte) error { return nil }
-func (m *recordingDaemonMgr) SendTerminalResize(string, string, uint32, uint32) error {
+func (m *recordingDaemonMgr) SendTerminalInput(string, string, string, []byte) error { return nil }
+func (m *recordingDaemonMgr) SendTerminalResize(string, string, string, uint32, uint32) error {
 	return nil
 }
-func (m *recordingDaemonMgr) SubscribeTerminalOutput(string, string) (<-chan *TerminalOutputEvent, func(), error) {
+func (m *recordingDaemonMgr) SubscribeTerminalOutput(string, string, string) (<-chan *TerminalOutputEvent, func(), error) {
 	return nil, func() {}, nil
 }
-func (m *recordingDaemonMgr) SubscribeProcessOutput(string, string, bool) (<-chan *ProcessOutputEvent, func(), error) {
+func (m *recordingDaemonMgr) SubscribeProcessOutput(string, string, string, bool) (<-chan *ProcessOutputEvent, func(), error) {
 	return nil, func() {}, nil
 }
 

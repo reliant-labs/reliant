@@ -1574,7 +1574,7 @@ func (s *ToolsDaemonService) handleProjectConfigDelta(ctx context.Context, conn 
 		return s.persistProjectConfigSnapshot(ctx, conn, snapshot, false)
 	}
 
-	return s.SendLoadProjectConfigs(ctx, conn.userID, projectPath, uuid.New().String())
+	return s.SendLoadProjectConfigs(ctx, conn.userID, conn.daemonID, projectPath, uuid.New().String())
 }
 
 // daemonRuntimeTypeFromLabels extracts the daemon's runtime/sandbox type
@@ -1950,10 +1950,10 @@ func (s *ToolsDaemonService) sendLoadAndWatchProjectConfig(ctx context.Context, 
 	if conn == nil {
 		return nil
 	}
-	if err := s.SendLoadProjectConfigs(ctx, conn.userID, projectPath, uuid.New().String()); err != nil {
+	if err := s.SendLoadProjectConfigs(ctx, conn.userID, conn.daemonID, projectPath, uuid.New().String()); err != nil {
 		return err
 	}
-	return s.SendWatchProjectConfigs(ctx, conn.userID, projectPath, includeInitial)
+	return s.SendWatchProjectConfigs(ctx, conn.userID, conn.daemonID, projectPath, includeInitial)
 }
 
 // defaultDaemonForUser returns the "best" connected daemon for a user.
@@ -1995,15 +1995,16 @@ func (s *ToolsDaemonService) defaultDaemonForUser(userID string) *daemonConnecti
 	return best
 }
 
-func (s *ToolsDaemonService) sendToUserDaemon(userID string, msg *reliantv1.ServerMessage) error {
+// sendToDaemon enqueues a message on ONE named daemon's connection. It never
+// falls back to another of the user's daemons: the subject that carried the
+// request named this daemon, and a different machine must not act on it.
+func (s *ToolsDaemonService) sendToDaemon(userID, daemonID string, msg *reliantv1.ServerMessage) error {
 	if msg == nil {
 		return nil
 	}
-	s.mu.RLock()
-	conn := s.defaultDaemonForUser(userID)
-	s.mu.RUnlock()
-	if conn == nil {
-		return fmt.Errorf("daemon not connected for user %s", userID)
+	conn, err := s.connForUser(userID, daemonID)
+	if err != nil {
+		return err
 	}
 	return s.sendToConn(conn, msg)
 }
@@ -2134,16 +2135,14 @@ func (s *ToolsDaemonService) ConnectedDaemonCountForUser(userID string) int {
 
 // SendToolRequest pushes a tool request to the daemon
 // Context is accepted for interface compliance but not used - daemon connections have their own lifecycle
-func (s *ToolsDaemonService) SendToolRequest(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) error {
-	s.mu.RLock()
-	conn := s.defaultDaemonForUser(userID)
-	s.mu.RUnlock()
-
-	if conn == nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot send request - daemon offline",
+func (s *ToolsDaemonService) SendToolRequest(ctx context.Context, userID, daemonID string, request *toolexec.ToolExecutionRequest) error {
+	conn, err := s.connForUser(userID, daemonID)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot send request - named daemon not connected",
 			"userID", userID,
+			"daemonID", daemonID,
 			"requestID", request.RequestID)
-		return fmt.Errorf("daemon offline for user %s, request %s could not be delivered", userID, request.RequestID)
+		return fmt.Errorf("daemon %s offline for user %s, request %s could not be delivered: %w", daemonID, userID, request.RequestID, err)
 	}
 
 	// Convert context map to JSON
@@ -2244,8 +2243,9 @@ func (s *ToolsDaemonService) GetConnectedUsers() []string {
 	return users
 }
 
-// SendLoadProjectConfigs requests a full snapshot load for a project path.
-func (s *ToolsDaemonService) SendLoadProjectConfigs(_ context.Context, userID string, projectPath string, requestID string) error {
+// SendLoadProjectConfigs requests a full snapshot load for a project path on
+// one named daemon.
+func (s *ToolsDaemonService) SendLoadProjectConfigs(_ context.Context, userID, daemonID string, projectPath string, requestID string) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -2263,11 +2263,11 @@ func (s *ToolsDaemonService) SendLoadProjectConfigs(_ context.Context, userID st
 			},
 		},
 	}
-	return s.sendToUserDaemon(userID, msg)
+	return s.sendToDaemon(userID, daemonID, msg)
 }
 
 // SendWatchProjectConfigs subscribes daemon-side watchers for project config changes.
-func (s *ToolsDaemonService) SendWatchProjectConfigs(_ context.Context, userID string, projectPath string, includeInitial bool) error {
+func (s *ToolsDaemonService) SendWatchProjectConfigs(_ context.Context, userID, daemonID string, projectPath string, includeInitial bool) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -2281,11 +2281,11 @@ func (s *ToolsDaemonService) SendWatchProjectConfigs(_ context.Context, userID s
 			},
 		},
 	}
-	return s.sendToUserDaemon(userID, msg)
+	return s.sendToDaemon(userID, daemonID, msg)
 }
 
 // SendUnwatchProjectConfigs unsubscribes daemon-side watchers for project config changes.
-func (s *ToolsDaemonService) SendUnwatchProjectConfigs(userID string, projectPath string) error {
+func (s *ToolsDaemonService) SendUnwatchProjectConfigs(userID, daemonID string, projectPath string) error {
 	projectPath = normalizeProjectPath(projectPath)
 	if projectPath == "" {
 		return nil
@@ -2296,11 +2296,11 @@ func (s *ToolsDaemonService) SendUnwatchProjectConfigs(userID string, projectPat
 			UnwatchProjectConfigs: &reliantv1.UnwatchProjectConfigsRequest{ProjectPath: projectPath},
 		},
 	}
-	return s.sendToUserDaemon(userID, msg)
+	return s.sendToDaemon(userID, daemonID, msg)
 }
 
 // SendKillProcess sends a kill request to the daemon for a specific background process.
-func (s *ToolsDaemonService) SendKillProcess(userID, processID string) error {
+func (s *ToolsDaemonService) SendKillProcess(userID, daemonID, processID string) error {
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_KillProcess{
 			KillProcess: &reliantv1.DaemonKillProcessRequest{
@@ -2308,7 +2308,7 @@ func (s *ToolsDaemonService) SendKillProcess(userID, processID string) error {
 			},
 		},
 	}
-	return s.sendToUserDaemon(userID, msg)
+	return s.sendToDaemon(userID, daemonID, msg)
 }
 
 // SendDaemonCommand sends a generic command to the user's default daemon and
@@ -2396,12 +2396,12 @@ func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemon
 	case resp := <-respCh:
 		return resp, nil
 	case <-time.After(timeout):
-		s.cancelDaemonCommand(conn.userID, req.RequestId, "daemon command timed out")
+		s.cancelDaemonCommand(conn.userID, conn.daemonID, req.RequestId, "daemon command timed out")
 		return nil, fmt.Errorf("daemon command %q timed out after %s", req.CommandType, timeout)
 	case <-conn.done:
 		return nil, fmt.Errorf("daemon disconnected while waiting for command %q response", req.CommandType)
 	case <-ctx.Done():
-		s.cancelDaemonCommand(conn.userID, req.RequestId, "daemon command caller cancelled")
+		s.cancelDaemonCommand(conn.userID, conn.daemonID, req.RequestId, "daemon command caller cancelled")
 		return nil, ctx.Err()
 	}
 }
@@ -2409,12 +2409,10 @@ func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemon
 // SendToolRequestSync sends a tool execution request to the user's default
 // daemon and waits for the correlated response. Resolution happens exactly
 // once, here; everything downstream operates on that one connection.
-func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
-	s.mu.RLock()
-	conn := s.defaultDaemonForUser(userID)
-	s.mu.RUnlock()
-	if conn == nil {
-		return nil, fmt.Errorf("no daemon connected for user %s", userID)
+func (s *ToolsDaemonService) SendToolRequestSync(ctx context.Context, userID, daemonID string, request *toolexec.ToolExecutionRequest) (*toolexec.ToolExecutionResponse, error) {
+	conn, err := s.connForUser(userID, daemonID)
+	if err != nil {
+		return nil, err
 	}
 	return s.sendToolRequestToConn(ctx, conn, request)
 }
@@ -2498,8 +2496,8 @@ func (s *ToolsDaemonService) sendToolRequestToConn(ctx context.Context, conn *da
 	}
 }
 
-func (s *ToolsDaemonService) cancelDaemonCommand(userID, requestID, reason string) {
-	if err := s.SendToolExecutionCancel(context.Background(), userID, requestID, reason); err != nil {
+func (s *ToolsDaemonService) cancelDaemonCommand(userID, daemonID, requestID, reason string) {
+	if err := s.SendToolExecutionCancel(context.Background(), userID, daemonID, requestID, reason); err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to send daemon command cancel", "userID", userID, "requestID", requestID, "error", err)
 	}
 }
@@ -2511,17 +2509,15 @@ func (s *ToolsDaemonService) cancelDaemonCommand(userID, requestID, reason strin
 // best-effort nudge to a RUNNING execution. If the daemon is offline, the
 // connection closed, or its buffer is full, the command simply keeps running in
 // the foreground — the caller surfaces that rather than claiming success.
-func (s *ToolsDaemonService) SendToolExecutionBackground(_ context.Context, userID, requestID, toolCallID string) error {
+func (s *ToolsDaemonService) SendToolExecutionBackground(_ context.Context, userID, daemonID, requestID, toolCallID string) error {
 	if strings.TrimSpace(requestID) == "" {
 		return fmt.Errorf("cannot background without a request id for tool call %s", toolCallID)
 	}
 
-	s.mu.RLock()
-	conn := s.defaultDaemonForUser(userID)
-	s.mu.RUnlock()
-	if conn == nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot background - daemon offline", "userID", userID, "requestID", requestID)
-		return fmt.Errorf("daemon offline for user %s, cannot deliver background for %s", userID, requestID)
+	conn, err := s.connForUser(userID, daemonID)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot background - named daemon not connected", "userID", userID, "daemonID", daemonID, "requestID", requestID)
+		return fmt.Errorf("daemon %s offline for user %s, cannot deliver background for %s: %w", daemonID, userID, requestID, err)
 	}
 
 	msg := &reliantv1.ServerMessage{
@@ -2546,17 +2542,15 @@ func (s *ToolsDaemonService) SendToolExecutionBackground(_ context.Context, user
 // SendToolExecutionCancel sends a cancellation request to connected daemon.
 // This currently reuses the tool_cancel transport and request_id correlation for
 // both tool executions and generic daemon commands.
-func (s *ToolsDaemonService) SendToolExecutionCancel(_ context.Context, userID, requestID, reason string) error {
+func (s *ToolsDaemonService) SendToolExecutionCancel(_ context.Context, userID, daemonID, requestID, reason string) error {
 	if strings.TrimSpace(requestID) == "" {
 		return nil
 	}
 
-	s.mu.RLock()
-	conn := s.defaultDaemonForUser(userID)
-	s.mu.RUnlock()
-	if conn == nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot cancel - daemon offline", "userID", userID, "requestID", requestID)
-		return fmt.Errorf("daemon offline for user %s, cannot deliver cancel for %s", userID, requestID)
+	conn, err := s.connForUser(userID, daemonID)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Cannot cancel - named daemon not connected", "userID", userID, "daemonID", daemonID, "requestID", requestID)
+		return fmt.Errorf("daemon %s offline for user %s, cannot deliver cancel for %s: %w", daemonID, userID, requestID, err)
 	}
 
 	msg := &reliantv1.ServerMessage{
@@ -2634,7 +2628,7 @@ func (c *daemonConnection) closeAllSubscribers() {
 }
 
 // SendTerminalInput sends raw PTY input bytes to the daemon for a terminal session.
-func (s *ToolsDaemonService) SendTerminalInput(userID string, sessionID string, data []byte) error {
+func (s *ToolsDaemonService) SendTerminalInput(userID, daemonID string, sessionID string, data []byte) error {
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_TerminalInput{
 			TerminalInput: &reliantv1.TerminalInputMessage{
@@ -2643,11 +2637,11 @@ func (s *ToolsDaemonService) SendTerminalInput(userID string, sessionID string, 
 			},
 		},
 	}
-	return s.sendToUserDaemon(userID, msg)
+	return s.sendToDaemon(userID, daemonID, msg)
 }
 
 // SendTerminalResize sends a terminal resize request to the daemon.
-func (s *ToolsDaemonService) SendTerminalResize(userID string, sessionID string, cols, rows uint32) error {
+func (s *ToolsDaemonService) SendTerminalResize(userID, daemonID string, sessionID string, cols, rows uint32) error {
 	msg := &reliantv1.ServerMessage{
 		Message: &reliantv1.ServerMessage_TerminalResize{
 			TerminalResize: &reliantv1.TerminalResizeMessage{
@@ -2657,17 +2651,15 @@ func (s *ToolsDaemonService) SendTerminalResize(userID string, sessionID string,
 			},
 		},
 	}
-	return s.sendToUserDaemon(userID, msg)
+	return s.sendToDaemon(userID, daemonID, msg)
 }
 
 // SubscribeTerminalOutput registers a subscriber for terminal output for a session.
 // Returns a channel that receives events, an unsubscribe function, and an error.
-func (s *ToolsDaemonService) SubscribeTerminalOutput(userID string, sessionID string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
-	s.mu.RLock()
-	conn := s.defaultDaemonForUser(userID)
-	s.mu.RUnlock()
-	if conn == nil {
-		return nil, nil, fmt.Errorf("no daemon connected for user %s", userID)
+func (s *ToolsDaemonService) SubscribeTerminalOutput(userID, daemonID string, sessionID string) (<-chan *toolexec.TerminalOutputEvent, func(), error) {
+	conn, err := s.connForUser(userID, daemonID)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	ch := make(chan *toolexec.TerminalOutputEvent, 64)
@@ -2690,7 +2682,7 @@ func (s *ToolsDaemonService) SubscribeTerminalOutput(userID string, sessionID st
 			},
 		},
 	}
-	if err := s.sendToUserDaemon(userID, subMsg); err != nil {
+	if err := s.sendToDaemon(userID, daemonID, subMsg); err != nil {
 		// Roll back the registration on failure.
 		conn.terminalSubsMu.Lock()
 		subs := conn.terminalSubs[sessionID]
@@ -2729,12 +2721,10 @@ func (s *ToolsDaemonService) SubscribeTerminalOutput(userID string, sessionID st
 // It sends a ProcessOutputSubscribe message to the daemon and returns a channel
 // that receives output events. The unsubscribe function sends an unsubscribe message
 // and removes the subscriber.
-func (s *ToolsDaemonService) SubscribeProcessOutput(userID string, processID string, newOnly bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
-	s.mu.RLock()
-	conn := s.defaultDaemonForUser(userID)
-	s.mu.RUnlock()
-	if conn == nil {
-		return nil, nil, fmt.Errorf("no daemon connected for user %s", userID)
+func (s *ToolsDaemonService) SubscribeProcessOutput(userID, daemonID string, processID string, newOnly bool) (<-chan *toolexec.ProcessOutputEvent, func(), error) {
+	conn, err := s.connForUser(userID, daemonID)
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Send subscribe message to daemon.
@@ -2746,7 +2736,7 @@ func (s *ToolsDaemonService) SubscribeProcessOutput(userID string, processID str
 			},
 		},
 	}
-	if err := s.sendToUserDaemon(userID, subMsg); err != nil {
+	if err := s.sendToDaemon(userID, daemonID, subMsg); err != nil {
 		return nil, nil, fmt.Errorf("send process output subscribe: %w", err)
 	}
 
@@ -2781,7 +2771,7 @@ func (s *ToolsDaemonService) SubscribeProcessOutput(userID string, processID str
 					},
 				},
 			}
-			_ = s.sendToUserDaemon(userID, unsubMsg) // best-effort
+			_ = s.sendToDaemon(userID, daemonID, unsubMsg) // best-effort
 		}
 	}
 

@@ -218,7 +218,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendToolRequest(ctx, userID, &request); err != nil {
+		if err := b.mgr.SendToolRequest(ctx, userID, daemonID, &request); err != nil {
 			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_request").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward tool request", "error", err, "userID", userID)
 		}
@@ -239,7 +239,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendToolExecutionCancel(ctx, userID, cancel.RequestID, cancel.Reason); err != nil {
+		if err := b.mgr.SendToolExecutionCancel(ctx, userID, daemonID, cancel.RequestID, cancel.Reason); err != nil {
 			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_cancel").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward cancel", "error", err, "userID", userID, "requestID", cancel.RequestID)
 		}
@@ -260,7 +260,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendToolExecutionBackground(ctx, userID, bg.RequestID, bg.ToolCallID); err != nil {
+		if err := b.mgr.SendToolExecutionBackground(ctx, userID, daemonID, bg.RequestID, bg.ToolCallID); err != nil {
 			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_background").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward background", "error", err, "userID", userID, "requestID", bg.RequestID)
 		}
@@ -281,7 +281,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendLoadProjectConfigs(ctx, userID, req.ProjectPath, req.RequestID); err != nil {
+		if err := b.mgr.SendLoadProjectConfigs(ctx, userID, daemonID, req.ProjectPath, req.RequestID); err != nil {
 			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_config_load").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward config load", "error", err, "userID", userID)
 		}
@@ -302,7 +302,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendWatchProjectConfigs(ctx, userID, req.ProjectPath, req.IncludeInitial); err != nil {
+		if err := b.mgr.SendWatchProjectConfigs(ctx, userID, daemonID, req.ProjectPath, req.IncludeInitial); err != nil {
 			observability.ToolExecutionErrorsTotal.WithLabelValues("forward_config_watch").Inc()
 			logging.Warn("[NATSToolBridge] Failed to forward config watch", "error", err, "userID", userID)
 		}
@@ -330,7 +330,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendTerminalInput(userID, sessionID, req.Data); err != nil {
+		if err := b.mgr.SendTerminalInput(userID, daemonID, sessionID, req.Data); err != nil {
 			logging.Warn("[NATSToolBridge] Failed to forward terminal input", "error", err, "userID", userID, "sessionID", sessionID)
 		}
 	}))
@@ -358,7 +358,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendTerminalResize(userID, sessionID, req.Cols, req.Rows); err != nil {
+		if err := b.mgr.SendTerminalResize(userID, daemonID, sessionID, req.Cols, req.Rows); err != nil {
 			logging.Warn("[NATSToolBridge] Failed to forward terminal resize", "error", err, "userID", userID, "sessionID", sessionID)
 		}
 	}))
@@ -378,7 +378,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		b.startProcessOutputForwarder(daemonCtx, userID, req.ProcessID, req.NewOnly)
+		b.startProcessOutputForwarder(daemonCtx, userID, daemonID, req.ProcessID, req.NewOnly)
 	}))
 
 	// 7b. daemon.terminal.subscribe.{userID}.{daemonID}.{sessionID}
@@ -429,7 +429,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			return
 		}
 
-		if err := b.mgr.SendKillProcess(userID, req.ProcessID); err != nil {
+		if err := b.mgr.SendKillProcess(userID, daemonID, req.ProcessID); err != nil {
 			resp, _ := json.Marshal(map[string]string{"error": err.Error()})
 			_ = msg.Respond(resp)
 			return
@@ -528,7 +528,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 			_ = msg.Respond(errResp)
 		}, func() {
 			defer span.End()
-			b.respondToolRequestSync(ctx, msg, userID, &request)
+			b.respondToolRequestSync(ctx, msg, userID, daemonID, &request)
 		})
 	})))
 
@@ -617,8 +617,8 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 
 // respondToolRequestSync performs the daemon round-trip for a tools.request.sync
 // message and publishes the reply. Runs off the NATS callback goroutine.
-func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.Msg, userID string, request *ToolExecutionRequest) {
-	resp, err := b.mgr.SendToolRequestSync(ctx, userID, request)
+func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.Msg, userID, daemonID string, request *ToolExecutionRequest) {
+	resp, err := b.mgr.SendToolRequestSync(ctx, userID, daemonID, request)
 	if err != nil {
 		errResp, _ := json.Marshal(&ToolExecutionResponse{
 			Success:      false,
@@ -733,7 +733,7 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 		return
 	}
 
-	outputCh, unsub, err := b.mgr.SubscribeTerminalOutput(userID, sessionID)
+	outputCh, unsub, err := b.mgr.SubscribeTerminalOutput(userID, daemonID, sessionID)
 	if err != nil {
 		logging.Warn("[NATSToolBridge] Failed to subscribe to terminal output for forwarding",
 			"error", err, "userID", userID, "sessionID", sessionID)
@@ -776,8 +776,8 @@ func (b *NATSToolBridge) startTerminalOutputForwarder(userCtx context.Context, u
 // startProcessOutputForwarder subscribes to local process output and publishes
 // events to NATS on daemon.process.output.{userID}.{processID}.
 // Note: process output subjects are NOT per-daemon — a processID is already unique.
-func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, userID, processID string, newOnly bool) {
-	outputCh, unsub, err := b.mgr.SubscribeProcessOutput(userID, processID, newOnly)
+func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, userID, daemonID, processID string, newOnly bool) {
+	outputCh, unsub, err := b.mgr.SubscribeProcessOutput(userID, daemonID, processID, newOnly)
 	if err != nil {
 		logging.Warn("[NATSToolBridge] Failed to subscribe to process output for forwarding",
 			"error", err, "userID", userID, "processID", processID)

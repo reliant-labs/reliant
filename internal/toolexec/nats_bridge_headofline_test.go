@@ -45,7 +45,7 @@ type blockingDaemonMgr struct {
 	cmdBlocks chan struct{}
 }
 
-func (m *blockingDaemonMgr) SendToolRequestSync(_ context.Context, _ string, req *ToolExecutionRequest) (*ToolExecutionResponse, error) {
+func (m *blockingDaemonMgr) SendToolRequestSync(_ context.Context, _, _ string, req *ToolExecutionRequest) (*ToolExecutionResponse, error) {
 	cur := m.inFlight.Add(1)
 	for {
 		prev := m.maxSeen.Load()

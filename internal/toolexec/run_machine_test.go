@@ -3,6 +3,7 @@ package toolexec
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -35,6 +36,16 @@ const machineRouterDefault = "daemon-default"
 
 func (r *machineRouter) ResolveDaemonID(context.Context, string) (string, error) {
 	return machineRouterDefault, nil
+}
+
+// ResolveDaemonIDForSelector models the real router's ownership check: the
+// fake user owns the default machine and daemon-b.
+func (r *machineRouter) ResolveDaemonIDForSelector(_ context.Context, _ string, sel *DaemonSelector) (string, error) {
+	switch sel.ID {
+	case machineRouterDefault, "daemon-b":
+		return sel.ID, nil
+	}
+	return "", errors.New("no daemon available")
 }
 
 func (r *machineRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, payload []byte, _ int32) ([]byte, error) {
