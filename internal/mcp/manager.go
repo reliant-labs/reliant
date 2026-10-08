@@ -84,11 +84,14 @@ func isLazyStartServer(name string, cfg config.MCPServer) bool {
 }
 
 // systemChromePaths are on-disk locations a system Chrome/Chromium may live.
-// The cloud workspace-base image installs google-chrome-stable and symlinks
-// /usr/local/bin/reliant-chrome (control-plane docker/Dockerfile.workspace-base).
+// The cloud workspace image installs google-chrome-stable and symlinks
+// /opt/reliant/bin/reliant-chrome (control-plane
+// docker/Dockerfile.workspace-runtime). /usr/local belongs to the user on a
+// managed daemon, so image-owned tools live under /opt/reliant. Images built
+// before that move are still covered by the distro paths below.
 // Checked in order; first existing binary wins.
 var systemChromePaths = []string{
-	"/usr/local/bin/reliant-chrome",
+	"/opt/reliant/bin/reliant-chrome",
 	"/usr/bin/google-chrome-stable",
 	"/usr/bin/google-chrome",
 	"/usr/bin/chromium",
