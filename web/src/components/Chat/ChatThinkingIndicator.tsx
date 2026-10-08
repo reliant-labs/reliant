@@ -15,11 +15,19 @@ interface ChatThinkingIndicatorProps {
    * - specific ID: Only show if that thread is active
    */
   filterThreadId?: string | null;
+  /**
+   * The run is held until its machine comes up (ChatActivity.WAITING_FOR_DAEMON):
+   * a run that needs a machine waits for one that is waking or starting rather
+   * than failing. Say so instead of cycling "Thinking…" over a run that is not
+   * thinking yet.
+   */
+  waitingOnMachine?: boolean;
 }
 
 export function ChatThinkingIndicator({ 
   chatId, 
   filterThreadId = null,
+  waitingOnMachine = false,
 }: ChatThinkingIndicatorProps) {
   const [thinkingMessage, setThinkingMessage] = useState("Thinking");
 
@@ -30,7 +38,9 @@ export function ChatThinkingIndicator({
   const currentActivity = useChatCurrentActivity(chatId || "");
   
   // Get user-friendly activity text
-  const activityText = getActivityDisplayText(currentActivity);
+  const activityText = waitingOnMachine
+    ? "Waiting for your machine"
+    : getActivityDisplayText(currentActivity);
 
   useEffect(() => {
     // If there's a specific activity, don't cycle through messages

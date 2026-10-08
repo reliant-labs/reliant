@@ -29,7 +29,9 @@ var (
 // only job is to be a distinguishable non-nil value; the picker never calls it.
 type stubDaemonRouter struct{}
 
-func (stubDaemonRouter) IsDaemonOnline(context.Context, string) (bool, error) { return true, nil }
+func (stubDaemonRouter) IsDaemonOnline(context.Context, string, *toolexec.DaemonSelector) (bool, error) {
+	return true, nil
+}
 func (stubDaemonRouter) SendToolRequest(context.Context, string, *toolexec.ToolExecutionRequest) error {
 	return nil
 }

@@ -1728,6 +1728,25 @@ func (r *Repo) IsDaemonAttached(ctx context.Context, userID string, staleThresho
 	return true, nil
 }
 
+// IsDaemonIDAttached reports whether the daemon has a fresh attachment lease.
+func (r *Repo) IsDaemonIDAttached(ctx context.Context, daemonID string, staleThreshold time.Duration) (bool, error) {
+	if daemonID == "" {
+		return false, fmt.Errorf("daemon ID cannot be empty")
+	}
+	cutoff := time.Now().UTC().Add(-staleThreshold)
+	query := `SELECT 1 FROM daemon_attachment WHERE daemon_id = ? AND last_stream_activity > ? LIMIT 1`
+	query = r.bindQuery(query)
+	var n int
+	err := r.DB.QueryRowContext(ctx, query, daemonID, cutoff).Scan(&n)
+	if err == sql.ErrNoRows {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("checking daemon attachment: %w", err)
+	}
+	return true, nil
+}
+
 // attachmentColumns is the shared SELECT column list matching
 // listAttachments' scan order.
 const attachmentColumns = `daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity, memory_used_bytes, memory_limit_bytes, memory_pressure, detected_ports`

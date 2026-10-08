@@ -89,3 +89,36 @@ func TestDaemonAttachmentDetectedPorts(t *testing.T) {
 		t.Errorf("detected ports after re-attach = %v, want none", got)
 	}
 }
+
+// TestIsDaemonIDAttached: the per-daemon lease check sees only its own daemon,
+// and only while the lease is fresh.
+func TestIsDaemonIDAttached(t *testing.T) {
+	repo, rawDB, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const userID = "id-attached-user"
+	clean := func() { _, _ = rawDB.Exec(`DELETE FROM daemon_attachment WHERE user_id = $1`, userID) }
+	clean()
+	t.Cleanup(clean)
+
+	now := time.Now().UTC()
+	for _, a := range []*DaemonAttachment{
+		{DaemonID: "id-att-fresh", UserID: userID, Source: DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now},
+		{DaemonID: "id-att-stale", UserID: userID, Source: DaemonAttachmentSourceInbound, AttachedAt: now, LastStreamActivity: now.Add(-time.Hour)},
+	} {
+		if err := repo.UpsertDaemonAttachment(ctx, a); err != nil {
+			t.Fatalf("UpsertDaemonAttachment: %v", err)
+		}
+	}
+
+	for id, want := range map[string]bool{"id-att-fresh": true, "id-att-stale": false, "id-att-none": false} {
+		got, err := repo.IsDaemonIDAttached(ctx, id, time.Minute)
+		if err != nil || got != want {
+			t.Errorf("IsDaemonIDAttached(%s) = %v, %v; want %v", id, got, err, want)
+		}
+	}
+	if _, err := repo.IsDaemonIDAttached(ctx, "", time.Minute); err == nil {
+		t.Error("empty daemon id must error")
+	}
+}

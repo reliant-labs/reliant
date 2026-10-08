@@ -11,7 +11,9 @@ import (
 
 type routerStub struct{}
 
-func (r *routerStub) IsDaemonOnline(_ context.Context, userID string) (bool, error) { return true, nil }
+func (r *routerStub) IsDaemonOnline(_ context.Context, userID string, _ *DaemonSelector) (bool, error) {
+	return true, nil
+}
 func (r *routerStub) SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error {
 	return nil
 }

@@ -72,7 +72,7 @@ func (r *recordingWorktreeDaemonRouter) SendDaemonCommand(ctx context.Context, u
 	return r.worktreeTestDaemonRouter.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
-func (r *worktreeTestDaemonRouter) IsDaemonOnline(_ context.Context, _ string) (bool, error) {
+func (r *worktreeTestDaemonRouter) IsDaemonOnline(_ context.Context, _ string, _ *toolexec.DaemonSelector) (bool, error) {
 	return true, nil
 }
 func (r *worktreeTestDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {

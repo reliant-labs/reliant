@@ -1017,6 +1017,12 @@ func exhaustionErrorEventID(workflowID string, err error) string {
 // drift apart silently.
 const infrastructureActivityMaxAttempts int32 = 3
 
+// preflightActivityMaxAttempts: a preflight check reports "still waiting" with
+// a successful result, so a failure is terminal and a retry would only repeat
+// the error card. It carries its own heartbeat timeout (not the graph-step
+// one), so the named switch in resolveMaxAttempts is what reaches it.
+const preflightActivityMaxAttempts int32 = 1
+
 // inlineSaveMessageMaxAttempts is the ladder executeSaveMessageInline
 // dispatches SaveMessage with (save_message.go). It is 5, NOT the
 // infrastructure 3 — the previous reporter's doc comment asserted 3 and was
@@ -1088,6 +1094,8 @@ func resolveMaxAttempts(info activity.Info) int32 {
 	// No heartbeat: one of the infrastructure dispatches. These are named
 	// rather than shape-matched, because their timeouts are incidental.
 	switch info.ActivityType.Name {
+	case "PreflightDaemonCheck":
+		return preflightActivityMaxAttempts
 	case "SaveMessage":
 		return inlineSaveMessageMaxAttempts
 	case "WorkflowError",

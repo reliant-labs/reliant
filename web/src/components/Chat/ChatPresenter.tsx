@@ -438,6 +438,7 @@ export const ChatPresenter = memo(function ChatPresenter({
 
   // Thinking indicator element, rendered as the timeline's footer
   const hasThinkingFooter = isChatBusy && pendingApprovals.length === 0 && !hasPendingQuestion;
+  const waitingOnMachine = currentChat?.activity === ChatActivity.WAITING_FOR_DAEMON;
   // Memoized because it is a prop of the memo()'d timeline: a fresh element
   // on every render would re-render the whole transcript on each pass —
   // which, during streaming, is many times per second.
@@ -447,9 +448,10 @@ export const ChatPresenter = memo(function ChatPresenter({
         <ChatThinkingIndicator
           chatId={chatId || undefined}
           filterThreadId={selectedThreadId}
+          waitingOnMachine={waitingOnMachine}
         />
       ) : undefined,
-    [hasThinkingFooter, chatId, selectedThreadId]
+    [hasThinkingFooter, chatId, selectedThreadId, waitingOnMachine]
   );
 
   // With a thread selected, render THAT THREAD's own messages rather than the
@@ -661,7 +663,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           <ComposerWakeStatus
             sending={!!chatId && sendingChatId === chatId}
             daemonId={currentChat?.activeDaemonId}
-            waitingOnMachine={currentChat?.activity === ChatActivity.WAITING_FOR_DAEMON}
+            waitingOnMachine={waitingOnMachine}
             continueWithoutMachine={
               chatId ? <ContinueWithoutMachineButton chatId={chatId} messageId={continueFromMessageId} /> : undefined
             }

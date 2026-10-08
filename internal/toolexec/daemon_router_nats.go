@@ -603,16 +603,19 @@ type LocalConnectionChecker interface {
 	HasConnectedDaemonsForUser(userID string) bool
 }
 
-// IsDaemonOnline is a thin wrapper that delegates to
-// daemonliveness.ReachableByUser. The signature is preserved so call sites
-// don't change during the Step 1 migration.
+// IsDaemonOnline answers "is a daemon connected". With a nil selector that is
+// any of the user's daemons (daemonliveness.ReachableByUser); with a selector
+// it is the daemon(s) the selector names, per daemonliveness.Reachable.
 //
 // When no DB is configured (OSS single-replica) the router falls back to the
 // legacy NATS request-reply path, which enumerates and asks; otherwise the
 // daemonliveness package owns the answer.
-func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (bool, error) {
+func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string, selector *DaemonSelector) (bool, error) {
+	if selector != nil {
+		return r.isSelectedDaemonOnline(ctx, userID, selector)
+	}
 	if r.db == nil {
-		return r.isDaemonOnlineViaNATS(ctx, userID)
+		return r.isDaemonOnlineViaNATS(ctx, userID, nil)
 	}
 	s, err := daemonliveness.ReachableByUser(ctx, r.nc, dbAdapter{r.db}, userID)
 	if err != nil {
@@ -621,11 +624,57 @@ func (r *NATSDaemonRouter) IsDaemonOnline(ctx context.Context, userID string) (b
 	return s.Live, nil
 }
 
-// dbAdapter implements daemonliveness.Repository by delegating to the
-// existing db.Repository. We deliberately do NOT add a new repo method:
-// IsDaemonAttached already answers the boolean we need, and LastSeen=zero is
-// acceptable for the current callers (none read it). The per-daemon variant
-// is a TODO — see below.
+// isSelectedDaemonOnline answers IsDaemonOnline for a non-nil selector: is a
+// daemon the selector names connected right now.
+func (r *NATSDaemonRouter) isSelectedDaemonOnline(ctx context.Context, userID string, selector *DaemonSelector) (bool, error) {
+	// The gateway-local resolver sees connected daemons and honours labels.
+	if r.resolver != nil {
+		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
+			return true, nil
+		}
+	}
+	if r.db == nil {
+		return r.isDaemonOnlineViaNATS(ctx, userID, selector)
+	}
+
+	// Otherwise ask about each registry record the selector matches. Records
+	// carry no labels, so label criteria were only applied by the resolver.
+	daemons, err := r.db.ListDaemonsByUserID(ctx, userID)
+	if err != nil {
+		return false, fmt.Errorf("listing daemons for liveness: %w", err)
+	}
+	var candidates []string
+	for _, d := range daemons {
+		if daemonRecordMatches(d, selector) {
+			candidates = append(candidates, d.ID)
+		}
+	}
+	if len(candidates) == 0 {
+		return false, nil
+	}
+	var lastErr error
+	failed := 0
+	for _, id := range candidates {
+		st, err := daemonliveness.Reachable(ctx, r.nc, dbAdapter{r.db}, id)
+		if err != nil {
+			lastErr = err
+			failed++
+			continue
+		}
+		if st.Live {
+			return true, nil
+		}
+	}
+	if failed == len(candidates) {
+		return false, fmt.Errorf("checking daemon liveness: %w", lastErr)
+	}
+	return false, nil
+}
+
+// dbAdapter implements daemonliveness.Repository by delegating to
+// db.Repository's attachment-lease checks: IsDaemonAttached per user,
+// IsDaemonIDAttached per daemon. LastSeen=zero is acceptable for the current
+// callers (none read it).
 type dbAdapter struct {
 	repo db.Repository
 }
@@ -639,20 +688,17 @@ func (a dbAdapter) GetUserLiveness(ctx context.Context, userID string, staleThre
 }
 
 func (a dbAdapter) GetDaemonLiveness(ctx context.Context, daemonID string, staleThreshold time.Duration) (daemonliveness.Status, error) {
-	// TODO: add a per-daemon attachment-freshness query to db.Repository when
-	// the first caller for Reachable(daemonID) lands. For now, callers route
-	// through ReachableByUser via IsDaemonOnline, so this path is unused.
-	_ = ctx
-	_ = daemonID
-	_ = staleThreshold
-	return daemonliveness.Status{}, fmt.Errorf("dbAdapter.GetDaemonLiveness: not implemented; no caller yet")
+	live, err := a.repo.IsDaemonIDAttached(ctx, daemonID, staleThreshold)
+	if err != nil {
+		return daemonliveness.Status{}, err
+	}
+	return daemonliveness.Status{Live: live}, nil
 }
 
 // isDaemonOnlineViaNATS is the legacy NATS request-reply check, used as fallback
 // when no DB is configured.
-func (r *NATSDaemonRouter) isDaemonOnlineViaNATS(ctx context.Context, userID string) (bool, error) {
-	// Try resolving a specific daemon first; fall back to wildcard.
-	daemonID, err := r.resolveDefaultDaemonID(ctx, userID)
+func (r *NATSDaemonRouter) isDaemonOnlineViaNATS(ctx context.Context, userID string, selector *DaemonSelector) (bool, error) {
+	daemonID, err := r.resolveDaemonID(ctx, userID, selector)
 	if err != nil {
 		return false, nil // No daemon found → offline.
 	}

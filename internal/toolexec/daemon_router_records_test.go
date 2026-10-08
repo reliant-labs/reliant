@@ -3,6 +3,7 @@ package toolexec
 
 import (
 	"context"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -31,6 +32,14 @@ func (f *fakeDaemonRecords) ListDaemonsByUserID(_ context.Context, userID string
 		}
 	}
 	return out, nil
+}
+
+func (f *fakeDaemonRecords) IsDaemonAttached(context.Context, string, time.Duration) (bool, error) {
+	return len(f.attached) > 0, nil
+}
+
+func (f *fakeDaemonRecords) IsDaemonIDAttached(_ context.Context, id string, _ time.Duration) (bool, error) {
+	return slices.Contains(f.attached, id), nil
 }
 
 func (f *fakeDaemonRecords) ListAttachedDaemonIDsForUser(context.Context, string, time.Duration) ([]string, error) {
