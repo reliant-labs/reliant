@@ -978,10 +978,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 		if err := waitForDaemon(ctx, preflightInput); err != nil {
 			if temporal.IsCanceledError(err) {
-				// User Stop: not a daemon failure, so no error card.
+				// Cancelled (CancelWorkflow): not a daemon failure, so no error card.
 				return nil, err
 			}
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", err.Error())
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", preflightFailureMessage(err))
 			return nil, fmt.Errorf("preflight daemon check failed: %w", err)
 		}
 		logger.Debug("[Workflow Runtime] Preflight daemon check passed")
@@ -5021,6 +5021,19 @@ const (
 	preflightHeartbeatTimeout = 20 * time.Second
 	preflightSliceMargin      = 30 * time.Second
 )
+
+// preflightFailureMessage is the text the daemon_unavailable card shows: the
+// activity's own message, which is written for the user. err.Error() leads
+// with Temporal's "activity error (type: …, scheduledEventID: …, identity: …):"
+// wrapping, which buried it. The returned error keeps the full chain — resume
+// resets to the activity it names.
+func preflightFailureMessage(err error) string {
+	var appErr *temporal.ApplicationError
+	if errors.As(err, &appErr) && appErr.Message() != "" {
+		return appErr.Message()
+	}
+	return err.Error()
+}
 
 // waitForDaemon runs PreflightDaemonCheck, repeating it in bounded slices
 // while it reports the daemon is still coming up. The ready path is a single

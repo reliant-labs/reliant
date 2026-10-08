@@ -36,9 +36,10 @@ daemon_unavailable" and "Workflow error in Preflight Daemon Check · Attempt 1".
   (30s) → assumes a graph step (5 attempts). Give preflight a DIFFERENT
   heartbeat timeout and add `"PreflightDaemonCheck"` to the named switch, or the
   terminal failure renders as "Retrying (attempt 1/5)".
-- Stop button = Temporal `CancelWorkflow` (chat_crud.go). Cancellation reaches
-  timers and activities. A user cancel during the wait must NOT post a
-  `daemon_unavailable` error card.
+- The UI's Stop is `TerminateChat` → Temporal `TerminateWorkflow`; a Temporal
+  `CancelWorkflow` (chat_crud.go's other paths, `temporal workflow cancel`)
+  reaches timers and activities. Neither may post a `daemon_unavailable` error
+  card during the wait. (Both verified on a live stack, §4.)
 - `trackDaemonPending` in `execute_tools.go` already drives
   `repo.SetChatDaemonBlocked(ctx, chatID, bool)` (transition-only write, emits a
   chat update). The `chats_with_activity` view reports
@@ -146,3 +147,27 @@ when the chat's activity is WAITING_FOR_DAEMON. `ChatPresenter` already computes
   the new `Repository.IsDaemonIDAttached` lease check). Preflight passes its
   selector to both the first check and the poll loop.
 - The terminal failure still shows two cards (wrapper card + `daemon_unavailable`).
+  The `daemon_unavailable` card now shows the activity's own message rather than
+  Temporal's `activity error (type: …, scheduledEventID: …)` wrapping.
+
+## 4. Verified on a live distributed stack (2026-10-08)
+
+Local compose stack (postgres, temporal, nats, api-server, temporal-worker,
+daemon-gateway, tools-daemon), `builtin://agent`, no LLM key (runs end at
+CallLLM, after preflight):
+
+- Daemon up: one `PreflightDaemonCheck`, 38 ms, scheduled after "started".
+- Daemon stopped, chat sent: activity 5 (WAITING_FOR_DAEMON), `daemon_blocked_at`
+  set, workflow state 2, 60s slices with a 2s timer between, no
+  `daemon_unavailable` card. Daemon restarted ~93s in (across a slice boundary):
+  preflight completed 1.6s after the gateway registered it, marker cleared, run
+  moved on to CallLLM.
+- UI Stop (terminate) and `temporal workflow cancel` mid-wait: marker cleared,
+  no error card.
+- Budget exhausted: 10 slices, then the "didn't come online within 10 minutes"
+  activity error, marker cleared, run failed.
+
+The repo's own `docker-compose.yml` does not run as-is (Dockerfile targets that
+do not exist, auth-gated base images, a NATS flag removed in 2.15, Temporal
+namespace mismatch, per-service vault keys, self-signed TLS); a working
+override was used.
