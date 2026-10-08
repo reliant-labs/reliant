@@ -27,11 +27,12 @@ type NATSToolBridge struct {
 	js  jetstream.JetStream
 	mgr DaemonConnectionManager // The local ToolsDaemonService
 
-	// Per-daemon NATS subscriptions, keyed by daemonID.
+	// Per-daemon NATS subscriptions, keyed by daemonKey(userID, daemonID) so
+	// one user's connect/disconnect can never tear down another user's.
 	daemonSubs map[string][]*nats.Subscription
 	subsMu     sync.Mutex
 
-	// Per-daemon cancel functions for output-forwarder goroutines, keyed by daemonID.
+	// Per-daemon cancel functions for output-forwarder goroutines, keyed by daemonKey.
 	daemonCancels map[string]context.CancelFunc
 	cancelsMu     sync.Mutex
 
@@ -179,6 +180,12 @@ func chunkedRequestSub(sub *nats.Subscription, err error) (*nats.Subscription, e
 	return sub, err
 }
 
+// daemonKey scopes bridge bookkeeping to the owning user. A NUL separator
+// cannot appear in either id, so distinct pairs never collide.
+func daemonKey(userID, daemonID string) string {
+	return userID + "\x00" + daemonID
+}
+
 // OnDaemonConnected implements DaemonConnectionListener. It creates per-daemon
 // NATS subscriptions for all 11 subjects that the bridge handles.
 func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
@@ -188,7 +195,7 @@ func (b *NATSToolBridge) OnDaemonConnected(userID, daemonID string) {
 	// Create a per-daemon context for output forwarder goroutines.
 	daemonCtx, daemonCancel := context.WithCancel(b.ctx)
 	b.cancelsMu.Lock()
-	b.daemonCancels[daemonID] = daemonCancel
+	b.daemonCancels[daemonKey(userID, daemonID)] = daemonCancel
 	b.cancelsMu.Unlock()
 
 	var subs []*nats.Subscription
@@ -674,7 +681,7 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID, daemonID string, subs []*nats.Subscription) {
 	// Store all subscriptions for this daemon.
 	b.subsMu.Lock()
-	b.daemonSubs[daemonID] = subs
+	b.daemonSubs[daemonKey(userID, daemonID)] = subs
 	b.subsMu.Unlock()
 
 	logging.Info("[NATSToolBridge] Subscribing to daemon subjects",
@@ -696,16 +703,17 @@ func (b *NATSToolBridge) finishDaemonConnected(daemonCtx context.Context, userID
 func (b *NATSToolBridge) OnDaemonDisconnected(userID, daemonID string) {
 	// Cancel per-daemon output forwarder goroutines.
 	b.cancelsMu.Lock()
-	if cancel, ok := b.daemonCancels[daemonID]; ok {
+	key := daemonKey(userID, daemonID)
+	if cancel, ok := b.daemonCancels[key]; ok {
 		cancel()
-		delete(b.daemonCancels, daemonID)
+		delete(b.daemonCancels, key)
 	}
 	b.cancelsMu.Unlock()
 
 	// Unsubscribe all NATS subscriptions for this daemon.
 	b.subsMu.Lock()
-	subs := b.daemonSubs[daemonID]
-	delete(b.daemonSubs, daemonID)
+	subs := b.daemonSubs[key]
+	delete(b.daemonSubs, key)
 	b.subsMu.Unlock()
 
 	if len(subs) > 0 {
@@ -828,6 +836,30 @@ func (b *NATSToolBridge) startProcessOutputForwarder(userCtx context.Context, us
 // (e.g. a git.clone) is silently never delivered.
 func sanitizePendingSubjectToken(s string) string {
 	return strings.NewReplacer(".", "_", ">", "_", "*", "_", " ", "_").Replace(s)
+}
+
+// The envelope's user_id is compared with the draining connection's userID,
+// which is the token's introspected ActingUserID — the user's EXTERNAL id
+// (control-plane's access_token_internal Introspect converts it). Every
+// enqueuer must therefore stamp the external id: NATSDaemonRouter's own
+// enqueue does (it routes on the same userID), and control-plane's CloneRepo
+// stamps auth.GetExternalUserID, never its internal daemon.OwnerID.
+//
+// pendingEnvelopeUserIDRequired flips the drain from "accept a missing
+// user_id (logged)" to "Term() a missing user_id". Keep false until
+// control-plane's PublishPendingDaemonCommand stamps "user_id" on its
+// envelope, otherwise in-flight and rolling-deploy git.clone commands are
+// dropped.
+// TODO(daemon-identity): set to true once control-plane ships user_id.
+const pendingEnvelopeUserIDRequired = false
+
+// pendingEnvelopeOwnerMatches reports whether a queued command may be
+// dispatched on a connection owned by connUserID.
+func pendingEnvelopeOwnerMatches(envelopeUserID, connUserID string) bool {
+	if envelopeUserID == "" {
+		return !pendingEnvelopeUserIDRequired
+	}
+	return envelopeUserID == connUserID
 }
 
 const (
@@ -1003,12 +1035,28 @@ func (b *NATSToolBridge) drainPendingCommands(ctx context.Context, userID, daemo
 				Payload     json.RawMessage          `json:"payload"`
 				TimeoutMs   int32                    `json:"timeout_ms"`
 				Policy      *daemonpolicy.WirePolicy `json:"policy,omitempty"`
+				// UserID is the user the command was enqueued for
+				// (envelope field "user_id"). See pendingEnvelopeUserIDRequired.
+				UserID string `json:"user_id,omitempty"`
 			}
 			if err := json.Unmarshal(msg.Data(), &envelope); err != nil {
 				logging.Warn("[NATSToolBridge] Failed to unmarshal pending command",
 					"daemonID", daemonID, "error", err)
 				_ = msg.Ack()
 				continue
+			}
+
+			if !pendingEnvelopeOwnerMatches(envelope.UserID, userID) {
+				logging.Warn("[NATSToolBridge] Terminating pending command queued for a different user",
+					"daemonID", daemonID, "connectionUserID", userID, "envelopeUserID", envelope.UserID,
+					"commandType", envelope.CommandType, "requestID", envelope.RequestID)
+				_ = msg.Term()
+				continue
+			}
+			if envelope.UserID == "" {
+				logging.Warn("[NATSToolBridge] Pending command has no user_id; dispatching on the strength of the daemon subject alone",
+					"daemonID", daemonID, "userID", userID,
+					"commandType", envelope.CommandType, "requestID", envelope.RequestID)
 			}
 
 			protoReq := &reliantv1.DaemonCommandRequest{
@@ -1099,11 +1147,11 @@ func (b *NATSToolBridge) Close() error {
 
 	// Unsubscribe all remaining per-daemon subscriptions.
 	b.subsMu.Lock()
-	for daemonID, subs := range b.daemonSubs {
+	for key, subs := range b.daemonSubs {
 		for _, sub := range subs {
 			_ = sub.Unsubscribe()
 		}
-		delete(b.daemonSubs, daemonID)
+		delete(b.daemonSubs, key)
 	}
 	b.subsMu.Unlock()
 

@@ -1113,6 +1113,11 @@ func (r *Repo) DeleteProjectDaemon(ctx context.Context, projectID, daemonID stri
 	return r.projects.DeleteProjectDaemon(ctx, projectID, daemonID)
 }
 
+// ErrDaemonOwnedByAnotherUser is returned when a daemon write names an id whose
+// row (or attachment) already belongs to a different user. Ownership is
+// immutable once the row exists.
+var ErrDaemonOwnedByAnotherUser = errors.New("daemon is owned by another user")
+
 func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	if daemon == nil {
 		return fmt.Errorf("daemon cannot be nil")
@@ -1138,13 +1143,13 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 			updated_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(id) DO UPDATE SET
-			user_id = excluded.user_id,
 			hostname = COALESCE(excluded.hostname, daemons.hostname),
 			platform = COALESCE(excluded.platform, daemons.platform),
 			capabilities = COALESCE(excluded.capabilities, daemons.capabilities),
 			project_paths = COALESCE(excluded.project_paths, daemons.project_paths),
 			daemon_type = COALESCE(excluded.daemon_type, daemons.daemon_type),
 			updated_at = excluded.updated_at
+		WHERE daemons.user_id = excluded.user_id
 	`
 	query = r.bindQuery(query)
 
@@ -1153,7 +1158,7 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 		createdAt = now
 	}
 
-	_, err := r.DB.ExecContext(ctx, query,
+	res, err := r.DB.ExecContext(ctx, query,
 		daemon.ID,
 		daemon.UserID,
 		daemon.Hostname,
@@ -1166,6 +1171,12 @@ func (r *Repo) UpsertDaemon(ctx context.Context, daemon *Daemon) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to upsert daemon %s: %w", daemon.ID, err)
+	}
+	// The conflict branch only fires for the row's own owner, so a conflict
+	// against a different owner writes nothing — in a single statement, with
+	// no read-then-write window.
+	if n, nErr := res.RowsAffected(); nErr == nil && n == 0 {
+		return fmt.Errorf("%w: daemon %s", ErrDaemonOwnedByAnotherUser, daemon.ID)
 	}
 
 	return nil
@@ -1462,10 +1473,18 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 			memory_limit_bytes = 0,
 			memory_pressure = FALSE,
 			detected_ports = '[]'
+		WHERE daemon_attachment.user_id = EXCLUDED.user_id
+		   OR EXISTS (SELECT 1 FROM daemons d WHERE d.id = EXCLUDED.daemon_id AND d.user_id = EXCLUDED.user_id)
 	`
 	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity); err != nil {
+	res, err := r.DB.ExecContext(ctx, query, att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity)
+	if err != nil {
 		return fmt.Errorf("upserting daemon attachment: %w", err)
+	}
+	// A different user's lease is only replaceable by the daemon row's owner
+	// (which heals a lease a past hijack left behind).
+	if n, nErr := res.RowsAffected(); nErr == nil && n == 0 {
+		return fmt.Errorf("%w: attachment for daemon %s", ErrDaemonOwnedByAnotherUser, att.DaemonID)
 	}
 	return nil
 }

@@ -118,6 +118,7 @@ type stubMsg struct {
 	mu           sync.Mutex
 	acked        bool
 	naked        bool
+	termed       bool
 }
 
 func (m *stubMsg) Data() []byte    { return m.data }
@@ -145,8 +146,13 @@ func (m *stubMsg) NakWithDelay(time.Duration) error {
 	m.naked = true
 	return nil
 }
-func (m *stubMsg) InProgress() error           { return nil }
-func (m *stubMsg) Term() error                 { return nil }
+func (m *stubMsg) InProgress() error { return nil }
+func (m *stubMsg) Term() error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.termed = true
+	return nil
+}
 func (m *stubMsg) TermWithReason(string) error { return nil }
 func (m *stubMsg) Metadata() (*jetstream.MsgMetadata, error) {
 	nd := m.numDelivered
@@ -154,6 +160,12 @@ func (m *stubMsg) Metadata() (*jetstream.MsgMetadata, error) {
 		nd = 1 // JetStream reports 1 on the first delivery.
 	}
 	return &jetstream.MsgMetadata{NumDelivered: nd}, nil
+}
+
+func (m *stubMsg) wasTermed() bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.termed
 }
 
 func (m *stubMsg) wasAcked() bool {
