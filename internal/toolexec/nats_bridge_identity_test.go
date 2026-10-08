@@ -55,18 +55,30 @@ func TestDrainPendingCommands_TermsMessageQueuedForAnotherUser(t *testing.T) {
 	require.False(t, mine.wasTermed())
 }
 
-// Rollout safety: until control-plane stamps user_id, an unstamped message is
-// still delivered (and logged). Flip pendingEnvelopeUserIDRequired to reject.
-func TestDrainPendingCommands_AcceptsMissingUserIDDuringRollout(t *testing.T) {
-	require.False(t, pendingEnvelopeUserIDRequired, "flip this test with the constant")
-	legacy := makePendingMsg(t, "req-legacy", "git.clone", json.RawMessage(`{}`), 1000)
+// A queued command with no user_id has no provable owner — the daemon id in
+// its subject is client-chosen — so it is Term()'d, never dispatched.
+func TestDrainPendingCommands_TermsMessageWithoutUserID(t *testing.T) {
+	unowned := makeOwnedPendingMsg(t, "req-unowned", "")
+	mine := makeOwnedPendingMsg(t, "req-mine", "user-B")
 
-	mgr := drainOnce(t, "user-B", legacy)
+	mgr := drainOnce(t, "user-B", unowned, mine)
 
+	require.True(t, unowned.wasTermed(), "a message without user_id must be Term()'d")
+	require.False(t, unowned.wasAcked())
+	require.False(t, unowned.wasNaked())
 	mgr.mu.Lock()
 	defer mgr.mu.Unlock()
-	require.Len(t, mgr.commands, 1)
-	require.False(t, legacy.wasTermed())
+	require.Len(t, mgr.commands, 1, "only the owned message is dispatched")
+	require.Equal(t, "req-mine", mgr.commands[0].RequestId)
+}
+
+// An empty connection user must not "match" an envelope that also omits
+// user_id: the comparison is never between two absent owners.
+func TestPendingEnvelopeOwnerMatches(t *testing.T) {
+	require.True(t, pendingEnvelopeOwnerMatches("user-A", "user-A"))
+	require.False(t, pendingEnvelopeOwnerMatches("user-A", "user-B"))
+	require.False(t, pendingEnvelopeOwnerMatches("", "user-A"))
+	require.False(t, pendingEnvelopeOwnerMatches("", ""))
 }
 
 // One user's connect/disconnect for a daemon id must not unsubscribe or cancel
