@@ -123,9 +123,12 @@ type ToolExecutionResponse struct {
 // Implementation:
 //   - NATSDaemonRouter: routes via NATS request-reply to the api-server holding the connection
 type DaemonRouter interface {
-	// IsDaemonOnline checks if a daemon is connected for the given user.
+	// IsDaemonOnline checks if a daemon is connected for the given user. A nil
+	// selector asks about ANY of the user's daemons; a non-nil one asks about
+	// the daemon(s) it selects, so a run pinned to a suspended daemon is not
+	// reported online because a different one is up.
 	// Returns (online, nil) for definitive results, or (false, err) for infrastructure failures.
-	IsDaemonOnline(ctx context.Context, userID string) (bool, error)
+	IsDaemonOnline(ctx context.Context, userID string, selector *DaemonSelector) (bool, error)
 
 	// SendToolRequest routes a tool execution request to the user's daemon (fire-and-forget).
 	SendToolRequest(ctx context.Context, userID string, request *ToolExecutionRequest) error

@@ -94,7 +94,7 @@ func (p *DBBackgroundProcessProvider) KillProcess(ctx context.Context, processID
 		return fmt.Errorf("process not found: %w", err)
 	}
 
-	online, onlineErr := p.router.IsDaemonOnline(ctx, process.UserID)
+	online, onlineErr := p.router.IsDaemonOnline(ctx, process.UserID, nil)
 	if onlineErr != nil {
 		// Infrastructure failure — log but attempt the kill anyway.
 		logging.Warn("IsDaemonOnline returned infrastructure error, attempting kill anyway",

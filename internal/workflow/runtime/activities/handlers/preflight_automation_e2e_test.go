@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/controlplane"
+	"github.com/reliant-labs/reliant/internal/daemonquery"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -89,6 +90,7 @@ type automationHarness struct {
 	suspendedAt time.Time
 	toolCalls   *int
 	router      *toolexec.NATSDaemonRouter
+	nc          *nats.Conn
 	mu          *sync.Mutex
 }
 
@@ -176,24 +178,50 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	require.True(t, created)
 
 	return &automationHarness{
-		repo: repo, cp: cp, router: router, userID: userID, daemonID: daemonID, chatID: chatID,
+		repo: repo, cp: cp, router: router, nc: nc, userID: userID, daemonID: daemonID, chatID: chatID,
 		suspendedAt: suspendedAt, toolCalls: &calls, mu: &mu,
-		activity: NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router)),
+		activity: newFastPollPreflight(repo, router),
 	}
 }
 
+func newFastPollPreflight(repo db.Repository, router toolexec.DaemonRouter) *PreflightDaemonCheckActivity {
+	a := NewPreflightDaemonCheckActivity(repo, toolexec.NewRemoteExecutor(router))
+	a.pollInterval = 20 * time.Millisecond
+	return a
+}
+
+// preflight runs the check as a single, non-waiting execution.
 func (h *automationHarness) preflight(t *testing.T) (PreflightDaemonCheckOutput, error) {
+	t.Helper()
+	return h.preflightWait(t, 0)
+}
+
+// preflightWait runs the check with a wait slice of waitSeconds.
+func (h *automationHarness) preflightWait(t *testing.T, waitSeconds int) (PreflightDaemonCheckOutput, error) {
 	t.Helper()
 	env := (&temporaltest.WorkflowTestSuite{}).NewTestActivityEnvironment()
 	env.RegisterActivity(h.activity.Execute)
 	val, err := env.ExecuteActivity(h.activity.Execute, PreflightDaemonCheckInput{
-		ChatID: h.chatID, DaemonSelector: &toolexec.DaemonSelector{ID: h.daemonID}})
+		ChatID: h.chatID, DaemonSelector: &toolexec.DaemonSelector{ID: h.daemonID}, WaitSeconds: waitSeconds})
 	if err != nil {
 		return PreflightDaemonCheckOutput{}, err
 	}
 	var out PreflightDaemonCheckOutput
 	require.NoError(t, val.Get(&out))
 	return out, nil
+}
+
+// attach makes the woken daemon reachable the way a gateway holding its stream
+// does: by answering its per-daemon status query.
+func (h *automationHarness) attach(t *testing.T) {
+	t.Helper()
+	sub, err := h.nc.Subscribe(daemonquery.SubjectStatus(h.daemonID), func(m *nats.Msg) {
+		body, _ := json.Marshal(daemonquery.Status{Connected: true, LastActiveMs: time.Now().UnixMilli()})
+		_ = m.Respond(body)
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = sub.Unsubscribe() })
+	require.NoError(t, h.nc.Flush())
 }
 
 // markReady mirrors the lifecycle event the control plane publishes once the
@@ -221,17 +249,25 @@ func TestUnattendedFireWithoutJWTResumesPinnedDaemonOnce(t *testing.T) {
 		t.Run(string(kind), func(t *testing.T) {
 			h := newAutomationHarness(t, kind)
 
-			out, err := h.preflight(t)
+			// The resume is accepted but the daemon is not attached yet: the
+			// check waits for it, and wakes it only once while it does.
+			go func() {
+				for h.cp.resumeCount() == 0 {
+					time.Sleep(10 * time.Millisecond)
+				}
+				h.markReady(t)
+				h.attach(t)
+			}()
+			out, err := h.preflightWait(t, 5)
 			require.NoError(t, err)
 			assert.True(t, out.DaemonAvailable)
-
+			assert.False(t, out.Waiting)
 			assert.Equal(t, 1, h.cp.resumeCount(), "the daemon is resumed exactly once")
 			assert.Equal(t, h.daemonID, out.DaemonID)
 
 			// The woken daemon now answers a tool call, and that call wakes
 			// nothing. Tool time holds no credential at all — the token is
 			// wake-only — so this also shows the run needs none after preflight.
-			h.markReady(t)
 			_, err = h.router.SendToolRequestSyncWithSelector(context.Background(), h.userID,
 				&toolexec.ToolExecutionRequest{RequestID: "r1", ToolName: "ping"}, &toolexec.DaemonSelector{ID: h.daemonID})
 			require.NoError(t, err)

@@ -56,7 +56,7 @@ func (s *DaemonRegistryService) ListDaemons(
 	// Trigger daemon connection check and wait briefly for it to register
 	// before querying the DB. No-op in cloud mode where the daemon is external.
 	if s.router != nil {
-		_, _ = s.router.IsDaemonOnline(ctx, userID)
+		_, _ = s.router.IsDaemonOnline(ctx, userID, nil)
 	}
 
 	daemons, err := s.database.ListDaemonsByUserID(ctx, userID)

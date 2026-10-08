@@ -443,6 +443,8 @@ type Repository interface {
 	// writer to the table.
 	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
+	// IsDaemonIDAttached is IsDaemonAttached for one daemon.
+	IsDaemonIDAttached(ctx context.Context, daemonID string, staleThreshold time.Duration) (bool, error)
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	// ListFreshDaemonAttachmentsForUser returns the full attachment rows
 	// (including memory telemetry) behind ListAttachedDaemonIDsForUser's

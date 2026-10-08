@@ -33,7 +33,7 @@ type forwardBackgroundCall struct {
 	toolCallID string
 }
 
-func (f *fakeDaemonRouter) IsDaemonOnline(_ context.Context, userID string) (bool, error) {
+func (f *fakeDaemonRouter) IsDaemonOnline(_ context.Context, userID string, _ *toolexec.DaemonSelector) (bool, error) {
 	return true, nil
 }
 func (f *fakeDaemonRouter) SendToolRequest(ctx context.Context, userID string, request *toolexec.ToolExecutionRequest) error {

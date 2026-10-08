@@ -764,7 +764,7 @@ func newFakeMCPDaemonRouter(mgr *fakeMCPManagerRuntime) *fakeMCPDaemonRouter {
 	}
 }
 
-func (r *fakeMCPDaemonRouter) IsDaemonOnline(_ context.Context, _ string) (bool, error) {
+func (r *fakeMCPDaemonRouter) IsDaemonOnline(_ context.Context, _ string, _ *toolexec.DaemonSelector) (bool, error) {
 	return true, nil
 }
 func (r *fakeMCPDaemonRouter) SendToolRequest(_ context.Context, _ string, _ *toolexec.ToolExecutionRequest) error {

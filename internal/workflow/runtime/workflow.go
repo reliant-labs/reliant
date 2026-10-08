@@ -841,46 +841,6 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 
-	// STEP 6.07: Preflight daemon check
-	// If the workflow requires a daemon (run nodes, daemon tools, explicit daemon field),
-	// verify that a daemon is available before starting execution. Fail fast with a
-	// clear error message rather than failing mid-execution.
-	preflightCfg := buildPreflightConfig()
-	if RequiresDaemon(wf, preflightCfg) {
-		preflightInput := map[string]interface{}{
-			"chat_id": input.ChatID,
-		}
-		// Pass daemon selector if one was resolved at workflow level
-		if execCtx.DaemonSelector != nil {
-			preflightInput["daemon_selector"] = map[string]interface{}{
-				"id":   execCtx.DaemonSelector.ID,
-				"name": execCtx.DaemonSelector.Name,
-				"type": execCtx.DaemonSelector.Type,
-			}
-		}
-		// Also check session daemon from inputs
-		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
-			if _, hasDaemonSelector := preflightInput["daemon_selector"]; !hasDaemonSelector {
-				preflightInput["daemon_selector"] = map[string]interface{}{
-					"id": sessionDaemonID,
-				}
-			}
-		}
-
-		preflightCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
-			StartToCloseTimeout: 30 * time.Second,
-			RetryPolicy: &temporal.RetryPolicy{
-				MaximumAttempts: 1, // Don't retry — fail fast
-			},
-		})
-		var preflightResult map[string]interface{}
-		if err := workflow.ExecuteActivity(preflightCtx, "PreflightDaemonCheck", preflightInput).Get(ctx, &preflightResult); err != nil {
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", err.Error())
-			return nil, fmt.Errorf("preflight daemon check failed: %w", err)
-		}
-		logger.Debug("[Workflow Runtime] Preflight daemon check passed")
-	}
-
 	// STEP 6.1: Initialize thread tracker for runtime thread tracking
 	threadTracker := NewThreadTracker()
 	threadTracker.Mapping.RecordThreadResolution(ThreadRoot, thread)
@@ -986,6 +946,46 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 	notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts)
+
+	// STEP 6.6: Preflight daemon check
+	// If the workflow requires a daemon (run nodes, daemon tools, explicit daemon field),
+	// verify that a daemon is available before starting execution. A daemon that
+	// exists but is still coming up makes the run WAIT (bounded); only a missing
+	// daemon, a refused wake or an exhausted budget fails it. Runs after the
+	// "started" notification so the running workflow row exists and the chat
+	// can surface WAITING_FOR_DAEMON while it waits.
+	preflightCfg := buildPreflightConfig()
+	if RequiresDaemon(wf, preflightCfg) {
+		preflightInput := map[string]interface{}{
+			"chat_id": input.ChatID,
+		}
+		// Pass daemon selector if one was resolved at workflow level
+		if execCtx.DaemonSelector != nil {
+			preflightInput["daemon_selector"] = map[string]interface{}{
+				"id":   execCtx.DaemonSelector.ID,
+				"name": execCtx.DaemonSelector.Name,
+				"type": execCtx.DaemonSelector.Type,
+			}
+		}
+		// Also check session daemon from inputs
+		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
+			if _, hasDaemonSelector := preflightInput["daemon_selector"]; !hasDaemonSelector {
+				preflightInput["daemon_selector"] = map[string]interface{}{
+					"id": sessionDaemonID,
+				}
+			}
+		}
+
+		if err := waitForDaemon(ctx, preflightInput); err != nil {
+			if temporal.IsCanceledError(err) {
+				// User Stop: not a daemon failure, so no error card.
+				return nil, err
+			}
+			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", err.Error())
+			return nil, fmt.Errorf("preflight daemon check failed: %w", err)
+		}
+		logger.Debug("[Workflow Runtime] Preflight daemon check passed")
+	}
 
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
 	// guidance it may seed is in the thread when the first LLM call reads it,
@@ -5002,4 +5002,57 @@ func getMapKeys(m map[string]interface{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+const (
+	// preflightWaitBudget bounds how long a run waits for its machine: long
+	// enough for a managed resume or a fresh provision, short enough that a
+	// stuck one fails with a clear message.
+	preflightWaitBudget = 10 * time.Minute
+	// preflightWaitSlice is how long one PreflightDaemonCheck execution polls.
+	// Slices (not one long activity) mean a worker restart mid-wait costs at
+	// most one slice, and history stays ~10 activities over the whole budget.
+	preflightWaitSlice = 60 * time.Second
+	// preflightSliceBackoff guards against a hot loop if a slice returns early.
+	preflightSliceBackoff = 2 * time.Second
+	// preflightHeartbeatTimeout deliberately differs from
+	// activityHeartbeatTimeout so resolveMaxAttempts does not treat the check
+	// as a retried graph step.
+	preflightHeartbeatTimeout = 20 * time.Second
+	preflightSliceMargin      = 30 * time.Second
+)
+
+// waitForDaemon runs PreflightDaemonCheck, repeating it in bounded slices
+// while it reports the daemon is still coming up. The ready path is a single
+// activity. The last slice sets final so the activity itself returns the
+// terminal error (it must stay an activity error: resume resets to the
+// decision that scheduled the failing activity).
+func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) error {
+	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
+		StartToCloseTimeout: preflightWaitSlice + preflightSliceMargin,
+		HeartbeatTimeout:    preflightHeartbeatTimeout,
+		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
+	})
+	waitStart := workflow.Now(ctx)
+	for {
+		final := workflow.Now(ctx).Sub(waitStart)+preflightWaitSlice >= preflightWaitBudget
+		in := make(map[string]interface{}, len(preflightInput)+2)
+		for k, v := range preflightInput {
+			in[k] = v
+		}
+		in["wait_seconds"] = int(preflightWaitSlice / time.Second)
+		in["wait_budget_seconds"] = int(preflightWaitBudget / time.Second)
+		in["final"] = final
+
+		var result map[string]interface{}
+		if err := workflow.ExecuteActivity(actCtx, "PreflightDaemonCheck", in).Get(ctx, &result); err != nil {
+			return err
+		}
+		if waiting, _ := result["waiting"].(bool); !waiting {
+			return nil
+		}
+		if err := workflow.Sleep(ctx, preflightSliceBackoff); err != nil {
+			return err
+		}
+	}
 }
