@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/antigravity"
@@ -53,18 +54,62 @@ func (p *baseDriver) SendMessages(ctx context.Context, prompts []string, message
 	return p.client.SendMessages(ctx, prompts, messages, tools)
 }
 
-// StreamResponse implements the Driver interface
+// StreamResponse implements the Driver interface.
+//
+// Every production driver streams through here, which makes this the one
+// place that can guarantee a driver is never wedged by its consumer. A driver
+// goroutine blocked on a send nobody will receive holds its HTTP stream and
+// everything it accumulated from it for the life of the process, and
+// consumers DO walk away mid-stream: CallLLM stops reading on cancellation,
+// on the progress timeout and on a handler error. So the inner channel is
+// always drained to its close, whatever the consumer does.
 func (p *baseDriver) StreamResponse(ctx context.Context, prompts []string, messages []message.Message, tools []tools.Tool) <-chan llm.DriverEvent {
 	ch := make(chan llm.DriverEvent)
+	in := p.client.StreamResponse(ctx, prompts, messages, tools)
 	go func() {
 		defer close(ch)
-		for event := range p.client.StreamResponse(ctx, prompts, messages, tools) {
+		defer func() {
+			for range in { //nolint:revive // draining lets the driver finish and release its stream
+			}
+		}()
+		for event := range in {
 			// Enrich the event with the model used
 			event.Model = p.model
-			ch <- event
+			if !deliverEvent(ctx, ch, event) {
+				return
+			}
 		}
 	}()
 	return ch
+}
+
+// consumerGoneGrace is how long a send waits for a receiver once ctx is done
+// before the consumer is treated as gone.
+//
+// Not zero, because a cancelled consumer is not necessarily gone: CallLLM
+// deliberately keeps taking events the driver has already handed over after
+// its context is cancelled, so the partial output the user watched stream in
+// is not dropped. Not long, because past this point the only thing waiting is
+// a goroutine holding a dead stream. A var only so tests need not wait it out.
+var consumerGoneGrace = 5 * time.Second
+
+// deliverEvent sends ev to the consumer. It reports false when ctx is done and
+// nobody has received for consumerGoneGrace, at which point the caller stops
+// sending.
+func deliverEvent(ctx context.Context, ch chan<- llm.DriverEvent, ev llm.DriverEvent) bool {
+	select {
+	case ch <- ev:
+		return true
+	case <-ctx.Done():
+	}
+	grace := time.NewTimer(consumerGoneGrace)
+	defer grace.Stop()
+	select {
+	case ch <- ev:
+		return true
+	case <-grace.C:
+		return false
+	}
 }
 
 // Model implements the Driver interface

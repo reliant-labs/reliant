@@ -257,14 +257,18 @@ func (c *LocalClient) StreamResponse(ctx context.Context, prompts []string, mess
 				}
 				choice := chunk.Choices[0]
 
+				// openai-go closes the stream itself only when Next reports
+				// the end, so leaving mid-iteration must close it here.
 				if reasoning := reasoningField(choice.Delta.RawJSON()); reasoning != "" {
 					if !emit("", reasoning) {
+						_ = stream.Close()
 						return
 					}
 				}
 				if choice.Delta.Content != "" {
 					contentDelta, thinkingDelta := split.push(choice.Delta.Content)
 					if !emit(contentDelta, thinkingDelta) {
+						_ = stream.Close()
 						return
 					}
 				}
