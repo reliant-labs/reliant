@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"sync"
 	"testing"
 	"time"
@@ -33,6 +34,18 @@ type placementRecordingRouter struct {
 
 func (r *placementRecordingRouter) ResolveDaemonID(context.Context, string) (string, error) {
 	return activityDefaultDaemon, nil
+}
+
+// ResolveDaemonIDForSelector models the real router's ownership-checked
+// selector resolution (toolexec.ResolveDaemonIDForSelector no longer echoes an
+// explicit id back unverified): the fake user owns the default machine and
+// daemon-b, and any other id is not found.
+func (r *placementRecordingRouter) ResolveDaemonIDForSelector(_ context.Context, _ string, sel *toolexec.DaemonSelector) (string, error) {
+	switch sel.ID {
+	case activityDefaultDaemon, "daemon-b":
+		return sel.ID, nil
+	}
+	return "", errors.New("no daemon available")
 }
 
 func (r *placementRecordingRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
