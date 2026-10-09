@@ -100,7 +100,7 @@ nodes:
   - id: classify
     type: router
     model:
-      tags: [fast, smart]
+      tags: [fast]
     system_prompt: |
       Classify the user's request to determine which phase of the pitch deck pipeline to start from.
       Consider what work has already been done and what the user needs.

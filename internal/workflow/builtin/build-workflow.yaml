@@ -153,7 +153,7 @@ nodes:
   - id: integration_router
     type: router
     model:
-      tags: [fast, smart]
+      tags: [fast]
     system_prompt: |
       Determine whether the workflow plan requires custom integrations to be built.
       Look at the conversation — specifically the scoping phase output.
