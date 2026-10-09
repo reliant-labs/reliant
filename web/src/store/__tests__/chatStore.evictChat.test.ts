@@ -28,7 +28,6 @@ function reset() {
   clearAllMessagesCache();
   useChatStore.setState({
     activeChatId: null,
-    discussMode: {},
     toolResultsByCallId: {},
     streamingMessages: {},
     errorEvents: {},
@@ -113,7 +112,6 @@ function populate(chatId: string) {
       ...state.contextUsage,
       [chatId]: { [chatId]: { threadTokenCount: 10, compactionThreshold: 100 } },
     },
-    discussMode: { ...state.discussMode, [chatId]: true },
   }));
 }
 
@@ -130,7 +128,6 @@ describe("evictChat", () => {
     expect(state.infoEvents[CHAT]).toBeDefined();
     expect(state.toolCallStates[CHAT]).toBeDefined();
     expect(state.contextUsage[CHAT]).toBeDefined();
-    expect(state.discussMode[CHAT]).toBeDefined();
 
     useChatStore.getState().evictChat(CHAT);
 
@@ -144,7 +141,6 @@ describe("evictChat", () => {
     expect(state.streamingMessages[CHAT]).toBeUndefined();
     expect(state.toolResultsByCallId[CHAT]).toBeUndefined();
     expect(state.contextUsage[CHAT]).toBeUndefined();
-    expect(state.discussMode[CHAT]).toBeUndefined();
   });
 
   it("leaves other chats' state untouched", () => {

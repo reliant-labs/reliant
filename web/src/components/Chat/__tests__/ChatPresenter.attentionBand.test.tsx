@@ -239,17 +239,4 @@ describe("the interrupt affordance tracks work in flight, not chat busy-ness", (
       screen.queryByLabelText("Interrupt the agent and deliver queued messages now"),
     ).toBeNull();
   });
-
-  it("withholds interrupt in discuss mode, but still shows the queue", async () => {
-    renderWithQuery(
-      <SurfaceProvider surface="desktop">
-        <ChatPresenter {...baseProps} isDiscussMode={true} />
-      </SurfaceProvider>,
-    );
-
-    expect(await screen.findByText("check the migration file")).toBeTruthy();
-    expect(
-      screen.queryByLabelText("Interrupt the agent and deliver queued messages now"),
-    ).toBeNull();
-  });
 });

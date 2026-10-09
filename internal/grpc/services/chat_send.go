@@ -527,15 +527,6 @@ func (s *ChatService) SendMessage(
 					fmt.Errorf("chat has not started; call StartChat"))
 
 			case db.Paused():
-
-				// Discuss mode: lightweight LLM chat without resuming the workflow
-				if req.Msg.Discuss {
-					// It never touches the run, and it waits on an LLM call —
-					// holding the lock through that would stall ESC for no reason.
-					releaseRunControl()
-					return s.handleDiscussMode(ctx, req, chat, existingWorkflow, workflowID, userID, userContent, hasUserContent, systemMessages)
-				}
-
 				// Update selected presets on chat if provided (before starting workflow)
 				if len(req.Msg.SelectedPresets) > 0 {
 					chat.SelectedPresets = req.Msg.SelectedPresets

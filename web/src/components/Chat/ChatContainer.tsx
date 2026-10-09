@@ -17,7 +17,6 @@ import {
   useInfoEvents,
   useRunOutputs,
   useStreamingMessages,
-  useDiscussMode,
   useHasOlderMessages,
   useIsChatSyncing,
 } from "../../store/chatStoreHooks";
@@ -94,7 +93,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
   const connectionStatus = useGlobalUpdatesStore((s) => s.connectionStatus);
   const isChatBusy = useIsChatRunning(chatId);
   const { data: pendingApprovals = [] } = usePendingApprovals(chatId);
-  const isDiscussMode = useDiscussMode(chatId);
   const { data: pendingQuestion } = usePendingQuestion(chatId);
   const isChatSyncing = useIsChatSyncing(chatId);
 
@@ -318,7 +316,6 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       isFocused={isFocused}
       workflowExecution={workflowExecution}
       workflowExecutions={workflowExecutions}
-      isDiscussMode={isDiscussMode}
       hasPendingQuestion={!!pendingQuestion}
       onLoadOlderMessages={handleLoadOlderMessages}
       isLoadingOlderMessages={isLoadingOlderMessages}

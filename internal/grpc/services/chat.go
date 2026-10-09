@@ -34,7 +34,6 @@ type ChatService struct {
 	// (see internal/launch/greenfield.go). Optional: nil means the probe is
 	// skipped.
 	daemonRouter toolexec.DaemonRouter
-	discussLocks sync.Map // per-chat lock to prevent concurrent discuss calls
 
 	// launcher owns the start path — see internal/launch. It is shared with the
 	// worker, which cannot import this package, so every helper StartChat and

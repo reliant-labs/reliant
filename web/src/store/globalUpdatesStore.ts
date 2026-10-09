@@ -1001,16 +1001,6 @@ function handleChatActivityChanged(update: UserUpdate) {
     // at the end of a run nothing else would ever clean it up.
     useChatStore.getState().clearStreamingState(chat_id);
   }
-
-  // Clear discuss mode when workflow resumes (activity becomes RUNNING)
-  if (activity === ChatActivity.RUNNING) {
-    useChatStore.setState((state) => {
-      if (!state.discussMode[chat_id]) return state;
-      return {
-        discussMode: { ...state.discussMode, [chat_id]: false },
-      };
-    });
-  }
 }
 
 function handleProcessStarted(update: UserUpdate) {

@@ -239,14 +239,3 @@ export function useContextUsageByThread(
 export function useToolCallStates(chatId: string) {
   return useChatStore((state) => state.toolCallStates[chatId] || EMPTY_MAP);
 }
-
-// ============================================================================
-// DISCUSS MODE SELECTORS
-// ============================================================================
-
-/**
- * Get discuss mode state for a chat
- */
-export function useDiscussMode(chatId: string): boolean {
-  return useChatStore((state) => state.discussMode[chatId] ?? false);
-}

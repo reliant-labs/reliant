@@ -851,7 +851,6 @@ interface ChatStoreState {
   // (messageKeys.list) — the single source of truth. Read via useChatMessages /
   // getMessagesFromCache; write via the message-queries helpers
   // (setMessagesInCache / patchMessagesCache). There is no messages field here.
-  discussMode: Record<string, boolean>;
   errorEvents: Record<string, ErrorUpdate[]>; // Error events from workflow/activity failures
   infoEvents: Record<string, InfoUpdate[]>; // Info notifications (shown to user, not saved to thread)
   runOutputs: Record<string, RunOutputUpdate[]>; // Run step outputs from workflow execution
@@ -943,7 +942,6 @@ interface ChatStoreState {
       workflowParams?: Record<string, unknown>;
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
-      discuss?: boolean; // If true, chat with LLM without resuming paused workflow
     },
   ) => Promise<void>;
   loadMessages: (chatId: string) => Promise<void>;
@@ -973,7 +971,6 @@ interface ChatStoreState {
   // Chat control methods
   cancelChat: (chatId: string) => Promise<void>;
   pauseChat: (chatId: string) => Promise<void>;
-  setDiscussMode: (chatId: string, enabled: boolean) => void;
   resumeChat: (chatId: string) => Promise<void>;
 
   resolveQuestion: (chatId: string, questionId: string, action: string, responseData?: string) => Promise<void>;
@@ -1157,7 +1154,6 @@ function applyFirstSend(
 
 export const useChatStore = create<ChatStoreState>((set, get) => ({
   // Initial state
-  discussMode: {},
   errorEvents: {},
   infoEvents: {},
   runOutputs: {},
@@ -1592,7 +1588,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       workflowParams?: Record<string, unknown>;
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
-      discuss?: boolean;
     },
   ) => {
     if (!getChatFromCache(chatId)) {
@@ -1637,8 +1632,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // Model is now configured via workflow params or presets, not global preferences
       const workflowParams = options?.workflowParams || {};
 
-      const isDiscuss = options?.discuss || get().discussMode[chatId];
-
       // A pause issued just before this send must reach the server first, or
       // the send can be routed as a wake and then stranded by the pause. The
       // optimistic message is already on screen, so this wait is invisible.
@@ -1655,7 +1648,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           Object.keys(options.selectedPresets).length > 0 && {
             selected_presets: options.selectedPresets,
           }),
-        ...(isDiscuss && { discuss: true }),
         client_message_id: clientMessageId,
       };
 
@@ -3492,12 +3484,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     }
   },
 
-  setDiscussMode: (chatId, enabled) => {
-    set((state) => ({
-      discussMode: { ...state.discussMode, [chatId]: enabled },
-    }));
-  },
-
   // Resume chat - resumes a paused or expired workflow
   // For paused: backend sends SignalResume to the running Temporal workflow
   // For expired: backend uses ResetWorkflowExecution to restore it
@@ -3507,12 +3493,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logger.warn("No chat state found for chatId:", chatId);
       return;
     }
-
-    // Optimistic update — clear discuss mode since we're resuming. The chat
-    // object itself is unchanged (activity is tracked in activityStore).
-    set((state) => ({
-      discussMode: { ...state.discussMode, [chatId]: false },
-    }));
 
     // Also update activityStore so sidebar dot reflects change immediately
     useActivityStore.getState().setActivity(chatId, ChatActivity.RUNNING);
@@ -3957,7 +3937,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       return rest;
     };
     set((state) => ({
-      discussMode: omit(state.discussMode),
       errorEvents: omit(state.errorEvents),
       infoEvents: omit(state.infoEvents),
       runOutputs: omit(state.runOutputs),
@@ -4002,7 +3981,6 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
     // Reset to initial state
     set({
-      discussMode: {},
       errorEvents: {},
       infoEvents: {},
       runOutputs: {},

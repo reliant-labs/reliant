@@ -208,7 +208,6 @@ export interface SendMessageOptions {
   workflow_params?: Record<string, unknown>;
   target_thread?: string;
   selected_presets?: Record<string, string>; // Update preset selections
-  discuss?: boolean; // If true, chat with LLM without resuming paused workflow
   // The id the client gave this message; a queued row is created with it.
   client_message_id?: string;
 }
@@ -428,7 +427,6 @@ export const chatGrpc = {
       workflowParams,
       targetThread: options.target_thread,
       selectedPresets: options.selected_presets || {},
-      discuss: options.discuss,
     });
     const response = await client.sendMessage(request);
     return {

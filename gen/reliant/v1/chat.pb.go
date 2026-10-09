@@ -2599,7 +2599,6 @@ type SendMessageRequest struct {
 	TargetThread    *string                    `protobuf:"bytes,13,opt,name=target_thread,json=targetThread,proto3,oneof" json:"target_thread,omitempty"`                                                                              // Target thread ID for the message (defaults to main thread if not specified)
 	SelectedPresets map[string]string          `protobuf:"bytes,14,rep,name=selected_presets,json=selectedPresets,proto3" json:"selected_presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Update preset selections (persisted with chat)
 	Messages        []*InputMessage            `protobuf:"bytes,15,rep,name=messages,proto3" json:"messages,omitempty"`                                                                                                                // Messages to send (user and system). At least one user message required.
-	Discuss         bool                       `protobuf:"varint,17,opt,name=discuss,proto3" json:"discuss,omitempty"`                                                                                                                 // If true, chat with LLM without resuming paused workflow
 	// Client-chosen UUID for the user message. When the message is queued for a
 	// running thread (see SendMessageResponse.queued) it becomes the queued
 	// row's id, so a client can key its optimistic copy by the id the queue
@@ -2707,13 +2706,6 @@ func (x *SendMessageRequest) GetMessages() []*InputMessage {
 		return x.Messages
 	}
 	return nil
-}
-
-func (x *SendMessageRequest) GetDiscuss() bool {
-	if x != nil {
-		return x.Discuss
-	}
-	return false
 }
 
 func (x *SendMessageRequest) GetClientMessageId() string {
@@ -6218,7 +6210,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x18ListArchivedChatsRequest\"a\n" +
 	"\x19ListArchivedChatsResponse\x12.\n" +
 	"\x05chats\x18\x01 \x03(\v2\x18.reliant.v1.ArchivedChatR\x05chats\x12\x14\n" +
-	"\x05total\x18\x02 \x01(\x05R\x05total\"\xb8\x06\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\"\xad\x06\n" +
 	"\x12SendMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12 \n" +
 	"\vattachments\x18\x03 \x03(\tR\vattachments\x12\x1f\n" +
@@ -6230,8 +6222,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04mode\x18\f \x01(\tH\x03R\x04mode\x88\x01\x01\x12(\n" +
 	"\rtarget_thread\x18\r \x01(\tH\x04R\ftargetThread\x88\x01\x01\x12^\n" +
 	"\x10selected_presets\x18\x0e \x03(\v23.reliant.v1.SendMessageRequest.SelectedPresetsEntryR\x0fselectedPresets\x124\n" +
-	"\bmessages\x18\x0f \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12\x18\n" +
-	"\adiscuss\x18\x11 \x01(\bR\adiscuss\x12/\n" +
+	"\bmessages\x18\x0f \x03(\v2\x18.reliant.v1.InputMessageR\bmessages\x12/\n" +
 	"\x11client_message_id\x18\x12 \x01(\tH\x05R\x0fclientMessageId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
@@ -6244,7 +6235,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\v_max_tokensB\a\n" +
 	"\x05_modeB\x10\n" +
 	"\x0e_target_threadB\x14\n" +
-	"\x12_client_message_id\"\xf7\x01\n" +
+	"\x12_client_message_idJ\x04\b\x11\x10\x12R\adiscuss\"\xf7\x01\n" +
 	"\x13SendMessageResponse\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +
