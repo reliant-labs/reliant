@@ -98,6 +98,11 @@ func TestCompactWorkflowValidation(t *testing.T) {
 			if node.GetType() != "compact" {
 				t.Errorf("Expected compact node type 'compact', got '%s'", node.GetType())
 			}
+			// The user asked for this compaction (CompactChat), so the
+			// futile-compaction guard must not decline it.
+			if !model.CelBoolValue(node.GetCompact().GetForce()) {
+				t.Error("Expected the manual compact workflow to force compaction")
+			}
 		}
 	}
 

@@ -80,17 +80,20 @@ func TestFormatStoredMemories_ProducesSystemMessage(t *testing.T) {
 }
 
 func TestFormatRepoMemoryMessages_Empty(t *testing.T) {
-	require.Nil(t, formatRepoMemoryMessages(nil))
-	require.Nil(t, formatRepoMemoryMessages(map[string]string{}))
-	require.Nil(t, formatRepoMemoryMessages(map[string]string{"api": "", "web": "  "}))
+	for _, memories := range []map[string]string{nil, {}, {"api": "", "web": "  "}} {
+		msgs, omitted := formatRepoMemoryMessages(memories, repoMemoryBudgetChars(272_000))
+		require.Nil(t, msgs)
+		require.Nil(t, omitted)
+	}
 }
 
 func TestFormatRepoMemoryMessages_SortedByName(t *testing.T) {
-	msgs := formatRepoMemoryMessages(map[string]string{
+	msgs, omitted := formatRepoMemoryMessages(map[string]string{
 		"forge":         "forge context",
 		"api":           "api context",
 		"control-plane": "cp context",
-	})
+	}, repoMemoryBudgetChars(272_000))
+	require.Empty(t, omitted)
 	require.Len(t, msgs, 3)
 
 	// Verify sorted order: api, control-plane, forge

@@ -60,6 +60,10 @@ type CompactActivity struct {
 	repo           db.Repository
 	threads        *threads.Service
 	driverResolver drivers.DriverResolver
+	// skips reports windows the activity declined to compact (see
+	// compaction_guard.go). Process-wide, so a window is reported once no
+	// matter which activity instance meets it.
+	skips *compactionSkipNotices
 }
 
 // NewCompactActivity creates a new CompactActivity
@@ -68,6 +72,7 @@ func NewCompactActivity(repo db.Repository, resolver drivers.DriverResolver) *Co
 		repo:           repo,
 		threads:        threads.NewService(repo),
 		driverResolver: resolver,
+		skips:          compactionSkips,
 	}
 }
 
@@ -112,9 +117,6 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 		return CompactOutput{}, fmt.Errorf("thread is required")
 	}
 
-	// Emit thread update to show "Summarizing conversation" in the UI
-	a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "Compact")
-
 	// Load conversation history (handles branching, DB repair, and in-memory repair)
 	currentContextMessages, err := LoadMessagesForLLM(ctx, a.repo, rtx.ChatID, thread, nil)
 	if err != nil {
@@ -123,9 +125,25 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 
 	if len(currentContextMessages) == 0 {
 		// No messages to compact - nothing to do
-		a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "")
 		return CompactOutput{}, nil
 	}
+
+	// A compaction that cannot shrink the context is the next turn's
+	// compaction trigger, not a fix: when the fixed base (system prompt, tools,
+	// memory, preloaded skills) is most of the window, the compacted window
+	// opens above the threshold and the loop compacts again — every turn, each
+	// time paying a full-context summarization call and discarding the agent's
+	// working memory. Decline, say so once, and let the turn proceed; the trim
+	// backstop in call_llm still keeps tool results inside the model's window.
+	// A compaction the user asked for (force) is not a loop, so it runs.
+	force := model.CelBoolValue(input.Node.GetCompact().GetForce())
+	if reclaim := message.EstimateCompactionReclaim(currentContextMessages); !force && !reclaim.Worthwhile() {
+		a.skips.report(newCompactionSkip(rtx.ChatID, thread, currentContextMessages, reclaim))
+		return CompactOutput{SkippedReason: compactionSkippedReason(reclaim)}, nil
+	}
+
+	// Emit thread update to show "Summarizing conversation" in the UI
+	a.emitThreadUpdate(ctx, rtx.ChatID, thread, "active", "Compact")
 
 	// Generate summary of messages to be compacted
 	summary, err := a.generateCompactionSummary(ctx, chat, currentContextMessages, summarizeWith)

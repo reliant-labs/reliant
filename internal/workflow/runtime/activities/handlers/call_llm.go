@@ -1323,11 +1323,18 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			Parts: []message.ContentPart{message.TextContent{Text: memoryContent}},
 		})
 	}
-	// Per-repo memory: eagerly inject all sub-repo reliant.md content from
-	// the config snapshot. Sorted by repo name for prefix-cache stability.
+	// Per-repo memory: eagerly inject sub-repo reliant.md content from the
+	// config snapshot, within a share of this model's window (see
+	// repoMemoryBudgetFraction). Sorted by repo name for prefix-cache
+	// stability.
 	if projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
-		if memMsgs := formatRepoMemoryMessages(projectCfg.RepoMemories); len(memMsgs) > 0 {
+		budget := repoMemoryBudgetChars(effectiveContextWindow)
+		memMsgs, omitted := formatRepoMemoryMessages(projectCfg.RepoMemories, budget)
+		if len(memMsgs) > 0 {
 			prefix = append(prefix, memMsgs...)
+		}
+		if len(omitted) > 0 {
+			repoMemoryOmissions.warn(chat.ProjectID, omitted, budget)
 		}
 	}
 	if len(prefix) > 0 {
@@ -3133,36 +3140,6 @@ func formatStoredMemories(projectCfg *cfgpkg.Config) string {
 		sections = append(sections, runtimeNote)
 	}
 	return strings.Join(sections, "\n\n")
-}
-
-// formatRepoMemoryMessages converts the config's repo memories map into
-// system messages, one per repo. Sorted by repo name for prefix-cache
-// stability across turns.
-func formatRepoMemoryMessages(repoMemories map[string]string) []message.Message {
-	if len(repoMemories) == 0 {
-		return nil
-	}
-
-	// Sort keys for deterministic ordering (prefix-cache stability).
-	keys := make([]string, 0, len(repoMemories))
-	for k := range repoMemories {
-		keys = append(keys, k)
-	}
-	sort.Strings(keys)
-
-	var msgs []message.Message
-	for _, repo := range keys {
-		content := strings.TrimSpace(repoMemories[repo])
-		if content == "" {
-			continue
-		}
-		body := fmt.Sprintf("<system-memory repo=%s>\n%s\n</system-memory>", repo, content)
-		msgs = append(msgs, message.Message{
-			Role:  message.System,
-			Parts: []message.ContentPart{message.TextContent{Text: body}},
-		})
-	}
-	return msgs
 }
 
 // preloadedSkillsPreamble opens the seeded turn by naming who loaded these

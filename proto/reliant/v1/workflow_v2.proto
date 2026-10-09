@@ -745,6 +745,17 @@ message CompactArgs {
     example: "flagship"
     category: "Model"
   }];
+
+  // Compact even when it would remove little of the context. Unset, the node
+  // declines a compaction that cannot shrink the context (the fixed base —
+  // system prompt, tools, memory — is most of it), which is what stops a
+  // threshold-triggered compaction from re-firing every turn. A compaction the
+  // user explicitly asked for sets it.
+  CelBool force = 3 [(reliant) = {
+    description: "Compact even when it would remove little of the context (a compaction the user asked for)"
+    label: "Force"
+    visibility_contexts: "advanced"
+  }];
 }
 
 // ApprovalArgs configures an approval node — pauses for user approval.
@@ -1688,6 +1699,11 @@ message ActionOutput {
 // CompactOutput is the output from the compact activity.
 message CompactOutput {
   MessageOutput message = 1;
+  // Why the activity declined to compact, empty when it compacted. Set when
+  // compacting could not shrink the context (the fixed base — system prompt,
+  // tools, memory — is most of it), so the turn proceeds uncompacted instead
+  // of re-compacting on every turn.
+  string skipped_reason = 2;
 }
 
 // ApprovalOutput is the output from the approval activity.

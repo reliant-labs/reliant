@@ -92,6 +92,7 @@ var generatedNodeBindingsByType = map[string]generatedNodeBinding{
 		oneofFieldName: "compact",
 		isStructural:   false,
 		argFieldKeys: map[string]struct{}{
+			"force": {},
 			"model": {},
 		},
 	},
