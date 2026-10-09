@@ -5,9 +5,11 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 	"os"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -26,15 +28,17 @@ type Config struct {
 	Version     string
 	InstanceID  string
 
-	// OTLPEndpoint is the vendor-neutral OTLP/gRPC collector address. Empty is
-	// an explicit disabled mode in development and tests only.
+	// OTLPEndpoint is the vendor-neutral OTLP/gRPC collector address. It must
+	// target gRPC port 4317 when OTLP is enabled.
 	OTLPEndpoint string
-	// OTLPEnabled distinguishes an intentionally disabled development/test
-	// runtime from a production misconfiguration with no collector endpoint.
+	// OTLPEnabled is the explicit rollout gate. A disabled runtime never
+	// configures OTLP, including in production before the rollout is activated.
 	OTLPEnabled bool
+	// OTLPProtocol rejects a deployment's OTLP/HTTP selection because Forge
+	// Setup only configures OTLP/gRPC.
+	OTLPProtocol string
 
-	// PrometheusEnabled retains the legacy toggle for the application metrics
-	// registry. Forge always keeps its OTel Prometheus reader available.
+	// PrometheusEnabled controls Reliant's existing custom Prometheus endpoint.
 	PrometheusEnabled bool
 }
 
@@ -46,19 +50,16 @@ func ConfigFromEnv(serviceName string) Config {
 	if err != nil || instanceID == "" {
 		instanceID = getEnv("HOSTNAME", "reliant-local")
 	}
-	environment := getEnv("RELIANT_ENV", "development")
+	environment := environmentFromEnv()
 	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
-	enabled := endpoint != "" && os.Getenv("OTEL_ENABLED") != "false"
-	if isProduction(environment) {
-		enabled = true
-	}
 	return Config{
 		ServiceName:       serviceName,
 		Environment:       environment,
 		Version:           buildVersion(),
 		InstanceID:        instanceID,
 		OTLPEndpoint:      endpoint,
-		OTLPEnabled:       enabled,
+		OTLPEnabled:       os.Getenv("OTEL_ENABLED") == "true",
+		OTLPProtocol:      strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_PROTOCOL")),
 		PrometheusEnabled: os.Getenv("PROMETHEUS_ENABLED") != "false",
 	}
 }
@@ -71,16 +72,26 @@ func buildVersion() string {
 	return v
 }
 
-func isProduction(environment string) bool {
-	switch strings.ToLower(strings.TrimSpace(environment)) {
-	case "production", "prod":
-		return true
-	default:
-		return false
+// environmentFromEnv follows deployment precedence: Sentry's explicit
+// environment is authoritative, then the typed deployment ENVIRONMENT, with the
+// legacy RELIANT_ENV retained only for standalone development compositions.
+func environmentFromEnv() string {
+	for _, key := range []string{"SENTRY_ENVIRONMENT", "ENVIRONMENT", "RELIANT_ENV"} {
+		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
+			return value
+		}
 	}
+	return "development"
 }
 
-var metricsOnce sync.Once
+var (
+	metricsOnce       sync.Once
+	prometheusEnabled atomic.Bool
+)
+
+func init() {
+	prometheusEnabled.Store(true)
+}
 
 // Provider holds the initialized Forge observability runtime.
 type Provider struct {
@@ -95,11 +106,20 @@ func Init(cfg Config) (*Provider, error) {
 	if strings.TrimSpace(cfg.ServiceName) == "" {
 		return nil, fmt.Errorf("observability service name is required")
 	}
-	if cfg.OTLPEnabled && strings.TrimSpace(cfg.OTLPEndpoint) == "" {
-		return nil, fmt.Errorf("observability is enabled but OTEL_EXPORTER_OTLP_ENDPOINT is empty")
+	if cfg.OTLPEnabled {
+		if cfg.OTLPProtocol != "" && cfg.OTLPProtocol != "grpc" {
+			return nil, fmt.Errorf("OTEL_EXPORTER_OTLP_PROTOCOL=%q is unsupported; Forge requires OTLP/gRPC", cfg.OTLPProtocol)
+		}
+		if strings.TrimSpace(cfg.OTLPEndpoint) == "" {
+			return nil, fmt.Errorf("observability is enabled but OTEL_EXPORTER_OTLP_ENDPOINT is empty")
+		}
+		if err := validateGRPCEndpoint(cfg.OTLPEndpoint); err != nil {
+			return nil, err
+		}
 	}
 
 	metricsOnce.Do(initMetrics)
+	prometheusEnabled.Store(cfg.PrometheusEnabled)
 	logging.SetDeadEndErrorCounter(DeadEndErrorsTotal)
 
 	endpoint := ""
@@ -128,11 +148,40 @@ func (p *Provider) Shutdown() error {
 	return p.shutdownFn(ctx)
 }
 
-// MetricsHandler returns an HTTP handler for the application Prometheus
-// registry. Forge's OTel metric reader uses its own registry, so application
-// metrics remain available without duplicate registrations.
+// MetricsHandler returns the existing application Prometheus endpoint when
+// enabled. Forge's independent OTel Prometheus handler is not mounted here;
+// OTLP metrics still export through Forge's periodic reader.
 func MetricsHandler() http.Handler {
+	if !prometheusEnabled.Load() {
+		return http.NotFoundHandler()
+	}
 	return promhttp.HandlerFor(Registry, promhttp.HandlerOpts{EnableOpenMetrics: true})
+}
+
+func validateGRPCEndpoint(endpoint string) error {
+	trimmed := strings.TrimSpace(endpoint)
+	parseTarget := trimmed
+	if !strings.Contains(parseTarget, "://") {
+		parseTarget = "http://" + parseTarget
+	}
+	parsed, err := url.Parse(parseTarget)
+	if err != nil {
+		return fmt.Errorf("invalid OTEL_EXPORTER_OTLP_ENDPOINT %q: %w", endpoint, err)
+	}
+	if parsed.Scheme != "http" && parsed.Scheme != "https" {
+		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT %q must use an OTLP/gRPC endpoint", endpoint)
+	}
+	host := parsed.Host
+	if strings.HasSuffix(host, ":4318") {
+		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT %q uses OTLP/HTTP port 4318; Forge requires OTLP/gRPC port 4317", endpoint)
+	}
+	if !strings.HasSuffix(host, ":4317") {
+		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT %q must target OTLP/gRPC port 4317", endpoint)
+	}
+	if parsed.Path != "" && parsed.Path != "/" && parsed.Host != "" {
+		return fmt.Errorf("OTEL_EXPORTER_OTLP_ENDPOINT %q must not include an OTLP/HTTP path", endpoint)
+	}
+	return nil
 }
 
 // Registry is the global Prometheus registry used for all application metrics.
