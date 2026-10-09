@@ -77,6 +77,7 @@ func TestPowerfulTagMembership(t *testing.T) {
 	// unservable — see TestEveryProviderImplementsEveryCoreTag.
 	assert.Equal(t, []string{
 		"claude-5.1-fable",
+		"gpt-6.1-astra",
 		"gpt-6-astra",
 		"gpt-5.6-sol",
 		"gemini-3.8-flash",
@@ -235,17 +236,17 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 		{"gemini-3.8-flash", []string{TagCheap, TagFast, TagFlagship, TagMeta, TagModerate, TagPowerful, TagReasoning},
 			[]string{"low", "medium", "high"}, TagPowerful, "high", 1048576, 65536},
 		{"gemini-3.7-flash", []string{TagFlagship, TagModerate, TagReasoning},
-			[]string{"low", "medium", "high"}, TagFlagship, "medium", 1048576, 65536},
+			[]string{"low", "medium", "high"}, TagFlagship, "high", 1048576, 65536},
 		{"gemini-3.6-flash", []string{TagModerate, TagReasoning},
-			[]string{"low", "medium", "high"}, TagModerate, "medium", 1048576, 65536},
+			[]string{"low", "medium", "high"}, TagModerate, "high", 1048576, 65536},
 		{"gemini-3.5-flash", []string{TagFast, TagModerate, TagReasoning},
-			[]string{"low", "medium", "high"}, TagFast, "low", 1048576, 65536},
+			[]string{"low", "medium", "high"}, TagFast, "high", 1048576, 65536},
 		{"gpt-6-astra", []string{TagPowerful, TagReasoning},
 			[]string{"low", "medium", "high", "xhigh", "max"}, TagPowerful, "xhigh", 1050000, 128000},
 		{"gpt-6-sol", []string{TagFlagship, TagReasoning},
 			[]string{"low", "medium", "high", "xhigh", "max"}, TagFlagship, "xhigh", 1050000, 128000},
 		{"gpt-6-terra", []string{TagModerate, TagReasoning},
-			[]string{"low", "medium", "high", "xhigh", "max"}, TagModerate, "medium", 1050000, 128000},
+			[]string{"low", "medium", "high", "xhigh", "max"}, TagModerate, "high", 1050000, 128000},
 	}
 
 	for _, tt := range tests {

@@ -82,6 +82,9 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `gpt-6-luna` | GPT-6 Luna | cheap, fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai, openrouter, copilot |
 | `gpt-6-sol` | GPT-6 Sol | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai, openrouter |
 | `gpt-6-terra` | GPT-6 Terra | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
+| `gpt-6.1-astra` | GPT-6.1 Astra | powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
+| `gpt-6.1-sol` | GPT-6.1 Sol | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
+| `gpt-6.1-terra` | GPT-6.1 Terra | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
 
 **Note:** OpenAI's GPT models with varying context windows and capabilities.
 
@@ -121,6 +124,7 @@ _Maximum capability for the hardest, longest-horizon work_
 | Model | Provider | Effort | Context | Capabilities |
 |-------|----------|--------|---------|-------------|
 | `claude-5.1-fable` | Anthropic | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-astra` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-astra` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.6-sol` | OpenAI | xhigh | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.8-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
@@ -141,15 +145,16 @@ _Most capable models for complex tasks_
 | `claude-5-fable` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-4.6-opus` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-4.5-opus` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-sol` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-sol` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.5` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.6-luna` | OpenAI | medium | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.6-luna` | OpenAI | high | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.4` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.4-pro` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.3-codex` | OpenAI | xhigh | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.2-codex` | OpenAI | xhigh | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.8-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.7-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.7-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.1-pro-preview` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3-pro-preview` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
@@ -159,22 +164,23 @@ _Balance of capability and cost_
 
 | Model | Provider | Effort | Context | Capabilities |
 |-------|----------|--------|---------|-------------|
-| `claude-5.5-sonnet` | Anthropic | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `claude-5-opus` | Anthropic | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-5.5-sonnet` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-5-opus` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-5-sonnet` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-6-terra` | OpenAI | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.5` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.6-terra` | OpenAI | medium | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.6-terra` | OpenAI | high | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.4` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.7-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `claude-4.6-sonnet` | Anthropic | medium | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `claude-4.5-sonnet` | Anthropic | medium | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.2-pro` | OpenAI | medium | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.2` | OpenAI | medium | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.6-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.5-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.7-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-4.6-sonnet` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-4.5-sonnet` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.2-pro` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.2` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.6-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.5-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-2.5-pro` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.8-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.8-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ### Fast
 
@@ -182,18 +188,18 @@ _Optimized for quick responses_
 
 | Model | Provider | Effort | Context | Capabilities |
 |-------|----------|--------|---------|-------------|
-| `gemini-3.5-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.5-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-4.5-haiku` | Anthropic | - | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} |
 | `gpt-5.4-mini` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5-mini` | OpenAI | medium | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-6-luna` | OpenAI | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5-mini` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6-luna` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3-flash-preview` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-3.1-flash-lite-preview` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash-lite` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
-| `gpt-5.6-terra` | OpenAI | low | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.8-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.4-nano` | OpenAI | low | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.6-terra` | OpenAI | high | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.8-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.4-nano` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ### Cheap
 
@@ -203,14 +209,14 @@ _Low cost per token_
 |-------|----------|--------|---------|-------------|
 | `claude-4.5-haiku` | Anthropic | - | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} |
 | `gpt-5.4-mini` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5-mini` | OpenAI | medium | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-6-luna` | OpenAI | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5-mini` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6-luna` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.1-flash-lite-preview` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
 | `gemini-2.5-flash-lite` | Google | - | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} |
-| `gpt-5.6-terra` | OpenAI | low | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.8-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.4-nano` | OpenAI | low | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.6-terra` | OpenAI | high | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.8-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.4-nano` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ### Reasoning
 
@@ -228,27 +234,30 @@ _Extended thinking capabilities_
 | `claude-4.6-opus` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-4.5-opus` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.5` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-astra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-astra` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-sol` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-sol` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.6-sol` | OpenAI | xhigh | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-6-terra` | OpenAI | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.6-terra` | OpenAI | medium | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.6-luna` | OpenAI | medium | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.6-terra` | OpenAI | high | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.6-luna` | OpenAI | high | 272K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.4` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.4-pro` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.3-codex` | OpenAI | xhigh | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.2-codex` | OpenAI | xhigh | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.8-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.7-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.7-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.1-pro-preview` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3-pro-preview` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-3.1-pro-preview-customtools` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `claude-4.6-sonnet` | Anthropic | medium | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `claude-4.5-sonnet` | Anthropic | medium | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.2-pro` | OpenAI | medium | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-5.2` | OpenAI | medium | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.6-flash` | Google | medium | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gemini-3.5-flash` | Google | low | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-4.6-sonnet` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `claude-4.5-sonnet` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.2-pro` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-5.2` | OpenAI | high | 400K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.6-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gemini-3.5-flash` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gemini-2.5-pro` | Google | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 
 ---

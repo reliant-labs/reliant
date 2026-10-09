@@ -37,7 +37,7 @@ func TestTierResolutions_ReflectTagPreferences(t *testing.T) {
 		prefs := map[string]modelprefs.TagPrefs{"moderate": {ModelID: "gpt-6-sol"}}
 		tier := tiersByTag(tierResolutions(registry, providers, prefs, nil))["moderate"]
 		assert.Equal(t, "claude-5.5-sonnet@anthropic", tier.ModelId)
-		assert.Equal(t, "medium", tier.ThinkingLevel)
+		assert.Equal(t, "high", tier.ThinkingLevel)
 	})
 }
 

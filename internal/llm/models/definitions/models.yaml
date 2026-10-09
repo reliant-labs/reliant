@@ -48,6 +48,7 @@
 tags:
   powerful:
     - {model: claude-5.1-fable, thinking_level: xhigh}
+    - {model: gpt-6.1-astra, thinking_level: xhigh}
     - {model: gpt-6-astra, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
     - {model: gemini-3.8-flash, thinking_level: high}
@@ -68,15 +69,16 @@ tags:
     - {model: claude-5-fable, thinking_level: high}
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
+    - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-6-sol, thinking_level: xhigh}
     - {model: gpt-5.5, thinking_level: xhigh}
-    - {model: gpt-5.6-luna, thinking_level: medium}
+    - {model: gpt-5.6-luna, thinking_level: high}
     - {model: gpt-5.4, thinking_level: xhigh}
     - {model: gpt-5.4-pro, thinking_level: xhigh}
     - {model: gpt-5.3-codex, thinking_level: xhigh}
     - {model: gpt-5.2-codex, thinking_level: xhigh}
     - {model: gemini-3.8-flash, thinking_level: high}
-    - {model: gemini-3.7-flash, thinking_level: medium}
+    - {model: gemini-3.7-flash, thinking_level: high}
     - {model: gemini-3.1-pro-preview, thinking_level: high}
     - {model: gemini-3-pro-preview, thinking_level: high}
     - {model: vertex-claude-5.5-opus, thinking_level: xhigh}
@@ -98,36 +100,37 @@ tags:
     # Implementation tier (the implementer preset). Sonnet 5.5 is the primary
     # Anthropic moderate model; Opus remains above it in flagship for orchestration
     # and below it here as a fallback.
-    - {model: claude-5.5-sonnet, thinking_level: medium}
-    - {model: claude-5-opus, thinking_level: medium}
+    - {model: claude-5.5-sonnet, thinking_level: high}
+    - {model: claude-5-opus, thinking_level: high}
     - {model: claude-5-sonnet, thinking_level: high}
-    - {model: gpt-6-terra, thinking_level: medium}
+    - {model: gpt-6.1-terra, thinking_level: high}
+    - {model: gpt-6-terra, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
-    - {model: gpt-5.6-terra, thinking_level: medium}
+    - {model: gpt-5.6-terra, thinking_level: high}
     - {model: gpt-5.4, thinking_level: xhigh}
-    - {model: gemini-3.7-flash, thinking_level: medium}
-    - {model: claude-4.6-sonnet, thinking_level: medium}
-    - {model: claude-4.5-sonnet, thinking_level: medium}
-    - {model: gpt-5.2-pro, thinking_level: medium}
-    - {model: gpt-5.2, thinking_level: medium}
-    - {model: gemini-3.6-flash, thinking_level: medium}
-    - {model: gemini-3.5-flash, thinking_level: low}
+    - {model: gemini-3.7-flash, thinking_level: high}
+    - {model: claude-4.6-sonnet, thinking_level: high}
+    - {model: claude-4.5-sonnet, thinking_level: high}
+    - {model: gpt-5.2-pro, thinking_level: high}
+    - {model: gpt-5.2, thinking_level: high}
+    - {model: gemini-3.6-flash, thinking_level: high}
+    - {model: gemini-3.5-flash, thinking_level: high}
     - {model: gemini-2.5-pro, thinking_level: high}
-    - {model: vertex-claude-5.5-sonnet, thinking_level: medium}
-    - {model: vertex-claude-5-opus, thinking_level: medium}
+    - {model: vertex-claude-5.5-sonnet, thinking_level: high}
+    - {model: vertex-claude-5-opus, thinking_level: high}
     - {model: vertex-claude-5-sonnet, thinking_level: high}
-    - {model: vertex-claude-4.5-sonnet, thinking_level: medium}
+    - {model: vertex-claude-4.5-sonnet, thinking_level: high}
     - {model: vertex-gemini-2.5-pro, thinking_level: high}
     # Trailing per-provider coverage — reached only by a user whose only
     # provider is antigravity. See the note under `powerful`.
-    - {model: gemini-3.8-flash, thinking_level: medium} # antigravity
+    - {model: gemini-3.8-flash, thinking_level: high} # antigravity
 
   fast:
-    - {model: gemini-3.5-flash, thinking_level: low}
+    - {model: gemini-3.5-flash, thinking_level: high}
     - {model: claude-4.5-haiku}
     - {model: gpt-5.4-mini, thinking_level: high}
-    - {model: gpt-5-mini, thinking_level: medium}
-    - {model: gpt-6-luna, thinking_level: low}
+    - {model: gpt-5-mini, thinking_level: high}
+    - {model: gpt-6-luna, thinking_level: high}
     - {model: gemini-3-flash-preview}
     - {model: gemini-3.1-flash-lite-preview}
     - {model: gemini-2.5-flash}
@@ -139,18 +142,17 @@ tags:
     # Trailing per-provider coverage. A provider that ships no genuinely cheap
     # model still has to answer [fast], because titling and other meta work ask
     # for that tier and a failure to resolve is not a slower title — it is no
-    # title. Each entry runs at its model's LOWEST effort, which is the closest
-    # these providers get to a fast tier.
-    - {model: gpt-5.6-terra, thinking_level: low}       # codex
-    - {model: gemini-3.8-flash, thinking_level: low}    # antigravity
-    - {model: gpt-5.4-nano, thinking_level: low}        # copilot
-    - {model: mai-code-1.1-flash, thinking_level: low}  # copilot
+    # title. Every tier runs at high effort or above: quality drops sharply below it.
+    - {model: gpt-5.6-terra, thinking_level: high}       # codex
+    - {model: gemini-3.8-flash, thinking_level: high}    # antigravity
+    - {model: gpt-5.4-nano, thinking_level: high}        # copilot
+    - {model: mai-code-1.1-flash, thinking_level: high}  # copilot
 
   cheap:
     - {model: claude-4.5-haiku}
     - {model: gpt-5.4-mini, thinking_level: high}
-    - {model: gpt-5-mini, thinking_level: medium}
-    - {model: gpt-6-luna, thinking_level: low}
+    - {model: gpt-5-mini, thinking_level: high}
+    - {model: gpt-6-luna, thinking_level: high}
     - {model: gemini-3.1-flash-lite-preview}
     - {model: gemini-2.5-flash}
     - {model: gemini-2.5-flash-lite}
@@ -159,12 +161,12 @@ tags:
     - {model: gemini-3.1-flash-lite-image}
     - {model: veo-3.1-lite-generate}
     # Trailing per-provider coverage — reached only by a codex-only or
-    # antigravity-only user. Both are subscription-billed, so "cheap" means the
-    # cheapest effort available rather than a cheaper per-token rate.
-    - {model: gpt-5.6-terra, thinking_level: low}       # codex
-    - {model: gemini-3.8-flash, thinking_level: low}    # antigravity
-    - {model: gpt-5.4-nano, thinking_level: low}        # copilot
-    - {model: mai-code-1.1-flash, thinking_level: low}  # copilot
+    # antigravity-only user. Both are subscription-billed, so "cheap" does not mean
+    # a cheaper per-token rate, and effort stays at high.
+    - {model: gpt-5.6-terra, thinking_level: high}       # codex
+    - {model: gemini-3.8-flash, thinking_level: high}    # antigravity
+    - {model: gpt-5.4-nano, thinking_level: high}        # copilot
+    - {model: mai-code-1.1-flash, thinking_level: high}  # copilot
 
   image-gen:
     - {model: gpt-image-2.5-flare}
@@ -191,14 +193,14 @@ tags:
   meta:
     - {model: claude-4.5-haiku}
     - {model: gpt-5.4-mini, thinking_level: high}
-    - {model: gpt-6-luna, thinking_level: low}
+    - {model: gpt-6-luna, thinking_level: high}
     - {model: vertex-claude-4.5-haiku}
     # Trailing per-provider coverage. Internal meta work (titling, routing,
     # summarizing) must be possible on every provider; these are reached only
     # when the user has none of the models above.
     - {model: gemini-3.1-flash-lite-preview}            # gemini
-    - {model: gpt-5.6-terra, thinking_level: low}        # codex
-    - {model: gemini-3.8-flash, thinking_level: low}     # antigravity
+    - {model: gpt-5.6-terra, thinking_level: high}        # codex
+    - {model: gemini-3.8-flash, thinking_level: high}     # antigravity
 
   reasoning:
     - {model: claude-5.5-opus, thinking_level: xhigh}
@@ -211,27 +213,30 @@ tags:
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
+    - {model: gpt-6.1-astra, thinking_level: high}
     - {model: gpt-6-astra, thinking_level: xhigh}
+    - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-6-sol, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
-    - {model: gpt-6-terra, thinking_level: medium}
-    - {model: gpt-5.6-terra, thinking_level: medium}
-    - {model: gpt-5.6-luna, thinking_level: medium}
+    - {model: gpt-6.1-terra, thinking_level: high}
+    - {model: gpt-6-terra, thinking_level: high}
+    - {model: gpt-5.6-terra, thinking_level: high}
+    - {model: gpt-5.6-luna, thinking_level: high}
     - {model: gpt-5.4, thinking_level: xhigh}
     - {model: gpt-5.4-pro, thinking_level: xhigh}
     - {model: gpt-5.3-codex, thinking_level: xhigh}
     - {model: gpt-5.2-codex, thinking_level: xhigh}
     - {model: gemini-3.8-flash, thinking_level: high}
-    - {model: gemini-3.7-flash, thinking_level: medium}
+    - {model: gemini-3.7-flash, thinking_level: high}
     - {model: gemini-3.1-pro-preview, thinking_level: high}
     - {model: gemini-3-pro-preview, thinking_level: high}
     - {model: gemini-3.1-pro-preview-customtools, thinking_level: high}
-    - {model: claude-4.6-sonnet, thinking_level: medium}
-    - {model: claude-4.5-sonnet, thinking_level: medium}
-    - {model: gpt-5.2-pro, thinking_level: medium}
-    - {model: gpt-5.2, thinking_level: medium}
-    - {model: gemini-3.6-flash, thinking_level: medium}
-    - {model: gemini-3.5-flash, thinking_level: low}
+    - {model: claude-4.6-sonnet, thinking_level: high}
+    - {model: claude-4.5-sonnet, thinking_level: high}
+    - {model: gpt-5.2-pro, thinking_level: high}
+    - {model: gpt-5.2, thinking_level: high}
+    - {model: gemini-3.6-flash, thinking_level: high}
+    - {model: gemini-3.5-flash, thinking_level: high}
     - {model: gemini-2.5-pro, thinking_level: high}
     - {model: vertex-claude-5.5-opus, thinking_level: xhigh}
     - {model: vertex-claude-5-opus, thinking_level: high}
@@ -241,7 +246,7 @@ tags:
     - {model: vertex-claude-5.1-fable, thinking_level: xhigh}
     - {model: vertex-claude-5-fable, thinking_level: high}
     - {model: vertex-claude-4.6-opus, thinking_level: high}
-    - {model: vertex-claude-4.5-sonnet, thinking_level: medium}
+    - {model: vertex-claude-4.5-sonnet, thinking_level: high}
     - {model: vertex-gemini-2.5-pro, thinking_level: high}
 
 models:
@@ -571,6 +576,29 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
 
+  # GPT-6.1 Astra is OpenAI's frontier model. It inherits GPT-6 Astra's
+  # Responses API contract and capability envelope.
+  - id: gpt-6.1-astra
+    name: GPT-6.1 Astra
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: openai
+        api_model: gpt-6.1-astra
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
   # GPT-6 Astra is OpenAI's frontier model. It uses the SAME request envelope as
   # the GPT-5.6 family below (tools and system prompt ride inside `input`), plus
   # two additions the 5.6 capture does not have: a `service_tier: priority` body
@@ -621,6 +649,29 @@ models:
     # Powerful tier: astra gets its top practical effort. `max` is supported but
     # reserved for explicit opt-in, matching how sol treats max.
 
+  # GPT-6.1 Sol is OpenAI's current flagship model. It inherits GPT-6 Sol's
+  # Responses API contract and capability envelope.
+  - id: gpt-6.1-sol
+    name: GPT-6.1 Sol
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: openai
+        api_model: gpt-6.1-sol
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
   # GPT-6 Sol (2026-09-29) — "near-Astra performance at a lower cost".
   # Figures from developers.openai.com/api/docs/models/gpt-6-sol.
   #
@@ -656,6 +707,29 @@ models:
         api_model: gpt-6-sol
       - driver: openrouter
         api_model: openai/gpt-6-sol
+    driver_settings:
+      preferred_endpoint: responses
+      temperature_mode: omit
+      use_max_completion_tokens: true
+
+  # GPT-6.1 Terra is OpenAI's current balanced model. It inherits GPT-6 Terra's
+  # Responses API contract and capability envelope.
+  - id: gpt-6.1-terra
+    name: GPT-6.1 Terra
+    visibility: user
+    capabilities:
+      can_reason: true
+      supports_tools: true
+      supports_attachments: true
+      supports_streaming: true
+      supports_caching: true
+      max_context_window: 1050000
+      max_output_tokens: 128000
+      thinking_levels: [low, medium, high, xhigh, max]
+      supported_file_types: [image, text]
+    providers:
+      - driver: openai
+        api_model: gpt-6.1-terra
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
