@@ -2,6 +2,8 @@ package threads
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
 	"github.com/reliant-labs/reliant/internal/db"
@@ -35,16 +37,14 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 
 	// Get current context window to link as parent
 	currentCW, err := s.repo.GetLatestContextWindow(ctx, threadID)
-	if err != nil {
-		// No existing context window - this shouldn't happen in practice
-		// but we handle it gracefully by not setting a parent
-		currentCW = nil
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to get latest context window: %w", err)
 	}
 
 	// Get current max sequence
 	currentSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
 	if err != nil {
-		currentSeq = 0
+		return nil, fmt.Errorf("failed to get max context window sequence: %w", err)
 	}
 
 	newSeq := currentSeq + 1
@@ -67,14 +67,17 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 		cw.ParentContextWindowID = &currentCW.ID
 	}
 
-	// Check if it already exists (idempotency for retries)
+	// Check if it already exists (idempotency for retries).
 	existingCW, err := s.repo.GetContextWindow(ctx, cw.ID)
 	if err == nil && existingCW != nil {
-		// Already exists - update the summary message link if needed
+		// Already exists - update the summary message link if needed.
 		if existingCW.CompactionSummaryMessageID == nil || *existingCW.CompactionSummaryMessageID != summaryMessageID {
 			return s.repo.SetCompactionSummaryMessage(ctx, cw.ID, summaryMessageID)
 		}
 		return existingCW, nil
+	}
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to check existing context window: %w", err)
 	}
 
 	// Create the new context window

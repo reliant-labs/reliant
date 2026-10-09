@@ -342,6 +342,29 @@ func TestCompact(t *testing.T) {
 			t.Errorf("expected sequences 1,2 got %d,%d", cw1.Sequence, cw2.Sequence)
 		}
 	})
+
+	t.Run("retrying the same compaction is idempotent", func(t *testing.T) {
+		thread, _ := h.createThread("idempotent-compact", h.chatID)
+
+		first, err := h.svc.Compact(ctx, thread.ID, "summary")
+		if err != nil {
+			t.Fatalf("first compaction failed: %v", err)
+		}
+		second, err := h.svc.Compact(ctx, thread.ID, "summary")
+		if err != nil {
+			t.Fatalf("retry failed: %v", err)
+		}
+		if second.ID != first.ID || second.Sequence != first.Sequence {
+			t.Fatalf("retry created a different context window: first=%+v second=%+v", first, second)
+		}
+		windows, err := h.repo.ListContextWindowsByThread(ctx, thread.ID)
+		if err != nil {
+			t.Fatalf("failed to list context windows: %v", err)
+		}
+		if len(windows) != 2 {
+			t.Fatalf("expected initial and compacted context windows, got %d", len(windows))
+		}
+	})
 }
 
 func TestGetThreadTokenCount(t *testing.T) {

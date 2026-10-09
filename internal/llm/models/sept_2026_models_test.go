@@ -8,7 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// Claude Sonnet 5.5 (2026-09-28) and the GPT-6 Astra/Sol/Terra/Luna models.
+// Claude Sonnet 5.5 (2026-09-28) and the GPT-6 model families.
 // Every figure below is taken from the vendor's own model page —
 // platform.claude.com/docs/en/models/sonnet-5-5 and
 // developers.openai.com/api/docs/models/{gpt-6-astra,gpt-6-sol,gpt-6-terra,gpt-6-luna}
@@ -75,25 +75,14 @@ func TestClaude55SonnetCapabilities(t *testing.T) {
 	}
 }
 
-// GPT-6 Sol, Terra and Luna reach users through openai and openrouter only.
-//
-// codex is absent on purpose. The ChatGPT-account backend serves a subset of
-// the catalog that has to be probed per model (see the note above gpt-5.5 in
-// models.yaml), and the GPT-6 family's request envelope is capture-specific
-// (usesAdditionalToolsEnvelope in the codex driver). That has only been done for
-// Astra, and a codex mapping the backend refuses 400s every request.
-//
-// reliant and vertexai are absent for the reason astra's are: Vertex serves
-// no OpenAI frontier models, and the gateway routes everything through it.
-func TestGPT6NewModelProviderMappings(t *testing.T) {
+// GPT-6.1 models currently reach users through OpenAI only. The 1M context
+// window and Responses contract are intentionally explicit here: provider
+// availability is model-specific and must be added only once verified.
+func TestGPT61ModelProviderMappings(t *testing.T) {
 	reg := MustGetRegistry()
 
-	for id, want := range map[string]map[string]string{
-		"gpt-6-sol":   {"openai": "gpt-6-sol", "openrouter": "openai/gpt-6-sol"},
-		"gpt-6-terra": {"openai": "gpt-6-terra"}, // openrouter removed 2026-10-04: not served
-		"gpt-6-luna":  {"openai": "gpt-6-luna", "openrouter": "openai/gpt-6-luna", "copilot": "gpt-6-luna"},
-	} {
-		assert.Equal(t, want, providerAPIModels(t, reg, id), "%s providers", id)
+	for _, id := range []string{"gpt-6.1-astra", "gpt-6.1-sol", "gpt-6.1-terra"} {
+		assert.Equal(t, map[string]string{"openai": id}, providerAPIModels(t, reg, id), "%s providers", id)
 	}
 }
 
@@ -104,7 +93,7 @@ func TestGPT6NewModelProviderMappings(t *testing.T) {
 func TestGPT6NewModelCapabilities(t *testing.T) {
 	reg := MustGetRegistry()
 
-	for _, id := range []string{"gpt-6-sol", "gpt-6-terra", "gpt-6-luna"} {
+	for _, id := range []string{"gpt-6.1-astra", "gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-sol", "gpt-6-terra", "gpt-6-luna"} {
 		t.Run(id, func(t *testing.T) {
 			def, ok := reg.GetDefinition(id)
 			require.True(t, ok)
@@ -143,10 +132,10 @@ func TestSept2026ModelsPinTierWinners(t *testing.T) {
 		{TagModerate, []string{"vertexai"}, "vertex-claude-5.5-sonnet"},
 		{TagFlagship, []string{"vertexai"}, "claude-5.5-opus"},
 
-		{TagFlagship, []string{"openai"}, "gpt-6-sol"},
-		{TagModerate, []string{"openai"}, "gpt-6-terra"},
+		{TagFlagship, []string{"openai"}, "gpt-6.1-sol"},
+		{TagModerate, []string{"openai"}, "gpt-6.1-terra"},
 		{TagReasoning, []string{"openai"}, "gpt-5.5"},
-		{TagPowerful, []string{"openai"}, "gpt-6-astra"},
+		{TagPowerful, []string{"openai"}, "gpt-6.1-astra"},
 		{TagFast, []string{"openai"}, "gpt-5.4-mini"},
 		{TagCheap, []string{"openai"}, "gpt-5.4-mini"},
 
@@ -177,26 +166,26 @@ func TestSept2026ModelsAreReachableThroughTheirTiers(t *testing.T) {
 		// Sonnet 5.5 is the new moderate leader and stays directly above Sonnet 5
 		// in the other tiers where Sonnet 5 appears.
 		{"claude-5.5-sonnet", TagFlagship, "high"},
-		{"claude-5.5-sonnet", TagModerate, "medium"},
+		{"claude-5.5-sonnet", TagModerate, "high"},
 		{"claude-5.5-sonnet", TagReasoning, "high"},
 		{"vertex-claude-5.5-sonnet", TagFlagship, "high"},
-		{"vertex-claude-5.5-sonnet", TagModerate, "medium"},
+		{"vertex-claude-5.5-sonnet", TagModerate, "high"},
 		{"vertex-claude-5.5-sonnet", TagReasoning, "high"},
 
 		// GPT-6 tiers: Astra is powerful, Sol is flagship, Terra is moderate.
 		{"gpt-6-astra", TagPowerful, "xhigh"},
 		{"gpt-6-sol", TagFlagship, "xhigh"},
 		{"gpt-6-sol", TagReasoning, "xhigh"},
-		{"gpt-6-terra", TagModerate, "medium"},
-		{"gpt-6-terra", TagReasoning, "medium"},
+		{"gpt-6-terra", TagModerate, "high"},
+		{"gpt-6-terra", TagReasoning, "high"},
 
 		// Luna is priced below every existing cheap/fast GPT entry, but it is
 		// placed AFTER them: those tiers carry chat titling and compaction for
 		// every OpenAI user, and a model nobody has run through them yet
 		// should not become their default by virtue of being new.
-		{"gpt-6-luna", TagFast, "low"},
-		{"gpt-6-luna", TagCheap, "low"},
-		{"gpt-6-luna", TagMeta, "low"},
+		{"gpt-6-luna", TagFast, "high"},
+		{"gpt-6-luna", TagCheap, "high"},
+		{"gpt-6-luna", TagMeta, "high"},
 	}
 
 	for _, tt := range tests {

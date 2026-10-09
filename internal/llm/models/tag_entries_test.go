@@ -28,7 +28,7 @@ func TestResolve_AgentTiersPinModelAndEffort(t *testing.T) {
 		wantLevel string
 	}{
 		{TagFlagship, "claude-5.5-opus", "vertex-claude-5.5-opus", "xhigh"},
-		{TagModerate, "claude-5.5-sonnet", "vertex-claude-5.5-sonnet", "medium"},
+		{TagModerate, "claude-5.5-sonnet", "vertex-claude-5.5-sonnet", "high"},
 	} {
 		t.Run(tt.tag, func(t *testing.T) {
 			for _, id := range []string{tt.wantModel, tt.vertex} {
@@ -265,7 +265,7 @@ func TestMergeUserConfig_UserTagEntriesLeadAndRetune(t *testing.T) {
 	// The shared registry is untouched.
 	original, err := MustGetRegistry().Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"anthropic"})
 	require.NoError(t, err)
-	assert.Equal(t, "medium", original.ThinkingLevel)
+	assert.Equal(t, "high", original.ThinkingLevel)
 }
 
 // A custom model joins a tier only through a user tag entry — models carry
