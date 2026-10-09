@@ -453,30 +453,13 @@ func setupGitCredentials() {
 		return
 	}
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		logging.Warn(logPrefix+" Failed to resolve home dir for git credentials", "error", err)
-		return
-	}
-
 	// Configure git to use the credential-store helper globally.
 	if err := exec.Command("git", "config", "--global", "credential.helper", "store").Run(); err != nil {
 		logging.Warn(logPrefix+" Failed to configure git credential.helper", "error", err)
 		return
 	}
 
-	// Append the token to ~/.git-credentials (don't overwrite existing entries).
-	credFile := filepath.Join(homeDir, ".git-credentials")
-	credLine := fmt.Sprintf("https://x-access-token:%s@github.com\n", token)
-
-	f, err := os.OpenFile(credFile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600)
-	if err != nil {
-		logging.Warn(logPrefix+" Failed to open .git-credentials", "error", err)
-		return
-	}
-	defer f.Close()
-
-	if _, err := f.WriteString(credLine); err != nil {
+	if err := upsertGitCredential("github.com", token); err != nil {
 		logging.Warn(logPrefix+" Failed to write .git-credentials", "error", err)
 		return
 	}
