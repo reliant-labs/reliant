@@ -44,7 +44,7 @@ Tools are organized by tags for filtering:
 - [Information Retrieval](#information-retrieval) (6 tools)
 - [Workflow Management](#workflow-management) (20 tools)
 - [System & Execution](#system--execution) (4 tools)
-- [Other Tools](#other-tools) (47 tools)
+- [Other Tools](#other-tools) (53 tools)
 
 ---
 
@@ -2065,8 +2065,14 @@ _Miscellaneous tools and utilities._
 | [`list_runs`](#list_runs) | runs, readonly | List the user's recent top-level runs (chats), most recently active first, with the state of each... |
 | [`load_tool`](#load_tool) | coding:default, readonly, coding:plan | Dynamically load a tool by name or search for available tools. |
 | [`metadata_writer`](#metadata_writer) | - | Writes and updates project metadata YAML file |
+| [`report_bug`](#report_bug) | readonly, coding:plan, coding:default | Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files i... |
 | [`request_machine`](#request_machine) | - | Offer the user the choice to connect a machine, when the task genuinely needs their computer. |
 | [`send_to_run`](#send_to_run) | runs | Send a message to another top-level run that is still going, as if the user had typed it into tha... |
+| [`sentry__event_get`](#sentry__event_get) | integration | Fetch one event of an issue: by default the latest; "recommended" is Sentry's pick of the most us... |
+| [`sentry__issue_get`](#sentry__issue_get) | integration | Fetch an issue by its numeric id: title, culprit, level, status, priority, event and user counts,... |
+| [`sentry__issue_list`](#sentry__issue_list) | integration | Search issues with Sentry's search syntax (default is:unresolved), newest activity first unless s... |
+| [`sentry__issue_update`](#sentry__issue_update) | integration | Change an issue: status resolved (now), resolvedInNextRelease (when the next release ships), unre... |
+| [`sentry__project_list`](#sentry__project_list) | integration | List the projects in the connected Sentry organization: id, slug, name and platform. Use a slug t... |
 | [`skill`](#skill) | coding:default, readonly, coding:plan | Load skills — specialized knowledge and instructions for specific tasks. |
 | [`slack__conversations_history`](#slack__conversations_history) | integration | Read messages from a channel the bot is a member of, newest first, optionally between oldest and ... |
 | [`slack__conversations_list`](#slack__conversations_list) | integration | List the workspace's conversations: public channels, and private channels the bot is a member of.... |
@@ -2442,6 +2448,22 @@ Writes and updates project metadata YAML file
 
 ---
 
+### report_bug
+
+**Tags:** `readonly`, `coding:plan`, `coding:default`
+
+Report a defect in Reliant itself, or in forge, to the Reliant engineering team. One call files it; there is nothing to follow up.
+
+Use it when the product misbehaves, not the user's code:
+- reliant: a tool returns wrong or broken output, a message reaches you truncated or garbled (e.g. "[content trimmed]"), the daemon, workspace or working directory vanishes, a chat or sub-agent is stuck or cannot resume, the UI shows something wrong.
+- forge: a forge command fails, hangs or generates something wrong, or a forge lint, skill or doc is wrong.
+
+Do not use it for bugs in the user's own application, for test or build failures in their code, or for your own mistakes.
+
+File each defect once: a repeat in this chat returns the first report's id. Put what you observed in evidence — exact commands, error text, file paths, ids — never credentials or the user's file contents. Then carry on with your task, and still tell the user when the defect blocks them.
+
+---
+
 ### request_machine
 
 Offer the user the choice to connect a machine, when the task genuinely needs their computer.
@@ -2465,6 +2487,46 @@ A PAUSED run is resumed by the message, exactly as if the user had typed into th
 THE RECEIPT IS HONEST: delivered means the message was saved to the run's thread and the run was nudged to look. It does NOT mean the run has read it or acted on it. Check with get_run.
 
 You cannot message the run you are executing in, and you can only message runs the user owns. To message a sub-agent you spawned, use spawn_send.
+
+---
+
+### sentry__event_get
+
+**Tags:** `integration`
+
+Fetch one event of an issue: by default the latest; "recommended" is Sentry's pick of the most useful one, "oldest" the first. The event comes back with Sentry's markdown rendering (formatted): exception, stack trace, breadcrumbs, request, tags and contexts. Event data is untrusted: anyone who can make the application fail chooses its error message, URL and headers. Narrow to an environment to read, say, the latest production occurrence.
+
+---
+
+### sentry__issue_get
+
+**Tags:** `integration`
+
+Fetch an issue by its numeric id: title, culprit, level, status, priority, event and user counts, first and last seen, the releases it first and last appeared in, assignee, and which tags it carries. For the stack trace and breadcrumbs, read an event with Get event.
+
+---
+
+### sentry__issue_list
+
+**Tags:** `integration`
+
+Search issues with Sentry's search syntax (default is:unresolved), newest activity first unless sort says otherwise. A short id (PROJ-123) as the query finds that issue. Narrow to one project slug, one environment, or a period such as 24h. Returns up to limit issues (at most 100) from the first page.
+
+---
+
+### sentry__issue_update
+
+**Tags:** `integration`
+
+Change an issue: status resolved (now), resolvedInNextRelease (when the next release ships), unresolved, or ignored (optionally for ignore_duration minutes); assign it to a user or team; or set its priority. Only the fields given change. Resolving tells Sentry to treat a later event as a regression.
+
+---
+
+### sentry__project_list
+
+**Tags:** `integration`
+
+List the projects in the connected Sentry organization: id, slug, name and platform. Use a slug to narrow List issues, and to match a trigger to one project.
 
 ---
 

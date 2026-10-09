@@ -1253,6 +1253,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if chat.NoMachine {
 		systemPrompts = append(systemPrompts, noMachineNotes(caps, projectGitHubRepos(project, repos))...)
 	}
+	if note := bugReportNote(caps); note != "" {
+		systemPrompts = append(systemPrompts, note)
+	}
 
 	// Set deferred tools on the load_tool so its description advertises them
 	if len(availableTools) > 0 {

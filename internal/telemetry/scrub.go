@@ -17,6 +17,10 @@ package telemetry
 // cut to their first line and a short prefix with credential shapes redacted,
 // because Go error strings routinely wrap tool output and provider responses.
 //
+// One event class is exempt, narrowly: a bug report an agent deliberately files
+// with the report_bug tool keeps its authored text (redacted and bounded),
+// because that text is the report. See bug_report.go.
+//
 // The same policy is implemented for the browser in web/src/lib/sentryScrub.ts
 // and for Electron's main process in electron/src/sentry-scrub.js. Keep them in
 // step: the three runtimes report into one Sentry organisation.
@@ -115,9 +119,23 @@ func scrubEvent(event *sentry.Event) *sentry.Event {
 		scrubStacktrace(event.Threads[i].Stacktrace)
 	}
 
-	event.Tags = scrubTags(event.Tags)
+	// An agent-filed bug report is the one exception to this policy: its
+	// report-only tags and authored text are kept, redacted and bounded
+	// (bug_report.go). Decided, and those tags read, from the event as it
+	// arrived, before scrubTags replaces its tags.
+	bugReport := isBugReport(event)
+
+	tags := scrubTags(event.Tags)
+	if bugReport {
+		tags = bugReportTags(tags, event.Tags)
+	}
+	event.Tags = tags
 	for name, ctx := range event.Contexts {
 		if standardContexts[name] {
+			continue
+		}
+		if bugReport && name == bugReportContext {
+			event.Contexts[name] = scrubBugReportFields(ctx)
 			continue
 		}
 		if kept := scrubFields(ctx); len(kept) > 0 {
