@@ -68,6 +68,24 @@ service AccessTokenService {
     option (forge.v1.method) = {auth_required: true};
   }
 
+  // ExchangeToken is the ON-DEMAND ELEVATION a machine credential acting as a
+  // person uses to do what that person's role allows — without the credential
+  // itself being permanently widened. forge calls it when a command is refused
+  // for a missing scope (domain:read, cluster:manage), so a signed-in user
+  // never runs a second login.
+  //
+  // Caller: a machine credential that ACTS AS A USER and holds deploy:write
+  // (a `forge login` token, or one Reliant's credential helper minted). The
+  // granted scopes are the requested ones that are exchangeable AND that the
+  // acting user holds in the credential's org AT THIS MOMENT — so a demoted
+  // user's old token elevates to nothing. The result lives at most an hour and
+  // never outlives the caller, acts as the same user in the same org, and
+  // inherits the caller's binding: cluster:manage cannot ride a daemon binding,
+  // so a managed daemon's credential can never obtain it.
+  rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
+
   // ── MEMBER PERMISSIONS ──────────────────────────────────────────────
   //
   // What a PERSON may do in the org, and therefore the most a token acting
@@ -239,4 +257,17 @@ message UpdateMyTokenRequest {
 
 message UpdateMyTokenResponse {
   AccessToken token = 1;
+}
+
+message ExchangeTokenRequest {
+  // scopes requested; must be non-empty. Anything not exchangeable is dropped,
+  // anything the acting user does not hold is dropped, and the response says
+  // what was granted.
+  repeated string scopes = 1;
+}
+
+message ExchangeTokenResponse {
+  AccessToken token = 1;
+  // secret is the plaintext, returned exactly once.
+  string secret = 2;
 }

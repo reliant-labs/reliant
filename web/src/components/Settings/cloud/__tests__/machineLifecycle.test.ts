@@ -52,20 +52,21 @@ const selfHosted = (status: number) => ({
 describe('lifecyclePlan', () => {
   it('still offers Resume (and the rest) when a managed machine status is unknown', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_UNKNOWN), null)
-    expect(plan.offer).toEqual(['suspend', 'restart', 'resume'])
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resume', 'resize'])
     expect(plan.disabledReason).toBeNull()
   })
 
-  it('offers Suspend and Restart on a running cloud machine, both enabled', () => {
+  it('offers Suspend, Restart and Resize on a running cloud machine, all enabled', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_ACTIVE), null)
     expect(plan.managed).toBe(true)
-    expect(plan.offer).toEqual(['suspend', 'restart'])
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resize'])
     expect(plan.disabledReason).toBeNull()
   })
 
-  it('offers only Resume on a suspended cloud machine', () => {
+  // A suspended machine is the one the control plane resizes directly.
+  it('offers Resume and Resize on a suspended cloud machine', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_SUSPENDED), null)
-    expect(plan.offer).toEqual(['resume'])
+    expect(plan.offer).toEqual(['resume', 'resize'])
     expect(plan.disabledReason).toBeNull()
   })
 
@@ -81,7 +82,7 @@ describe('lifecyclePlan', () => {
 
   it('disables the actions with a reason while a machine is still starting', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_PENDING), null)
-    expect(plan.offer).toEqual(['suspend', 'restart'])
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resize'])
     expect(plan.disabledReason).toMatch(/starting/i)
   })
 
@@ -90,7 +91,7 @@ describe('lifecyclePlan', () => {
   // it stays enabled rather than being lumped in with PENDING.
   it('keeps Suspend and Restart enabled on a disconnected cloud machine', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_DISCONNECTED, LIFECYCLE_PHASE_READY), null)
-    expect(plan.offer).toEqual(['suspend', 'restart'])
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resize'])
     expect(plan.disabledReason).toBeNull()
   })
 
@@ -98,13 +99,19 @@ describe('lifecyclePlan', () => {
   // reads DISCONNECTED + UNSPECIFIED. Resume must be reachable.
   it('also offers Resume on an unattached cloud machine with no known phase', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_DISCONNECTED, LIFECYCLE_PHASE_UNSPECIFIED), null)
-    expect(plan.offer).toEqual(['suspend', 'restart', 'resume'])
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resume', 'resize'])
     expect(plan.disabledReason).toBeNull()
   })
 
   it('does not offer Resume on a disconnected machine whose phase is known READY', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_DISCONNECTED, LIFECYCLE_PHASE_READY), null)
-    expect(plan.offer).toEqual(['suspend', 'restart'])
+    expect(plan.offer).toEqual(['suspend', 'restart', 'resize'])
+  })
+
+  // A failed machine's way back is Suspend; Resize is offered once it is
+  // suspended, never on the failed machine itself.
+  it('does not offer Resize on a failed machine', () => {
+    expect(lifecyclePlan(managed(MACHINE_STATUS_FAILED), null).offer).not.toContain('resize')
   })
 
   it('offers nothing for a self-hosted machine, at any status', () => {
@@ -118,6 +125,7 @@ describe('lifecyclePlan', () => {
   it('disables every action while a restart is in flight, naming the stage', () => {
     const plan = lifecyclePlan(managed(MACHINE_STATUS_ACTIVE), 'stopping')
     expect(plan.disabledReason).toMatch(/stopping/i)
+    expect(lifecyclePlan(managed(MACHINE_STATUS_SUSPENDED), 'resizing').disabledReason).toMatch(/size/i)
   })
 })
 
@@ -258,5 +266,93 @@ describe('restartMachine', () => {
       }),
     ).rejects.toThrow('nope')
     expect(resume).not.toHaveBeenCalled()
+  })
+})
+
+// Resizing a RUNNING machine: the control plane only resizes a suspended one
+// (control-plane docs/design/daemon-resize.md), so it is a restart with the
+// resize done while the machine is stopped.
+describe('restartMachine with a resize step', () => {
+  const stoppedAfterOnePoll = () => {
+    const phases = [LIFECYCLE_PHASE_SUSPENDING, LIFECYCLE_PHASE_SUSPENDED]
+    let i = 0
+    return async () => ({
+      phase: phases[Math.min(i++, phases.length - 1)],
+      status: MACHINE_STATUS_SUSPENDED,
+    })
+  }
+
+  it('resizes only once the machine has really stopped, then starts it', async () => {
+    const calls: string[] = []
+    const stages: string[] = []
+    const poll = stoppedAfterOnePoll()
+    await restartMachine({
+      suspend: async () => void calls.push('suspend'),
+      resize: async () => void calls.push('resize'),
+      resume: async () => void calls.push('resume'),
+      poll: async () => {
+        const r = await poll()
+        calls.push(`poll:${r.phase === LIFECYCLE_PHASE_SUSPENDED ? 'stopped' : 'stopping'}`)
+        return r
+      },
+      sleep: async () => {},
+      onStage: (s) => stages.push(s),
+    })
+    expect(calls).toEqual(['suspend', 'poll:stopping', 'poll:stopped', 'resize', 'resume'])
+    expect(stages).toEqual(['stopping', 'resizing', 'starting'])
+  })
+
+  // The guarantee the UI leans on: a refused resize (plan, funding) must not
+  // strand a machine the user had running. It comes back on its old size and
+  // the refusal is still reported.
+  it('starts the machine again when the resize is refused, then reports why', async () => {
+    const resume = vi.fn(async () => {})
+    await expect(
+      restartMachine({
+        suspend: async () => {},
+        resize: async () => {
+          throw new Error('[permission_denied] your plan does not include daemon size xl')
+        },
+        resume,
+        poll: stoppedAfterOnePoll(),
+        sleep: async () => {},
+        onStage: () => {},
+      }),
+    ).rejects.toThrow(/does not include daemon size/)
+    expect(resume).toHaveBeenCalledTimes(1)
+  })
+
+  // If the machine cannot be started either, THAT is what the user must hear:
+  // it is now stopped, which matters more than why the size did not change.
+  it('reports the resume failure over the resize failure', async () => {
+    await expect(
+      restartMachine({
+        suspend: async () => {},
+        resize: async () => {
+          throw new Error('resize refused')
+        },
+        resume: async () => {
+          throw new Error('resume refused')
+        },
+        poll: stoppedAfterOnePoll(),
+        sleep: async () => {},
+        onStage: () => {},
+      }),
+    ).rejects.toThrow('resume refused')
+  })
+
+  it('never resizes when the machine fails while stopping', async () => {
+    const resize = vi.fn(async () => {})
+    await expect(
+      restartMachine({
+        suspend: async () => {},
+        resize,
+        resume: async () => {},
+        poll: async () => ({ phase: LIFECYCLE_PHASE_UNSPECIFIED, status: MACHINE_STATUS_FAILED }),
+        sleep: async () => {},
+        onStage: () => {},
+      }),
+    ).rejects.toThrow(/failed while stopping/i)
+    expect(resize).not.toHaveBeenCalled()
   })
 })

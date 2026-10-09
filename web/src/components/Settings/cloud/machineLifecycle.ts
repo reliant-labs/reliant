@@ -96,10 +96,25 @@ export const LIFECYCLE_PHASE_FAILED = DaemonLifecyclePhase.FAILED
 // as unmanaged rather than silently being offered suspend/resume it cannot do.
 const EXTERNAL_DAEMON_TYPES = ['self_hosted', 'external']
 
-/** The stages a Restart passes through, for progress display. */
-export type RestartStage = 'stopping' | 'starting'
+/**
+ * The stages a Restart passes through, for progress display. `resizing` only
+ * occurs when the restart carries a resize (see restartMachine's `resize`).
+ */
+export type RestartStage = 'stopping' | 'resizing' | 'starting'
 
-export type LifecycleAction = 'suspend' | 'resume' | 'restart'
+/**
+ * `resize` changes the machine size. The control plane only resizes a
+ * SUSPENDED machine (control-plane docs/design/daemon-resize.md), so on a
+ * suspended machine it is one call that takes effect at the next start, and
+ * on a running one it is a restart with the resize done while stopped.
+ */
+export type LifecycleAction = 'suspend' | 'resume' | 'restart' | 'resize'
+
+const STAGE_REASON: Record<RestartStage, string> = {
+  stopping: 'Stopping the machine…',
+  resizing: 'Applying the new size…',
+  starting: 'Starting the machine…',
+}
 
 export interface LifecyclePlan {
   /** False for self-hosted machines: nothing here can control them. */
@@ -144,16 +159,22 @@ export function lifecyclePlan(
   if (restartStage) {
     return {
       managed: true,
-      offer: machine.status === MACHINE_STATUS_SUSPENDED ? ['resume'] : ['suspend', 'restart'],
-      disabledReason:
-        restartStage === 'stopping' ? 'Stopping the machine…' : 'Starting the machine…',
+      offer:
+        machine.status === MACHINE_STATUS_SUSPENDED
+          ? ['resume', 'resize']
+          : ['suspend', 'restart', 'resize'],
+      disabledReason: STAGE_REASON[restartStage],
       recoveryHint: null,
     }
   }
 
+  // Resize is offered wherever Restart or Resume is, because it IS one of
+  // them with a step in the middle: a suspended machine is resized in place,
+  // a running one is stopped, resized and started. A FAILED machine gets
+  // neither — its way back is Suspend, after which Resize is offered.
   switch (machine.status) {
     case MACHINE_STATUS_SUSPENDED:
-      return { managed: true, offer: ['resume'], disabledReason: null, recoveryHint: null }
+      return { managed: true, offer: ['resume', 'resize'], disabledReason: null, recoveryHint: null }
 
     // ResumeDaemon only accepts a SUSPENDED daemon, so Resume is not offered
     // here — it would be a button whose single outcome is an error.
@@ -177,7 +198,7 @@ export function lifecyclePlan(
     case MACHINE_STATUS_PENDING:
       return {
         managed: true,
-        offer: ['suspend', 'restart'],
+        offer: ['suspend', 'restart', 'resize'],
         disabledReason: 'This machine is still starting.',
         recoveryHint: null,
       }
@@ -186,7 +207,12 @@ export function lifecyclePlan(
     // is missing, so it may be suspended. Offer everything the server will
     // vet: it refuses Resume unless the machine is really suspended.
     case MACHINE_STATUS_UNKNOWN:
-      return { managed: true, offer: ['suspend', 'restart', 'resume'], disabledReason: null, recoveryHint: null }
+      return {
+        managed: true,
+        offer: ['suspend', 'restart', 'resume', 'resize'],
+        disabledReason: null,
+        recoveryHint: null,
+      }
 
     // ACTIVE, and DISCONNECTED — which is not a transition: the pod is up and
     // the daemon lost its gateway connection. Restart is the most useful
@@ -202,9 +228,14 @@ export function lifecyclePlan(
         machine.status === MACHINE_STATUS_DISCONNECTED &&
         (machine.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED) === LIFECYCLE_PHASE_UNSPECIFIED
       ) {
-        return { managed: true, offer: ['suspend', 'restart', 'resume'], disabledReason: null, recoveryHint: null }
+        return {
+          managed: true,
+          offer: ['suspend', 'restart', 'resume', 'resize'],
+          disabledReason: null,
+          recoveryHint: null,
+        }
       }
-      return { managed: true, offer: ['suspend', 'restart'], disabledReason: null, recoveryHint: null }
+      return { managed: true, offer: ['suspend', 'restart', 'resize'], disabledReason: null, recoveryHint: null }
   }
 }
 
@@ -215,6 +246,15 @@ export interface RestartOptions {
   poll: () => Promise<{ phase: number; status: number }>
   sleep: (ms: number) => Promise<void>
   onStage: (stage: RestartStage) => void
+  /**
+   * Optional step run once the machine has stopped and before it starts
+   * again — how a RUNNING machine is resized, since the control plane only
+   * resizes a suspended one. The machine is started again whether or not
+   * this succeeds (on its old size if it failed), and its error is then
+   * rethrown: a refused resize must never leave a machine the user had
+   * running switched off.
+   */
+  resize?: () => Promise<void>
   /** Give up waiting for the pod to stop after this long. */
   timeoutMs?: number
   pollIntervalMs?: number
@@ -241,10 +281,37 @@ export async function restartMachine(opts: RestartOptions): Promise<void> {
     poll,
     sleep,
     onStage,
+    resize,
     timeoutMs = DEFAULT_RESTART_TIMEOUT_MS,
     pollIntervalMs = DEFAULT_POLL_INTERVAL_MS,
     now = () => Date.now(),
   } = opts
+
+  // The second half of the sequence, once the machine is believed stopped.
+  // The resize step's failure is held until AFTER the resume, so the machine
+  // comes back either way. A resume failure wins over it: then the machine
+  // is left stopped, which is the more urgent thing to tell the user.
+  // `onResumeError` lets the stale-mirror path below reword a resume refusal
+  // without also catching the resize step's error.
+  const startAgain = async (onResumeError?: (e: unknown) => never) => {
+    let resizeError: unknown
+    if (resize) {
+      onStage('resizing')
+      try {
+        await resize()
+      } catch (e) {
+        resizeError = e
+      }
+    }
+    onStage('starting')
+    try {
+      await resume()
+    } catch (e) {
+      if (onResumeError) onResumeError(e)
+      throw e
+    }
+    if (resizeError !== undefined) throw resizeError
+  }
 
   onStage('stopping')
   await suspend()
@@ -277,11 +344,7 @@ export async function restartMachine(opts: RestartOptions): Promise<void> {
       // all along). Try the resume once; the server refuses it unless the
       // machine really is suspended, which is the check we cannot make here.
       if (!sawKnownPhase) {
-        onStage('starting')
-        try {
-          await resume()
-          return
-        } catch (e) {
+        await startAgain((e) => {
           const message = e instanceof Error ? e.message : String(e)
           if (/not suspended|failed.?precondition/i.test(message)) {
             throw new Error(
@@ -289,7 +352,8 @@ export async function restartMachine(opts: RestartOptions): Promise<void> {
             )
           }
           throw e
-        }
+        })
+        return
       }
       throw new Error(
         'The machine did not stop in time, so it was not restarted. It may still be stopping — check its status and resume it when it is suspended.',
@@ -299,6 +363,5 @@ export async function restartMachine(opts: RestartOptions): Promise<void> {
     await sleep(pollIntervalMs)
   }
 
-  onStage('starting')
-  await resume()
+  await startAgain()
 }

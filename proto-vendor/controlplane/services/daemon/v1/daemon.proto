@@ -38,6 +38,21 @@ service DaemonService {
   rpc ResumeDaemon(ResumeDaemonRequest) returns (ResumeDaemonResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
+  // ResizeDaemon changes a MANAGED daemon's machine size — the one path that
+  // does. The daemon must be SUSPENDED (FailedPrecondition otherwise): like
+  // changing a cloud VM's instance type, the new size takes effect when the
+  // machine next starts, because ResumeDaemon rebuilds the pod from the
+  // re-stamped spec (size, CPU/memory, disk). Resizing a running machine is
+  // therefore stop → resize → start, which the caller drives.
+  //
+  // The new size is gated exactly like CreateDaemon and ResumeDaemon
+  // (svcdaemon.checkDaemonSizeAllowed), so a refusal here is the same refusal
+  // the following resume would have produced. Resizing to the current size
+  // is a successful no-op. Disks only grow: a downsize keeps the larger disk,
+  // which is billed at its bound capacity.
+  rpc ResizeDaemon(ResizeDaemonRequest) returns (ResizeDaemonResponse) {
+    option (forge.v1.method) = {auth_required: true};
+  }
   rpc SetPortAccess(SetPortAccessRequest) returns (SetPortAccessResponse) {
     option (forge.v1.method) = {auth_required: true};
   }
@@ -101,8 +116,12 @@ message ListDaemonsResponse {
 message UpdateDaemonRequest {
   string daemon_id = 1;
   string new_name = 2;
-  string image = 3;
-  ResourceRequirements resources = 4;
+  // image and resources were removed. Both wrote the row without a size gate
+  // and were silently overwritten at the next create/resume re-stamp, so a
+  // caller could neither rely on them nor be stopped by them. A machine's
+  // resources are derived from its size; change the size with ResizeDaemon.
+  reserved 3, 4;
+  reserved "image", "resources";
 }
 
 message UpdateDaemonResponse {
@@ -129,6 +148,16 @@ message ResumeDaemonRequest {
 }
 
 message ResumeDaemonResponse {
+  Daemon daemon = 1;
+}
+
+message ResizeDaemonRequest {
+  string daemon_id = 1;
+  // The new size. UNSPECIFIED is rejected (InvalidArgument).
+  DaemonSize size = 2;
+}
+
+message ResizeDaemonResponse {
   Daemon daemon = 1;
 }
 

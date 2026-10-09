@@ -1236,6 +1236,106 @@ func (x *UpdateMyTokenResponse) GetToken() *AccessToken {
 	return nil
 }
 
+type ExchangeTokenRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// scopes requested; must be non-empty. Anything not exchangeable is dropped,
+	// anything the acting user does not hold is dropped, and the response says
+	// what was granted.
+	Scopes        []string `protobuf:"bytes,1,rep,name=scopes,proto3" json:"scopes,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeTokenRequest) Reset() {
+	*x = ExchangeTokenRequest{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[21]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeTokenRequest) ProtoMessage() {}
+
+func (x *ExchangeTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[21]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeTokenRequest.ProtoReflect.Descriptor instead.
+func (*ExchangeTokenRequest) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{21}
+}
+
+func (x *ExchangeTokenRequest) GetScopes() []string {
+	if x != nil {
+		return x.Scopes
+	}
+	return nil
+}
+
+type ExchangeTokenResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	Token *AccessToken           `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
+	// secret is the plaintext, returned exactly once.
+	Secret        string `protobuf:"bytes,2,opt,name=secret,proto3" json:"secret,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExchangeTokenResponse) Reset() {
+	*x = ExchangeTokenResponse{}
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[22]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExchangeTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExchangeTokenResponse) ProtoMessage() {}
+
+func (x *ExchangeTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_services_access_token_v1_access_token_proto_msgTypes[22]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExchangeTokenResponse.ProtoReflect.Descriptor instead.
+func (*ExchangeTokenResponse) Descriptor() ([]byte, []int) {
+	return file_services_access_token_v1_access_token_proto_rawDescGZIP(), []int{22}
+}
+
+func (x *ExchangeTokenResponse) GetToken() *AccessToken {
+	if x != nil {
+		return x.Token
+	}
+	return nil
+}
+
+func (x *ExchangeTokenResponse) GetSecret() string {
+	if x != nil {
+		return x.Secret
+	}
+	return ""
+}
+
 var File_services_access_token_v1_access_token_proto protoreflect.FileDescriptor
 
 const file_services_access_token_v1_access_token_proto_rawDesc = "" +
@@ -1323,7 +1423,12 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\rupdate_scopes\x18\x04 \x01(\bR\fupdateScopesB\a\n" +
 	"\x05_name\"K\n" +
 	"\x15UpdateMyTokenResponse\x122\n" +
-	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token2\x86\a\n" +
+	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\".\n" +
+	"\x14ExchangeTokenRequest\x12\x16\n" +
+	"\x06scopes\x18\x01 \x03(\tR\x06scopes\"c\n" +
+	"\x15ExchangeTokenResponse\x122\n" +
+	"\x05token\x18\x01 \x01(\v2\x1c.controlplane.v1.AccessTokenR\x05token\x12\x16\n" +
+	"\x06secret\x18\x02 \x01(\tR\x06secret2\xe6\a\n" +
 	"\x12AccessTokenService\x12X\n" +
 	"\vCreateToken\x12#.controlplane.v1.CreateTokenRequest\x1a$.controlplane.v1.CreateTokenResponse\x12U\n" +
 	"\n" +
@@ -1332,7 +1437,8 @@ const file_services_access_token_v1_access_token_proto_rawDesc = "" +
 	"\rCreateMyToken\x12%.controlplane.v1.CreateMyTokenRequest\x1a&.controlplane.v1.CreateMyTokenResponse\x12[\n" +
 	"\fListMyTokens\x12$.controlplane.v1.ListMyTokensRequest\x1a%.controlplane.v1.ListMyTokensResponse\x12^\n" +
 	"\rRevokeMyToken\x12%.controlplane.v1.RevokeMyTokenRequest\x1a&.controlplane.v1.RevokeMyTokenResponse\x12^\n" +
-	"\rUpdateMyToken\x12%.controlplane.v1.UpdateMyTokenRequest\x1a&.controlplane.v1.UpdateMyTokenResponse\x12p\n" +
+	"\rUpdateMyToken\x12%.controlplane.v1.UpdateMyTokenRequest\x1a&.controlplane.v1.UpdateMyTokenResponse\x12^\n" +
+	"\rExchangeToken\x12%.controlplane.v1.ExchangeTokenRequest\x1a&.controlplane.v1.ExchangeTokenResponse\x12p\n" +
 	"\x13ListOrgMemberGrants\x12+.controlplane.v1.ListOrgMemberGrantsRequest\x1a,.controlplane.v1.ListOrgMemberGrantsResponse\x12v\n" +
 	"\x15UpdateOrgMemberGrants\x12-.controlplane.v1.UpdateOrgMemberGrantsRequest\x1a..controlplane.v1.UpdateOrgMemberGrantsResponseB\xde\x01\n" +
 	"\x13com.controlplane.v1B\x10AccessTokenProtoP\x01ZXgithub.com/reliant-labs/reliant/gen/controlplane/services/access_token/v1;controlplanev1\xa2\x02\x03CXX\xaa\x02\x0fControlplane.V1\xca\x02\x0fControlplane\\V1\xe2\x02\x1bControlplane\\V1\\GPBMetadata\xea\x02\x10Controlplane::V1b\x06proto3"
@@ -1349,7 +1455,7 @@ func file_services_access_token_v1_access_token_proto_rawDescGZIP() []byte {
 	return file_services_access_token_v1_access_token_proto_rawDescData
 }
 
-var file_services_access_token_v1_access_token_proto_msgTypes = make([]protoimpl.MessageInfo, 21)
+var file_services_access_token_v1_access_token_proto_msgTypes = make([]protoimpl.MessageInfo, 23)
 var file_services_access_token_v1_access_token_proto_goTypes = []any{
 	(*OrgMemberGrants)(nil),               // 0: controlplane.v1.OrgMemberGrants
 	(*ListOrgMemberGrantsRequest)(nil),    // 1: controlplane.v1.ListOrgMemberGrantsRequest
@@ -1372,48 +1478,53 @@ var file_services_access_token_v1_access_token_proto_goTypes = []any{
 	(*RevokeMyTokenResponse)(nil),         // 18: controlplane.v1.RevokeMyTokenResponse
 	(*UpdateMyTokenRequest)(nil),          // 19: controlplane.v1.UpdateMyTokenRequest
 	(*UpdateMyTokenResponse)(nil),         // 20: controlplane.v1.UpdateMyTokenResponse
-	(*timestamppb.Timestamp)(nil),         // 21: google.protobuf.Timestamp
+	(*ExchangeTokenRequest)(nil),          // 21: controlplane.v1.ExchangeTokenRequest
+	(*ExchangeTokenResponse)(nil),         // 22: controlplane.v1.ExchangeTokenResponse
+	(*timestamppb.Timestamp)(nil),         // 23: google.protobuf.Timestamp
 }
 var file_services_access_token_v1_access_token_proto_depIdxs = []int32{
 	0,  // 0: controlplane.v1.ListOrgMemberGrantsResponse.members:type_name -> controlplane.v1.OrgMemberGrants
 	0,  // 1: controlplane.v1.UpdateOrgMemberGrantsResponse.member:type_name -> controlplane.v1.OrgMemberGrants
-	21, // 2: controlplane.v1.AccessToken.created_at:type_name -> google.protobuf.Timestamp
-	21, // 3: controlplane.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
-	21, // 4: controlplane.v1.AccessToken.last_used_at:type_name -> google.protobuf.Timestamp
-	21, // 5: controlplane.v1.AccessToken.revoked_at:type_name -> google.protobuf.Timestamp
+	23, // 2: controlplane.v1.AccessToken.created_at:type_name -> google.protobuf.Timestamp
+	23, // 3: controlplane.v1.AccessToken.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 4: controlplane.v1.AccessToken.last_used_at:type_name -> google.protobuf.Timestamp
+	23, // 5: controlplane.v1.AccessToken.revoked_at:type_name -> google.protobuf.Timestamp
 	5,  // 6: controlplane.v1.AccessToken.resource:type_name -> controlplane.v1.ResourceBinding
-	21, // 7: controlplane.v1.CreateTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 7: controlplane.v1.CreateTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
 	6,  // 8: controlplane.v1.CreateTokenResponse.token:type_name -> controlplane.v1.AccessToken
 	6,  // 9: controlplane.v1.ListTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
 	6,  // 10: controlplane.v1.RevokeTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	21, // 11: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
+	23, // 11: controlplane.v1.CreateMyTokenRequest.expires_at:type_name -> google.protobuf.Timestamp
 	5,  // 12: controlplane.v1.CreateMyTokenRequest.resource:type_name -> controlplane.v1.ResourceBinding
 	6,  // 13: controlplane.v1.CreateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
 	6,  // 14: controlplane.v1.ListMyTokensResponse.tokens:type_name -> controlplane.v1.AccessToken
 	6,  // 15: controlplane.v1.UpdateMyTokenResponse.token:type_name -> controlplane.v1.AccessToken
-	7,  // 16: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
-	9,  // 17: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
-	11, // 18: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
-	13, // 19: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
-	15, // 20: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
-	17, // 21: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
-	19, // 22: controlplane.v1.AccessTokenService.UpdateMyToken:input_type -> controlplane.v1.UpdateMyTokenRequest
-	1,  // 23: controlplane.v1.AccessTokenService.ListOrgMemberGrants:input_type -> controlplane.v1.ListOrgMemberGrantsRequest
-	3,  // 24: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:input_type -> controlplane.v1.UpdateOrgMemberGrantsRequest
-	8,  // 25: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
-	10, // 26: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
-	12, // 27: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
-	14, // 28: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
-	16, // 29: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
-	18, // 30: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
-	20, // 31: controlplane.v1.AccessTokenService.UpdateMyToken:output_type -> controlplane.v1.UpdateMyTokenResponse
-	2,  // 32: controlplane.v1.AccessTokenService.ListOrgMemberGrants:output_type -> controlplane.v1.ListOrgMemberGrantsResponse
-	4,  // 33: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:output_type -> controlplane.v1.UpdateOrgMemberGrantsResponse
-	25, // [25:34] is the sub-list for method output_type
-	16, // [16:25] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	6,  // 16: controlplane.v1.ExchangeTokenResponse.token:type_name -> controlplane.v1.AccessToken
+	7,  // 17: controlplane.v1.AccessTokenService.CreateToken:input_type -> controlplane.v1.CreateTokenRequest
+	9,  // 18: controlplane.v1.AccessTokenService.ListTokens:input_type -> controlplane.v1.ListTokensRequest
+	11, // 19: controlplane.v1.AccessTokenService.RevokeToken:input_type -> controlplane.v1.RevokeTokenRequest
+	13, // 20: controlplane.v1.AccessTokenService.CreateMyToken:input_type -> controlplane.v1.CreateMyTokenRequest
+	15, // 21: controlplane.v1.AccessTokenService.ListMyTokens:input_type -> controlplane.v1.ListMyTokensRequest
+	17, // 22: controlplane.v1.AccessTokenService.RevokeMyToken:input_type -> controlplane.v1.RevokeMyTokenRequest
+	19, // 23: controlplane.v1.AccessTokenService.UpdateMyToken:input_type -> controlplane.v1.UpdateMyTokenRequest
+	21, // 24: controlplane.v1.AccessTokenService.ExchangeToken:input_type -> controlplane.v1.ExchangeTokenRequest
+	1,  // 25: controlplane.v1.AccessTokenService.ListOrgMemberGrants:input_type -> controlplane.v1.ListOrgMemberGrantsRequest
+	3,  // 26: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:input_type -> controlplane.v1.UpdateOrgMemberGrantsRequest
+	8,  // 27: controlplane.v1.AccessTokenService.CreateToken:output_type -> controlplane.v1.CreateTokenResponse
+	10, // 28: controlplane.v1.AccessTokenService.ListTokens:output_type -> controlplane.v1.ListTokensResponse
+	12, // 29: controlplane.v1.AccessTokenService.RevokeToken:output_type -> controlplane.v1.RevokeTokenResponse
+	14, // 30: controlplane.v1.AccessTokenService.CreateMyToken:output_type -> controlplane.v1.CreateMyTokenResponse
+	16, // 31: controlplane.v1.AccessTokenService.ListMyTokens:output_type -> controlplane.v1.ListMyTokensResponse
+	18, // 32: controlplane.v1.AccessTokenService.RevokeMyToken:output_type -> controlplane.v1.RevokeMyTokenResponse
+	20, // 33: controlplane.v1.AccessTokenService.UpdateMyToken:output_type -> controlplane.v1.UpdateMyTokenResponse
+	22, // 34: controlplane.v1.AccessTokenService.ExchangeToken:output_type -> controlplane.v1.ExchangeTokenResponse
+	2,  // 35: controlplane.v1.AccessTokenService.ListOrgMemberGrants:output_type -> controlplane.v1.ListOrgMemberGrantsResponse
+	4,  // 36: controlplane.v1.AccessTokenService.UpdateOrgMemberGrants:output_type -> controlplane.v1.UpdateOrgMemberGrantsResponse
+	27, // [27:37] is the sub-list for method output_type
+	17, // [17:27] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_services_access_token_v1_access_token_proto_init() }
@@ -1430,7 +1541,7 @@ func file_services_access_token_v1_access_token_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_services_access_token_v1_access_token_proto_rawDesc), len(file_services_access_token_v1_access_token_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   21,
+			NumMessages:   23,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

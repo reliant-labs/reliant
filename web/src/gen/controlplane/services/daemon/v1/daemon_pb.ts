@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/daemon/v1/daemon.proto.
  */
 export const file_services_daemon_v1_daemon: GenFile = /*@__PURE__*/
-  fileDesc("Ch9zZXJ2aWNlcy9kYWVtb24vdjEvZGFlbW9uLnByb3RvEg9jb250cm9scGxhbmUudjEivwIKE0NyZWF0ZURhZW1vblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIwCgtkYWVtb25fdHlwZRgCIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlEg0KBWltYWdlGAMgASgJEjgKCXJlc291cmNlcxgEIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZVJlcXVpcmVtZW50cxIQCghnaXRfcmVwbxgFIAEoCRISCgpnaXRfYnJhbmNoGAYgASgJEhQKDHN0b3JhZ2Vfc2l6ZRgHIAEoCRIQCghob3N0bmFtZRgIIAEoCRIQCghwbGF0Zm9ybRgJIAEoCRIpCgRzaXplGAogASgOMhsuY29udHJvbHBsYW5lLnYxLkRhZW1vblNpemUSFAoMaWRsZV90aW1lb3V0GAsgASgJIj8KFENyZWF0ZURhZW1vblJlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iJQoQR2V0RGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiWwoRR2V0RGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbhIdChV3b3Jrc3BhY2VfYmFzZV9kb21haW4YAiABKAkimgEKEkxpc3REYWVtb25zUmVxdWVzdBI1CgtkYWVtb25fdHlwZRgBIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlSACIAQESMgoGc3RhdHVzGAIgASgOMh0uY29udHJvbHBsYW5lLnYxLkRhZW1vblN0YXR1c0gBiAEBQg4KDF9kYWVtb25fdHlwZUIJCgdfc3RhdHVzIj8KE0xpc3REYWVtb25zUmVzcG9uc2USKAoHZGFlbW9ucxgBIAMoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24igwEKE1VwZGF0ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEhAKCG5ld19uYW1lGAIgASgJEg0KBWltYWdlGAMgASgJEjgKCXJlc291cmNlcxgEIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZVJlcXVpcmVtZW50cyI/ChRVcGRhdGVEYWVtb25SZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uIkgKE0RlbGV0ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEh4KFnNuYXBzaG90X2JlZm9yZV9kZWxldGUYAiABKAgiFgoURGVsZXRlRGFlbW9uUmVzcG9uc2UiKQoUU3VzcGVuZERhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIkAKFVN1c3BlbmREYWVtb25SZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uIigKE1Jlc3VtZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJIj8KFFJlc3VtZURhZW1vblJlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24ibQoUU2V0UG9ydEFjY2Vzc1JlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEgwKBHBvcnQYAiABKAUSNAoLYWNjZXNzX21vZGUYAyABKA4yHy5jb250cm9scGxhbmUudjEuUG9ydEFjY2Vzc01vZGUiXAoVU2V0UG9ydEFjY2Vzc1Jlc3BvbnNlEi0KBHJ1bGUYASABKAsyHy5jb250cm9scGxhbmUudjEuUG9ydEFjY2Vzc1J1bGUSFAoMYWNjZXNzX3Rva2VuGAIgASgJIjoKF1JlbW92ZVBvcnRBY2Nlc3NSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIMCgRwb3J0GAIgASgFIhoKGFJlbW92ZVBvcnRBY2Nlc3NSZXNwb25zZSI3ChpMaXN0UG9ydEFjY2Vzc1J1bGVzUmVxdWVzdBIZCglkYWVtb25faWQYASABKAlCBrpIA8gBASJNChtMaXN0UG9ydEFjY2Vzc1J1bGVzUmVzcG9uc2USLgoFcnVsZXMYASADKAsyHy5jb250cm9scGxhbmUudjEuUG9ydEFjY2Vzc1J1bGUibgobU2V0RGVmYXVsdFBvcnRBY2Nlc3NSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRI8ChNkZWZhdWx0X2FjY2Vzc19tb2RlGAIgASgOMh8uY29udHJvbHBsYW5lLnYxLlBvcnRBY2Nlc3NNb2RlIkcKHFNldERlZmF1bHRQb3J0QWNjZXNzUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbjKZCQoNRGFlbW9uU2VydmljZRJjCgxDcmVhdGVEYWVtb24SJC5jb250cm9scGxhbmUudjEuQ3JlYXRlRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5DcmVhdGVEYWVtb25SZXNwb25zZSIGorsYAggBEloKCUdldERhZW1vbhIhLmNvbnRyb2xwbGFuZS52MS5HZXREYWVtb25SZXF1ZXN0GiIuY29udHJvbHBsYW5lLnYxLkdldERhZW1vblJlc3BvbnNlIgaiuxgCCAESYAoLTGlzdERhZW1vbnMSIy5jb250cm9scGxhbmUudjEuTGlzdERhZW1vbnNSZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLkxpc3REYWVtb25zUmVzcG9uc2UiBqK7GAIIARJjCgxVcGRhdGVEYWVtb24SJC5jb250cm9scGxhbmUudjEuVXBkYXRlRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5VcGRhdGVEYWVtb25SZXNwb25zZSIGorsYAggBEmMKDERlbGV0ZURhZW1vbhIkLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEYWVtb25SZXF1ZXN0GiUuY29udHJvbHBsYW5lLnYxLkRlbGV0ZURhZW1vblJlc3BvbnNlIgaiuxgCCAESZgoNU3VzcGVuZERhZW1vbhIlLmNvbnRyb2xwbGFuZS52MS5TdXNwZW5kRGFlbW9uUmVxdWVzdBomLmNvbnRyb2xwbGFuZS52MS5TdXNwZW5kRGFlbW9uUmVzcG9uc2UiBqK7GAIIARJjCgxSZXN1bWVEYWVtb24SJC5jb250cm9scGxhbmUudjEuUmVzdW1lRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5SZXN1bWVEYWVtb25SZXNwb25zZSIGorsYAggBEmYKDVNldFBvcnRBY2Nlc3MSJS5jb250cm9scGxhbmUudjEuU2V0UG9ydEFjY2Vzc1JlcXVlc3QaJi5jb250cm9scGxhbmUudjEuU2V0UG9ydEFjY2Vzc1Jlc3BvbnNlIgaiuxgCCAESbwoQUmVtb3ZlUG9ydEFjY2VzcxIoLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVQb3J0QWNjZXNzUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVQb3J0QWNjZXNzUmVzcG9uc2UiBqK7GAIIARJ4ChNMaXN0UG9ydEFjY2Vzc1J1bGVzEisuY29udHJvbHBsYW5lLnYxLkxpc3RQb3J0QWNjZXNzUnVsZXNSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkxpc3RQb3J0QWNjZXNzUnVsZXNSZXNwb25zZSIGorsYAggBEnsKFFNldERlZmF1bHRQb3J0QWNjZXNzEiwuY29udHJvbHBsYW5lLnYxLlNldERlZmF1bHRQb3J0QWNjZXNzUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5TZXREZWZhdWx0UG9ydEFjY2Vzc1Jlc3BvbnNlIgaiuxgCCAFC0wEKE2NvbS5jb250cm9scGxhbmUudjFCC0RhZW1vblByb3RvUAFaUmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9kYWVtb24vdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_shared, file_forge_v1_forge, file_buf_validate_validate]);
+  fileDesc("Ch9zZXJ2aWNlcy9kYWVtb24vdjEvZGFlbW9uLnByb3RvEg9jb250cm9scGxhbmUudjEivwIKE0NyZWF0ZURhZW1vblJlcXVlc3QSDAoEbmFtZRgBIAEoCRIwCgtkYWVtb25fdHlwZRgCIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlEg0KBWltYWdlGAMgASgJEjgKCXJlc291cmNlcxgEIAEoCzIlLmNvbnRyb2xwbGFuZS52MS5SZXNvdXJjZVJlcXVpcmVtZW50cxIQCghnaXRfcmVwbxgFIAEoCRISCgpnaXRfYnJhbmNoGAYgASgJEhQKDHN0b3JhZ2Vfc2l6ZRgHIAEoCRIQCghob3N0bmFtZRgIIAEoCRIQCghwbGF0Zm9ybRgJIAEoCRIpCgRzaXplGAogASgOMhsuY29udHJvbHBsYW5lLnYxLkRhZW1vblNpemUSFAoMaWRsZV90aW1lb3V0GAsgASgJIj8KFENyZWF0ZURhZW1vblJlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iJQoQR2V0RGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkiWwoRR2V0RGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbhIdChV3b3Jrc3BhY2VfYmFzZV9kb21haW4YAiABKAkimgEKEkxpc3REYWVtb25zUmVxdWVzdBI1CgtkYWVtb25fdHlwZRgBIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5EYWVtb25UeXBlSACIAQESMgoGc3RhdHVzGAIgASgOMh0uY29udHJvbHBsYW5lLnYxLkRhZW1vblN0YXR1c0gBiAEBQg4KDF9kYWVtb25fdHlwZUIJCgdfc3RhdHVzIj8KE0xpc3REYWVtb25zUmVzcG9uc2USKAoHZGFlbW9ucxgBIAMoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24iWAoTVXBkYXRlRGFlbW9uUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSEAoIbmV3X25hbWUYAiABKAlKBAgDEARKBAgEEAVSBWltYWdlUglyZXNvdXJjZXMiPwoUVXBkYXRlRGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbiJIChNEZWxldGVEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIeChZzbmFwc2hvdF9iZWZvcmVfZGVsZXRlGAIgASgIIhYKFERlbGV0ZURhZW1vblJlc3BvbnNlIikKFFN1c3BlbmREYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSJAChVTdXNwZW5kRGFlbW9uUmVzcG9uc2USJwoGZGFlbW9uGAEgASgLMhcuY29udHJvbHBsYW5lLnYxLkRhZW1vbiIoChNSZXN1bWVEYWVtb25SZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCSI/ChRSZXN1bWVEYWVtb25SZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uIlMKE1Jlc2l6ZURhZW1vblJlcXVlc3QSEQoJZGFlbW9uX2lkGAEgASgJEikKBHNpemUYAiABKA4yGy5jb250cm9scGxhbmUudjEuRGFlbW9uU2l6ZSI/ChRSZXNpemVEYWVtb25SZXNwb25zZRInCgZkYWVtb24YASABKAsyFy5jb250cm9scGxhbmUudjEuRGFlbW9uIm0KFFNldFBvcnRBY2Nlc3NSZXF1ZXN0EhEKCWRhZW1vbl9pZBgBIAEoCRIMCgRwb3J0GAIgASgFEjQKC2FjY2Vzc19tb2RlGAMgASgOMh8uY29udHJvbHBsYW5lLnYxLlBvcnRBY2Nlc3NNb2RlIlwKFVNldFBvcnRBY2Nlc3NSZXNwb25zZRItCgRydWxlGAEgASgLMh8uY29udHJvbHBsYW5lLnYxLlBvcnRBY2Nlc3NSdWxlEhQKDGFjY2Vzc190b2tlbhgCIAEoCSI6ChdSZW1vdmVQb3J0QWNjZXNzUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSDAoEcG9ydBgCIAEoBSIaChhSZW1vdmVQb3J0QWNjZXNzUmVzcG9uc2UiNwoaTGlzdFBvcnRBY2Nlc3NSdWxlc1JlcXVlc3QSGQoJZGFlbW9uX2lkGAEgASgJQga6SAPIAQEiTQobTGlzdFBvcnRBY2Nlc3NSdWxlc1Jlc3BvbnNlEi4KBXJ1bGVzGAEgAygLMh8uY29udHJvbHBsYW5lLnYxLlBvcnRBY2Nlc3NSdWxlIm4KG1NldERlZmF1bHRQb3J0QWNjZXNzUmVxdWVzdBIRCglkYWVtb25faWQYASABKAkSPAoTZGVmYXVsdF9hY2Nlc3NfbW9kZRgCIAEoDjIfLmNvbnRyb2xwbGFuZS52MS5Qb3J0QWNjZXNzTW9kZSJHChxTZXREZWZhdWx0UG9ydEFjY2Vzc1Jlc3BvbnNlEicKBmRhZW1vbhgBIAEoCzIXLmNvbnRyb2xwbGFuZS52MS5EYWVtb24y/gkKDURhZW1vblNlcnZpY2USYwoMQ3JlYXRlRGFlbW9uEiQuY29udHJvbHBsYW5lLnYxLkNyZWF0ZURhZW1vblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuQ3JlYXRlRGFlbW9uUmVzcG9uc2UiBqK7GAIIARJaCglHZXREYWVtb24SIS5jb250cm9scGxhbmUudjEuR2V0RGFlbW9uUmVxdWVzdBoiLmNvbnRyb2xwbGFuZS52MS5HZXREYWVtb25SZXNwb25zZSIGorsYAggBEmAKC0xpc3REYWVtb25zEiMuY29udHJvbHBsYW5lLnYxLkxpc3REYWVtb25zUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5MaXN0RGFlbW9uc1Jlc3BvbnNlIgaiuxgCCAESYwoMVXBkYXRlRGFlbW9uEiQuY29udHJvbHBsYW5lLnYxLlVwZGF0ZURhZW1vblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuVXBkYXRlRGFlbW9uUmVzcG9uc2UiBqK7GAIIARJjCgxEZWxldGVEYWVtb24SJC5jb250cm9scGxhbmUudjEuRGVsZXRlRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5EZWxldGVEYWVtb25SZXNwb25zZSIGorsYAggBEmYKDVN1c3BlbmREYWVtb24SJS5jb250cm9scGxhbmUudjEuU3VzcGVuZERhZW1vblJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuU3VzcGVuZERhZW1vblJlc3BvbnNlIgaiuxgCCAESYwoMUmVzdW1lRGFlbW9uEiQuY29udHJvbHBsYW5lLnYxLlJlc3VtZURhZW1vblJlcXVlc3QaJS5jb250cm9scGxhbmUudjEuUmVzdW1lRGFlbW9uUmVzcG9uc2UiBqK7GAIIARJjCgxSZXNpemVEYWVtb24SJC5jb250cm9scGxhbmUudjEuUmVzaXplRGFlbW9uUmVxdWVzdBolLmNvbnRyb2xwbGFuZS52MS5SZXNpemVEYWVtb25SZXNwb25zZSIGorsYAggBEmYKDVNldFBvcnRBY2Nlc3MSJS5jb250cm9scGxhbmUudjEuU2V0UG9ydEFjY2Vzc1JlcXVlc3QaJi5jb250cm9scGxhbmUudjEuU2V0UG9ydEFjY2Vzc1Jlc3BvbnNlIgaiuxgCCAESbwoQUmVtb3ZlUG9ydEFjY2VzcxIoLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVQb3J0QWNjZXNzUmVxdWVzdBopLmNvbnRyb2xwbGFuZS52MS5SZW1vdmVQb3J0QWNjZXNzUmVzcG9uc2UiBqK7GAIIARJ4ChNMaXN0UG9ydEFjY2Vzc1J1bGVzEisuY29udHJvbHBsYW5lLnYxLkxpc3RQb3J0QWNjZXNzUnVsZXNSZXF1ZXN0GiwuY29udHJvbHBsYW5lLnYxLkxpc3RQb3J0QWNjZXNzUnVsZXNSZXNwb25zZSIGorsYAggBEnsKFFNldERlZmF1bHRQb3J0QWNjZXNzEiwuY29udHJvbHBsYW5lLnYxLlNldERlZmF1bHRQb3J0QWNjZXNzUmVxdWVzdBotLmNvbnRyb2xwbGFuZS52MS5TZXREZWZhdWx0UG9ydEFjY2Vzc1Jlc3BvbnNlIgaiuxgCCAFC0wEKE2NvbS5jb250cm9scGxhbmUudjFCC0RhZW1vblByb3RvUAFaUmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbnRyb2xwbGFuZS9zZXJ2aWNlcy9kYWVtb24vdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_controlplane_v1_shared, file_forge_v1_forge, file_buf_validate_validate]);
 
 /**
  * @generated from message controlplane.v1.CreateDaemonRequest
@@ -211,16 +211,6 @@ export type UpdateDaemonRequest = Message<"controlplane.v1.UpdateDaemonRequest">
    * @generated from field: string new_name = 2;
    */
   newName: string;
-
-  /**
-   * @generated from field: string image = 3;
-   */
-  image: string;
-
-  /**
-   * @generated from field: controlplane.v1.ResourceRequirements resources = 4;
-   */
-  resources?: ResourceRequirements | undefined;
 };
 
 /**
@@ -351,6 +341,47 @@ export const ResumeDaemonResponseSchema: GenMessage<ResumeDaemonResponse> = /*@_
   messageDesc(file_services_daemon_v1_daemon, 13);
 
 /**
+ * @generated from message controlplane.v1.ResizeDaemonRequest
+ */
+export type ResizeDaemonRequest = Message<"controlplane.v1.ResizeDaemonRequest"> & {
+  /**
+   * @generated from field: string daemon_id = 1;
+   */
+  daemonId: string;
+
+  /**
+   * The new size. UNSPECIFIED is rejected (InvalidArgument).
+   *
+   * @generated from field: controlplane.v1.DaemonSize size = 2;
+   */
+  size: DaemonSize;
+};
+
+/**
+ * Describes the message controlplane.v1.ResizeDaemonRequest.
+ * Use `create(ResizeDaemonRequestSchema)` to create a new message.
+ */
+export const ResizeDaemonRequestSchema: GenMessage<ResizeDaemonRequest> = /*@__PURE__*/
+  messageDesc(file_services_daemon_v1_daemon, 14);
+
+/**
+ * @generated from message controlplane.v1.ResizeDaemonResponse
+ */
+export type ResizeDaemonResponse = Message<"controlplane.v1.ResizeDaemonResponse"> & {
+  /**
+   * @generated from field: controlplane.v1.Daemon daemon = 1;
+   */
+  daemon?: Daemon | undefined;
+};
+
+/**
+ * Describes the message controlplane.v1.ResizeDaemonResponse.
+ * Use `create(ResizeDaemonResponseSchema)` to create a new message.
+ */
+export const ResizeDaemonResponseSchema: GenMessage<ResizeDaemonResponse> = /*@__PURE__*/
+  messageDesc(file_services_daemon_v1_daemon, 15);
+
+/**
  * @generated from message controlplane.v1.SetPortAccessRequest
  */
 export type SetPortAccessRequest = Message<"controlplane.v1.SetPortAccessRequest"> & {
@@ -375,7 +406,7 @@ export type SetPortAccessRequest = Message<"controlplane.v1.SetPortAccessRequest
  * Use `create(SetPortAccessRequestSchema)` to create a new message.
  */
 export const SetPortAccessRequestSchema: GenMessage<SetPortAccessRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 14);
+  messageDesc(file_services_daemon_v1_daemon, 16);
 
 /**
  * @generated from message controlplane.v1.SetPortAccessResponse
@@ -399,7 +430,7 @@ export type SetPortAccessResponse = Message<"controlplane.v1.SetPortAccessRespon
  * Use `create(SetPortAccessResponseSchema)` to create a new message.
  */
 export const SetPortAccessResponseSchema: GenMessage<SetPortAccessResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 15);
+  messageDesc(file_services_daemon_v1_daemon, 17);
 
 /**
  * @generated from message controlplane.v1.RemovePortAccessRequest
@@ -421,7 +452,7 @@ export type RemovePortAccessRequest = Message<"controlplane.v1.RemovePortAccessR
  * Use `create(RemovePortAccessRequestSchema)` to create a new message.
  */
 export const RemovePortAccessRequestSchema: GenMessage<RemovePortAccessRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 16);
+  messageDesc(file_services_daemon_v1_daemon, 18);
 
 /**
  * @generated from message controlplane.v1.RemovePortAccessResponse
@@ -434,7 +465,7 @@ export type RemovePortAccessResponse = Message<"controlplane.v1.RemovePortAccess
  * Use `create(RemovePortAccessResponseSchema)` to create a new message.
  */
 export const RemovePortAccessResponseSchema: GenMessage<RemovePortAccessResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 17);
+  messageDesc(file_services_daemon_v1_daemon, 19);
 
 /**
  * @generated from message controlplane.v1.ListPortAccessRulesRequest
@@ -451,7 +482,7 @@ export type ListPortAccessRulesRequest = Message<"controlplane.v1.ListPortAccess
  * Use `create(ListPortAccessRulesRequestSchema)` to create a new message.
  */
 export const ListPortAccessRulesRequestSchema: GenMessage<ListPortAccessRulesRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 18);
+  messageDesc(file_services_daemon_v1_daemon, 20);
 
 /**
  * @generated from message controlplane.v1.ListPortAccessRulesResponse
@@ -468,7 +499,7 @@ export type ListPortAccessRulesResponse = Message<"controlplane.v1.ListPortAcces
  * Use `create(ListPortAccessRulesResponseSchema)` to create a new message.
  */
 export const ListPortAccessRulesResponseSchema: GenMessage<ListPortAccessRulesResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 19);
+  messageDesc(file_services_daemon_v1_daemon, 21);
 
 /**
  * @generated from message controlplane.v1.SetDefaultPortAccessRequest
@@ -494,7 +525,7 @@ export type SetDefaultPortAccessRequest = Message<"controlplane.v1.SetDefaultPor
  * Use `create(SetDefaultPortAccessRequestSchema)` to create a new message.
  */
 export const SetDefaultPortAccessRequestSchema: GenMessage<SetDefaultPortAccessRequest> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 20);
+  messageDesc(file_services_daemon_v1_daemon, 22);
 
 /**
  * @generated from message controlplane.v1.SetDefaultPortAccessResponse
@@ -513,7 +544,7 @@ export type SetDefaultPortAccessResponse = Message<"controlplane.v1.SetDefaultPo
  * Use `create(SetDefaultPortAccessResponseSchema)` to create a new message.
  */
 export const SetDefaultPortAccessResponseSchema: GenMessage<SetDefaultPortAccessResponse> = /*@__PURE__*/
-  messageDesc(file_services_daemon_v1_daemon, 21);
+  messageDesc(file_services_daemon_v1_daemon, 23);
 
 /**
  * @generated from service controlplane.v1.DaemonService
@@ -574,6 +605,27 @@ export const DaemonService: GenService<{
     methodKind: "unary";
     input: typeof ResumeDaemonRequestSchema;
     output: typeof ResumeDaemonResponseSchema;
+  },
+  /**
+   * ResizeDaemon changes a MANAGED daemon's machine size — the one path that
+   * does. The daemon must be SUSPENDED (FailedPrecondition otherwise): like
+   * changing a cloud VM's instance type, the new size takes effect when the
+   * machine next starts, because ResumeDaemon rebuilds the pod from the
+   * re-stamped spec (size, CPU/memory, disk). Resizing a running machine is
+   * therefore stop → resize → start, which the caller drives.
+   *
+   * The new size is gated exactly like CreateDaemon and ResumeDaemon
+   * (svcdaemon.checkDaemonSizeAllowed), so a refusal here is the same refusal
+   * the following resume would have produced. Resizing to the current size
+   * is a successful no-op. Disks only grow: a downsize keeps the larger disk,
+   * which is billed at its bound capacity.
+   *
+   * @generated from rpc controlplane.v1.DaemonService.ResizeDaemon
+   */
+  resizeDaemon: {
+    methodKind: "unary";
+    input: typeof ResizeDaemonRequestSchema;
+    output: typeof ResizeDaemonResponseSchema;
   },
   /**
    * @generated from rpc controlplane.v1.DaemonService.SetPortAccess
