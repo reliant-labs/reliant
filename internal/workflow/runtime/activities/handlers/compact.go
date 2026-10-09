@@ -136,7 +136,8 @@ func (a *CompactActivity) Execute(ctx context.Context, input ActivityInput) (Com
 	// Add context to summary
 	summary = "This session is being continued from a previous conversation that ran out of context. The conversation is summarized below:\n" + summary
 
-	// Save the compaction summary message (creates new context window automatically)
+	// Save the compaction summary message (creates a new context window automatically)
+	// as an info notification so the user can see the compaction in the timeline.
 	if err := a.saveCompactionMessage(ctx, rtx.ChatID, thread, summary); err != nil {
 		return CompactOutput{}, fmt.Errorf("failed to save compaction message: %w", err)
 	}
@@ -165,8 +166,8 @@ func (a *CompactActivity) saveCompactionMessage(ctx context.Context, chatID, thr
 		Thread:             thread,
 		Role:               parseMessageRole("system"),
 		Content:            summary,
-		DisplayStyle:       parseDisplayStyle("hidden"), // Sent to LLM but not shown in UI
-		NewContextSequence: true,                        // Creates new context window with incremented sequence
+		DisplayStyle:       parseDisplayStyle("info"),
+		NewContextSequence: true, // Creates new context window with incremented sequence
 		ActivityID:         &activityID,
 		AttemptNumber:      int32(info.Attempt),
 	})

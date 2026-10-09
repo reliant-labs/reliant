@@ -417,6 +417,26 @@ func StreamContentStallTimeout() time.Duration {
 // wrong in both directions: at 90s it cuts legitimate long prompt-processing
 // that emits only pings, and at 5m it lets a genuinely silent socket sit for
 // five minutes when 90s was demonstrably enough.
+//
+// # Lifetime: the reader releases itself
+//
+// One watcher goroutine enforces both deadlines, and it exits on the FIRST of:
+// Close, a Read that returns any error (io.EOF included), or a deadline
+// firing. Nothing else may be required to end it.
+//
+// That is the whole contract, because a caller that forgets Close is not
+// hypothetical. anthropic-sdk-go's ssestream never closes its body when the
+// stream ends, and the driver did not close it either, so every Anthropic
+// stream that finished normally left its watchers parked on a channel only
+// Close would ever close. A parked goroutine is a GC root: it pinned the
+// reader, the response body, the HTTP/2 stream and through that the
+// serialized request — the whole conversation, ~1MB per call. Prod held 708
+// such goroutines 22 minutes after a restart, 382MB of retained request
+// bodies, and the 2Gi worker was OOMKilled three times in a day.
+//
+// A stream abandoned mid-read, with neither Close nor a terminal Read, is
+// still bounded: no Read means no reset, so the idle deadline fires, closes
+// the body and ends the watcher within one idle timeout.
 type IdleTimeoutReader struct {
 	r                   io.ReadCloser
 	timeout             time.Duration
@@ -425,9 +445,9 @@ type IdleTimeoutReader struct {
 	contentTimer        *time.Timer
 	fired               atomic.Bool
 	contentFired        atomic.Bool
-	once                sync.Once
-	// done releases both watcher goroutines when the stream ends normally, so
-	// neither outlives the body it guards.
+	releaseOnce         sync.Once
+	// done ends the watcher goroutine. Closed by release, which runs on
+	// Close, on a terminal Read, and when a deadline fires.
 	done chan struct{}
 	// progress is touched only from Read, which io.Reader forbids calling
 	// concurrently, so it needs no lock of its own.
@@ -447,88 +467,86 @@ func newIdleTimeoutReader(r io.ReadCloser, timeout, contentStall time.Duration) 
 		r:                   r,
 		timeout:             timeout,
 		contentStallTimeout: contentStall,
+		timer:               time.NewTimer(timeout),
+		contentTimer:        time.NewTimer(contentStall),
 		done:                make(chan struct{}),
 	}
-
-	// Both timers are created STOPPED and started only once both fields are
-	// assigned. time.AfterFunc starts its clock immediately, so arming the
-	// first timer inline let it fire — and call Close, which reads
-	// contentTimer — before the second assignment had happened. With a short
-	// timeout that is a real nil-deref/data race, not a theoretical one; the
-	// race detector caught it on the 200ms unit test.
-	itr.timer = time.NewTimer(timeout)
-	itr.timer.Stop()
-	itr.contentTimer = time.NewTimer(contentStall)
-	itr.contentTimer.Stop()
-
-	go itr.watch(itr.timer.C, &itr.fired, func() {
-		logging.Warn("[IdleTimeoutReader] Stream idle timeout reached, closing connection",
-			"timeout", timeout)
-	})
-	go itr.watch(itr.contentTimer.C, &itr.contentFired, func() {
-		logging.Warn("[IdleTimeoutReader] Stream content stall timeout reached, closing connection",
-			"timeout", contentStall,
-			"detail", "connection stayed alive on keepalives but the provider sent no content")
-	})
-
-	itr.timer.Reset(timeout)
-	itr.contentTimer.Reset(contentStall)
+	// Started only after every field it reads is assigned, so a deadline
+	// shorter than this constructor cannot observe a half-built reader.
+	go itr.watch()
 	return itr
 }
 
-// watch closes the stream when its timer fires, recording which deadline was
-// breached so Read can report the right sentinel. Close is once-guarded, so
-// whichever timer fires first wins and the other watcher returns via done.
-func (itr *IdleTimeoutReader) watch(c <-chan time.Time, flag *atomic.Bool, logFire func()) {
+// watch is the reader's only goroutine. It closes the stream when a deadline
+// fires, recording which one so Read can report the right sentinel, and
+// otherwise exits when release closes done.
+func (itr *IdleTimeoutReader) watch() {
 	select {
-	case <-c:
-		flag.Store(true)
-		logFire()
-		_ = itr.Close()
+	case <-itr.timer.C:
+		itr.fired.Store(true)
+		logging.Warn("[IdleTimeoutReader] Stream idle timeout reached, closing connection",
+			"timeout", itr.timeout)
+	case <-itr.contentTimer.C:
+		itr.contentFired.Store(true)
+		logging.Warn("[IdleTimeoutReader] Stream content stall timeout reached, closing connection",
+			"timeout", itr.contentStallTimeout,
+			"detail", "connection stayed alive on keepalives but the provider sent no content")
 	case <-itr.done:
+		return
 	}
+	_ = itr.Close()
 }
 
 func (itr *IdleTimeoutReader) Read(p []byte) (int, error) {
 	n, err := itr.r.Read(p)
-	if n > 0 {
-		// Any byte proves the connection is alive.
-		itr.timer.Reset(itr.timeout)
-		// Only real content proves the provider is working. sawContent must
-		// see EVERY chunk — it carries partial-line and SSE frame state
-		// between calls.
-		if itr.progress.sawContent(p[:n]) {
-			itr.contentTimer.Reset(itr.contentStallTimeout)
-		}
-	}
 	if err != nil {
+		// The stream is over, whether or not anyone ever calls Close. Release
+		// the watcher now: waiting for Close is exactly how every Anthropic
+		// stream leaked (see the type comment).
+		itr.release()
+
 		// Report the real cause. Without this the caller sees whatever the
 		// transport says about a body we closed underneath it ("read on closed
 		// response body", "use of closed network connection"), which is neither
 		// diagnosable in a log nor reliably classified as transient.
 		//
-		// Content-stall is checked first: when it fires, the byte-idle timer
-		// is usually moments from firing too (the close stops both reads), and
-		// the stall is the more specific, more actionable diagnosis.
+		// Content-stall is checked first: it is the more specific, more
+		// actionable diagnosis of the two.
 		if itr.contentFired.Load() {
 			return n, ErrStreamContentStalled
 		}
 		if itr.fired.Load() {
 			return n, ErrStreamIdleTimeout
 		}
+		return n, err
+	}
+	if n > 0 {
+		// Any byte proves the connection is alive.
+		itr.timer.Reset(itr.timeout)
+		// Only real content proves the provider is working. sawContent must
+		// see EVERY chunk — it carries partial-line and SSE frame state
+		// between calls. (A chunk delivered alongside a terminal error is the
+		// last one, so skipping it above loses nothing.)
+		if itr.progress.sawContent(p[:n]) {
+			itr.contentTimer.Reset(itr.contentStallTimeout)
+		}
+	}
+	return n, nil
+}
+
+// release stops both deadlines and ends the watcher. It does not close the
+// body: after a terminal Read the transport has already finished with it, and
+// closing is still the owner's job.
+func (itr *IdleTimeoutReader) release() {
+	itr.releaseOnce.Do(func() {
 		itr.timer.Stop()
 		itr.contentTimer.Stop()
-	}
-	return n, err
+		close(itr.done)
+	})
 }
 
 func (itr *IdleTimeoutReader) Close() error {
-	itr.once.Do(func() {
-		itr.timer.Stop()
-		itr.contentTimer.Stop()
-		// Release whichever watcher did not fire.
-		close(itr.done)
-	})
+	itr.release()
 	return itr.r.Close()
 }
 
