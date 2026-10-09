@@ -130,3 +130,60 @@ func TestRecreate_MovesAParkedCheckoutBack(t *testing.T) {
 		t.Errorf("RestoredFromQuarantine = %v", resp.RestoredFromQuarantine)
 	}
 }
+
+// A checkout whose directory vanished without git being told — deleted by a
+// user, a GC, a crash — is still registered, and reliant LOCKS its checkouts,
+// so `git worktree prune` keeps the registration too. `git worktree add` then
+// refuses the path ("missing but locked worktree") and the branch ("already
+// checked out"), so recreate could never rebuild it. The stale registration of
+// a path that is gone is dropped first.
+func TestRecreate_RebuildsACheckoutDeletedOutFromUnderGit(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	base := t.TempDir()
+	repo := filepath.Join(base, "repo")
+	newRepo(t, repo)
+	ws := filepath.Join(base, "ws")
+	rcGit(t, repo, "worktree", "add", "-q", "-b", "feat/gone", ws, "main")
+	if err := worktreereclaim.LockCheckout(context.Background(), ws, "id3"); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.RemoveAll(ws); err != nil {
+		t.Fatal(err)
+	}
+
+	resp := recreate(t, worktreeRecreateRequest{
+		WorktreePath: ws, Branch: "feat/gone", WorktreeID: "id3",
+		Repos: []worktreeRecreateRepo{{RepoPath: repo, Rel: ""}},
+	})
+	if !resp.Success {
+		t.Fatalf("recreate failed: %+v", resp)
+	}
+	if got := strings.TrimSpace(rcGit(t, ws, "rev-parse", "--abbrev-ref", "HEAD")); got != "feat/gone" {
+		t.Errorf("recreated checkout is on %q, want feat/gone", got)
+	}
+}
+
+// A branch that exists only on the remote (deleted locally, or never fetched
+// into a local branch) is still recoverable: git creates the local branch
+// tracking it.
+func TestRecreate_UsesARemoteOnlyBranch(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	base := t.TempDir()
+	origin := filepath.Join(base, "origin")
+	newRepo(t, origin)
+	rcGit(t, origin, "branch", "feat/pushed")
+	repo := filepath.Join(base, "clone")
+	rcGit(t, base, "clone", "-q", origin, repo)
+
+	ws := filepath.Join(base, "ws")
+	resp := recreate(t, worktreeRecreateRequest{
+		WorktreePath: ws, Branch: "feat/pushed",
+		Repos: []worktreeRecreateRepo{{RepoPath: repo, Rel: ""}},
+	})
+	if !resp.Success {
+		t.Fatalf("recreate failed: %+v", resp)
+	}
+	if got := strings.TrimSpace(rcGit(t, ws, "rev-parse", "--abbrev-ref", "HEAD")); got != "feat/pushed" {
+		t.Errorf("recreated checkout is on %q, want feat/pushed", got)
+	}
+}

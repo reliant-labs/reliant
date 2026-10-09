@@ -24,6 +24,7 @@ import {
 import { formatDistanceToNow } from "date-fns";
 import { useChat, useDeleteChat, useRenameChat } from "../../hooks/chat-queries";
 import { NoMachinePill } from "./NoMachine";
+import { WorkspaceRecoveryMenuItems } from "./WorkspaceRecoveryMenuItems";
 import { useMessages } from "../../hooks/message-queries";
 import { ContextUsageIndicator } from "./ContextUsageIndicator";
 import { Tooltip } from "../ui/Tooltip";
@@ -131,6 +132,11 @@ export function ChatHeader({
       worktree,
     };
   }, [chat?.worktreeId, propWorktreeId, worktrees]);
+
+  const mainWorktree = useMemo(
+    () => (worktree ? worktrees.find((w) => w.is_main && w.project_id === worktree.project_id && !w.deleted_at) : undefined),
+    [worktree, worktrees],
+  );
 
   // Format time ago
   const timeAgo = useMemo(() => {
@@ -413,6 +419,15 @@ export function ChatHeader({
                           <Terminal className="h-4 w-4" />
                           Open Terminal
                         </button>
+                      )}
+
+                      {worktree && (
+                        <WorkspaceRecoveryMenuItems
+                          chatId={chatId}
+                          worktree={worktree}
+                          mainWorktree={mainWorktree}
+                          onSelect={() => setIsMenuOpen(false)}
+                        />
                       )}
                       
                       <button
