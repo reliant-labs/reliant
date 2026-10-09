@@ -16,6 +16,7 @@ func init() {
 	FieldDescriptions["call_llm.system_prompt"] = "Optional instructions for how the model should behave on this call"
 	FieldDescriptions["call_llm.temperature"] = "How varied replies are: 0 is the most repeatable, higher is more creative (0 to 2)"
 	FieldDescriptions["call_llm.thinking_level"] = "Extended thinking level for complex reasoning"
+	FieldDescriptions["compact.force"] = "Compact even when it would remove little of the context (a compaction the user asked for)"
 	FieldDescriptions["compact.model"] = "Model used to summarize the conversation (defaults to the built-in summarization tier)"
 	FieldDescriptions["create_worktree.base_branch"] = "The branch to start from. Empty uses the repository's default branch"
 	FieldDescriptions["create_worktree.copy_files"] = "Exact paths from the project root to copy into the new worktree, such as untracked config"

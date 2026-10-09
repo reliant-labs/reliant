@@ -17,6 +17,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	attachutil "github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
 )
@@ -122,9 +123,13 @@ func buildMessage(ctx context.Context, dbMsg *db.Message, blocks []*db.MessageCo
 		Parts:           parts,
 	}
 
-	// Copy token count for context estimation
+	// Copy token count for context estimation, and the model it was counted
+	// for: a count is only meaningful against that model's window.
 	if dbMsg.TokenCount != nil {
 		msg.TokenCount = int64(*dbMsg.TokenCount)
+	}
+	if dbMsg.Model != nil {
+		msg.Model = models.ModelID(*dbMsg.Model)
 	}
 
 	return msg

@@ -191,6 +191,7 @@ Compact conversation context to reduce token usage
 | Field | Type | Required | Default | Description |
 |-------|------|----------|---------|-------------|
 | `model` | model | No | - | Model used to summarize the conversation (defaults to the built-in summarization tier) |
+| `force` | boolean | No | - | Compact even when it would remove little of the context (a compaction the user asked for) |
 
 ### Outputs
 
@@ -201,6 +202,7 @@ Compact conversation context to reduce token usage
 | `message.role` | string |  |
 | `message.text` | string |  |
 | `message.phase` | string |  |
+| `skipped_reason` | string | - |
 
 ---
 

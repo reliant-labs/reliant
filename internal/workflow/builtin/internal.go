@@ -25,6 +25,9 @@ nodes:
   - id: compact
     type: compact
     timeout: "10m"
+    args:
+      # The user asked for this compaction; honor it even when it frees little.
+      force: true
 edges: []
 `),
 }

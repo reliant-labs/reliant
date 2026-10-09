@@ -217,13 +217,27 @@ export function ModelSettingsPage({
   if (currentCompaction !== undefined)
     currentOverrides.compaction_threshold = currentCompaction;
 
-  // Handler: change base selection
+  // Handler: change base selection.
+  //
+  // Overrides that mean the same thing on any model (temperature, a thinking
+  // level the new model supports) carry over. compaction_threshold does not:
+  // it is an absolute token count whose meaning depends on the window of the
+  // model it was set for — the field's own placeholder is that model's
+  // default — so it belongs to the selection, and switching drops it. Keeping
+  // it "when it still fits" is not checkable here: a tag re-resolves on the
+  // server, and the catalog's contextWindow is the model-wide window, not the
+  // smaller one a provider like codex enforces. Prod incident 2026-10-09: a
+  // 1M threshold set on one model rode a switch onto a 272k one, compaction
+  // never fired, and the trim backstop shredded the conversation instead.
   const handleSelectTag = (tag: string) => {
     const resolvedModel = tagResolvedModels[tag];
     const supportedLevels = resolvedModel?.supportedThinkingLevels ?? [];
     const newOverrides = { ...currentOverrides };
     if (newOverrides.thinking_level && !supportedLevels.includes(newOverrides.thinking_level as string)) {
       delete newOverrides.thinking_level;
+    }
+    if (selectedModelId || selectedTag !== tag) {
+      delete newOverrides.compaction_threshold;
     }
     onChange(buildModelValue({ tags: [tag] }, newOverrides));
   };
@@ -235,6 +249,12 @@ export function ModelSettingsPage({
     const newOverrides = { ...currentOverrides };
     if (newOverrides.thinking_level && !newLevels.includes(newOverrides.thinking_level as string)) {
       delete newOverrides.thinking_level;
+    }
+    const sameModel =
+      (selectedModelId === modelId || modelId.split("@")[0] === selectedModelId) &&
+      (parsed.providers ?? []).join(",") === (daemonId ? localProviderRef(daemonId) : "");
+    if (!sameModel) {
+      delete newOverrides.compaction_threshold;
     }
     onChange(
       buildModelValue(
