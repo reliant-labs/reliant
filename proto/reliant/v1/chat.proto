@@ -616,6 +616,9 @@ message SendAgentMessageRequest {
   string thread_id = 2;   // The target thread to message. Must belong to chat_id.
   string message = 3;
   repeated string attachments = 4;  // Attachment IDs
+  // Client-chosen UUID for the queued mailbox row. Lets the client reconcile
+  // its optimistic queue entry with the server row without matching message text.
+  optional string client_message_id = 5;
 }
 
 // SendAgentMessageResponse confirms the message was queued.

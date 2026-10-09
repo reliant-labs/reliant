@@ -74,7 +74,7 @@ import { chatGrpc, type QueuedAgentMessageView } from "../api/chat-grpc";
 // is idempotent — it returns the existing singleton when there is one and
 // never replaces it — so the app still gets the bus Providers built.
 import { initEventBus } from "../lib/events";
-import { isPendingSend } from "../lib/pendingSends";
+import { isPendingSend, withQueuedSendsInFlight } from "../lib/pendingSends";
 import { subscribeToRefetch } from "../store/refetchStore";
 
 /**
@@ -153,11 +153,16 @@ export function useQueuedAgentMessages(
         }
       }
 
-      // A row that is one of this client's in-flight sends is already on
-      // screen as that send's optimistic transcript entry; it joins the strip
-      // only when SendMessage answers that it was queued (below).
-      return response.messages.filter(
-        (m) => !tombstones.current.has(m.id) && !isPendingSend(m.id),
+      // A row that is one of this client's in-flight SendMessage calls is
+      // already on screen as an optimistic transcript entry. SendAgentMessage
+      // uses the same client-chosen ID for its optimistic queue row and server
+      // row, so an in-flight mailbox read can reconcile exactly by ID.
+      return withQueuedSendsInFlight(
+        response.messages.filter(
+          (m) => !tombstones.current.has(m.id) && !isPendingSend(m.id),
+        ),
+        chatId!,
+        threadId!,
       );
     },
     enabled,

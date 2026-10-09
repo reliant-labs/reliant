@@ -123,6 +123,29 @@ func TestSendAgentMessage_QueuesForRunningThread(t *testing.T) {
 	assert.Equal(t, "check the logs before continuing", queued[0].Body)
 }
 
+func TestSendAgentMessage_UsesClientMessageID(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+
+	ctx, fx := setupSendAgentMessageFixture(t, repo, "test-user")
+	clientMessageID := uuid.NewString()
+	service := &ChatService{database: repo}
+
+	resp, err := service.SendAgentMessage(ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId:          fx.chatID,
+		ThreadId:        fx.childThreadID,
+		Message:         "check the logs before continuing",
+		ClientMessageId: &clientMessageID,
+	}))
+	require.NoError(t, err)
+	require.True(t, resp.Msg.Success)
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.childThreadID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	assert.Equal(t, clientMessageID, queued[0].ID)
+}
+
 // TestSendAgentMessage_RingsMailboxDoorbell pins the deadlock fix.
 //
 // Queuing a row is not enough on its own. Delivery happens only in CallLLM,

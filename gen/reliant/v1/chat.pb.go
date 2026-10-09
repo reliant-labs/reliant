@@ -2826,13 +2826,16 @@ func (x *SendMessageResponse) GetQueued() bool {
 // state -- it exists specifically so a user can steer a running sub-agent
 // without pausing the chat.
 type SendAgentMessageRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ChatId        string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
-	ThreadId      string                 `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"` // The target thread to message. Must belong to chat_id.
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
-	Attachments   []string               `protobuf:"bytes,4,rep,name=attachments,proto3" json:"attachments,omitempty"` // Attachment IDs
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	ChatId      string                 `protobuf:"bytes,1,opt,name=chat_id,json=chatId,proto3" json:"chat_id,omitempty"`
+	ThreadId    string                 `protobuf:"bytes,2,opt,name=thread_id,json=threadId,proto3" json:"thread_id,omitempty"` // The target thread to message. Must belong to chat_id.
+	Message     string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
+	Attachments []string               `protobuf:"bytes,4,rep,name=attachments,proto3" json:"attachments,omitempty"` // Attachment IDs
+	// Client-chosen UUID for the queued mailbox row. Lets the client reconcile
+	// its optimistic queue entry with the server row without matching message text.
+	ClientMessageId *string `protobuf:"bytes,5,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *SendAgentMessageRequest) Reset() {
@@ -2891,6 +2894,13 @@ func (x *SendAgentMessageRequest) GetAttachments() []string {
 		return x.Attachments
 	}
 	return nil
+}
+
+func (x *SendAgentMessageRequest) GetClientMessageId() string {
+	if x != nil && x.ClientMessageId != nil {
+		return *x.ClientMessageId
+	}
+	return ""
 }
 
 // SendAgentMessageResponse confirms the message was queued.
@@ -6254,12 +6264,14 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"message_id\x18\x06 \x01(\tR\tmessageId\x12\x16\n" +
 	"\x06queued\x18\a \x01(\bR\x06queuedB\x12\n" +
-	"\x10_workflow_status\"\x8b\x01\n" +
+	"\x10_workflow_status\"\xd2\x01\n" +
 	"\x17SendAgentMessageRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
 	"\tthread_id\x18\x02 \x01(\tR\bthreadId\x12\x18\n" +
 	"\amessage\x18\x03 \x01(\tR\amessage\x12 \n" +
-	"\vattachments\x18\x04 \x03(\tR\vattachments\"N\n" +
+	"\vattachments\x18\x04 \x03(\tR\vattachments\x12/\n" +
+	"\x11client_message_id\x18\x05 \x01(\tH\x00R\x0fclientMessageId\x88\x01\x01B\x14\n" +
+	"\x12_client_message_id\"N\n" +
 	"\x18SendAgentMessageResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
 	"\amessage\x18\x02 \x01(\tR\amessage\"V\n" +
@@ -6894,6 +6906,7 @@ func file_reliant_v1_chat_proto_init() {
 	file_reliant_v1_chat_proto_msgTypes[21].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[25].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[26].OneofWrappers = []any{}
+	file_reliant_v1_chat_proto_msgTypes[27].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[36].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[52].OneofWrappers = []any{}
 	file_reliant_v1_chat_proto_msgTypes[53].OneofWrappers = []any{}
