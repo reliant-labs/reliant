@@ -841,7 +841,6 @@ var generatedToolParams = map[string]ToolParams{
 			"copy_files":  {},
 			"force":       {},
 			"name":        {},
-			"session_id":  {},
 		},
 		Unbindable: map[string]string{},
 	},

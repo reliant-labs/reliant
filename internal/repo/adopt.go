@@ -19,8 +19,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
+
+// DaemonCommander is the one daemon capability adoption needs: send a command
+// to the user's default daemon and return its raw response.
+type DaemonCommander interface {
+	SendDaemonCommand(ctx context.Context, userID, commandType string, payload []byte, timeoutMs int32) ([]byte, error)
+}
 
 // AdoptFromDaemon reconciles the repos registry with the filesystem. Registry
 // rows are written by the clone/init/add flows, so a repo created any other
@@ -33,7 +38,7 @@ import (
 //
 // Best-effort by design: on daemon or discovery failure it returns nil so the
 // caller keeps its own precondition semantics.
-func AdoptFromDaemon(ctx context.Context, database db.Repository, router toolexec.DaemonRouter, project *db.Project) []*core.Repo {
+func AdoptFromDaemon(ctx context.Context, database db.Repository, router DaemonCommander, project *db.Project) []*core.Repo {
 	payload, err := json.Marshal(map[string]string{"path": project.Path})
 	if err != nil {
 		return nil

@@ -4,6 +4,7 @@ package runtime
 import (
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
@@ -62,6 +63,7 @@ type spawnToolInput struct {
 	preset   string
 	agentID  string
 	title    string
+	worktree string
 	rawInput string
 }
 
@@ -95,6 +97,8 @@ func parseSpawnToolInput(input string) (spawnToolInput, error) {
 	parsed.preset, _ = toolInput["preset"].(string)
 	parsed.agentID, _ = toolInput["agent_id"].(string)
 	parsed.title, _ = toolInput["title"].(string)
+	worktree, _ := toolInput["worktree"].(string)
+	parsed.worktree = strings.TrimSpace(worktree)
 
 	// Prompt is always required, including for resumptions.
 	if parsed.prompt == "" {

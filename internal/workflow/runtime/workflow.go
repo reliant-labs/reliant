@@ -117,6 +117,9 @@ type SpawnHandoff struct {
 	ParentWorkflowID string `json:"parent_workflow_id"`
 	Preset           string `json:"preset,omitempty"`
 	Title            string `json:"title,omitempty"`
+	// ProjectPath is the child's working directory when it differs from the
+	// parent's (a thread-bound worktree); a relaunch restores it.
+	ProjectPath string `json:"project_path,omitempty"`
 	// ChildInputs are the spawn node's args (buildSpawnChildInputs output).
 	// Empty for a record derived from durable state; the successor rebuilds
 	// them from its own inputs.
@@ -2914,6 +2917,7 @@ type spawnChildWorkflowConfig struct {
 	toolCallID      string
 	presetName      string // Preset name from spawn tool call
 	title           string // Optional human-readable title for the thread
+	worktree        string // Optional worktree name/id the child works in instead of the chat's
 	// rawInput is the unwrapped spawn tool input JSON, carried so the durable
 	// tool_calls row records what the LLM actually asked for.
 	rawInput string
@@ -2941,6 +2945,7 @@ func parseSpawnToolCall(ctx workflow.Context, spawnToolCall *reliantv1.ToolCallM
 		toolCallID: toolCallID,
 		presetName: presetName,
 		title:      parsed.title, // May be empty - will default to preset name
+		worktree:   parsed.worktree,
 		rawInput:   parsed.rawInput,
 	}
 
@@ -3183,6 +3188,7 @@ func prepareSpawnInline(
 		}
 	}
 
+	var threadWorktreePath string
 	if err := initChildWorkflow(ChildWorkflowInitOpts{
 		Ctx:              ctx,
 		ChatID:           chatID,
@@ -3195,9 +3201,19 @@ func prepareSpawnInline(
 		ForkFromThread:   forkedFrom,
 		ParentThread:     parentThread,
 		Origin:           model.ThreadOriginSpawn,
+		Worktree:         config.worktree,
+		WorktreePath:     &threadWorktreePath,
 		InjectMessage:    injectMsg,
 		Logger:           logger,
 	}); err != nil {
+		var refusal *ChildInitRefusal
+		if errors.As(err, &refusal) {
+			return &spawnPrepResult{earlyResult: &spawnInlineResult{
+				ToolCallID: config.toolCallID,
+				Content:    refusal.Reason,
+				IsError:    true,
+			}}
+		}
 		logger.Error("[SpawnInline] Failed to initialize child workflow",
 			"toolCallID", config.toolCallID,
 			"childWorkflowID", config.childWorkflowID,
@@ -3226,6 +3242,14 @@ func prepareSpawnInline(
 	// Resolve parent permission for the child to inherit
 	parentPermission := resolveParentPermission(workflowInputs)
 
+	// A thread with its own worktree works THERE: its working directory is
+	// that checkout, not the parent's, so workflow.path and preset loading
+	// agree with the tools.
+	childProjectPath := projectPath
+	if threadWorktreePath != "" {
+		childProjectPath = threadWorktreePath
+	}
+
 	childExecContext := &ExecutionContext{
 		WorkflowID:       config.childWorkflowID,
 		ChatID:           chatID,
@@ -3235,7 +3259,7 @@ func prepareSpawnInline(
 		ThreadTitle:      threadTitle,
 		ForkedFrom:       forkedFrom,
 		ParentThread:     parentThread,
-		ProjectPath:      projectPath, // Always inherit from parent
+		ProjectPath:      childProjectPath, // Inherits the parent's unless the thread has its own worktree
 		SpawnDepth:       parentSpawnDepth + 1,
 		ParentPermission: parentPermission,
 		Parent: &ParentContext{
@@ -3680,6 +3704,7 @@ func spawnHandoffFor(config *spawnChildWorkflowConfig, prep *spawnPrepResult, pa
 	if prep != nil && prep.childExecContext != nil {
 		h.SpawnDepth = prep.childExecContext.SpawnDepth
 		h.ParentPermission = prep.childExecContext.ParentPermission
+		h.ProjectPath = prep.childExecContext.ProjectPath
 	}
 	if prep != nil && prep.spawnNode != nil {
 		h.ChildInputs = map[string]interface{}{}
@@ -3796,6 +3821,10 @@ func prepareSpawnRelaunch(
 	if parentPermission == "" {
 		parentPermission = resolveParentPermission(workflowInputs)
 	}
+	childProjectPath := projectPath
+	if handoff.ProjectPath != "" {
+		childProjectPath = handoff.ProjectPath
+	}
 	childExecContext := &ExecutionContext{
 		WorkflowID:       config.childWorkflowID,
 		ChatID:           chatID,
@@ -3804,7 +3833,7 @@ func prepareSpawnRelaunch(
 		ThreadMode:       model.ThreadModeInherit,
 		ThreadTitle:      threadTitle,
 		ParentThread:     handoff.ParentThread,
-		ProjectPath:      projectPath,
+		ProjectPath:      childProjectPath,
 		SpawnDepth:       spawnDepth,
 		ParentPermission: parentPermission,
 		Parent: &ParentContext{

@@ -14,7 +14,7 @@ func (s *Service) CreateThread(ctx context.Context, opts CreateThreadOpts) (*db.
 	if origin == "" {
 		origin = db.ThreadOriginMain
 	}
-	return s.createThreadInternal(ctx, opts.ChatID, opts.ID, opts.Title, nil, nil, origin, opts.OriginNodeID)
+	return s.createThreadInternal(ctx, opts.ChatID, opts.ID, opts.Title, nil, nil, origin, opts.OriginNodeID, nil)
 }
 
 // createThreadInternal creates a thread with an initial context window.
@@ -23,7 +23,7 @@ func (s *Service) CreateThread(ctx context.Context, opts CreateThreadOpts) (*db.
 // origin records HOW the thread was created and is required — it is the field
 // readers use to tell a spawn from a graph-node thread, and guessing it after
 // the fact is exactly the ambiguity this column exists to remove.
-func (s *Service) createThreadInternal(ctx context.Context, chatID, id string, title *string, parentThreadID *string, workflowID *string, origin db.ThreadOrigin, originNodeID *string) (*db.Thread, *db.ContextWindow, error) {
+func (s *Service) createThreadInternal(ctx context.Context, chatID, id string, title *string, parentThreadID *string, workflowID *string, origin db.ThreadOrigin, originNodeID *string, worktreeID *string) (*db.Thread, *db.ContextWindow, error) {
 	if chatID == "" {
 		return nil, nil, fmt.Errorf("chat ID is required")
 	}
@@ -43,6 +43,7 @@ func (s *Service) createThreadInternal(ctx context.Context, chatID, id string, t
 		Origin:         origin,
 		OriginNodeID:   originNodeID,
 		Status:         db.ThreadStatusRunning,
+		WorktreeID:     worktreeID,
 	}
 
 	createdThread, err := s.repo.CreateThread(ctx, thread)

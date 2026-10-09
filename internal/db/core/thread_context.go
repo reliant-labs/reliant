@@ -124,6 +124,11 @@ type Thread struct {
 	// rather than by a synthetic "thread:<node>" workflow record.
 	Status      int32      `json:"status"`
 	CompletedAt *time.Time `json:"completed_at,omitempty"`
+
+	// WorktreeID is the workspace this thread's tools run in when it is not
+	// the chat's: set on a sub-agent spawned with a `worktree`. Nil means the
+	// chat's own worktree (Chat.WorktreeID).
+	WorktreeID *string `json:"worktree_id,omitempty"`
 }
 
 // ContextWindow represents an atomic unit for LLM context.

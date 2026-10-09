@@ -2,8 +2,8 @@
 INSERT INTO threads (
     id, chat_id, parent_thread_id, fork_at_message_id,
     workflow_id, title, created_at,
-    origin, origin_node_id, status
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+    origin, origin_node_id, status, worktree_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 RETURNING *;
 
 -- name: GetThread :one

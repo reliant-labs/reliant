@@ -60,6 +60,20 @@ type machineWake struct {
 	owners machineOwners
 }
 
+type noWakeKey struct{}
+
+// withoutWake marks ctx so no request made under it wakes a machine: a
+// background poll must not turn a suspended machine on (and start billing it)
+// just because a sidebar hint asked a question.
+func withoutWake(ctx context.Context) context.Context {
+	return context.WithValue(ctx, noWakeKey{}, true)
+}
+
+func wakeSuppressed(ctx context.Context) bool {
+	v, _ := ctx.Value(noWakeKey{}).(bool)
+	return v
+}
+
 // wakeTarget is the machine a request needs.
 type wakeTarget struct {
 	// daemonID is the machine the request was sent to, or "" when default
@@ -94,7 +108,7 @@ func (w machineWake) afterFailure(ctx context.Context, userID string, target wak
 //   - a named machine that is not this user's, by the record here;
 //   - a machine that was not asleep (still provisioning, or already waking).
 func (w machineWake) wake(ctx context.Context, userID string, target wakeTarget) (string, bool) {
-	if target.noMachine || nomachine.Is(ctx) {
+	if target.noMachine || nomachine.Is(ctx) || wakeSuppressed(ctx) {
 		return "", false
 	}
 	resumer, ok := w.router.(machineResumer)

@@ -2043,6 +2043,20 @@ func (r *Repo) GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key s
 	return r.worktrees.GetWorktreeByIdempotencyKey(ctx, projectID, key)
 }
 
+func (r *Repo) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error) {
+	if projectID == "" || name == "" {
+		return nil, nil
+	}
+	return r.worktrees.GetLiveWorktreeByName(ctx, projectID, name)
+}
+
+func (r *Repo) ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*Worktree, error) {
+	if projectID == "" || branch == "" {
+		return nil, nil
+	}
+	return r.worktrees.ListWorktreesByBranch(ctx, projectID, branch)
+}
+
 func (r *Repo) ListWorktrees(ctx context.Context, filters WorktreeFilters) ([]*Worktree, error) {
 	return r.worktrees.ListWorktrees(ctx, filters)
 }

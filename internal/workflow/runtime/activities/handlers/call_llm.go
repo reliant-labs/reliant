@@ -976,10 +976,14 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// daemon will RUN the command is the one whose shell the description must
 	// describe.
 	var worktreeDaemonID string
-	if chat.WorktreeID != nil {
-		worktree, err := a.repo.GetWorktree(ctx, *chat.WorktreeID)
+	effectiveWorktree, worktreeThreadBound, err := effectiveWorktreeID(ctx, a.repo, chat, thread)
+	if err != nil {
+		return nil, err
+	}
+	if effectiveWorktree != nil {
+		worktree, err := a.repo.GetWorktree(ctx, *effectiveWorktree)
 		if err != nil {
-			return nil, fmt.Errorf("failed to load worktree %s for chat %s: %w", *chat.WorktreeID, chat.ID, err)
+			return nil, fmt.Errorf("failed to load worktree %s for chat %s thread %s: %w", *effectiveWorktree, chat.ID, thread, err)
 		}
 		worktreePath = worktree.Path
 		if worktree.DaemonID != nil {
@@ -1157,7 +1161,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		// MCP discovery runs on the run's daemon, resolved the way
 		// ExecuteTools resolves it: node/workflow selector over the worktree's
 		// owning daemon over default resolution.
-		toolCtx := toolexec.WithDaemonSelector(ctx, toolDaemonSelector(worktreeDaemonID, rtx.DaemonSelector))
+		toolCtx := toolexec.WithDaemonSelector(ctx, toolDaemonSelector(worktreeDaemonID, threadBoundExplicit(worktreeThreadBound, worktreeDaemonID, rtx.DaemonSelector)))
 		toolsResult := a.getAvailableTools(toolCtx, chat, workingDir, worktreeDaemonID, projectCfg, toolRequest{
 			Preloaded:        toolFilter,
 			Loadable:         loadable,
@@ -1249,6 +1253,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		projectCfg,
 		repos,
 		celStringValuePtr(args.GetSystemPrompt()),
+		caps.CanLoad(tools.ToolWorktree),
 	)
 	if chat.NoMachine {
 		systemPrompts = append(systemPrompts, noMachineNotes(caps, projectGitHubRepos(project, repos))...)
@@ -2338,7 +2343,8 @@ Parameters:
 - preset: REQUIRED - Name of the preset to use for the spawned workflow
 - prompt: REQUIRED - Detailed task description for the spawned workflow
 - title: Optional - Human-readable title for the spawned thread (defaults to preset name)
-- agent_id: Optional - Agent ID to resume existing conversation`, presetList)
+- agent_id: Optional - Agent ID to resume existing conversation
+- worktree: Optional - name of a worktree created with the worktree tool; the sub-agent works in that workspace (its own branch) instead of yours`, presetList)
 
 	return tools.NewSchemaOnlyTool(
 		"spawn",
@@ -2363,6 +2369,10 @@ Parameters:
 					"type":        "string",
 					"description": "Optional - Agent ID to resume existing conversation",
 				},
+				"worktree": map[string]interface{}{
+					"type":        "string",
+					"description": "Optional - name of a worktree created with the worktree tool; the sub-agent works in that workspace (its own branch) instead of yours",
+				},
 			},
 			"required": []string{"preset", "prompt"},
 		},
@@ -2378,6 +2388,7 @@ func (a *CallLLMActivity) getSystemPrompts(
 	projectCfg *cfgpkg.Config,
 	repos []*core.Repo,
 	systemPrompt *string,
+	worktreeReachable bool,
 ) []string {
 	// Add project context
 	workingDir := projectPath
@@ -2386,6 +2397,16 @@ func (a *CallLLMActivity) getSystemPrompts(
 	}
 	var bb strings.Builder
 	bb.WriteString("You are Reliant, a world class Software Engineer with advanced reasoning and capabilities. Note: it is very likely you are working in parallel with other agents, potentially in the same directory, or across multiple git worktrees. Please be careful of other's work. Be extremely careful with destructive commands that can discard another agent's uncommitted work, such as git checkout, git stash, and git reset.")
+	// Agents left to themselves run `git worktree add ../<repo>-<feature>`,
+	// which litters the user's project folder with checkouts the UI never
+	// sees (the shell refuses it; see shell_worktree_guard.go). Saying where
+	// worktrees come from up front saves the refused turn.
+	// Only said when the worktree tool is reachable this step (preloaded or
+	// grantable by load_tool); otherwise it points at a tool the agent
+	// cannot have.
+	if worktreeReachable {
+		bb.WriteString(" To work on a separate branch, create a worktree with the worktree tool — never `git worktree add` — and hand it to a sub-agent with spawn(worktree=<name>).")
+	}
 
 	// The working directory is stated as an ABSOLUTE PATH and as the literal
 	// root every relative path resolves against, because a thread that does
@@ -3613,4 +3634,13 @@ func toolDaemonSelector(worktreeDaemonID string, explicit *activitytypes.DaemonS
 		selector = &toolexec.DaemonSelector{ID: explicit.ID, Name: explicit.Name, Type: explicit.Type, Labels: explicit.Labels}
 	}
 	return selector
+}
+
+// threadBoundExplicit drops an inherited explicit selector when the thread's
+// own worktree has an owner: that checkout exists on the owner alone.
+func threadBoundExplicit(threadBound bool, ownerDaemonID string, explicit *activitytypes.DaemonSelector) *activitytypes.DaemonSelector {
+	if threadBound && ownerDaemonID != "" {
+		return nil
+	}
+	return explicit
 }

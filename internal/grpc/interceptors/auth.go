@@ -398,6 +398,7 @@ func NewTimeoutInterceptor() *TimeoutInterceptor {
 			"/reliant.v1.WorktreeService/UnarchiveWorktree":        worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/ImportWorktree":           worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/DiscoverWorktrees":        worktreeOperationTimeout,
+			"/reliant.v1.WorktreeService/PruneWorktrees":           worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/RecreateWorktree":         worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/GetWorktreeChanges":       worktreeOperationTimeout,
 			"/reliant.v1.WorktreeService/GetWorktreeGitStatus":     worktreeOperationTimeout,

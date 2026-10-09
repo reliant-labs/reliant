@@ -3,6 +3,7 @@ import {
   worktreeGrpc,
   type Worktree as GrpcWorktree,
   type DiscoveredWorktree as GrpcDiscoveredWorktree,
+  type StaleWorktree as GrpcStaleWorktree,
   type CleanupMetadata,
 } from '../api/worktree-grpc';
 import { WorktreeStatus } from '../gen/reliant/v1/worktree_pb';
@@ -58,14 +59,8 @@ export type CreateWorktreeInput = Partial<Worktree> & {
   base_branches?: Record<string, string>;
 };
 
-export interface DiscoveredWorktree {
-  path: string;
-  name: string;
-  branch: string;
-  is_imported: boolean;
-  is_prunable: boolean;
-  imported_id?: string;
-}
+export type DiscoveredWorktree = GrpcDiscoveredWorktree;
+export type StaleWorktree = GrpcStaleWorktree;
 
 // Convert gRPC worktree to store worktree format
 function grpcToStore(grpc: GrpcWorktree): Worktree {
@@ -87,18 +82,6 @@ function grpcToStore(grpc: GrpcWorktree): Worktree {
   };
 }
 
-// Convert gRPC discovered worktree to store format
-function grpcDiscoveredToStore(grpc: GrpcDiscoveredWorktree): DiscoveredWorktree {
-  return {
-    path: grpc.path,
-    name: grpc.name,
-    branch: grpc.branch,
-    is_imported: grpc.is_imported,
-    is_prunable: grpc.is_prunable,
-    imported_id: grpc.imported_id,
-  };
-}
-
 // Extract error message from various error types
 function getErrorMessage(error: unknown, defaultMsg: string): string {
   if (error instanceof ConnectError) {
@@ -117,6 +100,8 @@ interface WorktreeStore {
   isLoading: boolean;
   hasLoaded: boolean;
   isDiscovering: boolean;
+  staleWorktrees: StaleWorktree[];
+  workspacesRoot: string;
   deletingId: string | null;
   error: string | null;
   lastLoadIncludedArchived: boolean;
@@ -128,8 +113,15 @@ interface WorktreeStore {
   refreshWorktrees: (projectId?: string, options?: { includeArchived?: boolean }) => Promise<void>;
   selectWorktree: (worktree: Worktree | null, options?: { skipWorkspaceStateSave?: boolean }) => void;
   createWorktree: (data: CreateWorktreeInput) => Promise<Worktree>;
-  importWorktree: (data: { path: string; name?: string; project_id: string }) => Promise<Worktree>;
+  importWorktree: (data: {
+    path: string;
+    name?: string;
+    project_id: string;
+    repo_id: string;
+    confirm_move: boolean;
+  }) => Promise<Worktree>;
   discoverWorktrees: (projectId: string) => Promise<void>;
+  pruneWorktrees: (projectId: string) => Promise<StaleWorktree[]>;
   // ONLY archives (sets deleted_at). Never permanently deletes.
   // Optional cleanup: delete local directory and/or git branch
   archiveWorktree: (id: string, options?: { deleteGitBranch?: boolean }) => Promise<void>;
@@ -336,6 +328,8 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
   isLoading: false,
   hasLoaded: false,
   isDiscovering: false,
+  staleWorktrees: [],
+  workspacesRoot: '',
   deletingId: null,
   error: null,
   lastLoadIncludedArchived: false,
@@ -692,23 +686,37 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
     try {
       const response = await worktreeGrpc.discover(projectId);
       set({
-        discoveredWorktrees: response.discovered.map(grpcDiscoveredToStore),
+        discoveredWorktrees: response.discovered,
+        staleWorktrees: response.stale,
+        workspacesRoot: response.workspacesRoot,
         isDiscovering: false
       });
     } catch (error) {
       set({
         error: getErrorMessage(error, 'Failed to discover workspaces'),
         isDiscovering: false,
-        discoveredWorktrees: []
+        discoveredWorktrees: [],
+        staleWorktrees: [],
       });
     }
   },
 
-  importWorktree: async (data: { path: string; name?: string; project_id: string }) => {
+  pruneWorktrees: async (projectId: string) => {
+    const pruned = await worktreeGrpc.prune(projectId);
+    const gone = new Set(pruned.map((w) => w.path));
+    set((state) => ({
+      staleWorktrees: state.staleWorktrees.filter((w) => !gone.has(w.path)),
+    }));
+    return pruned;
+  },
+
+  importWorktree: async (data) => {
     set({ isLoading: true, error: null });
     try {
       const worktree = await worktreeGrpc.import(data.project_id, data.path, {
         name: data.name,
+        repoId: data.repo_id,
+        confirmMove: data.confirm_move,
       });
 
       const storeWorktree = grpcToStore(worktree);
@@ -717,9 +725,7 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       set(state => ({
         worktrees: [...state.worktrees, storeWorktree],
         currentWorktree: storeWorktree,
-        discoveredWorktrees: state.discoveredWorktrees.map(w =>
-          w.path === data.path ? { ...w, is_imported: true, imported_id: storeWorktree.id } : w
-        ),
+        discoveredWorktrees: state.discoveredWorktrees.filter(w => w.path !== data.path),
         isLoading: false
       }));
 
@@ -846,6 +852,8 @@ export const useWorktreeStore = create<WorktreeStore>((set) => ({
       worktrees: [],
       currentWorktree: null,
       discoveredWorktrees: [],
+      staleWorktrees: [],
+      workspacesRoot: '',
       isLoading: false,
       hasLoaded: false,
       isDiscovering: false,

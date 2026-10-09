@@ -1,49 +1,51 @@
-import type { DiscoveredWorktree } from "../../store/worktreeStore";
+import type { DiscoveredWorktree } from "../../api/worktree-grpc";
 
-export type DiscoverStatusFilter = "unimported" | "imported" | "all";
-export type DiscoverSortField = "name" | "branch" | "path";
-export type DiscoverSortDirection = "asc" | "desc";
-
-export interface DiscoverWorktreeQuery {
-  search: string;
-  statusFilter: DiscoverStatusFilter;
-  sortField: DiscoverSortField;
-  sortDirection: DiscoverSortDirection;
+export interface RepoGroup {
+  repoId: string;
+  repoName: string;
+  items: DiscoveredWorktree[];
 }
 
-export function deriveVisibleWorktrees(
-  worktrees: DiscoveredWorktree[],
-  query: DiscoverWorktreeQuery
-): DiscoveredWorktree[] {
-  const normalizedSearch = query.search.trim().toLowerCase();
-
-  let result = [...worktrees];
-
-  if (query.statusFilter === "unimported") {
-    result = result.filter((w) => !w.is_imported);
-  } else if (query.statusFilter === "imported") {
-    result = result.filter((w) => w.is_imported);
+/** Groups checkouts by repo, preserving first-seen repo order. */
+export function groupByRepo(worktrees: DiscoveredWorktree[]): RepoGroup[] {
+  const groups = new Map<string, RepoGroup>();
+  for (const w of worktrees) {
+    let group = groups.get(w.repo_id);
+    if (!group) {
+      group = { repoId: w.repo_id, repoName: w.repo_name || w.repo_id, items: [] };
+      groups.set(w.repo_id, group);
+    }
+    group.items.push(w);
   }
+  return Array.from(groups.values());
+}
 
-  if (normalizedSearch) {
-    result = result.filter((w) => {
-      const name = w.name.toLowerCase();
-      const branch = w.branch.toLowerCase();
-      const path = w.path.toLowerCase();
-      return (
-        name.includes(normalizedSearch) ||
-        branch.includes(normalizedSearch) ||
-        path.includes(normalizedSearch)
-      );
-    });
+export function adoptConfirmation(
+  entry: DiscoveredWorktree,
+  workspacesRoot: string,
+  name: string
+): string {
+  if (!entry.moves_on_import) {
+    return `Reliant will track ${entry.path} as a workspace. Archiving it later lets Reliant remove the directory, after saving any unpushed work.`;
   }
+  const others = entry.branch
+    ? ` Reliant also creates checkouts of the project's other repos on branch ${entry.branch}.`
+    : " Reliant also creates checkouts of the project's other repos.";
+  return `This moves ${entry.path} to ${workspacesRoot}/${name}-…/${entry.repo_name}. Anything running in that directory — a terminal, an agent, a dev server — will lose its working directory.${others}`;
+}
 
-  const direction = query.sortDirection === "asc" ? 1 : -1;
-  result.sort((a, b) => {
-    const left = (a[query.sortField] || "").toLowerCase();
-    const right = (b[query.sortField] || "").toLowerCase();
-    return left.localeCompare(right) * direction;
-  });
+export function lockedMoveExplanation(entry: DiscoveredWorktree): string {
+  return `Git will not move a locked worktree. Run \`git worktree unlock ${entry.path}\` first, then reopen this dialog.`;
+}
 
-  return result;
+export function isAdoptBlocked(entry: DiscoveredWorktree): boolean {
+  return entry.locked && entry.moves_on_import;
+}
+
+export function shouldShowHint(count: number, dismissedCount: number): boolean {
+  return count > 0 && count > dismissedCount;
+}
+
+export function hintLabel(count: number): string {
+  return `${count} ${count === 1 ? "worktree" : "worktrees"} made outside Reliant`;
 }

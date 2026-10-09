@@ -1090,7 +1090,8 @@ CREATE TABLE public.threads (
     origin_node_id text,
     status integer DEFAULT 2 NOT NULL,
     completed_at timestamp with time zone,
-    fork_at_message_id text
+    fork_at_message_id text,
+    worktree_id text
 );
 
 --
@@ -1989,13 +1990,6 @@ ALTER TABLE ONLY public.worktrees
     ADD CONSTRAINT worktrees_pkey PRIMARY KEY (id);
 
 --
--- Name: worktrees worktrees_project_id_name_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.worktrees
-    ADD CONSTRAINT worktrees_project_id_name_key UNIQUE (project_id, name);
-
---
 -- Name: access_tokens_live_acting_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2602,6 +2596,13 @@ CREATE INDEX idx_workflows_parent_id ON public.workflows USING btree (parent_id)
 CREATE INDEX idx_workflows_state ON public.workflows USING btree (state, stop_reason);
 
 --
+-- Name: worktrees_project_id_name_live_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX worktrees_project_id_name_live_key ON public.worktrees USING btree (project_id, name) WHERE (deleted_at IS NULL);
+
+
+--
 -- Name: idx_worktrees_idempotency_key; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2844,6 +2845,13 @@ ALTER TABLE ONLY public.threads
 
 ALTER TABLE ONLY public.threads
     ADD CONSTRAINT threads_fork_at_message_id_fkey FOREIGN KEY (fork_at_message_id) REFERENCES public.messages(id) ON DELETE RESTRICT;
+
+--
+-- Name: threads threads_worktree_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.threads
+    ADD CONSTRAINT threads_worktree_id_fkey FOREIGN KEY (worktree_id) REFERENCES public.worktrees(id) ON DELETE SET NULL;
 
 --
 -- Name: tool_call_results tool_call_results_message_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -

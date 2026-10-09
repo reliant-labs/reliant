@@ -4,6 +4,8 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -132,7 +134,9 @@ func TestCreateWorktreeReturnsBeforeDaemonWorkFinishes(t *testing.T) {
 	// repo's relative path off what the daemon reported. What matters here is
 	// that the CREATING row's empty path got replaced at all.
 	assert.NotEmpty(t, settled.Path, "the settled row must record a path")
-	assert.Equal(t, "/tmp", settled.Path)
+	// The fixture's repo is the project root (relative path "."), so the
+	// checkout the daemon reported IS the workspace root.
+	assert.Equal(t, filepath.Join(os.TempDir(), "reliant-test-worktree"), settled.Path)
 }
 
 // TestCreateWorktreeSurvivesClientDisconnect is the bug this change exists to

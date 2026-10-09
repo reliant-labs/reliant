@@ -37,6 +37,10 @@ type CreateWorkflowWithThreadInput struct {
 
 	// Fork configuration (optional)
 	ForkFromThread *string `json:"fork_from_thread,omitempty"`
+
+	// Worktree is the name (or id) of an active worktree of the chat's project
+	// the new thread works in instead of the chat's own. Set by spawn only.
+	Worktree string `json:"worktree,omitempty"`
 }
 
 // CreateWorkflowWithThreadOutput contains the IDs of the created workflow, thread, and context window
@@ -44,6 +48,16 @@ type CreateWorkflowWithThreadOutput struct {
 	WorkflowID      string `json:"workflow_id"`
 	ThreadID        string `json:"thread_id"`
 	ContextWindowID string `json:"context_window_id"`
+
+	// Refusal is set, with nothing created, when the requested Worktree cannot
+	// be used. It is an answer for the agent that asked, so it is returned as
+	// data: an error would be retried as if it might succeed next time.
+	Refusal string `json:"refusal,omitempty"`
+
+	// WorktreePath is the checkout path of the thread's own worktree, empty
+	// when the thread works in its chat's. The caller makes it the child's
+	// working directory.
+	WorktreePath string `json:"worktree_path,omitempty"`
 }
 
 // CreateWorkflowWithThreadActivity creates a workflow and its associated thread atomically
@@ -139,6 +153,18 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		return CreateWorkflowWithThreadOutput{}, fmt.Errorf("chat_id is required")
 	}
 
+	var threadWorktreeID *string
+	if input.Worktree != "" {
+		id, refusal, err := a.resolveThreadWorktree(ctx, input)
+		if err != nil {
+			return CreateWorkflowWithThreadOutput{}, err
+		}
+		if refusal != "" {
+			return CreateWorkflowWithThreadOutput{Refusal: refusal}, nil
+		}
+		threadWorktreeID = &id
+	}
+
 	// Build the db.Workflow struct
 	// Thread field will be set to the ThreadID (or generated if empty)
 	threadID := input.ThreadID
@@ -168,6 +194,7 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		ParentThread:   input.ParentThread,
 		ForkFromThread: input.ForkFromThread,
 		OriginNodeID:   input.OriginNodeID,
+		WorktreeID:     threadWorktreeID,
 	}
 	if input.Origin != nil {
 		opts.Origin = *input.Origin
@@ -215,9 +242,18 @@ func (a *CreateWorkflowWithThreadActivity) Execute(ctx context.Context, input Cr
 		}
 	}
 
-	return CreateWorkflowWithThreadOutput{
+	out := CreateWorkflowWithThreadOutput{
 		WorkflowID:      createdWorkflow.ID,
 		ThreadID:        createdThread.ID,
 		ContextWindowID: contextWindow.ID,
-	}, nil
+	}
+	// Also true of a resumed thread that was bound when first spawned.
+	if createdThread.WorktreeID != nil && *createdThread.WorktreeID != "" {
+		wt, err := a.repo.GetWorktree(ctx, *createdThread.WorktreeID)
+		if err != nil {
+			return CreateWorkflowWithThreadOutput{}, fmt.Errorf("load thread worktree %s: %w", *createdThread.WorktreeID, err)
+		}
+		out.WorktreePath = wt.Path
+	}
+	return out, nil
 }

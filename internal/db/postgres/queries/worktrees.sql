@@ -115,3 +115,15 @@ UPDATE worktrees SET daemon_id = $1 WHERE id = $2 AND daemon_id IS NULL;
 SELECT w.id, w.path FROM worktrees w
 JOIN projects p ON p.id = w.project_id
 WHERE p.user_id = $1 AND w.deleted_at IS NULL AND w.path <> '';
+
+-- name: GetLiveWorktreeByName :one
+-- The one unarchived row holding a name; worktrees_project_id_name_live_key
+-- guarantees there is at most one.
+SELECT * FROM worktrees
+WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL;
+
+-- name: ListWorktreesByBranch :many
+-- Every row, archived included, recorded against a branch: an archived row's
+-- checkout or branch may outlive the archive.
+SELECT * FROM worktrees
+WHERE project_id = $1 AND branch = $2;

@@ -39,6 +39,11 @@ type toolExecutionContext struct {
 	chat     *db.Chat
 	project  *db.Project
 	worktree *rctx.WorktreeInfo
+	// worktreeThreadBound: the worktree is this thread's own (a sub-agent
+	// spawned with `worktree`), not its chat's. It is then authoritative for the
+	// thread: neither an inherited project-path override nor an inherited daemon
+	// selector may move its tools off that checkout.
+	worktreeThreadBound bool
 
 	// repos lists the project's nested repos. Threaded into ToolRequest so
 	// tools with a `repo` param can resolve it without a DB call. Empty for
@@ -105,7 +110,12 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	tec.project = project
 
 	// Load worktree (defaults to project path if not set or not found)
-	tec.worktree = a.loadWorktreeInfo(ctx, chat, project)
+	wt, threadBound, err := a.loadWorktreeInfo(ctx, chat, project, thread)
+	if err != nil {
+		return nil, err.Error()
+	}
+	tec.worktree = wt
+	tec.worktreeThreadBound = threadBound
 
 	// Load nested repos. Failures degrade gracefully: tools fall back to
 	// single-repo behavior when repos is empty.
@@ -116,31 +126,47 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	return tec, ""
 }
 
-// loadWorktreeInfo loads worktree information, defaulting to project path
-func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Chat, project *db.Project) *rctx.WorktreeInfo {
-	if chat.WorktreeID == nil || *chat.WorktreeID == "" {
-		return &rctx.WorktreeInfo{ID: "", Path: project.Path}
+// loadWorktreeInfo loads worktree information, defaulting to project path.
+//
+// The worktree is the thread's when the thread has its own (a sub-agent
+// spawned with a `worktree`), else the chat's. A chat's worktree that cannot be
+// loaded degrades to the project path, as it always has; a thread's does not,
+// because that thread was sent to a specific workspace and running its tools in
+// the project checkout instead would write to the wrong branch.
+func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Chat, project *db.Project, thread string) (*rctx.WorktreeInfo, bool, error) {
+	worktreeID, threadBound, err := effectiveWorktreeID(ctx, a.repo, chat, thread)
+	if err != nil {
+		return nil, false, err
+	}
+	if worktreeID == nil || *worktreeID == "" {
+		return &rctx.WorktreeInfo{ID: "", Path: project.Path}, false, nil
 	}
 
-	worktree, err := a.repo.GetWorktree(ctx, *chat.WorktreeID)
+	worktree, err := a.repo.GetWorktree(ctx, *worktreeID)
 	if err != nil {
+		if threadBound {
+			return nil, true, fmt.Errorf("this agent's workspace %s could not be loaded: %w", *worktreeID, err)
+		}
 		// Worktree not found, fall back to project path
-		return &rctx.WorktreeInfo{ID: "", Path: project.Path}
+		return &rctx.WorktreeInfo{ID: "", Path: project.Path}, false, nil
+	}
+	if threadBound && worktree.DeletedAt != nil {
+		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there", worktree.Name)
 	}
 
 	daemonID := ""
 	if worktree.DaemonID != nil {
 		daemonID = *worktree.DaemonID
 	}
-	return &rctx.WorktreeInfo{ID: worktree.ID, Path: worktree.Path, DaemonID: daemonID}
+	return &rctx.WorktreeInfo{ID: worktree.ID, Path: worktree.Path, DaemonID: daemonID}, threadBound, nil
 }
 
 // buildToolRequest creates a ToolRequest from the loaded context
 func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 	// Determine effective working directory path
-	// Priority: projectPathOverride > worktree.Path > project.Path
+	// Priority: thread-bound worktree > projectPathOverride > worktree.Path > project.Path
 	effectiveWorktreePath := tec.worktree.Path
-	if tec.projectPathOverride != "" {
+	if tec.projectPathOverride != "" && !tec.worktreeThreadBound {
 		effectiveWorktreePath = tec.projectPathOverride
 	}
 
@@ -651,7 +677,10 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	if tec.worktree != nil && tec.worktree.DaemonID != "" {
 		tec.daemonSelector = &toolexec.DaemonSelector{ID: tec.worktree.DaemonID}
 	}
-	if daemonSel != nil {
+	// A thread-bound worktree exists on its owner alone, so an inherited
+	// selector (the parent's pin, the workflow's daemon) cannot override it.
+	threadWorktreeOwned := tec.worktreeThreadBound && tec.worktree != nil && tec.worktree.DaemonID != ""
+	if daemonSel != nil && !threadWorktreeOwned {
 		tec.daemonSelector = &toolexec.DaemonSelector{
 			ID:     daemonSel.ID,
 			Name:   daemonSel.Name,

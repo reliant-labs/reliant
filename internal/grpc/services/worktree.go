@@ -4,11 +4,11 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -24,6 +24,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	repopkg "github.com/reliant-labs/reliant/internal/repo"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/workspacecreate"
 	"github.com/reliant-labs/reliant/internal/worktreepath"
 )
 
@@ -507,11 +508,6 @@ func (s *WorktreeService) CreateWorktree(
 		return nil, err
 	}
 
-	// Build a human-readable workspace directory name (e.g.
-	// `myproject/feature-branch-a3f1b2c8`) instead of a bare UUID. Disk path
-	// becomes <HOME>/.reliant/worktrees/<workspaceID>[/<sub_path>].
-	workspaceID := worktreepath.WorkspaceDirName(project.Name, req.Msg.Name)
-
 	// An idempotency key makes a retry safe. Creation returns before the work
 	// finishes, so a client that loses the response cannot tell "failed" from
 	// "succeeded, reply dropped" — without this the natural retry produces a
@@ -538,8 +534,6 @@ func (s *WorktreeService) CreateWorktree(
 	//
 	// Path is empty until the daemon reports where it landed; the row carries
 	// CREATING so callers render a pending workspace rather than a broken one.
-	worktreeID := uuid.New().String()
-	now := time.Now().UTC()
 	var chatID *string
 	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
 		chatID = req.Msg.ChatId
@@ -548,26 +542,23 @@ func (s *WorktreeService) CreateWorktree(
 	if req.Msg.IdempotencyKey != nil && *req.Msg.IdempotencyKey != "" {
 		idempotencyKey = req.Msg.IdempotencyKey
 	}
-	worktree := &db.Worktree{
-		ID:             worktreeID,
+	createReq := workspacecreate.Request{
+		Project:        project,
+		Repos:          repos,
 		Name:           req.Msg.Name,
 		Branch:         req.Msg.Branch,
 		BaseBranch:     globalBase,
-		ProjectID:      project.ID,
+		BaseBranches:   req.Msg.BaseBranches,
+		Force:          req.Msg.Force,
+		CopyPaths:      copyPaths,
+		CopySource:     sourceWorkspace,
 		ChatID:         chatID,
-		DaemonID:       &ownerDaemonID,
+		OwnerDaemonID:  ownerDaemonID,
 		IdempotencyKey: idempotencyKey,
-		Status:         int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING),
-		CreatedAt:      now,
-		UpdatedAt:      now,
-		LastActive:     now,
 	}
-	if err := s.database.CreateWorktree(ctx, worktree); err != nil {
-		logging.Error("Failed to create worktree row", "error", err)
-		if strings.Contains(err.Error(), "UNIQUE constraint") || strings.Contains(err.Error(), "duplicate key") {
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; enable force to override", req.Msg.Name))
-		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
+	worktree, err := workspacecreate.Insert(ctx, s.database, createReq)
+	if err != nil {
+		return nil, insertWorktreeError(err, req.Msg.Name)
 	}
 
 	// Detached from the request context so the work survives the client going
@@ -581,12 +572,25 @@ func (s *WorktreeService) CreateWorktree(
 	pending := *worktree
 	go func() {
 		defer cancel()
-		s.finishWorktreeCreate(bgCtx, userID, project, repos, &pending, req.Msg, ownerDaemonID, workspaceID, globalBase, sourceWorkspace, copyPaths)
+		s.finishWorktreeCreate(bgCtx, userID, createReq, &pending)
 	}()
 
 	return connect.NewResponse(&reliantv1.CreateWorktreeResponse{
 		Worktree: worktreeToProto(worktree),
 	}), nil
+}
+
+// insertWorktreeError maps a workspacecreate.Insert failure to its wire error.
+func insertWorktreeError(err error, name string) error {
+	var branchHeld *workspacecreate.BranchHeldError
+	switch {
+	case errors.Is(err, core.ErrWorktreeNameTaken):
+		return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project; archive or rename it, or choose another name", name))
+	case errors.As(err, &branchHeld):
+		return connect.NewError(connect.CodeFailedPrecondition, branchHeld)
+	}
+	logging.Error("Failed to create worktree row", "error", err)
+	return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to create worktree"))
 }
 
 // worktreeCreateBudget bounds the detached creation goroutine. Generous
@@ -596,310 +600,24 @@ func (s *WorktreeService) CreateWorktree(
 const worktreeCreateBudget = 10 * time.Minute
 
 // finishWorktreeCreate performs the daemon-side worktree creation and settles
-// the row to ACTIVE or FAILED. It runs on a context detached from the client
-// request; nothing here may assume a caller is still listening.
-func (s *WorktreeService) finishWorktreeCreate(
-	ctx context.Context,
-	userID string,
-	project *db.Project,
-	repos []*core.Repo,
-	worktree *db.Worktree,
-	msg *reliantv1.CreateWorktreeRequest,
-	ownerDaemonID string,
-	workspaceID string,
-	globalBase string,
-	sourceWorkspace string,
-	copyPaths []string,
-) {
-	req := struct {
-		Msg *reliantv1.CreateWorktreeRequest
-	}{Msg: msg}
+// the row to ACTIVE or FAILED, then tells clients. It runs on a context
+// detached from the client request; nothing here may assume a caller is still
+// listening.
+func (s *WorktreeService) finishWorktreeCreate(ctx context.Context, userID string, req workspacecreate.Request, worktree *db.Worktree) {
+	_ = workspacecreate.Finish(ctx, s.database, worktreeMachine{s: s, userID: userID, daemonID: req.OwnerDaemonID}, req, worktree)
+	s.emitWorktreeChanged(ctx, userID, req.Project.ID, worktree.ID)
+}
 
-	type repoCreateResult struct {
-		repo         *core.Repo
-		worktreePath string
-		baseBranch   string
-	}
-	successes := make([]repoCreateResult, 0, len(repos))
+// worktreeMachine adapts the service's daemon send (which wakes a sleeping
+// machine on failure) to workspacecreate.Machine, bound to one owner daemon.
+type worktreeMachine struct {
+	s        *WorktreeService
+	userID   string
+	daemonID string
+}
 
-	// Declared before fail() so the rollback can remove the workspace root.
-	// Assigned by the first successful per-repo create below.
-	var workspaceRoot string
-
-	// The row is kept as FAILED rather than deleted: a workspace that silently
-	// never appears is indistinguishable from a bug, whereas a visible failed
-	// row can be retried or dismissed.
-	//
-	// Creation is ALL-OR-NOTHING on disk. A multi-repo workspace that got
-	// three repos in before the fourth failed is not a usable workspace, so
-	// the checkouts that DID succeed are torn down rather than left as a
-	// partial tree that later reads as real.
-	fail := func(reason error) {
-		for _, s2 := range successes {
-			repoPath := filepath.Join(project.Path, s2.repo.RelativePath)
-			_ = s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
-				"project_path":  repoPath,
-				"worktree_path": s2.worktreePath,
-			}, nil)
-		}
-		// Remove the workspace root itself. The per-repo deletes above clear
-		// <root>/<repo.rel>, which leaves the root behind for a multi-repo
-		// workspace — an empty directory that looks like a workspace to
-		// anything that stats it. Empty-only, for the same reason as the
-		// daemon-side rollback.
-		if workspaceRoot != "" {
-			_ = s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.delete_directory", map[string]string{
-				"project_path":  project.Path,
-				"worktree_path": workspaceRoot,
-			}, nil)
-		}
-
-		logging.Error("Worktree creation failed", "error", reason, "worktreeID", worktree.ID)
-		worktree.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
-		// A FAILED row must carry NO path.
-		//
-		// The row is inserted with an empty path and only settled at the end
-		// (see the comment above the ACTIVE branch), so on the common failure
-		// path this is already "". It is cleared explicitly because a failure
-		// AFTER the path was assigned — the UpdateWorktree error below is
-		// exactly that case — would otherwise leave a FAILED row pointing at
-		// directories this function just deleted.
-		//
-		// That combination is what breaks callers: filepreview.ResolveBasePath
-		// falls back to the project path only when the worktree LOOKUP errors,
-		// so a row that exists with an unusable path is returned as-is and
-		// every scoped filesystem RPC fails. Empty is the honest value, and it
-		// is the one ResolveBasePath can now recognize.
-		worktree.Path = ""
-		worktree.UpdatedAt = time.Now().UTC()
-		if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
-			logging.Error("Failed to mark worktree failed", "error", err, "worktreeID", worktree.ID)
-		}
-		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
-	}
-
-	// createRepo checks out ONE repo of the workspace. It runs concurrently
-	// with its siblings, so it touches nothing shared: everything it learns
-	// goes back through its return values, and the caller merges them.
-	//
-	// The returned error is the user-facing reason; it is non-nil exactly when
-	// the repo produced no checkout.
-	createRepo := func(repo *core.Repo) (repoCreateResult, error) {
-		repoPath := filepath.Join(project.Path, repo.RelativePath)
-
-		// Per-repo override > global > daemon auto-detect (empty).
-		repoBase := globalBase
-		if v, ok := req.Msg.BaseBranches[repo.ID]; ok && v != "" {
-			repoBase = v
-		}
-
-		if req.Msg.Force {
-			// Stale-branch cleanup; the workspace dir itself is fresh per UUID.
-			_ = s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.force_cleanup", map[string]string{
-				"project_path":  repoPath,
-				"worktree_path": "",
-				"branch":        req.Msg.Branch,
-			}, nil)
-		}
-
-		type createReq struct {
-			ProjectPath string `json:"project_path"`
-			WorkspaceID string `json:"workspace_id"`
-			SubPath     string `json:"sub_path"`
-			Name        string `json:"name"`
-			Branch      string `json:"branch"`
-			BaseBranch  string `json:"base_branch"`
-			Force       bool   `json:"force"`
-			WorktreeID  string `json:"worktree_id"`
-		}
-		var createResp struct {
-			Success      bool   `json:"success"`
-			WorktreePath string `json:"worktree_path"`
-			BaseBranch   string `json:"base_branch,omitempty"`
-			Error        string `json:"error,omitempty"`
-		}
-
-		err := s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.create", createReq{
-			WorktreeID:  worktree.ID,
-			ProjectPath: repoPath,
-			WorkspaceID: workspaceID,
-			SubPath:     repo.RelativePath,
-			Name:        req.Msg.Name,
-			Branch:      req.Msg.Branch,
-			BaseBranch:  repoBase,
-			Force:       req.Msg.Force,
-		}, &createResp)
-		if err != nil {
-			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
-			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
-		}
-		if !createResp.Success {
-			logging.Error("Failed to create git worktree", "error", createResp.Error, "repo", repo.ID)
-			return repoCreateResult{}, s.parseGitWorktreeError(createResp.Error, createResp.WorktreePath, req.Msg.Branch, repoBase)
-		}
-		return repoCreateResult{
-			repo:         repo,
-			worktreePath: createResp.WorktreePath,
-			baseBranch:   firstNonEmpty(createResp.BaseBranch, repoBase),
-		}, nil
-	}
-
-	// Repos are checked out CONCURRENTLY, not one after another.
-	//
-	// Each repo is an independent `git worktree add` into its own
-	// subdirectory, so serializing them made the wait the SUM of every
-	// checkout: a three-repo workspace sat in CREATING for ~29s, ~8s of it in
-	// the last repo alone. Run together, the wait is the slowest repo —
-	// measured on control-plane/forge/reliant, median 6.6s -> 2.8s.
-	//
-	// Do not ALSO turn on git's parallel checkout (checkout.workers) for
-	// these. It was measured on top of this and made creation slower (2.8s ->
-	// 3.9s; 3.6s even capped at 4 workers): the repos already overlap their
-	// I/O, and N repos each forking a worker per CPU oversubscribes the
-	// machine.
-	//
-	// Two rules keep that safe:
-	//
-	//   - A repo nested inside another registered repo waits for its parent
-	//     (repopkg.CheckoutWaves). Its checkout lands inside the parent's, and git
-	//     refuses to populate a parent into a directory that already exists.
-	//     Unrelated repos — the normal layout — form a single wave.
-	//
-	//   - A failure does NOT cancel its siblings. Cancelling would only stop
-	//     the server waiting; the daemon's git keeps running, finishes the
-	//     checkout, and the server never learns its path — the orphaned
-	//     directory the all-or-nothing rollback exists to prevent. Every
-	//     sibling is allowed to finish so each success is known and torn down.
-	results := make([]repoCreateResult, len(repos))
-	errs := make([]error, len(repos))
-	ran := make([]bool, len(repos))
-	var firstErr error
-	for _, wave := range repopkg.CheckoutWaves(repos) {
-		var wg sync.WaitGroup
-		for _, i := range wave {
-			ran[i] = true
-			wg.Go(func() {
-				results[i], errs[i] = createRepo(repos[i])
-			})
-		}
-		wg.Wait()
-
-		for _, i := range wave {
-			if errs[i] != nil {
-				firstErr = errs[i]
-				break
-			}
-		}
-		if firstErr != nil {
-			break
-		}
-	}
-	// Collected in the order the repos were listed, not the order they
-	// finished, so the workspace root and display base come from the same
-	// repo on every run — exactly as when the loop was sequential.
-	for i := range repos {
-		if ran[i] && errs[i] == nil {
-			successes = append(successes, results[i])
-		}
-	}
-
-	// The workspace root comes from the first success: the daemon returned
-	// <HOME>/.reliant/worktrees/<workspace_id>[/<repo.rel>], so strip the
-	// trailing repo.RelativePath to get the root. Resolved BEFORE fail() so
-	// the rollback can remove the root of a partially created workspace.
-	if len(successes) > 0 {
-		first := successes[0]
-		if first.repo.RelativePath == "" {
-			workspaceRoot = first.worktreePath
-		} else {
-			workspaceRoot = strings.TrimSuffix(first.worktreePath,
-				string(filepath.Separator)+first.repo.RelativePath)
-			if workspaceRoot == first.worktreePath {
-				workspaceRoot = filepath.Dir(first.worktreePath)
-			}
-		}
-	}
-	if firstErr != nil {
-		fail(firstErr)
-		return
-	}
-
-	// Carry over the requested paths — the gitignored pieces a checkout does
-	// not bring — once for the whole workspace, root to root. The workspace
-	// mirrors the project's layout, so `reliant/.env` lands in the reliant
-	// checkout and a root-level `.env` at the workspace root. Paths were
-	// validated in CreateWorktree, before the row existed.
-	//
-	// A failed copy does not fail the workspace: the checkouts are complete
-	// and usable, and a missing .env is something the user can see and fix.
-	// Tearing down a good workspace over it would be worse.
-	if len(copyPaths) > 0 {
-		copySource := project.Path
-		if sourceWorkspace != "" {
-			copySource = sourceWorkspace
-		}
-		var copyResp struct {
-			Copied  []string          `json:"copied"`
-			Missing []string          `json:"missing"`
-			Failed  map[string]string `json:"failed"`
-			Error   string            `json:"error"`
-		}
-		err := s.sendWorktreeDaemonCommand(ctx, userID, ownerDaemonID, "worktree.copy_paths", map[string]any{
-			"source_root": copySource,
-			"dest_root":   workspaceRoot,
-			"paths":       copyPaths,
-		}, &copyResp)
-		switch {
-		case err != nil:
-			logging.Error("Failed to copy paths into worktree", "error", err, "worktreeID", worktree.ID)
-		case copyResp.Error != "" || len(copyResp.Failed) > 0:
-			logging.Error("Some paths were not copied into worktree", "error", copyResp.Error,
-				"failed", copyResp.Failed, "worktreeID", worktree.ID)
-		case len(copyResp.Missing) > 0:
-			logging.Info("Requested copy paths not present in source", "missing", copyResp.Missing,
-				"source", copySource, "worktreeID", worktree.ID)
-		}
-	}
-
-	// Persist one Worktree row representing the workspace. BaseBranch is
-	// recorded as the resolved value of the first repo for display.
-	// BaseBranches captures the per-repo resolved value for every successful
-	// create — this is what CreatePR consults at op time so e.g. a repo whose
-	// default is `master` doesn't get a PR opened against `main`.
-	displayBase := ""
-	baseBranches := make(map[string]string, len(successes))
-	if len(successes) > 0 {
-		displayBase = successes[0].baseBranch
-	}
-	for _, s := range successes {
-		if s.baseBranch != "" {
-			baseBranches[s.repo.ID] = s.baseBranch
-		}
-	}
-	// Single-repo legacy: BaseBranch alone is canonical, BaseBranches stays
-	// nil so the column is NULL and writers don't have to special-case the
-	// "one entry" map.
-	if len(baseBranches) <= 1 {
-		baseBranches = nil
-	}
-
-	// Settle the row the handler already inserted. The daemon is the only
-	// source of the resolved path and base branches, so those are unknown
-	// until now — which is why the CREATING row carries an empty path.
-	worktree.Path = workspaceRoot
-	worktree.BaseBranch = displayBase
-	worktree.BaseBranches = baseBranches
-	worktree.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)
-	worktree.UpdatedAt = time.Now().UTC()
-	worktree.LastActive = worktree.UpdatedAt
-
-	if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
-		// The checkouts exist on disk but the row cannot record them, so the
-		// directories would be unreachable. Tear them down and mark failed.
-		fail(fmt.Errorf("failed to record worktree: %w", err))
-		return
-	}
-	s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
+func (m worktreeMachine) Send(ctx context.Context, commandType string, payload, resp any, timeoutMs int32) error {
+	return m.s.sendWorktreeDaemonCommandTimeout(ctx, m.userID, m.daemonID, commandType, payload, resp, timeoutMs)
 }
 
 // emitWorktreeChanged tells connected clients a worktree's state settled.
@@ -914,37 +632,6 @@ func (s *WorktreeService) emitWorktreeChanged(ctx context.Context, userID, proje
 		WorktreeID: &worktreeID,
 	}); err != nil {
 		logging.Error("Failed to emit worktree refetch", "error", err, "worktreeID", worktreeID)
-	}
-}
-
-func firstNonEmpty(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
-// parseGitWorktreeError parses git worktree errors into user-friendly messages
-func (s *WorktreeService) parseGitWorktreeError(output, worktreePath, branch, baseBranch string) error {
-	switch {
-	case strings.Contains(output, "already exists") && strings.Contains(output, "not empty"):
-		return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree path '%s' already exists and is not empty; enable force to override", worktreePath))
-	case strings.Contains(output, "already checked out"):
-		return connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("branch '%s' is already checked out in another worktree; enable force to override or choose a different branch", branch))
-	case strings.Contains(output, "is not a valid"):
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("base branch '%s' does not exist; please choose a valid branch", baseBranch))
-	case strings.Contains(output, "fatal: invalid reference"):
-		return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("invalid branch or reference '%s'; please check the branch name", baseBranch))
-	case strings.Contains(output, "Not a git repository"):
-		return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("project directory is not a valid git repository; please initialize git first"))
-	default:
-		errMsg := strings.TrimSpace(output)
-		if errMsg == "" {
-			errMsg = "unknown git error"
-		}
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("git worktree creation failed: %s", errMsg))
 	}
 }
 
@@ -1290,6 +977,14 @@ func (s *WorktreeService) UnarchiveWorktree(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace's files were removed; restore it with recreate"))
 	}
 
+	// Refuse a name collision before the machine is touched: re-locking the
+	// checkouts for a row that then cannot be restored would leave them locked
+	// as live under an archived row.
+	if holder, err := s.database.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
+	}
+
 	// Take the archive fence off the directory FIRST, and retire it: the machine
 	// re-locks the checkouts as "restored <fence>", so a removal already in
 	// flight for this archive finds a lock it does not own and refuses, and no
@@ -1303,6 +998,10 @@ func (s *WorktreeService) UnarchiveWorktree(
 	}
 
 	if err := s.database.UnarchiveWorktree(ctx, req.Msg.WorktreeId); err != nil {
+		if errors.Is(err, core.ErrWorktreeNameTaken) {
+			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+				"cannot unarchive '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
+		}
 		logging.Error("Failed to unarchive worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to unarchive worktree"))
 	}
@@ -1403,7 +1102,19 @@ func (s *WorktreeService) unarchiveWorktreeChats(ctx context.Context, userID str
 // Import/Discovery Operations
 // =============================================================================
 
-// ImportWorktree imports an existing git worktree directory
+// ImportWorktree adopts a git worktree made outside Reliant. The path must be
+// a linked worktree the daemon currently reports for repo_id that no row
+// tracks and that is not Reliant's own; the client's word is never enough.
+//
+//   - Single-repo project: the row is registered in place (Path = the checkout).
+//     Nothing moves and nothing is created. It is NOT locked: the reclaimer
+//     only settles rows under the daemon's worktrees root (anything else is
+//     "foreign" and left alone), so a lock would protect nothing.
+//   - Multi-repo project: the checkout is moved to <workspace>/<repo rel> with
+//     `git worktree move`, then the other repos get checkouts on the same
+//     branch, exactly like a UI-made workspace. It needs confirm_move. If any
+//     step after the move fails the checkout is moved back (see
+//     workspacecreate.ExistingCheckout) and the row ends FAILED.
 func (s *WorktreeService) ImportWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ImportWorktreeRequest],
@@ -1416,122 +1127,253 @@ func (s *WorktreeService) ImportWorktree(
 	if req.Msg.ProjectId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
 	}
-
-	// Check project permission
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
-
-	// Resolve the daemon that will validate (and therefore owns on disk) the
-	// imported worktree — the chat's machine when one is named — so the same
-	// id is recorded on the row and tool execution routes back to the machine
-	// the checkout actually lives on.
-	placement, err := s.placeNewWorktree(ctx, userID, req.Msg.ProjectId, req.Msg.ChatId, nil, "import")
+	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+	}
+	repos, err := s.listProjectRepos(ctx, project)
+	if err != nil {
+		return nil, err
+	}
+	byID := make(map[string]*core.Repo, len(repos))
+	for _, r := range repos {
+		byID[r.ID] = r
+	}
+	var repo *core.Repo
+	switch {
+	case req.Msg.RepoId != "":
+		if repo = byID[req.Msg.RepoId]; repo == nil {
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("repo not in project"))
+		}
+	case len(repos) == 1:
+		repo = repos[0]
+	default:
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("repo_id is required in multi-repo projects"))
+	}
+	moves := importMoves(byID)
+	if moves && !req.Msg.ConfirmMove {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("importing this worktree moves its directory into a new workspace; confirm the move (confirm_move) to continue"))
+	}
+
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, req.Msg.ChatId, nil, "import")
+	if err != nil {
+		return nil, err
+	}
+	if err := s.wakeIfAsleep(ctx, userID, placement, project.Path); err != nil {
 		return nil, err
 	}
 	ownerDaemonID := placement.daemonID
 
-	// Validate path exists and is a git worktree via daemon
-	var importResp struct {
-		Valid      bool   `json:"valid"`
-		AbsPath    string `json:"abs_path"`
-		Branch     string `json:"branch"`
-		BaseBranch string `json:"base_branch"`
-		Error      string `json:"error,omitempty"`
+	// Re-discover on the daemon and take the entry from there.
+	exclude, err := s.trackedWorktreePaths(ctx, project.ID)
+	if err != nil {
+		return nil, err
 	}
-	if err := s.sendToMachine(ctx, userID, placement, "worktree.import_validate", map[string]string{"path": req.Msg.Path}, &importResp, worktreeDaemonCommandTimeoutMs); err != nil {
+	repoPath := filepath.Join(project.Path, repo.RelativePath)
+	var found struct {
+		Worktrees []discoveredEntry `json:"worktrees"`
+	}
+	payload := map[string]any{"repos": []discoverRepoRef{{RepoID: repo.ID, Path: repoPath}}, "exclude_roots": exclude}
+	if err := s.sendToMachine(ctx, userID, placement, "worktree.discover_repos", payload, &found, worktreeReadCommandTimeoutMs); err != nil {
 		if isMachineWaking(err) {
 			return nil, err
 		}
 		logging.Error("Failed to validate import path via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to validate path"))
 	}
-	if !importResp.Valid {
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("%s", importResp.Error))
+	want := filepath.Clean(req.Msg.Path)
+	var entry *discoveredEntry
+	for i := range found.Worktrees {
+		if !found.Worktrees[i].Prunable && filepath.Clean(found.Worktrees[i].Path) == want {
+			entry = &found.Worktrees[i]
+			break
+		}
+	}
+	if entry == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			fmt.Errorf("%s is not an untracked linked worktree of repo '%s'; refresh the list and try again", req.Msg.Path, repo.Name))
+	}
+	if entry.Branch == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition,
+			fmt.Errorf("%s has a detached HEAD, so there is no branch to adopt; create one in it first (git switch -c <branch>) and try again", entry.Path))
 	}
 
-	absPath := importResp.AbsPath
-	branch := importResp.Branch
-	baseBranch := importResp.BaseBranch
-
-	// Determine worktree name
-	name := ""
+	name := entry.Name
 	if req.Msg.Name != nil && *req.Msg.Name != "" {
 		name = *req.Msg.Name
-	} else {
-		// Extract base name from absolute path
-		parts := strings.Split(absPath, "/")
-		if len(parts) > 0 {
-			name = parts[len(parts)-1]
-		} else {
-			name = absPath
-		}
 	}
-
-	// Check if worktree with this name or path already exists for this project
-	// Archived rows count: an archived workspace's directory is still the
-	// machine's to settle, and a second row sharing its path would let the
-	// archive be removed out from under the new one.
-	existingWorktrees, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
-		ProjectID:       &req.Msg.ProjectId,
-		IncludeArchived: true,
-		Limit:           1000,
-	})
-	if err != nil {
-		logging.Error("Failed to list worktrees", "error", err)
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check for existing worktrees"))
-	}
-
-	for _, wt := range existingWorktrees {
-		if wt.Name == name && wt.DeletedAt == nil {
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project", name))
-		}
-		if wt.Path == absPath {
-			if wt.DeletedAt != nil {
-				return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree at path '%s' belongs to an archived workspace; restore it instead", absPath))
-			}
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree at path '%s' is already imported", absPath))
-		}
-	}
-
-	worktreeID := uuid.New().String()
-	now := time.Now().UTC()
-
 	var chatID *string
 	if req.Msg.ChatId != nil && *req.Msg.ChatId != "" {
 		chatID = req.Msg.ChatId
 	}
-
-	worktree := &db.Worktree{
-		ID:         worktreeID,
-		Name:       name,
-		Path:       absPath,
-		Branch:     branch,
-		BaseBranch: baseBranch,
-		ProjectID:  req.Msg.ProjectId,
-		ChatID:     chatID,
-		DaemonID:   &ownerDaemonID,
-		Status:     int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		LastActive: now,
+	createReq := workspacecreate.Request{
+		Project:       project,
+		Repos:         repos,
+		Name:          name,
+		Branch:        entry.Branch,
+		ChatID:        chatID,
+		OwnerDaemonID: ownerDaemonID,
 	}
+	if moves {
+		createReq.WorkspaceID = worktreepath.WorkspaceDirName(project.Name, name)
+	}
+	worktree, err := workspacecreate.Insert(ctx, s.database, createReq)
+	if err != nil {
+		return nil, insertWorktreeError(err, name)
+	}
+	machine := worktreeMachine{s: s, userID: userID, daemonID: ownerDaemonID}
 
-	if err := s.database.CreateWorktree(ctx, worktree); err != nil {
-		logging.Error("Failed to import worktree", "error", err)
-		if strings.Contains(err.Error(), "UNIQUE constraint") {
-			return nil, connect.NewError(connect.CodeAlreadyExists, fmt.Errorf("worktree with name '%s' already exists in this project", name))
+	if !moves {
+		var def struct {
+			DefaultBranch string `json:"default_branch"`
 		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to import worktree"))
+		_ = machine.Send(ctx, "worktree.get_default_branch", map[string]string{"repo_path": repoPath}, &def, worktreeReadCommandTimeoutMs)
+		createReq.Existing = map[string]workspacecreate.ExistingCheckout{
+			repo.ID: {Path: entry.Path, Base: def.DefaultBranch},
+		}
+		if err := workspacecreate.Finish(ctx, s.database, machine, createReq, worktree); err != nil {
+			s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to import worktree"))
+		}
+		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
+		return connect.NewResponse(&reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}), nil
 	}
 
-	return connect.NewResponse(&reliantv1.ImportWorktreeResponse{
-		Worktree: worktreeToProto(worktree),
-	}), nil
+	var moved struct {
+		Success      bool   `json:"success"`
+		WorktreePath string `json:"worktree_path"`
+		BaseBranch   string `json:"base_branch"`
+		Error        string `json:"error"`
+	}
+	moveErr := machine.Send(ctx, "worktree.adopt_move", map[string]string{
+		"repo_path":    repoPath,
+		"src":          entry.Path,
+		"workspace_id": createReq.WorkspaceID,
+		"sub_path":     repo.RelativePath,
+		"worktree_id":  worktree.ID,
+	}, &moved, workspaceMoveTimeoutMs)
+	if moveErr != nil || !moved.Success {
+		// Nothing has moved (git refused, or the command never ran): the row
+		// is FAILED with no path and the user's checkout is where it was.
+		worktree.Status = int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)
+		worktree.Path = ""
+		worktree.UpdatedAt = time.Now().UTC()
+		if err := s.database.UpdateWorktree(ctx, worktree); err != nil {
+			logging.Error("Failed to mark adopted worktree failed", "error", err, "worktreeID", worktree.ID)
+		}
+		s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
+		if moveErr != nil {
+			if isMachineWaking(moveErr) {
+				return nil, moveErr
+			}
+			logging.Error("adopt_move failed", "error", moveErr)
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to move the worktree"))
+		}
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("could not move %s: %s", entry.Path, moved.Error))
+	}
+
+	createReq.Existing = map[string]workspacecreate.ExistingCheckout{
+		repo.ID: {Path: moved.WorktreePath, Base: moved.BaseBranch, OriginalPath: entry.Path},
+	}
+	// The other repos' checkouts take as long as a create, so finish in the
+	// background like CreateWorktree; the row stays CREATING until then.
+	bgCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeCreateBudget)
+	pending := *worktree
+	go func() {
+		defer cancel()
+		s.finishWorktreeCreate(bgCtx, userID, createReq, &pending)
+	}()
+	return connect.NewResponse(&reliantv1.ImportWorktreeResponse{Worktree: worktreeToProto(worktree)}), nil
 }
 
-// DiscoverWorktrees discovers existing git worktrees in a project
+// workspaceMoveTimeoutMs bounds adopt_move: a rename on one filesystem, but
+// git also rewrites the worktree's records.
+const workspaceMoveTimeoutMs int32 = 60_000
+
+// discoverRepoRef is a project repo as the daemon's discover/prune commands
+// take it.
+type discoverRepoRef struct {
+	RepoID string `json:"repo_id"`
+	Path   string `json:"path"`
+}
+
+// importMoves reports whether importing a worktree of this project moves the
+// directory (a multi-repo project, or a repo below the project root) rather
+// than registering it in place.
+func importMoves(repos map[string]*core.Repo) bool {
+	if len(repos) > 1 {
+		return true
+	}
+	for _, r := range repos {
+		if rel := filepath.Clean(r.RelativePath); rel != "." && rel != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// trackedWorktreePaths lists every path a row of the project holds, archived
+// rows included: an archived row's directory may still exist, and its
+// checkout is not "outside Reliant".
+func (s *WorktreeService) trackedWorktreePaths(ctx context.Context, projectID string) ([]string, error) {
+	tracked, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
+		ProjectID: &projectID, IncludeArchived: true, Limit: 100000,
+	})
+	if err != nil {
+		logging.Error("Failed to list worktrees", "error", err)
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list worktrees"))
+	}
+	paths := make([]string, 0, len(tracked))
+	for _, wt := range tracked {
+		if wt.Path != "" {
+			paths = append(paths, wt.Path)
+		}
+	}
+	return paths, nil
+}
+
+type discoveredEntry struct {
+	RepoID         string `json:"repo_id"`
+	Path           string `json:"path"`
+	Name           string `json:"name"`
+	Branch         string `json:"branch"`
+	Head           string `json:"head"`
+	Locked         bool   `json:"locked"`
+	Prunable       bool   `json:"prunable"`
+	PrunableReason string `json:"prunable_reason"`
+}
+
+// projectRepoRefs lists the project's repos with their checkout paths on the
+// daemon. A repo with relative path "" or "." is the project root itself.
+func (s *WorktreeService) projectRepoRefs(ctx context.Context, project *db.Project) ([]discoverRepoRef, map[string]*core.Repo, error) {
+	repos, err := s.database.ListReposByProject(ctx, project.ID)
+	if err != nil {
+		return nil, nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+	refs := make([]discoverRepoRef, 0, len(repos))
+	byID := make(map[string]*core.Repo, len(repos))
+	for _, r := range repos {
+		refs = append(refs, discoverRepoRef{RepoID: r.ID, Path: filepath.Join(project.Path, r.RelativePath)})
+		byID[r.ID] = r
+	}
+	return refs, byID, nil
+}
+
+func staleToProto(e discoveredEntry, byID map[string]*core.Repo) *reliantv1.StaleWorktree {
+	st := &reliantv1.StaleWorktree{Path: e.Path, RepoId: e.RepoID, Reason: e.PrunableReason}
+	if r := byID[e.RepoID]; r != nil {
+		st.RepoName = r.Name
+	}
+	return st
+}
+
+// DiscoverWorktrees lists the git worktrees of each of the project's repos
+// that Reliant does not track, and git's stale records separately. It is
+// read-only.
 func (s *WorktreeService) DiscoverWorktrees(
 	ctx context.Context,
 	req *connect.Request[reliantv1.DiscoverWorktreesRequest],
@@ -1541,85 +1383,124 @@ func (s *WorktreeService) DiscoverWorktrees(
 	if req.Msg.ProjectId == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
 	}
-
-	// Check project permission
 	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 		return nil, err
 	}
-
-	// Get the project
 	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
 		logging.Error("Failed to get project", "error", err, "projectID", req.Msg.ProjectId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
+	refs, byID, err := s.projectRepoRefs(ctx, project)
+	if err != nil {
+		return nil, err
+	}
 
-	// Discover worktrees via daemon
-	type discoverEntry struct {
-		Path       string `json:"path"`
-		Name       string `json:"name"`
-		Branch     string `json:"branch"`
-		IsPrunable bool   `json:"is_prunable"`
+	exclude, err := s.trackedWorktreePaths(ctx, project.ID)
+	if err != nil {
+		return nil, err
 	}
-	var discoverResp struct {
-		Worktrees []discoverEntry `json:"worktrees"`
-		Error     string          `json:"error,omitempty"`
+
+	// A background poll (the sidebar hint) never wakes a suspended machine:
+	// it answers Unavailable and the hint stays hidden.
+	if req.Msg.Background {
+		ctx = withoutWake(ctx)
 	}
-	// Project-level: the project clone, not any one worktree, so default
-	// resolution as before.
-	if err := s.sendWorktreeDaemonCommand(ctx, userID, "", "worktree.discover", map[string]string{"project_path": project.Path}, &discoverResp); err != nil {
+
+	// The same machine a new workspace for this project would be placed on.
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, "discover")
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Worktrees     []discoveredEntry `json:"worktrees"`
+		WorktreesRoot string            `json:"worktrees_root"`
+	}
+	payload := map[string]any{"repos": refs, "exclude_roots": exclude}
+	if err := s.sendToMachine(ctx, userID, placement, "worktree.discover_repos", payload, &resp, worktreeReadCommandTimeoutMs); err != nil {
+		if isMachineWaking(err) {
+			return nil, err
+		}
+		if req.Msg.Background && machineUnreachable(err) {
+			return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("your machine is not connected"))
+		}
 		logging.Warn("Failed to discover worktrees via daemon", "error", err)
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to list git worktrees"))
 	}
-	if discoverResp.Error != "" {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("git error: %s", discoverResp.Error))
-	}
 
-	// Filter out prunable worktrees
-	var filtered []discoverEntry
-	for _, wt := range discoverResp.Worktrees {
-		if wt.IsPrunable {
+	// Importing moves the checkout when the workspace layout cannot hold it
+	// in place: more than one repo, or a repo below the project root.
+	moves := importMoves(byID)
+
+	out := &reliantv1.DiscoverWorktreesResponse{}
+	if resp.WorktreesRoot != "" {
+		out.WorkspacesRoot = filepath.Join(resp.WorktreesRoot, worktreepath.ProjectDirName(project.Name))
+	}
+	for _, e := range resp.Worktrees {
+		if e.Prunable {
+			out.Stale = append(out.Stale, staleToProto(e, byID))
 			continue
 		}
-		filtered = append(filtered, wt)
+		d := &reliantv1.DiscoveredWorktree{
+			Path: e.Path, Name: e.Name, Branch: e.Branch, RepoId: e.RepoID,
+			Head: e.Head, Locked: e.Locked, MovesOnImport: moves,
+		}
+		if r := byID[e.RepoID]; r != nil {
+			d.RepoName = r.Name
+		}
+		out.Discovered = append(out.Discovered, d)
 	}
+	return connect.NewResponse(out), nil
+}
 
-	// Get existing worktrees to mark which are imported
-	existingWorktrees, err := s.database.ListWorktrees(ctx, db.WorktreeFilters{
-		ProjectID: &req.Msg.ProjectId,
-		Limit:     1000,
-	})
+// PruneWorktrees removes git's records of the project's worktrees whose
+// directories no longer exist. Only an explicit request does this.
+func (s *WorktreeService) PruneWorktrees(
+	ctx context.Context,
+	req *connect.Request[reliantv1.PruneWorktreesRequest],
+) (*connect.Response[reliantv1.PruneWorktreesResponse], error) {
+	userID := auth.MustGetUserID(ctx)
+
+	if req.Msg.ProjectId == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("project_id is required"))
+	}
+	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+		return nil, err
+	}
+	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
 	if err != nil {
-		logging.Warn("Failed to load existing worktrees", "error", err)
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 	}
-
-	// Build import lookup map
-	importedByPath := make(map[string]*db.Worktree)
-	for _, wt := range existingWorktrees {
-		importedByPath[wt.Path] = wt
+	refs, byID, err := s.projectRepoRefs(ctx, project)
+	if err != nil {
+		return nil, err
 	}
-
-	// Convert to proto messages
-	protoDiscovered := make([]*reliantv1.DiscoveredWorktree, len(filtered))
-	for i, wt := range filtered {
-		proto := &reliantv1.DiscoveredWorktree{
-			Path:       wt.Path,
-			Name:       wt.Name,
-			Branch:     wt.Branch,
-			IsImported: false,
-			IsPrunable: wt.IsPrunable,
+	placement, err := s.placeNewWorktree(ctx, userID, project.ID, nil, nil, "prune")
+	if err != nil {
+		return nil, err
+	}
+	var resp struct {
+		Pruned []discoveredEntry `json:"pruned"`
+		Errors []string          `json:"errors"`
+	}
+	if err := s.sendToMachine(ctx, userID, placement, "worktree.prune", map[string]any{"repos": refs}, &resp, worktreeDaemonCommandTimeoutMs); err != nil {
+		if isMachineWaking(err) {
+			return nil, err
 		}
-		if existing, ok := importedByPath[wt.Path]; ok {
-			proto.IsImported = true
-			proto.ImportedId = &existing.ID
-		}
-		protoDiscovered[i] = proto
+		logging.Warn("Failed to prune worktrees via daemon", "error", err)
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("failed to prune git worktrees"))
 	}
-
-	return connect.NewResponse(&reliantv1.DiscoverWorktreesResponse{
-		Discovered: protoDiscovered,
-		Total:      int32(len(protoDiscovered)),
-	}), nil
+	for _, msg := range resp.Errors {
+		logging.Warn("worktree prune error", "projectID", project.ID, "error", msg)
+	}
+	if len(resp.Pruned) == 0 && len(resp.Errors) > 0 {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("git error: %s", resp.Errors[0]))
+	}
+	out := &reliantv1.PruneWorktreesResponse{}
+	for _, e := range resp.Pruned {
+		out.Pruned = append(out.Pruned, staleToProto(e, byID))
+	}
+	return connect.NewResponse(out), nil
 }
 
 // RecreateWorktree recreates an archived worktree from its branch
@@ -1647,6 +1528,13 @@ func (s *WorktreeService) RecreateWorktree(
 
 	if worktree.DeletedAt == nil {
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is not archived; only archived worktrees can be recreated"))
+	}
+
+	// Recreating unarchives the row, so refuse before touching the machine when
+	// its name has been taken since.
+	if holder, err := s.database.GetLiveWorktreeByName(ctx, worktree.ProjectID, worktree.Name); err == nil && holder != nil {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf(
+			"cannot recreate '%s': another worktree in this project now uses that name; archive or rename the other one first", worktree.Name))
 	}
 
 	// Get project for git operations

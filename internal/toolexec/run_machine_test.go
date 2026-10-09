@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 )
 
@@ -64,14 +66,10 @@ func (r *machineRouter) deliver(daemonID, commandType string, payload []byte) ([
 	var req map[string]any
 	_ = json.Unmarshal(payload, &req)
 	switch commandType {
-	case "worktree.generate_repo_id":
-		return json.Marshal(map[string]string{"repo_id": "repo123"})
-	case "skills.get_home_dir":
-		return json.Marshal(map[string]string{"home_dir": r.home})
 	case "worktree.create":
 		return json.Marshal(map[string]any{
 			"success":       true,
-			"worktree_path": filepath.Join(r.home, ".reliant", "worktrees", req["repo_id"].(string), req["name"].(string)),
+			"worktree_path": filepath.Join(r.home, ".reliant", "worktrees", req["workspace_id"].(string)),
 			"base_branch":   "main",
 		})
 	}
@@ -105,21 +103,31 @@ func TestRunMachine_FollowsTheRunsDaemonSelector(t *testing.T) {
 func TestWorktreeTool_RunsGitOnTheRunsMachine(t *testing.T) {
 	workerHome := t.TempDir()
 	t.Setenv("HOME", workerHome)
+	// The tool records the workspace it makes, so it needs a database; the
+	// seeded "test-project" belongs to "test-user".
+	database, cleanup := db.SetupTestDB(t)
+	t.Cleanup(cleanup)
+	// Repos reach a server-side tool through the registry: the in-process
+	// executor's context map does not carry them.
+	require.NoError(t, database.CreateRepo(context.Background(), &core.Repo{
+		ID: "repo-1", ProjectID: "test-project", Name: "project", RelativePath: "",
+	}))
 
 	router := &machineRouter{home: "/home/machine-b"}
 	executor := NewRemoteExecutor(router)
 	executor.SetServerExecutor(NewLocalToolExecutor(tools.NewToolsFactory(&tools.ToolsOptions{
+		Repo:       database,
 		RunMachine: NewRunMachine(router),
 	})))
 
-	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-1")
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
 	result, err := executor.ExecuteTool(ctx, &ToolRequest{
 		ToolName:       tools.WorktreeToolName,
 		ToolInput:      `{"action":"create","name":"feature-auth","copy_files":[".env"]}`,
 		ToolCallID:     "call-1",
-		UserID:         "user-1",
+		UserID:         "test-user",
 		ChatID:         "chat-1",
-		ProjectID:      "project-1",
+		ProjectID:      "test-project",
 		ProjectPath:    "/home/machine-b/project",
 		WorktreePath:   "/home/machine-b/project",
 		DaemonSelector: &DaemonSelector{ID: "daemon-b"},
@@ -134,7 +142,8 @@ func TestWorktreeTool_RunsGitOnTheRunsMachine(t *testing.T) {
 	}
 	assert.Contains(t, types, "worktree.create", "the checkout must be made by the machine's daemon")
 	assert.Contains(t, types, "worktree.copy_paths", "copy_files must be copied by the machine's daemon")
-	assert.Contains(t, result.Content, "/home/machine-b/.reliant/worktrees/repo123/feature-auth")
+	assert.Contains(t, result.Content, "/home/machine-b/.reliant/worktrees/")
+	assert.Contains(t, result.Content, "/feature-auth-")
 
 	_, statErr := os.Stat(filepath.Join(workerHome, ".reliant"))
 	assert.True(t, os.IsNotExist(statErr), "the worker's own disk must not be touched")

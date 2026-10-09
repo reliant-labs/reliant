@@ -10,7 +10,7 @@ import (
 
 func TestGetSystemPrompts_ContainsBasePrompt(t *testing.T) {
 	activity := &CallLLMActivity{}
-	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil)
+	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil, true)
 	require.NotEmpty(t, prompts)
 	prompt := prompts[0]
 
@@ -23,7 +23,7 @@ func TestGetSystemPrompts_ContainsBasePrompt(t *testing.T) {
 // stop a model reaching for stash to clear a dirty tree before a build.
 func TestGetSystemPrompts_WarnsAgainstDestructiveGitCommands(t *testing.T) {
 	activity := &CallLLMActivity{}
-	prompt := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil)[0]
+	prompt := activity.getSystemPrompts(nil, "/tmp/project", "", nil, nil, nil, true)[0]
 
 	require.Contains(t, prompt, "git checkout")
 	require.Contains(t, prompt, "git stash")
@@ -36,7 +36,7 @@ func TestGetSystemPrompts_DoesNotContainMemories(t *testing.T) {
 		ProjectMemoryMD: "project memory",
 	}
 
-	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", cfg, nil, nil)
+	prompts := activity.getSystemPrompts(nil, "/tmp/project", "", cfg, nil, nil, true)
 	require.NotEmpty(t, prompts)
 	prompt := prompts[0]
 
@@ -119,7 +119,7 @@ func TestGetSystemPrompts_StatesWorkingDirectoryAsTheProjectRoot(t *testing.T) {
 	activity := &CallLLMActivity{}
 
 	t.Run("project path when no worktree", func(t *testing.T) {
-		prompt := activity.getSystemPrompts(nil, "/srv/checkout/acme", "", nil, nil, nil)[0]
+		prompt := activity.getSystemPrompts(nil, "/srv/checkout/acme", "", nil, nil, nil, true)[0]
 
 		require.Contains(t, prompt, "/srv/checkout/acme",
 			"the absolute working directory must appear verbatim — it is the only place a spawned unit can learn it")
@@ -130,7 +130,7 @@ func TestGetSystemPrompts_StatesWorkingDirectoryAsTheProjectRoot(t *testing.T) {
 	})
 
 	t.Run("worktree path wins when the chat is bound to one", func(t *testing.T) {
-		prompt := activity.getSystemPrompts(nil, "/srv/checkout/acme", "/srv/worktrees/feature-x", nil, nil, nil)[0]
+		prompt := activity.getSystemPrompts(nil, "/srv/checkout/acme", "/srv/worktrees/feature-x", nil, nil, nil, true)[0]
 
 		require.Contains(t, prompt, "/srv/worktrees/feature-x",
 			"a chat bound to a worktree works in the worktree, and the prompt must name that path")

@@ -695,6 +695,7 @@ type Thread struct {
 	Status          int32          `json:"status"`
 	CompletedAt     sql.NullTime   `json:"completed_at"`
 	ForkAtMessageID sql.NullString `json:"fork_at_message_id"`
+	WorktreeID      sql.NullString `json:"worktree_id"`
 }
 
 type ToolCall struct {

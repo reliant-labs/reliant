@@ -4,8 +4,6 @@ package daemonruntime
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -27,7 +25,6 @@ import (
 )
 
 func init() {
-	RegisterCommand("worktree.generate_repo_id", handleGenerateRepoID)
 	RegisterCommand("worktree.validate_path", handleValidatePath)
 	RegisterCommand("worktree.create", handleWorktreeCreate)
 	RegisterCommand("worktree.copy_paths", handleWorktreeCopyPaths)
@@ -36,7 +33,10 @@ func init() {
 	RegisterCommand("worktree.remove_workspace_dir", handleWorktreeRemoveWorkspaceDir)
 	RegisterCommand("worktree.delete_branch", handleWorktreeDeleteBranch)
 	RegisterCommand("worktree.import_validate", handleWorktreeImportValidate)
-	RegisterCommand("worktree.discover", handleWorktreeDiscover)
+	RegisterCommand("worktree.discover_repos", handleWorktreeDiscoverRepos)
+	RegisterCommand("worktree.prune", handleWorktreePrune)
+	RegisterCommand("worktree.adopt_move", handleWorktreeAdoptMove)
+	RegisterCommand("worktree.adopt_restore", handleWorktreeAdoptRestore)
 	RegisterCommand("worktree.recreate", handleWorktreeRecreate)
 	RegisterCommand("worktree.git_changes", handleWorktreeGitChanges)
 	RegisterCommand("worktree.git_status", handleWorktreeGitStatus)
@@ -52,46 +52,6 @@ func init() {
 	RegisterCommand("worktree.get_default_branch", handleWorktreeGetDefaultBranch)
 	RegisterCommand("worktree.reconcile", handleWorktreeReconcile)
 	RegisterCommand("worktree.snapshot_remove", handleWorktreeSnapshotRemove)
-}
-
-// =============================================================================
-// worktree.generate_repo_id
-// =============================================================================
-
-type generateRepoIDRequest struct {
-	ProjectPath string `json:"project_path"`
-}
-
-type generateRepoIDResponse struct {
-	RepoID string `json:"repo_id"`
-}
-
-func handleGenerateRepoID(ctx context.Context, payload []byte) ([]byte, error) {
-	var req generateRepoIDRequest
-	if err := json.Unmarshal(payload, &req); err != nil {
-		return nil, fmt.Errorf("invalid payload: %w", err)
-	}
-
-	cmd := exec.CommandContext(ctx, "git", "config", "--get", "remote.origin.url")
-	cmd.Dir = req.ProjectPath
-	output, err := cmd.Output()
-
-	var input string
-	if err == nil && len(output) > 0 {
-		input = strings.TrimSpace(string(output))
-	} else {
-		abs, err := filepath.Abs(req.ProjectPath)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get absolute path: %w", err)
-		}
-		input = abs
-	}
-
-	hash := sha256.Sum256([]byte(input))
-	resp := generateRepoIDResponse{
-		RepoID: hex.EncodeToString(hash[:])[:12],
-	}
-	return json.Marshal(resp)
 }
 
 // =============================================================================
@@ -134,18 +94,13 @@ func handleValidatePath(_ context.Context, payload []byte) ([]byte, error) {
 
 type worktreeCreateRequest struct {
 	ProjectPath string `json:"project_path"`
-	// RepoID is a daemon-side hash used to construct the legacy default
-	// worktree path when WorkspaceID is not provided. Kept for callers that
-	// still rely on the old <HOME>/.reliant/worktrees/<repo_id>/<name> layout.
-	RepoID string `json:"repo_id"`
-	Name   string `json:"name"`
-	Branch string `json:"branch"`
-	// WorkspaceID, when set, switches to the multi-repo layout:
+	Name        string `json:"name"`
+	Branch      string `json:"branch"`
+	// WorkspaceID names the workspace directory:
 	//   <HOME>/.reliant/worktrees/<workspace_id>/<sub_path>
-	// where sub_path is the nested repo's relative path within the project
-	// (or just <name> for single-repo workspaces). This is how the workspace
-	// service fans N repos into one workspace dir.
-	WorkspaceID string `json:"workspace_id,omitempty"`
+	// where sub_path is the nested repo's relative path within the project.
+	// Required: every worktree is a workspace (see internal/workspacecreate).
+	WorkspaceID string `json:"workspace_id"`
 	// SubPath is the path component under the workspace dir for this repo's
 	// checkout. Empty means the workspace root itself (single-repo project).
 	SubPath    string `json:"sub_path,omitempty"`
@@ -154,6 +109,12 @@ type worktreeCreateRequest struct {
 	// WorktreeID is the id of the worktree row this checkout belongs to; it is
 	// written into the git lock reason. Empty skips locking.
 	WorktreeID string `json:"worktree_id,omitempty"`
+	// ReuseBranch checks out Branch as it is when it already exists, instead
+	// of resetting it to BaseBranch (`add -B`). It ignores Force. Used when
+	// adopting a worktree, where the same branch name is looked up in the
+	// project's other repos and a branch there is someone's work, never ours
+	// to reset.
+	ReuseBranch bool `json:"reuse_branch,omitempty"`
 }
 
 type worktreeCreateResponse struct {
@@ -168,6 +129,10 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 	var req worktreeCreateRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+
+	if req.WorkspaceID == "" {
+		return json.Marshal(worktreeCreateResponse{Error: "workspace_id is required"})
 	}
 
 	// Default branch name if not provided
@@ -197,27 +162,17 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
-	// Resolve the on-disk worktree path.
-	//
-	// Multi-repo (workspace) layout: WorkspaceID set →
-	//   <HOME>/.reliant/worktrees/<workspace_id>/<sub_path>
-	// Legacy single-repo layout: WorkspaceID empty →
-	//   <HOME>/.reliant/worktrees/<repo_id>/<name>
+	// Resolve the on-disk worktree path:
+	//   <HOME>/.reliant/worktrees/<workspace_id>[/<sub_path>]
+	// A sub_path of "" puts the checkout at the workspace root itself
+	// (single-repo project).
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
 		return json.Marshal(worktreeCreateResponse{Error: fmt.Sprintf("failed to get home directory: %v", err)})
 	}
-	var worktreePath string
-	if req.WorkspaceID != "" {
-		// Sub-path may be empty for single-repo workspaces — checkout lands
-		// at the workspace root itself.
-		if req.SubPath == "" {
-			worktreePath = filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID)
-		} else {
-			worktreePath = filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID, req.SubPath)
-		}
-	} else {
-		worktreePath = filepath.Join(homeDir, ".reliant", "worktrees", req.RepoID, req.Name)
+	worktreePath := filepath.Join(homeDir, ".reliant", "worktrees", req.WorkspaceID)
+	if req.SubPath != "" {
+		worktreePath = filepath.Join(worktreePath, req.SubPath)
 	}
 
 	// Ensure parent directory exists
@@ -238,7 +193,17 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 
 	// Create the git worktree
 	var worktreeCmd *exec.Cmd
-	if branchExists || req.Force {
+	if req.ReuseBranch {
+		localBranch := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", "refs/heads/"+req.Branch)
+		localBranch.Dir = req.ProjectPath
+		if localBranch.Run() == nil {
+			// No -B and no --force: git itself refuses when the branch is
+			// checked out in another worktree.
+			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", worktreePath, req.Branch)
+		} else {
+			worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-b", req.Branch, worktreePath, req.BaseBranch)
+		}
+	} else if branchExists || req.Force {
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-B", req.Branch, worktreePath, req.BaseBranch)
 	} else {
 		worktreeCmd = exec.CommandContext(ctx, "git", "worktree", "add", "-b", req.Branch, worktreePath, req.BaseBranch)
@@ -314,6 +279,152 @@ func handleWorktreeCreate(ctx context.Context, payload []byte) ([]byte, error) {
 		"elapsed", time.Since(checkoutStart).Round(time.Millisecond).String())
 
 	return json.Marshal(worktreeCreateResponse{Success: true, WorktreePath: worktreePath, BaseBranch: req.BaseBranch})
+}
+
+// =============================================================================
+// worktree.adopt_move / worktree.adopt_restore
+// =============================================================================
+//
+// Adopting a hand-made worktree of a multi-repo project moves its checkout to
+// the place a Reliant workspace keeps that repo,
+// <HOME>/.reliant/worktrees/<workspace_id>/<sub_path>. The move is `git
+// worktree move`, which renames the directory and rewrites git's records: the
+// branch, HEAD, index and uncommitted changes are untouched. adopt_restore is
+// its exact inverse, used when anything later in the adopt fails.
+
+type worktreeAdoptMoveRequest struct {
+	// RepoPath is the repo's main checkout, which owns the worktree.
+	RepoPath string `json:"repo_path"`
+	// Src is the discovered checkout to move.
+	Src         string `json:"src"`
+	WorkspaceID string `json:"workspace_id"`
+	SubPath     string `json:"sub_path,omitempty"`
+	WorktreeID  string `json:"worktree_id,omitempty"`
+}
+
+type worktreeAdoptMoveResponse struct {
+	Success      bool   `json:"success"`
+	WorktreePath string `json:"worktree_path,omitempty"`
+	BaseBranch   string `json:"base_branch,omitempty"`
+	// Error is git's own refusal when it has one (locked, submodules, ...).
+	Error string `json:"error,omitempty"`
+}
+
+func workspaceCheckoutPath(workspaceID, subPath string) (string, error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return "", fmt.Errorf("failed to get home directory: %w", err)
+	}
+	p := filepath.Join(home, ".reliant", "worktrees", workspaceID)
+	if subPath != "" {
+		p = filepath.Join(p, subPath)
+	}
+	return p, nil
+}
+
+func handleWorktreeAdoptMove(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreeAdoptMoveRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	fail := func(format string, a ...any) ([]byte, error) {
+		return json.Marshal(worktreeAdoptMoveResponse{Error: fmt.Sprintf(format, a...)})
+	}
+	if req.RepoPath == "" || req.Src == "" || req.WorkspaceID == "" {
+		return fail("repo_path, src and workspace_id are required")
+	}
+	// The server validated src against a discovery, but this is the boundary
+	// that touches the disk: it must still be a live linked worktree of THIS
+	// repo (never its main checkout).
+	entries, err := listRepoLinkedWorktrees(ctx, worktreeRepoRef{Path: req.RepoPath})
+	if err != nil {
+		return fail("%v", err)
+	}
+	found := false
+	for _, e := range entries {
+		if !e.Prunable && comparablePath(e.Path) == comparablePath(req.Src) {
+			found = true
+			break
+		}
+	}
+	if !found {
+		return fail("%s is not a linked worktree of %s", req.Src, req.RepoPath)
+	}
+	dest, err := workspaceCheckoutPath(req.WorkspaceID, req.SubPath)
+	if err != nil {
+		return fail("%v", err)
+	}
+	if _, err := os.Lstat(dest); err == nil {
+		return fail("destination %s already exists", dest)
+	}
+	if err := os.MkdirAll(filepath.Dir(dest), 0o755); err != nil {
+		return fail("failed to create %s: %v", filepath.Dir(dest), err)
+	}
+	// No --force: git refuses a locked worktree or one with submodules, and
+	// that refusal is the answer.
+	out, err := exec.CommandContext(ctx, "git", "-C", req.RepoPath, "worktree", "move", req.Src, dest).CombinedOutput()
+	if err != nil {
+		// Only the parent we may have just made, and only when empty.
+		if parent := filepath.Dir(dest); parent != filepath.Dir(filepath.Dir(dest)) {
+			if entries, rerr := os.ReadDir(parent); rerr == nil && len(entries) == 0 {
+				_ = os.Remove(parent)
+			}
+		}
+		return fail("%s", strings.TrimSpace(string(out)))
+	}
+	if req.WorktreeID != "" {
+		if err := worktreereclaim.LockCheckout(ctx, dest, req.WorktreeID); err != nil {
+			logging.Warn("adopted worktree moved but not locked; reconcile will retry", "worktree_path", dest, "error", err)
+		}
+	}
+	return json.Marshal(worktreeAdoptMoveResponse{
+		Success:      true,
+		WorktreePath: dest,
+		BaseBranch:   getRepositoryDefaultBranch(ctx, req.RepoPath),
+	})
+}
+
+type worktreeAdoptRestoreRequest struct {
+	RepoPath string `json:"repo_path"`
+	// Src is where the checkout was before the move; Dest is where it is now.
+	Src  string `json:"src"`
+	Dest string `json:"dest"`
+}
+
+type worktreeAdoptRestoreResponse struct {
+	Success bool   `json:"success"`
+	Error   string `json:"error,omitempty"`
+}
+
+// handleWorktreeAdoptRestore moves an adopted checkout back to where it came
+// from. It never deletes anything.
+func handleWorktreeAdoptRestore(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreeAdoptRestoreRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	fail := func(format string, a ...any) ([]byte, error) {
+		return json.Marshal(worktreeAdoptRestoreResponse{Error: fmt.Sprintf(format, a...)})
+	}
+	if req.RepoPath == "" || req.Src == "" || req.Dest == "" {
+		return fail("repo_path, src and dest are required")
+	}
+	if _, err := os.Lstat(req.Dest); err != nil {
+		if _, serr := os.Lstat(req.Src); serr == nil {
+			// Already back (a retry after a partial rollback).
+			return json.Marshal(worktreeAdoptRestoreResponse{Success: true})
+		}
+		return fail("neither %s nor %s exists", req.Dest, req.Src)
+	}
+	if _, err := os.Lstat(req.Src); err == nil {
+		return fail("original path %s is occupied; the checkout stays at %s", req.Src, req.Dest)
+	}
+	// git will not move a locked worktree; the lock is Reliant's own.
+	worktreereclaim.UnlockForRemoval(ctx, req.Dest)
+	if out, err := exec.CommandContext(ctx, "git", "-C", req.RepoPath, "worktree", "move", req.Dest, req.Src).CombinedOutput(); err != nil {
+		return fail("%s", strings.TrimSpace(string(out)))
+	}
+	return json.Marshal(worktreeAdoptRestoreResponse{Success: true})
 }
 
 // =============================================================================
@@ -585,79 +696,260 @@ func handleWorktreeImportValidate(ctx context.Context, payload []byte) ([]byte, 
 }
 
 // =============================================================================
-// worktree.discover
+// worktree.discover_repos / worktree.prune
 // =============================================================================
 
-type worktreeDiscoverRequest struct {
-	ProjectPath string `json:"project_path"`
+// worktreeRepoRef names one registered repo of a project and where it is on
+// this machine.
+type worktreeRepoRef struct {
+	RepoID string `json:"repo_id"`
+	Path   string `json:"path"`
 }
 
+type worktreeDiscoverReposRequest struct {
+	Repos []worktreeRepoRef `json:"repos"`
+	// ExcludeRoots are paths whose checkouts are already tracked; an entry
+	// equal to or under one is dropped. The daemon's own worktrees root is
+	// always excluded as well.
+	ExcludeRoots []string `json:"exclude_roots,omitempty"`
+}
+
+// discoveredWorktreeEntry is one linked worktree of a repo. Prunable entries
+// are ones whose directory is gone; git does not mark a locked worktree
+// prunable.
 type discoveredWorktreeEntry struct {
-	Path       string `json:"path"`
-	Name       string `json:"name"`
-	Branch     string `json:"branch"`
-	IsPrunable bool   `json:"is_prunable"`
+	RepoID         string `json:"repo_id"`
+	Path           string `json:"path"`
+	Name           string `json:"name"`
+	Branch         string `json:"branch,omitempty"`
+	Head           string `json:"head,omitempty"`
+	Detached       bool   `json:"detached,omitempty"`
+	Locked         bool   `json:"locked,omitempty"`
+	LockReason     string `json:"lock_reason,omitempty"`
+	Prunable       bool   `json:"prunable,omitempty"`
+	PrunableReason string `json:"prunable_reason,omitempty"`
 }
 
-type worktreeDiscoverResponse struct {
+type worktreeDiscoverReposResponse struct {
 	Worktrees []discoveredWorktreeEntry `json:"worktrees"`
-	Error     string                    `json:"error,omitempty"`
+	// WorktreesRoot is where this machine keeps Reliant-made workspaces.
+	WorktreesRoot string `json:"worktrees_root,omitempty"`
 }
 
-func handleWorktreeDiscover(ctx context.Context, payload []byte) ([]byte, error) {
-	var req worktreeDiscoverRequest
+type worktreePruneRequest struct {
+	Repos []worktreeRepoRef `json:"repos"`
+}
+
+type worktreePruneResponse struct {
+	// Pruned are the stale entries that were gone after the prune.
+	Pruned []discoveredWorktreeEntry `json:"pruned"`
+	// Errors are per-repo failures; other repos are still processed.
+	Errors []string `json:"errors,omitempty"`
+}
+
+// porcelainWorktree is one block of `git worktree list --porcelain`.
+type porcelainWorktree struct {
+	Path           string
+	Head           string
+	Branch         string
+	Detached       bool
+	Bare           bool
+	Locked         bool
+	LockReason     string
+	Prunable       bool
+	PrunableReason string
+}
+
+// parseWorktreePorcelain parses `git worktree list --porcelain`. Blocks are
+// separated by blank lines and the first is the main checkout.
+func parseWorktreePorcelain(out string) []porcelainWorktree {
+	var all []porcelainWorktree
+	var cur *porcelainWorktree
+	flush := func() {
+		if cur != nil {
+			all = append(all, *cur)
+			cur = nil
+		}
+	}
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimRight(line, "\r")
+		if strings.TrimSpace(line) == "" {
+			flush()
+			continue
+		}
+		key, val, _ := strings.Cut(line, " ")
+		if key == "worktree" {
+			flush()
+			cur = &porcelainWorktree{Path: val}
+			continue
+		}
+		if cur == nil {
+			continue
+		}
+		switch key {
+		case "HEAD":
+			cur.Head = val
+		case "branch":
+			cur.Branch = strings.TrimPrefix(val, "refs/heads/")
+		case "detached":
+			cur.Detached = true
+		case "bare":
+			cur.Bare = true
+		case "locked":
+			cur.Locked = true
+			cur.LockReason = val
+		case "prunable":
+			cur.Prunable = true
+			cur.PrunableReason = val
+		}
+	}
+	flush()
+	return all
+}
+
+// listRepoLinkedWorktrees lists a repo's linked worktrees (never its main
+// checkout). A path that is missing or not itself a git checkout yields
+// nothing and no error: `git -C` would otherwise walk up into an enclosing
+// repository and report ITS worktrees.
+func listRepoLinkedWorktrees(ctx context.Context, repo worktreeRepoRef) ([]discoveredWorktreeEntry, error) {
+	if repo.Path == "" {
+		return nil, nil
+	}
+	if _, err := os.Stat(filepath.Join(repo.Path, ".git")); err != nil {
+		return nil, nil
+	}
+	cmd := exec.CommandContext(ctx, "git", "-C", repo.Path, "worktree", "list", "--porcelain")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		msg := strings.TrimSpace(string(out))
+		if strings.Contains(msg, "not a git repository") {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("git worktree list in %s: %s", repo.Path, msg)
+	}
+	self := comparablePath(repo.Path)
+	var entries []discoveredWorktreeEntry
+	for i, wt := range parseWorktreePorcelain(string(out)) {
+		if i == 0 || wt.Bare || comparablePath(wt.Path) == self {
+			continue
+		}
+		entries = append(entries, discoveredWorktreeEntry{
+			RepoID:         repo.RepoID,
+			Path:           wt.Path,
+			Name:           filepath.Base(wt.Path),
+			Branch:         wt.Branch,
+			Head:           wt.Head,
+			Detached:       wt.Detached,
+			Locked:         wt.Locked,
+			LockReason:     wt.LockReason,
+			Prunable:       wt.Prunable,
+			PrunableReason: wt.PrunableReason,
+		})
+	}
+	return entries, nil
+}
+
+// comparablePath resolves symlinks for comparison. A path that no longer
+// exists resolves through its nearest existing parent.
+func comparablePath(p string) string {
+	p = filepath.Clean(p)
+	if r, err := filepath.EvalSymlinks(p); err == nil {
+		return r
+	}
+	if dir := filepath.Dir(p); dir != p {
+		return filepath.Join(comparablePath(dir), filepath.Base(p))
+	}
+	return p
+}
+
+func pathWithin(p, root string) bool {
+	return p == root || strings.HasPrefix(p, root+string(filepath.Separator))
+}
+
+func handleWorktreeDiscoverRepos(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreeDiscoverReposRequest
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
-
-	cmd := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
-	cmd.Dir = req.ProjectPath
-	output, err := cmd.CombinedOutput()
-	if err != nil {
-		errOutput := strings.TrimSpace(string(output))
-		if strings.Contains(errOutput, "not a git repository") {
-			return json.Marshal(worktreeDiscoverResponse{Worktrees: []discoveredWorktreeEntry{}})
-		}
-		return json.Marshal(worktreeDiscoverResponse{Error: errOutput})
+	resp := worktreeDiscoverReposResponse{Worktrees: []discoveredWorktreeEntry{}}
+	var excluded []string
+	if root, err := worktreereclaim.DefaultRoot(); err == nil {
+		resp.WorktreesRoot = root
+		excluded = append(excluded, comparablePath(root))
 	}
-
-	var worktrees []discoveredWorktreeEntry
-	lines := strings.Split(string(output), "\n")
-
-	var current *discoveredWorktreeEntry
-	for _, line := range lines {
-		line = strings.TrimSpace(line)
-		if line == "" {
-			if current != nil {
-				worktrees = append(worktrees, *current)
-				current = nil
-			}
+	for _, r := range req.ExcludeRoots {
+		if r != "" {
+			excluded = append(excluded, comparablePath(r))
+		}
+	}
+	for _, repo := range req.Repos {
+		entries, err := listRepoLinkedWorktrees(ctx, repo)
+		if err != nil {
+			logging.Warn("worktree.discover_repos: list failed", "repo", repo.Path, "error", err)
 			continue
 		}
-
-		if strings.HasPrefix(line, "worktree ") {
-			path := strings.TrimPrefix(line, "worktree ")
-			current = &discoveredWorktreeEntry{
-				Path: path,
-				Name: filepath.Base(path),
+	next:
+		for _, e := range entries {
+			// A stale record has no directory to protect, so exclusions
+			// (which guard tracked checkouts) do not apply: pruning it only
+			// drops git's bookkeeping.
+			if !e.Prunable {
+				p := comparablePath(e.Path)
+				for _, x := range excluded {
+					if pathWithin(p, x) {
+						continue next
+					}
+				}
 			}
-		} else if strings.HasPrefix(line, "branch ") && current != nil {
-			branchRef := strings.TrimPrefix(line, "branch ")
-			parts := strings.Split(branchRef, "/")
-			if len(parts) >= 3 {
-				current.Branch = strings.Join(parts[2:], "/")
-			} else {
-				current.Branch = branchRef
-			}
-		} else if strings.HasPrefix(line, "prunable") && current != nil {
-			current.IsPrunable = true
+			resp.Worktrees = append(resp.Worktrees, e)
 		}
 	}
-	if current != nil {
-		worktrees = append(worktrees, *current)
-	}
+	return json.Marshal(resp)
+}
 
-	return json.Marshal(worktreeDiscoverResponse{Worktrees: worktrees})
+func handleWorktreePrune(ctx context.Context, payload []byte) ([]byte, error) {
+	var req worktreePruneRequest
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, fmt.Errorf("invalid payload: %w", err)
+	}
+	resp := worktreePruneResponse{Pruned: []discoveredWorktreeEntry{}}
+	for _, repo := range req.Repos {
+		before, err := listRepoLinkedWorktrees(ctx, repo)
+		if err != nil {
+			resp.Errors = append(resp.Errors, err.Error())
+			continue
+		}
+		var stale []discoveredWorktreeEntry
+		for _, e := range before {
+			if e.Prunable {
+				stale = append(stale, e)
+			}
+		}
+		if len(stale) == 0 {
+			continue
+		}
+		// Plain prune only: it removes git's records of directories that are
+		// already gone. No --expire, and nothing that touches a directory.
+		if out, err := exec.CommandContext(ctx, "git", "-C", repo.Path, "worktree", "prune").CombinedOutput(); err != nil {
+			resp.Errors = append(resp.Errors, fmt.Sprintf("git worktree prune in %s: %s", repo.Path, strings.TrimSpace(string(out))))
+			continue
+		}
+		after, err := listRepoLinkedWorktrees(ctx, repo)
+		if err != nil {
+			resp.Errors = append(resp.Errors, err.Error())
+			continue
+		}
+		remaining := map[string]bool{}
+		for _, e := range after {
+			remaining[e.Path] = true
+		}
+		for _, e := range stale {
+			if !remaining[e.Path] {
+				resp.Pruned = append(resp.Pruned, e)
+			}
+		}
+	}
+	return json.Marshal(resp)
 }
 
 // =============================================================================

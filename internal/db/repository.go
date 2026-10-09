@@ -144,6 +144,12 @@ type Repository interface {
 	CreateWorktree(ctx context.Context, worktree *Worktree) error
 	GetWorktree(ctx context.Context, id string) (*Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error)
+	// GetLiveWorktreeByName returns the project's unarchived worktree called
+	// name, or (nil, nil). At most one exists.
+	GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error)
+	// ListWorktreesByBranch returns every row of the project recorded against
+	// the branch, archived ones included.
+	ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*Worktree, error)
 	// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
 	// key, or (nil, nil) when there is none.
 	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error)

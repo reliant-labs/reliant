@@ -76,9 +76,9 @@ const createThread = `-- name: CreateThread :one
 INSERT INTO threads (
     id, chat_id, parent_thread_id, fork_at_message_id,
     workflow_id, title, created_at,
-    origin, origin_node_id, status
-) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
-RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id
+    origin, origin_node_id, status, worktree_id
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id
 `
 
 type CreateThreadParams struct {
@@ -92,6 +92,7 @@ type CreateThreadParams struct {
 	Origin          string         `json:"origin"`
 	OriginNodeID    sql.NullString `json:"origin_node_id"`
 	Status          int32          `json:"status"`
+	WorktreeID      sql.NullString `json:"worktree_id"`
 }
 
 func (q *Queries) CreateThread(ctx context.Context, arg CreateThreadParams) (Thread, error) {
@@ -106,6 +107,7 @@ func (q *Queries) CreateThread(ctx context.Context, arg CreateThreadParams) (Thr
 		arg.Origin,
 		arg.OriginNodeID,
 		arg.Status,
+		arg.WorktreeID,
 	)
 	var i Thread
 	err := row.Scan(
@@ -120,6 +122,7 @@ func (q *Queries) CreateThread(ctx context.Context, arg CreateThreadParams) (Thr
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 	)
 	return i, err
 }
@@ -143,7 +146,7 @@ func (q *Queries) DeleteThreadsByConversation(ctx context.Context, chatID string
 }
 
 const getRootThread = `-- name: GetRootThread :one
-SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id FROM threads
+SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id FROM threads
 WHERE chat_id = $1 AND parent_thread_id IS NULL
 ORDER BY created_at ASC
 LIMIT 1
@@ -165,12 +168,13 @@ func (q *Queries) GetRootThread(ctx context.Context, chatID string) (Thread, err
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 	)
 	return i, err
 }
 
 const getThread = `-- name: GetThread :one
-SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id FROM threads WHERE id = $1
+SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id FROM threads WHERE id = $1
 `
 
 func (q *Queries) GetThread(ctx context.Context, id string) (Thread, error) {
@@ -188,12 +192,13 @@ func (q *Queries) GetThread(ctx context.Context, id string) (Thread, error) {
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 	)
 	return i, err
 }
 
 const getThreadByWorkflow = `-- name: GetThreadByWorkflow :one
-SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id FROM threads WHERE workflow_id = $1
+SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id FROM threads WHERE workflow_id = $1
 `
 
 func (q *Queries) GetThreadByWorkflow(ctx context.Context, workflowID sql.NullString) (Thread, error) {
@@ -211,13 +216,14 @@ func (q *Queries) GetThreadByWorkflow(ctx context.Context, workflowID sql.NullSt
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 	)
 	return i, err
 }
 
 const getThreadWithParent = `-- name: GetThreadWithParent :one
 SELECT 
-    t.id, t.chat_id, t.parent_thread_id, t.workflow_id, t.created_at, t.title, t.origin, t.origin_node_id, t.status, t.completed_at, t.fork_at_message_id,
+    t.id, t.chat_id, t.parent_thread_id, t.workflow_id, t.created_at, t.title, t.origin, t.origin_node_id, t.status, t.completed_at, t.fork_at_message_id, t.worktree_id,
     pt.chat_id AS parent_chat_id
 FROM threads t
 LEFT JOIN threads pt ON t.parent_thread_id = pt.id
@@ -236,6 +242,7 @@ type GetThreadWithParentRow struct {
 	Status          int32          `json:"status"`
 	CompletedAt     sql.NullTime   `json:"completed_at"`
 	ForkAtMessageID sql.NullString `json:"fork_at_message_id"`
+	WorktreeID      sql.NullString `json:"worktree_id"`
 	ParentChatID    sql.NullString `json:"parent_chat_id"`
 }
 
@@ -255,13 +262,14 @@ func (q *Queries) GetThreadWithParent(ctx context.Context, id string) (GetThread
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 		&i.ParentChatID,
 	)
 	return i, err
 }
 
 const listChildThreads = `-- name: ListChildThreads :many
-SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id FROM threads
+SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id FROM threads
 WHERE parent_thread_id = $1
 ORDER BY created_at ASC
 `
@@ -288,6 +296,7 @@ func (q *Queries) ListChildThreads(ctx context.Context, parentThreadID sql.NullS
 			&i.Status,
 			&i.CompletedAt,
 			&i.ForkAtMessageID,
+			&i.WorktreeID,
 		); err != nil {
 			return nil, err
 		}
@@ -303,7 +312,7 @@ func (q *Queries) ListChildThreads(ctx context.Context, parentThreadID sql.NullS
 }
 
 const listThreadsByConversation = `-- name: ListThreadsByConversation :many
-SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id FROM threads
+SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id FROM threads
 WHERE chat_id = $1
 ORDER BY created_at ASC
 `
@@ -329,6 +338,7 @@ func (q *Queries) ListThreadsByConversation(ctx context.Context, chatID string) 
 			&i.Status,
 			&i.CompletedAt,
 			&i.ForkAtMessageID,
+			&i.WorktreeID,
 		); err != nil {
 			return nil, err
 		}
@@ -344,7 +354,7 @@ func (q *Queries) ListThreadsByConversation(ctx context.Context, chatID string) 
 }
 
 const listThreadsByOrigin = `-- name: ListThreadsByOrigin :many
-SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id FROM threads
+SELECT id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id FROM threads
 WHERE chat_id = $1 AND origin = $2
 ORDER BY created_at ASC
 `
@@ -376,6 +386,7 @@ func (q *Queries) ListThreadsByOrigin(ctx context.Context, arg ListThreadsByOrig
 			&i.Status,
 			&i.CompletedAt,
 			&i.ForkAtMessageID,
+			&i.WorktreeID,
 		); err != nil {
 			return nil, err
 		}
@@ -484,7 +495,7 @@ const updateThreadForkPoint = `-- name: UpdateThreadForkPoint :one
 UPDATE threads SET 
     fork_at_message_id = $1
 WHERE id = $2
-RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id
+RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id
 `
 
 type UpdateThreadForkPointParams struct {
@@ -508,6 +519,7 @@ func (q *Queries) UpdateThreadForkPoint(ctx context.Context, arg UpdateThreadFor
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 	)
 	return i, err
 }
@@ -517,7 +529,7 @@ UPDATE threads SET
     status = $1,
     completed_at = $2
 WHERE id = $3
-RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id
+RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id
 `
 
 type UpdateThreadStatusParams struct {
@@ -545,6 +557,7 @@ func (q *Queries) UpdateThreadStatus(ctx context.Context, arg UpdateThreadStatus
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 	)
 	return i, err
 }
@@ -552,7 +565,7 @@ func (q *Queries) UpdateThreadStatus(ctx context.Context, arg UpdateThreadStatus
 const updateThreadWorkflow = `-- name: UpdateThreadWorkflow :one
 UPDATE threads SET workflow_id = $1
 WHERE id = $2
-RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id
+RETURNING id, chat_id, parent_thread_id, workflow_id, created_at, title, origin, origin_node_id, status, completed_at, fork_at_message_id, worktree_id
 `
 
 type UpdateThreadWorkflowParams struct {
@@ -575,6 +588,7 @@ func (q *Queries) UpdateThreadWorkflow(ctx context.Context, arg UpdateThreadWork
 		&i.Status,
 		&i.CompletedAt,
 		&i.ForkAtMessageID,
+		&i.WorktreeID,
 	)
 	return i, err
 }

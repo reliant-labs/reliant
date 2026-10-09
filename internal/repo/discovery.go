@@ -65,7 +65,7 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 
 	rootIsGit := isGitDir(abs)
 
-	var found []Found
+	var candidates []candidate
 	rootDepth := strings.Count(abs, string(filepath.Separator))
 
 	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
@@ -103,11 +103,7 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 			if err != nil {
 				return nil
 			}
-			found = append(found, Found{
-				RelativePath: rel,
-				Name:         filepath.Base(path),
-				RemoteURL:    readRemoteURL(ctx, path),
-			})
+			candidates = append(candidates, candidate{abs: path, rel: rel})
 			// Don't recurse into a discovered repo.
 			return fs.SkipDir
 		}
@@ -116,6 +112,18 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 
 	if walkErr != nil {
 		return nil, fmt.Errorf("scan project: %w", walkErr)
+	}
+
+	candidates = dropDuplicateWorktrees(abs, rootIsGit, candidates)
+
+	// Resolve remotes only for survivors: each is a git spawn.
+	found := make([]Found, 0, len(candidates))
+	for _, c := range candidates {
+		found = append(found, Found{
+			RelativePath: c.rel,
+			Name:         filepath.Base(c.abs),
+			RemoteURL:    readRemoteURL(ctx, c.abs),
+		})
 	}
 
 	// If the root is a git repo and no nested repos were found, treat it as
@@ -133,9 +141,56 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 	return found, nil
 }
 
+// candidate is a git checkout seen by the walk, before duplicate filtering.
+type candidate struct {
+	abs string
+	rel string
+}
+
+// dropDuplicateWorktrees removes linked worktrees whose primary checkout is
+// also in the scan (the root counts when it is a git repo). Such a worktree
+// duplicates its primary: its memory files and skills would be added a second
+// time to every chat. It is a post-pass because lexical walk order does not
+// visit primaries first. Worktrees whose primary is outside the scan are all
+// kept (e.g. UI workspaces, where every member is a linked worktree), and any
+// directory we cannot classify is kept.
+func dropDuplicateWorktrees(root string, rootIsGit bool, cands []candidate) []candidate {
+	primaries := map[string]struct{}{}
+	if rootIsGit {
+		if common, linked, ok := gitIdentity(root); ok && !linked {
+			primaries[common] = struct{}{}
+		}
+	}
+	type ident struct {
+		common string
+		linked bool
+		ok     bool
+	}
+	ids := make([]ident, len(cands))
+	for i, c := range cands {
+		common, linked, ok := gitIdentity(c.abs)
+		ids[i] = ident{common, linked, ok}
+		if ok && !linked {
+			primaries[common] = struct{}{}
+		}
+	}
+	out := cands[:0:0]
+	for i, c := range cands {
+		if ids[i].ok && ids[i].linked {
+			if _, dup := primaries[ids[i].common]; dup {
+				continue
+			}
+		}
+		out = append(out, c)
+	}
+	return out
+}
+
 // isGitDir reports whether the given directory contains a `.git` entry.
-// A `.git` directory indicates a normal checkout; a `.git` file indicates
-// a worktree linked to a parent repo. Both count as a repo for our purposes.
+// A `.git` directory indicates a normal checkout; a `.git` file indicates a
+// submodule or a linked worktree. All count as repos here; linked worktrees
+// whose primary is in the same scan are removed afterwards by
+// dropDuplicateWorktrees.
 func isGitDir(dir string) bool {
 	info, err := os.Stat(filepath.Join(dir, ".git"))
 	if err != nil {
