@@ -9,8 +9,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
-
-	"github.com/reliant-labs/reliant/internal/logging"
 )
 
 func init() {
@@ -28,7 +26,6 @@ type gitCloneRequest struct {
 	Repo   string `json:"repo"`
 	Branch string `json:"branch"`
 	Path   string `json:"path"`
-	Token  string `json:"token,omitempty"`
 }
 
 type gitCloneResponse struct {
@@ -70,13 +67,8 @@ func handleGitClone(ctx context.Context, payload []byte) ([]byte, error) {
 		})
 	}
 
-	if err := cloneAtomically(ctx, req.Repo, req.Branch, req.Path, req.Token); err != nil {
+	if err := cloneAtomically(ctx, req.Repo, req.Branch, req.Path); err != nil {
 		return nil, err
-	}
-
-	// If token was provided, set up credential helper for this repo so push/pull works
-	if req.Token != "" {
-		setupCredentialForRepo(ctx, req.Path, req.Repo, req.Token)
 	}
 
 	return json.Marshal(gitCloneResponse{
@@ -105,7 +97,7 @@ const cloneStagingPrefix = ".reliant-clone-"
 // pre-create path, or by the user), and is adopted: the rename replaces it.
 // A NON-EMPTY dest that is not a checkout is someone's files, never ours to
 // replace, and is refused.
-func cloneAtomically(ctx context.Context, repo, branch, dest, token string) error {
+func cloneAtomically(ctx context.Context, repo, branch, dest string) error {
 	parent := filepath.Dir(dest)
 	if err := os.MkdirAll(parent, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory: %v", err)
@@ -130,14 +122,13 @@ func cloneAtomically(ctx context.Context, repo, branch, dest, token string) erro
 	// would be written to .git/config as remote.origin.url and outlive its
 	// validity there.
 	cmd := exec.CommandContext(ctx, "git", "clone", "--branch", branch, repo, staging)
-	cmd.Env = append(os.Environ(), "GIT_TERMINAL_PROMPT=0")
-	cmd.Env = append(cmd.Env, cloneCredentialEnv(token)...)
+	cmd.Env = gitCredentialEnv(append(os.Environ(), "GIT_TERMINAL_PROMPT=0"))
 
 	// git clone can be memory-heavy on large repos; attribute a SIGKILL to
 	// the workspace OOM killer when the cgroup recorded one.
 	oomSnap := memReader.SnapshotOOMKills()
 	if output, err := cmd.CombinedOutput(); err != nil {
-		return fmt.Errorf("git clone failed: %v: %s", wrapChildOOMKill(err, oomSnap), sanitizeGitOutput(string(output), token))
+		return fmt.Errorf("git clone failed: %v: %s", wrapChildOOMKill(err, oomSnap), string(output))
 	}
 
 	// An empty directory at dest (checked above) is replaced by the rename on
@@ -204,36 +195,6 @@ func repoNameFromURL(url string) string {
 		return parts[len(parts)-1]
 	}
 	return "repo"
-}
-
-// cloneTokenEnv carries the token to the one-shot credential helper. An env
-// var, not argv or the URL: neither the process list nor .git/config sees it.
-const cloneTokenEnv = "RELIANT_GIT_CLONE_TOKEN"
-
-// cloneCredentialEnv makes git authenticate to HTTPS remotes with token for
-// this one invocation only (GIT_CONFIG_COUNT config is never persisted).
-// The empty credential.helper first clears any helper inherited from system or
-// global config. Nil when there is no token.
-func cloneCredentialEnv(token string) []string {
-	if token == "" {
-		return nil
-	}
-	return []string{
-		cloneTokenEnv + "=" + token,
-		"GIT_CONFIG_COUNT=2",
-		"GIT_CONFIG_KEY_0=credential.helper",
-		"GIT_CONFIG_VALUE_0=",
-		"GIT_CONFIG_KEY_1=credential.helper",
-		"GIT_CONFIG_VALUE_1=!f() { echo username=x-access-token; echo \"password=$" + cloneTokenEnv + "\"; }; f",
-	}
-}
-
-// sanitizeGitOutput removes tokens from git output to prevent leaking secrets.
-func sanitizeGitOutput(output, token string) string {
-	if token == "" {
-		return output
-	}
-	return strings.ReplaceAll(output, token, "***")
 }
 
 // =============================================================================
@@ -348,8 +309,6 @@ type gitRecloneRequest struct {
 	Repo string `json:"repo"`
 	// Branch is the branch to check out (default "main").
 	Branch string `json:"branch,omitempty"`
-	// Token is an optional access token for private repos.
-	Token string `json:"token,omitempty"`
 }
 
 type gitRecloneResponse struct {
@@ -386,11 +345,8 @@ func handleGitReclone(ctx context.Context, payload []byte) ([]byte, error) {
 		}
 	}
 
-	if err := cloneAtomically(ctx, req.Repo, branch, req.Path, req.Token); err != nil {
+	if err := cloneAtomically(ctx, req.Repo, branch, req.Path); err != nil {
 		return nil, err
-	}
-	if req.Token != "" {
-		setupCredentialForRepo(ctx, req.Path, req.Repo, req.Token)
 	}
 	return json.Marshal(gitRecloneResponse{Success: true, Path: req.Path})
 }
@@ -404,67 +360,4 @@ func truncateGitOutput(out string) string {
 		return out
 	}
 	return out[:cap/2] + "\n…[truncated]…\n" + out[len(out)-cap/2:]
-}
-
-// setupCredentialForRepo configures git credential storage for the cloned repo
-// so that subsequent push/pull operations use the token.
-func setupCredentialForRepo(ctx context.Context, repoPath, repoURL, token string) {
-	// Set up credential.helper store for this repo
-	_ = exec.CommandContext(ctx, "git", "-C", repoPath, "config", "credential.helper", "store").Run()
-
-	// Determine the host from the repo URL
-	host := "github.com"
-	if strings.Contains(repoURL, "gitlab.com") {
-		host = "gitlab.com"
-	}
-
-	if err := upsertGitCredential(host, token); err != nil {
-		logging.Warn(logPrefix+" Failed to write .git-credentials", "error", err)
-	}
-}
-
-// upsertGitCredential makes token the one x-access-token credential stored for
-// host in ~/.git-credentials. The store helper returns the FIRST matching
-// line, so appending (the old behaviour) pinned every later push to the oldest
-// token for the host, long after a newer one had been issued. Other users'
-// and other hosts' lines are kept untouched.
-func upsertGitCredential(host, token string) error {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return err
-	}
-	credFile := filepath.Join(homeDir, ".git-credentials")
-	existing, err := os.ReadFile(credFile)
-	if err != nil && !os.IsNotExist(err) {
-		return err
-	}
-	prefix := "https://x-access-token:"
-	suffix := "@" + host
-	var kept []string
-	for _, line := range strings.Split(string(existing), "\n") {
-		if line == "" {
-			continue
-		}
-		if strings.HasPrefix(line, prefix) && strings.HasSuffix(line, suffix) {
-			continue
-		}
-		kept = append(kept, line)
-	}
-	kept = append(kept, prefix+token+suffix)
-	tmp, err := os.CreateTemp(filepath.Dir(credFile), ".git-credentials-*")
-	if err != nil {
-		return err
-	}
-	defer os.Remove(tmp.Name())
-	if _, err := tmp.WriteString(strings.Join(kept, "\n") + "\n"); err != nil {
-		tmp.Close()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		return err
-	}
-	if err := os.Chmod(tmp.Name(), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp.Name(), credFile)
 }

@@ -13,7 +13,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/token.proto.
  */
 export const file_reliant_v1_token: GenFile = /*@__PURE__*/
-  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLUAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmQSDgoGc2NvcGVzGAsgAygJIkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIjgKEUxpc3RUb2tlbnNSZXF1ZXN0EiMKBGtpbmQYASABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCI7ChJMaXN0VG9rZW5zUmVzcG9uc2USJQoGdG9rZW5zGAEgAygLMhUucmVsaWFudC52MS5Ub2tlbkluZm8iIAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIhUKE1Jldm9rZVRva2VuUmVzcG9uc2UicwoSVXBkYXRlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIqCgZzY29wZXMYAyABKAsyFS5yZWxpYW50LnYxLlNjb3BlTGlzdEgBiAEBQgcKBV9uYW1lQgkKB19zY29wZXMiGwoJU2NvcGVMaXN0Eg4KBnNjb3BlcxgBIAMoCSI6ChNVcGRhdGVUb2tlblJlc3BvbnNlEiMKBGluZm8YASABKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyI4ChRFeGNoYW5nZVRva2VuUmVxdWVzdBIQCghhdWRpZW5jZRgBIAEoCRIOCgZzY29wZXMYAiADKAkiYAoVRXhjaGFuZ2VUb2tlblJlc3BvbnNlEg0KBXRva2VuGAEgASgJEhQKDHRva2VuX3ByZWZpeBgCIAEoCRISCgpleHBpcmVzX2F0GAMgASgJEg4KBnNjb3BlcxgEIAMoCSpSCglUb2tlbktpbmQSGgoWVE9LRU5fS0lORF9VTlNQRUNJRklFRBAAEhUKEVRPS0VOX0tJTkRfREFFTU9OEAESEgoOVE9LRU5fS0lORF9BUEkQAjKrAwoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAElAKC1VwZGF0ZVRva2VuEh4ucmVsaWFudC52MS5VcGRhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLlVwZGF0ZVRva2VuUmVzcG9uc2UiABJWCg1FeGNoYW5nZVRva2VuEiAucmVsaWFudC52MS5FeGNoYW5nZVRva2VuUmVxdWVzdBohLnJlbGlhbnQudjEuRXhjaGFuZ2VUb2tlblJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
+  fileDesc("ChZyZWxpYW50L3YxL3Rva2VuLnByb3RvEgpyZWxpYW50LnYxIlwKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEhMKC3R0bF9zZWNvbmRzGAIgASgDEiMKBGtpbmQYAyABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCLUAQoJVG9rZW5JbmZvEgoKAmlkGAEgASgJEgwKBG5hbWUYAiABKAkSFAoMdG9rZW5fcHJlZml4GAMgASgJEhIKCmNyZWF0ZWRfYXQYBCABKAkSFAoMbGFzdF91c2VkX2F0GAUgASgJEhIKCmV4cGlyZXNfYXQYBiABKAkSEQoJZXBoZW1lcmFsGAggASgIEhEKCWRhZW1vbl9pZBgJIAEoCRIjCgRraW5kGAogASgOMhUucmVsaWFudC52MS5Ub2tlbktpbmQSDgoGc2NvcGVzGAsgAygJIkkKE0NyZWF0ZVRva2VuUmVzcG9uc2USIwoEaW5mbxgBIAEoCzIVLnJlbGlhbnQudjEuVG9rZW5JbmZvEg0KBXRva2VuGAIgASgJIjgKEUxpc3RUb2tlbnNSZXF1ZXN0EiMKBGtpbmQYASABKA4yFS5yZWxpYW50LnYxLlRva2VuS2luZCI7ChJMaXN0VG9rZW5zUmVzcG9uc2USJQoGdG9rZW5zGAEgAygLMhUucmVsaWFudC52MS5Ub2tlbkluZm8iIAoSUmV2b2tlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJIhUKE1Jldm9rZVRva2VuUmVzcG9uc2UicwoSVXBkYXRlVG9rZW5SZXF1ZXN0EgoKAmlkGAEgASgJEhEKBG5hbWUYAiABKAlIAIgBARIqCgZzY29wZXMYAyABKAsyFS5yZWxpYW50LnYxLlNjb3BlTGlzdEgBiAEBQgcKBV9uYW1lQgkKB19zY29wZXMiGwoJU2NvcGVMaXN0Eg4KBnNjb3BlcxgBIAMoCSI6ChNVcGRhdGVUb2tlblJlc3BvbnNlEiMKBGluZm8YASABKAsyFS5yZWxpYW50LnYxLlRva2VuSW5mbyI4ChRFeGNoYW5nZVRva2VuUmVxdWVzdBIQCghhdWRpZW5jZRgBIAEoCRIOCgZzY29wZXMYAiADKAkiYAoVRXhjaGFuZ2VUb2tlblJlc3BvbnNlEg0KBXRva2VuGAEgASgJEhQKDHRva2VuX3ByZWZpeBgCIAEoCRISCgpleHBpcmVzX2F0GAMgASgJEg4KBnNjb3BlcxgEIAMoCSImChJHZXRHaXRUb2tlblJlcXVlc3QSEAoIcHJvdmlkZXIYASABKAkiPwoTR2V0R2l0VG9rZW5SZXNwb25zZRIUCgxhY2Nlc3NfdG9rZW4YASABKAkSEgoKZXhwaXJlc19hdBgCIAEoCSpSCglUb2tlbktpbmQSGgoWVE9LRU5fS0lORF9VTlNQRUNJRklFRBAAEhUKEVRPS0VOX0tJTkRfREFFTU9OEAESEgoOVE9LRU5fS0lORF9BUEkQAjL9AwoMVG9rZW5TZXJ2aWNlElAKC0NyZWF0ZVRva2VuEh4ucmVsaWFudC52MS5DcmVhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLkNyZWF0ZVRva2VuUmVzcG9uc2UiABJNCgpMaXN0VG9rZW5zEh0ucmVsaWFudC52MS5MaXN0VG9rZW5zUmVxdWVzdBoeLnJlbGlhbnQudjEuTGlzdFRva2Vuc1Jlc3BvbnNlIgASUAoLUmV2b2tlVG9rZW4SHi5yZWxpYW50LnYxLlJldm9rZVRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuUmV2b2tlVG9rZW5SZXNwb25zZSIAElAKC1VwZGF0ZVRva2VuEh4ucmVsaWFudC52MS5VcGRhdGVUb2tlblJlcXVlc3QaHy5yZWxpYW50LnYxLlVwZGF0ZVRva2VuUmVzcG9uc2UiABJWCg1FeGNoYW5nZVRva2VuEiAucmVsaWFudC52MS5FeGNoYW5nZVRva2VuUmVxdWVzdBohLnJlbGlhbnQudjEuRXhjaGFuZ2VUb2tlblJlc3BvbnNlIgASUAoLR2V0R2l0VG9rZW4SHi5yZWxpYW50LnYxLkdldEdpdFRva2VuUmVxdWVzdBofLnJlbGlhbnQudjEuR2V0R2l0VG9rZW5SZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
 
 /**
  * @generated from message reliant.v1.CreateTokenRequest
@@ -357,6 +357,53 @@ export const ExchangeTokenResponseSchema: GenMessage<ExchangeTokenResponse> = /*
   messageDesc(file_reliant_v1_token, 11);
 
 /**
+ * @generated from message reliant.v1.GetGitTokenRequest
+ */
+export type GetGitTokenRequest = Message<"reliant.v1.GetGitTokenRequest"> & {
+  /**
+   * provider is the git provider; empty means "github".
+   *
+   * @generated from field: string provider = 1;
+   */
+  provider: string;
+};
+
+/**
+ * Describes the message reliant.v1.GetGitTokenRequest.
+ * Use `create(GetGitTokenRequestSchema)` to create a new message.
+ */
+export const GetGitTokenRequestSchema: GenMessage<GetGitTokenRequest> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 12);
+
+/**
+ * @generated from message reliant.v1.GetGitTokenResponse
+ */
+export type GetGitTokenResponse = Message<"reliant.v1.GetGitTokenResponse"> & {
+  /**
+   * access_token is the plaintext provider token. A credential: apply it to
+   * one request, never log or persist it.
+   *
+   * @generated from field: string access_token = 1;
+   */
+  accessToken: string;
+
+  /**
+   * expires_at is when access_token stops working (RFC 3339). Empty for a token
+   * the provider never said expires.
+   *
+   * @generated from field: string expires_at = 2;
+   */
+  expiresAt: string;
+};
+
+/**
+ * Describes the message reliant.v1.GetGitTokenResponse.
+ * Use `create(GetGitTokenResponseSchema)` to create a new message.
+ */
+export const GetGitTokenResponseSchema: GenMessage<GetGitTokenResponse> = /*@__PURE__*/
+  messageDesc(file_reliant_v1_token, 13);
+
+/**
  * @generated from enum reliant.v1.TokenKind
  */
 export enum TokenKind {
@@ -488,6 +535,39 @@ export const TokenService: GenService<{
     methodKind: "unary";
     input: typeof ExchangeTokenRequestSchema;
     output: typeof ExchangeTokenResponseSchema;
+  },
+  /**
+   * GetGitToken returns the CALLING session's acting user's CURRENT token for a
+   * git provider, renewed first when it is near expiry. It is what a daemon's
+   * git credential helper (`reliant auth git-credential`) asks, at the moment
+   * git needs to authenticate, so a daemon never holds a GitHub token at rest:
+   * no token rides a clone command, none is written to .git/config or
+   * ~/.git-credentials, and a push minutes or days later gets a fresh one.
+   *
+   * The token is the user's, held by the deployment's control plane (the one
+   * GitHub App); this server never stores it. It is a bearer credential for the
+   * user's GitHub account: callers apply it to one request and never log or
+   * persist it, and this server never logs it.
+   *
+   * Like ExchangeToken it authenticates its own caller, uncached — but admits
+   * only a DAEMON credential (daemon:connect). A reliant:api token (CLI,
+   * automation) acts as the user against Reliant's API; it must not also be a
+   * way to the user's GitHub account.
+   *
+   * Errors:
+   *   - UNAUTHENTICATED / PERMISSION_DENIED: not a live session credential.
+   *   - FAILED_PRECONDITION: this deployment has no control plane to ask, or the
+   *     user has not connected the provider, or the connection needs the user to
+   *     reconnect. `x-forge-error-reason` names which. Permanent until the user
+   *     acts; do not retry.
+   *   - UNAVAILABLE: the control plane or provider could not be reached; retry.
+   *
+   * @generated from rpc reliant.v1.TokenService.GetGitToken
+   */
+  getGitToken: {
+    methodKind: "unary";
+    input: typeof GetGitTokenRequestSchema;
+    output: typeof GetGitTokenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_reliant_v1_token, 0);

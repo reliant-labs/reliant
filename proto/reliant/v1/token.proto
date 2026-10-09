@@ -70,6 +70,32 @@ service TokenService {
   // Machine credential only — the exchange needs a credential to attenuate. A
   // human session signs in with `forge login` or uses the web app.
   rpc ExchangeToken(ExchangeTokenRequest) returns (ExchangeTokenResponse) {}
+
+  // GetGitToken returns the CALLING session's acting user's CURRENT token for a
+  // git provider, renewed first when it is near expiry. It is what a daemon's
+  // git credential helper (`reliant auth git-credential`) asks, at the moment
+  // git needs to authenticate, so a daemon never holds a GitHub token at rest:
+  // no token rides a clone command, none is written to .git/config or
+  // ~/.git-credentials, and a push minutes or days later gets a fresh one.
+  //
+  // The token is the user's, held by the deployment's control plane (the one
+  // GitHub App); this server never stores it. It is a bearer credential for the
+  // user's GitHub account: callers apply it to one request and never log or
+  // persist it, and this server never logs it.
+  //
+  // Like ExchangeToken it authenticates its own caller, uncached — but admits
+  // only a DAEMON credential (daemon:connect). A reliant:api token (CLI,
+  // automation) acts as the user against Reliant's API; it must not also be a
+  // way to the user's GitHub account.
+  //
+  // Errors:
+  //   - UNAUTHENTICATED / PERMISSION_DENIED: not a live session credential.
+  //   - FAILED_PRECONDITION: this deployment has no control plane to ask, or the
+  //     user has not connected the provider, or the connection needs the user to
+  //     reconnect. `x-forge-error-reason` names which. Permanent until the user
+  //     acts; do not retry.
+  //   - UNAVAILABLE: the control plane or provider could not be reached; retry.
+  rpc GetGitToken(GetGitTokenRequest) returns (GetGitTokenResponse) {}
 }
 
 enum TokenKind {
@@ -162,4 +188,18 @@ message ExchangeTokenResponse {
   string token_prefix = 2;  // Display identifier, e.g. "rlat_A3f9Kd2p"
   string expires_at = 3;    // RFC 3339
   repeated string scopes = 4;  // What was actually granted
+}
+
+message GetGitTokenRequest {
+  // provider is the git provider; empty means "github".
+  string provider = 1;
+}
+
+message GetGitTokenResponse {
+  // access_token is the plaintext provider token. A credential: apply it to
+  // one request, never log or persist it.
+  string access_token = 1;
+  // expires_at is when access_token stops working (RFC 3339). Empty for a token
+  // the provider never said expires.
+  string expires_at = 2;
 }

@@ -11,7 +11,6 @@ import (
 	"io/fs"
 	"log/slog"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"runtime"
 	"sort"
@@ -196,9 +195,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// reconnects, in both server and client modes.
 	go client.memWatcher.Run(ctx)
 
-	// If GIT_TOKEN is set (injected by workspace reconciler in cloud mode),
-	// configure git credential-store so all git operations use the token.
-	setupGitCredentials()
+	// Managed daemons: route github.com auth through the credential helper and
+	// scrub any token an older release left on disk. Local daemons are left
+	// alone. Best-effort and off the startup path.
+	setupManagedGitCredentials()
 
 	// Preview forwarder: in-pod reverse proxy that lets the workspace-proxy
 	// reach loopback-bound user dev servers (see preview_forwarder.go). Runs
@@ -442,29 +442,6 @@ func (d *daemonClient) registerLabels() map[string]string {
 	return map[string]string{
 		config.DaemonRuntimeTypeLabelKey: d.runtimeType,
 	}
-}
-
-// setupGitCredentials configures git credential-store globally when GIT_TOKEN
-// is set (injected by the workspace reconciler in cloud mode). This runs once
-// at daemon startup so all subsequent git operations use the token.
-func setupGitCredentials() {
-	token := os.Getenv("GIT_TOKEN")
-	if token == "" {
-		return
-	}
-
-	// Configure git to use the credential-store helper globally.
-	if err := exec.Command("git", "config", "--global", "credential.helper", "store").Run(); err != nil {
-		logging.Warn(logPrefix+" Failed to configure git credential.helper", "error", err)
-		return
-	}
-
-	if err := upsertGitCredential("github.com", token); err != nil {
-		logging.Warn(logPrefix+" Failed to write .git-credentials", "error", err)
-		return
-	}
-
-	logging.Info(logPrefix + " Configured git credential-store with GIT_TOKEN")
 }
 
 // recordStream publishes a gateway-stream transition to the daemon's on-disk
