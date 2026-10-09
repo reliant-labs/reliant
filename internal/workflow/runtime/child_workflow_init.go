@@ -33,12 +33,24 @@ type ChildWorkflowInitOpts struct {
 	// Origin is how the thread came to exist ("spawn", "node", "fork", "main")
 	// — see db.ThreadOrigin. Distinct from SpawnedByNodeID, which records which
 	// graph node produced the workflow.
-	Origin        string
-	OriginNodeID  string
+	Origin       string
+	OriginNodeID string
+	// Worktree names the workspace (a worktree's name or id) the child thread
+	// works in instead of its chat's. Empty keeps the chat's. Only a spawn sets it.
+	Worktree string
+	// WorktreePath, when non-nil, receives the checkout path of the thread's
+	// own worktree (empty if it has none) once the thread exists.
+	WorktreePath  *string
 	LoopIteration *int64
 	InjectMessage *InjectMessageConfig // nil if no inject message
 	Logger        log.Logger
 }
+
+// ChildInitRefusal is initChildWorkflow's report that the child was declined,
+// with a reason written for the agent that asked for it.
+type ChildInitRefusal struct{ Reason string }
+
+func (e *ChildInitRefusal) Error() string { return e.Reason }
 
 // InjectMessageConfig contains configuration for an inject message to save after creating
 // the child workflow's thread.
@@ -220,9 +232,25 @@ func initChildWorkflow(opts ChildWorkflowInitOpts) error {
 	if opts.LoopIteration != nil {
 		createInput["loop_iteration"] = *opts.LoopIteration
 	}
+	if opts.Worktree != "" {
+		createInput["worktree"] = opts.Worktree
+	}
 
-	if err := workflow.ExecuteActivity(activityCtx, "CreateWorkflowWithThread", createInput).Get(opts.Ctx, nil); err != nil {
+	var created struct {
+		// Refusal is a reason the activity declined to create the thread: the
+		// requested workspace is not usable. Nothing was created. It is an
+		// answer for the agent, not a failure to retry.
+		Refusal      string `json:"refusal"`
+		WorktreePath string `json:"worktree_path"`
+	}
+	if err := workflow.ExecuteActivity(activityCtx, "CreateWorkflowWithThread", createInput).Get(opts.Ctx, &created); err != nil {
 		return fmt.Errorf("failed to create child workflow+thread: %w", err)
+	}
+	if created.Refusal != "" {
+		return &ChildInitRefusal{Reason: created.Refusal}
+	}
+	if opts.WorktreePath != nil {
+		*opts.WorktreePath = created.WorktreePath
 	}
 
 	opts.Logger.Debug("[initChildWorkflow] Created child workflow",

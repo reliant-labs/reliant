@@ -9,14 +9,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/google/uuid"
-
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/rctx"
+	repopkg "github.com/reliant-labs/reliant/internal/repo"
+	"github.com/reliant-labs/reliant/internal/workspacecreate"
 )
 
 // WorktreeParams defines the parameters for worktree operations
@@ -34,13 +36,10 @@ type WorktreeParams struct {
 	BaseBranch string `json:"base_branch,omitempty" jsonschema:"description=Base branch to branch from (defaults to repository default branch)"`
 
 	// Exact paths to copy from the source repo — never searched for.
-	CopyFiles []string `json:"copy_files,omitempty" jsonschema:"description=Exact paths relative to the repository root to copy into the new worktree (e.g. .env or web/node_modules). Each path is copied as-is; nothing is searched for."`
+	CopyFiles []string `json:"copy_files,omitempty" jsonschema:"description=Exact paths relative to the project root to copy into the new worktree (e.g. .env or web/node_modules). Each path is copied as-is; nothing is searched for."`
 
 	// Force creation by deleting existing worktree/branch
-	Force bool `json:"force,omitempty" jsonschema:"description=Force creation by deleting existing worktree and branch if they exist"`
-
-	// SessionID to associate with the worktree
-	SessionID string `json:"session_id,omitempty" jsonschema:"description=Session ID to associate with worktree"`
+	Force bool `json:"force,omitempty" jsonschema:"description=Delete a stale branch of the same name in each repository before creating it"`
 }
 
 // WorktreeResponseMetadata contains metadata about the worktree operation
@@ -60,23 +59,28 @@ const (
 	WorktreeStatusActive    WorktreeStatus = "active"
 	WorktreeStatusCompleted WorktreeStatus = "completed"
 	WorktreeStatusAbandoned WorktreeStatus = "abandoned"
+	WorktreeStatusMerging   WorktreeStatus = "merging"
+	WorktreeStatusCreating  WorktreeStatus = "creating"
+	WorktreeStatusFailed    WorktreeStatus = "failed"
 )
 
-// WorktreeInfo describes one worktree in the tool's response metadata.
+// WorktreeInfo describes one worktree in the tool's response metadata. Path is
+// the workspace root; Checkouts maps each repository of the project to its
+// checkout inside it.
 type WorktreeInfo struct {
-	ID         string         `json:"id"`
-	Name       string         `json:"name"`
-	Path       string         `json:"path"`
-	WorkingDir string         `json:"working_dir"`
-	Branch     string         `json:"branch"`
-	BaseBranch string         `json:"base_branch"`
-	RepoID     string         `json:"repo_id"`
-	ProjectID  string         `json:"project_id"`
-	SessionID  string         `json:"session_id"`
-	Status     WorktreeStatus `json:"status"`
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	LastActive time.Time      `json:"last_active"`
+	ID         string            `json:"id"`
+	Name       string            `json:"name"`
+	Path       string            `json:"path"`
+	Checkouts  map[string]string `json:"checkouts,omitempty"`
+	Branch     string            `json:"branch"`
+	BaseBranch string            `json:"base_branch"`
+	ProjectID  string            `json:"project_id"`
+	SessionID  string            `json:"session_id"`
+	DaemonID   string            `json:"daemon_id,omitempty"`
+	Status     WorktreeStatus    `json:"status"`
+	CreatedAt  time.Time         `json:"created_at"`
+	UpdatedAt  time.Time         `json:"updated_at"`
+	LastActive time.Time         `json:"last_active"`
 }
 
 // RunMachine reaches the machine a run's tools execute on.
@@ -87,8 +91,8 @@ type WorktreeInfo struct {
 // also the machine recorded as the worktree's owner.
 //
 // Injected because the daemon router lives in toolexec, which imports this
-// package. Optional: without it the tool reports that creating and deleting
-// worktrees is unavailable here, rather than touching a local disk.
+// package. Optional: without it the tool reports that creating worktrees is
+// unavailable here, rather than touching a local disk.
 type RunMachine interface {
 	// DaemonID returns the daemon this run's tools execute on, chosen as
 	// ExecuteTools chose it: the run's daemon selector travels on ctx.
@@ -98,10 +102,9 @@ type RunMachine interface {
 }
 
 const (
-	// worktreeCheckoutTimeoutMs bounds commands whose cost grows with the
-	// repository: the checkout itself and copying copy_files into it.
-	worktreeCheckoutTimeoutMs int32 = 120_000
-	worktreeCommandTimeoutMs  int32 = 30_000
+	worktreeListPage  = 100
+	worktreeAdoptMs   = 30_000
+	worktreeCreateMax = 10 * time.Minute
 )
 
 type worktreeTool struct {
@@ -121,56 +124,45 @@ func (w *worktreeTool) Name() string {
 }
 
 func (w *worktreeTool) Description() string {
-	return `Manage git worktrees for parallel development workflows.
+	return `Create and manage worktrees: isolated workspaces for working on a separate branch.
 
-WHEN TO USE:
-- Creating isolated development environments for features/bugs
-- Setting up parallel workspaces for agents
-- Managing multiple concurrent work streams
+This is the ONLY way to make a worktree. Never run "git worktree add" yourself: the shell refuses it, because a checkout made by hand is invisible to Reliant and litters the project folder.
+
+A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/<project>/<name>-<id>/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
+
 ACTIONS:
-1. create - Create a new git worktree
-   Required: name
-   Optional: branch, base_branch, copy_files, force, session_id
+1. create - Required: name. Optional: branch, base_branch, copy_files, force
+   Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
+   The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
-2. list - List all worktrees
-   No parameters required
+2. list - List the project's worktrees (any state: creating, active, failed)
 
-3. get - Get details of a specific worktree
-   Required: name
+3. get - Required: name. Details, paths and owner of one worktree
 
-4. delete - Delete a worktree
-   Required: name
+4. delete - Required: name. Archives the worktree; its directory is removed later, only when it is clean, pushed and unused. Refuses your own current worktree and any worktree a chat is using.
 
-WORKTREE DATA STORAGE:
-- Worktree information is automatically stored in CEL context as 'worktree_data'
-- Available fields: id, name, path, branch, base_branch, repo_id
-- Use in subsequent steps: worktree_data.path, worktree_data.branch, etc.
+WORKING IN A WORKTREE:
+- Pass its name to spawn: spawn(worktree=<name>) runs the sub-agent inside it, so its shell and file tools work on that branch.
+- Or use the absolute paths from the result with commands that take a path (cd <path> && ...).
+- Commit and push from inside the worktree; each repository's checkout is on its own branch.
 
 FILE COPYING:
-- copy_files: exact paths relative to the repository root, for gitignored files a fresh checkout lacks
+- copy_files: exact paths relative to the project root, for gitignored files a fresh checkout lacks (the new worktree mirrors the project's layout)
 - Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
 - A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
+- When you are working inside a worktree, files are copied from that worktree
 
-EXAMPLES:
+WORKFLOW DATA:
+- Result fields are stored in CEL context as 'worktree_data': id, name, path, branch, base_branch, project_id, status, session_id, checkouts
 
-Create a worktree that carries over local env files:
+EXAMPLE:
 {
   "action": "create",
   "name": "feature-auth",
   "base_branch": "main",
   "copy_files": [".env", "frontend/.env.local"]
 }
-
-List all worktrees:
-{
-  "action": "list"
-}
-
-NOTES:
-- Worktree paths are stored in ~/.reliant/worktrees/<repo_id>/<name>
-- Each worktree gets its own branch and working directory
-- Use force=true to recreate existing worktrees
-- Worktree data is stored globally for cleanup tracking`
+then spawn a sub-agent in it with spawn(worktree="feature-auth").`
 }
 
 func (w *worktreeTool) RequiresPermission(params WorktreeParams) (bool, error) {
@@ -194,7 +186,7 @@ func (w *worktreeTool) Execute(rctx *rctx.ToolContext, params WorktreeParams) (T
 	case "create":
 		return w.handleCreate(ctx, &params, rctx)
 	case "list":
-		return w.handleList(ctx, &params, rctx)
+		return w.handleList(ctx, rctx)
 	case "get":
 		return w.handleGet(ctx, &params, rctx)
 	case "delete":
@@ -204,362 +196,306 @@ func (w *worktreeTool) Execute(rctx *rctx.ToolContext, params WorktreeParams) (T
 	}
 }
 
-func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rctx *rctx.ToolContext) (ToolResponse, error) {
+func (w *worktreeTool) handleCreate(ctx context.Context, p *WorktreeParams, rc *rctx.ToolContext) (ToolResponse, error) {
+	fail := func(format string, args ...any) (ToolResponse, error) {
+		return NewTextErrorResponse("Failed to create worktree: " + fmt.Sprintf(format, args...)), nil
+	}
 	if p.Name == "" {
 		return NewTextErrorResponse("Name is required for create action"), nil
 	}
 	if err := validateWorktreeName(p.Name); err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %v", err)), nil
+		return fail("%v", err)
 	}
 	// Exact paths, validated before any git work so a bad entry is an error
 	// rather than a worktree that silently lacks its .env.
 	copyPaths, err := copypath.CleanAll(p.CopyFiles)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: invalid copy_files: %v", err)), nil
+		return fail("invalid copy_files: %v", err)
 	}
-
-	// Get working directory for current repository
-	workingDir, err := GetWorkingDirectory(rctx)
+	project, err := w.project(rc)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get working directory: %v", err)), nil
+		return fail("%v", err)
 	}
 
 	// Resolved once: every command below, and the owner recorded on the row,
 	// must name the same machine.
 	machine, err := w.runMachine(ctx)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %v", err)), nil
+		return fail("%v", err)
 	}
-	loc, err := machine.locate(ctx, workingDir, p.Name)
+	repos, err := w.projectRepos(ctx, rc, project, machine)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %v", err)), nil
+		return fail("%v", err)
 	}
 
-	// The registry is the project's worktree rows, which hold one row per
-	// name, archived ones included.
-	projectID := ""
-	if rctx != nil && rctx.Project != nil {
-		projectID = rctx.Project.ID
+	var chatID *string
+	if rc.ChatID != "" {
+		id := rc.ChatID
+		chatID = &id
 	}
-	registered, err := w.registered(ctx, projectID, p.Name)
+	// When working inside a worktree, copy_files come from it, so the new
+	// workspace gets this one's .env and friends. The main checkout is the
+	// default source.
+	copySource := ""
+	if rc.Worktree != nil && rc.Worktree.ID != "" {
+		copySource = rc.Worktree.Path
+	}
+	req := workspacecreate.Request{
+		Project:       project,
+		Repos:         repos,
+		Name:          p.Name,
+		Branch:        p.Branch,
+		BaseBranch:    p.BaseBranch,
+		Force:         p.Force,
+		CopyPaths:     copyPaths,
+		CopySource:    copySource,
+		ChatID:        chatID,
+		OwnerDaemonID: machine.daemonID,
+	}
+	// The name is the handle agents pass to spawn(worktree=<name>): one live
+	// worktree per name. Insert applies the rule, shared with the UI's create.
+	wt, err := workspacecreate.Insert(ctx, w.repo, req)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %v", err)), nil
-	}
-	if registered != nil {
-		if refusal := createRefusal(registered, loc.path, machine.daemonID, p); refusal != "" {
-			return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %s", refusal)), nil
-		}
-	}
-
-	if p.Force {
-		// Clear whatever holds this name on the machine: the checkout at
-		// its path, stale git registrations, and the named branch.
-		if _, err := sendWorktreeCommand[map[string]any](ctx, machine, machine.daemonID, "worktree.force_cleanup",
-			map[string]string{"project_path": workingDir, "worktree_path": loc.path, "branch": p.Branch},
-			worktreeCommandTimeoutMs); err != nil {
-			return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %v", err)), nil
-		}
-	}
-
-	// The daemon does not report the branch it picked, so pick it here.
-	branch := p.Branch
-	if branch == "" {
-		branch = fmt.Sprintf("worktree/%s-%d", p.Name, time.Now().Unix())
-	}
-
-	created, err := sendWorktreeCommand[worktreeToolCreateResponse](ctx, machine, machine.daemonID, "worktree.create",
-		worktreeToolCreateRequest{
-			ProjectPath: workingDir,
-			RepoID:      loc.repoID,
-			Name:        p.Name,
-			Branch:      branch,
-			BaseBranch:  p.BaseBranch,
-			Force:       p.Force,
-		}, worktreeCheckoutTimeoutMs)
-	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %v", err)), nil
-	}
-	if !created.Success {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to create worktree: %v", gitWorktreeAddError(created.Error, loc.path, branch, p.BaseBranch))), nil
-	}
-	path := created.WorktreePath
-	if path != loc.path {
-		// The registry key and the checkout must agree; say so if they
-		// do not rather than silently keying the row differently.
-		logging.Warn("worktree.create used a different path than expected", "expected", loc.path, "actual", path)
-	}
-
-	// Copy specified files from the source repo into the worktree. A path
-	// that fails to copy is logged, not fatal: the checkout is complete.
-	if len(copyPaths) > 0 {
-		copied, err := sendWorktreeCommand[worktreeToolCopyPathsResponse](ctx, machine, machine.daemonID, "worktree.copy_paths",
-			map[string]any{"source_root": workingDir, "dest_root": path, "paths": copyPaths},
-			worktreeCheckoutTimeoutMs)
+		var held *workspacecreate.NameTakenError
+		var branchHeld *workspacecreate.BranchHeldError
 		switch {
-		case err != nil:
-			logging.Warn("Failed to copy paths into worktree", "path", path, "error", err)
-		case copied.Error != "":
-			logging.Warn("Failed to copy paths into worktree", "path", path, "error", copied.Error)
-		default:
-			for entry, reason := range copied.Failed {
-				logging.Warn("Failed to copy path into worktree", "path", entry, "error", reason)
-			}
+		case errors.As(err, &held):
+			return fail("%s", nameTakenReason(held.Holder, p.Name))
+		case errors.Is(err, core.ErrWorktreeNameTaken):
+			return fail("%s", nameTakenReason(nil, p.Name))
+		case errors.As(err, &branchHeld):
+			return fail("%v (set the branch parameter)", branchHeld)
 		}
+		return fail("record the worktree: %v", err)
 	}
 
-	sessionID := p.SessionID
-	if sessionID == "" && rctx != nil {
-		sessionID = rctx.ChatID
-	}
-	baseBranch := created.BaseBranch
-	if baseBranch == "" {
-		baseBranch = p.BaseBranch
-	}
-	wt := &WorktreeInfo{
-		ID:         fmt.Sprintf("%s/%s", loc.repoID, p.Name),
-		Name:       p.Name,
-		Path:       path,
-		Branch:     branch,
-		BaseBranch: baseBranch,
-		RepoID:     loc.repoID,
-		SessionID:  sessionID,
-		Status:     WorktreeStatusActive,
+	// Creation spans many seconds across repos and must not die with the
+	// tool call's own deadline half way: that would leave checkouts the
+	// rollback never saw.
+	createCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), worktreeCreateMax)
+	defer cancel()
+	finishErr := workspacecreate.Finish(createCtx, w.repo, machine, req, wt)
+	// Settled either way (ACTIVE or FAILED): tell connected clients.
+	w.emitChanged(ctx, machine.userID, project.ID, wt.ID)
+	if finishErr != nil {
+		return fail("%v (the attempt is recorded as a failed worktree named '%s'; creating again with that name replaces it)", finishErr, p.Name)
 	}
 
-	// Also persist to the database so the UI and List/Get can find it.
-	// Failing to is logged, not fatal: the checkout was already created.
-	if w.repo != nil && rctx != nil && rctx.Project != nil {
-		if err := w.persist(ctx, registered, wt, rctx, machine.daemonID); err != nil {
-			logging.Warn("Failed to persist worktree to database", "worktreeID", wt.ID, "error", err)
-		}
-	}
-
-	// Prepare data to store in CEL context
+	info := w.info(wt, repos)
+	info.SessionID = rc.ChatID
 	celData := map[string]interface{}{
-		"id":          wt.ID,
-		"name":        wt.Name,
-		"path":        wt.Path,
-		"branch":      wt.Branch,
-		"base_branch": wt.BaseBranch,
-		"repo_id":     wt.RepoID,
-		"session_id":  wt.SessionID,
-		"status":      string(wt.Status),
+		"id":          info.ID,
+		"name":        info.Name,
+		"path":        info.Path,
+		"branch":      info.Branch,
+		"base_branch": info.BaseBranch,
+		"project_id":  info.ProjectID,
+		"session_id":  info.SessionID,
+		"status":      string(info.Status),
+		"checkouts":   info.Checkouts,
 	}
-
 	metadata := WorktreeResponseMetadata{
 		Action:      "create",
-		WorktreeID:  wt.ID,
-		Path:        wt.Path,
-		Branch:      wt.Branch,
+		WorktreeID:  info.ID,
+		Path:        info.Path,
+		Branch:      info.Branch,
 		StoredInCEL: celData,
 	}
 
-	content := fmt.Sprintf(`Created worktree successfully:
-- Name: %s
-- Path: %s
-- Branch: %s
-- Base Branch: %s
-- ID: %s
+	var content strings.Builder
+	fmt.Fprintf(&content, "Created worktree '%s':\n- ID: %s\n- Path (workspace root): %s\n- Branch: %s\n- Base Branch: %s\n",
+		info.Name, info.ID, info.Path, info.Branch, info.BaseBranch)
+	writeCheckouts(&content, repos, info.Checkouts)
+	fmt.Fprintf(&content, "\nIt appears in the Reliant sidebar. To work in it, pass spawn(worktree=%q) to run a sub-agent there, or use the paths above.\n", info.Name)
+	content.WriteString("Worktree data stored in CEL context as 'worktree_data'.")
 
-Worktree data stored in CEL context as 'worktree_data'
-Access in workflows: worktree_data.path, worktree_data.branch, etc.`,
-		wt.Name, wt.Path, wt.Branch, wt.BaseBranch, wt.ID)
-
-	return WithResponseMetadata(NewTextResponse(content), metadata), nil
+	return WithResponseMetadata(NewTextResponse(content.String()), metadata), nil
 }
 
-func (w *worktreeTool) handleList(ctx context.Context, p *WorktreeParams, rctx *rctx.ToolContext) (ToolResponse, error) {
+func (w *worktreeTool) handleList(ctx context.Context, rc *rctx.ToolContext) (ToolResponse, error) {
 	if w.repo == nil {
 		return NewTextErrorResponse("Database not available for listing worktrees"), nil
 	}
-
-	filters := db.WorktreeFilters{
-		Limit: 100,
-	}
-
-	// Scope to project if available
-	if rctx != nil && rctx.Project != nil {
-		filters.ProjectID = &rctx.Project.ID
-	}
-
-	dbWorktrees, err := w.repo.ListWorktrees(ctx, filters)
+	project, err := w.project(rc)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to list worktrees: %v", err)), nil
 	}
-
-	if len(dbWorktrees) == 0 {
+	rows, err := w.listAll(ctx, project.ID, false)
+	if err != nil {
+		return NewTextErrorResponse(fmt.Sprintf("Failed to list worktrees: %v", err)), nil
+	}
+	if len(rows) == 0 {
 		return NewTextResponse("No worktrees found"), nil
 	}
+	repos := w.reposForDisplay(ctx, rc, project)
 
-	// Convert to WorktreeInfo for response metadata
-	worktrees := make([]*WorktreeInfo, len(dbWorktrees))
-	content := fmt.Sprintf("Found %d worktrees:\n\n", len(dbWorktrees))
-	for i, dbWt := range dbWorktrees {
-		wt := dbWorktreeToWorktree(dbWt)
-		worktrees[i] = wt
-		content += fmt.Sprintf("%d. %s\n   Path: %s\n   Branch: %s\n   Status: %s\n   Main: %v\n",
-			i+1, wt.Name, wt.Path, wt.Branch, wt.Status, dbWt.IsMain)
-		if dbWt.ChatID != nil {
-			content += fmt.Sprintf("   Chat: %s\n", *dbWt.ChatID)
+	worktrees := make([]*WorktreeInfo, len(rows))
+	var content strings.Builder
+	fmt.Fprintf(&content, "Found %d worktrees:\n\n", len(rows))
+	for i, row := range rows {
+		info := w.info(row, repos)
+		worktrees[i] = info
+		fmt.Fprintf(&content, "%d. %s\n   Status: %s\n", i+1, info.Name, info.Status)
+		if info.Path != "" {
+			fmt.Fprintf(&content, "   Path: %s\n", info.Path)
 		}
-		content += "\n"
+		fmt.Fprintf(&content, "   Branch: %s\n", info.Branch)
+		if info.BaseBranch != "" {
+			fmt.Fprintf(&content, "   Base Branch: %s\n", info.BaseBranch)
+		}
+		if row.IsMain {
+			content.WriteString("   Main checkout: true\n")
+		}
+		if info.DaemonID != "" {
+			fmt.Fprintf(&content, "   Owner machine (daemon): %s\n", info.DaemonID)
+		}
+		if info.SessionID != "" {
+			fmt.Fprintf(&content, "   Chat: %s\n", info.SessionID)
+		}
+		content.WriteString("\n")
 	}
-
-	metadata := WorktreeResponseMetadata{
-		Action:    "list",
-		Worktrees: worktrees,
-	}
-
-	return WithResponseMetadata(NewTextResponse(content), metadata), nil
+	return WithResponseMetadata(NewTextResponse(content.String()), WorktreeResponseMetadata{Action: "list", Worktrees: worktrees}), nil
 }
 
-func (w *worktreeTool) handleGet(ctx context.Context, p *WorktreeParams, rctx *rctx.ToolContext) (ToolResponse, error) {
+func (w *worktreeTool) handleGet(ctx context.Context, p *WorktreeParams, rc *rctx.ToolContext) (ToolResponse, error) {
 	if p.Name == "" {
 		return NewTextErrorResponse("Name is required for get action"), nil
 	}
-
 	if w.repo == nil {
 		return NewTextErrorResponse("Database not available for getting worktree"), nil
 	}
-
-	// Find the worktree by name - list all worktrees for the project and filter by name
-	filters := db.WorktreeFilters{
-		Limit: 100,
-	}
-	if rctx != nil && rctx.Project != nil {
-		filters.ProjectID = &rctx.Project.ID
-	}
-
-	dbWorktrees, err := w.repo.ListWorktrees(ctx, filters)
+	project, err := w.project(rc)
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Failed to get worktree: %v", err)), nil
 	}
-
-	var dbWt *db.Worktree
-	for _, wt := range dbWorktrees {
-		if wt.Name == p.Name {
-			dbWt = wt
-			break
-		}
+	row, err := w.byName(ctx, project.ID, p.Name)
+	if err != nil {
+		return NewTextErrorResponse(fmt.Sprintf("Failed to get worktree: %v", err)), nil
 	}
-
-	if dbWt == nil {
+	if row == nil {
 		return NewTextErrorResponse(fmt.Sprintf("Worktree '%s' not found", p.Name)), nil
 	}
+	repos := w.reposForDisplay(ctx, rc, project)
+	info := w.info(row, repos)
 
-	wt := dbWorktreeToWorktree(dbWt)
-
-	// Prepare data to store in CEL context
 	celData := map[string]interface{}{
-		"id":          wt.ID,
-		"name":        wt.Name,
-		"path":        wt.Path,
-		"branch":      wt.Branch,
-		"base_branch": wt.BaseBranch,
-		"project_id":  wt.ProjectID,
-		"status":      string(wt.Status),
+		"id":          info.ID,
+		"name":        info.Name,
+		"path":        info.Path,
+		"branch":      info.Branch,
+		"base_branch": info.BaseBranch,
+		"project_id":  info.ProjectID,
+		"session_id":  info.SessionID,
+		"status":      string(info.Status),
+		"checkouts":   info.Checkouts,
 	}
-
 	metadata := WorktreeResponseMetadata{
 		Action:      "get",
-		WorktreeID:  wt.ID,
-		Path:        wt.Path,
-		Branch:      wt.Branch,
+		WorktreeID:  info.ID,
+		Path:        info.Path,
+		Branch:      info.Branch,
 		StoredInCEL: celData,
 	}
 
-	content := fmt.Sprintf(`Worktree: %s
-- ID: %s
-- Path: %s
-- Branch: %s
-- Base Branch: %s
-- Status: %s
-- Created: %s
-- Last Active: %s`,
-		wt.Name, wt.ID, wt.Path, wt.Branch, wt.BaseBranch,
-		wt.Status, wt.CreatedAt.Format("2006-01-02 15:04:05"),
-		wt.LastActive.Format("2006-01-02 15:04:05"))
-
-	content += "\n\nWorktree data stored in CEL context as 'worktree_data'"
-
-	return WithResponseMetadata(NewTextResponse(content), metadata), nil
+	var content strings.Builder
+	fmt.Fprintf(&content, "Worktree: %s\n- ID: %s\n- Status: %s\n- Path (workspace root): %s\n- Branch: %s\n- Base Branch: %s\n- Owner machine (daemon): %s\n- Created: %s\n- Last Active: %s\n",
+		info.Name, info.ID, info.Status, info.Path, info.Branch, info.BaseBranch, info.DaemonID,
+		info.CreatedAt.Format("2006-01-02 15:04:05"), info.LastActive.Format("2006-01-02 15:04:05"))
+	writeCheckouts(&content, repos, info.Checkouts)
+	content.WriteString("\nWorktree data stored in CEL context as 'worktree_data'")
+	return WithResponseMetadata(NewTextResponse(content.String()), metadata), nil
 }
 
-func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rctx *rctx.ToolContext) (ToolResponse, error) {
+// handleDelete archives the worktree. It never removes the directory itself:
+// removing a workspace is the reclaim loop's job (worktreesweep), which does it
+// only for a directory that is clean, pushed and not in use, and honours the
+// user's "keep everything" setting. The sweep runs in the API server every
+// ten minutes over every archived row, with no gRPC call involved.
+func (w *worktreeTool) handleDelete(ctx context.Context, p *WorktreeParams, rc *rctx.ToolContext) (ToolResponse, error) {
+	fail := func(format string, args ...any) (ToolResponse, error) {
+		return NewTextErrorResponse("Failed to delete worktree: " + fmt.Sprintf(format, args...)), nil
+	}
 	if p.Name == "" {
 		return NewTextErrorResponse("Name is required for delete action"), nil
 	}
 	if err := validateWorktreeName(p.Name); err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to delete worktree: %v", err)), nil
+		return fail("%v", err)
 	}
-
-	// Get working directory for current repository
-	workingDir, err := GetWorkingDirectory(rctx)
+	if w.repo == nil {
+		return fail("database not available")
+	}
+	project, err := w.project(rc)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to get working directory: %v", err)), nil
+		return fail("%v", err)
 	}
-
-	machine, err := w.runMachine(ctx)
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || userID == "" {
+		return fail("no user in the tool context")
+	}
+	row, err := w.byName(ctx, project.ID, p.Name)
 	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to delete worktree: %v", err)), nil
+		return fail("%v", err)
 	}
-	loc, err := machine.locate(ctx, workingDir, p.Name)
-	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to delete worktree: %v", err)), nil
+	if row == nil {
+		return fail("worktree '%s' not found", p.Name)
 	}
-
-	// Only a live worktree this tool created under that name is deleted. A
-	// workspace made elsewhere that shares the name lives at another path
-	// and is not touched.
-	projectID := ""
-	if rctx != nil && rctx.Project != nil {
-		projectID = rctx.Project.ID
+	switch {
+	case row.IsMain:
+		return fail("'%s' is the project's main checkout", p.Name)
+	case rc.Worktree != nil && rc.Worktree.ID != "" && rc.Worktree.ID == row.ID:
+		return fail("'%s' is the worktree this chat is working in; delete it from another chat or the Reliant UI", p.Name)
+	case row.Status == int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING):
+		return fail("'%s' is still being created", p.Name)
 	}
-	registered, err := w.registered(ctx, projectID, p.Name)
-	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to delete worktree: %v", err)), nil
-	}
-	if registered == nil || registered.DeletedAt != nil || registered.Path != loc.path {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to delete worktree: worktree '%s' not found", p.Name)), nil
+	if busy, err := w.liveChatIn(ctx, userID, project.ID, row.ID); err != nil {
+		return fail("%v", err)
+	} else if busy != "" {
+		return fail("chat %s is working in '%s'; archive that chat or the worktree from the Reliant UI", busy, p.Name)
 	}
 
-	// The checkout exists only on the worktree's owner. A row that records
-	// none was made on the run's machine, the only one this tool uses.
-	owner := machine.daemonID
-	if registered.DaemonID != nil && *registered.DaemonID != "" {
-		owner = *registered.DaemonID
+	if err := w.repo.ArchiveWorktree(ctx, row.ID); err != nil {
+		return fail("archive: %v", err)
 	}
-	deleted, err := sendWorktreeCommand[worktreeToolDeleteResponse](ctx, machine, owner, "worktree.delete_directory",
-		map[string]string{"project_path": workingDir, "worktree_path": registered.Path},
-		worktreeCommandTimeoutMs)
-	if err != nil {
-		return NewTextErrorResponse(fmt.Sprintf("Failed to delete worktree: %v", err)), nil
-	}
-	if !deleted.Deleted {
-		logging.Warn("failed to remove worktree directory", "path", registered.Path, "daemonID", owner)
-	}
+	w.emitChanged(ctx, userID, project.ID, row.ID)
 
-	if err := w.repo.ArchiveWorktree(ctx, registered.ID); err != nil {
-		logging.Warn("Failed to archive deleted worktree", "worktreeID", registered.ID, "error", err)
-	}
-
-	metadata := WorktreeResponseMetadata{
-		Action: "delete",
-	}
-
-	content := fmt.Sprintf("Successfully deleted worktree: %s", p.Name)
-	return WithResponseMetadata(NewTextResponse(content), metadata), nil
+	content := fmt.Sprintf("Archived worktree '%s'. Its directory is removed later, only if it is clean, pushed and unused; otherwise it is kept and listed in the Reliant inbox.", p.Name)
+	return WithResponseMetadata(NewTextResponse(content), WorktreeResponseMetadata{Action: "delete", WorktreeID: row.ID}), nil
 }
 
-// worktreeRunMachine is the machine one call of the tool works on.
-type worktreeRunMachine struct {
+// workspaceMachine is a workspacecreate.Machine bound to the run's machine.
+type workspaceMachine struct {
 	RunMachine
 	userID   string
 	daemonID string
 }
 
+// Send implements workspacecreate.Machine.
+func (m *workspaceMachine) Send(ctx context.Context, commandType string, payload, resp any, timeoutMs int32) error {
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("%s: marshal request: %w", commandType, err)
+	}
+	raw, err := m.RunMachine.Send(ctx, m.userID, m.daemonID, commandType, body, timeoutMs)
+	if err != nil {
+		return fmt.Errorf("%s: %w", commandType, err)
+	}
+	if resp == nil {
+		return nil
+	}
+	if err := json.Unmarshal(raw, resp); err != nil {
+		return fmt.Errorf("%s: decode reply: %w", commandType, err)
+	}
+	return nil
+}
+
+// SendDaemonCommand implements repo.DaemonCommander: adoption asks the same
+// machine the worktree will be created on.
+func (m *workspaceMachine) SendDaemonCommand(ctx context.Context, _, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return m.RunMachine.Send(ctx, m.userID, m.daemonID, commandType, payload, timeoutMs)
+}
+
 // runMachine resolves the machine this run's tools execute on.
-func (w *worktreeTool) runMachine(ctx context.Context) (*worktreeRunMachine, error) {
+func (w *worktreeTool) runMachine(ctx context.Context) (*workspaceMachine, error) {
 	if w.machine == nil {
 		return nil, errors.New("no machine can be reached from here to run git")
 	}
@@ -571,233 +507,187 @@ func (w *worktreeTool) runMachine(ctx context.Context) (*worktreeRunMachine, err
 	if err != nil {
 		return nil, fmt.Errorf("resolve the run's machine: %w", err)
 	}
-	return &worktreeRunMachine{RunMachine: w.machine, userID: userID, daemonID: daemonID}, nil
+	return &workspaceMachine{RunMachine: w.machine, userID: userID, daemonID: daemonID}, nil
 }
 
-// worktreeLocation is where a named worktree of a repository lives on the
-// run's machine.
-type worktreeLocation struct {
-	repoID string
-	path   string
+// project is the chat's project. Its Path is the main checkout, never the
+// chat's working directory, which may be inside another workspace.
+func (w *worktreeTool) project(rc *rctx.ToolContext) (*db.Project, error) {
+	if w.repo == nil {
+		return nil, errors.New("database not available")
+	}
+	if rc == nil || rc.Project == nil {
+		return nil, errors.New("this chat has no project")
+	}
+	return rc.Project, nil
 }
 
-// locate returns where worktree.create puts a worktree called name for the
-// repository at workingDir: <HOME>/.reliant/worktrees/<repo_id>/<name>, the
-// layout it uses when given no workspace id (daemonruntime
-// handleWorktreeCreate). The tool needs the path BEFORE creating: it is the
-// key the name is registered under, and what force=true clears. Both parts
-// come from the machine itself, because its home and the repository's remote
-// are visible only there.
-func (m *worktreeRunMachine) locate(ctx context.Context, workingDir, name string) (worktreeLocation, error) {
-	repo, err := sendWorktreeCommand[struct {
-		RepoID string `json:"repo_id"`
-	}](ctx, m, m.daemonID, "worktree.generate_repo_id", map[string]string{"project_path": workingDir}, worktreeCommandTimeoutMs)
-	if err != nil {
-		return worktreeLocation{}, err
-	}
-	if repo.RepoID == "" {
-		return worktreeLocation{}, errors.New("the machine returned no repository id")
-	}
-	home, err := sendWorktreeCommand[struct {
-		HomeDir string `json:"home_dir"`
-		Error   string `json:"error,omitempty"`
-	}](ctx, m, m.daemonID, "skills.get_home_dir", struct{}{}, worktreeCommandTimeoutMs)
-	if err != nil {
-		return worktreeLocation{}, err
-	}
-	if home.HomeDir == "" {
-		return worktreeLocation{}, fmt.Errorf("the machine has no home directory: %s", home.Error)
-	}
-	return worktreeLocation{
-		repoID: repo.RepoID,
-		path:   ospath.Join(home.HomeDir, ".reliant", "worktrees", repo.RepoID, name),
-	}, nil
-}
-
-// registered returns the project's worktree row called name, archived or
-// not, or nil. A project holds one row per name.
-func (w *worktreeTool) registered(ctx context.Context, projectID, name string) (*db.Worktree, error) {
-	if w.repo == nil || projectID == "" {
-		return nil, nil
-	}
-	const page = 100
-	for offset := 0; ; offset += page {
-		rows, err := w.repo.ListWorktrees(ctx, db.WorktreeFilters{
-			ProjectID: &projectID, IncludeArchived: true, Limit: page, Offset: offset,
-		})
+// projectRepos lists the repositories a workspace gets a checkout of: the
+// chat's, else the registry's, else whatever exists on the machine (the
+// registry trails the filesystem after a manual `git init`).
+func (w *worktreeTool) projectRepos(ctx context.Context, rc *rctx.ToolContext, project *db.Project, m *workspaceMachine) ([]*core.Repo, error) {
+	repos := rc.Repos
+	if len(repos) == 0 {
+		var err error
+		repos, err = w.repo.ListReposByProject(ctx, project.ID)
 		if err != nil {
-			return nil, fmt.Errorf("look up existing worktrees: %w", err)
-		}
-		for _, row := range rows {
-			if row.Name == name {
-				return row, nil
-			}
-		}
-		if len(rows) < page {
-			return nil, nil
+			return nil, fmt.Errorf("list the project's repositories: %w", err)
 		}
 	}
-}
-
-// createRefusal says why the name cannot be (re)created, given the row that
-// already holds it, or "" when it can.
-//
-// Only a row this tool made for the name on this machine is reused: one at
-// the tool's own path whose checkout is here. force=true wipes that path, so
-// it must never be applied to a workspace made some other way, which lives at
-// another path and may be in use.
-func createRefusal(existing *db.Worktree, path, daemonID string, p *WorktreeParams) string {
-	switch {
-	case existing.Path != path:
-		return fmt.Sprintf("worktree '%s' already exists in Reliant registry as another workspace (use a different name)", p.Name)
-	case existing.DaemonID != nil && *existing.DaemonID != "" && *existing.DaemonID != daemonID:
-		return fmt.Sprintf("worktree '%s' already exists in Reliant registry on another machine (use a different name)", p.Name)
-	case existing.DeletedAt == nil && !p.Force:
-		return fmt.Sprintf("worktree '%s' already exists in Reliant registry (use force=true to override)", p.Name)
+	if len(repos) == 0 {
+		repos = repopkg.AdoptFromDaemon(ctx, w.repo, m, project)
 	}
-	return ""
+	if len(repos) == 0 {
+		return nil, errors.New("the project has no git repositories; initialize one before creating worktrees")
+	}
+	return repos, nil
 }
 
-// persist records the created worktree. A row the tool made for the name
-// before (deleted, or replaced by force=true) is brought back in place, so
-// chats bound to it stay bound; otherwise a new row records the machine as
-// the owner, so a chat later bound to the worktree, and every operation on
-// it, routes to the machine that has the checkout.
-func (w *worktreeTool) persist(ctx context.Context, existing *db.Worktree, wt *WorktreeInfo, rc *rctx.ToolContext, daemonID string) error {
-	now := time.Now().UTC()
-	if existing != nil {
-		existing.Branch = wt.Branch
-		existing.BaseBranch = wt.BaseBranch
-		existing.Path = wt.Path
-		existing.Status = 1 // WORKTREE_STATUS_ACTIVE
-		existing.LastActive = now
-		if err := w.repo.UpdateWorktree(ctx, existing); err != nil {
-			return err
-		}
-		if existing.DeletedAt != nil {
-			return w.repo.UnarchiveWorktree(ctx, existing.ID)
-		}
+// reposForDisplay is projectRepos without side effects, for list/get.
+func (w *worktreeTool) reposForDisplay(ctx context.Context, rc *rctx.ToolContext, project *db.Project) []*core.Repo {
+	if len(rc.Repos) > 0 {
+		return rc.Repos
+	}
+	repos, err := w.repo.ListReposByProject(ctx, project.ID)
+	if err != nil {
+		logging.Warn("worktree tool: could not list repos", "projectID", project.ID, "error", err)
 		return nil
 	}
-	var chatID *string
-	if rc.ChatID != "" {
-		chatID = &rc.ChatID
-	}
-	return w.repo.CreateWorktree(ctx, &db.Worktree{
-		ID:         uuid.New().String(),
-		Name:       wt.Name,
-		Path:       wt.Path,
-		Branch:     wt.Branch,
-		BaseBranch: wt.BaseBranch,
-		ProjectID:  rc.Project.ID,
-		ChatID:     chatID,
-		DaemonID:   &daemonID,
-		Status:     1, // WORKTREE_STATUS_ACTIVE
-		CreatedAt:  now,
-		UpdatedAt:  now,
-		LastActive: now,
-	})
+	return repos
 }
 
-// validateWorktreeName refuses a name that is not one plain path segment. The
-// name becomes the last component of a directory on the user's machine, which
-// force=true wipes and delete removes: "../.." would aim both outside
-// ~/.reliant/worktrees.
+// listAll pages through the project's worktree rows.
+func (w *worktreeTool) listAll(ctx context.Context, projectID string, includeArchived bool) ([]*db.Worktree, error) {
+	var out []*db.Worktree
+	for offset := 0; ; offset += worktreeListPage {
+		rows, err := w.repo.ListWorktrees(ctx, db.WorktreeFilters{
+			ProjectID: &projectID, IncludeArchived: includeArchived, Limit: worktreeListPage, Offset: offset,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("look up worktrees: %w", err)
+		}
+		out = append(out, rows...)
+		if len(rows) < worktreeListPage {
+			return out, nil
+		}
+	}
+}
+
+// byName returns the project's live worktree called name, or nil. Archived
+// rows are not found by name: a name can be reused once its worktree is
+// archived, so it identifies the live row only.
+func (w *worktreeTool) byName(ctx context.Context, projectID, name string) (*db.Worktree, error) {
+	return w.repo.GetLiveWorktreeByName(ctx, projectID, name)
+}
+
+// liveChatIn returns the id of a non-archived chat of userID bound to the
+// worktree, or "".
+func (w *worktreeTool) liveChatIn(ctx context.Context, userID, projectID, worktreeID string) (string, error) {
+	chats, err := w.repo.ListChats(ctx, db.ChatFilters{UserID: userID, ProjectID: &projectID, ExcludeArchived: true, Limit: 1000})
+	if err != nil {
+		return "", fmt.Errorf("look up chats using the worktree: %w", err)
+	}
+	for _, chat := range chats {
+		if chat.WorktreeID != nil && *chat.WorktreeID == worktreeID {
+			return chat.ID, nil
+		}
+	}
+	return "", nil
+}
+
+// emitChanged tells the user's connected clients the worktree list changed.
+func (w *worktreeTool) emitChanged(ctx context.Context, userID, projectID, worktreeID string) {
+	if err := w.repo.EmitUserRefetch(ctx, userID, db.RefetchWorktreeChanges, db.RefetchOpts{
+		ProjectID: &projectID, WorktreeID: &worktreeID,
+	}); err != nil {
+		logging.Warn("worktree tool: could not emit worktree refetch", "worktreeID", worktreeID, "error", err)
+	}
+}
+
+// info converts a row, with each repository's checkout under the root.
+func (w *worktreeTool) info(row *db.Worktree, repos []*core.Repo) *WorktreeInfo {
+	info := &WorktreeInfo{
+		ID:         row.ID,
+		Name:       row.Name,
+		Path:       row.Path,
+		Branch:     row.Branch,
+		BaseBranch: row.BaseBranch,
+		ProjectID:  row.ProjectID,
+		Status:     worktreeStatusName(row.Status),
+		CreatedAt:  row.CreatedAt,
+		UpdatedAt:  row.UpdatedAt,
+		LastActive: row.LastActive,
+	}
+	if row.ChatID != nil {
+		info.SessionID = *row.ChatID
+	}
+	if row.DaemonID != nil {
+		info.DaemonID = *row.DaemonID
+	}
+	if row.Path != "" && len(repos) > 0 {
+		info.Checkouts = make(map[string]string, len(repos))
+		for _, repo := range repos {
+			info.Checkouts[repo.Name] = checkoutPath(row.Path, repo)
+		}
+	}
+	return info
+}
+
+// checkoutPath is where a repository's checkout sits in a workspace. The
+// workspace belongs to the user's machine, so the path rules are its own.
+func checkoutPath(root string, repo *core.Repo) string {
+	if repo.RelativePath == "" {
+		return root
+	}
+	return ospath.Join(root, repo.RelativePath)
+}
+
+func writeCheckouts(b *strings.Builder, repos []*core.Repo, checkouts map[string]string) {
+	if len(checkouts) == 0 {
+		return
+	}
+	b.WriteString("- Checkouts (one per repository, each on the branch above):\n")
+	for _, repo := range repos {
+		if path, ok := checkouts[repo.Name]; ok {
+			fmt.Fprintf(b, "  - %s: %s\n", repo.Name, path)
+		}
+	}
+}
+
+func worktreeStatusName(status int32) WorktreeStatus {
+	switch reliantv1.WorktreeStatus(status) {
+	case reliantv1.WorktreeStatus_WORKTREE_STATUS_COMPLETED:
+		return WorktreeStatusCompleted
+	case reliantv1.WorktreeStatus_WORKTREE_STATUS_ABANDONED:
+		return WorktreeStatusAbandoned
+	case reliantv1.WorktreeStatus_WORKTREE_STATUS_MERGING:
+		return WorktreeStatusMerging
+	case reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING:
+		return WorktreeStatusCreating
+	case reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED:
+		return WorktreeStatusFailed
+	default:
+		return WorktreeStatusActive
+	}
+}
+
+// nameTakenReason says why a name cannot be used. Only a live worktree holds a
+// name (a failed one is replaced by a retry, an archived one releases it), so
+// holder, nil when a concurrent create won the race, is always live.
+func nameTakenReason(holder *db.Worktree, name string) string {
+	if holder != nil && holder.Status == int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING) {
+		return fmt.Sprintf("a worktree named '%s' is still being created; pick another name or wait for it", name)
+	}
+	return fmt.Sprintf("a worktree named '%s' already exists in this project; pick another name, or delete the old one (action delete) to reuse the name", name)
+}
+
+// validateWorktreeName refuses a name that is not one plain path segment: it
+// becomes the prefix of a directory on the user's machine.
 func validateWorktreeName(name string) error {
 	if name == "." || name == ".." || strings.ContainsAny(name, "/\\\x00") || strings.TrimSpace(name) != name {
 		return fmt.Errorf("invalid worktree name %q: use a single directory name, without slashes", name)
 	}
 	return nil
-}
-
-// gitWorktreeAddError turns the output of a failed `git worktree add` into the
-// error the tool reports.
-func gitWorktreeAddError(output, path, branch, baseBranch string) error {
-	switch {
-	case strings.Contains(output, "already exists"):
-		return fmt.Errorf("worktree path '%s' already exists", path)
-	case strings.Contains(output, "already checked out"):
-		return fmt.Errorf("branch '%s' is already checked out in another worktree", branch)
-	case strings.Contains(output, "not a valid branch"):
-		return fmt.Errorf("base branch '%s' is not a valid branch", baseBranch)
-	default:
-		return fmt.Errorf("git worktree creation failed: %s", strings.TrimSpace(output))
-	}
-}
-
-type worktreeToolCreateRequest struct {
-	ProjectPath string `json:"project_path"`
-	RepoID      string `json:"repo_id"`
-	Name        string `json:"name"`
-	Branch      string `json:"branch"`
-	BaseBranch  string `json:"base_branch"`
-	Force       bool   `json:"force"`
-}
-
-type worktreeToolCreateResponse struct {
-	Success      bool   `json:"success"`
-	WorktreePath string `json:"worktree_path,omitempty"`
-	BaseBranch   string `json:"base_branch,omitempty"`
-	Error        string `json:"error,omitempty"`
-}
-
-type worktreeToolCopyPathsResponse struct {
-	Failed map[string]string `json:"failed,omitempty"`
-	Error  string            `json:"error,omitempty"`
-}
-
-type worktreeToolDeleteResponse struct {
-	Deleted bool `json:"deleted"`
-}
-
-// sendWorktreeCommand marshals payload, sends it to daemonID and decodes the
-// reply into T.
-func sendWorktreeCommand[T any](ctx context.Context, m *worktreeRunMachine, daemonID, commandType string, payload any, timeoutMs int32) (T, error) {
-	var resp T
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return resp, fmt.Errorf("%s: marshal request: %w", commandType, err)
-	}
-	raw, err := m.Send(ctx, m.userID, daemonID, commandType, body, timeoutMs)
-	if err != nil {
-		return resp, fmt.Errorf("%s: %w", commandType, err)
-	}
-	if err := json.Unmarshal(raw, &resp); err != nil {
-		return resp, fmt.Errorf("%s: decode reply: %w", commandType, err)
-	}
-	return resp, nil
-}
-
-// dbWorktreeToWorktree converts a db.Worktree to a WorktreeInfo for response metadata
-func dbWorktreeToWorktree(dbWt *db.Worktree) *WorktreeInfo {
-	status := WorktreeStatusActive
-	switch dbWt.Status {
-	case 1:
-		status = WorktreeStatusActive
-	case 2:
-		status = WorktreeStatusCompleted
-	case 3:
-		status = WorktreeStatusAbandoned
-	}
-
-	sessionID := ""
-	if dbWt.ChatID != nil {
-		sessionID = *dbWt.ChatID
-	}
-
-	return &WorktreeInfo{
-		ID:         dbWt.ID,
-		Name:       dbWt.Name,
-		Path:       dbWt.Path,
-		Branch:     dbWt.Branch,
-		BaseBranch: dbWt.BaseBranch,
-		ProjectID:  dbWt.ProjectID,
-		SessionID:  sessionID,
-		Status:     status,
-		CreatedAt:  dbWt.CreatedAt,
-		UpdatedAt:  dbWt.UpdatedAt,
-		LastActive: dbWt.LastActive,
-	}
 }
 
 // IsReadOnly implements ReadOnlyTool

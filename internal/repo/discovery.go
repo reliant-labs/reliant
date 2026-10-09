@@ -107,10 +107,11 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 			if err != nil {
 				return nil
 			}
+			// RemoteURL is resolved after dedupe, for survivors only: each
+			// read is a git spawn.
 			found = append(found, Found{
 				RelativePath: rel,
 				Name:         filepath.Base(path),
-				RemoteURL:    readRemoteURL(ctx, path),
 			})
 			idents = append(idents, identifyCheckout(path))
 			// Don't recurse into a discovered repo.
@@ -128,6 +129,9 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 	// this is a multi-repo project where the root may also be a git repo
 	// (e.g. tracking shared config with children gitignored).
 	found = dedupeByRepository(found, idents, rootIdentity(abs, rootIsGit))
+	for i := range found {
+		found[i].RemoteURL = readRemoteURL(ctx, filepath.Join(abs, found[i].RelativePath))
+	}
 
 	if rootIsGit && len(found) == 0 {
 		return []Found{{

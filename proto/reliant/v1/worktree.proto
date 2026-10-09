@@ -45,6 +45,10 @@ service WorktreeService {
   // Import/Discovery Operations
   rpc ImportWorktree(ImportWorktreeRequest) returns (ImportWorktreeResponse) {}
   rpc DiscoverWorktrees(DiscoverWorktreesRequest) returns (DiscoverWorktreesResponse) {}
+  // PruneWorktrees runs `git worktree prune` in each repo of the project. It
+  // only drops records whose directories are already gone; it never touches a
+  // directory that exists. Explicit user action only, never automatic.
+  rpc PruneWorktrees(PruneWorktreesRequest) returns (PruneWorktreesResponse) {}
   rpc RecreateWorktree(RecreateWorktreeRequest) returns (RecreateWorktreeResponse) {}
   
   // Git Read Operations
@@ -110,14 +114,41 @@ message CleanupMetadata {
   repeated string snapshot_refs = 6;
 }
 
-// DiscoveredWorktree represents a worktree found via git discovery
+// DiscoveredWorktree is a linked git worktree of one of the project's repos
+// that Reliant did not make and does not track — typically a checkout made by
+// hand with `git worktree add`. Registered worktrees (archived ones included),
+// Reliant's own workspaces and the repos' main checkouts are never reported.
 message DiscoveredWorktree {
+  reserved 4, 5, 6;
+  reserved "is_imported", "is_prunable", "imported_id";
+
+  // Absolute path of the checkout.
   string path = 1;
+  // Suggested worktree name (the directory's base name).
   string name = 2;
+  // Checked-out branch; empty when HEAD is detached.
   string branch = 3;
-  bool is_imported = 4;
-  bool is_prunable = 5;
-  optional string imported_id = 6;
+  // The project repo this checkout belongs to.
+  string repo_id = 7;
+  string repo_name = 8;
+  // HEAD commit.
+  string head = 9;
+  // git refuses to move a locked worktree; import surfaces that refusal.
+  bool locked = 10;
+  // True when importing it moves the directory into a new workspace under
+  // workspaces_root (a multi-repo project), false when it is registered in
+  // place (a single-repo project). The client must confirm a move.
+  bool moves_on_import = 11;
+}
+
+// StaleWorktree is git's record of a linked worktree whose directory no longer
+// exists (`git worktree list` reports it prunable).
+message StaleWorktree {
+  string path = 1;
+  string repo_id = 2;
+  string repo_name = 3;
+  // git's prunable reason, e.g. "gitdir file points to non-existent location".
+  string reason = 4;
 }
 
 // GitCommit represents a git commit
@@ -260,12 +291,23 @@ message UnarchiveWorktreeResponse {
 // Import/Discovery Request/Response Messages
 // =============================================================================
 
-// ImportWorktreeRequest imports an existing worktree directory
+// ImportWorktreeRequest adopts a discovered worktree as a Reliant workspace.
+// In a single-repo project the checkout is registered where it is. In a
+// multi-repo project it is moved (`git worktree move`) into a new workspace
+// directory and the project's other repos get checkouts beside it, so the
+// result is the same workspace the UI creates.
 message ImportWorktreeRequest {
+  // Absolute path of the checkout, as reported by DiscoverWorktrees.
   string path = 1;
   string project_id = 2;
   optional string name = 3;
   optional string chat_id = 4;
+  // The project repo the checkout belongs to (DiscoveredWorktree.repo_id).
+  string repo_id = 5;
+  // Must be true when the import moves the directory
+  // (DiscoveredWorktree.moves_on_import): the user has been told that
+  // anything running inside it loses its working directory.
+  bool confirm_move = 6;
 }
 
 // ImportWorktreeResponse returns the imported worktree
@@ -273,15 +315,37 @@ message ImportWorktreeResponse {
   Worktree worktree = 1;
 }
 
-// DiscoverWorktreesRequest discovers existing git worktrees
+// DiscoverWorktreesRequest lists the project's untracked git worktrees.
 message DiscoverWorktreesRequest {
+  string project_id = 1;
+  // A background caller (the sidebar hint) must not wake a sleeping machine:
+  // when true and the machine is asleep, the call fails with Unavailable and
+  // nothing is woken. A user opening the discover dialog leaves it false.
+  bool background = 2;
+}
+
+// DiscoverWorktreesResponse returns the untracked worktrees of every repo of
+// the project, and git's stale records separately.
+message DiscoverWorktreesResponse {
+  reserved 2;
+  reserved "total";
+
+  repeated DiscoveredWorktree discovered = 1;
+  repeated StaleWorktree stale = 3;
+  // Directory new workspaces are created in, for display in a move
+  // confirmation (e.g. ~/.reliant/worktrees/<project>).
+  string workspaces_root = 4;
+}
+
+// PruneWorktreesRequest removes git's records of the project's worktrees
+// whose directories no longer exist.
+message PruneWorktreesRequest {
   string project_id = 1;
 }
 
-// DiscoverWorktreesResponse returns discovered worktrees
-message DiscoverWorktreesResponse {
-  repeated DiscoveredWorktree discovered = 1;
-  int32 total = 2;
+// PruneWorktreesResponse lists the records that were removed.
+message PruneWorktreesResponse {
+  repeated StaleWorktree pruned = 1;
 }
 
 // RecreateWorktreeRequest recreates an archived worktree from its branch

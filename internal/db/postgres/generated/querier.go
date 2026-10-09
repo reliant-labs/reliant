@@ -374,6 +374,9 @@ type Querier interface {
 	// "params changed" note a send can write after the user's message, are not
 	// turns, so they must not make an unanswered message look answered.
 	GetLatestTurnRoleByThread(ctx context.Context, threadID string) (int32, error)
+	// The one unarchived row holding a name; worktrees_project_id_name_live_key
+	// guarantees there is at most one.
+	GetLiveWorktreeByName(ctx context.Context, arg GetLiveWorktreeByNameParams) (Worktree, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (interface{}, error)
 	GetMessage(ctx context.Context, id string) (Message, error)
 	GetMessageByActivityID(ctx context.Context, arg GetMessageByActivityIDParams) (Message, error)
@@ -994,6 +997,9 @@ type Querier interface {
 	// Used for startup recovery to restart workers for active workflows.
 	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
 	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
+	// Every row, archived included, recorded against a branch: an archived row's
+	// checkout or branch may outlive the archive.
+	ListWorktreesByBranch(ctx context.Context, arg ListWorktreesByBranchParams) ([]Worktree, error)
 	// Every workspace whose directory a daemon may still hold: not main, has a
 	// path, and not already known to be removed. Status 5 is CREATING and 6 is
 	// FAILED (WorktreeStatus in worktree.proto); neither has a directory yet. Archived rows are the ones to remove; the rest are locked as

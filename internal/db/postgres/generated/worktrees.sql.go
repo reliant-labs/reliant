@@ -97,6 +97,43 @@ func (q *Queries) DeleteWorktree(ctx context.Context, id string) error {
 	return err
 }
 
+const getLiveWorktreeByName = `-- name: GetLiveWorktreeByName :one
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees
+WHERE project_id = $1 AND name = $2 AND deleted_at IS NULL
+`
+
+type GetLiveWorktreeByNameParams struct {
+	ProjectID string `json:"project_id"`
+	Name      string `json:"name"`
+}
+
+// The one unarchived row holding a name; worktrees_project_id_name_live_key
+// guarantees there is at most one.
+func (q *Queries) GetLiveWorktreeByName(ctx context.Context, arg GetLiveWorktreeByNameParams) (Worktree, error) {
+	row := q.db.QueryRowContext(ctx, getLiveWorktreeByName, arg.ProjectID, arg.Name)
+	var i Worktree
+	err := row.Scan(
+		&i.ID,
+		&i.Name,
+		&i.Path,
+		&i.Branch,
+		&i.BaseBranch,
+		&i.ProjectID,
+		&i.ChatID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.LastActive,
+		&i.DeletedAt,
+		&i.IsMain,
+		&i.CleanupMetadata,
+		&i.BaseBranches,
+		&i.DaemonID,
+		&i.IdempotencyKey,
+	)
+	return i, err
+}
+
 const getWorktree = `-- name: GetWorktree :one
 SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees WHERE id = $1
 `
@@ -327,6 +364,59 @@ func (q *Queries) ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([
 		arg.Offset,
 		arg.Limit,
 	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []Worktree{}
+	for rows.Next() {
+		var i Worktree
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Path,
+			&i.Branch,
+			&i.BaseBranch,
+			&i.ProjectID,
+			&i.ChatID,
+			&i.Status,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.LastActive,
+			&i.DeletedAt,
+			&i.IsMain,
+			&i.CleanupMetadata,
+			&i.BaseBranches,
+			&i.DaemonID,
+			&i.IdempotencyKey,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listWorktreesByBranch = `-- name: ListWorktreesByBranch :many
+SELECT id, name, path, branch, base_branch, project_id, chat_id, status, created_at, updated_at, last_active, deleted_at, is_main, cleanup_metadata, base_branches, daemon_id, idempotency_key FROM worktrees
+WHERE project_id = $1 AND branch = $2
+`
+
+type ListWorktreesByBranchParams struct {
+	ProjectID string `json:"project_id"`
+	Branch    string `json:"branch"`
+}
+
+// Every row, archived included, recorded against a branch: an archived row's
+// checkout or branch may outlive the archive.
+func (q *Queries) ListWorktreesByBranch(ctx context.Context, arg ListWorktreesByBranchParams) ([]Worktree, error) {
+	rows, err := q.db.QueryContext(ctx, listWorktreesByBranch, arg.ProjectID, arg.Branch)
 	if err != nil {
 		return nil, err
 	}

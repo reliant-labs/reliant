@@ -1,4 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
+import { externalWorktreesKey } from "./useExternalWorktrees";
 import {
   AlertCircle,
   Archive,
@@ -16,6 +18,7 @@ import { useProjectStore } from "../../store/projectStore";
 import { useChatList } from "../../hooks/chat-queries";
 import { CreateWorktreeModal } from "./CreateWorktreeModal";
 import { DiscoverWorktreesModal } from "./DiscoverWorktreesModal";
+import { WorktreesDiscoverHint } from "./WorktreesDiscoverHint";
 import { DeleteWorktreeModal } from "./DeleteWorktreeModal";
 import { AddRepoModal } from "./AddRepoModal";
 import { InitializeGitModal } from "../Git/InitializeGitModal";
@@ -82,6 +85,7 @@ export function WorktreesPanel({
   const [showAddRepoModal, setShowAddRepoModal] = useState(false);
   const [showInitGitModal, setShowInitGitModal] = useState(false);
 
+  const queryClient = useQueryClient();
   const archive = useArchiveWorkspace();
   const { openWorkspace, openChat } = useOpenWorkspace(onOpened);
 
@@ -190,6 +194,8 @@ export function WorktreesPanel({
           </Button>
         </div>
       </div>
+
+      <WorktreesDiscoverHint projectId={currentProject.id} onReview={() => setShowDiscoverModal(true)} />
 
       {error && (
         <div
@@ -333,7 +339,10 @@ export function WorktreesPanel({
       />
       <DiscoverWorktreesModal
         isOpen={showDiscoverModal}
-        onClose={() => setShowDiscoverModal(false)}
+        onClose={() => {
+          setShowDiscoverModal(false);
+          void queryClient.invalidateQueries({ queryKey: externalWorktreesKey(currentProject.id) });
+        }}
         onWorktreesImported={() => refreshWorktrees()}
         projectId={currentProject.id}
       />

@@ -24,16 +24,21 @@ var nonSlugRE = regexp.MustCompile(`[^a-z0-9]+`)
 // The 8-char short-id keeps the path unique even if the user reuses a
 // worktree name after deleting an old one whose directory wasn't cleaned.
 func WorkspaceDirName(projectName, worktreeName string) string {
-	proj := slug(projectName)
-	if proj == "" {
-		proj = "workspace"
-	}
+	proj := ProjectDirName(projectName)
 	wt := slug(worktreeName)
 	if wt == "" {
 		wt = "worktree"
 	}
 	short := strings.SplitN(uuid.New().String(), "-", 2)[0]
 	return path.Join(proj, wt+"-"+short)
+}
+
+// ProjectDirName is the per-project directory under the worktrees root.
+func ProjectDirName(projectName string) string {
+	if proj := slug(projectName); proj != "" {
+		return proj
+	}
+	return "workspace"
 }
 
 func slug(name string) string {

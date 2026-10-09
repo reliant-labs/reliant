@@ -351,6 +351,12 @@ func (s *shellTool) Execute(rctx *rctx.ToolContext, params ShellParams) (ToolRes
 		return NewTextErrorResponse(refusal), nil
 	}
 
+	// Refuse a hand-made `git worktree add` outside a temp dir: the worktree
+	// tool creates the workspace the UI would. See shell_worktree_guard.go.
+	if refusal := gitWorktreeAddRefusal(params.Command, capabilitiesFor(rctx)); refusal != "" {
+		return NewTextErrorResponse(refusal), nil
+	}
+
 	// params.Timeout is in milliseconds per the JSON schema
 	maxTimeoutMs := int(MaxShellTimeout.Milliseconds())
 	defaultTimeoutMs := int(DefaultShellTimeout.Milliseconds())

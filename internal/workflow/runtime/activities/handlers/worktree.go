@@ -7,13 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
-	"strings"
-	"sync"
-	"time"
 
-	"github.com/google/uuid"
-
-	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/copypath"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -23,11 +17,9 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
-	"github.com/reliant-labs/reliant/internal/worktreepath"
+	"github.com/reliant-labs/reliant/internal/workspacecreate"
 	"go.temporal.io/sdk/temporal"
 )
-
-const worktreeCreateDaemonTimeoutMs int32 = 120_000
 
 // ============================================================================
 // TYPES (strongly typed inputs/outputs)
@@ -171,208 +163,46 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 		return CreateWorktreeOutput{}, fmt.Errorf("invalid copy_files: %w", err)
 	}
 
-	// Generate default branch name if not provided (must match daemon-side logic)
-	if branch == "" {
-		branch = fmt.Sprintf("worktree/%s-%d", name, time.Now().Unix())
-	}
-
-	// Human-readable workspace dir name; matches the convention used by the
-	// CreateWorktree gRPC handler so disk paths look the same regardless of
-	// where the worktree was kicked off.
-	workspaceID := worktreepath.WorkspaceDirName(project.Name, name)
-	// Fixed before any checkout so the daemon can write it into each
-	// checkout's lock reason (see worktreereclaim.LockReason).
-	worktreeID := uuid.New().String()
-
-	type repoCreateResult struct {
-		repo         *core.Repo
-		worktreePath string
-		baseBranch   string
-	}
-	successes := make([]repoCreateResult, 0, len(repos))
-
-	rollback := func(reason error) error {
-		for _, s := range successes {
-			repoPath := filepath.Join(project.Path, s.repo.RelativePath)
-			_, _ = sendWorktreeDaemonCmd[worktreeDeleteDaemonResponse](
-				ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.delete_directory",
-				worktreeDeleteDaemonRequest{
-					ProjectPath:  repoPath,
-					WorktreePath: s.worktreePath,
-				}, 30_000,
-			)
-		}
-		return reason
-	}
-
-	createRepo := func(repo *core.Repo) (repoCreateResult, error) {
-		repoPath := filepath.Join(project.Path, repo.RelativePath)
-
-		if force {
-			// Stale-branch cleanup; the workspace dir itself is fresh per UUID.
-			_, _ = sendWorktreeDaemonCmd[map[string]any](
-				ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.force_cleanup",
-				map[string]string{
-					"project_path":  repoPath,
-					"worktree_path": "",
-					"branch":        branch,
-				}, 30_000,
-			)
-		}
-
-		createResp, err := sendWorktreeDaemonCmd[worktreeCreateDaemonResponse](
-			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.create",
-			worktreeCreateDaemonRequest{
-				ProjectPath: repoPath,
-				WorkspaceID: workspaceID,
-				SubPath:     repo.RelativePath,
-				Name:        name,
-				Branch:      branch,
-				BaseBranch:  baseBranch,
-				Force:       force,
-				WorktreeID:  worktreeID,
-			}, worktreeCreateDaemonTimeoutMs,
-		)
-		if err != nil {
-			logging.Error("Failed to create git worktree via daemon", "error", err, "repo", repo.ID)
-			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %w", repo.Name, err)
-		}
-		if !createResp.Success {
-			logging.Error("Failed to create git worktree", "error", createResp.Error, "repo", repo.ID)
-			return repoCreateResult{}, fmt.Errorf("failed to create worktree for repo %s: %s", repo.Name, createResp.Error)
-		}
-		return repoCreateResult{
-			repo:         repo,
-			worktreePath: createResp.WorktreePath,
-			baseBranch:   firstNonEmptyWT(createResp.BaseBranch, baseBranch),
-		}, nil
-	}
-
-	// Concurrent, with the same two rules as WorktreeService.finishWorktreeCreate:
-	// a repo nested in another waits for its container, and a failure lets its
-	// siblings finish so every checkout that exists is known and rolled back.
-	results := make([]repoCreateResult, len(repos))
-	errs := make([]error, len(repos))
-	ran := make([]bool, len(repos))
-	var firstErr error
-	for _, wave := range repopkg.CheckoutWaves(repos) {
-		var wg sync.WaitGroup
-		for _, i := range wave {
-			ran[i] = true
-			wg.Go(func() {
-				results[i], errs[i] = createRepo(repos[i])
-			})
-		}
-		wg.Wait()
-		for _, i := range wave {
-			if errs[i] != nil {
-				firstErr = errs[i]
-				break
-			}
-		}
-		if firstErr != nil {
-			break
-		}
-	}
-	for i := range repos {
-		if ran[i] && errs[i] == nil {
-			successes = append(successes, results[i])
-		}
-	}
-	if firstErr != nil {
-		return CreateWorktreeOutput{}, rollback(firstErr)
-	}
-
-	// The workspace root comes from the first repo: the daemon returns
-	// <HOME>/.reliant/worktrees/<workspace_id>[/<repo.rel>], so strip the
-	// trailing repo.RelativePath.
-	var workspaceRoot string
-	if len(successes) > 0 {
-		first := successes[0]
-		workspaceRoot = first.worktreePath
-		if first.repo.RelativePath != "" {
-			workspaceRoot = strings.TrimSuffix(first.worktreePath,
-				string(filepath.Separator)+first.repo.RelativePath)
-			if workspaceRoot == first.worktreePath {
-				workspaceRoot = filepath.Dir(first.worktreePath)
-			}
-		}
-	}
-
-	// Once for the whole workspace, root to root — see
-	// WorktreeService.finishWorktreeCreate. A failed copy is logged, not
-	// fatal: the checkouts are complete and usable.
-	if len(copyPaths) > 0 && workspaceRoot != "" {
-		copyResp, err := sendWorktreeDaemonCmd[worktreeCopyPathsDaemonResponse](
-			ctx, a.daemonRouter, chat.UserID, ownerDaemonID, "worktree.copy_paths",
-			worktreeCopyPathsDaemonRequest{
-				SourceRoot: project.Path,
-				DestRoot:   workspaceRoot,
-				Paths:      copyPaths,
-			}, worktreeCreateDaemonTimeoutMs,
-		)
-		switch {
-		case err != nil:
-			logging.Error("Failed to copy paths into worktree", "error", err, "workspace", workspaceRoot)
-		case copyResp.Error != "" || len(copyResp.Failed) > 0:
-			logging.Error("Some paths were not copied into worktree", "error", copyResp.Error,
-				"failed", copyResp.Failed, "workspace", workspaceRoot)
-		}
-	}
-
-	// Persist one Worktree row representing the workspace. BaseBranch is the
-	// resolved value of the first repo for display; BaseBranches captures
-	// per-repo bases so PR creation (and other future write ops) can pick
-	// the right base for each nested repo.
-	displayBase := baseBranch
-	if len(successes) > 0 {
-		displayBase = successes[0].baseBranch
-	}
-	baseBranches := make(map[string]string, len(successes))
-	for _, s := range successes {
-		if s.baseBranch != "" {
-			baseBranches[s.repo.ID] = s.baseBranch
-		}
-	}
-	if len(baseBranches) <= 1 {
-		// Single-repo: legacy BaseBranch alone is canonical, leave the map nil
-		// so the JSON column stays NULL.
-		baseBranches = nil
-	}
-
-	now := time.Now().UTC()
+	// workspacecreate.Insert defaults an empty branch to worktree/<name>-<unix>.
 	var chatIDPtr *string
 	if rtx.ChatID != "" {
 		c := rtx.ChatID
 		chatIDPtr = &c
 	}
-	wt := &db.Worktree{
-		ID:           worktreeID,
-		Name:         name,
-		Path:         workspaceRoot,
-		Branch:       branch,
-		BaseBranch:   displayBase,
-		BaseBranches: baseBranches,
-		ProjectID:    project.ID,
-		ChatID:       chatIDPtr,
-		DaemonID:     &ownerDaemonID,
-		Status:       int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE),
-		CreatedAt:    now,
-		UpdatedAt:    now,
-		LastActive:   now,
+	createReq := workspacecreate.Request{
+		Project:       project,
+		Repos:         repos,
+		Name:          name,
+		Branch:        branch,
+		BaseBranch:    baseBranch,
+		Force:         force,
+		CopyPaths:     copyPaths,
+		ChatID:        chatIDPtr,
+		OwnerDaemonID: ownerDaemonID,
 	}
-	if err := a.repo.CreateWorktree(ctx, wt); err != nil {
-		logging.Error("Failed to create worktree row", "error", err)
-		_ = rollback(nil)
+	wt, err := workspacecreate.Insert(ctx, a.repo, createReq)
+	if err != nil {
 		return CreateWorktreeOutput{}, fmt.Errorf("failed to persist worktree row: %w", err)
+	}
+	machine := daemonMachine{router: a.daemonRouter, userID: chat.UserID, daemonID: ownerDaemonID}
+	finishErr := workspacecreate.Finish(ctx, a.repo, machine, createReq, wt)
+	// Settled either way (ACTIVE or FAILED): tell connected clients.
+	if err := a.repo.EmitUserRefetch(ctx, chat.UserID, db.RefetchWorktreeChanges, db.RefetchOpts{
+		ProjectID:  &project.ID,
+		WorktreeID: &wt.ID,
+	}); err != nil {
+		logging.Error("Failed to emit worktree refetch", "error", err, "worktreeID", wt.ID)
+	}
+	if finishErr != nil {
+		return CreateWorktreeOutput{}, finishErr
 	}
 
 	return CreateWorktreeOutput{
-		Id:         worktreeID,
+		Id:         wt.ID,
 		Name:       name,
-		Path:       workspaceRoot,
-		Branch:     branch,
-		BaseBranch: displayBase,
+		Path:       wt.Path,
+		Branch:     wt.Branch,
+		BaseBranch: wt.BaseBranch,
 		// RepoId is intentionally empty: in the multi-repo model a worktree
 		// is workspace-level, not tied to a single nested repo. Kept on the
 		// proto for backwards-compat with existing workflow YAML fixtures.
@@ -381,14 +211,28 @@ func (a *CreateWorktreeActivity) Execute(ctx context.Context, input ActivityInpu
 	}, nil
 }
 
-// firstNonEmptyWT returns the first non-empty string from values.
-func firstNonEmptyWT(values ...string) string {
-	for _, v := range values {
-		if v != "" {
-			return v
+// daemonMachine is a workspacecreate.Machine bound to one owner daemon.
+type daemonMachine struct {
+	router   toolexec.DaemonRouter
+	userID   string
+	daemonID string
+}
+
+func (m daemonMachine) Send(ctx context.Context, commandType string, payload, resp any, timeoutMs int32) error {
+	payloadBytes, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+	respBytes, err := m.router.SendDaemonCommandToDaemon(ctx, m.userID, m.daemonID, commandType, payloadBytes, timeoutMs)
+	if err != nil {
+		return fmt.Errorf("daemon command %s: %w", commandType, err)
+	}
+	if resp != nil {
+		if err := json.Unmarshal(respBytes, resp); err != nil {
+			return fmt.Errorf("unmarshal response for %s: %w", commandType, err)
 		}
 	}
-	return ""
+	return nil
 }
 
 // ============================================================================
@@ -569,37 +413,6 @@ func (a *DeleteWorktreeActivity) softDeleteWorktree(ctx context.Context, worktre
 // ============================================================================
 // DAEMON COMMAND TYPES & HELPERS
 // ============================================================================
-
-type worktreeCreateDaemonRequest struct {
-	ProjectPath string `json:"project_path"`
-	WorkspaceID string `json:"workspace_id"`
-	SubPath     string `json:"sub_path"`
-	Name        string `json:"name"`
-	Branch      string `json:"branch"`
-	BaseBranch  string `json:"base_branch"`
-	Force       bool   `json:"force"`
-	WorktreeID  string `json:"worktree_id,omitempty"`
-}
-
-type worktreeCopyPathsDaemonRequest struct {
-	SourceRoot string   `json:"source_root"`
-	DestRoot   string   `json:"dest_root"`
-	Paths      []string `json:"paths"`
-}
-
-type worktreeCopyPathsDaemonResponse struct {
-	Copied  []string          `json:"copied,omitempty"`
-	Missing []string          `json:"missing,omitempty"`
-	Failed  map[string]string `json:"failed,omitempty"`
-	Error   string            `json:"error,omitempty"`
-}
-
-type worktreeCreateDaemonResponse struct {
-	Success      bool   `json:"success"`
-	WorktreePath string `json:"worktree_path,omitempty"`
-	BaseBranch   string `json:"base_branch,omitempty"`
-	Error        string `json:"error,omitempty"`
-}
 
 type worktreeDeleteDaemonRequest struct {
 	ProjectPath  string `json:"project_path"`
