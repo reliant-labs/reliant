@@ -105,6 +105,7 @@ func offerSessionToForge(conn *connection, server, account string) {
 		server = conn.ServerURL
 	}
 	exportForgeCredentialHelper(server, account)
+	pinGitCredentialHelper(server, account)
 	retireLegacyForgeDeposits()
 }
 

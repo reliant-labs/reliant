@@ -2,7 +2,6 @@
 package daemonruntime
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"os"
@@ -14,9 +13,18 @@ import (
 
 const testSecretToken = "ghu_TESTSECRET0123456789abcdefghijklmn"
 
-// A clone made with a token must not leave it in the checkout: it used to be
-// spliced into the clone URL, which git persists as remote.origin.url.
-func TestHandleGitClone_TokenNeverLandsInGitConfig(t *testing.T) {
+func gitOut(t *testing.T, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", args...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
+	return string(out)
+}
+
+// A clone must leave a clean remote URL and no token anywhere in .git/config,
+// even when an older control-plane still sends one in the payload.
+func TestHandleGitClone_IgnoresLegacyTokenField(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short: runs real git clone; skipped under -short")
 	}
@@ -25,14 +33,10 @@ func TestHandleGitClone_TokenNeverLandsInGitConfig(t *testing.T) {
 	origin := newTestOriginRepo(t)
 	dest := filepath.Join(t.TempDir(), "dest")
 
-	payload, err := json.Marshal(gitCloneRequest{Repo: origin, Branch: "main", Path: dest, Token: testSecretToken})
-	if err != nil {
-		t.Fatal(err)
-	}
+	payload := []byte(`{"repo":` + jsonString(t, origin) + `,"branch":"main","path":` + jsonString(t, dest) + `,"token":"` + testSecretToken + `"}`)
 	if _, err := handleGitClone(context.Background(), payload); err != nil {
 		t.Fatalf("clone: %v", err)
 	}
-
 	cfg, err := os.ReadFile(filepath.Join(dest, ".git", "config"))
 	if err != nil {
 		t.Fatal(err)
@@ -40,79 +44,211 @@ func TestHandleGitClone_TokenNeverLandsInGitConfig(t *testing.T) {
 	if strings.Contains(string(cfg), testSecretToken) || strings.Contains(string(cfg), "x-access-token") {
 		t.Fatalf("token leaked into .git/config:\n%s", cfg)
 	}
-	out, err := exec.Command("git", "-C", dest, "remote", "get-url", "origin").Output()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if got := strings.TrimSpace(string(out)); got != origin {
+	if got := strings.TrimSpace(gitOut(t, "-C", dest, "remote", "get-url", "origin")); got != origin {
 		t.Fatalf("origin url = %q, want the clean %q", got, origin)
+	}
+	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".git-credentials")); err == nil {
+		t.Fatal("clone wrote ~/.git-credentials")
 	}
 }
 
-// The one-shot helper must hand git the token for HTTPS, and nothing from
-// inherited helpers.
-func TestCloneCredentialEnv_SuppliesTokenToGit(t *testing.T) {
+func TestGitRecloneRequest_IgnoresLegacyTokenField(t *testing.T) {
+	var req gitRecloneRequest
+	if err := json.Unmarshal([]byte(`{"path":"/p","repo":"r","token":"x"}`), &req); err != nil {
+		t.Fatal(err)
+	}
+	if req.Path != "/p" || req.Repo != "r" {
+		t.Fatalf("req = %+v", req)
+	}
+}
+
+func jsonString(t *testing.T, s string) string {
+	t.Helper()
+	b, err := json.Marshal(s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return string(b)
+}
+
+func withHelper(t *testing.T, argv ...string) {
+	t.Helper()
+	SetGitCredentialHelper(argv)
+	t.Cleanup(func() { SetGitCredentialHelper(nil) })
+}
+
+// git itself, given the daemon's per-invocation env, runs the helper for
+// github.com (with spaces in the path) and gets the answer.
+func TestGitCredentialEnv_GitInvokesHelperForGithubOnly(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short: runs real git credential; skipped under -short")
 	}
-	if cloneCredentialEnv("") != nil {
-		t.Fatal("no token must yield no credential env")
+	setGitCloneTestEnv(t)
+	dir := t.TempDir()
+	script := filepath.Join(dir, "my helper")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\ncat >/dev/null\necho username=x-access-token\necho \"password=$1-$2\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	withHelper(t, script, "it's ok")
+
+	run := func(host string, env []string) string {
+		cmd := exec.Command("git", "credential", "fill")
+		cmd.Env = env
+		cmd.Stdin = strings.NewReader("protocol=https\nhost=" + host + "\n\n")
+		cmd.Env = append(cmd.Env, "GIT_TERMINAL_PROMPT=0")
+		out, _ := cmd.CombinedOutput()
+		return string(out)
+	}
+	env := gitCredentialEnv(os.Environ())
+	if got := run("github.com", env); !strings.Contains(got, "username=x-access-token") || !strings.Contains(got, "password=it's ok-get") {
+		t.Fatalf("github.com not answered by helper:\n%s", got)
+	}
+	if got := run("example.com", env); strings.Contains(got, "x-access-token") {
+		t.Fatalf("helper answered a non-github host:\n%s", got)
+	}
+}
+
+func TestGitCredentialEnv_AppendsToExistingGitConfigEnv(t *testing.T) {
+	withHelper(t, "/bin/h")
+	env := gitCredentialEnv([]string{"A=1", "GIT_CONFIG_COUNT=1", "GIT_CONFIG_KEY_0=a.b", "GIT_CONFIG_VALUE_0=c"})
+	joined := strings.Join(env, "\n")
+	for _, want := range []string{"GIT_CONFIG_COUNT=3", "GIT_CONFIG_KEY_0=a.b", "GIT_CONFIG_KEY_1=credential.https://github.com.helper", "GIT_CONFIG_VALUE_1=\n", "GIT_CONFIG_VALUE_2=!'/bin/h'"} {
+		if !strings.Contains(joined+"\n", want) {
+			t.Errorf("missing %q in\n%s", want, joined)
+		}
+	}
+	if strings.Count(joined, "GIT_CONFIG_COUNT=") != 1 {
+		t.Error("duplicate GIT_CONFIG_COUNT")
+	}
+}
+
+func TestGitCredentialHelperValue_QuotesSafely(t *testing.T) {
+	got := gitCredentialHelperValue([]string{"/a b/reliant", "auth", "it's"})
+	want := `!'/a b/reliant' 'auth' 'it'\''s'`
+	if got != want {
+		t.Fatalf("got %s want %s", got, want)
+	}
+}
+
+func TestWireGlobalGitCredentialHelper_IdempotentAndReplacesStore(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short: runs real git config; skipped under -short")
+	}
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	gitOut(t, "config", "--global", "credential.helper", "store")
+	argv := []string{"/x y/reliant", "auth", "git-credential", "--daemon-server", "http://s"}
+	for i := 0; i < 2; i++ {
+		if err := wireGlobalGitCredentialHelper(context.Background(), argv); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, _ := os.ReadFile(cfg)
+	if n := strings.Count(string(got), "helper ="); n != 1 {
+		t.Fatalf("want exactly one helper entry, got %d:\n%s", n, got)
+	}
+	if strings.Contains(string(got), "= store") {
+		t.Fatalf("old store helper left behind:\n%s", got)
+	}
+	// A user's own non-store global helper is untouched.
+	gitOut(t, "config", "--global", "credential.helper", "osxkeychain")
+	if err := wireGlobalGitCredentialHelper(context.Background(), argv); err != nil {
+		t.Fatal(err)
+	}
+	if got := gitOut(t, "config", "--global", "--get", "credential.helper"); strings.TrimSpace(got) != "osxkeychain" {
+		t.Fatalf("user's helper clobbered: %q", got)
+	}
+}
+
+// Off a managed daemon the global config is never written.
+func TestSetupManagedGitCredentials_LocalDaemonLeavesGlobalConfigAlone(t *testing.T) {
+	cfg := filepath.Join(t.TempDir(), "gitconfig")
+	t.Setenv("GIT_CONFIG_GLOBAL", cfg)
+	t.Setenv("GIT_CONFIG_SYSTEM", os.DevNull)
+	t.Setenv(DaemonTypeEnvVar, "")
+	withHelper(t, "/bin/h")
+	setupManagedGitCredentials()
+	if _, err := os.Stat(cfg); err == nil {
+		t.Fatal("a local daemon wrote the global git config")
+	}
+}
+
+func TestHealLeakedGitCredentials(t *testing.T) {
+	if testing.Short() {
+		t.Skip("-short: runs real git; skipped under -short")
 	}
 	setGitCloneTestEnv(t)
-	cmd := exec.Command("git", "credential", "fill")
-	cmd.Env = append(os.Environ(), cloneCredentialEnv(testSecretToken)...)
-	cmd.Stdin = strings.NewReader("protocol=https\nhost=github.com\n\n")
-	var stdout bytes.Buffer
-	cmd.Stdout = &stdout
-	cmd.Stderr = &stdout
-	if err := cmd.Run(); err != nil {
-		t.Fatalf("git credential fill: %v: %s", err, stdout.String())
+	home := t.TempDir()
+	projects := t.TempDir()
+	mk := func(name string, remotes map[string]string) string {
+		d := filepath.Join(projects, name)
+		gitOut(t, "init", "-q", d)
+		for n, u := range remotes {
+			gitOut(t, "-C", d, "remote", "add", n, u)
+		}
+		return d
 	}
-	got := stdout.String()
-	if !strings.Contains(got, "username=x-access-token") || !strings.Contains(got, "password="+testSecretToken) {
-		t.Fatalf("helper did not supply the token:\n%s", got)
+	leaked := mk("leaked", map[string]string{"origin": "https://x-access-token:" + testSecretToken + "@github.com/o/r.git"})
+	clean := mk("clean", map[string]string{"origin": "https://github.com/o/c.git"})
+	user := mk("user", map[string]string{"origin": "ssh://git@github.com/o/u.git", "up": "https://alice@github.com/o/u.git"})
+	mk("none", nil)
+
+	creds := filepath.Join(home, ".git-credentials")
+	seed := "https://x-access-token:" + testSecretToken + "@github.com\nhttps://alice:pw@gitlab.com\nhttps://x-access-token:keep@gitlab.com\n"
+	if err := os.WriteFile(creds, []byte(seed), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	remotes, lines := healLeakedGitCredentials(context.Background(), projects, home)
+	if remotes != 1 || lines != 1 {
+		t.Fatalf("counts = %d, %d; want 1, 1", remotes, lines)
+	}
+	if got := strings.TrimSpace(gitOut(t, "-C", leaked, "remote", "get-url", "origin")); got != "https://github.com/o/r.git" {
+		t.Fatalf("leaked url = %q", got)
+	}
+	if got := strings.TrimSpace(gitOut(t, "-C", clean, "remote", "get-url", "origin")); got != "https://github.com/o/c.git" {
+		t.Fatalf("clean url = %q", got)
+	}
+	if got := strings.TrimSpace(gitOut(t, "-C", user, "remote", "get-url", "up")); got != "https://alice@github.com/o/u.git" {
+		t.Fatalf("userinfo-without-password url = %q", got)
+	}
+	cfg, _ := os.ReadFile(filepath.Join(leaked, ".git", "config"))
+	if strings.Contains(string(cfg), testSecretToken) {
+		t.Fatal("token still in .git/config")
+	}
+	got, _ := os.ReadFile(creds)
+	if string(got) != "https://alice:pw@gitlab.com\nhttps://x-access-token:keep@gitlab.com\n" {
+		t.Fatalf("credentials file = %q", got)
+	}
+	if info, _ := os.Stat(creds); info.Mode().Perm() != 0o600 {
+		t.Fatalf("mode = %v", info.Mode().Perm())
+	}
+
+	// Idempotent; and a file that held only the token goes away.
+	if r, l := healLeakedGitCredentials(context.Background(), projects, home); r != 0 || l != 0 {
+		t.Fatalf("second run counts = %d, %d", r, l)
+	}
+	if err := os.WriteFile(creds, []byte("https://x-access-token:"+testSecretToken+"@github.com\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	healLeakedGitCredentials(context.Background(), projects, home)
+	if _, err := os.Stat(creds); !os.IsNotExist(err) {
+		t.Fatal("empty credentials file should be removed")
 	}
 }
 
-// The store helper returns the FIRST matching line, so a refreshed token has to
-// replace the old one rather than queue behind it.
-func TestUpsertGitCredential_ReplacesStaleTokenKeepsOthers(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	credFile := filepath.Join(home, ".git-credentials")
-	seed := "https://x-access-token:OLD@github.com\nhttps://alice:pw@gitlab.com\nhttps://x-access-token:OLDLAB@gitlab.com\n"
-	if err := os.WriteFile(credFile, []byte(seed), 0o600); err != nil {
-		t.Fatal(err)
-	}
-
-	if err := upsertGitCredential("github.com", "NEW"); err != nil {
-		t.Fatal(err)
-	}
-	if err := upsertGitCredential("github.com", "NEWER"); err != nil {
-		t.Fatal(err)
-	}
-
-	got, err := os.ReadFile(credFile)
-	if err != nil {
-		t.Fatal(err)
-	}
-	want := "https://alice:pw@gitlab.com\nhttps://x-access-token:OLDLAB@gitlab.com\nhttps://x-access-token:NEWER@github.com\n"
-	if string(got) != want {
-		t.Fatalf("credentials file:\n%s\nwant:\n%s", got, want)
-	}
-	if info, err := os.Stat(credFile); err != nil || info.Mode().Perm() != 0o600 {
-		t.Fatalf("mode = %v, err = %v; want 0600", info.Mode().Perm(), err)
-	}
-}
-
-func TestUpsertGitCredential_CreatesMissingFile(t *testing.T) {
-	home := t.TempDir()
-	t.Setenv("HOME", home)
-	if err := upsertGitCredential("github.com", "T"); err != nil {
-		t.Fatal(err)
-	}
-	got, _ := os.ReadFile(filepath.Join(home, ".git-credentials"))
-	if string(got) != "https://x-access-token:T@github.com\n" {
-		t.Fatalf("got %q", got)
+func TestStripURLPassword(t *testing.T) {
+	for in, want := range map[string]string{
+		"https://x-access-token:T@github.com/o/r.git": "https://github.com/o/r.git",
+		"https://github.com/o/r.git":                  "",
+		"https://alice@github.com/o/r.git":            "",
+		"git@github.com:o/r.git":                      "",
+		"/local/path":                                 "",
+	} {
+		got, leaked := stripURLPassword(in)
+		if got != want || leaked != (want != "") {
+			t.Errorf("%q -> %q,%v", in, got, leaked)
+		}
 	}
 }

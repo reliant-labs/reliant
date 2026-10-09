@@ -32,6 +32,7 @@ forge (see 'reliant auth login --help'), keyed by the server it is for.`,
 	cmd.AddCommand(newAuthServeCmd())
 	cmd.AddCommand(newAuthTokenCmd())
 	cmd.AddCommand(newAuthForgeCredentialCmd())
+	cmd.AddCommand(newAuthGitCredentialCmd())
 
 	return cmd
 }
