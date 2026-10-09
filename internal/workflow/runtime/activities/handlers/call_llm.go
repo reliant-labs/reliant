@@ -1540,6 +1540,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 		}, streamState)
 	}
 
+	// Fingerprint exactly what is about to be sent, and diff it against this
+	// thread's previous request. Logged on the Usage line below, so a turn that
+	// rewrote most of its prompt into the cache names the section that moved.
+	shape := computePromptShape(resolvedModelID, systemPrompts, history, availableTools)
+	shapeDiff := callLLMShapes.observe(chat.ID+"|"+thread, shape)
+
 	// Stream response with cancellation support
 	llmCallStart := time.Now()
 	eventChan := driver.StreamResponse(streamCtx, systemPrompts, history, availableTools)
@@ -1715,7 +1721,7 @@ streamLoop:
 	if streamInterrupted {
 		analyticsErr = nil
 	}
-	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, analyticsErr)
+	a.trackLLMCallCompleted(ctx, chat, driver, llmLatencyMs, streamState.usage, analyticsErr, shape, shapeDiff)
 
 	if streamState.upstreamRequestID != "" || streamState.upstreamProxymanID != "" {
 		activity.GetLogger(ctx).Info("[CallLLM] Upstream correlation",
@@ -2867,7 +2873,7 @@ func (a *CallLLMActivity) handleComplete(ctx context.Context, event llm.DriverEv
 }
 
 // trackLLMCallCompleted fires an analytics event after each LLM API call.
-func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error) {
+func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Chat, driver llm.Driver, latencyMs int64, usage llm.TokenUsage, streamErr error, shape promptShape, diff shapeDiff) {
 	model := driver.Model()
 
 	// Per-call usage, logged next to the latency that produced it. This is the
@@ -2887,7 +2893,12 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 	if promptTotal > 0 {
 		cacheReadPct = int(usage.CacheReadInputTokens * 100 / promptTotal)
 	}
-	logging.Info("[CallLLM] Usage",
+	// The shape fields answer "what changed since this thread's last request",
+	// which the token counts alone cannot: a cache miss with toolsChanged=true is
+	// the tool set moving, one with divergedKind=memory is the project memory
+	// block, and one with divergedAt > 0 and no section changed is history that
+	// was rewritten mid-conversation. Content-free hashes only.
+	usageFields := []any{
 		"chatID", chat.ID,
 		"provider", driver.Name(),
 		"model", string(model.ID),
@@ -2900,7 +2911,8 @@ func (a *CallLLMActivity) trackLLMCallCompleted(ctx context.Context, chat *db.Ch
 		"cacheCreationTokens", usage.CacheCreationInputTokens,
 		"cacheReadPct", cacheReadPct,
 		"totalTokens", usage.TokenCount,
-	)
+	}
+	logging.Info("[CallLLM] Usage", append(usageFields, shape.logFields(diff)...)...)
 	metrics := analytics.LLMCallMetrics{
 		Provider:    driver.Name(),
 		Model:       string(model.ID),

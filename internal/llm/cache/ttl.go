@@ -3,35 +3,10 @@ package cache
 
 import "strings"
 
-// ExtendedTTL is the cache_control `ttl` every Anthropic-dialect breakpoint
-// carries: the Anthropic API, Claude on Vertex AI, OpenRouter's Claude
-// passthrough, and the LiteLLM gateway in front of Vertex.
-//
-// WHY ONE HOUR, NOT THE 5-MINUTE DEFAULT. An agent turn routinely outlives five
-// minutes: a long xhigh-thinking generation, a slow tool, a user reading the
-// reply. When it does, the next request's prefix has already expired and the
-// whole conversation is written to cache again from scratch. Measured on our
-// own claude-code traffic, gaps of 5m–1h were 5% of requests but produced 55% of
-// all cache-write tokens, at a 41% miss rate. A 1h write costs 2x base input
-// against 1.25x for 5m, and replaying that traffic with every write at the 1h
-// price still came out ~8% cheaper on input, before counting the latency of
-// re-prefilling a 400k-token prefix.
-//
-// It must be uniform within a request, not just preferred. Anthropic requires
-// every longer-TTL breakpoint to precede every shorter one (tools -> system ->
-// messages), so mixing 1h system blocks with a 5m message breakpoint is only
-// legal in that one order, and a stray 5m breakpoint on a tool would 400 the
-// request. Sending 1h everywhere makes the ordering rule unreachable.
-//
-// No beta header is needed: 1h TTL is GA on the Anthropic API, Vertex AI and
-// Bedrock. Real Claude Code sends ttl:"1h" on its message breakpoint and its
-// cached system blocks (.dev/claude/*.json captures), so the claude-code driver
-// matches its fingerprint by using this too.
-//
-// Not applied to GitHub Copilot's Anthropic endpoint: its official client sends
-// a bare {type:"ephemeral"}, and nothing documents that the endpoint accepts a
-// ttl. See research/PROMPT_CACHE_TTL_BY_PROVIDER.md.
-const ExtendedTTL = "1h"
+// Anthropic-dialect breakpoints carry no ttl (the API's 5m default): measured
+// on prod, the 1h TTL cost more in write premium than it saved in reads.
+// Anthropic requires longer-TTL breakpoints to precede shorter ones
+// (tools -> system -> messages); any future per-section TTL must keep that order.
 
 // OpenAIExtendedRetention is the prompt_cache_retention value that keeps an
 // OpenAI prompt-cache prefix for up to 24 hours instead of the in-memory

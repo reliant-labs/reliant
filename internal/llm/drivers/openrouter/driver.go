@@ -180,16 +180,10 @@ func NewClient(opts llm.DriverOptions) *Client {
 	return &Client{delegate}
 }
 
-// extendedCacheControl is the cache_control object for every breakpoint this
-// driver emits. It is a single helper because the TTL has to be uniform within
-// a request: Anthropic requires longer-TTL breakpoints to precede shorter ones
-// (tools -> system -> messages), so one bare 5m breakpoint among 1h ones 400s
-// the request. The rationale for 1h itself is on cache.ExtendedTTL.
-func extendedCacheControl() map[string]string {
-	return map[string]string{
-		"type": "ephemeral",
-		"ttl":  cache.ExtendedTTL,
-	}
+// ephemeralCacheControl is the cache_control object for every breakpoint this
+// driver emits: a bare {type:"ephemeral"} (the API's 5m default, no ttl).
+func ephemeralCacheControl() map[string]string {
+	return map[string]string{"type": "ephemeral"}
 }
 
 // isAnthropicModel checks if the current model is an Anthropic model.
@@ -392,7 +386,7 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 					{
 						"type":          "text",
 						"text":          prompt,
-						"cache_control": extendedCacheControl(),
+						"cache_control": ephemeralCacheControl(),
 					},
 				}
 			} else {
@@ -529,13 +523,13 @@ func (c *Client) convertMessagesWithCacheControl(prompts []string, messages []me
 				{
 					"type":          "text",
 					"text":          content,
-					"cache_control": extendedCacheControl(),
+					"cache_control": ephemeralCacheControl(),
 				},
 			}
 		} else if contentArray, ok := lastMsg["content"].([]map[string]interface{}); ok {
 			// Already array format - add cache control to last content block
 			if len(contentArray) > 0 {
-				contentArray[len(contentArray)-1]["cache_control"] = extendedCacheControl()
+				contentArray[len(contentArray)-1]["cache_control"] = ephemeralCacheControl()
 			}
 		}
 	}

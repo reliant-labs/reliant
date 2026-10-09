@@ -15,7 +15,6 @@ import (
 	"github.com/anthropics/anthropic-sdk-go/option"
 	"github.com/anthropics/anthropic-sdk-go/packages/ssestream"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/anthropicwire"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -48,12 +47,6 @@ type baseClient struct {
 	options llm.DriverOptions
 	client  anthropic.Client
 
-	// cacheTTL is the ttl stamped on every cache_control breakpoint this client
-	// emits. It is cache.ExtendedTTL for every Anthropic endpoint we know accepts
-	// it, and empty (the API's 5m default, sent as a bare {type:"ephemeral"}) for
-	// a host that has not been shown to — see NewAnthropicClientWithOptions.
-	cacheTTL anthropic.CacheControlEphemeralTTL
-
 	// wireToolPrefix is the prefix tool names carry on the wire, stripped from
 	// every tool name the model returns so callers only ever see Reliant's own
 	// names. Empty for the plain Anthropic driver; ClaudeCodeClient presents
@@ -76,18 +69,15 @@ func newBase(opts llm.DriverOptions, clientOptions []option.RequestOption) *base
 	// is what extended thinking requires. Adaptive models (opus-4.8/sonnet-5/fable-5)
 	// 400 if temperature is sent at all, so omitting it is mandatory.
 	return &baseClient{
-		options:  opts,
-		client:   llm.NewAnthropicSDKClient(clientOptions...),
-		cacheTTL: anthropic.CacheControlEphemeralTTL(cache.ExtendedTTL),
+		options: opts,
+		client:  llm.NewAnthropicSDKClient(clientOptions...),
 	}
 }
 
-// cacheControl is the single place a breakpoint's cache_control is built, so
-// every breakpoint in one request carries the same TTL. Anthropic requires
-// longer-TTL breakpoints to precede shorter ones; a uniform TTL can never
-// violate that.
+// cacheControl is the single place a breakpoint's cache_control is built: a
+// bare {type:"ephemeral"} (the API's 5m default, no ttl).
 func (b *baseClient) cacheControl() anthropic.CacheControlEphemeralParam {
-	return anthropic.CacheControlEphemeralParam{Type: "ephemeral", TTL: b.cacheTTL}
+	return anthropic.CacheControlEphemeralParam{Type: "ephemeral"}
 }
 
 func (b *baseClient) addCacheControl(block *anthropic.ContentBlockParamUnion) {

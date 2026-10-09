@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -88,11 +87,9 @@ func ttlTestConversation() ([]string, []message.Message, []tools.Tool) {
 	return prompts, msgs, toolsList
 }
 
-// TestCacheControlTTL_VertexClaude pins every breakpoint this driver emits —
-// last tool, both cached system prompts, last message (a tool_result here) — at
-// the 1h extended TTL. A single 5m breakpoint anywhere would both expire the
-// prefix during a long turn and, if it preceded a 1h one, 400 the request on
-// Anthropic's longer-TTL-first ordering rule.
+// TestCacheControlTTL_VertexClaude pins every breakpoint this driver emits
+// (last tool, both cached system prompts, last message) at a bare
+// {type:"ephemeral"}: the API's 5m default, no ttl.
 func TestCacheControlTTL_VertexClaude(t *testing.T) {
 	c := ttlTestClient(false)
 	prompts, msgs, toolsList := ttlTestConversation()
@@ -108,8 +105,8 @@ func TestCacheControlTTL_VertexClaude(t *testing.T) {
 		if cc.Type != "ephemeral" {
 			t.Errorf("breakpoint %d type = %q, want ephemeral", i, cc.Type)
 		}
-		if cc.TTL != cache.ExtendedTTL {
-			t.Errorf("breakpoint %d ttl = %q, want %q", i, cc.TTL, cache.ExtendedTTL)
+		if cc.TTL != "" {
+			t.Errorf("breakpoint %d ttl = %q, want none", i, cc.TTL)
 		}
 	}
 }

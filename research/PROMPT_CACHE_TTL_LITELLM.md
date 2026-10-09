@@ -1,3 +1,5 @@
+> **Superseded (2026-10-09):** Anthropic-dialect breakpoints went back to the default 5m TTL (bare `{type:"ephemeral"}`) after measuring prod usage: the 1h write premium cost more than it saved. OpenAI 24h retention is unchanged. The body below is historical.
+
 # LiteLLM: Anthropic prompt caching with 1h TTL through the OpenAI `/chat/completions` endpoint
 
 What this covers: our Go client → LiteLLM proxy (`ghcr.io/berriai/litellm:main-stable`) → `vertex_ai/claude-*`.

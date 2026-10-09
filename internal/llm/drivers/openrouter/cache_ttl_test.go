@@ -11,7 +11,6 @@ import (
 
 	"github.com/invopop/jsonschema"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -114,9 +113,7 @@ func collectCacheControls(t *testing.T, body map[string]any) []map[string]any {
 
 // TestCacheControlTTL_AnthropicModel pins every breakpoint this driver emits
 // for an anthropic/* model — last tool, both cached system prompts, last
-// message — at the 1h extended TTL. A bare 5m breakpoint among them would both
-// expire the prefix mid-turn and, in the wrong position, 400 the request on
-// Anthropic's longer-TTL-first ordering rule.
+// message — at a bare {type:"ephemeral"} (5m default, no ttl).
 func TestCacheControlTTL_AnthropicModel(t *testing.T) {
 	body := captureRequestBody(t, models.Claude45Sonnet)
 	require.Equal(t, "anthropic/claude-sonnet-4.5", body["model"])
@@ -126,8 +123,8 @@ func TestCacheControlTTL_AnthropicModel(t *testing.T) {
 	// 1 tool + 2 system + 1 message: Anthropic's 4-breakpoint maximum.
 	require.Len(t, ccs, 4, "breakpoints: %+v", ccs)
 	for i, cc := range ccs {
-		require.Equal(t, map[string]any{"type": "ephemeral", "ttl": cache.ExtendedTTL}, cc,
-			"breakpoint %d must be ephemeral at the extended TTL", i)
+		require.Equal(t, map[string]any{"type": "ephemeral"}, cc,
+			"breakpoint %d must be a bare ephemeral", i)
 	}
 }
 

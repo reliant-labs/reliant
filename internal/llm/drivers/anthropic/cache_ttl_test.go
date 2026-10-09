@@ -7,7 +7,6 @@ import (
 
 	"github.com/anthropics/anthropic-sdk-go"
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	toolsPkg "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -78,11 +77,25 @@ func ttlTestConversation() ([]string, []message.Message, []toolsPkg.Tool) {
 	return prompts, msgs, tools
 }
 
+// requireTTLOrdering asserts Anthropic's rule that a longer-TTL breakpoint never
+// follows a shorter one in request order (tools -> system -> messages).
+func requireTTLOrdering(t *testing.T, ccs []wireCacheControl) {
+	t.Helper()
+	rank := func(ttl string) int {
+		if ttl == "1h" {
+			return 1
+		}
+		return 0
+	}
+	for i := 1; i < len(ccs); i++ {
+		require.LessOrEqual(t, rank(ccs[i].TTL), rank(ccs[i-1].TTL),
+			"breakpoint %d (ttl %q) is longer-lived than the one before it (ttl %q): %+v", i, ccs[i].TTL, ccs[i-1].TTL, ccs)
+	}
+}
+
 // TestCacheControlTTL_AnthropicAPI pins every breakpoint the direct Anthropic
-// client emits — last tool, cached system prompts, last message (a tool_result
-// here) — at the 1h extended TTL. A single 5m breakpoint anywhere would both
-// expire the prefix during a long turn and, if it preceded a 1h one, 400 the
-// request on Anthropic's longer-TTL-first ordering rule.
+// client emits (last tool, cached system prompts, last message) at a bare
+// {type:"ephemeral"}: the API's 5m default, no ttl.
 func TestCacheControlTTL_AnthropicAPI(t *testing.T) {
 	client := NewAnthropicClient(llm.DriverOptions{
 		Model:     models.Model{ID: models.Claude45Sonnet, APIModel: "claude-sonnet-4-5"},
@@ -97,14 +110,15 @@ func TestCacheControlTTL_AnthropicAPI(t *testing.T) {
 	require.Len(t, ccs, 4, "breakpoints: %+v", ccs)
 	for i, cc := range ccs {
 		require.Equal(t, "ephemeral", cc.Type, "breakpoint %d", i)
-		require.Equal(t, cache.ExtendedTTL, cc.TTL, "breakpoint %d must use the extended TTL", i)
+		require.Empty(t, cc.TTL, "breakpoint %d must not carry a ttl", i)
 	}
+	requireTTLOrdering(t, ccs)
 }
 
-// TestCacheControlTTL_ClaudeCode pins the claude-code driver to real Claude
-// Code's shape: ttl "1h" on the cached base system blocks, the caller system
-// block, and the message breakpoint — matching the .dev/claude captures, where
-// every cache_control carries ttl "1h" — and no breakpoint on tools.
+// TestCacheControlTTL_ClaudeCode pins the claude-code driver: the two base
+// system blocks keep real Claude Code's ttl "1h" (see .dev/claude captures);
+// every other breakpoint (caller system block, message) carries no ttl, and the
+// 1h blocks precede all of them.
 func TestCacheControlTTL_ClaudeCode(t *testing.T) {
 	client := NewClaudeCodeClient(llm.DriverOptions{
 		ApiKey:    "sk-ant-oat01-test",
@@ -120,13 +134,17 @@ func TestCacheControlTTL_ClaudeCode(t *testing.T) {
 	require.Len(t, ccs, 4, "breakpoints: %+v", ccs)
 	for i, cc := range ccs {
 		require.Equal(t, "ephemeral", cc.Type, "breakpoint %d", i)
-		require.Equal(t, cache.ExtendedTTL, cc.TTL, "breakpoint %d must use the extended TTL", i)
+		if i < 2 {
+			require.Equal(t, "1h", cc.TTL, "base system block %d", i)
+		} else {
+			require.Empty(t, cc.TTL, "breakpoint %d must not carry a ttl", i)
+		}
 	}
+	requireTTLOrdering(t, ccs)
 }
 
-// TestCacheControlTTL_ForeignHostIsBare pins the Copilot path (any client built
-// via NewAnthropicClientWithOptions) at a bare {type:"ephemeral"}: Copilot's
-// own client never sends a ttl, so ours must not either.
+// TestCacheControlTTL_ForeignHostIsBare pins clients built via
+// NewAnthropicClientWithOptions (Copilot) at a bare {type:"ephemeral"}.
 func TestCacheControlTTL_ForeignHostIsBare(t *testing.T) {
 	client := NewAnthropicClientWithOptions(llm.DriverOptions{
 		Model:     models.Model{ID: models.Claude45Sonnet, APIModel: "claude-sonnet-4.5"},
@@ -140,6 +158,7 @@ func TestCacheControlTTL_ForeignHostIsBare(t *testing.T) {
 	require.Len(t, ccs, 4, "breakpoints: %+v", ccs)
 	for i, cc := range ccs {
 		require.Equal(t, "ephemeral", cc.Type, "breakpoint %d", i)
-		require.Empty(t, cc.TTL, "breakpoint %d must not carry a ttl on a foreign host", i)
+		require.Empty(t, cc.TTL, "breakpoint %d must not carry a ttl", i)
 	}
+	requireTTLOrdering(t, ccs)
 }

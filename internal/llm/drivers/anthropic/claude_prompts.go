@@ -98,6 +98,9 @@ func claudeCodeBaseSystemBlocks(apiModel string, disableCache bool) []anthropic.
 	outputBlock := anthropic.TextBlockParam{Text: profile.output}
 
 	if !disableCache {
+		// These 1h breakpoints mirror real Claude Code captures. They are legal
+		// only because they precede the 5m caller/message breakpoints (Anthropic
+		// requires longer TTLs first); a 1h breakpoint must never follow a 5m one.
 		// agent block: ephemeral, ttl 1h, scope:global (scope via SetExtraFields).
 		agentCC := anthropic.CacheControlEphemeralParam{
 			Type: "ephemeral",

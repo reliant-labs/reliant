@@ -176,7 +176,7 @@ func (c *Client) sendWithCacheControl(ctx context.Context, prompts []string, mes
 			if i == len(tools)-1 && !c.Options.DisableCache {
 				// Add cache control to the last tool
 				if function, ok := toolMap["function"].(map[string]interface{}); ok {
-					function["cache_control"] = extendedCacheControl()
+					function["cache_control"] = ephemeralCacheControl()
 				}
 			}
 
