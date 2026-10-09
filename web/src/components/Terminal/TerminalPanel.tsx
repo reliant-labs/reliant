@@ -71,11 +71,21 @@ export function TerminalPanel(_props: TerminalPanelProps) {
   // Get sessions scoped to current worktree (for UI display)
   const sessions = getWorktreeSessions(currentWorktreeId);
 
-  // Get all sessions for this project (for rendering - keeps terminals alive)
-  const projectSessions = useMemo(
-    () => allSessions.filter((s) => s.projectId === currentProject?.id),
-    [allSessions, currentProject?.id]
-  );
+  // Keep terminals alive across workspace switches, but never mount a
+  // persisted terminal for a workspace that is no longer in the active list.
+  // A mounted terminal reconnects on a missing directory by design; retaining
+  // one after its workspace disappears turns that recovery loop into permanent
+  // daemon work.
+  const projectSessions = useMemo(() => {
+    const activeWorktreeIDs = new Set(
+      worktrees.filter((worktree) => !worktree.deleted_at).map((worktree) => worktree.id)
+    );
+    return allSessions.filter(
+      (session) =>
+        session.projectId === currentProject?.id &&
+        (!session.worktreeId || activeWorktreeIDs.has(session.worktreeId))
+    );
+  }, [allSessions, currentProject?.id, worktrees]);
 
   // Get real-time dimensions from shared store
   const sidebarWidth = useSidebarStore((state) => state.width);

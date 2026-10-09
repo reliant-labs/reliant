@@ -248,7 +248,8 @@ func TestSendToolRequestFailsAsSoonAsItsConnectionEnds(t *testing.T) {
 	select {
 	case err := <-errCh:
 		require.Error(t, err)
-		require.Contains(t, err.Error(), "daemon disconnected")
+		require.Contains(t, err.Error(), "connection interrupted")
+		require.Contains(t, err.Error(), "may still complete")
 	case <-time.After(3 * time.Second):
 		t.Fatal("the caller was still waiting after its daemon connection ended")
 	}

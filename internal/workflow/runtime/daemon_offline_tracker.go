@@ -2,35 +2,31 @@
 package runtime
 
 import (
+	"time"
+
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
 	"go.temporal.io/sdk/workflow"
 )
 
 // DaemonOfflinePauseThreshold is the number of CONSECUTIVE daemon-targeted
-// step completions that failed with the "no daemon connected" condition after
-// which the workflow pauses itself (instead of doing another LLM round-trip
-// against a dead daemon).
-//
-// Why 3:
-//   - 1 is too aggressive: a brief disconnect during a single ExecuteTools
-//     fan-out (e.g. the user's laptop briefly lost wifi) would pause the
-//     workflow even though the daemon comes back milliseconds later.
-//   - 2 still risks pausing flows during expected daemon restarts (workspace
-//     pod restart, daemon binary upgrade).
-//   - 3 gives ~3 LLM-call boundaries of headroom (~30s+ depending on model
-//     latency) while still bounding the token burn and chat spam to something
-//     the user will tolerate. The threshold is a const, not an env var: it's
-//     a quality-of-life knob, not an operator-tunable knob.
-//
-// If we later observe this is too aggressive or too lax, change the const —
-// not introduce a flag.
+// step completions that failed with the "no daemon connected" condition before
+// the workflow may pause itself.
 const DaemonOfflinePauseThreshold = 3
+
+// DaemonOfflinePauseGrace is the minimum uninterrupted daemon-unreachable
+// interval before pausing a workflow. The gateway can roll independently of a
+// workspace pod, briefly leaving no NATS responder while every daemon
+// reconnects. Counting three quick tool attempts during that window must not
+// make the user manually resume a chat that would have recovered by itself.
+const DaemonOfflinePauseGrace = 2 * time.Minute
 
 // DaemonOfflinePauseMessage is the user-facing chat message emitted (via the
 // WorkflowError activity) when the circuit breaker pauses the workflow.
 // Paused chats resume when the user sends a message (SendMessage routes
-// paused chats through PauseService.ResumeWorkflow).
-const DaemonOfflinePauseMessage = "Paused: no machine is connected. Start your machine and send a message to continue."
+// paused chats through PauseService.ResumeWorkflow). A failed request only
+// proves this workflow could not reach its daemon; it does not prove the
+// machine is stopped, so it must not instruct the user to start it.
+const DaemonOfflinePauseMessage = "Paused: this chat has been unable to reach its machine for two minutes. The machine may still be reconnecting; send a message to retry."
 
 // DaemonOfflineCircuitBreaker counts consecutive daemon-offline step
 // completions and pauses the workflow when the streak reaches the threshold.
@@ -66,7 +62,10 @@ const DaemonOfflinePauseMessage = "Paused: no machine is connected. Start your m
 // loop_executor.go. Counting them here would double-pause.
 type DaemonOfflineCircuitBreaker struct {
 	threshold          int
+	grace              time.Duration
 	consecutiveOffline int
+	firstOfflineAt     time.Time
+	now                func(workflow.Context) time.Time
 
 	// pause blocks until the user resumes the workflow. Wired by
 	// DynamicWorkflow to: emit the user-facing chat message, mark the
@@ -76,13 +75,24 @@ type DaemonOfflineCircuitBreaker struct {
 	pause func(callerCtx workflow.Context, streak int)
 }
 
-// NewDaemonOfflineCircuitBreaker creates a breaker that invokes pause once
-// the consecutive-offline streak reaches threshold. pause may be nil (the
-// breaker then only counts — useful in tests).
+// NewDaemonOfflineCircuitBreaker creates a breaker that invokes pause only
+// after both the consecutive-offline threshold and DaemonOfflinePauseGrace.
+// pause may be nil (the breaker then only counts — useful in tests).
 func NewDaemonOfflineCircuitBreaker(threshold int, pause func(callerCtx workflow.Context, streak int)) *DaemonOfflineCircuitBreaker {
+	return newDaemonOfflineCircuitBreaker(threshold, DaemonOfflinePauseGrace, pause)
+}
+
+func newDaemonOfflineCircuitBreaker(threshold int, grace time.Duration, pause func(callerCtx workflow.Context, streak int)) *DaemonOfflineCircuitBreaker {
 	return &DaemonOfflineCircuitBreaker{
 		threshold: threshold,
-		pause:     pause,
+		grace:     grace,
+		now: func(ctx workflow.Context) time.Time {
+			if ctx != nil {
+				return workflow.Now(ctx)
+			}
+			return time.Now()
+		},
+		pause: pause,
 	}
 }
 
@@ -162,8 +172,8 @@ func classifyStepEvent(activityName string, stepEvent *StepEvent) stepVerdict {
 
 // ObserveStep records a completed step outcome: bumps the streak on
 // daemon-offline steps, resets it when a tool call succeeded, and leaves it
-// unchanged otherwise. When the streak reaches the threshold the pause
-// callback fires, blocking until the user resumes the workflow.
+// unchanged otherwise. It pauses only when the streak has persisted for the
+// configured grace period, so a gateway rollout cannot force a manual resume.
 //
 // The streak is deliberately NOT reset when pausing: if the daemon is still
 // offline after resume, the very next offline step re-pauses after a single
@@ -177,12 +187,19 @@ func (b *DaemonOfflineCircuitBreaker) ObserveStep(callerCtx workflow.Context, ac
 	if b == nil {
 		return
 	}
+
+	now := b.now(callerCtx)
+
 	switch classifyStepEvent(activityName, stepEvent) {
 	case verdictAlive:
 		b.consecutiveOffline = 0
+		b.firstOfflineAt = time.Time{}
 	case verdictOffline:
+		if b.firstOfflineAt.IsZero() {
+			b.firstOfflineAt = now
+		}
 		b.consecutiveOffline++
-		if b.consecutiveOffline >= b.threshold && b.pause != nil {
+		if b.consecutiveOffline >= b.threshold && now.Sub(b.firstOfflineAt) >= b.grace && b.pause != nil {
 			b.pause(callerCtx, b.consecutiveOffline)
 		}
 	case verdictNeutral:

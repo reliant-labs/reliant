@@ -2462,7 +2462,7 @@ func (s *ToolsDaemonService) sendCommandToConn(ctx context.Context, conn *daemon
 		s.cancelDaemonCommand(conn.userID, conn.daemonID, req.RequestId, "daemon command timed out")
 		return nil, fmt.Errorf("daemon command %q timed out after %s", req.CommandType, timeout)
 	case <-conn.done:
-		return nil, fmt.Errorf("daemon disconnected while waiting for command %q response", req.CommandType)
+		return nil, fmt.Errorf("daemon connection interrupted while waiting for command %q response; the command may still complete after reconnect", req.CommandType)
 	case <-ctx.Done():
 		s.cancelDaemonCommand(conn.userID, conn.daemonID, req.RequestId, "daemon command caller cancelled")
 		return nil, ctx.Err()
@@ -2553,7 +2553,7 @@ func (s *ToolsDaemonService) sendToolRequestToConn(ctx context.Context, conn *da
 	case <-time.After(timeout):
 		return nil, fmt.Errorf("tool request %q timed out after %s", request.RequestID, timeout)
 	case <-conn.done:
-		return nil, fmt.Errorf("daemon disconnected while waiting for tool request %q response", request.RequestID)
+		return nil, fmt.Errorf("daemon connection interrupted while waiting for tool request %q response; the request outcome is unknown and the daemon may still complete it after reconnect", request.RequestID)
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

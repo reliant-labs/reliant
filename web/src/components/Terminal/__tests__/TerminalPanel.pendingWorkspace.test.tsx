@@ -131,6 +131,36 @@ describe("TerminalPanel on a workspace that is still being created", () => {
     expect(screen.getByText(/failed to set up/i)).toBeInTheDocument();
   });
 
+  it("does not mount a persisted terminal for an archived workspace", () => {
+    const archived = worktree({
+      id: "wt-archived",
+      name: "archived",
+      path: "/home/u/.reliant/worktrees/proj/archived",
+      branch: "archived",
+      is_main: false,
+      deleted_at: now,
+    });
+    useWorktreeStore.setState({ worktrees: [mainWorktree, archived], currentWorktree: mainWorktree });
+    useTerminalStore.setState({
+      sessions: [{
+        id: "terminal-archived",
+        title: "Terminal 1",
+        workingDir: archived.path,
+        projectId,
+        worktreeId: archived.id,
+        createdAt: new Date(now),
+        isActive: true,
+      }],
+      activeSessionId: "terminal-archived",
+      activeSessionPerWorktree: { [archived.id]: "terminal-archived" },
+      isOpen: true,
+    });
+
+    render(React.createElement(TerminalPanel));
+
+    expect(screen.queryByTestId("terminal-terminal-archived")).not.toBeInTheDocument();
+  });
+
   it("still uses the project path for the main workspace", () => {
     useWorktreeStore.setState({ currentWorktree: mainWorktree });
 

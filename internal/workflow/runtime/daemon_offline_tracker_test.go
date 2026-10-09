@@ -246,7 +246,7 @@ func TestDaemonOfflineCircuitBreaker_CounterAndPauseSemantics(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			var pauseStreaks []int
-			b := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(_ workflow.Context, streak int) {
+			b := newDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, 0, func(_ workflow.Context, streak int) {
 				pauseStreaks = append(pauseStreaks, streak)
 			})
 
@@ -276,13 +276,56 @@ func TestDaemonOfflineCircuitBreaker_CounterAndPauseSemantics(t *testing.T) {
 
 func TestDaemonOfflineCircuitBreaker_NilPauseCallbackOnlyCounts(t *testing.T) {
 	t.Parallel()
-	b := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, nil)
+	b := newDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, 0, nil)
 	for i := 0; i < 5; i++ {
 		b.ObserveStep(nil, "ExecuteTools", offlineToolResultsEvent())
 	}
 	if got := b.ConsecutiveOffline(); got != 5 {
 		t.Errorf("streak = %d, want 5", got)
 	}
+}
+
+func TestDaemonOfflineCircuitBreaker_TransientDisconnectDoesNotPause(t *testing.T) {
+	t.Parallel()
+
+	var pauses []int
+	breaker := newDaemonOfflineCircuitBreaker(3, time.Minute, func(_ workflow.Context, streak int) {
+		pauses = append(pauses, streak)
+	})
+	now := time.Date(2026, 10, 9, 16, 27, 0, 0, time.UTC)
+	breaker.now = func(workflow.Context) time.Time { return now }
+	for range 3 {
+		breaker.ObserveStep(nil, "ExecuteTools", offlineToolResultsEvent())
+		now = now.Add(5 * time.Second)
+	}
+	breaker.ObserveStep(nil, "ExecuteTools", successToolResultsEvent())
+
+	require.Empty(t, pauses, "a short gateway outage must not require a manual resume")
+	require.Zero(t, breaker.ConsecutiveOffline(), "a successful daemon response clears the transient outage")
+}
+
+func TestDaemonOfflineCircuitBreaker_PausesOnlyAfterSustainedDisconnect(t *testing.T) {
+	t.Parallel()
+
+	var pauses []int
+	breaker := newDaemonOfflineCircuitBreaker(3, time.Minute, func(_ workflow.Context, streak int) {
+		pauses = append(pauses, streak)
+	})
+	now := time.Date(2026, 10, 9, 16, 27, 0, 0, time.UTC)
+	breaker.now = func(workflow.Context) time.Time { return now }
+	for range 3 {
+		breaker.ObserveStep(nil, "ExecuteTools", offlineToolResultsEvent())
+		now = now.Add(30 * time.Second)
+	}
+
+	require.Equal(t, []int{3}, pauses)
+}
+
+func TestDaemonOfflinePauseMessageDoesNotClaimTheMachineStopped(t *testing.T) {
+	t.Parallel()
+	require.Contains(t, DaemonOfflinePauseMessage, "two minutes")
+	require.Contains(t, DaemonOfflinePauseMessage, "may still be reconnecting")
+	require.NotContains(t, DaemonOfflinePauseMessage, "Start your machine")
 }
 
 // ============================================================================
@@ -318,7 +361,7 @@ func daemonPauseTestWorkflow(ctx workflow.Context, modes []string) (daemonPauseT
 	pauseCount := 0
 	resumeCh := workflow.GetSignalChannel(ctx, "test.resume")
 
-	breaker := NewDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, func(callerCtx workflow.Context, streak int) {
+	breaker := newDaemonOfflineCircuitBreaker(DaemonOfflinePauseThreshold, 0, func(callerCtx workflow.Context, streak int) {
 		pauseCount++
 		// Block until "resumed" — proves the workflow re-enters cleanly and
 		// keeps processing subsequent steps after a breaker-initiated pause.
