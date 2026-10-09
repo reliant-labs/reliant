@@ -21,6 +21,7 @@ import { Button } from "../ui/Button";
 import { Input } from "../ui/Input";
 import { Badge } from "../ui/Badge";
 import { cn } from "../../lib/utils";
+import { useAccountGate } from "@/hooks/useAccountGate";
 import { machineDisplayName } from "@/lib/machineName";
 
 /**
@@ -120,6 +121,7 @@ export function ConnectorConsent({
   const [error, setError] = useState<string | null>(null);
   const [authorized, setAuthorized] = useState(false);
   const [creatingMachine, setCreatingMachine] = useState(false);
+  const accountGate = useAccountGate();
   const [githubConnected, setGithubConnected] = useState(false);
   const [githubLoading, setGithubLoading] = useState(true);
   const [showRepoPicker, setShowRepoPicker] = useState(false);
@@ -240,7 +242,9 @@ export function ConnectorConsent({
    * the pod is a real boundary. That matters given the permissive defaults
    * above, which are safe there in a way they are not on someone's laptop.
    */
-  const handleCreateMachine = async () => {
+  const handleCreateMachine = () => accountGate.run(createMachine);
+
+  const createMachine = async (): Promise<void> => {
     setCreatingMachine(true);
     setError(null);
     try {
@@ -292,6 +296,7 @@ export function ConnectorConsent({
         }
       }
     } catch (err) {
+      if (accountGate.handleError(err, createMachine)) return;
       const { isReasonedQuotaError } = await import(
         "../../hooks/useOnboardingQueries"
       );
@@ -518,6 +523,7 @@ export function ConnectorConsent({
 
   return (
     <div className="max-w-2xl mx-auto py-8 space-y-6">
+      {accountGate.modal}
       <div>
         <h1 className="text-xl font-semibold mb-2">
           Allow {displayName} to use a machine?

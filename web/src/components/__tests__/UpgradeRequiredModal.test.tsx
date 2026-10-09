@@ -47,6 +47,12 @@ vi.mock("../ui/Modal", () => ({
   ),
 }));
 
+vi.mock("../Billing/LinkIdentityModal", () => ({
+  LinkIdentityModal: ({ intro }: { intro?: string }) => (
+    <div data-testid="link-identity-modal">{intro}</div>
+  ),
+}));
+
 import { UpgradeRequiredModal } from "../UpgradeRequiredModal";
 
 function renderModal(reason: string, message = "") {
@@ -111,5 +117,13 @@ describe("UpgradeRequiredModal", () => {
     renderModal("reliant_credit_exhausted", "wallet balance is 0");
 
     expect(screen.getByText("wallet balance is 0")).toBeTruthy();
+  });
+
+  it("opens the identity link, not the plans page, for account_required", () => {
+    renderModal("account_required", "sign in with an email account to start a cloud machine");
+
+    expect(screen.getByTestId("link-identity-modal").textContent).toMatch(/add an email/i);
+    expect(screen.queryByRole("button", { name: /upgrade plan/i })).toBeNull();
+    expect(goToBilling).not.toHaveBeenCalled();
   });
 });

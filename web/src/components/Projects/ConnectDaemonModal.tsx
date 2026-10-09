@@ -46,6 +46,8 @@ import { ArrowLeft, Check, Cloud, Loader2, Monitor } from "lucide-react";
 import { Modal } from "../ui/Modal";
 import { SelfHostedDaemonConnect } from "./SelfHostedDaemonConnect";
 import { RedeemCouponForm } from "../RedeemCouponForm";
+import { useAccountGate } from "@/hooks/useAccountGate";
+import { isAccountRequiredError } from "@/lib/accountRequired";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
 import { useCloudEligibility, useCreateDaemon } from "@/hooks/useOnboardingQueries";
 import { capabilities } from "../../services/controlPlane/capabilities";
@@ -81,8 +83,10 @@ export function ConnectDaemonModal({
   // permission from a still-loading query is how a refused action gets offered.
   const canStartCloud = hasCloud && eligible && !eligibilityLoading;
 
+  const accountGate = useAccountGate();
   const createDaemonMutation = useCreateDaemon({
     onError: (err) => {
+      if (isAccountRequiredError(err)) return;
       const msg = err instanceof Error ? err.message : "Failed to start cloud daemon";
       setCloudError(msg);
     },
@@ -143,10 +147,12 @@ export function ConnectDaemonModal({
       });
       setCloudStarted(true);
     } catch (err) {
+      if (accountGate.handleError(err, () => startCloudDaemon())) return;
       const msg = err instanceof Error ? err.message : "Failed to start cloud daemon";
       setCloudError(msg);
     }
-  }, [canStartCloud, createDaemonMutation]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [canStartCloud, createDaemonMutation, accountGate.handleError]);
 
   const startingCloud = createDaemonMutation.isPending;
 
@@ -159,6 +165,7 @@ export function ConnectDaemonModal({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Connect a daemon" size="lg">
+      {accountGate.modal}
       {mode === null && (
         <div className="space-y-3">
           <p className="text-sm text-muted-foreground">
@@ -178,8 +185,10 @@ export function ConnectDaemonModal({
               <button
                 type="button"
                 onClick={() => {
-                  setMode("cloud");
-                  void startCloudDaemon();
+                  void accountGate.run(() => {
+                    setMode("cloud");
+                    void startCloudDaemon();
+                  });
                 }}
                 className="flex min-w-0 flex-col items-start gap-3 rounded-xl border-2 border-primary/25 bg-primary/5 p-5 text-left transition-all hover:border-primary/50 hover:bg-primary/10"
               >
