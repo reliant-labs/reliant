@@ -60,6 +60,8 @@ import {
   DaemonStatus,
   ListDaemonsRequestSchema,
 } from "@/gen/reliant/v1/daemon_registry_pb";
+import { ACCOUNT_REQUIRED_MACHINE_COPY } from "@/lib/accountRequired";
+import { isAnonymousSession } from "@/lib/anonymousSession";
 import { isCloudCompute } from "./types";
 import type { LaunchPlan } from "./types";
 
@@ -148,6 +150,11 @@ export interface CommitTask {
   detail: string;
   /** Set by `provision_daemon` so the gate polls the right row. */
   daemonId?: string;
+  /**
+   * The task did not run because the account has no email yet. Not a failure
+   * to report: the gate asks for an identity and re-runs the commit.
+   */
+  needsIdentity?: boolean;
 }
 
 export type CommitStatus = "complete" | "partial" | "failed";
@@ -168,6 +175,8 @@ export interface CommitResult {
  * made from the commit point, which is the property the whole design rests on.
  */
 export interface CommitDeps {
+  /** True for an anonymous session, which may not create a managed machine. */
+  isAnonymous: () => boolean;
   grantAiAccess: () => Promise<{ synced: boolean }>;
   getComputeEligibility: () => Promise<{
     eligible: boolean;
@@ -203,6 +212,7 @@ const ELIGIBILITY_POLL_INTERVAL_MS = 2_000;
 
 function defaultDeps(): CommitDeps {
   return {
+    isAnonymous: isAnonymousSession,
     grantAiAccess: async () => {
       const { onboardingService } = await import(
         "@/services/controlPlane/onboarding"
@@ -342,6 +352,18 @@ async function provisionDaemon(
       name: "provision_daemon",
       status: "skipped",
       detail: "Running on your own computer.",
+    };
+  }
+
+  // Before anything is created or waited on: the server refuses a managed
+  // machine to an anonymous account, and we must be able to email whoever owns
+  // a cloud disk before it is reclaimed.
+  if (deps.isAnonymous()) {
+    return {
+      name: "provision_daemon",
+      status: "failed",
+      detail: ACCOUNT_REQUIRED_MACHINE_COPY,
+      needsIdentity: true,
     };
   }
 

@@ -25,6 +25,8 @@ import { getEventBus } from "@/lib/events";
 import { logger } from "@/lib/logger";
 import { formatMachineMinutes } from "@/lib/formatMachineMinutes";
 import { cn } from "@/lib/utils";
+import { useAccountGate } from "@/hooks/useAccountGate";
+import { ACCOUNT_REQUIRED_COUPON_COPY } from "@/lib/accountRequired";
 
 export interface RedeemCouponFormProps {
   /**
@@ -82,6 +84,13 @@ export function RedeemCouponForm({
   const [redeemed, setRedeemed] = useState("");
   const [syncWarning, setSyncWarning] = useState("");
   const redeem = useRedeemCoupon();
+  // Compute coupons are refused to an anonymous account. The kind is only
+  // known to the server, so this reacts to its refusal instead of blocking
+  // every code up front (wallet coupons work for anyone).
+  const accountGate = useAccountGate(() => {
+    const here = `${window.location.pathname}${window.location.search}`;
+    return here.startsWith("/") && !here.startsWith("//") ? here : undefined;
+  });
 
   const small = size === "sm";
 
@@ -97,6 +106,10 @@ export function RedeemCouponForm({
       return;
     }
 
+    attempt(trimmed);
+  };
+
+  const attempt = (trimmed: string) => {
     redeem.mutate(trimmed, {
       onSuccess: (res) => {
         setRedeemed(
@@ -139,7 +152,12 @@ export function RedeemCouponForm({
       // The server's message is already user-facing and per-case (unknown code
       // / already redeemed / fully claimed / expired), so it is shown verbatim
       // rather than flattened into one generic string.
-      onError: (err: unknown) => setError(userFacingMessage(err)),
+      onError: (err: unknown) => {
+        if (accountGate.handleError(err, () => attempt(trimmed), ACCOUNT_REQUIRED_COUPON_COPY)) {
+          return;
+        }
+        setError(userFacingMessage(err));
+      },
     });
   };
 
@@ -166,7 +184,11 @@ export function RedeemCouponForm({
     );
   }
 
+  // The modal is a sibling of the form, not a child: React bubbles synthetic
+  // events through portals, so the identity form's submit would otherwise
+  // re-submit this coupon form.
   return (
+    <>
     <form className={cn("space-y-2", className)} onSubmit={submit}>
       <label
         htmlFor="coupon-code"
@@ -221,5 +243,7 @@ export function RedeemCouponForm({
         </p>
       )}
     </form>
+    {accountGate.modal}
+    </>
   );
 }

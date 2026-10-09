@@ -32,6 +32,7 @@ const FAILED = DaemonStatus.FAILED;
 
 function makeDeps(overrides: Partial<CommitDeps> = {}) {
   const deps = {
+    isAnonymous: vi.fn(() => false),
     grantAiAccess: vi.fn(async () => ({ synced: true })),
     getComputeEligibility: vi.fn(async () => ({
       eligible: true,
@@ -542,5 +543,51 @@ describe("ensureCommitKey", () => {
     const reused = await ensureCommitKey({ commitKey: minted }, updatePlan);
     expect(reused).toBe(minted);
     expect(updatePlan).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("commitLaunchPlan — anonymous account", () => {
+  it("creates nothing for an anonymous user on a cloud plan, and asks for an identity", async () => {
+    const deps = makeDeps({ isAnonymous: vi.fn(() => true) });
+    const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+
+    expect(deps.createDaemon).not.toHaveBeenCalled();
+    expect(deps.getComputeEligibility).not.toHaveBeenCalled();
+    expect(deps.resumeDaemon).not.toHaveBeenCalled();
+    const task = taskNamed(result.tasks, "provision_daemon");
+    expect(task.status).toBe("failed");
+    expect(task.needsIdentity).toBe(true);
+    expect(task.detail).toMatch(/add an email/i);
+  });
+
+  it("provisions after the identity is linked, when the user retries", async () => {
+    let anonymous = true;
+    const deps = makeDeps({ isAnonymous: vi.fn(() => anonymous) });
+    await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+    anonymous = false;
+    retryCommit("key-1");
+    const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+
+    expect(deps.createDaemon).toHaveBeenCalledTimes(1);
+    expect(taskNamed(result.tasks, "provision_daemon").status).toBe("complete");
+  });
+
+  it("leaves a signed-in user's cloud commit unchanged", async () => {
+    const deps = makeDeps();
+    const result = await commitLaunchPlan(CLOUD_CREDITS_PLAN, deps);
+    expect(deps.createDaemon).toHaveBeenCalledTimes(1);
+    expect(taskNamed(result.tasks, "provision_daemon").needsIdentity).toBeUndefined();
+  });
+
+  it("does not ask an anonymous user on their own computer for anything", async () => {
+    const deps = makeDeps({ isAnonymous: vi.fn(() => true) });
+    const result = await commitLaunchPlan(
+      { compute: "local", modelProvider: "own_key", commitKey: "key-local" } as Partial<LaunchPlan>,
+      deps,
+    );
+    const task = taskNamed(result.tasks, "provision_daemon");
+    expect(task.status).toBe("skipped");
+    expect(task.needsIdentity).toBeUndefined();
+    expect(deps.createDaemon).not.toHaveBeenCalled();
   });
 });

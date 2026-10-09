@@ -32,8 +32,10 @@ import { Modal } from "@/components/ui/Modal";
 import { LinkIdentityForm } from "@/components/LinkIdentityForm";
 
 export interface LinkIdentityModalProps {
-  /** The refusal from the checkout mutation, shown verbatim. */
+  /** The refusal from the server, shown verbatim. Omitted when empty. */
   message: string;
+  /** Why an email is needed here. Defaults to the billing wording. */
+  intro?: string;
   /**
    * Where an OAuth round-trip should land. The email path never uses it — it
    * does not leave the page.
@@ -47,6 +49,7 @@ export interface LinkIdentityModalProps {
 
 export function LinkIdentityModal({
   message,
+  intro,
   returnTo,
   onLinked,
   onDismiss,
@@ -61,10 +64,12 @@ export function LinkIdentityModal({
       <div className="space-y-6">
         <div className="space-y-2">
           <p className="text-sm text-foreground">
-            You skipped sign-in earlier, so this account is temporary. To set up
-            billing we need a full account.
+            {intro ??
+              "You skipped sign-in earlier, so this account is temporary. To set up billing we need a full account."}
           </p>
-          <p className="text-sm text-muted-foreground">{message}</p>
+          {message && message !== intro ? (
+            <p className="text-sm text-muted-foreground">{message}</p>
+          ) : null}
           {/* Same promise, same words as /upgrade. Two surfaces phrasing this
               differently is how a user starts wondering which is true. */}
           <p className="text-sm text-muted-foreground">

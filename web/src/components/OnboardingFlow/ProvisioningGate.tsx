@@ -14,11 +14,19 @@
  * legible ("AI access ready / your machine couldn't start") instead of a
  * blank wait.
  */
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { LinkIdentityModal } from "@/components/Billing/LinkIdentityModal";
 import { DaemonConnectingGate } from "./DaemonConnectingGate";
+import { ACCOUNT_REQUIRED_MACHINE_COPY } from "@/lib/accountRequired";
+import { isSafeReturnTo } from "@/lib/returnTo";
 import type { CommitResult, CommitTask } from "./commitLaunchPlan";
+
+function currentUrl(): string | undefined {
+  const here = `${window.location.pathname}${window.location.search}`;
+  return isSafeReturnTo(here) ? here : undefined;
+}
 
 const TASK_LABELS: Record<CommitTask["name"], string> = {
   grant_ai_access: "AI access",
@@ -73,6 +81,11 @@ export function ProvisioningGate({
   onContinue,
   onRetry,
 }: ProvisioningGateProps) {
+  // Hides the modal once the user has linked and the re-run is in flight; a
+  // new commit result replaces `commit`, so this resets with the next ask.
+  const [linkedFor, setLinkedFor] = useState<CommitResult | null>(null);
+  const needsIdentity =
+    linkedFor !== commit && commit.tasks.some((t) => t.needsIdentity);
   const visibleTasks = commit.tasks.filter((t) => t.status !== "skipped");
   const daemonTask = commit.tasks.find((t) => t.name === "provision_daemon");
   const waitingOnMachine =
@@ -111,6 +124,20 @@ export function ProvisioningGate({
 
   return (
     <div className="space-y-5" data-testid="provisioning-gate">
+      {/* Linking keeps the same account, so the URL-held plan is untouched;
+          the retry re-runs the same commit key's provisioning. */}
+      {needsIdentity && onRetry ? (
+        <LinkIdentityModal
+          intro={ACCOUNT_REQUIRED_MACHINE_COPY}
+          message=""
+          returnTo={currentUrl()}
+          onLinked={() => {
+            setLinkedFor(commit);
+            onRetry();
+          }}
+          onDismiss={onContinue}
+        />
+      ) : null}
       <div className="space-y-1 text-center">
         <h2 className="text-xl font-semibold tracking-tight text-foreground">
           Setting up your workspace

@@ -2,6 +2,11 @@ import { ArrowUpRight, Zap } from "lucide-react";
 import { Modal } from "./ui/Modal";
 import type { UpgradeRequiredData } from "../store/modalStore";
 import { useGoToBilling } from "@/hooks/useGoToBilling";
+import { LinkIdentityModal } from "./Billing/LinkIdentityModal";
+import {
+  ACCOUNT_REQUIRED_MACHINE_COPY,
+  ACCOUNT_REQUIRED_REASON,
+} from "@/lib/accountRequired";
 
 export interface UpgradeRequiredModalProps {
   isOpen: boolean;
@@ -82,6 +87,19 @@ export function UpgradeRequiredModal({
   const goToBilling = useGoToBilling();
   const copy = REASON_COPY[data.reason] ?? GENERIC_COPY;
   const ctaLabel = CTA_LABEL[data.reason] ?? "Upgrade plan";
+
+  // Not a plan problem: the fix is an email on the account, so ask for that
+  // instead of sending the user to a plans page that would refuse them again.
+  if (data.reason === ACCOUNT_REQUIRED_REASON) {
+    return (
+      <LinkIdentityModal
+        intro={ACCOUNT_REQUIRED_MACHINE_COPY}
+        message={data.message}
+        onLinked={onClose}
+        onDismiss={onClose}
+      />
+    );
+  }
 
   const handleUpgrade = () => {
     onClose();

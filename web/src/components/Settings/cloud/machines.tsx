@@ -119,6 +119,7 @@ import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
 import { useProjectStore } from "@/store/projectStore";
 import type { GitRepo } from "@/services/controlPlane/git";
 import { createMachine, type CreateMachineResult } from "./createMachine";
+import { useAccountGate } from "@/hooks/useAccountGate";
 import { MachineAccess, activeGrantCounts, appCountLabel, useConnectors } from "./machineAccess";
 // The overage formatter, shared with the billing purchase grid so the two
 // surfaces cannot disagree about how a rate is written.
@@ -1079,6 +1080,7 @@ function CreateEnvironmentModal({
     return size !== null && allowedSizes.includes(size) ? size : allowedSizes[0];
   }, [allowedSizes, size]);
 
+  const accountGate = useAccountGate();
   const createMut = useMutation({
     mutationFn: () => {
       // Refuse rather than guess. A size the plan does not allow is one the
@@ -1101,7 +1103,10 @@ function CreateEnvironmentModal({
       setError("");
       onCreated();
     },
-    onError: (e) => setError(describeError(e, "Failed to create machine")),
+    onError: (e) => {
+      if (accountGate.handleError(e, () => createMut.mutate())) return;
+      setError(describeError(e, "Failed to create machine"));
+    },
   });
 
   // Prices come from the server's per-size list; a size it has no row for
@@ -1120,7 +1125,7 @@ function CreateEnvironmentModal({
         onSubmit={(e) => {
           e.preventDefault();
           setError("");
-          createMut.mutate();
+          void accountGate.run(() => createMut.mutate());
         }}
       >
         <Field label="Name" htmlFor="env-name">
@@ -1299,6 +1304,7 @@ function CreateEnvironmentModal({
           {createMut.isPending ? "Creating…" : "Create"}
         </Button>
       </div>
+      {accountGate.modal}
     </Modal>
   );
 }

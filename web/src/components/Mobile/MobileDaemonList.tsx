@@ -23,6 +23,7 @@ import {
 } from "@/hooks/useOnboardingQueries";
 import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import { cn } from "../../lib/utils";
+import { useAccountGate } from "@/hooks/useAccountGate";
 import { lastSeenMs, presentDaemon, sizeLabel } from "./daemonPresentation";
 import { relativeTimeFromMs } from "./relativeTime";
 import { useVisibilityPolling } from "./useVisibilityPolling";
@@ -83,12 +84,17 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
   const [error, setError] = useState("");
 
   const create = useCreateDaemon();
+  const accountGate = useAccountGate();
   const busy = create.isPending;
 
   const submit = async () => {
     const trimmedName = name.trim();
     if (!trimmedName || busy) return;
     setError("");
+    await accountGate.run(() => doCreate(trimmedName));
+  };
+
+  const doCreate = async (trimmedName: string) => {
     try {
       await create.mutateAsync({
         name: trimmedName,
@@ -100,6 +106,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
       });
       onClose();
     } catch (err) {
+      if (accountGate.handleError(err, () => doCreate(trimmedName))) return;
       if (isEntitlementDenial(err)) return;
       setError(err instanceof Error ? err.message : "Failed to create machine");
     }
@@ -269,6 +276,7 @@ function CreateMachineSheet({ onClose }: { onClose: () => void }) {
           </div>
         </form>
       </div>
+      {accountGate.modal}
     </div>
   );
 }
