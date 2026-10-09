@@ -1,3 +1,5 @@
+> **Superseded (2026-10-09):** Anthropic-dialect breakpoints went back to the default 5m TTL (bare `{type:"ephemeral"}`) after measuring prod usage: the 1h write premium cost more than it saved. OpenAI 24h retention is unchanged. The body below is historical.
+
 # Prompt-cache retention: the longest TTL each provider supports
 
 Researched from public docs. **[V]** means I verified it in an official source during this pass. **[I]** means it is inferred or comes from a secondary source.

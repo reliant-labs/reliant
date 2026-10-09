@@ -43,7 +43,7 @@ func (c *Client) streamWithCacheControl(ctx context.Context, prompts []string, m
 				// Cache the last tool
 				if i == len(toolList)-1 && !c.Options.DisableCache {
 					if function, ok := toolMap["function"].(map[string]interface{}); ok {
-						function["cache_control"] = extendedCacheControl()
+						function["cache_control"] = ephemeralCacheControl()
 					}
 				}
 

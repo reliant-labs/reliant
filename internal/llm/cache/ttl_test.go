@@ -3,13 +3,6 @@ package cache
 
 import "testing"
 
-func TestExtendedTTLIsOneHour(t *testing.T) {
-	// "1h" is the only extended value Anthropic accepts; anything else 400s.
-	if ExtendedTTL != "1h" {
-		t.Fatalf("ExtendedTTL = %q, want \"1h\"", ExtendedTTL)
-	}
-}
-
 func TestSupportsOpenAIExtendedRetention(t *testing.T) {
 	tests := []struct {
 		apiModel string

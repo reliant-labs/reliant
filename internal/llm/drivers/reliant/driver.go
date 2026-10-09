@@ -289,12 +289,10 @@ func (c *ReliantClient) isClaudeModel() bool {
 	return strings.HasPrefix(strings.ToLower(c.Options.Model.APIModel), "claude")
 }
 
-// claudeCacheControl is the single place a breakpoint's cache_control is built,
-// so every breakpoint in one request carries the same TTL. Anthropic requires
-// longer-TTL breakpoints to precede shorter ones; a uniform TTL can never
-// violate that.
+// claudeCacheControl is the single place a breakpoint's cache_control is built:
+// a bare {type:"ephemeral"} (the API's 5m default, no ttl).
 func claudeCacheControl() map[string]any {
-	return map[string]any{"type": "ephemeral", "ttl": cache.ExtendedTTL}
+	return map[string]any{"type": "ephemeral"}
 }
 
 // setCacheControl marks a param struct with a cache_control extra field.

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/llm"
-	"github.com/reliant-labs/reliant/internal/llm/cache"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	llmtools "github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -64,14 +63,14 @@ func cacheControlsIn(t *testing.T, params any) []cacheControlSite {
 	return found
 }
 
-func assertEphemeralOneHour(t *testing.T, sites []cacheControlSite) {
+func assertBareEphemeral(t *testing.T, sites []cacheControlSite) {
 	t.Helper()
 	for _, site := range sites {
 		if got := site.value["type"]; got != "ephemeral" {
 			t.Errorf("cache_control at %s has type %v, want ephemeral", site.path, got)
 		}
-		if got := site.value["ttl"]; got != cache.ExtendedTTL {
-			t.Errorf("cache_control at %s has ttl %v, want %s", site.path, got, cache.ExtendedTTL)
+		if got, ok := site.value["ttl"]; ok {
+			t.Errorf("cache_control at %s has ttl %v, want none", site.path, got)
 		}
 	}
 }
@@ -110,7 +109,7 @@ func TestClaudeCacheBreakpoints_SystemToolsAndToolResult(t *testing.T) {
 	if len(sites) != 4 {
 		t.Fatalf("got %d cache_control breakpoints, want exactly 4: %+v", len(sites), sites)
 	}
-	assertEphemeralOneHour(t, sites)
+	assertBareEphemeral(t, sites)
 
 	counts := countPaths(sites)
 	// Two system prompts, each marked on a text content PART inside the
@@ -150,7 +149,7 @@ func TestClaudeCacheBreakpoints_LastUserMessage(t *testing.T) {
 	if len(sites) != 1 {
 		t.Fatalf("got %d breakpoints, want exactly 1 (the last message): %+v", len(sites), sites)
 	}
-	assertEphemeralOneHour(t, sites)
+	assertBareEphemeral(t, sites)
 
 	// Prove it is on the LAST message's last part, not the first message's.
 	raw, err := json.Marshal(params)
