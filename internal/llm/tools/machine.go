@@ -99,6 +99,8 @@ var serverSafeTools = map[string]struct{}{
 	ToolActivateTrigger: {}, ToolListTriggers: {},
 	// Returns a fixed text; the offer is the rendered call itself.
 	ToolRequestMachine: {},
+	// Database reads and a Sentry event.
+	ToolReportBug: {},
 }
 
 // noMachineOnlyTools are tools that exist only for a run with no machine, and

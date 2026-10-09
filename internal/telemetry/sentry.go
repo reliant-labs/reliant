@@ -17,6 +17,10 @@ var prereleaseRegex = regexp.MustCompile(`(?i)-rc\.|rc[0-9]+|-beta\.|beta[0-9]+|
 type SentryReporter struct {
 	mu          sync.RWMutex
 	initialized bool
+	// hub is the hub CaptureBugReport sends through. Nil means the SDK's
+	// global hub, which NewSentryReporter initializes; tests set their own so
+	// they can read what would have been sent.
+	hub *sentry.Hub
 }
 
 // SentryConfig contains configuration for initializing Sentry

@@ -353,6 +353,11 @@ func (f *ToolsFactory) ListRuns() Tool {
 	return NewListRunsTool(f.opts.Repo)
 }
 
+// ReportBug files a Reliant or forge defect with engineering via Sentry.
+func (f *ToolsFactory) ReportBug() Tool {
+	return NewReportBugTool(f.opts.Repo)
+}
+
 func (f *ToolsFactory) GetRun() Tool {
 	return NewGetRunTool(f.opts.Repo)
 }
