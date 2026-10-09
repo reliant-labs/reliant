@@ -26,17 +26,19 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PWD: postgres
       POSTGRES_SEEDS: postgres
+      DEFAULT_NAMESPACE: reliant
     ports:
       - "7233:7233"
 
   nats:
     image: nats:2-alpine
-    command: ["--jetstream", "--store_dir", "/data", "-m", "8222", "--max_payload", "8388608"]
+    command: ["-c", "/etc/nats/nats.conf"]
     ports:
       - "4222:4222"   # Client connections
       - "8222:8222"   # HTTP monitoring
     volumes:
       - nats-data:/data
+      - ./docker/nats.conf:/etc/nats/nats.conf:ro
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8222/healthz"]
       interval: 5s
@@ -46,7 +48,7 @@ services:
   api-server:
     build:
       context: .
-      target: api-server
+    command: ["server", "api"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -68,6 +70,9 @@ services:
       NATS_URL: "nats://nats:4222"
       CORS_ALLOWED_ORIGINS: "*"
       HEALTH_PORT: "8081"
+      AUTH_MODE: "${AUTH_MODE:-apikey}"
+      AUTH_API_KEY: "${AUTH_API_KEY:-dev-api-key}"
+      RELIANT_VAULT_KEY: "${RELIANT_VAULT_KEY:-v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}"
     ports:
       - "8080:8080"
       - "9090:9090"
@@ -83,7 +88,7 @@ services:
   temporal-worker:
     build:
       context: .
-      target: temporal-worker
+    command: ["server", "worker"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -101,6 +106,7 @@ services:
       NATS_URL: "nats://nats:4222"
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       HEALTH_PORT: "8082"
+      RELIANT_VAULT_KEY: "${RELIANT_VAULT_KEY:-v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}"
     healthcheck:
       test: ["CMD", "wget", "--spider", "-q", "http://localhost:8082/health"]
       interval: 10s
@@ -111,7 +117,7 @@ services:
   daemon-gateway:
     build:
       context: .
-      target: daemon-gateway
+    command: ["server", "gateway"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -127,6 +133,9 @@ services:
       DATABASE_URL: "postgres://postgres:postgres@postgres:5432/reliant?sslmode=disable"
       DATA_DIR: /data
       NATS_URL: "nats://nats:4222"
+      AUTH_MODE: "${AUTH_MODE:-apikey}"
+      AUTH_API_KEY: "${AUTH_API_KEY:-dev-api-key}"
+      RELIANT_VAULT_KEY: "${RELIANT_VAULT_KEY:-v1:AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=}"
     ports:
       - "9190:9190"    # Daemon gRPC (tools-daemon connects here)
       - "9191:9191"    # Frontend proxy (browser connects here: gRPC + terminal WS)
@@ -143,13 +152,15 @@ services:
   tools-daemon:
     build:
       context: .
-      target: tools-daemon
+    command: ["sh", "-c", "printf '%s\\n' \"$$DAEMON_TOKEN\" | reliant daemon start --token --name compose-daemon --non-interactive"]
     depends_on:
       daemon-gateway:
         condition: service_healthy
     environment:
       RELIANT_ENV: dev
-      DAEMON_GRPC_URL: "http://daemon-gateway:9190"
+      DAEMON_GRPC_URL: "https://daemon-gateway:9190"
+      DAEMON_TLS_MODE: "insecure_tls_skip_verify"
+      DAEMON_TOKEN: "${DAEMON_TOKEN:?Set DAEMON_TOKEN to an rlat_ daemon token (reliant auth token create)}"
       DAEMON_DATA_DIR: /data
       DAEMON_WORKING_DIR: /workspace
     volumes:
