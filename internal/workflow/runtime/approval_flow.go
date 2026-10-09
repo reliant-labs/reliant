@@ -37,11 +37,6 @@ type approvalExecution struct {
 	TimeoutStr string
 	// Unattended is true when the run has no human to act on an approval.
 	Unattended bool
-	// ToolName, ToolCallID and ToolInput identify the one tool call this
-	// approval asks about (actionApprovalGate); empty for an approval node.
-	ToolName   string
-	ToolCallID string
-	ToolInput  string
 	Logger     log.Logger
 }
 
@@ -181,11 +176,6 @@ func executeApprovalSignalFlow(ctx workflow.Context, input approvalExecution) (m
 		"node_path":            input.NodePath,
 		"title":                input.Title,
 		"timeout":              input.TimeoutStr,
-	}
-	if input.ToolName != "" {
-		createInput["tool_name"] = input.ToolName
-		createInput["tool_call_id"] = input.ToolCallID
-		createInput["tool_input"] = input.ToolInput
 	}
 
 	var createOutput struct {
