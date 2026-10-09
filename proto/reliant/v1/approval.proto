@@ -5,10 +5,8 @@ package reliant.v1;
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
-// ApprovalType distinguishes tool approvals from workflow step approvals
 enum ApprovalType {
   APPROVAL_TYPE_UNSPECIFIED = 0;
-  APPROVAL_TYPE_TOOL = 1;
   APPROVAL_TYPE_WORKFLOW_STEP = 2;
 }
 
@@ -20,14 +18,12 @@ enum ApprovalStatus {
   APPROVAL_STATUS_DENIED = 3;
 }
 
-// ApprovalService handles tool and workflow approval operations
+// ApprovalService handles workflow approval operations.
 service ApprovalService {
   // ListApprovalsByChat lists all pending approvals for a chat
   rpc ListApprovalsByChat(ListApprovalsByChatRequest) returns (ListApprovalsByChatResponse) {}
   
   // Approve approves a pending approval request (signals workflow to continue).
-  // For a tool approval, action_taken "always_allow" also records the caller's
-  // standing decision to allow that action without asking.
   rpc Approve(ApproveRequest) returns (ApproveResponse) {}
   
   // Deny denies a pending approval request (cancels workflow)
@@ -40,7 +36,7 @@ service ApprovalService {
   rpc BatchDeny(BatchDenyRequest) returns (BatchDenyResponse) {}
 }
 
-// Approval represents a tool or workflow approval request
+// Approval represents a workflow approval request.
 message Approval {
   string id = 1;
   string chat_id = 2;
@@ -52,20 +48,12 @@ message Approval {
   optional string denial_reason = 8;
   string created_at = 11;
   optional string resolved_at = 12;
-  
-  // Structured fields (replacing JSON in actions/metadata)
-  optional string tool_name = 13;      // Tool name from metadata
-  optional string tool_call_id = 14;   // Tool call ID from metadata
-  optional string message_id = 15;     // Message ID from metadata
-  optional string workflow_id = 16;    // Workflow ID from metadata
-  optional string run_id = 17;         // Run ID from metadata
-  optional string action_taken = 19;   // Which action button was clicked (e.g., "Deploy Now")
 
-  // Tool approvals (APPROVAL_TYPE_TOOL) ask about one call to an integration
-  // action that changes something outside Reliant, before it runs.
-  optional string tool_input = 20;        // The call's parameters, as JSON
-  optional string integration_name = 21;  // The action's integration, e.g. "Slack"
-  optional string integration_icon = 22;  // The integration's manifest icon, e.g. "slack"
+  // Structured fields (replacing JSON in metadata).
+  optional string message_id = 15;
+  optional string workflow_id = 16;
+  optional string run_id = 17;
+  optional string action_taken = 19;  // Which action button was clicked (e.g., "Deploy Now")
 }
 
 // ListApprovalsByChatRequest lists pending approvals for a chat

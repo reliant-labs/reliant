@@ -23,12 +23,10 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// ApprovalType distinguishes tool approvals from workflow step approvals
 type ApprovalType int32
 
 const (
 	ApprovalType_APPROVAL_TYPE_UNSPECIFIED   ApprovalType = 0
-	ApprovalType_APPROVAL_TYPE_TOOL          ApprovalType = 1
 	ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP ApprovalType = 2
 )
 
@@ -36,12 +34,10 @@ const (
 var (
 	ApprovalType_name = map[int32]string{
 		0: "APPROVAL_TYPE_UNSPECIFIED",
-		1: "APPROVAL_TYPE_TOOL",
 		2: "APPROVAL_TYPE_WORKFLOW_STEP",
 	}
 	ApprovalType_value = map[string]int32{
 		"APPROVAL_TYPE_UNSPECIFIED":   0,
-		"APPROVAL_TYPE_TOOL":          1,
 		"APPROVAL_TYPE_WORKFLOW_STEP": 2,
 	}
 )
@@ -126,7 +122,7 @@ func (ApprovalStatus) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_approval_proto_rawDescGZIP(), []int{1}
 }
 
-// Approval represents a tool or workflow approval request
+// Approval represents a workflow approval request.
 type Approval struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	Id           string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
@@ -139,20 +135,13 @@ type Approval struct {
 	DenialReason *string                `protobuf:"bytes,8,opt,name=denial_reason,json=denialReason,proto3,oneof" json:"denial_reason,omitempty"`
 	CreatedAt    string                 `protobuf:"bytes,11,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
 	ResolvedAt   *string                `protobuf:"bytes,12,opt,name=resolved_at,json=resolvedAt,proto3,oneof" json:"resolved_at,omitempty"`
-	// Structured fields (replacing JSON in actions/metadata)
-	ToolName    *string `protobuf:"bytes,13,opt,name=tool_name,json=toolName,proto3,oneof" json:"tool_name,omitempty"`          // Tool name from metadata
-	ToolCallId  *string `protobuf:"bytes,14,opt,name=tool_call_id,json=toolCallId,proto3,oneof" json:"tool_call_id,omitempty"`  // Tool call ID from metadata
-	MessageId   *string `protobuf:"bytes,15,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`       // Message ID from metadata
-	WorkflowId  *string `protobuf:"bytes,16,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`    // Workflow ID from metadata
-	RunId       *string `protobuf:"bytes,17,opt,name=run_id,json=runId,proto3,oneof" json:"run_id,omitempty"`                   // Run ID from metadata
-	ActionTaken *string `protobuf:"bytes,19,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
-	// Tool approvals (APPROVAL_TYPE_TOOL) ask about one call to an integration
-	// action that changes something outside Reliant, before it runs.
-	ToolInput       *string `protobuf:"bytes,20,opt,name=tool_input,json=toolInput,proto3,oneof" json:"tool_input,omitempty"`                   // The call's parameters, as JSON
-	IntegrationName *string `protobuf:"bytes,21,opt,name=integration_name,json=integrationName,proto3,oneof" json:"integration_name,omitempty"` // The action's integration, e.g. "Slack"
-	IntegrationIcon *string `protobuf:"bytes,22,opt,name=integration_icon,json=integrationIcon,proto3,oneof" json:"integration_icon,omitempty"` // The integration's manifest icon, e.g. "slack"
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// Structured fields (replacing JSON in metadata).
+	MessageId     *string `protobuf:"bytes,15,opt,name=message_id,json=messageId,proto3,oneof" json:"message_id,omitempty"`
+	WorkflowId    *string `protobuf:"bytes,16,opt,name=workflow_id,json=workflowId,proto3,oneof" json:"workflow_id,omitempty"`
+	RunId         *string `protobuf:"bytes,17,opt,name=run_id,json=runId,proto3,oneof" json:"run_id,omitempty"`
+	ActionTaken   *string `protobuf:"bytes,19,opt,name=action_taken,json=actionTaken,proto3,oneof" json:"action_taken,omitempty"` // Which action button was clicked (e.g., "Deploy Now")
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *Approval) Reset() {
@@ -255,20 +244,6 @@ func (x *Approval) GetResolvedAt() string {
 	return ""
 }
 
-func (x *Approval) GetToolName() string {
-	if x != nil && x.ToolName != nil {
-		return *x.ToolName
-	}
-	return ""
-}
-
-func (x *Approval) GetToolCallId() string {
-	if x != nil && x.ToolCallId != nil {
-		return *x.ToolCallId
-	}
-	return ""
-}
-
 func (x *Approval) GetMessageId() string {
 	if x != nil && x.MessageId != nil {
 		return *x.MessageId
@@ -293,27 +268,6 @@ func (x *Approval) GetRunId() string {
 func (x *Approval) GetActionTaken() string {
 	if x != nil && x.ActionTaken != nil {
 		return *x.ActionTaken
-	}
-	return ""
-}
-
-func (x *Approval) GetToolInput() string {
-	if x != nil && x.ToolInput != nil {
-		return *x.ToolInput
-	}
-	return ""
-}
-
-func (x *Approval) GetIntegrationName() string {
-	if x != nil && x.IntegrationName != nil {
-		return *x.IntegrationName
-	}
-	return ""
-}
-
-func (x *Approval) GetIntegrationIcon() string {
-	if x != nil && x.IntegrationIcon != nil {
-		return *x.IntegrationIcon
 	}
 	return ""
 }
@@ -877,7 +831,7 @@ var File_reliant_v1_approval_proto protoreflect.FileDescriptor
 const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/approval.proto\x12\n" +
-	"reliant.v1\"\x8f\a\n" +
+	"reliant.v1\"\xea\x04\n" +
 	"\bApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12=\n" +
@@ -890,34 +844,20 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\v \x01(\tR\tcreatedAt\x12$\n" +
 	"\vresolved_at\x18\f \x01(\tH\x02R\n" +
-	"resolvedAt\x88\x01\x01\x12 \n" +
-	"\ttool_name\x18\r \x01(\tH\x03R\btoolName\x88\x01\x01\x12%\n" +
-	"\ftool_call_id\x18\x0e \x01(\tH\x04R\n" +
-	"toolCallId\x88\x01\x01\x12\"\n" +
+	"resolvedAt\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"message_id\x18\x0f \x01(\tH\x05R\tmessageId\x88\x01\x01\x12$\n" +
-	"\vworkflow_id\x18\x10 \x01(\tH\x06R\n" +
+	"message_id\x18\x0f \x01(\tH\x03R\tmessageId\x88\x01\x01\x12$\n" +
+	"\vworkflow_id\x18\x10 \x01(\tH\x04R\n" +
 	"workflowId\x88\x01\x01\x12\x1a\n" +
-	"\x06run_id\x18\x11 \x01(\tH\aR\x05runId\x88\x01\x01\x12&\n" +
-	"\faction_taken\x18\x13 \x01(\tH\bR\vactionTaken\x88\x01\x01\x12\"\n" +
-	"\n" +
-	"tool_input\x18\x14 \x01(\tH\tR\ttoolInput\x88\x01\x01\x12.\n" +
-	"\x10integration_name\x18\x15 \x01(\tH\n" +
-	"R\x0fintegrationName\x88\x01\x01\x12.\n" +
-	"\x10integration_icon\x18\x16 \x01(\tH\vR\x0fintegrationIcon\x88\x01\x01B\x0e\n" +
+	"\x06run_id\x18\x11 \x01(\tH\x05R\x05runId\x88\x01\x01\x12&\n" +
+	"\faction_taken\x18\x13 \x01(\tH\x06R\vactionTaken\x88\x01\x01B\x0e\n" +
 	"\f_descriptionB\x10\n" +
 	"\x0e_denial_reasonB\x0e\n" +
-	"\f_resolved_atB\f\n" +
-	"\n" +
-	"_tool_nameB\x0f\n" +
-	"\r_tool_call_idB\r\n" +
+	"\f_resolved_atB\r\n" +
 	"\v_message_idB\x0e\n" +
 	"\f_workflow_idB\t\n" +
 	"\a_run_idB\x0f\n" +
-	"\r_action_takenB\r\n" +
-	"\v_tool_inputB\x13\n" +
-	"\x11_integration_nameB\x13\n" +
-	"\x11_integration_icon\"5\n" +
+	"\r_action_taken\"5\n" +
 	"\x1aListApprovalsByChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"g\n" +
 	"\x1bListApprovalsByChatResponse\x122\n" +
@@ -960,10 +900,9 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\x11BatchDenyResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06denied\x18\x02 \x01(\x05R\x06denied\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*f\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage*N\n" +
 	"\fApprovalType\x12\x1d\n" +
-	"\x19APPROVAL_TYPE_UNSPECIFIED\x10\x00\x12\x16\n" +
-	"\x12APPROVAL_TYPE_TOOL\x10\x01\x12\x1f\n" +
+	"\x19APPROVAL_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
 	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02*\x88\x01\n" +
 	"\x0eApprovalStatus\x12\x1f\n" +
 	"\x1bAPPROVAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +

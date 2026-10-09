@@ -13,10 +13,10 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file reliant/v1/approval.proto.
  */
 export const file_reliant_v1_approval: GenFile = /*@__PURE__*/
-  fileDesc("ChlyZWxpYW50L3YxL2FwcHJvdmFsLnByb3RvEgpyZWxpYW50LnYxIrwFCghBcHByb3ZhbBIKCgJpZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEi8KDWFwcHJvdmFsX3R5cGUYAyABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRIRCgllbnRpdHlfaWQYBCABKAkSKgoGc3RhdHVzGAUgASgOMhoucmVsaWFudC52MS5BcHByb3ZhbFN0YXR1cxINCgV0aXRsZRgGIAEoCRIYCgtkZXNjcmlwdGlvbhgHIAEoCUgAiAEBEhoKDWRlbmlhbF9yZWFzb24YCCABKAlIAYgBARISCgpjcmVhdGVkX2F0GAsgASgJEhgKC3Jlc29sdmVkX2F0GAwgASgJSAKIAQESFgoJdG9vbF9uYW1lGA0gASgJSAOIAQESGQoMdG9vbF9jYWxsX2lkGA4gASgJSASIAQESFwoKbWVzc2FnZV9pZBgPIAEoCUgFiAEBEhgKC3dvcmtmbG93X2lkGBAgASgJSAaIAQESEwoGcnVuX2lkGBEgASgJSAeIAQESGQoMYWN0aW9uX3Rha2VuGBMgASgJSAiIAQESFwoKdG9vbF9pbnB1dBgUIAEoCUgJiAEBEh0KEGludGVncmF0aW9uX25hbWUYFSABKAlICogBARIdChBpbnRlZ3JhdGlvbl9pY29uGBYgASgJSAuIAQFCDgoMX2Rlc2NyaXB0aW9uQhAKDl9kZW5pYWxfcmVhc29uQg4KDF9yZXNvbHZlZF9hdEIMCgpfdG9vbF9uYW1lQg8KDV90b29sX2NhbGxfaWRCDQoLX21lc3NhZ2VfaWRCDgoMX3dvcmtmbG93X2lkQgkKB19ydW5faWRCDwoNX2FjdGlvbl90YWtlbkINCgtfdG9vbF9pbnB1dEITChFfaW50ZWdyYXRpb25fbmFtZUITChFfaW50ZWdyYXRpb25faWNvbiItChpMaXN0QXBwcm92YWxzQnlDaGF0UmVxdWVzdBIPCgdjaGF0X2lkGAEgASgJIlUKG0xpc3RBcHByb3ZhbHNCeUNoYXRSZXNwb25zZRInCglhcHByb3ZhbHMYASADKAsyFC5yZWxpYW50LnYxLkFwcHJvdmFsEg0KBXRvdGFsGAIgASgFIlAKDkFwcHJvdmVSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSGQoMYWN0aW9uX3Rha2VuGAIgASgJSACIAQFCDwoNX2FjdGlvbl90YWtlbiIzCg9BcHByb3ZlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJInsKC0RlbnlSZXF1ZXN0EhIKCnJlcXVlc3RfaWQYASABKAkSGgoNZGVuaWFsX3JlYXNvbhgCIAEoCUgAiAEBEhkKDGFjdGlvbl90YWtlbhgDIAEoCUgBiAEBQhAKDl9kZW5pYWxfcmVhc29uQg8KDV9hY3Rpb25fdGFrZW4iMAoMRGVueVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDwoHbWVzc2FnZRgCIAEoCSJWChNCYXRjaEFwcHJvdmVSZXF1ZXN0EhMKC3JlcXVlc3RfaWRzGAEgAygJEhkKDGFjdGlvbl90YWtlbhgCIAEoCUgAiAEBQg8KDV9hY3Rpb25fdGFrZW4iSgoUQmF0Y2hBcHByb3ZlUmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIQCghhcHByb3ZlZBgCIAEoBRIPCgdtZXNzYWdlGAMgASgJIoEBChBCYXRjaERlbnlSZXF1ZXN0EhMKC3JlcXVlc3RfaWRzGAEgAygJEhoKDWRlbmlhbF9yZWFzb24YAiABKAlIAIgBARIZCgxhY3Rpb25fdGFrZW4YAyABKAlIAYgBAUIQCg5fZGVuaWFsX3JlYXNvbkIPCg1fYWN0aW9uX3Rha2VuIkUKEUJhdGNoRGVueVJlc3BvbnNlEg8KB3N1Y2Nlc3MYASABKAgSDgoGZGVuaWVkGAIgASgFEg8KB21lc3NhZ2UYAyABKAkqZgoMQXBwcm92YWxUeXBlEh0KGUFQUFJPVkFMX1RZUEVfVU5TUEVDSUZJRUQQABIWChJBUFBST1ZBTF9UWVBFX1RPT0wQARIfChtBUFBST1ZBTF9UWVBFX1dPUktGTE9XX1NURVAQAiqIAQoOQXBwcm92YWxTdGF0dXMSHwobQVBQUk9WQUxfU1RBVFVTX1VOU1BFQ0lGSUVEEAASGwoXQVBQUk9WQUxfU1RBVFVTX1BFTkRJTkcQARIcChhBUFBST1ZBTF9TVEFUVVNfQVBQUk9WRUQQAhIaChZBUFBST1ZBTF9TVEFUVVNfREVOSUVEEAMynwMKD0FwcHJvdmFsU2VydmljZRJoChNMaXN0QXBwcm92YWxzQnlDaGF0EiYucmVsaWFudC52MS5MaXN0QXBwcm92YWxzQnlDaGF0UmVxdWVzdBonLnJlbGlhbnQudjEuTGlzdEFwcHJvdmFsc0J5Q2hhdFJlc3BvbnNlIgASRAoHQXBwcm92ZRIaLnJlbGlhbnQudjEuQXBwcm92ZVJlcXVlc3QaGy5yZWxpYW50LnYxLkFwcHJvdmVSZXNwb25zZSIAEjsKBERlbnkSFy5yZWxpYW50LnYxLkRlbnlSZXF1ZXN0GhgucmVsaWFudC52MS5EZW55UmVzcG9uc2UiABJTCgxCYXRjaEFwcHJvdmUSHy5yZWxpYW50LnYxLkJhdGNoQXBwcm92ZVJlcXVlc3QaIC5yZWxpYW50LnYxLkJhdGNoQXBwcm92ZVJlc3BvbnNlIgASSgoJQmF0Y2hEZW55EhwucmVsaWFudC52MS5CYXRjaERlbnlSZXF1ZXN0Gh0ucmVsaWFudC52MS5CYXRjaERlbnlSZXNwb25zZSIAQjpaOGdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL3JlbGlhbnQvdjE7cmVsaWFudHYxYgZwcm90bzM");
+  fileDesc("ChlyZWxpYW50L3YxL2FwcHJvdmFsLnByb3RvEgpyZWxpYW50LnYxItoDCghBcHByb3ZhbBIKCgJpZBgBIAEoCRIPCgdjaGF0X2lkGAIgASgJEi8KDWFwcHJvdmFsX3R5cGUYAyABKA4yGC5yZWxpYW50LnYxLkFwcHJvdmFsVHlwZRIRCgllbnRpdHlfaWQYBCABKAkSKgoGc3RhdHVzGAUgASgOMhoucmVsaWFudC52MS5BcHByb3ZhbFN0YXR1cxINCgV0aXRsZRgGIAEoCRIYCgtkZXNjcmlwdGlvbhgHIAEoCUgAiAEBEhoKDWRlbmlhbF9yZWFzb24YCCABKAlIAYgBARISCgpjcmVhdGVkX2F0GAsgASgJEhgKC3Jlc29sdmVkX2F0GAwgASgJSAKIAQESFwoKbWVzc2FnZV9pZBgPIAEoCUgDiAEBEhgKC3dvcmtmbG93X2lkGBAgASgJSASIAQESEwoGcnVuX2lkGBEgASgJSAWIAQESGQoMYWN0aW9uX3Rha2VuGBMgASgJSAaIAQFCDgoMX2Rlc2NyaXB0aW9uQhAKDl9kZW5pYWxfcmVhc29uQg4KDF9yZXNvbHZlZF9hdEINCgtfbWVzc2FnZV9pZEIOCgxfd29ya2Zsb3dfaWRCCQoHX3J1bl9pZEIPCg1fYWN0aW9uX3Rha2VuIi0KGkxpc3RBcHByb3ZhbHNCeUNoYXRSZXF1ZXN0Eg8KB2NoYXRfaWQYASABKAkiVQobTGlzdEFwcHJvdmFsc0J5Q2hhdFJlc3BvbnNlEicKCWFwcHJvdmFscxgBIAMoCzIULnJlbGlhbnQudjEuQXBwcm92YWwSDQoFdG90YWwYAiABKAUiUAoOQXBwcm92ZVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIZCgxhY3Rpb25fdGFrZW4YAiABKAlIAIgBAUIPCg1fYWN0aW9uX3Rha2VuIjMKD0FwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEg8KB21lc3NhZ2UYAiABKAkiewoLRGVueVJlcXVlc3QSEgoKcmVxdWVzdF9pZBgBIAEoCRIaCg1kZW5pYWxfcmVhc29uGAIgASgJSACIAQESGQoMYWN0aW9uX3Rha2VuGAMgASgJSAGIAQFCEAoOX2RlbmlhbF9yZWFzb25CDwoNX2FjdGlvbl90YWtlbiIwCgxEZW55UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIPCgdtZXNzYWdlGAIgASgJIlYKE0JhdGNoQXBwcm92ZVJlcXVlc3QSEwoLcmVxdWVzdF9pZHMYASADKAkSGQoMYWN0aW9uX3Rha2VuGAIgASgJSACIAQFCDwoNX2FjdGlvbl90YWtlbiJKChRCYXRjaEFwcHJvdmVSZXNwb25zZRIPCgdzdWNjZXNzGAEgASgIEhAKCGFwcHJvdmVkGAIgASgFEg8KB21lc3NhZ2UYAyABKAkigQEKEEJhdGNoRGVueVJlcXVlc3QSEwoLcmVxdWVzdF9pZHMYASADKAkSGgoNZGVuaWFsX3JlYXNvbhgCIAEoCUgAiAEBEhkKDGFjdGlvbl90YWtlbhgDIAEoCUgBiAEBQhAKDl9kZW5pYWxfcmVhc29uQg8KDV9hY3Rpb25fdGFrZW4iRQoRQmF0Y2hEZW55UmVzcG9uc2USDwoHc3VjY2VzcxgBIAEoCBIOCgZkZW5pZWQYAiABKAUSDwoHbWVzc2FnZRgDIAEoCSpOCgxBcHByb3ZhbFR5cGUSHQoZQVBQUk9WQUxfVFlQRV9VTlNQRUNJRklFRBAAEh8KG0FQUFJPVkFMX1RZUEVfV09SS0ZMT1dfU1RFUBACKogBCg5BcHByb3ZhbFN0YXR1cxIfChtBUFBST1ZBTF9TVEFUVVNfVU5TUEVDSUZJRUQQABIbChdBUFBST1ZBTF9TVEFUVVNfUEVORElORxABEhwKGEFQUFJPVkFMX1NUQVRVU19BUFBST1ZFRBACEhoKFkFQUFJPVkFMX1NUQVRVU19ERU5JRUQQAzKfAwoPQXBwcm92YWxTZXJ2aWNlEmgKE0xpc3RBcHByb3ZhbHNCeUNoYXQSJi5yZWxpYW50LnYxLkxpc3RBcHByb3ZhbHNCeUNoYXRSZXF1ZXN0GicucmVsaWFudC52MS5MaXN0QXBwcm92YWxzQnlDaGF0UmVzcG9uc2UiABJECgdBcHByb3ZlEhoucmVsaWFudC52MS5BcHByb3ZlUmVxdWVzdBobLnJlbGlhbnQudjEuQXBwcm92ZVJlc3BvbnNlIgASOwoERGVueRIXLnJlbGlhbnQudjEuRGVueVJlcXVlc3QaGC5yZWxpYW50LnYxLkRlbnlSZXNwb25zZSIAElMKDEJhdGNoQXBwcm92ZRIfLnJlbGlhbnQudjEuQmF0Y2hBcHByb3ZlUmVxdWVzdBogLnJlbGlhbnQudjEuQmF0Y2hBcHByb3ZlUmVzcG9uc2UiABJKCglCYXRjaERlbnkSHC5yZWxpYW50LnYxLkJhdGNoRGVueVJlcXVlc3QaHS5yZWxpYW50LnYxLkJhdGNoRGVueVJlc3BvbnNlIgBCOlo4Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vcmVsaWFudC92MTtyZWxpYW50djFiBnByb3RvMw");
 
 /**
- * Approval represents a tool or workflow approval request
+ * Approval represents a workflow approval request.
  *
  * @generated from message reliant.v1.Approval
  */
@@ -74,38 +74,18 @@ export type Approval = Message<"reliant.v1.Approval"> & {
   resolvedAt?: string | undefined;
 
   /**
-   * Structured fields (replacing JSON in actions/metadata)
-   *
-   * Tool name from metadata
-   *
-   * @generated from field: optional string tool_name = 13;
-   */
-  toolName?: string | undefined;
-
-  /**
-   * Tool call ID from metadata
-   *
-   * @generated from field: optional string tool_call_id = 14;
-   */
-  toolCallId?: string | undefined;
-
-  /**
-   * Message ID from metadata
+   * Structured fields (replacing JSON in metadata).
    *
    * @generated from field: optional string message_id = 15;
    */
   messageId?: string | undefined;
 
   /**
-   * Workflow ID from metadata
-   *
    * @generated from field: optional string workflow_id = 16;
    */
   workflowId?: string | undefined;
 
   /**
-   * Run ID from metadata
-   *
    * @generated from field: optional string run_id = 17;
    */
   runId?: string | undefined;
@@ -116,30 +96,6 @@ export type Approval = Message<"reliant.v1.Approval"> & {
    * @generated from field: optional string action_taken = 19;
    */
   actionTaken?: string | undefined;
-
-  /**
-   * Tool approvals (APPROVAL_TYPE_TOOL) ask about one call to an integration
-   * action that changes something outside Reliant, before it runs.
-   *
-   * The call's parameters, as JSON
-   *
-   * @generated from field: optional string tool_input = 20;
-   */
-  toolInput?: string | undefined;
-
-  /**
-   * The action's integration, e.g. "Slack"
-   *
-   * @generated from field: optional string integration_name = 21;
-   */
-  integrationName?: string | undefined;
-
-  /**
-   * The integration's manifest icon, e.g. "slack"
-   *
-   * @generated from field: optional string integration_icon = 22;
-   */
-  integrationIcon?: string | undefined;
 };
 
 /**
@@ -413,8 +369,6 @@ export const BatchDenyResponseSchema: GenMessage<BatchDenyResponse> = /*@__PURE_
   messageDesc(file_reliant_v1_approval, 10);
 
 /**
- * ApprovalType distinguishes tool approvals from workflow step approvals
- *
  * @generated from enum reliant.v1.ApprovalType
  */
 export enum ApprovalType {
@@ -422,11 +376,6 @@ export enum ApprovalType {
    * @generated from enum value: APPROVAL_TYPE_UNSPECIFIED = 0;
    */
   UNSPECIFIED = 0,
-
-  /**
-   * @generated from enum value: APPROVAL_TYPE_TOOL = 1;
-   */
-  TOOL = 1,
 
   /**
    * @generated from enum value: APPROVAL_TYPE_WORKFLOW_STEP = 2;
@@ -474,7 +423,7 @@ export const ApprovalStatusSchema: GenEnum<ApprovalStatus> = /*@__PURE__*/
   enumDesc(file_reliant_v1_approval, 1);
 
 /**
- * ApprovalService handles tool and workflow approval operations
+ * ApprovalService handles workflow approval operations.
  *
  * @generated from service reliant.v1.ApprovalService
  */
@@ -491,8 +440,6 @@ export const ApprovalService: GenService<{
   },
   /**
    * Approve approves a pending approval request (signals workflow to continue).
-   * For a tool approval, action_taken "always_allow" also records the caller's
-   * standing decision to allow that action without asking.
    *
    * @generated from rpc reliant.v1.ApprovalService.Approve
    */

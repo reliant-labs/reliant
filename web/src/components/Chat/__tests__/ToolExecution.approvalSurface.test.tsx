@@ -2,7 +2,7 @@ import { render, screen } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
 import { ToolExecution } from "../ToolExecution";
-import { ApprovalStatus, ApprovalType } from "../../../gen/reliant/v1/approval_pb";
+import { ApprovalStatus } from "../../../gen/reliant/v1/approval_pb";
 import type { ToolApprovalRequest } from "../../../api/client";
 
 // This is the approval UI that actually ships: ChatContainer -> ChatPresenter
@@ -99,21 +99,6 @@ describe("ToolExecution approval UI across surfaces", () => {
     const approve = screen.getByRole("button", { name: "Approve tool execution" });
     expect(approve.className).not.toMatch(/min-h-\[44px\]/);
     expect(approve.className).toMatch(/py-1\.5/);
-  });
-
-  it("leaves an integration action's decision to its approval card", () => {
-    render(
-      <SurfaceProvider surface="desktop">
-        <ToolExecution
-          toolCall={{ id: "toolu_2", name: "slack__message_post", input: { channel: "#general", text: "hi" }, finished: true }}
-          approval={{ ...pendingApproval, id: "approval-2", tool_call_id: "toolu_2", tool_name: "slack__message_post", approval_type: ApprovalType.TOOL }}
-          chatId="chat-1"
-          showRichContent
-        />
-      </SurfaceProvider>,
-    );
-    expect(screen.queryByRole("button", { name: "Approve tool execution" })).not.toBeInTheDocument();
-    expect(screen.getByText("Awaiting approval")).toBeInTheDocument();
   });
 
   it("renders the diff with the lightweight viewer, never Monaco", () => {

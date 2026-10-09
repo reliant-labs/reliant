@@ -562,15 +562,9 @@ type InboxApproval struct {
 	ApprovalId   string                 `protobuf:"bytes,1,opt,name=approval_id,json=approvalId,proto3" json:"approval_id,omitempty"`
 	ApprovalType ApprovalType           `protobuf:"varint,2,opt,name=approval_type,json=approvalType,proto3,enum=reliant.v1.ApprovalType" json:"approval_type,omitempty"`
 	// The approval's title.
-	Title string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
-	// Set for tool approvals.
-	ToolName   *string `protobuf:"bytes,4,opt,name=tool_name,json=toolName,proto3,oneof" json:"tool_name,omitempty"`
-	ToolCallId *string `protobuf:"bytes,5,opt,name=tool_call_id,json=toolCallId,proto3,oneof" json:"tool_call_id,omitempty"`
-	// A short, single-line summary of the tool's arguments, when the approval's
-	// metadata carries them. Empty otherwise.
-	ArgumentSummary string `protobuf:"bytes,6,opt,name=argument_summary,json=argumentSummary,proto3" json:"argument_summary,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	Title         string `protobuf:"bytes,3,opt,name=title,proto3" json:"title,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *InboxApproval) Reset() {
@@ -620,27 +614,6 @@ func (x *InboxApproval) GetApprovalType() ApprovalType {
 func (x *InboxApproval) GetTitle() string {
 	if x != nil {
 		return x.Title
-	}
-	return ""
-}
-
-func (x *InboxApproval) GetToolName() string {
-	if x != nil && x.ToolName != nil {
-		return *x.ToolName
-	}
-	return ""
-}
-
-func (x *InboxApproval) GetToolCallId() string {
-	if x != nil && x.ToolCallId != nil {
-		return *x.ToolCallId
-	}
-	return ""
-}
-
-func (x *InboxApproval) GetArgumentSummary() string {
-	if x != nil {
-		return x.ArgumentSummary
 	}
 	return ""
 }
@@ -1520,19 +1493,12 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x18automation_launch_failed\x18\x18 \x01(\v2'.reliant.v1.InboxAutomationLaunchFailedH\x00R\x16automationLaunchFailed\x12A\n" +
 	"\frun_finished\x18\x19 \x01(\v2\x1c.reliant.v1.InboxRunFinishedH\x00R\vrunFinished\x124\n" +
 	"\astorage\x18\x1a \x01(\v2\x18.reliant.v1.InboxStorageH\x00R\astorageB\t\n" +
-	"\apayload\"\x98\x02\n" +
+	"\apayload\"\x85\x01\n" +
 	"\rInboxApproval\x12\x1f\n" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
 	"approvalId\x12=\n" +
 	"\rapproval_type\x18\x02 \x01(\x0e2\x18.reliant.v1.ApprovalTypeR\fapprovalType\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\x12 \n" +
-	"\ttool_name\x18\x04 \x01(\tH\x00R\btoolName\x88\x01\x01\x12%\n" +
-	"\ftool_call_id\x18\x05 \x01(\tH\x01R\n" +
-	"toolCallId\x88\x01\x01\x12)\n" +
-	"\x10argument_summary\x18\x06 \x01(\tR\x0fargumentSummaryB\f\n" +
-	"\n" +
-	"_tool_nameB\x0f\n" +
-	"\r_tool_call_id\"\x93\x01\n" +
+	"\x05title\x18\x03 \x01(\tR\x05title\"\x93\x01\n" +
 	"\rInboxQuestion\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x1b\n" +
@@ -1696,7 +1662,6 @@ func file_reliant_v1_inbox_proto_init() {
 		(*InboxItem_RunFinished)(nil),
 		(*InboxItem_Storage)(nil),
 	}
-	file_reliant_v1_inbox_proto_msgTypes[3].OneofWrappers = []any{}
 	file_reliant_v1_inbox_proto_msgTypes[4].OneofWrappers = []any{}
 	file_reliant_v1_inbox_proto_msgTypes[6].OneofWrappers = []any{}
 	type x struct{}
