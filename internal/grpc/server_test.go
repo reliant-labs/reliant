@@ -31,21 +31,20 @@ func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 	auth := &testNamedInterceptor{}
 
 	result := newInterceptors(timeout, auth)
-	// forge's DefaultMiddlewares produces 5 (Recovery, RequestID, Logging, Tracing, Metrics)
-	// + Extras: SlowRPCWatchdogInterceptor, ErrorReporterInterceptor, timeout, auth = 9 total
-	require.Len(t, result, 9)
-	// The last four are the reliant-specific Extras in order.
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[6])
-	require.Same(t, timeout, result[7])
-	require.Same(t, auth, result[8])
+	// Forge's five middleware slots stay stable. otelconnect is the first extra
+	// and owns the only Connect server span; the remaining extras are Reliant's.
+	require.Len(t, result, 10)
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[7])
+	require.Same(t, timeout, result[8])
+	require.Same(t, auth, result[9])
 }
 
 func TestNewInterceptorsSkipsNilAuthInterceptor(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 
 	result := newInterceptors(timeout, (*interceptors.AuthInterceptor)(nil))
-	// forge's 5 + SlowRPCWatchdogInterceptor + ErrorReporterInterceptor + timeout = 8 (nil auth skipped)
-	require.Len(t, result, 8)
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[6])
-	require.Same(t, timeout, result[7])
+	// Forge's five + otelconnect + Reliant's three extras = 9 (nil auth skipped).
+	require.Len(t, result, 9)
+	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[7])
+	require.Same(t, timeout, result[8])
 }

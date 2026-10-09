@@ -6,94 +6,116 @@ import (
 	"fmt"
 	"net/http"
 	"os"
+	"strings"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	forgeobserve "github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // Config holds observability configuration.
 type Config struct {
-	ServiceName string // e.g. "reliant-api", "reliant-worker"
-	Environment string // e.g. "production", "development"
-	Version     string // build version
+	// ServiceName is the canonical workload identity (for example,
+	// "reliant-api-server"), not a collector-specific name.
+	ServiceName string
+	Environment string
+	Version     string
+	InstanceID  string
 
-	// OTel tracing
-	OTLPEndpoint string // OTLP HTTP endpoint for traces (empty = disabled)
-	OTLPInsecure bool   // use HTTP instead of HTTPS for OTLP
+	// OTLPEndpoint is the vendor-neutral OTLP/gRPC collector address. Empty is
+	// an explicit disabled mode in development and tests only.
+	OTLPEndpoint string
+	// OTLPEnabled distinguishes an intentionally disabled development/test
+	// runtime from a production misconfiguration with no collector endpoint.
+	OTLPEnabled bool
 
-	// Prometheus
-	PrometheusEnabled bool // expose /metrics endpoint
+	// PrometheusEnabled retains the legacy toggle for the application metrics
+	// registry. Forge always keeps its OTel Prometheus reader available.
+	PrometheusEnabled bool
 }
 
-// ConfigFromEnv builds a Config from environment variables.
+// ConfigFromEnv builds a Config from environment variables. Service identity is
+// chosen by the owning binary and cannot be replaced with an arbitrary collector
+// value through OTEL_SERVICE_NAME.
 func ConfigFromEnv(serviceName string) Config {
+	instanceID, err := os.Hostname()
+	if err != nil || instanceID == "" {
+		instanceID = getEnv("HOSTNAME", "reliant-local")
+	}
+	environment := getEnv("RELIANT_ENV", "development")
+	endpoint := strings.TrimSpace(os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"))
+	enabled := endpoint != "" && os.Getenv("OTEL_ENABLED") != "false"
+	if isProduction(environment) {
+		enabled = true
+	}
 	return Config{
-		ServiceName:       getEnv("OTEL_SERVICE_NAME", serviceName),
-		Environment:       getEnv("RELIANT_ENV", "development"),
-		Version:           getEnv("RELIANT_VERSION", "dev"),
-		OTLPEndpoint:      os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"),
-		OTLPInsecure:      os.Getenv("OTEL_EXPORTER_OTLP_INSECURE") != "false",
+		ServiceName:       serviceName,
+		Environment:       environment,
+		Version:           buildVersion(),
+		InstanceID:        instanceID,
+		OTLPEndpoint:      endpoint,
+		OTLPEnabled:       enabled,
 		PrometheusEnabled: os.Getenv("PROMETHEUS_ENABLED") != "false",
 	}
 }
 
-// Provider holds the initialized observability providers.
+func buildVersion() string {
+	v := strings.TrimSpace(version.Get().Version)
+	if v == "" || v == "unknown" {
+		return "dev"
+	}
+	return v
+}
+
+func isProduction(environment string) bool {
+	switch strings.ToLower(strings.TrimSpace(environment)) {
+	case "production", "prod":
+		return true
+	default:
+		return false
+	}
+}
+
+var metricsOnce sync.Once
+
+// Provider holds the initialized Forge observability runtime.
 type Provider struct {
 	config     Config
 	shutdownFn func(ctx context.Context) error
 }
 
-// Init initializes Prometheus metrics and OTel tracing based on the config.
-// Must be called early in startup, after logging.
+// Init initializes the application Prometheus registry and Forge's OTel runtime.
+// It validates configuration without probing the collector, so a temporary
+// collector outage never prevents a process from serving traffic.
 func Init(cfg Config) (*Provider, error) {
-	p := &Provider{config: cfg}
-	var shutdowns []func(ctx context.Context) error
+	if strings.TrimSpace(cfg.ServiceName) == "" {
+		return nil, fmt.Errorf("observability service name is required")
+	}
+	if cfg.OTLPEnabled && strings.TrimSpace(cfg.OTLPEndpoint) == "" {
+		return nil, fmt.Errorf("observability is enabled but OTEL_EXPORTER_OTLP_ENDPOINT is empty")
+	}
 
-	// Set up W3C Trace Context propagation globally.
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
-
-	// Initialize Prometheus metrics registry and collectors.
-	initMetrics()
-
-	// Wire the dead-end error counter into the slog metrics handler.
+	metricsOnce.Do(initMetrics)
 	logging.SetDeadEndErrorCounter(DeadEndErrorsTotal)
 
-	// Initialize OTel tracing if endpoint is configured.
-	if cfg.OTLPEndpoint != "" {
-		tp, err := initTracing(cfg)
-		if err != nil {
-			return nil, fmt.Errorf("failed to init OTel tracing: %w", err)
-		}
-		shutdowns = append(shutdowns, tp.Shutdown)
+	endpoint := ""
+	if cfg.OTLPEnabled {
+		endpoint = cfg.OTLPEndpoint
 	}
-
-	// Initialize OTel metrics provider backed by Prometheus.
-	if cfg.PrometheusEnabled {
-		mp, err := initOTelMetrics()
-		if err != nil {
-			return nil, fmt.Errorf("failed to init OTel metrics: %w", err)
-		}
-		shutdowns = append(shutdowns, mp.Shutdown)
+	shutdown, _, err := forgeobserve.Setup(context.Background(), forgeobserve.Config{
+		ServiceName:    cfg.ServiceName,
+		ServiceVersion: cfg.Version,
+		OTLPEndpoint:   endpoint,
+		InstanceID:     cfg.InstanceID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("setup Forge observability: %w", err)
 	}
-
-	p.shutdownFn = func(ctx context.Context) error {
-		var firstErr error
-		for _, fn := range shutdowns {
-			if err := fn(ctx); err != nil && firstErr == nil {
-				firstErr = err
-			}
-		}
-		return firstErr
-	}
-
-	return p, nil
+	return &Provider{config: cfg, shutdownFn: shutdown}, nil
 }
 
 // Shutdown flushes and closes all observability providers.
@@ -106,11 +128,11 @@ func (p *Provider) Shutdown() error {
 	return p.shutdownFn(ctx)
 }
 
-// MetricsHandler returns an HTTP handler for the /metrics endpoint.
+// MetricsHandler returns an HTTP handler for the application Prometheus
+// registry. Forge's OTel metric reader uses its own registry, so application
+// metrics remain available without duplicate registrations.
 func MetricsHandler() http.Handler {
-	return promhttp.HandlerFor(Registry, promhttp.HandlerOpts{
-		EnableOpenMetrics: true,
-	})
+	return promhttp.HandlerFor(Registry, promhttp.HandlerOpts{EnableOpenMetrics: true})
 }
 
 // Registry is the global Prometheus registry used for all application metrics.
