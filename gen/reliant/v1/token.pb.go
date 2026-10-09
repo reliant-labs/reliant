@@ -758,6 +758,107 @@ func (x *ExchangeTokenResponse) GetScopes() []string {
 	return nil
 }
 
+type GetGitTokenRequest struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// provider is the git provider; empty means "github".
+	Provider      string `protobuf:"bytes,1,opt,name=provider,proto3" json:"provider,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGitTokenRequest) Reset() {
+	*x = GetGitTokenRequest{}
+	mi := &file_reliant_v1_token_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGitTokenRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGitTokenRequest) ProtoMessage() {}
+
+func (x *GetGitTokenRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_token_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGitTokenRequest.ProtoReflect.Descriptor instead.
+func (*GetGitTokenRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_token_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *GetGitTokenRequest) GetProvider() string {
+	if x != nil {
+		return x.Provider
+	}
+	return ""
+}
+
+type GetGitTokenResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// access_token is the plaintext provider token. A credential: apply it to
+	// one request, never log or persist it.
+	AccessToken string `protobuf:"bytes,1,opt,name=access_token,json=accessToken,proto3" json:"access_token,omitempty"`
+	// expires_at is when access_token stops working (RFC 3339). Empty for a token
+	// the provider never said expires.
+	ExpiresAt     string `protobuf:"bytes,2,opt,name=expires_at,json=expiresAt,proto3" json:"expires_at,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGitTokenResponse) Reset() {
+	*x = GetGitTokenResponse{}
+	mi := &file_reliant_v1_token_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGitTokenResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGitTokenResponse) ProtoMessage() {}
+
+func (x *GetGitTokenResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_token_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGitTokenResponse.ProtoReflect.Descriptor instead.
+func (*GetGitTokenResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_token_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *GetGitTokenResponse) GetAccessToken() string {
+	if x != nil {
+		return x.AccessToken
+	}
+	return ""
+}
+
+func (x *GetGitTokenResponse) GetExpiresAt() string {
+	if x != nil {
+		return x.ExpiresAt
+	}
+	return ""
+}
+
 var File_reliant_v1_token_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_token_proto_rawDesc = "" +
@@ -812,18 +913,25 @@ const file_reliant_v1_token_proto_rawDesc = "" +
 	"\ftoken_prefix\x18\x02 \x01(\tR\vtokenPrefix\x12\x1d\n" +
 	"\n" +
 	"expires_at\x18\x03 \x01(\tR\texpiresAt\x12\x16\n" +
-	"\x06scopes\x18\x04 \x03(\tR\x06scopes*R\n" +
+	"\x06scopes\x18\x04 \x03(\tR\x06scopes\"0\n" +
+	"\x12GetGitTokenRequest\x12\x1a\n" +
+	"\bprovider\x18\x01 \x01(\tR\bprovider\"W\n" +
+	"\x13GetGitTokenResponse\x12!\n" +
+	"\faccess_token\x18\x01 \x01(\tR\vaccessToken\x12\x1d\n" +
+	"\n" +
+	"expires_at\x18\x02 \x01(\tR\texpiresAt*R\n" +
 	"\tTokenKind\x12\x1a\n" +
 	"\x16TOKEN_KIND_UNSPECIFIED\x10\x00\x12\x15\n" +
 	"\x11TOKEN_KIND_DAEMON\x10\x01\x12\x12\n" +
-	"\x0eTOKEN_KIND_API\x10\x022\xab\x03\n" +
+	"\x0eTOKEN_KIND_API\x10\x022\xfd\x03\n" +
 	"\fTokenService\x12P\n" +
 	"\vCreateToken\x12\x1e.reliant.v1.CreateTokenRequest\x1a\x1f.reliant.v1.CreateTokenResponse\"\x00\x12M\n" +
 	"\n" +
 	"ListTokens\x12\x1d.reliant.v1.ListTokensRequest\x1a\x1e.reliant.v1.ListTokensResponse\"\x00\x12P\n" +
 	"\vRevokeToken\x12\x1e.reliant.v1.RevokeTokenRequest\x1a\x1f.reliant.v1.RevokeTokenResponse\"\x00\x12P\n" +
 	"\vUpdateToken\x12\x1e.reliant.v1.UpdateTokenRequest\x1a\x1f.reliant.v1.UpdateTokenResponse\"\x00\x12V\n" +
-	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\rExchangeToken\x12 .reliant.v1.ExchangeTokenRequest\x1a!.reliant.v1.ExchangeTokenResponse\"\x00\x12P\n" +
+	"\vGetGitToken\x12\x1e.reliant.v1.GetGitTokenRequest\x1a\x1f.reliant.v1.GetGitTokenResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_token_proto_rawDescOnce sync.Once
@@ -838,7 +946,7 @@ func file_reliant_v1_token_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_token_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_reliant_v1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
 var file_reliant_v1_token_proto_goTypes = []any{
 	(TokenKind)(0),                // 0: reliant.v1.TokenKind
 	(*CreateTokenRequest)(nil),    // 1: reliant.v1.CreateTokenRequest
@@ -853,6 +961,8 @@ var file_reliant_v1_token_proto_goTypes = []any{
 	(*UpdateTokenResponse)(nil),   // 10: reliant.v1.UpdateTokenResponse
 	(*ExchangeTokenRequest)(nil),  // 11: reliant.v1.ExchangeTokenRequest
 	(*ExchangeTokenResponse)(nil), // 12: reliant.v1.ExchangeTokenResponse
+	(*GetGitTokenRequest)(nil),    // 13: reliant.v1.GetGitTokenRequest
+	(*GetGitTokenResponse)(nil),   // 14: reliant.v1.GetGitTokenResponse
 }
 var file_reliant_v1_token_proto_depIdxs = []int32{
 	0,  // 0: reliant.v1.CreateTokenRequest.kind:type_name -> reliant.v1.TokenKind
@@ -867,13 +977,15 @@ var file_reliant_v1_token_proto_depIdxs = []int32{
 	6,  // 9: reliant.v1.TokenService.RevokeToken:input_type -> reliant.v1.RevokeTokenRequest
 	8,  // 10: reliant.v1.TokenService.UpdateToken:input_type -> reliant.v1.UpdateTokenRequest
 	11, // 11: reliant.v1.TokenService.ExchangeToken:input_type -> reliant.v1.ExchangeTokenRequest
-	3,  // 12: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
-	5,  // 13: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
-	7,  // 14: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
-	10, // 15: reliant.v1.TokenService.UpdateToken:output_type -> reliant.v1.UpdateTokenResponse
-	12, // 16: reliant.v1.TokenService.ExchangeToken:output_type -> reliant.v1.ExchangeTokenResponse
-	12, // [12:17] is the sub-list for method output_type
-	7,  // [7:12] is the sub-list for method input_type
+	13, // 12: reliant.v1.TokenService.GetGitToken:input_type -> reliant.v1.GetGitTokenRequest
+	3,  // 13: reliant.v1.TokenService.CreateToken:output_type -> reliant.v1.CreateTokenResponse
+	5,  // 14: reliant.v1.TokenService.ListTokens:output_type -> reliant.v1.ListTokensResponse
+	7,  // 15: reliant.v1.TokenService.RevokeToken:output_type -> reliant.v1.RevokeTokenResponse
+	10, // 16: reliant.v1.TokenService.UpdateToken:output_type -> reliant.v1.UpdateTokenResponse
+	12, // 17: reliant.v1.TokenService.ExchangeToken:output_type -> reliant.v1.ExchangeTokenResponse
+	14, // 18: reliant.v1.TokenService.GetGitToken:output_type -> reliant.v1.GetGitTokenResponse
+	13, // [13:19] is the sub-list for method output_type
+	7,  // [7:13] is the sub-list for method input_type
 	7,  // [7:7] is the sub-list for extension type_name
 	7,  // [7:7] is the sub-list for extension extendee
 	0,  // [0:7] is the sub-list for field type_name
@@ -891,7 +1003,7 @@ func file_reliant_v1_token_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_token_proto_rawDesc), len(file_reliant_v1_token_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   12,
+			NumMessages:   14,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

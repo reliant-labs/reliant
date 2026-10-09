@@ -49,6 +49,9 @@ const (
 	// TokenServiceExchangeTokenProcedure is the fully-qualified name of the TokenService's
 	// ExchangeToken RPC.
 	TokenServiceExchangeTokenProcedure = "/reliant.v1.TokenService/ExchangeToken"
+	// TokenServiceGetGitTokenProcedure is the fully-qualified name of the TokenService's GetGitToken
+	// RPC.
+	TokenServiceGetGitTokenProcedure = "/reliant.v1.TokenService/GetGitToken"
 )
 
 // TokenServiceClient is a client for the reliant.v1.TokenService service.
@@ -97,6 +100,31 @@ type TokenServiceClient interface {
 	// Machine credential only — the exchange needs a credential to attenuate. A
 	// human session signs in with `forge login` or uses the web app.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
+	// GetGitToken returns the CALLING session's acting user's CURRENT token for a
+	// git provider, renewed first when it is near expiry. It is what a daemon's
+	// git credential helper (`reliant auth git-credential`) asks, at the moment
+	// git needs to authenticate, so a daemon never holds a GitHub token at rest:
+	// no token rides a clone command, none is written to .git/config or
+	// ~/.git-credentials, and a push minutes or days later gets a fresh one.
+	//
+	// The token is the user's, held by the deployment's control plane (the one
+	// GitHub App); this server never stores it. It is a bearer credential for the
+	// user's GitHub account: callers apply it to one request and never log or
+	// persist it, and this server never logs it.
+	//
+	// Like ExchangeToken it authenticates its own caller, uncached — but admits
+	// only a DAEMON credential (daemon:connect). A reliant:api token (CLI,
+	// automation) acts as the user against Reliant's API; it must not also be a
+	// way to the user's GitHub account.
+	//
+	// Errors:
+	//   - UNAUTHENTICATED / PERMISSION_DENIED: not a live session credential.
+	//   - FAILED_PRECONDITION: this deployment has no control plane to ask, or the
+	//     user has not connected the provider, or the connection needs the user to
+	//     reconnect. `x-forge-error-reason` names which. Permanent until the user
+	//     acts; do not retry.
+	//   - UNAVAILABLE: the control plane or provider could not be reached; retry.
+	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
 }
 
 // NewTokenServiceClient constructs a client for the reliant.v1.TokenService service. By default, it
@@ -140,6 +168,12 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(tokenServiceMethods.ByName("ExchangeToken")),
 			connect.WithClientOptions(opts...),
 		),
+		getGitToken: connect.NewClient[v1.GetGitTokenRequest, v1.GetGitTokenResponse](
+			httpClient,
+			baseURL+TokenServiceGetGitTokenProcedure,
+			connect.WithSchema(tokenServiceMethods.ByName("GetGitToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -150,6 +184,7 @@ type tokenServiceClient struct {
 	revokeToken   *connect.Client[v1.RevokeTokenRequest, v1.RevokeTokenResponse]
 	updateToken   *connect.Client[v1.UpdateTokenRequest, v1.UpdateTokenResponse]
 	exchangeToken *connect.Client[v1.ExchangeTokenRequest, v1.ExchangeTokenResponse]
+	getGitToken   *connect.Client[v1.GetGitTokenRequest, v1.GetGitTokenResponse]
 }
 
 // CreateToken calls reliant.v1.TokenService.CreateToken.
@@ -175,6 +210,11 @@ func (c *tokenServiceClient) UpdateToken(ctx context.Context, req *connect.Reque
 // ExchangeToken calls reliant.v1.TokenService.ExchangeToken.
 func (c *tokenServiceClient) ExchangeToken(ctx context.Context, req *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
 	return c.exchangeToken.CallUnary(ctx, req)
+}
+
+// GetGitToken calls reliant.v1.TokenService.GetGitToken.
+func (c *tokenServiceClient) GetGitToken(ctx context.Context, req *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error) {
+	return c.getGitToken.CallUnary(ctx, req)
 }
 
 // TokenServiceHandler is an implementation of the reliant.v1.TokenService service.
@@ -223,6 +263,31 @@ type TokenServiceHandler interface {
 	// Machine credential only — the exchange needs a credential to attenuate. A
 	// human session signs in with `forge login` or uses the web app.
 	ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error)
+	// GetGitToken returns the CALLING session's acting user's CURRENT token for a
+	// git provider, renewed first when it is near expiry. It is what a daemon's
+	// git credential helper (`reliant auth git-credential`) asks, at the moment
+	// git needs to authenticate, so a daemon never holds a GitHub token at rest:
+	// no token rides a clone command, none is written to .git/config or
+	// ~/.git-credentials, and a push minutes or days later gets a fresh one.
+	//
+	// The token is the user's, held by the deployment's control plane (the one
+	// GitHub App); this server never stores it. It is a bearer credential for the
+	// user's GitHub account: callers apply it to one request and never log or
+	// persist it, and this server never logs it.
+	//
+	// Like ExchangeToken it authenticates its own caller, uncached — but admits
+	// only a DAEMON credential (daemon:connect). A reliant:api token (CLI,
+	// automation) acts as the user against Reliant's API; it must not also be a
+	// way to the user's GitHub account.
+	//
+	// Errors:
+	//   - UNAUTHENTICATED / PERMISSION_DENIED: not a live session credential.
+	//   - FAILED_PRECONDITION: this deployment has no control plane to ask, or the
+	//     user has not connected the provider, or the connection needs the user to
+	//     reconnect. `x-forge-error-reason` names which. Permanent until the user
+	//     acts; do not retry.
+	//   - UNAVAILABLE: the control plane or provider could not be reached; retry.
+	GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error)
 }
 
 // NewTokenServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -262,6 +327,12 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(tokenServiceMethods.ByName("ExchangeToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tokenServiceGetGitTokenHandler := connect.NewUnaryHandler(
+		TokenServiceGetGitTokenProcedure,
+		svc.GetGitToken,
+		connect.WithSchema(tokenServiceMethods.ByName("GetGitToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.TokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TokenServiceCreateTokenProcedure:
@@ -274,6 +345,8 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 			tokenServiceUpdateTokenHandler.ServeHTTP(w, r)
 		case TokenServiceExchangeTokenProcedure:
 			tokenServiceExchangeTokenHandler.ServeHTTP(w, r)
+		case TokenServiceGetGitTokenProcedure:
+			tokenServiceGetGitTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -301,4 +374,8 @@ func (UnimplementedTokenServiceHandler) UpdateToken(context.Context, *connect.Re
 
 func (UnimplementedTokenServiceHandler) ExchangeToken(context.Context, *connect.Request[v1.ExchangeTokenRequest]) (*connect.Response[v1.ExchangeTokenResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.ExchangeToken is not implemented"))
+}
+
+func (UnimplementedTokenServiceHandler) GetGitToken(context.Context, *connect.Request[v1.GetGitTokenRequest]) (*connect.Response[v1.GetGitTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.TokenService.GetGitToken is not implemented"))
 }
