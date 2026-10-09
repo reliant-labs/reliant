@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 const minimalForgeYAML = "name: testproj\nmodule_path: example.com/testproj\nversion: \"1.0.0\"\n"
@@ -108,4 +110,46 @@ func TestProjectMemoryWithForgeFramework_EmptyProjectPath(t *testing.T) {
 	if !bytes.Equal(got, onDisk) {
 		t.Errorf("expected on-disk bytes returned unchanged for empty projectPath; got:\n%s", got)
 	}
+}
+
+func writeRepoFile(t *testing.T, dir, name, body string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
+}
+
+func TestCollectRepoMemories_FrameworkOnceAndIdenticalCollapsed(t *testing.T) {
+	root := t.TempDir()
+	for _, n := range []string{"b-forge", "a-forge", "c-plain", "d-plain"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(root, n, ".git"), 0o755))
+	}
+	for _, n := range []string{"a-forge", "b-forge"} {
+		writeRepoFile(t, filepath.Join(root, n), "forge.yaml", "name: "+n+"\n")
+		writeRepoFile(t, filepath.Join(root, n), "reliant.md", "notes "+n)
+	}
+	writeRepoFile(t, filepath.Join(root, "c-plain"), "reliant.md", "same text")
+	writeRepoFile(t, filepath.Join(root, "d-plain"), "reliant.md", "same text")
+
+	mem, ver1 := collectRepoMemories(root)
+	require.Contains(t, string(mem["a-forge"]), "notes a-forge")
+	require.Greater(t, len(mem["a-forge"]), 5000, "first forge repo carries the framework")
+	require.Contains(t, string(mem["b-forge"]), "notes b-forge")
+	require.Contains(t, string(mem["b-forge"]), "`a-forge`")
+	require.Less(t, len(mem["b-forge"]), 1000)
+	require.Equal(t, "same text", string(mem["c-plain"]))
+	require.Contains(t, string(mem["d-plain"]), "`c-plain`")
+
+	writeRepoFile(t, filepath.Join(root, "c-plain"), "reliant.md", "changed")
+	_, ver2 := collectRepoMemories(root)
+	require.NotEqual(t, string(ver1), string(ver2))
+}
+
+func TestCollectRepoMemories_RootForgeCarriesFramework(t *testing.T) {
+	root := t.TempDir()
+	writeRepoFile(t, root, "forge.yaml", "name: root\n")
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "x", ".git"), 0o755))
+	writeRepoFile(t, filepath.Join(root, "x"), "forge.yaml", "name: x\n")
+	mem, _ := collectRepoMemories(root)
+	require.Contains(t, string(mem["x"]), "project memory")
+	require.Less(t, len(mem["x"]), 1000)
 }

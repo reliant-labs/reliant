@@ -35,7 +35,7 @@ func SkillPathsForProject(projectPath string) []string {
 	for _, def := range snapshot.Definitions {
 		p := def.SkillPath
 		if p == "" {
-			p = def.NormalizedKey
+			p = def.Name
 		}
 		if p == "" {
 			continue

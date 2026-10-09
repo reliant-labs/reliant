@@ -21,7 +21,7 @@ func writeShadowSkill(t *testing.T, dir, name, body string) {
 // fails loudly when the set is empty — a project on a machine with forge
 // installed collides on several keys at once, so a bare count would assert
 // against whichever entry happened to sort first.
-func shadowFor(t *testing.T, snapshot Snapshot, key string, loser skillscore.Scope) ShadowedSkill {
+func shadowFor(t *testing.T, snapshot Snapshot, key SkillKey, loser skillscore.Scope) ShadowedSkill {
 	t.Helper()
 	require.NotEmpty(t, snapshot.Shadowed, "discovery reported no collisions at all; nothing below is being checked")
 	for _, s := range snapshot.Shadowed {
@@ -54,14 +54,14 @@ func TestDiscoverReportsShadowedSkill(t *testing.T) {
 
 	snapshot := Discover(DiscoverInput{ProjectPath: project, LoadFullDefinitions: true})
 
-	got := shadowFor(t, snapshot, "service-layer", skillscore.ScopeClaude)
+	got := shadowFor(t, snapshot, SkillKey{Path: "service-layer"}, skillscore.ScopeClaude)
 	require.Equal(t, skillscore.ScopeProject, got.WinnerScope, "the higher-priority copy must be the one kept")
 	require.True(t, got.BytesDiffer,
 		"the two copies have different bodies and the report says they match — a reader cannot tell whether the dropped copy mattered")
 
 	// The surviving definition is still the winner: this reports the collision,
 	// it does not re-rank the scopes.
-	require.Equal(t, skillscore.ScopeProject, snapshot.ByName["service-layer"].Scope)
+	require.Equal(t, skillscore.ScopeProject, snapshot.ByName[SkillKey{Path: "service-layer"}].Scope)
 }
 
 // Identical copies are still reported — two producers is the fact — but the
@@ -76,7 +76,7 @@ func TestShadowedReportDoesNotInventDifferences(t *testing.T) {
 
 	snapshot := Discover(DiscoverInput{ProjectPath: project, LoadFullDefinitions: true})
 
-	got := shadowFor(t, snapshot, "db", skillscore.ScopeClaude)
+	got := shadowFor(t, snapshot, SkillKey{Path: "db"}, skillscore.ScopeClaude)
 	require.False(t, got.BytesDiffer, "the two copies are byte-identical and the report says they differ")
 }
 
@@ -94,8 +94,8 @@ func TestNoShadowReportForASkillWithOneProducer(t *testing.T) {
 
 	// Fail loudly if nothing was discovered: an empty catalog would satisfy the
 	// assertion below without proving anything.
-	require.Contains(t, snapshot.ByName, only)
+	require.Contains(t, snapshot.ByName, SkillKey{Path: only})
 	for _, s := range snapshot.Shadowed {
-		require.NotEqual(t, only, s.Key, "a skill with a single producer was reported as shadowed: %+v", s)
+		require.NotEqual(t, SkillKey{Path: only}, s.Key, "a skill with a single producer was reported as shadowed: %+v", s)
 	}
 }

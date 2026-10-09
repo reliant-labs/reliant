@@ -330,9 +330,31 @@ func TestForgeSkillsForInput_PrefixesNestedRepoSources(t *testing.T) {
 
 	var sawPrefixed bool
 	for _, d := range defs {
-		if d.Source == "api" && d.NormalizedKey == "api/forge/db" {
+		if d.Source == "api" && d.SkillPath == "forge/db" {
 			sawPrefixed = true
 		}
 	}
-	require.True(t, sawPrefixed, "nested-repo forge skill should have NormalizedKey prefixed with the repo source")
+	require.True(t, sawPrefixed, "nested-repo forge skill should carry the repo source")
+}
+
+func TestForgeSkillsForInput_SharedSkillsDiscoveredOnce(t *testing.T) {
+	isolateHome(t)
+	root := t.TempDir()
+	var repos []string
+	for _, n := range []string{"a", "b", "c"} {
+		d := filepath.Join(root, n)
+		require.NoError(t, os.MkdirAll(d, 0o755))
+		ensureForgeYaml(t, d)
+		repos = append(repos, n)
+	}
+	defs := forgeSkillsForInput(DiscoverInput{ProjectPath: root, RepoSources: repos})
+	counts := map[string]int{}
+	for _, d := range defs {
+		counts[d.SkillPath]++
+	}
+	require.NotEmpty(t, counts)
+	for p, n := range counts {
+		require.Equal(t, 1, n, "skill %q must be discovered once, not per repo", p)
+	}
+	require.Equal(t, 1, counts[forgeNamespace])
 }

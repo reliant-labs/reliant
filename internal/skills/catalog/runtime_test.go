@@ -25,7 +25,6 @@ Use diagrams.
 `))
 		require.NoError(t, err)
 		require.Equal(t, "explain-code", s.Name)
-		require.Equal(t, "explain-code", s.NormalizedKey)
 		require.Equal(t, "Explain code clearly", s.Description)
 		require.Equal(t, "# Explain code\nUse diagrams.", s.Body)
 		require.Equal(t, skillscore.SkillFormatClaudeMarkdown, s.Format)
@@ -140,7 +139,7 @@ func TestValidateAgentSkillMarkdownFrontmatter_UsesNFKCForParentDirMatch(t *test
 
 func TestBuiltinSkills_DiscoverIncludesReliantConfig(t *testing.T) {
 	snapshot := Discover(DiscoverInput{ProjectPath: t.TempDir(), LoadFullDefinitions: true})
-	definition, ok := snapshot.ByName["reliant-config"]
+	definition, ok := snapshot.ByName[SkillKey{"", "reliant-config"}]
 	require.True(t, ok)
 	require.Equal(t, skillscore.ScopeBuiltin, definition.Scope)
 	require.Equal(t, skillscore.SkillFormatClaudeMarkdown, definition.Format)
@@ -185,20 +184,20 @@ func TestDiscover_IncludesExternalProviderSkillRoots(t *testing.T) {
 
 	snapshot := Discover(DiscoverInput{ProjectPath: project})
 
-	require.Contains(t, snapshot.ByName, "claude-skill")
-	require.Equal(t, skillscore.ScopeClaude, snapshot.ByName["claude-skill"].Scope)
+	require.Contains(t, snapshot.ByName, SkillKey{"", "claude-skill"})
+	require.Equal(t, skillscore.ScopeClaude, snapshot.ByName[SkillKey{"", "claude-skill"}].Scope)
 
-	require.Contains(t, snapshot.ByName, "codex-skill")
-	require.Equal(t, skillscore.ScopeCodexProject, snapshot.ByName["codex-skill"].Scope)
+	require.Contains(t, snapshot.ByName, SkillKey{"", "codex-skill"})
+	require.Equal(t, skillscore.ScopeCodexProject, snapshot.ByName[SkillKey{"", "codex-skill"}].Scope)
 
-	require.Contains(t, snapshot.ByName, "agents-skill")
-	require.Equal(t, skillscore.ScopeCodexAgents, snapshot.ByName["agents-skill"].Scope)
+	require.Contains(t, snapshot.ByName, SkillKey{"", "agents-skill"})
+	require.Equal(t, skillscore.ScopeCodexAgents, snapshot.ByName[SkillKey{"", "agents-skill"}].Scope)
 
-	require.Contains(t, snapshot.ByName, "claude-global")
-	require.Equal(t, skillscore.ScopeClaudeGlobal, snapshot.ByName["claude-global"].Scope)
+	require.Contains(t, snapshot.ByName, SkillKey{"", "claude-global"})
+	require.Equal(t, skillscore.ScopeClaudeGlobal, snapshot.ByName[SkillKey{"", "claude-global"}].Scope)
 
-	require.Contains(t, snapshot.ByName, "codex-global")
-	require.Equal(t, skillscore.ScopeCodexGlobal, snapshot.ByName["codex-global"].Scope)
+	require.Contains(t, snapshot.ByName, SkillKey{"", "codex-global"})
+	require.Equal(t, skillscore.ScopeCodexGlobal, snapshot.ByName[SkillKey{"", "codex-global"}].Scope)
 }
 
 func TestDiscover_MultiRepoSources(t *testing.T) {
@@ -223,14 +222,14 @@ func TestDiscover_MultiRepoSources(t *testing.T) {
 	})
 
 	// Skills from nested repos get their NormalizedKey prefixed with source.
-	require.Contains(t, snapshot.ByName, "api/api-deploy")
-	require.Equal(t, "api", snapshot.ByName["api/api-deploy"].Source)
+	require.Contains(t, snapshot.ByName, SkillKey{"api", "api-deploy"})
+	require.Equal(t, "api", snapshot.ByName[SkillKey{"api", "api-deploy"}].Source)
 
-	require.Contains(t, snapshot.ByName, "web/web-deploy")
-	require.Equal(t, "web", snapshot.ByName["web/web-deploy"].Source)
+	require.Contains(t, snapshot.ByName, SkillKey{"web", "web-deploy"})
+	require.Equal(t, "web", snapshot.ByName[SkillKey{"web", "web-deploy"}].Source)
 
 	// Builtins should still be present.
-	require.Contains(t, snapshot.ByName, "reliant-config")
+	require.Contains(t, snapshot.ByName, SkillKey{"", "reliant-config"})
 }
 
 func TestDiscover_ReliantShadowsExternalProviderSkills(t *testing.T) {
@@ -250,9 +249,9 @@ func TestDiscover_ReliantShadowsExternalProviderSkills(t *testing.T) {
 
 	snapshot := Discover(DiscoverInput{ProjectPath: project})
 
-	require.Contains(t, snapshot.ByName, "shared-skill")
-	require.Equal(t, skillscore.ScopeProject, snapshot.ByName["shared-skill"].Scope)
-	require.Equal(t, "Reliant version", snapshot.ByName["shared-skill"].Description)
+	require.Contains(t, snapshot.ByName, SkillKey{"", "shared-skill"})
+	require.Equal(t, skillscore.ScopeProject, snapshot.ByName[SkillKey{"", "shared-skill"}].Scope)
+	require.Equal(t, "Reliant version", snapshot.ByName[SkillKey{"", "shared-skill"}].Description)
 }
 
 func TestParseSkillMarkdown_ClaudeCompatibleFrontmatter(t *testing.T) {

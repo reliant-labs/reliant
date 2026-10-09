@@ -1831,20 +1831,45 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 		return nil, nil
 	}
 
-	result := make(map[string][]byte, len(repoSources))
+	sorted := append([]string(nil), repoSources...)
+	sort.Strings(sorted)
+
+	result := make(map[string][]byte, len(sorted))
 	acc := strings.Builder{}
 
-	for _, rel := range repoSources {
+	// The Forge framework guide is ~18KB and identical across forge repos,
+	// so it is carried once per snapshot: by the project root's memory when
+	// the root is a forge project, otherwise by the first forge repo in
+	// sorted order (the order the server emits entries in).
+	frameworkCarrier := ""
+	// Ask the same question buildProjectSnapshot does (rendered, not merely
+	// forge.yaml present): a root forge.yaml that fails to render carries no
+	// guide, and a pointer to it would name something the model never sees.
+	_, rootCarriesFramework := forgeFrameworkMemory(projectPath)
+	// Byte-identical repo memories (e.g. two clones of one repo) collapse
+	// to a pointer at the first repo carrying that content.
+	seen := map[string]string{}
+
+	for _, rel := range sorted {
 		if rel == "" {
 			continue
 		}
 		repoDir := filepath.Join(projectPath, rel)
 		var parts []string
 		md, _ := readOptionalFile(filepath.Join(repoDir, "reliant.md"))
-		// Inject forge framework memory for nested forge repos — same
-		// rationale as the top-level case in buildProjectSnapshot. A
-		// no-op when repoDir has no forge.yaml.
-		md = projectMemoryWithForgeFramework(repoDir, md)
+		if hasForgeYAML(repoDir) {
+			switch {
+			case rootCarriesFramework:
+				md = prependMemory([]byte("This repo is also a Forge project: the Forge framework guide in the project memory applies here too."), md)
+			case frameworkCarrier != "":
+				md = prependMemory([]byte(fmt.Sprintf("This repo is also a Forge project: the Forge framework guide included with the `%s` repo's memory applies here too.", frameworkCarrier)), md)
+			default:
+				if framework, ok := forgeFrameworkMemory(repoDir); ok {
+					md = prependMemory(framework, md)
+					frameworkCarrier = rel
+				}
+			}
+		}
 		if len(md) > 0 {
 			parts = append(parts, string(md))
 		}
@@ -1855,6 +1880,12 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 			continue
 		}
 		content := strings.Join(parts, "\n\n")
+		sum := hashBytes([]byte(content))
+		if first, dup := seen[sum]; dup {
+			content = fmt.Sprintf("This repo's memory is identical to the `%s` repo's memory; see that entry.", first)
+		} else {
+			seen[sum] = rel
+		}
 		result[rel] = []byte(content)
 		acc.WriteString(rel)
 		acc.WriteString(":")

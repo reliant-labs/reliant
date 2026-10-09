@@ -42,8 +42,11 @@ type Found struct {
 
 // Discover walks projectPath up to maxDepth looking for directories that
 // contain a `.git` entry (file or dir; both indicate a git checkout). It
-// returns one Found per repo. If projectPath itself is a git repo, the
-// scan stops at the root and returns just that one.
+// returns one Found per git repository: checkouts sharing a git common dir
+// (a main checkout plus its linked worktrees) collapse to the main checkout
+// when it is in the scan, else to the first linked worktree seen. If
+// projectPath itself is a git repo, the scan stops at the root and returns
+// just that one.
 //
 // If maxDepth <= 0, DefaultMaxDepth is used.
 //
@@ -66,6 +69,7 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 	rootIsGit := isGitDir(abs)
 
 	var found []Found
+	var idents []checkoutIdent
 	rootDepth := strings.Count(abs, string(filepath.Separator))
 
 	walkErr := filepath.WalkDir(abs, func(path string, d fs.DirEntry, walkErr error) error {
@@ -108,6 +112,7 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 				Name:         filepath.Base(path),
 				RemoteURL:    readRemoteURL(ctx, path),
 			})
+			idents = append(idents, identifyCheckout(path))
 			// Don't recurse into a discovered repo.
 			return fs.SkipDir
 		}
@@ -122,6 +127,8 @@ func Discover(ctx context.Context, projectPath string, maxDepth int) ([]Found, e
 	// a single-repo project (the common case). If nested repos were found,
 	// this is a multi-repo project where the root may also be a git repo
 	// (e.g. tracking shared config with children gitignored).
+	found = dedupeByRepository(found, idents, rootIdentity(abs, rootIsGit))
+
 	if rootIsGit && len(found) == 0 {
 		return []Found{{
 			RelativePath: "",
@@ -164,4 +171,94 @@ func readRemoteURL(ctx context.Context, repoPath string) string {
 		return ""
 	}
 	return strings.TrimSpace(string(out))
+}
+
+// checkoutIdent identifies the repository a checkout belongs to.
+type checkoutIdent struct {
+	commonDir string // cleaned git common dir; "" when unparseable
+	isMain    bool   // .git is a directory
+}
+
+func rootIdentity(root string, rootIsGit bool) string {
+	if !rootIsGit {
+		return ""
+	}
+	return identifyCheckout(root).commonDir
+}
+
+// identifyCheckout resolves a checkout's git common dir by reading .git
+// (and gitdir/commondir) directly, without exec'ing git. An unparseable
+// .git file yields an empty commonDir, making the checkout its own identity.
+func identifyCheckout(dir string) checkoutIdent {
+	dotGit := filepath.Join(dir, ".git")
+	info, err := os.Stat(dotGit)
+	if err != nil {
+		return checkoutIdent{}
+	}
+	if info.IsDir() {
+		return checkoutIdent{commonDir: canonicalPath(dotGit), isMain: true}
+	}
+	data, err := os.ReadFile(dotGit)
+	if err != nil {
+		return checkoutIdent{}
+	}
+	line := strings.TrimSpace(string(data))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(line, prefix) {
+		return checkoutIdent{}
+	}
+	gitdir := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+	if gitdir == "" {
+		return checkoutIdent{}
+	}
+	if !filepath.IsAbs(gitdir) {
+		gitdir = filepath.Join(dir, gitdir)
+	}
+	common := gitdir
+	if cd, err := os.ReadFile(filepath.Join(gitdir, "commondir")); err == nil {
+		if v := strings.TrimSpace(string(cd)); v != "" {
+			if !filepath.IsAbs(v) {
+				v = filepath.Join(gitdir, v)
+			}
+			common = v
+		}
+	}
+	return checkoutIdent{commonDir: canonicalPath(common)}
+}
+
+func canonicalPath(p string) string {
+	p = filepath.Clean(p)
+	if resolved, err := filepath.EvalSymlinks(p); err == nil {
+		return resolved
+	}
+	return p
+}
+
+// dedupeByRepository keeps one Found per common dir, preferring the main
+// checkout, else the first in walk order. Checkouts whose common dir equals
+// rootCommon (the scan root's own repository) are dropped: the root already
+// represents that repository. Output preserves walk order.
+func dedupeByRepository(found []Found, idents []checkoutIdent, rootCommon string) []Found {
+	chosen := make(map[string]int, len(found)) // commonDir -> index into found
+	for i, id := range idents {
+		if id.commonDir == "" {
+			continue
+		}
+		if id.commonDir == rootCommon {
+			chosen[id.commonDir] = -1
+			continue
+		}
+		cur, ok := chosen[id.commonDir]
+		if !ok || (cur >= 0 && id.isMain && !idents[cur].isMain) {
+			chosen[id.commonDir] = i
+		}
+	}
+	out := make([]Found, 0, len(found))
+	for i, f := range found {
+		if cd := idents[i].commonDir; cd != "" && chosen[cd] != i {
+			continue
+		}
+		out = append(out, f)
+	}
+	return out
 }

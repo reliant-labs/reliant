@@ -146,7 +146,6 @@ func parseSkillMarkdown(path string, scope skillscore.Scope, data []byte, includ
 	name := skillscore.NormalizeSkillName(fm.Name)
 	return Definition{
 		Name:                   name,
-		NormalizedKey:          name,
 		Description:            strings.TrimSpace(fm.Description),
 		License:                strings.TrimSpace(fm.License),
 		Compatibility:          strings.TrimSpace(fm.Compatibility),
@@ -402,7 +401,6 @@ func builtinSkills(loadFullDefinitions bool) []Definition {
 		// so filepath.Dir(p) gives "code-review" or "code-review/security-review".
 		if definition.SkillPath == "" {
 			definition.SkillPath = filepath.ToSlash(filepath.Dir(p))
-			definition.NormalizedKey = definition.SkillPath
 		}
 		defs = append(defs, definition)
 	}
@@ -412,7 +410,7 @@ func builtinSkills(loadFullDefinitions bool) []Definition {
 // discoverAll discovers all skills (including nested) from all roots.
 func discoverAll(input DiscoverInput) Snapshot {
 	result := Snapshot{
-		ByName: make(map[string]Definition),
+		ByName: make(map[SkillKey]Definition),
 	}
 
 	roots := discoveryRoots(input.ProjectPath, input.RepoSources, input.ExcludeGlobalRoots)
@@ -450,16 +448,11 @@ func discoverAll(input DiscoverInput) Snapshot {
 			skillPath := computeSkillPath(r.Path, definition.SkillDir)
 			if skillPath != "" {
 				definition.SkillPath = skillPath
-				definition.NormalizedKey = skillPath
 			}
 
-			// Stamp the source repo and prefix the NormalizedKey so skills with
-			// the same name in different repos don't shadow each other. Project
-			// root (Source == "") keeps its bare key for backwards compatibility.
+			// Stamp the source repo; (Source, SkillPath) is the identity, so
+			// same-named skills in different repos never shadow each other.
 			definition.Source = r.Source
-			if r.Source != "" && definition.NormalizedKey != "" {
-				definition.NormalizedKey = r.Source + "/" + definition.NormalizedKey
-			}
 
 			// Detect sub-skills.
 			definition.HasChildren = hasChildSkillDirs(definition.SkillDir)
@@ -492,7 +485,7 @@ func discoverAll(input DiscoverInput) Snapshot {
 		}
 		return result.Diagnostics[i].Path < result.Diagnostics[j].Path
 	})
-	sort.Slice(result.Shadowed, func(i, j int) bool { return result.Shadowed[i].Key < result.Shadowed[j].Key })
+	sort.Slice(result.Shadowed, func(i, j int) bool { return result.Shadowed[i].Key.String() < result.Shadowed[j].Key.String() })
 
 	reportShadowed(result.Shadowed)
 
@@ -516,11 +509,11 @@ var reportedShadows sync.Map
 // identical lines in one dev day) instead of surfacing it.
 func reportShadowed(shadowed []ShadowedSkill) {
 	for _, s := range shadowed {
-		if _, seen := reportedShadows.LoadOrStore(s.Key+"\x00"+s.WinnerPath+"\x00"+s.LoserPath, struct{}{}); seen {
+		if _, seen := reportedShadows.LoadOrStore(s.Key.String()+"\x00"+s.WinnerPath+"\x00"+s.LoserPath, struct{}{}); seen {
 			continue
 		}
 		slog.Warn("[Skills] skill delivered by two producers; one copy is being dropped",
-			"skill", s.Key,
+			"skill", s.Key.String(),
 			"using", s.WinnerPath,
 			"using_scope", string(s.WinnerScope),
 			"dropped", s.LoserPath,
@@ -535,7 +528,7 @@ func Discover(input DiscoverInput) Snapshot {
 
 	// Filter to top-level skills only (no "/" in SkillPath, or builtin skills).
 	result := Snapshot{
-		ByName:      make(map[string]Definition, len(all.ByName)),
+		ByName:      make(map[SkillKey]Definition, len(all.ByName)),
 		Diagnostics: all.Diagnostics,
 		Shadowed:    all.Shadowed,
 	}
@@ -613,20 +606,21 @@ func shouldReplace(existing Definition, candidate Definition) bool {
 }
 
 func mergeDefinition(result *Snapshot, definition Definition) {
-	existing, ok := result.ByName[definition.NormalizedKey]
+	key := definition.Key()
+	existing, ok := result.ByName[key]
 	if !ok {
-		result.ByName[definition.NormalizedKey] = definition
+		result.ByName[key] = definition
 		return
 	}
 
 	winner, loser := existing, definition
 	if shouldReplace(existing, definition) {
 		winner, loser = definition, existing
-		result.ByName[definition.NormalizedKey] = definition
+		result.ByName[key] = definition
 	}
 
 	result.Shadowed = append(result.Shadowed, ShadowedSkill{
-		Key:         definition.NormalizedKey,
+		Key:         key,
 		WinnerPath:  winner.Path,
 		WinnerScope: winner.Scope,
 		LoserPath:   loser.Path,

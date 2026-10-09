@@ -226,7 +226,7 @@ func TestTagDefault(t *testing.T) {
 
 	// Default tools should include the focused set for general-purpose work
 	expectedDefaults := []string{
-		"view", "write", "edit", "find_replace", // file
+		"view", "write", "edit", // file (find_replace deferred)
 		ShellToolName,        // execution + search (platform-specific: bash on Unix, powershell on Windows)
 		"fetch", "websearch", // web
 		"create_plan",                           // planning (update_plan, get_plan deferred)
@@ -252,6 +252,7 @@ func TestTagDefault(t *testing.T) {
 		"component_library", "worktree", "move_code",
 		"update_plan", "get_plan",
 		"add_dependency", "remove_dependency", "list_ready_tasks",
+		"find_replace",
 	}
 	for _, deferred := range deferredTools {
 		if resultMap[deferred] {

@@ -718,3 +718,16 @@ func TestSkillTool_List_EmptyNamespace_NamesExistingNamespaces(t *testing.T) {
 		assert.Contains(t, resp.Content, ns, "error should name existing namespace %q", ns)
 	}
 }
+
+func TestSkillsAnnouncement_DedupesSamePath(t *testing.T) {
+	mk := func(path, desc, src string) config.StoredSkill {
+		return config.StoredSkill{Name: path, SkillPath: path, Description: desc, Source: src}
+	}
+	got := SkillsAnnouncement([]config.StoredSkill{
+		mk("adapter", "same", "a"), mk("adapter", "same", "b"), mk("adapter", "same", "c"),
+		mk("zeta", "z", ""),
+	})
+	require.Equal(t, 1, strings.Count(got, "- adapter:"))
+	require.Equal(t, 1, strings.Count(got, "- zeta:"))
+	require.Less(t, strings.Index(got, "- adapter:"), strings.Index(got, "- zeta:"))
+}
