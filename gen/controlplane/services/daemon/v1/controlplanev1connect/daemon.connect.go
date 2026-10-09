@@ -59,6 +59,9 @@ const (
 	// DaemonServiceResumeDaemonProcedure is the fully-qualified name of the DaemonService's
 	// ResumeDaemon RPC.
 	DaemonServiceResumeDaemonProcedure = "/controlplane.v1.DaemonService/ResumeDaemon"
+	// DaemonServiceResizeDaemonProcedure is the fully-qualified name of the DaemonService's
+	// ResizeDaemon RPC.
+	DaemonServiceResizeDaemonProcedure = "/controlplane.v1.DaemonService/ResizeDaemon"
 	// DaemonServiceSetPortAccessProcedure is the fully-qualified name of the DaemonService's
 	// SetPortAccess RPC.
 	DaemonServiceSetPortAccessProcedure = "/controlplane.v1.DaemonService/SetPortAccess"
@@ -82,6 +85,19 @@ type DaemonServiceClient interface {
 	DeleteDaemon(context.Context, *connect.Request[v1.DeleteDaemonRequest]) (*connect.Response[v1.DeleteDaemonResponse], error)
 	SuspendDaemon(context.Context, *connect.Request[v1.SuspendDaemonRequest]) (*connect.Response[v1.SuspendDaemonResponse], error)
 	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	// ResizeDaemon changes a MANAGED daemon's machine size — the one path that
+	// does. The daemon must be SUSPENDED (FailedPrecondition otherwise): like
+	// changing a cloud VM's instance type, the new size takes effect when the
+	// machine next starts, because ResumeDaemon rebuilds the pod from the
+	// re-stamped spec (size, CPU/memory, disk). Resizing a running machine is
+	// therefore stop → resize → start, which the caller drives.
+	//
+	// The new size is gated exactly like CreateDaemon and ResumeDaemon
+	// (svcdaemon.checkDaemonSizeAllowed), so a refusal here is the same refusal
+	// the following resume would have produced. Resizing to the current size
+	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
+	// which is billed at its bound capacity.
+	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
 	SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error)
 	RemovePortAccess(context.Context, *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error)
 	ListPortAccessRules(context.Context, *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error)
@@ -146,6 +162,12 @@ func NewDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(daemonServiceMethods.ByName("ResumeDaemon")),
 			connect.WithClientOptions(opts...),
 		),
+		resizeDaemon: connect.NewClient[v1.ResizeDaemonRequest, v1.ResizeDaemonResponse](
+			httpClient,
+			baseURL+DaemonServiceResizeDaemonProcedure,
+			connect.WithSchema(daemonServiceMethods.ByName("ResizeDaemon")),
+			connect.WithClientOptions(opts...),
+		),
 		setPortAccess: connect.NewClient[v1.SetPortAccessRequest, v1.SetPortAccessResponse](
 			httpClient,
 			baseURL+DaemonServiceSetPortAccessProcedure,
@@ -182,6 +204,7 @@ type daemonServiceClient struct {
 	deleteDaemon         *connect.Client[v1.DeleteDaemonRequest, v1.DeleteDaemonResponse]
 	suspendDaemon        *connect.Client[v1.SuspendDaemonRequest, v1.SuspendDaemonResponse]
 	resumeDaemon         *connect.Client[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse]
+	resizeDaemon         *connect.Client[v1.ResizeDaemonRequest, v1.ResizeDaemonResponse]
 	setPortAccess        *connect.Client[v1.SetPortAccessRequest, v1.SetPortAccessResponse]
 	removePortAccess     *connect.Client[v1.RemovePortAccessRequest, v1.RemovePortAccessResponse]
 	listPortAccessRules  *connect.Client[v1.ListPortAccessRulesRequest, v1.ListPortAccessRulesResponse]
@@ -223,6 +246,11 @@ func (c *daemonServiceClient) ResumeDaemon(ctx context.Context, req *connect.Req
 	return c.resumeDaemon.CallUnary(ctx, req)
 }
 
+// ResizeDaemon calls controlplane.v1.DaemonService.ResizeDaemon.
+func (c *daemonServiceClient) ResizeDaemon(ctx context.Context, req *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error) {
+	return c.resizeDaemon.CallUnary(ctx, req)
+}
+
 // SetPortAccess calls controlplane.v1.DaemonService.SetPortAccess.
 func (c *daemonServiceClient) SetPortAccess(ctx context.Context, req *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error) {
 	return c.setPortAccess.CallUnary(ctx, req)
@@ -252,6 +280,19 @@ type DaemonServiceHandler interface {
 	DeleteDaemon(context.Context, *connect.Request[v1.DeleteDaemonRequest]) (*connect.Response[v1.DeleteDaemonResponse], error)
 	SuspendDaemon(context.Context, *connect.Request[v1.SuspendDaemonRequest]) (*connect.Response[v1.SuspendDaemonResponse], error)
 	ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error)
+	// ResizeDaemon changes a MANAGED daemon's machine size — the one path that
+	// does. The daemon must be SUSPENDED (FailedPrecondition otherwise): like
+	// changing a cloud VM's instance type, the new size takes effect when the
+	// machine next starts, because ResumeDaemon rebuilds the pod from the
+	// re-stamped spec (size, CPU/memory, disk). Resizing a running machine is
+	// therefore stop → resize → start, which the caller drives.
+	//
+	// The new size is gated exactly like CreateDaemon and ResumeDaemon
+	// (svcdaemon.checkDaemonSizeAllowed), so a refusal here is the same refusal
+	// the following resume would have produced. Resizing to the current size
+	// is a successful no-op. Disks only grow: a downsize keeps the larger disk,
+	// which is billed at its bound capacity.
+	ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error)
 	SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error)
 	RemovePortAccess(context.Context, *connect.Request[v1.RemovePortAccessRequest]) (*connect.Response[v1.RemovePortAccessResponse], error)
 	ListPortAccessRules(context.Context, *connect.Request[v1.ListPortAccessRulesRequest]) (*connect.Response[v1.ListPortAccessRulesResponse], error)
@@ -312,6 +353,12 @@ func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOp
 		connect.WithSchema(daemonServiceMethods.ByName("ResumeDaemon")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonServiceResizeDaemonHandler := connect.NewUnaryHandler(
+		DaemonServiceResizeDaemonProcedure,
+		svc.ResizeDaemon,
+		connect.WithSchema(daemonServiceMethods.ByName("ResizeDaemon")),
+		connect.WithHandlerOptions(opts...),
+	)
 	daemonServiceSetPortAccessHandler := connect.NewUnaryHandler(
 		DaemonServiceSetPortAccessProcedure,
 		svc.SetPortAccess,
@@ -352,6 +399,8 @@ func NewDaemonServiceHandler(svc DaemonServiceHandler, opts ...connect.HandlerOp
 			daemonServiceSuspendDaemonHandler.ServeHTTP(w, r)
 		case DaemonServiceResumeDaemonProcedure:
 			daemonServiceResumeDaemonHandler.ServeHTTP(w, r)
+		case DaemonServiceResizeDaemonProcedure:
+			daemonServiceResizeDaemonHandler.ServeHTTP(w, r)
 		case DaemonServiceSetPortAccessProcedure:
 			daemonServiceSetPortAccessHandler.ServeHTTP(w, r)
 		case DaemonServiceRemovePortAccessProcedure:
@@ -395,6 +444,10 @@ func (UnimplementedDaemonServiceHandler) SuspendDaemon(context.Context, *connect
 
 func (UnimplementedDaemonServiceHandler) ResumeDaemon(context.Context, *connect.Request[v1.ResumeDaemonRequest]) (*connect.Response[v1.ResumeDaemonResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.ResumeDaemon is not implemented"))
+}
+
+func (UnimplementedDaemonServiceHandler) ResizeDaemon(context.Context, *connect.Request[v1.ResizeDaemonRequest]) (*connect.Response[v1.ResizeDaemonResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.DaemonService.ResizeDaemon is not implemented"))
 }
 
 func (UnimplementedDaemonServiceHandler) SetPortAccess(context.Context, *connect.Request[v1.SetPortAccessRequest]) (*connect.Response[v1.SetPortAccessResponse], error) {

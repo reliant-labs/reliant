@@ -96,31 +96,14 @@ export async function createEnvironment(args: CreateEnvironmentArgs): Promise<Da
   return res.daemon;
 }
 
-// Canonical CPU/memory pairs per size — mirrors admin-web's detail-page map so
-// an Update keeps the daemon's resources consistent with its size tier.
-const SIZE_RESOURCES: Record<number, { cpu: string; memory: string }> = {
-  [DaemonSize.DAEMON_SIZE_SMALL]: { cpu: "1", memory: "2Gi" },
-  [DaemonSize.DAEMON_SIZE_MEDIUM]: { cpu: "2", memory: "4Gi" },
-  [DaemonSize.DAEMON_SIZE_LARGE]: { cpu: "4", memory: "8Gi" },
-  [DaemonSize.DAEMON_SIZE_XL]: { cpu: "8", memory: "16Gi" },
-};
-
-export async function updateEnvironment(args: {
-  daemonId: string;
-  newName: string;
-  size: DaemonSize;
-}): Promise<void> {
-  const res = SIZE_RESOURCES[args.size] ?? SIZE_RESOURCES[DaemonSize.DAEMON_SIZE_MEDIUM];
-  await getControlPlaneClient(DaemonService).updateDaemon({
-    daemonId: args.daemonId,
-    newName: args.newName,
-    resources: {
-      cpuRequest: res.cpu,
-      cpuLimit: res.cpu,
-      memoryRequest: res.memory,
-      memoryLimit: res.memory,
-    },
-  });
+/**
+ * Changes a cloud machine's size. The control plane accepts this only while
+ * the machine is SUSPENDED, and the new size takes effect when it next starts
+ * (control-plane docs/design/daemon-resize.md); resizing a running machine is
+ * stop → resize → start, which `restartMachine`'s `resize` step drives.
+ */
+export async function resizeDaemon(daemonId: string, size: DaemonSize): Promise<void> {
+  await getControlPlaneClient(DaemonService).resizeDaemon({ daemonId, size });
 }
 
 export async function suspendDaemon(daemonId: string): Promise<void> {

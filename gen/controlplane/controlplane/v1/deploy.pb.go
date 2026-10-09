@@ -909,8 +909,8 @@ type DeployHoldKind int32
 const (
 	DeployHoldKind_DEPLOY_HOLD_KIND_UNSPECIFIED DeployHoldKind = 0
 	// The deploy runs something that needs an active Reliant Compute plan — a
-	// hosted workload, a managed database, or a static site — and the
-	// organization has none.
+	// hosted workload, a managed database, or static sites beyond the free
+	// tier — and the organization has none.
 	DeployHoldKind_DEPLOY_HOLD_KIND_BILLING DeployHoldKind = 1
 )
 

@@ -80,6 +80,7 @@ import {
   listPortAccessRules,
   portAccessRulesQueryKey,
   removePortAccess,
+  resizeDaemon,
   resumeEnvironment,
   setPortAccess,
   suspendDaemon,
@@ -261,6 +262,11 @@ const SIZE_TIERS = [
   { value: DaemonSize.DAEMON_SIZE_MEDIUM, name: "medium", label: "Medium", specs: formatMachineSpec("medium") },
   { value: DaemonSize.DAEMON_SIZE_LARGE, name: "large", label: "Large", specs: formatMachineSpec("large") },
   { value: DaemonSize.DAEMON_SIZE_XL, name: "xl", label: "XL", specs: formatMachineSpec("xl") },
+  // The catalog sells 2xl (see Billing/machineSpecs.ts). Without a row here a
+  // plan that allows it could neither create one nor resize to one, and an
+  // existing 2xl machine read as "Custom". Whether it is OFFERED is still the
+  // server's call, via allowed_daemon_sizes.
+  { value: DaemonSize.DAEMON_SIZE_2XL, name: "2xl", label: "2XL", specs: formatMachineSpec("2xl") },
 ] as const;
 
 // ── Copy for the un-funded state ────────────────────────────────────────────
@@ -1310,20 +1316,31 @@ function CreateEnvironmentModal({
  * Self-hosted machines get nothing: `lifecyclePlan` returns an empty offer
  * for them, and the detail view explains why in prose instead.
  */
+const STAGE_LABEL: Record<RestartStage, string> = {
+  stopping: "Stopping…",
+  resizing: "Resizing…",
+  starting: "Starting…",
+};
+
 function MachineLifecycleActions({
   daemon,
   busy,
   restartStage,
+  cycling,
   onSuspend,
   onResume,
   onRestart,
+  onResize,
 }: {
   daemon: Daemon;
   busy: boolean;
   restartStage: RestartStage | null;
+  /** Which action is driving `restartStage` — that button narrates it. */
+  cycling: LifecycleAction | null;
   onSuspend: () => void;
   onResume: () => void;
   onRestart: () => void;
+  onResize: () => void;
 }) {
   const plan = lifecyclePlan(daemon, restartStage);
   if (plan.offer.length === 0) return null;
@@ -1335,23 +1352,30 @@ function MachineLifecycleActions({
   const disabled = busy || plan.disabledReason !== null;
   const reason = plan.disabledReason ?? undefined;
 
+  // While a restart (or a resize of a running machine, which is a restart
+  // with a step in the middle) runs, the button that started it narrates the
+  // stage — the whole operation takes a pod teardown plus a cold start, which
+  // is long enough that a silent spinner reads as a hang.
+  const narrated = (action: LifecycleAction, idle: string) =>
+    restartStage && cycling === action ? STAGE_LABEL[restartStage] : idle;
+
   const label: Record<LifecycleAction, string> = {
     suspend: "Suspend",
     resume: "Resume",
-    // While a restart runs, the button narrates the stage it is in — the
-    // whole operation takes a pod teardown plus a cold start, which is long
-    // enough that a silent spinner reads as a hang.
-    restart: restartStage === "stopping" ? "Stopping…" : restartStage === "starting" ? "Starting…" : "Restart",
+    restart: narrated("restart", "Restart"),
+    resize: narrated("resize", "Resize"),
   };
   const icon: Record<LifecycleAction, React.ReactNode> = {
     suspend: <Pause className="h-4 w-4" />,
     resume: <Play className="h-4 w-4" />,
-    restart: <RefreshCw className={cn("h-4 w-4", restartStage && "animate-spin")} />,
+    restart: <RefreshCw className={cn("h-4 w-4", restartStage && cycling === "restart" && "animate-spin")} />,
+    resize: <Cpu className="h-4 w-4" />,
   };
   const onClick: Record<LifecycleAction, () => void> = {
     suspend: onSuspend,
     resume: onResume,
     restart: onRestart,
+    resize: onResize,
   };
 
   return (
@@ -1421,6 +1445,186 @@ function RestartMachineModal({
   );
 }
 
+/**
+ * Resize: pick a new size, then confirm what that will do.
+ *
+ * A size changes only while the machine is stopped (control-plane
+ * docs/design/daemon-resize.md), so what confirming DOES depends on the
+ * machine's state, and the copy says which. A suspended machine is resized
+ * now and starts on the new size next time. A running one is restarted onto
+ * it, which disconnects whatever runs there — the same warning Restart gives,
+ * for the same reason.
+ *
+ * Sizes come from the server answer the create picker uses
+ * (GetCurrentUserComputeEligibility.allowed_daemon_sizes). A size the plan
+ * does not include is shown disabled rather than hidden: someone resizing up
+ * is exactly the person who needs to learn the size exists and what unlocks
+ * it.
+ */
+function ResizeMachineModal({
+  target,
+  currentSize,
+  storageSize,
+  running,
+  allowedSizes,
+  sizesLoading,
+  pricing,
+  isPending,
+  stage,
+  error,
+  onClose,
+  onConfirm,
+  onSeePlans,
+}: {
+  target: Daemon | null;
+  currentSize: DaemonSize | undefined;
+  /** The machine's current data disk, e.g. "80Gi", for the downsize note. */
+  storageSize?: string;
+  running: boolean;
+  allowedSizes: DaemonSize[];
+  sizesLoading: boolean;
+  pricing?: DaemonPricingLike;
+  isPending: boolean;
+  stage: RestartStage | null;
+  error: string;
+  onClose: () => void;
+  onConfirm: (size: DaemonSize) => void;
+  onSeePlans: () => void;
+}) {
+  const groupId = useId();
+  const [selected, setSelected] = useState<DaemonSize | null>(null);
+  // A fresh choice every time the modal opens: carrying a previous pick into
+  // a later resize of a machine that has since changed would pre-select a
+  // size nobody chose this time.
+  useEffect(() => {
+    if (!target) setSelected(null);
+  }, [target]);
+
+  const currentIndex = SIZE_TIERS.findIndex((t) => t.value === currentSize);
+  const selectedIndex = SIZE_TIERS.findIndex((t) => t.value === selected);
+  const shrinking = selected !== null && currentIndex >= 0 && selectedIndex < currentIndex;
+  const someDisallowed = !sizesLoading && SIZE_TIERS.some((t) => !allowedSizes.includes(t.value));
+  const name = target ? daemonDisplayName(target) : "";
+
+  return (
+    <Modal open={target !== null} onClose={isPending ? () => {} : onClose} title="Resize Machine" maxWidth="max-w-xl">
+      <p className="text-sm text-muted-foreground" data-testid="resize-effect">
+        {running ? (
+          <>
+            Resizing restarts <span className="font-semibold text-foreground">{name}</span>, so any open
+            sessions on it — running agents, terminals and dev servers — will disconnect. Files on
+            its disk are kept.
+          </>
+        ) : (
+          <>
+            <span className="font-semibold text-foreground">{name}</span> is suspended. The new size
+            takes effect the next time it starts.
+          </>
+        )}
+      </p>
+
+      <div role="radiogroup" aria-label="Size" className="mt-4 grid grid-cols-2 gap-2">
+        {SIZE_TIERS.map((t) => {
+          const isCurrent = t.value === currentSize;
+          const allowed = allowedSizes.includes(t.value);
+          const choosable = !isCurrent && allowed && !sizesLoading && !isPending;
+          const isSelected = selected === t.value;
+          const price = hourlyPriceShort(pricing, t.name);
+          const burn = sizeFacts(pricing, t.name)?.burnRateLabel;
+          const labelId = `${groupId}-size-${t.name}`;
+          const detailId = `${labelId}-detail`;
+          return (
+            <button
+              key={t.name}
+              type="button"
+              role="radio"
+              aria-checked={isSelected}
+              aria-labelledby={labelId}
+              aria-describedby={detailId}
+              disabled={!choosable}
+              data-testid={`resize-size-${t.name}`}
+              onClick={() => setSelected(t.value)}
+              className={cn(
+                "rounded-lg border-2 p-3 text-left transition-colors disabled:cursor-not-allowed",
+                isSelected
+                  ? "border-primary bg-primary/5"
+                  : "border-border bg-card enabled:hover:border-muted-foreground/40",
+                !choosable && !isCurrent && "opacity-50",
+              )}
+            >
+              <div className="flex items-baseline justify-between gap-2">
+                <span id={labelId} className="text-sm font-semibold text-foreground">{t.label}</span>
+                {isCurrent ? (
+                  <Badge label="Current" variant="neutral" />
+                ) : (
+                  price && (
+                    <span className="whitespace-nowrap text-sm font-semibold tabular-nums text-foreground">
+                      {price}
+                    </span>
+                  )
+                )}
+              </div>
+              <div id={detailId}>
+                <div className="mt-1 whitespace-nowrap text-xs text-muted-foreground">{t.specs}</div>
+                {!allowed && !isCurrent && !sizesLoading ? (
+                  <div className="mt-0.5 text-xs text-muted-foreground">Not on your plan</div>
+                ) : (
+                  burn && <div className="mt-0.5 text-xs text-muted-foreground first-letter:uppercase">{burn}</div>
+                )}
+              </div>
+            </button>
+          );
+        })}
+      </div>
+
+      {sizesLoading && <p className="mt-2 text-xs text-muted-foreground">Checking which sizes your plan includes…</p>}
+      {someDisallowed && (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Larger sizes need a bigger compute plan.{" "}
+          <button type="button" onClick={onSeePlans} className="font-medium text-primary hover:underline">
+            See plans
+          </button>
+        </p>
+      )}
+
+      {/* Disks only grow (the operator never shrinks a bound volume), so a
+          smaller size keeps the disk it has — and the meter bills a disk at
+          its real capacity, not at the smaller tier's number. Saying so
+          before the click is the difference between a known trade-off and
+          a surprise on the bill. */}
+      {shrinking && (
+        <CardInset className="mt-4 text-sm text-muted-foreground" data-testid="resize-disk-note">
+          The disk doesn&apos;t shrink: this machine keeps its current
+          {storageSize ? ` ${storageSize}` : ""} disk, and is billed for it at that size.
+        </CardInset>
+      )}
+
+      {stage && (
+        <p className="mt-4 text-sm font-medium text-foreground" data-testid="resize-progress">
+          {stage === "stopping"
+            ? "Stopping the machine…"
+            : stage === "resizing"
+              ? "Applying the new size…"
+              : "Starting the machine…"}
+        </p>
+      )}
+
+      <ErrorNote message={error} />
+
+      <div className="mt-6 flex justify-end gap-3">
+        <Button variant="outline" disabled={isPending} onClick={onClose}>Cancel</Button>
+        <Button
+          isLoading={isPending}
+          disabled={selected === null}
+          onClick={() => selected !== null && onConfirm(selected)}
+        >
+          {isPending ? "Resizing…" : running ? "Resize and restart" : "Resize"}
+        </Button>
+      </div>
+    </Modal>
+  );
+}
+
 function InfoRow({ label, value }: { label: string; value: React.ReactNode }) {
   return (
     <div className="flex justify-between gap-4 border-b border-border py-2 last:border-0">
@@ -1449,6 +1653,12 @@ function EnvironmentDetail({
   // a restart is two RPCs with a wait between them and the daemon's own
   // status is not sufficient to tell you one is in flight.
   const [restartStage, setRestartStage] = useState<RestartStage | null>(null);
+  // Which action owns `restartStage`: a Restart, or a Resize of a running
+  // machine (a restart with the resize done while it is stopped).
+  const [cycling, setCycling] = useState<LifecycleAction | null>(null);
+  const [resizeOpen, setResizeOpen] = useState(false);
+  const [resizeError, setResizeError] = useState("");
+  const goToBilling = useGoToBilling();
 
   // The detail view reads BOTH halves, from the service that owns each.
   //
@@ -1521,37 +1731,91 @@ function EnvironmentDetail({
    * force-rolls a running pod), so this sequence is what actually rolls a
    * new workspace image.
    */
+  // The stop → (resize) → start sequence shared by Restart and by Resize of a
+  // running machine.
+  const cycleMachine = (resize?: () => Promise<void>) =>
+    restartMachine({
+      suspend: () => suspendDaemon(daemonId),
+      resume: () => resumeEnvironment(daemonId),
+      // Polls the REGISTRY, which owns status and lifecycle phase. This
+      // read used to be control-plane's GetDaemon; pointing it at the one
+      // list keeps the signal restartMachine waits on (phase SUSPENDED) and
+      // the status the UI shows from coming out of two different services,
+      // which is the disagreement docs/design/one-daemon-list.md removes.
+      poll: async () => {
+        const resp = await grpcClient
+          .daemonRegistry()
+          .listDaemons(create(ListDaemonsRequestSchema));
+        const row = resp.daemons.find((d) => d.daemonId === daemonId);
+        return {
+          phase: row?.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED,
+          status: row?.status ?? 0,
+        };
+      },
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      onStage: setRestartStage,
+      resize,
+    });
+
   const restartMut = useMutation({
     mutationFn: async () => {
-      await restartMachine({
-        suspend: () => suspendDaemon(daemonId),
-        resume: () => resumeEnvironment(daemonId),
-        // Polls the REGISTRY, which owns status and lifecycle phase. This
-        // read used to be control-plane's GetDaemon; pointing it at the one
-        // list keeps the signal restartMachine waits on (phase SUSPENDED) and
-        // the status the UI shows from coming out of two different services,
-        // which is the disagreement docs/design/one-daemon-list.md removes.
-        poll: async () => {
-          const resp = await grpcClient
-            .daemonRegistry()
-            .listDaemons(create(ListDaemonsRequestSchema));
-          const row = resp.daemons.find((d) => d.daemonId === daemonId);
-          return {
-            phase: row?.lifecyclePhase ?? LIFECYCLE_PHASE_UNSPECIFIED,
-            status: row?.status ?? 0,
-          };
-        },
-        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-        onStage: setRestartStage,
-      });
+      setCycling("restart");
+      await cycleMachine();
     },
     onSuccess: () => { setError(""); refetchAll(); },
     onError: (e) => setError(describeError(e, "Failed to restart machine")),
     // Clear the stage on BOTH paths: leaving it set after a failure would
     // disable every lifecycle button with a stale "Stopping…" reason and
     // strand the machine with no way to act on it from this page.
-    onSettled: () => { setRestartStage(null); refetchAll(); },
+    onSettled: () => { setRestartStage(null); setCycling(null); refetchAll(); },
   });
+
+  /**
+   * Resize. The control plane resizes only a SUSPENDED machine, and the size
+   * lands when it next starts (control-plane docs/design/daemon-resize.md):
+   *
+   *   suspended → one ResizeDaemon call; the machine stays suspended.
+   *   otherwise → the Restart sequence with the resize done while stopped.
+   *               restartMachine starts the machine again even if the resize
+   *               is refused, so a denial costs a restart, never a machine
+   *               the user had running.
+   */
+  const resizeMut = useMutation({
+    mutationFn: async (size: DaemonSize) => {
+      if (daemon?.status === DaemonStatus.SUSPENDED) {
+        await resizeDaemon(daemonId, size);
+        return;
+      }
+      setCycling("resize");
+      await cycleMachine(() => resizeDaemon(daemonId, size));
+    },
+    onSuccess: (_data, size) => {
+      setResizeError("");
+      setResizeOpen(false);
+      const label = SIZE_TIERS.find((t) => t.value === size)?.label ?? "the new size";
+      toast.success(
+        daemon?.status === DaemonStatus.SUSPENDED
+          ? `${daemon ? daemonDisplayName(daemon) : "The machine"} will start as ${label}`
+          : `${daemon ? daemonDisplayName(daemon) : "The machine"} is restarting as ${label}`,
+      );
+    },
+    onError: (e) => setResizeError(describeError(e, "Failed to resize machine")),
+    onSettled: () => { setRestartStage(null); setCycling(null); refetchAll(); },
+  });
+
+  // Only fetched once someone opens Resize: the same server answer the
+  // create picker uses, so the two cannot disagree about what is runnable.
+  const resizeEligibilityQ = useQuery({
+    queryKey: QK.computeEligibility,
+    queryFn: () => getComputeEligibility(),
+    staleTime: 30_000,
+    enabled: cloud && resizeOpen,
+  });
+  const resizeAllowed = useMemo(
+    () => sizeTiersFromWire(resizeEligibilityQ.data?.allowedDaemonSizes ?? []),
+    [resizeEligibilityQ.data?.allowedDaemonSizes],
+  );
+  const resizePricing = usePlans({ enabled: cloud && resizeOpen }).data?.daemonPricing;
 
   const status = daemon ? daemonStatus(daemon) : "pending";
   const waking = useWakingMachines();
@@ -1564,7 +1828,16 @@ function EnvironmentDetail({
     : statusBadge[status];
   const connected = daemon?.status === DaemonStatus.ACTIVE;
   const busy =
-    suspendMut.isPending || resumeMut.isPending || deleteMut.isPending || restartMut.isPending;
+    suspendMut.isPending ||
+    resumeMut.isPending ||
+    deleteMut.isPending ||
+    restartMut.isPending ||
+    resizeMut.isPending;
+  // The registry's size name first; control-plane's spec as a fallback for a
+  // row whose size never reached the mirror.
+  const currentSize =
+    SIZE_TIERS.find((t) => t.name === daemon?.size)?.value ??
+    (spec?.size ? SIZE_TIERS.find((t) => t.value === spec.size)?.value : undefined);
   const external = daemon ? isExternalDaemon(daemon) : false;
   // The registry list is what proves the machine exists; the control-plane
   // spec is an extra half that only a cloud build has.
@@ -1619,9 +1892,11 @@ function EnvironmentDetail({
                 daemon={daemon}
                 busy={busy}
                 restartStage={restartStage}
+                cycling={cycling}
                 onSuspend={() => suspendMut.mutate()}
                 onResume={() => resumeMut.mutate()}
                 onRestart={() => setRestartOpen(true)}
+                onResize={() => { setResizeError(""); setResizeOpen(true); }}
               />
               {(() => {
                 const removal = canRemoveDaemon(daemon);
@@ -1696,7 +1971,7 @@ function EnvironmentDetail({
                     </>
                   ) : (
                     <>
-                      <InfoRow label="Size" value={SIZE_TIERS.find((t) => t.name === daemon.size)?.label ?? "Custom"} />
+                      <InfoRow label="Size" value={SIZE_TIERS.find((t) => t.value === currentSize)?.label ?? "Custom"} />
                       <InfoRow label="Storage" value={spec?.storageSize} />
                     </>
                   )}
@@ -1755,6 +2030,22 @@ function EnvironmentDetail({
             onConfirm={() =>
               restartMut.mutate(undefined, { onSuccess: () => setRestartOpen(false) })
             }
+          />
+
+          <ResizeMachineModal
+            target={resizeOpen ? daemon : null}
+            currentSize={currentSize}
+            storageSize={spec?.storageSize}
+            running={daemon.status !== DaemonStatus.SUSPENDED}
+            allowedSizes={resizeAllowed}
+            sizesLoading={resizeEligibilityQ.isLoading}
+            pricing={resizePricing}
+            isPending={resizeMut.isPending}
+            stage={cycling === "resize" ? restartStage : null}
+            error={resizeError}
+            onClose={() => setResizeOpen(false)}
+            onConfirm={(size) => resizeMut.mutate(size)}
+            onSeePlans={goToBilling}
           />
         </>
       )}

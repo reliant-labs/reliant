@@ -34,9 +34,10 @@ type DeployCapacityCode int32
 const (
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_UNSPECIFIED DeployCapacityCode = 0
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_OK          DeployCapacityCode = 1
-	// The deploy runs something — compute or a static site — and the org has
-	// no active compute plan.
+	// The deploy runs compute and the org has no active compute plan.
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN DeployCapacityCode = 2
+	// No plan, static sites only, beyond the free tier.
+	DeployCapacityCode_DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED DeployCapacityCode = 3
 	// A plan exists and the demand does not fit its compute ceiling.
 	DeployCapacityCode_DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING DeployCapacityCode = 4
 	// The org's spend cap has been reached.
@@ -51,17 +52,19 @@ var (
 		0: "DEPLOY_CAPACITY_CODE_UNSPECIFIED",
 		1: "DEPLOY_CAPACITY_CODE_OK",
 		2: "DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN",
+		3: "DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED",
 		4: "DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING",
 		5: "DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED",
 		6: "DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN",
 	}
 	DeployCapacityCode_value = map[string]int32{
-		"DEPLOY_CAPACITY_CODE_UNSPECIFIED":       0,
-		"DEPLOY_CAPACITY_CODE_OK":                1,
-		"DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN":   2,
-		"DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING":   4,
-		"DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED": 5,
-		"DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN":      6,
+		"DEPLOY_CAPACITY_CODE_UNSPECIFIED":               0,
+		"DEPLOY_CAPACITY_CODE_OK":                        1,
+		"DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN":           2,
+		"DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED": 3,
+		"DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING":           4,
+		"DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED":         5,
+		"DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN":              6,
 	}
 )
 
@@ -4290,10 +4293,12 @@ type DeployCapacityDemand struct {
 	Workloads int32 `protobuf:"varint,4,opt,name=workloads,proto3" json:"workloads,omitempty"`
 	Databases int32 `protobuf:"varint,5,opt,name=databases,proto3" json:"databases,omitempty"`
 	Builds    int32 `protobuf:"varint,6,opt,name=builds,proto3" json:"builds,omitempty"`
-	// Static sites this environment would hold.
-	StaticSites   int32 `protobuf:"varint,7,opt,name=static_sites,json=staticSites,proto3" json:"static_sites,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	// Static sites this environment would hold. The server adds the org's
+	// sites in OTHER environments, because the free tier is per org.
+	StaticSites      int32 `protobuf:"varint,7,opt,name=static_sites,json=staticSites,proto3" json:"static_sites,omitempty"`
+	StaticStorageGib int64 `protobuf:"varint,8,opt,name=static_storage_gib,json=staticStorageGib,proto3" json:"static_storage_gib,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *DeployCapacityDemand) Reset() {
@@ -4375,9 +4380,17 @@ func (x *DeployCapacityDemand) GetStaticSites() int32 {
 	return 0
 }
 
+func (x *DeployCapacityDemand) GetStaticStorageGib() int64 {
+	if x != nil {
+		return x.StaticStorageGib
+	}
+	return 0
+}
+
 type CheckDeployCapacityRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// The environment being deployed to.
+	// The environment being deployed to. Its OTHER sites are excluded from the
+	// org-wide static count so a redeploy does not count itself twice.
 	EnvironmentId string                `protobuf:"bytes,1,opt,name=environment_id,json=environmentId,proto3" json:"environment_id,omitempty"`
 	Demand        *DeployCapacityDemand `protobuf:"bytes,2,opt,name=demand,proto3" json:"demand,omitempty"`
 	unknownFields protoimpl.UnknownFields
@@ -4991,8 +5004,17 @@ type LedgerImportPromotion struct {
 	// The original promotion time, set EXPLICITLY. Load-bearing rather than
 	// cosmetic: promotions import in this order, and it is what makes the
 	// reconstructed timeline match the one the files describe.
-	PromotedAt    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=promoted_at,json=promotedAt,proto3" json:"promoted_at,omitempty"`
-	ImportedFrom  string                 `protobuf:"bytes,10,opt,name=imported_from,json=importedFrom,proto3" json:"imported_from,omitempty"`
+	PromotedAt   *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=promoted_at,json=promotedAt,proto3" json:"promoted_at,omitempty"`
+	ImportedFrom string                 `protobuf:"bytes,10,opt,name=imported_from,json=importedFrom,proto3" json:"imported_from,omitempty"`
+	// The FILE's promotion id, preserved verbatim.
+	//
+	// Required, and not minted server-side: forge's "N promotions never
+	// imported" refusal compares the file's ids against the hosted ones, so a
+	// re-minted id would make every imported promotion look un-imported forever
+	// and `forge env deploy` would refuse a ledger that had in fact been
+	// imported. It is also what makes a re-import recognise what it already
+	// wrote.
+	Id            string `protobuf:"bytes,11,opt,name=id,proto3" json:"id,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5093,6 +5115,13 @@ func (x *LedgerImportPromotion) GetPromotedAt() *timestamppb.Timestamp {
 func (x *LedgerImportPromotion) GetImportedFrom() string {
 	if x != nil {
 		return x.ImportedFrom
+	}
+	return ""
+}
+
+func (x *LedgerImportPromotion) GetId() string {
+	if x != nil {
+		return x.Id
 	}
 	return ""
 }
@@ -5830,7 +5859,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\tbundle_id\x18\x02 \x01(\tR\bbundleId\x12'\n" +
 	"\x0frelease_version\x18\x03 \x01(\tR\x0ereleaseVersion\"E\n" +
 	"\x12PlanDeployResponse\x12/\n" +
-	"\x04plan\x18\x01 \x01(\v2\x1b.controlplane.v1.DeployPlanR\x04plan\"\xf8\x01\n" +
+	"\x04plan\x18\x01 \x01(\v2\x1b.controlplane.v1.DeployPlanR\x04plan\"\xa6\x02\n" +
 	"\x14DeployCapacityDemand\x12%\n" +
 	"\x0ecpu_millicores\x18\x01 \x01(\x03R\rcpuMillicores\x12!\n" +
 	"\fmemory_bytes\x18\x02 \x01(\x03R\vmemoryBytes\x12\x1f\n" +
@@ -5839,7 +5868,8 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\tworkloads\x18\x04 \x01(\x05R\tworkloads\x12\x1c\n" +
 	"\tdatabases\x18\x05 \x01(\x05R\tdatabases\x12\x16\n" +
 	"\x06builds\x18\x06 \x01(\x05R\x06builds\x12!\n" +
-	"\fstatic_sites\x18\a \x01(\x05R\vstaticSites\"\x82\x01\n" +
+	"\fstatic_sites\x18\a \x01(\x05R\vstaticSites\x12,\n" +
+	"\x12static_storage_gib\x18\b \x01(\x03R\x10staticStorageGib\"\x82\x01\n" +
 	"\x1aCheckDeployCapacityRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\x12=\n" +
 	"\x06demand\x18\x02 \x01(\v2%.controlplane.v1.DeployCapacityDemandR\x06demand\"\x8f\x03\n" +
@@ -5891,7 +5921,7 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindR\x04kind\x129\n" +
 	"\n" +
 	"deleted_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tdeletedAt\x12#\n" +
-	"\rimported_from\x18\x04 \x01(\tR\fimportedFrom\"\xe1\x05\n" +
+	"\rimported_from\x18\x04 \x01(\tR\fimportedFrom\"\xf1\x05\n" +
 	"\x15LedgerImportPromotion\x12 \n" +
 	"\venvironment\x18\x01 \x01(\tR\venvironment\x12'\n" +
 	"\x0frelease_version\x18\x02 \x01(\tR\x0ereleaseVersion\x12l\n" +
@@ -5904,7 +5934,8 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\vpromoted_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"promotedAt\x12#\n" +
 	"\rimported_from\x18\n" +
-	" \x01(\tR\fimportedFrom\x1aD\n" +
+	" \x01(\tR\fimportedFrom\x12\x0e\n" +
+	"\x02id\x18\v \x01(\tR\x02id\x1aD\n" +
 	"\x16ResolvedArtifactsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1aa\n" +
@@ -5945,11 +5976,12 @@ const file_services_deploy_v1_deploy_proto_rawDesc = "" +
 	"\x15GetDeployDriftRequest\x12%\n" +
 	"\x0eenvironment_id\x18\x01 \x01(\tR\renvironmentId\"L\n" +
 	"\x16GetDeployDriftResponse\x122\n" +
-	"\x05drift\x18\x01 \x01(\v2\x1c.controlplane.v1.DeployDriftR\x05drift*\xfe\x01\n" +
+	"\x05drift\x18\x01 \x01(\v2\x1c.controlplane.v1.DeployDriftR\x05drift*\xb2\x02\n" +
 	"\x12DeployCapacityCode\x12$\n" +
 	" DEPLOY_CAPACITY_CODE_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17DEPLOY_CAPACITY_CODE_OK\x10\x01\x12(\n" +
-	"$DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN\x10\x02\x12(\n" +
+	"$DEPLOY_CAPACITY_CODE_NO_COMPUTE_PLAN\x10\x02\x122\n" +
+	".DEPLOY_CAPACITY_CODE_STATIC_FREE_TIER_EXCEEDED\x10\x03\x12(\n" +
 	"$DEPLOY_CAPACITY_CODE_EXCEEDS_CEILING\x10\x04\x12*\n" +
 	"&DEPLOY_CAPACITY_CODE_SPEND_CAP_REACHED\x10\x05\x12%\n" +
 	"!DEPLOY_CAPACITY_CODE_PLAN_UNKNOWN\x10\x062\x9d\x1f\n" +

@@ -3909,8 +3909,8 @@ export enum DeployHoldKind {
 
   /**
    * The deploy runs something that needs an active Reliant Compute plan — a
-   * hosted workload, a managed database, or a static site — and the
-   * organization has none.
+   * hosted workload, a managed database, or static sites beyond the free
+   * tier — and the organization has none.
    *
    * @generated from enum value: DEPLOY_HOLD_KIND_BILLING = 1;
    */
