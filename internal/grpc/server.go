@@ -6,6 +6,7 @@ import (
 	"crypto/tls"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -29,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
@@ -155,6 +157,9 @@ func NewServer(cfg *Config) (*Server, error) {
 		// this interceptor (reliant:api only) refuses by design. Public here
 		// means "not gated by the interceptor", never unauthenticated.
 		reliantv1connect.TokenServiceExchangeTokenProcedure,
+		// GetGitToken authenticates its own bearer for the same reason, and
+		// admits only a daemon credential.
+		reliantv1connect.TokenServiceGetGitTokenProcedure,
 	}
 	authInterceptor, err := interceptors.NewAuthInterceptor(cfg.JWTPublicKey, cfg.JWKSURL, publicMethods)
 	if err != nil {
@@ -230,6 +235,19 @@ func NewServer(cfg *Config) (*Server, error) {
 		Issuer:      os.Getenv(cliauth.AuthorizationServerEnv),
 		ClipsGrants: authorityMode == tokenauthority.ModeControlPlane,
 	})
+	if cpURL := tokenauthority.ControlPlaneURL(); cpURL != "" {
+		// Hosted users' git tokens live at control-plane. tokenauthority.New
+		// already refused to boot without the secret; check again so this
+		// wiring never rests on that ordering.
+		secret := strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET"))
+		if secret == "" {
+			return nil, errors.New("git tokens: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not")
+		}
+		tokenService.WithGitTokens(gitcredentialclient.New(gitcredentialclient.Deps{
+			BaseURL: cpURL,
+			Sign:    func() (string, error) { return auth.SignInternalServiceToken(secret) },
+		}))
+	}
 	daemonProxyService := services.NewDaemonProxyService(router)
 	toolCallService := services.NewToolCallService(database, cfg.TemporalClient, router)
 

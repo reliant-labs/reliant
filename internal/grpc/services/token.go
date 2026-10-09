@@ -27,6 +27,7 @@ type TokenService struct {
 	reliantv1connect.UnimplementedTokenServiceHandler
 	authority    tokenauthority.Authority
 	controlPlane TokenControlPlane
+	gitTokens    gitTokenSource
 }
 
 // NewTokenService constructs the facade over authority. controlPlane is the
