@@ -2,7 +2,7 @@
  * The keyboard race: the streaming flag is sampled twice -- once by
  * ChatTextArea's handleKeyDown (to decide send vs. queue vs. newline) and
  * again, independently, by ChatInput's handleSend (`effectiveStreaming`,
- * derived from isDiscussMode / hasPendingQuestion / isStreaming, any of
+ * derived from hasPendingQuestion / isStreaming, any of
  * which can change between the two reads because hasPendingQuestion is a
  * React Query subscription that can settle at any moment).
  *

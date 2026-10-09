@@ -367,7 +367,7 @@ so the window recurs.
 
 **StartChat / SendMessage**
 - The pending arm rejects before saving anything.
-- The paused (including discuss), active, failed (inspect, reset-replay,
+- The paused, active, failed (inspect, reset-replay,
   question resume, coarse resume), completed/cancelled and ghost-resurrection
   arms are unchanged; the diff only reroutes helpers through `launcher()`.
 - Restarts keep `TERMINATE_EXISTING`.

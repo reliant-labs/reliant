@@ -8,7 +8,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
-// Delta identity: producers without a Temporal workflow (e.g. discuss mode)
+// Delta identity: producers without a Temporal workflow (e.g. streaming producers)
 // mint the assistant message id before streaming and must persist under it.
 
 func TestSaveMessageToThreadWithID(t *testing.T) {
@@ -21,7 +21,7 @@ func TestSaveMessageToThreadWithID(t *testing.T) {
 	thread := chatID // root thread id equals chat id
 
 	t.Run("honors provided message id", func(t *testing.T) {
-		fixedID := "discuss-preallocated-id"
+		fixedID := "preallocated-id"
 		msg, err := repo.SaveMessageToThreadWithID(ctx, chatID, thread,
 			int32(reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT), "streamed reply", nil, nil, nil, fixedID)
 		if err != nil {

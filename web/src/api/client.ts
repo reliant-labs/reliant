@@ -393,7 +393,6 @@ export const api = {
         target_thread?: string;
         selected_presets?: Record<string, string>;
 
-        discuss?: boolean; // If true, chat with LLM without resuming paused workflow
         client_message_id?: string; // The id the client gave this message
       }
     ) => {
@@ -413,7 +412,6 @@ export const api = {
         workflow_params: options?.workflow_params,
         target_thread: options?.target_thread,
         selected_presets: options?.selected_presets,
-        discuss: options?.discuss,
         client_message_id: options?.client_message_id,
       });
       // Return workflow metadata for state updates

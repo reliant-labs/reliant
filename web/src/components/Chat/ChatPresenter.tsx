@@ -84,9 +84,6 @@ interface ChatPresenterProps {
   workflowExecution?: WorkflowExecution;
   workflowExecutions?: WorkflowExecution[];
 
-  // Discuss mode
-  isDiscussMode?: boolean;
-
   // Question (ask_user) state
   hasPendingQuestion?: boolean;
 
@@ -126,7 +123,6 @@ export const ChatPresenter = memo(function ChatPresenter({
   paneId,
   workflowExecution,
   workflowExecutions,
-  isDiscussMode,
   hasPendingQuestion,
   onLoadOlderMessages,
   isLoadingOlderMessages,
@@ -181,7 +177,7 @@ export const ChatPresenter = memo(function ChatPresenter({
   // a question drains nothing, so polling it is pure noise), and the
   // "Interrupt & send now" button, which must not be offered when there is no
   // work in flight to stop.
-  const isAgentWorking = isChatBusy && !isDiscussMode && !hasPendingQuestion;
+  const isAgentWorking = isChatBusy && !hasPendingQuestion;
 
   const {
     messages: queuedMessages,
@@ -722,7 +718,6 @@ export const ChatPresenter = memo(function ChatPresenter({
               paneId={paneId}
               selectedThreadId={selectedThreadId}
               workflowExecution={workflowExecution}
-              isDiscussMode={isDiscussMode}
             />
           </div>
         ) : !(isWorkflowViewerExpanded && workflowViewerMode === 'inline') ? (

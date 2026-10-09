@@ -576,7 +576,8 @@ message SendMessageRequest {
   optional string target_thread = 13;  // Target thread ID for the message (defaults to main thread if not specified)
   map<string, string> selected_presets = 14; // Update preset selections (persisted with chat)
   repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
-  bool discuss = 17;              // If true, chat with LLM without resuming paused workflow
+  reserved 17;
+  reserved "discuss";
   // Client-chosen UUID for the user message. When the message is queued for a
   // running thread (see SendMessageResponse.queued) it becomes the queued
   // row's id, so a client can key its optimistic copy by the id the queue

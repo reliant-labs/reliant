@@ -141,8 +141,6 @@ interface ChatInputProps {
   // Thread-specific params
   selectedThreadId?: string | null;  // Currently selected thread (null = main/all)
   workflowExecution?: WorkflowExecution;  // Root workflow execution tree
-  // Discuss mode
-  isDiscussMode?: boolean;
   prefill?: ComposerPrefill;
 }
 
@@ -159,7 +157,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       paneId,
       selectedThreadId,
       workflowExecution,
-      isDiscussMode,
       prefill,
     },
     ref
@@ -1081,8 +1078,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       return resolveThreadNameFromActiveThreads(selectedThreadId, activeThreadsForName) || 'Thread';
     }, [selectedThreadId, workflowExecution, activeThreadsForName]);
 
-    // In discuss mode or when a question is pending, treat as not-streaming so the input stays enabled
-    const effectiveStreaming = isDiscussMode ? false : (hasPendingQuestion ? false : isStreaming);
+    // When a question is pending, treat as not-streaming so the input stays enabled
+    const effectiveStreaming = hasPendingQuestion ? false : isStreaming;
 
     // Allow messaging at all times - users can type while workflow is running
     const isMessagingAllowed = true;
@@ -1286,7 +1283,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       } else if (hasSomethingToSend && effectiveStreaming) {
         // ChatTextArea decided "not streaming, send" at keydown time, but
         // effectiveStreaming flipped true before this handler ran (it is
-        // derived from isDiscussMode / hasPendingQuestion / isStreaming,
+        // derived from hasPendingQuestion / isStreaming,
         // any of which can change between keydown and here). Falling off
         // the end here would silently drop the keystroke -- queue it into
         // the running agent's mailbox instead, same as onQueue does.
@@ -1618,12 +1615,12 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           <div className="max-w-[1200px] mx-auto">
             <div ref={containerRef} className="mt-1 mb-1.5">
               <div
-                className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${isDiscussMode ? "border-blue-500/70" : hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
+                className={`relative rounded-lg chat-input-container border-2 transition-all duration-200 cursor-text ${hasPendingQuestion ? "border-yellow-500/70" : threadBorderColor ? "" : "border-border/70"}`}
                 data-onboarding="chat-input"
                 onClick={handleInputContainerClick}
                 style={{
                   padding: "4px 8px",
-                  ...(threadBorderColor && !isDiscussMode ? { borderColor: threadBorderColor } : {}),
+                  ...(threadBorderColor ? { borderColor: threadBorderColor } : {}),
                   backgroundColor: isDragging
                     ? "var(--chat-drag-bg, var(--transparent-button-hover))"
                     : effectiveStreaming
@@ -1685,15 +1682,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         style={{ color: threadBorderColor }}
                       >
                         {threadDisplayName}
-                      </span>
-                    </div>
-                  )}
-
-                  {/* Discuss mode hint */}
-                  {isDiscussMode && (
-                    <div className="px-3 py-1">
-                      <span className="text-xs text-blue-600 dark:text-blue-400">
-                        Discussion mode — messages won't resume the workflow
                       </span>
                     </div>
                   )}

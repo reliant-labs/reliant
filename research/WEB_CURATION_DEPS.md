@@ -68,7 +68,7 @@ Client-supplied only, and it is a short list. `chatGrpc.sendMessage`
 (`web/src/api/chat-grpc.ts:390-416`) attaches exactly: `chatId`, `messages`
 (role/content/displayStyle), `attachments` (attachment ID strings),
 `workflow`, `mode`, `temperature`, `maxTokens`, `workflowParams`,
-`targetThread`, `selectedPresets`, `discuss`. `createChat` is the same set plus
+`targetThread`, `selectedPresets`. `createChat` is the same set plus
 `projectId`, `worktreeId`, `title` (`chat-grpc.ts:256-268`).
 
 There is **no** editor context, current file, cursor position, selected-files
