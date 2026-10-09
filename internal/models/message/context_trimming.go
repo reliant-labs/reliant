@@ -3,6 +3,7 @@ package message
 
 import (
 	"strings"
+	"sync/atomic"
 
 	"github.com/reliant-labs/reliant/internal/logging"
 )
@@ -86,7 +87,31 @@ type ContextEstimate struct {
 //   - When a message with TokenCount is found, it represents the total context
 //     at that point (including system prompts and tools)
 //   - If no message has token data, system prompts and tools are estimated separately
+//
+// It does not know the model's window, so it trusts every stored TokenCount.
+// Trimming goes through the window-aware estimateContextTokens instead.
 func EstimateFullContextTokens(messages []Message, systemPrompts []string, tools []ToolDefinition) ContextEstimate {
+	return estimateContextTokens(messages, systemPrompts, tools, 0)
+}
+
+// unreliableTokenCountWarned makes the "TokenCount exceeds the window" warning
+// fire once per process. A thread that has one such count has one on every
+// turn, so per-call logging would bury everything else in the log.
+var unreliableTokenCountWarned atomic.Bool
+
+// estimateContextTokens is EstimateFullContextTokens with a sanity check
+// against the model's REAL context window (contextWindow <= 0: unknown).
+//
+// A stored TokenCount is the provider's report of how big the context was on
+// that turn. One LARGER than the model's window cannot describe a context the
+// model holds, so it is not evidence of how big the next request is: it is
+// either a misreport, or the window we were told is not the one the provider
+// enforced. Either way it must not drive trimming. Prod incident 2026-10-09:
+// gpt-5.6-terra (272k) turns stored 520k / 696k, every turn landed "over" the
+// 95% backstop, and the trimmer shredded the conversation. Such a count is
+// ignored and the whole context is estimated from characters instead — the
+// same path used when no message carries token data at all.
+func estimateContextTokens(messages []Message, systemPrompts []string, tools []ToolDefinition, contextWindow int64) ContextEstimate {
 	estimate := ContextEstimate{}
 	foundTokenData := false
 
@@ -95,6 +120,11 @@ func EstimateFullContextTokens(messages []Message, systemPrompts []string, tools
 		msg := messages[i]
 
 		if hasTokenData(&msg) {
+			if contextWindow > 0 && msg.TokenCount > contextWindow {
+				warnUnreliableTokenCount(msg, contextWindow)
+				estimate = estimateFromChars(messages)
+				break
+			}
 			// Found message with token data - use TokenCount directly
 			// This includes the full context at that API call (system prompts + tools + all prior messages)
 			estimate.MessageTokens += int(msg.TokenCount)
@@ -134,6 +164,32 @@ func EstimateFullContextTokens(messages []Message, systemPrompts []string, tools
 // hasTokenData returns true if the message has a stored token count
 func hasTokenData(msg *Message) bool {
 	return msg.TokenCount > 0
+}
+
+// estimateFromChars estimates every message from its characters, ignoring any
+// stored token data.
+func estimateFromChars(messages []Message) ContextEstimate {
+	estimate := ContextEstimate{}
+	for _, msg := range messages {
+		estimate.MessageTokens += estimateMessageChars(msg) / CharsPerToken
+	}
+	return estimate
+}
+
+func warnUnreliableTokenCount(msg Message, contextWindow int64) {
+	if !unreliableTokenCountWarned.CompareAndSwap(false, true) {
+		logging.Debug("[CONTEXT_TRIM] Ignoring stored token count larger than the context window",
+			"messageID", msg.ID,
+			"tokenCount", msg.TokenCount,
+			"contextWindow", contextWindow)
+		return
+	}
+	logging.Warn("[CONTEXT_TRIM] Stored token count is larger than the model's context window; "+
+		"treating it as unreliable and estimating from characters (logged once per process)",
+		"messageID", msg.ID,
+		"model", msg.Model,
+		"tokenCount", msg.TokenCount,
+		"contextWindow", contextWindow)
 }
 
 // estimateMessageChars calculates the character count for a single message
@@ -194,6 +250,16 @@ func TrimMessagesToFitContextWithFullEstimate(messages []Message, systemPrompts 
 // The function modifies messages in-place and returns whether any trimming occurred.
 // It trims from the end of the conversation, prioritizing tool results for trimming.
 //
+// ONLY TOOL OUTPUT IS EVER TRIMMED. The backstop exists to shred bulky tool
+// results; it never rewrites what a person wrote (role=user), what the model
+// said (assistant text, reasoning), or system text. It used to trim "the last
+// message" whatever its role, and on a user turn the last message IS the user's
+// request: a short request cut to 10% of itself is shorter than the ellipsis
+// marker, so the model received the literal "[content trimmed]" instead of the
+// question (prod incident 2026-10-09). When tool output alone cannot bring the
+// context under the limit, the rest is sent intact — an oversized request the
+// provider rejects is recoverable; a silently rewritten user turn is not.
+//
 // TOOL-PAIR SAFETY (load-bearing for the tool_use/tool_result invariant):
 // Trimming is deliberately TOPOLOGY-PRESERVING. It only ever shortens the string
 // payload of a part that is already there; it never removes a part, never removes
@@ -220,7 +286,7 @@ func TrimMessagesToFitContextWindow(messages []Message, systemPrompts []string, 
 
 	safeLimit := deriveSafeContextTokens(contextWindow)
 
-	estimate := EstimateFullContextTokens(messages, systemPrompts, tools)
+	estimate := estimateContextTokens(messages, systemPrompts, tools, contextWindow)
 	if estimate.TotalTokens <= safeLimit {
 		return false
 	}
@@ -239,28 +305,28 @@ func TrimMessagesToFitContextWindow(messages []Message, systemPrompts []string, 
 	tokensToTrim := estimate.TotalTokens - safeLimit
 	charsToTrim := tokensToTrim * CharsPerToken
 
-	// Calculate how much the last message can contribute
-	lastMsgIdx := len(messages) - 1
-	lastMsgChars := estimateMessageChars(messages[lastMsgIdx])
-
-	// Try to trim from the last message first
 	trimmed := false
 	remainingCharsToTrim := charsToTrim
 
-	if lastMsgChars > 0 {
-		// Determine how much the last message can trim (up to 90% of its content)
-		maxTrimFromLast := int(float64(lastMsgChars) * 0.9)
-		if maxTrimFromLast > 0 {
-			trimmed = trimLastMessage(messages, min(charsToTrim, lastMsgChars))
-			if trimmed {
-				remainingCharsToTrim -= maxTrimFromLast
-			}
+	// A fresh tool result at the tail is the likeliest cause of the overflow, so
+	// it goes first. Any other last message — above all the user's own turn —
+	// is not trimmable (see ONLY TOOL OUTPUT above).
+	lastMsgIdx := len(messages) - 1
+	skipMsgIdx := -1
+	if messages[lastMsgIdx].Role == Tool {
+		lastMsgChars := estimateMessageChars(messages[lastMsgIdx])
+		if lastMsgChars > 0 && trimLastMessage(messages, min(charsToTrim, lastMsgChars)) {
+			trimmed = true
+			remainingCharsToTrim -= lastMsgChars - estimateMessageChars(messages[lastMsgIdx])
+			// Already cut to what this pass decided to keep; a second cut
+			// would only stack another marker onto the same result.
+			skipMsgIdx = lastMsgIdx
 		}
 	}
 
 	// If we still need more trimming, try trimming large tool results from earlier messages
 	if remainingCharsToTrim > 0 {
-		if trimLargeToolResults(messages, remainingCharsToTrim) {
+		if trimLargeToolResults(messages, remainingCharsToTrim, skipMsgIdx) {
 			return true
 		}
 	}
@@ -268,7 +334,8 @@ func TrimMessagesToFitContextWindow(messages []Message, systemPrompts []string, 
 	return trimmed
 }
 
-// trimLastMessage attempts to trim the last message to reduce character count.
+// trimLastMessage attempts to trim the last message (a tool message — see
+// TrimMessagesToFitContextWindow) to reduce character count.
 // Returns true if trimming was performed.
 func trimLastMessage(messages []Message, charsToTrim int) bool {
 	lastMsgIdx := len(messages) - 1
@@ -307,7 +374,8 @@ func trimLastMessage(messages []Message, charsToTrim int) bool {
 
 // trimLargeToolResults finds and trims large tool results throughout the conversation.
 // This is a fallback when the last message alone can't free enough space.
-func trimLargeToolResults(messages []Message, charsToTrim int) bool {
+// The message at skipMsgIdx (-1: none) is left alone.
+func trimLargeToolResults(messages []Message, charsToTrim int, skipMsgIdx int) bool {
 	// Find all tool results and their sizes
 	type toolResultLocation struct {
 		msgIdx  int
@@ -317,6 +385,9 @@ func trimLargeToolResults(messages []Message, charsToTrim int) bool {
 	var toolResults []toolResultLocation
 
 	for msgIdx, msg := range messages {
+		if msgIdx == skipMsgIdx {
+			continue
+		}
 		for partIdx, part := range msg.Parts {
 			if tr, ok := part.(ToolResult); ok {
 				chars := len(tr.Content)
@@ -389,16 +460,13 @@ func trimLargeToolResults(messages []Message, charsToTrim int) bool {
 // trimPart trims a content part to the given ratio, preserving head and tail.
 // Returns nil when the part must not be shortened.
 //
-// ToolCall is deliberately absent from the switch: trimming a tool call's input
-// would corrupt the arguments the model asked for, and truncating its ID would
-// orphan the matching tool_result. Tool calls pass through untouched.
+// Only ToolResult is trimmable. Text and reasoning are words a person or the
+// model wrote, and the backstop never rewrites those (see
+// TrimMessagesToFitContextWindow). ToolCall is deliberately absent as well:
+// trimming a tool call's input would corrupt the arguments the model asked for,
+// and truncating its ID would orphan the matching tool_result.
 func trimPart(part ContentPart, keepRatio float64) ContentPart {
 	switch p := part.(type) {
-	case TextContent:
-		newLen := int(float64(len(p.Text)) * keepRatio)
-		if newLen < len(p.Text) {
-			return TextContent{Text: trimWithHeadTail(p.Text, newLen) + TrimmedContentSuffix}
-		}
 	case ToolResult:
 		newLen := int(float64(len(p.Content)) * keepRatio)
 		if newLen < len(p.Content) {
@@ -410,14 +478,8 @@ func trimPart(part ContentPart, keepRatio float64) ContentPart {
 			trimmed.Content = trimWithHeadTail(p.Content, newLen) + TrimmedContentSuffix
 			return trimmed
 		}
-	case ReasoningContent:
-		newLen := int(float64(len(p.Thinking)) * keepRatio)
-		if newLen < len(p.Thinking) {
-			return ReasoningContent{Thinking: trimWithHeadTail(p.Thinking, newLen) + TrimmedContentSuffix}
-		}
-		// ToolCall, BinaryContent, ImageURLContent - don't trim these
 	}
-	return nil // No trimming needed
+	return nil // Not trimmable, or no trimming needed
 }
 
 // trimWithHeadTail trims content to targetLen, keeping head and tail portions.

@@ -899,14 +899,7 @@ func (o *OpenaiClient) sendResponses(ctx context.Context, prompts []string, mess
 
 	finishReason := responseswire.FinishReason(resp, len(toolCalls))
 
-	usage := llm.TokenUsage{}
-	if resp.Usage.TotalTokens > 0 {
-		usage.TokenCount = resp.Usage.TotalTokens
-		usage.InputTokens = resp.Usage.InputTokens
-		usage.OutputTokens = resp.Usage.OutputTokens
-		usage.ReasoningTokens = resp.Usage.OutputTokensDetails.ReasoningTokens
-		usage.CachedInputTokens = resp.Usage.InputTokensDetails.CachedTokens
-	}
+	usage := responseswire.TokenUsage(resp.Usage)
 
 	upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(rawResp)
 
@@ -1084,12 +1077,8 @@ func (o *OpenaiClient) streamResponses(ctx context.Context, prompts []string, me
 		finishReason := responseswire.FinishReason(finalResp, len(finalToolCalls))
 
 		usage := llm.TokenUsage{}
-		if finalResp != nil && finalResp.Usage.TotalTokens > 0 {
-			usage.TokenCount = finalResp.Usage.TotalTokens
-			usage.InputTokens = finalResp.Usage.InputTokens
-			usage.OutputTokens = finalResp.Usage.OutputTokens
-			usage.ReasoningTokens = finalResp.Usage.OutputTokensDetails.ReasoningTokens
-			usage.CachedInputTokens = finalResp.Usage.InputTokensDetails.CachedTokens
+		if finalResp != nil {
+			usage = responseswire.TokenUsage(finalResp.Usage)
 		}
 
 		upstreamRequestID, upstreamProxymanID := extractUpstreamCorrelationHeaders(streamResp)

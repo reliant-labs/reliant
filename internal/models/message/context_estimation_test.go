@@ -343,21 +343,17 @@ func TestTrimMessagesToFitContextWithFullEstimate_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "large text content trimmed",
+			// Only tool output is trimmable; user text is never rewritten.
+			name: "large user text is not trimmed",
 			messages: []Message{
 				{Role: User, Parts: []ContentPart{TextContent{Text: strings.Repeat("y", 800000)}}},
 			},
-			expectTrimmed: true,
-			validateTrimming: func(t *testing.T, messages []Message) {
-				text := messages[0].Parts[0].(TextContent)
-				assert.Less(t, len(text.Text), 800000, "Text should be trimmed")
-				assert.Contains(t, text.Text, TrimmedContentSuffix)
-			},
+			expectTrimmed: false,
 		},
 		{
 			name: "system prompts push over limit triggers trimming",
 			messages: []Message{
-				{Role: User, Parts: []ContentPart{TextContent{Text: strings.Repeat("m", 750000)}}}, // ~187k tokens
+				{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "tc_1", Name: "view", Content: strings.Repeat("m", 750000)}}}, // ~187k tokens
 			},
 			systemPrompts: []string{
 				strings.Repeat("s", 50000), // ~12.5k tokens, pushes over 195k limit
@@ -367,7 +363,7 @@ func TestTrimMessagesToFitContextWithFullEstimate_TableDriven(t *testing.T) {
 		{
 			name: "tool definitions push over limit triggers trimming",
 			messages: []Message{
-				{Role: User, Parts: []ContentPart{TextContent{Text: strings.Repeat("m", 750000)}}}, // ~187k tokens
+				{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "tc_1", Name: "view", Content: strings.Repeat("m", 750000)}}}, // ~187k tokens
 			},
 			tools: []ToolDefinition{
 				mockTool{name: "t1", description: strings.Repeat("d", 20000), schemaJSON: []byte(strings.Repeat("j", 30000))},
@@ -390,18 +386,14 @@ func TestTrimMessagesToFitContextWithFullEstimate_TableDriven(t *testing.T) {
 			},
 		},
 		{
-			name: "reasoning content can be trimmed",
+			// Reasoning is the model's own words (and may be signed): not trimmable.
+			name: "reasoning content is not trimmed",
 			messages: []Message{
 				{Role: Assistant, Parts: []ContentPart{
 					ReasoningContent{Thinking: strings.Repeat("t", 800000)},
 				}},
 			},
-			expectTrimmed: true,
-			validateTrimming: func(t *testing.T, messages []Message) {
-				reasoning := messages[0].Parts[0].(ReasoningContent)
-				assert.Less(t, len(reasoning.Thinking), 800000)
-				assert.Contains(t, reasoning.Thinking, TrimmedContentSuffix)
-			},
+			expectTrimmed: false,
 		},
 		{
 			name: "preserves head and tail when trimming",

@@ -199,3 +199,29 @@ func TestCompactionThresholdForModel(t *testing.T) {
 		}
 	}
 }
+
+func TestCompactionThresholdCeiling(t *testing.T) {
+	override := func(v int) *ModelDefinition {
+		return &ModelDefinition{DefaultCompactionThreshold: &v}
+	}
+	tests := []struct {
+		name   string
+		def    *ModelDefinition
+		window int
+		want   int
+	}{
+		{name: "unknown window has no ceiling", def: nil, window: 0, want: 0},
+		{name: "272k window (gpt-5.6 on codex)", def: &ModelDefinition{}, window: 272_000, want: 231_200},
+		{name: "1M window", def: nil, window: 1_000_000, want: 850_000},
+		{name: "higher per-model default raises the ceiling", def: override(950_000), window: 1_000_000, want: 950_000},
+		{name: "lower per-model default does not lower it", def: override(100_000), window: 1_000_000, want: 850_000},
+		{name: "a per-model default past the window stops at the window", def: override(2_000_000), window: 1_000_000, want: 1_000_000},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := CompactionThresholdCeiling(tc.def, tc.window); got != tc.want {
+				t.Errorf("CompactionThresholdCeiling = %d, want %d", got, tc.want)
+			}
+		})
+	}
+}
