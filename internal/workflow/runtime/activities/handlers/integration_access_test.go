@@ -136,7 +136,7 @@ func TestUnusableIntegrationsAreWithheldByTheResolver(t *testing.T) {
 			MCPTools: []string{"mcp__srv__probe"}, UsableIntegrations: usable})
 	}
 
-	everything := map[string]bool{"github": true, "slack": true, "gmail": true, "twilio": true}
+	everything := map[string]bool{"github": true, "slack": true, "gmail": true, "twilio": true, "sentry": true}
 	caps := resolve(tools.ToolAccess{LoadableAll: true, Preloaded: []string{"github__issue_get", tools.ToolFetch}}, everything)
 	assert.True(t, caps.LoadableAll, "nothing withheld: still unrestricted")
 	assert.Empty(t, caps.WithheldIntegrations)
