@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strings"
+	"unicode/utf8"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -306,7 +308,7 @@ func (s *messageStore) UpdateContentBlock(ctx context.Context, block *core.Messa
 func (s *messageStore) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
 	return s.q.AppendToContentBlock(ctx, pgdb.AppendToContentBlockParams{
 		ID:      blockID,
-		Content: sql.NullString{String: delta, Valid: true},
+		Content: sql.NullString{String: validUTF8(delta), Valid: true},
 	})
 }
 
@@ -475,9 +477,16 @@ func contentBlockToCreateIfNotExistsParams(block *core.MessageContentBlock) pgdb
 
 func msgPtrToNullString(s *string) sql.NullString {
 	if s != nil {
-		return sql.NullString{String: *s, Valid: true}
+		return sql.NullString{String: validUTF8(*s), Valid: true}
 	}
 	return sql.NullString{Valid: false}
+}
+
+func validUTF8(text string) string {
+	if utf8.ValidString(text) {
+		return text
+	}
+	return strings.ToValidUTF8(text, "\uFFFD")
 }
 
 func msgNullStringToPtr(ns sql.NullString) *string {

@@ -636,6 +636,7 @@ func (r *Repo) CreateContentBlock(ctx context.Context, block *MessageContentBloc
 	if block.MessageID == "" {
 		return fmt.Errorf("content block MessageID cannot be empty")
 	}
+	normalizeContentBlock(block)
 	return r.messages.CreateContentBlock(ctx, block)
 }
 
@@ -649,6 +650,7 @@ func (r *Repo) CreateContentBlockIfNotExists(ctx context.Context, block *Message
 	if block.MessageID == "" {
 		return fmt.Errorf("content block MessageID cannot be empty")
 	}
+	normalizeContentBlock(block)
 	return r.messages.CreateContentBlockIfNotExists(ctx, block)
 }
 
@@ -737,6 +739,7 @@ func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBloc
 	if block.ID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
+	normalizeContentBlock(block)
 
 	return r.messages.UpdateContentBlock(ctx, block)
 }
@@ -744,6 +747,10 @@ func (r *Repo) UpdateContentBlock(ctx context.Context, block *MessageContentBloc
 func (r *Repo) AppendToContentBlock(ctx context.Context, blockID string, delta string) error {
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
+	}
+	delta = validUTF8(delta)
+	if delta == "" {
+		return nil
 	}
 
 	return r.messages.AppendToContentBlock(ctx, blockID, delta)
@@ -757,6 +764,7 @@ func (r *Repo) AppendContentBlockDelta(ctx context.Context, chatID string, block
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
+	delta = validUTF8(delta)
 	if delta == "" {
 		return nil // Nothing to append
 	}
@@ -778,6 +786,7 @@ func (r *Repo) AppendToolInputDelta(ctx context.Context, chatID string, blockID 
 	if blockID == "" {
 		return fmt.Errorf("content block ID cannot be empty")
 	}
+	delta = validUTF8(delta)
 	if delta == "" {
 		return nil // Nothing to append
 	}
