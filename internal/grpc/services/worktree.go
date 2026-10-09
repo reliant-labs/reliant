@@ -1622,7 +1622,10 @@ func (s *WorktreeService) DiscoverWorktrees(
 	}), nil
 }
 
-// RecreateWorktree recreates an archived worktree from its branch
+// RecreateWorktree rebuilds a worktree's directory from its branch: an
+// archived worktree is restored (and unarchived); an active one whose
+// directory went missing from disk is re-materialized in place, which is the
+// user's way out of a chat stuck on "working directory does not exist".
 func (s *WorktreeService) RecreateWorktree(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RecreateWorktreeRequest],
@@ -1638,15 +1641,10 @@ func (s *WorktreeService) RecreateWorktree(
 		return nil, err
 	}
 
-	// Get worktree to verify it exists and is archived
 	worktree, err := s.database.GetWorktree(ctx, req.Msg.WorktreeId)
 	if err != nil {
 		logging.Error("Failed to get worktree", "error", err, "worktreeID", req.Msg.WorktreeId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found"))
-	}
-
-	if worktree.DeletedAt == nil {
-		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("worktree is not archived; only archived worktrees can be recreated"))
 	}
 
 	// Get project for git operations
@@ -1654,6 +1652,10 @@ func (s *WorktreeService) RecreateWorktree(
 	if err != nil {
 		logging.Error("Failed to get project", "error", err, "projectID", worktree.ProjectID)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+	}
+
+	if worktree.DeletedAt == nil {
+		return s.repairActiveWorktree(ctx, userID, worktree, project)
 	}
 
 	// Recreate EVERY repo of the workspace. A multi-repo project's root is not a
@@ -1754,6 +1756,56 @@ func (s *WorktreeService) RecreateWorktree(
 		out.SnapshotWarning = fmt.Sprintf("Your work is saved at %s but could not be applied (%s).", strings.Join(savedRefs, ", "), strings.Join(recreateResp.SnapshotFailed, ", "))
 		out.SnapshotRefs = savedRefs
 	}
+	return connect.NewResponse(out), nil
+}
+
+// repairActiveWorktree asks the machine that owns an active worktree to
+// recreate its directory from its branch if it has gone missing — the same
+// worktree.ensure a chat's tool batch runs, so the button and the automatic
+// path cannot disagree. Only the machine can see the directory, so this
+// service decides nothing about it.
+//
+// It never moves the chat: a repair that is not possible is reported with the
+// machine's reason, and where the chat runs instead is the user's call ("Move
+// to main checkout", which is UpdateChat).
+func (s *WorktreeService) repairActiveWorktree(ctx context.Context, userID string, worktree *db.Worktree, project *db.Project) (*connect.Response[reliantv1.RecreateWorktreeResponse], error) {
+	if worktree.IsMain {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("the project's main checkout is not a workspace reliant can recreate"))
+	}
+	if worktree.Path == "" {
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("this workspace was never created on disk; create a new one instead"))
+	}
+	repos, err := s.database.ListReposByProject(ctx, worktree.ProjectID)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list repos for project"))
+	}
+	ensureReq := toolexec.WorkspaceEnsureRequest{
+		Path:         worktree.Path,
+		Repair:       true,
+		WorktreeID:   worktree.ID,
+		Branch:       worktree.Branch,
+		Repos:        toolexec.WorkspaceReposOf(project.Path, repos),
+		FallbackPath: project.Path,
+	}
+	var resp toolexec.WorkspaceEnsureResponse
+	if err := s.sendWorktreeDaemonCommandTimeout(ctx, userID, worktreeOwner(worktree), toolexec.WorkspaceEnsureCommand, ensureReq, &resp, toolexec.WorkspaceEnsureTimeoutMs); err != nil {
+		if isMachineWaking(err) {
+			return nil, err
+		}
+		logging.Warn("Failed to repair worktree via daemon", "error", err, "worktreeID", worktree.ID)
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("could not reach the machine that holds this workspace: %w", err))
+	}
+
+	out := &reliantv1.RecreateWorktreeResponse{Path: worktree.Path, Branch: worktree.Branch}
+	switch resp.Status {
+	case toolexec.WorkspacePresent:
+		out.Message = "The workspace is on disk; nothing needed recreating"
+	case toolexec.WorkspaceRepaired:
+		out.Message = fmt.Sprintf("Workspace recreated from branch %s. Uncommitted changes that were in it are gone.", worktree.Branch)
+	default:
+		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("could not recreate the workspace: %s", resp.Detail))
+	}
+	s.emitWorktreeChanged(ctx, userID, project.ID, worktree.ID)
 	return connect.NewResponse(out), nil
 }
 

@@ -296,6 +296,20 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	workflowRunID := activityInfo.WorkflowExecution.RunID
 	attemptNumber := int(activityInfo.Attempt)
 
+	// The directory the batch runs in is checked — and recovered if it has
+	// gone missing — once, before any call runs. A retried attempt executes
+	// nothing (isActivityRetry), so it has nothing to check.
+	workspace := batchWorkspace{noteIndex: -1}
+	if !isActivityRetry(attemptNumber) {
+		workspace = a.ensureBatchWorkspace(ctx, &rtx, resolvedToolCalls, func(call message.ToolCall) bool {
+			return responseToolSet[call.Name] || refusedByWorkflow[call.ID] != ""
+		})
+	}
+	workingPath := rtx.ProjectPath
+	if workspace.path != "" {
+		workingPath = workspace.path
+	}
+
 	// Execute all tool calls in parallel using goroutines
 	// This significantly improves performance when multiple tools are called together
 	type toolCallJob struct {
@@ -415,7 +429,7 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 						activityID,
 						workflowRunID,
 						attemptNumber,
-						rtx.ProjectPath,    // Pass project path override for working directory
+						workingPath,        // Working directory override: the run's, or where ensureBatchWorkspace moved it
 						rtx.DaemonSelector, // Pass daemon selector for targeted routing
 					)
 
@@ -444,6 +458,13 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	for i := 0; i < len(resolvedToolCalls); i++ {
 		result := <-resultsChan
 		results[result.index] = result.result
+	}
+
+	// What happened to the workspace is said once, ahead of the first result
+	// that ran on the machine, so the model reads it before the output it
+	// explains.
+	if workspace.note != "" && workspace.noteIndex >= 0 && workspace.noteIndex < len(results) {
+		results[workspace.noteIndex].Content = workspace.note + results[workspace.noteIndex].Content
 	}
 
 	// Get current thread token count for compaction decisions
@@ -648,17 +669,13 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// owning daemon > default resolution. A worktree-bound (e.g. branch) chat
 	// must run on the daemon that has its checkout on disk; a nil worktree
 	// DaemonID (main checkout / legacy rows) leaves routing at the default.
-	if tec.worktree != nil && tec.worktree.DaemonID != "" {
-		tec.daemonSelector = &toolexec.DaemonSelector{ID: tec.worktree.DaemonID}
+	// ensureBatchWorkspace routes with the same function, so the directory it
+	// checked is on the disk these calls run on.
+	worktreeDaemon := ""
+	if tec.worktree != nil {
+		worktreeDaemon = tec.worktree.DaemonID
 	}
-	if daemonSel != nil {
-		tec.daemonSelector = &toolexec.DaemonSelector{
-			ID:     daemonSel.ID,
-			Name:   daemonSel.Name,
-			Type:   daemonSel.Type,
-			Labels: daemonSel.Labels,
-		}
-	}
+	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, daemonSel)
 
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this

@@ -4,6 +4,7 @@ package handlers
 import (
 	"context"
 	"crypto/x509"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"sync"
@@ -86,6 +87,16 @@ func (r *daemonRunningRouter) SendToolRequestSync(_ context.Context, _ string, r
 
 func (r *daemonRunningRouter) SendToolRequestSyncWithSelector(ctx context.Context, userID string, req *toolexec.ToolExecutionRequest, _ *toolexec.DaemonSelector) (*toolexec.ToolExecutionResponse, error) {
 	return r.SendToolRequestSync(ctx, userID, req)
+}
+
+// Generic commands (the batch's worktree.ensure) are answered the way a daemon
+// that does not know them answers; the batch then runs as it always did.
+func (r *daemonRunningRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
+	return nil, fmt.Errorf("unknown daemon command %q", commandType)
+}
+
+func (r *daemonRunningRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
+	return r.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 }
 
 // received is the input the daemon got for a call, and whether it got one.

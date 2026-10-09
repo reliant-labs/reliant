@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -716,6 +717,14 @@ func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error)
 	if err := json.Unmarshal(payload, &req); err != nil {
 		return nil, fmt.Errorf("invalid payload: %w", err)
 	}
+	return json.Marshal(recreateWorktree(ctx, req))
+}
+
+// recreateWorktree rebuilds a workspace's checkouts from their branch: one
+// `git worktree add` per repo, all or nothing. It serves both the restore of
+// an archived workspace (worktree.recreate) and the repair of an active one
+// whose directory disappeared (worktree.ensure), so the two cannot drift.
+func recreateWorktree(ctx context.Context, req worktreeRecreateRequest) worktreeRecreateResponse {
 	repos := req.Repos
 	if len(repos) == 0 {
 		repos = []worktreeRecreateRepo{{RepoPath: req.ProjectPath, Rel: "", Branch: req.Branch, SnapshotRefs: req.SnapshotRefs}}
@@ -726,12 +735,10 @@ func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error)
 	// third repo does not leave two checkouts behind.
 	for _, repo := range repos {
 		branch := firstNonEmptyStr(repo.Branch, req.Branch)
-		check := exec.CommandContext(ctx, "git", "rev-parse", "--verify", branch)
-		check.Dir = repo.RepoPath
-		if err := check.Run(); err != nil {
+		if !branchAvailable(ctx, repo.RepoPath, branch) {
 			resp.BranchExists = false
 			resp.Error = fmt.Sprintf("branch '%s' no longer exists in %s", branch, repo.RepoPath)
-			return json.Marshal(resp)
+			return resp
 		}
 	}
 	resp.BranchExists = true
@@ -748,13 +755,20 @@ func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error)
 		}
 	}
 	for _, repo := range repos {
-		if recovered[filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel))] {
+		dest := filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel))
+		if recovered[dest] {
 			continue
 		}
-		if _, err := os.Stat(filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel))); err == nil {
+		if _, err := os.Stat(dest); err == nil {
 			resp.PathExists = true
-			resp.Error = fmt.Sprintf("worktree directory '%s' already exists", filepath.Join(req.WorktreePath, filepath.FromSlash(repo.Rel)))
-			return json.Marshal(resp)
+			resp.Error = fmt.Sprintf("worktree directory '%s' already exists", dest)
+			return resp
+		}
+		// Only for a path that is provably absent: a stat that failed for any
+		// other reason (permissions) says nothing, and dropping the
+		// registration of a checkout that is actually there deletes it.
+		if _, err := os.Lstat(dest); errors.Is(err, fs.ErrNotExist) {
+			dropStaleRegistration(ctx, repo.RepoPath, dest)
 		}
 	}
 
@@ -782,15 +796,17 @@ func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error)
 		if err := os.MkdirAll(filepath.Dir(dest), 0755); err != nil {
 			rollback()
 			resp.Error = fmt.Sprintf("failed to create parent directory: %v", err)
-			return json.Marshal(resp)
+			return resp
 		}
+		// A branch that exists only as a remote-tracking ref is created
+		// locally by git's own DWIM, tracking that remote (branchAvailable).
 		add := exec.CommandContext(ctx, "git", "worktree", "add", dest, firstNonEmptyStr(repo.Branch, req.Branch))
 		add.Dir = repo.RepoPath
 		if output, err := add.CombinedOutput(); err != nil {
 			rollback()
 			resp.Output = string(output)
 			resp.Error = fmt.Sprintf("failed to recreate worktree: %s", strings.TrimSpace(string(output)))
-			return json.Marshal(resp)
+			return resp
 		}
 		created[i] = dest
 	}
@@ -842,7 +858,94 @@ func handleWorktreeRecreate(ctx context.Context, payload []byte) ([]byte, error)
 		resp.SnapshotApplied = false
 	}
 	resp.Success = true
-	return json.Marshal(resp)
+	return resp
+}
+
+// branchAvailable reports whether `git worktree add <path> <branch>` can check
+// the branch out: it resolves locally, or exactly one remote has a branch of
+// that name, which git's DWIM turns into a local branch tracking it. A branch
+// that was pushed is therefore still recoverable after its local ref is gone.
+func branchAvailable(ctx context.Context, repoPath, branch string) bool {
+	if branch == "" {
+		return false
+	}
+	check := exec.CommandContext(ctx, "git", "rev-parse", "--verify", "--quiet", branch)
+	check.Dir = repoPath
+	if check.Run() == nil {
+		return true
+	}
+	refs := exec.CommandContext(ctx, "git", "for-each-ref", "--format=%(refname)", "refs/remotes/*/"+branch)
+	refs.Dir = repoPath
+	out, err := refs.Output()
+	if err != nil {
+		return false
+	}
+	return len(strings.Fields(string(out))) == 1
+}
+
+// dropStaleRegistration removes git's record of a checkout at dest, which the
+// caller has just found does not exist.
+//
+// A checkout deleted without git being told stays registered, and reliant
+// locks the checkouts it creates, so `git worktree prune` keeps the record
+// too. git then refuses both the path ("missing but locked worktree") and the
+// branch ("already checked out") to `git worktree add`, and nothing could ever
+// rebuild the directory. Removing the one registration — never a repo-wide
+// prune, which would also drop other worktrees' records — clears both. A path
+// git does not know is a no-op.
+//
+// The registration is named by git's own record of it. git resolves a path it
+// is given through realpath, which fails once the checkout's PARENT is gone
+// too (a whole multi-repo workspace deleted), so the caller's spelling of dest
+// would match nothing; its recorded path always matches itself.
+func dropStaleRegistration(ctx context.Context, repoPath, dest string) {
+	registered := registeredWorktreePath(ctx, repoPath, dest)
+	if registered == "" {
+		return
+	}
+	rm := exec.CommandContext(ctx, "git", "worktree", "remove", "--force", "--force", registered)
+	rm.Dir = repoPath
+	if out, err := rm.CombinedOutput(); err != nil {
+		logging.Warn("could not drop a stale worktree registration", "repo", repoPath, "path", registered, "error", err, "output", strings.TrimSpace(string(out)))
+	}
+}
+
+// registeredWorktreePath returns the path under which repoPath records a
+// worktree at dest, or "" when it records none. Both sides are compared
+// canonically, since git records the realpath (/private/var/... on macOS for
+// /var/...).
+func registeredWorktreePath(ctx context.Context, repoPath, dest string) string {
+	list := exec.CommandContext(ctx, "git", "worktree", "list", "--porcelain")
+	list.Dir = repoPath
+	out, err := list.Output()
+	if err != nil {
+		return ""
+	}
+	want := canonicalMissingPath(dest)
+	for _, line := range strings.Split(string(out), "\n") {
+		if p, ok := strings.CutPrefix(line, "worktree "); ok && canonicalMissingPath(p) == want {
+			return p
+		}
+	}
+	return ""
+}
+
+// canonicalMissingPath resolves symlinks in the longest prefix of p that
+// exists, and keeps the rest as written: the path may name something gone.
+func canonicalMissingPath(p string) string {
+	p = filepath.Clean(p)
+	rest := ""
+	for {
+		if resolved, err := filepath.EvalSymlinks(p); err == nil {
+			return filepath.Join(resolved, rest)
+		}
+		parent := filepath.Dir(p)
+		if parent == p {
+			return filepath.Join(p, rest)
+		}
+		rest = filepath.Join(filepath.Base(p), rest)
+		p = parent
+	}
 }
 
 // snapshotRefsFor picks, from the refs recorded on the row, those that hold
