@@ -411,14 +411,10 @@ func (a *CompactActivity) generateCompactionSummary(ctx context.Context, chat *d
 	// Standard pre-request transforms. Summarization is a read-only pass that
 	// passes no tools, so this also flattens tool_use/tool_result blocks to
 	// text (providers reject tool-call blocks on tool-less requests). The trim
-	// backstop scales with the summarization model's real context window for the
-	// SELECTED provider (a small-window provider like "@codex" caps the model
-	// below its platform window), so the summarization request itself fits.
-	summarizeContextWindow := resolved.Model.ContextWindow
-	if resolved.Definition != nil {
-		summarizeContextWindow = int64(models.EffectiveContextWindow(resolved.Definition, resolved.ProviderDriver))
-	}
-	history = prepareHistoryForLLM(chat.ID, history, compactionPrompts, nil, summarizeContextWindow)
+	// backstop scales with the summarization model's prompt ceiling for the
+	// SELECTED provider, so the summarization request itself fits.
+	history = prepareHistoryForLLM(chat.ID, history, compactionPrompts, nil,
+		promptCeiling(resolved.Definition, resolved.ProviderDriver, resolved.Model))
 
 	// Call LLM to generate summary using streaming (required for long operations)
 	// We use streaming mode because Anthropic requires it for operations that may take >10 minutes

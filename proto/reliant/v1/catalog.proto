@@ -61,7 +61,8 @@ message ModelInfo {
   string provider = 3;
   // Model capabilities (e.g., "vision", "function_calling")
   repeated string capabilities = 4;
-  // Context window size in tokens
+  // Published total context window (input + output) in tokens, as served by
+  // driver_id.
   int64 context_window = 5;
   // Default max output tokens
   int64 default_max_tokens = 6;
@@ -88,6 +89,15 @@ message ModelInfo {
   // serves this model. A local model is reachable only through that daemon,
   // so the id (e.g. "qwen3:latest@local") is ambiguous without it.
   LocalModelSource local = 17;
+
+  // Token count at which an unpinned chat on this model+driver compacts: 85% of
+  // the prompt ceiling (context_window − max output, lowered to the limit the
+  // provider advertises for the account).
+  int64 default_compaction_threshold = 18;
+  // The largest compaction_threshold a pin may use on this model+driver. A
+  // larger pin is capped to it, since compaction must fire before the prompt
+  // ceiling is reached. 0 = unknown, no cap.
+  int64 max_compaction_threshold = 19;
 }
 
 // LocalModelSource locates a local model on a specific daemon's machine.

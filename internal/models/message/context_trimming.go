@@ -24,8 +24,10 @@ const (
 	// why trimming must always be driven by the real window when it is known.
 	SafeContextTokens = 195000
 
-	// TrimBackstopFraction is the fraction of a model's REAL context window at
-	// which the trim BACKSTOP engages. It sits ABOVE the compaction threshold
+	// TrimBackstopFraction is the fraction of a model's PROMPT CEILING (its
+	// published total window less max output, models.PromptCeiling — every
+	// "contextWindow" parameter in this file is that ceiling) at which the trim
+	// BACKSTOP engages. It sits ABOVE the compaction threshold
 	// (~85% of the window) so that compaction — which summarizes older context
 	// into a handoff — is the PRIMARY context-management mechanism. Trimming, which
 	// head/tail-shreds tool output and degrades the session, is only a last-resort
@@ -100,17 +102,18 @@ func EstimateFullContextTokens(messages []Message, systemPrompts []string, tools
 var unreliableTokenCountWarned atomic.Bool
 
 // estimateContextTokens is EstimateFullContextTokens with a sanity check
-// against the model's REAL context window (contextWindow <= 0: unknown).
+// against the model's prompt ceiling (contextWindow <= 0: unknown).
 //
 // A stored TokenCount is the provider's report of how big the context was on
-// that turn. One LARGER than the model's window cannot describe a context the
-// model holds, so it is not evidence of how big the next request is: it is
-// either a misreport, or the window we were told is not the one the provider
-// enforced. Either way it must not drive trimming. Prod incident 2026-10-09:
-// gpt-5.6-terra (272k) turns stored 520k / 696k, every turn landed "over" the
-// 95% backstop, and the trimmer shredded the conversation. Such a count is
-// ignored and the whole context is estimated from characters instead — the
-// same path used when no message carries token data at all.
+// that turn. One LARGER than the prompt ceiling cannot describe a context the
+// model accepts, so it is not evidence of how big the next request is: it is
+// either a misreport, or the ceiling we derived is not the one the provider
+// enforced. Either way it must not drive trimming. Such a count is ignored and
+// the whole context is estimated from characters instead — the same path used
+// when no message carries token data at all. (Prod incident 2026-10-09: with
+// gpt-5.6-terra's codex window wrongly set to 272k, its genuine 520k / 696k
+// counts were all "over" the backstop and the trimmer shredded the
+// conversation; its real codex ceiling is 872k.)
 func estimateContextTokens(messages []Message, systemPrompts []string, tools []ToolDefinition, contextWindow int64) ContextEstimate {
 	estimate := ContextEstimate{}
 	foundTokenData := false
@@ -236,10 +239,10 @@ func TrimMessagesToFitContextWithFullEstimate(messages []Message, systemPrompts 
 // and tool definitions.
 //
 // This is the model-aware BACKSTOP: the trim threshold is derived from the
-// model's real context window (~95% of it via TrimBackstopFraction), which sits
+// model's prompt ceiling (~95% of it via TrimBackstopFraction), which sits
 // ABOVE the compaction threshold (~85%). Compaction is the primary mechanism;
 // this trim only engages when compaction failed to bring the context down. Pass
-// contextWindow<=0 when the real window is unknown to fall back to the fixed
+// contextWindow<=0 when the ceiling is unknown to fall back to the fixed
 // SafeContextTokens threshold.
 //
 // This function provides accurate context window protection by considering:

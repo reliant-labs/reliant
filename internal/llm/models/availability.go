@@ -7,15 +7,18 @@ import (
 )
 
 // ModelAvailability is what a credentialed provider reports about one model for
-// the connected account: whether it may be used at all, why not, and the real
-// context window the account gets.
+// the connected account: whether it may be used at all, why not, and the
+// context limit the provider advertises for it.
 type ModelAvailability struct {
 	// Disabled means the account may not use the model on this provider.
 	Disabled bool
 	// Reason is the user-facing explanation for Disabled.
 	Reason string
-	// ContextWindow, when positive, is the window this account actually gets
-	// from the provider; it replaces the catalog's per-provider window.
+	// ContextWindow, when positive, is the context limit the provider
+	// advertises for this account (codex: /codex/models max_context_window;
+	// copilot: /models max_context_window_tokens). Whether it counts output is
+	// not stated, so it never RAISES the prompt ceiling derived from the
+	// catalog; when it is lower, it is the ceiling (ProviderPromptCeiling).
 	ContextWindow int
 	// ThinkingLevels, when non-empty, are the reasoning levels the account can
 	// actually use, replacing the catalog's list.
@@ -63,9 +66,10 @@ func restrictProviders(model *ModelDefinition, availableSet map[string]bool, ava
 	return restricted, reason
 }
 
-// resolvedWithAvailability builds the ResolvedModel, applying the account's real
-// context window to the chosen provider so EffectiveContextWindow (compaction
-// threshold, trim backstop) is derived from what the account will actually get.
+// resolvedWithAvailability builds the ResolvedModel, stamping the account's
+// advertised context limit onto the chosen provider so ProviderPromptCeiling
+// (compaction threshold, pin cap, trim backstop) never exceeds what the
+// provider says it accepts.
 func resolvedWithAvailability(model *ModelDefinition, provider *ProviderMapping, level string, avail AvailabilityFunc) *ResolvedModel {
 	resolved := &ResolvedModel{Definition: *model, Provider: *provider, ThinkingLevel: level}
 	if avail == nil {
@@ -73,19 +77,33 @@ func resolvedWithAvailability(model *ModelDefinition, provider *ProviderMapping,
 	}
 	a := avail(provider.Driver, model.ID)
 	if a.ContextWindow > 0 {
-		resolved.Provider.MaxContextWindow = a.ContextWindow
+		resolved.Provider.AdvertisedLimit = a.ContextWindow
 		resolved.Definition.Providers = slices.Clone(model.Providers)
 		for i := range resolved.Definition.Providers {
 			if resolved.Definition.Providers[i].Driver == provider.Driver {
-				resolved.Definition.Providers[i].MaxContextWindow = a.ContextWindow
+				resolved.Definition.Providers[i].AdvertisedLimit = a.ContextWindow
 			}
 		}
+		logAdvertisedLimit(model, provider.Driver, a.ContextWindow)
 	}
 	if len(a.ThinkingLevels) > 0 {
 		resolved.Definition.Capabilities.ThinkingLevels = slices.Clone(a.ThinkingLevels)
 		resolved.ThinkingLevel = ClampThinkingLevel(ResolveThinkingCapability(resolved.Definition.Capabilities), resolved.ThinkingLevel)
 	}
 	return resolved
+}
+
+// ServedDefinition returns def as this registry's account is served it by
+// providerDriver: the provider's advertised limit stamped on exactly as Resolve
+// does, so a picker's ProviderPromptCeiling agrees with the request path. A
+// provider the model does not map returns def unchanged.
+func (r *ModelRegistry) ServedDefinition(def *ModelDefinition, providerDriver string) ModelDefinition {
+	for i := range def.Providers {
+		if def.Providers[i].Driver == providerDriver {
+			return resolvedWithAvailability(def, &def.Providers[i], "", r.avail).Definition
+		}
+	}
+	return *def
 }
 
 // codexAcceptedThinkingLevels is the reasoning-effort enumeration the Codex API

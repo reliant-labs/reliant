@@ -110,6 +110,8 @@ export const api = {
           supportedThinkingLevels: m.supportedThinkingLevels,
           supportsTemperature: m.supportsTemperature,
           contextWindow: Number(m.contextWindow),
+          defaultCompactionThreshold: Number(m.defaultCompactionThreshold),
+          maxCompactionThreshold: Number(m.maxCompactionThreshold),
           local: m.local
             ? {
                 daemonId: m.local.daemonId,
@@ -121,7 +123,6 @@ export const api = {
             : undefined,
           capabilities: m.capabilities,
           tags: m.tags || [],
-          metadata: undefined,
         })),
         total: response.total,
         // What each tag selector ({tags: [tag]}) resolves to for this user:
@@ -205,7 +206,6 @@ export const api = {
                   m.canReason ? "reasoning" : null,
                 ].filter((c): c is string => c !== null),
                 tags: m.tags,
-                metadata: undefined,
               }))
           : [];
 

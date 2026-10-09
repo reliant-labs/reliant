@@ -19,7 +19,11 @@ const mocks = vi.hoisted(() => ({
       name: "GPT-5.6 Terra",
       provider: "Codex",
       driverId: "codex",
-      contextWindow: 272_000,
+      contextWindow: 1_050_000,
+      // 0.85 × 872,000: the codex prompt ceiling (/codex/models advertises
+      // 872,000, below 1,050,000 − 128,000).
+      defaultCompactionThreshold: 741_200,
+      maxCompactionThreshold: 741_200,
       capabilities: [],
       tags: ["moderate"],
     },
@@ -76,5 +80,31 @@ describe("ModelSettingsPage compaction_threshold", () => {
     const onChange = renderPage({ id: "gpt-5.6-terra@codex", compaction_threshold: 150_000 });
     await userEvent.click(screen.getByRole("button", { name: /GPT-5.6 Terra/ }));
     expect(onChange).toHaveBeenCalledWith({ id: "gpt-5.6-terra@codex", compaction_threshold: 150_000 });
+  });
+});
+
+// The field shows what the server will actually do: the model+driver's default
+// as the placeholder, and the largest pin it honors as the maximum.
+describe("ModelSettingsPage compaction limits", () => {
+  const compactionInput = () => screen.getByRole("spinbutton");
+
+  it("shows the selected model's default and the largest pin it honors", () => {
+    renderPage({ id: "gpt-5.6-terra@codex" });
+    expect(compactionInput()).toHaveAttribute("placeholder", "741200");
+    expect(compactionInput()).toHaveAttribute("max", "741200");
+    expect(screen.getByTestId("compaction-max")).toHaveTextContent("max 741,200");
+    expect(screen.queryByTestId("compaction-capped")).toBeNull();
+  });
+
+  it("says a pin past the maximum is capped", () => {
+    renderPage({ tags: ["moderate"], compaction_threshold: 1_000_000 });
+    expect(screen.getByTestId("compaction-capped")).toHaveTextContent("Capped at 741,200");
+  });
+
+  it("states no maximum when the server reports none", () => {
+    renderPage({ id: "claude-5-opus@anthropic", compaction_threshold: 1_000_000 });
+    expect(compactionInput()).not.toHaveAttribute("max");
+    expect(screen.queryByTestId("compaction-max")).toBeNull();
+    expect(screen.queryByTestId("compaction-capped")).toBeNull();
   });
 });

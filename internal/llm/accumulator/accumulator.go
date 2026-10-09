@@ -12,6 +12,7 @@ import (
 	"go.temporal.io/sdk/activity"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/models/message"
@@ -44,12 +45,14 @@ func StreamAndAccumulate(
 
 	// Trim messages if they would exceed context window limits
 	// This prevents API errors from context overflow. The backstop threshold is
-	// derived from the driver's real model context window (~95% of it), so it
-	// scales per-model and sits above the compaction threshold rather than using
-	// a fixed 200k-window assumption.
-	if message.TrimMessagesToFitContextWindow(messages, nil, nil, driver.Model().ContextWindow) {
+	// derived from the driver model's prompt ceiling (~95% of it), so it scales
+	// per-model and sits above the compaction threshold rather than using a
+	// fixed 200k-window assumption.
+	model := driver.Model()
+	ceiling := int64(models.PromptCeiling(int(model.ContextWindow), int(model.DefaultMaxTokens)))
+	if message.TrimMessagesToFitContextWindow(messages, nil, nil, ceiling) {
 		logging.Debug("[ACCUMULATOR] Trimmed messages to fit context window",
-			"contextWindow", driver.Model().ContextWindow)
+			"promptCeiling", ceiling)
 	}
 
 	// Accumulate content and tool calls

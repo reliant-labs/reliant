@@ -87,7 +87,8 @@ type ModelInfo struct {
 	Provider string `protobuf:"bytes,3,opt,name=provider,proto3" json:"provider,omitempty"`
 	// Model capabilities (e.g., "vision", "function_calling")
 	Capabilities []string `protobuf:"bytes,4,rep,name=capabilities,proto3" json:"capabilities,omitempty"`
-	// Context window size in tokens
+	// Published total context window (input + output) in tokens, as served by
+	// driver_id.
 	ContextWindow int64 `protobuf:"varint,5,opt,name=context_window,json=contextWindow,proto3" json:"context_window,omitempty"`
 	// Default max output tokens
 	DefaultMaxTokens int64 `protobuf:"varint,6,opt,name=default_max_tokens,json=defaultMaxTokens,proto3" json:"default_max_tokens,omitempty"`
@@ -112,9 +113,17 @@ type ModelInfo struct {
 	// Set only for driver_id "local": the machine whose local model server
 	// serves this model. A local model is reachable only through that daemon,
 	// so the id (e.g. "qwen3:latest@local") is ambiguous without it.
-	Local         *LocalModelSource `protobuf:"bytes,17,opt,name=local,proto3" json:"local,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	Local *LocalModelSource `protobuf:"bytes,17,opt,name=local,proto3" json:"local,omitempty"`
+	// Token count at which an unpinned chat on this model+driver compacts: 85% of
+	// the prompt ceiling (context_window − max output, lowered to the limit the
+	// provider advertises for the account).
+	DefaultCompactionThreshold int64 `protobuf:"varint,18,opt,name=default_compaction_threshold,json=defaultCompactionThreshold,proto3" json:"default_compaction_threshold,omitempty"`
+	// The largest compaction_threshold a pin may use on this model+driver. A
+	// larger pin is capped to it, since compaction must fire before the prompt
+	// ceiling is reached. 0 = unknown, no cap.
+	MaxCompactionThreshold int64 `protobuf:"varint,19,opt,name=max_compaction_threshold,json=maxCompactionThreshold,proto3" json:"max_compaction_threshold,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *ModelInfo) Reset() {
@@ -250,6 +259,20 @@ func (x *ModelInfo) GetLocal() *LocalModelSource {
 		return x.Local
 	}
 	return nil
+}
+
+func (x *ModelInfo) GetDefaultCompactionThreshold() int64 {
+	if x != nil {
+		return x.DefaultCompactionThreshold
+	}
+	return 0
+}
+
+func (x *ModelInfo) GetMaxCompactionThreshold() int64 {
+	if x != nil {
+		return x.MaxCompactionThreshold
+	}
+	return 0
 }
 
 // LocalModelSource locates a local model on a specific daemon's machine.
@@ -2920,7 +2943,7 @@ var File_reliant_v1_catalog_proto protoreflect.FileDescriptor
 const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\n" +
 	"\x18reliant/v1/catalog.proto\x12\n" +
-	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1breliant/v1/connection.proto\"\xbc\x04\n" +
+	"reliant.v1\x1a\x1cgoogle/protobuf/struct.proto\x1a\x1breliant/v1/connection.proto\"\xb8\x05\n" +
 	"\tModelInfo\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1a\n" +
@@ -2938,7 +2961,9 @@ const file_reliant_v1_catalog_proto_rawDesc = "" +
 	"\x10supports_caching\x18\x0e \x01(\bR\x0fsupportsCaching\x12:\n" +
 	"\x19supported_thinking_levels\x18\x0f \x03(\tR\x17supportedThinkingLevels\x121\n" +
 	"\x14supports_temperature\x18\x10 \x01(\bR\x13supportsTemperature\x122\n" +
-	"\x05local\x18\x11 \x01(\v2\x1c.reliant.v1.LocalModelSourceR\x05local\"\xb0\x01\n" +
+	"\x05local\x18\x11 \x01(\v2\x1c.reliant.v1.LocalModelSourceR\x05local\x12@\n" +
+	"\x1cdefault_compaction_threshold\x18\x12 \x01(\x03R\x1adefaultCompactionThreshold\x128\n" +
+	"\x18max_compaction_threshold\x18\x13 \x01(\x03R\x16maxCompactionThreshold\"\xb0\x01\n" +
 	"\x10LocalModelSource\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12!\n" +
 	"\fmachine_name\x18\x02 \x01(\tR\vmachineName\x12\x1f\n" +
