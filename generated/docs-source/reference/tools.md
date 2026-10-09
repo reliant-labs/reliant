@@ -403,7 +403,7 @@ _Tools for reading, writing, and modifying files._
 | Tool | Tags | Description |
 |------|------|-------------|
 | [`edit`](#edit) | file, coding:default | Make a precise text replacement in a single file, or create/delete file content. One edit per call. |
-| [`find_replace`](#find_replace) | file, coding:default | Performs find and replace operations across multiple files matching a glob pattern. |
+| [`find_replace`](#find_replace) | file | Performs find and replace operations across multiple files matching a glob pattern. |
 | [`move_code`](#move_code) | file | Move or copy a block of code from one location to another, within the same file or across files. |
 | [`prove_test`](#prove_test) | execution, file | Prove a regression test actually tests your fix: one call runs the test with the |
 | [`read_attachment`](#read_attachment) | file, readonly, coding:plan, coding:default | Read the contents of a file the user attached to the conversation. |
@@ -510,7 +510,7 @@ Remember: This tool requires EXACT text matching including all whitespace and in
 
 ### find_replace
 
-**Tags:** `file`, `coding:default`
+**Tags:** `file`
 
 Performs find and replace operations across multiple files matching a glob pattern.
 WHEN TO USE:
