@@ -212,7 +212,6 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge skill list`](#reliant-forge-skill-list) | List available skills (forge-shipped, project, and user-global) |
 | [`reliant forge skill load`](#reliant-forge-skill-load) | Print a skill's content to stdout (resolves user > project > forge) |
 | [`reliant forge skill search`](#reliant-forge-skill-search) | Search skills across all scopes by keyword (path/name=3, desc/body=1) |
-| [`reliant forge skill write`](#reliant-forge-skill-write) | Write every bundled skill to a directory |
 | [`reliant forge start`](#reliant-forge-start) | Print the greenfield brief: empty directory to authored protos, in one call |
 | [`reliant forge storage`](#reliant-forge-storage) | Inspect and bound local caches; preserve persistent application data |
 | [`reliant forge storage check`](#reliant-forge-storage-check) | Refuse a build below the physical host free-space reserve |
@@ -5971,7 +5970,7 @@ reliant forge project new [project-name] --mod [module-path] [flags]
 | `--frontend` | `stringSlice` | `[]` | Name(s) of Next.js frontends (can be repeated or comma-separated) |
 | `--frontend-workspaces` | `bool` | - | Opt into pnpm-workspaces layout: emit packages/api + packages/hooks + packages/ui-web shared across all frontends. Off by default; recommended once you have 2+ frontends (web + mobile). |
 | `--go-version` | `string` | - | Go version to use in go.mod (e.g., 1.24); defaults to detected version |
-| `--harness` | `string` | `reliant` | AI harness conventions to scaffold for. Each writes a memory file; only claude also receives on-disk skills. reliant (default): reliant.md — skills are read from the forge binary (`forge skill load <name>`) and discovered via forge.yaml, so NO skill files are written. claude: CLAUDE.md + .claude/skills/ (regenerated every `forge generate`). cursor: .cursorrules. copilot: .github/copilot-instructions.md. codex: AGENTS.md. Recorded as `harness:` in forge.yaml and honored by every later generate |
+| `--harness` | `string` | `reliant` | AI harness conventions to scaffold for. Each writes a memory file; Forge never writes skill files for any harness. reliant (default): reliant.md — skills are read from the forge binary (`forge skill search|load`) and discovered via forge.yaml. claude: CLAUDE.md. For non-reliant harnesses, add your own skill telling the agent to run `forge skill search <query>`. cursor: .cursorrules. copilot: .github/copilot-instructions.md. codex: AGENTS.md. Recorded as `harness:` in forge.yaml and honored by every later generate |
 | `--in-place` | `bool` | - | Create project in current directory instead of a new subdirectory |
 | `--kind` | `string` | `service` | Project kind: service (default), cli, library |
 | `--link-forge` | `bool` | - | Bridge the project to the forge checkout this binary was built from (gitignored go.work 'use' + .forge-link/ for the web runtime). Off by default; required for a service scaffold from an unreleased forge build (also: FORGE_LINK_FORGE=1) |
@@ -7347,7 +7346,6 @@ reliant forge skill
 | [`list`](#reliant-forge-skill-list) | List available skills (forge-shipped, project, and user-global) |
 | [`load`](#reliant-forge-skill-load) | Print a skill's content to stdout (resolves user > project > forge) |
 | [`search`](#reliant-forge-skill-search) | Search skills across all scopes by keyword (path/name=3, desc/body=1) |
-| [`write`](#reliant-forge-skill-write) | Write every bundled skill to a directory |
 
 ---
 
@@ -7409,41 +7407,6 @@ reliant forge skill search <query> [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--json` | `bool` | - | Output JSON instead of a tab-separated table |
-
----
-
-#### reliant forge skill write
-
-Write every bundled skill to a directory
-
-Bulk-export forge's skills to a target directory.
-
-Layouts:
-  --style forge   (default) Forge's native layout: `<dir>`/`<skill>`/SKILL.md.
-  --style claude            Claude Code-compatible layout: `<dir>`/`<skill>`/SKILL.md
-                            with YAML frontmatter guaranteed (synthesized if
-                            missing). Drop --out at `<repo>`/.claude/skills/ so
-                            an LLM running Claude Code picks them up.
-  --style md                Flat: `<dir>`/`<skill>`.md, no per-skill subdirectory.
-
-The skill content is the same body returned by `forge skill load <name>`.
-
-Note: inside a forge project you don't need this for .claude/skills/ —
-'forge generate' regenerates the forge-shipped skills there on every run
-(Tier-1 tracked), keeping them in sync with the forge binary version.
-'skill write' remains for exporting skills to arbitrary locations.
-
-```
-reliant forge skill write --out <dir> [--style claude|forge|md] [flags]
-```
-
-**Flags:**
-
-| Flag | Type | Default | Description |
-|------|------|---------|-------------|
-| `--include-migrations` | `bool` | - | Also export one-time migration skills (relevance: migration) |
-| `--out` | `string` | - | Target directory (created if missing) — required |
-| `--style` | `string` | `forge` | Output layout: forge (default), claude, md |
 
 ---
 
@@ -7628,6 +7591,7 @@ reliant forge storage worktrees [flags]
 | `--apply` | `bool` | - | remove removable worktrees without forcing or deleting branches |
 | `--base` | `string` | - | integration branch for the pushed test (default: origin/HEAD, else origin/main) |
 | `--idle` | `duration` | `24h0m0s` | minimum time since any activity in the worktree (at least 24h) |
+| `--reliant-managed` | `bool` | - | also consider worktrees under Reliant's worktree root (~/.reliant/worktrees), which Reliant otherwise reclaims itself |
 | `--repo` | `string` | `.` | repository whose worktrees to inspect |
 
 ---
