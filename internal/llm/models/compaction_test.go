@@ -127,17 +127,18 @@ func TestCompactionThresholdForProvider(t *testing.T) {
 	}
 }
 
-// TestGPT5CodexProviderWindowRegistered pins the real fix in models.yaml: every
-// codex-served GPT-5.x model whose platform window exceeds the codex backend cap
-// declares the 272k per-provider override, so an @codex session's compaction
-// threshold derives from 272k rather than the (unreachable) platform window.
+// TestGPT5CodexProviderWindowRegistered pins gpt-5.5's codex window in
+// models.yaml: /codex/models advertises 272000 for it, far below the platform's
+// 1,050,000, so its codex window is declared as 272000 + 128000 max output and
+// the derived prompt ceiling is the 272000 @codex has always run at — even
+// when /codex/models is unreachable and no advertised limit is applied.
 //
 // The list covers only models the ChatGPT-account backend actually serves.
 // gpt-5.4, gpt-5.4-mini, gpt-5.3-codex and gpt-5.2-codex used to be here, but
 // the backend refuses them for a ChatGPT account, so their codex provider
 // mapping was removed and there is no codex window to pin.
 func TestGPT5CodexProviderWindowRegistered(t *testing.T) {
-	const codexWindow = 272_000
+	const codexCeiling = 272_000
 	registry, err := GetRegistry()
 	if err != nil {
 		t.Fatalf("failed to load registry: %v", err)
@@ -148,11 +149,62 @@ func TestGPT5CodexProviderWindowRegistered(t *testing.T) {
 			t.Errorf("model %q not found in registry", id)
 			continue
 		}
-		if got := EffectiveContextWindow(def, "codex"); got != codexWindow {
-			t.Errorf("model %q via codex: effective window = %d, want %d", id, got, codexWindow)
+		if got := ProviderPromptCeiling(def, "codex"); got != codexCeiling {
+			t.Errorf("model %q via codex: prompt ceiling = %d, want %d", id, got, codexCeiling)
 		}
-		if got := CompactionThresholdForProvider(def, "codex"); got != int(codexWindow*CompactionThresholdFraction) {
-			t.Errorf("model %q via codex: threshold = %d, want %d", id, got, int(codexWindow*CompactionThresholdFraction))
+		if got := CompactionThresholdForProvider(def, "codex"); got != int(codexCeiling*CompactionThresholdFraction) {
+			t.Errorf("model %q via codex: threshold = %d, want %d", id, got, int(codexCeiling*CompactionThresholdFraction))
+		}
+	}
+}
+
+func TestPromptCeiling(t *testing.T) {
+	tests := []struct {
+		name              string
+		window, maxOutput int
+		want              int
+	}{
+		{name: "GPT-5.6: 1,050,000 window, 128,000 output", window: 1_050_000, maxOutput: 128_000, want: 922_000},
+		{name: "unknown window", window: 0, maxOutput: 128_000, want: 0},
+		{name: "no declared output reserves nothing", window: 200_000, maxOutput: 0, want: 200_000},
+		{name: "output that would fill the window reserves nothing", window: 8_192, maxOutput: 8_192, want: 8_192},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := PromptCeiling(tc.window, tc.maxOutput); got != tc.want {
+				t.Errorf("PromptCeiling(%d, %d) = %d, want %d", tc.window, tc.maxOutput, got, tc.want)
+			}
+		})
+	}
+}
+
+// TestCompactionThresholdForProvider_CodexGPTWindows: the GPT-5.6 family and
+// GPT-6 Astra publish a 1,050,000-token context window with 128,000 max output
+// (developers.openai.com/api/docs/models/<id>.md), so the catalog prompt ceiling
+// is 922,000 and an unpinned codex chat compacts at 85% of it. When the
+// account's /codex/models advertises a lower limit (872,000), that applies.
+func TestCompactionThresholdForProvider_CodexGPTWindows(t *testing.T) {
+	reg := MustGetRegistry()
+	live := reg.WithAvailability(func(driver, _ string) ModelAvailability {
+		if driver == "codex" {
+			return ModelAvailability{ContextWindow: 872_000}
+		}
+		return ModelAvailability{}
+	})
+	for _, id := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra"} {
+		def, ok := reg.GetDefinition(id)
+		if !ok {
+			t.Fatalf("model %q not in registry", id)
+		}
+		if got := CompactionThresholdForProvider(def, "codex"); got != 783_700 {
+			t.Errorf("%s@codex from the catalog: threshold = %d, want 783700 (0.85 × 922k)", id, got)
+		}
+		resolved, err := live.Resolve(ModelSelector{ID: id + "@codex"}, []string{"codex"})
+		if err != nil {
+			t.Fatalf("resolve %s@codex: %v", id, err)
+		}
+		if got := CompactionThresholdForProvider(&resolved.Definition, "codex"); got != 741_200 {
+			t.Errorf("%s@codex with /models 872k: threshold = %d, want 741200 (0.85 × 872k)", id, got)
 		}
 	}
 }
@@ -189,13 +241,14 @@ func TestCompactionThresholdForModel(t *testing.T) {
 		}
 	}
 
-	// Spot-check a known 1M-window flagship model derives to 850k.
+	// Spot-check a known 1M-window flagship model: 0.85 × (1,000,000 window −
+	// 64,000 max output).
 	if def, ok := registry.GetDefinition("claude-4.8-opus"); ok {
 		if def.DefaultCompactionThreshold != nil {
 			t.Errorf("claude-4.8-opus should not declare a per-model default_compaction_threshold; got %d", *def.DefaultCompactionThreshold)
 		}
-		if got := CompactionThresholdForModel("claude-4.8-opus"); got != 850_000 {
-			t.Errorf("claude-4.8-opus (1M window): got %d, want 850000", got)
+		if got := CompactionThresholdForModel("claude-4.8-opus"); got != 795_600 {
+			t.Errorf("claude-4.8-opus (1M window, 64k output): got %d, want 795600", got)
 		}
 	}
 }

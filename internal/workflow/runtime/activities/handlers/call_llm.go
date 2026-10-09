@@ -239,20 +239,20 @@ func compactionThresholdIsSet(args *reliantv1.CallLLMArgs) bool {
 
 // resolveCompactionThreshold returns the token count at which the agent loop
 // compacts this call's thread. Precedence: node arg > model value > the user's
-// tag preference > DERIVED from the resolved model's REAL context window for the
-// selected provider (CompactionThresholdFraction × EffectiveContextWindow, with
+// tag preference > DERIVED from the resolved model's prompt ceiling for the
+// selected provider (CompactionThresholdFraction × ProviderPromptCeiling, with
 // a per-model explicit override honored if the definition declares one; see
 // models.CompactionThresholdForProvider). With no registry definition (an
-// injected driver resolver, e.g. in tests) it derives from contextWindow, or
+// injected driver resolver, e.g. in tests) it derives from promptLimit, or
 // falls back to the global default when that is unknown.
 //
 // A pinned value is capped at models.CompactionThresholdCeiling: a threshold
 // past the point where the model runs out of room never fires, which leaves the
 // trim backstop to shred the conversation on every turn instead. A pin chosen
-// for a 1M-window model and carried onto a 272k one is exactly that.
+// for a 1M-window model and carried onto a smaller one is exactly that.
 //
-// contextWindow is the provider-effective window of the resolved model.
-func resolveCompactionThreshold(args *reliantv1.CallLLMArgs, tagThreshold int32, def *models.ModelDefinition, providerDriver string, contextWindow int64) int32 {
+// promptLimit is the resolved model's prompt ceiling (see promptCeiling).
+func resolveCompactionThreshold(args *reliantv1.CallLLMArgs, tagThreshold int32, def *models.ModelDefinition, providerDriver string, promptLimit int64) int32 {
 	threshold := explicitCompactionThresholdArg(args)
 	pinned := compactionThresholdIsSet(args)
 	if !pinned && tagThreshold > 0 {
@@ -260,11 +260,11 @@ func resolveCompactionThreshold(args *reliantv1.CallLLMArgs, tagThreshold int32,
 		pinned = true
 	}
 	if pinned {
-		if ceiling := int32(models.CompactionThresholdCeiling(def, int(contextWindow))); ceiling > 0 && threshold > ceiling {
-			logging.Info("[CallLLM] Pinned compaction threshold is past the model's context window; capping it",
+		if ceiling := int32(models.CompactionThresholdCeiling(def, int(promptLimit))); ceiling > 0 && threshold > ceiling {
+			logging.Info("[CallLLM] Pinned compaction threshold is past the model's prompt ceiling; capping it",
 				"pinned", threshold,
 				"capped", ceiling,
-				"contextWindow", contextWindow,
+				"promptCeiling", promptLimit,
 				"provider", providerDriver)
 			return ceiling
 		}
@@ -273,7 +273,7 @@ func resolveCompactionThreshold(args *reliantv1.CallLLMArgs, tagThreshold int32,
 	if def != nil {
 		return int32(models.CompactionThresholdForProvider(def, providerDriver))
 	}
-	return int32(models.DeriveCompactionThreshold(int(contextWindow)))
+	return int32(models.DeriveCompactionThreshold(int(promptLimit)))
 }
 
 // explicitSamplingOverrides applies precedence: node arg (author pinned) >
@@ -1075,15 +1075,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 			"modelID", resolved.Model.ID)
 	}
 
-	// The REAL context window of the resolved model for the SELECTED provider (a
-	// small-window provider like "@codex" caps the model below its platform
-	// window). Both the compaction trigger and the trim backstop scale from it.
-	effectiveContextWindow := resolved.Model.ContextWindow
-	if resolved.Definition != nil {
-		effectiveContextWindow = int64(models.EffectiveContextWindow(resolved.Definition, resolved.ProviderDriver))
-	}
+	// The largest prompt the resolved model accepts from the SELECTED provider.
+	// The compaction trigger, the pin cap, the trim backstop and the
+	// stored-token-count sanity check all scale from this one number.
+	ceiling := promptCeiling(resolved.Definition, resolved.ProviderDriver, resolved.Model)
 	effectiveCompactionThreshold := resolveCompactionThreshold(args, resolved.TagCompactionThreshold,
-		resolved.Definition, resolved.ProviderDriver, effectiveContextWindow)
+		resolved.Definition, resolved.ProviderDriver, ceiling)
 
 	// Observability: record whether extended reasoning is engaged for this call
 	// and at what effort. GPT/codex (and every reasoning driver) only emit
@@ -1328,7 +1325,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// repoMemoryBudgetFraction). Sorted by repo name for prefix-cache
 	// stability.
 	if projectCfg != nil && len(projectCfg.RepoMemories) > 0 {
-		budget := repoMemoryBudgetChars(effectiveContextWindow)
+		budget := repoMemoryBudgetChars(ceiling)
 		memMsgs, omitted := formatRepoMemoryMessages(projectCfg.RepoMemories, budget)
 		if len(memMsgs) > 0 {
 			prefix = append(prefix, memMsgs...)
@@ -1456,9 +1453,9 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	// Standard pre-request history transforms (shared with Compact):
 	// flatten tool blocks when the request carries no tools, trim to fit the
 	// context window, and normalize roles for API compatibility. The trim
-	// backstop threshold scales with effectiveContextWindow, matching the
+	// backstop threshold scales with the prompt ceiling, matching the
 	// compaction trigger above.
-	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, effectiveContextWindow)
+	history = prepareHistoryForLLM(chat.ID, history, systemPrompts, availableTools, ceiling)
 
 	// Inject skill suggestions into the latest user message based on token matching.
 	// Skills come from the synced project config — no filesystem access.

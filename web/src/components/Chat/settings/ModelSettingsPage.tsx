@@ -209,6 +209,12 @@ export function ModelSettingsPage({
     );
   }, [selectedModel]);
 
+  // The largest compaction_threshold the server honors for the selected
+  // model+driver; undefined when it reports none.
+  const maxCompaction = selectedModel?.maxCompactionThreshold || undefined;
+  const compactionCapped =
+    maxCompaction !== undefined && currentCompaction !== undefined && currentCompaction > maxCompaction;
+
   // Build override object (only non-default/non-auto values)
   const currentOverrides: Record<string, unknown> = {};
   if (currentThinking) currentOverrides.thinking_level = currentThinking;
@@ -225,10 +231,10 @@ export function ModelSettingsPage({
   // model it was set for — the field's own placeholder is that model's
   // default — so it belongs to the selection, and switching drops it. Keeping
   // it "when it still fits" is not checkable here: a tag re-resolves on the
-  // server, and the catalog's contextWindow is the model-wide window, not the
-  // smaller one a provider like codex enforces. Prod incident 2026-10-09: a
-  // 1M threshold set on one model rode a switch onto a 272k one, compaction
-  // never fired, and the trim backstop shredded the conversation instead.
+  // server, so the model this page shows for it may not be the one that runs.
+  // Prod incident 2026-10-09: a 1M threshold set on one model rode a switch
+  // onto a smaller one, compaction never fired, and the trim backstop
+  // shredded the conversation instead.
   const handleSelectTag = (tag: string) => {
     const resolvedModel = tagResolvedModels[tag];
     const supportedLevels = resolvedModel?.supportedThinkingLevels ?? [];
@@ -559,19 +565,24 @@ export function ModelSettingsPage({
         </div>
         )}
 
-        {/* Compaction */}
+        {/* Compaction: the placeholder is where this model+driver compacts by
+            default; the max is the largest pin the server honors there (85% of
+            the prompt ceiling) — a larger pin is capped to it. */}
         <div className="flex items-center justify-between">
           <span className="text-xs text-muted-foreground font-medium">
             Compaction
+            {maxCompaction && (
+              <span data-testid="compaction-max" className="text-2xs text-muted-foreground/70 font-normal">
+                {" "}
+                · max {maxCompaction.toLocaleString("en-US")}
+              </span>
+            )}
           </span>
           <input
             type="number"
             value={currentCompaction ?? ""}
-            placeholder={
-              selectedModel?.metadata?.defaultCompaction
-                ? String(selectedModel.metadata.defaultCompaction)
-                : "185000"
-            }
+            placeholder={String(selectedModel?.defaultCompactionThreshold || 185000)}
+            max={maxCompaction}
             onChange={(e) => {
               const val = e.target.value
                 ? Number(e.target.value)
@@ -582,6 +593,11 @@ export function ModelSettingsPage({
             className="w-[70px] px-2 py-1 bg-muted border border-border rounded text-foreground text-xs outline-none text-right focus:border-border/80"
           />
         </div>
+        {compactionCapped && maxCompaction !== undefined && (
+          <div data-testid="compaction-capped" className="mt-1 text-2xs text-warning text-right">
+            Capped at {maxCompaction.toLocaleString("en-US")}: compaction must run before the model&apos;s prompt limit.
+          </div>
+        )}
       </div>
     </div>
   );

@@ -34,17 +34,45 @@ func TestParseCodexModels_ReasoningLevelsAreIntersectedWithAcceptedSet(t *testin
 	assert.Equal(t, []string{"low", "medium", "high", "xhigh"}, report.Models["gpt-5.5"].ThinkingLevels)
 }
 
-func TestParseCodexModels_ContextWindowOverridesCatalog(t *testing.T) {
+// /codex/models reports two numbers per model: context_window (272000, the
+// window Codex CLI runs at by default) and max_context_window (872000, the most
+// it lets a session configure). The backend's limit is max_context_window: prod
+// accepted 698,604-token gpt-5.6-terra prompts.
+func TestParseCodexModels_ReadsMaxContextWindow(t *testing.T) {
 	report := recordedReport(t)
-	assert.Equal(t, 272000, report.Models["gpt-5.6-sol"].ContextWindow)
+	for _, slug := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra"} {
+		assert.Equal(t, 872000, report.Models[slug].ContextWindow, slug)
+	}
+	assert.Equal(t, 272000, report.Models["gpt-5.5"].ContextWindow)
+}
 
-	// An account window below the catalog's drives EffectiveContextWindow.
+// A response without max_context_window falls back to context_window.
+func TestParseCodexModels_FallsBackToContextWindow(t *testing.T) {
+	report, err := parseCodexModels([]byte(`{"models":[
+		{"slug":"gpt-5.6-terra","visibility":"list","context_window":300000,"supported_reasoning_levels":[{"effort":"high"}]}
+	]}`))
+	require.NoError(t, err)
+	assert.Equal(t, 300000, report.For("gpt-5.6-terra").ContextWindow)
+}
+
+// The recorded report caps the codex prompt ceiling at the advertised 872000,
+// below the catalog's 1,050,000 − 128,000 = 922,000; a lower account limit
+// lowers it further.
+func TestParseCodexModels_AdvertisedLimitCapsPromptCeiling(t *testing.T) {
+	resolveSol := func(report registry.ProviderAvailability) int {
+		t.Helper()
+		avail := registry.BuildAvailabilityFunc(models.MustGetRegistry(), map[string]registry.ProviderAvailability{"codex": report})
+		got, err := models.MustGetRegistry().WithAvailability(avail).Resolve(models.ModelSelector{ID: "gpt-5.6-sol@codex"}, []string{"codex"})
+		require.NoError(t, err)
+		return models.ProviderPromptCeiling(&got.Definition, "codex")
+	}
+
+	report := recordedReport(t)
+	assert.Equal(t, 872000, resolveSol(report))
+
 	custom := report
 	custom.Models = map[string]models.ModelAvailability{"gpt-5.6-sol": {ContextWindow: 100000}}
-	avail := registry.BuildAvailabilityFunc(models.MustGetRegistry(), map[string]registry.ProviderAvailability{"codex": custom})
-	got, err := models.MustGetRegistry().WithAvailability(avail).Resolve(models.ModelSelector{ID: "gpt-5.6-sol@codex"}, []string{"codex"})
-	require.NoError(t, err)
-	assert.Equal(t, 100000, models.EffectiveContextWindow(&got.Definition, "codex"))
+	assert.Equal(t, 100000, resolveSol(custom))
 }
 
 func TestParseCodexModels_HiddenAndUnknownSlugsAreNotOffered(t *testing.T) {

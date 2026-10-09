@@ -34,6 +34,10 @@ interface Model {
   supportsTemperature?: boolean;
   /** Tokens the model's server honors; 0/undefined = unknown. */
   contextWindow?: number;
+  /** Token count an unpinned chat on this model+driver compacts at; 0/undefined = unknown. */
+  defaultCompactionThreshold?: number;
+  /** Largest compaction_threshold the server honors on this model+driver (a larger pin is capped); 0/undefined = unknown. */
+  maxCompactionThreshold?: number;
   /** Set only for driverId "local": the machine whose server runs this model. */
   local?: {
     daemonId: string;
@@ -44,7 +48,6 @@ interface Model {
   };
   capabilities: string[];
   tags: string[];
-  metadata?: Record<string, unknown>;
 }
 
 /** What a tag selector resolves to for this user: model + the tier's effort. */

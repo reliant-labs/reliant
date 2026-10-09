@@ -28,11 +28,21 @@ const (
 
 // codexModelsResponse is the subset of GET /codex/models consumed. Recorded
 // 2026-10-04 (see testdata/codex_models.json).
+//
+// The two window fields mean what Codex CLI makes them mean (openai/codex
+// codex-rs/protocol/src/openai_models.rs, models-manager/src/model_info.rs):
+// context_window is the window a session runs at by DEFAULT (Codex CLI
+// auto-compacts against it), and max_context_window is "the maximum context
+// window allowed for config overrides" — the most the backend serves. For the
+// GPT-5.6 family and GPT-6 those are 272000 and 872000, and prod accepted
+// 698,604-token gpt-5.6-terra prompts, so the backend's limit is
+// max_context_window. context_window is only the fallback when max is absent.
 type codexModelsResponse struct {
 	Models []struct {
 		Slug                     string `json:"slug"`
 		Visibility               string `json:"visibility"`
 		ContextWindow            int    `json:"context_window"`
+		MaxContextWindow         int    `json:"max_context_window"`
 		SupportedReasoningLevels []struct {
 			Effort string `json:"effort"`
 		} `json:"supported_reasoning_levels"`
@@ -66,7 +76,9 @@ func accountKey(accountID, token string) string {
 //
 //   - slug maps to our catalog id by api_model;
 //   - visibility "hide" means not offered;
-//   - context_window overrides the model's window for codex;
+//   - max_context_window (context_window when absent) is the limit the backend
+//     advertises; it caps the codex prompt ceiling when lower than the
+//     catalog's (see models.ProviderPromptCeiling);
 //   - reasoning levels are the INTERSECTION of the advertised levels and the
 //     ones the API accepts (`ultra` is advertised and 400s).
 //
@@ -160,10 +172,14 @@ func parseCodexModels(body []byte) (registry.ProviderAvailability, error) {
 		for _, l := range m.SupportedReasoningLevels {
 			advertised = append(advertised, l.Effort)
 		}
+		limit := m.MaxContextWindow
+		if limit <= 0 {
+			limit = m.ContextWindow
+		}
 		report.Models[slug] = models.ModelAvailability{
 			Disabled:       m.Visibility == "hide",
 			Reason:         codexNotServedReason,
-			ContextWindow:  m.ContextWindow,
+			ContextWindow:  limit,
 			ThinkingLevels: models.IntersectCodexLevels(advertised),
 		}
 	}

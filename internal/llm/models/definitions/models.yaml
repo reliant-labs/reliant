@@ -561,12 +561,17 @@ models:
     providers:
       - driver: codex
         api_model: gpt-5.5
-        # The ChatGPT/Codex subscription backend serves GPT-5.x with a ~272k
-        # context window, far below the OpenAI platform window declared above.
-        # Context management (compaction trigger + trim backstop) derives from
-        # this per-provider window so an @codex session compacts before it
-        # overflows and 400s with context_length_exceeded.
-        max_context_window: 272000
+        # The ChatGPT/Codex subscription backend serves GPT-5.5 far below the
+        # OpenAI platform window declared above: GET /codex/models advertises
+        # context_window = max_context_window = 272000 for it. Every window in
+        # this file is a TOTAL (input + output) and the prompt ceiling is window
+        # − max_output_tokens (models.PromptCeiling), so the codex window is
+        # declared as 272000 + 128000: the derived ceiling then equals the
+        # backend's advertised 272000 — the ceiling @codex has always run at —
+        # even when /codex/models is unreachable. Whether the backend's 272000
+        # itself counts output is not stated; the live value caps the ceiling
+        # either way (models.ProviderPromptCeiling).
+        max_context_window: 400000
       - driver: openai
         api_model: gpt-5.5
       - driver: openrouter
@@ -628,16 +633,13 @@ models:
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
+      # codex inherits the published 1,050,000 window / 128,000 max output
+      # (prompt ceiling 922,000). GET /codex/models advertises
+      # max_context_window 872000 for astra (context_window 272000 is only
+      # Codex CLI's default working window), and the lower of the two governs:
+      # the codex prompt ceiling is 872,000 (models.ProviderPromptCeiling).
       - driver: codex
         api_model: gpt-6-astra
-        # UNVERIFIED for astra specifically. The ChatGPT/Codex subscription
-        # backend caps every GPT-5.x model at ~272k (see the gpt-5.5 note), and
-        # the astra capture never grew a context large enough to prove whether
-        # that still applies to a 1M-window model. Inheriting the cap is the
-        # safe direction: too small only makes us compact early, while too large
-        # 400s the turn with context_length_exceeded. Raise this once someone
-        # runs a long astra session through the codex backend.
-        max_context_window: 272000
       - driver: openai
         api_model: gpt-6-astra
       - driver: openrouter
@@ -813,6 +815,26 @@ models:
   # 2026-10-04). They also
   # return no reasoning summaries — only encrypted reasoning content — so there
   # is no visible thinking to stream for these models.
+  #
+  # Context: OpenAI publishes each of them with a 1,050,000-token context window
+  # (input + output), 922,000 maximum input tokens and 128,000 max output
+  # tokens (developers.openai.com/api/docs/models/<id>.md, checked 2026-10-09;
+  # >272K input is billed at the long-context rate). max_context_window is that
+  # TOTAL; the prompt ceiling every context threshold derives from is window −
+  # max_output_tokens = 922,000 (models.PromptCeiling).
+  #
+  # Codex: GET /codex/models (testdata/codex_models.json, and the catalog Codex
+  # CLI bundles at openai/codex codex-rs/models-manager/models.json, main
+  # 2026-10-09) advertises context_window 272000 — Codex CLI's DEFAULT working
+  # window — and max_context_window 872000, "the maximum context window allowed
+  # for config overrides". 872000 may itself be an input figure (1M − 128k), so
+  # it is not converted: it caps the prompt ceiling because it is lower, and the
+  # codex ceiling is 872,000 (compaction 741,200, backstop 828,400). Prod
+  # accepted 698,604-token terra prompts, well past the 272k default.
+  #
+  # Copilot (terra, luna) inherits the same window: its /models reports
+  # max_context_window_tokens 1050000 and max_prompt_tokens 922000 for these
+  # models (copilot testdata/copilot_models.json).
   - id: gpt-5.6-sol
     name: GPT-5.6 Sol
     visibility: user
@@ -822,7 +844,7 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
-      max_context_window: 272000
+      max_context_window: 1050000
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
@@ -855,7 +877,7 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
-      max_context_window: 272000
+      max_context_window: 1050000
       max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
@@ -884,7 +906,7 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
-      max_context_window: 272000
+      max_context_window: 1050000
       max_output_tokens: 128000
       # `max` is observed working on luna in the capture.
       thinking_levels: [low, medium, high, xhigh, max]

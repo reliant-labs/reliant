@@ -126,6 +126,17 @@ type resolvedLLMCall struct {
 	TagCompactionThreshold int32
 }
 
+// promptCeiling is the largest prompt this call may send: the context budget
+// compaction, the pin cap, the trim backstop and the stored-token-count sanity
+// check all derive from (models.PromptCeiling). def is nil when an injected
+// resolver supplied model.
+func promptCeiling(def *models.ModelDefinition, providerDriver string, model models.Model) int64 {
+	if def != nil {
+		return int64(models.ProviderPromptCeiling(def, providerDriver))
+	}
+	return int64(models.PromptCeiling(int(model.ContextWindow), int(model.DefaultMaxTokens)))
+}
+
 // resolveLLMCall resolves a spec into a ready-to-use driver the same way for
 // every activity:
 //   - registry resolution over the user's configured providers (the provider

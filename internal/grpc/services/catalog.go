@@ -141,21 +141,28 @@ func (s *CatalogService) ListModels(
 			// Get display name for the driver (used for grouping in UI)
 			driverDisplayName := getDriverDisplayName(driverID)
 
+			// The model as THIS driver serves it to this account, so the window
+			// and compaction thresholds are the ones a request will run with.
+			served := registry.ServedDefinition(model, driverID)
+			defaultCompaction, maxCompaction := compactionThresholds(&served, driverID)
+
 			modelList = append(modelList, &reliantv1.ModelInfo{
-				Id:                      uniqueID,
-				Name:                    model.Name,
-				Provider:                driverDisplayName, // For UI grouping
-				DriverId:                driverID,          // For routing
-				Capabilities:            capabilitiesToStrings(model.Capabilities),
-				ContextWindow:           int64(model.Capabilities.MaxContextWindow),
-				DefaultMaxTokens:        int64(model.Capabilities.MaxOutputTokens),
-				CanReason:               model.Capabilities.CanReason,
-				SupportsAttachments:     model.Capabilities.SupportsAttachments,
-				Tags:                    registry.TagsOf(model.ID),
-				SupportsTools:           model.Capabilities.SupportsTools,
-				SupportsCaching:         model.Capabilities.SupportsCaching,
-				SupportedThinkingLevels: models.SupportedThinkingLevels(model.Capabilities),
-				SupportsTemperature:     models.SupportsTemperature(model, driverID),
+				Id:                         uniqueID,
+				Name:                       model.Name,
+				Provider:                   driverDisplayName, // For UI grouping
+				DriverId:                   driverID,          // For routing
+				Capabilities:               capabilitiesToStrings(model.Capabilities),
+				ContextWindow:              int64(models.EffectiveContextWindow(&served, driverID)),
+				DefaultMaxTokens:           int64(model.Capabilities.MaxOutputTokens),
+				CanReason:                  model.Capabilities.CanReason,
+				SupportsAttachments:        model.Capabilities.SupportsAttachments,
+				Tags:                       registry.TagsOf(model.ID),
+				SupportsTools:              model.Capabilities.SupportsTools,
+				SupportsCaching:            model.Capabilities.SupportsCaching,
+				SupportedThinkingLevels:    models.SupportedThinkingLevels(model.Capabilities),
+				SupportsTemperature:        models.SupportsTemperature(model, driverID),
+				DefaultCompactionThreshold: defaultCompaction,
+				MaxCompactionThreshold:     maxCompaction,
 			})
 		}
 	}
@@ -184,23 +191,35 @@ func (s *CatalogService) localModelInfos(ctx context.Context, userID string) []*
 	infos := make([]*reliantv1.ModelInfo, 0, len(found))
 	for _, m := range found {
 		def := m.Definition
+		defaultCompaction, maxCompaction := compactionThresholds(&def, string(local.Family))
 		infos = append(infos, &reliantv1.ModelInfo{
-			Id:                      m.CatalogID(),
-			Name:                    def.Name,
-			Provider:                getDriverDisplayName(string(local.Family)),
-			DriverId:                string(local.Family),
-			Capabilities:            capabilitiesToStrings(def.Capabilities),
-			ContextWindow:           int64(def.Capabilities.MaxContextWindow),
-			DefaultMaxTokens:        int64(def.Capabilities.MaxOutputTokens),
-			CanReason:               def.Capabilities.CanReason,
-			SupportsAttachments:     def.Capabilities.SupportsAttachments,
-			SupportsTools:           def.Capabilities.SupportsTools,
-			SupportedThinkingLevels: models.SupportedThinkingLevels(def.Capabilities),
-			SupportsTemperature:     true,
-			Local:                   localModelSource(m),
+			Id:                         m.CatalogID(),
+			Name:                       def.Name,
+			Provider:                   getDriverDisplayName(string(local.Family)),
+			DriverId:                   string(local.Family),
+			Capabilities:               capabilitiesToStrings(def.Capabilities),
+			ContextWindow:              int64(def.Capabilities.MaxContextWindow),
+			DefaultMaxTokens:           int64(def.Capabilities.MaxOutputTokens),
+			CanReason:                  def.Capabilities.CanReason,
+			SupportsAttachments:        def.Capabilities.SupportsAttachments,
+			SupportsTools:              def.Capabilities.SupportsTools,
+			SupportedThinkingLevels:    models.SupportedThinkingLevels(def.Capabilities),
+			SupportsTemperature:        true,
+			Local:                      localModelSource(m),
+			DefaultCompactionThreshold: defaultCompaction,
+			MaxCompactionThreshold:     maxCompaction,
 		})
 	}
 	return infos
+}
+
+// compactionThresholds returns where an unpinned chat on def served by driver
+// compacts, and the largest pin that is honored there — the same derivation
+// call_llm uses (models.ProviderPromptCeiling).
+func compactionThresholds(def *models.ModelDefinition, driver string) (defaultThreshold, maxThreshold int64) {
+	ceiling := models.ProviderPromptCeiling(def, driver)
+	return int64(models.CompactionThresholdForProvider(def, driver)),
+		int64(models.CompactionThresholdCeiling(def, ceiling))
 }
 
 // localModelSource locates a model for the picker. A configured endpoint is
@@ -492,7 +511,7 @@ func (s *CatalogService) ListModelsByProvider(
 			Name:                    def.Name,
 			Provider:                provider,
 			DriverId:                provider,
-			ContextWindow:           int64(def.Capabilities.MaxContextWindow),
+			ContextWindow:           int64(models.EffectiveContextWindow(&def, provider)),
 			DefaultMaxTokens:        int64(def.Capabilities.MaxOutputTokens),
 			CanReason:               def.Capabilities.CanReason,
 			SupportedThinkingLevels: models.SupportedThinkingLevels(def.Capabilities),

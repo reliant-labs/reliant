@@ -523,18 +523,18 @@ type ProviderMapping struct {
 	// Required: Yes
 	APIModel string `yaml:"api_model" json:"api_model" mapstructure:"api_model"`
 
-	// MaxContextWindow is an OPTIONAL per-provider override of the model's real
-	// context window when THIS provider serves the model with a smaller window
-	// than the model-wide Capabilities.MaxContextWindow.
+	// MaxContextWindow is an OPTIONAL per-provider override of the model's
+	// published TOTAL context window (input + output) when THIS provider serves
+	// the model with a smaller window than the model-wide
+	// Capabilities.MaxContextWindow.
 	//
-	// The same model can be reachable through several providers whose real
-	// windows differ: the OpenAI platform API serves GPT-5.x at ~1M tokens, but
-	// the ChatGPT/Codex subscription backend (driver "codex") caps the same model
-	// far lower. The model-wide window is the platform value; a provider that
-	// serves a smaller window declares it here so context management (compaction
-	// trigger + trim backstop) is derived from the window the request will
-	// actually hit — not the optimistic platform window, which would let history
-	// grow past the provider's real limit and 400 with context_length_exceeded.
+	// The same model can be reachable through several providers whose windows
+	// differ. A provider that serves a smaller window declares it here so context
+	// management (compaction trigger + trim backstop) is derived from the window
+	// the request will actually hit — not the optimistic platform window, which
+	// would let history grow past the provider's real limit and 400 with
+	// context_length_exceeded. Like the model-wide value it is a TOTAL: the
+	// prompt ceiling is this less max_output_tokens (see models.PromptCeiling).
 	//
 	// When 0/unset the model-wide Capabilities.MaxContextWindow applies. A value
 	// larger than the model-wide window is ignored (see EffectiveContextWindow).
@@ -542,6 +542,13 @@ type ProviderMapping struct {
 	// YAML key: max_context_window
 	// Default: 0 (use the model-wide window)
 	MaxContextWindow int `yaml:"max_context_window,omitempty" json:"max_context_window,omitempty" mapstructure:"max_context_window"`
+
+	// AdvertisedLimit is the context limit the provider itself reports for the
+	// connected account (e.g. /codex/models' max_context_window). It is never
+	// declared in YAML: resolution stamps it from the provider's live
+	// availability report. When positive and below the prompt ceiling derived
+	// from the catalog, it IS the ceiling (see ProviderPromptCeiling).
+	AdvertisedLimit int `yaml:"-" json:"-" mapstructure:"-"`
 }
 
 // DriverSettings contains driver-specific configuration for a model.

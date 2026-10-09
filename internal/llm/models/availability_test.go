@@ -80,24 +80,59 @@ func TestResolve_TagFailsWhenEveryCandidateDisabled(t *testing.T) {
 	require.Error(t, err)
 }
 
-// The account's real window and usable levels land on the resolved model, so
-// EffectiveContextWindow and clamping derive from what the account gets.
-func TestResolve_AvailabilityOverridesWindowAndLevels(t *testing.T) {
-	avail := func(driver, modelID string) ModelAvailability {
-		if driver == "codex" && modelID == "gpt-5.6-sol" {
-			return ModelAvailability{ContextWindow: 123456, ThinkingLevels: []string{"low", "medium"}}
+// The account's advertised limit and usable levels land on the resolved model,
+// so ProviderPromptCeiling and clamping derive from what the account gets. A
+// limit below the catalog-derived ceiling (922,000 for gpt-5.6-sol) is the
+// ceiling; one above it never raises it.
+func TestResolve_AvailabilityCapsPromptCeilingAndLevels(t *testing.T) {
+	resolveWith := func(limit int) *ResolvedModel {
+		t.Helper()
+		avail := func(driver, modelID string) ModelAvailability {
+			if driver == "codex" && modelID == "gpt-5.6-sol" {
+				return ModelAvailability{ContextWindow: limit, ThinkingLevels: []string{"low", "medium"}}
+			}
+			return ModelAvailability{}
 		}
-		return ModelAvailability{}
+		got, err := MustGetRegistry().WithAvailability(avail).Resolve(ModelSelector{ID: "gpt-5.6-sol@codex"}, []string{"codex"})
+		require.NoError(t, err)
+		return got
 	}
-	got, err := MustGetRegistry().WithAvailability(avail).Resolve(ModelSelector{ID: "gpt-5.6-sol@codex"}, []string{"codex"})
-	require.NoError(t, err)
-	assert.Equal(t, 123456, EffectiveContextWindow(&got.Definition, "codex"))
+
+	got := resolveWith(123456)
+	assert.Equal(t, 123456, ProviderPromptCeiling(&got.Definition, "codex"))
+	assert.Equal(t, 1_050_000, EffectiveContextWindow(&got.Definition, "codex"), "the catalog window is not rewritten")
 	assert.Equal(t, []string{"low", "medium"}, got.Definition.Capabilities.ThinkingLevels)
+
+	got = resolveWith(2_000_000)
+	assert.Equal(t, 922_000, ProviderPromptCeiling(&got.Definition, "codex"), "a larger advertised limit does not raise the ceiling")
 
 	// The shared registry is untouched.
 	orig, _ := MustGetRegistry().GetDefinition("gpt-5.6-sol")
 	assert.NotEqual(t, []string{"low", "medium"}, orig.Capabilities.ThinkingLevels)
-	assert.NotEqual(t, 123456, EffectiveContextWindow(orig, "codex"))
+	assert.Equal(t, 922_000, ProviderPromptCeiling(orig, "codex"))
+}
+
+// ServedDefinition applies the same advertised limit Resolve does, so the
+// picker's thresholds match the request path.
+func TestServedDefinition_MatchesResolve(t *testing.T) {
+	reg := MustGetRegistry().WithAvailability(func(driver, _ string) ModelAvailability {
+		if driver == "codex" {
+			return ModelAvailability{ContextWindow: 872_000}
+		}
+		return ModelAvailability{}
+	})
+	def, ok := reg.GetDefinition("gpt-5.6-terra")
+	require.True(t, ok)
+
+	served := reg.ServedDefinition(def, "codex")
+	assert.Equal(t, 872_000, ProviderPromptCeiling(&served, "codex"))
+	resolved, err := reg.Resolve(ModelSelector{ID: "gpt-5.6-terra@codex"}, []string{"codex"})
+	require.NoError(t, err)
+	assert.Equal(t, ProviderPromptCeiling(&resolved.Definition, "codex"), ProviderPromptCeiling(&served, "codex"))
+
+	// copilot reports nothing here: the catalog ceiling applies.
+	copilot := reg.ServedDefinition(def, "copilot")
+	assert.Equal(t, 922_000, ProviderPromptCeiling(&copilot, "copilot"))
 }
 
 func TestWithAvailability_NilIsIdentity(t *testing.T) {
