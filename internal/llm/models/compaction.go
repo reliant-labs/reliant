@@ -30,6 +30,29 @@ func DeriveCompactionThreshold(contextWindow int) int {
 	return int(float64(contextWindow) * CompactionThresholdFraction)
 }
 
+// CompactionThresholdCeiling is the largest compaction threshold that still
+// fires before a model with the given REAL context window runs out of room: the
+// threshold derived from the window, or the definition's own
+// default_compaction_threshold when that is higher (the model author's call),
+// never past the window itself. 0 means the window is unknown, so there is
+// nothing to cap against.
+//
+// It bounds PINNED thresholds (a call_llm arg, a model selector's
+// compaction_threshold, a tag preference). A pin outlives the model it was
+// chosen for: prod incident 2026-10-09 pinned 1M on a selector whose tag
+// resolved to a 272k-window model, compaction could never fire, and the trim
+// backstop shredded the conversation on every turn instead.
+func CompactionThresholdCeiling(def *ModelDefinition, contextWindow int) int {
+	if contextWindow <= 0 {
+		return 0
+	}
+	ceiling := DeriveCompactionThreshold(contextWindow)
+	if def != nil && def.DefaultCompactionThreshold != nil && *def.DefaultCompactionThreshold > ceiling {
+		ceiling = min(*def.DefaultCompactionThreshold, contextWindow)
+	}
+	return ceiling
+}
+
 // EffectiveContextWindow returns the REAL context window a model has when served
 // by the given provider driver. A provider may serve the model with a smaller
 // window than the model-wide Capabilities.MaxContextWindow (the ChatGPT/Codex

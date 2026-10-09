@@ -280,8 +280,9 @@ func TestTrimMessagesToFitContextWithFullEstimate_PreservesHeadAndTail(t *testin
 	}
 }
 
-func TestTrimMessagesToFitContextWithFullEstimate_TrimsTextContent(t *testing.T) {
-	// Test that text content is also trimmed (not just tool results)
+func TestTrimMessagesToFitContextWithFullEstimate_NeverTrimsUserText(t *testing.T) {
+	// Only tool output is trimmable: an over-limit user message is sent intact
+	// rather than rewritten (see context_trimming_user_safety_test.go).
 	largeText := strings.Repeat("y", 800000)
 
 	messages := []Message{
@@ -291,19 +292,11 @@ func TestTrimMessagesToFitContextWithFullEstimate_TrimsTextContent(t *testing.T)
 		},
 	}
 
-	trimmed := TrimMessagesToFitContextWithFullEstimate(messages, nil, nil)
-	if !trimmed {
-		t.Error("Expected trimming for large text message")
+	if TrimMessagesToFitContextWithFullEstimate(messages, nil, nil) {
+		t.Error("reported trimming with no tool output to trim")
 	}
-
-	textContent := messages[0].Parts[0].(TextContent)
-	if len(textContent.Text) >= len(largeText) {
-		t.Errorf("Expected text to be trimmed, got %d chars (original %d)",
-			len(textContent.Text), len(largeText))
-	}
-
-	if !strings.Contains(textContent.Text, TrimmedContentSuffix) {
-		t.Error("Expected trimmed content suffix")
+	if got := messages[0].Parts[0].(TextContent).Text; got != largeText {
+		t.Errorf("user text was trimmed: %d -> %d chars", len(largeText), len(got))
 	}
 }
 
@@ -343,7 +336,7 @@ func TestTrimWithFullEstimate_SystemPromptsExceedLimit(t *testing.T) {
 	// Create messages that are just under the limit
 	messageContent := strings.Repeat("m", 750000) // ~187k tokens
 	messages := []Message{
-		{Parts: []ContentPart{TextContent{Text: messageContent}}},
+		{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "tc_1", Name: "view", Content: messageContent}}},
 	}
 
 	// Without system prompts, this should not need trimming
@@ -367,7 +360,7 @@ func TestTrimWithFullEstimate_ToolsExceedLimit(t *testing.T) {
 	// Test that tool definitions push us over the limit
 	messageContent := strings.Repeat("m", 750000) // ~187k tokens
 	messages := []Message{
-		{Parts: []ContentPart{TextContent{Text: messageContent}}},
+		{Role: Tool, Parts: []ContentPart{ToolResult{ToolCallID: "tc_1", Name: "view", Content: messageContent}}},
 	}
 
 	// Create large tool definitions
