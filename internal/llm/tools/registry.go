@@ -656,6 +656,14 @@ func GetToolRegistry() []ToolDefinition {
 		// Metadata tools
 		{ToolMetadataWriter, (*ToolsFactory).MetadataWriter, []ToolTag{}, PlacementDaemon},
 
+		// Defect reporting. In the coding bundles, like skill and load_tool,
+		// because an agent reaches for it at the moment something breaks —
+		// a tool it must first discover is one it does not use. Every other
+		// agent can load it (call_llm's report_bug note says so). Server-
+		// placed: it needs no filesystem, and the worker is where the Sentry
+		// DSN is.
+		{ToolReportBug, (*ToolsFactory).ReportBug, []ToolTag{TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer},
+
 		// Component tools
 		{ToolComponentLibrary, (*ToolsFactory).ComponentLibrary, []ToolTag{TagReadOnly, TagCodingPlan}, PlacementAny},
 

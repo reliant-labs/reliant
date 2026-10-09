@@ -87,6 +87,9 @@ const (
 	// Metadata tools
 	ToolMetadataWriter = "metadata_writer"
 
+	// Defect reporting: an agent files a Reliant or forge bug with engineering
+	ToolReportBug = "report_bug"
+
 	// Component tools
 	ToolComponentLibrary = "component_library"
 
@@ -139,6 +142,7 @@ var AllToolNames = []string{
 	ToolMoveCode,
 	ToolSaveRecommendations,
 	ToolMetadataWriter,
+	ToolReportBug,
 	ToolComponentLibrary,
 	// Workflow editing
 	ToolCreateWorkflow, ToolEditWorkflow, ToolWriteWorkflow,
