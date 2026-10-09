@@ -630,9 +630,25 @@ func SkillsAnnouncement(skills []config.StoredSkill) string {
 		return ""
 	}
 
-	sort.Slice(tops, func(i, j int) bool {
-		return tops[i].SkillPath < tops[j].SkillPath
+	sort.SliceStable(tops, func(i, j int) bool {
+		if tops[i].SkillPath != tops[j].SkillPath {
+			return tops[i].SkillPath < tops[j].SkillPath
+		}
+		return tops[i].Description < tops[j].Description
 	})
+
+	// Print each addressable path once. A load resolves a path to exactly one
+	// skill (findSkillByPath takes the first exact match), so a second line
+	// with the same path names nothing the tool could reach — it only costs
+	// tokens. The first entry in sort order is the one printed.
+	uniq := tops[:0:0]
+	for _, def := range tops {
+		if len(uniq) > 0 && uniq[len(uniq)-1].SkillPath == def.SkillPath {
+			continue
+		}
+		uniq = append(uniq, def)
+	}
+	tops = uniq
 
 	var sb strings.Builder
 	sb.WriteString("\n\n<system-reminder>\nAvailable skills (use the skill tool to load):\n")

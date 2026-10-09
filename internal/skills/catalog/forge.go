@@ -46,20 +46,45 @@ func parseForgeSyntheticPath(p string) (projectRoot, forgePath string, ok bool) 
 	return rest[:sep], rest[sep+1:], true
 }
 
-// forgeSkillsForInput enumerates forge skills for the project root and each
-// nested repo source declared in input. The same NormalizedKey-prefixing
-// rule used elsewhere in discoverAll is applied here so forge skills from
-// different repos don't shadow each other.
-//
-// Skills surfaced under a nested repo get NormalizedKey="<source>/forge/..."
-// instead of "forge/...", consistent with how reliant disambiguates skills
-// from multiple repos. The synthesized parent's NormalizedKey is also
-// prefixed so each repo gets its own "forge" group.
+// forgeSkillsForInput enumerates forge skills for the project: the
+// directory-independent ones (forge-shipped and user-global, plus the single
+// synthesized "forge" parent) once, and each repo source's project-local
+// <repo>/.forge/skills on its own. Project-local skills from a nested repo get
+// Source=<source> — the same identity rule discoverAll applies —
+// so same-named local skills in different repos don't shadow each other.
 func forgeSkillsForInput(input DiscoverInput) []Definition {
-	roots := append([]string{""}, input.RepoSources...)
-	seen := map[string]struct{}{}
+	// forgecli.ListSkills(baseDir) = forge-shipped (embedded in this binary,
+	// identical for every baseDir) + user-global (~/.forge/skills, also
+	// baseDir-independent) + project-local (<baseDir>/.forge/skills). Only the
+	// last varies per directory; RenderSkill's output differs per baseDir solely
+	// by the audience (forge.yaml present) and a version-skew advisory. So the
+	// baseDir-independent skills are discovered ONCE, and only project-local
+	// ones are discovered per source. Enumerating everything per repo repeated
+	// ~25 byte-identical skills once per repo.
 	var out []Definition
-	for _, src := range roots {
+
+	// Shared pass. Use a forge project dir as baseDir when there is one so
+	// emit:both bodies keep their @forge-only sections (the audience is derived
+	// from forge.yaml at baseDir) and the forge namespace is surfaced.
+	sharedDir := input.ProjectPath
+	sharedForge := false
+	candidates := append([]string{""}, input.RepoSources...)
+	for _, src := range candidates {
+		src = strings.TrimSpace(src)
+		if src == "." {
+			src = ""
+		}
+		dir := filepath.Join(input.ProjectPath, src)
+		if _, err := os.Stat(filepath.Join(dir, "forge.yaml")); err == nil {
+			sharedDir, sharedForge = dir, true
+			break
+		}
+	}
+	out = append(out, discoverForgeSkillsFiltered(sharedDir, "", input.LoadFullDefinitions, sharedForge, false,
+		func(s forgecli.Skill) bool { return s.Scope != string(projectSkillScope) })...)
+
+	seen := map[string]struct{}{}
+	for _, src := range candidates {
 		src = strings.TrimSpace(src)
 		canonical := src
 		if canonical == "." {
@@ -74,16 +99,19 @@ func forgeSkillsForInput(input DiscoverInput) []Definition {
 		if canonical != "" {
 			baseDir = filepath.Join(input.ProjectPath, canonical)
 		}
-		defs := discoverForgeSkills(baseDir, canonical, input.LoadFullDefinitions)
+		_, yamlErr := os.Stat(filepath.Join(baseDir, "forge.yaml"))
+		defs := discoverForgeSkillsFiltered(baseDir, canonical, input.LoadFullDefinitions, yamlErr == nil, true,
+			func(s forgecli.Skill) bool { return s.Scope == string(projectSkillScope) })
 		for _, def := range defs {
-			if canonical != "" && def.NormalizedKey != "" {
-				def.NormalizedKey = canonical + "/" + def.NormalizedKey
-			}
 			out = append(out, def)
 		}
 	}
 	return out
 }
+
+// projectSkillScope is forge's scope value for skills read from
+// <baseDir>/.forge/skills.
+const projectSkillScope = "project"
 
 // discoverForgeSkills enumerates skills surfaced from a sibling forge
 // module rooted at baseDir. The result is partitioned by each skill's
@@ -105,18 +133,33 @@ func forgeSkillsForInput(input DiscoverInput) []Definition {
 // Returns nil when forge enumeration fails or returns zero skills —
 // integration is best-effort and silent.
 //
-// source is propagated to each Definition.Source so the caller's
-// NormalizedKey-prefixing logic can disambiguate forge skills across
+// source is propagated to each Definition.Source so the catalog
+// key (Source, SkillPath) can disambiguate forge skills across
 // nested repos.
 func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Definition {
+	_, err := os.Stat(filepath.Join(baseDir, "forge.yaml"))
+	return discoverForgeSkillsFiltered(baseDir, source, loadFullDefinitions, err == nil, false, nil)
+}
+
+// discoverForgeSkillsFiltered is discoverForgeSkills with the forge-project
+// decision made by the caller and an optional filter over forgecli's listing.
+// keep == nil keeps everything.
+func discoverForgeSkillsFiltered(baseDir, source string, loadFullDefinitions, hasForgeYAML, projectOnly bool, keep func(forgecli.Skill) bool) []Definition {
 	skills, err := forgecli.ListSkills(baseDir)
-	if err != nil || len(skills) == 0 {
+	if err != nil {
 		return nil
 	}
-
-	hasForgeYAML := false
-	if _, err := os.Stat(filepath.Join(baseDir, "forge.yaml")); err == nil {
-		hasForgeYAML = true
+	if keep != nil {
+		kept := skills[:0:0]
+		for _, s := range skills {
+			if keep(s) {
+				kept = append(kept, s)
+			}
+		}
+		skills = kept
+	}
+	if len(skills) == 0 {
+		return nil
 	}
 
 	// Deterministic order so the synthesized parent's body and the
@@ -127,19 +170,18 @@ func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Def
 
 	// Forge framework parent — only in forge projects. Its body lists
 	// only the framework children that will actually appear under it.
-	if hasForgeYAML {
+	if hasForgeYAML && !projectOnly {
 		defs = append(defs, Definition{
-			Name:          forgeNamespace,
-			NormalizedKey: forgeNamespace,
-			Description:   "Forge skills surfaced from this project's sibling forge module. Use the skill tool to load a specific sub-skill (e.g. forge/db, forge/proto, forge/api/handlers).",
-			Body:          forgeParentBody(filterForgeAudience(skills)),
-			Path:          forgeSyntheticPath(baseDir, ""),
-			Scope:         skillscore.ScopeForge,
-			Format:        skillscore.SkillFormatClaudeMarkdown,
-			SkillDir:      forgeSyntheticPath(baseDir, ""),
-			SkillPath:     forgeNamespace,
-			HasChildren:   true,
-			Source:        source,
+			Name:        forgeNamespace,
+			Description: "Forge skills surfaced from this project's sibling forge module. Use the skill tool to load a specific sub-skill (e.g. forge/db, forge/proto, forge/api/handlers).",
+			Body:        forgeParentBody(filterForgeAudience(skills)),
+			Path:        forgeSyntheticPath(baseDir, ""),
+			Scope:       skillscore.ScopeForge,
+			Format:      skillscore.SkillFormatClaudeMarkdown,
+			SkillDir:    forgeSyntheticPath(baseDir, ""),
+			SkillPath:   forgeNamespace,
+			HasChildren: true,
+			Source:      source,
 		})
 	}
 
@@ -150,16 +192,15 @@ func discoverForgeSkills(baseDir, source string, loadFullDefinitions bool) []Def
 		}
 
 		defs = append(defs, Definition{
-			Name:          skillscore.NormalizeSkillName(s.Name),
-			NormalizedKey: skillPath,
-			Description:   s.Description,
-			Body:          "",
-			Path:          forgeSyntheticPath(baseDir, s.Path),
-			Scope:         skillscore.ScopeForge,
-			Format:        skillscore.SkillFormatClaudeMarkdown,
-			SkillDir:      forgeSyntheticPath(baseDir, s.Path),
-			SkillPath:     skillPath,
-			Source:        source,
+			Name:        skillscore.NormalizeSkillName(s.Name),
+			Description: s.Description,
+			Body:        "",
+			Path:        forgeSyntheticPath(baseDir, s.Path),
+			Scope:       skillscore.ScopeForge,
+			Format:      skillscore.SkillFormatClaudeMarkdown,
+			SkillDir:    forgeSyntheticPath(baseDir, s.Path),
+			SkillPath:   skillPath,
+			Source:      source,
 		})
 	}
 

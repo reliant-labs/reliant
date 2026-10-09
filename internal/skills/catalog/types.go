@@ -5,7 +5,6 @@ import skillscore "github.com/reliant-labs/reliant/internal/skills/core"
 // Definition is the metadata-level representation of a discovered skill.
 type Definition struct {
 	Name          string
-	NormalizedKey string
 	Description   string
 	License       string
 	Compatibility string
@@ -19,9 +18,8 @@ type Definition struct {
 	SkillPath     string // Hierarchical path relative to discovery root, e.g. "go/error-handling"
 	HasChildren   bool   // True if this skill has sub-skills in subdirectories
 	// Source is the repo relative path the skill was discovered in. "" means
-	// project root scope; non-empty means a nested repo (e.g. "api"). Skills
-	// with non-empty Source get their NormalizedKey prefixed with Source/ to
-	// avoid collisions across repos.
+	// project root scope; non-empty means a nested repo (e.g. "api"). Together
+	// with SkillPath it forms the skill's identity (see Key).
 	Source string
 
 	// Claude-compatible fields
@@ -29,6 +27,33 @@ type Definition struct {
 	DisableModelInvocation bool
 	UserInvocable          *bool // nil = default true
 	Paths                  string
+}
+
+// SkillKey is a skill's catalog identity: which source it came from and its
+// path within that source. It is a struct, not a joined string, so a repo named
+// like a namespace ("forge") can never collide with a skill whose path happens
+// to start with that namespace ("forge/proto").
+type SkillKey struct {
+	Source string
+	Path   string
+}
+
+// String renders the key for humans only; never parse or compare it.
+func (k SkillKey) String() string {
+	src := k.Source
+	if src == "" {
+		src = "(root)"
+	}
+	return src + ":" + k.Path
+}
+
+// Key returns the definition's catalog identity.
+func (d Definition) Key() SkillKey {
+	p := d.SkillPath
+	if p == "" {
+		p = d.Name
+	}
+	return SkillKey{Source: d.Source, Path: p}
 }
 
 // ShadowedSkill is one skill delivered by two producers under the same key,
@@ -46,8 +71,8 @@ type Definition struct {
 // The scope ORDER is not the bug: a hand-authored project skill outranking a
 // framework default is correct. Silence about the duplicate is the bug.
 type ShadowedSkill struct {
-	// Key is the NormalizedKey both copies claimed.
-	Key string
+	// Key is the identity both copies claimed.
+	Key SkillKey
 	// Winner / Loser are the definition paths, with their scopes.
 	WinnerPath  string
 	WinnerScope skillscore.Scope
@@ -62,7 +87,7 @@ type ShadowedSkill struct {
 // Snapshot is the catalog/discovery output before activation/materialization.
 type Snapshot struct {
 	Definitions []Definition
-	ByName      map[string]Definition
+	ByName      map[SkillKey]Definition
 	Diagnostics []skillscore.Diagnostic
 	// Shadowed lists every key that two producers both claimed. Replaces a pair
 	// of path→path maps that recorded the same thing and were read by nothing:

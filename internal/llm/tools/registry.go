@@ -528,7 +528,10 @@ func GetToolRegistry() []ToolDefinition {
 		{ToolSaveAttachment, (*ToolsFactory).SaveAttachment, []ToolTag{TagFile, TagCodingDefault}, PlacementServer},
 		{ToolWrite, (*ToolsFactory).Write, []ToolTag{TagFile, TagCodingDefault}, PlacementAny},
 		{ToolEdit, (*ToolsFactory).Edit, []ToolTag{TagFile, TagCodingDefault}, PlacementAny},
-		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile, TagCodingDefault}, PlacementAny},
+		// Not TagCodingDefault: ~4KB of schema for something edit plus a shell
+		// sed already cover at turn 1. Still in tag:file, and loadable via
+		// load_tool; the refactor preset names it directly.
+		{ToolFindReplace, (*ToolsFactory).FindAndReplace, []ToolTag{TagFile}, PlacementAny},
 
 		// Search: there are no dedicated grep/glob LLM tools. Agents search with
 		// the shell (ripgrep preferred, degrading to grep -r/find). The shell

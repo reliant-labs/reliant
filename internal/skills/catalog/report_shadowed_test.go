@@ -16,7 +16,7 @@ func TestReportShadowed_WarnsOncePerShadowing(t *testing.T) {
 	t.Cleanup(func() { slog.SetDefault(prev) })
 
 	shadow := ShadowedSkill{
-		Key:        "report-shadowed-test/" + t.Name(),
+		Key:        SkillKey{Source: "report-shadowed-test", Path: t.Name()},
 		WinnerPath: "/winner/SKILL.md",
 		LoserPath:  "/loser/SKILL.md",
 	}
