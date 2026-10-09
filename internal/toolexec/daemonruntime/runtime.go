@@ -117,6 +117,12 @@ type daemonClient struct {
 	// local daemons, and all accessors are nil-safe.
 	portWatcher *netports.Watcher
 
+	// guard refuses work under a directory that stopped being the one the
+	// daemon was serving, and stops a managed daemon whose workspace volume
+	// went away (workspace_guard.go). Nil when unguarded; every use is
+	// nil-safe.
+	guard *workspaceGuard
+
 	// buildSnapshot overrides buildProjectSnapshot. Nil in production; tests
 	// set it to stand in for discovery that takes seconds on a real project.
 	buildSnapshot func(projectPath string) (*reliantv1.ProjectConfigSnapshot, error)
@@ -162,6 +168,13 @@ func Start(ctx context.Context, opts StartOptions) error {
 	if err != nil {
 		return err
 	}
+
+	// The runtime stops when the caller cancels — or when the workspace guard
+	// finds a managed workspace's volume gone, because exiting is the only
+	// thing that gets it re-attached. See workspace_guard.go.
+	ctx, stopRuntime := context.WithCancel(ctx)
+	defer stopRuntime()
+	client.armWorkspaceGuard(ctx, stopRuntime)
 
 	// Publish the runtime record before the first dial. Until the gateway acks
 	// registration the record says so, which is what makes `reliant daemon
@@ -252,7 +265,11 @@ func Start(ctx context.Context, opts StartOptions) error {
 			"cwd", client.cwd,
 			"listenPort", opts.BootstrapConfig.ListenPort,
 		)
-		if err := client.runServerMode(ctx); err != nil && !errors.Is(err, context.Canceled) {
+		err := client.runServerMode(ctx)
+		if lost := client.guard.lostVolume(); lost != nil {
+			return lost
+		}
+		if err != nil && !errors.Is(err, context.Canceled) {
 			return fmt.Errorf("tools daemon server stopped: %w", err)
 		}
 		return nil
@@ -264,7 +281,11 @@ func Start(ctx context.Context, opts StartOptions) error {
 		"cwd", client.cwd,
 	)
 
-	if err := client.run(ctx); err != nil && !errors.Is(err, context.Canceled) {
+	err = client.run(ctx)
+	if lost := client.guard.lostVolume(); lost != nil {
+		return lost
+	}
+	if err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("tools daemon runtime stopped: %w", err)
 	}
 	return nil
@@ -992,6 +1013,16 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	}
 	ctx = daemonpolicy.NewContext(ctx, policy)
 
+	// Refuse everything while $HOME is not the directory the daemon started
+	// with: whatever the command touches would be the wrong disk.
+	if refusal := d.guard.commandPreflight(); refusal != nil {
+		logging.Warn(logPrefix+" daemon command handled",
+			"commandType", req.CommandType, "requestID", req.RequestId,
+			"elapsed", "0s", "outcome", "refused: workspace directory changed", "error", refusal)
+		d.sendCommandFailure(req, refusal)
+		return
+	}
+
 	// Let a long-running exec detach itself if the user asks. Keyed by request
 	// id — the same correlation cancellation uses, and the only handle the
 	// daemon has on a running execution.
@@ -1011,6 +1042,10 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	})
 
 	resultPayload, err := defaultRegistry.Handle(ctx, req.CommandType, req.Payload)
+	if refusal := d.guard.commandVerdict(); refusal != nil {
+		// $HOME went away while this ran; its result describes the wrong disk.
+		resultPayload, err = nil, refusal
+	}
 
 	watchdog.Stop()
 	logDaemonCommandHandled(req, time.Since(start), err, d.sendBacklog())
@@ -1289,6 +1324,16 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 		contextMap["user_id"] = d.userID
 	}
 
+	// The worktree or project this call works in: recorded the first time it
+	// is seen, and refused while it (or $HOME) is no longer the directory the
+	// daemon was serving. Empty for a call with no project context, which
+	// only a $HOME fault refuses.
+	workspaceRoot := resolveProjectPathFromContext(contextMap, "", "")
+	if refused := d.guard.preflight(workspaceRoot); refused != nil {
+		d.sendToolResult(req.RequestId, refused)
+		return
+	}
+
 	projectPath := ""
 	if isMCPToolName(req.ToolName) {
 		projectPath = d.ensureMCPServersLoadedForRequest(execCtx, req, contextMap)
@@ -1336,6 +1381,12 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 		}
 	}
 
+	// A call in flight when its directory went away reports that, not the
+	// cancellation or missing working directory that followed from it.
+	if refused := d.guard.verdict(workspaceRoot); refused != nil {
+		result = refused
+	}
+
 	if result == nil {
 		result = &toolexec.ExecutionResult{
 			Success:      false,
@@ -1346,6 +1397,11 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 		}
 	}
 
+	d.sendToolResult(req.RequestId, result)
+}
+
+// sendToolResult replies to a tool request.
+func (d *daemonClient) sendToolResult(requestID string, result *toolexec.ExecutionResult) {
 	// Sanitize all string fields to valid UTF-8 before protobuf serialization.
 	// Protobuf3 string fields reject invalid UTF-8, which would silently drop
 	// the response and leave the server-side poller waiting until timeout.
@@ -1355,7 +1411,7 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_ToolResponse{ToolResponse: &reliantv1.ToolResponse{
-			RequestId:    req.RequestId,
+			RequestId:    requestID,
 			Success:      result.Success,
 			IsError:      result.IsError,
 			Content:      result.Content,
@@ -1366,7 +1422,7 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 		}},
 	}
 	if err := d.send(resp); err != nil {
-		logging.Warn(logPrefix+" Failed to send tool response via stream", "requestID", req.RequestId, "error", err)
+		logging.Warn(logPrefix+" Failed to send tool response via stream", "requestID", requestID, "error", err)
 	}
 }
 
@@ -1492,6 +1548,20 @@ func (d *daemonClient) cancelToolExecution(requestID string) {
 	cancel := d.cancelByReq[requestID]
 	d.cancelMu.Unlock()
 	if cancel != nil {
+		cancel()
+	}
+}
+
+// cancelAllRequests cancels every in-flight tool execution and daemon
+// command. Each one still sends its reply as it unwinds.
+func (d *daemonClient) cancelAllRequests() {
+	d.cancelMu.Lock()
+	cancels := make([]context.CancelFunc, 0, len(d.cancelByReq))
+	for _, cancel := range d.cancelByReq {
+		cancels = append(cancels, cancel)
+	}
+	d.cancelMu.Unlock()
+	for _, cancel := range cancels {
 		cancel()
 	}
 }
