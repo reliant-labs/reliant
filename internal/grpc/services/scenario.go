@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -281,13 +282,16 @@ func (s *ScenarioService) RunScenario(
 			}
 			projectID = project.ID
 
-			// Load the scenario from stored config
-			record, err := s.database.GetProjectConfigRecord(ctx, project.ID)
-			if err != nil {
+			// Load the scenario from stored config.
+			scenariosJSON, err := s.database.GetProjectScenariosJSON(ctx, project.ID)
+			if errors.Is(err, sql.ErrNoRows) {
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project config not found: %s", project.ID))
 			}
+			if err != nil {
+				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load stored scenarios: %w", err))
+			}
 
-			allScenarios, err := cfg.ParseStoredScenarios(record.ProjectScenariosJSON)
+			allScenarios, err := cfg.ParseStoredScenarios(scenariosJSON)
 			if err != nil {
 				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse stored scenarios: %w", err))
 			}
@@ -533,13 +537,16 @@ func (s *ScenarioService) ExportScenario(
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 		}
 
-		// Load from stored config
-		record, err := s.database.GetProjectConfigRecord(ctx, project.ID)
-		if err != nil {
+		// Load from stored config.
+		scenariosJSON, err := s.database.GetProjectScenariosJSON(ctx, project.ID)
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project config not found"))
 		}
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("load stored scenarios: %w", err))
+		}
 
-		allScenarios, err := cfg.ParseStoredScenarios(record.ProjectScenariosJSON)
+		allScenarios, err := cfg.ParseStoredScenarios(scenariosJSON)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse stored scenarios: %w", err))
 		}
@@ -789,12 +796,15 @@ func discoverProjectScenariosFromDB(repo db.Repository, ctx context.Context, pro
 		return nil, nil
 	}
 
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
+	scenariosJSON, err := repo.GetProjectScenariosJSON(ctx, projectID)
 	if err != nil {
-		return nil, nil // No config record, no stored scenarios
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil // No config record, no stored scenarios
+		}
+		return nil, fmt.Errorf("load stored scenarios: %w", err)
 	}
 
-	allScenarios, err := cfg.ParseStoredScenarios(record.ProjectScenariosJSON)
+	allScenarios, err := cfg.ParseStoredScenarios(scenariosJSON)
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse stored scenarios: %w", err)
 	}

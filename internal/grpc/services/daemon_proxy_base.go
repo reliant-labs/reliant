@@ -101,6 +101,34 @@ func DaemonOutdatedConnectError(err error) *connect.Error {
 	return connect.NewError(connect.CodeFailedPrecondition, err)
 }
 
+const (
+	legacyDaemonStartingMarker = "no daemon connected"
+	legacyDaemonAbsentMarker   = "no daemon available"
+)
+
+// machineStateConnectError recognizes both typed machine-state errors from
+// current routers and the text-only errors emitted during a rolling deployment.
+// Daemon command errors cross NATS as strings, so older daemons cannot preserve
+// the typed state that distinguishes a starting machine from no machine at all.
+func machineStateConnectError(doing string, err error) (*connect.Error, bool) {
+	code, ok := toolexec.MachineStateCode(err)
+	if !ok && err != nil {
+		switch {
+		case strings.Contains(err.Error(), legacyDaemonAbsentMarker):
+			code, ok = connect.CodeFailedPrecondition, true
+		case strings.Contains(err.Error(), legacyDaemonStartingMarker):
+			code, ok = connect.CodeUnavailable, true
+		}
+	}
+	if !ok {
+		return nil, false
+	}
+	if doing != "" {
+		err = fmt.Errorf("%s: %w", doing, err)
+	}
+	return connect.NewError(code, err), true
+}
+
 // mapDaemonDispatchError converts a SendDaemonCommand failure into a Connect
 // error whose code reflects the failure class. SendDaemonCommand flattens every
 // failure — transport, timeout, unresolved daemon, unknown command, and

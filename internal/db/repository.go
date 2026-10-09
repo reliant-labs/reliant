@@ -130,6 +130,20 @@ type Repository interface {
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error)
+	// GetProjectConfigPushedAt reads only the config snapshot timestamp for
+	// staleness checks, without loading the indexed config payload.
+	GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error)
+	// GetProjectScenariosJSON reads only the synced project scenarios payload.
+	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
+	// GetProjectWorkflowsJSON reads only the synced workflow payload.
+	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
+	// GetProjectPresetsJSON reads only the synced preset payload.
+	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	// GetProjectMCPConfigsJSON reads only the synced scoped MCP payload.
+	GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error)
+	// GetProjectConfigVersion reads an opaque token that changes whenever the
+	// config record is rewritten, without reading the indexed config payload.
+	GetProjectConfigVersion(ctx context.Context, projectID string) (string, error)
 
 	// Project ↔ Daemon installations (which daemons have a clone of a project).
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error

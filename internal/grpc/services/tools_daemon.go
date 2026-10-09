@@ -1810,7 +1810,7 @@ func (s *ToolsDaemonService) shouldApplyProjectConfigUpdate(ctx context.Context,
 		return true, nil
 	}
 
-	record, err := s.database.GetProjectConfigRecord(ctx, projectID)
+	pushedAt, err := s.database.GetProjectConfigPushedAt(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil
@@ -1818,7 +1818,7 @@ func (s *ToolsDaemonService) shouldApplyProjectConfigUpdate(ctx context.Context,
 		return false, err
 	}
 
-	existingTSUnixMs := record.PushedAt.UTC().UnixMilli()
+	existingTSUnixMs := pushedAt.UTC().UnixMilli()
 	if existingTSUnixMs <= 0 {
 		return true, nil
 	}

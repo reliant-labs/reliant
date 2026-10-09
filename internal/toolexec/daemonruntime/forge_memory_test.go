@@ -118,7 +118,7 @@ func writeRepoFile(t *testing.T, dir, name, body string) {
 	require.NoError(t, os.WriteFile(filepath.Join(dir, name), []byte(body), 0o644))
 }
 
-func TestCollectRepoMemories_FrameworkOnceAndIdenticalCollapsed(t *testing.T) {
+func TestCollectRepoMemories_FrameworkOnceAndPerRepoKeysStayStable(t *testing.T) {
 	root := t.TempDir()
 	for _, n := range []string{"b-forge", "a-forge", "c-plain", "d-plain"} {
 		require.NoError(t, os.MkdirAll(filepath.Join(root, n, ".git"), 0o755))
@@ -136,8 +136,12 @@ func TestCollectRepoMemories_FrameworkOnceAndIdenticalCollapsed(t *testing.T) {
 	require.Contains(t, string(mem["b-forge"]), "notes b-forge")
 	require.Contains(t, string(mem["b-forge"]), "`a-forge`")
 	require.Less(t, len(mem["b-forge"]), 1000)
+	// The daemon-to-server snapshot remains a plain map[path]content until
+	// the proto carries a structured representation. A grouped display key
+	// ("c-plain, d-plain") would make older readers treat it as a literal path
+	// and silently break per-repo resolution during a rolling deploy.
 	require.Equal(t, "same text", string(mem["c-plain"]))
-	require.Contains(t, string(mem["d-plain"]), "`c-plain`")
+	require.Equal(t, "same text", string(mem["d-plain"]))
 
 	writeRepoFile(t, filepath.Join(root, "c-plain"), "reliant.md", "changed")
 	_, ver2 := collectRepoMemories(root)

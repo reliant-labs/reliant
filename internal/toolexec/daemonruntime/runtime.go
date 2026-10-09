@@ -1876,10 +1876,6 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 	// forge.yaml present): a root forge.yaml that fails to render carries no
 	// guide, and a pointer to it would name something the model never sees.
 	_, rootCarriesFramework := forgeFrameworkMemory(projectPath)
-	// Byte-identical repo memories (e.g. two clones of one repo) collapse
-	// to a pointer at the first repo carrying that content.
-	seen := map[string]string{}
-
 	for _, rel := range sorted {
 		if rel == "" {
 			continue
@@ -1910,12 +1906,6 @@ func collectRepoMemories(projectPath string) (map[string][]byte, []byte) {
 			continue
 		}
 		content := strings.Join(parts, "\n\n")
-		sum := hashBytes([]byte(content))
-		if first, dup := seen[sum]; dup {
-			content = fmt.Sprintf("This repo's memory is identical to the `%s` repo's memory; see that entry.", first)
-		} else {
-			seen[sum] = rel
-		}
 		result[rel] = []byte(content)
 		acc.WriteString(rel)
 		acc.WriteString(":")

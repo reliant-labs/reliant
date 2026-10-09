@@ -2007,6 +2007,83 @@ func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*P
 	return &record, nil
 }
 
+// GetProjectConfigPushedAt reads when the daemon pushed the project's config
+// record without loading its indexed payload. It returns sql.ErrNoRows
+// unwrapped when the project has no record.
+func (r *Repo) GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error) {
+	if projectID == "" {
+		return time.Time{}, fmt.Errorf("project ID cannot be empty")
+	}
+	query := r.bindQuery(`SELECT pushed_at FROM project_configs WHERE project_id = ? LIMIT 1`)
+
+	var pushedAt time.Time
+	if err := r.DB.QueryRowContext(ctx, query, projectID).Scan(&pushedAt); err != nil {
+		if err == sql.ErrNoRows {
+			return time.Time{}, err
+		}
+		return time.Time{}, fmt.Errorf("failed to load config pushed_at for project %s: %w", projectID, err)
+	}
+	return pushedAt, nil
+}
+
+// GetProjectScenariosJSON reads only the synced project scenarios payload. It
+// returns sql.ErrNoRows unwrapped when the project has no record.
+func (r *Repo) GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error) {
+	return r.getProjectConfigJSONColumn(ctx, projectID, "project_scenarios_json")
+}
+
+// GetProjectWorkflowsJSON reads only the synced workflow payload.
+func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
+	return r.getProjectConfigJSONColumn(ctx, projectID, "project_workflows_json")
+}
+
+// GetProjectPresetsJSON reads only the synced preset payload.
+func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
+	return r.getProjectConfigJSONColumn(ctx, projectID, "project_presets_json")
+}
+
+// GetProjectMCPConfigsJSON reads only the synced scoped MCP payload.
+func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
+	return r.getProjectConfigJSONColumn(ctx, projectID, "mcp_configs")
+}
+
+// GetProjectConfigVersion returns an opaque token that changes whenever the
+// project's config record is rewritten, without reading its payload. Callers
+// compare it only for equality.
+func (r *Repo) GetProjectConfigVersion(ctx context.Context, projectID string) (string, error) {
+	if projectID == "" {
+		return "", fmt.Errorf("project ID cannot be empty")
+	}
+	query := r.bindQuery(`SELECT updated_at, xmin::text FROM project_configs WHERE project_id = ? LIMIT 1`)
+	var (
+		updatedAt sql.NullTime
+		xmin      string
+	)
+	if err := r.DB.QueryRowContext(ctx, query, projectID).Scan(&updatedAt, &xmin); err != nil {
+		if err == sql.ErrNoRows {
+			return "", err
+		}
+		return "", fmt.Errorf("failed to load config version for project %s: %w", projectID, err)
+	}
+	return fmt.Sprintf("%d/%s", updatedAt.Time.UnixMicro(), xmin), nil
+}
+
+func (r *Repo) getProjectConfigJSONColumn(ctx context.Context, projectID, column string) (*string, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	query := r.bindQuery(`SELECT ` + column + ` FROM project_configs WHERE project_id = ? LIMIT 1`)
+
+	var value *string
+	if err := r.DB.QueryRowContext(ctx, query, projectID).Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to load %s for project %s: %w", column, projectID, err)
+	}
+	return value, nil
+}
+
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 	if worktree == nil {
 		return fmt.Errorf("worktree cannot be nil")

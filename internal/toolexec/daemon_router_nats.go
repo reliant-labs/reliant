@@ -413,7 +413,7 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 		case recordAttached, recordUnconfirmed:
 			return rec.id, nil
 		case recordSuspended:
-			logging.Info("[DaemonRouter] daemon is suspended; not waking it from tool-time resolution",
+			routerStateLog.info("suspended", userID, "[DaemonRouter] daemon is suspended; not waking it from tool-time resolution",
 				append([]any{"user_id", userID, "daemon_id", rec.id}, selectorLogFields(selector)...)...)
 			return "", fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", ErrDaemonPending)
 		}
@@ -440,7 +440,7 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 	// and its own text carries the "no daemon connected" marker the frontend's
 	// wait machinery keys on (isDaemonConnectingError / classifyDaemonWait).
 	if sawDaemonRecord {
-		logging.Warn("[DaemonRouter] daemon record exists but is not routable yet",
+		routerStateLog.info("starting", userID, "[DaemonRouter] daemon record exists but is not routable yet",
 			append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 		if selector != nil {
 			return "", fmt.Errorf("the machine for this request is still starting: %w", ErrDaemonPending)
@@ -448,7 +448,7 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 		return "", fmt.Errorf("your machine is still starting: %w", ErrDaemonPending)
 	}
 
-	logging.Warn("[DaemonRouter] no daemon could be resolved",
+	routerStateLog.info("absent", userID, "[DaemonRouter] no daemon could be resolved",
 		append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 	if selector != nil {
 		return "", fmt.Errorf("no daemon available: the machine this request asked for is not connected")

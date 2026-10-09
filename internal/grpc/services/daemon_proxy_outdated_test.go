@@ -3,10 +3,13 @@ package services
 
 import (
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
 	"connectrpc.com/connect"
+
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // The production report was:
@@ -73,6 +76,40 @@ func TestOutdatedDaemonMapsToFailedPrecondition(t *testing.T) {
 }
 
 // Other failure classes must keep the codes they had.
+func TestMachineStateConnectError_MapsTypedAndLegacyDaemonFailures(t *testing.T) {
+	for _, testCase := range []struct {
+		name string
+		err  error
+		want connect.Code
+	}{
+		{
+			name: "typed starting",
+			err:  fmt.Errorf("resolve: %w", toolexec.ErrDaemonPending),
+			want: connect.CodeUnavailable,
+		},
+		{
+			name: "legacy starting text",
+			err:  errors.New("daemon command failed: no daemon connected for user"),
+			want: connect.CodeUnavailable,
+		},
+		{
+			name: "legacy no machine text",
+			err:  errors.New("no daemon available: no machine is connected to your account yet"),
+			want: connect.CodeFailedPrecondition,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			got, ok := machineStateConnectError("forward command", testCase.err)
+			if !ok {
+				t.Fatalf("machineStateConnectError(%v) did not recognize machine state", testCase.err)
+			}
+			if code := connect.CodeOf(got); code != testCase.want {
+				t.Errorf("code = %v, want %v", code, testCase.want)
+			}
+		})
+	}
+}
+
 func TestNonSkewDispatchErrorsKeepTheirCodes(t *testing.T) {
 	notFound := mapDaemonDispatchError("pkg.list_commands",
 		errors.New("working dir does not exist: /daemon/workspace/gone"))
