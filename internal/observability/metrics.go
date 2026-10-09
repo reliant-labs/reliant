@@ -11,9 +11,6 @@ package observability
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/collectors"
-	"go.opentelemetry.io/otel"
-	otelprom "go.opentelemetry.io/otel/exporters/prometheus"
-	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 // ─── HTTP Metrics ───────────────────────────────────────────────────────────
@@ -417,21 +414,4 @@ func initMetrics() {
 		TemporalWorkflowsTotal,
 		TemporalActivityDuration,
 	)
-}
-
-// initOTelMetrics creates an OTel MeterProvider backed by the Prometheus registry,
-// enabling OTel-instrumented libraries (otelhttp, etc.) to export via /metrics.
-func initOTelMetrics() (*sdkmetric.MeterProvider, error) {
-	exporter, err := otelprom.New(
-		otelprom.WithRegisterer(Registry),
-	)
-	if err != nil {
-		return nil, err
-	}
-
-	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithReader(exporter),
-	)
-	otel.SetMeterProvider(mp)
-	return mp, nil
 }

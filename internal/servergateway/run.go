@@ -99,18 +99,16 @@ func Run(ctx context.Context, opts Options) error {
 	})
 	defer logging.Close() //nolint:errcheck
 
-	// Initialize observability (Prometheus metrics + OTel tracing)
-	obsCfg := observability.ConfigFromEnv("reliant-gateway")
-	obsProvider, err := observability.Init(obsCfg)
+	// Forge owns the OTel runtime; Sentry remains independently initialized below.
+	obsProvider, err := observability.Init(observability.ConfigFromEnv("daemon-gateway"))
 	if err != nil {
-		logging.Warn("Failed to initialize observability", "error", err)
-	} else {
-		defer func() {
-			if err := obsProvider.Shutdown(); err != nil {
-				logging.Warn("Failed to shutdown observability", "error", err)
-			}
-		}()
+		return fmt.Errorf("initialize observability: %w", err)
 	}
+	defer func() {
+		if err := obsProvider.Shutdown(); err != nil {
+			logging.Warn("Failed to shutdown observability", "error", err)
+		}
+	}()
 
 	logging.Info("Starting Reliant daemon-gateway",
 		"daemon_port", opts.ToolsDaemonPort,

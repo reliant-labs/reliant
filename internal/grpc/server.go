@@ -16,10 +16,10 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"connectrpc.com/otelconnect"
 	"github.com/go-chi/cors"
 	"github.com/reliant-labs/forge/pkg/oauth2"
 	"github.com/reliant-labs/forge/pkg/observe"
-	"go.opentelemetry.io/otel"
 	"go.temporal.io/sdk/client"
 	"golang.org/x/net/http2"
 
@@ -759,8 +759,15 @@ func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ..
 		}
 		extras = append(extras, ai)
 	}
+
+	otelInterceptor, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
+	if err != nil {
+		panic(fmt.Sprintf("create Connect OpenTelemetry interceptor: %v", err))
+	}
+	extras = append([]connect.Interceptor{otelInterceptor}, extras...)
 	return observe.DefaultMiddlewares(observe.DefaultMiddlewareDeps{
-		Tracer: otel.Tracer("reliant.grpc"),
+		// otelconnect owns the Connect server span and propagation. Supplying a
+		// Forge tracing interceptor here would create a duplicate span per RPC.
 		Extras: extras,
 	})
 }
