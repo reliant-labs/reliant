@@ -57,13 +57,17 @@ func (r *ModelRegistry) modelInfoFromDef(def *ModelDefinition, provider Provider
 	if name == "" {
 		name = def.ID
 	}
+	// The limits this provider serves, not the model-wide ones.
+	capabilities := def.Capabilities
+	capabilities.MaxContextWindow = EffectiveContextWindow(def, provider.Driver)
+	capabilities.MaxOutputTokens = EffectiveMaxOutputTokens(def, provider.Driver)
 	return ModelInfo{
 		ID:           def.ID,
 		DisplayName:  name,
 		Family:       GetModelFamily(def.ID),
 		DriverID:     provider.Driver,
 		APIModel:     provider.APIModel,
-		Capabilities: def.Capabilities,
+		Capabilities: capabilities,
 		Tags:         r.TagsOf(def.ID),
 		Enabled:      enabled,
 	}

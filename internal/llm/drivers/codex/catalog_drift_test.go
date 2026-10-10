@@ -132,6 +132,37 @@ func TestCodexEnvelopeFollowsResponsesLite(t *testing.T) {
 	}
 }
 
+// When /codex/models is unreachable the catalog alone sets the codex prompt
+// ceiling (window − max output). It must never sit below what Codex advertises
+// (max_context_window): that is how gpt-5.6-* compacted at 231,200 while the
+// backend accepted 698,604-token prompts. The live advertised limit can only
+// lower the ceiling, so a catalog ceiling above it is safe.
+func TestCodexCatalogCeilingCoversAdvertisedLimit(t *testing.T) {
+	body, err := os.ReadFile("testdata/codex_models.json")
+	require.NoError(t, err)
+	var parsed struct {
+		Models []struct {
+			Slug             string `json:"slug"`
+			Visibility       string `json:"visibility"`
+			MaxContextWindow int    `json:"max_context_window"`
+		} `json:"models"`
+	}
+	require.NoError(t, json.Unmarshal(body, &parsed))
+
+	mapped := codexCatalogIDs()
+	for _, m := range parsed.Models {
+		id, ok := mapped[m.Slug]
+		if !ok || m.Visibility != "list" {
+			continue
+		}
+		def, ok := models.MustGetRegistry().GetDefinition(string(id))
+		require.True(t, ok)
+		ceiling := models.PromptCeiling(models.EffectiveContextWindow(def, string(Family)), models.EffectiveMaxOutputTokens(def, string(Family)))
+		assert.GreaterOrEqualf(t, ceiling, m.MaxContextWindow,
+			"%s@codex: the catalog ceiling %d is below the %d /codex/models advertises", id, ceiling, m.MaxContextWindow)
+	}
+}
+
 // versionAtLeast compares dotted numeric versions ("0.155.0").
 func versionAtLeast(t *testing.T, have, need string) bool {
 	t.Helper()

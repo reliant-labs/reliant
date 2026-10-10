@@ -206,6 +206,10 @@ func (c *CopilotClient) ValidateKey(ctx context.Context) error {
 // servable so a stale or renamed catalog never hides a model Reliant maps. If the
 // catalog cannot be fetched the report is empty — fail open, so a Copilot outage
 // cannot make every Copilot model unresolvable.
+//
+// The advertised limit is the model's max_prompt_tokens: Copilot's own prompt
+// cap, which lowers the prompt ceiling when it is below the catalog's
+// window − max output (models.ProviderPromptCeiling).
 func (c *CopilotClient) ReportAvailability(ctx context.Context) (registry.ProviderAvailability, error) {
 	token, err := resolveGitHubToken(c.options)
 	if err != nil {

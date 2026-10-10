@@ -47,6 +47,24 @@ const (
 	betaDefault = "claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,redact-thinking-2026-02-12,context-management-2025-06-27,prompt-caching-scope-2026-01-05,advanced-tool-use-2025-11-20,effort-2025-11-24"
 )
 
+// claudeCodeMaxTokens returns the max_tokens claude-cli sends for the given
+// api_model (the request bodies in .dev/claude/), or 0 for a model with no
+// capture. The catalog declares each model's published maximum output, which is
+// larger: the subscription request is clamped to the captured value so it keeps
+// claude-cli's shape. A model with no capture is sent the catalog value.
+func claudeCodeMaxTokens(apiModel string) int64 {
+	switch apiModel {
+	case "claude-haiku-4-5-20251001":
+		return 32000
+	case "claude-sonnet-5", "claude-opus-4-8", "claude-opus-5", "claude-fable-5", apiModelFable51:
+		return 64000
+	case apiModelOpus55:
+		return 128000
+	default:
+		return 0
+	}
+}
+
 // claudeCodeBetaHeader returns the exact anthropic-beta header string for the given
 // api_model, falling back to betaDefault for models not seen in the captures.
 func claudeCodeBetaHeader(apiModel string) string {

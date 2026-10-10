@@ -267,7 +267,11 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			modelIDForDriver = resolvedDef.ID + "@" + resolved.Provider.Driver
 		}
 
+		// The model as the chosen provider serves it, so driver.Model() reports
+		// that provider's window and max output, not the model-wide figures.
 		legacyModel = resolvedDef.ToModel()
+		legacyModel.ContextWindow = int64(models.EffectiveContextWindow(&resolvedDef, providerDriver))
+		legacyModel.DefaultMaxTokens = int64(models.EffectiveMaxOutputTokens(&resolvedDef, providerDriver))
 	}
 
 	// Build preferences for driver selection.

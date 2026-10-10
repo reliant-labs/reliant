@@ -69,8 +69,13 @@ func TestParseModels_RecordedAccountPolicyAndLimits(t *testing.T) {
 	if !enabled["grok-4.7"] || !enabled["kimi-k3"] {
 		t.Error("grok-4.7 and kimi-k3 are enabled on the recorded account")
 	}
-	if limits["kimi-k3"] != 1048576 || limits["grok-4.5"] != 500000 {
-		t.Errorf("limits = kimi-k3:%d grok-4.5:%d", limits["kimi-k3"], limits["grok-4.5"])
+	// The advertised limit is max_prompt_tokens, Copilot's prompt cap — not
+	// max_context_window_tokens (input + output). gpt-5-mini is the case where
+	// they diverge most: a 264,000 window, 64,000 output and a 128,000 cap.
+	for apiModel, want := range map[string]int{"kimi-k3": 917504, "grok-4.5": 372000, "gpt-5-mini": 128000, "claude-haiku-4.5": 128000} {
+		if limits[apiModel] != want {
+			t.Errorf("limits[%s] = %d, want max_prompt_tokens %d", apiModel, limits[apiModel], want)
+		}
 	}
 }
 

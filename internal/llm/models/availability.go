@@ -16,9 +16,9 @@ type ModelAvailability struct {
 	Reason string
 	// ContextWindow, when positive, is the context limit the provider
 	// advertises for this account (codex: /codex/models max_context_window;
-	// copilot: /models max_context_window_tokens). Whether it counts output is
-	// not stated, so it never RAISES the prompt ceiling derived from the
-	// catalog; when it is lower, it is the ceiling (ProviderPromptCeiling).
+	// copilot: /models max_prompt_tokens). It is a prompt cap, not a window:
+	// it never RAISES the prompt ceiling derived from the catalog; when it is
+	// lower, it is the ceiling (ProviderPromptCeiling).
 	ContextWindow int
 	// ThinkingLevels, when non-empty, are the reasoning levels the account can
 	// actually use, replacing the catalog's list.

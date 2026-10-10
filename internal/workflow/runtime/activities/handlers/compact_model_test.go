@@ -60,12 +60,19 @@ func TestResolveCompactionModel_PrefersAgentModel(t *testing.T) {
 	require.True(t, ok, "agent model must resolve in the registry")
 	agentWindow := models.EffectiveContextWindow(def, "anthropic")
 
-	tierDef, ok := models.MustGetRegistry().GetDefinition(string(compactionModelTier[0]))
-	require.True(t, ok)
-	tierWindow := models.EffectiveContextWindow(tierDef, "anthropic")
-
-	assert.Greater(t, agentWindow, tierWindow,
-		"this test is only meaningful while the tier head is smaller-windowed than the agent model")
+	// The tier list still holds a smaller-windowed model the resolver could
+	// have fallen to (claude-4.5-sonnet, 200k; the 4.6 head is 1M like the
+	// agent model).
+	smallerTierModel := false
+	for _, id := range compactionModelTier {
+		tierDef, ok := models.MustGetRegistry().GetDefinition(string(id))
+		if ok && models.EffectiveContextWindow(tierDef, "anthropic") < agentWindow {
+			smallerTierModel = true
+			break
+		}
+	}
+	assert.True(t, smallerTierModel,
+		"this test is only meaningful while the tier list holds a smaller-windowed model than the agent model")
 }
 
 func TestResolveCompactionModel_FallsBackToTierList(t *testing.T) {

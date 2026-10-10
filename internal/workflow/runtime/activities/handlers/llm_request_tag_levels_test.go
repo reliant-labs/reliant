@@ -132,6 +132,51 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 	}
 }
 
+// The driver is handed the model as the CHOSEN provider serves it. Copilot caps
+// claude-sonnet-5 at 64,000 output and claude-haiku-4.5 at 144,000 / 32,000,
+// below Anthropic's published 128,000 and 200,000 / 64,000; the window and
+// max output the driver reports (driver.Model(), which the accumulator's trim
+// backstop and every max_tokens default read) must be Copilot's, or a request
+// asks for more output than Copilot allows.
+func TestResolveLLMCall_DriverGetsTheProvidersLimits(t *testing.T) {
+	for _, tt := range []struct {
+		modelID           string
+		provider          string
+		wantWindow        int64
+		wantMaxOutput     int64
+		wantPromptCeiling int64
+	}{
+		{"claude-5-sonnet", "anthropic", 1_000_000, 128_000, 872_000},
+		{"claude-5-sonnet", "copilot", 1_000_000, 64_000, 936_000},
+		{"claude-4.5-haiku", "anthropic", 200_000, 64_000, 136_000},
+		{"claude-4.5-haiku", "copilot", 144_000, 32_000, 112_000},
+	} {
+		t.Run(tt.modelID+"@"+tt.provider, func(t *testing.T) {
+			userID := "user-" + uuid.NewString()
+			ctx := context.Background()
+			provisionProviderKeys(t, ctx, userID, []string{tt.provider})
+
+			captured := &capturedDriverOptions{}
+			original := drivers.GetDriver
+			drivers.GetDriver = captureDriverOptionsResolver(captured)
+			t.Cleanup(func() { drivers.GetDriver = original })
+
+			resolved, err := resolveLLMCall(ctx, nil, llmCallSpec{
+				UserID:    userID,
+				SessionID: "session-" + uuid.NewString(),
+				Selector:  models.ModelSelector{ID: tt.modelID + "@" + tt.provider},
+			})
+			require.NoError(t, err)
+
+			require.Equal(t, tt.modelID+"@"+tt.provider, resolved.ModelID)
+			assert.Equal(t, tt.wantWindow, captured.Model.ContextWindow, "window the driver reports")
+			assert.Equal(t, tt.wantMaxOutput, captured.Model.DefaultMaxTokens, "max output the driver requests")
+			assert.Equal(t, tt.wantPromptCeiling, promptCeiling(resolved.Definition, resolved.ProviderDriver, resolved.Model),
+				"the ceiling compaction and the trim backstop derive from reserves the provider's output")
+		})
+	}
+}
+
 // tagEntryLevelOverCapabilityDefaultCatalog is a fixture catalog whose tag
 // entry level and the model's capability default DISAGREE.
 //

@@ -258,12 +258,6 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		}
 		model := def.ToModel()
 
-		// Use preference's token budget if specified, otherwise model's default
-		maxTokens := int64(def.Capabilities.MaxOutputTokens)
-		if pref.TokenBudget != nil {
-			maxTokens = *pref.TokenBudget
-		}
-
 		// Get available drivers
 		availableDrivers := GetAvailableDrivers(ctx, userID)
 
@@ -301,6 +295,18 @@ func defaultGetDriver(ctx context.Context, userID string, preferences models.Pre
 		if !found {
 			lastErr = fmt.Errorf("model %q: no configured driver can serve it (explicitDriver=%q) — is the provider connected and is this binary current?", modelID, explicitDriverID)
 			continue // Try next model in preferences
+		}
+
+		// The model as the selected provider serves it: a provider may cap the
+		// window or the output below the model-wide figures (Copilot serves
+		// claude-sonnet-5 at 64,000 output). Requesting more than the provider
+		// allows 400s, so max_tokens is the provider's, unless the preference
+		// carries an explicit budget.
+		model.ContextWindow = int64(models.EffectiveContextWindow(def, string(driverConfig.DriverID)))
+		model.DefaultMaxTokens = int64(models.EffectiveMaxOutputTokens(def, string(driverConfig.DriverID)))
+		maxTokens := model.DefaultMaxTokens
+		if pref.TokenBudget != nil {
+			maxTokens = *pref.TokenBudget
 		}
 
 		// Build driver options with the API key from the selected driver

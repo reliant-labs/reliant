@@ -38,7 +38,12 @@ type copilotModelsResponse struct {
 		SupportedEndpoints []string `json:"supported_endpoints"`
 		Capabilities       struct {
 			Limits struct {
-				MaxContextWindowTokens int `json:"max_context_window_tokens"`
+				// MaxPromptTokens is the largest prompt Copilot accepts for
+				// the model. It is reported alongside max_context_window_tokens
+				// (input + output) and max_output_tokens, and is usually their
+				// difference — but not always: gpt-5-mini is 264,000 / 64,000
+				// with a 128,000 prompt cap. Only this field states the cap.
+				MaxPromptTokens int `json:"max_prompt_tokens"`
 			} `json:"limits"`
 		} `json:"capabilities"`
 		Policy *struct {
@@ -57,7 +62,7 @@ const availabilityFetchTimeout = 4 * time.Second
 
 type availabilityEntry struct {
 	enabled   map[string]bool     // api_model id -> enabled
-	limits    map[string]int      // api_model id -> context window, when reported
+	limits    map[string]int      // api_model id -> max prompt tokens, when reported
 	endpoints map[string][]string // api_model id -> supported_endpoints, when reported
 	err       error               // non-nil: a remembered failed fetch
 	fetchedAt time.Time
@@ -188,7 +193,7 @@ func parseEnabledModels(body []byte) (map[string]bool, error) {
 }
 
 // parseModels maps a GET /models body to api_model -> enabled and, where the
-// account reports one, api_model -> context window.
+// account reports one, api_model -> max prompt tokens.
 func parseModels(body []byte) (map[string]bool, map[string]int, map[string][]string, error) {
 	var parsed copilotModelsResponse
 	if err := json.Unmarshal(body, &parsed); err != nil {
@@ -208,8 +213,8 @@ func parseModels(body []byte) (map[string]bool, map[string]int, map[string][]str
 			enabled = false
 		}
 		out[id] = enabled
-		if w := m.Capabilities.Limits.MaxContextWindowTokens; w > 0 {
-			limits[id] = w
+		if p := m.Capabilities.Limits.MaxPromptTokens; p > 0 {
+			limits[id] = p
 		}
 		if len(m.SupportedEndpoints) > 0 {
 			endpoints[id] = m.SupportedEndpoints

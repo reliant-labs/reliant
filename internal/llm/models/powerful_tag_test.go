@@ -225,10 +225,12 @@ func TestNewModelDefinitionsParseWithExpectedCapabilities(t *testing.T) {
 		contextWindow int
 		outputTokens  int
 	}{
+		// 128,000 is Anthropic's published max output; the subscription driver
+		// still requests claude-cli's 64,000 (claudeCodeMaxTokens).
 		{"claude-5.1-fable", []string{TagFlagship, TagPowerful, TagReasoning},
-			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 64000},
+			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 128000},
 		{"vertex-claude-5.1-fable", []string{TagFlagship, TagPowerful, TagReasoning},
-			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 64000},
+			[]string{"low", "medium", "high", "xhigh"}, TagPowerful, "xhigh", 1000000, 128000},
 		// gemini-3.8-flash carries every tier: it is antigravity's ONLY text
 		// model, so each tag it is missing is a tag an antigravity-only user
 		// cannot resolve at all. The lower tiers are trailing entries running at

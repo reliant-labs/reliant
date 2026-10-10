@@ -16,6 +16,7 @@ import (
 type capturedDriverOptions struct {
 	Preferences     models.Preferences
 	ReasoningEffort string
+	Model           models.Model
 }
 
 func captureDriverOptionsResolver(captured *capturedDriverOptions) drivers.DriverResolver {
@@ -27,6 +28,7 @@ func captureDriverOptionsResolver(captured *capturedDriverOptions) drivers.Drive
 			opt(&driverOpts)
 		}
 		captured.ReasoningEffort = driverOpts.ReasoningEffort
+		captured.Model = driverOpts.Model
 
 		return &mockLLMDriverForIdempotency{}, nil
 	}
