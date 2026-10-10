@@ -242,13 +242,13 @@ func TestCompactionThresholdForModel(t *testing.T) {
 	}
 
 	// Spot-check a known 1M-window flagship model: 0.85 × (1,000,000 window −
-	// 64,000 max output).
+	// 128,000 max output).
 	if def, ok := registry.GetDefinition("claude-4.8-opus"); ok {
 		if def.DefaultCompactionThreshold != nil {
 			t.Errorf("claude-4.8-opus should not declare a per-model default_compaction_threshold; got %d", *def.DefaultCompactionThreshold)
 		}
-		if got := CompactionThresholdForModel("claude-4.8-opus"); got != 795_600 {
-			t.Errorf("claude-4.8-opus (1M window, 64k output): got %d, want 795600", got)
+		if got := CompactionThresholdForModel("claude-4.8-opus"); got != 741_200 {
+			t.Errorf("claude-4.8-opus (1M window, 128k output): got %d, want 741200", got)
 		}
 	}
 }

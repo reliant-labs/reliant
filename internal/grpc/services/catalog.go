@@ -153,7 +153,7 @@ func (s *CatalogService) ListModels(
 				DriverId:                   driverID,          // For routing
 				Capabilities:               capabilitiesToStrings(model.Capabilities),
 				ContextWindow:              int64(models.EffectiveContextWindow(&served, driverID)),
-				DefaultMaxTokens:           int64(model.Capabilities.MaxOutputTokens),
+				DefaultMaxTokens:           int64(models.EffectiveMaxOutputTokens(&served, driverID)),
 				CanReason:                  model.Capabilities.CanReason,
 				SupportsAttachments:        model.Capabilities.SupportsAttachments,
 				Tags:                       registry.TagsOf(model.ID),
@@ -512,7 +512,7 @@ func (s *CatalogService) ListModelsByProvider(
 			Provider:                provider,
 			DriverId:                provider,
 			ContextWindow:           int64(models.EffectiveContextWindow(&def, provider)),
-			DefaultMaxTokens:        int64(def.Capabilities.MaxOutputTokens),
+			DefaultMaxTokens:        int64(models.EffectiveMaxOutputTokens(&def, provider)),
 			CanReason:               def.Capabilities.CanReason,
 			SupportedThinkingLevels: models.SupportedThinkingLevels(def.Capabilities),
 		})

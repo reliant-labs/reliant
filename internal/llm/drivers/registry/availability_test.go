@@ -36,12 +36,14 @@ func TestProviderAvailability_AuthoritativeDisablesUnlisted(t *testing.T) {
 	assert.False(t, ProviderAvailability{}.For("b").Disabled)
 }
 
-func TestApplyAvailability_StampsEnabledWindowAndLevels(t *testing.T) {
+// The advertised limit is a prompt cap; the window the picker shows stays the
+// catalog's published total so it means the same thing on every provider.
+func TestApplyAvailability_StampsEnabledAndLevelsNotWindow(t *testing.T) {
 	infos := []models.ModelInfo{{ID: "m", APIModel: "m", Capabilities: models.ModelCapabilities{MaxContextWindow: 500, ThinkingLevels: []string{"low", "ultra"}}, Enabled: true}}
 	out := ApplyAvailability(infos, ProviderAvailability{Models: map[string]models.ModelAvailability{
 		"m": {Disabled: true, ContextWindow: 100, ThinkingLevels: []string{"low"}},
 	}})
 	assert.False(t, out[0].Enabled)
-	assert.Equal(t, 100, out[0].Capabilities.MaxContextWindow)
+	assert.Equal(t, 500, out[0].Capabilities.MaxContextWindow)
 	assert.Equal(t, []string{"low"}, out[0].Capabilities.ThinkingLevels)
 }

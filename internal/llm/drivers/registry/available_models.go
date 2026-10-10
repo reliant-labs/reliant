@@ -130,15 +130,14 @@ func RejectedCredential(status int, detail string) error {
 }
 
 // ApplyAvailability stamps a provider's report onto its static model list: the
-// per-account Enabled flag, the real context window and the usable reasoning
-// levels.
+// per-account Enabled flag and the usable reasoning levels. The advertised
+// limit is a prompt cap, not a window, so it is not written over the catalog
+// window: a "window" means the provider's published total everywhere, and the
+// cap is applied where the prompt ceiling is derived (ProviderPromptCeiling).
 func ApplyAvailability(infos []models.ModelInfo, report ProviderAvailability) []models.ModelInfo {
 	for i := range infos {
 		a := report.For(infos[i].APIModel)
 		infos[i].Enabled = !a.Disabled
-		if a.ContextWindow > 0 && a.ContextWindow < infos[i].Capabilities.MaxContextWindow {
-			infos[i].Capabilities.MaxContextWindow = a.ContextWindow
-		}
 		if len(a.ThinkingLevels) > 0 {
 			infos[i].Capabilities.ThinkingLevels = a.ThinkingLevels
 		}

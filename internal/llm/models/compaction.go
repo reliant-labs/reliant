@@ -63,7 +63,7 @@ func PromptCeiling(window, maxOutput int) int {
 
 // ProviderPromptCeiling returns the prompt ceiling for a model served by the
 // given provider driver: PromptCeiling over the provider's window
-// (EffectiveContextWindow) and the model's max output — lowered to the limit the
+// (EffectiveContextWindow) and max output (EffectiveMaxOutputTokens) — lowered to the limit the
 // provider itself advertises for the account (ProviderMapping.AdvertisedLimit,
 // e.g. /codex/models' max_context_window) when that is smaller. The backend's
 // own word is the safe one; a larger advertised figure never raises the
@@ -72,7 +72,7 @@ func ProviderPromptCeiling(def *ModelDefinition, providerDriver string) int {
 	if def == nil {
 		return 0
 	}
-	ceiling := PromptCeiling(EffectiveContextWindow(def, providerDriver), def.Capabilities.MaxOutputTokens)
+	ceiling := PromptCeiling(EffectiveContextWindow(def, providerDriver), EffectiveMaxOutputTokens(def, providerDriver))
 	if limit := advertisedLimit(def, providerDriver); limit > 0 && (ceiling <= 0 || limit < ceiling) {
 		return limit
 	}
@@ -99,7 +99,7 @@ var advertisedLimitLogged sync.Map
 // logAdvertisedLimit records, once, whether a provider's advertised limit or the
 // catalog-derived ceiling governs a model on that provider.
 func logAdvertisedLimit(def *ModelDefinition, providerDriver string, advertised int) {
-	derived := PromptCeiling(EffectiveContextWindow(def, providerDriver), def.Capabilities.MaxOutputTokens)
+	derived := PromptCeiling(EffectiveContextWindow(def, providerDriver), EffectiveMaxOutputTokens(def, providerDriver))
 	key := fmt.Sprintf("%s|%s|%d|%d", providerDriver, def.ID, advertised, derived)
 	if _, seen := advertisedLimitLogged.LoadOrStore(key, true); seen {
 		return
@@ -172,6 +172,34 @@ func EffectiveContextWindow(def *ModelDefinition, providerDriver string) int {
 		return window
 	}
 	return window
+}
+
+// EffectiveMaxOutputTokens returns the most output a model may generate when
+// served by the given provider driver: the provider's per-provider
+// max_output_tokens when it declares a smaller one, else the model-wide
+// Capabilities.MaxOutputTokens. Like EffectiveContextWindow it only shrinks.
+//
+// It is both the max_tokens reliant requests from that provider and the
+// response the prompt ceiling reserves (ProviderPromptCeiling), so the two
+// cannot disagree.
+func EffectiveMaxOutputTokens(def *ModelDefinition, providerDriver string) int {
+	if def == nil {
+		return 0
+	}
+	maxOutput := def.Capabilities.MaxOutputTokens
+	if providerDriver == "" {
+		return maxOutput
+	}
+	for _, p := range def.Providers {
+		if p.Driver != providerDriver || p.MaxOutputTokens <= 0 {
+			continue
+		}
+		if maxOutput <= 0 || p.MaxOutputTokens < maxOutput {
+			return p.MaxOutputTokens
+		}
+		return maxOutput
+	}
+	return maxOutput
 }
 
 // CompactionThresholdForProvider returns the compaction threshold for a resolved

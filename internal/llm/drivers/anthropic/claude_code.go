@@ -529,9 +529,14 @@ func (c *ClaudeCodeClient) preparedMessages(prompts []string, messages []anthrop
 	system := claudeCodeBaseSystemBlocks(c.options.Model.APIModel, c.options.DisableCache)
 	system = append(system, c.callerSystemBlocks(prompts)...)
 
+	maxTokens := c.options.MaxTokens
+	if captured := claudeCodeMaxTokens(c.options.Model.APIModel); captured > 0 {
+		maxTokens = min(maxTokens, captured)
+	}
+
 	params := anthropic.MessageNewParams{
 		Model:      anthropic.Model(c.options.Model.APIModel),
-		MaxTokens:  c.options.MaxTokens,
+		MaxTokens:  maxTokens,
 		Messages:   messages,
 		Tools:      tools,
 		ToolChoice: c.toolChoice(c.mcpToolName(c.options.ForceToolChoice)),

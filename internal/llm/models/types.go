@@ -543,6 +543,20 @@ type ProviderMapping struct {
 	// Default: 0 (use the model-wide window)
 	MaxContextWindow int `yaml:"max_context_window,omitempty" json:"max_context_window,omitempty" mapstructure:"max_context_window"`
 
+	// MaxOutputTokens is an OPTIONAL per-provider override of the model's max
+	// output when THIS provider caps it below the model-wide
+	// Capabilities.MaxOutputTokens (GitHub Copilot serves claude-sonnet-5 at
+	// 64,000 against Anthropic's 128,000). It is what reliant requests as
+	// max_tokens on this provider and what the prompt ceiling reserves for the
+	// response (see EffectiveMaxOutputTokens).
+	//
+	// When 0/unset the model-wide value applies. A value larger than the
+	// model-wide value is ignored.
+	//
+	// YAML key: max_output_tokens
+	// Default: 0 (use the model-wide max output)
+	MaxOutputTokens int `yaml:"max_output_tokens,omitempty" json:"max_output_tokens,omitempty" mapstructure:"max_output_tokens"`
+
 	// AdvertisedLimit is the context limit the provider itself reports for the
 	// connected account (e.g. /codex/models' max_context_window). It is never
 	// declared in YAML: resolution stamps it from the provider's live

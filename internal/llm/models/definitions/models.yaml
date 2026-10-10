@@ -262,6 +262,16 @@ models:
   # FLAGSHIP MODELS - Best overall for complex tasks
   # ============================================================================
 
+  # Claude context limits (every Claude entry below, vertex-* included):
+  # max_context_window is Anthropic's published TOTAL window and
+  # max_output_tokens its published max output, per model page
+  # (platform.claude.com/docs/en/models/<model>/overview, checked 2026-10-10):
+  # 1M / 128K for Claude 4.6 and later, 200K / 64K for the 4.5 generation.
+  # 1M is the default on 4.6+, with no beta header. The Vertex pages publish
+  # the same figures. The Claude subscription driver requests the smaller
+  # max_tokens claude-cli sends (claudeCodeMaxTokens), not these maxima.
+  # TestCatalogContextLimitsMatchProviders pins every value.
+  #
   # Claude 5.5 Opus leads [flagship] (at xhigh) in the tags section above: the
   # general agent and orchestrators ask for flagship. It is deliberately NOT
   # in [moderate] — implementation runs on Sonnet 5.5 at medium. Nor is it
@@ -308,7 +318,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -338,7 +348,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -364,7 +374,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -440,7 +450,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -453,8 +463,11 @@ models:
       # GitHub Copilot serves sonnet-5 on the Anthropic Messages dialect
       # (/v1/messages). This account's /models reports it policy=enabled; verified
       # 200 with the gho_ Bearer alone (paid plan).
+      # Copilot caps its output at 64,000 (/models max_output_tokens; prompt
+      # 936,000 = 1,000,000 − 64,000), half Anthropic's 128,000.
       - driver: copilot
         api_model: claude-sonnet-5
+        max_output_tokens: 64000
     driver_settings:
       temperature_mode: omit
       thinking_mode: adaptive
@@ -469,7 +482,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -492,8 +505,8 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
-      max_context_window: 200000
-      max_output_tokens: 20000
+      max_context_window: 1000000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
@@ -515,7 +528,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 200000
-      max_output_tokens: 20000
+      max_output_tokens: 64000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
@@ -843,9 +856,11 @@ models:
         api_model: gpt-6-luna
       - driver: openrouter
         api_model: openai/gpt-6-luna
-      # GitHub Copilot, /responses only; /models policy=enabled.
+      # GitHub Copilot, /responses only; /models policy=enabled. Copilot's
+      # window is 1,000,000 (max_prompt_tokens 872,000), not OpenAI's 1,050,000.
       - driver: copilot
         api_model: gpt-6-luna
+        max_context_window: 1000000
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -1147,9 +1162,13 @@ models:
         api_model: google/gemini-3.7-flash
       - driver: reliant
         api_model: gemini-3.7-flash
-      # GitHub Copilot, OpenAI Chat dialect; /models policy=enabled.
+      # GitHub Copilot, OpenAI Chat dialect; /models policy=enabled. Copilot
+      # serves it at 1,000,000 / 64,000 (max_prompt_tokens 936,000), below
+      # Google's 1,048,576 / 65,536.
       - driver: copilot
         api_model: gemini-3.7-flash
+        max_context_window: 1000000
+        max_output_tokens: 64000
     default_temperature: 1.0
 
   - id: gemini-3.1-pro-preview
@@ -1226,8 +1245,8 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
-      max_context_window: 200000
-      max_output_tokens: 20000
+      max_context_window: 1000000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1248,17 +1267,23 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
-      max_context_window: 200000
-      max_output_tokens: 20000
+      # OpenRouter publishes Sonnet 4.5 at 1M (it serves the long-context
+      # variant upstream); Anthropic's API serves it at 200K, and the 1M beta
+      # needs a context-1m header no reliant driver sends. Hence 1M model-wide
+      # with the first-party providers held to 200K.
+      max_context_window: 1000000
+      max_output_tokens: 64000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
       - driver: anthropic
         api_model: claude-sonnet-4-5-20250929
+        max_context_window: 200000
       - driver: openrouter
         api_model: anthropic/claude-sonnet-4.5
       - driver: reliant
         api_model: claude-sonnet-4-5
+        max_context_window: 200000
     default_temperature: 1.0
 
   - id: gpt-5.2-pro
@@ -1384,7 +1409,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 200000
-      max_output_tokens: 32000
+      max_output_tokens: 64000
       supported_file_types: [image, pdf, text]
     providers:
       - driver: anthropic
@@ -1395,9 +1420,13 @@ models:
         api_model: claude-haiku-4-5
       # GitHub Copilot serves haiku-4.5 on the Anthropic Messages dialect
       # (/v1/messages); /models reports it policy=enabled. Verified 200 with the
-      # gho_ Bearer alone.
+      # gho_ Bearer alone. Copilot serves a smaller model than Anthropic:
+      # max_context_window_tokens 144,000, max_output_tokens 32,000,
+      # max_prompt_tokens 128,000.
       - driver: copilot
         api_model: claude-haiku-4.5
+        max_context_window: 144000
+        max_output_tokens: 32000
     default_temperature: 1.0
 
   - id: gpt-5.4-mini
@@ -1449,9 +1478,14 @@ models:
       # GitHub Copilot serves gpt-5-mini on the OpenAI Chat dialect
       # (/chat/completions); /models reports it policy=enabled. Verified 200 with
       # the gho_ Bearer alone. gpt-5-mini has no native (openai/codex) provider
-      # today, so copilot is its only source.
+      # today, so copilot is its only source. The model-wide figures are
+      # OpenAI's (400,000 / 128,000); Copilot serves it smaller:
+      # max_context_window_tokens 264,000, max_output_tokens 64,000 and a
+      # 128,000 max_prompt_tokens, which the live /models report enforces.
       - driver: copilot
         api_model: gpt-5-mini
+        max_context_window: 264000
+        max_output_tokens: 64000
     driver_settings:
       preferred_endpoint: responses
       temperature_mode: omit
@@ -1508,8 +1542,10 @@ models:
     providers:
       - driver: gemini
         api_model: gemini-2.5-flash
+      # OpenRouter's max_completion_tokens is 65,535, one below Google's.
       - driver: openrouter
         api_model: google/gemini-2.5-flash
+        max_output_tokens: 65535
       # No `reliant` mapping: not in pkg/llmcatalog gatewayRoster (nor the
       # control-plane LiteLLM config), so the gateway does not serve it.
     default_temperature: 1.0
@@ -1534,8 +1570,10 @@ models:
     providers:
       - driver: gemini
         api_model: gemini-2.5-flash-lite
+      # OpenRouter's max_completion_tokens is 65,535, one below Google's.
       - driver: openrouter
         api_model: google/gemini-2.5-flash-lite
+        max_output_tokens: 65535
       # No `reliant` mapping: not in pkg/llmcatalog gatewayRoster (nor the
       # control-plane LiteLLM config), so the gateway does not serve it.
     default_temperature: 1.0
@@ -1714,7 +1752,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1734,7 +1772,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1777,7 +1815,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1797,7 +1835,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1817,7 +1855,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 1000000
-      max_output_tokens: 64000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high, xhigh]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1836,8 +1874,8 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
-      max_context_window: 200000
-      max_output_tokens: 20000
+      max_context_window: 1000000
+      max_output_tokens: 128000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1854,8 +1892,10 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: true
+      # Vertex serves 1M only as a preview behind the context-1m beta header,
+      # which the vertexai driver does not send; 200K is its GA window.
       max_context_window: 200000
-      max_output_tokens: 20000
+      max_output_tokens: 64000
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text]
     providers:
@@ -1873,7 +1913,7 @@ models:
       supports_streaming: true
       supports_caching: true
       max_context_window: 200000
-      max_output_tokens: 8192
+      max_output_tokens: 64000
       supported_file_types: [image, pdf, text]
     providers:
       - driver: vertexai
@@ -1889,8 +1929,10 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: false
-      max_context_window: 1000000
-      max_output_tokens: 50000
+      # Vertex: context window 1,048,576, max output 65,536
+      # (cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro).
+      max_context_window: 1048576
+      max_output_tokens: 65536
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
     providers:
@@ -1907,8 +1949,10 @@ models:
       supports_attachments: true
       supports_streaming: true
       supports_caching: false
-      max_context_window: 1000000
-      max_output_tokens: 50000
+      # Vertex: context window 1,048,576, max output 65,536
+      # (cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
+      max_context_window: 1048576
+      max_output_tokens: 65536
       supported_file_types: [image, pdf, text, audio, video]
     providers:
       - driver: vertexai
