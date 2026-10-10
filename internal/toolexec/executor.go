@@ -45,6 +45,9 @@ type ToolRequest struct {
 	ChatID     string // Chat this execution belongs to (REQUIRED)
 	ProjectID  string // Project ID (REQUIRED)
 	WorktreeID string // Worktree ID (optional, empty if none)
+	// WorktreeDaemonID is the daemon that owns the worktree's checkout
+	// (rctx.WorktreeInfo.DaemonID). Empty for the main checkout.
+	WorktreeDaemonID string
 
 	// Context for tool execution (primitives only)
 	Thread       string // Thread path (UUID matching workflow ID)

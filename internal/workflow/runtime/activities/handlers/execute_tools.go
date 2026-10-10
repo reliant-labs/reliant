@@ -145,22 +145,23 @@ func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 	}
 
 	return &toolexec.ToolRequest{
-		ToolName:       tec.toolName,
-		ToolInput:      tec.dispatchInput,
-		ToolCallID:     tec.toolCallID,
-		ContentBlockID: "", // Not required - tool calls can be ephemeral
-		UserID:         tec.project.UserID,
-		ChatID:         tec.chat.ID,
-		ProjectID:      tec.project.ID,
-		WorktreeID:     tec.worktree.ID,
-		Thread:         tec.thread,
-		MessageID:      "", // Not required - tool calls can be ephemeral
-		ProjectPath:    tec.project.Path,
-		ProjectName:    tec.project.Name,
-		WorktreePath:   effectiveWorktreePath, // Uses override if set
-		Timeout:        toolexec.DefaultToolTimeout,
-		DaemonSelector: tec.daemonSelector,
-		Repos:          tec.repos,
+		ToolName:         tec.toolName,
+		ToolInput:        tec.dispatchInput,
+		ToolCallID:       tec.toolCallID,
+		ContentBlockID:   "", // Not required - tool calls can be ephemeral
+		UserID:           tec.project.UserID,
+		ChatID:           tec.chat.ID,
+		ProjectID:        tec.project.ID,
+		WorktreeID:       tec.worktree.ID,
+		WorktreeDaemonID: tec.worktree.DaemonID,
+		Thread:           tec.thread,
+		MessageID:        "", // Not required - tool calls can be ephemeral
+		ProjectPath:      tec.project.Path,
+		ProjectName:      tec.project.Name,
+		WorktreePath:     effectiveWorktreePath, // Uses override if set
+		Timeout:          toolexec.DefaultToolTimeout,
+		DaemonSelector:   tec.daemonSelector,
+		Repos:            tec.repos,
 	}
 }
 
