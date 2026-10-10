@@ -15,6 +15,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 
 	"google.golang.org/protobuf/types/known/structpb"
@@ -23,12 +24,15 @@ import (
 	cfg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/builtin"
+	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
@@ -293,17 +297,108 @@ func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowN
 		errs = append(errs, result.AsError())
 	}
 
-	// Validate model availability - check that any model inputs can be resolved
-	// with the user's configured API keys. If the selected model isn't available,
-	// reject it with a clear error instead of silently substituting.
+	// Validate model inputs: an unknown model, a malformed selector or a user
+	// with no provider at all is a bad input and is rejected here.
+	//
+	// A model no connected provider can serve right now is NOT: availability
+	// is a property of the user's providers at call time, not of the input,
+	// and it changes on its own (a provider recovers, the user reconnects).
+	// Rejecting it refused the user's message outright — prod chat 66a045ce,
+	// pinned to gpt-5.6-sol@codex after its owner disconnected Codex, had
+	// "continue" answered with "invalid_argument: ... none of required
+	// providers [codex] available". A send first moves such a model onto a
+	// connected provider (SubstituteUnservableModels); whatever remains is
+	// left to the run, whose resolution fails it terminally with the
+	// explained error in the chat (models.ProviderUnavailableError.Explain).
 	modelSelectors := ExtractModelSelectors(finalInputs, wf.GetInputs(), "")
 	for inputPath, selector := range modelSelectors {
 		if err := drivers.ValidateModelSelector(ctx, userID, selector); err != nil {
+			if errors.Is(err, drivererrors.ErrNoServableProvider) {
+				logging.Info("Model input has no servable provider now; leaving it to the run to explain",
+					"input", inputPath, "workflow", workflowName, "reason", err.Error())
+				continue
+			}
 			errs = append(errs, fmt.Errorf("input '%s': %w", inputPath, err))
 		}
 	}
 
 	return errs
+}
+
+// ModelSubstitution is one model input a send moved off a provider that
+// cannot serve the user (see SubstituteUnservableModels).
+type ModelSubstitution struct {
+	// Input is the input's path, e.g. "model" or "<group>.model".
+	Input string
+	drivers.ModelSubstitution
+}
+
+// SubstituteUnservableModels applies the send-time model policy to the inputs
+// a send is about to hand a run, in place: every model input naming a model
+// none of the user's servable providers can serve is replaced by what those
+// providers offer in its place — the same model on another provider, else the
+// same tier (drivers.SubstituteUnservableModel). It returns one substitution
+// per replaced input, whose Notice the caller must show in the chat: the
+// switch is the user's to see, never silent.
+//
+// Only sends call this. A run that meets an unservable pin on its own (a
+// trigger, a sub-agent, a resumed step) is not rerouted; it fails with the
+// explained error, because no user is there to be told.
+func (l *Launcher) SubstituteUnservableModels(ctx context.Context, userID, workflowName, projectID string, inputs map[string]interface{}) []ModelSubstitution {
+	if len(inputs) == 0 {
+		return nil
+	}
+	resolved, err := workflowsource.Resolve(ctx, l.repo, workflowsource.Options{
+		UserID: userID, ProjectID: projectID, DraftRoot: workflowName,
+	}, workflowName)
+	if err != nil {
+		return nil
+	}
+	available, err := drivers.LookupAvailableDrivers(ctx, userID)
+	if err != nil {
+		// Validation reports the failed settings read.
+		return nil
+	}
+	return substituteModelInputs(inputs, resolved.Workflow.GetInputs(), available, "")
+}
+
+// substituteModelInputs walks inputs against their schema, as
+// ExtractModelSelectors does, replacing each unservable model selector in the
+// map that holds it so the caller's inputs carry the replacement.
+func substituteModelInputs(inputs map[string]interface{}, schemas map[string]*reliantv1.Input, available models.AvailableDrivers, prefix string) []ModelSubstitution {
+	names := make([]string, 0, len(schemas))
+	for name := range schemas {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var out []ModelSubstitution
+	for _, name := range names {
+		schema := schemas[name]
+		if schema == nil {
+			continue
+		}
+		path := name
+		if prefix != "" {
+			path = prefix + "." + name
+		}
+		switch model.GetInputType(schema) {
+		case "model":
+			value, ok := inputs[name]
+			if !ok || value == nil {
+				continue
+			}
+			if sub, ok := drivers.SubstituteUnservableModel(value, available); ok {
+				inputs[name] = sub.Selector
+				out = append(out, ModelSubstitution{Input: path, ModelSubstitution: sub})
+			}
+		case "group":
+			if group, ok := inputs[name].(map[string]interface{}); ok {
+				out = append(out, substituteModelInputs(group, model.GetGroupInputs(schema), available, path)...)
+			}
+		}
+	}
+	return out
 }
 
 // LoadWorkflowForValidation loads a builtin or project workflow by ref — not

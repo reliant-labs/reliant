@@ -56,17 +56,29 @@ func (e *ProviderUnavailableError) Is(target error) bool {
 // driver, from AvailableDrivers.Unavailable; absent means "not connected"),
 // and the two ways out.
 func (e *ProviderUnavailableError) Explain(reasons map[DriverID]string) string {
-	names := make([]string, 0, len(e.Providers))
+	return fmt.Sprintf("%s. Reconnect %s in Settings → Providers, or pick a model from a connected provider in the composer's model picker",
+		e.Reason(reasons), e.ProviderNames())
+}
+
+// Reason is the first clause of Explain: the provider(s) the model is pinned
+// to and why none of them can serve it, without the ways out.
+func (e *ProviderUnavailableError) Reason(reasons map[DriverID]string) string {
 	whys := make([]string, 0, len(e.Providers))
 	for _, p := range e.Providers {
-		name := ProviderDisplayName(p)
-		names = append(names, name)
 		if reason, ok := reasons[DriverID(p)]; ok && reason != "" {
 			whys = append(whys, reason)
 		} else {
-			whys = append(whys, name+" is not connected")
+			whys = append(whys, ProviderDisplayName(p)+" is not connected")
 		}
 	}
-	return fmt.Sprintf("%s runs only on %s, and %s. Reconnect %s in Settings → Providers, or pick a model from a connected provider in the composer's model picker",
-		e.ModelID, strings.Join(names, " or "), strings.Join(whys, "; "), strings.Join(names, " or "))
+	return fmt.Sprintf("%s runs only on %s, and %s", e.ModelID, e.ProviderNames(), strings.Join(whys, "; "))
+}
+
+// ProviderNames is the pinned provider(s) as Settings → Providers names them.
+func (e *ProviderUnavailableError) ProviderNames() string {
+	names := make([]string, 0, len(e.Providers))
+	for _, p := range e.Providers {
+		names = append(names, ProviderDisplayName(p))
+	}
+	return strings.Join(names, " or ")
 }

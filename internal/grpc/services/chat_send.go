@@ -310,6 +310,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 	}
 
 	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+	s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData, nil)
 
 	// Validate workflow inputs before starting
 	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
@@ -606,6 +607,9 @@ func (s *ChatService) SendMessage(
 				// Signal workflow with param/preset input updates when provided.
 				if len(req.Msg.WorkflowParams) > 0 || len(req.Msg.SelectedPresets) > 0 {
 					stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
+					s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
+						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
+					})
 
 					// Validate model selectors in updated params
 					if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
@@ -761,6 +765,14 @@ func (s *ChatService) SendMessage(
 				if len(req.Msg.WorkflowParams) > 0 || len(req.Msg.SelectedPresets) > 0 {
 					stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
 
+					runID := ""
+					if chat.RunID != nil {
+						runID = *chat.RunID
+					}
+					s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
+						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
+					})
+
 					// Validate model selectors in updated params
 					if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
 						errMsgs := make([]string, len(validationErrors))
@@ -768,11 +780,6 @@ func (s *ChatService) SendMessage(
 							errMsgs[i] = e.Error()
 						}
 						return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
-					}
-
-					runID := ""
-					if chat.RunID != nil {
-						runID = *chat.RunID
 					}
 
 					// Only add "params changed" message if params actually changed from current workflow state
@@ -1075,6 +1082,8 @@ func (s *ChatService) SendMessage(
 		}
 		savedMessageID = saved
 	}
+
+	s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData, nil)
 
 	// Validate workflow inputs before starting
 	// This catches missing required inputs early (400) instead of at runtime
