@@ -235,6 +235,11 @@ func (s *FileSystemService) GetFileTree(
 		FS:         s.fs,
 	})
 	if err != nil {
+		// A directory that is not there is the user's disk, not a fault:
+		// the same NotFound the proxy service returns for it.
+		if s.fs.IsNotExist(err) {
+			return nil, connect.NewError(connect.CodeNotFound, err)
+		}
 		logging.Error("Failed to read directory", "error", err, "path", absFullPath)
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}

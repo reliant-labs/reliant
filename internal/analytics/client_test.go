@@ -240,8 +240,17 @@ func TestBatching(t *testing.T) {
 		})
 	}
 
-	// Wait for automatic flush
-	time.Sleep(100 * time.Millisecond)
+	// Wait for the automatic flush. Polled rather than a fixed sleep: on a
+	// loaded machine the round trip outlived a 100ms sleep and the test failed.
+	require.Eventually(t, func() bool {
+		mu.Lock()
+		defer mu.Unlock()
+		total := 0
+		for _, batch := range receivedBatches {
+			total += len(batch)
+		}
+		return total >= maxBatchSize
+	}, 5*time.Second, 10*time.Millisecond)
 
 	mu.Lock()
 	assert.GreaterOrEqual(t, len(receivedBatches), 1)

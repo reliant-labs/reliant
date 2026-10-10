@@ -256,6 +256,11 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string,
 //   - no machine at all is FailedPrecondition: nothing to wait for, and the
 //     file tree says "no machine" instead of an error.
 //
+// The path the request named not being on the machine — a folder the user
+// deleted, a worktree that was removed, a checkout never cloned there — is the
+// state of the user's disk too: NotFound. As Internal it reached Sentry from
+// both the server and the browser (ELECTRON-AW, ELECTRON-9Y).
+//
 // Only what is left is Internal. Mapping the not-connected case there (it used
 // to fall through) logged an ERROR "rpc failed" for every file-tree poll while
 // a machine restarted — 117 in five hours for one user's crash-looping machine
@@ -267,6 +272,8 @@ func fsProxyDaemonError(err error) error {
 		return connect.NewError(connect.CodeUnavailable, err)
 	case toolexec.IsNoDaemon(err):
 		return connect.NewError(connect.CodeFailedPrecondition, err)
+	case isMissingPathError(err):
+		return connect.NewError(connect.CodeNotFound, err)
 	default:
 		return connect.NewError(connect.CodeInternal, err)
 	}

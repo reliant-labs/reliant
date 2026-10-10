@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -24,6 +25,8 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -228,4 +231,121 @@ func TestStreamTerminal_SessionCreatedLogsRequestedAndEffectiveWorkingDir(t *tes
 	record := logRecord(t, logs, "[Terminal] Stream session created")
 	require.Equal(t, projectWorkingDir, record["requested_working_dir"])
 	require.Equal(t, projectWorkingDir, record["working_dir"])
+}
+
+// fakeTerminalCheckouts serves the workspace records TerminalWSHandler reads
+// to decide whether a missing working directory may still appear.
+type fakeTerminalCheckouts struct {
+	worktrees      map[string]*db.Worktree
+	projectDaemons map[string][]*db.ProjectDaemon
+}
+
+func (f fakeTerminalCheckouts) GetWorktree(_ context.Context, id string) (*db.Worktree, error) {
+	if wt, ok := f.worktrees[id]; ok {
+		return wt, nil
+	}
+	return nil, fmt.Errorf("%w: %s", core.ErrWorktreeNotFound, id)
+}
+
+func (f fakeTerminalCheckouts) ListProjectDaemonsForProject(_ context.Context, projectID string) ([]*db.ProjectDaemon, error) {
+	return f.projectDaemons[projectID], nil
+}
+
+// dialTerminalWSFor opens the terminal websocket for a worktree's directory
+// and returns the first message the server sends.
+func dialTerminalWSFor(t *testing.T, router toolexec.DaemonRouter, checkouts terminalCheckouts, workingDir, worktreeID string) map[string]any {
+	t.Helper()
+	srv := httptest.NewServer(TerminalWSHandler(router, staticTokenValidator{userID: terminalTestUserID}, WithTerminalCheckouts(checkouts)))
+	t.Cleanup(srv.Close)
+
+	query := url.Values{"token": {"test"}, "workingDir": {workingDir}, "worktreeId": {worktreeID}}
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http") + "/?" + query.Encode()
+	conn, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+
+	_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+	var first map[string]any
+	require.NoError(t, conn.ReadJSON(&first))
+	return first
+}
+
+// requireNoErrorOrWarnLogs fails if anything was logged at WARN or above:
+// the condition under test is the user's state, and an ERROR line is what
+// the Sentry log handler reports.
+func requireNoErrorOrWarnLogs(t *testing.T, logs *logCapture) {
+	t.Helper()
+	scanner := bufio.NewScanner(strings.NewReader(logs.String()))
+	for scanner.Scan() {
+		var record map[string]any
+		if json.Unmarshal(scanner.Bytes(), &record) != nil {
+			continue
+		}
+		if record["level"] == "ERROR" || record["level"] == "WARN" {
+			t.Fatalf("logged at %v for a user-state condition: %s", record["level"], scanner.Text())
+		}
+	}
+}
+
+const removedWorktreeDir = "/home/workspace/.reliant/worktrees/reliant-labs/365-95b57228"
+
+// The prod case behind 905 refusals in five hours: a persisted terminal for a
+// worktree whose directory was removed after it had been set up, retried every
+// ~12s because every refusal said "wait for it". Nothing recreates that
+// directory, so the browser must be told to stop.
+func TestTerminalWS_RemovedWorktreeDirIsMissingNotUnavailable(t *testing.T) {
+	logs := captureLogs(t)
+	router := &terminalCreateRouter{createErr: errors.New(`daemon command "terminal.create" failed: create session: ` +
+		`terminal working directory unavailable: ` + removedWorktreeDir + ` does not exist`)}
+	checkouts := fakeTerminalCheckouts{worktrees: map[string]*db.Worktree{
+		"wt-active": {ID: "wt-active", ProjectID: "p1", Path: removedWorktreeDir,
+			Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)},
+	}}
+
+	first := dialTerminalWSFor(t, router, checkouts, removedWorktreeDir, "wt-active")
+
+	require.Equal(t, "error", first["type"])
+	require.Equal(t, "working_dir_missing", first["code"], "a removed worktree directory will not come back; retrying cannot succeed")
+	require.Contains(t, first["data"], removedWorktreeDir)
+	requireNoErrorOrWarnLogs(t, logs)
+}
+
+func TestTerminalWS_MissingDirClassification(t *testing.T) {
+	archivedAt := time.Now()
+	checkouts := fakeTerminalCheckouts{
+		worktrees: map[string]*db.Worktree{
+			"wt-creating": {ID: "wt-creating", ProjectID: "p1", Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING)},
+			"wt-failed":   {ID: "wt-failed", ProjectID: "p1", Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED)},
+			"wt-archived": {ID: "wt-archived", ProjectID: "p1", Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), DeletedAt: &archivedAt},
+			"main-cloning": {ID: "main-cloning", ProjectID: "p-cloning", IsMain: true,
+				Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)},
+			"main-cloned": {ID: "main-cloned", ProjectID: "p-cloned", IsMain: true,
+				Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE)},
+		},
+		projectDaemons: map[string][]*db.ProjectDaemon{
+			// fakeDaemonRouter resolves every user to "test-daemon-id".
+			"p-cloning": {{ProjectID: "p-cloning", DaemonID: "test-daemon-id", InstallState: core.ProjectInstallInstalling}},
+			"p-cloned":  {{ProjectID: "p-cloned", DaemonID: "test-daemon-id", InstallState: core.ProjectInstallInstalled}},
+		},
+	}
+	cases := []struct {
+		worktreeID string
+		wantCode   string
+	}{
+		{"wt-creating", "working_dir_unavailable"},  // its directory is being made
+		{"main-cloning", "working_dir_unavailable"}, // its clone is still landing
+		{"wt-failed", "working_dir_missing"},
+		{"wt-archived", "working_dir_missing"},
+		{"wt-gone", "working_dir_missing"},     // no row at all
+		{"main-cloned", "working_dir_missing"}, // cloned, then removed
+		{"", "working_dir_unavailable"},        // nothing to look up: keep waiting
+	}
+	for _, tc := range cases {
+		t.Run(tc.worktreeID, func(t *testing.T) {
+			router := &terminalCreateRouter{createErr: missingWorkingDirTransportError}
+			first := dialTerminalWSFor(t, router, checkouts, projectWorkingDir, tc.worktreeID)
+			require.Equal(t, "error", first["type"])
+			require.Equal(t, tc.wantCode, first["code"])
+		})
+	}
 }

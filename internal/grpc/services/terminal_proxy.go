@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -79,6 +80,19 @@ func closeDaemonTerminalSession(ctx context.Context, router toolexec.DaemonRoute
 		logging.Debug("[Terminal] Session close on disconnect did not complete (may already be closed)",
 			"error", err, "session_id", sessionID)
 	}
+}
+
+// terminalSessionNotFound is how the daemon's terminal manager says a session
+// id names no live session (terminal.Manager.CloseSession). The daemon
+// transport carries a command's error as its message only
+// (daemon_router_nats.go), so the text is what reaches this server; daemons
+// already in the field send exactly this.
+const terminalSessionNotFound = "session not found"
+
+// isTerminalSessionNotFound reports whether a terminal.close failure is the
+// daemon having no such session.
+func isTerminalSessionNotFound(err error) bool {
+	return err != nil && strings.Contains(err.Error(), terminalSessionNotFound)
 }
 
 // ListSessions returns all active terminal sessions.
@@ -162,6 +176,17 @@ func (s *TerminalProxyService) CloseSession(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.close", payload, 30000)
 	if err != nil {
+		// Closing a session that is already gone has achieved what close
+		// asks for. The race is built in: the terminal connection's deferred
+		// close (closeDaemonTerminalSession) and the browser's explicit
+		// CloseSession both close the same session when a tab is closed,
+		// and whichever lands second used to fail as INTERNAL (ELECTRON-97).
+		if isTerminalSessionNotFound(err) {
+			return connect.NewResponse(&reliantv1.CloseTerminalSessionResponse{
+				Success: true,
+				Message: "Session already closed",
+			}), nil
+		}
 		if toolexec.IsDaemonPending(err) {
 			return nil, connect.NewError(connect.CodeUnavailable, err)
 		}
