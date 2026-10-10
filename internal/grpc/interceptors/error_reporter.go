@@ -6,6 +6,7 @@ import (
 	"strings"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 )
@@ -64,9 +65,16 @@ func (i *ErrorReporterInterceptor) WrapStreamingHandler(next connect.StreamingHa
 func (i *ErrorReporterInterceptor) reportError(err error, procedure string) {
 	code := connect.CodeOf(err)
 
-	// Codes that are already covered by the forge logging interceptor's WARN
-	// line. No additional log here; no Sentry report.
+	// Codes that are already covered by the forge logging interceptor's
+	// "rpc failed" line. No additional log here; no Sentry report.
 	if isExpectedCode(code) {
+		return
+	}
+
+	// A user error under a server-side code — a handler that wrapped "your
+	// machine is offline" in Internal — is still the user's to fix. The forge
+	// logging interceptor already wrote it at INFO with error_class=user.
+	if !errclass.IsServerError(err) {
 		return
 	}
 

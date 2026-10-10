@@ -3,12 +3,14 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
 	"time"
 
 	"connectrpc.com/connect"
+	"go.temporal.io/api/serviceerror"
 	"google.golang.org/protobuf/types/known/structpb"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -99,6 +101,9 @@ func (s *ChatService) UpdateWorkflowParams(
 		stateUpdate,
 	)
 	if err != nil {
+		if stale := staleWorkflowSignalError(err); stale != nil {
+			return nil, stale
+		}
 		logging.Error("Failed to signal workflow for param update",
 			"chatID", req.Msg.ChatId,
 			"workflowID", workflowID,
@@ -117,6 +122,22 @@ func (s *ChatService) UpdateWorkflowParams(
 		Success: true,
 		Message: "Workflow parameters updated",
 	}), nil
+}
+
+// staleWorkflowSignalError is the error for a param-update signal that found
+// no running workflow, and nil for any other signal failure.
+//
+// The run finished between the handler's status check and the signal
+// ("workflow execution already completed"), so there is no run for the params
+// to apply to. The caller's view is stale: a FailedPrecondition — a user error
+// — not a server failure. As an Internal it was 11 of the 12 ERRORs this RPC
+// logged in five days of prod.
+func staleWorkflowSignalError(err error) error {
+	var notFound *serviceerror.NotFound
+	if !errors.As(err, &notFound) {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, errors.New("the chat's workflow is no longer running"))
 }
 
 // GetWorkflowExecutions returns the workflow execution tree for a chat

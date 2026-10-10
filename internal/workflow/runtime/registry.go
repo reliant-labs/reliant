@@ -21,7 +21,9 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/worker"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -68,6 +70,30 @@ func (e *TerminalError) Error() string {
 
 func (e *TerminalError) Unwrap() error {
 	return e.Cause
+}
+
+// markTextOnlyUserError marks as user errors (svcerr.ClassUser) the activity
+// failures classifyError recognises only by their text: provider credit or
+// quota exhaustion, a provider usage window, and spent Reliant credit. Each is
+// the user's to fix, and the same rule that makes classifyError stop retrying
+// them makes them user errors — written at INFO, never sent to Sentry.
+//
+// Typed user errors (RetryAfterTooLongError, ProviderUnavailableError,
+// ErrDaemonPending, ...) already carry their class; this covers the ones a
+// driver hands back as provider text. The error's text and identity are
+// unchanged.
+func markTextOnlyUserError(err error) error {
+	if err == nil || !errclass.IsServerError(err) {
+		return err
+	}
+	if drivererrors.IsProviderCreditExhaustion(err) {
+		return svcerr.WithClass(err, svcerr.ClassUser)
+	}
+	if kind, _, ok := chatmarkers.Extract(err.Error()); ok &&
+		(kind == chatmarkers.KindProviderUsageLimit || kind == chatmarkers.KindReliantManagedQuotaExhausted) {
+		return svcerr.WithClass(err, svcerr.ClassUser)
+	}
+	return err
 }
 
 // classifyError determines if an error is terminal or transient
@@ -806,6 +832,7 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 	// Execute the typed activity directly - no conversion needed!
 	// Temporal already deserialized the input to type I
 	result, execErr := w.activity(ctx, input)
+	execErr = markTextOnlyUserError(execErr)
 
 	// Calculate execution duration
 	endTime := time.Now()
@@ -846,7 +873,10 @@ func (w *ActivityWrapper[I, O]) Execute(ctx context.Context, input I) (O, error)
 			"attemptNumber", attemptNumber,
 			"durationMs", durationMs,
 			"cause", context.Cause(ctx),
-			"error", execErr)
+			// Our own heartbeat RPC failed, not the caller going away: a
+			// server-side condition that stays a WARN, which the
+			// context.Canceled it unwound with would otherwise lower.
+			"error", svcerr.WithClass(execErr, svcerr.ClassServer))
 		recordAttempt(nil, execErr)
 		return zeroOutput, temporal.NewApplicationErrorWithCause(
 			fmt.Sprintf("heartbeat RPC failed while running %s; retrying", activityType),

@@ -4,13 +4,17 @@ package logging
 import (
 	"bytes"
 	"encoding/json"
-	"io"
+	"errors"
 	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/prometheus/client_golang/prometheus/testutil"
+	"github.com/reliant-labs/forge/pkg/svcerr"
+	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -133,28 +137,40 @@ func TestLogFormatText(t *testing.T) {
 }
 
 // The JSON handler must sit under the same wrappers as the text one: the
-// metrics bridge outermost, then the Sentry bridge. Losing either when the
-// format changes would silently drop dead-end metrics or Sentry reports in
-// exactly the environment that turns JSON on.
+// error-class policy outermost, then the metrics bridge, then the Sentry
+// bridge. Losing any of them when the format changes would silently drop
+// dead-end metrics or Sentry reports — or page on user errors again — in
+// exactly the environment that turns JSON on. Checked by behaviour: the policy
+// handler is forge's, and its type is not ours to unwrap.
 func TestLogFormatKeepsWrappers(t *testing.T) {
 	for _, format := range []string{"json", "text"} {
 		t.Run(format, func(t *testing.T) {
 			isolateLogging(t)
 			t.Setenv("LOG_FORMAT", format)
-			DefaultOutput = io.Discard
+			var out bytes.Buffer
+			DefaultOutput = &out
+			counter := newTestCounter(t)
+			previous := telemetry.GetReporter()
+			reporter := &recordingReporter{}
+			telemetry.SetReporter(reporter)
+			t.Cleanup(func() { telemetry.SetReporter(previous) })
 			Setup(slog.LevelInfo)
 
-			metrics, ok := slog.Default().Handler().(*metricsHandler)
-			require.True(t, ok, "outermost handler is %T, want *metricsHandler", slog.Default().Handler())
-			sentry, ok := metrics.inner.(*sentryHandler)
-			require.True(t, ok, "metrics wraps %T, want *sentryHandler", metrics.inner)
+			slog.Error("charge failed", "error", errors.New("stripe: 500"))
+			slog.Error("plan limit hit", "error", svcerr.PlanLimit("seat cap"))
 
-			switch format {
-			case "json":
-				assert.IsType(t, &slog.JSONHandler{}, sentry.inner)
-			default:
-				assert.IsType(t, &slog.TextHandler{}, sentry.inner)
+			require.Eventually(t, func() bool { return len(reporter.captured()) == 1 }, 2*time.Second, 5*time.Millisecond,
+				"the Sentry bridge must still see a server error")
+			assert.Equal(t, 2.0, testutil.ToFloat64(counter.WithLabelValues("error", "logging", "charge failed"))+
+				testutil.ToFloat64(counter.WithLabelValues("user_error", "logging", "plan limit hit")),
+				"the metrics bridge must count both")
+
+			lines := nonEmptyLines(out.String())
+			require.Len(t, lines, 2)
+			for _, line := range lines {
+				assert.Equal(t, format == "json", json.Valid([]byte(line)), "line is not %s: %s", format, line)
 			}
+			assert.Contains(t, lines[1], "INFO", "the error-class policy must lower a user error: %s", lines[1])
 		})
 	}
 }

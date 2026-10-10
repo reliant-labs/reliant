@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/anthropics/anthropic-sdk-go"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -128,6 +129,11 @@ func (e *RetryAfterTooLongError) Error() string {
 }
 
 func (e *RetryAfterTooLongError) Unwrap() error { return e.Err }
+
+// ErrorClass: a subscription usage window (Anthropic's 5-hour or 7-day limit)
+// is the user's to wait out or switch providers on — a user error that logs at
+// INFO and never reaches Sentry.
+func (e *RetryAfterTooLongError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // retryableStatus is the SDK's own retry set: timeout, conflict, rate limit,
 // and server errors (529 is Anthropic's "overloaded").

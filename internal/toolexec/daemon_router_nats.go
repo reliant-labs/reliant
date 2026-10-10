@@ -859,7 +859,7 @@ func (r *NATSDaemonRouter) SendToolExecutionBackground(ctx context.Context, user
 // "no daemon connected".
 func daemonRequestError(op string, err error) error {
 	if err == nats.ErrNoResponders {
-		return connect.NewError(connect.CodeUnavailable, fmt.Errorf("no daemon connected for user"))
+		return connect.NewError(connect.CodeUnavailable, errDaemonNotConnected)
 	}
 	return fmt.Errorf("%s via NATS failed: %w", op, err)
 }
@@ -1010,13 +1010,21 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 			// a command times out (stale daemon resolution vs. dead stream) —
 			// the 2026-07-09 git_changes timeouts were undiagnosable from the
 			// bare "nats: timeout" alone.
+			//
+			// The CLASSIFIED error is what is logged: a daemon that is not
+			// connected (no responders) is the user's machine being closed —
+			// a user error, written at INFO — while a timeout or a transport
+			// failure stays a WARN. Logging the raw NATS error made every
+			// file-tree poll of a closed laptop a WARN: 830 in six hours.
+			reqErr := daemonRequestError(
+				fmt.Sprintf("daemon command %s (subject %s, timeout %s)", commandType, subject, timeout), res.err)
 			logging.Warn("[DaemonRouter] daemon command failed",
 				"subject", subject, "commandType", commandType,
 				"payloadBytes", len(data), "timeout", timeout.String(),
 				"elapsed", time.Since(start).Round(time.Millisecond).String(),
-				"error", res.err)
-			return nil, daemonRequestError(
-				fmt.Sprintf("daemon command %s (subject %s, timeout %s)", commandType, subject, timeout), res.err)
+				"nats_error", res.err.Error(),
+				"error", reqErr)
+			return nil, reqErr
 		}
 		msg = res.msg
 	case <-ctx.Done():
