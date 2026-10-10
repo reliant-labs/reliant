@@ -68,6 +68,25 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     return resolveTerminalWorkingDir(worktree, currentProject);
   }, [currentWorktreeId, worktrees, selectedWorktree, currentProject]);
 
+  // Drop terminals whose workspace is gone. Every project session below
+  // mounts a terminal with its own socket, hidden or not, so a stale one is
+  // not just clutter — it reconnects forever to a directory that will never
+  // come back. Only once the list for THIS project has loaded: the main
+  // worktree is always in it, so its absence means the list is someone
+  // else's or not here yet, and pruning against it would drop live sessions.
+  const worktreesLoaded = useWorktreeStore((state) => state.hasLoaded);
+  const pruneSessions = useTerminalStore((state) => state.pruneSessions);
+  useEffect(() => {
+    const projectId = currentProject?.id;
+    if (!projectId || !worktreesLoaded) return;
+    const projectWorktrees = worktrees.filter((w) => w.project_id === projectId);
+    if (!projectWorktrees.some((w) => w.is_main)) return;
+    pruneSessions(
+      projectId,
+      new Set(projectWorktrees.filter((w) => !w.deleted_at).map((w) => w.id)),
+    );
+  }, [currentProject?.id, worktreesLoaded, worktrees, pruneSessions]);
+
   // Get sessions scoped to current worktree (for UI display)
   const sessions = getWorktreeSessions(currentWorktreeId);
 

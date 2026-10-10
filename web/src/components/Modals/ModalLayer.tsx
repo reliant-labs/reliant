@@ -15,11 +15,13 @@ import {
   useModalStore,
   type UpgradeRequiredData,
   type BillingEmailRequiredData,
+  type AppOutOfDateData,
 } from "@/store/modalStore";
 import { isModalAllowedOnRoute } from "./modalRoutePolicy";
 import { ApiKeySetupModal } from "../ApiKeySetupModal";
 import { UpgradeRequiredModal } from "../UpgradeRequiredModal";
 import { BillingEmailRequiredModal } from "../BillingEmailRequiredModal";
+import { AppOutOfDateModal } from "../AppOutOfDateModal";
 
 export function ModalLayer() {
   const activeModal = useModalStore((s) => s.activeModal);
@@ -56,6 +58,16 @@ export function ModalLayer() {
         isOpen
         onClose={closeModal}
         data={data as BillingEmailRequiredData}
+      />
+    );
+  }
+
+  if (activeModal === "app-out-of-date") {
+    return (
+      <AppOutOfDateModal
+        isOpen
+        onClose={closeModal}
+        data={data as AppOutOfDateData}
       />
     );
   }

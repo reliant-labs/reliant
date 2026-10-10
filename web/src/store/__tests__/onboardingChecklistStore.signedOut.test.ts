@@ -149,4 +149,23 @@ describe("onboarding checklist — signed out", () => {
     unsub();
     vi.useRealTimers();
   });
+
+  it("the poll issues NO fetch while the tab is hidden", async () => {
+    authState.session = { access_token: "token-abc" };
+    vi.useFakeTimers();
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    const unsub = useOnboardingChecklistStore.getState().subscribeToStoreChanges();
+
+    try {
+      await vi.advanceTimersByTimeAsync(61_000);
+      expect(getProviders).not.toHaveBeenCalled();
+    } finally {
+      unsub();
+      delete (document as unknown as { visibilityState?: unknown }).visibilityState;
+      vi.useRealTimers();
+    }
+  });
 });

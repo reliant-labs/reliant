@@ -24,6 +24,10 @@ export interface TerminalSession {
    *
    * Undefined until "init" arrives, and undefined forever for a session whose
    * socket never connected. Closing one of those is correctly a no-op.
+   *
+   * Connection-scoped, so never persisted: the server closes the daemon
+   * session when its socket drops, and an id restored after a reload names a
+   * session that no longer exists (ELECTRON-97).
    */
   daemonSessionId?: string;
 }
@@ -47,6 +51,11 @@ interface TerminalState {
   updateSessionPID: (id: string, pid: number) => void;
   /** Bind the daemon's session id once "init" arrives. See TerminalSession.daemonSessionId. */
   setDaemonSessionId: (id: string, daemonSessionId: string) => void;
+  /**
+   * Drop the project's sessions whose workspace is gone (archived, deleted,
+   * or no longer listed). See pruneSessionsForWorkspaces.
+   */
+  pruneSessions: (projectId: string, liveWorktreeIds: ReadonlySet<string>) => void;
   toggleTerminal: () => void; // Show/hide the terminal panel
   showTerminal: () => void; // Expand/show the terminal panel
   hideTerminal: () => void; // Collapse/hide the terminal panel
@@ -61,6 +70,31 @@ type PersistedTerminalState = Pick<TerminalState, 'sessions' | 'activeSessionId'
 
 // Key for main workspace (no worktree)
 const MAIN_WORKSPACE_KEY = '__main__';
+
+/**
+ * The sessions to keep once a project's live workspaces are known.
+ *
+ * Sessions persist across reloads, and every one in the project mounts a
+ * terminal with its own WebSocket, visible or not. Nothing removed the
+ * session of a workspace that was archived or deleted, so its hidden terminal
+ * reconnected to a directory that no longer existed — every ~12s, for five
+ * hours, in prod (2026-10-08). A session with no worktree id belongs to the
+ * project's main checkout and is always kept.
+ */
+export function pruneSessionsForWorkspaces(
+  sessions: readonly TerminalSession[],
+  projectId: string,
+  liveWorktreeIds: ReadonlySet<string>,
+): TerminalSession[] {
+  return sessions.filter(
+    (s) => s.projectId !== projectId || !s.worktreeId || liveWorktreeIds.has(s.worktreeId),
+  );
+}
+
+/** Sessions as they are written to storage: no connection-scoped fields. */
+function persistableSessions(sessions: readonly TerminalSession[]): TerminalSession[] {
+  return sessions.map(({ daemonSessionId: _daemonSessionId, ...rest }) => rest);
+}
 
 export const useTerminalStore = create(
   persist<TerminalState, [], [], PersistedTerminalState>(
@@ -210,6 +244,25 @@ export const useTerminalStore = create(
     logger.debug("[TerminalStore] Updated session PID", { id, pid });
   },
 
+  pruneSessions: (projectId: string, liveWorktreeIds: ReadonlySet<string>) => {
+    const before = get().sessions;
+    const sessions = pruneSessionsForWorkspaces(before, projectId, liveWorktreeIds);
+    if (sessions.length === before.length) return;
+    set((state) => {
+      const kept = new Set(sessions.map((s) => s.id));
+      const activeSessionPerWorktree = Object.fromEntries(
+        Object.entries(state.activeSessionPerWorktree).filter(([, id]) => kept.has(id)),
+      );
+      const activeSessionId =
+        state.activeSessionId && kept.has(state.activeSessionId) ? state.activeSessionId : null;
+      return { sessions, activeSessionPerWorktree, activeSessionId };
+    });
+    logger.info("[TerminalStore] Pruned sessions of removed workspaces", {
+      projectId,
+      removed: before.length - sessions.length,
+    });
+  },
+
   toggleTerminal: () => {
     const newIsOpen = !get().isOpen;
     set({ isOpen: newIsOpen });
@@ -269,7 +322,7 @@ export const useTerminalStore = create(
       version: 2,
       // Only persist session metadata, not the isOpen state
       partialize: (state): PersistedTerminalState => ({
-        sessions: state.sessions,
+        sessions: persistableSessions(state.sessions),
         activeSessionId: state.activeSessionId,
         activeSessionPerWorktree: state.activeSessionPerWorktree,
       }),
@@ -277,7 +330,9 @@ export const useTerminalStore = create(
       onRehydrateStorage: () => (state) => {
         if (state?.sessions) {
           // Convert createdAt strings back to Date objects after rehydration
-          state.sessions = state.sessions.map(session => ({
+          // persistableSessions also drops daemonSessionId from anything
+          // stored before it stopped being persisted.
+          state.sessions = persistableSessions(state.sessions).map(session => ({
             ...session,
             createdAt: session.createdAt instanceof Date
               ? session.createdAt

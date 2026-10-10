@@ -6,6 +6,8 @@ import { Search, X, Loader2, FileText, ChevronDown, ChevronRight, Settings2 } fr
 import { cn } from "../../lib/utils";
 import { searchFiles, type SearchResult, type SearchMatch } from "../../api/fileSystem";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { isNoMachineError } from "../../lib/daemon-errors";
+import { NoMachineState } from "../NoMachineState";
 import { useProjectStore } from "../../store/projectStore";
 import { useActiveWorktreeId } from "../../store/worktreeStore";
 import { useViewerStore } from "../../store/viewerStore";
@@ -21,6 +23,8 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
   const [totalMatches, setTotalMatches] = useState(0);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // The account has no machine at all (lib/daemon-errors isNoMachineError): offer to connect one.
+  const [noMachine, setNoMachine] = useState(false);
   const [expandedFiles, setExpandedFiles] = useState<Set<string>>(new Set());
   const [highlightedIndex, setHighlightedIndex] = useState(0);
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null);
@@ -67,6 +71,7 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
     
     setIsLoading(true);
     setError(null);
+    setNoMachine(false);
     
     try {
       const response = await searchFiles(searchQuery, {
@@ -93,6 +98,10 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
       // search box. Say what's actually true instead.
       if (isDaemonConnectingError(err)) {
         setError("Your machine is starting — search will work once it's online.");
+        return;
+      }
+      if (isNoMachineError(err)) {
+        setNoMachine(true);
         return;
       }
       console.error("Search failed:", err);
@@ -363,7 +372,13 @@ export function GlobalSearch({ isOpen, onClose }: GlobalSearchProps) {
           ref={resultsRef}
           className="max-h-[60vh] overflow-y-auto"
         >
-          {error ? (
+          {noMachine ? (
+            <NoMachineState
+              purpose="search this project"
+              onMachineConnected={() => void performSearch(query)}
+              className="h-auto"
+            />
+          ) : error ? (
             <div className="px-4 py-8 text-center">
               <p className="text-sm text-destructive-ink font-mono">{error}</p>
             </div>

@@ -111,10 +111,26 @@ const appStartTime = Date.now();
 const notifiedUpdateIds = new Set<string>();
 const NOTIFIED_UPDATE_IDS_MAX = 500;
 
-// Set when the stream errors or ends; the next successful connect then
-// refreshes list state as a safety net (the reconnect's DB replay restores
-// update-driven state, but ephemeral signals like REFETCH are not replayed).
-let streamWasDisrupted = false;
+// Set (to the wall time it happened) when the stream errors or ends; the next
+// successful connect then refreshes list state as a safety net (the
+// reconnect's DB replay restores update-driven state, but ephemeral signals
+// like REFETCH are not replayed). Null while the stream is undisturbed.
+let streamDisruptedAt: number | null = null;
+
+/**
+ * Only data last read BEFORE the stream went down can have missed an
+ * ephemeral signal. A query the user already re-read since then — the window
+ * focus refetch on returning to the tab usually beats the reconnect by a
+ * second — is current, and refetching it again is the duplicate burst that
+ * every resume used to pay (ListDaemons and GetChat twice, ListChats three
+ * times, all onto a connection that had often just died).
+ */
+export function readBeforeDisruption(disruptedAt: number) {
+  // `<=`: a read in the same millisecond as the disruption cannot be ordered
+  // against it, so it is refreshed.
+  return (query: { state: { dataUpdatedAt: number } }): boolean =>
+    query.state.dataUpdatedAt <= disruptedAt;
+}
 
 /**
  * THE single write path for chat metadata updates arriving over the stream:
@@ -232,6 +248,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
         useChatStore.getState().resumeChatStreamFrom(chatId),
       onChatSyncPending: (chatId) =>
         useChatStore.getState().setChatSyncPending(chatId),
+      onChatSubscriptionRejected: (chatId) => {
+        if (get().subscribedChatId === chatId) set({ subscribedChatId: null });
+      },
     });
 
     set({ wsService });
@@ -275,6 +294,10 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
       });
       set({ subscribedChatId: chatId });
       state.wsService.subscribeToChatDetails(chatId);
+      // The service declines a chat the server has already refused (see
+      // UserStreamingService.dropRefusedChat); mirror what it actually holds.
+      const held = state.wsService.getSubscribedChatId() ?? null;
+      if (held !== chatId) set({ subscribedChatId: held });
       return;
     }
 
@@ -461,8 +484,8 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     logger.info(`${LOG_PREFIX} Connection status: ${prevStatus} -> ${status}`);
     set({ connectionStatus: status });
 
-    if (status === "error" || status === "disconnected") {
-      streamWasDisrupted = true;
+    if ((status === "error" || status === "disconnected") && streamDisruptedAt === null) {
+      streamDisruptedAt = Date.now();
     }
 
     // After a disruption, refresh chat state once reconnected. The stream's
@@ -470,16 +493,19 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
     // covers ephemeral signals (REFETCH events are deliberately not replayed).
     // NOTE: the old condition (`prevStatus !== "connecting"`) could never
     // fire — every path to "connected" goes through "connecting".
-    if (status === "connected" && streamWasDisrupted) {
-      streamWasDisrupted = false;
+    if (status === "connected" && streamDisruptedAt !== null) {
+      const stale = readBeforeDisruption(streamDisruptedAt);
+      streamDisruptedAt = null;
       logger.info(`${LOG_PREFIX} Reconnected after disruption - refreshing chat state`);
       useChatStore.getState().loadChats().catch((err) => {
         logger.warn(`${LOG_PREFIX} Failed to refresh chats on reconnect`, { error: err });
       });
-      try { queryClient.invalidateQueries({ queryKey: chatKeys.all }); } catch { /* bus not ready */ }
+      try {
+        void queryClient.invalidateQueries({ queryKey: chatKeys.all, predicate: stale });
+      } catch { /* bus not ready */ }
       // Daemon-list announcements are ephemeral, so any sent while the stream
       // was down are gone; read the list once instead.
-      invalidateDaemonList(queryClient);
+      invalidateDaemonList(queryClient, { predicate: stale });
     }
   },
 
