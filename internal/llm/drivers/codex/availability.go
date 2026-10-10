@@ -6,10 +6,13 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/openai/openai-go/v3"
 
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
@@ -84,7 +87,9 @@ func accountKey(accountID, token string) string {
 //
 // A model the catalog does not list is NOT servable (the account does not
 // serve it). A slug with no catalog entry is not auto-added; it is logged once.
-// A failed fetch is an error, which callers treat as fail-open.
+// A failed fetch is an error: a credential refusal is a
+// registry.CredentialRejectedError (the provider is unavailable), anything
+// else an outage callers fail open on.
 func (c *CodexClient) ReportAvailability(ctx context.Context) (registry.ProviderAvailability, error) {
 	key := accountKey(c.accountID, c.accessToken)
 
@@ -107,7 +112,7 @@ func (c *CodexClient) ReportAvailability(ctx context.Context) (registry.Provider
 	err := c.client.Get(fetchCtx, codexModelsPath+"?client_version="+CodexVersion, nil, &raw)
 	var report registry.ProviderAvailability
 	if err != nil {
-		err = fmt.Errorf("codex models request failed: %w", err)
+		err = modelsRequestError(err)
 	} else {
 		report, err = parseCodexModels(raw)
 	}
@@ -116,6 +121,26 @@ func (c *CodexClient) ReportAvailability(ctx context.Context) (registry.Provider
 	availabilityCache[key] = availabilityEntry{report: report, err: err, fetchedAt: time.Now()}
 	availabilityMu.Unlock()
 	return report, err
+}
+
+// modelsRequestError classifies a failed GET /codex/models. A 400, 401 or 403
+// is the Codex backend refusing the credential every request carries (by now
+// past the refresh transport, which refreshes an expired token and retries a
+// 401 once after reloading rotated tokens), so it is a
+// registry.CredentialRejectedError and Codex becomes unavailable. A transport
+// error, timeout, 429 or 5xx is an outage, and callers fail open.
+func modelsRequestError(err error) error {
+	var apiErr *openai.Error
+	if errors.As(err, &apiErr) {
+		detail := AugmentAPIError(err).Error()
+		if apiErr.Message != "" {
+			detail = apiErr.Message
+		}
+		if rejected := registry.RejectedCredential(apiErr.StatusCode, detail); rejected != nil {
+			return fmt.Errorf("codex models request: %w", rejected)
+		}
+	}
+	return fmt.Errorf("codex models request failed: %w", err)
 }
 
 // GetAvailableModels implements registry.ModelLister for the model picker,

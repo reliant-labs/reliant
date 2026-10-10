@@ -21,6 +21,10 @@ const (
 	ChatStateArchived ChatState = core.ChatStateArchived
 )
 
+// ProviderOAuthMarker is the api_keys value an OAuth provider stores when it
+// connects; never a credential. See core.ProviderOAuthMarker.
+const ProviderOAuthMarker = core.ProviderOAuthMarker
+
 // Run-list types.
 type (
 	RunListFilters  = core.RunListFilters

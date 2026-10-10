@@ -55,7 +55,7 @@ func TestAggregateAvailableModels_StaticProviderReturnsRegistryList(t *testing.T
 
 	// Static client: not a ModelLister, so AvailableModelsFor must return the
 	// registry list for the family.
-	build := func(id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
+	build := func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
 		return &fakeClient{name: string(id)}, nil
 	}
 
@@ -86,7 +86,7 @@ func TestAggregateAvailableModels_DynamicProviderReturnsItsList(t *testing.T) {
 		"copilot": cfgFor("copilot"),
 	}}
 
-	build := func(_ models.DriverID, _ models.DriverConfig) (registry.Client, error) {
+	build := func(_ context.Context, _ models.DriverID, _ models.DriverConfig) (registry.Client, error) {
 		return &fakeLister{fakeClient: fakeClient{name: "copilot"}, list: dynamicList}, nil
 	}
 
@@ -122,7 +122,7 @@ func TestAggregateAvailableModels_FailOpenOnError(t *testing.T) {
 
 	// Builder errors for this provider; the aggregator must fail open and fall
 	// back to the static registry list rather than dropping the provider.
-	build := func(_ models.DriverID, _ models.DriverConfig) (registry.Client, error) {
+	build := func(_ context.Context, _ models.DriverID, _ models.DriverConfig) (registry.Client, error) {
 		return nil, errors.New("boom: cannot build client")
 	}
 

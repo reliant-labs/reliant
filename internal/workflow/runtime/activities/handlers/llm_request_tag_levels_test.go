@@ -7,8 +7,12 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/llm/models"
+	"github.com/reliant-labs/reliant/internal/llm/tools"
+	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -212,7 +216,39 @@ func provisionProviderKeys(t *testing.T, ctx context.Context, userID string, pro
 	t.Cleanup(cleanup)
 
 	drivers.InitializeAPIKeyProvider(repo)
+	// No real provider catalog: a fake key would be refused (Copilot answers
+	// 401), and a refused credential is now — correctly — unavailable. These
+	// tests are about the settings resolveLLMCall computes, so every provider
+	// reports no account availability (all its models servable).
+	original := drivers.AccountAvailabilityClient
+	drivers.AccountAvailabilityClient = func(_ context.Context, id models.DriverID, _ models.DriverConfig) (registry.Client, error) {
+		return staticCatalogClient{name: string(id)}, nil
+	}
+	t.Cleanup(func() { drivers.AccountAvailabilityClient = original })
+
 	for _, provider := range providers {
+		if provider == "copilot" {
+			// Copilot's credential lives in its own token table; the
+			// api_keys row is only the connection marker.
+			require.NoError(t, repo.SetCopilotAuthTokens(ctx, userID, db.CopilotAuthTokens{
+				GitHubAccessToken: "gho_test-key-copilot",
+			}))
+			require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, db.ProviderOAuthMarker))
+			continue
+		}
 		require.NoError(t, repo.SetProviderAPIKey(ctx, userID, provider, "test-key-"+provider))
 	}
 }
+
+// staticCatalogClient is a provider with no account catalog: it implements
+// neither registry.AvailabilityReporter nor registry.ModelLister.
+type staticCatalogClient struct{ name string }
+
+func (c staticCatalogClient) Name() string { return c.name }
+func (staticCatalogClient) SendMessages(context.Context, []string, []message.Message, []tools.Tool) (*llm.DriverResponse, error) {
+	return nil, nil
+}
+func (staticCatalogClient) StreamResponse(context.Context, []string, []message.Message, []tools.Tool) <-chan llm.DriverEvent {
+	return nil
+}
+func (staticCatalogClient) ValidateKey(context.Context) error { return nil }

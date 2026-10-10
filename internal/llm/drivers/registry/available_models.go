@@ -3,6 +3,10 @@ package registry
 
 import (
 	"context"
+	"errors"
+	"fmt"
+	"net/http"
+	"strings"
 
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
@@ -67,8 +71,62 @@ func (p ProviderAvailability) For(apiModel string) models.ModelAvailability {
 // back it with a TTL cache: resolution consults it on every request, and it must
 // not put a network call in the hot path. ModelLister (the picker view) is
 // derived from the same report, so the picker and resolution cannot disagree.
+//
+// A report that fails because the provider refused the credential must return
+// a *CredentialRejectedError (see RejectedCredential): that is a verdict, and
+// callers make the provider unavailable. Any other error is an outage, and
+// callers fail open.
 type AvailabilityReporter interface {
 	ReportAvailability(ctx context.Context) (ProviderAvailability, error)
+}
+
+// ErrCredentialRejected matches every *CredentialRejectedError via errors.Is.
+var ErrCredentialRejected = errors.New("provider rejected the credential")
+
+// CredentialRejectedError is a provider's refusal of the credential an account
+// catalog request carried — the same credential, and the same client identity,
+// every inference request would carry. It is a verdict, not an outage: the
+// provider cannot serve this account until the user reconnects it.
+type CredentialRejectedError struct {
+	// Status is the HTTP status the provider answered with (400, 401 or 403).
+	Status int
+	// Detail is the provider's reason, whitespace-collapsed and bounded.
+	Detail string
+}
+
+func (e *CredentialRejectedError) Error() string {
+	return fmt.Sprintf("%v: HTTP %d: %s", ErrCredentialRejected, e.Status, e.Detail)
+}
+
+// Is makes errors.Is(err, ErrCredentialRejected) hold.
+func (e *CredentialRejectedError) Is(target error) bool { return target == ErrCredentialRejected }
+
+// maxRejectionDetail bounds the provider text carried into a user-facing
+// reason; a provider can answer with a whole JSON document.
+const maxRejectionDetail = 240
+
+// RejectedCredential returns a *CredentialRejectedError when status is a
+// provider refusing the credential, and nil for any other status.
+//
+// 401 and 403 are refusals by definition. 400 is too, for an account catalog
+// request: it is a parameterless GET whose only per-user input IS the
+// credential, so a 400 is the provider rejecting how that credential reads
+// (GitHub's "Authorization header is badly formatted") — and every inference
+// request would carry the same header. 408, 429 and 5xx are outages.
+func RejectedCredential(status int, detail string) error {
+	switch status {
+	case http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden:
+	default:
+		return nil
+	}
+	detail = strings.Join(strings.Fields(detail), " ")
+	if runes := []rune(detail); len(runes) > maxRejectionDetail {
+		detail = string(runes[:maxRejectionDetail]) + "…"
+	}
+	if detail == "" {
+		detail = http.StatusText(status)
+	}
+	return &CredentialRejectedError{Status: status, Detail: detail}
 }
 
 // ApplyAvailability stamps a provider's report onto its static model list: the

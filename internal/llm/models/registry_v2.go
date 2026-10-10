@@ -9,6 +9,8 @@ import (
 	"sync"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 )
 
 //go:embed definitions/models.yaml
@@ -409,7 +411,7 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 		provider, err := r.findBestProvider(model, preferredProviders, servable, hardConstraint)
 		if err != nil {
 			if disabledReason != "" {
-				return nil, fmt.Errorf("model %s is unavailable: %s", model.ID, disabledReason)
+				return nil, fmt.Errorf("model %s is unavailable: %s: %w", model.ID, disabledReason, drivererrors.ErrNoServableProvider)
 			}
 			return nil, err
 		}
@@ -449,7 +451,7 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 		}
 	}
 
-	return nil, fmt.Errorf("no available provider for models with tags: %v (tried %d candidates)", selector.Tags, len(candidates))
+	return nil, fmt.Errorf("no available provider for models with tags: %v (tried %d candidates): %w", selector.Tags, len(candidates), drivererrors.ErrNoServableProvider)
 }
 
 // tagCandidate is a model a tag selector may resolve to, with the entry that
@@ -525,7 +527,7 @@ func (r *ModelRegistry) findBestProvider(model *ModelDefinition, preferredProvid
 		}
 		// None of the preferred providers available
 		if hardConstraint {
-			return nil, fmt.Errorf("none of required providers %v available for model %s", preferredProviders, model.ID)
+			return nil, &ProviderUnavailableError{ModelID: model.ID, Providers: slices.Clone(preferredProviders)}
 		}
 		// Fall through to system priority
 	}
@@ -561,7 +563,7 @@ func (r *ModelRegistry) findBestProvider(model *ModelDefinition, preferredProvid
 	}
 
 	if bestProvider == nil {
-		return nil, fmt.Errorf("no available provider for model %s", model.ID)
+		return nil, fmt.Errorf("no available provider for model %s: %w", model.ID, drivererrors.ErrNoServableProvider)
 	}
 
 	return bestProvider, nil

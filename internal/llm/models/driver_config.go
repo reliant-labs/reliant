@@ -49,6 +49,13 @@ type AvailableDrivers struct {
 	// owns these drivers (e.g. a Copilot model policy=disabled). Nil means every
 	// model of a configured driver is servable.
 	Availability AvailabilityFunc
+
+	// Unavailable holds the providers the user has a stored credential for
+	// that the provider itself rejected, keyed by driver, with the
+	// user-facing reason. A driver here is never in Drivers: it serves no
+	// traffic until the user reconnects it. Resolution errors read this to
+	// say WHY a pinned provider cannot serve, not just that it cannot.
+	Unavailable map[DriverID]string
 }
 
 // GetAvailableDriversForModel returns the list of drivers that support a model AND are properly configured.

@@ -3,8 +3,10 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/llm"
@@ -215,7 +217,7 @@ func resolveLLMCall(ctx context.Context, resolver drivers.DriverResolver, spec l
 			var err error
 			resolved, err = resolve(spec.Selector, availableProviders)
 			if err != nil {
-				return nil, fmt.Errorf("failed to resolve model: %w. Please check your API key configuration in Settings", err)
+				return nil, resolutionError(err, availableDrivers)
 			}
 		}
 		if effectiveTemperature == nil {
@@ -388,6 +390,43 @@ func loadTagPrefs(ctx context.Context, spec llmCallSpec, registry *models.ModelR
 			"userID", spec.UserID, "error", err)
 	}
 	return all[tag]
+}
+
+// resolveFailure is a model resolution that failed, worded for the user. Its
+// cause stays in the chain, so a no-servable-provider failure remains
+// errors.Is(drivererrors.ErrNoServableProvider) and the runtime fails the call
+// once instead of retrying a resolution only the user can change.
+type resolveFailure struct {
+	msg   string
+	cause error
+}
+
+func (e *resolveFailure) Error() string { return e.msg }
+func (e *resolveFailure) Unwrap() error { return e.cause }
+
+// resolutionError says why no provider can serve the request and what the user
+// can do about it. A model pinned to one provider ("gpt-5.6-sol@codex", which
+// is what picking a model in the composer stores) names that provider and why
+// it cannot serve: not connected, or connected with a credential the provider
+// rejected. Anything else names every rejected provider, since a rejected
+// credential is the likeliest reason a configured user's tier came up empty.
+func resolutionError(err error, available models.AvailableDrivers) error {
+	var pinned *models.ProviderUnavailableError
+	if errors.As(err, &pinned) {
+		return &resolveFailure{msg: "failed to resolve model: " + pinned.Explain(available.Unavailable), cause: err}
+	}
+	msg := "failed to resolve model: " + err.Error()
+	if len(available.Unavailable) > 0 {
+		reasons := make([]string, 0, len(available.Unavailable))
+		for _, reason := range available.Unavailable {
+			reasons = append(reasons, reason)
+		}
+		sort.Strings(reasons)
+		msg += ". " + strings.Join(reasons, "; ") + ". Reconnect it in Settings → Providers, or connect another provider"
+	} else {
+		msg += ". Connect a provider that serves this model in Settings → Providers"
+	}
+	return &resolveFailure{msg: msg, cause: err}
 }
 
 // configuredProviderIDs returns the driver IDs the user has properly

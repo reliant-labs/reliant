@@ -10,6 +10,13 @@ import (
 // Callers can use errors.Is(err, ErrEmptyInput) to classify deterministically.
 var ErrEmptyInput = fmt.Errorf("llm request has no input")
 
+// ErrNoServableProvider matches a model resolution that found no connected,
+// credential-accepted provider able to serve the requested model. It is
+// deterministic for the life of a retry ladder — only the user reconnecting a
+// provider or picking another model changes it — so it is terminal: the call
+// fails once, with its explanation, instead of retrying the same failure.
+var ErrNoServableProvider = fmt.Errorf("no servable provider")
+
 // EmptyInputError describes a request that could not be sent because message
 // conversion produced no input items.
 type EmptyInputError struct {
