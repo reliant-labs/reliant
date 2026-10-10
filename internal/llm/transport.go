@@ -298,8 +298,10 @@ func StreamIdleTimeout() time.Duration {
 // so a silent stream is retried rather than failing the workflow.
 var ErrStreamIdleTimeout = errors.New("llm stream idle timeout: provider sent no data before the idle deadline")
 
-// ErrStreamContentStalled is returned when a stream kept its connection busy
-// with keepalives but produced no actual content for DefaultStreamContentStallTimeout.
+// ErrStreamContentStalled matches a stream that kept its connection busy with
+// keepalives but produced no actual content for its content-stall deadline.
+// The reader returns a *StreamStallError, which names the phase and deadline;
+// test for the class with errors.Is against this sentinel.
 //
 // Distinct from ErrStreamIdleTimeout because the two describe different
 // faults and a reader of the logs needs to tell them apart: idle means the
@@ -309,7 +311,9 @@ var ErrStreamIdleTimeout = errors.New("llm stream idle timeout: provider sent no
 var ErrStreamContentStalled = errors.New("llm stream content stall timeout: provider sent only keepalives before the content deadline")
 
 // DefaultStreamContentStallTimeout bounds how long a stream may deliver
-// keepalives and nothing else.
+// keepalives and nothing else while no content block is open. Inside an open
+// block the looser DefaultStreamMidBlockStallTimeout family applies instead —
+// see StreamMidBlockStallTimeout for why this deadline is wrong there.
 //
 // This is the guard for the credit-exhaustion hang: Anthropic answered 200,
 // then emitted ping frames for 28-43 minutes while withholding all content,
@@ -355,7 +359,10 @@ var ErrStreamProgressTimeout = errors.New("llm stream progress timeout: no strea
 // transport-level guards would still consider healthy. It is the floor under
 // an unbounded hang, not a promptness guarantee: at 10 minutes, the
 // content-stall timer has already had two full chances to cut a ping-only
-// stream with a more specific error.
+// stream with a more specific error. The one place keepalives ARE healthy for
+// longer than this — inside an open content block, up to the mid-block
+// deadline — the transport reports them on the request's StreamLiveness, and
+// CallLLM holds this timer off for as long as they keep coming.
 //
 // Override with RELIANT_LLM_STREAM_PROGRESS_TIMEOUT.
 const DefaultStreamProgressTimeout = 10 * time.Minute
@@ -403,7 +410,13 @@ func StreamContentStallTimeout() time.Duration {
 // working while keeping the TCP connection alive.
 //
 //	byte-idle    no bytes at all for `timeout`        -> ErrStreamIdleTimeout
-//	content-stall no CONTENT for `contentStallTimeout` -> ErrStreamContentStalled
+//	content-stall no CONTENT for the phase's deadline  -> *StreamStallError
+//
+// The content-stall deadline depends on the phase (see streamStallPolicy and
+// sseProgressScanner.midBlock): with no content block open it is the tight
+// awaiting deadline that catches the credit-exhaustion hang; inside an open
+// block, where a redacted thinking block legitimately sends only keepalives,
+// it is the request's output budget at a floor generation rate.
 //
 // Two timers rather than one, because "the socket is alive" and "the request
 // is progressing" are different questions and each has its own correct
@@ -438,14 +451,17 @@ func StreamContentStallTimeout() time.Duration {
 // still bounded: no Read means no reset, so the idle deadline fires, closes
 // the body and ends the watcher within one idle timeout.
 type IdleTimeoutReader struct {
-	r                   io.ReadCloser
-	timeout             time.Duration
-	contentStallTimeout time.Duration
-	timer               *time.Timer
-	contentTimer        *time.Timer
-	fired               atomic.Bool
-	contentFired        atomic.Bool
-	releaseOnce         sync.Once
+	r            io.ReadCloser
+	timeout      time.Duration
+	stall        streamStallPolicy
+	timer        *time.Timer
+	contentTimer *time.Timer
+	fired        atomic.Bool
+	contentFired atomic.Bool
+	// armedMidBlock records which phase's deadline the content timer was last
+	// armed with, so a stall reports the phase and deadline that applied.
+	armedMidBlock atomic.Bool
+	releaseOnce   sync.Once
 	// done ends the watcher goroutine. Closed by release, which runs on
 	// Close, on a terminal Read, and when a deadline fires.
 	done chan struct{}
@@ -461,15 +477,24 @@ func NewIdleTimeoutReader(r io.ReadCloser, timeout time.Duration) *IdleTimeoutRe
 }
 
 // newIdleTimeoutReader takes both deadlines explicitly so tests can exercise
-// either guard without waiting the real durations.
+// either guard without waiting the real durations. The mid-block deadline is
+// the budget-unknown default.
 func newIdleTimeoutReader(r io.ReadCloser, timeout, contentStall time.Duration) *IdleTimeoutReader {
+	return newIdleTimeoutReaderWithPolicy(r, timeout, streamStallPolicy{
+		awaiting: contentStall,
+		midBlock: midBlockStallTimeout(0, contentStall),
+	})
+}
+
+func newIdleTimeoutReaderWithPolicy(r io.ReadCloser, timeout time.Duration, stall streamStallPolicy) *IdleTimeoutReader {
 	itr := &IdleTimeoutReader{
-		r:                   r,
-		timeout:             timeout,
-		contentStallTimeout: contentStall,
-		timer:               time.NewTimer(timeout),
-		contentTimer:        time.NewTimer(contentStall),
-		done:                make(chan struct{}),
+		r:       r,
+		timeout: timeout,
+		stall:   stall,
+		timer:   time.NewTimer(timeout),
+		// A response starts with no block open.
+		contentTimer: time.NewTimer(stall.awaiting),
+		done:         make(chan struct{}),
 	}
 	// Started only after every field it reads is assigned, so a deadline
 	// shorter than this constructor cannot observe a half-built reader.
@@ -488,8 +513,10 @@ func (itr *IdleTimeoutReader) watch() {
 			"timeout", itr.timeout)
 	case <-itr.contentTimer.C:
 		itr.contentFired.Store(true)
+		stall := itr.stallError()
 		logging.Warn("[IdleTimeoutReader] Stream content stall timeout reached, closing connection",
-			"timeout", itr.contentStallTimeout,
+			"phase", stall.Phase,
+			"timeout", stall.Timeout,
 			"detail", "connection stayed alive on keepalives but the provider sent no content")
 	case <-itr.done:
 		return
@@ -513,7 +540,7 @@ func (itr *IdleTimeoutReader) Read(p []byte) (int, error) {
 		// Content-stall is checked first: it is the more specific, more
 		// actionable diagnosis of the two.
 		if itr.contentFired.Load() {
-			return n, ErrStreamContentStalled
+			return n, itr.stallError()
 		}
 		if itr.fired.Load() {
 			return n, ErrStreamIdleTimeout
@@ -527,11 +554,32 @@ func (itr *IdleTimeoutReader) Read(p []byte) (int, error) {
 		// see EVERY chunk — it carries partial-line and SSE frame state
 		// between calls. (A chunk delivered alongside a terminal error is the
 		// last one, so skipping it above loses nothing.)
-		if itr.progress.sawContent(p[:n]) {
-			itr.contentTimer.Reset(itr.contentStallTimeout)
+		content := itr.progress.sawContent(p[:n])
+		midBlock := itr.progress.midBlock()
+		switch {
+		case content:
+			// Re-armed with the deadline of the phase this content left the
+			// stream in: opening a block switches to the mid-block deadline,
+			// closing one switches back.
+			itr.armedMidBlock.Store(midBlock)
+			itr.contentTimer.Reset(itr.stall.deadline(midBlock))
+		case midBlock:
+			// A keepalive inside an open block: the model is generating
+			// something it does not stream. It does not reset the deadline —
+			// a ping carries no data — but it is the only sign of life the
+			// layers above the driver can get.
+			itr.stall.liveness.Touch()
 		}
 	}
 	return n, nil
+}
+
+// stallError describes the content-stall deadline that was armed last.
+func (itr *IdleTimeoutReader) stallError() *StreamStallError {
+	if itr.armedMidBlock.Load() {
+		return &StreamStallError{Phase: StallMidBlock, Timeout: itr.stall.midBlock}
+	}
+	return &StreamStallError{Phase: StallAwaitingContent, Timeout: itr.stall.awaiting}
 }
 
 // release stops both deadlines and ends the watcher. It does not close the
@@ -558,6 +606,9 @@ type idleTimeoutTransport struct {
 	base                http.RoundTripper
 	timeout             time.Duration
 	contentStallTimeout time.Duration
+	// midBlockStallTimeout pins the mid-block deadline. Zero derives it per
+	// request from the output budget the driver put on the request context.
+	midBlockStallTimeout time.Duration
 }
 
 func (t *idleTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, error) {
@@ -570,7 +621,15 @@ func (t *idleTimeoutTransport) RoundTrip(req *http.Request) (*http.Response, err
 		if stall <= 0 {
 			stall = StreamContentStallTimeout()
 		}
-		resp.Body = newIdleTimeoutReader(resp.Body, t.timeout, stall)
+		midBlock := t.midBlockStallTimeout
+		if midBlock <= 0 {
+			midBlock = midBlockStallTimeout(streamOutputBudget(req.Context()), stall)
+		}
+		resp.Body = newIdleTimeoutReaderWithPolicy(resp.Body, t.timeout, streamStallPolicy{
+			awaiting: stall,
+			midBlock: midBlock,
+			liveness: StreamLivenessFrom(req.Context()),
+		})
 	}
 	return resp, nil
 }
@@ -608,11 +667,18 @@ func newStreamingHTTPClient(idle time.Duration) *http.Client {
 // newStreamingHTTPClientWithStall additionally pins the content-stall deadline,
 // so a test can drive either guard independently of the other.
 func newStreamingHTTPClientWithStall(idle, contentStall time.Duration) *http.Client {
+	return newStreamingHTTPClientWithStalls(idle, contentStall, 0)
+}
+
+// newStreamingHTTPClientWithStalls also pins the mid-block deadline (0 derives
+// it from the request's output budget, as production does).
+func newStreamingHTTPClientWithStalls(idle, contentStall, midBlock time.Duration) *http.Client {
 	return &http.Client{
 		Transport: &idleTimeoutTransport{
-			base:                otelhttp.NewTransport(ResilientTransport()),
-			timeout:             idle,
-			contentStallTimeout: contentStall,
+			base:                 otelhttp.NewTransport(ResilientTransport()),
+			timeout:              idle,
+			contentStallTimeout:  contentStall,
+			midBlockStallTimeout: midBlock,
 		},
 	}
 }

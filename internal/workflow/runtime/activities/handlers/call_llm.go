@@ -15,7 +15,6 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
@@ -1561,9 +1560,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	shape := computePromptShape(resolvedModelID, systemPrompts, history, availableTools)
 	shapeDiff := callLLMShapes.observe(chat.ID+"|"+thread, shape)
 
-	// Stream response with cancellation support
+	// Stream response with cancellation support. The transport reports on
+	// liveness the keepalives it reads inside an open content block, which
+	// the progress guard below needs and no driver event carries.
 	llmCallStart := time.Now()
-	eventChan := driver.StreamResponse(streamCtx, systemPrompts, history, availableTools)
+	liveness := llm.NewStreamLiveness()
+	eventChan := driver.StreamResponse(llm.WithStreamLiveness(streamCtx, liveness), systemPrompts, history, availableTools)
 	var streamErr error
 	streamInterrupted := false
 
@@ -1644,9 +1646,19 @@ streamLoop:
 			break streamLoop
 
 		case <-progressTimer.C:
-			// No event for the whole progress window. Not an interrupt: the
-			// turn failed and must be retried, so streamInterrupted stays
-			// false and the error surfaces below.
+			// No event for the whole progress window — but a redacted
+			// thinking block produces none until it ends, and may legitimately
+			// run past this window. If the transport has been reading
+			// keepalives inside an open block, the driver's goroutine is alive
+			// and the provider is mid-block; the transport's own mid-block
+			// deadline bounds that, so wait out the rest of the window from
+			// the last keepalive instead of cutting a working turn.
+			if sinceKeepalive, ok := liveness.Since(); ok && sinceKeepalive < progressTimeout {
+				progressTimer.Reset(progressTimeout - sinceKeepalive)
+				continue
+			}
+			// Not an interrupt: the turn failed and must be retried, so
+			// streamInterrupted stays false and the error surfaces below.
 			activity.GetLogger(ctx).Warn("[CallLLM] Stream produced no events; cutting the turn for retry",
 				"chatID", chat.ID,
 				"thread", thread,
@@ -1755,22 +1767,26 @@ streamLoop:
 		// act on, and the one they cannot diagnose from the chat: the
 		// provider returned 200 and then sent keepalives and nothing else,
 		// which historically presented as a chat that stayed active for half
-		// an hour with no output and no error. Name the provider and say what
-		// to check. The marker survives Temporal's error stringification so
-		// the chat UI can route on it; see internal/chatmarkers.
-		if errors.Is(streamErr, llm.ErrStreamContentStalled) {
-			activity.GetLogger(ctx).Warn("[CallLLM] Provider streamed only keepalives; cutting the turn for retry",
+		// an hour with no output and no error. Name the model and provider and
+		// say what it means; the error also carries its own retry schedule
+		// (see streamStalledError). The marker survives Temporal's error
+		// stringification so the chat UI can route on it; see
+		// internal/chatmarkers.
+		var stall *llm.StreamStallError
+		if errors.As(streamErr, &stall) {
+			stalled := newStreamStalledError(ctx, stall, resolved.ProviderDriver, resolvedModelID)
+			retryDelay, retry := stalled.RetryAfter()
+			activity.GetLogger(ctx).Warn("[CallLLM] Provider streamed only keepalives; cutting the turn",
 				"chatID", chat.ID,
 				"thread", thread,
 				"provider", resolved.ProviderDriver,
 				"model", resolvedModelID,
-				"stallTimeout", llm.StreamContentStallTimeout())
-			return nil, fmt.Errorf("%s: %w", chatmarkers.Wrap(
-				chatmarkers.KindProviderStreamStalled,
-				resolved.ProviderDriver,
-				fmt.Sprintf("the %s provider accepted the request but sent no content for %s; retrying. If this repeats, check that the subscription has remaining credit",
-					resolved.ProviderDriver, llm.StreamContentStallTimeout()),
-			), streamErr)
+				"phase", stall.Phase,
+				"stallTimeout", stall.Timeout,
+				"attempt", stalled.attempt,
+				"retry", retry,
+				"retryDelay", retryDelay)
+			return nil, stalled
 		}
 		return nil, streamErr
 	}

@@ -46,6 +46,27 @@ type sseProgressScanner struct {
 	// `event: ping` line, so its data lines are keepalive too. Cleared by the
 	// blank line that terminates every frame.
 	inPingFrame bool
+	// blockOpen records that the provider has opened a content block and not
+	// yet closed it — see midBlock.
+	blockOpen bool
+}
+
+// midBlock reports whether the stream is inside an open content block: an
+// Anthropic `content_block_start` with no `content_block_stop` yet.
+//
+// Keepalives mean something different there. Before a block opens, pings and
+// nothing else is the credit-exhaustion hang this scanner exists to catch.
+// Inside a block the model is demonstrably generating — the provider admitted
+// the request and started the block — and some blocks are generated without
+// being streamed: a thinking block under the redact-thinking beta emits no
+// thinking_delta at all, only pings until its signature, and a tool_use
+// block's input may be buffered whole. Chat 622675c2's implementer thought for
+// 30-38k tokens a turn that way, four to five minutes of pings per turn.
+//
+// Only Anthropic's event names are recognized. A dialect that never opens a
+// block simply never leaves the awaiting phase, which is today's behaviour.
+func (s *sseProgressScanner) midBlock() bool {
+	return s.blockOpen
 }
 
 // sawContent reports whether chunk carried anything other than keepalives.
@@ -112,6 +133,14 @@ func (s *sseProgressScanner) lineIsContent(line []byte) bool {
 			return false
 		}
 		s.inPingFrame = false
+		switch string(rest) {
+		case "content_block_start":
+			s.blockOpen = true
+		case "content_block_stop", "message_delta", "message_stop", "error":
+			// message_delta and message_stop only follow the last block, and an
+			// error ends the response; none of them can leave a block open.
+			s.blockOpen = false
+		}
 		return true
 	}
 
