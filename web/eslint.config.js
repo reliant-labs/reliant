@@ -74,6 +74,26 @@ export default tseslint.config([
             'Arbitrary px font size ignores the Appearance font-size preference. Use a scale step (text-3xs, text-2xs, text-xs, text-sm, …) from tailwind.config.js.',
         },
       ],
+      // TanStack's lazyRouteComponent reloads the page from inside render when
+      // a chunk is missing after a deploy, and beforeunload listeners turned
+      // that into an update loop that froze the tab (ELECTRON-CC).
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@tanstack/react-router',
+              importNames: ['lazyRouteComponent'],
+              message: 'Use lazyRoute from src/lib/lazyRoute.tsx: it recovers from a stale chunk without reloading during render.',
+            },
+          ],
+        },
+      ],
     },
+  },
+  {
+    // The wrapper itself, and the test that reproduces the unwrapped hazard.
+    files: ['src/lib/lazyRoute.tsx', 'src/__tests__/staleChunkUnloadLoop.test.tsx'],
+    rules: { 'no-restricted-imports': 'off' },
   },
 ])

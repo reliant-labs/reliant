@@ -5,11 +5,17 @@ import { AlertTriangle, Copy, RefreshCw } from 'lucide-react';
 import { getPrivacySettings } from '../store/privacyStore';
 import { Button } from './ui/Button';
 import { isDev } from '../lib/constants';
+import { StaleBuildError } from '../lib/lazyRoute';
+import { cn } from '../lib/utils';
 
 interface Props {
   children: ReactNode;
   fallback?: ReactNode;
+  /** Where the default fallback sits: the whole window, or one panel of it. */
+  layout?: FallbackLayout;
 }
+
+type FallbackLayout = 'screen' | 'panel';
 
 interface State {
   hasError: boolean;
@@ -85,6 +91,7 @@ export function ErrorFallbackUI(props: {
   errorId?: string;
   occurredAt?: string;
   onReload: () => void;
+  layout?: FallbackLayout;
 }) {
   const {
     title = 'Something went wrong',
@@ -95,6 +102,7 @@ export function ErrorFallbackUI(props: {
     errorId,
     occurredAt,
     onReload,
+    layout = 'screen',
   } = props;
 
   const [copied, setCopied] = React.useState(false);
@@ -104,7 +112,10 @@ export function ErrorFallbackUI(props: {
 
   return (
     <div
-      className="min-h-screen flex items-center justify-center bg-background px-4 py-10"
+      className={cn(
+        'flex justify-center',
+        layout === 'screen' ? 'min-h-screen items-center bg-background px-4 py-10' : 'py-10',
+      )}
       role="alert"
       aria-live="assertive"
     >
@@ -179,6 +190,43 @@ export function ErrorFallbackUI(props: {
   );
 }
 
+/**
+ * Report an error an error boundary caught. A caught error never reaches
+ * Sentry's global handlers, so a boundary that does not report it hides it.
+ */
+export function reportCaughtError(error: unknown, componentStack?: string | null) {
+  // Only report to Sentry if user has crash reporting enabled
+  const { crashReportingEnabled } = getPrivacySettings();
+  if (!crashReportingEnabled) return;
+  Sentry.captureException(error, {
+    contexts: {
+      react: {
+        componentStack,
+      },
+    },
+  });
+}
+
+/**
+ * The error UI for a route — TanStack's errorComponent. A route that throws is
+ * replaced by this while the routes above it (and the overlays the root
+ * renders beside the outlet) keep running.
+ */
+export function RouteErrorFallback({ error }: { error: unknown }) {
+  const staleBuild = error instanceof StaleBuildError;
+  return (
+    <ErrorFallbackUI
+      error={error}
+      onReload={() => window.location.reload()}
+      {...(staleBuild && {
+        title: 'Reliant was updated',
+        description:
+          'This screen belongs to a newer version of Reliant than the one running in this tab. Reload to continue.',
+      })}
+    />
+  );
+}
+
 class ErrorBoundary extends Component<Props, State> {
   constructor(props: Props) {
     super(props);
@@ -198,18 +246,8 @@ class ErrorBoundary extends Component<Props, State> {
       errorId: this.state.errorId ?? createErrorId(),
       occurredAt: this.state.occurredAt ?? new Date().toISOString(),
     });
-    
-    // Only report to Sentry if user has crash reporting enabled
-    const { crashReportingEnabled } = getPrivacySettings();
-    if (crashReportingEnabled) {
-      Sentry.captureException(error, {
-        contexts: {
-          react: {
-            componentStack: errorInfo.componentStack,
-          },
-        },
-      });
-    }
+
+    reportCaughtError(error, errorInfo.componentStack);
   }
 
   render() {
@@ -225,6 +263,7 @@ class ErrorBoundary extends Component<Props, State> {
           errorId={this.state.errorId}
           occurredAt={this.state.occurredAt}
           onReload={() => window.location.reload()}
+          layout={this.props.layout}
         />
       );
     }

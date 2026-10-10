@@ -18,6 +18,7 @@ import { ArrowLeft, X } from "lucide-react";
 import { useTitleBarChrome } from "@/hooks/useTitleBarChrome";
 import { getParentRouteNavigateOptions } from "@/lib/routeParent";
 import { cn } from "@/lib/utils";
+import ErrorBoundary from "../ErrorBoundary";
 import { Tooltip } from "../ui/Tooltip";
 
 interface AreaShellProps {
@@ -110,7 +111,11 @@ export function AreaShell({ areaPath, areaLabel, areaNoun, children }: AreaShell
           span) is contained by the scroller rather than stretching the
           document — without it the window scrolls past the content. */}
       <main className="relative flex-1 overflow-y-auto">
-        <div className="mx-auto w-full max-w-5xl px-6 py-8">{children}</div>
+        <div className="mx-auto w-full max-w-5xl px-6 py-8">
+          {/* A crash in the area stays in the area: the title bar above keeps
+              the way out, which in Electron is the only one. */}
+          <ErrorBoundary layout="panel">{children}</ErrorBoundary>
+        </div>
       </main>
     </div>
   );
