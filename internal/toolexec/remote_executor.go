@@ -192,37 +192,7 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 		timeoutMs = int(req.Timeout.Milliseconds())
 	}
 
-	contextMap := map[string]interface{}{
-		"user_id":    req.UserID,
-		"chat_id":    req.ChatID,
-		"thread":     req.Thread,
-		"message_id": req.MessageID,
-		"project": map[string]interface{}{
-			"id":   req.ProjectID,
-			"path": req.ProjectPath,
-			"name": req.ProjectName,
-		},
-	}
-	if req.WorktreePath != "" {
-		contextMap["worktree"] = map[string]interface{}{
-			"id":   req.WorktreeID,
-			"path": req.WorktreePath,
-		}
-	}
-	if len(req.Repos) > 0 {
-		repos := make([]map[string]interface{}, 0, len(req.Repos))
-		for _, r := range req.Repos {
-			if r == nil {
-				continue
-			}
-			repos = append(repos, map[string]interface{}{
-				"id":            r.ID,
-				"name":          r.Name,
-				"relative_path": r.RelativePath,
-			})
-		}
-		contextMap["repos"] = repos
-	}
+	contextMap := req.toolContextMap()
 
 	// Create a per-request daemon client via the factory (thread-safe).
 	// Falls back to the executor's default daemon when no factory is set.
@@ -257,14 +227,10 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 	}, nil
 }
 
-// executeOnDaemon dispatches a tool request to the user's daemon and waits for the result.
-// Used for tools that must run in the user's environment (e.g., bash, shell commands).
-// When the request has a DaemonSelector, it targets a specific daemon instead of the default.
-func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
-	if e.router == nil {
-		return nil, fmt.Errorf("daemon router not configured: cannot execute tool %q on daemon", req.ToolName)
-	}
-
+// toolContextMap is the request's context as the executing tool's
+// rctx.ToolContext is rebuilt from it (LocalToolExecutor.executeTool), on the
+// worker for a server-placed tool and on the daemon for a daemon-placed one.
+func (req *ToolRequest) toolContextMap() map[string]interface{} {
 	contextMap := map[string]interface{}{
 		"user_id":    req.UserID,
 		"chat_id":    req.ChatID,
@@ -277,10 +243,14 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		},
 	}
 	if req.WorktreePath != "" {
-		contextMap["worktree"] = map[string]interface{}{
+		worktree := map[string]interface{}{
 			"id":   req.WorktreeID,
 			"path": req.WorktreePath,
 		}
+		if req.WorktreeDaemonID != "" {
+			worktree["daemon_id"] = req.WorktreeDaemonID
+		}
+		contextMap["worktree"] = worktree
 	}
 	if len(req.Repos) > 0 {
 		repos := make([]map[string]interface{}, 0, len(req.Repos))
@@ -296,6 +266,18 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		}
 		contextMap["repos"] = repos
 	}
+	return contextMap
+}
+
+// executeOnDaemon dispatches a tool request to the user's daemon and waits for the result.
+// Used for tools that must run in the user's environment (e.g., bash, shell commands).
+// When the request has a DaemonSelector, it targets a specific daemon instead of the default.
+func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, startTime time.Time) (*ToolResult, error) {
+	if e.router == nil {
+		return nil, fmt.Errorf("daemon router not configured: cannot execute tool %q on daemon", req.ToolName)
+	}
+
+	contextMap := req.toolContextMap()
 
 	timeoutMs := 0
 	if req.Timeout > 0 {

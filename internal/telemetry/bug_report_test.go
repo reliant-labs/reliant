@@ -11,8 +11,6 @@ import (
 	"github.com/getsentry/sentry-go"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // captureTransport records what the client would have sent. Events reach it
@@ -67,10 +65,15 @@ func sampleBugReport() BugReport {
 		ToolCallID: toolCallID,
 		ProjectID:  "d70701a6-8aa9-4fb8-8d13-9c41b708201d",
 		UserID:     userID,
+		WorktreeID: "1ddeaaf3-ffa8-43e0-a99e-08f219670a2c",
 		Workflow:   "builtin://agent",
 		Model:      "gpt-5.6-terra",
 		DaemonID:   "daemon-2aab1465",
 		DaemonType: "managed",
+		Pod:        "ws-ws-2aab1465",
+
+		ReliantVersion: "v0.9.3",
+		ForgeVersion:   "v0.1.28-0.20261009201500-abcdef123456",
 	}
 }
 
@@ -101,7 +104,12 @@ func TestCaptureBugReport_BuildsATaggedGroupedEvent(t *testing.T) {
 		"model":        "gpt-5.6-terra",
 		"daemon_id":    "daemon-2aab1465",
 		"daemon_type":  "managed",
-		"app_version":  version.Version,
+		// The machine, and the build, are what make a report actionable:
+		// without them a workspace defect cannot be tied to a pod.
+		"worktree_id":     "1ddeaaf3-ffa8-43e0-a99e-08f219670a2c",
+		"pod":             "ws-ws-2aab1465",
+		"reliant_version": "v0.9.3",
+		"forge_version":   "v0.1.28-0.20261009201500-abcdef123456",
 	} {
 		assert.Equal(t, want, event.Tags[key], "tag %s", key)
 	}

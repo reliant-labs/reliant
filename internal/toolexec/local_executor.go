@@ -135,10 +135,12 @@ func (e *LocalToolExecutor) executeTool(
 	if worktreeMap, ok := contextMap["worktree"].(map[string]interface{}); ok {
 		worktreeID, _ := worktreeMap["id"].(string)
 		worktreePath, _ := worktreeMap["path"].(string)
+		worktreeDaemonID, _ := worktreeMap["daemon_id"].(string)
 		if worktreePath != "" {
 			worktreeInfo = &rctx.WorktreeInfo{
-				ID:   worktreeID,
-				Path: worktreePath,
+				ID:       worktreeID,
+				Path:     worktreePath,
+				DaemonID: worktreeDaemonID,
 			}
 		}
 	}

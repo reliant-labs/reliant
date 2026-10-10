@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/telemetry"
+	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // report_bug lets an agent file a defect in Reliant itself, or in forge, with
@@ -86,6 +87,7 @@ type bugReportLookup interface {
 	GetChat(ctx context.Context, id string) (*db.Chat, error)
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*db.Message, error)
 	GetDaemon(ctx context.Context, id string) (*db.Daemon, error)
+	ListDaemonsByUserID(ctx context.Context, userID string) ([]*db.Daemon, error)
 }
 
 // processBugReportLimiter is the process's one limiter. It has to outlive the
@@ -200,6 +202,8 @@ func oneLine(s string, maxRunes int) string {
 // effort: a report that cannot say which daemon it ran on is still a report,
 // and one lost to a failed read is not.
 func (t *reportBugTool) describeCaller(tc *rctx.ToolContext, report *telemetry.BugReport) {
+	report.ReliantVersion = version.Version
+	report.ForgeVersion = version.Forge()
 	report.ChatID = tc.ChatID
 	report.ThreadID = tc.Thread
 	if call, ok := tc.Value(ctxkeys.ToolCallContextKey).(*ctxkeys.ToolCallContext); ok && call != nil {
@@ -214,6 +218,7 @@ func (t *reportBugTool) describeCaller(tc *rctx.ToolContext, report *telemetry.B
 	// The worktree's daemon is the one that holds its checkout and ran the
 	// run's tools; the chat's active daemon is the fallback.
 	if tc.Worktree != nil {
+		report.WorktreeID = tc.Worktree.ID
 		report.DaemonID = tc.Worktree.DaemonID
 	}
 	if t.lookup == nil {
@@ -241,12 +246,27 @@ func (t *reportBugTool) describeCaller(tc *rctx.ToolContext, report *telemetry.B
 			report.Model = stringOrEmpty(msg.Model)
 		}
 	}
+	// Nothing pinned the run to a machine, so its tools went wherever default
+	// resolution sent them. When the user has exactly one machine, that is
+	// the one; with several, naming any of them would be a guess.
+	if report.DaemonID == "" && report.UserID != "" {
+		if daemons, err := t.lookup.ListDaemonsByUserID(tc.Context, report.UserID); err == nil && len(daemons) == 1 {
+			report.DaemonID = daemons[0].ID
+		}
+	}
 	if report.DaemonID != "" {
 		if daemon, err := t.lookup.GetDaemon(tc.Context, report.DaemonID); err == nil && daemon != nil {
 			report.DaemonType = stringOrEmpty(daemon.DaemonType)
+			// A managed machine's hostname is its workspace pod's name.
+			if report.DaemonType == daemonTypeManaged {
+				report.Pod = stringOrEmpty(daemon.Hostname)
+			}
 		}
 	}
 }
+
+// daemonTypeManaged is db.Daemon.DaemonType for a cloud workspace.
+const daemonTypeManaged = "managed"
 
 func stringOrEmpty(s *string) string {
 	if s == nil {
@@ -274,10 +294,14 @@ func logBugReport(report telemetry.BugReport, outcome bugReportOutcome) {
 		"tool_call_id", r.ToolCallID,
 		"project_id", r.ProjectID,
 		"user_id", r.UserID,
+		"worktree_id", r.WorktreeID,
 		"workflow", r.Workflow,
 		"model", r.Model,
 		"daemon_id", r.DaemonID,
 		"daemon_type", r.DaemonType,
+		"pod", r.Pod,
+		"reliant_version", r.ReliantVersion,
+		"forge_version", r.ForgeVersion,
 		"sentry_event_id", outcome.EventID,
 		"sentry_delivered", outcome.EventID != "",
 	)

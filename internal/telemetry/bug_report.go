@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/getsentry/sentry-go"
-	"github.com/reliant-labs/reliant/internal/version"
 )
 
 // Agent-filed bug reports.
@@ -57,10 +56,22 @@ type BugReport struct {
 	ToolCallID string
 	ProjectID  string
 	UserID     string
+	WorktreeID string
 	Workflow   string
 	Model      string
-	DaemonID   string
+	// DaemonID is the machine the run's tools executed on.
+	DaemonID string
+	// DaemonType is that machine's kind: "managed" (a cloud workspace) or
+	// "self_hosted" (the desktop app, or a daemon the user runs themselves).
 	DaemonType string
+	// Pod is a managed machine's workspace pod. It is never set for a
+	// self-hosted machine, whose hostname names the user's own computer.
+	Pod string
+
+	// ReliantVersion and ForgeVersion are the build that filed the report:
+	// reliant's version, and the forge it embeds.
+	ReliantVersion string
+	ForgeVersion   string
 }
 
 // BugReportCapturer is a reporter that can deliver an agent-filed bug report.
@@ -111,19 +122,22 @@ func bugReportEvent(report BugReport) *sentry.Event {
 	event.User = sentry.User{ID: report.UserID}
 
 	tags := map[string]string{
-		"source":       BugReportSource,
-		"product":      report.Product,
-		"severity":     report.Severity,
-		"chat_id":      report.ChatID,
-		"thread_id":    report.ThreadID,
-		"tool_call_id": report.ToolCallID,
-		"project_id":   report.ProjectID,
-		"user_id":      report.UserID,
-		"workflow":     report.Workflow,
-		"model":        report.Model,
-		"daemon_id":    report.DaemonID,
-		"daemon_type":  report.DaemonType,
-		"app_version":  version.Version,
+		"source":          BugReportSource,
+		"product":         report.Product,
+		"severity":        report.Severity,
+		"chat_id":         report.ChatID,
+		"thread_id":       report.ThreadID,
+		"tool_call_id":    report.ToolCallID,
+		"project_id":      report.ProjectID,
+		"user_id":         report.UserID,
+		"worktree_id":     report.WorktreeID,
+		"workflow":        report.Workflow,
+		"model":           report.Model,
+		"daemon_id":       report.DaemonID,
+		"daemon_type":     report.DaemonType,
+		"pod":             report.Pod,
+		"reliant_version": report.ReliantVersion,
+		"forge_version":   report.ForgeVersion,
 	}
 	for key, value := range tags {
 		if value != "" {
@@ -192,7 +206,7 @@ func normalizeBugTitle(title string) string {
 // enums and names, but they are not in the general allowlist (metadataKeys),
 // which the browser and Electron scrubbers mirror; a report keeps them by
 // being a report.
-var bugReportTagKeys = []string{"product", "severity", "workflow", "daemon_type", "app_version"}
+var bugReportTagKeys = []string{"product", "severity", "workflow", "daemon_type", "pod", "reliant_version", "forge_version"}
 
 // bugReportFields are the text fields of the report context.
 var bugReportFields = map[string]bool{"title": true, "summary": true, "expected": true, "actual": true, "evidence": true}
