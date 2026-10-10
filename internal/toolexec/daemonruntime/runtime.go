@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"log/slog"
 	"os"
@@ -819,7 +820,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			DaemonId: d.daemonID,
 		}},
 	}
-	if err := stream.Send(register); err != nil {
+	if err := sendRegistration(stream, register); err != nil {
 		return fmt.Errorf("sending daemon registration to %s: %w", baseURL, err)
 	}
 
@@ -1528,6 +1529,35 @@ func (d *daemonClient) send(msg *reliantv1.DaemonMessage) error {
 	case <-d.sessionDone:
 		return fmt.Errorf("daemon session ended")
 	}
+}
+
+// registrationStream is the part of the client stream sendRegistration needs.
+type registrationStream interface {
+	messageSender
+	Receive() (*reliantv1.ServerMessage, error)
+}
+
+// sendRegistration sends the first message on a freshly opened stream.
+//
+// connect-go reports a failed stream on Send as an error wrapping io.EOF and
+// says to call Receive for the real one: the dial error (DNS, TLS, refused),
+// the HTTP status, or the gateway's own rejection only surface from the
+// response side. Without this the daemon logged "write envelope: EOF" for
+// every cause alike — a pod whose DNS or CA bundle was broken looked the same
+// as a gateway outage, and nothing in the logs said which.
+//
+// The returned error is the Receive error when there is one (it keeps its
+// connect code, so the caller's fatal/retry classification sees the real
+// code), with the Send error kept in the message.
+func sendRegistration(stream registrationStream, register *reliantv1.DaemonMessage) error {
+	sendErr := stream.Send(register)
+	if sendErr == nil || !errors.Is(sendErr, io.EOF) {
+		return sendErr
+	}
+	if _, recvErr := stream.Receive(); recvErr != nil && !errors.Is(recvErr, io.EOF) {
+		return fmt.Errorf("%w (send: %v)", recvErr, sendErr)
+	}
+	return sendErr
 }
 
 // messageSender is the write half of the gateway stream. It is an interface so
