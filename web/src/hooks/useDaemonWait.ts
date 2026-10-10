@@ -23,10 +23,13 @@ import { create } from "@bufbuild/protobuf";
 import { grpcClient } from "@/api/grpc-client";
 import {
   DaemonLifecyclePhase,
+  DaemonStatus,
   ListDaemonsRequestSchema,
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import { capabilities } from "@/services/controlPlane/capabilities";
+import { resumeDaemon } from "@/services/controlPlane/daemon";
+import { isAlreadyResumedError } from "@/lib/daemon-resume";
 import {
   classifyDaemonWait,
   DAEMON_WAIT_POLL_MS,
@@ -216,12 +219,30 @@ export function useDaemonWait({
 
   // Restarts the shared clock, so every surface's escalation starts over
   // together; the others pick it up on their next tick.
+  //
+  // On a FAILED machine "try again" must actually try again: refetching only
+  // re-reads the same FAILED row. The control plane treats ResumeDaemon on a
+  // Failed machine as a retry and rebuilds its pod on the current image, which
+  // is what unsticks a machine whose pod crash-looped on a bad release.
+  const failedDaemonId =
+    capabilities.cloudDaemons && daemon?.status === DaemonStatus.FAILED ? daemon.daemonId : null;
   const retryNow = useCallback(() => {
     if (sharedWait.waiters > 0) sharedWait.startedAt = Date.now();
     setElapsedMs(0);
+    if (failedDaemonId) {
+      void resumeDaemon(failedDaemonId)
+        .catch((err: unknown) => {
+          if (!isAlreadyResumedError(err)) console.warn("retrying failed machine:", err);
+        })
+        .finally(() => {
+          void refetch();
+          onRetryRef.current?.();
+        });
+      return;
+    }
     void refetch();
     onRetryRef.current?.();
-  }, [refetch]);
+  }, [refetch, failedDaemonId]);
 
   return { state, elapsedMs, daemon, retryNow };
 }
