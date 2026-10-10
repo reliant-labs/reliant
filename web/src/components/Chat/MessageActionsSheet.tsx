@@ -8,6 +8,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { cn } from "../../lib/utils";
+import { LONG_PRESS_SURFACE_CLASS } from "../../hooks/useLongPress";
 
 export interface MessageActionsSheetAction {
   key: string;
@@ -58,15 +59,20 @@ export function MessageActionsSheet({
     // `pointerup` rather than `touchend`: the portal steals the touch sequence
     // from the pressed element, and a document-level pointer listener is what
     // still observes the release. `once` so a later tap can't re-arm nothing.
-    document.addEventListener("pointerup", arm, { once: true });
-    document.addEventListener("touchend", arm, { once: true });
+    // When iOS takes the gesture over for native selection it delivers
+    // `pointercancel`/`touchcancel` instead of the up events, so those arm too.
+    const events = ["pointerup", "pointercancel", "touchend", "touchcancel"];
+    for (const name of events) {
+      document.addEventListener(name, arm, { once: true });
+    }
     // Belt-and-braces for a press whose release is never delivered (finger
     // dragged off-screen, synthetic events in tests).
     const timer = window.setTimeout(arm, 400);
 
     return () => {
-      document.removeEventListener("pointerup", arm);
-      document.removeEventListener("touchend", arm);
+      for (const name of events) {
+        document.removeEventListener(name, arm);
+      }
       window.clearTimeout(timer);
     };
   }, [isOpen]);
@@ -97,6 +103,9 @@ export function MessageActionsSheet({
     <div
       className={cn(
         "fixed inset-0 z-[9999] flex items-end justify-center",
+        // A selection must never be able to cover the buttons (iOS swallows
+        // taps on selected text).
+        LONG_PRESS_SURFACE_CLASS,
         // The sheet opens while the finger is still down, directly underneath
         // it. Releasing then dispatches pointerup/click onto whatever button
         // landed at that spot — which silently ran Copy, and created real

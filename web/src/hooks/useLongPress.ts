@@ -11,7 +11,18 @@ export interface LongPressHandlers {
   onTouchMove: (e: React.TouchEvent) => void;
   onTouchEnd: (e: React.TouchEvent) => void;
   onTouchCancel: (e: React.TouchEvent) => void;
+  onContextMenu: (e: React.SyntheticEvent) => void;
 }
+
+/**
+ * Classes for any element that carries the long-press handlers. iOS starts a
+ * native text selection (plus the callout) at about the same 500ms the press
+ * fires; a selection anchored in the message extends to the end of the
+ * document and ends up under the actions sheet, where a tap toggles the
+ * system edit menu instead of dispatching `click`. "Copy message" in the
+ * sheet replaces native copy on these surfaces.
+ */
+export const LONG_PRESS_SURFACE_CLASS = "select-none [-webkit-touch-callout:none]";
 
 /**
  * Long-press detection for touch surfaces. Fires `onLongPress` once the
@@ -42,6 +53,9 @@ export function useLongPress(onLongPress: () => void): LongPressHandlers {
       timerRef.current = setTimeout(() => {
         firedRef.current = true;
         timerRef.current = null;
+        // Drop any selection the browser already began for this press, so it
+        // can't survive under the sheet that is about to open.
+        window.getSelection()?.removeAllRanges();
         onLongPress();
       }, LONG_PRESS_MS);
     },
@@ -78,5 +92,10 @@ export function useLongPress(onLongPress: () => void): LongPressHandlers {
     clear();
   }, [clear]);
 
-  return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel };
+  // Android Chrome opens its own selection/context menu on long-press.
+  const onContextMenu = useCallback((e: React.SyntheticEvent) => {
+    e.preventDefault();
+  }, []);
+
+  return { onTouchStart, onTouchMove, onTouchEnd, onTouchCancel, onContextMenu };
 }

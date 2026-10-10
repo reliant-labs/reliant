@@ -81,4 +81,32 @@ describe('MessageActionsSheet input guard', () => {
     expect(screen.getByText('Copy message')).toBeInTheDocument()
     expect(screen.getByText('Branch in place')).toBeInTheDocument()
   })
+
+  it.each(['pointercancel', 'touchcancel'])(
+    'arms when iOS cancels the opening gesture (%s)',
+    (name) => {
+      // iOS delivers a cancel, not an up event, when it takes the press over
+      // for native text selection. Without arming here only the 400ms
+      // fallback would make the sheet tappable.
+      vi.useFakeTimers()
+      try {
+        renderSheet()
+        expect(sheetRoot().className).toContain('pointer-events-none')
+        act(() => {
+          document.dispatchEvent(new Event(name))
+        })
+        expect(sheetRoot().className).not.toContain('pointer-events-none')
+      } finally {
+        vi.useRealTimers()
+      }
+    },
+  )
+
+  it('is not selectable and suppresses the iOS callout', () => {
+    // A selection anchored in the pressed message extends to the end of the
+    // document and would otherwise cover (and swallow taps on) the buttons.
+    renderSheet()
+    expect(sheetRoot().className).toContain('select-none')
+    expect(sheetRoot().className).toContain('[-webkit-touch-callout:none]')
+  })
 })
