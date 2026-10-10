@@ -41,6 +41,8 @@ import { useThreadMessages } from "../../hooks/message-queries";
 import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
+import { latestTurnIsUsers } from "../../lib/awaitingReply";
+import { useChatActivity } from "../../store/activityStore";
 import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
 
 interface ChatPresenterProps {
@@ -179,11 +181,21 @@ export const ChatPresenter = memo(function ChatPresenter({
   // work in flight to stop.
   const isAgentWorking = isChatBusy && !hasPendingQuestion;
 
+  // The run is held until its machine comes up (research/QUEUE_UNTIL_DAEMON.md).
+  // Read from the activity store, which streams activity changes, and not
+  // from the chat query: that is a snapshot from its last fetch and does not
+  // follow the run into (or out of) the wait. WAITING_FOR_DAEMON is also not
+  // "running", so isChatBusy is false throughout it — everything that should
+  // still speak for a held run (the footer, the queued strip) takes this too.
+  const waitingOnMachine = useChatActivity(chatId || "") === ChatActivity.WAITING_FOR_DAEMON;
+
+  // A held run drains its mailbox on its first turn, so the strip keeps
+  // polling while it waits; only interrupting needs work in flight.
   const {
     messages: queuedMessages,
     refresh: refreshQueuedMessages,
     forget: forgetQueuedMessage,
-  } = useQueuedAgentMessages(chatId || undefined, queueThreadId, isAgentWorking);
+  } = useQueuedAgentMessages(chatId || undefined, queueThreadId, isAgentWorking || waitingOnMachine);
 
   // Workspace state store for persisting workflow viewer state
   const getWorkflowViewerOpen = useWorkspaceStateStore((state) => state.getWorkflowViewerOpen);
@@ -433,8 +445,12 @@ export const ChatPresenter = memo(function ChatPresenter({
   }, []);
 
   // Thinking indicator element, rendered as the timeline's footer
-  const hasThinkingFooter = isChatBusy && pendingApprovals.length === 0 && !hasPendingQuestion;
-  const waitingOnMachine = currentChat?.activity === ChatActivity.WAITING_FOR_DAEMON;
+  const hasThinkingFooter =
+    (isChatBusy || waitingOnMachine) && pendingApprovals.length === 0 && !hasPendingQuestion;
+  // A held run that has not read the user's latest message yet is holding
+  // THAT message: the footer says it is queued, not that it is stuck.
+  const messageQueuedForMachine =
+    waitingOnMachine && latestTurnIsUsers(messages, currentChat?.workflowId || chatId || undefined);
   // Memoized because it is a prop of the memo()'d timeline: a fresh element
   // on every render would re-render the whole transcript on each pass —
   // which, during streaming, is many times per second.
@@ -445,9 +461,10 @@ export const ChatPresenter = memo(function ChatPresenter({
           chatId={chatId || undefined}
           filterThreadId={selectedThreadId}
           waitingOnMachine={waitingOnMachine}
+          messageQueuedForMachine={messageQueuedForMachine}
         />
       ) : undefined,
-    [hasThinkingFooter, chatId, selectedThreadId, waitingOnMachine]
+    [hasThinkingFooter, chatId, selectedThreadId, waitingOnMachine, messageQueuedForMachine]
   );
 
   // With a thread selected, render THAT THREAD's own messages rather than the
@@ -629,6 +646,7 @@ export const ChatPresenter = memo(function ChatPresenter({
               onForget={forgetQueuedMessage}
               onInterrupted={refreshQueuedMessages}
               isRunning={isAgentWorking}
+              waitingOnMachine={waitingOnMachine}
             />
           </div>
         </div>

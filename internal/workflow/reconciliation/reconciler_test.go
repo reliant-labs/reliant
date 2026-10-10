@@ -72,6 +72,11 @@ type mockReconcilerTemporalClient struct {
 	resetErr              error
 	historyEvents         []*historypb.HistoryEvent
 	getWorkflowHistoryCnt int
+
+	// retryingWedge makes every describe report the pending workflow task
+	// one attempt further on: a worker keeps retrying it and it keeps
+	// failing, as a real wedge does between reconcile passes.
+	retryingWedge bool
 }
 
 func (m *mockReconcilerTemporalClient) DescribeWorkflowExecution(
@@ -80,6 +85,9 @@ func (m *mockReconcilerTemporalClient) DescribeWorkflowExecution(
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if resp, ok := m.describeResponses[workflowID]; ok {
+		if m.retryingWedge && resp.resp != nil && resp.resp.PendingWorkflowTask != nil {
+			resp.resp.PendingWorkflowTask.Attempt++
+		}
 		return resp.resp, resp.err
 	}
 	// Default: not found
@@ -224,6 +232,34 @@ type mockRepo struct {
 	backgroundedProcessCalls []*db.BackgroundedProcessCall
 	daemons                  map[string]bool
 	emittedToolCallUpdates   []db.ToolCallUpdate
+
+	// Terminal cascades and checkpoint drops a repair performs.
+	cascadedDescendants    []string
+	cascadedThreadSubtrees []string
+	cascadedReason         db.WorkflowStopReason
+	deletedCheckpoints     []string
+}
+
+func (m *mockRepo) CascadeTerminalStatusToDescendants(_ context.Context, workflowID string, reason db.WorkflowStopReason) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cascadedDescendants = append(m.cascadedDescendants, workflowID)
+	m.cascadedReason = reason
+	return nil
+}
+
+func (m *mockRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, workflowID string, _ db.WorkflowStopReason) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cascadedThreadSubtrees = append(m.cascadedThreadSubtrees, workflowID)
+	return nil
+}
+
+func (m *mockRepo) DeleteWorkflowCheckpoint(_ context.Context, workflowID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deletedCheckpoints = append(m.deletedCheckpoints, workflowID)
+	return nil
 }
 
 func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.BackgroundedProcessCall, error) {
@@ -1294,6 +1330,8 @@ func TestReconciler_WedgedWorkflowTask_TerminatedAndMarkedFailed(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
 		},
+		historyEvents: replayDivergedTail(),
+		retryingWedge: true,
 	}
 	tempClient.setPollersActive(true)
 
@@ -1336,6 +1374,8 @@ func TestReconciler_WedgedWorkflowTask_PausedWorkflow_TerminatedAndMarkedFailed(
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 471)},
 		},
+		historyEvents: replayDivergedTail(),
+		retryingWedge: true,
 	}
 	tempClient.setPollersActive(true)
 
@@ -1392,6 +1432,8 @@ func TestReconciler_WedgedWorkflowTask_NoPollers_Skipped(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
 		},
+		historyEvents: replayDivergedTail(),
+		retryingWedge: true,
 	}
 	tempClient.setPollersActive(false) // worker down/rebuilding
 
@@ -1414,6 +1456,8 @@ func TestReconciler_WedgedWorkflowTask_DebounceRequiresConsecutivePasses(t *test
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 99)},
 		},
+		historyEvents: replayDivergedTail(),
+		retryingWedge: true,
 	}
 
 	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
@@ -1451,7 +1495,10 @@ func TestReconciler_WedgedWorkflowTask_PrecedenceOverStuckReset(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: resp},
 		},
-		historyEvents: makeHistoryWithActivity("act-1"),
+		// The run's history records the failure every retry repeats.
+		historyEvents: append(makeHistoryWithActivity("act-1"),
+			failedWorkflowTask(100, enums.WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR)),
+		retryingWedge: true,
 	}
 	tempClient.setPollersActive(true)
 
@@ -1474,6 +1521,8 @@ func TestReconciler_WedgedThenRecovered_ClearsDebounce(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 10)},
 		},
+		historyEvents: replayDivergedTail(),
+		retryingWedge: true,
 	}
 	tempClient.setPollersActive(true)
 
@@ -1951,6 +2000,8 @@ func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
 			describeResponses: map[string]mockDescribeResponse{
 				"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
 			},
+			historyEvents: replayDivergedTail(),
+			retryingWedge: true,
 		}
 		tempClient.setPollersActive(true)
 		reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
@@ -2018,6 +2069,8 @@ func TestReconcileRunningWorkflows_IncludesPausedWedgedZombie(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 471)},
 		},
+		historyEvents: replayDivergedTail(),
+		retryingWedge: true,
 	}
 	tempClient.setPollersActive(true)
 

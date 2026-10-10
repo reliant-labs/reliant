@@ -14,17 +14,22 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 )
 
-// The reconciler's three DESTRUCTIVE recovery paths are opt-in and off by
-// default: on 2026-09-29 the wedge detector terminated a healthy chat, and its
-// six in-flight sub-agents with it, because an overloaded host made the run's
-// workflow tasks TIME OUT — the attempt counter it reads cannot tell a timeout
-// from a failure. See dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
+// The reconciler's stuck-task and progress-stall recoveries are opt-in and off
+// by default: on 2026-09-29 the wedge detector terminated a healthy chat, and
+// its six in-flight sub-agents with it, because an overloaded host made the
+// run's workflow tasks TIME OUT — the attempt counter it read could not tell a
+// timeout from a failure. See dev-docs/incidents/2026-09-29-reconciler-false-wedge.md.
 //
 // These tests drive each detector past its confirmation thresholds with the
 // SHIPPED default config and assert that nothing happens: no TerminateWorkflow,
 // no ResetWorkflowExecution, no DB status write, no chat message. The
 // detection code itself still runs — the point of the switch is that detection
 // is free and the response is not.
+//
+// The wedge path is no longer behind the switch: it now acts only on a
+// workflow-task failure the run's history RECORDS (wedge_recovery_test.go). A
+// high attempt count with no recorded failure — the 2026-09-29 shape — is
+// still left alone, which the first two tests below pin.
 
 // disabledWedgeConfig is stuckTestConfig's thresholds with the shipped default
 // (interventions off), so the only difference from the terminating tests is
@@ -41,7 +46,7 @@ func disabledProgressConfig(detectPasses int) *ReconcilerConfig {
 	return cfg
 }
 
-func TestReconciler_InterventionsDisabled_WedgedWorkflowTask_NoAction(t *testing.T) {
+func TestReconciler_InterventionsDisabled_AttemptCountAloneIsNotAWedge(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
@@ -58,10 +63,10 @@ func TestReconciler_InterventionsDisabled_WedgedWorkflowTask_NoAction(t *testing
 	for i := 1; i <= 6; i++ {
 		result := reconciler.ReconcileWorkflow(context.Background(), wf)
 		require.NoError(t, result.Error)
-		assert.False(t, result.WasStale, "pass %d: interventions disabled, nothing to repair", i)
+		assert.False(t, result.WasStale, "pass %d: no recorded failure, nothing to repair", i)
 	}
 
-	assert.Empty(t, tempClient.terminateCalls, "must not terminate a wedged workflow when interventions are off")
+	assert.Empty(t, tempClient.terminateCalls, "an attempt count with no recorded failure is not a wedge")
 	assert.Empty(t, tempClient.resetCalls)
 	assert.Empty(t, repo.updatedStatuses, "DB status must be left alone")
 	assert.Empty(t, repo.savedMessages, "no chat message for an action that did not happen")
@@ -69,9 +74,8 @@ func TestReconciler_InterventionsDisabled_WedgedWorkflowTask_NoAction(t *testing
 		"a suppressed action must not be counted as a termination")
 }
 
-// A paused wedged run is the same class (a wedged replay can never process its
-// resume), so the switch must cover it too.
-func TestReconciler_InterventionsDisabled_WedgedPausedWorkflow_NoAction(t *testing.T) {
+// The same for a paused run with a climbing attempt count.
+func TestReconciler_InterventionsDisabled_PausedAttemptCountAloneIsNotAWedge(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{

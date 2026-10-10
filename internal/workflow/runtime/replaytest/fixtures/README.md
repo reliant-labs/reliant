@@ -38,61 +38,80 @@ fixtures make that class of change fail at **test time** instead.
 | `action_approval.json` | `builtin://agent` (`tools: [http__request]`) | Action approval gate: an attended turn calls a mutating integration action, so the batch first raises an approval (`ApprovalCreate`, a timer, `signal.approval.*`); it is denied, and `ExecuteTools` refuses the call (`refused_tool_calls`) before the next turn completes the run. |
 | `late_user_message.json` | `builtin://agent` | Late wake: a `thread_wake` signal lands while the run's only (tool-less) turn is in flight, with nothing queued for its `pending_inbox` probe and nothing live. The loop-exit gate re-enters for it (`late-user-wake-gets-a-turn` version marker, a second `CallLLM`) instead of completing. A history recorded before that change — one `CallLLM`, then completion, with the signal unanswered — must keep replaying that way; that is what the version marker is for. |
 
+## Frozen sets
+
+`frozen/<set>/*.json` are histories that runs ALREADY IN FLIGHT were recorded
+with. `TestReplayFixtures` replays them exactly like the current set, but
+nothing ever regenerates them, and `TestFrozenFixturesAreUnchanged` pins their
+bytes (each set's `SHA256SUMS`). Each set has a README naming the shape it
+pins and the `workflow.GetVersion` gate that keeps it replaying.
+
+They exist because the current set cannot catch a break on its own: it is
+rewritten by `make replay-fixtures`, so it only proves the code replays
+histories the same code just recorded. #641 reordered the run's startup
+(preflight after "started"), regenerated every fixture, passed this suite, and
+on the 2026-10-09 deploy wedged every run in flight with the old order —
+chats 97654413 and 3f03dc31 retried their workflow task with TMPRL1100 for
+hours while showing as active. `frozen/2026-10-08-preflight-before-started` is
+that shape.
+
+| Set | Pins | Kept replaying by |
+|---|---|---|
+| `2026-10-08-preflight-before-started` | Every fixture at `fbca55fe^`: `PreflightDaemonCheck` scheduled before the "started" `WorkflowStatus` | `preflightAfterStartedChangeID` (`runtime/workflow.go`) |
+
+Retire a set only together with its gate, once no run older than the gate's
+deploy can still be open.
+
 ## When `TestReplayFixtures` fails
 
 Your change made `DynamicWorkflow` (or code it calls **inside the workflow
 sandbox** — executors, routers, CEL/template evaluation that gates commands)
-emit a different command sequence for at least one recorded history.
-
-**This is expected, and the fix is to regenerate:**
-
-```
-make replay-fixtures
-```
-
-then commit the updated JSON together with your change.
+emit a different command sequence for at least one recorded history. If it
+deploys, every in-flight run recorded with that shape fails its next workflow
+task with TMPRL1100 and retries it forever.
 
 Things that break replay: adding/removing/reordering `workflow.ExecuteActivity`
 calls, changing an activity's registered name, adding/removing timers
 (`workflow.Sleep`, `workflow.NewTimer`), changing `workflow.Go` coroutine
 structure, changing side effects, or changing any branch condition that gates
 the above. Things that do NOT break replay: activity *implementation* changes,
-changes to values that don't alter the command sequence, logging.
+changes to values that don't alter the command sequence (activity inputs and
+options included), logging.
 
-### Do not add a version gate (unless asked)
+**Make the change replay-compatible, then freeze the old shape:**
 
-`late-user-wake-gets-a-turn` (`late_user_message.json`) is a deliberate
-exception, requested explicitly: the change it gates decides whether a user's
-message is answered, so an in-flight run must not wedge over it. Everything
-below still applies to everything else.
+1. Gate the change with `workflow.GetVersion(ctx, "<change-id>",
+   workflow.DefaultVersion, 1)`: a history without your marker keeps the order
+   it was recorded in; a new run records the marker and takes the new path.
+   Call it at the point where the two paths first differ, and only on the
+   path that differs (the preflight gate is only consulted when the run needs
+   a daemon). The runtime already carries a dozen of these; follow them.
+2. Freeze the current fixtures BEFORE regenerating — they are the shape the
+   in-flight runs have:
 
-`workflow.GetVersion` keeps old histories on the old code path by keeping the
-old code path. **We do not do that here.** This product has not launched, so
-there is no fleet of long-lived in-flight runs worth preserving a dead branch
-for — and a gate is not free: it is a permanent fork in the workflow, it can
-never be deleted (removing a recorded version wedges the very histories it was
-added to protect), and every later change has to reason about both sides of it.
-Two gates compose into four paths.
+   ```
+   make freeze-replay-fixtures NAME=<yyyy-mm-dd>-<what-changed>
+   ```
 
-Cut to the new code, delete the old path, and regenerate the fixtures.
+   and add a README to the new set (shape, gate, incident if any).
+3. Regenerate the current set: `make replay-fixtures`. The new fixtures carry
+   your marker; the frozen set still replays without it.
 
-If you are changing a workflow where in-flight runs genuinely cannot be
-interrupted, that is a conversation to have explicitly — not a default to reach
-for.
+### Marker-less histories of two different shapes
 
-**Know what regenerating does.** When the change deploys, every in-flight
-workflow run whose history matches the old shape wedges with TMPRL1100 the next
-time its worker replays it (immediately, on the deploy itself). Those runs do
-not self-heal on their own: the reconciler detects the wedged execution and the
-resume/checkpoint machinery starts a replacement run from the last position
-checkpoint, with thread history as conversation truth. That recovery loses the
-old run's in-memory state (its node outputs) and costs a user-visible
-interruption.
-
-That is the price of cutting cleanly, and it is the right price to pay. What
-this suite exists to prevent is not the break — it is a break landing that
-**nobody noticed**, with no regenerated fixtures and no one aware that live runs
-needed recovering.
+A gate only distinguishes "recorded before the gate" from "recorded with it".
+If a break has ALREADY shipped ungated — as #641 did — there are two
+marker-less shapes in flight, the one before the break and the one the break
+recorded, and no `GetVersion` call can tell them apart. Nothing a workflow can
+read deterministically before the divergence (start time, inputs, build id)
+reliably separates them either: #641's own fixtures were recorded before prod
+chats that still ran the old code. Pick the population to keep (for #641: the
+older one — every long-lived parked chat), freeze it, and rely on recovery for
+the other: the reconciler terminates a run whose latest workflow task failed
+TMPRL1100, and the resume path refuses to reset-and-replay such a history
+(`ErrReplayDiverged`) and starts a fresh execution at the checkpoint instead.
+That recovery loses the old run's in-memory node outputs and costs a visible
+interruption, which is why the gate comes first.
 
 ## Regenerating
 

@@ -15,6 +15,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { DaemonInfoSchema, DaemonStatus, type DaemonInfo } from "../../../gen/reliant/v1/daemon_registry_pb";
 import { ChatActivity, MessageRole } from "../../../gen/reliant/v1/chat_pb";
+import { useActivityStore } from "../../../store/activityStore";
 import type { Message } from "../../../api/client";
 import { renderWithQuery } from "../../../test/renderWithQuery";
 import { SurfaceProvider } from "../../../lib/surfaceContext";
@@ -101,6 +102,7 @@ function renderPresenter(messages: Message[] = []) {
 beforeEach(() => {
   store.branchChatWithoutMachine.mockClear();
   state.daemons = [daemon("d-1", "MacBook", DaemonStatus.ACTIVE)];
+  useActivityStore.getState().setActivity("chat-1", ChatActivity.IDLE);
 });
 
 describe("ChatPresenter: a chat with no machine", () => {
@@ -141,9 +143,11 @@ describe("ChatPresenter: a chat whose machine is unavailable", () => {
       id: "chat-1",
       workflowId: "chat-1",
       activeDaemonId: "d-1",
-      activity: ChatActivity.WAITING_FOR_DAEMON,
       launchKind: "chat.start",
     };
+    // The wait is read from the activity store, which streams activity
+    // changes; the chat query is only a snapshot from its last fetch.
+    useActivityStore.getState().setActivity("chat-1", ChatActivity.WAITING_FOR_DAEMON);
     state.daemons = [daemon("d-1", "MacBook", DaemonStatus.SUSPENDED)];
     renderPresenter([message("m-1", "chat-1")]);
 

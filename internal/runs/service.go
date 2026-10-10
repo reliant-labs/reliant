@@ -208,10 +208,12 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string) (ResumeO
 		}, nil
 	}
 
-	// Nothing to replay (ghost, past retention) or the bounded guard gave up
-	// on a run that kept re-failing at the same point. Both are documented
+	// Nothing to replay (ghost, past retention), the bounded guard gave up on
+	// a run that kept re-failing at the same point, or a history the current
+	// code cannot replay (a reset would wedge the new run). All are documented
 	// fallbacks to the coarse restart.
-	if errors.Is(resumeErr, workflow.ErrNoReplayableHistory) || errors.Is(resumeErr, workflow.ErrResetAttemptsExhausted) {
+	if errors.Is(resumeErr, workflow.ErrNoReplayableHistory) || errors.Is(resumeErr, workflow.ErrResetAttemptsExhausted) ||
+		errors.Is(resumeErr, workflow.ErrReplayDiverged) {
 		logging.Info("[runs] Run is not reset-resumable — restart at checkpoint",
 			"chatID", chatID, "workflowID", workflowID, "reason", resumeErr)
 		return ResumeOutcome{Kind: OutcomeNeedsRestart, WorkflowID: workflowID}, nil

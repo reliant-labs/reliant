@@ -60,7 +60,12 @@ daemon_unavailable" and "Workflow error in Preflight Daemon Check · Attempt 1".
 - Replay policy (`internal/workflow/runtime/replaytest/fixtures/README.md`):
   never add `workflow.GetVersion` gates; change the command sequence and
   regenerate fixtures with `make replay-fixtures` (needs Postgres + an
-  ephemeral Temporal dev server).
+  ephemeral Temporal dev server). **Superseded 2026-10-10:** this change
+  shipped ungated and wedged every in-flight run recorded with the old order
+  (chats 97654413, 3f03dc31). The order is now gated by
+  `preflightAfterStartedChangeID`, the old shape is pinned by the frozen set
+  `replaytest/fixtures/frozen/2026-10-08-preflight-before-started`, and the
+  README now requires a gate plus a frozen set for any command-sequence change.
 - `NATSDaemonRouter` always implements `toolexec.DaemonWaker`. Record states:
   attached (routable), unconfirmed (self-hosted with no fresh lease, or managed
   ready/failed), starting (provisioning/cloning → `ErrDaemonPending`), suspended

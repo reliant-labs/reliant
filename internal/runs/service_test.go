@@ -444,6 +444,7 @@ func TestResumeInterrupted_MapsSentinelsToOutcomes(t *testing.T) {
 		{"reset-and-replay served it", nil, OutcomeResumed, false},
 		{"nothing to replay", workflow.ErrNoReplayableHistory, OutcomeNeedsRestart, false},
 		{"guard gave up", workflow.ErrResetAttemptsExhausted, OutcomeNeedsRestart, false},
+		{"history no longer replays", workflow.ErrReplayDiverged, OutcomeNeedsRestart, false},
 		{"at the history cap", workflow.ErrHistoryLimitExceeded, OutcomeNeedsRestart, true},
 		{"unexpected failure still falls back", errors.New("boom"), OutcomeNeedsRestart, false},
 	}

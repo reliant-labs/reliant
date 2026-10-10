@@ -32,6 +32,7 @@ const (
 	resumeOutcomeNoReplayableHistory    = "no_replayable_history"
 	resumeOutcomeResetAttemptsExhausted = "reset_attempts_exhausted"
 	resumeOutcomeResetError             = "reset_error"
+	resumeOutcomeReplayDiverged         = "replay_diverged"
 )
 
 // recordResumeOutcome counts one resume attempt and logs it with the same
@@ -300,9 +301,10 @@ func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, sign
 				return fmt.Errorf("failed to send signal %s after reset: %w", signalName, sigErr)
 			}
 			return nil
-		case errors.Is(resetErr, ErrResetAttemptsExhausted), errors.Is(resetErr, ErrHistoryLimitExceeded):
-			// Bounded, or at the history cap where resetting is futile —
-			// surface so callers fall back to the coarse fresh restart.
+		case errors.Is(resetErr, ErrResetAttemptsExhausted), errors.Is(resetErr, ErrHistoryLimitExceeded), errors.Is(resetErr, ErrReplayDiverged):
+			// Bounded, at the history cap, or a history the current code
+			// cannot replay — resetting is futile; surface so callers fall
+			// back to the coarse fresh restart.
 			return fmt.Errorf("failed to reset expired workflow for signal %s: %w", signalName, resetErr)
 		default:
 			// ErrNoReplayableHistory (completed / not-found / not eligible): fall
@@ -629,6 +631,16 @@ func (ps *PauseService) resetInterruptedForResume(ctx context.Context, workflowI
 	}
 
 	reset, err := ResetInterruptedWorkflow(ctx, ps.temporalClient, workflowID, runID, status)
+	if errors.Is(err, ErrReplayDiverged) {
+		// Resetting would wedge the new run exactly like this one; only a
+		// fresh execution on the current code can continue it.
+		logging.Warn("[PauseService] Workflow history no longer replays on the current code; reset cannot recover it, falling back to fresh restart",
+			"workflowID", workflowID,
+			"chatID", chatID,
+		)
+		recordResumeOutcome(resumeOutcomeReplayDiverged, workflowID, chatID, nil)
+		return ResetResult{}, ErrReplayDiverged
+	}
 	if err != nil {
 		recordResumeOutcome(resumeOutcomeResetError, workflowID, chatID, err)
 		return ResetResult{}, fmt.Errorf("failed to reset interrupted workflow: %w", err)

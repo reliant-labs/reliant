@@ -1,0 +1,38 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * Whether the conversation's latest turn is the user's: a message that no
+ * reply has answered yet.
+ *
+ * It decides what a run held for its machine says (ChatThinkingIndicator). A
+ * run that has not read the user's message yet is holding that message, so the
+ * honest line is "Queued — will send when your machine connects"; a run held
+ * mid-turn (a tool call waiting for the machine) has already read it, and is
+ * only "Waiting for your machine".
+ *
+ * System notes are not turns. The hidden "your params changed" note that a
+ * send can write right after the user's message, and the notices the server
+ * posts about a run, must not make an unanswered message look answered.
+ * Messages on another thread (a sub-agent's) are not the conversation's turns
+ * either.
+ */
+
+import { MessageRole } from "@/gen/reliant/v1/chat_pb";
+
+export interface TurnLike {
+  role: MessageRole;
+  thread?: string;
+}
+
+export function latestTurnIsUsers(
+  messages: ReadonlyArray<TurnLike>,
+  mainThreadId: string | undefined,
+): boolean {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]!;
+    if (mainThreadId && message.thread && message.thread !== mainThreadId) continue;
+    if (message.role === MessageRole.SYSTEM) continue;
+    return message.role === MessageRole.USER;
+  }
+  return false;
+}

@@ -45,6 +45,20 @@ import { machineWsStatus, presentMachineStatus } from "./machineWake";
 export const MACHINE_NOUN = "machine";
 
 /**
+ * What a message the server accepted, but that no turn has read yet, says
+ * while its run is held for the machine (ChatActivity.WAITING_FOR_DAEMON).
+ * Nothing is lost and nothing is stuck: the run reads it as soon as the
+ * machine connects. Saying so is the difference between a queue and a hang.
+ */
+export const QUEUED_FOR_MACHINE = `Queued — will send when your ${MACHINE_NOUN} connects`;
+
+/** The same promise as the tail of a queued-strip entry ("queued 12s ago · …"). */
+export const QUEUED_FOR_MACHINE_DETAIL = `will send when your ${MACHINE_NOUN} connects`;
+
+/** The run is held for its machine and has no unread message to speak for. */
+export const WAITING_FOR_MACHINE = `Waiting for your ${MACHINE_NOUN}`;
+
+/**
  * How long a consumer should retry before it starts saying more than
  * "connecting". Not a deadline — nothing fails here, the copy just escalates.
  */
