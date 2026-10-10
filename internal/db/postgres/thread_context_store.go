@@ -91,8 +91,21 @@ func (s *threadStore) CascadeTerminalStatusToThreadSubtree(ctx context.Context, 
 	})
 }
 
-func (s *threadStore) ReapOrphanedThreads(ctx context.Context) (int64, error) {
-	return s.q.ReapOrphanedThreads(ctx)
+func (s *threadStore) ReapOrphanedThreads(ctx context.Context) ([]core.ReapedThread, error) {
+	rows, err := s.q.ReapOrphanedThreads(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reaped := make([]core.ReapedThread, 0, len(rows))
+	for _, row := range rows {
+		reaped = append(reaped, core.ReapedThread{
+			ThreadID:   row.ThreadID,
+			ChatID:     row.ChatID,
+			WorkflowID: row.WorkflowID,
+			Status:     row.Status,
+		})
+	}
+	return reaped, nil
 }
 
 func (s *threadStore) ListThreadsByOrigin(ctx context.Context, chatID string, origin core.ThreadOrigin) ([]*core.Thread, error) {

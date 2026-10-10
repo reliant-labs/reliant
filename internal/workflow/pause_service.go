@@ -238,31 +238,32 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 		}
 	}
 
+	// The status and the cascade commit together: written apart, the
+	// reconciler's thread reap could run between them and close the threads
+	// itself, reporting a cascade that was one statement away as a missed one.
 	status := db.Stopped(reason)
-	if err := ps.database.UpdateWorkflowStatus(ctx, workflowID, status); err != nil {
+	err = ps.database.RunTx(ctx, func(txCtx context.Context) error {
+		if err := ps.database.UpdateWorkflowStatus(txCtx, workflowID, status); err != nil {
+			return err
+		}
+		// Cascade to child workflows, at the status the run actually reached.
+		// When a root workflow's Temporal execution has expired, children's
+		// status notifications were likely lost too — leaving them stuck at
+		// active/paused and the chat permanently "active".
+		if err := ps.database.CascadeTerminalStatusToDescendants(txCtx, workflowID, reason); err != nil {
+			return fmt.Errorf("cascade terminal status to child workflows: %w", err)
+		}
+		// Threads are not a workflows row and need their own cascade call —
+		// see dev-docs/incidents/2026-08-12-spawn-history-cap.md.
+		if err := ps.database.CascadeTerminalStatusToThreadSubtree(txCtx, workflowID, reason); err != nil {
+			return fmt.Errorf("cascade terminal status to threads: %w", err)
+		}
+		return nil
+	})
+	if err != nil {
 		logging.Error("[PauseService] Failed to reconcile workflow status",
 			"workflowID", workflowID,
 			"targetStatus", status.Label(),
-			"error", err,
-		)
-		return
-	}
-
-	// Cascade to child workflows, at the status the run actually reached. When a
-	// root workflow's Temporal execution has expired, children's status
-	// notifications were likely lost too — leaving them stuck at active/paused
-	// and the chat permanently "active".
-	if err := ps.database.CascadeTerminalStatusToDescendants(ctx, workflowID, reason); err != nil {
-		logging.Error("[PauseService] Failed to cascade terminal status to child workflows",
-			"workflowID", workflowID,
-			"error", err,
-		)
-	}
-	// Threads are not a workflows row and need their own cascade call — see
-	// dev-docs/incidents/2026-08-12-spawn-history-cap.md.
-	if err := ps.database.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, reason); err != nil {
-		logging.Error("[PauseService] Failed to cascade terminal status to threads",
-			"workflowID", workflowID,
 			"error", err,
 		)
 	}

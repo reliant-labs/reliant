@@ -4324,9 +4324,9 @@ func (r *Repo) CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflo
 }
 
 // ReapOrphanedThreads ends running/paused threads whose workflow is already
-// terminal, at the workflow's own status, returning the number of rows
-// repaired. See the Repository interface for why the backstop is needed.
-func (r *Repo) ReapOrphanedThreads(ctx context.Context) (int64, error) {
+// terminal, at the workflow's own status, returning the rows repaired. See
+// the Repository interface for why the backstop is needed.
+func (r *Repo) ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error) {
 	return r.threads.ReapOrphanedThreads(ctx)
 }
 

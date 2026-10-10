@@ -5,6 +5,8 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"reflect"
+	"runtime"
 	"strings"
 
 	"github.com/reliant-labs/reliant/internal/telemetry"
@@ -43,10 +45,82 @@ func (h *sentryHandler) Handle(ctx context.Context, r slog.Record) error {
 		return err
 	}
 
-	// Build the error and context for Sentry.
-	go h.reportToSentry(r)
+	// The stack is read here, on the logging goroutine: the report runs on
+	// its own, whose stack says nothing about who logged.
+	frames := callerFrames()
+	go h.reportToSentry(r, frames)
 
 	return err
+}
+
+// maxLogStackDepth bounds the stack captured for a forwarded record.
+const maxLogStackDepth = 64
+
+// slogFramePrefix marks slog's own frames. Every handler in the chain — this
+// one, the metrics bridge, forge's error-class policy, whatever wraps them
+// next — runs inside slog's Logger.log, so the frames below the outermost
+// slog frame are handler machinery whichever handlers are installed.
+const slogFramePrefix = "log/slog."
+
+// loggerWrapperPrefixes are the loggers that adapt into slog from the call
+// site's side: this package's Error/Warn/... and the Temporal loggers. r.PC
+// cannot locate the call site — every logging.Error call records
+// logging.Error as its caller — so the call site is the first frame past slog
+// that is not one of these.
+var loggerWrapperPrefixes = []string{
+	reflect.TypeOf(sentryHandler{}).PkgPath() + ".",
+	"go.temporal.io/sdk/log.",
+	"go.temporal.io/sdk/internal/log.",
+}
+
+// callerFrames is the stack of the code that logged, innermost first, so
+// frames[0] is the call site.
+func callerFrames() []runtime.Frame {
+	var pcs [maxLogStackDepth]uintptr
+	n := runtime.Callers(1, pcs[:])
+	iter := runtime.CallersFrames(pcs[:n])
+	var stack []runtime.Frame
+	for {
+		frame, more := iter.Next()
+		stack = append(stack, frame)
+		if !more {
+			break
+		}
+	}
+	// Past the first run of slog frames — or, for a handler driven directly
+	// with no slog in the stack, from the top — then past the wrappers that
+	// adapt into slog.
+	start, inSlog := 0, false
+	for i, frame := range stack {
+		if strings.HasPrefix(frame.Function, slogFramePrefix) {
+			inSlog = true
+			continue
+		}
+		if inSlog {
+			start = i
+			break
+		}
+	}
+	for start < len(stack) && isLoggerWrapperFrame(stack[start]) {
+		start++
+	}
+	return stack[start:]
+}
+
+// isLoggerWrapperFrame reports whether frame is a logger adapting into slog
+// (or, for a handler driven directly, this package's own machinery) rather
+// than the code that logged. A test file is never a wrapper: a test in this
+// package that logs is the call site.
+func isLoggerWrapperFrame(frame runtime.Frame) bool {
+	if strings.HasSuffix(frame.File, "_test.go") {
+		return false
+	}
+	for _, prefix := range loggerWrapperPrefixes {
+		if strings.HasPrefix(frame.Function, prefix) {
+			return true
+		}
+	}
+	return false
 }
 
 func (h *sentryHandler) WithAttrs(attrs []slog.Attr) slog.Handler {
@@ -80,9 +154,11 @@ var sentryWarnPatterns = []string{
 	"signal: killed",
 }
 
-// reportToSentry extracts error information from the log record and sends it
-// to Sentry. Runs in a separate goroutine to avoid blocking log callers.
-func (h *sentryHandler) reportToSentry(r slog.Record) {
+// reportToSentry sends the record to Sentry as a log event: titled and
+// grouped by its message and call site (frames, captured on the logging
+// goroutine), with its fields as tags and context. Runs in a separate
+// goroutine to avoid blocking log callers.
+func (h *sentryHandler) reportToSentry(r slog.Record, frames []runtime.Frame) {
 	// Build tags and extra context from record attributes.
 	tags := make(map[string]string)
 	extra := make(map[string]interface{})
@@ -99,33 +175,25 @@ func (h *sentryHandler) reportToSentry(r slog.Record) {
 		return true
 	})
 
-	// If no explicit error attribute was found, create one from the message.
-	if capturedErr == nil {
-		capturedErr = errors.New(r.Message)
+	// The suppression patterns match the error when there is one, and the
+	// message otherwise.
+	matchErr := capturedErr
+	if matchErr == nil {
+		matchErr = errors.New(r.Message)
 	}
 
 	// Completely silent — user-initiated cancellations.
-	if matchesAny(capturedErr, sentrySilentPatterns) {
+	if matchesAny(matchErr, sentrySilentPatterns) {
 		return
 	}
 
 	// Warn-only — log for visibility but don't send to Sentry.
-	if matchesAny(capturedErr, sentryWarnPatterns) {
+	if matchesAny(matchErr, sentryWarnPatterns) {
 		Warn("[Sentry] Suppressed non-actionable error",
-			"error", capturedErr.Error(),
+			"error", matchErr.Error(),
 			"log_message", r.Message,
 		)
 		return
-	}
-
-	// Add the log message as extra context when we have a real error.
-	extra["log_message"] = r.Message
-
-	// Add source location if available.
-	if r.PC != 0 {
-		// slog.Record has source info but we keep it simple — the stack
-		// trace in Sentry will be more useful.
-		tags["log_source"] = "slog"
 	}
 
 	// Add group prefix if any. Group names come from code, not users, but
@@ -136,7 +204,13 @@ func (h *sentryHandler) reportToSentry(r slog.Record) {
 		}
 	}
 
-	telemetry.CaptureExceptionWithContext(capturedErr, tags, extra)
+	telemetry.CaptureLogEvent(telemetry.LogEvent{
+		Message: r.Message,
+		Frames:  frames,
+		Err:     capturedErr,
+		Tags:    tags,
+		Extra:   extra,
+	})
 }
 
 // matchesAny returns true if the error message contains any of the given patterns.
@@ -154,7 +228,8 @@ func matchesAny(err error, patterns []string) bool {
 }
 
 // collectAttr processes a single slog.Attr: an "error"/"err" attribute becomes
-// the captured error, and every other attribute goes through collectField.
+// the captured error (whose text and type the event carries as context and a
+// tag), and every other attribute goes through collectField.
 func (h *sentryHandler) collectAttr(a slog.Attr, tags map[string]string, extra map[string]interface{}, capturedErr *error) {
 	key := a.Key
 	val := a.Value.Resolve()
@@ -163,13 +238,11 @@ func (h *sentryHandler) collectAttr(a slog.Attr, tags map[string]string, extra m
 	if key == "error" || key == "err" {
 		if e, ok := val.Any().(error); ok && e != nil {
 			*capturedErr = e
-			extra[key] = e.Error()
 			return
 		}
 		// Even if it's a string representation of an error, capture it.
 		if val.Kind() == slog.KindString {
 			*capturedErr = errors.New(val.String())
-			extra[key] = val.String()
 			return
 		}
 	}

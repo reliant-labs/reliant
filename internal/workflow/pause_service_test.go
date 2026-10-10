@@ -162,6 +162,11 @@ func (m *mockPauseRepo) PauseRunningWorkflowsByChat(_ context.Context, _ string)
 	return nil
 }
 
+// RunTx runs f inline; the mock has no transactions.
+func (m *mockPauseRepo) RunTx(ctx context.Context, f func(context.Context) error) error {
+	return f(ctx)
+}
+
 func (m *mockPauseRepo) ResumeWorkflowsByChat(_ context.Context, _ string) error {
 	return nil
 }

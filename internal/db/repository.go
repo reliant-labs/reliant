@@ -686,11 +686,11 @@ type Repository interface {
 	// (it only matches threads already in a terminal status).
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, reason WorkflowStopReason) error
 	// ReapOrphanedThreads ends every running/paused thread whose workflow is
-	// already terminal, at the workflow's own status, and reports how many
-	// rows it moved. The backstop for a write path that reached a terminal
-	// workflow status without cascading to the thread — mirrors
+	// already terminal, at the workflow's own status, and returns the rows it
+	// moved. The backstop for a write path that reached a terminal workflow
+	// status without cascading to the thread — mirrors
 	// ReapOrphanedWorkflowDescendants for the same reason.
-	ReapOrphanedThreads(ctx context.Context) (int64, error)
+	ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error)
 
 	// Context Windows - Atomic unit for what gets sent to the LLM
 	// Each thread has one or more context windows (sequence increments on compaction)

@@ -1069,7 +1069,12 @@ type Querier interface {
 	// pending/active distinction to make). This is the SQL twin of
 	// core.ThreadStatusForStopReason — a repaired cancel must not read as a
 	// repaired success.
-	ReapOrphanedThreads(ctx context.Context) (int64, error)
+	//
+	// Returns each thread it moved and the workflow that owns it. A reap is the
+	// evidence that some write path ended a workflow without cascading, and a
+	// count alone cannot say which run, which chat, or how that run ended — the
+	// reconciler needs the ids to ask Temporal and to log something actionable.
+	ReapOrphanedThreads(ctx context.Context) ([]ReapOrphanedThreadsRow, error)
 	// Enforce the invariant CascadeTerminalStatusToDescendants asserts from the
 	// other direction: a workflow whose PARENT is terminal is not running.
 	//
