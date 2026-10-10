@@ -49,10 +49,7 @@ func (s *DaemonProxyService) StartOAuthFlow(
 	// cancellation, which propagates via ctx.
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.start_oauth", payload, 3_600_000)
 	if err != nil {
-		if IsDaemonOutdatedError(err) {
-			return nil, DaemonOutdatedConnectError(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("OAuth flow failed: %w", err))
+		return nil, oauthDaemonError("OAuth flow failed", err)
 	}
 
 	var resp struct {
@@ -69,6 +66,30 @@ func (s *DaemonProxyService) StartOAuthFlow(
 		State:       resp.State,
 		RedirectUri: resp.RedirectURI,
 	}), nil
+}
+
+// oauthDaemonError maps a failed OAuth daemon command onto the Connect code
+// for what went wrong, wrapped with what was being done:
+//
+//   - The daemon is older than this server: FailedPrecondition, the daemon's
+//     own message. The production report that started this was
+//     `open OAuth helper: daemon command "auth.open_oauth_helper" failed:
+//     unknown daemon command type` from a daemon that predated the handler —
+//     nothing was broken server-side, but `code: internal` said otherwise.
+//   - The command never reached a machine: the machine's state picks the code
+//     (machineStateConnectError). "No machine is connected to your account
+//     yet" used to leave here as Internal (ELECTRON-B1); the settings page
+//     asks for the helper whether or not the user has connected a machine.
+//   - Anything else — the daemon ran the command and it failed, the reply
+//     timed out — is Internal.
+func oauthDaemonError(doing string, err error) *connect.Error {
+	if IsDaemonOutdatedError(err) {
+		return DaemonOutdatedConnectError(err)
+	}
+	if cerr, ok := machineStateConnectError(doing, err); ok {
+		return cerr
+	}
+	return connect.NewError(connect.CodeInternal, fmt.Errorf("%s: %w", doing, err))
 }
 
 // openHelperTimeoutMs bounds the open/close commands. These return as soon as
@@ -96,15 +117,7 @@ func (s *DaemonProxyService) OpenOAuthHelper(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.open_oauth_helper", payload, openHelperTimeoutMs)
 	if err != nil {
-		// This is the exact call that produced the production report:
-		//   open OAuth helper: daemon command "auth.open_oauth_helper" failed:
-		//   unknown daemon command type: "auth.open_oauth_helper"
-		// on a daemon that predated the PR adding the handler. Nothing was
-		// broken server-side, but `code: internal` said otherwise.
-		if IsDaemonOutdatedError(err) {
-			return nil, DaemonOutdatedConnectError(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open OAuth helper: %w", err))
+		return nil, oauthDaemonError("open OAuth helper", err)
 	}
 
 	var resp struct {
@@ -135,10 +148,7 @@ func (s *DaemonProxyService) CloseOAuthHelper(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "auth.close_oauth_helper", []byte("{}"), openHelperTimeoutMs)
 	if err != nil {
-		if IsDaemonOutdatedError(err) {
-			return nil, DaemonOutdatedConnectError(err)
-		}
-		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("close OAuth helper: %w", err))
+		return nil, oauthDaemonError("close OAuth helper", err)
 	}
 
 	var resp struct {

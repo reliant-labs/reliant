@@ -112,8 +112,8 @@ func (s *TerminalProxyService) ListSessions(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
 	if err != nil {
-		if toolexec.IsDaemonPending(err) {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+		if cerr, ok := machineStateConnectError("", err); ok {
+			return nil, cerr
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -187,8 +187,8 @@ func (s *TerminalProxyService) CloseSession(
 				Message: "Session already closed",
 			}), nil
 		}
-		if toolexec.IsDaemonPending(err) {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+		if cerr, ok := machineStateConnectError("", err); ok {
+			return nil, cerr
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -250,6 +250,9 @@ func (s *TerminalProxyService) StreamTerminal(
 			logging.Warn("[Terminal] Stream working directory unavailable",
 				"requested_working_dir", createReq.GetWorkingDir(), "user_id", userID, "error", err)
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("create terminal session: %w", err))
+		}
+		if cerr, ok := machineStateConnectError("create terminal session", err); ok {
+			return cerr
 		}
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("create terminal session: %w", err))
 	}

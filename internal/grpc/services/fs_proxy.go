@@ -267,16 +267,13 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string,
 // on 2026-10-09 — and handed the UI a 500-class error for a machine that was
 // merely starting.
 func fsProxyDaemonError(err error) error {
-	switch {
-	case machineUnreachable(err):
-		return connect.NewError(connect.CodeUnavailable, err)
-	case toolexec.IsNoDaemon(err):
-		return connect.NewError(connect.CodeFailedPrecondition, err)
-	case isMissingPathError(err):
-		return connect.NewError(connect.CodeNotFound, err)
-	default:
-		return connect.NewError(connect.CodeInternal, err)
+	if cerr, ok := machineStateConnectError("", err); ok {
+		return cerr
 	}
+	if isMissingPathError(err) {
+		return connect.NewError(connect.CodeNotFound, err)
+	}
+	return connect.NewError(connect.CodeInternal, err)
 }
 
 // GetFileTree returns the file tree structure for a project.

@@ -54,8 +54,12 @@ func (s *BackgroundProxyService) sendCommand(ctx context.Context, userID, comman
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, commandType, payload, timeoutMs)
 	if err != nil {
-		if toolexec.IsDaemonPending(err) {
-			return connect.NewError(connect.CodeUnavailable, err)
+		// A machine that is starting, asleep or absent is not a server
+		// fault: Unavailable while it is on its way, FailedPrecondition when
+		// the user has none. ListProcesses used to return the second as
+		// Internal (ELECTRON-A6).
+		if cerr, ok := machineStateConnectError("", err); ok {
+			return cerr
 		}
 		return connect.NewError(connect.CodeInternal, err)
 	}

@@ -101,6 +101,40 @@ func DaemonOutdatedConnectError(err error) *connect.Error {
 	return connect.NewError(connect.CodeFailedPrecondition, err)
 }
 
+// machineStateConnectError returns a daemon-command failure that never reached
+// a machine as the Connect error the machine's state calls for, wrapped with
+// what the handler was doing (doing may be empty). ok is false for any other
+// failure, which the handler maps itself.
+//
+//   - not reachable right now — starting, asleep, or not connected (NATS had
+//     no responder) — is Unavailable: retryable, what the web's daemon-wait
+//     machinery expects, and the message keeps the "no daemon connected"
+//     marker isDaemonConnectingError keys on;
+//   - no machine at all (toolexec.ErrNoDaemon) is FailedPrecondition: waiting
+//     cannot produce a machine the user has not connected.
+//
+// Every handler that forwards to a daemon checks this before choosing its own
+// code. The OAuth helper and ListProcesses did not, and answered "no machine
+// is connected to your account yet" as Internal (ELECTRON-B1, A6): a 500 for a
+// user who simply has no machine. The wire code is the handler's choice, so it
+// is made here rather than read off the error (forge svcerr: a cause never
+// decides what the client sees).
+func machineStateConnectError(doing string, err error) (*connect.Error, bool) {
+	var code connect.Code
+	switch {
+	case machineUnreachable(err):
+		code = connect.CodeUnavailable
+	case toolexec.IsNoDaemon(err):
+		code = connect.CodeFailedPrecondition
+	default:
+		return nil, false
+	}
+	if doing != "" {
+		err = fmt.Errorf("%s: %w", doing, err)
+	}
+	return connect.NewError(code, err), true
+}
+
 // mapDaemonDispatchError converts a SendDaemonCommand failure into a Connect
 // error whose code reflects the failure class. SendDaemonCommand flattens every
 // failure — transport, timeout, unresolved daemon, unknown command, and
@@ -117,6 +151,13 @@ func mapDaemonDispatchError(commandType string, err error) *connect.Error {
 	// prefixing it buries that behind plumbing vocabulary.
 	if IsDaemonOutdatedError(err) {
 		return DaemonOutdatedConnectError(err)
+	}
+
+	// The command never reached a machine: its state picks the code. "No
+	// machine at all" is FailedPrecondition here, not the Unavailable below —
+	// waiting cannot produce a machine the user has not connected.
+	if cerr, ok := machineStateConnectError(fmt.Sprintf("daemon command %s failed", commandType), err); ok {
+		return cerr
 	}
 
 	// The daemon answered, but the requested working directory is absent on its

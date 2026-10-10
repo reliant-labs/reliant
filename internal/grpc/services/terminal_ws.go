@@ -410,7 +410,7 @@ func writeWSError(conn *websocket.Conn, msg string, logFields ...any) {
 // project or machine id to say whose.
 const terminalMachineStateLogWindow = 5 * time.Minute
 
-var terminalMachineStateLog = newThrottledLog(terminalMachineStateLogWindow, time.Now)
+var terminalMachineStateLog = logging.NewThrottle(terminalMachineStateLogWindow, time.Now)
 
 // terminalMachineState names why a terminal could not be created when the
 // reason is the machine's state rather than a failure: the user has no
@@ -433,7 +433,7 @@ func terminalMachineState(err error) (state string, ok bool) {
 // per window per user and state, with how many were suppressed since and the
 // machine default resolution names, when it names one.
 func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, userID, state string, err error, logFields []any) {
-	suppressed, ok := terminalMachineStateLog.allow(userID + "|" + state)
+	suppressed, ok := terminalMachineStateLog.Allow(userID + "|" + state)
 	if !ok {
 		return
 	}
