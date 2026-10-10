@@ -244,6 +244,7 @@ CREATE TABLE public.chats (
     adopted_at timestamp with time zone,
     daemon_blocked_at timestamp with time zone,
     no_machine boolean DEFAULT false NOT NULL,
+    queued_for_machine_at timestamp with time zone,
     CONSTRAINT chats_no_machine_has_no_daemon_check CHECK (((NOT no_machine) OR (active_daemon_id IS NULL)))
 );
 
@@ -363,6 +364,7 @@ CREATE VIEW public.chats_with_activity AS
     adopted_at,
     daemon_blocked_at,
     no_machine,
+    queued_for_machine_at,
     last_message_at,
     activity,
     root_workflow_state,
@@ -400,6 +402,7 @@ CREATE VIEW public.chats_with_activity AS
             c.adopted_at,
             c.daemon_blocked_at,
             c.no_machine,
+            c.queued_for_machine_at,
             ( SELECT max(m.created_at) AS max
                    FROM public.messages m
                   WHERE (m.chat_id = c.id)) AS last_message_at,
@@ -416,6 +419,7 @@ CREATE VIEW public.chats_with_activity AS
                     WHEN (EXISTS ( SELECT 1
                        FROM public.workflows w
                       WHERE ((w.chat_id = c.id) AND (w.state = 2)))) THEN 1
+                    WHEN (c.queued_for_machine_at IS NOT NULL) THEN 6
                     WHEN (( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 2))) AS max
                        FROM public.workflows w
                       WHERE (w.chat_id = c.id)) > COALESCE(( SELECT max(w.completed_at) FILTER (WHERE ((w.state = 3) AND (w.stop_reason = 1))) AS max
@@ -2138,6 +2142,12 @@ CREATE INDEX idx_chat_updates_snapshot_heads ON public.chat_updates USING btree 
 --
 
 CREATE INDEX idx_chat_updates_snapshot_rekeyed ON public.chat_updates USING btree (chat_id, sequence_number) WHERE (update_type = ANY (ARRAY[3, 18]));
+
+--
+-- Name: idx_chats_queued_for_machine; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_chats_queued_for_machine ON public.chats USING btree (queued_for_machine_at) WHERE (queued_for_machine_at IS NOT NULL);
 
 --
 -- Name: idx_chats_user_created_id; Type: INDEX; Schema: public; Owner: -

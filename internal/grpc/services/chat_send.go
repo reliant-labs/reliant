@@ -412,11 +412,26 @@ func (s *ChatService) SendMessage(
 
 	s.wakeDaemonForAttendedTurn(ctx, userID, chat)
 
-	// An attended send wakes the machine, so a daemon-pending marker left by an
-	// earlier run no longer describes it. The next tool call re-sets it if the
-	// machine is still unreachable.
-	if err := s.database.SetChatDaemonBlocked(ctx, chat.ID, false); err != nil {
+	if chat.Activity != nil && reliantv1.ChatActivity(*chat.Activity) == reliantv1.ChatActivity_CHAT_ACTIVITY_WAITING_FOR_DAEMON {
+		// A live run is waiting for the machine this send just woke. Its
+		// marker still describes it — clearing it would show the run as
+		// thinking until its next check, which can be minutes away — so ask
+		// the run to check now instead: it clears the marker itself once the
+		// machine is up. A run held mid-turn does not listen, and its next
+		// tool call settles the marker the same way.
+		s.nudgeMachineWait(ctx, chat)
+	} else if err := s.database.SetChatDaemonBlocked(ctx, chat.ID, false); err != nil {
+		// An attended send wakes the machine, so a daemon-pending marker left
+		// by an earlier run no longer describes it. The next tool call re-sets
+		// it if the machine is still unreachable.
 		logging.Warn("Failed to clear daemon-pending marker on send", "error", err, "chatID", chat.ID)
+	}
+	// A message queued for the machine is read by whichever run this send
+	// starts, resumes or wakes — the run reads the thread, where it already
+	// is — so it is no longer waiting on the machine to be delivered. If that
+	// run's machine is still down, its preflight queues both again.
+	if _, err := s.database.SetChatQueuedForMachine(ctx, chat.ID, false); err != nil {
+		logging.Warn("Failed to clear queued-for-machine marker on send", "error", err, "chatID", chat.ID)
 	}
 
 	// Note: Previously checked if workflow completed and thread is closed.

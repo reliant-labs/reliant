@@ -1730,6 +1730,35 @@ func (r *Repo) SetChatDaemonBlocked(ctx context.Context, chatID string, blocked 
 	})
 }
 
+// SetChatQueuedForMachine records (or clears) that the chat holds a message
+// queued for its machine, and reports whether the stored value changed. A
+// clear that reports true is a claim: exactly one of two racing deliverers
+// gets it. It emits chat_activity_changed only on a change.
+func (r *Repo) SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error) {
+	var changed bool
+	err := r.RunTx(ctx, func(txCtx context.Context) error {
+		var err error
+		changed, err = r.chats.SetChatQueuedForMachine(txCtx, chatID, queued)
+		if err != nil || !changed {
+			return err
+		}
+		return r.emitChatActivityIfChanged(txCtx, chatID)
+	})
+	return changed, err
+}
+
+// ListChatsQueuedForMachine lists chats holding a message queued for their
+// machine; see the Repository interface.
+func (r *Repo) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error) {
+	return r.chats.ListChatsQueuedForMachine(ctx, userID, limit)
+}
+
+// ListChatsWaitingForMachine lists a user's chats whose live root run is
+// parked waiting for a machine.
+func (r *Repo) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error) {
+	return r.chats.ListChatsWaitingForMachine(ctx, userID)
+}
+
 // UpdateChatUnread sets the unread flag on a chat and emits a user update.
 func (r *Repo) UpdateChatUnread(ctx context.Context, chatID string, unread bool, reason string) error {
 	chat, err := r.GetChat(ctx, chatID)

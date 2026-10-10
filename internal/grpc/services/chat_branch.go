@@ -361,6 +361,11 @@ func (s *ChatService) BranchChat(
 		logging.Error("Failed to re-read branched chat after commit", "error", err, "chatID", branchChatID)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to load branch"))
 	}
+	// "Continue without machine" ends the chat it leaves waiting for its
+	// machine: the conversation now continues in the branch.
+	if req.Msg.GetNoMachine() && !fromChat.NoMachine {
+		s.abandonMachineWait(ctx, fromChat)
+	}
 	return connect.NewResponse(&reliantv1.BranchChatResponse{
 		Chat: chatToProto(committed),
 	}), nil

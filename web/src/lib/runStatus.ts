@@ -58,7 +58,7 @@ export type RunLifecycleKey =
  * (`ChatActivity.WAITING_FOR_DAEMON`), and the server folds the same thing
  * into `RunDisplayState.WAITING_FOR_MACHINE` for the Runs list.
  */
-export type RunStatusOverlayKey = "waiting_for_machine";
+export type RunStatusOverlayKey = "waiting_for_machine" | "queued_for_machine";
 
 export type RunStatusKey = RunLifecycleKey | RunStatusOverlayKey;
 
@@ -104,11 +104,28 @@ const OVERLAY_ROWS: Record<RunStatusOverlayKey, RunStatusDisplay> = {
     badgeVariant: "warning",
     pulse: false,
   },
+  // The run ended because its machine never came up, and its message is
+  // queued for the machine (`ChatActivity.QUEUED_FOR_MACHINE`): not failed —
+  // the server sends it when the machine connects.
+  queued_for_machine: {
+    key: "queued_for_machine",
+    label: "Queued for machine",
+    dotVariant: "pending",
+    badgeVariant: "warning",
+    pulse: false,
+  },
 };
 
 /** The G7 hook point. See RunStatusOverlayKey. */
 function overlayFor(input: { activity?: ChatActivity }): RunStatusOverlayKey | null {
-  return input.activity === ChatActivity.WAITING_FOR_DAEMON ? "waiting_for_machine" : null;
+  switch (input.activity) {
+    case ChatActivity.WAITING_FOR_DAEMON:
+      return "waiting_for_machine";
+    case ChatActivity.QUEUED_FOR_MACHINE:
+      return "queued_for_machine";
+    default:
+      return null;
+  }
 }
 
 /** The status of a run, from its root workflow's lifecycle. */

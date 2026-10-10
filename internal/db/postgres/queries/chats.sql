@@ -117,3 +117,35 @@ UPDATE chats SET
     daemon_blocked_at = CASE WHEN sqlc.arg('blocked')::boolean THEN NOW() ELSE NULL END
 WHERE id = sqlc.arg('id')
   AND (daemon_blocked_at IS NOT NULL) IS DISTINCT FROM sqlc.arg('blocked')::boolean;
+
+-- name: SetChatQueuedForMachine :execrows
+-- Sets or clears the queued-for-machine marker. Returns 1 only when the value
+-- actually changed: clearing is how a deliverer CLAIMS the queued message, so
+-- of two that race exactly one sees the row change.
+UPDATE chats SET
+    queued_for_machine_at = CASE WHEN sqlc.arg('queued')::boolean THEN NOW() ELSE NULL END
+WHERE id = sqlc.arg('id')
+  AND (queued_for_machine_at IS NOT NULL) IS DISTINCT FROM sqlc.arg('queued')::boolean;
+
+-- name: ListChatsQueuedForMachine :many
+-- Chats holding a message queued for their machine, oldest first. An empty
+-- user_id lists every user's (the delivery sweep); otherwise one user's (a
+-- machine of theirs just connected). Archived chats are left alone.
+SELECT id, user_id, active_daemon_id, queued_for_machine_at
+FROM chats
+WHERE queued_for_machine_at IS NOT NULL
+  AND state IS DISTINCT FROM 3
+  AND (sqlc.arg('user_id')::text = '' OR user_id = sqlc.arg('user_id')::text)
+ORDER BY queued_for_machine_at ASC, id ASC
+LIMIT sqlc.arg('max_rows');
+
+-- name: ListChatsWaitingForMachine :many
+-- One user's chats whose root run is live and parked waiting for a machine
+-- (the daemon-pending marker on a running root workflow): the runs to tell
+-- when one of the user's machines connects.
+SELECT c.id, c.workflow_id
+FROM chats c
+JOIN workflows w ON w.id = c.workflow_id
+WHERE c.user_id = sqlc.arg('user_id')::text
+  AND c.daemon_blocked_at IS NOT NULL
+  AND w.state = 2;

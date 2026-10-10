@@ -200,6 +200,18 @@ export function useChatActivity(chatId: string): ChatActivity {
   );
 }
 
+/**
+ * The coarse "something is in progress" test the ESC handler, the app's
+ * active-workflow count and the streaming cleanup use: every activity from
+ * RUNNING up — except QUEUED_FOR_MACHINE. That one ranks highest in the enum
+ * only because it was added last: its run has ENDED (the machine never came
+ * up), and the server starts a fresh one when the machine connects. Treating it
+ * as busy would pause a run that is not there.
+ */
+export function isBusyActivity(activity: ChatActivity | undefined): boolean {
+  return activity !== undefined && activity >= ChatActivity.RUNNING && activity !== ChatActivity.QUEUED_FOR_MACHINE;
+}
+
 /** True when a chat is actively working (RUNNING or AWAITING_INPUT). */
 export function useIsChatRunning(chatId: string): boolean {
   return useActivityStore(

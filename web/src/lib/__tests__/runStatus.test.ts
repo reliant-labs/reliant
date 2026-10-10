@@ -237,6 +237,18 @@ describe("waiting for a machine overrides the lifecycle row (G7)", () => {
   it("the sidebar's activity view says the same", () => {
     expect(runStatusFromActivity(ChatActivity.WAITING_FOR_DAEMON)?.label).toBe("Waiting for machine");
   });
+
+  // The run ended because its machine never came up, but its message is
+  // queued for the machine and goes out when it connects: not "Failed".
+  it("a run that ended with its message QUEUED_FOR_MACHINE reads Queued for machine, not Failed", () => {
+    const status = runStatus({
+      state: WorkflowState.STOPPED,
+      stopReason: WorkflowStopReason.FAILED,
+      activity: ChatActivity.QUEUED_FOR_MACHINE,
+    });
+    expect(status).toMatchObject({ label: "Queued for machine", dotVariant: "pending", badgeVariant: "warning", pulse: false });
+    expect(runStatusFromActivity(ChatActivity.QUEUED_FOR_MACHINE)?.label).toBe("Queued for machine");
+  });
 });
 
 describe("triggerEventOutcomeDisplay: a firing, never a run result", () => {

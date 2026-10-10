@@ -45,7 +45,7 @@ import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
 import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
 import { SequenceHint } from "./components/Layout/SequenceHint";
 import { useChatStore } from "./store/chatStore";
-import { useActivityStore, ChatActivity } from "./store/activityStore";
+import { useActivityStore, ChatActivity, isBusyActivity } from "./store/activityStore";
 import { useChatNavigationStore } from "./store/chatNavigationStore";
 import { useWindowContext } from "./hooks/useWindowContext";
 import { useOpenProjectListener } from "./hooks/useOpenProjectListener";
@@ -612,7 +612,7 @@ function App() {
           const { pauseChat } =
             useChatStore.getState();
           const activity = useActivityStore.getState().activities.get(activeChatId);
-          const isBusy = activity !== undefined && activity >= ChatActivity.RUNNING;
+          const isBusy = isBusyActivity(activity);
 
           // Only stop if chat is actually busy
           if (isBusy) {
@@ -1360,7 +1360,7 @@ function App() {
     const activeWorkflows = activeChats.filter(
       (chat) => {
         const activity = activityMap.get(chat.id);
-        return activity !== undefined && activity >= ChatActivity.RUNNING;
+        return isBusyActivity(activity);
       },
     ).length;
     const canCreateChat = Boolean(currentProject) && !isSettingsMode && !isWorkflowMode;

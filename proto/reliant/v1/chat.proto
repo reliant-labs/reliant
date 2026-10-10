@@ -113,6 +113,12 @@ enum ChatActivity {
   // RUNNING; cleared by the next successful tool call. Chat.active_daemon_id
   // names the machine when the chat pins one.
   CHAT_ACTIVITY_WAITING_FOR_DAEMON = 5;
+  // No run is live, and the chat holds a message queued for its machine: its
+  // last run ended because the machine failed to start, was removed, or was
+  // still not online after hours of waiting. The message is not dropped — a
+  // run is started for it as soon as the chat's machine connects (or the user
+  // sends again). Outranks ERROR; every live-run state outranks it.
+  CHAT_ACTIVITY_QUEUED_FOR_MACHINE = 6;
 }
 
 // ChatService handles chat-related operations

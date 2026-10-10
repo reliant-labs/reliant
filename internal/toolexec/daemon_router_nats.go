@@ -269,6 +269,11 @@ type daemonRecord struct {
 	id      string
 	state   daemonRecordState
 	managed bool // a cloud machine the control plane can suspend and resume
+	// failed: unattached, and the mirrored lifecycle says the machine failed
+	// to start. Routing treats it as unconfirmed (the NATS request decides);
+	// MachineState reports it, so a run waiting for this machine can stop.
+	failed        bool
+	statusMessage string
 }
 
 // wakeable reports whether EnsureAwake should ask the control plane to resume
@@ -345,6 +350,9 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 			id:      d.ID,
 			state:   daemonRecordStateOf(d, attached[d.ID]),
 			managed: d.DaemonType != nil && canonicalDaemonType(*d.DaemonType) == "managed",
+			failed: !attached[d.ID] && d.LifecyclePhase != nil &&
+				daemonstate.LifecyclePhase(*d.LifecyclePhase) == daemonstate.LifecyclePhaseFailed,
+			statusMessage: d.LastStatusMessage,
 		}
 		switch candidate.state {
 		case recordAttached:
@@ -467,6 +475,52 @@ func selectorLogFields(selector *DaemonSelector) []any {
 		"selector_name", selector.Name,
 		"selector_id", selector.ID,
 	}
+}
+
+// MachineState is the registry's view of the machine a request would route
+// to, for a caller deciding whether to keep waiting for it.
+type MachineState struct {
+	// DaemonID is the machine resolution picks; empty when Exists is false.
+	DaemonID string
+	// Exists is false when no machine matches the selector at all: it was
+	// removed, or the user never had one.
+	Exists bool
+	// Failed: the machine is not attached and its lifecycle says it failed to
+	// start. Nothing will bring it up on its own schedule; the owner has to
+	// retry it (or the control plane rebuilds it).
+	Failed bool
+	// StatusMessage is the control plane's latest reason, shown verbatim.
+	StatusMessage string
+}
+
+// MachineState reports what the registry knows about the machine a request
+// for this selector would route to — the record lookupDaemonRecord picks, so
+// it is the machine a waiting run is actually waiting for. Like resolution it
+// reads this process's database only, wakes nothing and asks nobody.
+func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, selector *DaemonSelector) (MachineState, error) {
+	if r.resolver != nil {
+		if daemons, err := r.resolver.ResolveDaemons(ctx, userID, selector); err == nil && len(daemons) > 0 {
+			return MachineState{DaemonID: daemons[0].DaemonID, Exists: true}, nil
+		}
+	}
+	if r.db == nil {
+		// No registry to read: "no record" would mean nothing here, and must
+		// not read as "removed".
+		return MachineState{}, errors.New("no daemon registry configured")
+	}
+	rec, found, _, err := r.lookupDaemonRecord(ctx, userID, selector)
+	if err != nil {
+		return MachineState{}, err
+	}
+	if !found {
+		return MachineState{}, nil
+	}
+	return MachineState{
+		DaemonID:      rec.id,
+		Exists:        true,
+		Failed:        rec.failed,
+		StatusMessage: rec.statusMessage,
+	}, nil
 }
 
 // DaemonWaker wakes a suspended daemon. It is held only by the callers that

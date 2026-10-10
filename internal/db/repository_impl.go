@@ -511,6 +511,13 @@ func (r *Repo) GetLatestMessageInThread(ctx context.Context, threadID string) (*
 	return r.messages.GetLatestMessageInThread(ctx, threadID)
 }
 
+func (r *Repo) ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error) {
+	if threadID == "" {
+		return false, fmt.Errorf("thread ID cannot be empty")
+	}
+	return r.messages.ThreadAwaitsReply(ctx, threadID)
+}
+
 func (r *Repo) GetMaxContextSequenceInThread(ctx context.Context, threadID string) (int, error) {
 	if threadID == "" {
 		return 0, fmt.Errorf("thread ID cannot be empty")

@@ -235,6 +235,15 @@ type Harness struct {
 
 func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 	t.Helper()
+	return newHarnessWith(t, llmScript, nil)
+}
+
+// newHarnessWith is newHarness with the worker's tool executor chosen by the
+// scenario: nil means the hermetic local "daemon" every other scenario uses.
+// A scenario that must exercise the run's machine wait passes a
+// RemoteExecutor over a router it controls (see machineStartingRouter).
+func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.ToolExecutor) *Harness {
+	t.Helper()
 	s := requireStack(t)
 
 	userID := "replayfix-user-" + shortID()
@@ -292,7 +301,9 @@ func newHarness(t *testing.T, llmScript *ScriptedLLM) *Harness {
 	}), "seed synced (empty) project config snapshot")
 
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{Repo: s.Repo})
-	executor := newLocalDaemonExecutor(toolsFactory)
+	if executor == nil {
+		executor = newLocalDaemonExecutor(toolsFactory)
+	}
 
 	resolver := func(ctx context.Context, userID string, prefs models.Preferences, o ...llm.DriverOption) (llm.Driver, error) {
 		return llmScript, nil
@@ -485,7 +496,14 @@ func (h *Harness) eventually(what string, cond func() (bool, string)) {
 // cleanly.
 func (h *Harness) WaitTemporalWorkflowDone(workflowID string) {
 	h.T.Helper()
-	ctx, cancel := context.WithTimeout(h.Ctx, waitTimeout)
+	h.WaitTemporalWorkflowDoneWithin(workflowID, waitTimeout)
+}
+
+// WaitTemporalWorkflowDoneWithin is WaitTemporalWorkflowDone for a scenario
+// whose run is slower than waitTimeout by design (a machine wait).
+func (h *Harness) WaitTemporalWorkflowDoneWithin(workflowID string, timeout time.Duration) {
+	h.T.Helper()
+	ctx, cancel := context.WithTimeout(h.Ctx, timeout)
 	defer cancel()
 	run := h.Stack.Temporal.GetWorkflow(ctx, workflowID, "")
 	require.NoError(h.T, run.Get(ctx, nil), "temporal workflow %s should complete cleanly", workflowID)
@@ -686,6 +704,44 @@ func (e *localDaemonExecutor) ExecuteTool(ctx context.Context, req *toolexec.Too
 }
 
 func (e *localDaemonExecutor) Close() error { return nil }
+
+// ---------------------------------------------------------------------------
+// A machine that is still starting when the run begins
+// ---------------------------------------------------------------------------
+
+// machineStartingRouter is the daemon router of a chat whose machine is still
+// coming up: offline (and "still starting" when woken) until upAfter has
+// passed since the run's first check, online from then on. Only the methods
+// the run's preflight touches are implemented, so the scenario that uses it
+// must make no tool calls.
+type machineStartingRouter struct {
+	toolexec.DaemonRouter
+
+	upAfter time.Duration
+
+	mu         sync.Mutex
+	firstCheck time.Time
+}
+
+func (r *machineStartingRouter) up() bool {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.firstCheck.IsZero() {
+		r.firstCheck = time.Now()
+	}
+	return time.Since(r.firstCheck) >= r.upAfter
+}
+
+func (r *machineStartingRouter) IsDaemonOnline(context.Context, string, *toolexec.DaemonSelector) (bool, error) {
+	return r.up(), nil
+}
+
+func (r *machineStartingRouter) EnsureAwake(context.Context, string, *toolexec.DaemonSelector) (string, error) {
+	if r.up() {
+		return "replayfix-machine", nil
+	}
+	return "replayfix-machine", fmt.Errorf("your machine is still starting: %w", toolexec.ErrDaemonPending)
+}
 
 // ---------------------------------------------------------------------------
 // No-op streaming hub

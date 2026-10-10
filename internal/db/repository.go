@@ -37,6 +37,10 @@ type Repository interface {
 	GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*Message, error)
 	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*Message, error)
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error)
+	// ThreadAwaitsReply reports whether a thread's latest turn — its newest
+	// message that is not a system note — is a user message no reply has
+	// followed.
+	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	GetMaxContextSequenceInThread(ctx context.Context, threadID string) (int, error)
 	GetLatestMessageWithTokensInThread(ctx context.Context, threadID string, contextSequence int) (*Message, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)
@@ -517,6 +521,19 @@ type Repository interface {
 	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
 	SetChatAdopted(ctx context.Context, chatID, userID string, adopted bool) (bool, error)
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) error
+	// SetChatQueuedForMachine sets or clears the marker saying the chat holds
+	// a message queued for its machine (its last run ended because the machine
+	// never came up). Reports whether the stored value changed — clearing it
+	// is how a deliverer claims the message — and emits
+	// chat_activity_changed when it did.
+	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
+	// ListChatsQueuedForMachine lists non-archived chats holding a message
+	// queued for their machine, oldest first, at most limit; userID "" lists
+	// every user's.
+	ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error)
+	// ListChatsWaitingForMachine lists a user's chats whose live root run is
+	// parked waiting for a machine.
+	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error)
 
 	// Background Processes
 	CreateBackgroundProcess(ctx context.Context, process *BackgroundProcess) error

@@ -57,6 +57,10 @@ type Server struct {
 	// inputs (e.g. the daemon-events JetStream consumer in serverapi.Run).
 	projectService *services.ProjectService
 
+	// chatService is exposed so serverapi.Run can hand undelivered messages
+	// to it (queued delivery, the reconciler's wedge continuation).
+	chatService *services.ChatService
+
 	router toolexec.DaemonRouter
 
 	// worktreeSweeper settles archived worktrees' directories through their
@@ -575,6 +579,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		tlsCertFile:     cfg.TLSCertFile,
 		tlsKeyFile:      cfg.TLSKeyFile,
 		projectService:  projectService,
+		chatService:     chatService,
 		router:          router,
 		worktreeSweeper: worktreeSweeper,
 	}, nil
@@ -640,6 +645,12 @@ func newCORSHandler(origins []string) func(http.Handler) http.Handler {
 // out-of-band inputs (e.g. JetStream consumers in serverapi.Run).
 func (s *Server) ProjectService() *services.ProjectService {
 	return s.projectService
+}
+
+// ChatService returns the chat service, for out-of-band callers that start
+// runs on a chat's behalf (serverapi.Run's queued delivery).
+func (s *Server) ChatService() *services.ChatService {
+	return s.chatService
 }
 
 // WorktreeSweeper returns the sweeper that settles archived worktrees, or nil

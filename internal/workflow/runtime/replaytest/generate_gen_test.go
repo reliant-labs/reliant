@@ -25,6 +25,8 @@ import (
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
+	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/workflow/machinewait"
 	wfruntime "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/threadwake"
 )
@@ -448,4 +450,71 @@ func TestGenerateFixture_LateUserMessage(t *testing.T) {
 	assert.False(t, h.LLM.Exhausted())
 
 	h.ExportHistory(workflowID, "late_user_message")
+}
+
+// TestGenerateFixture_MachineWait pins a run whose machine is still starting
+// when it begins: the preflight check wakes it and polls through a whole wait
+// slice without it attaching, the run keeps waiting, the machine attaches, and
+// the held message is answered with no resend. The router reports the machine
+// up machineWaitUpAfter after the run's first check, which is past the first
+// slice (preflightWaitSlice, 60s), so the history always records the run
+// continuing to wait after a slice ended — the path a change to how a run
+// waits for its machine must keep replaying. Text-only: the router answers
+// only what preflight asks.
+func TestGenerateFixture_MachineWait(t *testing.T) {
+	const machineWaitUpAfter = 65 * time.Second
+
+	script := NewScriptedLLM(Turn{Text: "Your machine is up, and here is the answer."})
+	router := &machineStartingRouter{upAfter: machineWaitUpAfter}
+	h := newHarnessWith(t, script, toolexec.NewRemoteExecutor(router))
+
+	created := h.StartChat("builtin://agent", "Answer this once my machine is up", map[string]any{
+		"mode": "auto",
+	})
+	workflowID := created.WorkflowId
+
+	h.WaitTemporalWorkflowDoneWithin(workflowID, 5*time.Minute)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	assert.False(t, h.LLM.Exhausted())
+
+	h.ExportHistory(workflowID, "machine_wait")
+}
+
+// TestGenerateFixture_MachineWaitSignaled pins the same wait woken by its
+// machine's signal (machinewait), as the api-server sends it when one of the
+// user's machines connects: the run is asleep on its recheck timer after the
+// first slice, the signal cancels the timer, and the check that follows finds
+// the machine up — instead of the timer firing later.
+func TestGenerateFixture_MachineWaitSignaled(t *testing.T) {
+	const machineWaitUpAfter = 65 * time.Second
+
+	script := NewScriptedLLM(Turn{Text: "Your machine is up, and here is the answer."})
+	router := &machineStartingRouter{upAfter: machineWaitUpAfter}
+	h := newHarnessWith(t, script, toolexec.NewRemoteExecutor(router))
+
+	created := h.StartChat("builtin://agent", "Answer this once my machine is up", map[string]any{
+		"mode": "auto",
+	})
+	workflowID := created.WorkflowId
+
+	// The first slice ends at 60s and the first recheck timer would fire at
+	// ~90s; the machine is up at 65s, so the connect signal at ~67s lands
+	// while the run sleeps on that timer.
+	h.eventually("the router's first check", func() (bool, string) {
+		router.mu.Lock()
+		defer router.mu.Unlock()
+		return !router.firstCheck.IsZero(), "no check yet"
+	})
+	router.mu.Lock()
+	signalAt := router.firstCheck.Add(machineWaitUpAfter + 2*time.Second)
+	router.mu.Unlock()
+	time.Sleep(time.Until(signalAt))
+	require.NoError(t, h.Stack.Temporal.SignalWorkflow(h.Ctx, workflowID, "", machinewait.SignalName,
+		machinewait.Signal{Reason: machinewait.ReasonMachineConnected}))
+
+	h.WaitTemporalWorkflowDoneWithin(workflowID, 5*time.Minute)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	assert.False(t, h.LLM.Exhausted())
+
+	h.ExportHistory(workflowID, "machine_wait_signaled")
 }

@@ -460,6 +460,12 @@ const (
 	// RUNNING; cleared by the next successful tool call. Chat.active_daemon_id
 	// names the machine when the chat pins one.
 	ChatActivity_CHAT_ACTIVITY_WAITING_FOR_DAEMON ChatActivity = 5
+	// No run is live, and the chat holds a message queued for its machine: its
+	// last run ended because the machine failed to start, was removed, or was
+	// still not online after hours of waiting. The message is not dropped — a
+	// run is started for it as soon as the chat's machine connects (or the user
+	// sends again). Outranks ERROR; every live-run state outranks it.
+	ChatActivity_CHAT_ACTIVITY_QUEUED_FOR_MACHINE ChatActivity = 6
 )
 
 // Enum value maps for ChatActivity.
@@ -471,6 +477,7 @@ var (
 		3: "CHAT_ACTIVITY_ERROR",
 		4: "CHAT_ACTIVITY_PAUSED",
 		5: "CHAT_ACTIVITY_WAITING_FOR_DAEMON",
+		6: "CHAT_ACTIVITY_QUEUED_FOR_MACHINE",
 	}
 	ChatActivity_value = map[string]int32{
 		"CHAT_ACTIVITY_IDLE":               0,
@@ -479,6 +486,7 @@ var (
 		"CHAT_ACTIVITY_ERROR":              3,
 		"CHAT_ACTIVITY_PAUSED":             4,
 		"CHAT_ACTIVITY_WAITING_FOR_DAEMON": 5,
+		"CHAT_ACTIVITY_QUEUED_FOR_MACHINE": 6,
 	}
 )
 
@@ -6566,14 +6574,15 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x1bCONTENT_BLOCK_TYPE_THINKING\x10\x05\x12%\n" +
 	"!CONTENT_BLOCK_TYPE_FILE_REFERENCE\x10\x06\x12\x1f\n" +
 	"\x1bCONTENT_BLOCK_TYPE_DOCUMENT\x10\a\x12(\n" +
-	"$CONTENT_BLOCK_TYPE_REDACTED_THINKING\x10\b*\xbc\x01\n" +
+	"$CONTENT_BLOCK_TYPE_REDACTED_THINKING\x10\b*\xe2\x01\n" +
 	"\fChatActivity\x12\x16\n" +
 	"\x12CHAT_ACTIVITY_IDLE\x10\x00\x12\x19\n" +
 	"\x15CHAT_ACTIVITY_RUNNING\x10\x01\x12 \n" +
 	"\x1cCHAT_ACTIVITY_AWAITING_INPUT\x10\x02\x12\x17\n" +
 	"\x13CHAT_ACTIVITY_ERROR\x10\x03\x12\x18\n" +
 	"\x14CHAT_ACTIVITY_PAUSED\x10\x04\x12$\n" +
-	" CHAT_ACTIVITY_WAITING_FOR_DAEMON\x10\x05*\xf0\x01\n" +
+	" CHAT_ACTIVITY_WAITING_FOR_DAEMON\x10\x05\x12$\n" +
+	" CHAT_ACTIVITY_QUEUED_FOR_MACHINE\x10\x06*\xf0\x01\n" +
 	"\x0eToolCallStatus\x12 \n" +
 	"\x1cTOOL_CALL_STATUS_UNSPECIFIED\x10\x00\x12\x1c\n" +
 	"\x18TOOL_CALL_STATUS_PENDING\x10\x01\x12\x1e\n" +

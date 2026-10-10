@@ -6,7 +6,7 @@ import { logger } from './logger';
 import { isDev } from './constants';
 import { useChatStore } from '../store/chatStore';
 import { useThreadActivityStore } from '../store/threadActivityStore';
-import { useActivityStore, ChatActivity } from '../store/activityStore';
+import { useActivityStore, ChatActivity, isBusyActivity } from '../store/activityStore';
 import { queryClient } from './query-client';
 import { approvalKeys } from '../hooks/approval-queries';
 import { getMessagesFromCache } from '../hooks/message-queries';
@@ -51,7 +51,7 @@ if (isDev && typeof window !== "undefined") {
     const activityState = useActivityStore.getState();
     const chatState = {
       chatId: chatId,
-      isActive: (activityState.activities.get(chatId) ?? ChatActivity.IDLE) >= ChatActivity.RUNNING,
+      isActive: isBusyActivity(activityState.activities.get(chatId)),
       activity: activityState.activities.get(chatId) ?? ChatActivity.IDLE,
       pendingApprovals:
         (queryClient

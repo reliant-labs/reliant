@@ -68,7 +68,7 @@ func (q *Queries) DeleteChat(ctx context.Context, id string) error {
 }
 
 const getChat = `-- name: GetChat :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1
 `
 
 func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, error) {
@@ -94,6 +94,7 @@ func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, er
 		&i.AdoptedAt,
 		&i.DaemonBlockedAt,
 		&i.NoMachine,
+		&i.QueuedForMachineAt,
 		&i.LastMessageAt,
 		&i.Activity,
 		&i.RootWorkflowState,
@@ -107,7 +108,7 @@ func (q *Queries) GetChat(ctx context.Context, id string) (ChatsWithActivity, er
 }
 
 const getChatWithUserCheck = `-- name: GetChatWithUserCheck :one
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1 AND user_id = $2
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity WHERE id = $1 AND user_id = $2
 `
 
 type GetChatWithUserCheckParams struct {
@@ -138,6 +139,7 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 		&i.AdoptedAt,
 		&i.DaemonBlockedAt,
 		&i.NoMachine,
+		&i.QueuedForMachineAt,
 		&i.LastMessageAt,
 		&i.Activity,
 		&i.RootWorkflowState,
@@ -152,7 +154,7 @@ func (q *Queries) GetChatWithUserCheck(ctx context.Context, arg GetChatWithUserC
 
 const listArchivedChats = `-- name: ListArchivedChats :many
 SELECT
-    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id, c.adopted_at, c.daemon_blocked_at, c.no_machine, c.last_message_at, c.activity, c.root_workflow_state, c.root_workflow_stop_reason, c.launch_kind, c.trigger_id, c.list_in_sidebar, c.display_state,
+    c.id, c.title, c.project_id, c.user_id, c.state, c.workflow_id, c.run_id, c.created_at, c.updated_at, c.last_active, c.worktree_id, c.workflow_name, c.selected_presets, c.archived_worktree_name, c.unread, c.active_daemon_id, c.adopted_at, c.daemon_blocked_at, c.no_machine, c.queued_for_machine_at, c.last_message_at, c.activity, c.root_workflow_state, c.root_workflow_stop_reason, c.launch_kind, c.trigger_id, c.list_in_sidebar, c.display_state,
     COALESCE(w.name, c.archived_worktree_name, p.name) as worktree_name,
     w.deleted_at as worktree_deleted_at
 FROM chats_with_activity c
@@ -183,6 +185,7 @@ type ListArchivedChatsRow struct {
 	AdoptedAt              sql.NullTime   `json:"adopted_at"`
 	DaemonBlockedAt        sql.NullTime   `json:"daemon_blocked_at"`
 	NoMachine              bool           `json:"no_machine"`
+	QueuedForMachineAt     sql.NullTime   `json:"queued_for_machine_at"`
 	LastMessageAt          interface{}    `json:"last_message_at"`
 	Activity               int32          `json:"activity"`
 	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`
@@ -227,6 +230,7 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 			&i.AdoptedAt,
 			&i.DaemonBlockedAt,
 			&i.NoMachine,
+			&i.QueuedForMachineAt,
 			&i.LastMessageAt,
 			&i.Activity,
 			&i.RootWorkflowState,
@@ -252,7 +256,7 @@ func (q *Queries) ListArchivedChats(ctx context.Context, userID string) ([]ListA
 }
 
 const listChats = `-- name: ListChats :many
-SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity
+SELECT id, title, project_id, user_id, state, workflow_id, run_id, created_at, updated_at, last_active, worktree_id, workflow_name, selected_presets, archived_worktree_name, unread, active_daemon_id, adopted_at, daemon_blocked_at, no_machine, queued_for_machine_at, last_message_at, activity, root_workflow_state, root_workflow_stop_reason, launch_kind, trigger_id, list_in_sidebar, display_state FROM chats_with_activity
 WHERE
     user_id = $1
     AND ($2::text IS NULL OR project_id = $2::text)
@@ -312,6 +316,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 			&i.AdoptedAt,
 			&i.DaemonBlockedAt,
 			&i.NoMachine,
+			&i.QueuedForMachineAt,
 			&i.LastMessageAt,
 			&i.Activity,
 			&i.RootWorkflowState,
@@ -334,8 +339,101 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWi
 	return items, nil
 }
 
+const listChatsQueuedForMachine = `-- name: ListChatsQueuedForMachine :many
+SELECT id, user_id, active_daemon_id, queued_for_machine_at
+FROM chats
+WHERE queued_for_machine_at IS NOT NULL
+  AND state IS DISTINCT FROM 3
+  AND ($1::text = '' OR user_id = $1::text)
+ORDER BY queued_for_machine_at ASC, id ASC
+LIMIT $2
+`
+
+type ListChatsQueuedForMachineParams struct {
+	UserID  string `json:"user_id"`
+	MaxRows int32  `json:"max_rows"`
+}
+
+type ListChatsQueuedForMachineRow struct {
+	ID                 string         `json:"id"`
+	UserID             string         `json:"user_id"`
+	ActiveDaemonID     sql.NullString `json:"active_daemon_id"`
+	QueuedForMachineAt sql.NullTime   `json:"queued_for_machine_at"`
+}
+
+// Chats holding a message queued for their machine, oldest first. An empty
+// user_id lists every user's (the delivery sweep); otherwise one user's (a
+// machine of theirs just connected). Archived chats are left alone.
+func (q *Queries) ListChatsQueuedForMachine(ctx context.Context, arg ListChatsQueuedForMachineParams) ([]ListChatsQueuedForMachineRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChatsQueuedForMachine, arg.UserID, arg.MaxRows)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChatsQueuedForMachineRow{}
+	for rows.Next() {
+		var i ListChatsQueuedForMachineRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.UserID,
+			&i.ActiveDaemonID,
+			&i.QueuedForMachineAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatsWaitingForMachine = `-- name: ListChatsWaitingForMachine :many
+SELECT c.id, c.workflow_id
+FROM chats c
+JOIN workflows w ON w.id = c.workflow_id
+WHERE c.user_id = $1::text
+  AND c.daemon_blocked_at IS NOT NULL
+  AND w.state = 2
+`
+
+type ListChatsWaitingForMachineRow struct {
+	ID         string         `json:"id"`
+	WorkflowID sql.NullString `json:"workflow_id"`
+}
+
+// One user's chats whose root run is live and parked waiting for a machine
+// (the daemon-pending marker on a running root workflow): the runs to tell
+// when one of the user's machines connects.
+func (q *Queries) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]ListChatsWaitingForMachineRow, error) {
+	rows, err := q.db.QueryContext(ctx, listChatsWaitingForMachine, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ListChatsWaitingForMachineRow{}
+	for rows.Next() {
+		var i ListChatsWaitingForMachineRow
+		if err := rows.Scan(&i.ID, &i.WorkflowID); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const searchChats = `-- name: SearchChats :many
-SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.adopted_at, cws.daemon_blocked_at, cws.no_machine, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason, cws.launch_kind, cws.trigger_id, cws.list_in_sidebar, cws.display_state
+SELECT DISTINCT cws.id, cws.title, cws.project_id, cws.user_id, cws.state, cws.workflow_id, cws.run_id, cws.created_at, cws.updated_at, cws.last_active, cws.worktree_id, cws.workflow_name, cws.selected_presets, cws.archived_worktree_name, cws.unread, cws.active_daemon_id, cws.adopted_at, cws.daemon_blocked_at, cws.no_machine, cws.queued_for_machine_at, cws.last_message_at, cws.activity, cws.root_workflow_state, cws.root_workflow_stop_reason, cws.launch_kind, cws.trigger_id, cws.list_in_sidebar, cws.display_state
 FROM chats_with_activity cws
 LEFT JOIN messages m ON cws.id = m.chat_id
 LEFT JOIN message_content_blocks mcb ON m.id = mcb.message_id AND mcb.block_type = 1
@@ -402,6 +500,7 @@ func (q *Queries) SearchChats(ctx context.Context, arg SearchChatsParams) ([]Cha
 			&i.AdoptedAt,
 			&i.DaemonBlockedAt,
 			&i.NoMachine,
+			&i.QueuedForMachineAt,
 			&i.LastMessageAt,
 			&i.Activity,
 			&i.RootWorkflowState,
@@ -468,6 +567,29 @@ type SetChatDaemonBlockedParams struct {
 // not on every tool call.
 func (q *Queries) SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error) {
 	result, err := q.db.ExecContext(ctx, setChatDaemonBlocked, arg.Blocked, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
+const setChatQueuedForMachine = `-- name: SetChatQueuedForMachine :execrows
+UPDATE chats SET
+    queued_for_machine_at = CASE WHEN $1::boolean THEN NOW() ELSE NULL END
+WHERE id = $2
+  AND (queued_for_machine_at IS NOT NULL) IS DISTINCT FROM $1::boolean
+`
+
+type SetChatQueuedForMachineParams struct {
+	Queued bool   `json:"queued"`
+	ID     string `json:"id"`
+}
+
+// Sets or clears the queued-for-machine marker. Returns 1 only when the value
+// actually changed: clearing is how a deliverer CLAIMS the queued message, so
+// of two that race exactly one sees the row change.
+func (q *Queries) SetChatQueuedForMachine(ctx context.Context, arg SetChatQueuedForMachineParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, setChatQueuedForMachine, arg.Queued, arg.ID)
 	if err != nil {
 		return 0, err
 	}

@@ -148,6 +148,7 @@ type Chat struct {
 	AdoptedAt            sql.NullTime   `json:"adopted_at"`
 	DaemonBlockedAt      sql.NullTime   `json:"daemon_blocked_at"`
 	NoMachine            bool           `json:"no_machine"`
+	QueuedForMachineAt   sql.NullTime   `json:"queued_for_machine_at"`
 }
 
 type ChatUpdate struct {
@@ -180,6 +181,7 @@ type ChatsWithActivity struct {
 	AdoptedAt              sql.NullTime   `json:"adopted_at"`
 	DaemonBlockedAt        sql.NullTime   `json:"daemon_blocked_at"`
 	NoMachine              bool           `json:"no_machine"`
+	QueuedForMachineAt     sql.NullTime   `json:"queued_for_machine_at"`
 	LastMessageAt          interface{}    `json:"last_message_at"`
 	Activity               int32          `json:"activity"`
 	RootWorkflowState      sql.NullInt32  `json:"root_workflow_state"`

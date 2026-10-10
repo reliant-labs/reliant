@@ -137,6 +137,61 @@ func TestReconciler_ReplayDivergedRun_RecoveredWithShippedConfig(t *testing.T) {
 	assert.Contains(t, repo.savedMessages[0].content, "send a message")
 }
 
+// fakeQueuedDelivery records the chats it was asked to continue.
+type fakeQueuedDelivery struct {
+	continued []string
+	start     bool
+}
+
+func (f *fakeQueuedDelivery) ContinueQueued(_ context.Context, chatID string) (bool, error) {
+	f.continued = append(f.continued, chatID)
+	return f.start, nil
+}
+
+func (f *fakeQueuedDelivery) Sweep(context.Context) (int, error) { return 0, nil }
+
+// Chat 97654413: the user's "continue" was saved, and the run that took it in
+// wedged and was ended. Ending it is not enough — the user already sent that
+// message once — so the reconciler hands it to a fresh run at the checkpoint
+// and says so, rather than asking for it again.
+func TestReconciler_WedgedRunWithAnUndeliveredMessage_IsContinued(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := wedgedClient(28, replayDivergedTail())
+	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	delivery := &fakeQueuedDelivery{start: true}
+	reconciler.SetQueuedDelivery(delivery)
+	wf := runningWorkflow()
+
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+
+	require.Equal(t, []string{"wf-1"}, tempClient.terminateCalls)
+	assert.Equal(t, []string{wf.ChatID}, delivery.continued, "the wedged run's chat is continued once, after it is ended")
+	require.Len(t, repo.savedMessages, 1)
+	assert.Equal(t, wedgeContinuedChatMessage, repo.savedMessages[0].content,
+		"the user is told the conversation continued, not asked to send again")
+}
+
+// With nothing undelivered (ContinueQueued starts nothing), the chat is told
+// how to continue, as before.
+func TestReconciler_WedgedRunWithNothingUndelivered_AsksForTheNextMessage(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := wedgedClient(28, replayDivergedTail())
+	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	delivery := &fakeQueuedDelivery{start: false}
+	reconciler.SetQueuedDelivery(delivery)
+	wf := runningWorkflow()
+
+	reconciler.ReconcileWorkflow(context.Background(), wf)
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+
+	assert.Equal(t, []string{wf.ChatID}, delivery.continued)
+	require.Len(t, repo.savedMessages, 1)
+	assert.Equal(t, wedgeInterruptedChatMessage, repo.savedMessages[0].content)
+}
+
 // Right after the deploy that fixes a replay break, a run the fix heals still
 // shows what the old workers recorded: a high attempt count and a TMPRL1100 in
 // its history. Temporal backs the task off for minutes, so the fixed worker
