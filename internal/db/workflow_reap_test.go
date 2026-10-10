@@ -3,6 +3,7 @@ package db
 
 import (
 	"context"
+	"reflect"
 	"testing"
 )
 
@@ -63,8 +64,18 @@ func TestReapOrphanedWorkflowDescendants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReapOrphanedWorkflowDescendants: %v", err)
 	}
-	if reaped != 3 {
-		t.Errorf("reaped %d rows, want 3 (two under the cancelled root, one under the failed root)", reaped)
+	gotReaped := map[string]ReapedWorkflow{}
+	for _, row := range reaped {
+		gotReaped[row.WorkflowID] = row
+	}
+	wantReaped := map[string]ReapedWorkflow{
+		cancelledChild:      {WorkflowID: cancelledChild, ChatID: chatID, StopReason: StopReasonCancelled},
+		cancelledGrandchild: {WorkflowID: cancelledGrandchild, ChatID: chatID, StopReason: StopReasonCancelled},
+		failedChild:         {WorkflowID: failedChild, ChatID: chatID, StopReason: StopReasonFailed},
+	}
+	if len(reaped) != len(wantReaped) || !reflect.DeepEqual(gotReaped, wantReaped) {
+		t.Errorf("reaped %+v, want exactly %+v (two under the cancelled root, one under the failed root) — "+
+			"each row with its chat and the stop reason it took, which is what the reconciler reports", reaped, wantReaped)
 	}
 
 	assertStatus := func(id string, want WorkflowStatus, why string) {
@@ -104,7 +115,7 @@ func TestReapOrphanedWorkflowDescendants(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReapOrphanedWorkflowDescendants (second pass): %v", err)
 	}
-	if again != 0 {
-		t.Errorf("second pass reaped %d rows, want 0 — the repair must converge", again)
+	if len(again) != 0 {
+		t.Errorf("second pass reaped %+v, want none — the repair must converge", again)
 	}
 }

@@ -29,6 +29,7 @@ import (
 	enums "go.temporal.io/api/enums/v1"
 	historypb "go.temporal.io/api/history/v1"
 	temporalclient "go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/interceptor"
 	"go.temporal.io/sdk/testsuite"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/structpb"
@@ -325,6 +326,8 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		ConfigProvider:  config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(s.Repo)),
 		DriverResolver:  resolver,
 		TaskQueueSuffix: taskQueueSuffix,
+		// Inert for every workflow but the workflow_panic scenario's.
+		WorkflowInterceptors: []interceptor.WorkerInterceptor{&workflowPanicInjector{}},
 	})
 	require.NoError(t, err, "start scenario worker")
 	t.Cleanup(func() {

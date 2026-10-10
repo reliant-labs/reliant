@@ -556,7 +556,7 @@ func (q *Queries) PauseRunningWorkflowsByChat(ctx context.Context, chatID string
 	return err
 }
 
-const reapOrphanedWorkflowDescendants = `-- name: ReapOrphanedWorkflowDescendants :execrows
+const reapOrphanedWorkflowDescendants = `-- name: ReapOrphanedWorkflowDescendants :many
 WITH RECURSIVE descendants AS (
     SELECT c.id, p.stop_reason AS terminal_reason FROM workflows c
     JOIN workflows p ON c.parent_id = p.id
@@ -570,7 +570,14 @@ SET state = 3, stop_reason = descendants.terminal_reason, completed_at = NOW()
 FROM descendants
 WHERE t.id = descendants.id
   AND (t.state = 2 OR (t.state = 3 AND t.stop_reason = 3))
+RETURNING t.id AS workflow_id, t.chat_id, t.stop_reason
 `
+
+type ReapOrphanedWorkflowDescendantsRow struct {
+	WorkflowID string `json:"workflow_id"`
+	ChatID     string `json:"chat_id"`
+	StopReason int32  `json:"stop_reason"`
+}
 
 // Enforce the invariant CascadeTerminalStatusToDescendants asserts from the
 // other direction: a workflow whose PARENT is terminal is not running.
@@ -597,12 +604,31 @@ WHERE t.id = descendants.id
 //
 // "Terminal parent" is STOPPED for a reason other than PAUSED: a paused parent
 // has not ended, and reaping its children would kill a run that is coming back.
-func (q *Queries) ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error) {
-	result, err := q.db.ExecContext(ctx, reapOrphanedWorkflowDescendants)
+//
+// Returns each workflow it moved. Whether a reap is a bug depends on how the
+// run ended, and a count cannot say which run that was — the reconciler needs
+// the ids to ask Temporal and to log something actionable.
+func (q *Queries) ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapOrphanedWorkflowDescendantsRow, error) {
+	rows, err := q.db.QueryContext(ctx, reapOrphanedWorkflowDescendants)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	items := []ReapOrphanedWorkflowDescendantsRow{}
+	for rows.Next() {
+		var i ReapOrphanedWorkflowDescendantsRow
+		if err := rows.Scan(&i.WorkflowID, &i.ChatID, &i.StopReason); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const resumeWorkflowsByChat = `-- name: ResumeWorkflowsByChat :exec

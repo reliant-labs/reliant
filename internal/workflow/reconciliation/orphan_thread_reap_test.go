@@ -60,7 +60,7 @@ func TestReconciler_ReapsOrphanedThreadsEveryPass(t *testing.T) {
 
 func TestReconciler_ReapThreadsRunsAfterWorkflowReapSameBefore(t *testing.T) {
 	repo := newMockRepo()
-	repo.reapRows = 1
+	repo.reapRows = reapedWorkflows(1)
 	repo.reapedThreads = []db.ReapedThread{{ThreadID: "th-1", ChatID: "chat-1", WorkflowID: "wf-1", Status: db.ThreadStatusFailed}}
 	repo.workflowsByStatus[db.Active()] = []*db.Workflow{runningWorkflow()}
 

@@ -67,6 +67,9 @@ var generatorMode bool
 //     [observability.NewOTelWorkerInterceptor()] (internal/workersetup/setup.go).
 //     Its workflow inbound is a pass-through today, but it is mirrored so a
 //     future interceptor that issues workflow commands is covered by this test.
+//     workflowPanicInjector follows it, as it did on the generator's worker:
+//     the workflow_panic fixtures were recorded panicking, so they must replay
+//     panicking. It touches no other workflow.
 //
 // DisableDeadlockDetection: the replayer's fixed 1s deadlock timeout is
 // stricter than the production worker's DeadlockDetectionTimeout of 30s;
@@ -78,7 +81,7 @@ func newProductionMirroredReplayer(t *testing.T) worker.WorkflowReplayer {
 
 	replayer, err := worker.NewWorkflowReplayerWithOptions(worker.WorkflowReplayerOptions{
 		DataConverter:            rtemporal.NewFlexibleDataConverter(),
-		Interceptors:             []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
+		Interceptors:             []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor(), &workflowPanicInjector{}},
 		DisableDeadlockDetection: true,
 	})
 	if err != nil {

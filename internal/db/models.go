@@ -160,6 +160,9 @@ type BackgroundedProcessCall = core.BackgroundedProcessCall
 // ReapedThread is an alias to the shared core model.
 type ReapedThread = core.ReapedThread
 
+// ReapedWorkflow is an alias to the shared core model.
+type ReapedWorkflow = core.ReapedWorkflow
+
 // The durable tool call status enum is deliberately NOT re-exported here as
 // `db.ToolCallStatus`: that name is already taken by the string-valued status
 // on ToolCallUpdate (chat_update_types.go), which describes the transient

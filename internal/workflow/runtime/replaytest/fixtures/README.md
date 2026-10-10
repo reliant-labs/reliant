@@ -40,6 +40,7 @@ fixtures make that class of change fail at **test time** instead.
 | `late_user_message.json` | `builtin://agent` | Late wake: a `thread_wake` signal lands while the run's only (tool-less) turn is in flight, with nothing queued for its `pending_inbox` probe and nothing live. The loop-exit gate re-enters for it (`late-user-wake-gets-a-turn` version marker, a second `CallLLM`) instead of completing. A history recorded before that change — one `CallLLM`, then completion, with the signal unanswered — must keep replaying that way; that is what the version marker is for. |
 | `machine_wait.json` | `builtin://agent` (a `RemoteExecutor` over a router whose machine attaches 65s after the first check; text-only) | A run held for a machine that is still starting: the first `PreflightDaemonCheck` polls a whole 60s slice and reports `waiting`, the run sleeps on its 30s recheck timer, and the next check finds the machine up before the first `CallLLM`. |
 | `machine_wait_signaled.json` | same | The same wait woken by its machine: the `machine_wait` signal (sent by the api-server when one of the user's machines connects) lands while the run sleeps on the recheck timer, the timer is cancelled, and the check runs at once. |
+| `workflow_panic.json` | `replay-panic` (user draft: one top-level `call_llm`) | A panic in workflow code: `workflowPanicInjector` (`panic_injector_test.go`) panics on the run's root coroutine where it schedules `CallLLM`. The run recovers it, records the `workflow-panic-fails-run` marker, runs `Cleanup`, shows the panic (`WorkflowError`), records itself failed (`WorkflowStatus`) and fails. Every replayer runs the injector too — it touches no other workflow — so the history replays the panic it was recorded with. |
 
 ## Frozen sets
 
@@ -63,6 +64,7 @@ that shape.
 | `2026-10-08-preflight-before-started` | Every fixture at `fbca55fe^`: `PreflightDaemonCheck` scheduled before the "started" `WorkflowStatus` | `preflightAfterStartedChangeID` (`runtime/workflow.go`) |
 | `2026-10-10-machine-wait-ten-minute-budget` | `machine_wait.json` at `43c3e8fc`: the old 10-minute wait, 60s slices with a 2s timer between them | No gate: the durable wait issues the same commands (a timer is matched by id, not duration; an activity by type, not input) — this set is the proof |
 | `2026-10-10-subagent-exhaustion-pauses-run` | `spawn_failure.json` recorded at `78bfc941`: a sub-agent's exhausted step self-pauses the whole run; a resume re-dispatches it | `subAgentFailsAloneChangeID` (`runtime/subagent_failure.go`) |
+| `2026-10-10-panic-wedges-workflow-task` | `workflow_panic_healed.json`: a run whose panic wedged its workflow task on `60d63966` (two failed attempts, `yield during panic unwinding`), then picked up and failed cleanly by the fixed worker | `panicFailsRunChangeID` (`runtime/workflow_panic.go`) |
 
 Retire a set only together with its gate, once no run older than the gate's
 deploy can still be open.
@@ -249,6 +251,13 @@ jq -r '.events[].eventType' fixtures/agent_tool_loop.json
   fixture when you add or materially change such a path.
 - Fixtures pin the workflow-side contract of activity *interfaces* recorded in
   history (names, payload decoding), not activity implementations.
+- The replayer runs only a history's COMPLETED workflow tasks: one that ends on
+  a task in flight (a wedged run, retrying a failed task) replays through its
+  last completed task and never runs the live one. So a history exported while
+  a run is wedged pins nothing about how the wedge ends. To pin a change that
+  heals a wedge, record the run across the change — wedge it on the old build,
+  let the new build pick up the retry — as
+  `frozen/2026-10-10-panic-wedges-workflow-task` was.
 
 ## Replaying a deployed environment's live runs
 

@@ -1100,7 +1100,11 @@ type Querier interface {
 	//
 	// "Terminal parent" is STOPPED for a reason other than PAUSED: a paused parent
 	// has not ended, and reaping its children would kill a run that is coming back.
-	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
+	//
+	// Returns each workflow it moved. Whether a reap is a bug depends on how the
+	// run ended, and a count cannot say which run that was — the reconciler needs
+	// the ids to ask Temporal and to log something actionable.
+	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapOrphanedWorkflowDescendantsRow, error)
 	RemoveCommandFavorite(ctx context.Context, arg RemoveCommandFavoriteParams) error
 	RestoreInboxItems(ctx context.Context, arg RestoreInboxItemsParams) error
 	// Resume all paused workflows for a chat.

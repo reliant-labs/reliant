@@ -272,9 +272,23 @@ var (
 	//                            - the same repair after Temporal stopped the
 	//                              run outright (terminate, timeout), when no
 	//                              code could cascade. Expected; logged at INFO
-	//   silent_terminal_drift    - run ended terminally in Temporal (typically
-	//                              a hard terminate) without ever reporting
-	//                              it; DB repaired and the user notified
+	//   orphan_descendant_reaped - workflow whose parent is terminal but which
+	//                              was still running/paused; moved to the
+	//                              ancestor's status. The run ended by running
+	//                              workflow code, so a cascade was missed: a bug
+	//   orphan_descendant_reaped_after_terminate
+	//                            - the same repair after Temporal stopped the
+	//                              run outright. Expected; logged at INFO
+	//   silent_terminal_drift    - run ended terminally in Temporal without
+	//                              ever reporting it, although its own code ran
+	//                              to that end; DB repaired and the user
+	//                              notified. A missed report: a bug
+	//   silent_terminal_drift_expected
+	//                            - the same repair where nothing could have
+	//                              reported it: Temporal stopped the run
+	//                              outright (terminate, timeout), or the failure
+	//                              that ended it is the user's to act on.
+	//                              Expected; logged at INFO
 	// Every increment of the fault classes is paired with a Sentry-visible
 	// ERROR log; alert on any sustained non-zero rate of those.
 	ReconcilerAnomaliesTotal = newCounterVec(
@@ -282,7 +296,7 @@ var (
 			Namespace: "reliant",
 			Subsystem: "reconciler",
 			Name:      "anomalies_total",
-			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, backgrounded_process_closed).",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_descendant_reaped, orphan_descendant_reaped_after_terminate, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, silent_terminal_drift_expected, backgrounded_process_closed).",
 		},
 		[]string{"class"},
 	)

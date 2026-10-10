@@ -189,7 +189,7 @@ type mockRepo struct {
 	// forced error, and how many times the pass invoked it. callOrder records
 	// the repo calls a pass makes, in order, so a test can assert the reap
 	// happens BEFORE the pass lists the workflows it will adjudicate.
-	reapRows  int64
+	reapRows  []db.ReapedWorkflow
 	reapErr   error
 	reapCalls int
 	callOrder []string
@@ -430,7 +430,7 @@ func (m *mockRepo) ListWorkflowsByStatus(_ context.Context, status db.WorkflowSt
 	return out, nil
 }
 
-func (m *mockRepo) ReapOrphanedWorkflowDescendants(_ context.Context) (int64, error) {
+func (m *mockRepo) ReapOrphanedWorkflowDescendants(_ context.Context) ([]db.ReapedWorkflow, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.reapCalls++
