@@ -249,3 +249,35 @@ jq -r '.events[].eventType' fixtures/agent_tool_loop.json
   fixture when you add or materially change such a path.
 - Fixtures pin the workflow-side contract of activity *interfaces* recorded in
   history (names, payload decoding), not activity implementations.
+
+## Replaying a deployed environment's live runs
+
+The fixtures pin shapes recorded in a harness. They cannot tell you whether the
+runs that actually exist in an environment will replay on a build. That is the
+question for every release, and the first one in every wedge investigation.
+`TestReplayRecordedHistory` (`prod_history_replay_test.go`, build tag
+`prodreplay`) answers it from histories downloaded out of that environment's
+Temporal:
+
+```
+temporal workflow show --workflow-id <id> --output json > /tmp/h/<id>.json
+REPLAY_HISTORY=/tmp/h \
+REPLAY_PAYLOAD_DSN='postgres://…/reliant?sslmode=disable&options=-c%20default_transaction_read_only%3Don' \
+  go test -tags prodreplay -run TestReplayRecordedHistory -v -count=1 \
+  ./internal/workflow/runtime/replaytest/
+```
+
+`REPLAY_PAYLOAD_DSN` points at the environment's reliant database, which holds
+the claim-checked payloads. The harness only reads it. Replay re-encodes
+re-issued activity inputs, and those writes are discarded on purpose. A
+read-only connection that is not wrapped this way panics inside
+`ExecuteActivity`, with "yield during panic unwinding", and that looks exactly
+like a replay break.
+
+Histories and payloads are user data, so they are never committed. A shape
+worth keeping goes in as a frozen fixture recorded by the generator.
+
+Measured on 2026-10-10 against prod's two live runs, 97654413 (11,319 events)
+and 098c210d: both fail with TMPRL1100 at ActivityId 11 on `cc4ef48d` (the
+build before #672), and both pass on `d3b903f1`. Prod was then running
+`4c6f6d3e`, which differs from `d3b903f1` only in `internal/db`.

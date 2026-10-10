@@ -108,6 +108,75 @@ func (s *ChatService) saveIncomingMessages(
 	return savedMessageID, nil
 }
 
+// liveRunStateUpdate builds the input update a send carries to the chat's run
+// and validates it, returning a refusal for the caller to return as-is. Nil
+// when the send carries no params or presets.
+//
+// Every caller runs it BEFORE the send writes anything, because a refused send
+// has to be one that did not happen. Prod chat 66a045ce (2026-10-10) answered
+// "continue" on a paused run and was refused for its model only after the
+// message was saved: the transcript gained a turn no run would read, the
+// client was told the send failed, and the retry saved the message a second
+// time. #685 stopped refusing that model (one no connected provider can serve
+// now moves to one that can), but what is still refused — an unknown model, a
+// malformed selector, a user with no provider, a missing required input — was
+// refused the same way, after the write, on every path.
+//
+// The send-time model fallback (fallBackFromUnservableModels) runs after the
+// write, not here: it posts a notice, and validation does not depend on it —
+// a model it would move is not a validation error.
+//
+// chat.SelectedPresets must already hold this send's presets (see
+// applyRequestPresets), so the update is built from the presets the run will
+// actually get.
+func (s *ChatService) liveRunStateUpdate(
+	ctx context.Context,
+	userID string,
+	chat *db.Chat,
+	workflowName string,
+	req *connect.Request[reliantv1.SendMessageRequest],
+) (map[string]interface{}, error) {
+	if len(req.Msg.WorkflowParams) == 0 && len(req.Msg.SelectedPresets) == 0 {
+		return nil, nil
+	}
+	stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, workflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
+	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
+		return nil, inputValidationError(validationErrors)
+	}
+	return stateUpdate, nil
+}
+
+// inputValidationError is SendMessage's refusal for inputs that failed
+// validation: InvalidArgument, naming every failure.
+func inputValidationError(validationErrors []error) error {
+	errMsgs := make([]string, len(validationErrors))
+	for i, e := range validationErrors {
+		errMsgs[i] = e.Error()
+	}
+	return connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
+}
+
+// applyRequestPresets makes a send's preset selection the chat's, in memory
+// only, and reports whether it did. The caller persists it with
+// persistChatPresets once the send has passed validation.
+func applyRequestPresets(chat *db.Chat, requestPresets map[string]string) bool {
+	if len(requestPresets) == 0 {
+		return false
+	}
+	chat.SelectedPresets = requestPresets
+	return true
+}
+
+// persistChatPresets writes the chat's preset selection. Best-effort: the
+// presets also travel in the run's inputs, so a failed write costs only the
+// selection shown next time.
+func (s *ChatService) persistChatPresets(ctx context.Context, chat *db.Chat) {
+	chat.UpdatedAt = time.Now().UTC()
+	if err := s.database.UpdateChat(ctx, chat); err != nil {
+		logging.Error("Failed to update chat presets", "error", err, "chatID", chat.ID)
+	}
+}
+
 // markResumeAnswer wraps a plain user message that is being delivered as a
 // question answer to RESUME a canceled/failed workflow (the reset-and-replay
 // recovery path), so the resumed LLM knows its tool-call "answer" is actually a
@@ -258,15 +327,9 @@ func (s *ChatService) resurrectGhostWorkflow(
 	// Extract user and system messages from input
 	userContent, systemMessages, hasUserContent := extractMessagesFromInput(req.Msg.Messages)
 
-	// Update selected presets if provided
-	if len(req.Msg.SelectedPresets) > 0 {
-		chat.SelectedPresets = req.Msg.SelectedPresets
-		chat.UpdatedAt = time.Now().UTC()
-		if err := s.database.UpdateChat(ctx, chat); err != nil {
-			logging.Error("[Ghost Recovery] Failed to update chat presets", "error", err, "chatID", req.Msg.ChatId)
-			// Non-fatal, continue
-		}
-	}
+	// The request's presets replace the chat's; persisted once the inputs
+	// below pass validation.
+	presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
 
 	// Determine target thread - default to root workflow thread
 	targetThread := existingWorkflow.Thread
@@ -274,16 +337,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		targetThread = *req.Msg.TargetThread
 	}
 
-	// Step 1: Save messages BEFORE starting workflow. The DB said running but
-	// Temporal lost the execution. Anything queued in this thread's mailbox is
-	// left there: the resurrected run's first call_llm delivers it.
-	savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
-	if err != nil {
-		logging.Error("[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
-		return nil, connect.NewError(connect.CodeInternal, err)
-	}
-
-	// Step 2: Build workflow options - same ID, fresh execution
+	// Step 1: Build workflow options - same ID, fresh execution
 	workflowOptions := client.StartWorkflowOptions{
 		ID:                       workflowID,
 		TaskQueue:                s.taskQueue,
@@ -292,7 +346,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		WorkflowTaskTimeout:      workflow.DynamicWorkflowTaskTimeout,
 	}
 
-	// Step 4: Build workflow inputs (with presets and model defaults)
+	// Step 2: Build workflow inputs (with presets and model defaults)
 	// Use worktree path if available, otherwise project path
 	checkout := s.launcher().GetEffectiveCheckout(ctx, chat)
 
@@ -310,18 +364,28 @@ func (s *ChatService) resurrectGhostWorkflow(
 	}
 
 	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
-	s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData, nil)
 
-	// Validate workflow inputs before starting
+	// Validate workflow inputs before starting, and before anything of the
+	// send is written — a refused send leaves nothing behind (see
+	// liveRunStateUpdate).
 	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
-		errMsgs := make([]string, len(validationErrors))
-		for i, e := range validationErrors {
-			errMsgs[i] = e.Error()
-		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
+		return nil, inputValidationError(validationErrors)
+	}
+	if presetsChanged {
+		s.persistChatPresets(ctx, chat)
 	}
 
-	// Step 5: Build execution context - inheriting existing thread
+	// Step 3: Save messages BEFORE starting workflow. The DB said running but
+	// Temporal lost the execution. Anything queued in this thread's mailbox is
+	// left there: the resurrected run's first call_llm delivers it.
+	savedMessageID, err := s.saveIncomingMessages(ctx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
+	if err != nil {
+		logging.Error("[Ghost Recovery] Failed to save messages", "error", err, "chatID", req.Msg.ChatId)
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData, nil)
+
+	// Step 4: Build execution context - inheriting existing thread
 	// We use ThreadModeInherit because we're continuing an existing conversation
 	execContext := &v2.ExecutionContext{
 		WorkflowID:   workflowID,
@@ -350,7 +414,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		Resume: v2.ResumeInputFromDurableState(ctx, s.database, req.Msg.ChatId, workflowID),
 	}
 
-	// Step 6: Start fresh Temporal execution
+	// Step 5: Start fresh Temporal execution
 	workflowRun, err := s.tempClient.ExecuteWorkflow(ctx, workflowOptions, v2.DynamicWorkflow, workflowInput)
 	if err != nil {
 		logging.Error("[Ghost Recovery] Failed to start workflow", "error", err, "chatID", req.Msg.ChatId, "workflowID", workflowID)
@@ -366,7 +430,7 @@ func (s *ChatService) resurrectGhostWorkflow(
 		"thread", targetThread,
 	)
 
-	// Step 7: Update run IDs and workflow status
+	// Step 6: Update run IDs and workflow status
 	s.runs.RecordRun(ctx, req.Msg.ChatId, workflowID, runID)
 	if err := s.database.UpdateWorkflowStatus(ctx, workflowID, db.Active()); err != nil {
 		logging.Warn("[Ghost Recovery] Failed to update workflow status", "error", err, "workflowID", workflowID)
@@ -543,14 +607,15 @@ func (s *ChatService) SendMessage(
 					fmt.Errorf("chat has not started; call StartChat"))
 
 			case db.Paused():
-				// Update selected presets on chat if provided (before starting workflow)
-				if len(req.Msg.SelectedPresets) > 0 {
-					chat.SelectedPresets = req.Msg.SelectedPresets
-					chat.UpdatedAt = time.Now().UTC()
-					if err := s.database.UpdateChat(ctx, chat); err != nil {
-						logging.Error("Failed to update chat presets", "error", err, "chatID", req.Msg.ChatId)
-						// Don't fail - non-critical
-					}
+				// Refuse bad params before anything is written; see
+				// liveRunStateUpdate.
+				presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req)
+				if err != nil {
+					return nil, err
+				}
+				if presetsChanged {
+					s.persistChatPresets(ctx, chat)
 				}
 
 				// Determine target thread - use workflow's thread from DB (not root workflow ID)
@@ -585,7 +650,7 @@ func (s *ChatService) SendMessage(
 				// "paused" row on a running workflow is self-healing; a
 				// never-signalled workflow is not.
 				var savedMessageID string
-				err := s.database.RunTx(ctx, func(txCtx context.Context) error {
+				err = s.database.RunTx(ctx, func(txCtx context.Context) error {
 					var saveErr error
 					savedMessageID, saveErr = s.saveIncomingMessages(txCtx, req, targetThread, workflowID, systemMessages, userContent, hasUserContent)
 					return saveErr
@@ -604,24 +669,16 @@ func (s *ChatService) SendMessage(
 					runID = *chat.RunID
 				}
 
-				// Signal workflow with param/preset input updates when provided.
-				if len(req.Msg.WorkflowParams) > 0 || len(req.Msg.SelectedPresets) > 0 {
-					stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
+				// Signal workflow with the param/preset input update validated
+				// above, after the send-time model policy (#685) has moved any
+				// model no connected provider can serve.
+				if len(stateUpdate) > 0 {
 					s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
 						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
 					})
 
-					// Validate model selectors in updated params
-					if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
-						errMsgs := make([]string, len(validationErrors))
-						for i, e := range validationErrors {
-							errMsgs[i] = e.Error()
-						}
-						return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
-					}
-
 					// Only add "params changed" message if params actually changed from current workflow state
-					if len(stateUpdate) > 0 && s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
+					if s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
 						hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
 						_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
 						if err != nil {
@@ -629,10 +686,8 @@ func (s *ChatService) SendMessage(
 						}
 					}
 
-					if len(stateUpdate) > 0 {
-						if err := s.tempClient.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
-							logging.Warn("Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
-						}
+					if err := s.tempClient.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
+						logging.Warn("Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
 					}
 				}
 
@@ -702,15 +757,15 @@ func (s *ChatService) SendMessage(
 				}), nil
 
 			case db.Active():
-
-				// Update selected presets on chat if provided
-				if len(req.Msg.SelectedPresets) > 0 {
-					chat.SelectedPresets = req.Msg.SelectedPresets
-					chat.UpdatedAt = time.Now().UTC()
-					if err := s.database.UpdateChat(ctx, chat); err != nil {
-						logging.Error("Failed to update chat presets", "error", err, "chatID", req.Msg.ChatId)
-						// Don't fail - non-critical
-					}
+				// Refuse bad params before anything is written or queued; see
+				// liveRunStateUpdate.
+				presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
+				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, existingWorkflow.WorkflowName, req)
+				if err != nil {
+					return nil, err
+				}
+				if presetsChanged {
+					s.persistChatPresets(ctx, chat)
 				}
 
 				// Use workflow's thread from DB (not root workflow ID) to handle
@@ -761,10 +816,10 @@ func (s *ChatService) SendMessage(
 					}
 				}
 
-				// Signal workflow with param/preset input updates when provided.
-				if len(req.Msg.WorkflowParams) > 0 || len(req.Msg.SelectedPresets) > 0 {
-					stateUpdate := s.launcher().BuildStateUpdateForActiveWorkflow(ctx, userID, chat, existingWorkflow.WorkflowName, req.Msg.SelectedPresets, req.Msg.WorkflowParams)
-
+				// Signal workflow with the param/preset input update validated
+				// above, after the send-time model policy (#685) has moved any
+				// model no connected provider can serve.
+				if len(stateUpdate) > 0 {
 					runID := ""
 					if chat.RunID != nil {
 						runID = *chat.RunID
@@ -773,17 +828,8 @@ func (s *ChatService) SendMessage(
 						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
 					})
 
-					// Validate model selectors in updated params
-					if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, existingWorkflow.WorkflowName, chat.ProjectID, stateUpdate); len(validationErrors) > 0 {
-						errMsgs := make([]string, len(validationErrors))
-						for i, e := range validationErrors {
-							errMsgs[i] = e.Error()
-						}
-						return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
-					}
-
 					// Only add "params changed" message if params actually changed from current workflow state
-					if len(stateUpdate) > 0 && s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
+					if s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
 						hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
 						_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
 						if err != nil {
@@ -792,10 +838,8 @@ func (s *ChatService) SendMessage(
 						}
 					}
 
-					if len(stateUpdate) > 0 {
-						if err := s.tempClient.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
-							logging.Warn("Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
-						}
+					if err := s.tempClient.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
+						logging.Warn("Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
 					}
 				}
 
@@ -865,6 +909,16 @@ func (s *ChatService) SendMessage(
 				if inspection.Stuck {
 					return nil, connect.NewError(connect.CodeFailedPrecondition,
 						fmt.Errorf("this conversation experienced a workflow error and cannot be resumed - use the branch feature to start a new conversation from any previous message"))
+				}
+
+				// Both recoveries below save the message before they know
+				// whether they can serve it, so bad params are refused here,
+				// first; see liveRunStateUpdate. The run they restart gets the
+				// same inputs, so the same check applies (in memory only: the
+				// new-run path below persists the presets once it starts).
+				applyRequestPresets(chat, req.Msg.SelectedPresets)
+				if _, err := s.liveRunStateUpdate(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), req); err != nil {
+					return nil, err
 				}
 
 				// A run that died parked on an unanswered ask_question wakes on
@@ -972,8 +1026,6 @@ func (s *ChatService) SendMessage(
 	// Workflow name is always set on chat (required at creation)
 	workflowName := *chat.WorkflowName
 
-	needsChatUpdate := false
-
 	// A chat with no root workflow has never started; that first send is
 	// StartChat's.
 	workflowID := chat.MainThreadID()
@@ -989,20 +1041,9 @@ func (s *ChatService) SendMessage(
 			fmt.Errorf("cannot change workflow after chat has started - use Branch to create a new chat with a different workflow"))
 	}
 
-	// Update selected presets if provided
-	if len(req.Msg.SelectedPresets) > 0 {
-		chat.SelectedPresets = req.Msg.SelectedPresets
-		needsChatUpdate = true
-	}
-
-	// Update chat if needed
-	if needsChatUpdate {
-		chat.UpdatedAt = time.Now().UTC()
-		if err := s.database.UpdateChat(ctx, chat); err != nil {
-			logging.Error("Failed to update chat", "error", err, "chatID", req.Msg.ChatId)
-			// Don't fail the request for non-critical updates
-		}
-	}
+	// The request's presets replace the chat's. Applied in memory here, and
+	// persisted only once the inputs below have passed validation.
+	presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
 
 	workflowOptions := s.newRunOptions(workflowID)
 
@@ -1024,6 +1065,17 @@ func (s *ChatService) SendMessage(
 
 	// Build workflow inputs from merged presets and user params
 	initialData := s.launcher().BuildWorkflowInputs(ctx, userID, checkout, chat.ProjectID, workflowName, effectivePresets, req.Msg.WorkflowParams)
+
+	// Validate workflow inputs before starting — and before the messages are
+	// saved below. This catches missing required inputs, unknown models and a
+	// user with no provider early (400), and a refused send must leave nothing
+	// behind; see liveRunStateUpdate.
+	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
+		return nil, inputValidationError(validationErrors)
+	}
+	if presetsChanged {
+		s.persistChatPresets(ctx, chat)
+	}
 
 	// Determine target thread. Resume runs continue the interrupted run's
 	// thread (which may be a forked/child thread) so history stays continuous.
@@ -1084,16 +1136,6 @@ func (s *ChatService) SendMessage(
 	}
 
 	s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, workflowName, workflowID, targetThread, initialData, nil)
-
-	// Validate workflow inputs before starting
-	// This catches missing required inputs early (400) instead of at runtime
-	if validationErrors := s.launcher().ValidateWorkflowInputs(ctx, userID, workflowName, chat.ProjectID, initialData); len(validationErrors) > 0 {
-		errMsgs := make([]string, len(validationErrors))
-		for i, e := range validationErrors {
-			errMsgs[i] = e.Error()
-		}
-		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("workflow input validation failed: %s", strings.Join(errMsgs, "; ")))
-	}
 
 	// Inject session daemon if set on chat
 	launch.InjectSessionDaemonID(initialData, chat)
