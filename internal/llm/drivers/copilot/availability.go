@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/llm"
+	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -160,10 +161,24 @@ func fetchEnabledModels(ctx context.Context, githubToken string) (map[string]boo
 		return nil, nil, nil, fmt.Errorf("failed to read copilot models response: %w", err)
 	}
 	if resp.StatusCode != http.StatusOK {
-		return nil, nil, nil, fmt.Errorf("copilot models request returned status %d: %s", resp.StatusCode, strings.TrimSpace(string(body)))
+		return nil, nil, nil, modelsStatusError(resp.StatusCode, body)
 	}
 
 	return parseModels(body)
+}
+
+// modelsStatusError classifies a non-200 GET /models answer. 400, 401 and 403
+// are GitHub refusing the token every Copilot request would carry — a
+// malformed token is a 400 "Authorization header is badly formatted", a
+// revoked one a 401, an account without a Copilot seat a 403 — so they are a
+// registry.CredentialRejectedError and Copilot becomes unavailable. Anything
+// else is an outage, and callers fail open.
+func modelsStatusError(status int, body []byte) error {
+	detail := strings.TrimSpace(string(body))
+	if rejected := registry.RejectedCredential(status, detail); rejected != nil {
+		return fmt.Errorf("copilot models request: %w", rejected)
+	}
+	return fmt.Errorf("copilot models request returned status %d: %s", status, detail)
 }
 
 // parseEnabledModels maps a GET /models body to api_model -> enabled.

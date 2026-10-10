@@ -115,6 +115,14 @@ func classifyError(err error) error {
 		return temporal.NewNonRetryableApplicationError(err.Error(), "TerminalError", err)
 	}
 
+	// No connected provider can serve the requested model. Only the user can
+	// change that (reconnect the provider, or pick another model), so a retry
+	// ladder just shows "Retrying (Attempt 2/5)" over an error that says what
+	// to do. Fail once; the executor pauses and a new message retries.
+	if errors.Is(err, drivererrors.ErrNoServableProvider) {
+		return temporal.NewNonRetryableApplicationError(err.Error(), "TerminalError", err)
+	}
+
 	// SDK-level JSON parsing errors during streaming accumulation
 	// These occur when the API sends malformed partial JSON chunks
 	//

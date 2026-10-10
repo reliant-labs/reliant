@@ -220,6 +220,24 @@ func extractModelUnavailableSummary(errMsg, errLower string) string {
 	return "That model isn't available on your account right now — pick a different model to continue"
 }
 
+// resolutionFailurePrefix opens every model-resolution failure (see
+// handlers.resolutionError); the text after it is already written for the user.
+const resolutionFailurePrefix = "failed to resolve model: "
+
+// extractResolutionSummary returns a model-resolution failure's own
+// explanation without the activity and Temporal wrapping around it (Temporal
+// appends " (type: TerminalError, retryable: false): <the chain again>").
+func extractResolutionSummary(errMsg string) string {
+	_, rest, ok := strings.Cut(errMsg, resolutionFailurePrefix)
+	if !ok {
+		return ""
+	}
+	if i := strings.Index(rest, " (type: "); i >= 0 {
+		rest = rest[:i]
+	}
+	return strings.TrimSpace(rest)
+}
+
 // extractInfrastructureSummary describes a failure in OUR storage layer rather
 // than at the provider.
 //
@@ -289,6 +307,13 @@ func extractLLMErrorSummary(errMsg string) string {
 	// provider-specific claim about it can be true.
 	if isNetworkFailure(errLower) {
 		return networkFailureSummary
+	}
+
+	// A model no connected provider can serve. Its own text already names the
+	// provider, why it cannot serve and how to fix it; the reconnect patterns
+	// below would flatten a rejected-credential reason to a generic one.
+	if summary := extractResolutionSummary(errMsg); summary != "" {
+		return summary
 	}
 
 	if reconnectSummary := extractProviderReconnectSummary(errLower); reconnectSummary != "" {

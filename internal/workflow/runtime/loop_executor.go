@@ -1263,6 +1263,46 @@ func (e *InlineLoopExecutor) buildIterationInputs() (map[string]interface{}, err
 	return iterInputs, nil
 }
 
+// syncIterationInputs re-applies the parent's live inputs to this iteration's
+// inputs map before a step is re-dispatched in place after a pause. It writes
+// IN PLACE: the iteration's step executor holds the same map, so the
+// re-dispatched step evaluates its args (`model: "{{inputs.model}}"`) against
+// the update.
+//
+// Signaled updates (update_workflow_state: the composer's model, mode, tools)
+// land on the parent's map. buildIterationInputs COPIES that map when the
+// iteration starts, so without this the re-dispatched step runs with the
+// inputs the iteration began with. That is how chat dfd85515 stayed pinned to
+// a disconnected Codex: the user switched to Claude and sent a message, the
+// update landed, and the resumed step still asked for gpt-5.6-sol@codex.
+//
+//   - Inline body (inherit parent inputs): every parent key except the
+//     iteration's own loop/iter context.
+//   - Ref'd body (presets, args, defaults): only keys the body already has —
+//     the body's own inputs are not the parent's.
+//
+// Replay: a history recorded before this replays the re-dispatch with a
+// different INPUT than it recorded, which Temporal does not check — the
+// command (ScheduleActivityTask, same id and type) matches, and its recorded
+// result drives what follows. It is deliberately not behind workflow.GetVersion:
+// a version is fixed once per run, so a chat paused today would never pass the
+// gate and could not recover on its next message.
+func (e *InlineLoopExecutor) syncIterationInputs(iterInputs map[string]interface{}) {
+	inherit := e.inputPolicy() == core.InputPolicyInlineInheritParentInputs
+	for key, parentValue := range e.workflowInputs {
+		if key == "loop" || key == "iter" {
+			continue
+		}
+		current, exists := iterInputs[key]
+		if !exists && !inherit {
+			continue
+		}
+		if !exists || !reflect.DeepEqual(current, parentValue) {
+			iterInputs[key] = parentValue
+		}
+	}
+}
+
 // executeIteration runs all nodes in the sub-workflow for a single iteration.
 // Returns the evaluated workflow outputs when complete.
 func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) {
@@ -1352,7 +1392,9 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 		// Sync workflow params from parent inputs before edge evaluation.
 		// This ensures signaled updates (e.g., mode changes) take effect immediately.
 		// Only needed for ref'd workflows. Inline workflows inherit parent inputs
-		// directly each iteration, so they're already in sync.
+		// directly each iteration, so they're already in sync — except for a
+		// step re-dispatched in place after a pause, which syncIterationInputs
+		// covers at the re-dispatch.
 		if e.inputPolicy() == core.InputPolicyRefPresetsArgsDefaults {
 			for key, parentValue := range e.workflowInputs {
 				if _, exists := iterInputs[key]; exists {
@@ -1797,6 +1839,11 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 						}
 						// Yield so replay does not trip deadlock detection.
 						_ = workflow.Sleep(e.ctx, 0)
+						// The user may have changed the model (or mode, tools)
+						// while paused — usually to recover from the failure
+						// that paused it. Re-dispatch with that, not the
+						// inputs this iteration started with.
+						e.syncIterationInputs(iterInputs)
 						newRunning := iterExecutor.Start(&core.TriggeredNode{
 							Node:  running.Node,
 							Event: running.Event,
@@ -1881,7 +1928,9 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 						"stepID", running.StepID,
 					)
 
-					// Retry the step
+					// Retry the step with whatever the user changed while it
+					// was paused (see the cancelled branch above).
+					e.syncIterationInputs(iterInputs)
 					triggeredNode := &core.TriggeredNode{
 						Node:  running.Node,
 						Event: running.Event,

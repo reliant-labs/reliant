@@ -79,6 +79,14 @@ type AntigravityAuthTokens struct {
 	Scope        string
 }
 
+// ProviderOAuthMarker is the api_keys value an OAuth provider (Claude, Codex,
+// GitHub Copilot, Antigravity) stores when it connects. It records THAT the
+// provider was connected; the credential itself lives in that provider's
+// sealed token table. It is never a credential: a reader that finds it must
+// load the token row, and a provider with a marker but no token row is not
+// connected.
+const ProviderOAuthMarker = "oauth"
+
 // AutomationProviderPrefix namespaces the api_keys rows that hold a user's
 // delegated automation credentials ("reliant-automation:<daemonID>"). They share
 // the table because it is the existing per-user secret store, but they are NOT

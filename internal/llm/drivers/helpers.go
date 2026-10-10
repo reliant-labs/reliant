@@ -3,6 +3,7 @@ package drivers
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -22,15 +23,46 @@ import (
 // and local provider configuration.
 // userID is required to fetch API keys from the database.
 func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID string) (models.AvailableDrivers, error) {
+	return buildAvailableDrivers(ctx, repo, userID, AccountAvailabilityClient)
+}
+
+// AccountAvailabilityClient builds the credentialed client whose account
+// catalog decides a dynamic provider's availability (BuildAvailableDrivers,
+// ListAvailableModels). A variable, like GetDriver, so a test that resolves
+// through GetAvailableDrivers never depends on a real provider's catalog
+// answering — or refusing — its fake credential.
+var AccountAvailabilityClient func(ctx context.Context, driverID models.DriverID, cfg models.DriverConfig) (registry.Client, error) = clientForDriver
+
+// buildAvailableDrivers is BuildAvailableDrivers with the availability client
+// builder injected, so tests never reach a provider's real catalog endpoint.
+func buildAvailableDrivers(ctx context.Context, repo db.Repository, userID string, build clientBuilder) (models.AvailableDrivers, error) {
+	drivers, err := configuredDrivers(ctx, repo, userID)
+	if err != nil {
+		return models.AvailableDrivers{}, err
+	}
+	return withAccountAvailability(ctx, drivers, build), nil
+}
+
+// usableAPIKey reports whether a stored api_keys value is a credential: not
+// empty, not the "dummy" placeholder, and not an OAuth provider's connection
+// marker (db.ProviderOAuthMarker).
+func usableAPIKey(key string) bool {
+	key = strings.TrimSpace(key)
+	return key != "" && key != "dummy" && key != db.ProviderOAuthMarker
+}
+
+// configuredDrivers loads the credential material for every provider the user
+// has stored a key or OAuth connection for.
+func configuredDrivers(ctx context.Context, repo db.Repository, userID string) (map[models.DriverID]models.DriverConfig, error) {
 	if userID == "" {
 		// Per reliant.md: no fallback paths, error out when things aren't set properly
-		return models.AvailableDrivers{}, fmt.Errorf("userID is required to fetch API keys from database")
+		return nil, fmt.Errorf("userID is required to fetch API keys from database")
 	}
 
 	// Get the list of configured providers (with masked keys to know which ones are configured)
 	maskedKeys, err := repo.GetProviderAPIKeys(ctx, userID)
 	if err != nil {
-		return models.AvailableDrivers{}, fmt.Errorf("failed to get provider API keys: %w", err)
+		return nil, fmt.Errorf("failed to get provider API keys: %w", err)
 	}
 
 	drivers := make(map[models.DriverID]models.DriverConfig)
@@ -142,35 +174,21 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 		}
 
 		if driverID == "copilot" {
-			// The Copilot credential is a GitHub OAuth token (from the device
-			// flow in copilot/auth.go). The driver exchanges it for the
-			// tier-appropriate bearer at request time.
-			//
-			// Prefer the dedicated Copilot credential store, which holds the GitHub
-			// OAuth token. Auth is the raw gho_ Bearer against a single host — there
-			// is no tier or session-token concept.
-			if tokens, err := repo.GetCopilotAuthTokens(ctx, userID); err == nil && tokens != nil {
-				githubToken := strings.TrimSpace(tokens.GitHubAccessToken)
-				if githubToken != "" && githubToken != "dummy" {
-					// GitHub token goes into APIKey, which the resolver forwards
-					// via WithAPIKey; the driver reads it through
-					// resolveGitHubToken (BearerToken/ApiKey).
-					drivers[models.DriverID(driverID)] = models.DriverConfig{
-						DriverID: models.DriverID(driverID),
-						APIKey:   githubToken,
-						Enabled:  true,
-					}
-					continue
-				}
-			}
-
-			// Fall back to the generic provider-key / env path (dev / env-token
-			// usage) when there is no copilot_auth_tokens row. The tier is left
-			// empty here, so the driver infers it from the requested model.
-			githubToken, err := repo.GetProviderAPIKey(ctx, userID, driverID)
-			if err != nil || strings.TrimSpace(githubToken) == "" || githubToken == "dummy" {
+			// The Copilot credential is the GitHub OAuth token from the device
+			// flow (copilot/auth.go), held only in copilot_auth_tokens. Auth is
+			// the raw gho_ Bearer against a single host. The api_keys row is
+			// the connection marker, never a token: without a token row
+			// Copilot is not connected, exactly as Settings reports it.
+			tokens, err := repo.GetCopilotAuthTokens(ctx, userID)
+			if err != nil || tokens == nil {
 				continue
 			}
+			githubToken := strings.TrimSpace(tokens.GitHubAccessToken)
+			if !usableAPIKey(githubToken) {
+				continue
+			}
+			// GitHub token goes into APIKey, which the resolver forwards via
+			// WithAPIKey; the driver reads it through resolveGitHubToken.
 			drivers[models.DriverID(driverID)] = models.DriverConfig{
 				DriverID: models.DriverID(driverID),
 				APIKey:   githubToken,
@@ -185,7 +203,7 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 			continue // Skip this provider if we can't get the key
 		}
 
-		if apiKey != "" && apiKey != "dummy" { // Skip empty or dummy keys
+		if usableAPIKey(apiKey) {
 			// The gateway authenticates only rlat_ access tokens (401 otherwise), so a
 			// legacy-shaped key is not a usable credential. Never log the key.
 			if driverID == "reliant" && !IsReliantLLMKey(apiKey) {
@@ -218,25 +236,34 @@ func BuildAvailableDrivers(ctx context.Context, repo db.Repository, userID strin
 		}
 	}
 
-	return models.AvailableDrivers{
-		Drivers:      drivers,
-		Availability: accountAvailability(ctx, drivers),
-	}, nil
+	return drivers, nil
 }
 
-// accountAvailability builds the per-(driver, model) availability filter for the
-// account's dynamic providers (Copilot, Codex): the clients that implement
-// registry.AvailabilityReporter. Each report is TTL-cached by its driver, so
-// this adds no network call to a warm resolution. A provider whose report cannot
-// be fetched is left unfiltered (fail open) so an outage never makes its models
-// unresolvable.
-func accountAvailability(ctx context.Context, configured map[models.DriverID]models.DriverConfig) models.AvailabilityFunc {
+// withAccountAvailability asks each configured dynamic provider (Copilot,
+// Codex: the clients implementing registry.AvailabilityReporter) what the
+// account may use, and applies the answer. Each report is TTL-cached by its
+// driver, so a warm resolution makes no network call.
+//
+// A failed report is either a VERDICT or an OUTAGE, and the two must not be
+// confused:
+//
+//   - Verdict (registry.ErrCredentialRejected: the provider answered 400, 401
+//     or 403 to the credential every request would carry). The provider is
+//     unavailable: it leaves Drivers, so no resolution can route to it, and
+//     Unavailable records why, for the error that names the fix. Treating it
+//     as servable is what sent chat dfd85515's sub-agents to a Copilot that
+//     answered every request "Authorization header is badly formatted".
+//   - Outage (transport error, timeout, 429, 5xx, an unparseable body). The
+//     provider stays, unfiltered: the credential is not in question, and a
+//     catalog blip must never strand a chat on an otherwise healthy provider.
+func withAccountAvailability(ctx context.Context, drivers map[models.DriverID]models.DriverConfig, build clientBuilder) models.AvailableDrivers {
 	reports := make(map[string]registry.ProviderAvailability)
-	for driverID, cfg := range configured {
+	var unavailable map[models.DriverID]string
+	for driverID, cfg := range drivers {
 		if !cfg.IsConfigured() {
 			continue
 		}
-		client, err := clientForDriver(driverID, cfg)
+		client, err := build(ctx, driverID, cfg)
 		if err != nil {
 			continue
 		}
@@ -245,18 +272,34 @@ func accountAvailability(ctx context.Context, configured map[models.DriverID]mod
 			continue
 		}
 		report, err := reporter.ReportAvailability(ctx)
+		var rejected *registry.CredentialRejectedError
+		if errors.As(err, &rejected) {
+			reason := fmt.Sprintf("%s rejected the saved credential (HTTP %d: %s)",
+				models.ProviderDisplayName(string(driverID)), rejected.Status, rejected.Detail)
+			logging.Warn("provider rejected the stored credential; provider unavailable until reconnected",
+				"driver", string(driverID), "error", err)
+			if unavailable == nil {
+				unavailable = make(map[models.DriverID]string)
+			}
+			unavailable[driverID] = reason
+			continue
+		}
 		if err != nil {
-			logging.Warn("provider availability unavailable; treating its models as servable",
+			logging.Warn("provider availability report failed (outage, not a credential verdict); treating its models as servable",
 				"driver", string(driverID), "error", err)
 			continue
 		}
 		reports[string(driverID)] = report
 	}
-	reg, err := models.GetRegistry()
-	if err != nil {
-		return nil
+	for driverID := range unavailable {
+		delete(drivers, driverID)
 	}
-	return registry.BuildAvailabilityFunc(reg, reports)
+
+	available := models.AvailableDrivers{Drivers: drivers, Unavailable: unavailable}
+	if reg, err := models.GetRegistry(); err == nil {
+		available.Availability = registry.BuildAvailabilityFunc(reg, reports)
+	}
+	return available
 }
 
 // hasRegisteredDriver reports whether a stored provider id has a registered

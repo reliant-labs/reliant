@@ -47,7 +47,7 @@ func TestBuildAvailableDrivers_CodexUsesPersistedAccessToken(t *testing.T) {
 		AccountID:    "test-account-id",
 	}))
 
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["codex"]
@@ -77,7 +77,7 @@ func TestBuildAvailableDrivers_CodexExpiredTokenIsRefreshable(t *testing.T) {
 	}))
 	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "openai", "sk-openai-test"))
 
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 
 	cfg, hasCodex := availableDrivers.Drivers["codex"]
@@ -109,7 +109,7 @@ func TestBuildAvailableDrivers_CodexExpiredWithoutRefreshTokenIsSkipped(t *testi
 		AccountID:    "test-account-id",
 	}))
 
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 
 	_, hasCodex := availableDrivers.Drivers["codex"]
@@ -127,7 +127,7 @@ func TestBuildAvailableDrivers_ReliantConfiguredViaProviderAPIKey(t *testing.T) 
 
 	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", validRlat))
 
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 
 	cfg, ok := availableDrivers.Drivers["reliant"]
@@ -146,7 +146,7 @@ func TestBuildAvailableDrivers_ReliantNotConfiguredWithoutKey(t *testing.T) {
 
 	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "sk-ant-test"))
 
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 
 	_, hasReliant := availableDrivers.Drivers["reliant"]
@@ -163,7 +163,7 @@ func TestBuildAvailableDrivers_CodexMarkerWithoutTokensIsSkipped(t *testing.T) {
 	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "codex", "oauth"))
 	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "sk-ant-test"))
 
-	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	availableDrivers, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 
 	_, hasCodex := availableDrivers.Drivers["codex"]
@@ -172,6 +172,34 @@ func TestBuildAvailableDrivers_CodexMarkerWithoutTokensIsSkipped(t *testing.T) {
 	anthropic, hasAnthropic := availableDrivers.Drivers["anthropic"]
 	require.True(t, hasAnthropic)
 	assert.Equal(t, "sk-ant-test", anthropic.APIKey)
+}
+
+// The "oauth" row in api_keys is a connection MARKER every OAuth provider
+// writes beside its token row; it is never a credential. Migration
+// 20261006124843 truncated the token tables and left the markers, and the
+// Copilot branch fell back to reading the marker as a GitHub token: every
+// request went out as `Authorization: Bearer oauth`, which GitHub answers with
+// 400 "Authorization header is badly formatted" — for a user who never had
+// Copilot connected in Settings (chat dfd85515, 2026-10-09).
+func TestBuildAvailableDrivers_CopilotMarkerWithoutTokensIsSkipped(t *testing.T) {
+	repo, cleanup := db.SetupTestDB(t)
+	defer cleanup()
+
+	ctx := context.Background()
+	userID := "test-user"
+
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "copilot", db.ProviderOAuthMarker))
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "anthropic", "sk-ant-test"))
+
+	availableDrivers, err := BuildAvailableDrivers(ctx, repo, userID)
+	require.NoError(t, err)
+
+	copilotCfg, hasCopilot := availableDrivers.Drivers["copilot"]
+	assert.False(t, hasCopilot,
+		"copilot must not be available from its connection marker alone (got APIKey %q)", copilotCfg.APIKey)
+
+	_, hasAnthropic := availableDrivers.Drivers["anthropic"]
+	assert.True(t, hasAnthropic, "an unrelated configured provider is unaffected")
 }
 
 // A well-formed rlat_ access token: prefix plus base62 padding to TokenLen.
@@ -187,7 +215,7 @@ func TestBuildAvailableDrivers_ReliantLegacyKeyIsSkippedAndReported(t *testing.T
 	userID := "test-user"
 	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlnt_abcdef0123456789"))
 
-	available, err := BuildAvailableDrivers(ctx, repo, userID)
+	available, err := buildAvailableDrivers(ctx, repo, userID, noReportClients)
 	require.NoError(t, err)
 	_, has := available.Drivers["reliant"]
 	assert.False(t, has, "legacy rlnt_ key must not register the reliant driver")

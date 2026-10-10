@@ -3,6 +3,7 @@ package drivers
 
 import (
 	"context"
+	"errors"
 
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/registry"
@@ -24,19 +25,20 @@ import (
 // list rather than being dropped, so one flaky provider never blanks the picker.
 func ListAvailableModels(ctx context.Context, userID string) ([]models.ModelInfo, error) {
 	available := GetAvailableDrivers(ctx, userID)
-	return aggregateAvailableModels(ctx, available, clientForDriver)
+	return aggregateAvailableModels(ctx, available, AccountAvailabilityClient)
 }
 
 // clientBuilder constructs a credentialed, model-less client for a driver. It is
-// the injection seam that lets aggregateAvailableModels be unit-tested with fake
-// providers instead of the real driver factories.
-type clientBuilder func(driverID models.DriverID, cfg models.DriverConfig) (registry.Client, error)
+// the injection seam that lets availability (resolution and picker) be
+// unit-tested with fake providers instead of the real driver factories.
+type clientBuilder func(ctx context.Context, driverID models.DriverID, cfg models.DriverConfig) (registry.Client, error)
 
 // aggregateAvailableModels iterates the configured drivers, asks each provider's
 // client for the models it serves (via registry.AvailableModelsFor), and returns
-// the union. It fails OPEN per provider: if a provider's client cannot be built
-// or its availability lookup errors, that provider falls back to its static
-// registry list rather than being dropped.
+// the union. A provider that rejects the credential is dropped, exactly as
+// resolution drops it (see withAccountAvailability). Any other failure fails
+// OPEN: the provider falls back to its static registry list rather than
+// vanishing from the picker over a catalog blip.
 func aggregateAvailableModels(ctx context.Context, available models.AvailableDrivers, build clientBuilder) ([]models.ModelInfo, error) {
 	reg, err := models.GetRegistry()
 	if err != nil {
@@ -51,6 +53,11 @@ func aggregateAvailableModels(ctx context.Context, available models.AvailableDri
 		driver := string(driverID)
 
 		infos, err := availableModelsForDriver(ctx, driverID, cfg, build)
+		if errors.Is(err, registry.ErrCredentialRejected) {
+			logging.Warn("[ListAvailableModels] provider rejected the stored credential; omitting its models",
+				"driver", driver, "error", err)
+			continue
+		}
 		if err != nil {
 			// Fail open: fall back to this provider's static registry list so a
 			// transient error (e.g. a dynamic provider's catalog fetch failing)
@@ -81,7 +88,7 @@ func ListAvailableModelsOrEmpty(ctx context.Context, userID string) []models.Mod
 // availableModelsForDriver builds the provider's client and returns the models it
 // serves for the picker.
 func availableModelsForDriver(ctx context.Context, driverID models.DriverID, cfg models.DriverConfig, build clientBuilder) ([]models.ModelInfo, error) {
-	client, err := build(driverID, cfg)
+	client, err := build(ctx, driverID, cfg)
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +99,14 @@ func availableModelsForDriver(ctx context.Context, driverID models.DriverID, cfg
 // the registered factory. Model-less because listing needs the account's creds
 // but not a specific bound model; the factory tolerates an empty Model (only
 // SendMessages/Stream need one, which listing never calls).
-func clientForDriver(driverID models.DriverID, cfg models.DriverConfig) (registry.Client, error) {
+//
+// An OAuth credential gets the same refresher the request path installs
+// (resolver.go). The account catalog's answer is only a verdict on the
+// credential if it carried the credential a request would: without the
+// refresher an expired-but-refreshable Codex token reads as a 401, and the
+// provider would be declared unavailable when the next request would have
+// refreshed and succeeded.
+func clientForDriver(ctx context.Context, driverID models.DriverID, cfg models.DriverConfig) (registry.Client, error) {
 	factory, ok := registry.GetDriverFactory(models.Family(driverID))
 	if !ok {
 		return nil, ErrUnsupportedFamily
@@ -106,6 +120,12 @@ func clientForDriver(driverID models.DriverID, cfg models.DriverConfig) (registr
 		AccountUUID:      cfg.AccountUUID,
 		AccountEmail:     cfg.AccountEmail,
 		OrganizationUUID: cfg.OrganizationUUID,
+	}
+	if cfg.RefreshToken != "" && cfg.UserID != "" {
+		refresher, reloader := tokenRefresherForDriver(ctx, driverID, cfg.UserID)
+		if refresher != nil {
+			llm.WithTokenRefresher(refresher, reloader, cfg.RefreshToken, cfg.TokenExpiresAt)(opts)
+		}
 	}
 	return factory(opts)
 }

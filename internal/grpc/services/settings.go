@@ -1365,7 +1365,7 @@ func (s *SettingsService) CompleteCodexOAuth(ctx context.Context, req *connect.R
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Codex credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, "codex", "oauth"); err != nil {
+	if err := s.database.SetProviderAPIKey(ctx, userID, "codex", db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Codex provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Codex provider"))
 	}
@@ -1425,7 +1425,7 @@ func (s *SettingsService) CompleteAntigravityOAuth(ctx context.Context, req *con
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Antigravity credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, antigravity.DriverID, "oauth"); err != nil {
+	if err := s.database.SetProviderAPIKey(ctx, userID, antigravity.DriverID, db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Antigravity provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Antigravity provider"))
 	}
@@ -1518,7 +1518,7 @@ func (s *SettingsService) PollCopilotDeviceAuth(ctx context.Context, req *connec
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save GitHub Copilot credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, "copilot", "oauth"); err != nil {
+	if err := s.database.SetProviderAPIKey(ctx, userID, "copilot", db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Copilot provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect GitHub Copilot provider"))
 	}
@@ -1579,7 +1579,7 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save Claude credentials"))
 	}
 
-	if err := s.database.SetProviderAPIKey(ctx, userID, "claude", "oauth"); err != nil {
+	if err := s.database.SetProviderAPIKey(ctx, userID, "claude", db.ProviderOAuthMarker); err != nil {
 		logging.Error("Failed to set Claude provider marker", "error", err)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to connect Claude provider"))
 	}
