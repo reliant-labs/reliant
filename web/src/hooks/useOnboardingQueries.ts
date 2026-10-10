@@ -165,8 +165,10 @@ export function useCloudEligibility() {
 // does while a machine wakes); `false` keeps this observer from adding a timer
 // of its own, which the mobile list passes while the tab is hidden. With no
 // option, the shared fallback poll applies.
-export function useDaemonList(options?: { refetchInterval?: number | false }) {
+export function useDaemonList(options?: { refetchInterval?: number | false; enabled?: boolean }) {
   return useQuery({
+    // Disabled, it still returns what another reader already fetched.
+    enabled: options?.enabled ?? true,
     queryKey: DAEMON_LIST_QUERY_KEY,
     // The registry, not control-plane: one list that knows both whether a
     // machine has attached and what it is doing. See

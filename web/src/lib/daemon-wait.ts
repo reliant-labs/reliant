@@ -67,6 +67,34 @@ export const WAITING_FOR_MACHINE = `Waiting for your ${MACHINE_NOUN}`;
 export const QUEUED_UNTIL_MACHINE_IS_BACK = `Queued — will send when your ${MACHINE_NOUN} is back`;
 
 /**
+ * The transcript footer while the chat's machine is down and the chat has work
+ * waiting on it (lib/chatMachineNotice). Said whatever the run is doing —
+ * held for the machine, retrying, resuming, still replaying — because what the
+ * user is waiting on is the machine, and the run's state does not change that.
+ */
+export const WAKING_MACHINE_FOR_MESSAGE = `Waking your ${MACHINE_NOUN} — your message will send when it connects`;
+/** The same, for a run past the user's message: it carries on when the machine connects. */
+export const WAKING_MACHINE_FOR_RUN = `Waking your ${MACHINE_NOUN} — the run continues when it connects`;
+/** A machine that was up and dropped (DISCONNECTED). */
+export const RECONNECTING_MACHINE_FOR_MESSAGE = `Reconnecting to your ${MACHINE_NOUN} — your message will send when it connects`;
+export const RECONNECTING_MACHINE_FOR_RUN = `Reconnecting to your ${MACHINE_NOUN} — the run continues when it connects`;
+/** FAILED: nothing brings it back by itself; Try again rebuilds it. */
+export const MACHINE_FAILED_TO_START = `Your ${MACHINE_NOUN} failed to start`;
+/** SUSPENDED, and something is waking it (a send, or Resume). */
+export const MACHINE_ASLEEP_STARTING = `Your ${MACHINE_NOUN} is asleep — starting it`;
+/** SUSPENDED, and nothing is waking it: the user is offered Start it. */
+export const MACHINE_ASLEEP = `Your ${MACHINE_NOUN} is asleep`;
+
+/**
+ * What the thinking indicator says once a run has shown nothing for
+ * STILL_WORKING_AFTER_MS: no streamed output, no new activity. "Processing"
+ * cycling for minutes is the same picture as a run that has wedged, so past
+ * the bound it stops pretending to narrate and offers a way to look or stop.
+ */
+export const STILL_WORKING = "Still working — no response yet";
+export const STILL_WORKING_AFTER_MS = 60_000;
+
+/**
  * How long a consumer should retry before it starts saying more than
  * "connecting". Not a deadline — nothing fails here, the copy just escalates.
  */
@@ -156,7 +184,7 @@ export function classifyDaemonWait(input: DaemonWaitInput): DaemonWaitState {
   if (daemon?.status === DaemonStatus.FAILED) {
     return {
       tone: "failed",
-      title: `Your ${MACHINE_NOUN} failed to start`,
+      title: MACHINE_FAILED_TO_START,
       detail: reason
         ? null
         : "It stopped before it finished starting up. Retrying may work; if it doesn't, recreate it.",

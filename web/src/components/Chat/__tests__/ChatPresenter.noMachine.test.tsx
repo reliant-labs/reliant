@@ -36,6 +36,7 @@ vi.mock("../../../hooks/chat-queries", () => ({
 }));
 vi.mock("@/hooks/useOnboardingQueries", () => ({
   useDaemonList: () => ({ data: state.daemons, isLoading: false }),
+  useResumeDaemon: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 vi.mock("@/store/chatStore", () => ({
   useChatStore: Object.assign(vi.fn(), { getState: () => store }),
@@ -61,7 +62,9 @@ vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => <div data-testid
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
 vi.mock("../BackgroundWorkPill", () => ({ BackgroundWorkPill: () => null }));
 vi.mock("../QueuedMessages", () => ({ QueuedMessages: () => null }));
-vi.mock("../thread-views", () => ({ InterleavedTimeline: () => <div data-testid="timeline" /> }));
+vi.mock("../thread-views", () => ({
+  InterleavedTimeline: ({ footer }: { footer?: React.ReactNode }) => <div data-testid="timeline">{footer}</div>,
+}));
 vi.mock("../../workflow/WorkflowViewerPanel", () => ({ WorkflowViewerPanel: () => null }));
 // The dialog is covered by its own test; here it only needs to exist.
 vi.mock("../ConnectMachineDialog", () => ({
@@ -151,8 +154,20 @@ describe("ChatPresenter: a chat whose machine is unavailable", () => {
     state.daemons = [daemon("d-1", "MacBook", DaemonStatus.SUSPENDED)];
     renderPresenter([message("m-1", "chat-1")]);
 
-    expect(screen.getByRole("status", { name: "Waking MacBook…" })).toBeInTheDocument();
+    // The transcript's footer says what the machine is doing (the run's
+    // preflight woke it); the composer keeps only the way out.
+    expect(screen.getByTestId("chat-machine-notice")).toHaveTextContent("Your machine is asleep — starting it");
+    expect(screen.queryByTestId("composer-wake-status")).toBeNull();
     expect(screen.getByTestId("continue-without-machine")).toBeInTheDocument();
+  });
+
+  it("says what the machine is doing over an empty transcript in the composer, as before", () => {
+    state.chat = { id: "chat-1", workflowId: "chat-1", activeDaemonId: "d-1", launchKind: "chat.start" };
+    useActivityStore.getState().setActivity("chat-1", ChatActivity.WAITING_FOR_DAEMON);
+    state.daemons = [daemon("d-1", "MacBook", DaemonStatus.SUSPENDED)];
+    renderPresenter([]);
+
+    expect(screen.getByRole("status", { name: "Waking MacBook…" })).toBeInTheDocument();
   });
 
   it("offers nothing while the machine is online", () => {
