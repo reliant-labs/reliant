@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 )
 
 const (
@@ -706,6 +707,12 @@ func truncateForLog(s string) string {
 
 // rejectForeignDaemon refuses a registration whose daemon id belongs to
 // another user. It runs before any connection-map or NATS side effect.
+//
+// The refusal carries bootstrap.ForeignDaemonIDReason so the daemon can tell
+// it from a bad credential: a daemon that read the id from its own saved file
+// sets the file aside and registers again with no id (see daemonruntime). The
+// owner is logged here and never returned — the caller learns that the id is
+// someone else's, not whose.
 func (s *ToolsDaemonService) rejectForeignDaemon(ctx context.Context, userID, daemonID string) error {
 	ownerID := "unknown"
 	if d, err := s.database.GetDaemon(ctx, daemonID); err == nil && d != nil {
@@ -719,7 +726,24 @@ func (s *ToolsDaemonService) rejectForeignDaemon(ctx context.Context, userID, da
 	}
 	logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Rejected daemon registration for a daemon id owned by another user",
 		"daemonID", daemonID, "requestingUserID", userID, "ownerUserID", ownerID)
-	return connect.NewError(connect.CodePermissionDenied, errors.New("daemon id is owned by another user"))
+	return bootstrap.NewForeignDaemonIDError()
+}
+
+// WhoAmI names the account the presented daemon credential acts as. The daemon
+// auth interceptor has already resolved the credential; this reads the result
+// and touches nothing else — no daemon row, no connection, no NATS.
+//
+// `reliant daemon start --token` asks before deriving the daemon's instance
+// directory, so each account on a machine keeps its own saved daemon id.
+func (s *ToolsDaemonService) WhoAmI(
+	ctx context.Context,
+	_ *connect.Request[reliantv1.WhoAmIRequest],
+) (*connect.Response[reliantv1.WhoAmIResponse], error) {
+	userID, ok := auth.GetUserIDFromContext(ctx)
+	if !ok || strings.TrimSpace(userID) == "" {
+		return nil, connect.NewError(connect.CodeUnauthenticated, errors.New("a daemon credential is required"))
+	}
+	return connect.NewResponse(&reliantv1.WhoAmIResponse{UserId: userID}), nil
 }
 
 // ConnectDaemon implements the bidirectional streaming RPC for daemon connections

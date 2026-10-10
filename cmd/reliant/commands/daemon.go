@@ -440,17 +440,15 @@ func isReadOnlyOrPermissionErr(err error) bool {
 		errors.Is(err, syscall.EPERM)
 }
 
-// credentialsFromToken reads a PAT from stdin and constructs daemon credentials.
-// Supports both interactive (prompt) and piped input.
+// readPastedToken reads a PAT from stdin. Supports both interactive (prompt)
+// and piped input.
 //
 // The stdin read runs in a background goroutine and the main path selects on
 // ctx.Done() so Ctrl+C unblocks the wait. `bufio.Scanner.Scan` blocks in
 // `syscall.read(2)` and cannot itself be canceled — the goroutine outlives
 // this function in that case, but the process is on its way out so the leak
 // is bounded.
-func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connection, account string) (*auth.DaemonCredentials, error) {
-	apiURL, gwURL := conn.ServerURL, conn.GatewayURL
-
+func readPastedToken(ctx context.Context, cmd *cobra.Command) (string, error) {
 	stat, _ := os.Stdin.Stat()
 	isPiped := (stat.Mode() & os.ModeCharDevice) == 0
 
@@ -479,34 +477,40 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 	var token string
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return "", ctx.Err()
 	case res := <-readCh:
 		if res.err != nil {
-			return nil, res.err
+			return "", res.err
 		}
 		token = res.token
 	}
 
 	if token == "" {
 		if isPiped {
-			return nil, fmt.Errorf("no token provided via stdin")
+			return "", fmt.Errorf("no token provided via stdin")
 		}
-		return nil, fmt.Errorf("no token provided")
+		return "", fmt.Errorf("no token provided")
 	}
 
 	if !accesstoken.HasFormat(token) {
-		return nil, fmt.Errorf("invalid token format (expected an rlat_ daemon token)")
+		return "", fmt.Errorf("invalid token format (expected an rlat_ daemon token)")
 	}
+	return token, nil
+}
 
-	// We don't pre-validate the token over the network. The stream connect
-	// the daemon makes next authenticates it, so a bad token surfaces with a
-	// clear CodeUnauthenticated on the very first reach-out. Skipping a
-	// redundant probe keeps the server's daemon-credential surface confined
-	// to the daemon listener.
+// credentialsFromToken stores a pasted token as account's daemon credential.
+//
+// account is the token's owner as the gateway named it (accountForPastedToken),
+// so each account's token is its own store entry — pasting account B's token
+// no longer overwrites account A's — and it becomes the origin's default, which
+// is what later no-flag `daemon status`/`stop` resolve their instance from.
+// verified says whether the gateway has accepted the token yet; the message
+// says only what is true.
+func credentialsFromToken(cmd *cobra.Command, conn *connection, token, account string, verified bool) (*auth.DaemonCredentials, error) {
 	creds := &auth.DaemonCredentials{
 		PAT:          token,
-		ServerURL:    apiURL,
-		GatewayURL:   gwURL,
+		ServerURL:    conn.ServerURL,
+		GatewayURL:   conn.GatewayURL,
 		RegisteredAt: time.Now().UTC(),
 		Sub:          account,
 	}
@@ -519,7 +523,11 @@ func credentialsFromToken(ctx context.Context, cmd *cobra.Command, conn *connect
 	// same discovery-based deposit as the other two mint paths.
 	shareDaemonSessionWithForge(conn, creds)
 
-	fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token accepted (host: %s)\n", instanceid.Label())
+	if verified {
+		fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token accepted for account %s (host: %s)\n", account, instanceid.Label())
+	} else {
+		fmt.Fprintf(cmd.OutOrStdout(), "\u2713 Token saved (host: %s) — the gateway checks it when the daemon connects\n", instanceid.Label())
+	}
 	return creds, nil
 }
 
@@ -570,6 +578,80 @@ After registering, run 'reliant daemon start' to connect.`,
 		"Account (Supabase subject) to register; separate accounts on one server keep separate credentials")
 
 	return cmd
+}
+
+// daemonCredentialRefused reports whether the gateway refused the daemon's
+// credential itself — the one failure a new token or a re-registration fixes.
+//
+// A daemon id owned by another user arrives as PermissionDenied too, and is
+// excluded: the credential was accepted and only the asserted identity was
+// refused. Treating it as a credential failure is what told a user with two
+// accounts on one laptop to re-mint a token that was fine, and — without
+// --token — deleted their good credential and opened a browser login.
+func daemonCredentialRefused(err error) bool {
+	if bootstrap.IsForeignDaemonIDError(err) {
+		return false
+	}
+	code := connect.CodeOf(err)
+	return code == connect.CodeUnauthenticated || code == connect.CodePermissionDenied
+}
+
+// daemonStartFailure turns the error that stopped the daemon into what the
+// user is told, and reports whether a fresh registration could fix it.
+//
+// A refused daemon id is passed through as the runtime described it — the
+// runtime knows whether it already set a saved id aside and why that did not
+// help. A refused --token is a token problem and says so. A refused stored
+// credential is re-minted (reRegister). Everything else is reported as is.
+func daemonStartFailure(err error, useToken bool, conn *connection) (failure error, reRegister bool) {
+	switch {
+	case bootstrap.IsForeignDaemonIDError(err):
+		return fmt.Errorf("tools-daemon stopped: %w", err), false
+	case !daemonCredentialRefused(err):
+		return fmt.Errorf("tools-daemon exited with error: %w", err), false
+	case useToken:
+		// The user pasted this token explicitly; silently flipping into a
+		// browser login would surprise them.
+		return tokenRejectedError(conn, connect.CodeOf(err)), false
+	default:
+		return nil, true
+	}
+}
+
+// resolveDaemonGateway decides where the daemon dials and over what transport.
+//
+// The URL is the --grpc-url flag, else the credential's gateway, else a local
+// gateway on --port; grpc:// and grpcs:// are normalized first because the TLS
+// inference below keys off the scheme (`forge cluster urls` prints grpc://).
+// TLS mode is the explicit flag, else TLS when a cert and key are given (which
+// also points an unflagged URL at the local TLS listener), else TLS for an
+// https:// URL, else h2c.
+func resolveDaemonGateway(cmd *cobra.Command, grpcURL, credsGatewayURL, port, tlsMode, tlsCert, tlsKey string) (daemonGateway, error) {
+	url := grpcURL
+	if url == "" {
+		url = credsGatewayURL
+	}
+	if url == "" {
+		url = fmt.Sprintf("http://localhost:%s", port)
+	}
+	url, err := bootstrap.NormalizeGatewayURL(url)
+	if err != nil {
+		return daemonGateway{}, err
+	}
+
+	mode := bootstrap.TLSModeH2C
+	switch {
+	case tlsMode != "":
+		mode = bootstrap.TLSMode(tlsMode)
+	case tlsCert != "" && tlsKey != "":
+		mode = bootstrap.TLSModeTLS
+		if !cmd.Flags().Changed("grpc-url") {
+			url = fmt.Sprintf("https://localhost:%s", port)
+		}
+	case strings.HasPrefix(url, "https://"):
+		mode = bootstrap.TLSModeTLS
+	}
+	return daemonGateway{url: url, tlsMode: mode}, nil
 }
 
 // daemonShutdownGrace bounds the whole graceful shutdown. It is shorter than
@@ -640,7 +722,15 @@ Credential resolution order:
      runtime state, and polls for a credentials file to appear on disk (see
      'reliant daemon status' and internal/toolexec/daemonstate). This is the
      mode Electron spawns in: its own login page owns interactive sign-in, and
-     the daemon must never pop a second one.`,
+     the daemon must never pop a second one.
+
+One machine can serve several accounts. Each account keeps its own daemon
+identity (under ~/.reliant/instances/<server>/<account>/<workspace>/): with
+--token the gateway is asked whose token was pasted and the daemon runs as
+that account; otherwise --account, else the most recently connected account,
+applies. Two accounts can run side by side, even in the same workspace.
+To switch back to an account whose token is already stored:
+  reliant daemon start --account <user-id>`,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if background {
 				// TODO: implement background fork/detach
@@ -660,7 +750,43 @@ Credential resolution order:
 			if err != nil {
 				return err
 			}
-			dataDir, err := resolveDaemonDataDir(instance, conn.ServerURL)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			sigCh := make(chan os.Signal, 2)
+			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
+			defer signal.Stop(sigCh)
+			go watchShutdownSignals(sigCh, cmd.ErrOrStderr(), cancel, daemonShutdownGrace, os.Exit)
+
+			// The instance account is the account this daemon's credential
+			// belongs to, and it has to be settled before the data directory
+			// is: the directory — and the saved daemon id inside it — is per
+			// account. A pasted token names no account on its face, so it is
+			// read and the gateway is asked whose it is first; otherwise the
+			// stored credential's account applies (resolveInstanceAccount).
+			var pastedToken string
+			tokenVerified := false
+			if useToken && !serverMode {
+				pastedToken, err = readPastedToken(ctx, cmd)
+				if err != nil {
+					return err
+				}
+				gateway, err := resolveDaemonGateway(cmd, grpcURL, conn.GatewayURL, port, tlsMode, tlsCert, tlsKey)
+				if err != nil {
+					return err
+				}
+				owner, verified, err := accountForPastedToken(ctx, cmd, conn, gateway, pastedToken, nonInteractive)
+				if err != nil {
+					return err
+				}
+				tokenVerified = verified
+				if strings.TrimSpace(instance.account) == "" {
+					instance.account = owner
+				}
+			} else {
+				instance.account = resolveInstanceAccount(instance.account, conn.ServerURL)
+			}
+			dataDir, err := daemonDataDir(instance, conn.ServerURL)
 			if err != nil {
 				return err
 			}
@@ -672,13 +798,6 @@ Credential resolution order:
 			// rotate the same file.
 			setupToolsDaemonLogging(dataDir, verbose)
 			defer logging.Close() //nolint:errcheck
-
-			ctx, cancel := context.WithCancel(context.Background())
-			defer cancel()
-			sigCh := make(chan os.Signal, 2)
-			signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM)
-			defer signal.Stop(sigCh)
-			go watchShutdownSignals(sigCh, cmd.ErrOrStderr(), cancel, daemonShutdownGrace, os.Exit)
 
 			// The daemon runtime publishes the record `daemon status` and
 			// `daemon stop` read (PID, binary identity, gateway-stream state);
@@ -723,7 +842,9 @@ Credential resolution order:
 
 			var creds *auth.DaemonCredentials
 			if useToken {
-				creds, err = credentialsFromToken(ctx, cmd, conn, instance.account)
+				logging.Info("Daemon token identified by gateway",
+					"account", instance.account, "verified", tokenVerified)
+				creds, err = credentialsFromToken(cmd, conn, pastedToken, instance.account, tokenVerified)
 				if err != nil {
 					return err
 				}
@@ -734,36 +855,11 @@ Credential resolution order:
 				}
 			}
 
-			// Gateway URL for the bidi stream: flag > credentials > derive from server
-			daemonGRPCURL := grpcURL
-			if daemonGRPCURL == "" {
-				daemonGRPCURL = creds.GatewayURL
-			}
-			if daemonGRPCURL == "" {
-				daemonGRPCURL = fmt.Sprintf("http://localhost:%s", port)
-			}
-
-			// Normalize before the TLS-mode inference below, which keys off the
-			// scheme: `forge cluster urls` prints grpc://host:port, and grpcs://
-			// must imply TLS just as https:// does.
-			daemonGRPCURL, err = bootstrap.NormalizeGatewayURL(daemonGRPCURL)
+			gateway, err := resolveDaemonGateway(cmd, grpcURL, creds.GatewayURL, port, tlsMode, tlsCert, tlsKey)
 			if err != nil {
 				return err
 			}
-
-			// Determine TLS mode: explicit flag/env > cert/key presence > h2c.
-			parsedTLSMode := bootstrap.TLSModeH2C
-
-			if tlsMode != "" {
-				parsedTLSMode = bootstrap.TLSMode(tlsMode)
-			} else if tlsCert != "" && tlsKey != "" {
-				parsedTLSMode = bootstrap.TLSModeTLS
-				if !cmd.Flags().Changed("grpc-url") {
-					daemonGRPCURL = fmt.Sprintf("https://localhost:%s", port)
-				}
-			} else if strings.HasPrefix(daemonGRPCURL, "https://") {
-				parsedTLSMode = bootstrap.TLSModeTLS
-			}
+			daemonGRPCURL, parsedTLSMode := gateway.url, gateway.tlsMode
 
 			logging.Info("Starting tools-daemon", "port", port, "tls_mode", string(parsedTLSMode), "gateway_url", daemonGRPCURL, "data_dir", dataDir)
 
@@ -792,42 +888,38 @@ Credential resolution order:
 			logging.Info("Connecting daemon to gateway", "gateway_url", daemonGRPCURL)
 			err = startDaemon(creds)
 			if err != nil {
-				code := connect.CodeOf(err)
-				isAuthFail := code == connect.CodeUnauthenticated || code == connect.CodePermissionDenied
-
-				// If the user pasted a token explicitly with --token, a rejection
-				// is a real error — don't silently flip into Supabase OAuth, that
-				// would surprise the user who chose to use a specific PAT.
-				if isAuthFail && useToken {
-					_ = auth.DeleteDaemonCredentials(conn.ServerURL, instance.account)
-					return fmt.Errorf("token rejected by gateway %s (%s) — verify the PAT is correct, not revoked, and was minted by %s",
-						conn.describeGateway(), code.String(), conn.describeServer())
+				failure, reRegister := daemonStartFailure(err, useToken, conn)
+				if !reRegister {
+					// A pasted token the gateway refused is gone for good; a
+					// refused daemon id says nothing about the credential, which
+					// is kept.
+					if useToken && daemonCredentialRefused(err) {
+						_ = auth.DeleteDaemonCredentials(conn.ServerURL, instance.account)
+					}
+					return failure
 				}
 
 				// Register flow: stale creds get cleaned up and we re-run the
 				// Supabase login + TokenService.CreateToken(daemon) handshake.
-				if isAuthFail {
-					logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
-						"error", err, "code", code.String(), "gateway_url", daemonGRPCURL)
-					_ = auth.DeleteDaemonCredentials(conn.ServerURL, instance.account)
+				logging.Warn("Daemon gateway authentication failed — deleting stale credentials and re-registering",
+					"error", err, "code", connect.CodeOf(err).String(), "gateway_url", daemonGRPCURL)
+				_ = auth.DeleteDaemonCredentials(conn.ServerURL, instance.account)
 
-					if !nonInteractive {
-						fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
-					}
-					newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
-					if regErr != nil {
-						return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
-					}
-
-					logging.Info("Re-registered successfully, retrying connection...")
-					if retryErr := startDaemon(newCreds); retryErr != nil {
-						return fmt.Errorf("tools-daemon exited with error after re-registration: %w", retryErr)
-					}
-
-					logging.Info("tools-daemon shut down gracefully")
-					return nil
+				if !nonInteractive {
+					fmt.Fprintln(cmd.OutOrStdout(), "Credentials expired or revoked. Re-registering...")
 				}
-				return fmt.Errorf("tools-daemon exited with error: %w", err)
+				newCreds, regErr := registerOrAwaitCredentials(ctx, cmd, conn, instance.account, dataDir, nonInteractive)
+				if regErr != nil {
+					return fmt.Errorf("re-registration failed: %w (original: %v)", regErr, err)
+				}
+
+				logging.Info("Re-registered successfully, retrying connection...")
+				if retryErr := startDaemon(newCreds); retryErr != nil {
+					return fmt.Errorf("tools-daemon exited with error after re-registration: %w", retryErr)
+				}
+
+				logging.Info("tools-daemon shut down gracefully")
+				return nil
 			}
 
 			logging.Info("tools-daemon shut down gracefully")

@@ -147,6 +147,46 @@ func TestConnectDaemonRefusesDaemonIDOwnedByAnotherUser(t *testing.T) {
 	require.Empty(t, svc.userDaemons["user-B"])
 }
 
+// A foreign-id refusal and a bad credential have opposite remedies — forget
+// the saved id versus get a new token — so the daemon must be able to tell them
+// apart without parsing prose. And the refusal is about the CALLER's mistake:
+// it must not say whose the id actually is.
+func TestConnectDaemonForeignRefusalCarriesStableReasonAndNoOwner(t *testing.T) {
+	daemonID := uuid.NewString()
+	repo := newOwnershipRepo(map[string]string{daemonID: "user-A"})
+	svc := NewToolsDaemonService(repo)
+	t.Cleanup(svc.Close)
+
+	err := registerAs(t, svc, "user-B", daemonID)
+
+	var connectErr *connect.Error
+	require.ErrorAs(t, err, &connectErr)
+	require.Equal(t, connect.CodePermissionDenied, connectErr.Code())
+	require.Equal(t, "daemon_id_owned_by_another_user", connectErr.Meta().Get("x-forge-error-reason"),
+		"the refusal must carry a stable machine-readable reason")
+	require.NotContains(t, connectErr.Error(), "user-A", "the refusal must not name the owner")
+	require.NotContains(t, fmt.Sprint(connectErr.Meta()), "user-A", "nor carry the owner in metadata")
+}
+
+// WhoAmI is how `daemon start --token` learns whose token was pasted before it
+// picks which account's daemon identity to load. It answers from the
+// authenticated principal only and touches no daemon state.
+func TestWhoAmINamesOnlyTheCallersAccount(t *testing.T) {
+	repo := newOwnershipRepo(map[string]string{})
+	svc := NewToolsDaemonService(repo)
+	t.Cleanup(svc.Close)
+
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "user-B")
+	resp, err := svc.WhoAmI(ctx, connect.NewRequest(&reliantv1.WhoAmIRequest{}))
+	require.NoError(t, err)
+	require.Equal(t, "user-B", resp.Msg.GetUserId())
+	require.Empty(t, repo.owners, "WhoAmI must not register or touch any daemon row")
+
+	_, err = svc.WhoAmI(context.Background(), connect.NewRequest(&reliantv1.WhoAmIRequest{}))
+	require.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err),
+		"no authenticated principal is a credential problem")
+}
+
 func TestConnectDaemonRefusesSupersedingAnotherUsersLiveConnection(t *testing.T) {
 	// Defense in depth: even if the row check were bypassed (row absent), a
 	// live incumbent owned by someone else must not be superseded.
