@@ -20,7 +20,19 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/models/message"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
+
+// storyDaemonOfflinePauseGrace stands in for runtime.DaemonOfflinePauseGrace
+// (two minutes) for this test binary; TestMain installs it. The stories run on
+// a real Temporal dev server, whose workflow clock cannot be skipped.
+const storyDaemonOfflinePauseGrace = time.Second
+
+// daemonOfflineAttempt is how long each offline tool call takes. Three of
+// them span more than storyDaemonOfflinePauseGrace by construction, so the
+// third strike is always past the grace however fast the machine runs: the
+// pause lands on exactly the third iteration.
+const daemonOfflineAttempt = 600 * time.Millisecond
 
 // daemonOfflineExecutor simulates the exact shape RemoteExecutor produces
 // when the user's machine is not connected: a NON-error activity result whose
@@ -30,6 +42,11 @@ import (
 type daemonOfflineExecutor struct{}
 
 func (daemonOfflineExecutor) ExecuteTool(ctx context.Context, req *toolexec.ToolRequest) (*toolexec.ToolResult, error) {
+	select {
+	case <-time.After(daemonOfflineAttempt):
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 	now := time.Now()
 	return &toolexec.ToolResult{
 		Success:      false,
@@ -46,11 +63,11 @@ func (daemonOfflineExecutor) Close() error { return nil }
 
 // Story 05: the user's machine goes away mid-conversation. Three consecutive
 // agent-loop iterations see every daemon-targeted tool result fail with "no
-// daemon connected"; the circuit breaker
-// (internal/workflow/runtime/daemon_offline_tracker.go, threshold 3) must
-// pause the workflow with the "no machine is connected" chat message instead
-// of burning LLM turns forever. Sending a message resumes the workflow and
-// it completes.
+// daemon connected", over longer than the breaker's grace; the circuit breaker
+// (internal/workflow/runtime/daemon_offline_tracker.go, threshold 3 plus the
+// grace 2e295eb6 added so a gateway rollout cannot force a manual resume) must
+// pause the workflow with DaemonOfflinePauseMessage instead of burning LLM
+// turns forever. Sending a message resumes the workflow and it completes.
 func TestStory05_DaemonOfflineCircuitBreakerPausesAndResumes(t *testing.T) {
 	t.Parallel()
 
@@ -93,11 +110,11 @@ func TestStory05_DaemonOfflineCircuitBreakerPausesAndResumes(t *testing.T) {
 	var pauseMsgSeen bool
 	for _, u := range updatesResp.Msg.Updates {
 		// UpdateType is the proto enum string (CHAT_UPDATE_TYPE_ERROR).
-		if strings.Contains(u.UpdateType, "ERROR") && strings.Contains(u.Data, "no machine is connected") {
+		if strings.Contains(u.UpdateType, "ERROR") && strings.Contains(u.Data, v2.DaemonOfflinePauseMessage) {
 			pauseMsgSeen = true
 		}
 	}
-	require.True(t, pauseMsgSeen, `chat updates must contain the "no machine is connected" pause notice; got %d updates`, len(updatesResp.Msg.Updates))
+	require.True(t, pauseMsgSeen, `chat updates must contain the daemon-offline pause notice; got %d updates`, len(updatesResp.Msg.Updates))
 
 	// Exactly 3 LLM turns were burned before pausing — the breaker's whole
 	// point is bounding this.

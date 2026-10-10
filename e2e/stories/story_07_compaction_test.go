@@ -20,27 +20,44 @@ import (
 
 // Story 07: compaction triggers mid-conversation and the conversation
 // continues. We force it by setting a tiny compaction threshold on the model
-// input; the scripted turn reports a token usage far above it, so the
+// input; a scripted turn reports a token usage far above it, so the
 // agent-loop edge `execute_tools.thread_token_count > compaction_threshold`
 // routes into the compact node. Compact generates a summary via the shared
 // llm_request path (SendMessages on the injected resolver), saves it as a
 // new-context-window system message, and the next LLM turn runs against the
 // compacted history.
+//
+// The context has to GROW past the threshold, not open above it. Since #662
+// the compact node skips a compaction that cannot reclaim at least 10% of the
+// context (message.CompactionMinReclaimFraction): what a window opened with —
+// system prompt, tools, memory — survives compaction, so compacting it only
+// loops. The first turn's usage is the window's floor; the second reports far
+// above it, and that growth is what the compaction reclaims.
 func TestStory07_CompactionTriggersAndConversationContinues(t *testing.T) {
 	t.Parallel()
 
 	marker := "e2e-compact-" + shortID()
 	script := NewScriptedLLM(
-		// Iteration 1: tool call with a huge reported token usage → after
-		// execute_tools, thread tokens exceed the threshold → compact runs.
+		// Iteration 1: a tool call reporting a usage below the threshold, so
+		// no compaction yet. This count is the window's floor.
 		Turn{
 			Text: "Working on it.",
 			ToolCalls: []message.ToolCall{
 				ToolCall("call-bash-1", tools.ShellToolName, fmt.Sprintf(`{"command":"echo %s"}`, marker)),
 			},
+			TokenCount: 50,
+		},
+		// Iteration 2: a tool call with a huge reported usage → after
+		// execute_tools, thread tokens exceed the threshold, nearly all of it
+		// growth since the floor → compact runs.
+		Turn{
+			Text: "Still working.",
+			ToolCalls: []message.ToolCall{
+				ToolCall("call-bash-2", tools.ShellToolName, fmt.Sprintf(`{"command":"echo %s-again"}`, marker)),
+			},
 			TokenCount: 5000,
 		},
-		// Iteration 2: runs AFTER compaction, finishes the conversation.
+		// Iteration 3: runs AFTER compaction, finishes the conversation.
 		Turn{Text: "All finished after compaction."},
 	)
 	h := newHarness(t, script)
@@ -81,19 +98,21 @@ func TestStory07_CompactionTriggersAndConversationContinues(t *testing.T) {
 	require.Len(t, h.LLM.CompactionCalls(), 1, "compaction must make exactly one summary LLM request")
 	assert.Contains(t, TextOf(*compactionMsg), CompactionSummaryText)
 
-	// The post-compaction turn ran: exactly two agent-loop calls, and the
-	// second one's history contains the compaction summary text instead of a
-	// dangling raw history.
+	// The post-compaction turn ran: exactly three agent-loop calls, and only
+	// the third one's history contains the compaction summary text instead
+	// of a dangling raw history.
 	streamCalls := h.LLM.StreamCalls()
-	require.Len(t, streamCalls, 2)
-	var summaryInHistory bool
-	for i := range streamCalls[1].Messages {
-		hm := &streamCalls[1].Messages[i]
-		if strings.Contains(hm.Content().Text, "This session is being continued from a previous conversation") {
-			summaryInHistory = true
+	require.Len(t, streamCalls, 3)
+	summaryInHistory := func(call LLMCall) bool {
+		for i := range call.Messages {
+			if strings.Contains(call.Messages[i].Content().Text, "This session is being continued from a previous conversation") {
+				return true
+			}
 		}
+		return false
 	}
-	assert.True(t, summaryInHistory, "second LLM call must run against the compacted history")
+	assert.False(t, summaryInHistory(streamCalls[1]), "the turn that tripped the threshold ran before compaction")
+	assert.True(t, summaryInHistory(streamCalls[2]), "third LLM call must run against the compacted history")
 
 	// Conversation continued to a clean end.
 	var sawFinal bool

@@ -46,9 +46,12 @@ func (h *sentryHandler) Handle(ctx context.Context, r slog.Record) error {
 	}
 
 	// The stack is read here, on the logging goroutine: the report runs on
-	// its own, whose stack says nothing about who logged.
+	// its own, whose stack says nothing about who logged. So is the
+	// reporter: the record belongs to the one in force when it was logged.
+	// Read on the report goroutine, a record logged just before a reporter
+	// swap reached the reporter installed after it.
 	frames := callerFrames()
-	go h.reportToSentry(r, frames)
+	go h.reportToSentry(telemetry.GetReporter(), r, frames)
 
 	return err
 }
@@ -154,11 +157,11 @@ var sentryWarnPatterns = []string{
 	"signal: killed",
 }
 
-// reportToSentry sends the record to Sentry as a log event: titled and
-// grouped by its message and call site (frames, captured on the logging
-// goroutine), with its fields as tags and context. Runs in a separate
+// reportToSentry sends the record to Sentry, through reporter, as a log event:
+// titled and grouped by its message and call site (frames, captured on the
+// logging goroutine), with its fields as tags and context. Runs in a separate
 // goroutine to avoid blocking log callers.
-func (h *sentryHandler) reportToSentry(r slog.Record, frames []runtime.Frame) {
+func (h *sentryHandler) reportToSentry(reporter telemetry.ErrorReporter, r slog.Record, frames []runtime.Frame) {
 	// Build tags and extra context from record attributes.
 	tags := make(map[string]string)
 	extra := make(map[string]interface{})
@@ -204,7 +207,7 @@ func (h *sentryHandler) reportToSentry(r slog.Record, frames []runtime.Frame) {
 		}
 	}
 
-	telemetry.CaptureLogEvent(telemetry.LogEvent{
+	telemetry.CaptureLogEventWith(reporter, telemetry.LogEvent{
 		Message: r.Message,
 		Frames:  frames,
 		Err:     capturedErr,

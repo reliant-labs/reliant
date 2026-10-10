@@ -45,6 +45,7 @@ import (
 	"go.temporal.io/sdk/testsuite"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
 // temporalDev holds the shared ephemeral Temporal dev server for the whole
@@ -96,7 +97,11 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 
+	// Before any story starts a workflow: every breaker reads the grace when
+	// its workflow starts. See storyDaemonOfflinePauseGrace.
+	restoreGrace := v2.SetDaemonOfflinePauseGraceForTest(storyDaemonOfflinePauseGrace)
 	code := m.Run()
+	restoreGrace()
 
 	if temporalDev.server != nil {
 		_ = temporalDev.server.Stop()

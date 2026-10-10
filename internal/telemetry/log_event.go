@@ -61,6 +61,13 @@ type LogEventReporter interface {
 // record's error is what is classified — or, for a record without one, its
 // message, as the bridge always has.
 func CaptureLogEvent(event LogEvent) string {
+	return CaptureLogEventWith(GetReporter(), event)
+}
+
+// CaptureLogEventWith is CaptureLogEvent with the reporter chosen by the
+// caller: one that reports asynchronously reads the process reporter when the
+// record is logged, so a reporter installed afterwards never receives it.
+func CaptureLogEventWith(reporter ErrorReporter, event LogEvent) string {
 	classified := event.Err
 	if classified == nil {
 		classified = errors.New(event.Message)
@@ -68,7 +75,7 @@ func CaptureLogEvent(event LogEvent) string {
 	if !errclass.IsServerError(classified) {
 		return ""
 	}
-	if reporter, ok := GetReporter().(LogEventReporter); ok {
+	if reporter, ok := reporter.(LogEventReporter); ok {
 		return reporter.CaptureLogEvent(event)
 	}
 	return ""

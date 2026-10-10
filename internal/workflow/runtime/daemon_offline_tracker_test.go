@@ -328,6 +328,19 @@ func TestDaemonOfflinePauseMessageDoesNotClaimTheMachineStopped(t *testing.T) {
 	require.NotContains(t, DaemonOfflinePauseMessage, "Start your machine")
 }
 
+// The production breaker waits DaemonOfflinePauseGrace; the e2e stories'
+// override changes only breakers created while it is installed.
+func TestNewDaemonOfflineCircuitBreaker_GraceOverrideIsScoped(t *testing.T) {
+	// Not parallel: the override is process-wide.
+	require.Equal(t, DaemonOfflinePauseGrace, NewDaemonOfflineCircuitBreaker(3, nil).grace)
+
+	restore := SetDaemonOfflinePauseGraceForTest(time.Second)
+	require.Equal(t, time.Second, NewDaemonOfflineCircuitBreaker(3, nil).grace)
+
+	restore()
+	require.Equal(t, DaemonOfflinePauseGrace, NewDaemonOfflineCircuitBreaker(3, nil).grace)
+}
+
 // ============================================================================
 // E2E: breaker pauses (blocking) and resumes inside a Temporal workflow
 // ============================================================================

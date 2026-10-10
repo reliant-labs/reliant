@@ -5,6 +5,7 @@ package gitutil
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -20,30 +21,43 @@ import (
 // reliable way to hit that window: without it, staging finishes in
 // milliseconds and the cancellation lands either before the lock exists or
 // after it is gone, so the test would pass for the wrong reason.
-func slowStagingRepo(t *testing.T) (repo, target string) {
+//
+// The filter touches started before it sleeps; see waitForStagingFilter.
+func slowStagingRepo(t *testing.T) (repo, target, started string) {
 	t.Helper()
 	repo = initRepo(t)
+	started = filepath.Join(t.TempDir(), "filter-started")
 
 	if err := os.WriteFile(filepath.Join(repo, ".gitattributes"), []byte("*.slow filter=slow\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	run(t, repo, "config", "filter.slow.clean", "sleep 5; cat")
+	run(t, repo, "config", "filter.slow.clean", fmt.Sprintf("touch '%s'; sleep 5; cat", started))
 
 	target = "payload.slow"
 	if err := os.WriteFile(filepath.Join(repo, target), []byte("payload\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	return repo, target
+	return repo, target, started
 }
 
-// waitForLock blocks until the repository's index.lock appears.
-func waitForLock(t *testing.T, repo string, within time.Duration) bool {
+// waitForStagingFilter blocks until git is inside the slow clean filter with
+// index.lock held.
+//
+// The lock file appearing is not enough to cancel on. git creates the file
+// (tempfile.c: open) and only THEN registers it, together with the signal
+// handler that removes it (activate_tempfile). A SIGTERM between the two finds
+// nothing to clean up, and the lock strands whichever way git is stopped. A
+// loaded CI runner preempted git in exactly that window. git add takes the
+// lock before it filters anything (builtin/add.c), so the filter having
+// started proves both steps are done.
+func waitForStagingFilter(t *testing.T, repo, started string, within time.Duration) bool {
 	t.Helper()
 	lock := lockPath(t, repo)
 	deadline := time.Now().Add(within)
 	for time.Now().Before(deadline) {
-		if _, err := os.Stat(lock); err == nil {
-			return true
+		if _, err := os.Stat(started); err == nil {
+			_, err := os.Stat(lock)
+			return err == nil
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
@@ -89,7 +103,7 @@ func TestCancelledIndexWrite_DoesNotStrandLock(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			repo, target := slowStagingRepo(t)
+			repo, target, started := slowStagingRepo(t)
 			lock := lockPath(t, repo)
 
 			ctx, cancel := context.WithCancel(context.Background())
@@ -109,8 +123,8 @@ func TestCancelledIndexWrite_DoesNotStrandLock(t *testing.T) {
 				t.Fatalf("Start: %v", err)
 			}
 
-			if !waitForLock(t, repo, 5*time.Second) {
-				t.Skip("git never produced an observable index.lock; cannot exercise cancellation mid-write")
+			if !waitForStagingFilter(t, repo, started, 5*time.Second) {
+				t.Skip("git never reached the clean filter holding index.lock; cannot exercise cancellation mid-write")
 			}
 
 			cancel()
