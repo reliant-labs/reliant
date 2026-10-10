@@ -35,6 +35,20 @@ func IsDaemonPending(err error) bool {
 	return errors.Is(err, ErrDaemonPending)
 }
 
+// ErrNoDaemon means no machine for the request exists at all: the user has
+// none registered, or the selector names none of theirs. Unlike
+// ErrDaemonPending there is nothing to wait for, so a surface shows "no
+// machine" rather than a spinner. Its text deliberately lacks
+// daemonoffline.ErrorSubstring ("no daemon connected"): it is not a machine
+// that went offline.
+var ErrNoDaemon = errors.New("no daemon available")
+
+// IsNoDaemon reports whether err is ErrNoDaemon: the user has no machine for
+// this request.
+func IsNoDaemon(err error) bool {
+	return errors.Is(err, ErrNoDaemon)
+}
+
 // TerminalOutputEvent represents a terminal output message or session lifecycle event.
 type TerminalOutputEvent struct {
 	SessionID string

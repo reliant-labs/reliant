@@ -312,6 +312,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
               sessionId={session.id}
               workingDir={session.workingDir}
               worktreeId={session.worktreeId}
+              projectId={session.projectId}
               className={cn(
                 "absolute inset-0",
                 // Only show if this is the active session AND belongs to current worktree

@@ -4,9 +4,13 @@ package db
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"sort"
+	"strings"
 	"testing"
 	"time"
+
+	"github.com/pressly/goose/v3"
 )
 
 // These run the real SQL. The registry writes in daemon_registry.go carry
@@ -147,6 +151,187 @@ func TestRemoveDaemon_DeletesRowAndLease(t *testing.T) {
 	if err != nil || removed {
 		t.Errorf("second RemoveDaemon = %v, %v; want idempotent no-op", removed, err)
 	}
+}
+
+// seedMachineBindings binds one chat (pinned), one worktree (owned) and one
+// project install to each daemon, all in the seeded test-project. Rows are
+// named after their daemon: chat-<id>, wt-<id>.
+func seedMachineBindings(t *testing.T, rawDB *sql.DB, userID string, daemonIDs ...string) {
+	t.Helper()
+	for _, id := range daemonIDs {
+		if _, err := rawDB.Exec(`INSERT INTO chats (id, title, project_id, user_id, created_at, updated_at, last_active, active_daemon_id)
+			VALUES ($1, 't', 'test-project', $2, now(), now(), now(), $3)`, "chat-"+id, userID, id); err != nil {
+			t.Fatalf("seed chat on %s: %v", id, err)
+		}
+		if _, err := rawDB.Exec(`INSERT INTO worktrees (id, name, path, branch, base_branch, project_id, created_at, updated_at, last_active, daemon_id)
+			VALUES ($1, $2, $3, $2, 'main', 'test-project', now(), now(), now(), $4)`, "wt-"+id, "branch-"+id, "/w/"+id, id); err != nil {
+			t.Fatalf("seed worktree on %s: %v", id, err)
+		}
+		if _, err := rawDB.Exec(`INSERT INTO project_daemons (project_id, daemon_id, path) VALUES ('test-project', $1, '/p')`, id); err != nil {
+			t.Fatalf("seed project install on %s: %v", id, err)
+		}
+	}
+}
+
+// machineBindings reads back what seedMachineBindings bound to daemonID: the
+// chat's pin, the worktree's owner, the project installs on it, and the
+// chat_config_changed updates its chat's owner was sent.
+type machineBindings struct {
+	chatPin       sql.NullString
+	worktreeOwner sql.NullString
+	installs      int
+	configUpdates []string
+}
+
+func readMachineBindings(t *testing.T, rawDB *sql.DB, daemonID string) machineBindings {
+	t.Helper()
+	var b machineBindings
+	if err := rawDB.QueryRow(`SELECT active_daemon_id FROM chats WHERE id = $1`, "chat-"+daemonID).Scan(&b.chatPin); err != nil {
+		t.Fatalf("read chat pin: %v", err)
+	}
+	if err := rawDB.QueryRow(`SELECT daemon_id FROM worktrees WHERE id = $1`, "wt-"+daemonID).Scan(&b.worktreeOwner); err != nil {
+		t.Fatalf("read worktree owner: %v", err)
+	}
+	if err := rawDB.QueryRow(`SELECT count(*) FROM project_daemons WHERE daemon_id = $1`, daemonID).Scan(&b.installs); err != nil {
+		t.Fatalf("count installs: %v", err)
+	}
+	rows, err := rawDB.Query(`SELECT data FROM user_updates WHERE chat_id = $1 AND update_type = $2 ORDER BY sequence_number`,
+		"chat-"+daemonID, int64(UserUpdateChatConfigChanged))
+	if err != nil {
+		t.Fatalf("read user updates: %v", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var data string
+		if err := rows.Scan(&data); err != nil {
+			t.Fatalf("scan user update: %v", err)
+		}
+		b.configUpdates = append(b.configUpdates, data)
+	}
+	return b
+}
+
+// assertReleased: nothing still points at a daemon that no longer exists,
+// and the pinned chat's clients were told it is unpinned.
+func assertReleased(t *testing.T, rawDB *sql.DB, daemonID string) {
+	t.Helper()
+	b := readMachineBindings(t, rawDB, daemonID)
+	if b.chatPin.Valid {
+		t.Errorf("chat still pinned to removed daemon %s", b.chatPin.String)
+	}
+	if b.worktreeOwner.Valid {
+		t.Errorf("worktree still owned by removed daemon %s", b.worktreeOwner.String)
+	}
+	if b.installs != 0 {
+		t.Errorf("%d project install(s) left on removed daemon %s", b.installs, daemonID)
+	}
+	if len(b.configUpdates) != 1 || !strings.Contains(b.configUpdates[0], `"active_daemon_id":""`) {
+		t.Errorf("chat_config_changed for the unpinned chat = %q; want one clearing active_daemon_id", b.configUpdates)
+	}
+}
+
+// assertKept: a daemon that still exists keeps everything bound to it.
+func assertKept(t *testing.T, rawDB *sql.DB, daemonID string) {
+	t.Helper()
+	b := readMachineBindings(t, rawDB, daemonID)
+	if b.chatPin.String != daemonID || b.worktreeOwner.String != daemonID || b.installs != 1 || len(b.configUpdates) != 0 {
+		t.Errorf("bindings of surviving daemon %s = %+v; want untouched", daemonID, b)
+	}
+}
+
+// TestRemoveDaemon_ReleasesWhatWasBoundToIt: a machine that no longer exists
+// must not keep serving as a chat's pin, a worktree's owner or a project's
+// install. Each of those resolved to a daemon nothing can reach — routing
+// failed for good, and validateOwnedProjectDaemon refused every OTHER machine
+// for the project — so a chat on a deleted (or re-identified) machine never
+// recovered. Released, each is re-learned from live evidence: default
+// resolution for the chat, the sweep's adoption for the worktree, the
+// daemon's connect-time reconcile for the install.
+func TestRemoveDaemon_ReleasesWhatWasBoundToIt(t *testing.T) {
+	repo, rawDB := registryTestRepo(t)
+	ctx := context.Background()
+	for _, id := range []string{"gone-1", "kept-1"} {
+		if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: id, UserID: "test-user", DaemonType: "managed"}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	seedMachineBindings(t, rawDB, "test-user", "gone-1", "kept-1")
+
+	if _, removed, err := repo.RemoveDaemon(ctx, "gone-1"); err != nil || !removed {
+		t.Fatalf("RemoveDaemon = %v, %v; want removed", removed, err)
+	}
+	assertReleased(t, rawDB, "gone-1")
+	assertKept(t, rawDB, "kept-1")
+
+	// Idempotent: a second removal finds no row and tells no one again.
+	if _, removed, err := repo.RemoveDaemon(ctx, "gone-1"); err != nil || removed {
+		t.Fatalf("second RemoveDaemon = %v, %v; want idempotent no-op", removed, err)
+	}
+	assertReleased(t, rawDB, "gone-1")
+}
+
+// TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow: the
+// reconcile path removes rows too, and must release them the same way.
+func TestApplyDaemonRegistrySnapshot_ReleasesWhatWasBoundToARemovedRow(t *testing.T) {
+	repo, rawDB := registryTestRepo(t)
+	ctx := context.Background()
+	old := time.Now().UTC().Add(-24 * time.Hour)
+	for _, id := range []string{"ghost-1", "listed-1"} {
+		if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: id, UserID: "test-user", DaemonType: "managed", CreatedAt: old}); err != nil {
+			t.Fatalf("seed %s: %v", id, err)
+		}
+	}
+	seedMachineBindings(t, rawDB, "test-user", "ghost-1", "listed-1")
+
+	now := time.Now().UTC()
+	result, err := repo.ApplyDaemonRegistrySnapshot(ctx, RegistrySnapshotApply{
+		UserID:            "test-user",
+		Daemons:           []RegistrySnapshotDaemon{{Identity: DaemonIdentity{DaemonID: "listed-1", DaemonType: "managed", CreatedAt: old}}},
+		KeepCreatedAfter:  now.Add(-10 * time.Minute),
+		KeepAttachedSince: now.Add(-90 * time.Second),
+	})
+	if err != nil {
+		t.Fatalf("ApplyDaemonRegistrySnapshot: %v", err)
+	}
+	if len(result.Removed) != 1 || result.Removed[0] != "ghost-1" {
+		t.Fatalf("Removed = %v; want [ghost-1]", result.Removed)
+	}
+	assertReleased(t, rawDB, "ghost-1")
+	assertKept(t, rawDB, "listed-1")
+}
+
+// releaseBindingsMigrationVersion is
+// 20261010020219_release_bindings_to_removed_daemons.sql.
+const releaseBindingsMigrationVersion int64 = 20261010020219
+
+// TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals: removals made
+// before releaseDaemonBindings existed left their bindings dangling (in prod,
+// one live worktree owner and 13 project installs). The migration releases
+// exactly those, and nothing bound to a machine that still exists.
+func TestReleaseBindingsMigration_HealsRowsLeftByEarlierRemovals(t *testing.T) {
+	repo, rawDB := registryTestRepo(t)
+	ctx := context.Background()
+	if _, err := repo.UpsertDaemonIdentity(ctx, DaemonIdentity{DaemonID: "kept-2", UserID: "test-user", DaemonType: "managed"}); err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	// "gone-2" has bindings and no registry row: what a pre-release removal left.
+	seedMachineBindings(t, rawDB, "test-user", "gone-2", "kept-2")
+
+	if _, err := rawDB.Exec(fmt.Sprintf(`DELETE FROM %s WHERE version_id = $1`, goose.TableName()), releaseBindingsMigrationVersion); err != nil { //nolint:gosec // goose.TableName is a compile-time constant
+		t.Fatalf("rewind: %v", err)
+	}
+	if err := initGoose(); err != nil {
+		t.Fatalf("init goose: %v", err)
+	}
+	if err := goose.UpTo(rawDB, migrationsDir, releaseBindingsMigrationVersion, goose.WithAllowMissing()); err != nil {
+		t.Fatalf("apply migration: %v", err)
+	}
+
+	b := readMachineBindings(t, rawDB, "gone-2")
+	if b.chatPin.Valid || b.worktreeOwner.Valid || b.installs != 0 {
+		t.Errorf("bindings to the removed daemon after the migration = %+v; want released", b)
+	}
+	assertKept(t, rawDB, "kept-2")
 }
 
 // TestApplyDaemonRegistrySnapshot_ReconcilesOneOwner reproduces the owner's

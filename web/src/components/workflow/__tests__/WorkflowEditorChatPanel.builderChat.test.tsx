@@ -3,9 +3,9 @@
  * (research/WORKFLOW_EDITOR_UX_REVIEW.md issue 8, research/NO_MACHINE_CHATS.md).
  *
  *   - Its empty state is about THIS workflow: suggested prompts.
- *   - It never blocks on a machine it does not need. With no usable machine it
- *     starts with no machine, says so, and its composer works; with one, it
- *     runs there as every chat does.
+ *   - With no machine at all it starts with no machine, says so, and its
+ *     composer works; with one, in whatever state, it runs there as every chat
+ *     does (a machine still starting is waited for, not treated as absent).
  *   - Picking a suggestion fills the composer behind the workflow reference.
  *
  * Only the composer is stubbed: it renders its value, takes `prefill` the way
@@ -168,8 +168,16 @@ describe("the workflow editor's chat", () => {
     ]);
   });
 
-  it("starts with no machine, without waiting for one, when the user has no usable machine", async () => {
+  it("waits for the user's machine while it is starting, rather than starting with no machine", () => {
     daemonState.current = { activeDaemon: undefined, daemons: [provisioning], loading: false };
+    render(panel());
+
+    expect(screen.queryByTestId("builder-chat-no-machine-pill")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Starting your machine");
+  });
+
+  it("starts with no machine, without waiting for one, when the user has no machine", async () => {
+    daemonState.current = { activeDaemon: undefined, daemons: [], loading: false };
     render(panel());
 
     expect(screen.getByTestId("builder-chat-no-machine-pill")).toHaveTextContent("No machine · web & integrations");

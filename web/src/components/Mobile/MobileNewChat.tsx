@@ -73,7 +73,7 @@ import {
   NO_MACHINE_COMPOSER_HINT,
   chatMachineOptions,
   defaultChatMachine,
-  isAwakeMachine,
+  defaultMachineDaemon,
   startOptionsForMachine,
 } from "@/lib/chatMachine";
 
@@ -186,10 +186,9 @@ export function MobileNewChat() {
   const machine =
     selectedMachine ?? defaultChatMachine({ daemons, loading: daemonsLoading, surface: "mobile" }) ?? DEFAULT_MACHINE;
   const noMachine = machine === NO_MACHINE;
-  // DEFAULT_MACHINE sends no daemon (the server picks); show the awake
-  // machine it will land on.
-  const awake = daemons.find(isAwakeMachine);
-  const machineRowValue = machine === DEFAULT_MACHINE ? (awake?.daemonId ?? "") : machine;
+  // DEFAULT_MACHINE sends no daemon (the server picks); show the machine it
+  // will land on — an awake one, or one still starting.
+  const machineRowValue = machine === DEFAULT_MACHINE ? (defaultMachineDaemon(daemons)?.daemonId ?? "") : machine;
   const machineRowOptions = [
     ...chatMachineOptions(daemons).map((option) => ({
       value: option.value,

@@ -44,6 +44,16 @@ export function isDaemonConnectingError(error: unknown): boolean {
 }
 
 /**
+ * Returns true when a request found no machine at all: toolexec.ErrNoDaemon
+ * ("no daemon available"), sent as FailedPrecondition. There is nothing to
+ * wait for — unlike isDaemonConnectingError — so a surface says "no machine"
+ * instead of spinning, and instead of showing the server's text as an error.
+ */
+export function isNoMachineError(error: unknown): boolean {
+  return extractMessage(error).toLowerCase().includes("no daemon available");
+}
+
+/**
  * Returns true for toolexec.ErrDaemonPending as it reads inside a tool result:
  * "the machine for this request is suspended and will wake…" or "…is still
  * starting", both wrapping the "no daemon connected" marker.

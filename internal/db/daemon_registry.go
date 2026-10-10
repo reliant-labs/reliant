@@ -4,6 +4,7 @@ package db
 import (
 	"context"
 	"database/sql"
+	"encoding/json"
 	"fmt"
 	"time"
 )
@@ -147,40 +148,122 @@ func (r *Repo) upsertDaemonIdentity(ctx context.Context, ex execer, id DaemonIde
 // The attachment goes too: a lease for a daemon that does not exist is
 // meaningless, and a stale one would keep the reap loop as its only cleanup.
 // Connector grants go with the row through their ON DELETE CASCADE, which is
-// right — a grant to a machine that no longer exists grants nothing.
+// right — a grant to a machine that no longer exists grants nothing. Every
+// other binding to the machine is released in the same transaction
+// (releaseDaemonBindings).
 func (r *Repo) RemoveDaemon(ctx context.Context, daemonID string) (string, bool, error) {
 	if daemonID == "" {
 		return "", false, fmt.Errorf("daemon ID cannot be empty")
 	}
-	tx, err := r.DB.SQLDB().BeginTx(ctx, nil)
-	if err != nil {
-		return "", false, fmt.Errorf("begin daemon removal: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
-	userID, removed, err := r.removeDaemon(ctx, tx, daemonID)
+	var userID string
+	var removed bool
+	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+		var err error
+		userID, removed, err = r.removeDaemon(txCtx, daemonID)
+		return err
+	})
 	if err != nil {
 		return "", false, err
-	}
-	if err := tx.Commit(); err != nil {
-		return "", false, fmt.Errorf("commit daemon removal %s: %w", daemonID, err)
 	}
 	return userID, removed, nil
 }
 
-func (r *Repo) removeDaemon(ctx context.Context, tx *sql.Tx, daemonID string) (string, bool, error) {
-	if _, err := tx.ExecContext(ctx, r.bindQuery(`DELETE FROM daemon_attachment WHERE daemon_id = ?`), daemonID); err != nil {
+// removeDaemon deletes the row and its lease and releases its bindings. ctx
+// must carry the caller's transaction (RunTx), so the release commits or rolls
+// back with the removal.
+func (r *Repo) removeDaemon(ctx context.Context, daemonID string) (string, bool, error) {
+	if _, err := r.DB.ExecContext(ctx, r.bindQuery(`DELETE FROM daemon_attachment WHERE daemon_id = ?`), daemonID); err != nil {
 		return "", false, fmt.Errorf("deleting attachment for removed daemon %s: %w", daemonID, err)
 	}
 	var userID string
-	err := tx.QueryRowContext(ctx, r.bindQuery(`DELETE FROM daemons WHERE id = ? RETURNING user_id`), daemonID).Scan(&userID)
+	err := r.DB.QueryRowContext(ctx, r.bindQuery(`DELETE FROM daemons WHERE id = ? RETURNING user_id`), daemonID).Scan(&userID)
 	if err == sql.ErrNoRows {
 		return "", false, nil
 	}
 	if err != nil {
 		return "", false, fmt.Errorf("deleting daemon %s: %w", daemonID, err)
 	}
+	if err := r.releaseDaemonBindings(ctx, daemonID); err != nil {
+		return "", false, err
+	}
 	return userID, true, nil
+}
+
+// releaseDaemonBindings drops every reference to a daemon that no longer
+// exists. Three rows name a machine:
+//
+//   - chats.active_daemon_id, the chat's pin;
+//   - worktrees.daemon_id, the machine holding a workspace's checkout;
+//   - project_daemons, the project installed on a machine.
+//
+// Each resolves to a daemon nothing can reach once the machine is gone, so a
+// chat on a deleted machine, or on one that came back under a new id, never
+// recovered: its tools routed to the dead id forever, and
+// validateOwnedProjectDaemon refused every OTHER machine for a project whose
+// only install was on it. Released, each is re-learned from live evidence:
+// the chat falls to its worktree's owner, else default resolution (exactly as
+// a chat that never had a pin), a workspace is adopted by the machine that
+// finds its directory (worktreesweep → AdoptWorktreeDaemon), and an install
+// is re-recorded by the machine that has the checkout when it connects
+// (reconcileProjectDaemons).
+//
+// Clearing a pin never sets no_machine: a chat on a machine stays on one.
+// Open clients hear of the unpinned chat through the same
+// chat_config_changed update SetChatDaemon sends.
+func (r *Repo) releaseDaemonBindings(ctx context.Context, daemonID string) error {
+	type unpinned struct {
+		id, userID, projectID string
+		worktreeID            sql.NullString
+	}
+	rows, err := r.DB.QueryContext(ctx, r.bindQuery(`
+		UPDATE chats SET active_daemon_id = NULL, updated_at = NOW()
+		WHERE active_daemon_id = ?
+		RETURNING id, user_id, project_id, worktree_id
+	`), daemonID)
+	if err != nil {
+		return fmt.Errorf("unpinning chats from removed daemon %s: %w", daemonID, err)
+	}
+	var chats []unpinned
+	for rows.Next() {
+		var c unpinned
+		if err := rows.Scan(&c.id, &c.userID, &c.projectID, &c.worktreeID); err != nil {
+			_ = rows.Close()
+			return fmt.Errorf("scanning chat unpinned from removed daemon %s: %w", daemonID, err)
+		}
+		chats = append(chats, c)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("unpinning chats from removed daemon %s: %w", daemonID, err)
+	}
+	if _, err := r.DB.ExecContext(ctx, r.bindQuery(`UPDATE worktrees SET daemon_id = NULL WHERE daemon_id = ?`), daemonID); err != nil {
+		return fmt.Errorf("releasing worktrees of removed daemon %s: %w", daemonID, err)
+	}
+	if _, err := r.DB.ExecContext(ctx, r.bindQuery(`DELETE FROM project_daemons WHERE daemon_id = ?`), daemonID); err != nil {
+		return fmt.Errorf("deleting project installs on removed daemon %s: %w", daemonID, err)
+	}
+
+	for _, c := range chats {
+		data, err := json.Marshal(map[string]interface{}{"chat_id": c.id, "active_daemon_id": ""})
+		if err != nil {
+			return err
+		}
+		update := &UserUpdate{
+			UserID:     c.userID,
+			ProjectID:  &c.projectID,
+			ChatID:     &c.id,
+			UpdateType: UserUpdateChatConfigChanged,
+			EntityType: EntityTypeChat,
+			EntityID:   c.id,
+			Data:       data,
+		}
+		if c.worktreeID.Valid {
+			update.WorktreeID = &c.worktreeID.String
+		}
+		if err := r.CreateUserUpdate(ctx, update); err != nil {
+			return fmt.Errorf("announcing chat %s unpinned from removed daemon %s: %w", c.id, daemonID, err)
+		}
+	}
+	return nil
 }
 
 // ApplyDaemonRegistrySnapshot reconciles one owner's registry rows against the
@@ -199,31 +282,40 @@ func (r *Repo) removeDaemon(ctx context.Context, tx *sql.Tx, daemonID string) (s
 // Scoped to one owner throughout. Rows of other owners are never read or
 // written, so a snapshot can only ever affect the user it names.
 func (r *Repo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error) {
-	var result RegistrySnapshotResult
 	if snap.UserID == "" {
-		return result, fmt.Errorf("snapshot user ID cannot be empty")
+		return RegistrySnapshotResult{}, fmt.Errorf("snapshot user ID cannot be empty")
 	}
-
-	tx, err := r.DB.SQLDB().BeginTx(ctx, nil)
+	var result RegistrySnapshotResult
+	err := r.RunTxWithOptions(ctx, TxOptions{Isolation: IsolationReadCommitted}, func(txCtx context.Context) error {
+		var err error
+		result, err = r.applyDaemonRegistrySnapshot(txCtx, snap)
+		return err
+	})
 	if err != nil {
-		return result, fmt.Errorf("begin registry snapshot: %w", err)
+		return RegistrySnapshotResult{}, fmt.Errorf("registry snapshot for %s: %w", snap.UserID, err)
 	}
-	defer func() { _ = tx.Rollback() }()
+	return result, nil
+}
 
+// applyDaemonRegistrySnapshot is one attempt at the snapshot, inside the
+// transaction ctx carries. It builds its result from scratch, so a retried
+// attempt reports only what the committed one did.
+func (r *Repo) applyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error) {
+	var result RegistrySnapshotResult
 	keep := make([]string, 0, len(snap.Daemons))
 	for _, d := range snap.Daemons {
 		ident := d.Identity
 		ident.UserID = snap.UserID
 		keep = append(keep, ident.DaemonID)
 
-		wrote, err := r.upsertDaemonIdentity(ctx, tx, ident)
+		wrote, err := r.upsertDaemonIdentity(ctx, r.DB, ident)
 		if err != nil {
 			return RegistrySnapshotResult{}, err
 		}
 		if d.Lifecycle != nil {
 			lc := *d.Lifecycle
 			lc.DaemonID = ident.DaemonID
-			applied, err := r.applyDaemonLifecycle(ctx, tx, lc)
+			applied, err := r.applyDaemonLifecycle(ctx, r.DB, lc)
 			if err != nil {
 				return RegistrySnapshotResult{}, err
 			}
@@ -234,7 +326,7 @@ func (r *Repo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 		}
 	}
 
-	rows, err := tx.QueryContext(ctx, r.bindQuery(`
+	rows, err := r.DB.QueryContext(ctx, r.bindQuery(`
 		SELECT d.id FROM daemons d
 		WHERE d.user_id = ?
 		  AND NOT (d.id = ANY(COALESCE(?::text[], ARRAY[]::text[])))
@@ -261,15 +353,11 @@ func (r *Repo) ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySna
 		return RegistrySnapshotResult{}, fmt.Errorf("closing absent registry rows: %w", err)
 	}
 	for _, id := range stale {
-		if _, removed, err := r.removeDaemon(ctx, tx, id); err != nil {
+		if _, removed, err := r.removeDaemon(ctx, id); err != nil {
 			return RegistrySnapshotResult{}, err
 		} else if removed {
 			result.Removed = append(result.Removed, id)
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return RegistrySnapshotResult{}, fmt.Errorf("commit registry snapshot for %s: %w", snap.UserID, err)
 	}
 	return result, nil
 }

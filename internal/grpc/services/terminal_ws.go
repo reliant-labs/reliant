@@ -67,6 +67,7 @@ type wsResizeMessage struct {
 //   - token:      JWT token used for auth
 //   - workingDir: directory to start the shell in
 //   - worktreeId: (optional) worktree identifier
+//   - projectId:  (optional) the project the terminal belongs to; logged only
 //
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
 // LocalDaemonRouter.
@@ -76,6 +77,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		token := q.Get("token")
 		workingDir := q.Get("workingDir")
 		worktreeID := q.Get("worktreeId")
+		projectID := q.Get("projectId")
 
 		// --- Authenticate ---
 		if validator == nil {
@@ -93,11 +95,13 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			return
 		}
 		userID := claims.Sub
+		// Every line this connection logs says whose terminal it was.
+		logFields := []any{"user_id", userID, "project_id", projectID, "worktree_id", worktreeID}
 
 		// --- Upgrade to WebSocket ---
 		conn, err := wsUpgrader.Upgrade(w, r, nil)
 		if err != nil {
-			logging.Error("[TerminalWS] WebSocket upgrade failed", "error", err)
+			logging.Error("[TerminalWS] WebSocket upgrade failed", append([]any{"error", err}, logFields...)...)
 			return
 		}
 		defer conn.Close()
@@ -114,7 +118,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		}
 		payload, err := json.Marshal(createReq)
 		if err != nil {
-			writeWSError(conn, fmt.Sprintf("marshal create request: %v", err))
+			writeWSError(conn, fmt.Sprintf("marshal create request: %v", err), logFields...)
 			return
 		}
 
@@ -122,15 +126,19 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		if err != nil {
 			if terminal.IsWorkingDirUnavailable(err) {
 				logging.Warn("[TerminalWS] Working directory unavailable",
-					"requested_working_dir", workingDir,
-					"worktree_id", worktreeID,
-					"user_id", userID,
-					"error", err,
-				)
+					append([]any{"requested_working_dir", workingDir, "error", err}, logFields...)...)
 				writeWSJSON(conn, wsMessage{Type: "error", Code: wsErrorWorkingDirUnavailable, Data: err.Error()})
 				return
 			}
-			writeWSError(conn, fmt.Sprintf("create terminal session: %v", err))
+			message := fmt.Sprintf("create terminal session: %v", err)
+			// No machine, or one that is not up yet, is the machine's state:
+			// the browser shows it and retries. Said once, below ERROR.
+			if state, ok := terminalMachineState(err); ok {
+				logTerminalMachineState(ctx, router, userID, state, err, logFields)
+				writeWSJSON(conn, wsMessage{Type: "error", Data: message})
+				return
+			}
+			writeWSError(conn, message, append([]any{"error", err}, logFields...)...)
 			return
 		}
 
@@ -142,7 +150,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 			WorkingDir string `json:"working_dir"`
 		}
 		if err := json.Unmarshal(respBytes, &createResp); err != nil {
-			writeWSError(conn, fmt.Sprintf("unmarshal create response: %v", err))
+			writeWSError(conn, fmt.Sprintf("unmarshal create response: %v", err), logFields...)
 			return
 		}
 
@@ -152,14 +160,13 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		defer closeDaemonTerminalSession(ctx, router, userID, sessionID)
 		// Both directories, so a terminal in the wrong place is diagnosable
 		// from this line alone: this server cannot see the filesystem.
+		logFields = append(logFields, "session_id", sessionID)
 		logging.Info("[TerminalWS] Session created",
-			"session_id", sessionID,
-			"pid", createResp.PID,
-			"user_id", userID,
-			"worktree_id", worktreeID,
-			"requested_working_dir", workingDir,
-			"working_dir", createResp.WorkingDir,
-		)
+			append([]any{
+				"pid", createResp.PID,
+				"requested_working_dir", workingDir,
+				"working_dir", createResp.WorkingDir,
+			}, logFields...)...)
 
 		// Send init message to browser, carrying the daemon's session id so the
 		// browser can address this session on close. See wsMessage.SessionID.
@@ -168,7 +175,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		// --- Subscribe to terminal output ---
 		outputCh, unsub, err := router.SubscribeTerminalOutput(ctx, userID, sessionID)
 		if err != nil {
-			writeWSError(conn, fmt.Sprintf("subscribe terminal output: %v", err))
+			writeWSError(conn, fmt.Sprintf("subscribe terminal output: %v", err), logFields...)
 			return
 		}
 		defer unsub()
@@ -252,7 +259,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				_, raw, err := conn.ReadMessage()
 				if err != nil {
 					if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseNormalClosure) {
-						logging.Debug("[TerminalWS] WebSocket read error", "error", err, "session_id", sessionID)
+						logging.Debug("[TerminalWS] WebSocket read error", append([]any{"error", err}, logFields...)...)
 					}
 					setPumpErr(nil)
 					return
@@ -262,7 +269,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				var resize wsResizeMessage
 				if json.Unmarshal(raw, &resize) == nil && resize.Type == "resize" {
 					if err := router.SendTerminalResize(ctx, userID, sessionID, resize.Cols, resize.Rows); err != nil {
-						logging.Error("[TerminalWS] Send resize failed", "error", err, "session_id", sessionID)
+						logging.Error("[TerminalWS] Send resize failed", append([]any{"error", err}, logFields...)...)
 						setPumpErr(err)
 						return
 					}
@@ -271,7 +278,7 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 				// Otherwise treat as raw PTY input.
 				if err := router.SendTerminalInput(ctx, userID, sessionID, raw); err != nil {
-					logging.Error("[TerminalWS] Send input failed", "error", err, "session_id", sessionID)
+					logging.Error("[TerminalWS] Send input failed", append([]any{"error", err}, logFields...)...)
 					setPumpErr(err)
 					return
 				}
@@ -280,9 +287,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 
 		wg.Wait()
 		if pumpErr != nil {
-			logging.Error("[TerminalWS] Session ended with error", "error", pumpErr, "session_id", sessionID)
+			logging.Error("[TerminalWS] Session ended with error", append([]any{"error", pumpErr}, logFields...)...)
 		} else {
-			logging.Info("[TerminalWS] Session ended", "session_id", sessionID, "user_id", userID)
+			logging.Info("[TerminalWS] Session ended", logFields...)
 		}
 	}
 }
@@ -300,8 +307,51 @@ func writeWSJSON(conn *websocket.Conn, msg wsMessage) {
 	}
 }
 
-// writeWSError sends an error message to the browser.
-func writeWSError(conn *websocket.Conn, msg string) {
-	logging.Error("[TerminalWS] Error", "message", msg)
+// writeWSError sends an error message to the browser and logs it at ERROR
+// with the connection's context. Only for real failures: the machine not being
+// there or not being up goes through logTerminalMachineState instead.
+func writeWSError(conn *websocket.Conn, msg string, logFields ...any) {
+	logging.Error("[TerminalWS] Error", append([]any{"message", msg}, logFields...)...)
 	writeWSJSON(conn, wsMessage{Type: "error", Data: msg})
+}
+
+// terminalMachineStateLogWindow bounds how often one user's terminal logs the
+// same machine state. The browser retries a terminal it could not open every
+// 10–20 s for as long as the machine is down: one user's crash-looping machine
+// produced 1,019 ERROR lines in five hours on 2026-10-09, each with no user,
+// project or machine id to say whose.
+const terminalMachineStateLogWindow = 5 * time.Minute
+
+var terminalMachineStateLog = newThrottledLog(terminalMachineStateLogWindow, time.Now)
+
+// terminalMachineState names why a terminal could not be created when the
+// reason is the machine's state rather than a failure: the user has no
+// machine, it is starting or asleep, or it is not connected (NATS had no
+// responder). ok is false for anything else, which is a real failure.
+func terminalMachineState(err error) (state string, ok bool) {
+	switch {
+	case toolexec.IsNoDaemon(err):
+		return "no_machine", true
+	case toolexec.IsDaemonPending(err):
+		return "starting_or_asleep", true
+	case machineUnreachable(err):
+		return "not_connected", true
+	default:
+		return "", false
+	}
+}
+
+// logTerminalMachineState logs an expected machine state at INFO, at most once
+// per window per user and state, with how many were suppressed since and the
+// machine default resolution names, when it names one.
+func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, userID, state string, err error, logFields []any) {
+	suppressed, ok := terminalMachineStateLog.allow(userID + "|" + state)
+	if !ok {
+		return
+	}
+	fields := append([]any{"machine_state", state, "error", err, "suppressed_since_last", suppressed}, logFields...)
+	if daemonID, resolveErr := router.ResolveDaemonID(ctx, userID); resolveErr == nil {
+		fields = append(fields, "daemon_id", daemonID)
+	}
+	logging.Info("[TerminalWS] Machine not ready; the browser shows it and retries", fields...)
 }

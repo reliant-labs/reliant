@@ -8,44 +8,76 @@ import {
   chatMachineOptions,
   continueBranchPoint,
   defaultChatMachine,
-  hasUsableMachineForChat,
+  defaultMachineDaemon,
+  hasMachine,
   isUsableMachineForChat,
   startOptionsForMachine,
 } from "../chatMachine";
 
-const machine = (status: DaemonStatus, daemonId = "d1", hostname = "laptop") => ({ daemonId, hostname, status });
+const machine = (status: DaemonStatus, daemonId = "d1", hostname = "laptop", daemonType = "self_hosted") => ({
+  daemonId,
+  hostname,
+  status,
+  daemonType,
+});
 
-describe("isUsableMachineForChat (NO_MACHINE_CHATS.md §2.1)", () => {
-  it("counts a connected machine and an asleep one, which a send wakes", () => {
+const EVERY_STATUS = [
+  DaemonStatus.ACTIVE,
+  DaemonStatus.IDLE,
+  DaemonStatus.PENDING,
+  DaemonStatus.SUSPENDED,
+  DaemonStatus.DISCONNECTED,
+  DaemonStatus.FAILED,
+  DaemonStatus.UNSPECIFIED,
+];
+
+describe("hasMachine", () => {
+  it("counts every machine the user has, whatever state it is in right now", () => {
+    expect(hasMachine([])).toBe(false);
+    for (const status of EVERY_STATUS) {
+      expect(hasMachine([machine(status)])).toBe(true);
+    }
+  });
+});
+
+describe("isUsableMachineForChat", () => {
+  it("counts a machine that serves a chat now, once it is up, or after a send wakes it", () => {
     expect(isUsableMachineForChat(machine(DaemonStatus.ACTIVE))).toBe(true);
     expect(isUsableMachineForChat(machine(DaemonStatus.IDLE))).toBe(true);
     expect(isUsableMachineForChat(machine(DaemonStatus.SUSPENDED))).toBe(true);
+    // Starting: provisioning, or restarting during a release. It comes up by
+    // itself; nothing has to wake it.
+    expect(isUsableMachineForChat(machine(DaemonStatus.PENDING))).toBe(true);
   });
 
-  it("does not count a machine still provisioning, offline, failed or unknown", () => {
-    // Provisioning is the case §2.1 names as falling back to no machine —
-    // the one place this differs from onboarding's predicate.
-    expect(isUsableMachineForChat(machine(DaemonStatus.PENDING))).toBe(false);
+  it("does not count a machine offline, failed or unknown", () => {
     expect(isUsableMachineForChat(machine(DaemonStatus.DISCONNECTED))).toBe(false);
     expect(isUsableMachineForChat(machine(DaemonStatus.FAILED))).toBe(false);
     expect(isUsableMachineForChat(machine(DaemonStatus.UNSPECIFIED))).toBe(false);
   });
-
-  it("is about any machine the user has", () => {
-    expect(hasUsableMachineForChat([])).toBe(false);
-    expect(hasUsableMachineForChat([machine(DaemonStatus.PENDING), machine(DaemonStatus.SUSPENDED, "d2")])).toBe(true);
-  });
 });
 
 describe("defaultChatMachine", () => {
-  it("is the user's machine whenever they have a usable one, asleep included", () => {
+  it("is the user's machine whenever they have one, asleep included", () => {
     expect(defaultChatMachine({ daemons: [machine(DaemonStatus.ACTIVE)], loading: false })).toBe(DEFAULT_MACHINE);
     expect(defaultChatMachine({ daemons: [machine(DaemonStatus.SUSPENDED)], loading: false })).toBe(DEFAULT_MACHINE);
   });
 
-  it("falls back to no machine only when the user has none usable", () => {
+  // Prod, 2026-10-09 22:17:30 UTC: the user's only machine was restarting
+  // under a release (registry phase provisioning → PENDING). The new chat
+  // defaulted to No machine, StartChat persisted chats.no_machine, and the
+  // chat said "No machine" for good, while the Files tab and the terminal —
+  // which resolve the machine per request — worked again 20 s later when the
+  // daemon re-registered. A machine that is not up yet is a wait, not an
+  // absence.
+  it("is the user's machine while it is starting, reconnecting or failed: never No machine", () => {
+    for (const status of [DaemonStatus.PENDING, DaemonStatus.DISCONNECTED, DaemonStatus.FAILED, DaemonStatus.UNSPECIFIED]) {
+      expect(defaultChatMachine({ daemons: [machine(status)], loading: false })).toBe(DEFAULT_MACHINE);
+    }
+  });
+
+  it("is No machine only when the user has no machine at all", () => {
     expect(defaultChatMachine({ daemons: [], loading: false })).toBe(NO_MACHINE);
-    expect(defaultChatMachine({ daemons: [machine(DaemonStatus.PENDING)], loading: false })).toBe(NO_MACHINE);
   });
 
   it("decides nothing until it can know: loading, or the desktop app's own daemon still registering", () => {
@@ -53,13 +85,39 @@ describe("defaultChatMachine", () => {
     expect(defaultChatMachine({ daemons: [], loading: false, awaitingBundledDaemon: true })).toBeUndefined();
   });
 
-  it("on mobile, preselects no machine unless one is awake (§2.5)", () => {
-    expect(defaultChatMachine({ daemons: [machine(DaemonStatus.SUSPENDED)], loading: false, surface: "mobile" })).toBe(
-      NO_MACHINE,
-    );
-    expect(defaultChatMachine({ daemons: [machine(DaemonStatus.ACTIVE)], loading: false, surface: "mobile" })).toBe(
-      DEFAULT_MACHINE,
-    );
+  it("on mobile, preselects no machine when the only machines are asleep or down (§2.5)", () => {
+    for (const status of [DaemonStatus.SUSPENDED, DaemonStatus.DISCONNECTED, DaemonStatus.FAILED]) {
+      expect(defaultChatMachine({ daemons: [machine(status)], loading: false, surface: "mobile" })).toBe(NO_MACHINE);
+    }
+    expect(defaultChatMachine({ daemons: [], loading: false, surface: "mobile" })).toBe(NO_MACHINE);
+  });
+
+  it("on mobile, is the user's machine when one is awake or starting: a starting machine needs no wake", () => {
+    for (const status of [DaemonStatus.ACTIVE, DaemonStatus.IDLE, DaemonStatus.PENDING]) {
+      expect(defaultChatMachine({ daemons: [machine(status)], loading: false, surface: "mobile" })).toBe(
+        DEFAULT_MACHINE,
+      );
+    }
+  });
+});
+
+describe("defaultMachineDaemon", () => {
+  // Mirrors the server's default resolution (toolexec resolveDaemonID with no
+  // selector), so the picker names the machine an unpinned chat lands on.
+  it("prefers a connected machine, and a self-hosted one among connected", () => {
+    const cloud = machine(DaemonStatus.ACTIVE, "d-cloud", "cloud", "managed");
+    const laptop = machine(DaemonStatus.ACTIVE, "d-laptop", "laptop", "self_hosted");
+    const asleep = machine(DaemonStatus.SUSPENDED, "d-sleep", "sleepy", "managed");
+    expect(defaultMachineDaemon([asleep, cloud, laptop])?.daemonId).toBe("d-laptop");
+    expect(defaultMachineDaemon([asleep, cloud])?.daemonId).toBe("d-cloud");
+  });
+
+  it("falls to a starting or asleep machine, then to any machine, and is undefined with none", () => {
+    const starting = machine(DaemonStatus.PENDING, "d-start");
+    const offline = machine(DaemonStatus.DISCONNECTED, "d-off");
+    expect(defaultMachineDaemon([offline, starting])?.daemonId).toBe("d-start");
+    expect(defaultMachineDaemon([offline])?.daemonId).toBe("d-off");
+    expect(defaultMachineDaemon([])).toBeUndefined();
   });
 });
 
@@ -67,11 +125,12 @@ describe("chatMachineOptions", () => {
   it("lists online machines first, then asleep, then the rest", () => {
     const options = chatMachineOptions([
       machine(DaemonStatus.DISCONNECTED, "d-off", "old-box"),
+      machine(DaemonStatus.PENDING, "d-start", "new-box"),
       machine(DaemonStatus.SUSPENDED, "d-sleep", "cloud"),
       machine(DaemonStatus.ACTIVE, "d-on", "laptop"),
     ]);
-    expect(options.map((o) => o.value)).toEqual(["d-on", "d-sleep", "d-off"]);
-    expect(options.map((o) => o.usable)).toEqual([true, true, false]);
+    expect(options.map((o) => o.value)).toEqual(["d-on", "d-sleep", "d-start", "d-off"]);
+    expect(options.map((o) => o.usable)).toEqual([true, true, true, false]);
     expect(options[1]).toMatchObject({ label: "cloud", statusLabel: "suspended" });
   });
 });

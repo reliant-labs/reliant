@@ -8,8 +8,10 @@
  * and the empty state suggests things to ask about this workflow.
  *
  * Where the chat runs is NewChatView's rule (lib/chatMachine.ts): the user's
- * machine when they have a usable one, otherwise no machine. Building a
- * workflow needs none — the workflow tools all run on the server.
+ * machine when they have one, in whatever state, otherwise no machine.
+ * Building a workflow needs none — the workflow tools all run on the server —
+ * but a machine that is only starting is waited for: no machine is a
+ * permanent property of the chat, not a stand-in for "not up yet".
  */
 
 import { useEffect, useState } from "react";

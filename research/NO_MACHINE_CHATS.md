@@ -48,10 +48,11 @@ for runs with no machine. This doc covers the product surface on top of it.
 
 ## 2. Product rules (accepted)
 
-1. **The default is always a usable machine.**
-   - A new chat falls back to no-machine only when the user has no usable machine
-     at all, e.g. a web signup with no daemon, or the only machine is still being
-     provisioned.
+1. **The default is always the user's machine.**
+   - A new chat falls back to no-machine only when the user has no machine at
+     all, e.g. a web signup with no daemon. **Revised 2026-10-10 (§6.5):** a
+     machine still being provisioned, restarting, reconnecting or failed is NOT
+     a fallback case; the new chat waits for it.
    - An asleep or suspended machine keeps today's "Waking…" behaviour. It does
      NOT fall back.
    - "No machine" is also an explicit option in the machine picker when starting a
@@ -274,3 +275,46 @@ with the reason.
   nudge would be a turn the user did not ask for.
 - The project-less space (§2.2) is still deferred.
 
+### 6.5 Revision (2026-10-10): No machine only when there is none
+
+**What happened (prod, 2026-10-09 22:17:30 UTC).** The user's only machine was
+restarting under a release (registry phase provisioning, web status PENDING)
+for the ~20 s its pod took to come back (daemon re-registered 22:17:50). A new
+chat created in that window took §6.3's default, No machine, because
+`isUsableMachineForChat` excluded PENDING, and StartChat persisted
+`chats.no_machine = true` (chat `b222f6e9`, the only no-machine chat in prod).
+From then on the chat showed "No machine — this chat can use the web and your
+integrations, not the files in this project." while the Files tab and the
+terminal worked: those resolve the machine per request on the server
+(`chatDaemonID` / default resolution), and the machine was back. One path
+had frozen a momentary status into a permanent, one-way fact about the chat;
+the other read the live one.
+
+**Rule now.** No machine is a property of the CHAT, persisted and one-way, so it
+is never inferred from a machine's momentary state:
+
+- Desktop: `defaultChatMachine` is No machine only when the user has no machine
+  at all (`hasMachine`). Any machine, in any state, is the default; the
+  composer waits for it (`lib/daemon-wait.ts`: starting / connecting / failed),
+  and "Continue without machine" stays the explicit way out.
+- Mobile (§2.5): No machine unless a machine is awake OR starting
+  (`isStartingMachine`): a starting machine needs no wake.
+- `isUsableMachineForChat` now counts PENDING; it only ranks machines (the
+  Connect a machine preselection) and no longer decides No machine.
+- `defaultMachineDaemon` mirrors the server's default resolution (connected,
+  self-hosted first; then starting or asleep; then any), so the picker names
+  the machine an unpinned chat actually lands on.
+
+**Lost bindings self-repair (server).** Removing a daemon from the registry
+(`RemoveDaemon`, or a registry snapshot) now releases, in the same
+transaction, everything that named it: `chats.active_daemon_id` (with a
+`chat_config_changed` update so open clients drop the pin),
+`worktrees.daemon_id` and `project_daemons`. Each is re-learned from live
+evidence: default resolution for the chat, the sweep's adoption for the
+worktree, connect-time reconcile for the install. Migration
+`20261010020219` released the rows earlier removals left dangling.
+
+**An unpinned chat is not tool-less.** A chat with no `active_daemon_id` (and
+`no_machine = false`) routes each tool call by default resolution, the same
+resolution the Files tab uses for its main checkout; nothing binds it, and
+nothing needs to.

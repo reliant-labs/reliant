@@ -1,4 +1,5 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
+import { Code, ConnectError } from "@connectrpc/connect";
 // FileTree shows the shared machine-wait state, which reads daemon status
 // through React Query — so it needs a provider the way the real app has one.
 import { renderWithQuery as render } from "../../test/renderWithQuery";
@@ -59,6 +60,17 @@ vi.mock("../../lib/toast-manager", () => ({
   toast: {
     notify: storeMocks.toastNotify,
   },
+}));
+
+// The shared wait renders its own copy; here it only has to be the wait.
+vi.mock("../../hooks/useDaemonWait", () => ({
+  useDaemonWait: ({ waiting }: { waiting: boolean }) => ({
+    state: waiting ? { tone: "waiting", title: "Starting your machine" } : null,
+    retryNow: vi.fn(),
+  }),
+}));
+vi.mock("../DaemonWaitState", () => ({
+  DaemonWaitState: ({ state }: { state: { title: string } }) => <div data-testid="daemon-wait">{state.title}</div>,
 }));
 
 vi.mock("./FileOperationsModal", () => ({
@@ -195,5 +207,37 @@ describe("FileTree binary-aware delete snapshots", () => {
         action: expect.objectContaining({ label: "Undo (Cmd+Z)" }),
       })
     );
+  });
+});
+
+// What the server sends for a machine that is not up, or not there
+// (internal/grpc/services/fs_proxy.go fsProxyDaemonError). Neither is an error
+// to show the user: prod, 2026-10-09, a restarting machine made the tree show
+// "internal: unavailable: no daemon connected for user".
+describe("FileTree when the machine is not up, or not there", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("waits for a machine that is starting or not connected (Unavailable)", async () => {
+    apiMocks.getFileTree.mockRejectedValue(new ConnectError("no daemon connected for user", Code.Unavailable));
+    renderFileTree();
+
+    expect(await screen.findByTestId("daemon-wait")).toHaveTextContent("Starting your machine");
+    expect(screen.queryByText(/no daemon connected/)).toBeNull();
+  });
+
+  it("says there is no machine, rather than showing an error, when the user has none (FailedPrecondition)", async () => {
+    apiMocks.getFileTree.mockRejectedValue(
+      new ConnectError(
+        "resolving daemon for command: no daemon available: no machine is connected to your account yet",
+        Code.FailedPrecondition,
+      ),
+    );
+    renderFileTree();
+
+    expect(await screen.findByTestId("file-tree-no-machine")).toHaveTextContent("No machine");
+    expect(screen.queryByText(/no daemon available/)).toBeNull();
+    expect(screen.queryByTestId("daemon-wait")).toBeNull();
   });
 });

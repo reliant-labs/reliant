@@ -237,22 +237,39 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string,
 		// which MachineWakingInterceptor turns into Unavailable + DaemonWaking
 		// whatever code is chosen below.
 		err = s.wake.afterFailure(ctx, userID, target, err)
-		// A daemon that exists but hasn't connected yet (still
-		// provisioning) is retryable, unlike every other daemon-command
-		// failure this helper maps to CodeInternal — CodeUnavailable is
-		// what the frontend's daemon-wait machinery expects, and the
-		// message still carries the "no daemon connected" marker
-		// isDaemonConnectingError keys on either way.
-		if toolexec.IsDaemonPending(err) {
-			return connect.NewError(connect.CodeUnavailable, err)
-		}
-		return connect.NewError(connect.CodeInternal, err)
+		return fsProxyDaemonError(err)
 	}
 
 	if err := json.Unmarshal(respBytes, resp); err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("unmarshal response: %w", err))
 	}
 	return nil
+}
+
+// fsProxyDaemonError maps a failed daemon command to the code that says what
+// happened. The machine's STATE is not a server failure:
+//
+//   - not reachable right now — starting, asleep (and possibly just woken), or
+//     not connected (NATS had no responder) — is Unavailable: retryable, what
+//     the web's daemon-wait machinery expects, and its message keeps the
+//     "no daemon connected" marker isDaemonConnectingError keys on;
+//   - no machine at all is FailedPrecondition: nothing to wait for, and the
+//     file tree says "no machine" instead of an error.
+//
+// Only what is left is Internal. Mapping the not-connected case there (it used
+// to fall through) logged an ERROR "rpc failed" for every file-tree poll while
+// a machine restarted — 117 in five hours for one user's crash-looping machine
+// on 2026-10-09 — and handed the UI a 500-class error for a machine that was
+// merely starting.
+func fsProxyDaemonError(err error) error {
+	switch {
+	case machineUnreachable(err):
+		return connect.NewError(connect.CodeUnavailable, err)
+	case toolexec.IsNoDaemon(err):
+		return connect.NewError(connect.CodeFailedPrecondition, err)
+	default:
+		return connect.NewError(connect.CodeInternal, err)
+	}
 }
 
 // GetFileTree returns the file tree structure for a project.

@@ -17,7 +17,8 @@ import {
   NO_MACHINE,
   NO_MACHINE_COMPOSER_HINT,
   defaultChatMachine,
-  hasUsableMachineForChat,
+  defaultMachineDaemon,
+  hasMachine,
   startOptionsForMachine,
   type ChatMachineChoice,
 } from "@/lib/chatMachine";
@@ -90,13 +91,14 @@ export function NewChatView({
   const daemonConnected = Boolean(activeDaemon);
 
   // Where the chat runs (NO_MACHINE_CHATS.md §2.1). Null until the user picks:
-  // the default is the user's machine whenever they have a usable one, and
-  // No machine only when they have none at all. An asleep machine still
-  // counts — sending wakes it — and the desktop app's own daemon gets the
-  // moments it needs to register before an empty list means "none".
+  // the default is the user's machine whenever they have one, and No machine
+  // only when they have none at all. A machine that is starting, asleep or
+  // reconnecting still counts — the composer waits for it — and the desktop
+  // app's own daemon gets the moments it needs to register before an empty
+  // list means "none".
   const canPickMachine = useCapability("chatDaemonSelection");
   const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
-  const awaitingBundledDaemon = useBundledDaemonPending(hasUsableMachineForChat(daemons));
+  const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
   const defaultMachine = defaultChatMachine({
     daemons,
     loading: daemonLoading,
@@ -341,7 +343,7 @@ export function NewChatView({
                     value={machine}
                     onChange={setMachineChoice}
                     daemons={daemons}
-                    defaultDaemon={activeDaemon}
+                    defaultDaemon={defaultMachineDaemon(daemons)}
                     disabled={isCreating}
                   />
                 )}

@@ -8,7 +8,7 @@
 import { describe, expect, it } from "vitest";
 import { ConnectError, Code } from "@connectrpc/connect";
 
-import { isDaemonConnectingError } from "../daemon-errors";
+import { isDaemonConnectingError, isNoMachineError } from "../daemon-errors";
 import { classifyDaemonWait } from "../daemon-wait";
 
 // The exact message toolexec.ErrDaemonPending wraps its errors with (see
@@ -52,5 +52,19 @@ describe("end to end: the pending signal renders as a wait state, not a raw erro
     // verbatim to the user).
     expect(state.title).not.toContain("resolving daemon");
     expect(state.title).not.toContain("no daemon connected");
+  });
+});
+
+describe("isNoMachineError", () => {
+  it("recognises toolexec.ErrNoDaemon — no machine at all — and nothing that is a wait", () => {
+    const none = new ConnectError(
+      "resolving daemon for command: no daemon available: no machine is connected to your account yet",
+      Code.FailedPrecondition,
+    );
+    expect(isNoMachineError(none)).toBe(true);
+    expect(isDaemonConnectingError(none)).toBe(false);
+
+    expect(isNoMachineError(new ConnectError(PENDING_DAEMON_MESSAGE, Code.Unavailable))).toBe(false);
+    expect(isNoMachineError(new ConnectError("no daemon connected for user", Code.Unavailable))).toBe(false);
   });
 });

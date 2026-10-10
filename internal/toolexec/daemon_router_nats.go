@@ -451,9 +451,9 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 	logging.Warn("[DaemonRouter] no daemon could be resolved",
 		append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 	if selector != nil {
-		return "", fmt.Errorf("no daemon available: the machine this request asked for is not connected")
+		return "", fmt.Errorf("%w: the machine this request asked for is not connected", ErrNoDaemon)
 	}
-	return "", fmt.Errorf("no daemon available: no machine is connected to your account yet")
+	return "", fmt.Errorf("%w: no machine is connected to your account yet", ErrNoDaemon)
 }
 
 // selectorLogFields renders an optional selector as structured log key/values,

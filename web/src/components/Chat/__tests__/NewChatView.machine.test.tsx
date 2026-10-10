@@ -1,8 +1,9 @@
 /**
  * Where a new chat runs (research/NO_MACHINE_CHATS.md §2.1).
  *
- *   - The default is always the user's machine when they have a usable one,
- *     an asleep one included (sending wakes it).
+ *   - The default is always the user's machine when they have one, whatever
+ *     its state: an asleep one (sending wakes it) and a starting one (the
+ *     composer waits for it) included.
  *   - It falls back to No machine only when they have none at all.
  *   - No machine is also an explicit choice in the picker, and the way out of
  *     the "waiting for your machine" state.
@@ -118,9 +119,23 @@ describe("NewChatView: where the chat runs", () => {
     expect(screen.queryByTestId("new-chat-no-machine-hint")).toBeNull();
   });
 
-  it("falls back to No machine when the user has no usable machine, and can send without one", async () => {
-    const provisioning = { daemonId: "d-cloud", hostname: "cloud", status: 4 };
-    daemonState.current = { activeDaemon: undefined, daemons: [provisioning], loading: false };
+  // Prod, 2026-10-09: the user's only machine was restarting under a release
+  // (PENDING). The view defaulted to No machine, the chat was created with
+  // no_machine, and it said "No machine" for good while the Files tab and the
+  // terminal worked again 20 s later. A machine that is starting is waited
+  // for, never treated as absent.
+  it("waits for a machine that is starting: it is not No machine", () => {
+    const starting = { daemonId: "d-cloud", hostname: "cloud", status: 4 };
+    daemonState.current = { activeDaemon: undefined, daemons: [starting], loading: false };
+    render(<NewChatView tabId="t1" />);
+
+    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No machine");
+    expect(screen.queryByTestId("new-chat-no-machine-hint")).toBeNull();
+    expect(screen.getByRole("status")).toHaveTextContent("Waiting for your machine");
+  });
+
+  it("falls back to No machine when the user has no machine at all, and can send without one", async () => {
+    daemonState.current = { activeDaemon: undefined, daemons: [], loading: false };
     render(<NewChatView tabId="t1" />);
 
     expect(screen.getByTestId("machine-picker")).toHaveTextContent("No machine");
