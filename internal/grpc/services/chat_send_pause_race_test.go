@@ -62,16 +62,16 @@ func (p *gatedPauseController) PauseWorkflow(ctx context.Context, workflowID, _,
 	return p.repo.UpdateWorkflowStatus(ctx, workflowID, db.Paused())
 }
 
-func (p *gatedPauseController) ResumeWorkflow(ctx context.Context, workflowID, _ string) error {
+func (p *gatedPauseController) ResumeWorkflow(ctx context.Context, workflowID, _ string, _ map[string]interface{}) error {
 	p.record("resume")
 	return p.repo.UpdateWorkflowStatus(ctx, workflowID, db.Active())
 }
 
-func (p *gatedPauseController) ResumeInterruptedWorkflow(context.Context, string, string) (string, error) {
+func (p *gatedPauseController) ResumeInterruptedWorkflow(context.Context, string, string, map[string]interface{}) (string, error) {
 	return "", errors.New("a paused run is live; nothing here should reset it")
 }
 
-func (p *gatedPauseController) SignalWithRecovery(context.Context, string, string, interface{}) error {
+func (p *gatedPauseController) SignalWithRecovery(context.Context, string, string, interface{}, map[string]interface{}) error {
 	return nil
 }
 

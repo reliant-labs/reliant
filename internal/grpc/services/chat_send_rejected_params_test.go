@@ -182,12 +182,12 @@ type recordingPauseController struct {
 	resumes int
 }
 
-func (p *recordingPauseController) ResumeWorkflow(ctx context.Context, workflowID, chatID string) error {
+func (p *recordingPauseController) ResumeWorkflow(ctx context.Context, workflowID, chatID string, _ map[string]interface{}) error {
 	p.resumes++
-	return p.succeedingPauseController.ResumeWorkflow(ctx, workflowID, chatID)
+	return p.succeedingPauseController.ResumeWorkflow(ctx, workflowID, chatID, nil)
 }
 
-func (p *recordingPauseController) ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string) (string, error) {
+func (p *recordingPauseController) ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string, _ map[string]interface{}) (string, error) {
 	p.resumes++
-	return p.succeedingPauseController.ResumeInterruptedWorkflow(ctx, workflowID, chatID)
+	return p.succeedingPauseController.ResumeInterruptedWorkflow(ctx, workflowID, chatID, nil)
 }

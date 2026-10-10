@@ -959,7 +959,7 @@ func (s *ChatService) ResumeChat(
 	release := s.runs.LockRunControl(ctx, req.Msg.ChatId)
 	defer release()
 
-	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId)
+	outcome, err := s.runs.Resume(ctx, req.Msg.ChatId, nil)
 	if err != nil {
 		logging.Error("Failed to resume workflow", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to resume workflow"))

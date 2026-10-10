@@ -190,7 +190,7 @@ func (s *QuestionService) signalQuestion(ctx context.Context, question *db.Quest
 		return
 	}
 	signalName := "signal.question." + question.ID
-	if err := s.pauseService.SignalWithRecovery(ctx, question.TemporalWorkflowID, signalName, signalData); err != nil {
+	if err := s.pauseService.SignalWithRecovery(ctx, question.TemporalWorkflowID, signalName, signalData, nil); err != nil {
 		logging.Warn("[Question] Failed to signal question resolution",
 			"error", err,
 			"questionID", question.ID,

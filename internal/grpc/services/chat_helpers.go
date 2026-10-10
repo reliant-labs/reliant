@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -58,27 +59,40 @@ func (s *ChatService) getChatForUser(ctx context.Context, chatID, userID string)
 // with the incoming params. Returns true only if at least one param value actually changed.
 // This prevents the "params changed" message from being sent when params haven't changed.
 func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID, runID string, incomingParams map[string]interface{}) bool {
-	// Query the workflow for its current inputs
-	queryResp, err := s.tempClient.QueryWorkflow(ctx, workflowID, runID, "get_workflow_inputs")
+	currentInputs, err := s.queryRunInputs(ctx, workflowID, runID)
 	if err != nil {
 		// If query fails (e.g., workflow not running yet), assume params changed to be safe
 		logging.Warn("Failed to query workflow inputs, assuming params changed", "error", err, "workflowID", workflowID)
 		return true
 	}
+	return inputsDiffer(currentInputs, incomingParams)
+}
 
+// queryRunInputs reads a run's current inputs with its get_workflow_inputs
+// query. Temporal answers it for a closed run too, by replaying the history
+// on a worker.
+func (s *ChatService) queryRunInputs(ctx context.Context, workflowID, runID string) (map[string]interface{}, error) {
+	queryResp, err := s.tempClient.QueryWorkflow(ctx, workflowID, runID, "get_workflow_inputs")
+	if err != nil {
+		return nil, err
+	}
 	var currentInputs map[string]interface{}
 	if err := queryResp.Get(&currentInputs); err != nil {
-		logging.Warn("Failed to decode workflow inputs, assuming params changed", "error", err, "workflowID", workflowID)
-		return true
+		return nil, fmt.Errorf("decode workflow inputs: %w", err)
 	}
+	return currentInputs, nil
+}
 
-	// Compare each incoming param with current value using JSON normalization.
-	// Both sides go through JSON serialization (Temporal stores as JSON, protobuf
-	// values are JSON-compatible), so normalizing to JSON bytes eliminates type
-	// mismatches (e.g., float64 vs int from JSON round-trip, structpb types vs
-	// native Go types).
-	for key, newValue := range incomingParams {
-		currentValue, exists := currentInputs[key]
+// inputsDiffer reports whether any incoming input differs from the run's
+// current value, or is one the run does not have.
+//
+// Both sides go through JSON serialization (Temporal stores as JSON, protobuf
+// values are JSON-compatible), so normalizing to JSON bytes eliminates type
+// mismatches (e.g., float64 vs int from JSON round-trip, structpb types vs
+// native Go types).
+func inputsDiffer(current, incoming map[string]interface{}) bool {
+	for key, newValue := range incoming {
+		currentValue, exists := current[key]
 		if !exists {
 			logging.Debug("Param change detected: new param", "key", key)
 			return true
@@ -95,8 +109,7 @@ func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID
 			return true
 		}
 	}
-
-	logging.Debug("No actual param changes detected", "workflowID", workflowID, "paramCount", len(incomingParams))
+	logging.Debug("No actual param changes detected", "paramCount", len(incoming))
 	return false
 }
 

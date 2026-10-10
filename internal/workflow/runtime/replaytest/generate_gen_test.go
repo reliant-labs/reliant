@@ -345,7 +345,7 @@ func TestGenerateFixture_PauseResume(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	// 4. Resume (signal.resume) → turn 2 plays → ask_question again.
-	require.NoError(t, h.Pause.ResumeWorkflow(h.Ctx, workflowID, chatID))
+	require.NoError(t, h.Pause.ResumeWorkflow(h.Ctx, workflowID, chatID, nil))
 	q2 := h.WaitPendingQuestion(chatID)
 	require.NotEqual(t, q1.ID, q2.ID, "second ask_question must be a fresh question")
 

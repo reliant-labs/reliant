@@ -30,7 +30,7 @@ func TestResumeInterruptedWorkflow_AtHistoryLimit_DoesNotReset(t *testing.T) {
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
 	assert.False(t, tc.resetCalled,
 		"resetting a run at the history cap forks from inside the oversized history and dies again")
@@ -47,7 +47,7 @@ func TestResumeInterruptedWorkflow_NearHistoryLimit_DoesNotReset(t *testing.T) {
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
 	assert.False(t, tc.resetCalled)
 }
@@ -63,7 +63,7 @@ func TestResumeInterruptedWorkflow_NormalHistory_StillResets(t *testing.T) {
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.NoError(t, err)
 	assert.Equal(t, "new-run", newRunID)
 	assert.True(t, tc.resetCalled, "a normal interrupted run still gets the precise reset-and-replay recovery")
@@ -97,7 +97,7 @@ func TestResumeInterruptedWorkflow_TerminatedForHistorySize_DoesNotReset(t *test
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
 	assert.False(t, tc.resetCalled, "a size-limit death must never be reset into its own oversized history")
 }
@@ -110,7 +110,7 @@ func TestResumeInterruptedWorkflow_TerminatedForHistoryCount_DoesNotReset(t *tes
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
 	assert.False(t, tc.resetCalled)
 }
@@ -127,7 +127,7 @@ func TestResumeInterruptedWorkflow_NearHistorySizeLimit_DoesNotReset(t *testing.
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrHistoryLimitExceeded)
 	assert.False(t, tc.resetCalled)
 }
@@ -142,7 +142,7 @@ func TestResumeInterruptedWorkflow_UnrelatedTerminate_StillResets(t *testing.T) 
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "new-run", newRunID)
 	assert.True(t, tc.resetCalled)

@@ -140,7 +140,10 @@ func (s *Service) Terminate(ctx context.Context, chatID string) error {
 //  3. Re-read the run id from Temporal and write it back. A reset mints a NEW
 //     run, so the id the chat holds is stale exactly when a reset happened —
 //     and asking unconditionally is cheap and correct.
-func (s *Service) Resume(ctx context.Context, chatID string) (ResumeOutcome, error) {
+//
+// inputUpdate, when non-empty, reaches the run before its resume does — the
+// live run or the one a reset made (PauseController.ResumeWorkflow).
+func (s *Service) Resume(ctx context.Context, chatID string, inputUpdate map[string]interface{}) (ResumeOutcome, error) {
 	_, workflowID, err := s.chatRun(ctx, chatID)
 	if err != nil {
 		return ResumeOutcome{}, err
@@ -152,7 +155,7 @@ func (s *Service) Resume(ctx context.Context, chatID string) (ResumeOutcome, err
 		return ResumeOutcome{Kind: OutcomeUnresumable, WorkflowID: workflowID}, nil
 	}
 
-	if err := s.pause.ResumeWorkflow(ctx, workflowID, chatID); err != nil {
+	if err := s.pause.ResumeWorkflow(ctx, workflowID, chatID, inputUpdate); err != nil {
 		if errors.Is(err, workflow.ErrWorkflowNotFound) {
 			logging.Info("[runs] Run is gone from Temporal — caller must recover",
 				"chatID", chatID, "workflowID", workflowID)
@@ -181,13 +184,17 @@ func (s *Service) Resume(ctx context.Context, chatID string) (ResumeOutcome, err
 // OutcomeNeedsRestart is a normal result, not a failure — it means replay
 // cannot serve this run and the caller should start a fresh one at the
 // checkpoint.
-func (s *Service) ResumeInterrupted(ctx context.Context, chatID string) (ResumeOutcome, error) {
+//
+// inputUpdate, when non-empty, reaches the replayed run before its resume:
+// replay rebuilds the run from the inputs its history recorded, so a change
+// the caller is carrying would otherwise never reach it.
+func (s *Service) ResumeInterrupted(ctx context.Context, chatID string, inputUpdate map[string]interface{}) (ResumeOutcome, error) {
 	_, workflowID, err := s.chatRun(ctx, chatID)
 	if err != nil {
 		return ResumeOutcome{}, err
 	}
 
-	newRunID, resumeErr := s.pause.ResumeInterruptedWorkflow(ctx, workflowID, chatID)
+	newRunID, resumeErr := s.pause.ResumeInterruptedWorkflow(ctx, workflowID, chatID, inputUpdate)
 	if resumeErr == nil {
 		s.RecordRun(ctx, chatID, workflowID, newRunID)
 		logging.Info("[runs] Interrupted run reset-and-resumed (precise nested resume)",
@@ -237,7 +244,7 @@ func (s *Service) ResumeInterrupted(ctx context.Context, chatID string) (ResumeO
 // new run. Both writes are best-effort: the signal is the step that actually
 // restarts the run, and it has already succeeded.
 func (s *Service) ResumeViaSignal(ctx context.Context, in ResumeViaSignalInput) (ResumeOutcome, error) {
-	if err := s.pause.SignalWithRecovery(ctx, in.TargetWorkflowID, in.SignalName, in.SignalData); err != nil {
+	if err := s.pause.SignalWithRecovery(ctx, in.TargetWorkflowID, in.SignalName, in.SignalData, in.InputUpdate); err != nil {
 		logging.Info("[runs] Signal-parked run not reset-resumable — restart at checkpoint",
 			"chatID", in.ChatID, "workflowID", in.WorkflowID,
 			"signal", in.SignalName, "error", err)

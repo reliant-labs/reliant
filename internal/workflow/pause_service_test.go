@@ -357,7 +357,7 @@ func TestResumeInterruptedWorkflow_Failed_ResetsResumesAndMarksRunning(t *testin
 	ps := NewPauseService(tc, repo)
 	ps.SetResetGuard(NewResetAttemptGuard(2))
 
-	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "new-run", newRunID)
 
@@ -402,7 +402,7 @@ func TestResumeInterruptedWorkflow_RevivesSubtreeBeforeMarkingRootActive(t *test
 	repo := newMockPauseRepo()
 	ps := NewPauseService(tc, repo)
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)
 
 	require.Len(t, repo.reviveCalls, 1, "the resume must revive the subtree it is resuming")
@@ -435,7 +435,7 @@ func TestResumeInterruptedWorkflow_ReviveFailure_StillResumes(t *testing.T) {
 	repo.reviveErr = errors.New("database is down")
 	ps := NewPauseService(tc, repo)
 
-	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	newRunID, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)
 	assert.Equal(t, "new-run", newRunID)
 	assert.Equal(t, db.Active(), repo.updatedStatuses["wf-1"], "the root still resumes")
@@ -455,7 +455,7 @@ func TestResumeInterruptedWorkflow_NotFound_ReturnsNoReplayableHistory(t *testin
 	tc := &mockPauseTemporalClient{describeErr: fmt.Errorf("workflow not found")}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrNoReplayableHistory)
 	assert.False(t, tc.resetCalled)
 }
@@ -466,7 +466,7 @@ func TestResumeInterruptedWorkflow_Running_NotEligible(t *testing.T) {
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrNoReplayableHistory, "a running execution is not reset-resumed here")
 	assert.False(t, tc.resetCalled)
 }
@@ -477,7 +477,7 @@ func TestResumeInterruptedWorkflow_Cancelled_NotEligible(t *testing.T) {
 	}
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrNoReplayableHistory, "user-cancelled runs start fresh, not reset-resumed")
 	assert.False(t, tc.resetCalled)
 }
@@ -494,7 +494,7 @@ func TestResumeInterruptedWorkflow_GuardExhausted_FallsBack(t *testing.T) {
 	// Pre-exhaust the guard at the same history length (no progress).
 	guard.Record("wf-1", 11)
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	assert.ErrorIs(t, err, ErrResetAttemptsExhausted)
 	assert.False(t, tc.resetCalled, "no reset once the guard has given up")
 }
@@ -507,7 +507,7 @@ func TestSignalWithRecovery_LiveWorkflow_SignalsDirectly(t *testing.T) {
 	tc := &mockPauseTemporalClient{} // no signalErr → live signal succeeds
 	ps := NewPauseService(tc, newMockPauseRepo())
 
-	err := ps.SignalWithRecovery(context.Background(), "wf-1", SignalResume, nil)
+	err := ps.SignalWithRecovery(context.Background(), "wf-1", SignalResume, nil, nil)
 	require.NoError(t, err)
 	require.Len(t, tc.signalCalls, 1)
 	assert.Equal(t, "", tc.signalCalls[0].runID)
@@ -526,7 +526,7 @@ func TestSignalWithRecovery_ClosedFailed_ResetsAndReSignalsOnNewRun(t *testing.T
 
 	// A question answer to a dead (Failed) question-parked run: reset-replay, then
 	// re-deliver signal.question.<id> on the new run.
-	err := ps.SignalWithRecovery(context.Background(), "wf-1", "signal.question.q1", map[string]interface{}{"status": "resolved"})
+	err := ps.SignalWithRecovery(context.Background(), "wf-1", "signal.question.q1", map[string]interface{}{"status": "resolved"}, nil)
 	require.NoError(t, err)
 
 	require.True(t, tc.resetCalled, "closed run must be reset-and-replayed")
@@ -534,6 +534,36 @@ func TestSignalWithRecovery_ClosedFailed_ResetsAndReSignalsOnNewRun(t *testing.T
 	assert.Equal(t, "", tc.signalCalls[0].runID)
 	assert.Equal(t, "new-run", tc.signalCalls[1].runID)
 	assert.Equal(t, "signal.question.q1", tc.signalCalls[1].signalName)
+}
+
+// An input update a send carries reaches whichever run wakes, ahead of the
+// wake: the live run first, and when that one turns out to be closed, the run
+// the reset made — the replay starts from the inputs its history recorded.
+func TestSignalWithRecovery_InputUpdateReachesTheRunThatWakes_BeforeTheWake(t *testing.T) {
+	tc := &mockPauseTemporalClient{
+		signalErr:     fmt.Errorf("workflow execution already completed"),
+		describeResp:  closedDescribe(enumspb.WORKFLOW_EXECUTION_STATUS_TERMINATED, "old-run", 11),
+		historyEvents: failedByActivityHistory(),
+		resetResp:     &workflowservice.ResetWorkflowExecutionResponse{RunId: "new-run"},
+	}
+	ps := NewPauseService(tc, newMockPauseRepo())
+	ps.SetResetGuard(NewResetAttemptGuard(2))
+
+	err := ps.SignalWithRecovery(context.Background(), "wf-1", SignalResume, nil,
+		map[string]interface{}{"model": map[string]interface{}{"id": "claude-5.5-opus@anthropic"}})
+	require.NoError(t, err)
+
+	require.True(t, tc.resetCalled)
+	var toNewRun []string
+	for _, call := range tc.signalCalls {
+		if call.runID == "new-run" {
+			toNewRun = append(toNewRun, call.signalName)
+		}
+	}
+	assert.Equal(t, []string{SignalUpdateWorkflowState, SignalResume}, toNewRun,
+		"the new run gets the update, then the resume")
+	assert.Equal(t, SignalUpdateWorkflowState, tc.signalCalls[0].signalName,
+		"the live attempt sends the update first too; it is what found the run closed")
 }
 
 func TestSignalWithRecovery_ClosedFailed_GuardExhausted_FallsBack(t *testing.T) {
@@ -548,7 +578,7 @@ func TestSignalWithRecovery_ClosedFailed_GuardExhausted_FallsBack(t *testing.T) 
 	ps.SetResetGuard(g)
 	g.Record("wf-1", 11) // pre-exhaust at the same history length
 
-	err := ps.SignalWithRecovery(context.Background(), "wf-1", "signal.question.q1", nil)
+	err := ps.SignalWithRecovery(context.Background(), "wf-1", "signal.question.q1", nil, nil)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "failed to reset expired workflow",
 		"guard-exhausted surfaces the legacy reset error so callers coarse-restart")
@@ -568,7 +598,7 @@ func TestResumeInterruptedWorkflow_ResetGuardProgress_AllowsAgain(t *testing.T) 
 	// forward progress (400 > 11), so a reset is allowed again.
 	guard.Record("wf-1", 11)
 
-	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1")
+	_, err := ps.ResumeInterruptedWorkflow(context.Background(), "wf-1", "chat-1", nil)
 	require.NoError(t, err)
 	assert.True(t, tc.resetCalled)
 	// Ensure the sentinel errors are distinct (defensive).

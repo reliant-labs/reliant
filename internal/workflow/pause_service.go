@@ -286,8 +286,13 @@ func (ps *PauseService) reconcileTerminalStatus(ctx context.Context, workflowID 
 //
 // A guard-exhausted target surfaces the legacy "failed to reset expired
 // workflow" error so callers (ResumeWorkflow) fall back to the coarse restart.
-func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, signalName string, signalData interface{}) error {
-	err := ps.temporalClient.SignalWorkflow(ctx, workflowID, "", signalName, signalData)
+//
+// inputUpdate, when non-empty, is delivered to the same run immediately before
+// the signal (signalRun): the inputs a send changed — the user's model pick,
+// or a model the send moved off a provider that cannot serve it — reach the
+// run that wakes, whether that is the live one or the run a reset just made.
+func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, signalName string, signalData interface{}, inputUpdate map[string]interface{}) error {
+	err := ps.signalRun(ctx, workflowID, "", signalName, signalData, inputUpdate)
 	if err == nil {
 		return nil
 	}
@@ -298,7 +303,7 @@ func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, sign
 		reset, resetErr := ps.resetInterruptedForResume(ctx, workflowID, "")
 		switch {
 		case resetErr == nil:
-			if sigErr := ps.temporalClient.SignalWorkflow(ctx, workflowID, reset.NewRunID, signalName, signalData); sigErr != nil {
+			if sigErr := ps.signalRun(ctx, workflowID, reset.NewRunID, signalName, signalData, inputUpdate); sigErr != nil {
 				return fmt.Errorf("failed to send signal %s after reset: %w", signalName, sigErr)
 			}
 			return nil
@@ -323,10 +328,27 @@ func (ps *PauseService) SignalWithRecovery(ctx context.Context, workflowID, sign
 		return fmt.Errorf("failed to reset expired workflow for signal %s: %w", signalName, resetErr)
 	}
 	ps.reviveResumedSubtree(ctx, workflowID, "", reset.ResetPointTime)
-	if err := ps.temporalClient.SignalWorkflow(ctx, workflowID, reset.NewRunID, signalName, signalData); err != nil {
+	if err := ps.signalRun(ctx, workflowID, reset.NewRunID, signalName, signalData, inputUpdate); err != nil {
 		return fmt.Errorf("failed to send signal %s after reset: %w", signalName, err)
 	}
 	return nil
+}
+
+// signalRun delivers inputUpdate, when there is one, and then signalName to
+// one run, in that order. The order is the point: a parked run's resume — or
+// a question's answer — re-dispatches its step from its live inputs
+// (InlineLoopExecutor.syncIterationInputs), so they must already hold the
+// update when the wake lands. Sent first, the update is in the same workflow
+// task as the wake or an earlier one, and either way the update handler runs
+// before the parked step can; sent after, it can land a task late and the
+// step re-dispatches with the inputs it had.
+func (ps *PauseService) signalRun(ctx context.Context, workflowID, runID, signalName string, signalData interface{}, inputUpdate map[string]interface{}) error {
+	if len(inputUpdate) > 0 {
+		if err := ps.temporalClient.SignalWorkflow(ctx, workflowID, runID, SignalUpdateWorkflowState, inputUpdate); err != nil {
+			return err
+		}
+	}
+	return ps.temporalClient.SignalWorkflow(ctx, workflowID, runID, signalName, signalData)
 }
 
 // reviveResumedSubtree puts a reset-and-replayed run's subtree back to running
@@ -401,13 +423,14 @@ func (ps *PauseService) reviveResumedSubtree(ctx context.Context, workflowID, ch
 // ResumeWorkflow resumes a paused workflow. For live Temporal executions it sends
 // a signal.resume. For expired executions (Temporal timed out after ~14 days), it
 // resets the workflow to the pause point and then signals resume on the new run.
-func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID string) error {
+// inputUpdate, when non-empty, reaches whichever run that is first (signalRun).
+func (ps *PauseService) ResumeWorkflow(ctx context.Context, workflowID, chatID string, inputUpdate map[string]interface{}) error {
 	logging.Info("[PauseService] Resuming workflow",
 		"workflowID", workflowID,
 		"chatID", chatID,
 	)
 
-	err := ps.SignalWithRecovery(ctx, workflowID, SignalResume, nil)
+	err := ps.SignalWithRecovery(ctx, workflowID, SignalResume, nil, inputUpdate)
 	if err != nil {
 		// Check if the error is because the workflow is truly not found (not just expired)
 		if strings.Contains(err.Error(), "failed to reset expired workflow") {
@@ -515,7 +538,12 @@ func (ps *PauseService) ResumeExpiredWorkflow(ctx context.Context, workflowID, c
 //     (ghost / past retention / running / user-cancelled).
 //   - ErrResetAttemptsExhausted: the bounded guard has given up on resetting
 //     this workflow (it kept re-failing without forward progress).
-func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string) (string, error) {
+//
+// inputUpdate, when non-empty, is delivered to the new run before the resume
+// (signalRun). The replayed run starts from the inputs its history recorded,
+// so without it a model the user just chose — or one the send moved off a
+// provider that cannot serve it — would never reach it.
+func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string, inputUpdate map[string]interface{}) (string, error) {
 	// resetInterruptedForResume has already revived the subtree the replay is
 	// about to rebuild — before this function marks the root Active, which is
 	// the ordering that matters. See reviveResumedSubtree.
@@ -533,7 +561,7 @@ func (ps *PauseService) ResumeInterruptedWorkflow(ctx context.Context, workflowI
 	// of being consumed as a no-op epoch bump and leaving the run parked
 	// forever. Harmless for a run that never pauses: the held resume is
 	// discarded by the next explicit signal.pause.
-	if err := ps.temporalClient.SignalWorkflow(ctx, workflowID, newRunID, SignalResume, nil); err != nil {
+	if err := ps.signalRun(ctx, workflowID, newRunID, SignalResume, nil, inputUpdate); err != nil {
 		return "", fmt.Errorf("failed to send resume signal after reset: %w", err)
 	}
 

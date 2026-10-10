@@ -59,9 +59,11 @@ type TemporalTerminator interface {
 // live run, resetting a dead one, and honoring the bounded reset guard.
 type PauseController interface {
 	PauseWorkflow(ctx context.Context, workflowID, chatID, reason string) error
-	ResumeWorkflow(ctx context.Context, workflowID, chatID string) error
-	ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string) (string, error)
-	SignalWithRecovery(ctx context.Context, workflowID, signalName string, signalData interface{}) error
+	// inputUpdate, when non-empty, is delivered to the run that wakes, before
+	// it wakes: the live run, or the one a reset makes.
+	ResumeWorkflow(ctx context.Context, workflowID, chatID string, inputUpdate map[string]interface{}) error
+	ResumeInterruptedWorkflow(ctx context.Context, workflowID, chatID string, inputUpdate map[string]interface{}) (string, error)
+	SignalWithRecovery(ctx context.Context, workflowID, signalName string, signalData interface{}, inputUpdate map[string]interface{}) error
 }
 
 // OutcomeKind is what a resume attempt settled as, in terms a caller can
@@ -181,4 +183,8 @@ type ResumeViaSignalInput struct {
 
 	// SignalData is the signal payload.
 	SignalData interface{}
+
+	// InputUpdate, when non-empty, reaches the run before the signal does
+	// (PauseController.SignalWithRecovery).
+	InputUpdate map[string]interface{}
 }
