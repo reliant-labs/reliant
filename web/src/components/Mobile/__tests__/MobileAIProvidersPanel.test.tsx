@@ -187,6 +187,24 @@ describe("MobileAIProvidersPanel", () => {
     vi.unstubAllGlobals();
   });
 
+  it("confirms a sign-in provider's disconnect by name, and says the others stay connected", async () => {
+    const confirmSpy = vi.fn(() => false);
+    vi.stubGlobal("confirm", confirmSpy);
+    const { default: userEvent } = await import("@testing-library/user-event");
+    const user = userEvent.setup();
+    renderPanel([
+      { provider: "codex", configured: true, hasApiKey: true, displayName: "Codex (ChatGPT)" },
+    ]);
+
+    await user.click(screen.getByRole("button", { name: /disconnect codex/i }));
+    const prompt = (confirmSpy.mock.calls[0] as unknown as [string])[0];
+    expect(prompt).toMatch(/^Disconnect Codex \(ChatGPT\)\?/);
+    expect(prompt).toContain("Your other providers stay connected");
+    expect(prompt).not.toMatch(/api key/i);
+    expect(mocks.updateProvider).not.toHaveBeenCalled();
+    vi.unstubAllGlobals();
+  });
+
   it("starts Antigravity's OWN flow, not Codex's, when Antigravity is picked", async () => {
     // The ternary this replaced (`kind === "claude" ? claudeOAuth : codexOAuth`)
     // routed Antigravity into the Codex flow with no error anywhere — the user

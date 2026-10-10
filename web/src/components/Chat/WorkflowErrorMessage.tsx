@@ -1,12 +1,52 @@
 import { useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
 import { Tooltip } from "../ui/Tooltip";
 import { cn } from '../../lib/utils';
-import { ChevronDown, ChevronRight, AlertTriangle, RotateCw, Copy, Check } from 'lucide-react';
+import { ChevronDown, ChevronRight, AlertTriangle, RotateCw, Copy, Check, ArrowUpRight } from 'lucide-react';
 import type { ErrorUpdate } from '../../types/streaming';
 import { cleanTemporalErrorMessage, hasTemporalScaffolding } from '../../lib/temporalErrors';
 
 interface WorkflowErrorMessageProps {
   error: ErrorUpdate;
+}
+
+// Phrases that mean "the fix is in Settings → Providers": a model no connected
+// provider can serve (internal/llm/models.ProviderUnavailableError.Explain), a
+// provider sign-in that must be redone, or no provider at all. Matched on what
+// the backend and extractProviderReconnectSummary below actually emit.
+const PROVIDER_SETTINGS_SIGNALS = [
+  'settings → providers',
+  'none of required providers',
+  'please reconnect',
+  'then use login with',
+  'no api keys configured',
+  'authentication failed with the ai provider',
+];
+
+/**
+ * Whether this error is fixed by connecting or reconnecting a provider, so the
+ * card can offer to go there instead of only describing the way.
+ */
+export function needsProviderSettings(summary: string, message: string): boolean {
+  const text = `${summary}\n${message}`.toLowerCase();
+  return PROVIDER_SETTINGS_SIGNALS.some((signal) => text.includes(signal));
+}
+
+function OpenProviderSettingsButton() {
+  const navigate = useNavigate();
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        // "general" is the AI section; it opens on its "Your providers" tab.
+        navigate({ to: '/settings/$section', params: { section: 'general' } })
+      }
+      className="inline-flex items-center gap-1 rounded-md border border-destructive/30 bg-background/60 px-2 py-0.5 text-xs font-medium text-foreground transition-colors hover:bg-destructive/10"
+    >
+      Open Settings → Providers
+      <ArrowUpRight className="h-3 w-3" />
+    </button>
+  );
 }
 
 export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
@@ -103,6 +143,9 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
   const timestampLabel = formatTimestamp(error.timestamp);
   const retryLabel = getRetryLabel();
   const Icon = isRetrying ? RotateCw : AlertTriangle;
+  // Only once the run has stopped: while it is still retrying the error may
+  // clear on its own.
+  const offerProviderSettings = !isRetrying && needsProviderSettings(summary, cleanedMessage);
 
   return (
     <div className={cn(
@@ -154,6 +197,14 @@ export function WorkflowErrorMessage({ error }: WorkflowErrorMessageProps) {
           <ChevronRight className="w-3.5 h-3.5 text-muted-foreground flex-shrink-0" data-testid="workflow-error-chevron" />
         )}
       </button>
+
+      {/* The way out, one click away — outside the header, which is itself a
+          button (expand/collapse) and cannot contain another. */}
+      {offerProviderSettings && (
+        <div className="flex justify-end border-t border-destructive/20 px-2 py-1">
+          <OpenProviderSettingsButton />
+        </div>
+      )}
 
       {/* Expandable Error Details */}
       {isExpanded && (
