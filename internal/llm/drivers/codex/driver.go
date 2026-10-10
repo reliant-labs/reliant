@@ -127,8 +127,15 @@ func NewClient(opts llm.DriverOptions) (*CodexClient, error) {
 	// HTTP-vs-WS note: the ground-truth capture is a WebSocket handshake. WS-only
 	// headers (Upgrade/Connection/Sec-WebSocket-*, and openai-beta:
 	// responses_websockets=...) are intentionally NOT sent over the HTTP transport.
+	// The backend is always CodexBaseURL in production (configuredDrivers sets
+	// no base URL for codex); an explicit one points the client at a recorded
+	// backend in tests.
+	baseURL := CodexBaseURL
+	if strings.TrimSpace(opts.BaseURL) != "" {
+		baseURL = strings.TrimSpace(opts.BaseURL)
+	}
 	sdkOpts := []option.RequestOption{
-		option.WithBaseURL(CodexBaseURL),
+		option.WithBaseURL(baseURL),
 		option.WithHeader("version", CodexVersion),
 		option.WithHeader("originator", CodexOriginator),
 		option.WithHeader("user-agent", CodexUserAgent),
