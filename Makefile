@@ -46,7 +46,7 @@ NC := \033[0m # No Color
 MINTLIFY_DOCS_DIR := docs
 MINTLIFY_PORT ?= 3000
 
-.PHONY: all build build-all clean test test-short test-race test-coverage test-ci test-e2e replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
+.PHONY: all build build-all clean test test-short test-race test-coverage test-ci test-e2e replay-fixtures freeze-replay-fixtures deps fmt vet lint security help generate generate-cli generate-tools-ref generate-shortcuts generate-nodes generate-types generate-presets generate-workflow-builder-skill generate-changelog generate-mintlify-reference docs docs-build mint changelog changelog-draft postgres-up postgres-down db-driver-audit generate-yaml-bindings build-api-server build-temporal-worker build-tools-daemon build-services docker-build pin-forge pin-drift pin-ancestry release-rc release-patch release-minor release-major release-tag release-tag-dry-run check-release-tags
 
 # Default target
 all: deps fmt vet test build
@@ -213,6 +213,21 @@ replay-fixtures:
 	@echo "$(YELLOW)Verifying regenerated fixtures replay cleanly against current code...$(NC)"
 	$(GOTEST) -count=1 -timeout=5m -v -run TestReplayFixtures ./internal/workflow/runtime/replaytest/
 	@echo "$(GREEN)✅ Replay fixtures regenerated and verified — commit fixtures/*.json with your change$(NC)"
+
+## freeze-replay-fixtures: Pin the current replay fixtures as a frozen set that must keep replaying (NAME=<yyyy-mm-dd>-<what-changed>)
+# Run BEFORE `make replay-fixtures` when a change alters the workflow command
+# sequence: the current fixtures are the shape in-flight runs were recorded
+# with, and the change must stay replay-compatible with them (gate it with
+# workflow.GetVersion). A frozen set is never rewritten; TestReplayFixtures
+# replays it and TestFrozenFixturesAreUnchanged pins its bytes.
+FROZEN_FIXTURES_DIR := internal/workflow/runtime/replaytest/fixtures/frozen
+freeze-replay-fixtures:
+	@test -n "$(NAME)" || { echo "usage: make freeze-replay-fixtures NAME=<yyyy-mm-dd>-<what-changed>"; exit 1; }
+	@test ! -e "$(FROZEN_FIXTURES_DIR)/$(NAME)" || { echo "frozen set $(NAME) already exists; frozen sets are never rewritten"; exit 1; }
+	@mkdir -p "$(FROZEN_FIXTURES_DIR)/$(NAME)"
+	@cp internal/workflow/runtime/replaytest/fixtures/*.json "$(FROZEN_FIXTURES_DIR)/$(NAME)/"
+	@cd "$(FROZEN_FIXTURES_DIR)/$(NAME)" && shasum -a 256 *.json > SHA256SUMS
+	@echo "$(GREEN)✅ Froze the current fixtures as $(FROZEN_FIXTURES_DIR)/$(NAME) — add a README.md saying which shape it pins and which version gate keeps it replaying$(NC)"
 
 
 ## fmt: Format Go code

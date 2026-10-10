@@ -841,6 +841,26 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		}
 	}
 
+	// STEP 6.07: Preflight daemon check, and WHERE it runs. A run that needs a
+	// daemon checks (and if need be waits for) it before graph entry — after
+	// the "started" notification (STEP 6.6), so the running workflow row exists
+	// and the chat can surface WAITING_FOR_DAEMON while it waits. Runs recorded
+	// before that order existed checked here instead, and must keep doing so on
+	// replay; see preflightAfterStartedChangeID.
+	preflightAfterStarted := false
+	runPreflight := func() error { return nil }
+	if RequiresDaemon(wf, buildPreflightConfig()) {
+		preflightAfterStarted = workflow.GetVersion(ctx, preflightAfterStartedChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+		runPreflight = func() error {
+			return preflightDaemonCheck(ctx, input, execCtx, workflowID, thread)
+		}
+	}
+	if !preflightAfterStarted {
+		if err := runPreflight(); err != nil {
+			return nil, err
+		}
+	}
+
 	// STEP 6.1: Initialize thread tracker for runtime thread tracking
 	threadTracker := NewThreadTracker()
 	threadTracker.Mapping.RecordThreadResolution(ThreadRoot, thread)
@@ -947,44 +967,12 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	}
 	notifyWorkflowStatus(ctx, input.ChatID, workflowID, input.WorkflowName, "started", parentWorkflowID, thread, statusOpts)
 
-	// STEP 6.6: Preflight daemon check
-	// If the workflow requires a daemon (run nodes, daemon tools, explicit daemon field),
-	// verify that a daemon is available before starting execution. A daemon that
-	// exists but is still coming up makes the run WAIT (bounded); only a missing
-	// daemon, a refused wake or an exhausted budget fails it. Runs after the
-	// "started" notification so the running workflow row exists and the chat
-	// can surface WAITING_FOR_DAEMON while it waits.
-	preflightCfg := buildPreflightConfig()
-	if RequiresDaemon(wf, preflightCfg) {
-		preflightInput := map[string]interface{}{
-			"chat_id": input.ChatID,
+	// STEP 6.6: Preflight daemon check, for every run recorded since the check
+	// moved after "started" (see STEP 6.07).
+	if preflightAfterStarted {
+		if err := runPreflight(); err != nil {
+			return nil, err
 		}
-		// Pass daemon selector if one was resolved at workflow level
-		if execCtx.DaemonSelector != nil {
-			preflightInput["daemon_selector"] = map[string]interface{}{
-				"id":   execCtx.DaemonSelector.ID,
-				"name": execCtx.DaemonSelector.Name,
-				"type": execCtx.DaemonSelector.Type,
-			}
-		}
-		// Also check session daemon from inputs
-		if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
-			if _, hasDaemonSelector := preflightInput["daemon_selector"]; !hasDaemonSelector {
-				preflightInput["daemon_selector"] = map[string]interface{}{
-					"id": sessionDaemonID,
-				}
-			}
-		}
-
-		if err := waitForDaemon(ctx, preflightInput); err != nil {
-			if temporal.IsCanceledError(err) {
-				// Cancelled (CancelWorkflow): not a daemon failure, so no error card.
-				return nil, err
-			}
-			notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", preflightFailureMessage(err))
-			return nil, fmt.Errorf("preflight daemon check failed: %w", err)
-		}
-		logger.Debug("[Workflow Runtime] Preflight daemon check passed")
 	}
 
 	// STEP 6.8: Greenfield probe, the last thing before graph entry so the
@@ -5002,6 +4990,63 @@ func getMapKeys(m map[string]interface{}) []string {
 	}
 	sort.Strings(keys)
 	return keys
+}
+
+// preflightAfterStartedChangeID gates WHERE a run's preflight daemon check
+// sits in its startup sequence (workflow.GetVersion).
+//
+// #641 moved the check from before the "started" WorkflowStatus notification
+// to after it, so a run waiting for its machine has a running workflow row to
+// surface WAITING_FOR_DAEMON on. It shipped without a gate and regenerated the
+// replay fixtures, and on the 2026-10-09 deploy every in-flight run recorded
+// with the old order (PreflightDaemonCheck as activity 11, WorkflowStatus as
+// 17) failed its next workflow task with TMPRL1100 — chats 97654413 and
+// 3f03dc31 retried it for hours. A history without this marker therefore runs
+// the check first, as it was recorded; a run that records the marker runs it
+// after "started".
+//
+// Histories recorded by #641's own build carry no marker either, so on replay
+// they take the old order and do not match. That trade is deliberate: the
+// alternative leaves every run older than #641 wedged, and a marker-less run
+// that wedges is recovered by the reconciler. Pinned by the frozen fixture set
+// replaytest/fixtures/frozen/2026-10-08-preflight-before-started.
+const preflightAfterStartedChangeID = "preflight-after-started"
+
+// preflightDaemonCheck runs a daemon-requiring run's preflight: check the
+// daemon, and if it exists but is still coming up, wait for it (bounded). Only
+// a missing daemon, a refused wake or an exhausted budget fails the run. The
+// returned error is DynamicWorkflow's to return.
+func preflightDaemonCheck(ctx workflow.Context, input WorkflowInput, execCtx *ExecutionContext, workflowID, thread string) error {
+	preflightInput := map[string]interface{}{
+		"chat_id": input.ChatID,
+	}
+	// Pass daemon selector if one was resolved at workflow level
+	if execCtx.DaemonSelector != nil {
+		preflightInput["daemon_selector"] = map[string]interface{}{
+			"id":   execCtx.DaemonSelector.ID,
+			"name": execCtx.DaemonSelector.Name,
+			"type": execCtx.DaemonSelector.Type,
+		}
+	}
+	// Also check session daemon from inputs
+	if sessionDaemonID, ok := input.Inputs["session_daemon_id"].(string); ok && sessionDaemonID != "" {
+		if _, hasDaemonSelector := preflightInput["daemon_selector"]; !hasDaemonSelector {
+			preflightInput["daemon_selector"] = map[string]interface{}{
+				"id": sessionDaemonID,
+			}
+		}
+	}
+
+	if err := waitForDaemon(ctx, preflightInput); err != nil {
+		if temporal.IsCanceledError(err) {
+			// Cancelled (CancelWorkflow): not a daemon failure, so no error card.
+			return err
+		}
+		notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread, "daemon_unavailable", preflightFailureMessage(err))
+		return fmt.Errorf("preflight daemon check failed: %w", err)
+	}
+	workflow.GetLogger(ctx).Debug("[Workflow Runtime] Preflight daemon check passed")
+	return nil
 }
 
 const (
