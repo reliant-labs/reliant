@@ -18,7 +18,7 @@ import (
 
 // TestStreamUserUpdates_BinaryConnectWire exercises the production stream
 // implementation through the generated Connect handler and client over real
-// HTTP/2. The browser's dedicated stream transport uses application/proto, so
+// HTTP/2. The browser's dedicated stream transport uses binary framing (application/connect+proto), so
 // this catches codec changes that fake streams cannot see and proves snapshot
 // and heartbeat frames decode.
 func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
@@ -50,7 +50,7 @@ func TestStreamUserUpdates_BinaryConnectWire(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = stream.Close() })
 
-	require.Equal(t, "application/proto", <-contentTypes)
+	require.Equal(t, "application/connect+proto", <-contentTypes)
 
 	receivedSnapshot := false
 	for stream.Receive() {
