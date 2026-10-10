@@ -2,11 +2,11 @@ import { useEffect, useState, useRef, useCallback, forwardRef, useImperativeHand
 import { FileTreeItem } from "./FileTreeItem";
 import type { FileOperationType } from "./FileTreeItem";
 import { FileOperationsModal } from "./FileOperationsModal";
-import { Loader2, AlertCircle, FilePlus, FolderPlus } from "lucide-react";
+import { Loader2, AlertCircle, CloudOff, FilePlus, FolderPlus } from "lucide-react";
 import type { FileNode } from "./index";
 import { getFileTree, createFile, createFolder, deleteFileOrFolder, copyFile, getFileContent, getFilePreviewInfo } from "../../api/fileSystem";
 import { cn } from "../../lib/utils";
-import { isDaemonConnectingError, projectCheckoutMissing } from "../../lib/daemon-errors";
+import { isDaemonConnectingError, isNoMachineError, projectCheckoutMissing } from "../../lib/daemon-errors";
 import { ProjectCheckoutState, type ProjectCheckoutMissing } from "../../gen/reliant/v1/filesystem_pb";
 import { ProjectCheckoutMissingPanel } from "./ProjectCheckoutMissingPanel";
 import { DaemonWaitState } from "../DaemonWaitState";
@@ -199,6 +199,8 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
   // owns the stopwatch, the status poll, and the retry cadence; we only record
   // that we're blocked on it.
   const [waitingOnDaemon, setWaitingOnDaemon] = useState(false);
+  // The user has no machine at all: nothing to wait for, and not an error.
+  const [noMachine, setNoMachine] = useState(false);
   // The project's directory is not on this machine — a clone still landing,
   // or a project that lives elsewhere. A state with its own panel, never the
   // raw "no such file or directory" error. See ProjectCheckoutMissingPanel.
@@ -296,8 +298,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
       setTree((prev) => reconcileChildren(rootChildren, prev, expandedPathsRef.current));
       setWaitingOnDaemon(false);
       setCheckoutMissing(null);
+      setNoMachine(false);
     } catch (err) {
       const missing = projectCheckoutMissing(err);
+      setNoMachine(false);
       if (missing) {
         setWaitingOnDaemon(false);
         setCheckoutMissing(missing);
@@ -308,6 +312,10 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
         // pulling an image or cloning a repo. The wait state escalates its copy
         // instead, and only reports failure when the control plane says so.
         setWaitingOnDaemon(true);
+      } else if (isNoMachineError(err)) {
+        setWaitingOnDaemon(false);
+        setCheckoutMissing(null);
+        setNoMachine(true);
       } else {
         setWaitingOnDaemon(false);
         setCheckoutMissing(null);
@@ -1084,6 +1092,23 @@ export const FileTree = forwardRef<FileTreeHandle, FileTreeProps>(function FileT
         projectName={currentProject?.name ?? "This project"}
         onCloneQueued={() => void loadFileTree(false)}
       />
+    );
+  }
+
+  if (noMachine) {
+    return (
+      <div className="flex items-center justify-center h-full p-4" data-testid="file-tree-no-machine">
+        <div className="text-center space-y-2 max-w-xs">
+          <CloudOff className="w-8 h-8 text-muted-foreground mx-auto" aria-hidden="true" />
+          <p className="text-sm font-medium text-foreground">No machine</p>
+          <p className="text-xs text-muted-foreground">
+            This project&apos;s files live on a machine. Connect one to browse them here.
+          </p>
+          <button onClick={() => loadFileTree()} className="text-xs text-primary hover:underline">
+            Check again
+          </button>
+        </div>
+      </div>
     );
   }
 

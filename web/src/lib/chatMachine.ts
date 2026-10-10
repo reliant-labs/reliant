@@ -29,35 +29,63 @@ export const DEFAULT_MACHINE = "";
 export type ChatMachineChoice = string;
 
 /**
- * Whether a chat can run on this machine now or after a wake.
+ * Whether the user has a machine at all, in any state.
  *
- *   - ACTIVE / IDLE: connected.
- *   - SUSPENDED: asleep. A send wakes it ("Waking…"), so it still counts:
- *     rule §2.1 keeps an asleep machine as the default rather than falling
- *     back to no machine.
+ * This, and only this, is what makes a new chat default to No machine
+ * (§2.1). "No machine" is a fact about the CHAT, persisted on its row
+ * (chats.no_machine) and one-way, so it must never be inferred from a
+ * machine's momentary state. A machine that is provisioning, restarting under
+ * a release, reconnecting, asleep or even failed still exists: a new chat
+ * waits for it (lib/daemon-wait.ts says "starting" / "connecting" / "failed"),
+ * and "Continue without machine" is the explicit way out.
  *
- * Deliberately narrower than onboarding's hasUsableDaemonForOnboarding
- * (ComputeStep.tsx), which also counts PENDING. That predicate answers "has
- * the user already chosen where their machine lives", and a machine still
- * being provisioned has. This one answers "can the next chat run somewhere",
- * and a machine still provisioning cannot: §2.1 names it as a case that falls
- * back to no machine. DISCONNECTED and FAILED cannot be woken from here.
+ * Prod, 2026-10-09 22:17:30 UTC: the user's only machine read PENDING for the
+ * 20 s its pod took to restart. The old rule (connected or asleep only) made
+ * the new chat a no-machine chat for good, while the Files tab and the
+ * terminal, which resolve the machine per request on the server, worked again
+ * as soon as it re-registered.
  */
-export function isUsableMachineForChat(daemon: Pick<DaemonInfo, "status">): boolean {
-  return (
-    daemon.status === DaemonStatus.ACTIVE ||
-    daemon.status === DaemonStatus.IDLE ||
-    daemon.status === DaemonStatus.SUSPENDED
-  );
-}
-
-export function hasUsableMachineForChat(daemons: ReadonlyArray<Pick<DaemonInfo, "status">>): boolean {
-  return daemons.some(isUsableMachineForChat);
+export function hasMachine(daemons: ReadonlyArray<unknown>): boolean {
+  return daemons.length > 0;
 }
 
 /** Connected right now: a send needs no wake. */
 export function isAwakeMachine(daemon: Pick<DaemonInfo, "status">): boolean {
   return daemon.status === DaemonStatus.ACTIVE || daemon.status === DaemonStatus.IDLE;
+}
+
+/** On its way up by itself (provisioning, cloning, restarting): nothing has to wake it. */
+export function isStartingMachine(daemon: Pick<DaemonInfo, "status">): boolean {
+  return daemon.status === DaemonStatus.PENDING;
+}
+
+/**
+ * Whether a chat can run on this machine now, once it is up, or after a send
+ * wakes it: connected, starting, or asleep. This ranks machines (the Connect a
+ * machine preselection); it does NOT decide No machine — see hasMachine.
+ * DISCONNECTED and FAILED cannot be brought back from here.
+ */
+export function isUsableMachineForChat(daemon: Pick<DaemonInfo, "status">): boolean {
+  return isAwakeMachine(daemon) || isStartingMachine(daemon) || daemon.status === DaemonStatus.SUSPENDED;
+}
+
+/**
+ * The machine the server's default resolution picks for a chat that names
+ * none (toolexec NATSDaemonRouter.resolveDaemonID with no selector): a
+ * connected machine, a self-hosted one first; else one starting or asleep;
+ * else any. The web uses it to NAME that machine, so what the picker shows is
+ * where an unpinned chat actually runs.
+ */
+export function defaultMachineDaemon<T extends Pick<DaemonInfo, "status"> & Partial<Pick<DaemonInfo, "daemonType">>>(
+  daemons: ReadonlyArray<T>,
+): T | undefined {
+  const connected = daemons.filter(isAwakeMachine);
+  return (
+    connected.find((d) => d.daemonType === "self_hosted") ??
+    connected[0] ??
+    daemons.find((d) => isStartingMachine(d) || d.status === DaemonStatus.SUSPENDED) ??
+    daemons[0]
+  );
 }
 
 export interface DefaultChatMachineInput {
@@ -77,10 +105,11 @@ export interface DefaultChatMachineInput {
  * undefined while that cannot be known yet (the list is loading, or the
  * desktop app's own daemon is still registering).
  *
- * Desktop (§2.1): the user's machine whenever they have a usable one, and no
- * machine only when they have none at all. Mobile (§2.5): no machine unless
- * one of their machines is awake right now, because waking one from a phone
- * is an explicit choice; the picker still offers an asleep machine.
+ * Desktop (§2.1): the user's machine whenever they have one, in whatever
+ * state, and No machine only when they have none at all (hasMachine).
+ * Mobile (§2.5): No machine unless one of their machines is awake or starting
+ * by itself, because waking one from a phone is an explicit choice; the
+ * picker still offers every machine.
  */
 export function defaultChatMachine({
   daemons,
@@ -90,9 +119,9 @@ export function defaultChatMachine({
 }: DefaultChatMachineInput): ChatMachineChoice | undefined {
   if (loading || awaitingBundledDaemon) return undefined;
   if (surface === "mobile") {
-    return daemons.some(isAwakeMachine) ? DEFAULT_MACHINE : NO_MACHINE;
+    return daemons.some((d) => isAwakeMachine(d) || isStartingMachine(d)) ? DEFAULT_MACHINE : NO_MACHINE;
   }
-  return hasUsableMachineForChat(daemons) ? DEFAULT_MACHINE : NO_MACHINE;
+  return hasMachine(daemons) ? DEFAULT_MACHINE : NO_MACHINE;
 }
 
 export interface ChatMachineOption {

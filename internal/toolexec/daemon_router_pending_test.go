@@ -36,6 +36,15 @@ func TestResolveDaemonID_NoDaemonAtAll_ReturnsHardError(t *testing.T) {
 	require.Error(t, err)
 	assert.False(t, IsDaemonPending(err), "user with truly no daemon must get a real error, not the pending signal")
 	assert.Contains(t, err.Error(), "no daemon available")
+	// Typed, so surfaces can say "no machine" (FailedPrecondition) rather
+	// than report a server failure; and never the offline marker.
+	assert.True(t, IsNoDaemon(err), "expected ErrNoDaemon, got: %v", err)
+	assert.NotContains(t, err.Error(), "no daemon connected")
+
+	// A selector naming no machine the user has is the same: nothing to wait for.
+	_, err = router.resolveDaemonID(context.Background(), "user-1", &DaemonSelector{ID: "gone"})
+	require.Error(t, err)
+	assert.True(t, IsNoDaemon(err), "expected ErrNoDaemon for an unknown selector, got: %v", err)
 }
 
 // Neither resolution failure may name the account UUID. These messages are

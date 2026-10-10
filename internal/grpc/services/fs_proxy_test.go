@@ -4,6 +4,8 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"path/filepath"
 	"testing"
 
@@ -13,6 +15,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -52,6 +55,71 @@ func TestFileSystemProxy_CreateDirectory_RoutesMkdirToDaemon(t *testing.T) {
 	var sent map[string]string
 	require.NoError(t, json.Unmarshal(router.lastPayload, &sent))
 	assert.Equal(t, "/home/workspace/projects/new-folder", sent["path"])
+}
+
+// failingFSDaemonRouter fails every daemon command with err.
+type failingFSDaemonRouter struct {
+	worktreeTestDaemonRouter
+	err error
+}
+
+func (r *failingFSDaemonRouter) SendDaemonCommand(context.Context, string, string, []byte, int32) ([]byte, error) {
+	return nil, r.err
+}
+
+func (r *failingFSDaemonRouter) SendDaemonCommandToDaemon(context.Context, string, string, string, []byte, int32) ([]byte, error) {
+	return nil, r.err
+}
+
+// A machine that is not up, or not there, is the machine's state, not a server
+// failure. Prod, 2026-10-09: a crash-looping machine made every file-tree poll
+// fail as Internal ("internal: unavailable: no daemon connected for user") —
+// 117 ERROR "rpc failed" lines in five hours, and a 500-class error in the UI
+// for a machine that was only restarting.
+func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
+	cases := []struct {
+		name   string
+		err    error
+		want   connect.Code
+		marker bool // keeps "no daemon connected", which the web's wait keys on
+	}{
+		{
+			name:   "not connected: NATS had no responder",
+			err:    connect.NewError(connect.CodeUnavailable, errors.New("no daemon connected for user")),
+			want:   connect.CodeUnavailable,
+			marker: true,
+		},
+		{
+			name:   "starting or asleep",
+			err:    fmt.Errorf("resolving daemon for command: %w", fmt.Errorf("your machine is still starting: %w", toolexec.ErrDaemonPending)),
+			want:   connect.CodeUnavailable,
+			marker: true,
+		},
+		{
+			name: "no machine at all",
+			err:  fmt.Errorf("resolving daemon for command: %w", fmt.Errorf("%w: no machine is connected to your account yet", toolexec.ErrNoDaemon)),
+			want: connect.CodeFailedPrecondition,
+		},
+		{
+			name: "a real failure stays Internal",
+			err:  errors.New("fs.mkdir via NATS failed: nats: timeout"),
+			want: connect.CodeInternal,
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := NewFileSystemProxyService(&failingFSDaemonRouter{err: tc.err}, nil)
+			ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+			_, err := svc.CreateDirectory(ctx, connect.NewRequest(&reliantv1.CreateDirectoryRequest{
+				Path: "/home/workspace/projects/new-folder",
+			}))
+			require.Error(t, err)
+			assert.Equal(t, tc.want, connect.CodeOf(err), "error: %v", err)
+			if tc.marker {
+				assert.Contains(t, err.Error(), "no daemon connected")
+			}
+		})
+	}
 }
 
 func TestFileSystemProxy_CreateDirectory_RejectsEmptyAndRelativePaths(t *testing.T) {

@@ -21,6 +21,8 @@ interface TerminalProps {
   sessionId: string;
   workingDir?: string;
   worktreeId?: string;
+  /** The project the terminal belongs to. Sent so the server can log it. */
+  projectId?: string;
   onExit?: () => void;
   className?: string;
 }
@@ -74,7 +76,7 @@ type TerminalConnectionState =
   | "waiting_for_directory"
   | "disconnected";
 
-export function Terminal({ sessionId, workingDir, worktreeId, className }: TerminalProps) {
+export function Terminal({ sessionId, workingDir, worktreeId, projectId, className }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -408,6 +410,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
       const params = new URLSearchParams();
       if (workingDir) params.append("workingDir", workingDir);
       if (worktreeId) params.append("worktreeId", worktreeId);
+      if (projectId) params.append("projectId", projectId);
       if (token) params.append("token", token);
 
       const wsUrl = `${protocol}//${host}/api/v2/terminal/ws?${params.toString()}`;
@@ -666,7 +669,7 @@ export function Terminal({ sessionId, workingDir, worktreeId, className }: Termi
 
       term.dispose();
     };
-  }, [sessionId, workingDir, worktreeId, updateSessionPID, setDaemonSessionId, updateConnectionState]); // updateConnectionState is a stable setter
+  }, [sessionId, workingDir, worktreeId, projectId, updateSessionPID, setDaemonSessionId, updateConnectionState]); // updateConnectionState is a stable setter
 
   // Listen for theme changes and update terminal colors
   useEffect(() => {
