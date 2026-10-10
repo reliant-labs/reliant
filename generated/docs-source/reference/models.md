@@ -79,11 +79,11 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 | `gpt-5.6-sol` | GPT-5.6 Sol | powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex |
 | `gpt-5.6-terra` | GPT-5.6 Terra | cheap, fast, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, copilot |
 | `gpt-6-astra` | GPT-6 Astra | powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai, openrouter |
-| `gpt-6-luna` | GPT-6 Luna | cheap, fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai, openrouter, copilot |
-| `gpt-6-sol` | GPT-6 Sol | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai, openrouter |
+| `gpt-6-luna` | GPT-6 Luna | cheap, fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai, openrouter, copilot |
+| `gpt-6-sol` | GPT-6 Sol | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai, openrouter |
 | `gpt-6-terra` | GPT-6 Terra | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
 | `gpt-6.1-astra` | GPT-6.1 Astra | powerful, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
-| `gpt-6.1-sol` | GPT-6.1 Sol | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
+| `gpt-6.1-sol` | GPT-6.1 Sol | flagship, moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | codex, openai |
 | `gpt-6.1-terra` | GPT-6.1 Terra | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | openai |
 
 **Note:** OpenAI's GPT models with varying context windows and capabilities.
@@ -169,6 +169,7 @@ _Balance of capability and cost_
 | `claude-5-sonnet` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6.1-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-sol` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.5` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.6-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.4` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
@@ -233,10 +234,10 @@ _Extended thinking capabilities_
 | `claude-5-fable` | Anthropic | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-4.6-opus` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `claude-4.5-opus` | Anthropic | high | 200K | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
+| `gpt-6.1-sol` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.5` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6.1-astra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-astra` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
-| `gpt-6.1-sol` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6-sol` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-5.6-sol` | OpenAI | xhigh | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |
 | `gpt-6.1-terra` | OpenAI | high | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "save" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} |

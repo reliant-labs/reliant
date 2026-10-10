@@ -275,7 +275,7 @@ func TestEnvelopeName(t *testing.T) {
 }
 
 func TestUsesAdditionalToolsEnvelope(t *testing.T) {
-	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra} {
+	for _, id := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra, models.GPT61Sol, models.GPT6Sol, models.GPT6Luna} {
 		if !usesAdditionalToolsEnvelope(id) {
 			t.Errorf("expected %s to use the additional_tools envelope", id)
 		}
@@ -290,7 +290,7 @@ func TestUsesAdditionalToolsEnvelope(t *testing.T) {
 func TestModelSupportsReasoningSummaries(t *testing.T) {
 	noSummaries := []models.ModelID{
 		models.GPT56Sol, models.GPT56Luna, models.GPT56Terra,
-		models.GPT6Astra,
+		models.GPT6Astra, models.GPT61Sol, models.GPT6Sol, models.GPT6Luna,
 	}
 	for _, id := range noSummaries {
 		if modelSupportsReasoningSummaries(id) {
@@ -324,7 +324,8 @@ func TestBuildParams_AstraPinsPriorityServiceTier(t *testing.T) {
 		t.Errorf("expected astra to request service_tier=priority, got %v", astra["service_tier"])
 	}
 
-	for _, modelID := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra} {
+	// No capture for the newer GPT-6 models either; see astraServiceTier.
+	for _, modelID := range []models.ModelID{models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT61Sol, models.GPT6Sol, models.GPT6Luna} {
 		payload := marshalParams(t, gpt56Model(modelID, string(modelID)), "high", nil)
 		if tier, ok := payload["service_tier"]; ok {
 			t.Errorf("expected %s to omit service_tier, got %v", modelID, tier)

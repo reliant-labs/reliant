@@ -11,8 +11,24 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testdata/codex_models.json is GET /codex/models recorded 2026-10-04 with all
-// credentials stripped (only the fields the driver consumes are kept).
+// testdata/codex_models.json is the model catalog Codex CLI bundles —
+// openai/codex codex-rs/models-manager/models.json at d63a9b8344 (2026-10-06,
+// fetched 2026-10-10; gpt-6.1-sol arrived in b1e72963c3 on 2026-09-29) —
+// projected onto the fields this package and its tests read. Codex CLI
+// deserializes that file and GET /codex/models into the same type
+// (codex_protocol::openai_models::ModelsResponse), so it is a /codex/models
+// body. The 2026-10-04 live recording it replaced listed the same windows and
+// levels for every model both carry. Refresh with:
+//
+//	gh api repos/openai/codex/contents/codex-rs/models-manager/models.json \
+//	  -H 'Accept: application/vnd.github.raw' | jq --indent 1 '{models: [.models[] |
+//	  {slug, display_name, description, visibility, priority, minimal_client_version,
+//	   context_window, max_context_window, default_reasoning_level,
+//	   supported_reasoning_levels, supported_in_api, tool_mode, use_responses_lite,
+//	   default_service_tier}]}'
+//
+// then run this package's tests: catalog_drift_test.go names every listed model
+// reliant does not serve yet.
 func recordedReport(t *testing.T) registry.ProviderAvailability {
 	t.Helper()
 	body, err := os.ReadFile("testdata/codex_models.json")
@@ -26,7 +42,7 @@ func TestParseCodexModels_ReasoningLevelsAreIntersectedWithAcceptedSet(t *testin
 	report := recordedReport(t)
 
 	// The catalog advertises `ultra` for astra/sol/terra; the API 400s on it.
-	for _, slug := range []string{"gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra"} {
+	for _, slug := range []string{"gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna", "gpt-5.6-sol", "gpt-5.6-terra"} {
 		got := report.Models[slug].ThinkingLevels
 		assert.NotContains(t, got, "ultra", slug)
 		assert.Equal(t, []string{"low", "medium", "high", "xhigh", "max"}, got, slug)
@@ -40,7 +56,7 @@ func TestParseCodexModels_ReasoningLevelsAreIntersectedWithAcceptedSet(t *testin
 // accepted 698,604-token gpt-5.6-terra prompts.
 func TestParseCodexModels_ReadsMaxContextWindow(t *testing.T) {
 	report := recordedReport(t)
-	for _, slug := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra"} {
+	for _, slug := range []string{"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		assert.Equal(t, 872000, report.Models[slug].ContextWindow, slug)
 	}
 	assert.Equal(t, 272000, report.Models["gpt-5.5"].ContextWindow)
@@ -79,8 +95,9 @@ func TestParseCodexModels_HiddenAndUnknownSlugsAreNotOffered(t *testing.T) {
 	report := recordedReport(t)
 
 	// visibility:"hide" slugs have no catalog entry and are never auto-added.
-	assert.NotContains(t, report.Models, "gpt-reserve")
-	assert.NotContains(t, report.Models, "codex-auto-review")
+	for _, hidden := range []string{"gpt-daybreak-blue-latest", "gpt-daybreak-red-latest", "codex-auto-review"} {
+		assert.NotContains(t, report.Models, hidden)
+	}
 
 	// Authoritative: a catalog model the account does not list is not servable.
 	assert.True(t, report.Authoritative)

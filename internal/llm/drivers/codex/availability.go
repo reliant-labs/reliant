@@ -29,8 +29,8 @@ const (
 	availabilityTimeout    = 4 * time.Second
 )
 
-// codexModelsResponse is the subset of GET /codex/models consumed. Recorded
-// 2026-10-04 (see testdata/codex_models.json).
+// codexModelsResponse is the subset of GET /codex/models consumed (see
+// testdata/codex_models.json and its provenance on recordedReport).
 //
 // The two window fields mean what Codex CLI makes them mean (openai/codex
 // codex-rs/protocol/src/openai_models.rs, models-manager/src/model_info.rs):

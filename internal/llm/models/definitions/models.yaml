@@ -105,6 +105,9 @@ tags:
     - {model: claude-5-sonnet, thinking_level: high}
     - {model: gpt-6.1-terra, thinking_level: high}
     - {model: gpt-6-terra, thinking_level: high}
+    # Codex's workhorse (the Terras are API-key only). Below them, so an OpenAI
+    # user's [moderate] is unchanged.
+    - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
     - {model: gpt-5.6-terra, thinking_level: high}
     - {model: gpt-5.4, thinking_level: xhigh}
@@ -143,6 +146,8 @@ tags:
     # model still has to answer [fast], because titling and other meta work ask
     # for that tier and a failure to resolve is not a slower title — it is no
     # title. Every tier runs at high effort or above: quality drops sharply below it.
+    # codex is answered by gpt-6-luna above; terra is its fallback for a plan
+    # whose /codex/models does not serve luna.
     - {model: gpt-5.6-terra, thinking_level: high}       # codex
     - {model: gemini-3.8-flash, thinking_level: high}    # antigravity
     - {model: gpt-5.4-nano, thinking_level: high}        # copilot
@@ -160,9 +165,10 @@ tags:
     - {model: vertex-gemini-2.5-flash}
     - {model: gemini-3.1-flash-lite-image}
     - {model: veo-3.1-lite-generate}
-    # Trailing per-provider coverage — reached only by a codex-only or
-    # antigravity-only user. Both are subscription-billed, so "cheap" does not mean
-    # a cheaper per-token rate, and effort stays at high.
+    # Trailing per-provider coverage — reached only by an antigravity-only user,
+    # or a codex user whose plan does not serve gpt-6-luna. Both are
+    # subscription-billed, so "cheap" does not mean a cheaper per-token rate, and
+    # effort stays at high.
     - {model: gpt-5.6-terra, thinking_level: high}       # codex
     - {model: gemini-3.8-flash, thinking_level: high}    # antigravity
     - {model: gpt-5.4-nano, thinking_level: high}        # copilot
@@ -197,7 +203,8 @@ tags:
     - {model: vertex-claude-4.5-haiku}
     # Trailing per-provider coverage. Internal meta work (titling, routing,
     # summarizing) must be possible on every provider; these are reached only
-    # when the user has none of the models above.
+    # when the user has none of the models above (codex: gpt-6-luna above, terra
+    # when the plan does not serve luna).
     - {model: gemini-3.1-flash-lite-preview}            # gemini
     - {model: gpt-5.6-terra, thinking_level: high}        # codex
     - {model: gemini-3.8-flash, thinking_level: high}     # antigravity
@@ -212,10 +219,11 @@ tags:
     - {model: claude-5-fable, thinking_level: high}
     - {model: claude-4.6-opus, thinking_level: high}
     - {model: claude-4.5-opus, thinking_level: high}
+    # GPT order as in [flagship]: the current Sol ahead of legacy gpt-5.5.
+    - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-5.5, thinking_level: xhigh}
     - {model: gpt-6.1-astra, thinking_level: high}
     - {model: gpt-6-astra, thinking_level: xhigh}
-    - {model: gpt-6.1-sol, thinking_level: high}
     - {model: gpt-6-sol, thinking_level: xhigh}
     - {model: gpt-5.6-sol, thinking_level: xhigh}
     - {model: gpt-6.1-terra, thinking_level: high}
@@ -539,6 +547,15 @@ models:
   # probe; it is refused exactly like its parent. A `-mini` does not inherit
   # the family's acceptance — probe each id.
   #
+  # gpt-6.1-sol, gpt-6-sol and gpt-6-luna (2026-10-10) were not live-probed.
+  # They are mapped on the strength of Codex CLI's own catalog listing them
+  # (visibility "list", every ChatGPT plan; openai/codex
+  # codex-rs/models-manager/models.json), and the live /codex/models report is
+  # authoritative per account, so a plan that lacks one hides it instead of
+  # offering a model that 400s. TestEveryListedCodexModelHasACodexMapping
+  # (internal/llm/drivers/codex) fails when that catalog lists a model with no
+  # codex mapping here.
+  #
   # The refused models stay in this catalog served by `openai`/`openrouter`,
   # which reach them with an API key. Only their codex mapping was wrong.
   #
@@ -653,6 +670,25 @@ models:
 
   # GPT-6.1 Sol is OpenAI's current flagship model. It inherits GPT-6 Sol's
   # Responses API contract and capability envelope.
+  #
+  # Window and output are OpenAI's published figures for all three GPT-6
+  # entries below that codex serves (gpt-6.1-sol, gpt-6-sol, gpt-6-luna):
+  # 1,050,000 context window, 922,000 maximum input, 128,000 max output
+  # (developers.openai.com/api/docs/models/<id>.md, checked 2026-10-10).
+  #
+  # Codex: Codex CLI's own catalog (openai/codex
+  # codex-rs/models-manager/models.json, gpt-6.1-sol added 2026-09-29 in
+  # b1e72963 "Add GPT-6.1 Sol as the default catalog model") lists gpt-6.1-sol
+  # at priority 1 — its default — beside astra, gpt-6-sol and gpt-6-luna, all
+  # visibility "list" with use_responses_lite (the additional_tools envelope,
+  # like the 5.6 family and astra). /codex/models advertises context_window
+  # 272000 and max_context_window 872000 for each, so the codex prompt ceiling
+  # is 872,000, exactly as for astra and the 5.6 family. Whether an account is
+  # served a given model is the live /codex/models report's call: it is
+  # authoritative, so a model the plan lacks is hidden, not offered and 400'd.
+  #
+  # Tiers: gpt-6.1-sol is codex's [flagship], [moderate] and [reasoning] pick;
+  # gpt-6-luna its [fast], [cheap] and [meta] pick; astra stays [powerful].
   - id: gpt-6.1-sol
     name: GPT-6.1 Sol
     visibility: user
@@ -667,6 +703,8 @@ models:
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
+      - driver: codex
+        api_model: gpt-6.1-sol
       - driver: openai
         api_model: gpt-6.1-sol
     driver_settings:
@@ -685,12 +723,12 @@ models:
   # this model — so preferred_endpoint is load-bearing. Efforts are exactly
   # low..max: unlike the rest of the GPT-6 family it rejects `none`/`minimal`.
   #
-  # No codex mapping. The ChatGPT-account backend serves a per-model subset
-  # that must be probed (see the note above gpt-5.5), and the GPT-6 request
-  # envelope is capture-specific (usesAdditionalToolsEnvelope in the codex
-  # driver). Neither has been done for Sol, and an unprobed codex mapping 400s
-  # every request. No reliant/vertexai mapping, for astra's reason: Vertex serves
-  # no OpenAI frontier models, and the gateway routes through it.
+  # Codex serves it (see the note on gpt-6.1-sol): it is Codex's "Previous
+  # generation workhorse", behind gpt-6.1-sol in every codex tier. Codex CLI
+  # requires codex-tui 0.155.0 for it (minimal_client_version), which is why
+  # the codex driver claims 0.155.0. No reliant/vertexai mapping, for astra's
+  # reason: Vertex serves no OpenAI frontier models, and the gateway routes
+  # through it.
   - id: gpt-6-sol
     name: GPT-6 Sol
     visibility: user
@@ -705,6 +743,8 @@ models:
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
+      - driver: codex
+        api_model: gpt-6-sol
       - driver: openai
         api_model: gpt-6-sol
       - driver: openrouter
@@ -774,11 +814,14 @@ models:
   # high-volume tasks". Figures from developers.openai.com/api/docs/models/gpt-6-luna.
   #
   # It is OpenAI's efficiency-tier model, but it is listed AFTER gpt-5.4-mini and
-  # gpt-5-mini under fast/cheap/meta, and at `low` effort. Those tiers run chat
-  # titling, compaction and other internal calls for every OpenAI user; promoting
-  # it above the existing mini picks should be a measured decision.
+  # gpt-5-mini under fast/cheap/meta. Those tiers run chat titling, compaction
+  # and other internal calls for every OpenAI user; promoting it above the
+  # existing mini picks should be a measured decision. For a codex user neither
+  # mini is servable, so luna — Codex's "Fast and affordable model for easier
+  # tasks" — is codex's [fast], [cheap] and [meta] model. Codex CLI requires
+  # codex-tui 0.155.0 for it, as for gpt-6-sol.
   #
-  # Not the same model as gpt-5.6-luna (the codex-only ChatGPT-family flagship).
+  # Not the same model as gpt-5.6-luna (the older ChatGPT-family model).
   # Same provider reasoning as gpt-6-sol above.
   - id: gpt-6-luna
     name: GPT-6 Luna
@@ -794,6 +837,8 @@ models:
       thinking_levels: [low, medium, high, xhigh, max]
       supported_file_types: [image, text]
     providers:
+      - driver: codex
+        api_model: gpt-6-luna
       - driver: openai
         api_model: gpt-6-luna
       - driver: openrouter
