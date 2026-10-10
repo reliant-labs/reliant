@@ -6,7 +6,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/lib/pq"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
@@ -217,6 +219,9 @@ func (r *Repo) SaveMessageAtomic(ctx context.Context, w AtomicMessageWrite) (*At
 		return nil, fmt.Errorf("thread ID is required")
 	}
 
+	for index := range w.Blocks {
+		normalizeContentBlock(&w.Blocks[index])
+	}
 	cols := newBlockColumns(w.Blocks)
 
 	var result AtomicMessageResult
@@ -359,7 +364,40 @@ func derefString(s *string) string {
 	if s == nil {
 		return ""
 	}
-	return *s
+	return validUTF8(*s)
+}
+
+// validUTF8 protects the database boundary from raw subprocess and provider
+// bytes that reached a Go string without being valid text. PostgreSQL text
+// rejects malformed UTF-8, so one bad byte must not make an entire message
+// write fail. Valid content returns unchanged.
+func validUTF8(text string) string {
+	if utf8.ValidString(text) {
+		return text
+	}
+	return strings.ToValidUTF8(text, "\uFFFD")
+}
+
+func normalizeContentBlock(block *MessageContentBlock) {
+	if block == nil {
+		return
+	}
+	block.Content = normalizeOptionalUTF8(block.Content)
+	block.ToolName = normalizeOptionalUTF8(block.ToolName)
+	block.ToolInput = normalizeOptionalUTF8(block.ToolInput)
+	block.ToolCallID = normalizeOptionalUTF8(block.ToolCallID)
+	block.ThoughtSignature = normalizeOptionalUTF8(block.ThoughtSignature)
+	block.Phase = normalizeOptionalUTF8(block.Phase)
+	block.ActivityID = normalizeOptionalUTF8(block.ActivityID)
+	block.WorkflowRunID = normalizeOptionalUTF8(block.WorkflowRunID)
+}
+
+func normalizeOptionalUTF8(text *string) *string {
+	if text == nil || utf8.ValidString(*text) {
+		return text
+	}
+	value := validUTF8(*text)
+	return &value
 }
 
 func derefInt(i *int) int {
