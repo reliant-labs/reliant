@@ -1,10 +1,20 @@
 // Copyright (c) 2025 Reliant Labs
+//
+// Leaf utility package: the exported surface is concrete helpers over the
+// stdlib or the OS, with no collaborator to fake and no second implementation.
+// An interface here would have exactly one implementor and one caller shape,
+// which is indirection without a seam.
+//
+//forge:lint-disable-next-line forge-exclude-contract-multi-impl: AnalyticsClient already IS the seam (Client vs NoopClient chosen at startup); moving it into contract.go changes nothing without forge codegen; tracked in H-RELIANT-CI-lint follow-ups
+//forge:lint-disable-next-line forge-exclude-contract-outbound-io: the batch uploader POSTs to the analytics endpoint; converting to an adapter contract is deferred (reliant is not forge-generated, so a contract.go yields no mock/decorator); tracked in H-RELIANT-CI-lint follow-ups
+//forge:exclude-contract: the product analytics client (PostHog-style batcher) plus its no-op twin, selected once at startup
 package analytics
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -12,6 +22,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/denisbrodbeck/machineid"
@@ -29,9 +40,16 @@ const (
 	retryBackoff           = 2 * time.Second
 )
 
+// statsigKeyEnv supplies the key events are sent with.
+const statsigKeyEnv = "STATSIG_CLIENT_KEY"
+
 func getAPIKey() string {
-	return os.Getenv("STATSIG_CLIENT_KEY")
+	return os.Getenv(statsigKeyEnv)
 }
+
+// errStatsigKeyRejected is a 401 or 403 from Statsig: the key is missing,
+// wrong or revoked, and no retry or later batch will be accepted with it.
+var errStatsigKeyRejected = errors.New("statsig rejected the API key")
 
 var (
 	statsigEndpoint   = defaultStatsigEndpoint
@@ -67,6 +85,12 @@ type Client struct {
 	// Deduplication: track recently sent events to avoid duplicates
 	recentEvents   map[string]time.Time // eventKey -> timestamp
 	recentEventsMu sync.Mutex
+
+	// statsigOff is set when there is no key, or Statsig refused the one we
+	// have. Nothing sent with that key will ever be accepted, so the process
+	// stops sending (until restart) instead of being rejected, and logging
+	// it, once per batch.
+	statsigOff atomic.Bool
 }
 
 const (
@@ -110,20 +134,13 @@ func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled 
 		return NewNoopClient()
 	}
 
-	// Get stable device ID from filesystem
-	deviceID, err := getUserID()
-	if err != nil {
-		logging.Warn("[Statsig] Failed to get device ID, using random UUID", "error", err)
-		deviceID = uuid.New().String()
-	}
-
 	// If no userID provided, leave empty (Statsig treats empty as anonymous)
 	// userID will be set when user authenticates
 
 	clientCtx, cancel := context.WithCancel(ctx)
 	client := &Client{
 		apiKey:       getAPIKey(),
-		deviceID:     deviceID,
+		deviceID:     getDeviceID(),
 		userID:       userID,
 		httpClient:   &http.Client{Timeout: 10 * time.Second},
 		eventQueue:   make([]Event, 0, maxBatchSize),
@@ -135,9 +152,22 @@ func NewClientFromSettings(ctx context.Context, userID string, analyticsEnabled 
 		gtmURL:       os.Getenv("SUPABASE_URL"),
 		gtmAPIKey:    os.Getenv("SUPABASE_ANON_KEY"),
 	}
+	if client.apiKey == "" {
+		client.stopStatsig(statsigKeyEnv + " is not set")
+	}
 
 	client.startBackgroundFlusher()
 	return client
+}
+
+// stopStatsig turns event sending off for the life of the process, saying
+// why once. WARN, not ERROR: analytics is not the product, and the ERROR
+// level forwards to Sentry.
+func (c *Client) stopStatsig(reason string) {
+	if c.statsigOff.CompareAndSwap(false, true) {
+		logging.Warn("[Statsig] Event sending is off until restart: set "+statsigKeyEnv+" to a valid Statsig key",
+			"reason", reason, "env_var", statsigKeyEnv)
+	}
 }
 
 // SetClient sets the global analytics client instance
@@ -707,13 +737,18 @@ func (c *Client) flush() {
 	c.eventQueue = c.eventQueue[:0]
 	c.mu.Unlock()
 
-	payload := map[string]interface{}{
-		"events": events,
-	}
-
-	if err := c.sendEvents(payload); err != nil {
-		logging.Warn("[Statsig] Failed to send events", "error", err, "eventCount", len(events))
-		c.saveFailedEvents(events)
+	// A batch Statsig did not take is dropped, never written to disk: a
+	// server's root filesystem is read-only, and nothing ever read the files
+	// back. sendEvents has already retried what a retry could fix.
+	if !c.statsigOff.Load() {
+		payload := map[string]interface{}{
+			"events": events,
+		}
+		if err := c.sendEvents(payload); errors.Is(err, errStatsigKeyRejected) {
+			c.stopStatsig(err.Error())
+		} else if err != nil {
+			logging.Warn("[Statsig] Failed to send events; batch dropped", "error", err, "eventCount", len(events))
+		}
 	}
 
 	// Write qualifying events to GTM (non-blocking, failures don't affect Statsig)
@@ -758,6 +793,9 @@ func (c *Client) sendEvents(payload map[string]interface{}) error {
 			return nil
 		}
 
+		if resp.StatusCode == http.StatusUnauthorized || resp.StatusCode == http.StatusForbidden {
+			return fmt.Errorf("%w: status=%d", errStatsigKeyRejected, resp.StatusCode)
+		}
 		lastErr = fmt.Errorf("statsig API error: status=%d, body=%s", resp.StatusCode, string(body))
 
 		if resp.StatusCode >= 400 && resp.StatusCode < 500 {
@@ -847,71 +885,47 @@ func (c *Client) writeToGTM(events []Event) {
 	}
 }
 
-// getAnalyticsDataDir returns the directory path for analytics data storage.
-// Analytics is internal data, stored in the platform-specific app data directory.
-func getAnalyticsDataDir() (string, error) {
-	// Use RELIANT_APP_DATA_DIR for internal data (analytics, auth, databases)
-	if appDataDir := os.Getenv("RELIANT_APP_DATA_DIR"); appDataDir != "" {
-		dataDir := filepath.Join(appDataDir, "analytics")
-		if err := os.MkdirAll(dataDir, 0700); err != nil {
-			return "", fmt.Errorf("failed to create analytics directory: %w", err)
-		}
-		return dataDir, nil
+// analyticsDataDir is where analytics caches state on disk, or "" when there
+// is nowhere to write. Only a configured app data directory counts
+// (RELIANT_APP_DATA_DIR, which the desktop app sets): a server container sets
+// none, and its root filesystem is read-only, so guessing a platform default
+// there produced an error on every write.
+func analyticsDataDir() string {
+	appDataDir := os.Getenv("RELIANT_APP_DATA_DIR")
+	if appDataDir == "" {
+		return ""
 	}
-
-	// Fall back to platform-specific app data directory
-	userConfigDir, err := os.UserConfigDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get user config directory: %w", err)
-	}
-
-	dataDir := filepath.Join(userConfigDir, "reliant", "analytics")
+	dataDir := filepath.Join(appDataDir, "analytics")
 	if err := os.MkdirAll(dataDir, 0700); err != nil {
-		return "", fmt.Errorf("failed to create analytics directory: %w", err)
+		logging.Warn("[Statsig] Analytics data directory is not writable; the device ID will not be cached",
+			"dir", dataDir, "error", err)
+		return ""
 	}
-
-	return dataDir, nil
+	return dataDir
 }
 
-func (c *Client) saveFailedEvents(events []Event) {
-	dataDir, err := getAnalyticsDataDir()
-	if err != nil {
-		logging.Error("[Statsig] Failed to get analytics directory", "error", err)
-		return
-	}
-
-	failedFile := filepath.Join(dataDir, fmt.Sprintf("failed_%d.json", time.Now().Unix()))
-	data, err := json.Marshal(events)
-	if err != nil {
-		logging.Error("[Statsig] Failed to marshal failed events", "error", err)
-		return
-	}
-
-	if err := os.WriteFile(failedFile, data, 0600); err != nil {
-		logging.Error("[Statsig] Failed to save failed events", "error", err)
-	}
-}
-
-func getUserID() (string, error) {
-	dataDir, err := getAnalyticsDataDir()
-	if err != nil {
-		return "", fmt.Errorf("failed to get analytics directory: %w", err)
-	}
-
-	userIDFile := filepath.Join(dataDir, "userid")
-
-	// #nosec G304 -- userIDFile is derived from internal analytics data directory
-	if data, err := os.ReadFile(userIDFile); err == nil && len(data) > 0 {
-		return string(data), nil
+// getDeviceID is this machine's stable analytics id, cached in the analytics
+// data directory when there is one. Without one it is derived again each
+// start — the same value wherever the OS has a machine id — and never
+// written.
+func getDeviceID() string {
+	userIDFile := ""
+	if dataDir := analyticsDataDir(); dataDir != "" {
+		userIDFile = filepath.Join(dataDir, "userid")
+		// #nosec G304 -- userIDFile is derived from internal analytics data directory
+		if data, err := os.ReadFile(userIDFile); err == nil && len(data) > 0 {
+			return string(data)
+		}
 	}
 
 	id, err := machineid.ProtectedID("reliant")
 	if err != nil {
 		id = uuid.New().String()
 	}
-
-	if err := os.WriteFile(userIDFile, []byte(id), 0600); err != nil {
-		logging.Warn("[Statsig] Failed to save user ID to file", "error", err)
+	if userIDFile != "" {
+		if err := os.WriteFile(userIDFile, []byte(id), 0600); err != nil {
+			logging.Warn("[Statsig] Failed to save device ID", "error", err)
+		}
 	}
-	return id, nil
+	return id
 }
