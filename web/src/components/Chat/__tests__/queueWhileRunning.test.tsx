@@ -39,6 +39,7 @@ const { sendAgentMessageMock, toastErrorMock } = vi.hoisted(() => ({
 
 vi.mock("../../../api/chat-grpc", () => ({
   chatGrpc: { sendAgentMessage: sendAgentMessageMock },
+  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 vi.mock("../../../lib/toast-manager", () => ({
