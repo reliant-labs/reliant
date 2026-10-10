@@ -224,6 +224,34 @@ type mockRepo struct {
 	backgroundedProcessCalls []*db.BackgroundedProcessCall
 	daemons                  map[string]bool
 	emittedToolCallUpdates   []db.ToolCallUpdate
+
+	// Terminal cascades and checkpoint drops a repair performs.
+	cascadedDescendants    []string
+	cascadedThreadSubtrees []string
+	cascadedReason         db.WorkflowStopReason
+	deletedCheckpoints     []string
+}
+
+func (m *mockRepo) CascadeTerminalStatusToDescendants(_ context.Context, workflowID string, reason db.WorkflowStopReason) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cascadedDescendants = append(m.cascadedDescendants, workflowID)
+	m.cascadedReason = reason
+	return nil
+}
+
+func (m *mockRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, workflowID string, _ db.WorkflowStopReason) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.cascadedThreadSubtrees = append(m.cascadedThreadSubtrees, workflowID)
+	return nil
+}
+
+func (m *mockRepo) DeleteWorkflowCheckpoint(_ context.Context, workflowID string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.deletedCheckpoints = append(m.deletedCheckpoints, workflowID)
+	return nil
 }
 
 func (m *mockRepo) ListBackgroundedProcessToolCalls(_ context.Context) ([]*db.BackgroundedProcessCall, error) {
@@ -1294,6 +1322,7 @@ func TestReconciler_WedgedWorkflowTask_TerminatedAndMarkedFailed(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
 		},
+		historyEvents: replayDivergedTail(),
 	}
 	tempClient.setPollersActive(true)
 
@@ -1336,6 +1365,7 @@ func TestReconciler_WedgedWorkflowTask_PausedWorkflow_TerminatedAndMarkedFailed(
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 471)},
 		},
+		historyEvents: replayDivergedTail(),
 	}
 	tempClient.setPollersActive(true)
 
@@ -1392,6 +1422,7 @@ func TestReconciler_WedgedWorkflowTask_NoPollers_Skipped(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
 		},
+		historyEvents: replayDivergedTail(),
 	}
 	tempClient.setPollersActive(false) // worker down/rebuilding
 
@@ -1414,6 +1445,7 @@ func TestReconciler_WedgedWorkflowTask_DebounceRequiresConsecutivePasses(t *test
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 99)},
 		},
+		historyEvents: replayDivergedTail(),
 	}
 
 	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
@@ -1451,7 +1483,9 @@ func TestReconciler_WedgedWorkflowTask_PrecedenceOverStuckReset(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: resp},
 		},
-		historyEvents: makeHistoryWithActivity("act-1"),
+		// The run's history records the failure every retry repeats.
+		historyEvents: append(makeHistoryWithActivity("act-1"),
+			failedWorkflowTask(100, enums.WORKFLOW_TASK_FAILED_CAUSE_NON_DETERMINISTIC_ERROR)),
 	}
 	tempClient.setPollersActive(true)
 
@@ -1474,6 +1508,7 @@ func TestReconciler_WedgedThenRecovered_ClearsDebounce(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 10)},
 		},
+		historyEvents: replayDivergedTail(),
 	}
 	tempClient.setPollersActive(true)
 
@@ -1951,6 +1986,7 @@ func TestReconciler_AnomalyMetrics_Counters(t *testing.T) {
 			describeResponses: map[string]mockDescribeResponse{
 				"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 42)},
 			},
+			historyEvents: replayDivergedTail(),
 		}
 		tempClient.setPollersActive(true)
 		reconciler := NewReconciler(repo, tempClient, stuckTestConfig(2))
@@ -2018,6 +2054,7 @@ func TestReconcileRunningWorkflows_IncludesPausedWedgedZombie(t *testing.T) {
 		describeResponses: map[string]mockDescribeResponse{
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 471)},
 		},
+		historyEvents: replayDivergedTail(),
 	}
 	tempClient.setPollersActive(true)
 

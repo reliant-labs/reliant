@@ -214,6 +214,10 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 		failingActivityResetTo  int64
 		// The error chain the workflow returned, from the close event.
 		closeFailure *failurepb.Failure
+		// replayDiverged: the last workflow task to end before the run closed
+		// failed because the worker could not replay this history. See
+		// ErrReplayDiverged.
+		replayDiverged bool
 	)
 
 	for iter.HasNext() {
@@ -226,6 +230,11 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 		case enumspb.EVENT_TYPE_WORKFLOW_TASK_COMPLETED:
 			lastWFTCompleted = wftPoint{eventID: event.GetEventId(), at: event.GetEventTime().AsTime()}
 			wftTimes[lastWFTCompleted.eventID] = lastWFTCompleted.at
+			replayDiverged = false
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_FAILED:
+			replayDiverged = IsReplayDivergence(event.GetWorkflowTaskFailedEventAttributes().GetCause())
+		case enumspb.EVENT_TYPE_WORKFLOW_TASK_TIMED_OUT:
+			replayDiverged = false
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_SCHEDULED:
 			scheduledToWFT[event.GetEventId()] = lastWFTCompleted.eventID
 		case enumspb.EVENT_TYPE_ACTIVITY_TASK_COMPLETED:
@@ -245,6 +254,13 @@ func findResumeResetPoint(ctx context.Context, tempClient client.Client, workflo
 
 	if lastWFTCompleted.eventID == 0 {
 		return wftPoint{}, fmt.Errorf("no WorkflowTaskCompleted event found in history for workflow %s (run %s)", workflowID, runID)
+	}
+
+	// The run was wedged replaying this history when it closed (a deploy
+	// changed the command sequence under it, and something terminated it).
+	// Every reset point re-diverges the same way.
+	if replayDiverged {
+		return wftPoint{}, ErrReplayDiverged
 	}
 
 	if status == enumspb.WORKFLOW_EXECUTION_STATUS_FAILED {

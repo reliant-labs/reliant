@@ -300,6 +300,10 @@ var (
 	//   reset_attempts_exhausted  - the bounded guard gave up after repeated
 	//                               resets made no forward progress.
 	//   reset_error               - the reset itself failed unexpectedly.
+	//   replay_diverged           - the run's last workflow task failed
+	//                               TMPRL1100: the current code cannot replay
+	//                               its history, so any reset re-wedges.
+	//                               Fell back to coarse restart.
 	//
 	// THIS COUNTER DECIDES WHETHER THE POSITION STACK'S READ SIDE IS BUILT.
 	// The position stack is only worth reading for runs that replay cannot
@@ -319,7 +323,7 @@ var (
 			Namespace: "reliant",
 			Subsystem: "workflow",
 			Name:      "resume_outcome_total",
-			Help:      "Interrupted-workflow resume attempts by outcome (reset_replay, history_limit_exceeded, no_replayable_history, reset_attempts_exhausted, reset_error). Non-reset_replay outcomes are the cases a position stack would have to serve.",
+			Help:      "Interrupted-workflow resume attempts by outcome (reset_replay, history_limit_exceeded, no_replayable_history, reset_attempts_exhausted, reset_error, replay_diverged). Non-reset_replay outcomes are the cases a position stack would have to serve.",
 		},
 		[]string{"outcome"},
 	)
