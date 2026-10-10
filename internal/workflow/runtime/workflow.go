@@ -656,7 +656,22 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// no error and completes normally — that is the whole reason the verdict
 	// needs its own channel instead of being read off the lifecycle status.
 	runOutcome := ""
+	// handlerDone stops the input-update handler (STEP 5.55) when the run
+	// exits; nil until that handler starts.
+	var handlerDone workflow.Channel
+	var caught capturedPanic
 	defer func() {
+		// A panic anywhere on this coroutine was stopped by caught.capture,
+		// below. Temporal's own panics are re-raised here, before anything
+		// blocks; any other becomes the error the run fails with.
+		if caught.value != nil {
+			result, retErr = nil, recoveredPanic(ctx, caught)
+		}
+		// Only send done signal if not cancelled - if cancelled, the handler
+		// exits on its own via ctx.Err() check to avoid blocking on Send
+		if handlerDone != nil && ctx.Err() == nil {
+			handlerDone.Send(ctx, true)
+		}
 		// Read at exit, off the final inputs map (ApplyDefaults replaces it).
 		launchRun := IsLaunchRun(input.Inputs)
 		// A root run woken after its last turn hands off to a fresh run
@@ -667,6 +682,13 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 			result, retErr = nil, handoff
 		}
 	}()
+	// Deferred after the completion handler above, so it runs FIRST when this
+	// coroutine panics: it only stops the panic and records it, and the
+	// handler then runs as on a normal return. It must be the last defer this
+	// function registers — the completion bookkeeping blocks, and blocking
+	// while a panic unwinds is a second panic that buries the first (see
+	// capturedPanic).
+	defer caught.capture()
 
 	// STEP 5: Load workflow definition (YAML and JSON)
 	loadedWf, err := loadWorkflowDefinition(ctx, input)
@@ -763,15 +785,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// Create a done channel to signal the handler to exit when workflow completes.
 	// Without this, the signal handler goroutine blocks forever and prevents Temporal
 	// from marking the workflow as completed.
-	handlerDone := workflow.NewChannel(ctx)
+	// The completion defer sends on it at exit; a defer of its own here would
+	// run while a panic unwinds, and must not block then (see capturedPanic).
+	handlerDone = workflow.NewChannel(ctx)
 	setupInputUpdateHandler(ctx, input.Inputs, childTracker, workflowID, handlerDone)
-	defer func() {
-		// Only send done signal if not cancelled - if cancelled, the handler
-		// exits on its own via ctx.Err() check to avoid blocking on Send
-		if ctx.Err() == nil {
-			handlerDone.Send(ctx, true)
-		}
-	}()
 
 	// NOTE: Pause/resume is handled via signals to the workflow.
 	// The shared worker pool is always running; paused workflows block on a signal channel.
@@ -1813,8 +1830,9 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					// to avoid "trying to block on coroutine which is already blocked" errors.
 					executorCopy = executorCopy.WithWorkflowContext(gCtx)
 
-					// Execute the inline workflow
-					output, execErr := executorCopy.Execute()
+					// Execute the inline workflow. A panic in it fails this
+					// node, not the workflow task.
+					output, execErr := executeRecovering(gCtx, executorCopy.Execute)
 					runningCopy.Output = output
 					runningCopy.Error = execErr
 					// Signal completion
@@ -1896,7 +1914,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				workflow.Go(ctx, func(gCtx workflow.Context) {
 					routerCopy = routerCopy.WithWorkflowContext(gCtx)
-					output, execErr := routerCopy.Execute()
+					output, execErr := executeRecovering(gCtx, routerCopy.Execute)
 					runningCopy.Output = output
 					runningCopy.Error = execErr
 					runningCopy.DoneCh.Send(gCtx, true)
@@ -2013,7 +2031,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 
 				workflow.Go(ctx, func(gCtx workflow.Context) {
 					routerCopy = routerCopy.WithWorkflowContext(gCtx)
-					output, execErr := routerCopy.Execute()
+					output, execErr := executeRecovering(gCtx, routerCopy.Execute)
 					runningCopy.Output = output
 					runningCopy.Error = execErr
 					runningCopy.DoneCh.Send(gCtx, true)
@@ -2284,7 +2302,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							runningCopy := retryRunning
 							workflow.Go(ctx, func(gCtx workflow.Context) {
 								routerCopy = routerCopy.WithWorkflowContext(gCtx)
-								output, execErr := routerCopy.Execute()
+								output, execErr := executeRecovering(gCtx, routerCopy.Execute)
 								runningCopy.Output = output
 								runningCopy.Error = execErr
 								runningCopy.DoneCh.Send(gCtx, true)
@@ -2315,7 +2333,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							runningCopy := retryRunning
 							workflow.Go(ctx, func(gCtx workflow.Context) {
 								routerCopy = routerCopy.WithWorkflowContext(gCtx)
-								output, execErr := routerCopy.Execute()
+								output, execErr := executeRecovering(gCtx, routerCopy.Execute)
 								runningCopy.Output = output
 								runningCopy.Error = execErr
 								runningCopy.DoneCh.Send(gCtx, true)
@@ -2356,7 +2374,7 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 							runningCopy := retryRunning
 							workflow.Go(ctx, func(gCtx workflow.Context) {
 								executorCopy = executorCopy.WithWorkflowContext(gCtx)
-								output, execErr := executorCopy.Execute()
+								output, execErr := executeRecovering(gCtx, executorCopy.Execute)
 								runningCopy.Output = output
 								runningCopy.Error = execErr
 								runningCopy.DoneCh.Send(gCtx, true)
@@ -2371,13 +2389,19 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 					}
 
 					if running.Error != nil {
-						logger.Error("[Workflow Runtime] Inline workflow execution failed",
-							"stepID", running.StepID,
-							"error", running.Error,
-						)
-						notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
-							"inline_workflow_error",
-							fmt.Sprintf("Inline workflow '%s' failed: %s", running.StepID, running.Error.Error()))
+						// A panicked node fails the run, and the completion
+						// handler shows the panic; a second card here would
+						// describe the same failure twice.
+						var panicErr *WorkflowPanicError
+						if !errors.As(running.Error, &panicErr) {
+							logger.Error("[Workflow Runtime] Inline workflow execution failed",
+								"stepID", running.StepID,
+								"error", running.Error,
+							)
+							notifyWorkflowError(ctx, input.ChatID, workflowID, input.WorkflowName, thread,
+								"inline_workflow_error",
+								fmt.Sprintf("Inline workflow '%s' failed: %s", running.StepID, running.Error.Error()))
+						}
 						return nil, fmt.Errorf("inline workflow %s failed: %w", running.StepID, running.Error)
 					}
 				}
@@ -3595,76 +3619,103 @@ func startDetachedSpawn(
 ) {
 	logger := workflow.GetLogger(ctx)
 	workflow.Go(ctx, func(gCtx workflow.Context) {
-		// A panic inside this coroutine cannot be caught by the recover() in
-		// handleWorkflowCompletion — recover only works within the goroutine
-		// that panicked. Left unguarded, the Temporal dispatcher surfaces it
+		// A panic inside this coroutine cannot be caught by DynamicWorkflow's
+		// deferred recover() — recover only works within the goroutine that
+		// panicked. Left unguarded, the Temporal dispatcher surfaces it
 		// as a panicError and, under the default BlockWorkflow policy, wedges
 		// the ENTIRE parent workflow task in a retry loop. One malformed child
 		// would take down a run that is otherwise healthy, which is a strictly
 		// worse outcome than losing that child's result. Contain it here: mark
 		// the spawn failed, let the parent's Await see it complete, and let the
 		// run continue.
-		defer func() {
-			if r := recover(); r != nil {
-				logger.Error("[SpawnBackground] Detached spawn panicked; containing to this spawn",
-					"toolCallID", config.toolCallID,
-					"childThread", config.childThread,
-					"panic", r,
-				)
-				notifyToolCallStatus(gCtx, chatID, config.toolCallID, "spawn", "failed", prep.spawnStatusOpts)
-				childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
-			}
-		}()
-
-		// The sweep treats "terminal child + no report" as stranded, so the
-		// report must land before the child goes terminal; otherwise a stalled
-		// workflow task lets the reconciler write a placeholder first. The old
-		// order is kept for histories recorded before this version.
-		reportFirst := workflow.GetVersion(gCtx, spawnReportBeforeTerminalChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
-		result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep, reportFirst)
-		if result == nil {
-			// Parked for a continue-as-new handoff. Still live; the
-			// successor relaunches it and reports its outcome.
+		//
+		// Except Temporal's own panics: a replay divergence must keep failing
+		// the task as non-deterministic, so a fixed worker can replay it (see
+		// recoveredPanic). Marking the spawn failed would issue commands the
+		// recorded history does not have.
+		//
+		// The containment runs after runRecovering returns, not in a deferred
+		// recover: it blocks on an activity, and blocking while the panic
+		// unwinds is the SDK's "yield during panic unwinding" panic — which
+		// is what this guard used to raise in place of containing anything.
+		panicErr := runRecovering(gCtx, func() {
+			runDetachedSpawnChild(gCtx, config, chatID, parentWorkflowID, parentThread, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep)
+		})
+		if panicErr == nil {
 			return
 		}
-
-		enqueueCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
-			StartToCloseTimeout: 30 * time.Second,
-			RetryPolicy: &temporal.RetryPolicy{
-				InitialInterval:    time.Second,
-				BackoffCoefficient: 2.0,
-				MaximumInterval:    10 * time.Second,
-				MaximumAttempts:    3,
-			},
-		})
-		enqueueInput := map[string]interface{}{
-			"chat_id":        chatID,
-			"from_thread_id": config.childThread,
-			"to_thread_id":   parentThread,
-			"kind":           spawnResultKindForMailbox(result),
-			"body":           result.Content,
-			"tool_call_id":   config.toolCallID,
-		}
-		var enqueueOutput map[string]interface{}
-		if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
-			// Best-effort by the same rule as every other mailbox write: a
-			// failed enqueue here means the parent never learns this spawn
-			// finished until the stranded-spawn reconciler sweep catches it
-			// (spec §7.1) — logged, not fatal to this goroutine or the run.
-			logger.Warn("[SpawnBackground] Failed to enqueue completion to parent mailbox",
-				"toolCallID", config.toolCallID,
-				"parentThread", parentThread,
-				"childThread", config.childThread,
-				"error", err,
-			)
-		}
-
-		if result.terminalStatus != "" {
-			notifySpawnTerminal(gCtx, chatID, config, prep, parentWorkflowID, result.terminalStatus)
-		}
-
+		// recoveredPanic has reported the panic, with its stack, at ERROR.
+		logger.Warn("[SpawnBackground] Detached spawn panicked; containing to this spawn",
+			"toolCallID", config.toolCallID,
+			"childThread", config.childThread,
+			"panic", panicErr,
+		)
+		notifyToolCallStatus(gCtx, chatID, config.toolCallID, "spawn", "failed", prep.spawnStatusOpts)
 		childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
 	})
+}
+
+// runDetachedSpawnChild is a detached spawn's coroutine body: run the child
+// inline, deliver its result to the parent's mailbox, and settle the spawn.
+func runDetachedSpawnChild(
+	gCtx workflow.Context,
+	config *spawnChildWorkflowConfig,
+	chatID, parentWorkflowID, parentThread, projectPath string,
+	workflowInputs map[string]interface{},
+	childTracker *ChildWorkflowTracker,
+	makeThreadPauseCtrl func(string) *PauseController,
+	makeThreadInterrupt func(string) *ThreadInterrupt,
+	prep *spawnPrepResult,
+) {
+	logger := workflow.GetLogger(gCtx)
+	// The sweep treats "terminal child + no report" as stranded, so the
+	// report must land before the child goes terminal; otherwise a stalled
+	// workflow task lets the reconciler write a placeholder first. The old
+	// order is kept for histories recorded before this version.
+	reportFirst := workflow.GetVersion(gCtx, spawnReportBeforeTerminalChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion
+	result := runSpawnInlineChild(gCtx, config, chatID, parentWorkflowID, projectPath, workflowInputs, childTracker, makeThreadPauseCtrl, makeThreadInterrupt, prep, reportFirst)
+	if result == nil {
+		// Parked for a continue-as-new handoff. Still live; the
+		// successor relaunches it and reports its outcome.
+		return
+	}
+
+	enqueueCtx := workflow.WithActivityOptions(gCtx, workflow.ActivityOptions{
+		StartToCloseTimeout: 30 * time.Second,
+		RetryPolicy: &temporal.RetryPolicy{
+			InitialInterval:    time.Second,
+			BackoffCoefficient: 2.0,
+			MaximumInterval:    10 * time.Second,
+			MaximumAttempts:    3,
+		},
+	})
+	enqueueInput := map[string]interface{}{
+		"chat_id":        chatID,
+		"from_thread_id": config.childThread,
+		"to_thread_id":   parentThread,
+		"kind":           spawnResultKindForMailbox(result),
+		"body":           result.Content,
+		"tool_call_id":   config.toolCallID,
+	}
+	var enqueueOutput map[string]interface{}
+	if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
+		// Best-effort by the same rule as every other mailbox write: a
+		// failed enqueue here means the parent never learns this spawn
+		// finished until the stranded-spawn reconciler sweep catches it
+		// (spec §7.1) — logged, not fatal to this goroutine or the run.
+		logger.Warn("[SpawnBackground] Failed to enqueue completion to parent mailbox",
+			"toolCallID", config.toolCallID,
+			"parentThread", parentThread,
+			"childThread", config.childThread,
+			"error", err,
+		)
+	}
+
+	if result.terminalStatus != "" {
+		notifySpawnTerminal(gCtx, chatID, config, prep, parentWorkflowID, result.terminalStatus)
+	}
+
+	childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
 }
 
 // spawnHandoffFor is the record a successor execution needs to relaunch this
@@ -4768,12 +4819,33 @@ func notifyWorkflowError(ctx workflow.Context, chatID, workflowID, workflowName,
 // bookkeeping; a non-nil error it returns (a continue-as-new for input that
 // arrived after the run's last turn, see late_wake.go) is handed back for the
 // workflow to return in place of completing. Nil disables it.
+//
+// Whatever non-nil error this returns is what the workflow returns: the
+// late-wake continue-as-new, or the failure of a run a panic ended.
 func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflowName, parentWorkflowID, thread, forkedFromThread string, retErr error, runOutcome string, launchRun bool, childTracker *ChildWorkflowTracker, lateWake func() error) error {
 	logger := workflow.GetLogger(ctx)
 
 	// Create a disconnected context that will survive cancellation
 	// This allows us to run cleanup activities even when the workflow is cancelled
 	cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
+
+	// A panic in workflow code, recovered on this coroutine or on a node's
+	// (recoveredPanic, executeRecovering) and handed in as retErr. Checked before
+	// cancellation: the run ends FAILED in Temporal whatever else was in
+	// flight, so the row must say failed too. The user is shown the panic,
+	// and the run fails for good — retrying the task replays the same code
+	// into the same panic, which is how a panicking run used to wedge.
+	var panicErr *WorkflowPanicError
+	if errors.As(retErr, &panicErr) {
+		logger.Info("[Workflow Runtime] Failing the run on a recovered panic", "workflowID", workflowID, "error", retErr)
+		finalizeOutstandingStreams(ctx, streamReasonAborted)
+		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
+		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
+		notifyWorkflowPanic(cleanupCtx, chatID, workflowID, workflowName, thread, panicErr)
+		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
+			&workflowStatusOpts{Error: failureText(retErr), LaunchRun: launchRun})
+		return runFailureForPanic(retErr)
+	}
 
 	// Check if workflow was cancelled. A run whose user continued without its
 	// machine ends itself cancelled, with nobody having cancelled it (see
@@ -4795,20 +4867,6 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "cancelled", parentWorkflowID, thread,
 			&workflowStatusOpts{LaunchRun: launchRun})
 		return nil
-	}
-
-	// Check for panic/error recovery
-	if r := recover(); r != nil {
-		logger.Error("[Workflow Runtime] Panic recovered", "panic", r, "workflowID", workflowID)
-		// Delta identity: finalize any outstanding message ids (aborted).
-		finalizeOutstandingStreams(ctx, streamReasonAborted)
-		terminalDrainDetachedSpawns(cleanupCtx, chatID, childTracker)
-		// Run cleanup activities
-		runCleanupActivities(cleanupCtx, chatID, workflowID, thread)
-		// Notify UI that workflow failed and update workflow record
-		notifyWorkflowStatus(cleanupCtx, chatID, workflowID, workflowName, "failed", parentWorkflowID, thread,
-			&workflowStatusOpts{Error: failureText(fmt.Errorf("panic: %v", r)), LaunchRun: launchRun})
-		panic(r) // Re-panic to maintain Temporal semantics
 	}
 
 	// ContinueAsNew is not a termination: the execution is handing off to a

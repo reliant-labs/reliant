@@ -25,6 +25,7 @@ import (
 	"go.temporal.io/api/serviceerror"
 	"go.temporal.io/api/workflowservice/v1"
 	"go.temporal.io/sdk/client"
+	"go.temporal.io/sdk/temporal"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -231,10 +232,19 @@ const (
 	anomalyBackgroundedProcessClosed = "backgrounded_process_closed"
 	// anomalySilentTerminalDrift is a run that ended terminally in Temporal
 	// without ever reporting it — the DB still said running/paused when this
-	// pass found it. A hard TERMINATE is the archetype: the worker gets no
-	// further workflow task, so no completion handler runs and the user is
-	// told nothing. See emitSilentTerminationError.
+	// pass found it — although its own code ran to that end: a missed report,
+	// a bug. See logSilentEnd and emitSilentTerminationError.
 	anomalySilentTerminalDrift = "silent_terminal_drift"
+	// anomalySilentTerminalDriftExpected is the same repair where nothing
+	// could have reported the end: Temporal stopped the run outright (a hard
+	// TERMINATE — operator, history cap — or a timeout), so no completion
+	// handler ran; or the failure that ended it is the user's to act on.
+	// Expected; logged at INFO.
+	anomalySilentTerminalDriftExpected = "silent_terminal_drift_expected"
+	// anomalyOrphanDescendantReapedAfterTerminate is anomalyOrphanDescendantReaped
+	// for a run Temporal stopped outright, where no workflow code ran to
+	// cascade. Expected, not a bug; see reapOrphanedDescendants.
+	anomalyOrphanDescendantReapedAfterTerminate = "orphan_descendant_reaped_after_terminate"
 )
 
 // Debounce defaults: a stuck task must be observed on at least
@@ -524,6 +534,10 @@ type TemporalWorkflowState struct {
 	// report: the worker receives no further workflow task, so no completion
 	// handler, no status activity and no WorkflowError activity ever runs.
 	WasTerminated bool
+	// CloseStatus is Temporal's own status for the execution, before it is
+	// mapped onto ours: what tells a TERMINATE or a TIMED_OUT — after which no
+	// workflow code ran — from a FAILED, which ran its own completion.
+	CloseStatus enums.WorkflowExecutionStatus
 }
 
 // quiescent reports whether the workflow is in the progress watchdog's
@@ -784,6 +798,7 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 		RunID:         runID,
 		IsRunning:     isRunning,
 		WasTerminated: wasTerminated,
+		CloseStatus:   execStatus,
 	}
 
 	// Check for stuck tasks (only if workflow is running)
@@ -1305,14 +1320,9 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// for the user by definition (Resume, or their next message, carries
 		// it on), and starting it for them would override a pause.
 		if temporalState.Status == db.Failed() {
-			logging.Error("[Reconciler] Paused workflow ended terminally without reporting it - notifying user",
-				"workflowID", wf.ID,
-				"chatID", wf.ChatID,
-				"thread", wf.Thread,
-				"terminated", temporalState.WasTerminated,
-			)
-			r.recordAnomaly(stats, anomalySilentTerminalDrift)
-			r.emitSilentTerminationError(ctx, wf, temporalState, false)
+			end := r.silentEnd(ctx, wf.ID, temporalState)
+			r.logSilentEnd(stats, "[Reconciler] Paused workflow ended terminally without reporting it - notifying user", wf, end)
+			r.emitSilentTerminationError(ctx, wf, end, false)
 		}
 
 		result.TemporalStatus = temporalState.Status
@@ -1357,15 +1367,10 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// wedged), Temporal's history cap, or a failure nothing reported.
 			// Before, the user was told to send their message again.
 			if temporalState.Status == db.Failed() {
-				logging.Error("[Reconciler] Workflow ended terminally without reporting it - notifying user",
-					"workflowID", wf.ID,
-					"chatID", wf.ChatID,
-					"thread", wf.Thread,
-					"terminated", temporalState.WasTerminated,
-				)
-				r.recordAnomaly(stats, anomalySilentTerminalDrift)
+				end := r.silentEnd(ctx, wf.ID, temporalState)
+				r.logSilentEnd(stats, "[Reconciler] Workflow ended terminally without reporting it - notifying user", wf, end)
 				continued := r.continueAfterEnd(ctx, wf)
-				r.emitSilentTerminationError(ctx, wf, temporalState, continued)
+				r.emitSilentTerminationError(ctx, wf, end, continued)
 				if continued {
 					r.postRecoveredNote(ctx, wf)
 				}
@@ -1977,22 +1982,69 @@ func (r *Reconciler) findResetPoint(ctx context.Context, workflowID string, stat
 //
 // Runs BEFORE the pass lists workflows, so a row known dead is never
 // adjudicated as a live one.
+//
+// Logged per run, at the level its end calls for — the same rule as
+// reapOrphanedThreads: a run Temporal stopped outright (terminated, timed out)
+// ran no code that could cascade, so the reap is the designed recovery (INFO);
+// any other end means a path that could have cascaded did not (ERROR).
 func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passStats) (int, error) {
 	reaped, err := r.repo.ReapOrphanedWorkflowDescendants(ctx)
 	if err != nil {
 		logging.Error("[Reconciler] Failed to reap orphaned workflow descendants", "error", err)
 		return 0, fmt.Errorf("failed to reap orphaned workflow descendants: %w", err)
 	}
-	if reaped == 0 {
+	if len(reaped) == 0 {
 		return 0, nil
 	}
-	for i := int64(0); i < reaped; i++ {
-		r.recordAnomaly(stats, anomalyOrphanDescendantReaped)
+	for _, run := range r.groupReapedWorkflowsByRun(ctx, reaped) {
+		closeStatus := r.runCloseStatus(ctx, run.rootWorkflowID)
+		fields := []any{
+			"workflowID", run.rootWorkflowID,
+			"chatID", run.chatID,
+			"workflowIDs", run.workflowIDs,
+			"rows", len(run.workflowIDs),
+			"closeStatus", closeStatusLabel(closeStatus),
+		}
+		if ranNoWorkflowCode(closeStatus) {
+			for range run.workflowIDs {
+				r.recordAnomaly(stats, anomalyOrphanDescendantReapedAfterTerminate)
+			}
+			logging.Info("[Reconciler] Reaped the descendants of a run Temporal stopped outright — no workflow code ran to cascade, as expected",
+				fields...)
+			continue
+		}
+		for range run.workflowIDs {
+			r.recordAnomaly(stats, anomalyOrphanDescendantReaped)
+		}
+		logging.Error("[Reconciler] Reaped orphaned workflow descendants — a terminal parent did not cascade",
+			fields...)
 	}
-	logging.Error("[Reconciler] Reaped orphaned workflow descendants — a terminal parent did not cascade",
-		"rows", reaped,
-	)
-	return int(reaped), nil
+	return len(reaped), nil
+}
+
+// reapedWorkflowRun is the reaped descendants of one run, under its root.
+type reapedWorkflowRun struct {
+	rootWorkflowID string
+	chatID         string
+	workflowIDs    []string
+}
+
+// groupReapedWorkflowsByRun groups reaped workflows under the root of their
+// run — the execution Temporal knows — in first-seen order.
+func (r *Reconciler) groupReapedWorkflowsByRun(ctx context.Context, reaped []db.ReapedWorkflow) []*reapedWorkflowRun {
+	var runs []*reapedWorkflowRun
+	byRoot := map[string]*reapedWorkflowRun{}
+	for _, wf := range reaped {
+		root := r.rootWorkflowID(ctx, wf.WorkflowID)
+		run := byRoot[root]
+		if run == nil {
+			run = &reapedWorkflowRun{rootWorkflowID: root, chatID: wf.ChatID}
+			byRoot[root] = run
+			runs = append(runs, run)
+		}
+		run.workflowIDs = append(run.workflowIDs, wf.WorkflowID)
+	}
+	return runs
 }
 
 // reapOrphanedThreads is reapOrphanedDescendants' thread-lifecycle
@@ -2878,17 +2930,17 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 // continued says the reconciler already started a run that is answering the
 // user's message (continueAfterEnd), so the summary does not ask them to send
 // it again.
-func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState, continued bool) {
+func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Workflow, end silentEnd, continued bool) {
 	summary := silentTerminationSummary
 	if continued {
 		summary = silentTerminationContinuedSummary
 	}
 	message := "The workflow was stopped by the system before it could finish."
-	if reason := r.closeReason(ctx, wf.ID, state); reason != "" {
+	if end.reason != "" {
 		// Temporal's own words. For the incident above this reads "Workflow
 		// history count exceeds limit." — which is the difference between a
 		// user filing "it just stopped" and one who can say what happened.
-		message = fmt.Sprintf("The workflow was stopped by the system before it could finish. Reason: %s", reason)
+		message = fmt.Sprintf("The workflow was stopped by the system before it could finish. Reason: %s", end.reason)
 	}
 
 	if _, err := handlers.WriteWorkflowError(ctx, r.repo, handlers.WorkflowErrorInput{
@@ -2908,10 +2960,78 @@ func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Work
 	}
 }
 
+// silentEnd is how a run that ended without reporting it ended, as Temporal
+// recorded it.
+type silentEnd struct {
+	closeStatus enums.WorkflowExecutionStatus
+	// reason is Temporal's own words for why the run closed, "" when it has
+	// none (see closeReason).
+	reason string
+	// userError says the failure that closed a FAILED run is one only the
+	// user can act on (#686): its root cause is an ApplicationError marked
+	// benign at the activity boundary — their machine is offline, their
+	// provider is out of credit.
+	userError bool
+}
+
+// err is the close as an error for a log record, classified as #686's
+// error-class handler reads it: benign when it is the user's to act on.
+func (e silentEnd) err() error {
+	reason := e.reason
+	if reason == "" {
+		reason = "Temporal recorded no reason"
+	}
+	if e.userError {
+		return temporal.NewApplicationErrorWithOptions(reason, "", temporal.ApplicationErrorOptions{Category: temporal.ApplicationErrorCategoryBenign})
+	}
+	return errors.New(reason)
+}
+
+// silentEnd reads how a run that never reported its end actually ended. Only
+// called on the pass that won the status swap, so it reads the close event
+// once per dead run.
+func (r *Reconciler) silentEnd(ctx context.Context, workflowID string, state *TemporalWorkflowState) silentEnd {
+	end := silentEnd{closeStatus: state.CloseStatus}
+	end.reason, end.userError = r.closeReason(ctx, workflowID, state)
+	return end
+}
+
+// logSilentEnd reports a run that ended without saying so, at the level its
+// end calls for — #689's rule for the thread reap:
+//   - Terminated or timed out: Temporal stopped the run without executing any
+//     more of its code (an operator, the history cap, a timeout), so nothing
+//     COULD report it. Repairing the row and telling the user is the designed
+//     recovery: INFO, silent_terminal_drift_expected.
+//   - Anything else: the run's own code ran to an end — or Temporal cannot say
+//     how it ended — and still did not report it: ERROR,
+//     silent_terminal_drift. Unless the failure that ended it is the user's
+//     to act on, which the error-class handler (#686) writes at INFO with
+//     error_class=user and never sends to Sentry; it is counted as expected.
+func (r *Reconciler) logSilentEnd(stats *passStats, message string, wf *db.Workflow, end silentEnd) {
+	fields := []any{
+		"workflowID", wf.ID,
+		"chatID", wf.ChatID,
+		"thread", wf.Thread,
+		"closeStatus", closeStatusLabel(end.closeStatus),
+	}
+	if ranNoWorkflowCode(end.closeStatus) {
+		r.recordAnomaly(stats, anomalySilentTerminalDriftExpected)
+		logging.Info(message, append(fields, "reason", end.reason)...)
+		return
+	}
+	if end.userError {
+		r.recordAnomaly(stats, anomalySilentTerminalDriftExpected)
+	} else {
+		r.recordAnomaly(stats, anomalySilentTerminalDrift)
+	}
+	logging.Error(message, append(fields, "error", end.err())...)
+}
+
 // closeReason returns what Temporal recorded about WHY the run closed, or ""
 // when there is nothing to be had: the operator/system reason on a
 // WorkflowExecutionTerminated event, or the root cause of the error chain on a
-// WorkflowExecutionFailed event.
+// WorkflowExecutionFailed event — and, for the latter, whether that root
+// cause is the user's to act on.
 //
 // The FAILED half exists because a failure can reach the silent path too. A
 // reset-and-replay resume that lands after a recorded activity failure
@@ -2927,7 +3047,7 @@ func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Work
 // extra Temporal call per dead workflow, once, not once per pass. The
 // close-event filter keeps it to the last event rather than paging a history
 // that, for the motivating incident, was 51,199 events long.
-func (r *Reconciler) closeReason(ctx context.Context, workflowID string, state *TemporalWorkflowState) string {
+func (r *Reconciler) closeReason(ctx context.Context, workflowID string, state *TemporalWorkflowState) (reason string, userError bool) {
 	iter := r.tempClient.GetWorkflowHistory(ctx, workflowID, state.RunID, false, enums.HISTORY_EVENT_FILTER_TYPE_CLOSE_EVENT)
 	for iter.HasNext() {
 		event, err := iter.Next()
@@ -2937,16 +3057,16 @@ func (r *Reconciler) closeReason(ctx context.Context, workflowID string, state *
 				"error", err,
 				"workflowID", workflowID,
 			)
-			return ""
+			return "", false
 		}
 		if attrs := event.GetWorkflowExecutionTerminatedEventAttributes(); attrs != nil {
-			return attrs.GetReason()
+			return attrs.GetReason(), false
 		}
 		if attrs := event.GetWorkflowExecutionFailedEventAttributes(); attrs != nil {
-			return rootCauseMessage(attrs.GetFailure())
+			return rootCauseMessage(attrs.GetFailure()), rootCauseIsBenign(attrs.GetFailure())
 		}
 	}
-	return ""
+	return "", false
 }
 
 // rootCauseMessage returns the innermost non-empty message of a failure
@@ -2959,6 +3079,20 @@ func rootCauseMessage(f *failurepb.Failure) string {
 		}
 	}
 	return msg
+}
+
+// rootCauseIsBenign reports whether the innermost application failure of a
+// chain was marked benign — a user error, as the activity boundary records
+// one (errclass.TemporalCategory). The workflow's own wrapping of it is never
+// marked, so the outer failures say nothing.
+func rootCauseIsBenign(f *failurepb.Failure) bool {
+	benign := false
+	for ; f != nil; f = f.GetCause() {
+		if info := f.GetApplicationFailureInfo(); info != nil {
+			benign = info.GetCategory() == enums.APPLICATION_ERROR_CATEGORY_BENIGN
+		}
+	}
+	return benign
 }
 
 // StartBackgroundReconciliation starts the background reconciliation loop.

@@ -3760,9 +3760,9 @@ func (r *Repo) CascadeTerminalStatusToDescendants(ctx context.Context, parentWor
 }
 
 // ReapOrphanedWorkflowDescendants ends running/paused workflows whose parent is
-// already terminal, at the terminal ancestor's status, returning the number of
-// rows repaired. See the Repository interface for why the backstop is needed.
-func (r *Repo) ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error) {
+// already terminal, at the terminal ancestor's status, returning the rows
+// repaired. See the Repository interface for why the backstop is needed.
+func (r *Repo) ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapedWorkflow, error) {
 	return r.workflows.ReapOrphanedWorkflowDescendants(ctx)
 }
 

@@ -599,12 +599,12 @@ type Repository interface {
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error
 	// ReapOrphanedWorkflowDescendants ends every running/paused workflow whose
 	// parent is already terminal — at the terminal ancestor's own status — and
-	// reports how many rows it moved. The backstop for a write path that reached
+	// returns the rows it moved. The backstop for a write path that reached
 	// a terminal status without cascading (every TerminateWorkflow path does: a
 	// hard kill skips the workflow's own completion handler). Nothing else
 	// revisits those rows — the reconciler skips workflows with a parent_id — so
 	// without this they are reported as running forever.
-	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
+	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapedWorkflow, error)
 	// ReviveSubtreeLiveAt is the inverse of the two cascades above for a
 	// subtree that is coming BACK: after a reset-and-replay, every
 	// descendant workflow row that was live at the reset point returns to

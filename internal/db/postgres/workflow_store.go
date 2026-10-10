@@ -186,8 +186,20 @@ func (s *workflowStore) CascadeTerminalStatusToDescendants(ctx context.Context, 
 	})
 }
 
-func (s *workflowStore) ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error) {
-	return s.q.ReapOrphanedWorkflowDescendants(ctx)
+func (s *workflowStore) ReapOrphanedWorkflowDescendants(ctx context.Context) ([]core.ReapedWorkflow, error) {
+	rows, err := s.q.ReapOrphanedWorkflowDescendants(ctx)
+	if err != nil {
+		return nil, err
+	}
+	reaped := make([]core.ReapedWorkflow, 0, len(rows))
+	for _, row := range rows {
+		reaped = append(reaped, core.ReapedWorkflow{
+			WorkflowID: row.WorkflowID,
+			ChatID:     row.ChatID,
+			StopReason: core.WorkflowStopReason(row.StopReason),
+		})
+	}
+	return reaped, nil
 }
 
 // ReviveSubtreeLiveAt brings back the descendants a reset-and-replay is about

@@ -138,7 +138,7 @@ type WorkflowStore interface {
 	SetWorkflowOutcome(ctx context.Context, id string, outcome string) error
 	UpdateWorkflowName(ctx context.Context, id string, workflowName string) error
 	CascadeTerminalStatusToDescendants(ctx context.Context, parentWorkflowID string, reason WorkflowStopReason) error
-	ReapOrphanedWorkflowDescendants(ctx context.Context) (int64, error)
+	ReapOrphanedWorkflowDescendants(ctx context.Context) ([]ReapedWorkflow, error)
 	// ReviveSubtreeLiveAt moves every descendant of a root that was live at
 	// a reset point back to active, along with the threads those rows own
 	// and the root's own thread, and reports how many of each it moved. The
@@ -183,4 +183,13 @@ type WorkflowStore interface {
 	ListCommandFavorites(ctx context.Context, userID, projectID string) ([]string, error)
 	AddCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
 	RemoveCommandFavorite(ctx context.Context, userID, projectID, commandKey string) error
+}
+
+// ReapedWorkflow is one workflow ReapOrphanedWorkflowDescendants closed: the
+// workflow, its chat, and the stop reason it inherited from its terminal
+// ancestor.
+type ReapedWorkflow struct {
+	WorkflowID string
+	ChatID     string
+	StopReason WorkflowStopReason
 }

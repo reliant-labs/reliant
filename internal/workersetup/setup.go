@@ -85,6 +85,10 @@ type Config struct {
 	// Optional overrides (for testing)
 	RunExecutorOverride handlers.RunExecutor
 	DriverResolver      drivers.DriverResolver // Custom LLM driver resolver (nil = production default)
+	// WorkflowInterceptors run after the production interceptors. The replay
+	// fixture generator injects a workflow panic through one; production
+	// passes none.
+	WorkflowInterceptors []interceptor.WorkerInterceptor
 
 	// Task queue configuration
 	TaskQueueSuffix string // Optional suffix for test isolation
@@ -209,7 +213,7 @@ func StartWorker(cfg *Config) (*Handle, *v2.ActivityRegistry, error) {
 		// hostname-based default cannot answer that question.
 		Identity:                 instanceid.WorkerIdentity(),
 		DeadlockDetectionTimeout: 30 * time.Second,
-		Interceptors:             []interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()},
+		Interceptors:             append([]interceptor.WorkerInterceptor{observability.NewOTelWorkerInterceptor()}, cfg.WorkflowInterceptors...),
 	}
 
 	w := worker.New(cfg.TemporalClient, cfg.taskQueueName(), workerOpts)

@@ -90,7 +90,16 @@ func (e *InlineLoopExecutor) ExecuteParallel() (*reliantv1.LoopOutput, error) {
 		iterKey := iterationKeys[idx]
 
 		workflow.Go(e.ctx, func(gCtx workflow.Context) {
-			result := e.executeParallelIteration(gCtx, idx, iterItem, iterKey)
+			// A panic in one iteration is that iteration's failure, judged
+			// by the loop's on_failure like any other — not the whole
+			// workflow task's. Temporal's own panics pass through
+			// (recoveredPanic).
+			var result *parallelIterationResult
+			if panicErr := runRecovering(gCtx, func() {
+				result = e.executeParallelIteration(gCtx, idx, iterItem, iterKey)
+			}); panicErr != nil {
+				result = &parallelIterationResult{Key: iterKey, Index: idx, Error: panicErr}
+			}
 			resultCh.Send(gCtx, result)
 		})
 	}

@@ -30,7 +30,7 @@ import (
 
 func TestReconciler_ReapsOrphanedDescendantsEveryPass(t *testing.T) {
 	repo := newMockRepo()
-	repo.reapRows = 3
+	repo.reapRows = reapedWorkflows(3)
 	// Deliberately EMPTY: after a cancel the root is terminal and nothing is
 	// listed as running. The pre-fix pass returned here before touching
 	// anything, which is why the orphans survived every 30s poll forever.
@@ -50,7 +50,7 @@ func TestReconciler_ReapsOrphanedDescendantsEveryPass(t *testing.T) {
 
 func TestReconciler_ReapRunsBeforeWorkflowsAreListed(t *testing.T) {
 	repo := newMockRepo()
-	repo.reapRows = 1
+	repo.reapRows = reapedWorkflows(1)
 	repo.workflowsByStatus[db.Active()] = []*db.Workflow{runningWorkflow()}
 
 	tempClient := &mockReconcilerTemporalClient{}

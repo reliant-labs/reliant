@@ -159,7 +159,7 @@ FROM descendants
 WHERE t.id = descendants.id
   AND (t.state = 2 OR (t.state = 3 AND t.stop_reason = 3));
 
--- name: ReapOrphanedWorkflowDescendants :execrows
+-- name: ReapOrphanedWorkflowDescendants :many
 -- Enforce the invariant CascadeTerminalStatusToDescendants asserts from the
 -- other direction: a workflow whose PARENT is terminal is not running.
 --
@@ -185,6 +185,10 @@ WHERE t.id = descendants.id
 --
 -- "Terminal parent" is STOPPED for a reason other than PAUSED: a paused parent
 -- has not ended, and reaping its children would kill a run that is coming back.
+--
+-- Returns each workflow it moved. Whether a reap is a bug depends on how the
+-- run ended, and a count cannot say which run that was — the reconciler needs
+-- the ids to ask Temporal and to log something actionable.
 WITH RECURSIVE descendants AS (
     SELECT c.id, p.stop_reason AS terminal_reason FROM workflows c
     JOIN workflows p ON c.parent_id = p.id
@@ -197,7 +201,8 @@ UPDATE workflows AS t
 SET state = 3, stop_reason = descendants.terminal_reason, completed_at = NOW()
 FROM descendants
 WHERE t.id = descendants.id
-  AND (t.state = 2 OR (t.state = 3 AND t.stop_reason = 3));
+  AND (t.state = 2 OR (t.state = 3 AND t.stop_reason = 3))
+RETURNING t.id AS workflow_id, t.chat_id, t.stop_reason;
 
 -- name: ListWorkflowsByStatus :many
 -- List all workflows at a specific lifecycle (e.g. ACTIVE, or STOPPED/PAUSED).
