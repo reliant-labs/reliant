@@ -28,6 +28,11 @@ import (
 //	REFUSED   gpt-5.4, gpt-5.4-mini, gpt-5.3-codex, gpt-5.3-codex-spark,
 //	          gpt-5.2-codex
 //
+// gpt-6.1-sol, gpt-6-sol and gpt-6-luna are mapped from Codex CLI's own
+// catalog (visibility "list"), not a live probe; see the note in models.yaml.
+// The per-account /codex/models report is authoritative, so a plan without one
+// hides it rather than offering a model that 400s.
+//
 // The refused models are ordinary OpenAI-platform models; they remain in the
 // catalog served by the `openai` and `openrouter` drivers, which reach them
 // with an API key. Only the `codex` provider mapping is wrong.

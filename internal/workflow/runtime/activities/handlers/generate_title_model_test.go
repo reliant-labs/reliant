@@ -57,8 +57,8 @@ func TestTitleModel_SelectsByTagNotAHardcodedModel(t *testing.T) {
 	// The load-bearing half. Tags degrade gracefully and `fast` is carried by
 	// image-generation models (gpt-image-2.5-flare, gemini-3.1-flash-lite-
 	// image), so without a hard modality requirement titling can resolve to a
-	// model that cannot emit text. Verified: bare TagFast on codex resolves to
-	// gpt-image-2.5-flare.
+	// model that cannot emit text. Bare TagFast on codex resolved to
+	// gpt-image-2.5-flare until gpt-6-luna gained a codex mapping.
 	assert.Equal(t, models.ModalityText, selector.RequireOutputModality,
 		"titling must REQUIRE text output; speed is only a preference")
 }
@@ -117,7 +117,7 @@ func TestTitleModel_PinsTheModelPerProvider(t *testing.T) {
 		{"anthropic and antigravity", []string{"anthropic", "antigravity"}, models.Claude45Haiku},
 		{"openai", []string{"openai"}, models.GPT54Mini},
 		{"antigravity only", []string{"antigravity"}, models.Gemini38Flash},
-		{"codex only", []string{"codex"}, models.GPT56Terra},
+		{"codex only", []string{"codex"}, models.GPT6Luna},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			assert.Equal(t, string(tt.wantModel), resolveTitleModel(t, tt.providers...).Definition.ID)

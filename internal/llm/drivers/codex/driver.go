@@ -36,17 +36,20 @@ const (
 
 	// CodexVersion is the version header to send.
 	// Keep aligned with a current codex-tui (CLI) release; backend DOES gate on
-	// this. OpenAI documents gpt-6-astra as requiring codex-tui 0.153.0 or
-	// newer, so the previous 0.146.0 pin (the release observed serving the
-	// gpt-5.6 family) is not sufficient to reach astra. 0.153.4 is the release
-	// in the astra capture, and it still serves the 5.6 family.
-	CodexVersion = "0.153.4"
+	// this: each model in Codex's catalog carries a minimal_client_version, and
+	// /codex/models omits a model the claimed version is too old for (the
+	// authoritative availability report then hides it). gpt-6-sol and
+	// gpt-6-luna need 0.155.0; astra and gpt-6.1-sol 0.153.0; the 5.6 family
+	// 0.144.0. 0.155.0 is the oldest release that reaches every listed model —
+	// the smallest step past 0.153.4, the release in the astra capture.
+	// TestCodexVersionServesEveryListedModel pins this to testdata.
+	CodexVersion = "0.155.0"
 
 	// CodexOriginator identifies the client to the Codex backend.
 	CodexOriginator = "codex-tui"
 
 	// CodexUserAgent is the user agent string, matching the codex-tui CLI identity.
-	CodexUserAgent = "codex-tui/0.153.4 (Mac OS 14.3.0; arm64) Apple_Terminal/453 (codex-tui; 0.153.4)"
+	CodexUserAgent = "codex-tui/" + CodexVersion + " (Mac OS 14.3.0; arm64) Apple_Terminal/453 (codex-tui; " + CodexVersion + ")"
 
 	// CodexBetaFeatures advertises the beta features the codex-tui client opts into.
 	CodexBetaFeatures = "remote_compaction_v2"

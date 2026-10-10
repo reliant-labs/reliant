@@ -54,9 +54,16 @@ import (
 //
 // Named for the wire shape rather than a model generation because it now spans
 // two families: an "isGPT56" that returns true for gpt-6-astra reads as a bug.
+//
+// Codex's catalog states it per model as use_responses_lite (openai/codex
+// codex-rs/core/tests/suite/responses_lite.rs: no top-level instructions or
+// tools, input[0] is additional_tools). gpt-6.1-sol, gpt-6-sol and gpt-6-luna
+// set it like astra; TestCodexEnvelopeFollowsResponsesLite keeps this list in
+// step with testdata/codex_models.json.
 func usesAdditionalToolsEnvelope(id models.ModelID) bool {
 	switch id {
-	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra:
+	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra,
+		models.GPT6Astra, models.GPT61Sol, models.GPT6Sol, models.GPT6Luna:
 		return true
 	default:
 		return false
@@ -81,6 +88,12 @@ func envelopeName(id models.ModelID) string {
 // service_tier at all and lets the server default it, so extending the field to
 // those models would be changing behavior we have direct contrary evidence
 // about, in exchange for nothing.
+//
+// Nor to gpt-6.1-sol, gpt-6-sol or gpt-6-luna, which have no capture. Codex's
+// catalog gives gpt-6-sol and gpt-6-luna default_service_tier "priority" (a
+// client-side default Codex CLI applies unless the user opts out) and
+// gpt-6.1-sol none. Omitting the field is the server's default tier, which the
+// 5.6 family runs on; sending one we never observed is the riskier guess.
 const astraServiceTier = responses.ResponseNewParamsServiceTierPriority
 
 // routingHint returns the x-codex-routing-hint header value for a model, or ""
@@ -111,9 +124,12 @@ func routingHint(id models.ModelID, apiModel string) string {
 //
 // To flip this once tested, give the model a reasoning_summary_mode in
 // models.yaml and drop it from this list — no other code needs to change.
+//
+// gpt-6.1-sol, gpt-6-sol and gpt-6-luna follow astra, for the same reason.
 func modelSupportsReasoningSummaries(id models.ModelID) bool {
 	switch id {
-	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra, models.GPT6Astra:
+	case models.GPT56Sol, models.GPT56Luna, models.GPT56Terra,
+		models.GPT6Astra, models.GPT61Sol, models.GPT6Sol, models.GPT6Luna:
 		return false
 	default:
 		return true

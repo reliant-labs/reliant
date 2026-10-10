@@ -75,15 +75,17 @@ func TestClaude55SonnetCapabilities(t *testing.T) {
 	}
 }
 
-// GPT-6.1 models currently reach users through OpenAI only. The 1M context
-// window and Responses contract are intentionally explicit here: provider
-// availability is model-specific and must be added only once verified.
+// GPT-6.1 models reach users through OpenAI, and gpt-6.1-sol through Codex too
+// (Codex CLI's catalog lists it as the default). Provider availability is
+// model-specific and must be added only once verified: Codex lists neither
+// gpt-6.1-astra nor gpt-6.1-terra.
 func TestGPT61ModelProviderMappings(t *testing.T) {
 	reg := MustGetRegistry()
 
-	for _, id := range []string{"gpt-6.1-astra", "gpt-6.1-sol", "gpt-6.1-terra"} {
+	for _, id := range []string{"gpt-6.1-astra", "gpt-6.1-terra"} {
 		assert.Equal(t, map[string]string{"openai": id}, providerAPIModels(t, reg, id), "%s providers", id)
 	}
+	assert.Equal(t, map[string]string{"codex": "gpt-6.1-sol", "openai": "gpt-6.1-sol"}, providerAPIModels(t, reg, "gpt-6.1-sol"))
 }
 
 // These models take tools only on the Responses API (Chat Completions refuses
@@ -134,10 +136,16 @@ func TestSept2026ModelsPinTierWinners(t *testing.T) {
 
 		{TagFlagship, []string{"openai"}, "gpt-6.1-sol"},
 		{TagModerate, []string{"openai"}, "gpt-6.1-terra"},
-		{TagReasoning, []string{"openai"}, "gpt-5.5"},
+		{TagReasoning, []string{"openai"}, "gpt-6.1-sol"},
 		{TagPowerful, []string{"openai"}, "gpt-6.1-astra"},
 		{TagFast, []string{"openai"}, "gpt-5.4-mini"},
 		{TagCheap, []string{"openai"}, "gpt-5.4-mini"},
+
+		// Codex adding gpt-6.1-sol / gpt-6-luna must not move a user who has
+		// codex AND a provider that already answered the tier.
+		{TagModerate, []string{"openai", "codex"}, "gpt-6.1-terra"},
+		{TagFast, []string{"openai", "codex"}, "gpt-5.4-mini"},
+		{TagFast, []string{"copilot", "codex"}, "claude-4.5-haiku"},
 
 		{TagFlagship, []string{"copilot"}, "claude-5.5-sonnet"}, // 5.5 sits above 5 in flagship and copilot now serves it
 	}

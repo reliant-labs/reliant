@@ -647,13 +647,14 @@ func TestResolve_BySingleTag(t *testing.T) {
 	}
 }
 
-func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
+// gpt-6.1-sol is Codex's default ("Latest workhorse model for coding and
+// everyday work", priority 1 in Codex CLI's catalog), so it is a codex user's
+// flagship AND moderate model.
+func TestResolve_CodexFlagshipAndModerateUseGPT61Sol(t *testing.T) {
 	reg := MustGetRegistry()
 
-	_, ok := reg.GetDefinition("gpt-5.5")
-	require.True(t, ok, "expected gpt-5.5 to exist in registry")
-	assert.Contains(t, reg.TagsOf("gpt-5.5"), TagFlagship)
-	assert.Contains(t, reg.TagsOf("gpt-5.5"), TagModerate)
+	assert.Contains(t, reg.TagsOf("gpt-6.1-sol"), TagFlagship)
+	assert.Contains(t, reg.TagsOf("gpt-6.1-sol"), TagModerate)
 
 	moderate, err := reg.Resolve(ModelSelector{Tags: []string{TagModerate}}, []string{"codex"})
 	require.NoError(t, err)
@@ -661,8 +662,9 @@ func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 	flagship, err := reg.Resolve(ModelSelector{Tags: []string{TagFlagship}}, []string{"codex"})
 	require.NoError(t, err)
 
-	assert.Equal(t, "gpt-5.5", moderate.Definition.ID)
+	assert.Equal(t, "gpt-6.1-sol", moderate.Definition.ID)
 	assert.Equal(t, flagship.Definition.ID, moderate.Definition.ID)
+	assert.Equal(t, "codex", moderate.Provider.Driver)
 	assert.Equal(t, flagship.Provider.Driver, moderate.Provider.Driver)
 }
 
@@ -672,38 +674,52 @@ func TestResolve_CodexModerateUsesGPT55(t *testing.T) {
 func TestResolve_CodexTagTargetsArePinned(t *testing.T) {
 	reg := MustGetRegistry()
 
-	// The codex driver has NO fast-tagged model, deliberately. TagFast pointed
-	// at gpt-5.3-codex-spark and then at gpt-5.4-mini; the ChatGPT-account
-	// backend refuses both with a 400 ("not supported when using Codex with a
-	// ChatGPT account"), so every titling and compaction call failed for a
-	// codex user — invisibly, because titling falls back to a truncated first
-	// message that looks real. Tagging terra instead would have repointed
-	// @fast globally, away from gemini-3.5-flash, for every user.
-	//
-	// Callers that want speed pass a preference ladder and degrade; see
-	// TestResolve_CodexTitlingDegradesToAServableModel below.
+	// TagFast once pointed at gpt-5.3-codex-spark and then at gpt-5.4-mini; the
+	// ChatGPT-account backend refuses both with a 400 ("not supported when
+	// using Codex with a ChatGPT account"), so every titling and compaction
+	// call failed for a codex user — invisibly, because titling falls back to
+	// a truncated first message that looks real. gpt-6-luna is Codex's own
+	// "Fast and affordable model", listed for every plan, so it answers the
+	// cheap tiers; it sits below gpt-5.4-mini and gpt-5-mini there, so no
+	// OpenAI or Copilot user's pick moves.
 	for tag, want := range map[string]string{
-		TagFlagship:  "gpt-5.5",
-		TagModerate:  "gpt-5.5",
-		TagReasoning: "gpt-5.5",
+		TagPowerful:  "gpt-6-astra",
+		TagFlagship:  "gpt-6.1-sol",
+		TagModerate:  "gpt-6.1-sol",
+		TagReasoning: "gpt-6.1-sol",
+		TagFast:      "gpt-6-luna",
+		TagCheap:     "gpt-6-luna",
+		TagMeta:      "gpt-6-luna",
 	} {
-		resolved, err := reg.Resolve(ModelSelector{Tags: []string{tag}}, []string{"codex"})
+		resolved, err := reg.Resolve(ModelSelector{Tags: []string{tag}, RequireOutputModality: ModalityText}, []string{"codex"})
 		require.NoError(t, err, "resolving tag %q", tag)
 		assert.Equal(t, want, resolved.Definition.ID, "codex tag %q resolved to an unexpected model", tag)
+		assert.Equal(t, "codex", resolved.Provider.Driver, "codex tag %q", tag)
 	}
 
-	// Bare TagFast on codex resolves to gpt-image-2.5-flare — an IMAGE model,
-	// which carries `fast` and is the only fast-tagged codex entry left. That
-	// is precisely why every text caller must pin RequireOutputModality: this
-	// assertion documents the trap rather than pretending it is closed. A
-	// text-modality requirement is what makes the [fast, moderate] ladder land
-	// on gpt-5.5 instead.
+	// Image models carry `fast` too (gpt-image-2.5-flare is codex-mapped), which
+	// is why every text caller pins RequireOutputModality. Bare TagFast on codex
+	// used to land on that image model; luna now precedes it in [fast].
 	bare, err := reg.Resolve(ModelSelector{Tags: []string{TagFast}}, []string{"codex"})
 	require.NoError(t, err)
-	assert.Equal(t, "gpt-image-2.5-flare", bare.Definition.ID,
-		"bare TagFast on codex is expected to hit an image model; text callers "+
-			"must set RequireOutputModality=text to avoid it")
-	assert.False(t, bare.Definition.Capabilities.CanOutput(ModalityText))
+	assert.Equal(t, "gpt-6-luna", bare.Definition.ID)
+	assert.True(t, bare.Definition.Capabilities.CanOutput(ModalityText))
+}
+
+// A plan whose /codex/models omits gpt-6-luna still resolves every cheap tier:
+// the trailing gpt-5.6-terra entries are codex's fallback.
+func TestResolve_CodexCheapTiersFallBackWhenLunaIsNotServed(t *testing.T) {
+	reg := MustGetRegistry().WithAvailability(func(driver, modelID string) ModelAvailability {
+		if driver == "codex" && modelID == "gpt-6-luna" {
+			return ModelAvailability{Disabled: true, Reason: "not on this plan"}
+		}
+		return ModelAvailability{}
+	})
+	for _, tag := range []string{TagFast, TagCheap, TagMeta} {
+		resolved, err := reg.Resolve(ModelSelector{Tags: []string{tag}, RequireOutputModality: ModalityText}, []string{"codex"})
+		require.NoError(t, err, "resolving tag %q", tag)
+		assert.Equal(t, "gpt-5.6-terra", resolved.Definition.ID, "codex tag %q", tag)
+	}
 }
 
 func TestResolve_ReliantThinkingPolicyRegressionModels(t *testing.T) {

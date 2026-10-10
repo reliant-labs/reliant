@@ -31,6 +31,23 @@ func TestTierResolutions_ReportModelAndEffortPerTag(t *testing.T) {
 	assert.Equal(t, "high", moderate.ThinkingLevel)
 }
 
+// What the composer's tier labels show a codex-only user (ListModels.tiers):
+// Codex's current models, not gpt-5.5 / gpt-5.6-terra.
+func TestTierResolutions_CodexUserGetsCurrentCodexModels(t *testing.T) {
+	tiers := tiersByTag(tierResolutions(models.MustGetRegistry(), []string{"codex"}, nil, nil))
+	for tag, want := range map[string]string{
+		"powerful": "gpt-6-astra@codex",
+		"flagship": "gpt-6.1-sol@codex",
+		"moderate": "gpt-6.1-sol@codex",
+		"fast":     "gpt-6-luna@codex",
+		"cheap":    "gpt-6-luna@codex",
+	} {
+		tier, ok := tiers[tag]
+		require.True(t, ok, "%s must resolve on codex", tag)
+		assert.Equal(t, want, tier.ModelId, tag)
+	}
+}
+
 func TestTierResolutions_SkipsNonTextAndUnresolvableTags(t *testing.T) {
 	// openai serves image models; image-gen must still never appear as a tier
 	// because the chat picker can only run text models.
