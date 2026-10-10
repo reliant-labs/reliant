@@ -44,7 +44,7 @@ func TestReconciler_RunTerminatedByOthers_ContinuesTheUnansweredMessageOnce(t *t
 	require.Len(t, updates, 1)
 	assert.Equal(t, silentTerminationContinuedSummary, updates[0].data["error_summary"],
 		"the user is not asked to send again: the message is already being answered")
-	assert.Contains(t, updates[0].data["error_message"], "terminated by operator: replay wedge")
+	assert.NotContains(t, updates[0].data["error_message"], "replay wedge", "an operator's terminate reason is not for the user")
 
 	require.Len(t, repo.savedMessages, 1)
 	assert.Equal(t, "Recovered from an internal error; continuing from your last message.", repo.savedMessages[0].content)
