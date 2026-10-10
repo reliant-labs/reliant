@@ -106,6 +106,8 @@ describe("SpawnToolRenderer", () => {
         "chat-1",
         "wf-child-1",
         "please check logs",
+        undefined,
+        expect.any(String),
       );
     });
     expect(input).toHaveValue("");

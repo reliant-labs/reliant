@@ -4,7 +4,7 @@
 
 import { createClient } from "@connectrpc/connect";
 import { create, fromJsonString } from "@bufbuild/protobuf";
-import { getTransport } from "./grpc-client";
+import { getStreamingTransport } from "./grpc-client";
 import { logger } from "../lib/logger";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
@@ -832,7 +832,7 @@ export class UserStreamingService {
     const myAbortController = this.abortController;
 
     try {
-      const client = createClient(StreamingService, getTransport());
+      const client = createClient(StreamingService, getStreamingTransport());
 
       const request = create(StreamUserUpdatesRequestSchema, {
         sinceSeq: this.lastSequence,

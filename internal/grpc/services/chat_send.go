@@ -802,7 +802,7 @@ func (s *ChatService) SendMessage(
 					queuedMsg = &db.AgentMessage{
 						// The client's own id for the message, so the copy it
 						// is already showing and the queued row are one item.
-						ID:           clientMessageID(req.Msg),
+						ID:           clientMessageID(req.Msg.GetClientMessageId()),
 						FromThreadID: chat.MainThreadID(),
 						ChatID:       req.Msg.ChatId,
 						ToThreadID:   targetThread,
@@ -1207,8 +1207,8 @@ func (s *ChatService) SendMessage(
 
 // clientMessageID is the id the client chose for its message, when it is one a
 // queued row can carry; otherwise a fresh one.
-func clientMessageID(req *reliantv1.SendMessageRequest) string {
-	if id, err := uuid.Parse(req.GetClientMessageId()); err == nil {
+func clientMessageID(clientMessageID string) string {
+	if id, err := uuid.Parse(clientMessageID); err == nil {
 		return id.String()
 	}
 	return uuid.New().String()
@@ -1349,7 +1349,7 @@ func (s *ChatService) SendAgentMessage(
 	}
 
 	msg := &db.AgentMessage{
-		ID: uuid.New().String(),
+		ID: clientMessageID(req.Msg.GetClientMessageId()),
 		// FromThreadID is a required FK to threads(id), and the human
 		// sending this has no thread of their own. The chat's root thread
 		// is the closest stable stand-in for "the user's side of this

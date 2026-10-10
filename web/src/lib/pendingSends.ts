@@ -35,3 +35,50 @@ export function isPendingSend(id: string): boolean {
 export function newClientMessageId(): string {
   return crypto.randomUUID();
 }
+
+/** A row as the pending-queue strip shows it (QueuedAgentMessageView). */
+export interface QueuedRow {
+  id: string;
+  body: string;
+  created_at: string;
+  sender_kind: number;
+  attachments: string[];
+}
+
+interface QueuedSend {
+  chatId: string;
+  thread: string;
+  row: QueuedRow;
+}
+
+const queuedInFlight = new Map<string, QueuedSend>();
+
+export function beginQueuedSend(send: QueuedSend): void {
+  queuedInFlight.set(send.row.id, send);
+}
+
+export function endQueuedSend(rowId: string): void {
+  queuedInFlight.delete(rowId);
+}
+
+/**
+ * A mailbox read for (chat, thread), with every in-flight queued send that the
+ * read does not yet include appended in send order. The row IDs are the
+ * client_message_id values sent to the server, so reconciliation is exact.
+ */
+export function withQueuedSendsInFlight<T extends QueuedRow>(
+  rows: T[],
+  chatId: string,
+  thread: string,
+): T[] {
+  const local = [...queuedInFlight.values()].filter(
+    (send) => send.chatId === chatId && send.thread === thread,
+  );
+  if (local.length === 0) return rows;
+
+  const known = new Set(rows.map((row) => row.id));
+  const missing = local
+    .map((send) => send.row)
+    .filter((row) => !known.has(row.id));
+  return missing.length === 0 ? rows : [...rows, ...(missing as T[])];
+}

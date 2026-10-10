@@ -97,10 +97,14 @@ const getGRPCBaseURL = (): string | null => {
 
 // Create the Connect transport
 let _transport: ReturnType<typeof createConnectTransport> | null = null;
+let _streamingTransport: ReturnType<typeof createConnectTransport> | null = null;
+let _streamingTransportURL: string | null = null;
 let _currentBaseURL: string | null = null;
 
 // Clear all cached clients (called when transport changes)
 const clearClientCache = () => {
+  _streamingTransport = null;
+  _streamingTransportURL = null;
   _systemClient = null;
   _planClient = null;
   _taskClient = null;
@@ -205,6 +209,26 @@ export const getTransport = () => {
   return _transport;
 };
 
+// StreamUserUpdates carries snapshots and heartbeats. Keep that one hot path
+// binary while unary RPCs remain JSON for readable network inspection.
+export const getStreamingTransport = () => {
+  const currentBaseURL = getGRPCBaseURL();
+  if (currentBaseURL === null) {
+    throw new Error("gRPC client not ready - waiting for backend configuration");
+  }
+
+  if (!_streamingTransport || _streamingTransportURL !== currentBaseURL) {
+    _streamingTransportURL = currentBaseURL;
+    _streamingTransport = createConnectTransport({
+      baseUrl: currentBaseURL,
+      interceptors: buildInterceptors({ withAuth: true }),
+      useBinaryFormat: true,
+    });
+  }
+
+  return _streamingTransport;
+};
+
 // Check if gRPC client is ready (config available)
 export const isGrpcReady = (): boolean => {
   return getGRPCBaseURL() !== null;
@@ -282,7 +306,7 @@ export const createPackageCommandsClient = (): Client<typeof PackageCommandsServ
 };
 
 export const createStreamingClient = (): Client<typeof StreamingService> => {
-  return createClient(StreamingService, getTransport());
+  return createClient(StreamingService, getStreamingTransport());
 };
 
 export const createTerminalClient = (): Client<typeof TerminalService> => {

@@ -447,7 +447,8 @@ export const chatGrpc = {
     chatId: string,
     threadId: string,
     message: string,
-    attachments?: string[]
+    attachments?: string[],
+    clientMessageId?: string,
   ): Promise<{ success: boolean; message: string }> {
     const client = grpcClient.chat();
     const request = create(SendAgentMessageRequestSchema, {
@@ -455,6 +456,7 @@ export const chatGrpc = {
       threadId,
       message,
       attachments: attachments ?? [],
+      clientMessageId,
     });
     const response = await client.sendAgentMessage(request);
     return { success: response.success, message: response.message };

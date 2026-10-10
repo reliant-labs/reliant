@@ -39,6 +39,7 @@ const { sendAgentMessageMock, toastErrorMock } = vi.hoisted(() => ({
 
 vi.mock("../../../api/chat-grpc", () => ({
   chatGrpc: { sendAgentMessage: sendAgentMessageMock },
+  QUEUED_SENDER_KIND_HUMAN: 5,
 }));
 
 vi.mock("../../../lib/toast-manager", () => ({
@@ -157,7 +158,8 @@ describe("queueing a message while the agent is running", () => {
       CHAT_ID,
       MAIN_THREAD_ID,
       "check the migration file",
-      []
+      [],
+      expect.any(String),
     );
     // Queueing is not sending: the ordinary turn-starting path stays untouched.
     expect(onSend).not.toHaveBeenCalled();
@@ -190,7 +192,8 @@ describe("queueing a message while the agent is running", () => {
       CHAT_ID,
       MAIN_THREAD_ID,
       "look at this",
-      ["att-1"]
+      ["att-1"],
+      expect.any(String),
     );
   });
 

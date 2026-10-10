@@ -45,7 +45,7 @@ import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
 import { workflowGrpc } from "../../api/workflow-grpc";
 import { presetGrpc } from "../../api/preset-grpc";
-import { chatGrpc } from "../../api/chat-grpc";
+import { chatGrpc, QUEUED_SENDER_KIND_HUMAN } from "../../api/chat-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
 import { useChatStore } from "../../store/chatStore";
@@ -65,6 +65,13 @@ import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { findPinnedModel } from "../../lib/modelId";
 import { ComposerModelName } from "./ComposerModelName";
+import {
+  beginQueuedSend,
+  endQueuedSend,
+  newClientMessageId,
+  type QueuedRow,
+} from "../../lib/pendingSends";
+import { initEventBus } from "../../lib/events";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -273,6 +280,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       chatId,
       tabId: tabId ?? undefined,
     });
+    const latestInputRef = useRef(input);
+    latestInputRef.current = input;
 
     // Declared after useChatInputState, so on mount this runs after the
     // draft is read and the prefill wins. The focus waits a frame for the new
@@ -1325,24 +1334,38 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       }
 
       const attachmentIds = attachments.map((a) => a.id);
+      const clientMessageId = newClientMessageId();
+      const row: QueuedRow = {
+        id: clientMessageId,
+        body: message,
+        created_at: new Date().toISOString(),
+        sender_kind: QUEUED_SENDER_KIND_HUMAN,
+        attachments: attachmentIds,
+      };
 
       queueingRef.current = true;
+      let queued = false;
       try {
+        beginQueuedSend({ chatId, thread: targetThreadId, row });
+        initEventBus().emit("agentMailbox:queued", {
+          chatId,
+          thread: targetThreadId,
+          message: row,
+        });
+        handleClearInput();
         const response = await chatGrpc.sendAgentMessage(
           chatId,
           targetThreadId,
           message,
-          attachmentIds
+          attachmentIds,
+          clientMessageId,
         );
         if (response.success === false) {
           toast.error(response.message);
           return;
         }
-        handleClearInput();
+        queued = true;
         clearAttachments(attachmentSessionId);
-        // Populate the strip now rather than up to a poll interval later, so
-        // the message the user just queued appears immediately.
-        await refreshQueuedMessages();
       } catch (error) {
         logger.error("[ChatInput] Failed to queue agent message", {
           error,
@@ -1351,8 +1374,19 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         });
         toast.error(error);
       } finally {
+        endQueuedSend(clientMessageId);
         queueingRef.current = false;
+        if (!queued) {
+          initEventBus().emit("agentMailbox:drained", {
+            chatId,
+            thread: targetThreadId,
+            messageIds: [clientMessageId],
+          });
+          const typedSince = latestInputRef.current.trim();
+          replaceInput(typedSince ? `${message}\n\n${typedSince}` : message);
+        }
       }
+      await refreshQueuedMessages();
     }, [
       input,
       chatId,
@@ -1360,6 +1394,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       attachments,
       attachmentSessionId,
       handleClearInput,
+      replaceInput,
       clearAttachments,
       refreshQueuedMessages,
     ]);

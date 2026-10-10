@@ -32,6 +32,7 @@ import { cn } from "../../../lib/utils";
 import { logger } from "../../../lib/logger";
 import { compareMessagesWithinThread } from "../../../lib/messageOrder";
 import { chatGrpc } from "../../../api/chat-grpc";
+import { newClientMessageId } from "../../../lib/pendingSends";
 import { toast } from "../../../lib/toast-manager";
 
 const MAX_PREVIEW_MESSAGES = 10;
@@ -381,7 +382,13 @@ function SendToAgentForm({ chatId, threadId }: { chatId: string; threadId: strin
     if (!message || sending) return;
     setSending(true);
     try {
-      await chatGrpc.sendAgentMessage(chatId, threadId, message);
+      await chatGrpc.sendAgentMessage(
+        chatId,
+        threadId,
+        message,
+        undefined,
+        newClientMessageId(),
+      );
       setValue("");
     } catch (error) {
       logger.error("[SendToAgentForm] Failed to send agent message", { error, chatId, threadId });
