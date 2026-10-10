@@ -48,7 +48,10 @@ type WorkflowResolver interface {
 	GetUsableWorkflowBySlug(ctx context.Context, userID, slug string) (*db.WorkflowDraft, error)
 	GetPresetBySlug(ctx context.Context, userID, slug string) (*db.Preset, error)
 	GetPresetBySlugAndProject(ctx context.Context, userID, slug, projectID string) (*db.Preset, error)
-	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)
+	// One column each, never the whole project config record: see
+	// db.Repo.GetProjectWorkflowsJSON.
+	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
+	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
 }
 
 // ProjectLookup resolves the project, worktrees and settings a launch runs in.

@@ -242,11 +242,12 @@ func (a *LoadWorkflowActivity) createWorkflowLoader(ctx context.Context, wfCtx *
 // Loads from stored project config (synced by daemon), then falls back to builtins.
 func (a *LoadWorkflowActivity) createPresetLoader(ctx context.Context, projectID string) validation.PresetLoader {
 	return func(presetName string) (map[string]interface{}, error) {
-		// Try stored project presets from daemon config sync
+		// Try stored project presets from daemon config sync. One column, not
+		// the whole config row (see GetProjectPresetsJSON).
 		if projectID != "" && a.repo != nil {
-			record, err := a.repo.GetProjectConfigRecord(ctx, projectID)
+			presetsJSON, err := a.repo.GetProjectPresetsJSON(ctx, projectID)
 			if err == nil {
-				presets, err := cfg.ParseStoredPresets(record.ProjectPresetsJSON)
+				presets, err := cfg.ParseStoredPresets(presetsJSON)
 				if err == nil {
 					sp := cfg.FindStoredPresetByName(presets, presetName)
 					if sp != nil {

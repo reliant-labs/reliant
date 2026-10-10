@@ -42,13 +42,13 @@ func (f fakeStore) GetWorkflowDraftBySlug(_ context.Context, _, slug string) (*d
 	return f.drafts[slug], nil
 }
 
-func (f fakeStore) GetProjectConfigRecord(context.Context, string) (*db.ProjectConfigRecord, error) {
+func (f fakeStore) GetProjectWorkflowsJSON(context.Context, string) (*string, error) {
 	data, err := json.Marshal(f.project)
 	if err != nil {
 		return nil, err
 	}
 	s := string(data)
-	return &db.ProjectConfigRecord{ProjectWorkflowsJSON: &s}, nil
+	return &s, nil
 }
 
 var opts = Options{UserID: "u", ProjectID: "p"}
@@ -92,6 +92,37 @@ func TestResolve_AFailedReadIsAStoreError(t *testing.T) {
 	_, err := Resolve(context.Background(), store, opts, "flow")
 	var storeErr *StoreError
 	require.ErrorAs(t, err, &storeErr, "a failed read is retryable, not a verdict")
+}
+
+// untouchableStore fails the test if resolution reads anything from it.
+type untouchableStore struct{ t *testing.T }
+
+func (s untouchableStore) GetProjectWorkflowsJSON(context.Context, string) (*string, error) {
+	s.t.Errorf("resolving a builtin read the project's workflows")
+	return nil, errors.New("unexpected read")
+}
+
+func (s untouchableStore) GetUsableWorkflowBySlug(context.Context, string, string) (*db.WorkflowDraft, error) {
+	s.t.Errorf("resolving a builtin read the user's workflows")
+	return nil, errors.New("unexpected read")
+}
+
+func (s untouchableStore) GetWorkflowDraftBySlug(context.Context, string, string) (*db.WorkflowDraft, error) {
+	s.t.Errorf("resolving a builtin read the user's drafts")
+	return nil, errors.New("unexpected read")
+}
+
+// A builtin:// ref cannot be shadowed by a user or project workflow, so
+// resolving one must not read either. Every send of the default workflow
+// (builtin://agent) resolves it several times; each read used to fetch the
+// whole project config record, 18 MB in prod.
+func TestResolve_BuiltinReadsNothingFromTheStore(t *testing.T) {
+	r, err := Resolve(context.Background(), untouchableStore{t}, opts, "builtin://agent")
+	require.NoError(t, err)
+	assert.Equal(t, workflowref.SourceBuiltin, r.Source)
+
+	_, err = Resolve(context.Background(), untouchableStore{t}, opts, "builtin://no-such-builtin")
+	require.ErrorIs(t, err, workflowref.ErrNotFound)
 }
 
 func TestResolve_DraftRootMayBeIncomplete(t *testing.T) {

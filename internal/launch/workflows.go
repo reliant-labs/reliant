@@ -272,7 +272,9 @@ func (l *Launcher) ValidateWorkflowInputs(ctx context.Context, userID, workflowN
 
 	// Apply explicit defaults before validation so optional schema defaults are included.
 	// Required inputs without defaults intentionally remain absent and are rejected below.
-	protoInputs := l.LoadWorkflowInputsForBuild(ctx, userID, workflowName, projectID)
+	// The schema is the workflow just resolved: LoadWorkflowInputsForBuild would
+	// resolve the same ref with the same options a second time.
+	protoInputs := wf.GetInputs()
 	inputsWithDefaults := v2.ApplyDefaults(filteredInputs, protoInputs)
 
 	// Filter again after ApplyDefaults to ensure runtime-injected inputs aren't reintroduced
@@ -610,9 +612,9 @@ func (l *Launcher) LoadPresetFromDB(ctx context.Context, userID, projectID, name
 
 		// Try stored project presets from daemon config sync.
 		if projectID != "" {
-			record, err := l.repo.GetProjectConfigRecord(ctx, projectID)
+			presetsJSON, err := l.repo.GetProjectPresetsJSON(ctx, projectID)
 			if err == nil {
-				presets, err := cfg.ParseStoredPresets(record.ProjectPresetsJSON)
+				presets, err := cfg.ParseStoredPresets(presetsJSON)
 				if err == nil {
 					sp := cfg.FindStoredPresetByName(presets, name)
 					if sp != nil {
@@ -645,7 +647,7 @@ func (l *Launcher) LoadPresetFromDB(ctx context.Context, userID, projectID, name
 // needs. Declared at the consumer so both ChatService and WorkflowService can
 // call the function with their own *db.Repo.
 type ProjectWorkflowLoader interface {
-	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)
+	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 }
 
 // LoadProjectWorkflowBySlugFromDB loads the project workflow NAMED slug from

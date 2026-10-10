@@ -5,6 +5,7 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -40,6 +41,42 @@ func NewScenarioService(database db.Repository, daemonRouter toolexec.DaemonRout
 		database:     database,
 		daemonRouter: daemonRouter,
 	}
+}
+
+// projectScenariosReader reads the synced project scenarios column of a
+// project's config record, and nothing else from it
+// (db.Repo.GetProjectScenariosJSON). It returns sql.ErrNoRows, unwrapped, when
+// the project has no record.
+type projectScenariosReader interface {
+	GetProjectScenariosJSON(ctx context.Context, projectID string) (*string, error)
+}
+
+// The repository every server wires in must answer it, checked at build time.
+var _ projectScenariosReader = (*db.Repo)(nil)
+
+// storedProjectScenarios returns the project's synced scenarios. A project
+// with no config record returns sql.ErrNoRows, unwrapped.
+//
+// It reads the one column the scenario RPCs need. The whole config record
+// carries every skill body and repo memory the daemon indexed — 18 MB in
+// prod — for a column that is empty or a few KB.
+func storedProjectScenarios(ctx context.Context, repo db.Repository, projectID string) ([]cfg.StoredScenario, error) {
+	// The method lives on *db.Repo, not on db.Repository; every production
+	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
+	// fault, reported rather than papered over with the full-record read.
+	reader, ok := repo.(projectScenariosReader)
+	if !ok {
+		return nil, fmt.Errorf("stored project scenarios: %T cannot read the scenarios column (GetProjectScenariosJSON)", repo)
+	}
+	scenariosJSON, err := reader.GetProjectScenariosJSON(ctx, projectID)
+	if err != nil {
+		return nil, err
+	}
+	scenarios, err := cfg.ParseStoredScenarios(scenariosJSON)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse stored scenarios: %w", err)
+	}
+	return scenarios, nil
 }
 
 // projectBelongsToUser verifies the authenticated user owns the given project.
@@ -282,14 +319,12 @@ func (s *ScenarioService) RunScenario(
 			projectID = project.ID
 
 			// Load the scenario from stored config
-			record, err := s.database.GetProjectConfigRecord(ctx, project.ID)
-			if err != nil {
+			allScenarios, err := storedProjectScenarios(ctx, s.database, project.ID)
+			if errors.Is(err, sql.ErrNoRows) {
 				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project config not found: %s", project.ID))
 			}
-
-			allScenarios, err := cfg.ParseStoredScenarios(record.ProjectScenariosJSON)
 			if err != nil {
-				return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse stored scenarios: %w", err))
+				return nil, connect.NewError(connect.CodeInternal, err)
 			}
 
 			workflowScenarios := cfg.FindStoredScenariosByWorkflow(allScenarios, workflowSlug)
@@ -534,14 +569,12 @@ func (s *ScenarioService) ExportScenario(
 		}
 
 		// Load from stored config
-		record, err := s.database.GetProjectConfigRecord(ctx, project.ID)
-		if err != nil {
+		allScenarios, err := storedProjectScenarios(ctx, s.database, project.ID)
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project config not found"))
 		}
-
-		allScenarios, err := cfg.ParseStoredScenarios(record.ProjectScenariosJSON)
 		if err != nil {
-			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to parse stored scenarios: %w", err))
+			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 
 		workflowScenarios := cfg.FindStoredScenariosByWorkflow(allScenarios, workflowSlug)
@@ -789,14 +822,12 @@ func discoverProjectScenariosFromDB(repo db.Repository, ctx context.Context, pro
 		return nil, nil
 	}
 
-	record, err := repo.GetProjectConfigRecord(ctx, projectID)
-	if err != nil {
+	allScenarios, err := storedProjectScenarios(ctx, repo, projectID)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil // No config record, no stored scenarios
 	}
-
-	allScenarios, err := cfg.ParseStoredScenarios(record.ProjectScenariosJSON)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse stored scenarios: %w", err)
+		return nil, err
 	}
 
 	workflowScenarios := cfg.FindStoredScenariosByWorkflow(allScenarios, workflowSlug)

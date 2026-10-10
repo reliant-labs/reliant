@@ -2322,12 +2322,15 @@ func (a *CallLLMActivity) getSpawnTool(ctx context.Context, projectID string, co
 		return nil
 	}
 
-	// Load preset descriptions from stored config (synced by daemon) + builtins
+	// Load preset descriptions from stored config (synced by daemon) + builtins.
+	// This runs on every turn of an orchestrating node, so it reads the one
+	// column it needs: the whole config row carries every indexed skill and
+	// was 3.3 GB of worker allocation per 22 minutes in prod.
 	var storedPresets []cfgpkg.StoredPreset
 	if projectID != "" && a.repo != nil {
-		record, err := a.repo.GetProjectConfigRecord(ctx, projectID)
+		presetsJSON, err := a.repo.GetProjectPresetsJSON(ctx, projectID)
 		if err == nil {
-			storedPresets, _ = cfgpkg.ParseStoredPresets(record.ProjectPresetsJSON)
+			storedPresets, _ = cfgpkg.ParseStoredPresets(presetsJSON)
 		}
 	}
 

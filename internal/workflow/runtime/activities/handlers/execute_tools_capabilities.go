@@ -112,21 +112,37 @@ func grantedByResult(toolName, metadata string, isError bool) []string {
 	return granted
 }
 
-// projectSkills reads the project's skills from its config row — the same
-// source call_llm's config provider reads. A missing or unreadable row means
-// no skills, which the skill tool reports itself.
+// WithConfigProvider gives the activity the worker's project config provider,
+// the one call_llm resolves the turn's skill catalog from. The skill tool
+// reads its skills through it.
+func (a *ExecuteToolsActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) *ExecuteToolsActivity {
+	a.configProvider = provider
+	return a
+}
+
+// projectSkills is the project's skill catalog, from the worker's config
+// provider — the same source, and so the same catalog, call_llm offered the
+// turn from. A project with no synced config, or one that cannot be read,
+// has no skills, which the skill tool reports itself.
+//
+// It used to read the whole config row and re-parse every skill on each skill
+// call: 18 MB per call in prod. The worker's provider is cached per config
+// version, so a call costs one version read.
 func (a *ExecuteToolsActivity) projectSkills(ctx context.Context, projectID string) []cfgpkg.StoredSkill {
-	if a.repo == nil || projectID == "" {
+	if projectID == "" {
 		return nil
 	}
-	record, err := a.repo.GetProjectConfigRecord(ctx, projectID)
-	if err != nil || record == nil {
+	if a.configProvider == nil {
+		logging.Warn("[ExecuteTools] No config provider wired; the skill tool sees no project skills", "projectID", projectID)
 		return nil
 	}
-	skills, err := cfgpkg.ParseStoredSkills(record.ProjectSkillsJSON)
+	cfg, err := a.configProvider.GetProjectConfig(ctx, cfgpkg.ProjectRef{ProjectID: projectID})
 	if err != nil {
-		logging.Warn("[ExecuteTools] Project skills could not be parsed", "projectID", projectID, "error", err)
+		logging.Warn("[ExecuteTools] Project skills could not be loaded", "projectID", projectID, "error", err)
 		return nil
 	}
-	return skills
+	if cfg == nil {
+		return nil
+	}
+	return cfg.Skills
 }

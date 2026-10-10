@@ -26,8 +26,8 @@ import (
 
 type storedRecord struct{ record *db.ProjectConfigRecord }
 
-func (s storedRecord) GetProjectConfigRecord(context.Context, string) (*db.ProjectConfigRecord, error) {
-	return s.record, nil
+func (s storedRecord) GetProjectWorkflowsJSON(context.Context, string) (*string, error) {
+	return s.record.ProjectWorkflowsJSON, nil
 }
 
 // The caller has no workflows of their own: only the project answers, on both

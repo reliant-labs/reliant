@@ -166,8 +166,11 @@ func RegisterAll(registry *v2.ActivityRegistry, deps *Activities) {
 	// TOOL EXECUTION ACTIVITIES
 	// ========================================================================
 
-	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor))
-	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor))
+	// The skill tool reads the project's skills through the same config
+	// provider CallLLM offered them from (cached per config version on the
+	// worker), not by re-reading the whole config row per call.
+	v2.RegisterActivity(registry, handlers.NewExecuteToolsActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
+	v2.RegisterActivity(registry, handlers.NewInvokeToolActivity(deps.Repo, deps.ToolExecutor).WithConfigProvider(deps.ConfigProvider))
 	v2.RegisterActivity(registry, handlers.NewActionActivity(deps.Connections))
 
 	// ========================================================================
