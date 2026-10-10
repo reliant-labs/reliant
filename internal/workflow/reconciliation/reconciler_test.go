@@ -1405,8 +1405,9 @@ func TestReconciler_WedgedWorkflowTask_BelowThreshold_NoAction(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
-			// Attempt 3 < default threshold 5: normal transient retries.
-			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 3)},
+			// Attempt 1 < default threshold 2: a first try, which has not
+			// failed or timed out yet.
+			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", 1)},
 		},
 	}
 	tempClient.setPollersActive(true)
@@ -1450,7 +1451,7 @@ func TestReconciler_WedgedWorkflowTask_NoPollers_Skipped(t *testing.T) {
 	assert.Empty(t, repo.savedMessages)
 }
 
-func TestReconciler_WedgedWorkflowTask_DebounceRequiresConsecutivePasses(t *testing.T) {
+func TestReconciler_WedgedWorkflowTask_PollerOutageRestartsTheStreak(t *testing.T) {
 	repo := newMockRepo()
 	tempClient := &mockReconcilerTemporalClient{
 		describeResponses: map[string]mockDescribeResponse{
@@ -1460,24 +1461,23 @@ func TestReconciler_WedgedWorkflowTask_DebounceRequiresConsecutivePasses(t *test
 		retryingWedge: true,
 	}
 
-	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
+	reconciler := NewReconciler(repo, tempClient, DefaultConfig())
 	wf := runningWorkflow()
 
-	// Two poller-active passes...
+	// A poller-active pass sets the baseline...
 	tempClient.setPollersActive(true)
 	reconciler.ReconcileWorkflow(context.Background(), wf)
-	reconciler.ReconcileWorkflow(context.Background(), wf)
-	// ...a poller outage resets the count...
+	// ...a poller outage drops it: with no worker, nothing failed the task...
 	tempClient.setPollersActive(false)
 	reconciler.ReconcileWorkflow(context.Background(), wf)
-	// ...so two more active passes still aren't enough...
+	assert.Empty(t, tempClient.terminateCalls, "no action while pollers are absent")
+	// ...so the next active pass is a new baseline, though the count moved...
 	tempClient.setPollersActive(true)
-	reconciler.ReconcileWorkflow(context.Background(), wf)
 	result := reconciler.ReconcileWorkflow(context.Background(), wf)
 	assert.False(t, result.WasStale)
-	assert.Empty(t, tempClient.terminateCalls, "outage must reset the consecutive-pass count")
+	assert.Empty(t, tempClient.terminateCalls, "an outage restarts the streak")
 
-	// ...and the third consecutive active pass confirms.
+	// ...and a retry a live worker fails after it confirms.
 	result = reconciler.ReconcileWorkflow(context.Background(), wf)
 	assert.True(t, result.WasStale)
 	assert.Len(t, tempClient.terminateCalls, 1)
@@ -1529,11 +1529,10 @@ func TestReconciler_WedgedThenRecovered_ClearsDebounce(t *testing.T) {
 	reconciler := NewReconciler(repo, tempClient, stuckTestConfig(3))
 	wf := runningWorkflow()
 
-	// Two wedge observations...
-	reconciler.ReconcileWorkflow(context.Background(), wf)
+	// A wedge observation sets the baseline...
 	reconciler.ReconcileWorkflow(context.Background(), wf)
 
-	// ...then the workflow makes progress (task succeeded): debounce clears.
+	// ...then the workflow makes progress (task succeeded): the streak clears.
 	tempClient.mu.Lock()
 	tempClient.describeResponses["wf-1"] = mockDescribeResponse{resp: makeRunningDescribeResp("run-1")}
 	tempClient.mu.Unlock()
@@ -1545,6 +1544,14 @@ func TestReconciler_WedgedThenRecovered_ClearsDebounce(t *testing.T) {
 	tracked := len(reconciler.stuckObservations)
 	reconciler.stuckMu.Unlock()
 	assert.Equal(t, 0, tracked, "recovered workflow must clear its wedge debounce entry")
+
+	// A later wedge is measured from a new baseline, not the cleared one.
+	tempClient.mu.Lock()
+	tempClient.describeResponses["wf-1"] = mockDescribeResponse{resp: makeWedgedWorkflowTaskDescribeResp("run-1", 20)}
+	tempClient.mu.Unlock()
+	result = reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.False(t, result.WasStale)
 	assert.Empty(t, tempClient.terminateCalls)
 }
 

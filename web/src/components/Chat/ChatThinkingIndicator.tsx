@@ -1,6 +1,12 @@
 import { useState, useEffect } from "react";
 import { thinkingMessages } from "../../lib/thinking-messages";
-import { QUEUED_FOR_MACHINE, WAITING_FOR_MACHINE } from "../../lib/daemon-wait";
+import {
+  QUEUED_FOR_MACHINE,
+  STILL_WORKING,
+  STILL_WORKING_AFTER_MS,
+  WAITING_FOR_MACHINE,
+} from "../../lib/daemon-wait";
+import { formatWaitElapsed } from "../../lib/chatMachineNotice";
 import { 
   useIsThreadActive,
   useChatCurrentActivity,
@@ -28,6 +34,21 @@ interface ChatThinkingIndicatorProps {
    * message yet: that message is queued, and says so.
    */
   messageQueuedForMachine?: boolean;
+  /**
+   * Changes whenever the run shows the user something: streamed output, a new
+   * message, run output. The indicator times "no response yet" from the last
+   * change (and from the last change of the thread's activity).
+   */
+  progressKey?: string;
+  /** "Run status": show what the run is doing. Omitted where there is no such view. */
+  onShowRunStatus?: () => void;
+  /** "Stop": stop the run. The user's next message starts it again. */
+  onStop?: () => void;
+}
+
+/** Activities a run can legitimately sit in for minutes; they narrate themselves. */
+function isGenericThinking(activityText: string | null): boolean {
+  return activityText === null || activityText === "Thinking";
 }
 
 export function ChatThinkingIndicator({ 
@@ -35,6 +56,9 @@ export function ChatThinkingIndicator({
   filterThreadId = null,
   waitingOnMachine = false,
   messageQueuedForMachine = false,
+  progressKey,
+  onShowRunStatus,
+  onStop,
 }: ChatThinkingIndicatorProps) {
   const [thinkingMessage, setThinkingMessage] = useState("Thinking");
 
@@ -53,6 +77,25 @@ export function ChatThinkingIndicator({
       ? QUEUED_FOR_MACHINE
       : WAITING_FOR_MACHINE
     : getActivityDisplayText(currentActivity);
+
+  // "No response yet": how long since the run last showed anything. Only for
+  // the generic thinking line — a tool or an approval says what it is doing,
+  // and a long build is not a stall.
+  const timesSilence = isActive && !waitingOnMachine && isGenericThinking(activityText);
+  const [lastProgressAt, setLastProgressAt] = useState(() => Date.now());
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const at = Date.now();
+    setLastProgressAt(at);
+    setNow(at);
+  }, [progressKey, currentActivity]);
+  useEffect(() => {
+    if (!timesSilence) return;
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, [timesSilence]);
+  const silentFor = now - lastProgressAt;
+  const stillWorking = timesSilence && silentFor >= STILL_WORKING_AFTER_MS;
 
   useEffect(() => {
     // If there's a specific activity, don't cycle through messages
@@ -79,7 +122,7 @@ export function ChatThinkingIndicator({
   }
 
   return (
-    <div data-testid="thinking-indicator" data-active="true">
+    <div data-testid="thinking-indicator" data-active="true" data-still-working={stillWorking || undefined}>
       <style>{`
         @keyframes bounce-wave {
           0%, 60%, 100% {
@@ -102,13 +145,37 @@ export function ChatThinkingIndicator({
           animation-delay: 0.3s;
         }
       `}</style>
-      <div className="flex items-center gap-2">
-        <span className="text-sm text-muted-foreground">{thinkingMessage}</span>
+      <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+        <span className="text-sm text-muted-foreground">{stillWorking ? STILL_WORKING : thinkingMessage}</span>
         <div className="flex items-center gap-1.5">
           <div className="w-1.5 h-1.5 rounded-full thinking-dot-1" style={{ backgroundColor: 'hsl(var(--primary))' }} />
           <div className="w-1.5 h-1.5 rounded-full thinking-dot-2" style={{ backgroundColor: 'hsl(var(--primary))' }} />
           <div className="w-1.5 h-1.5 rounded-full thinking-dot-3" style={{ backgroundColor: 'hsl(var(--primary))' }} />
         </div>
+        {stillWorking && (
+          <>
+            <span className="text-xs tabular-nums text-muted-foreground">· {formatWaitElapsed(silentFor)}</span>
+            {onShowRunStatus && (
+              <button
+                type="button"
+                onClick={onShowRunStatus}
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Run status
+              </button>
+            )}
+            {onStop && (
+              <button
+                type="button"
+                onClick={onStop}
+                title="Stop this run. Sending a message starts it again."
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                Stop
+              </button>
+            )}
+          </>
+        )}
       </div>
     </div>
   );

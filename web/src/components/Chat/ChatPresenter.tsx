@@ -9,6 +9,7 @@ import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
 import { GripHorizontal, GripVertical, Loader2 } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
+import { ChatMachineNoticeLine } from "./ChatMachineNotice";
 import { QueuedForMachineNote } from "./QueuedForMachineNote";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
@@ -42,7 +43,10 @@ import { useThreadMessages } from "../../hooks/message-queries";
 import { useChat } from "../../hooks/chat-queries";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
 import { isUnadoptedAutomation } from "../../lib/sidebarChatList";
-import { latestTurnIsUsers } from "../../lib/awaitingReply";
+import { unansweredMessage } from "../../lib/awaitingReply";
+import { chatMachineNotice, resolveChatMachine } from "../../lib/chatMachineNotice";
+import { useWakingMachines } from "../../lib/machineWake";
+import { useDaemonList } from "@/hooks/useOnboardingQueries";
 import { useChatActivity } from "../../store/activityStore";
 import { TakeOverRunBar, useAdoptOnSend } from "./TakeOverRunBar";
 
@@ -458,16 +462,75 @@ export const ChatPresenter = memo(function ChatPresenter({
     (isChatBusy || waitingOnMachine) && pendingApprovals.length === 0 && !hasPendingQuestion;
   // A held run that has not read the user's latest message yet is holding
   // THAT message: the footer says it is queued, not that it is stuck.
-  const latestMessageUnanswered = latestTurnIsUsers(messages, currentChat?.workflowId || chatId || undefined);
+  const unanswered = useMemo(
+    () => unansweredMessage(messages, currentChat?.workflowId || chatId || undefined),
+    [messages, currentChat?.workflowId, chatId],
+  );
+  const latestMessageUnanswered = unanswered !== undefined;
   const messageQueuedForMachine = waitingOnMachine && latestMessageUnanswered;
   // The run ended and its message waits for the machine: a static line, not
   // the thinking indicator — nothing is running.
   const hasQueuedForMachineFooter =
     !hasThinkingFooter && queuedForMachine && latestMessageUnanswered && pendingApprovals.length === 0 && !hasPendingQuestion;
+
+  // The chat's machine, read from the machine registry rather than from the
+  // run (lib/chatMachineNotice). Whenever work is waiting — a live run, a run
+  // held for (or a message queued for) the machine, a send in flight — and
+  // the machine is coming up, reconnecting, asleep or failed, the footer says
+  // so. The run's state does not gate it: chat 66a045ce's run was failing its
+  // replay while its machine resumed, never reached the machine wait, and
+  // read "Processing" throughout.
+  const sendingThisChat = !!chatId && sendingChatId === chatId;
+  const workWaitsOnMachine =
+    !noMachine &&
+    pendingApprovals.length === 0 &&
+    !hasPendingQuestion &&
+    (isAgentWorking || heldForMachine || sendingThisChat);
+  const { data: daemons } = useDaemonList({ enabled: workWaitsOnMachine });
+  const wakes = useWakingMachines();
+  const chatMachineDaemon = workWaitsOnMachine ? resolveChatMachine(daemons, currentChat?.activeDaemonId) : undefined;
+  const chatMachineWakeStartedAt = chatMachineDaemon ? wakes.get(chatMachineDaemon.daemonId) : undefined;
+  const unansweredSentAt = unanswered ? Date.parse(unanswered.createdAt) : NaN;
+  const machineNotice = useMemo(
+    () =>
+      chatMachineNotice({
+        daemon: chatMachineDaemon,
+        messageUnanswered: latestMessageUnanswered || sendingThisChat,
+        messageSentAt: Number.isFinite(unansweredSentAt) ? unansweredSentAt : undefined,
+        sending: sendingThisChat,
+        runWaitingForMachine: waitingOnMachine,
+        wakeStartedAt: chatMachineWakeStartedAt,
+      }),
+    [
+      chatMachineDaemon,
+      latestMessageUnanswered,
+      sendingThisChat,
+      waitingOnMachine,
+      unansweredSentAt,
+      chatMachineWakeStartedAt,
+    ],
+  );
+
+  // What the thinking indicator times "no response yet" from: anything the
+  // run shows — a new message, streamed text, run output.
+  const lastMessage = messages[messages.length - 1];
+  const lastBlock = lastMessage?.contentBlocks?.[lastMessage.contentBlocks.length - 1];
+  const progressKey = `${messages.length}:${lastMessage?.id ?? ""}:${lastMessage?.contentBlocks?.length ?? 0}:${
+    lastBlock?.content?.length ?? 0
+  }:${runOutputs.length}`;
+  const canShowRunStatus = showDesktopChrome && workflowExecution !== undefined;
+  const handleShowRunStatus = useCallback(() => updateWorkflowViewerOpen(true), [updateWorkflowViewerOpen]);
+  const handleStopRun = useCallback(() => {
+    void onStopStreaming();
+  }, [onStopStreaming]);
+
   // Memoized because it is a prop of the memo()'d timeline: a fresh element
   // on every render would re-render the whole transcript on each pass —
   // which, during streaming, is many times per second.
   const thinkingFooter = useMemo(() => {
+    if (machineNotice) {
+      return <ChatMachineNoticeLine notice={machineNotice} />;
+    }
     if (hasThinkingFooter) {
       return (
         <ChatThinkingIndicator
@@ -475,11 +538,30 @@ export const ChatPresenter = memo(function ChatPresenter({
           filterThreadId={selectedThreadId}
           waitingOnMachine={waitingOnMachine}
           messageQueuedForMachine={messageQueuedForMachine}
+          progressKey={progressKey}
+          onShowRunStatus={canShowRunStatus ? handleShowRunStatus : undefined}
+          onStop={handleStopRun}
         />
       );
     }
     return hasQueuedForMachineFooter ? <QueuedForMachineNote /> : undefined;
-  }, [hasThinkingFooter, hasQueuedForMachineFooter, chatId, selectedThreadId, waitingOnMachine, messageQueuedForMachine]);
+  }, [
+    machineNotice,
+    hasThinkingFooter,
+    hasQueuedForMachineFooter,
+    chatId,
+    selectedThreadId,
+    waitingOnMachine,
+    messageQueuedForMachine,
+    progressKey,
+    canShowRunStatus,
+    handleShowRunStatus,
+    handleStopRun,
+  ]);
+  // The transcript, and with it that footer, is only drawn once there is
+  // something in it.
+  const showsTimeline =
+    messages.length > 0 || runOutputs.length > 0 || errorEvents.length > 0 || infoEvents.length > 0;
 
   // With a thread selected, render THAT THREAD's own messages rather than the
   // chat-wide list narrowed down to it. Filtering only showed whatever part of
@@ -613,11 +695,7 @@ export const ChatPresenter = memo(function ChatPresenter({
         {/* Messages Area - hidden when workflow viewer is expanded in inline mode */}
         {!(isWorkflowViewerExpanded && workflowViewerMode === 'inline') && (
         <ChatMessagesContainer chatId={chatId ?? undefined}>
-          {(messages.length > 0 ||
-            runOutputs.length > 0 ||
-            errorEvents.length > 0 ||
-            infoEvents.length > 0) &&
-            renderTimeline()}
+          {showsTimeline && renderTimeline()}
           {/* Cached transcript, live catch-up still in flight. Overlaid
               rather than inserted, so the transcript never shifts when it
               appears or clears, and non-interactive so it never blocks
@@ -689,9 +767,10 @@ export const ChatPresenter = memo(function ChatPresenter({
           // "Waking <machine>…" while this send wakes the chat's machine, and
           // "Continue without machine" whenever that machine is unavailable.
           <ComposerWakeStatus
-            sending={!!chatId && sendingChatId === chatId}
+            sending={sendingThisChat}
             daemonId={currentChat?.activeDaemonId}
             waitingOnMachine={heldForMachine}
+            machineStatusInTranscript={!!machineNotice && showsTimeline}
             continueWithoutMachine={
               chatId ? <ContinueWithoutMachineButton chatId={chatId} messageId={continueFromMessageId} /> : undefined
             }

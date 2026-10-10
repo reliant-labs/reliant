@@ -28,11 +28,19 @@ export function latestTurnIsUsers(
   messages: ReadonlyArray<TurnLike>,
   mainThreadId: string | undefined,
 ): boolean {
+  return unansweredMessage(messages, mainThreadId) !== undefined;
+}
+
+/** The user's message that is the conversation's latest turn, if it is. */
+export function unansweredMessage<T extends TurnLike>(
+  messages: ReadonlyArray<T>,
+  mainThreadId: string | undefined,
+): T | undefined {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i]!;
     if (mainThreadId && message.thread && message.thread !== mainThreadId) continue;
     if (message.role === MessageRole.SYSTEM) continue;
-    return message.role === MessageRole.USER;
+    return message.role === MessageRole.USER ? message : undefined;
   }
-  return false;
+  return undefined;
 }

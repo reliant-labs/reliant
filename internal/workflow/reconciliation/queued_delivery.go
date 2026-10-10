@@ -3,6 +3,7 @@ package reconciliation
 
 import (
 	"context"
+	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -42,31 +43,101 @@ func (r *Reconciler) queuedDelivery() QueuedDelivery {
 	return nil
 }
 
-// wedgeContinuedChatMessage is what the chat is told when the reconciler ended
-// a wedged run and a fresh one is already answering the user's message.
-const wedgeContinuedChatMessage = "This conversation's workflow was interrupted by an update. It has restarted from where it left off and is answering your message."
+// recoveredContinuingChatMessage is what the chat is told when the reconciler
+// ended a run that could not go on — a wedge, or an end nothing reported — and
+// a fresh run at its checkpoint is already answering the user's message.
+const recoveredContinuingChatMessage = "Recovered from an internal error; continuing from your last message."
 
-// continueAfterWedge hands a just-ended wedged run's undelivered message —
-// the user's "continue" that the run took in and never answered — to a fresh
-// run at its checkpoint, so the user does not have to send it again. It
-// reports whether a run was started. ContinueQueued is idempotent and starts
-// nothing for a chat with nothing owed.
-func (r *Reconciler) continueAfterWedge(ctx context.Context, wf *db.Workflow) bool {
+const (
+	// autoContinueLimit runs per autoContinueWindow is how often the
+	// reconciler continues one chat on its own. A run restarted at its
+	// checkpoint runs current code on an empty history, so it does not wedge
+	// the same way again — unless the workflow code itself panics at that
+	// point, which would otherwise wedge, end and restart every two minutes
+	// forever. Past the limit the chat is told to send a message instead.
+	autoContinueLimit  = 2
+	autoContinueWindow = 30 * time.Minute
+
+	// continueTimeout is the continuation's own budget. It is detached from
+	// the reconcile pass's 30s context, which it would otherwise share with
+	// every other repair in the pass: ContinueQueued reads the ended run's
+	// inputs with a query Temporal answers by replaying the whole history
+	// (12s a task for chat 66a045ce's 10k events) before it starts the run.
+	continueTimeout = 90 * time.Second
+)
+
+// continueAfterEnd hands a run's undelivered message — the user's "continue"
+// that the run took in and never answered — to a fresh run at its checkpoint,
+// right after the reconciler saw that run end (it ended a wedge, or found a
+// run that ended without saying so), so the user does not have to send it
+// again. It reports whether a run was started.
+//
+// It delivers at most once: ContinueQueued holds the chat's run-control lock,
+// claims the message, and starts nothing unless the root run is FAILED in the
+// database and closed in Temporal; the run it starts is recorded running
+// before the lock is released. A chat with nothing owed starts nothing.
+func (r *Reconciler) continueAfterEnd(ctx context.Context, wf *db.Workflow) bool {
 	q := r.queuedDelivery()
 	if q == nil {
 		return false
 	}
-	started, err := q.ContinueQueued(ctx, wf.ChatID)
+	if !r.autoContinueAllowed(wf.ChatID, time.Now()) {
+		logging.Error("[Reconciler] Not continuing a chat again: it was already continued automatically and ended again; the user's next message continues it",
+			"workflowID", wf.ID, "chatID", wf.ChatID,
+			"limit", autoContinueLimit, "window", autoContinueWindow)
+		return false
+	}
+	continueCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), continueTimeout)
+	defer cancel()
+	started, err := q.ContinueQueued(continueCtx, wf.ChatID)
 	if err != nil {
-		logging.Warn("[Reconciler] Could not continue a wedged run's undelivered message; the user's next message continues it",
+		logging.Warn("[Reconciler] Could not continue an ended run's undelivered message; the user's next message continues it",
 			"workflowID", wf.ID, "chatID", wf.ChatID, "error", err)
 		return false
 	}
 	if started {
-		logging.Info("[Reconciler] Continued a wedged run's undelivered message in a fresh run",
+		r.recordAutoContinue(wf.ChatID, time.Now())
+		logging.Info("[Reconciler] Continued an ended run's undelivered message in a fresh run",
 			"workflowID", wf.ID, "chatID", wf.ChatID)
 	}
 	return started
+}
+
+// autoContinueAllowed reports whether the chat has been continued
+// automatically fewer than autoContinueLimit times in the last
+// autoContinueWindow.
+func (r *Reconciler) autoContinueAllowed(chatID string, now time.Time) bool {
+	r.continueMu.Lock()
+	defer r.continueMu.Unlock()
+	recent := r.autoContinues[chatID][:0]
+	for _, at := range r.autoContinues[chatID] {
+		if now.Sub(at) < autoContinueWindow {
+			recent = append(recent, at)
+		}
+	}
+	if len(recent) == 0 {
+		delete(r.autoContinues, chatID)
+		return true
+	}
+	r.autoContinues[chatID] = recent
+	return len(recent) < autoContinueLimit
+}
+
+func (r *Reconciler) recordAutoContinue(chatID string, at time.Time) {
+	r.continueMu.Lock()
+	defer r.continueMu.Unlock()
+	r.autoContinues[chatID] = append(r.autoContinues[chatID], at)
+}
+
+// postRecoveredNote tells the chat that the run it was waiting on ended and a
+// fresh one is answering its last message.
+func (r *Reconciler) postRecoveredNote(ctx context.Context, wf *db.Workflow) {
+	if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), recoveredContinuingChatMessage, &wf.ID, nil, nil); err != nil {
+		logging.Warn("[Reconciler] Failed to tell the chat its run was continued",
+			"error", err,
+			"workflowID", wf.ID,
+		)
+	}
 }
 
 // sweepQueuedDeliveries is the backstop for a machine connect whose event was

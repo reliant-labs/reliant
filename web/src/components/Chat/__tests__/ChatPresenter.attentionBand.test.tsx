@@ -59,6 +59,15 @@ vi.mock("../../../hooks/approval-queries", async () => {
   return { ...actual, usePendingQuestion: () => ({ data: null }) };
 });
 
+// While the agent works, ChatPresenter reads the machine registry to say
+// whether that work waits on the machine. There is no machine here.
+vi.mock("@/hooks/useOnboardingQueries", async () => {
+  const actual = await vi.importActual<
+    typeof import("@/hooks/useOnboardingQueries")
+  >("@/hooks/useOnboardingQueries");
+  return { ...actual, useDaemonList: () => ({ data: [], isLoading: false }) };
+});
+
 // ChatPresenter pulls in the whole chat stack. This suite is about the order
 // of two surfaces, so everything else renders a marker and nothing heavier —
 // except BackgroundWorkPill and QueuedMessages, which are the subjects.

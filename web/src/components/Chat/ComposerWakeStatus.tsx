@@ -32,6 +32,10 @@
  * Whenever the machine is unavailable, `continueWithoutMachine` (the
  * "Continue without machine" action) is offered beside the status: a branch
  * with no machine that carries the conversation and leaves this chat alone.
+ *
+ * When the chat has work waiting on that machine, the transcript footer states
+ * the machine's status (ChatMachineNoticeLine) whatever the run is doing, and
+ * this line keeps only the way out.
  */
 
 import type { ReactNode } from "react";
@@ -50,6 +54,12 @@ interface ComposerWakeStatusProps {
   daemonId?: string;
   /** The run is blocked on its machine (ChatActivity.WAITING_FOR_DAEMON). */
   waitingOnMachine?: boolean;
+  /**
+   * The transcript's footer is saying what the machine is doing, with its
+   * Try again / Start it (ChatMachineNoticeLine). The composer then offers
+   * only the way out, rather than a second copy of the status.
+   */
+  machineStatusInTranscript?: boolean;
   /** "Continue without machine", shown whenever the machine is unavailable. */
   continueWithoutMachine?: ReactNode;
 }
@@ -64,7 +74,25 @@ function isOffline(status: DaemonStatus): boolean {
   return status === DaemonStatus.DISCONNECTED || status === DaemonStatus.FAILED;
 }
 
-export function ComposerWakeStatus({ sending, daemonId, waitingOnMachine, continueWithoutMachine }: ComposerWakeStatusProps) {
+export function ComposerWakeStatus({
+  sending,
+  daemonId,
+  waitingOnMachine,
+  machineStatusInTranscript,
+  continueWithoutMachine,
+}: ComposerWakeStatusProps) {
+  if (machineStatusInTranscript) {
+    if (!continueWithoutMachine) return null;
+    return (
+      <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8" data-testid="composer-machine-exit">
+        <div className="mx-auto max-w-[1200px]">
+          <div className="forge-ui flex flex-wrap items-center gap-x-3 px-1 pb-1.5 text-xs text-muted-foreground">
+            {continueWithoutMachine}
+          </div>
+        </div>
+      </div>
+    );
+  }
   if (daemonId) {
     // The registry is only read while it could matter: a chat pinned to a
     // machine, or a run held for one. (It is a shared, cached query; most

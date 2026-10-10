@@ -124,6 +124,12 @@ type Reconciler struct {
 	// both. Atomic for the same reason as bgDaemons.
 	queued atomic.Pointer[queuedDeliveryHolder]
 
+	// continueMu guards autoContinues: per chat, when the reconciler started
+	// a run to carry on after ending one (continueAfterEnd). In memory for
+	// the same reason as stuckObservations; it only bounds a loop.
+	continueMu    sync.Mutex
+	autoContinues map[string][]time.Time
+
 	// stuckMu guards stuckObservations, the in-memory debounce state for
 	// stuck-task handling. In-memory tracking is acceptable here: a single
 	// reconciler process runs per deployment, and even if multiple replicas
@@ -166,10 +172,12 @@ type stuckObservation struct {
 	// logs once rather than on every 30s pass until it clears.
 	disabledLogged bool
 
-	// wedgeAttempt is the pending workflow task's attempt count when a wedge
-	// streak was first observed (wedge observations only). See
-	// wedgeRetriedSinceObserved.
-	wedgeAttempt int32
+	// wedgeAttempt and wedgeFailedEventID are the baseline a wedge streak is
+	// measured against (wedge observations only): the pending workflow task's
+	// attempt count, and the id of the WorkflowTaskFailed event the history
+	// records, as first observed. See observeWedge.
+	wedgeAttempt       int32
+	wedgeFailedEventID int64
 }
 
 // progressObservation tracks one RUNNING workflow's static-history streak for
@@ -237,13 +245,20 @@ const (
 
 // DefaultWedgeAttemptThreshold is the pending WORKFLOW task attempt count at
 // which the reconciler reads a running workflow's history to learn why the
-// task keeps coming back. It is a wedge only if the history records a failure
-// every retry repeats (the classic cause is a non-deterministic replay error —
-// TMPRL1100 — after worker code changed mid-run); a task that keeps timing out
-// is slow, not wedged. Transient failures (worker OOM, deploy blips) resolve
-// within an attempt or two; a confirmed failure past this threshold, sustained
-// across the debounce window with pollers active, can never succeed.
-const DefaultWedgeAttemptThreshold = 5
+// task keeps coming back: 2, the first retry, because attempt 2 exists only
+// once a task has failed or timed out. It is a wedge only if the history
+// records a failure every retry repeats (the classic cause is a
+// non-deterministic replay error — TMPRL1100 — after worker code changed
+// mid-run), and a worker polling now has failed it again (observeWedge); a
+// task that keeps timing out is slow, not wedged.
+//
+// It was 5, behind a 3-pass, 3-minute debounce. Temporal retried chat
+// 66a045ce's diverged task about once a minute (attempts 1–4 from 14:42 to
+// 14:44 UTC, 2026-10-10), so the reconciler had not looked at it at all when
+// an operator terminated it by hand after three minutes. The evidence — a
+// recorded deterministic failure, repeated by a live worker — is what makes a
+// wedge; the attempt count only decides when to go and read it.
+const DefaultWedgeAttemptThreshold = 2
 
 // wedgeObservationTaskType is the debounce identity used for wedged workflow
 // tasks, distinct from the "workflow"/"activity" stuck-in-Scheduled classes.
@@ -297,6 +312,11 @@ const silentTerminationErrorType = "workflow_terminated"
 // into resume-at-position.
 const silentTerminationSummary = "This conversation was stopped by the system, not by you or the assistant. Send a message and it will pick up where it left off."
 
+// silentTerminationContinuedSummary is silentTerminationSummary when the
+// reconciler has already started the run that answers the user's message; the
+// recovered note (recoveredContinuingChatMessage) follows it.
+const silentTerminationContinuedSummary = "This conversation was stopped by the system, not by you or the assistant."
+
 // pollerRecencyWindow bounds how old a poller's LastAccessTime may be to
 // still count as "active". Temporal's DescribeTaskQueue keeps poller history
 // for ~5 minutes after the last poll, so a dead worker is still listed for a
@@ -335,9 +355,9 @@ type ReconcilerConfig struct {
 	StuckConfirmationWindow time.Duration
 
 	// WedgeAttemptThreshold is the pending workflow task attempt count at
-	// which a workflow is treated as wedged (workflow task failing forever,
-	// e.g. non-deterministic replay after a code update).
-	// Default: DefaultWedgeAttemptThreshold.
+	// which the reconciler reads the run's history to see whether it is
+	// wedged (workflow task failing forever, e.g. non-deterministic replay
+	// after a code update). Default: DefaultWedgeAttemptThreshold.
 	WedgeAttemptThreshold int
 
 	// ProgressStallPasses is how many consecutive quiescent passes (running,
@@ -446,6 +466,7 @@ func NewReconciler(repo db.Repository, tempClient client.Client, config *Reconci
 		interventions:           cfg.Interventions,
 		stuckObservations:       make(map[string]*stuckObservation),
 		progressObservations:    make(map[string]*progressObservation),
+		autoContinues:           make(map[string][]time.Time),
 		stopPolling:             make(chan struct{}),
 		pollDone:                make(chan struct{}),
 	}
@@ -786,7 +807,13 @@ func (r *Reconciler) getTemporalWorkflowState(ctx context.Context, workflowID st
 		// (stuck forever — chats 97654413 and 3f03dc31 after the 2026-10-09
 		// deploy). The history records which, so it is read here, and only a
 		// recorded deterministic failure is a wedge.
-		if pwt := descResp.PendingWorkflowTask; pwt != nil && r.wedgeAttemptThreshold > 0 && pwt.Attempt >= int32(r.wedgeAttemptThreshold) {
+		//
+		// A streak already being watched is read below the threshold too: a
+		// signal that lands on a failing run (the user sending "continue"
+		// again) starts a fresh, recorded task at attempt 1, and that is not
+		// the run recovering.
+		if pwt := descResp.PendingWorkflowTask; pwt != nil && r.wedgeAttemptThreshold > 0 &&
+			(pwt.Attempt >= int32(r.wedgeAttemptThreshold) || r.watchingWedge(workflowID)) {
 			state.WedgedTaskAttempt = pwt.Attempt
 			outcome, err := v2workflow.LatestWorkflowTaskOutcome(ctx, r.tempClient.WorkflowService(), r.namespace, workflowID, runID)
 			if err != nil {
@@ -968,8 +995,12 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 
 	// Wedged workflow task: the workflow task is dispatched and fails over
 	// and over (attempt count climbing) — every signal lands in a black hole
-	// and the workflow can never make progress. Debounced like the stuck
-	// path (pollers active + consecutive passes + wall-clock window).
+	// and the workflow can never make progress. Confirmed by evidence rather
+	// than by a wall-clock debounce: the history records a deterministic
+	// failure, and a worker polling now has failed the task again since this
+	// process first saw it (observeWedge). That takes one retry — about a
+	// minute for a freshly diverged run — where the old 3-pass, 3-minute
+	// window plus an attempt threshold of 5 took ten minutes or more.
 	// Recovery for this class deliberately does NOT reset: for the dominant
 	// cause (non-deterministic replay after a code update) replay re-diverges
 	// no matter where we reset to. Instead: terminate with a clear reason,
@@ -991,11 +1022,9 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// chat reads "active" with nothing running until someone notices.
 	if temporalState.HasWedgedWorkflowTask &&
 		(wf.Status == db.Active() || wf.Status == db.Paused()) {
-		confirmed := r.observeTask(ctx, wf, wedgeObservationTaskType, "", pollers)
-		retried := r.wedgeRetriedSinceObserved(wf.ID, temporalState.WedgedTaskAttempt)
-		if !confirmed || !retried {
-			// Not yet confirmed (pollers absent, debounce still counting), or
-			// no worker has retried the task since the streak began.
+		if !r.observeWedge(ctx, wf, temporalState, pollers) {
+			// Pollers absent, or no worker has failed the task again since
+			// the streak began.
 			return result
 		}
 		r.recoverWedgedWorkflow(ctx, wf, temporalState, stats, result)
@@ -1266,6 +1295,10 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 		// execution ended without the workflow reporting it, so nothing has
 		// told the user. A parked run dying is if anything MORE surprising —
 		// the user was waiting on a pause they expected to resume from.
+		//
+		// Unlike that repair it is not continued: a paused run is waiting
+		// for the user by definition (Resume, or their next message, carries
+		// it on), and starting it for them would override a pause.
 		if temporalState.Status == db.Failed() {
 			logging.Error("[Reconciler] Paused workflow ended terminally without reporting it - notifying user",
 				"workflowID", wf.ID,
@@ -1274,7 +1307,7 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 				"terminated", temporalState.WasTerminated,
 			)
 			r.recordAnomaly(stats, anomalySilentTerminalDrift)
-			r.emitSilentTerminationError(ctx, wf, temporalState)
+			r.emitSilentTerminationError(ctx, wf, temporalState, false)
 		}
 
 		result.TemporalStatus = temporalState.Status
@@ -1311,6 +1344,13 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 			// the user, since nothing else will. Cancelled is excluded — a
 			// user cancel is the one terminal status the user already knows
 			// about, having asked for it.
+			//
+			// And carry on with what the run owed: a user message it took in
+			// and never answered is continued in a fresh run at the
+			// checkpoint, whoever ended this one — an operator's TERMINATE
+			// (chat 66a045ce, 2026-10-10, ended by hand after its replay
+			// wedged), Temporal's history cap, or a failure nothing reported.
+			// Before, the user was told to send their message again.
 			if temporalState.Status == db.Failed() {
 				logging.Error("[Reconciler] Workflow ended terminally without reporting it - notifying user",
 					"workflowID", wf.ID,
@@ -1319,7 +1359,11 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 					"terminated", temporalState.WasTerminated,
 				)
 				r.recordAnomaly(stats, anomalySilentTerminalDrift)
-				r.emitSilentTerminationError(ctx, wf, temporalState)
+				continued := r.continueAfterEnd(ctx, wf)
+				r.emitSilentTerminationError(ctx, wf, temporalState, continued)
+				if continued {
+					r.postRecoveredNote(ctx, wf)
+				}
 			}
 		}
 	}
@@ -1420,8 +1464,8 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 	// mode for failed/terminated predecessors, and never resets a history
 	// that no longer replays.
 	note := wedgeInterruptedChatMessage
-	if r.continueAfterWedge(ctx, wf) {
-		note = wedgeContinuedChatMessage
+	if r.continueAfterEnd(ctx, wf) {
+		note = recoveredContinuingChatMessage
 	}
 	if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), note, &wf.ID, nil, nil); err != nil {
 		logging.Warn("[Reconciler] Failed to add wedge interruption message to chat",
@@ -1500,9 +1544,9 @@ func (r *Reconciler) transitionChatOnCompletion(ctx context.Context, wf *db.Work
 	}
 }
 
-// observeTask records one problem-task observation (stuck-in-Scheduled or
-// wedged workflow task) and reports whether it is now CONFIRMED (eligible for
-// recovery). Confirmation requires:
+// observeTask records one stuck-in-Scheduled task observation and reports
+// whether it is now CONFIRMED (eligible for recovery). (A wedged workflow
+// task is confirmed by observeWedge instead.) Confirmation requires:
 //   - active pollers on the task queue for the task's type THIS pass
 //     (no pollers = worker down/rebuilding = Temporal will re-dispatch), and
 //   - at least stuckConfirmationPasses consecutive poller-active passes
@@ -1541,31 +1585,73 @@ func (r *Reconciler) observeTask(ctx context.Context, wf *db.Workflow, taskType,
 	return obs.passes >= r.stuckConfirmationPasses && time.Since(obs.firstObserved) >= r.stuckConfirmationWindow
 }
 
-// wedgeRetriedSinceObserved reports whether the wedged workflow task has been
-// retried — and failed again — since this streak began: its attempt count has
-// moved past the count first observed. Call it after observeTask, which owns
-// the streak's lifetime.
+// observeWedge records one observation of a workflow task whose history
+// records a deterministic failure (state.HasWedgedWorkflowTask) and reports
+// whether it is CONFIRMED: a worker polling now has failed the task again
+// since this process first saw the streak. Either of two things proves that:
 //
-// The recorded failure is evidence about the code that recorded it, not about
-// the code the workers run now. The fix for a replay break ships in the same
-// release as this reconciler, and Temporal backs a failing workflow task off
-// to minutes between attempts, so right after that deploy every run the fix
-// heals still shows a high attempt count and a TMPRL1100 in its history — and
-// would be killed before the fixed worker's first attempt healed it. Only a
-// failure that happened again while this process watched is a failure of the
-// current workers.
-func (r *Reconciler) wedgeRetriedSinceObserved(workflowID string, attempt int32) bool {
+//   - the pending task's attempt count moved past the count first observed
+//     (a transient retry failed; Temporal records only the first failure of
+//     a run of retries, so the count is the only trace a retry leaves), or
+//   - the history records a newer WorkflowTaskFailed than the one first
+//     observed (a signal — the user sending again — made the next task a
+//     recorded one, starting the count again at 1, and it failed too).
+//
+// The recorded failure alone is evidence about the code that recorded it, not
+// about the code the workers run now. The fix for a replay break ships in the
+// same release as this reconciler, and Temporal backs a failing workflow task
+// off to minutes between attempts, so right after that deploy every run the
+// fix heals still shows a TMPRL1100 in its history — and would be killed
+// before the fixed worker's first attempt healed it. Only a failure that
+// happened again while this process watched is a failure of the current
+// workers.
+//
+// Workflow pollers must be active (no pollers means no worker to fail it, and
+// Temporal re-dispatches when one returns); without them the streak resets.
+// There is no wall-clock window: a timing-out task never sets
+// HasWedgedWorkflowTask, which is what the 2026-09-29 false wedge needed, and
+// a failure repeated by a live worker cannot be outwaited.
+func (r *Reconciler) observeWedge(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState, pollers *pollerState) bool {
+	active, err := r.pollersActive(ctx, pollers, "workflow")
+	if err != nil || !active {
+		r.clearStuckObservation(wf.ID)
+		return false
+	}
+
+	attempt := state.WedgedTaskAttempt
+	failedEventID := state.WedgeOutcome.EventID
+
+	r.stuckMu.Lock()
+	defer r.stuckMu.Unlock()
+	obs := r.stuckObservations[wf.ID]
+	if obs == nil || obs.taskType != wedgeObservationTaskType {
+		r.stuckObservations[wf.ID] = &stuckObservation{
+			taskType:           wedgeObservationTaskType,
+			firstObserved:      time.Now(),
+			passes:             1,
+			wedgeAttempt:       attempt,
+			wedgeFailedEventID: failedEventID,
+		}
+		return false
+	}
+	obs.passes++
+	if attempt > obs.wedgeAttempt || failedEventID > obs.wedgeFailedEventID {
+		return true
+	}
+	// A fresh recorded task restarted the count below the baseline; its
+	// failure will be a newer event, and a retry after it counts from here.
+	obs.wedgeAttempt = attempt
+	return false
+}
+
+// watchingWedge reports whether a wedge streak is being watched for the
+// workflow, so the next pass reads its history even if the attempt count fell
+// below the threshold (see observeWedge).
+func (r *Reconciler) watchingWedge(workflowID string) bool {
 	r.stuckMu.Lock()
 	defer r.stuckMu.Unlock()
 	obs := r.stuckObservations[workflowID]
-	if obs == nil {
-		return false
-	}
-	if obs.wedgeAttempt == 0 {
-		obs.wedgeAttempt = attempt
-		return false
-	}
-	return attempt > obs.wedgeAttempt
+	return obs != nil && obs.taskType == wedgeObservationTaskType
 }
 
 // clearStuckObservation drops the debounce entry for a workflow.
@@ -2640,7 +2726,15 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 // running/paused. Every later pass reads a DB status that already matches
 // Temporal, finds no mismatch, and never reaches this function — so the ~30s
 // reconcile loop cannot repeat the error.
-func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState) {
+//
+// continued says the reconciler already started a run that is answering the
+// user's message (continueAfterEnd), so the summary does not ask them to send
+// it again.
+func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Workflow, state *TemporalWorkflowState, continued bool) {
+	summary := silentTerminationSummary
+	if continued {
+		summary = silentTerminationContinuedSummary
+	}
 	message := "The workflow was stopped by the system before it could finish."
 	if reason := r.closeReason(ctx, wf.ID, state); reason != "" {
 		// Temporal's own words. For the incident above this reads "Workflow
@@ -2655,7 +2749,7 @@ func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Work
 		WorkflowName: wf.WorkflowName,
 		ErrorType:    silentTerminationErrorType,
 		ErrorMessage: message,
-		ErrorSummary: silentTerminationSummary,
+		ErrorSummary: summary,
 		Thread:       wf.Thread,
 	}); err != nil {
 		logging.Warn("[Reconciler] Failed to emit termination error to chat",
