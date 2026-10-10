@@ -2,12 +2,15 @@
 package observability
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/propagation"
 )
 
 func TestInitDisabledModePreservesPrometheusEndpoint(t *testing.T) {
@@ -42,23 +45,52 @@ func TestInitRejectsEnabledRuntimeWithoutCollector(t *testing.T) {
 	require.ErrorContains(t, err, "OTEL_EXPORTER_OTLP_ENDPOINT is empty")
 }
 
-func TestInitRejectsOTLPHTTPProtocol(t *testing.T) {
-	_, err := Init(Config{
-		ServiceName:  "reliant-api-server",
-		OTLPEnabled:  true,
-		OTLPProtocol: "http/protobuf",
-		OTLPEndpoint: "http://otel-collector:4317",
-	})
-	require.ErrorContains(t, err, "Forge requires OTLP/gRPC")
+func TestValidateOTLPEndpointAcceptsAnyPort(t *testing.T) {
+	for _, endpoint := range []string{
+		"http://127.0.0.1:4317",
+		"http://127.0.0.1:4318",
+		"https://otlp.example.com",
+		"https://otlp.example.com:443",
+		"otel-collector:4318",
+		"http://otel-collector:9999/",
+	} {
+		require.NoError(t, validateOTLPEndpoint(endpoint), endpoint)
+	}
 }
 
-func TestInitRejectsOTLPHTTPPort(t *testing.T) {
-	_, err := Init(Config{
-		ServiceName:  "reliant-api-server",
-		OTLPEnabled:  true,
-		OTLPEndpoint: "http://otel-collector:4318/v1/traces",
-	})
-	require.ErrorContains(t, err, "OTLP/HTTP port 4318")
+func TestValidateOTLPEndpointRejectsMalformed(t *testing.T) {
+	require.ErrorContains(t, validateOTLPEndpoint("grpc://collector:4317"), "http or https scheme")
+	require.ErrorContains(t, validateOTLPEndpoint("http://collector:4318/v1/traces"), "/v1/traces")
+	require.ErrorContains(t, validateOTLPEndpoint("http://collector:4318/v1/metrics/"), "/v1/metrics")
+}
+
+func TestInitInstallsPropagatorWhenExportDisabled(t *testing.T) {
+	previous := otel.GetTextMapPropagator()
+	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator())
+	t.Cleanup(func() { otel.SetTextMapPropagator(previous) })
+
+	provider, err := Init(Config{ServiceName: "reliant-api-server", PrometheusEnabled: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown()) })
+
+	require.ElementsMatch(t, []string{"traceparent", "tracestate", "baggage"}, otel.GetTextMapPropagator().Fields())
+}
+
+func TestMetricsHandlerIncludesOTelInstrumentationMetrics(t *testing.T) {
+	provider, err := Init(Config{ServiceName: "reliant-api-server", PrometheusEnabled: true})
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, provider.Shutdown()) })
+
+	counter, err := otel.Meter("reliant.test").Int64Counter("reliant_test_otel_bridge")
+	require.NoError(t, err)
+	counter.Add(context.Background(), 1)
+
+	recorder := httptest.NewRecorder()
+	MetricsHandler().ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/metrics", nil))
+	require.Equal(t, http.StatusOK, recorder.Code)
+	body := recorder.Body.String()
+	require.Contains(t, body, "reliant_test_otel_bridge")
+	require.Contains(t, body, "go_gc_duration_seconds")
 }
 
 func TestInitEnabledModeAcceptsGRPCCollectorEndpoint(t *testing.T) {
@@ -73,6 +105,7 @@ func TestInitEnabledModeAcceptsGRPCCollectorEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotNil(t, provider)
+	t.Cleanup(func() { _ = provider.Shutdown() })
 }
 
 func TestConfigFromEnvCurrentProductionRolloutDisabled(t *testing.T) {

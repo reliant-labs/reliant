@@ -18,6 +18,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	"go.opentelemetry.io/otel/sdk/trace/tracetest"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	"google.golang.org/protobuf/types/known/emptypb"
 )
 
@@ -60,7 +61,7 @@ func TestConnectAndHTTPInstrumentationPropagateTrace(t *testing.T) {
 		_, err = io.Copy(io.Discard, resp.Body)
 		require.NoError(t, err)
 		return connect.NewResponse(&emptypb.Empty{}), nil
-	}, connect.WithInterceptors(newInterceptors(&testNamedInterceptor{})...))
+	}, connect.WithInterceptors(newInterceptors(true, &testNamedInterceptor{})...))
 	server := httptest.NewServer(handler)
 	defer server.Close()
 
@@ -82,4 +83,56 @@ func TestConnectAndHTTPInstrumentationPropagateTrace(t *testing.T) {
 		}
 	}
 	require.Len(t, traceIDs, 1, "Connect and HTTP spans must share the inbound trace")
+}
+
+func TestUntrustedServerStartsNewRootAndLinksRemoteTrace(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		trust bool
+	}{{"trusted public API continues the caller trace", true}, {"untrusted daemon server starts a new root", false}} {
+		t.Run(tc.name, func(t *testing.T) {
+			exporter := tracetest.NewInMemoryExporter()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSyncer(exporter))
+			previousProvider := otel.GetTracerProvider()
+			previousPropagator := otel.GetTextMapPropagator()
+			otel.SetTracerProvider(provider)
+			otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{}))
+			t.Cleanup(func() {
+				otel.SetTracerProvider(previousProvider)
+				otel.SetTextMapPropagator(previousPropagator)
+				require.NoError(t, provider.Shutdown(context.Background()))
+			})
+
+			handler := connect.NewUnaryHandler(echoProcedure, func(context.Context, *connect.Request[emptypb.Empty]) (*connect.Response[emptypb.Empty], error) {
+				return connect.NewResponse(&emptypb.Empty{}), nil
+			}, connect.WithInterceptors(newInterceptors(tc.trust, &testNamedInterceptor{})...))
+			server := httptest.NewServer(handler)
+			defer server.Close()
+
+			const remoteTrace = "0af7651916cd43dd8448eb211c80319c"
+			client := connect.NewClient[emptypb.Empty, emptypb.Empty](http.DefaultClient, server.URL+echoProcedure)
+			req := connect.NewRequest(&emptypb.Empty{})
+			req.Header().Set("traceparent", "00-"+remoteTrace+"-b7ad6b7169203331-01")
+			_, err := client.CallUnary(context.Background(), req)
+			require.NoError(t, err)
+
+			var serverSpans []tracetest.SpanStub
+			for _, span := range exporter.GetSpans() {
+				if span.SpanKind == oteltrace.SpanKindServer {
+					serverSpans = append(serverSpans, span)
+				}
+			}
+			require.Len(t, serverSpans, 1)
+			span := serverSpans[0]
+			if tc.trust {
+				require.Equal(t, remoteTrace, span.SpanContext.TraceID().String())
+				require.True(t, span.Parent.IsValid())
+				return
+			}
+			require.NotEqual(t, remoteTrace, span.SpanContext.TraceID().String())
+			require.False(t, span.Parent.IsValid(), "remote context must not be the parent")
+			require.Len(t, span.Links, 1)
+			require.Equal(t, remoteTrace, span.Links[0].SpanContext.TraceID().String())
+		})
+	}
 }

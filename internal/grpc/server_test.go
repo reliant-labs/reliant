@@ -30,7 +30,7 @@ func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 	auth := &testNamedInterceptor{}
 
-	result := newInterceptors(timeout, auth)
+	result := newInterceptors(true, timeout, auth)
 	// Forge's five middleware slots stay stable. otelconnect is the first extra
 	// and owns the only Connect server span; the remaining extras are Reliant's.
 	require.Len(t, result, 10)
@@ -42,7 +42,7 @@ func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 func TestNewInterceptorsSkipsNilAuthInterceptor(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 
-	result := newInterceptors(timeout, (*interceptors.AuthInterceptor)(nil))
+	result := newInterceptors(true, timeout, (*interceptors.AuthInterceptor)(nil))
 	// Forge's five + otelconnect + Reliant's three extras = 9 (nil auth skipped).
 	require.Len(t, result, 9)
 	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[7])

@@ -184,7 +184,7 @@ func NewServer(cfg *Config) (*Server, error) {
 
 	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
 	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(services.ForgeRPCDeadlines())
-	opts := newHandlerOptions(timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
+	opts := newHandlerOptions(true, timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
 
 	// Build a DaemonRouter for services that need transport-agnostic daemon access.
 	// The api-server itself never accepts daemon bidi streams — daemons connect to
@@ -731,9 +731,9 @@ func (s *Server) Mux() *http.ServeMux {
 }
 
 // newHandlerOptions builds the standard Connect handler options with the shared
-// interceptor chain.
-func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.HandlerOption {
-	all := newInterceptors(timeoutInterceptor, authInterceptors...)
+// interceptor chain. See newInterceptors for trustRemoteTrace.
+func newHandlerOptions(trustRemoteTrace bool, timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.HandlerOption {
+	all := newInterceptors(trustRemoteTrace, timeoutInterceptor, authInterceptors...)
 	opts := make([]connect.HandlerOption, 0, len(all))
 	for _, i := range all {
 		opts = append(opts, connect.WithInterceptors(i))
@@ -747,7 +747,14 @@ func newHandlerOptions(timeoutInterceptor connect.Interceptor, authInterceptors 
 //	Recovery → RequestID → Logging → Tracing → Metrics → Extras
 //
 // Reliant-specific interceptors (error reporter, timeout, auth) are passed as Extras.
-func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
+//
+// trustRemoteTrace controls whether a caller-supplied traceparent becomes the
+// parent of the server span. The public API trusts it for browser-to-API trace
+// continuity. The daemon-facing server must not: daemons run on user machines
+// and are untrusted, so a caller could otherwise pick the trace ID and sampled
+// flag. Untrusted servers start a new root span and record the remote context
+// as a span link only.
+func newInterceptors(trustRemoteTrace bool, timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
 	extras := []connect.Interceptor{
 		interceptors.NewSlowRPCWatchdogInterceptor(),
 		interceptors.NewErrorReporterInterceptor(),
@@ -760,7 +767,11 @@ func newInterceptors(timeoutInterceptor connect.Interceptor, authInterceptors ..
 		extras = append(extras, ai)
 	}
 
-	otelInterceptor, err := otelconnect.NewInterceptor(otelconnect.WithTrustRemote())
+	var otelOpts []otelconnect.Option
+	if trustRemoteTrace {
+		otelOpts = append(otelOpts, otelconnect.WithTrustRemote())
+	}
+	otelInterceptor, err := otelconnect.NewInterceptor(otelOpts...)
 	if err != nil {
 		panic(fmt.Sprintf("create Connect OpenTelemetry interceptor: %v", err))
 	}

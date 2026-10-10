@@ -67,7 +67,7 @@ func NewDaemonServer(cfg *DaemonConfig) *DaemonServer {
 	}
 	toolsDaemonPath, toolsDaemonHandler := reliantv1connect.NewToolsDaemonServiceHandler(
 		toolsDaemonService,
-		newHandlerOptions(interceptors.NewTimeoutInterceptor().Interceptor(), daemonAuthInterceptor)...,
+		newHandlerOptions(false, interceptors.NewTimeoutInterceptor().Interceptor(), daemonAuthInterceptor)...,
 	)
 	mux.Handle(toolsDaemonPath, toolsDaemonHandler)
 
