@@ -152,4 +152,46 @@ describe("ChatMessage long-press actions (mobile)", () => {
     fireEvent.click(screen.getByText("Branch in place"));
     expect(branchChat).toHaveBeenCalledWith("chat-1", "msg-1");
   });
+
+  it.each([
+    ["user", MessageRole.USER],
+    ["assistant", MessageRole.ASSISTANT],
+  ] as const)("makes the %s long-press surface non-selectable on mobile", (_n, role) => {
+    renderMobile(role);
+    const surface = messageSurface();
+    expect(surface.className).toContain("select-none");
+    expect(surface.className).toContain("[-webkit-touch-callout:none]");
+  });
+
+  it("prevents the native context menu on the long-press surface", () => {
+    renderMobile(MessageRole.USER);
+    const surface = messageSurface();
+    const notPrevented = fireEvent.contextMenu(surface);
+    expect(notPrevented).toBe(false);
+  });
+
+  it("clears an in-progress selection when the long press fires", () => {
+    const removeAllRanges = vi.fn();
+    const spy = vi
+      .spyOn(window, "getSelection")
+      .mockReturnValue({ removeAllRanges } as unknown as Selection);
+    try {
+      renderMobile(MessageRole.USER);
+      fireEvent.touchStart(messageSurface(), touch(10, 10));
+      act(() => {
+        vi.advanceTimersByTime(500);
+      });
+      expect(removeAllRanges).toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("keeps the desktop surface selectable", () => {
+    render(<ChatMessage message={buildMessage(MessageRole.USER)} chatId="chat-1" />);
+    const surface = messageSurface();
+    expect(surface.className).not.toContain("select-none");
+    expect(surface.className).not.toContain("touch-callout");
+    expect(fireEvent.contextMenu(surface)).toBe(true);
+  });
 });

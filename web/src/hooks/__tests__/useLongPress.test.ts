@@ -115,4 +115,50 @@ describe("useLongPress", () => {
     });
     expect(endEvent.preventDefault).toHaveBeenCalled();
   });
+
+  it("clears any native selection right before firing", () => {
+    const removeAllRanges = vi.fn();
+    const onLongPress = vi.fn(() => {
+      expect(removeAllRanges).toHaveBeenCalledTimes(1);
+    });
+    const spy = vi
+      .spyOn(window, "getSelection")
+      .mockReturnValue({ removeAllRanges } as unknown as Selection);
+    try {
+      const { result } = renderHook(() => useLongPress(onLongPress));
+      act(() => {
+        result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent);
+        vi.advanceTimersByTime(500);
+      });
+      expect(onLongPress).toHaveBeenCalledTimes(1);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("does not touch the selection when the press never fires", () => {
+    const removeAllRanges = vi.fn();
+    const spy = vi
+      .spyOn(window, "getSelection")
+      .mockReturnValue({ removeAllRanges } as unknown as Selection);
+    try {
+      const { result } = renderHook(() => useLongPress(vi.fn()));
+      act(() => {
+        result.current.onTouchStart(touchEvent(10, 10) as React.TouchEvent);
+        vi.advanceTimersByTime(200);
+        result.current.onTouchEnd(touchEvent(10, 10) as React.TouchEvent);
+        vi.advanceTimersByTime(500);
+      });
+      expect(removeAllRanges).not.toHaveBeenCalled();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("returns an onContextMenu handler that prevents the default menu", () => {
+    const { result } = renderHook(() => useLongPress(vi.fn()));
+    const preventDefault = vi.fn();
+    result.current.onContextMenu({ preventDefault } as unknown as React.SyntheticEvent);
+    expect(preventDefault).toHaveBeenCalled();
+  });
 });

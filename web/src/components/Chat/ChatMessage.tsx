@@ -38,7 +38,7 @@ import {
   useChat,
 } from "../../store/chatStoreHooks";
 import { useSurface } from "../../lib/surfaceContext";
-import { useLongPress } from "../../hooks/useLongPress";
+import { LONG_PRESS_SURFACE_CLASS, useLongPress } from "../../hooks/useLongPress";
 // import { useChatNavigationStore } from "../../store/chatNavigationStore";
 import { useProjectStore } from "../../store/projectStore";
 import { logger } from "../../lib/logger";
@@ -937,7 +937,8 @@ function ChatMessageComponent({
                       ? "w-full cursor-default"
                       : "cursor-pointer hover:border-primary/35 hover:bg-primary/20",
                     !pinned && timelineVariant === "card" && "shadow-md",
-                    !pinned && timelineVariant === "minimal" && "shadow-none"
+                    !pinned && timelineVariant === "minimal" && "shadow-none",
+                    isMobile && !pinned && LONG_PRESS_SURFACE_CLASS
                   )}
                   onClick={() => {
                     if (pinned) return;
@@ -1029,7 +1030,8 @@ function ChatMessageComponent({
                 "message-content group/assistant relative w-full px-2",
                 compactToolSpacing && "py-0",
                 timelineVariant === "card" && "rounded-xl border border-border/60 bg-card/60 p-3 shadow-sm",
-                timelineVariant === "minimal" && "px-0"
+                timelineVariant === "minimal" && "px-0",
+                isMobile && !pinned && LONG_PRESS_SURFACE_CLASS
               )}
               {...(isMobile && !pinned ? longPressHandlers : {})}
             >
