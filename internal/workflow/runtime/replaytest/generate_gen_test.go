@@ -14,6 +14,7 @@
 package replaytest
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -150,6 +151,53 @@ func TestGenerateFixture_Spawn(t *testing.T) {
 	h.RequireToolCallStatus(spawnCall.ID, core.ToolCallStatusCompleted)
 
 	h.ExportHistory(workflowID, "spawn")
+}
+
+// subAgentFailureMarker opens the spawned agent's prompt so the scripted
+// driver can fail that agent's requests, and only those (see
+// conversationMentions).
+const subAgentFailureMarker = "[replay-fixture: this sub-agent's provider is failing]"
+
+// TestGenerateFixture_SpawnFailure pins sub-agent failure isolation: a
+// spawned sub-agent's call_llm fails on every attempt, its exhausted step ENDS
+// THAT AGENT (subagent-exhaustion-fails-agent marker, a thread-scoped
+// WorkflowError, the failed report into the parent's mailbox, the spawn's
+// terminal "failed" status), and the parent — never paused — reacts to the
+// failure on its next turn and finishes.
+//
+// The pre-isolation shape of this same scenario — the exhausted step
+// self-pausing the whole run until a resume — is frozen in
+// fixtures/frozen/2026-10-10-subagent-exhaustion-pauses-run.
+func TestGenerateFixture_SpawnFailure(t *testing.T) {
+	spawnCall := ToolCall("call-spawn-1", "spawn", `{"preset":"general","prompt":"`+subAgentFailureMarker+` Implement the change."}`)
+	script := NewScriptedLLM(
+		// Turn 1: the parent delegates.
+		Turn{Text: "I'll delegate this to a sub-agent.", ToolCalls: []message.ToolCall{spawnCall}},
+		// Turn 2: the parent's exit candidate; it parks on the live agent.
+		// The agent's failing attempts consume no turns, so nothing races it.
+		Turn{Text: "Waiting on the sub-agent."},
+		// Turn 3: the parent reacts to the failed agent_result.
+		Turn{Text: "The sub-agent failed; I'll carry on without it."},
+	)
+	script.FailWhen(func(msgs []message.Message) error {
+		if conversationMentions(msgs, subAgentFailureMarker) {
+			return errors.New("provider stream stalled: no content for 120s")
+		}
+		return nil
+	})
+	h := newHarness(t, script)
+
+	created := h.StartChat("builtin://agent", "Please delegate a task to a sub-agent", map[string]any{
+		"mode": "auto",
+	})
+	workflowID := created.WorkflowId
+
+	h.WaitTemporalWorkflowDone(workflowID)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	h.WaitWorkflowStatus(wfruntime.DeterministicWorkflowID(workflowID, spawnCall.ID), db.Failed())
+	h.RequireToolCallStatus(spawnCall.ID, core.ToolCallStatusFailed)
+
+	h.ExportHistory(workflowID, "spawn_failure")
 }
 
 // replayRouterWorkflowYAML is a minimal pitch-deck-shaped workflow: an

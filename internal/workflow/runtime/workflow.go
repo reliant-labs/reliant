@@ -3068,8 +3068,11 @@ func prepareSpawnInline(
 	pauseCtrl := makeThreadPauseCtrl(config.childThread)
 
 	// A user cancels a spawn by naming its TOOL CALL — that is the only id the
-	// UI has. Widen this thread's cancellation check to match either id.
+	// UI has. Widen this thread's cancellation check to match either id. And
+	// mark the thread a sub-agent: a step it exhausts ends it and is reported
+	// to its parent, rather than pausing the run (failsAlone).
 	if pauseCtrl != nil {
+		pauseCtrl.SubAgent = true
 		threadCancelled := pauseCtrl.Cancelled
 		toolCallCancelled := makeThreadPauseCtrl(config.toolCallID).Cancelled
 		pauseCtrl.Cancelled = func() bool {
@@ -3357,7 +3360,7 @@ func runSpawnInlineChild(
 			}
 			return &spawnInlineResult{
 				ToolCallID:     config.toolCallID,
-				Content:        fmt.Sprintf("Failed to create spawn executor: %v", err),
+				Content:        spawnFailureReport(prep.threadTitle, config.childThread, fmt.Errorf("could not start: %w", err)),
 				IsError:        true,
 				terminalStatus: deferredStatus(deferTerminalStatus, "failed"),
 			}
@@ -3409,6 +3412,16 @@ func runSpawnInlineChild(
 			}
 		}
 
+		// A step that exhausted its retries ended this agent (failsAlone). It
+		// is terminal HERE even though its cause is usually transient: whether
+		// to try again is the parent's decision, made from the report below,
+		// and retrying it in this loop would just be the run-wide pause again
+		// with a backoff instead of a banner.
+		var exhausted *subAgentFailedError
+		if errors.As(execErr, &exhausted) {
+			break
+		}
+
 		// Transient errors (worker restart, heartbeat timeout) — retry with backoff.
 		// Spawn tool calls must survive any number of worker restarts. The thread's
 		// persisted messages ensure the agent resumes from where it left off.
@@ -3451,7 +3464,7 @@ func runSpawnInlineChild(
 		}
 		return &spawnInlineResult{
 			ToolCallID:     config.toolCallID,
-			Content:        fmt.Sprintf("Spawned workflow failed: %v", execErr),
+			Content:        spawnFailureReport(prep.threadTitle, config.childThread, execErr),
 			IsError:        true,
 			terminalStatus: deferredStatus(deferTerminalStatus, "failed"),
 		}
@@ -3761,6 +3774,8 @@ func prepareSpawnRelaunch(
 ) *spawnPrepResult {
 	pauseCtrl := makeThreadPauseCtrl(config.childThread)
 	if pauseCtrl != nil {
+		// As in prepareSpawnInline: a relaunched spawn is still a sub-agent.
+		pauseCtrl.SubAgent = true
 		threadCancelled := pauseCtrl.Cancelled
 		toolCallCancelled := makeThreadPauseCtrl(config.toolCallID).Cancelled
 		pauseCtrl.Cancelled = func() bool {
