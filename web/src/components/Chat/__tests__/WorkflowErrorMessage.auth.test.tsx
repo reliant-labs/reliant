@@ -1,5 +1,12 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
+
+// Reconnect errors carry an "Open Settings → Providers" button, which navigates;
+// these tests render outside a RouterProvider.
+vi.mock('@tanstack/react-router', () => ({
+  useNavigate: () => vi.fn(),
+}));
+
 import { WorkflowErrorMessage } from '../WorkflowErrorMessage';
 import type { ErrorUpdate } from '../../../types/streaming';
 

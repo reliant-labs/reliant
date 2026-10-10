@@ -43,6 +43,10 @@ type SettingsService struct {
 	database           db.Repository
 	daemonRouter       toolexec.DaemonRouter
 	controlPlaneClient controlplane.Client
+	// exchangeClaudeCode trades a Claude OAuth authorization code for tokens.
+	// A field rather than a direct call so tests can drive CompleteClaudeOAuth
+	// without reaching Anthropic's token endpoint.
+	exchangeClaudeCode func(code, codeVerifier, redirectURI, state string) (*claude.ClaudeTokens, error)
 }
 
 // NewSettingsService creates a new SettingsService
@@ -51,12 +55,19 @@ func NewSettingsService(database db.Repository, daemonRouter toolexec.DaemonRout
 		database:           database,
 		daemonRouter:       daemonRouter,
 		controlPlaneClient: controlplane.NewClient(""),
+		exchangeClaudeCode: claude.ExchangeClaudeAuthorizationCode,
 	}
 }
 
 // WithControlPlaneClient overrides the default control-plane client. Intended for tests.
 func (s *SettingsService) WithControlPlaneClient(client controlplane.Client) *SettingsService {
 	s.controlPlaneClient = client
+	return s
+}
+
+// WithClaudeCodeExchange overrides the Claude OAuth code exchange. Intended for tests.
+func (s *SettingsService) WithClaudeCodeExchange(exchange func(code, codeVerifier, redirectURI, state string) (*claude.ClaudeTokens, error)) *SettingsService {
+	s.exchangeClaudeCode = exchange
 	return s
 }
 
@@ -1559,7 +1570,7 @@ func (s *SettingsService) CompleteClaudeOAuth(ctx context.Context, req *connect.
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("redirect_uri is required"))
 	}
 
-	tokens, err := claude.ExchangeClaudeAuthorizationCode(code, codeVerifier, redirectURI, state)
+	tokens, err := s.exchangeClaudeCode(code, codeVerifier, redirectURI, state)
 	if err != nil {
 		logging.Error("Claude OAuth code exchange failed", "error", err)
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("failed to complete Claude OAuth: %w", err))

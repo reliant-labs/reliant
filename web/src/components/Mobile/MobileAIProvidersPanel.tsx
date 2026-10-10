@@ -70,6 +70,7 @@ import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../CopilotDevicePanel";
 import { getEventBus } from "../../lib/events";
+import { providerDisconnectConfirmation } from "../../lib/providerDisconnect";
 import {
   VISIBLE_PROVIDERS,
   providerConfigs,
@@ -412,11 +413,14 @@ export function MobileAIProvidersPanel({
 
   const handleDeleteProvider = async (provider: string) => {
     const config = providerConfigs[provider as ProviderId];
-    const displayName = provider === "reliant" ? "Reliant" : config?.name || provider;
-    const prompt =
-      provider === "reliant"
-        ? "Disconnect Reliant? You can re-enable it later from Settings."
-        : `Remove the API key for ${displayName}?`;
+    const prompt = providerDisconnectConfirmation({
+      provider,
+      displayName:
+        providers.find((p) => p.provider === provider)?.displayName ||
+        config?.name ||
+        provider,
+      usesSignIn: !!config?.usesOAuth,
+    });
     if (!confirm(prompt)) return;
 
     setDeletingProvider(provider);

@@ -41,6 +41,7 @@ import { onboardingService } from "../../services/controlPlane/onboarding";
 import { OAuthHelperPanel } from "../OAuthHelperPanel";
 import { CopilotDevicePanel } from "../CopilotDevicePanel";
 import { getEventBus } from "../../lib/events";
+import { providerDisconnectConfirmation } from "../../lib/providerDisconnect";
 
 interface CombinedGeneralSettingsProps {
   providers: Array<{
@@ -457,13 +458,20 @@ export function CombinedGeneralSettings({
       !providers.find((p) => p.provider === id && p.hasApiKey)
   ) as [ProviderId, (typeof providerConfigs)[ProviderId]][];
 
+  // The name on the provider's card. The disconnect confirmation repeats it so
+  // the user confirms the provider they actually clicked.
+  const providerCardName = (provider: string) =>
+    providers.find((p) => p.provider === provider)?.displayName ||
+    providerConfigs[provider as ProviderId]?.name ||
+    provider;
+
   const handleDeleteProvider = async (provider: string) => {
     const config = providerConfigs[provider as keyof typeof providerConfigs];
-    const displayName = provider === "reliant" ? "Reliant" : config?.name || provider;
-    const prompt =
-      provider === "reliant"
-        ? "Disconnect Reliant? You can re-enable it later from Settings."
-        : `Are you sure you want to remove the API key for ${displayName}?`;
+    const prompt = providerDisconnectConfirmation({
+      provider,
+      displayName: providerCardName(provider),
+      usesSignIn: !!config?.usesOAuth,
+    });
     if (!confirm(prompt)) {
       return;
     }
@@ -1059,6 +1067,7 @@ export function CombinedGeneralSettings({
                         className="px-3 py-1.5 text-sm border border-destructive/20 text-destructive-ink rounded-md hover:bg-destructive/10 transition-colors flex items-center gap-1"
                         onClick={() => handleDeleteProvider(provider.provider)}
                         disabled={deletingProvider === provider.provider}
+                        aria-label={`${disconnectLabel} ${provider.displayName}`}
                       >
                         {deletingProvider === provider.provider ? (
                           <Loader2 className="w-4 h-4 animate-spin" />

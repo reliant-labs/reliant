@@ -63,6 +63,8 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
+import { findPinnedModel } from "../../lib/modelId";
+import { ComposerModelName } from "./ComposerModelName";
 
 /** Extract WorkflowInputs schema from a proto Workflow's inputs.
  *  Returns { inputs, groupTags, groupUIs } for use with WorkflowParamsPanel. */
@@ -1801,9 +1803,8 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                         const resolvedModel = currentModelTag
                           ? availableModels.find(m => tierModelId ? m.id === tierModelId : m.tags?.includes(currentModelTag))
                           : currentModelId
-                            ? availableModels.find(m => m.id === currentModelId || m.id.split('@')[0] === currentModelId)
+                            ? findPinnedModel(currentModelId, availableModels)
                             : null;
-                        const currentModelDisplayName = resolvedModel?.name || currentModelId || 'auto';
                         const getProviderColor = (driverId?: string): string => {
                           switch (driverId) {
                             case 'anthropic': return 'bg-orange-400';
@@ -1825,7 +1826,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
                               )}
                               onClick={() => setSettingsPage(settingsPage === 'model' ? null : 'model')} aria-label="Model settings">
                               <span className={cn("w-1.5 h-1.5 rounded-full", getProviderColor(currentModelProvider))} />
-                              {currentModelDisplayName}
+                              <ComposerModelName name={resolvedModel?.name} pinnedId={currentModelId} />
                               <ChevronDown className="w-2.5 h-2.5 opacity-50" />
                             </button>
 </Tooltip>
