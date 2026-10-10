@@ -28,7 +28,10 @@
 //	  - origin    which backend this daemon talks to, collapsed to
 //	    scheme://host:port. Separates dev, staging and prod.
 //	  - sub       the Supabase subject the credentials belong to. Separates
-//	    accounts on a shared machine. May be empty — that is the
+//	    accounts on a shared machine, so each keeps its own saved daemon
+//	    id. The CLI resolves it from the credential: --account, else the
+//	    owner the gateway names for a pasted --token (WhoAmI), else the
+//	    stored credential's account. May be empty — that is the
 //	    not-yet-signed-in and self-hosted case, and it maps to the
 //	    explicit "_default" segment rather than to nothing.
 //	  - workspace the worktree path, or an explicit label. Separates the many

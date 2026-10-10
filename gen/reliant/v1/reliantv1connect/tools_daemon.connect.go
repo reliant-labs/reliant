@@ -44,6 +44,9 @@ const (
 	// ToolsDaemonServiceReportToolResultProcedure is the fully-qualified name of the
 	// ToolsDaemonService's ReportToolResult RPC.
 	ToolsDaemonServiceReportToolResultProcedure = "/reliant.v1.ToolsDaemonService/ReportToolResult"
+	// ToolsDaemonServiceWhoAmIProcedure is the fully-qualified name of the ToolsDaemonService's WhoAmI
+	// RPC.
+	ToolsDaemonServiceWhoAmIProcedure = "/reliant.v1.ToolsDaemonService/WhoAmI"
 )
 
 // ToolsDaemonServiceClient is a client for the reliant.v1.ToolsDaemonService service.
@@ -62,6 +65,19 @@ type ToolsDaemonServiceClient interface {
 	// when the bidirectional stream is unavailable. The daemon calls this when
 	// a tool completes but the bidi stream send fails (e.g. temporary disconnect).
 	ReportToolResult(context.Context, *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error)
+	// WhoAmI names the account the presented daemon credential acts as, and
+	// does nothing else: no daemon row is read or written and nothing connects.
+	//
+	// `reliant daemon start --token` asks it before choosing where the daemon's
+	// state lives. A machine keeps one daemon identity per (server, account,
+	// workspace), and until the gateway says whose token was pasted the CLI
+	// cannot know which account's identity to load. Without it every account on
+	// one laptop shared a single saved daemon id, and the second account to
+	// connect was refused as "owned by another user".
+	//
+	// It answers only about the caller's own credential.
+	//   - UNAUTHENTICATED: not a live daemon credential.
+	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
 }
 
 // NewToolsDaemonServiceClient constructs a client for the reliant.v1.ToolsDaemonService service. By
@@ -93,6 +109,12 @@ func NewToolsDaemonServiceClient(httpClient connect.HTTPClient, baseURL string, 
 			connect.WithSchema(toolsDaemonServiceMethods.ByName("ReportToolResult")),
 			connect.WithClientOptions(opts...),
 		),
+		whoAmI: connect.NewClient[v1.WhoAmIRequest, v1.WhoAmIResponse](
+			httpClient,
+			baseURL+ToolsDaemonServiceWhoAmIProcedure,
+			connect.WithSchema(toolsDaemonServiceMethods.ByName("WhoAmI")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -101,6 +123,7 @@ type toolsDaemonServiceClient struct {
 	connectDaemon    *connect.Client[v1.DaemonMessage, v1.ServerMessage]
 	connectGateway   *connect.Client[v1.ServerMessage, v1.DaemonMessage]
 	reportToolResult *connect.Client[v1.ReportToolResultRequest, v1.ReportToolResultResponse]
+	whoAmI           *connect.Client[v1.WhoAmIRequest, v1.WhoAmIResponse]
 }
 
 // ConnectDaemon calls reliant.v1.ToolsDaemonService.ConnectDaemon.
@@ -116,6 +139,11 @@ func (c *toolsDaemonServiceClient) ConnectGateway(ctx context.Context) *connect.
 // ReportToolResult calls reliant.v1.ToolsDaemonService.ReportToolResult.
 func (c *toolsDaemonServiceClient) ReportToolResult(ctx context.Context, req *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error) {
 	return c.reportToolResult.CallUnary(ctx, req)
+}
+
+// WhoAmI calls reliant.v1.ToolsDaemonService.WhoAmI.
+func (c *toolsDaemonServiceClient) WhoAmI(ctx context.Context, req *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
+	return c.whoAmI.CallUnary(ctx, req)
 }
 
 // ToolsDaemonServiceHandler is an implementation of the reliant.v1.ToolsDaemonService service.
@@ -134,6 +162,19 @@ type ToolsDaemonServiceHandler interface {
 	// when the bidirectional stream is unavailable. The daemon calls this when
 	// a tool completes but the bidi stream send fails (e.g. temporary disconnect).
 	ReportToolResult(context.Context, *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error)
+	// WhoAmI names the account the presented daemon credential acts as, and
+	// does nothing else: no daemon row is read or written and nothing connects.
+	//
+	// `reliant daemon start --token` asks it before choosing where the daemon's
+	// state lives. A machine keeps one daemon identity per (server, account,
+	// workspace), and until the gateway says whose token was pasted the CLI
+	// cannot know which account's identity to load. Without it every account on
+	// one laptop shared a single saved daemon id, and the second account to
+	// connect was refused as "owned by another user".
+	//
+	// It answers only about the caller's own credential.
+	//   - UNAUTHENTICATED: not a live daemon credential.
+	WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error)
 }
 
 // NewToolsDaemonServiceHandler builds an HTTP handler from the service implementation. It returns
@@ -161,6 +202,12 @@ func NewToolsDaemonServiceHandler(svc ToolsDaemonServiceHandler, opts ...connect
 		connect.WithSchema(toolsDaemonServiceMethods.ByName("ReportToolResult")),
 		connect.WithHandlerOptions(opts...),
 	)
+	toolsDaemonServiceWhoAmIHandler := connect.NewUnaryHandler(
+		ToolsDaemonServiceWhoAmIProcedure,
+		svc.WhoAmI,
+		connect.WithSchema(toolsDaemonServiceMethods.ByName("WhoAmI")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.ToolsDaemonService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case ToolsDaemonServiceConnectDaemonProcedure:
@@ -169,6 +216,8 @@ func NewToolsDaemonServiceHandler(svc ToolsDaemonServiceHandler, opts ...connect
 			toolsDaemonServiceConnectGatewayHandler.ServeHTTP(w, r)
 		case ToolsDaemonServiceReportToolResultProcedure:
 			toolsDaemonServiceReportToolResultHandler.ServeHTTP(w, r)
+		case ToolsDaemonServiceWhoAmIProcedure:
+			toolsDaemonServiceWhoAmIHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -188,4 +237,8 @@ func (UnimplementedToolsDaemonServiceHandler) ConnectGateway(context.Context, *c
 
 func (UnimplementedToolsDaemonServiceHandler) ReportToolResult(context.Context, *connect.Request[v1.ReportToolResultRequest]) (*connect.Response[v1.ReportToolResultResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.ReportToolResult is not implemented"))
+}
+
+func (UnimplementedToolsDaemonServiceHandler) WhoAmI(context.Context, *connect.Request[v1.WhoAmIRequest]) (*connect.Response[v1.WhoAmIResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.ToolsDaemonService.WhoAmI is not implemented"))
 }

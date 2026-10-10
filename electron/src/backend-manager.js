@@ -260,7 +260,33 @@ class BackendManager {
     // child picked it.
     args.push('--data-dir', this.daemonDataDir());
 
+    // Pass the signed-in account, so the daemon reads THIS account's
+    // credential from daemon.json.
+    //
+    // --data-dir already pins the instance, but the credential is looked up
+    // separately, and with no --account the daemon takes the store's default:
+    // the most recently registered account on this origin. One laptop can hold
+    // several — `reliant daemon start --token` files a pasted token under its
+    // owner and makes it the default — so without this, Electron signed in as
+    // A could spawn a daemon running B's token inside A's instance, asserting
+    // A's saved daemon id. Signed out there is no account to name, and the
+    // daemon idles awaiting credentials as before.
+    const account = this.daemonInstanceAccount();
+    if (account) {
+      args.push('--account', account);
+    }
+
     return args;
+  }
+
+  /**
+   * The account component of this app's instance key: the signed-in user's
+   * id, or '' when signed out. The same value the Go daemon resolves its
+   * instance and credential by (`--account`), so the two cannot disagree.
+   */
+  daemonInstanceAccount() {
+    const sub = this.authStorage?.loadStoredAuth?.()?.user?.id;
+    return typeof sub === 'string' ? sub.trim() : '';
   }
 
   /**
@@ -334,7 +360,7 @@ class BackendManager {
   daemonInstanceKey() {
     return daemonCreds.instanceKey({
       apiUrl: this.apiUrl,
-      sub: this.authStorage?.loadStoredAuth?.()?.user?.id || '',
+      sub: this.daemonInstanceAccount(),
       workspace: this.daemonInstanceWorkspace(),
     });
   }

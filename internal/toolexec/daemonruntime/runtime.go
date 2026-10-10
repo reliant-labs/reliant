@@ -126,6 +126,11 @@ type daemonClient struct {
 	// buildSnapshot overrides buildProjectSnapshot. Nil in production; tests
 	// set it to stand in for discovery that takes seconds on a real project.
 	buildSnapshot func(projectPath string) (*reliantv1.ProjectConfigSnapshot, error)
+
+	// foreignIDSetAside records that this process already moved a saved
+	// daemon id aside because the gateway said another user owns it. The
+	// recovery runs at most once per process; see setAsideForeignDaemonID.
+	foreignIDSetAside bool
 }
 
 // projectSnapshot builds the config snapshot for projectPath.
@@ -452,6 +457,67 @@ func (d *daemonClient) persistDaemonID(daemonID string) {
 		"daemonID", daemonID, "dataDir", dataDir, "serverURL", d.serverURL)
 }
 
+// setAsideForeignDaemonID recovers from the one refusal a daemon can fix by
+// itself: the gateway saying the id it asserted belongs to another user. It
+// reports whether it did, in which case the caller redials.
+//
+// The usual cause is one laptop serving two accounts. The instance directory
+// still held the id the gateway minted for the FIRST account, and this
+// daemon, running as the second, asserted it — so every start was refused,
+// forever, until someone found the file by hand. The server mints ids and
+// never gives one to two owners, so the fix is to stop asserting this one:
+// move the file aside (renamed, never deleted — it is the other account's
+// machine identity) and register with no id, which the gateway answers with
+// this account's own. The other owner's record is untouched.
+//
+// Only an id read from this instance's daemon-id file is moved: one a launcher
+// passed in explicitly is not this daemon's to rewrite. And only once per
+// process: if registering with no id is refused too, the credential itself
+// names a daemon another account owns, and redialing cannot change that.
+func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
+	if d.foreignIDSetAside || !bootstrap.IsForeignDaemonIDError(err) {
+		return false
+	}
+	asserted := strings.TrimSpace(d.daemonID)
+	dataDir := strings.TrimSpace(d.bootCfg.DataDir)
+	if asserted == "" || dataDir == "" || bootstrap.ReadDaemonID(dataDir) != asserted {
+		return false
+	}
+
+	setAsideTo, mvErr := bootstrap.SetAsideDaemonID(dataDir)
+	if mvErr != nil {
+		logging.Error(logPrefix+" Saved daemon id belongs to another account, and moving it aside failed",
+			"error", mvErr, "daemonID", asserted, "dataDir", dataDir)
+		return false
+	}
+	d.foreignIDSetAside = true
+	d.daemonID = ""
+	d.bootCfg.DaemonID = ""
+	SetDaemonIdentity("")
+
+	logging.Warn(logPrefix+" Saved daemon id belongs to another account — set it aside; registering as a new machine",
+		"daemonID", asserted, "setAsideTo", setAsideTo, "dataDir", dataDir)
+	if !d.bootCfg.Verbose {
+		fmt.Printf("  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
+			"    Moved it aside (%s) and registering this machine with your account.\n", setAsideTo)
+	}
+	return true
+}
+
+// foreignDaemonIDFailure is the error a daemon stops with when the gateway
+// refuses its id as another user's and setAsideForeignDaemonID could not help.
+// It never calls this a credential problem: the credential was accepted.
+func (d *daemonClient) foreignDaemonIDFailure(err error) error {
+	if d.foreignIDSetAside {
+		return fmt.Errorf("the gateway still refused this daemon after its saved id was set aside and it registered "+
+			"with no id, so the credential itself is bound to a machine owned by another Reliant account — "+
+			"use a daemon token minted by the account you want this machine to serve: %w", err)
+	}
+	return fmt.Errorf("the gateway refused this daemon's id because another Reliant account owns it, and the id "+
+		"was not read from %s, so it was left in place — start the daemon without that id: %w",
+		bootstrap.DaemonIDPath(d.bootCfg.DataDir), err)
+}
+
 // registerLabels builds the daemon-registration label map. It advertises the
 // daemon's runtime/sandbox type when known so the server can surface runtime
 // capability limits to the model. Returns nil when there is nothing to report,
@@ -470,6 +536,17 @@ func (d *daemonClient) registerLabels() map[string]string {
 // Best-effort: a daemon that is connected and serving must not die because a
 // status file could not be written.
 func (d *daemonClient) recordStream(s daemonstate.Stream, detail string) {
+	d.recordStreamTransition(s, detail, true)
+}
+
+// recordStreamStopped records a stream that ended for good. Same record and
+// machine notice as recordStream; the human line just does not promise a
+// reconnect that is never coming.
+func (d *daemonClient) recordStreamStopped(detail string) {
+	d.recordStreamTransition(daemonstate.StreamDisconnected, detail, false)
+}
+
+func (d *daemonClient) recordStreamTransition(s daemonstate.Stream, detail string, retrying bool) {
 	if err := daemonstate.SetStream(d.bootCfg.DataDir, s, detail); err != nil {
 		logging.Warn(logPrefix+" Failed to record daemon stream state", "error", err, "stream", string(s))
 	}
@@ -503,7 +580,7 @@ func (d *daemonClient) recordStream(s daemonstate.Stream, detail string) {
 		fmt.Printf("%s %s\n", daemonstate.StreamNoticePrefix, string(s))
 	}
 
-	d.announceStatus(s, detail)
+	d.announceStatus(s, detail, retrying)
 }
 
 // announceStatus prints the short, human-readable half of a stream transition:
@@ -514,7 +591,7 @@ func (d *daemonClient) recordStream(s daemonstate.Stream, detail string) {
 // stdout for these. In verbose mode the structured lines are already on stdout
 // and say the same thing with more detail, so these would be duplication —
 // hence the early return.
-func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string) {
+func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retrying bool) {
 	if d.bootCfg.Verbose {
 		return
 	}
@@ -529,8 +606,15 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string) {
 		// Only worth a line when it carries a reason; a bare disconnect is
 		// immediately followed by a reconnect attempt, and narrating both
 		// halves of a retry loop is the noise this whole change removes.
-		if detail != "" {
+		if detail == "" {
+			break
+		}
+		if retrying {
 			fmt.Printf("  ! Disconnected: %s\n    Reconnecting…\n", detail)
+		} else {
+			// Stopping for good: the error that follows says why and what
+			// to do, so this line must not promise a retry.
+			fmt.Printf("  ! Disconnected: %s\n", detail)
 		}
 	}
 }
@@ -575,14 +659,22 @@ func (d *daemonClient) run(ctx context.Context) error {
 		d.recordStream(daemonstate.StreamConnecting, "")
 		err := d.runSession(ctx)
 		if err != nil && !errors.Is(err, context.Canceled) {
-			d.recordStream(daemonstate.StreamDisconnected, err.Error())
+			if d.setAsideForeignDaemonID(err) {
+				// Redial at once: nothing on the gateway has to change, this
+				// daemon just stops asserting an id that is not its own.
+				continue
+			}
 			if isFatalError(err) {
+				d.recordStreamStopped(err.Error())
 				logging.Error(logPrefix+" Fatal error — not reconnecting",
 					"error", err,
 					"code", connect.CodeOf(err).String(),
 					"grpc_url", d.bootCfg.GRPCURL,
 				)
 				d.stopAllStreams()
+				if bootstrap.IsForeignDaemonIDError(err) {
+					return d.foreignDaemonIDFailure(err)
+				}
 				if connect.CodeOf(err) == connect.CodeAborted {
 					// Name the condition rather than calling it a connection
 					// failure: the connection worked fine, another daemon
@@ -596,6 +688,7 @@ func (d *daemonClient) run(ctx context.Context) error {
 				}
 				return fmt.Errorf("daemon connection failed (not retrying): %w", err)
 			}
+			d.recordStream(daemonstate.StreamDisconnected, err.Error())
 			if connect.CodeOf(err) == connect.CodeUnauthenticated {
 				// Credentials the gateway would not accept. This USED to be
 				// fatal, and that is what cost a full working day.

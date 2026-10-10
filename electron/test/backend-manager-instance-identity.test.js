@@ -173,6 +173,40 @@ test('the data dir lives under the instance directory, not the working directory
   );
 });
 
+// ─── The daemon runs as the signed-in account ──────────────────────────────
+
+test('the daemon is spawned with the signed-in account, so it reads that account\'s credential', (t) => {
+  // --data-dir pins the instance, but the daemon looks its credential up
+  // separately, and with no --account it takes the store's default — the
+  // account most recently registered on this origin. `reliant daemon start
+  // --token` files a pasted token under its owner and makes it the default,
+  // so a laptop serving two accounts could hand Electron's daemon (signed in
+  // as A) account B's token inside A's instance.
+  const prev = process.env[daemonCreds.ENV_INSTANCE_WORKSPACE];
+  process.env[daemonCreds.ENV_INSTANCE_WORKSPACE] = '/tmp/backend-manager-account-test';
+  t.after(() => {
+    if (prev === undefined) delete process.env[daemonCreds.ENV_INSTANCE_WORKSPACE];
+    else process.env[daemonCreds.ENV_INSTANCE_WORKSPACE] = prev;
+  });
+
+  const manager = new BackendManager();
+  manager.apiUrl = 'http://localhost:8090';
+  manager.authStorage = { loadStoredAuth: () => ({ user: { id: 'user-a' } }) };
+
+  const args = manager.buildDaemonArgs();
+  const at = args.indexOf('--account');
+  assert.notEqual(at, -1, `expected --account in daemon args, got: ${args.join(' ')}`);
+  assert.equal(args[at + 1], 'user-a');
+  assert.equal(
+    manager.daemonInstanceKey().sub,
+    'user-a',
+    'the account the daemon runs as is the account its data dir was derived from',
+  );
+
+  manager.authStorage = null;
+  assert.equal(manager.buildDaemonArgs().includes('--account'), false, 'signed out: no account to name');
+});
+
 // ─── A foreign record is not evidence about our daemon ─────────────────────
 
 test('a record stamped with another instance is IGNORED, not trusted', () => {

@@ -22,7 +22,6 @@ func TestDaemonStartToken_RefusesNonAccessTokens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	conn := &connection{ServerURL: "https://api.example.test"}
 
 	for _, tc := range []struct {
 		input string
@@ -42,18 +41,18 @@ func TestDaemonStartToken_RefusesNonAccessTokens(t *testing.T) {
 		os.Stdin = r
 		cmd := NewRootCmd()
 		cmd.SetOut(&bytes.Buffer{})
-		creds, err := credentialsFromToken(context.Background(), cmd, conn, "")
+		token, err := readPastedToken(context.Background(), cmd)
 		os.Stdin = orig
 		_ = r.Close()
 
 		if tc.ok {
-			if err != nil || creds == nil || creds.PAT != tc.input {
-				t.Fatalf("%q: want accepted, got creds=%v err=%v", tc.input, creds, err)
+			if err != nil || token != tc.input {
+				t.Fatalf("%q: want accepted, got token=%q err=%v", tc.input, token, err)
 			}
 			continue
 		}
 		if err == nil || !strings.Contains(err.Error(), "invalid token format") {
-			t.Fatalf("%q: want invalid token format, got creds=%v err=%v", tc.input, creds, err)
+			t.Fatalf("%q: want invalid token format, got token=%q err=%v", tc.input, token, err)
 		}
 	}
 }
