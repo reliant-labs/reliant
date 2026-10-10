@@ -588,6 +588,14 @@ Credential resolution order:
      mode Electron spawns in: its own login page owns interactive sign-in, and
      the daemon must never pop a second one.
 
+One machine can serve several accounts. Each account keeps its own daemon
+identity (under ~/.reliant/instances/`<server>`/`<account>`/`<workspace>`/): with
+--token the gateway is asked whose token was pasted and the daemon runs as
+that account; otherwise --account, else the most recently connected account,
+applies. Two accounts can run side by side, even in the same workspace.
+To switch back to an account whose token is already stored:
+  reliant daemon start --account `<user-id>`
+
 ```
 reliant daemon start [flags]
 ```
