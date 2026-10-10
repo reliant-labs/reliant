@@ -4824,6 +4824,12 @@ plane; every other env records in this machine's ledger under
 $FORGE_LEDGER_HOME (default ~/.forge/ledger), keyed by project so every
 worktree shares one history.
 
+FORGE_LEDGER=machine overrides that for every env and every forge process that
+inherits it: nothing is read from or written to a declared control plane. Use
+it for hermetic tests and scripts. $FORGE_LEDGER_HOME only relocates the
+machine ledger; it never keeps a declared env off its control plane.
+`ledger where <env>` says which ledger an env uses, and why.
+
 `import` is how history reaches whichever store an env selected. forge once
 kept promotions in `.forge/promotions/<env>.jsonl` inside the checkout; those
 files are no longer read, and a command refuses while the checkout holds
@@ -4922,10 +4928,19 @@ append-only log's current binding is its last line, so interleaving imported
 history with promotions made since would leave the environment reading whatever
 sorted last. The remedy is to import first.
 
+WHERE IT WRITES is each environment's selected ledger: an env whose KCL declares
+`forge.ControlPlane` imports INTO THAT CONTROL PLANE. The plan labels every
+target as hosted or machine, and --apply names a hosted target again on the
+line before it writes. To keep an import on this machine — a test, a script, a
+scratch copy of a real env — set FORGE_LEDGER=machine. Setting only
+$FORGE_LEDGER_HOME does not: it relocates the machine ledger, and a declared
+env still imports into its control plane.
+
 Examples:
   cli forge ledger import --from-git                        # dry run against origin/main
   cli forge ledger import --from-git --rev origin/main --apply
   cli forge ledger import --from-file-ledger ~/.forge/ledger/myproj-ab12cd34 --apply
+  FORGE_LEDGER=machine FORGE_LEDGER_HOME=$(mktemp -d) cli forge ledger import --from-git --rev HEAD --apply
 
 ```
 reliant forge ledger import [flags]
@@ -4991,6 +5006,14 @@ including local — and every other environment records in this machine's
 ledger under $FORGE_LEDGER_HOME (default ~/.forge/ledger), keyed by project so
 that every worktree of a project shares one history.
 
+ONE OVERRIDE: FORGE_LEDGER=machine sends every environment to this machine's
+ledger, whatever it declares, and nothing is read from or written to the
+declared control plane. It is for hermetic tests and scripts that render or
+import a real environment. $FORGE_LEDGER_HOME alone does NOT do this: it says
+WHERE the machine ledger is, not WHETHER an environment uses it. A script can
+assert its run stays local with `ledger where <env> --json` (backend
+"machine", override "FORGE_LEDGER=machine").
+
 This renders the environment and reports the declaration it FOUND. It does not
 infer the answer from which store happens to hold records: a project that has
 moved an environment to a control plane still has its old machine-ledger files
@@ -5009,7 +5032,7 @@ reliant forge ledger where <environment> [flags]
 
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
-| `--json` | `bool` | - | Print {env, backend, location, because, declaration, project} as JSON |
+| `--json` | `bool` | - | Print {env, backend, location, because, declaration, override, project} as JSON |
 
 ---
 
