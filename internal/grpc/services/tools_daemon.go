@@ -17,6 +17,7 @@ import (
 	"connectrpc.com/connect"
 
 	"github.com/google/uuid"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
@@ -2407,7 +2408,8 @@ func (s *ToolsDaemonService) SendDaemonCommand(ctx context.Context, userID strin
 	conn := s.defaultDaemonForUser(userID)
 	s.mu.RUnlock()
 	if conn == nil {
-		return nil, fmt.Errorf("no daemon connected for user %s", userID)
+		// The user's machine is not connected: theirs to fix, not a fault.
+		return nil, svcerr.WithClass(fmt.Errorf("no daemon connected for user %s", userID), svcerr.ClassUser)
 	}
 	return s.sendCommandToConn(ctx, conn, req)
 }

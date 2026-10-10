@@ -26,6 +26,7 @@ import (
 	"github.com/openai/openai-go/v3/packages/param"
 	"github.com/openai/openai-go/v3/shared"
 	accesstoken "github.com/reliant-labs/forge/pkg/accesstoken"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/llm"
 	"github.com/reliant-labs/reliant/internal/llm/cache"
@@ -940,6 +941,10 @@ func (e *ErrReliantManagedQuotaExhausted) Error() string {
 	}
 	return chatmarkers.Wrap(chatmarkers.KindReliantManagedQuotaExhausted, url, msg)
 }
+
+// ErrorClass: the user has spent their Reliant credit — theirs to top up, so a
+// user error that logs at INFO and never reaches Sentry.
+func (e *ErrReliantManagedQuotaExhausted) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // isReliantManagedQuotaError returns true when the OpenAI-shape error body
 // from LiteLLM (proxied by control-plane/internal/llmproxy) signals that the

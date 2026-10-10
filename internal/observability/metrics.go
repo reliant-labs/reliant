@@ -221,7 +221,7 @@ var (
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Name:      "dead_end_errors_total",
-			Help:      "Errors that are logged but not propagated to callers.",
+			Help:      "Errors that are logged but not propagated to callers. level is error, warn, or user_error: a user error (error_class=user), which the error-class policy logs at INFO.",
 		},
 		[]string{"level", "package", "message"},
 	)

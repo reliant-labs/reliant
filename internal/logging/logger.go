@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/runenv"
 	"gopkg.in/natefinch/lumberjack.v2"
 )
@@ -81,8 +83,8 @@ func resolveLogFormat() (asJSON, recognised bool) {
 
 // install is the one place the process logger is built. Every Setup* variant
 // differs only in where lines are written, so they all come here: the format
-// is chosen once, and the Sentry and metrics bridges wrap it the same way
-// whichever format it is.
+// is chosen once, and the error-class policy, the Sentry and the metrics
+// bridges wrap it the same way whichever format it is (withReporting).
 //
 // It is also where prod's INFO floor is enforced, so no caller can build a
 // DEBUG logger in prod: GetLogLevel already caps what it returns, and install
@@ -104,14 +106,25 @@ func install(output io.Writer, level slog.Level) {
 	} else {
 		handler = slog.NewTextHandler(output, opts)
 	}
-	handler = newSentryHandler(handler)
-	handler = newMetricsHandler(handler)
-	slog.SetDefault(slog.New(handler))
+	slog.SetDefault(slog.New(withReporting(handler)))
 
 	if !recognised {
 		slog.Warn("Unrecognised LOG_FORMAT, logging as text", "log_format", os.Getenv(logFormatEnv), "allowed", "json,text")
 	}
 	warnRefusedDebug(requested, level)
+}
+
+// withReporting wraps the line-writing handler with everything that routes on a
+// record's level: the Sentry bridge (ERROR and above) and the dead-end error
+// counter. The error-class policy goes OUTSIDE both, so they see the level the
+// policy decided rather than the one the call site wrote: a logging.Error
+// carrying a user error — the user's machine is offline, their provider
+// subscription is spent — is written at INFO with error_class=user, counted as
+// a user error, and never reaches Sentry. See internal/errclass.
+func withReporting(lines slog.Handler) slog.Handler {
+	var handler slog.Handler = newSentryHandler(lines)
+	handler = newMetricsHandler(handler)
+	return observe.NewErrorClassHandler(handler, observe.WithErrorClassifier(errclass.Library))
 }
 
 // warnRefusedDebug reports, once per logger install, that prod refused a DEBUG

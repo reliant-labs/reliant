@@ -9,6 +9,7 @@ import (
 
 	"connectrpc.com/connect"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
@@ -180,10 +181,15 @@ func (e *machineWakingError) Error() string {
 
 func (e *machineWakingError) Unwrap() error { return e.cause }
 
+// ErrorClass: an asleep machine waking for a request is the system working,
+// not a fault — a user error that logs at INFO and never reaches Sentry.
+func (e *machineWakingError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
+
 // connectError is the wire form: Unavailable, with a DaemonWaking detail naming
-// the machine so the client can say which one is waking.
+// the machine so the client can say which one is waking. It is still a user
+// error; the class is carried onto the fresh error, which drops the chain.
 func (e *machineWakingError) connectError() *connect.Error {
-	cerr := connect.NewError(connect.CodeUnavailable, errors.New(e.Error()))
+	cerr := connect.NewError(connect.CodeUnavailable, svcerr.WithClass(errors.New(e.Error()), svcerr.ClassUser))
 	if detail, err := connect.NewErrorDetail(&reliantv1.DaemonWaking{DaemonId: e.daemonID}); err == nil {
 		cerr.AddDetail(detail)
 	}

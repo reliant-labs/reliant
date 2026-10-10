@@ -9,6 +9,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/prometheus/client_golang/prometheus"
+	"github.com/reliant-labs/forge/pkg/observe"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // metricsHandler is an slog.Handler that increments Prometheus counters for
@@ -49,13 +51,24 @@ func (h *metricsHandler) Handle(ctx context.Context, r slog.Record) error {
 	// Always delegate to the inner handler.
 	err := h.inner.Handle(ctx, r)
 
-	// Only count Warn and Error level.
-	if r.Level < slog.LevelWarn {
+	counter := deadEndCounter
+	if counter == nil {
 		return err
 	}
 
-	counter := deadEndCounter
-	if counter == nil {
+	// Count Warn and Error records, and user errors. A user error no longer
+	// logs at Warn or Error (the error-class policy lowers it to INFO), so
+	// without its own label its volume would vanish from this counter along
+	// with the page it should never have caused.
+	var level string
+	switch {
+	case r.Level >= slog.LevelError:
+		level = "error"
+	case r.Level >= slog.LevelWarn:
+		level = "warn"
+	case isUserErrorRecord(r):
+		level = "user_error"
+	default:
 		return err
 	}
 
@@ -68,13 +81,26 @@ func (h *metricsHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 	}
 
-	level := "error"
-	if r.Level == slog.LevelWarn {
-		level = "warn"
-	}
-
 	counter.WithLabelValues(level, pkg, messageLabel(r.Message)).Inc()
 	return err
+}
+
+// isUserErrorRecord reports whether the error-class policy marked r as a user
+// error (error_class=user). Canceled records are not counted: nobody has to
+// act on a caller that went away.
+func isUserErrorRecord(r slog.Record) bool {
+	if r.NumAttrs() == 0 {
+		return false
+	}
+	user := false
+	r.Attrs(func(a slog.Attr) bool {
+		if a.Key == observe.ErrorClassKey {
+			user = a.Value.String() == svcerr.ClassUser.String()
+			return false
+		}
+		return true
+	})
+	return user
 }
 
 // maxMessageLabelRunes caps the message label to keep counter cardinality and

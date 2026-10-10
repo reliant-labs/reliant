@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 )
 
@@ -25,7 +26,12 @@ import (
 // already renders (classifyDaemonWait + useDaemonWait's poll loop), instead
 // of inventing a second wire format the client would need new plumbing to
 // understand.
-var ErrDaemonPending = errors.New("no daemon connected: daemon record exists but has not registered yet (still starting)")
+//
+// It is a USER error (svcerr.ClassUser): the user's machine is starting,
+// asleep or suspended, and the system is behaving correctly by saying so. It
+// logs at INFO and never reaches Sentry — even under the Unavailable code
+// callers give it — while errors.Is(err, ErrDaemonPending) is unchanged.
+var ErrDaemonPending = svcerr.WithClass(errors.New("no daemon connected: daemon record exists but has not registered yet (still starting)"), svcerr.ClassUser)
 
 // IsDaemonPending reports whether err indicates a daemon exists for the user
 // but has not connected yet (still provisioning) — as opposed to no daemon
@@ -40,8 +46,14 @@ func IsDaemonPending(err error) bool {
 // ErrDaemonPending there is nothing to wait for, so a surface shows "no
 // machine" rather than a spinner. Its text deliberately lacks
 // daemonoffline.ErrorSubstring ("no daemon connected"): it is not a machine
-// that went offline.
-var ErrNoDaemon = errors.New("no daemon available")
+// that went offline. A USER error (svcerr.ClassUser), like ErrDaemonPending.
+var ErrNoDaemon = svcerr.WithClass(errors.New("no daemon available"), svcerr.ClassUser)
+
+// errDaemonNotConnected is the cause daemonRequestError reports when NATS had
+// no responder for the daemon's subject: the daemon is not connected. A USER
+// error — the machine is closed or restarting — whose text carries
+// daemonoffline.ErrorSubstring, the marker every surface keys on.
+var errDaemonNotConnected = svcerr.WithClass(errors.New("no daemon connected for user"), svcerr.ClassUser)
 
 // IsNoDaemon reports whether err is ErrNoDaemon: the user has no machine for
 // this request.

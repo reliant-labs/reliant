@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 )
 
@@ -81,7 +82,8 @@ type AvailabilityReporter interface {
 }
 
 // ErrCredentialRejected matches every *CredentialRejectedError via errors.Is.
-var ErrCredentialRejected = errors.New("provider rejected the credential")
+// A USER error (svcerr.ClassUser): only the user can reconnect the provider.
+var ErrCredentialRejected = svcerr.WithClass(errors.New("provider rejected the credential"), svcerr.ClassUser)
 
 // CredentialRejectedError is a provider's refusal of the credential an account
 // catalog request carried — the same credential, and the same client identity,
@@ -100,6 +102,10 @@ func (e *CredentialRejectedError) Error() string {
 
 // Is makes errors.Is(err, ErrCredentialRejected) hold.
 func (e *CredentialRejectedError) Is(target error) bool { return target == ErrCredentialRejected }
+
+// ErrorClass: a rejected credential is the user's to reconnect, so it logs at
+// INFO and never reaches Sentry.
+func (e *CredentialRejectedError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // maxRejectionDetail bounds the provider text carried into a user-facing
 // reason; a provider can answer with a whole JSON document.

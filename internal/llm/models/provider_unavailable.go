@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 )
 
@@ -50,6 +51,10 @@ func (e *ProviderUnavailableError) Error() string {
 func (e *ProviderUnavailableError) Is(target error) bool {
 	return target == drivererrors.ErrNoServableProvider
 }
+
+// ErrorClass: only the user can reconnect the provider or pick another model,
+// so this is a user error — INFO, never Sentry.
+func (e *ProviderUnavailableError) ErrorClass() svcerr.Class { return svcerr.ClassUser }
 
 // Explain renders the failure as the user should read it: which provider the
 // model is pinned to, why that provider cannot serve (reasons, keyed by

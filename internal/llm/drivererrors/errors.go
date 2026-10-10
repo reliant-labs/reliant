@@ -2,8 +2,11 @@
 package drivererrors
 
 import (
+	"errors"
 	"fmt"
 	"strings"
+
+	"github.com/reliant-labs/forge/pkg/svcerr"
 )
 
 // ErrEmptyInput is a sentinel error for LLM calls that have no usable input.
@@ -15,7 +18,10 @@ var ErrEmptyInput = fmt.Errorf("llm request has no input")
 // deterministic for the life of a retry ladder — only the user reconnecting a
 // provider or picking another model changes it — so it is terminal: the call
 // fails once, with its explanation, instead of retrying the same failure.
-var ErrNoServableProvider = fmt.Errorf("no servable provider")
+//
+// For the same reason it is a USER error (svcerr.ClassUser): it logs at INFO
+// and never reaches Sentry, whichever error wraps it.
+var ErrNoServableProvider = svcerr.WithClass(errors.New("no servable provider"), svcerr.ClassUser)
 
 // EmptyInputError describes a request that could not be sent because message
 // conversion produced no input items.

@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/logging"
 )
 
@@ -52,6 +53,18 @@ func (e *StreamStallError) Error() string {
 // Is makes every stall match ErrStreamContentStalled.
 func (e *StreamStallError) Is(target error) bool {
 	return target == ErrStreamContentStalled
+}
+
+// ErrorClass: a provider that answers and then sends only keepalives with no
+// content block open is, as observed, a subscription with no remaining credit
+// (see chatmarkers.KindProviderStreamStalled) — the user's to fix, so it logs
+// at INFO and never reaches Sentry. A stall mid-block is a provider or model
+// taking too long, which says nothing about the user: no opinion.
+func (e *StreamStallError) ErrorClass() svcerr.Class {
+	if e.Phase == StallMidBlock {
+		return svcerr.ClassNone
+	}
+	return svcerr.ClassUser
 }
 
 // DefaultStreamMidBlockStallTimeout caps how long a content block may stay open

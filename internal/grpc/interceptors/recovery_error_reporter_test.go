@@ -4,10 +4,12 @@ package interceptors
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"testing"
 
 	"connectrpc.com/connect"
+	"github.com/reliant-labs/forge/pkg/svcerr"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/stretchr/testify/require"
 )
@@ -144,6 +146,23 @@ func TestErrorReporterInterceptorSkipsDaemonNotConnectedInternalError(t *testing
 	_, err := wrapped(context.Background(), connect.NewRequest(&struct{}{}))
 	require.Error(t, err)
 	require.Empty(t, spy.errors, "transient daemon-connection errors should not be reported to Sentry")
+}
+
+// A user error is the user's to fix whatever code a handler wrapped it in. No
+// message pattern is involved: the error carries its class.
+func TestErrorReporterInterceptorSkipsMarkedUserErrorUnderInternal(t *testing.T) {
+	spy := &telemetrySpyReporter{}
+	withTelemetryReporter(t, spy)
+
+	wrapped := NewErrorReporterInterceptor().WrapUnary(func(context.Context, connect.AnyRequest) (connect.AnyResponse, error) {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("open session: %w",
+			svcerr.WithClass(errors.New("the machine for this request is suspended"), svcerr.ClassUser)))
+	})
+
+	_, err := wrapped(context.Background(), connect.NewRequest(&struct{}{}))
+	require.Error(t, err)
+	require.Equal(t, connect.CodeInternal, connect.CodeOf(err), "the wire code is the handler's business")
+	require.Empty(t, spy.errors, "a user error must not reach Sentry")
 }
 
 func TestErrorReporterInterceptorReportsUnexpectedInternalErrors(t *testing.T) {
