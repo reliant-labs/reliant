@@ -19,6 +19,7 @@ import { cn } from "../../lib/utils";
 import { toast } from "../../lib/toast-manager";
 import { logger } from "../../lib/logger";
 import { Tooltip } from "../ui/Tooltip";
+import { QUEUED_FOR_MACHINE_DETAIL } from "../../lib/daemon-wait";
 import {
   chatGrpc,
   QUEUED_SENDER_KIND_HUMAN,
@@ -76,6 +77,12 @@ interface QueuedMessagesProps {
    * while it is: an idle agent has no work in flight to stop.
    */
   isRunning?: boolean;
+  /**
+   * The run is held until its machine comes up
+   * (ChatActivity.WAITING_FOR_DAEMON). A queued entry then waits on the
+   * machine, not on the agent, and says so.
+   */
+  waitingOnMachine?: boolean;
 }
 
 export function QueuedMessages({
@@ -86,6 +93,7 @@ export function QueuedMessages({
   onForget,
   onInterrupted,
   isRunning = false,
+  waitingOnMachine = false,
 }: QueuedMessagesProps) {
   // Only the user's own queued messages are actionable here. A peer agent's
   // spawn_send message is not the human's to revoke.
@@ -322,8 +330,8 @@ export function QueuedMessages({
                 </button>
               )}
               <span className="flex items-center gap-1 text-2xs text-muted-foreground/80">
-                {formatQueuedAge(message.created_at, now)} · waiting for the
-                agent's next turn
+                {formatQueuedAge(message.created_at, now)} ·{" "}
+                {waitingOnMachine ? QUEUED_FOR_MACHINE_DETAIL : "waiting for the agent's next turn"}
                 {message.attachments.length > 0 && (
                   <span className="flex items-center gap-0.5">
                     <Paperclip className="h-2.5 w-2.5" />

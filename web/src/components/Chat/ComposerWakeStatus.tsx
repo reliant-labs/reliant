@@ -15,11 +15,19 @@
  *   3. The run is blocked on its machine (ChatActivity.WAITING_FOR_DAEMON), or
  *      the registry says the pinned machine is offline, failed or gone.
  *
- * An unpinned chat wakes whatever default resolution picks on the server,
- * which the web cannot see — so it gets no machine name, only the
- * server-reported "waiting" state. If the wake fails the send still goes
+ * An unpinned chat wakes whatever default resolution picks on the server.
+ * Once its run is held for that machine, the line names the machine the
+ * server's default resolves to (`defaultMachineDaemon`), the same rule the
+ * new-chat picker preselects with. If the wake fails the send still goes
  * through; the tool card then reports the pending error and the run's machine
  * banner offers Wake it.
+ *
+ * A machine that FAILED to start is not "offline" and not "waking": nothing
+ * will bring it back by itself, and a run held for it waits for nothing. The
+ * line says so in the shared wait vocabulary (`classifyDaemonWait`, "Your
+ * machine failed to start", with the control plane's reason) and offers the
+ * ways forward: Try again (resume, which the control plane treats as a retry
+ * that rebuilds the machine), Manage machines, or continue without it.
  *
  * Whenever the machine is unavailable, `continueWithoutMachine` (the
  * "Continue without machine" action) is offered beside the status: a branch
@@ -27,10 +35,13 @@
  */
 
 import type { ReactNode } from "react";
-import { DaemonStatus } from "@/gen/reliant/v1/daemon_registry_pb";
-import { useDaemonList } from "@/hooks/useOnboardingQueries";
+import { DaemonStatus, type DaemonInfo } from "@/gen/reliant/v1/daemon_registry_pb";
+import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import StatusDot from "../forge-ui/status_dot";
+import { DaemonWaitState } from "../DaemonWaitState";
 import { machineDisplayName } from "@/lib/machineName";
+import { defaultMachineDaemon } from "@/lib/chatMachine";
+import { classifyDaemonWait, WAITING_FOR_MACHINE } from "@/lib/daemon-wait";
 
 interface ComposerWakeStatusProps {
   /** A send for this chat is awaiting the server. */
@@ -56,7 +67,8 @@ function isOffline(status: DaemonStatus): boolean {
 export function ComposerWakeStatus({ sending, daemonId, waitingOnMachine, continueWithoutMachine }: ComposerWakeStatusProps) {
   if (daemonId) {
     // The registry is only read while it could matter: a chat pinned to a
-    // machine. (It is a shared, cached query; most reads find it warm.)
+    // machine, or a run held for one. (It is a shared, cached query; most
+    // reads find it warm.)
     return (
       <WakeLine
         daemonId={daemonId}
@@ -67,9 +79,23 @@ export function ComposerWakeStatus({ sending, daemonId, waitingOnMachine, contin
     );
   }
   if (!waitingOnMachine) return null;
+  return <UnpinnedWaitLine continueWithoutMachine={continueWithoutMachine} />;
+}
+
+const WAITING_LABEL = `${WAITING_FOR_MACHINE}…`;
+
+function UnpinnedWaitLine({ continueWithoutMachine }: { continueWithoutMachine?: ReactNode }) {
+  const { data: daemons } = useDaemonList();
+  const daemon = daemons ? defaultMachineDaemon(daemons) : undefined;
+  if (daemon?.status === DaemonStatus.FAILED) {
+    return <FailedMachineLine daemon={daemon} continueWithoutMachine={continueWithoutMachine} />;
+  }
+  if (daemon && needsWake(daemon.status)) {
+    return <WakingLine name={machineDisplayName(daemon)} continueWithoutMachine={continueWithoutMachine} />;
+  }
   return (
-    <StatusLine label="Waiting for your machine…" pulse continueWithoutMachine={continueWithoutMachine}>
-      Waiting for your machine…
+    <StatusLine label={WAITING_LABEL} pulse continueWithoutMachine={continueWithoutMachine}>
+      {WAITING_LABEL}
     </StatusLine>
   );
 }
@@ -92,6 +118,9 @@ function WakeLine({
   const daemon = daemons.find((d) => d.daemonId === daemonId);
   const name = daemon ? machineDisplayName(daemon) : "your machine";
 
+  if (daemon?.status === DaemonStatus.FAILED) {
+    return <FailedMachineLine daemon={daemon} continueWithoutMachine={continueWithoutMachine} />;
+  }
   if (!daemon || isOffline(daemon.status)) {
     const label = daemon ? `${name} is offline` : "This chat's machine is no longer available";
     return (
@@ -107,14 +136,48 @@ function WakeLine({
     );
   }
   if (needsWake(daemon.status) && (sending || waitingOnMachine)) {
-    const label = `Waking ${name}…`;
-    return (
-      <StatusLine label={label} pulse continueWithoutMachine={continueWithoutMachine}>
-        Waking <span className="font-medium text-foreground">{name}</span>…
-      </StatusLine>
-    );
+    return <WakingLine name={name} continueWithoutMachine={continueWithoutMachine} />;
   }
   return null;
+}
+
+function WakingLine({ name, continueWithoutMachine }: { name: string; continueWithoutMachine?: ReactNode }) {
+  const label = `Waking ${name}…`;
+  return (
+    <StatusLine label={label} pulse continueWithoutMachine={continueWithoutMachine}>
+      Waking <span className="font-medium text-foreground">{name}</span>…
+    </StatusLine>
+  );
+}
+
+/**
+ * The machine failed to start. Said with the shared wait vocabulary and its
+ * exits, because this is the state where the user has to do something: Try
+ * again resumes the machine, which the control plane treats as a retry that
+ * rebuilds it on the current image.
+ */
+function FailedMachineLine({
+  daemon,
+  continueWithoutMachine,
+}: {
+  daemon: DaemonInfo;
+  continueWithoutMachine?: ReactNode;
+}) {
+  const resume = useResumeDaemon();
+  const state = classifyDaemonWait({ daemon, elapsedMs: 0, isCloud: true });
+  return (
+    <div className="flex-shrink-0 px-4 sm:px-6 lg:px-8" data-testid="composer-machine-failed">
+      <div className="mx-auto max-w-[1200px]">
+        <DaemonWaitState
+          variant="inline"
+          state={state}
+          onRetry={resume.isPending ? undefined : () => resume.mutate(daemon.daemonId)}
+          className="rounded-md border border-border/60"
+        />
+        {continueWithoutMachine && <div className="px-1 pt-1 pb-1.5">{continueWithoutMachine}</div>}
+      </div>
+    </div>
+  );
 }
 
 function StatusLine({

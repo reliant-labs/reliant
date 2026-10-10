@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { thinkingMessages } from "../../lib/thinking-messages";
+import { QUEUED_FOR_MACHINE, WAITING_FOR_MACHINE } from "../../lib/daemon-wait";
 import { 
   useIsThreadActive,
   useChatCurrentActivity,
@@ -22,24 +23,35 @@ interface ChatThinkingIndicatorProps {
    * thinking yet.
    */
   waitingOnMachine?: boolean;
+  /**
+   * While held for the machine, the run has not read the user's latest
+   * message yet: that message is queued, and says so.
+   */
+  messageQueuedForMachine?: boolean;
 }
 
 export function ChatThinkingIndicator({ 
   chatId, 
   filterThreadId = null,
   waitingOnMachine = false,
+  messageQueuedForMachine = false,
 }: ChatThinkingIndicatorProps) {
   const [thinkingMessage, setThinkingMessage] = useState("Thinking");
 
-  // Use thread activity store for per-thread active checks
-  const isActive = useIsThreadActive(chatId || "", filterThreadId ?? null);
+  // Use thread activity store for per-thread active checks. A run held for
+  // its machine is not RUNNING, so the thread store reports nothing active —
+  // yet the run is live and the user is owed a line under their message.
+  const isThreadActive = useIsThreadActive(chatId || "", filterThreadId ?? null);
+  const isActive = isThreadActive || waitingOnMachine;
 
   // Thread-level activity detail from threadActivityStore
   const currentActivity = useChatCurrentActivity(chatId || "");
   
   // Get user-friendly activity text
   const activityText = waitingOnMachine
-    ? "Waiting for your machine"
+    ? messageQueuedForMachine
+      ? QUEUED_FOR_MACHINE
+      : WAITING_FOR_MACHINE
     : getActivityDisplayText(currentActivity);
 
   useEffect(() => {

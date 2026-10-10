@@ -125,6 +125,22 @@ describe("QueuedMessages", () => {
     expect(screen.getByText(/queued 17s ago/)).toBeTruthy();
   });
 
+  it("says what a queued message waits on: the agent's next turn, or the machine", () => {
+    const { rerender } = renderWithQuery(
+      <QueuedMessages chatId={CHAT_ID} messages={[queued()]} onRefresh={vi.fn()} />,
+    );
+    expect(screen.getByText(/waiting for the agent's next turn/)).toBeTruthy();
+
+    // The run is held until its machine comes up: the message is not stuck,
+    // it goes out when the machine connects — and nothing here may say the
+    // agent is the thing it waits on.
+    rerender(
+      <QueuedMessages chatId={CHAT_ID} messages={[queued()]} onRefresh={vi.fn()} waitingOnMachine />,
+    );
+    expect(screen.getByText(/queued 12s ago · will send when your machine connects/)).toBeTruthy();
+    expect(screen.queryByText(/waiting for the agent's next turn/)).toBeNull();
+  });
+
   it("hides another agent's spawn_send message — it is not the human's to revoke", () => {
     renderWithQuery(
       <QueuedMessages
