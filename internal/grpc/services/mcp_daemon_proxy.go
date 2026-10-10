@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/config"
-	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -19,6 +18,9 @@ import (
 type daemonMCPProxy struct {
 	router toolexec.DaemonRouter
 	userID string
+	// onChange runs after every start, stop or restart this proxy sends,
+	// whatever its outcome: the server's status may have changed.
+	onChange func()
 }
 
 // NewDaemonMCPProxy creates a new daemon-proxying MCP manager.
@@ -39,7 +41,7 @@ func (p *daemonMCPProxy) sendCommand(ctx context.Context, commandType string, pa
 	return p.router.SendDaemonCommand(ctx, p.userID, commandType, data, timeoutMs)
 }
 
-// --- mcpManagerRuntime: server status queries ---
+// --- server status ---
 
 type daemonMCPServerStatus struct {
 	Servers []daemonMCPServerStatusEntry `json:"servers"`
@@ -56,9 +58,26 @@ type daemonMCPServerStatusEntry struct {
 	PromptsEnabled   bool            `json:"prompts_enabled"`
 }
 
-func (p *daemonMCPProxy) getServerStatus(projectPath string) (*daemonMCPServerStatus, error) {
+// entry returns the status of the named server, if the daemon reported one.
+func (s *daemonMCPServerStatus) entry(name string) (daemonMCPServerStatusEntry, bool) {
+	if s == nil {
+		return daemonMCPServerStatusEntry{}, false
+	}
+	for _, e := range s.Servers {
+		if e.Name == name {
+			return e, true
+		}
+	}
+	return daemonMCPServerStatusEntry{}, false
+}
+
+// serverStatus is one mcp.server_status round trip: every server the daemon
+// has for the project — running or failed to start — with its health, last
+// error, server info and tool count. It is all a listing needs; nothing
+// about a server's status takes a second call.
+func (p *daemonMCPProxy) serverStatus(ctx context.Context, projectPath string) (*daemonMCPServerStatus, error) {
 	req := map[string]string{"project_path": projectPath}
-	respData, err := p.sendCommand(context.Background(), "mcp.server_status", req, int32(mcpStatusTimeout.Milliseconds()))
+	respData, err := p.sendCommand(ctx, "mcp.server_status", req, int32(mcpStatusTimeout.Milliseconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -69,30 +88,13 @@ func (p *daemonMCPProxy) getServerStatus(projectPath string) (*daemonMCPServerSt
 	return &status, nil
 }
 
-// daemonMCPClient is a lightweight adapter that implements mcp.Client for
-// server-side code that needs to inspect MCP server state. It does NOT proxy
-// tool calls — those go through the daemon's tool execution path.
-type daemonMCPClient struct {
-	entry       daemonMCPServerStatusEntry
-	tools       []mcp.Tool // lazily populated
-	proxy       *daemonMCPProxy
-	projectPath string
-}
-
-func (c *daemonMCPClient) Initialize(_ context.Context) error { return nil }
-func (c *daemonMCPClient) Close() error                       { return nil }
-func (c *daemonMCPClient) IsConnected() bool                  { return c.entry.Connected }
-func (c *daemonMCPClient) ServerInfo() *mcp.ServerInfo        { return c.entry.ServerInfo }
-
-func (c *daemonMCPClient) ListTools() ([]mcp.Tool, error) {
-	if c.tools != nil {
-		return c.tools, nil
-	}
+// listTools asks the daemon for the tools one server exposes.
+func (p *daemonMCPProxy) listTools(ctx context.Context, projectPath, serverName string) ([]mcp.Tool, error) {
 	req := map[string]string{
-		"project_path": c.projectPath,
-		"server_name":  c.entry.Name,
+		"project_path": projectPath,
+		"server_name":  serverName,
 	}
-	respData, err := c.proxy.sendCommand(context.Background(), "mcp.list_tools", req, int32(mcpStatusTimeout.Milliseconds()))
+	respData, err := p.sendCommand(ctx, "mcp.list_tools", req, int32(mcpStatusTimeout.Milliseconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -106,74 +108,10 @@ func (c *daemonMCPClient) ListTools() ([]mcp.Tool, error) {
 	if resp.Error != "" {
 		return nil, fmt.Errorf("%s", resp.Error)
 	}
-	c.tools = resp.Tools
-	return c.tools, nil
-}
-
-func (c *daemonMCPClient) CallTool(name string, arguments map[string]interface{}) (*mcp.ToolResult, error) {
-	return nil, fmt.Errorf("tool calls should go through daemon tool execution, not the proxy")
-}
-func (c *daemonMCPClient) ListResources() ([]mcp.Resource, error) { return nil, nil }
-func (c *daemonMCPClient) ReadResource(uri string) (*mcp.ResourceContent, error) {
-	return nil, nil
-}
-func (c *daemonMCPClient) ListPrompts() ([]mcp.Prompt, error) { return nil, nil }
-func (c *daemonMCPClient) GetPrompt(name string, args map[string]interface{}) (*mcp.PromptResult, error) {
-	return nil, nil
+	return resp.Tools, nil
 }
 
 // --- mcpManagerRuntime interface ---
-
-func (p *daemonMCPProxy) GetProjectClients(projectPath string) map[string]mcp.Client {
-	status, err := p.getServerStatus(projectPath)
-	if err != nil {
-		logging.Warn("Failed to get MCP server status from daemon", "error", err)
-		return nil
-	}
-	clients := make(map[string]mcp.Client, len(status.Servers))
-	for _, entry := range status.Servers {
-		clients[entry.Name] = &daemonMCPClient{entry: entry, proxy: p, projectPath: projectPath}
-	}
-	return clients
-}
-
-func (p *daemonMCPProxy) GetProjectHealthStatus(projectPath string) map[string]bool {
-	status, err := p.getServerStatus(projectPath)
-	if err != nil {
-		return nil
-	}
-	result := make(map[string]bool, len(status.Servers))
-	for _, entry := range status.Servers {
-		result[entry.Name] = entry.Healthy
-	}
-	return result
-}
-
-func (p *daemonMCPProxy) GetProjectLastError(projectPath, serverName string) error {
-	status, err := p.getServerStatus(projectPath)
-	if err != nil {
-		return err
-	}
-	for _, entry := range status.Servers {
-		if entry.Name == serverName && entry.LastError != "" {
-			return fmt.Errorf("%s", entry.LastError)
-		}
-	}
-	return nil
-}
-
-func (p *daemonMCPProxy) GetProjectClient(projectPath, serverName string) (mcp.Client, bool) {
-	status, err := p.getServerStatus(projectPath)
-	if err != nil {
-		return nil, false
-	}
-	for _, entry := range status.Servers {
-		if entry.Name == serverName {
-			return &daemonMCPClient{entry: entry, proxy: p, projectPath: projectPath}, true
-		}
-	}
-	return nil, false
-}
 
 func (p *daemonMCPProxy) AddProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error {
 	return p.manageServer(ctx, "add", projectPath, serverName, &cfg)
@@ -187,31 +125,10 @@ func (p *daemonMCPProxy) RestartProjectServer(ctx context.Context, projectPath, 
 	return p.manageServer(ctx, "restart", projectPath, serverName, &cfg)
 }
 
-func (p *daemonMCPProxy) AddServer(ctx context.Context, name string, cfg config.MCPServer) error {
-	return p.manageServer(ctx, "add", "", name, &cfg)
-}
-
-func (p *daemonMCPProxy) RemoveServer(name string) error {
-	return p.manageServer(context.Background(), "remove", "", name, nil)
-}
-
-func (p *daemonMCPProxy) GetAllClients() map[string]mcp.Client {
-	return p.GetProjectClients("")
-}
-
-func (p *daemonMCPProxy) GetHealthStatus() map[string]bool {
-	return p.GetProjectHealthStatus("")
-}
-
-func (p *daemonMCPProxy) GetLastError(name string) error {
-	return p.GetProjectLastError("", name)
-}
-
-func (p *daemonMCPProxy) GetClient(name string) (mcp.Client, bool) {
-	return p.GetProjectClient("", name)
-}
-
 func (p *daemonMCPProxy) manageServer(ctx context.Context, action, projectPath, serverName string, cfg *config.MCPServer) error {
+	if p.onChange != nil {
+		defer p.onChange()
+	}
 	req := struct {
 		Action      string            `json:"action"`
 		ProjectPath string            `json:"project_path"`

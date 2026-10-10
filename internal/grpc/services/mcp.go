@@ -23,7 +23,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/mcp"
 	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
@@ -32,20 +31,12 @@ const (
 	installServerStartupTimeout = 120 * time.Second
 )
 
+// mcpManagerRuntime starts and stops a user's MCP servers. What they are
+// doing is read through MCPService.serverStatus instead.
 type mcpManagerRuntime interface {
 	AddProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error
 	RemoveProjectServer(projectPath, serverName string) error
 	RestartProjectServer(ctx context.Context, projectPath, serverName string, cfg config.MCPServer) error
-	GetProjectClients(projectPath string) map[string]mcp.Client
-	GetProjectHealthStatus(projectPath string) map[string]bool
-	GetProjectLastError(projectPath, serverName string) error
-	GetProjectClient(projectPath, serverName string) (mcp.Client, bool)
-	AddServer(ctx context.Context, name string, cfg config.MCPServer) error
-	RemoveServer(name string) error
-	GetAllClients() map[string]mcp.Client
-	GetHealthStatus() map[string]bool
-	GetLastError(name string) error
-	GetClient(name string) (mcp.Client, bool)
 }
 
 // MCPService implements the MCPService RPC handlers
@@ -53,21 +44,109 @@ type MCPService struct {
 	reliantv1connect.UnimplementedMCPServiceHandler
 	database     db.Repository
 	daemonRouter toolexec.DaemonRouter
+	// statuses holds the servers' last-known status per user and project
+	// (see mcpStatusCache), so reading the MCP page does not wait on the
+	// user's machine.
+	statuses *mcpStatusCache
 }
 
 // NewMCPService creates a new MCPService
 func NewMCPService(database db.Repository, daemonRouter toolexec.DaemonRouter) *MCPService {
-	return &MCPService{
+	s := &MCPService{
 		database:     database,
 		daemonRouter: daemonRouter,
 	}
+	s.statuses = newMCPStatusCache(func(ctx context.Context, userID, projectPath string) (*daemonMCPServerStatus, error) {
+		return NewDaemonMCPProxy(s.daemonRouter, userID).serverStatus(ctx, projectPath)
+	})
+	return s
 }
 
 // mcpManagerForUser returns an mcpManagerRuntime that proxies through the daemon
 // for the given user. MCP servers run on the user's machine (tools daemon), so
 // all runtime operations are dispatched via daemon commands.
 func (s *MCPService) mcpManagerForUser(userID string) mcpManagerRuntime {
-	return NewDaemonMCPProxy(s.daemonRouter, userID)
+	proxy := NewDaemonMCPProxy(s.daemonRouter, userID)
+	proxy.onChange = func() { s.statuses.invalidateUser(userID) }
+	return proxy
+}
+
+// serverStatus is the project's MCP server status as the daemon last reported
+// it, or nil when it is not known (no machine, or one too slow to answer in
+// time). It never waits on the daemon for long: see mcpStatusCache.
+func (s *MCPService) serverStatus(ctx context.Context, userID, projectPath string) *daemonMCPServerStatus {
+	if s.daemonRouter == nil || s.statuses == nil {
+		return nil
+	}
+	return s.statuses.get(ctx, userID, projectPath)
+}
+
+// applyServerStatus fills in a server's runtime state from the daemon's
+// report. An enabled server the daemon has never heard of is configured but
+// not running; with no report at all its status is unknown (UNSPECIFIED),
+// which the UI shows as not connected.
+func applyServerStatus(server *reliantv1.MCPServer, status *daemonMCPServerStatus) {
+	server.Connected = false
+	server.Healthy = false
+	if status == nil {
+		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_UNSPECIFIED
+		return
+	}
+	entry, ok := status.entry(server.Name)
+	if !ok {
+		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED
+		return
+	}
+	server.Connected = entry.Connected
+	server.Healthy = entry.Healthy
+	switch {
+	case entry.Connected && entry.Healthy:
+		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY
+	case entry.Connected:
+		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_UNHEALTHY
+	default:
+		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED
+	}
+	if info := entry.ServerInfo; info != nil {
+		server.ServerInfo = &reliantv1.MCPServerInfo{Name: info.Name, Version: info.Version}
+		server.ResourcesEnabled = info.Capabilities.Resources != nil
+		server.PromptsEnabled = info.Capabilities.Prompts != nil
+	} else {
+		server.ResourcesEnabled = entry.ResourcesEnabled
+		server.PromptsEnabled = entry.PromptsEnabled
+	}
+	server.ToolCount = int32(entry.ToolCount)
+	if entry.LastError != "" {
+		lastErr := entry.LastError
+		server.LastError = &lastErr
+	}
+}
+
+// mcpServerFromConfig is a server as configured, before any runtime status.
+func mcpServerFromConfig(name string, scoped serverScopeConfig) *reliantv1.MCPServer {
+	cfg := scoped.Config
+	cfgType := cfg.Type
+	if cfgType == "" {
+		cfgType = string(config.MCPStdio)
+	}
+	server := &reliantv1.MCPServer{
+		Name: name,
+		Config: &reliantv1.MCPServerConfig{
+			Command: cfg.Command,
+			Args:    cfg.Args,
+			Headers: cfg.Headers,
+			Type:    cfgType,
+		},
+		Enabled: cfg.IsEnabled(),
+		Scope:   scoped.Scope,
+	}
+	if cfg.URL != "" {
+		server.Config.Url = &cfg.URL
+	}
+	for k, v := range cfg.Env {
+		server.Config.Env = append(server.Config.Env, k+"="+v)
+	}
+	return server
 }
 
 // ============================================================================
@@ -354,13 +433,14 @@ func (s *MCPService) readMCPConfigForScope(ctx context.Context, projectID string
 		return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
 	}
 
-	record, err := s.database.GetProjectConfigRecord(ctx, projectID)
+	mcpConfigs, err := s.database.GetProjectMCPConfigsJSON(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
 		}
 		return nil, fmt.Errorf("failed to load stored MCP configuration snapshot: %w", err)
 	}
+	record := &db.ProjectConfigRecord{ProjectID: projectID, MCPConfigs: mcpConfigs}
 
 	cfg, ok, parseErr := readScopeConfigFromStoredRecord(record, normalizedScope)
 	if parseErr != nil {
@@ -374,24 +454,23 @@ func (s *MCPService) readMCPConfigForScope(ctx context.Context, projectID string
 	return &MCPConfigFile{MCPServers: make(map[string]MCPServerConfig)}, nil
 }
 
+// readMergedScopedServers is every configured server across the three scopes,
+// the narrower scope winning a name. It reads the stored record once: it
+// used to read it once per scope, and the record carries every skill body
+// the daemon indexed (18 MB in prod), so each MCP page load read it three
+// times to use a few hundred bytes of one column.
 func (s *MCPService) readMergedScopedServers(ctx context.Context, projectID string) (map[string]serverScopeConfig, error) {
-	merged := make(map[string]serverScopeConfig)
-	for _, scope := range []reliantv1.ConfigScope{
-		reliantv1.ConfigScope_CONFIG_SCOPE_GLOBAL,
-		reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT,
-		reliantv1.ConfigScope_CONFIG_SCOPE_PROJECT_LOCAL,
-	} {
-		cfg, err := s.readMCPConfigForScope(ctx, projectID, scope)
-		if err != nil {
-			return nil, fmt.Errorf("failed to read MCP configuration for %s scope: %w", scope.String(), err)
-		}
-
-		for name, serverCfg := range cfg.MCPServers {
-			merged[name] = serverScopeConfig{Config: serverCfg, Scope: scope}
-		}
+	if s.database == nil {
+		return map[string]serverScopeConfig{}, nil
 	}
-
-	return merged, nil
+	mcpConfigs, err := s.database.GetProjectMCPConfigsJSON(ctx, projectID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return map[string]serverScopeConfig{}, nil
+		}
+		return nil, fmt.Errorf("failed to load stored MCP configuration snapshot: %w", err)
+	}
+	return readMergedScopedServersFromStoredRecord(&db.ProjectConfigRecord{ProjectID: projectID, MCPConfigs: mcpConfigs}), nil
 }
 
 // projectBelongsToUser checks if a project belongs to the authenticated user.
@@ -507,6 +586,8 @@ func (s *MCPService) writeMCPConfigViaDaemon(ctx context.Context, projectID, pro
 		return fmt.Errorf("failed to marshal daemon write request: %w", err)
 	}
 
+	// The daemon reloads servers when their config changes.
+	defer s.statuses.invalidateUser(userID)
 	respBytes, err := s.daemonRouter.SendDaemonCommand(ctx, userID, "mcp.write_config", payload, 15000)
 	if err != nil {
 		return fmt.Errorf("daemon config write failed: %w", err)
@@ -655,7 +736,11 @@ func normalizeScope(scope reliantv1.ConfigScope) reliantv1.ConfigScope {
 // RPC Methods
 // ============================================================================
 
-// ListServers returns all configured MCP servers with their status
+// ListServers returns all configured MCP servers with their status.
+//
+// The servers and their configuration come from the database; their runtime
+// status is the daemon's last report (see MCPService.serverStatus), so the
+// list renders without waiting on the user's machine.
 func (s *MCPService) ListServers(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListServersRequest],
@@ -685,106 +770,30 @@ func (s *MCPService) ListServers(
 		}), nil
 	}
 
-	// Get all clients from runtime
-	mgr := s.mcpManagerForUser(userID)
-	clients := mgr.GetProjectClients(projectPath)
-	healthStatus := mgr.GetProjectHealthStatus(projectPath)
-
-	// Build server list from merged scoped config (source of truth)
-	servers := make([]*reliantv1.MCPServer, 0, len(scopedServers))
 	names := make([]string, 0, len(scopedServers))
-	for name := range scopedServers {
+	anyEnabled := false
+	for name, scoped := range scopedServers {
 		names = append(names, name)
+		anyEnabled = anyEnabled || scoped.Config.IsEnabled()
 	}
 	sort.Strings(names)
 
+	// Only an enabled server has a runtime status to report.
+	var status *daemonMCPServerStatus
+	if anyEnabled {
+		status = s.serverStatus(ctx, userID, projectPath)
+	}
+
+	// Build server list from merged scoped config (source of truth)
+	servers := make([]*reliantv1.MCPServer, 0, len(scopedServers))
 	for _, name := range names {
 		scoped := scopedServers[name]
-		cfg := scoped.Config
-		cfgType := cfg.Type
-		if cfgType == "" {
-			cfgType = string(config.MCPStdio)
-		}
-		server := &reliantv1.MCPServer{
-			Name: name,
-			Config: &reliantv1.MCPServerConfig{
-				Command: cfg.Command,
-				Args:    cfg.Args,
-				Headers: cfg.Headers,
-				Type:    cfgType,
-			},
-			Enabled: scoped.Config.IsEnabled(),
-			Scope:   scoped.Scope,
-		}
-		if cfg.URL != "" {
-			server.Config.Url = &cfg.URL
-		}
-
-		// Convert env from map to []string
-		if len(cfg.Env) > 0 {
-			for k, v := range cfg.Env {
-				server.Config.Env = append(server.Config.Env, k+"="+v)
-			}
-		}
-
+		server := mcpServerFromConfig(name, scoped)
 		if !scoped.Config.IsEnabled() {
 			server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISABLED
-			server.Connected = false
-			server.Healthy = false
-			servers = append(servers, server)
-			continue
-		}
-
-		// Check if server is running and get its status
-		if client, exists := clients[name]; exists {
-			healthy := healthStatus[name]
-			connected := client.IsConnected()
-
-			mcpStatus := reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED
-			if connected && healthy {
-				mcpStatus = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY
-			} else if connected {
-				mcpStatus = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_UNHEALTHY
-			}
-
-			server.Status = mcpStatus
-			server.Connected = connected
-			server.Healthy = healthy
-
-			// Get server info
-			if info := client.ServerInfo(); info != nil {
-				server.ServerInfo = &reliantv1.MCPServerInfo{
-					Name:    info.Name,
-					Version: info.Version,
-				}
-				server.ResourcesEnabled = info.Capabilities.Resources != nil
-				server.PromptsEnabled = info.Capabilities.Prompts != nil
-			}
-
-			// Get tool count
-			if tools, err := client.ListTools(); err == nil {
-				server.ToolCount = int32(len(tools))
-			} else {
-				errStr := err.Error()
-				server.LastError = &errStr
-			}
-			if lastErr := mgr.GetProjectLastError(projectPath, name); lastErr != nil {
-				errStr := lastErr.Error()
-				server.LastError = &errStr
-			}
 		} else {
-			// Server is configured but not running
-			server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED
-			server.Connected = false
-			server.Healthy = false
-
-			// Check if there was an initialization error
-			if lastErr := mgr.GetProjectLastError(projectPath, name); lastErr != nil {
-				errStr := lastErr.Error()
-				server.LastError = &errStr
-			}
+			applyServerStatus(server, status)
 		}
-
 		servers = append(servers, server)
 	}
 
@@ -824,88 +833,23 @@ func (s *MCPService) GetServer(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("MCP not available"))
 	}
 
-	mgr := s.mcpManagerForUser(userID)
-
 	scoped, configured := scopedServers[name]
 	if !configured {
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("server not found"))
 	}
 
-	cfgType := scoped.Config.Type
-	if cfgType == "" {
-		cfgType = string(config.MCPStdio)
-	}
-	server := &reliantv1.MCPServer{
-		Name: name,
-		Config: &reliantv1.MCPServerConfig{
-			Command: scoped.Config.Command,
-			Args:    scoped.Config.Args,
-			Headers: scoped.Config.Headers,
-			Type:    cfgType,
-		},
-		Enabled: scoped.Config.IsEnabled(),
-		Scope:   scoped.Scope,
-	}
-	if scoped.Config.URL != "" {
-		server.Config.Url = &scoped.Config.URL
-	}
-	for k, v := range scoped.Config.Env {
-		server.Config.Env = append(server.Config.Env, k+"="+v)
-	}
-
+	server := mcpServerFromConfig(name, scoped)
+	status := s.serverStatus(ctx, userID, projectPath)
 	if !scoped.Config.IsEnabled() {
+		// A disabled server reports why it last failed, if it did.
 		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISABLED
-		server.Connected = false
-		server.Healthy = false
-		if lastErr := mgr.GetProjectLastError(projectPath, name); lastErr != nil {
-			errStr := lastErr.Error()
-			server.LastError = &errStr
+		if entry, ok := status.entry(name); ok && entry.LastError != "" {
+			lastErr := entry.LastError
+			server.LastError = &lastErr
 		}
 		return connect.NewResponse(&reliantv1.GetServerResponse{Server: server}), nil
 	}
-
-	client, exists := mgr.GetProjectClient(projectPath, name)
-	healthStatus := mgr.GetProjectHealthStatus(projectPath)
-	if exists {
-		healthy := healthStatus[name]
-		connected := client.IsConnected()
-
-		mcpStatus := reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED
-		if connected && healthy {
-			mcpStatus = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_HEALTHY
-		} else if connected {
-			mcpStatus = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_UNHEALTHY
-		}
-
-		server.Status = mcpStatus
-		server.Connected = connected
-		server.Healthy = healthy
-
-		if info := client.ServerInfo(); info != nil {
-			server.ServerInfo = &reliantv1.MCPServerInfo{
-				Name:    info.Name,
-				Version: info.Version,
-			}
-			server.ResourcesEnabled = info.Capabilities.Resources != nil
-			server.PromptsEnabled = info.Capabilities.Prompts != nil
-		}
-
-		if tools, err := client.ListTools(); err == nil {
-			server.ToolCount = int32(len(tools))
-		} else {
-			errStr := err.Error()
-			server.LastError = &errStr
-		}
-	} else {
-		server.Status = reliantv1.MCPServerStatus_MCP_SERVER_STATUS_DISCONNECTED
-		server.Connected = false
-		server.Healthy = false
-	}
-
-	if lastErr := mgr.GetProjectLastError(projectPath, name); lastErr != nil {
-		errStr := lastErr.Error()
-		server.LastError = &errStr
-	}
+	applyServerStatus(server, status)
 
 	return connect.NewResponse(&reliantv1.GetServerResponse{Server: server}), nil
 }
@@ -949,12 +893,14 @@ func (s *MCPService) GetServerTools(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("MCP not available"))
 	}
 
-	client, exists := s.mcpManagerForUser(userID).GetProjectClient(projectPath, name)
-	if !exists {
+	// A server the daemon does not have has no tools to list.
+	if _, ok := s.serverStatus(ctx, userID, projectPath).entry(name); !ok {
 		return connect.NewResponse(&reliantv1.GetServerToolsResponse{Tools: []*reliantv1.MCPTool{}, Total: 0}), nil
 	}
 
-	tools, err := client.ListTools()
+	// The tools themselves are a live question for the server; ask within
+	// the request's own budget.
+	tools, err := NewDaemonMCPProxy(s.daemonRouter, userID).listTools(ctx, projectPath, name)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list tools: %w", err))
 	}
