@@ -318,19 +318,23 @@ const wedgeInterruptedChatMessage = "This conversation's workflow was interrupte
 // nothing to work with.
 const silentTerminationErrorType = "workflow_terminated"
 
-// silentTerminationSummary is the one-line ErrorUpdate.error_summary the
-// timeline shows collapsed. Three things the user needs, in the order they
-// need them: it stopped, it was not their doing, and it continues from where
-// it stopped. Accurate because the run is marked failed with its position
-// checkpoint deliberately preserved (see the "failed" case in
-// activities/handlers/workflow_status.go), which routes the next SendMessage
-// into resume-at-position.
-const silentTerminationSummary = "This conversation was stopped by the system, not by you or the assistant. Send a message and it will pick up where it left off."
+// The copy a user reads when their run ended without reporting it. It says
+// what happened in their terms and what happens next; Temporal's own close
+// reason is operator-facing text ("orchestrator: wedged on TMPRL1100 ...")
+// and goes to the log, never to the chat. Each variant is accurate because
+// the run is marked failed with its position checkpoint deliberately
+// preserved (see the "failed" case in activities/handlers/workflow_status.go),
+// which routes the next SendMessage into resume-at-position.
+const (
+	// silentTerminationContinuedSummary: the reconciler has already started
+	// the run that answers the user's message (continueAfterEnd).
+	silentTerminationContinuedSummary = "This run was interrupted and restarted from your last message — nothing you sent was lost."
+	// silentTerminationSummary: nothing was owed, so the user continues it.
+	silentTerminationSummary = "This run was stopped before it finished. Send a message to continue from where it left off."
 
-// silentTerminationContinuedSummary is silentTerminationSummary when the
-// reconciler has already started the run that answers the user's message; the
-// recovered note (recoveredContinuingChatMessage) follows it.
-const silentTerminationContinuedSummary = "This conversation was stopped by the system, not by you or the assistant."
+	silentTimeoutContinuedSummary = "This run ran past its time limit and was restarted from your last message — nothing you sent was lost."
+	silentTimeoutSummary          = "This run ran past its time limit and was stopped. Send a message to continue from where it left off."
+)
 
 // pollerRecencyWindow bounds how old a poller's LastAccessTime may be to
 // still count as "active". Temporal's DescribeTaskQueue keeps poller history
@@ -1552,7 +1556,7 @@ func reconciledFailureText(outcome core.RunEventOutcome) string {
 	if outcome != core.RunEventFailed {
 		return ""
 	}
-	return "The workflow was stopped by the system before it could finish."
+	return silentTerminationSummary
 }
 
 // transitionChatOnCompletion switches the chat to the completed ROOT workflow's
@@ -2931,16 +2935,15 @@ func (r *Reconciler) addWorkflowErrorMessage(ctx context.Context, wf *db.Workflo
 // user's message (continueAfterEnd), so the summary does not ask them to send
 // it again.
 func (r *Reconciler) emitSilentTerminationError(ctx context.Context, wf *db.Workflow, end silentEnd, continued bool) {
-	summary := silentTerminationSummary
-	if continued {
-		summary = silentTerminationContinuedSummary
-	}
-	message := "The workflow was stopped by the system before it could finish."
-	if end.reason != "" {
-		// Temporal's own words. For the incident above this reads "Workflow
-		// history count exceeds limit." — which is the difference between a
-		// user filing "it just stopped" and one who can say what happened.
-		message = fmt.Sprintf("The workflow was stopped by the system before it could finish. Reason: %s", end.reason)
+	summary := end.userSummary(continued)
+	message := summary
+	if end.closeStatus == enums.WORKFLOW_EXECUTION_STATUS_FAILED && end.reason != "" {
+		// Only a run that failed on its own carries a cause worth showing:
+		// the root of its error chain, written by the code that failed
+		// ("this workflow requires a daemon but none is available").
+		// Terminated and timed-out closes carry an operator's or the
+		// server's note instead, which is for the log (logSilentEnd).
+		message = fmt.Sprintf("%s Cause: %s", summary, end.reason)
 	}
 
 	if _, err := handlers.WriteWorkflowError(ctx, r.repo, handlers.WorkflowErrorInput{
@@ -2985,6 +2988,21 @@ func (e silentEnd) err() error {
 		return temporal.NewApplicationErrorWithOptions(reason, "", temporal.ApplicationErrorOptions{Category: temporal.ApplicationErrorCategoryBenign})
 	}
 	return errors.New(reason)
+}
+
+// userSummary is the chat copy for this end: plain language, what happened
+// and what happens next, never Temporal's reason.
+func (e silentEnd) userSummary(continued bool) string {
+	switch {
+	case e.closeStatus == enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT && continued:
+		return silentTimeoutContinuedSummary
+	case e.closeStatus == enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return silentTimeoutSummary
+	case continued:
+		return silentTerminationContinuedSummary
+	default:
+		return silentTerminationSummary
+	}
 }
 
 // silentEnd reads how a run that never reported its end actually ended. Only

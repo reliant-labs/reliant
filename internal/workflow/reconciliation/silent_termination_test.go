@@ -200,16 +200,15 @@ func TestReconciler_HardTermination_EmitsUserVisibleError(t *testing.T) {
 	// it (see WorkflowErrorInput.Thread).
 	assert.Equal(t, "thread-main", data["thread"])
 
-	// Temporal's own reason survives to the user.
-	assert.Contains(t, data["error_message"], "Workflow history count exceeds limit.")
+	// Temporal's reason is for operators, not the chat.
+	assert.NotContains(t, data["error_message"], "Workflow history count")
 
 	// The summary is what the timeline shows collapsed, so it carries the
 	// three facts that matter: it stopped, it was not the user's doing, and
 	// it resumes.
 	summary, _ := data["error_summary"].(string)
-	assert.Contains(t, summary, "stopped by the system")
-	assert.Contains(t, summary, "not by you")
-	assert.Contains(t, summary, "pick up where it left off")
+	assert.Equal(t, silentTerminationSummary, summary)
+	assert.Contains(t, summary, "Send a message to continue")
 }
 
 func TestReconciler_HardTermination_ErrorEmittedOncePerRun(t *testing.T) {
@@ -275,9 +274,9 @@ func TestReconciler_HardTermination_ReasonUnavailable_StillEmits(t *testing.T) {
 
 	updates := repo.errorUpdates()
 	require.Len(t, updates, 1)
-	assert.Contains(t, updates[0].data["error_message"], "stopped by the system")
-	assert.NotContains(t, updates[0].data["error_message"], "Reason:",
-		"no reason available means no empty Reason clause")
+	assert.Equal(t, silentTerminationSummary, updates[0].data["error_message"])
+	assert.NotContains(t, updates[0].data["error_message"], "Cause:",
+		"no reason available means no empty Cause clause")
 }
 
 func TestReconciler_CleanCompletionDrift_EmitsNoError(t *testing.T) {
@@ -377,8 +376,8 @@ func TestReconciler_ReplayedFailureDrift_SurfacesRootCause(t *testing.T) {
 	updates := repo.errorUpdates()
 	require.Len(t, updates, 1)
 	msg, _ := updates[0].data["error_message"].(string)
-	assert.Contains(t, msg, "stopped by the system")
-	assert.Contains(t, msg, "Reason: this workflow requires a daemon but none is available",
+	assert.Contains(t, msg, silentTerminationSummary)
+	assert.Contains(t, msg, "Cause: this workflow requires a daemon but none is available",
 		"the innermost message of the chain is the actionable one")
 	assert.NotContains(t, msg, "scheduledEventID", "SDK wrapper text must not leak to the user")
 }
