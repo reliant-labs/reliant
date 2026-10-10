@@ -14,6 +14,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { logger } from "../lib/logger";
+import { structurallyEqual } from "../lib/structuralEqual";
 import type { NavigationTab } from "../components/Layout/NavigationBar";
 import type { ViewerType } from "./viewerStore";
 
@@ -461,8 +462,26 @@ export const useWorkspaceStateStore = create<WorkspaceStateStore>()(
         set((state) => {
           const projectState =
             state.projects[projectId] ?? createDefaultProjectState();
+          const existingWorktreeState = projectState.worktrees[worktreeKey];
+
+          // A write that changes nothing publishes nothing. Returning the
+          // same state is what tells zustand not to notify: a new object
+          // re-renders every subscriber of this worktree, and some writers
+          // run again on every render they cause. The beforeunload save is
+          // one — a route that reloads while rendering (a stale code-split
+          // chunk) fires it once per render, and an always-new state turned
+          // that into an update loop that froze the tab (ELECTRON-CC).
+          if (
+            existingWorktreeState &&
+            (Object.keys(newState) as (keyof WorktreeState)[]).every((key) =>
+              structurallyEqual(existingWorktreeState[key], newState[key])
+            )
+          ) {
+            return state;
+          }
+
           const currentWorktreeState =
-            projectState.worktrees[worktreeKey] ?? createDefaultWorktreeState();
+            existingWorktreeState ?? createDefaultWorktreeState();
 
           const newProjects = {
             ...state.projects,

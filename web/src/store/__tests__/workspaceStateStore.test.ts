@@ -206,6 +206,43 @@ describe('workspaceStateStore', () => {
       expect(state.activeViewerIndex).toBe(0);
     });
 
+    // ELECTRON-CC: the beforeunload save re-serializes the same viewers on
+    // every call. Publishing each of those as a new state re-rendered every
+    // subscriber, which fed an update loop when the save ran during render.
+    it('publishes nothing when a write changes nothing', () => {
+      const serialize = (): SerializedViewer[] => [
+        { type: 'file', title: 'App.tsx', filePath: '/src/App.tsx', chatId: undefined },
+      ];
+      act(() => {
+        useWorkspaceStateStore.getState().setOpenViewers(projectId, worktreeId, serialize(), 0);
+      });
+      const before = useWorkspaceStateStore.getState();
+      const listener = vi.fn();
+      const unsubscribe = useWorkspaceStateStore.subscribe(listener);
+
+      act(() => {
+        // Fresh but equal objects, as each save produces.
+        useWorkspaceStateStore.getState().setOpenViewers(projectId, worktreeId, serialize(), 0);
+        useWorkspaceStateStore.getState().setTerminalOpen(projectId, worktreeId, true); // the default
+      });
+      expect(listener).not.toHaveBeenCalled();
+      expect(useWorkspaceStateStore.getState()).toBe(before);
+
+      act(() => {
+        useWorkspaceStateStore.getState().setOpenViewers(projectId, worktreeId, serialize(), null);
+      });
+      expect(listener).toHaveBeenCalledTimes(1);
+      expect(useWorkspaceStateStore.getState().getWorktreeState(projectId, worktreeId).activeViewerIndex).toBeNull();
+      unsubscribe();
+    });
+
+    it('creates the worktree entry on its first write even when it matches the defaults', () => {
+      act(() => {
+        useWorkspaceStateStore.getState().setTerminalOpen(projectId, 'fresh-worktree', true);
+      });
+      expect(useWorkspaceStateStore.getState().projects[projectId]?.worktrees['fresh-worktree']).toBeDefined();
+    });
+
     it('should set scroll position for chat', () => {
       act(() => {
         useWorkspaceStateStore.getState().setScrollPosition(projectId, worktreeId, 'chat-1', 500);

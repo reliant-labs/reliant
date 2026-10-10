@@ -1,5 +1,5 @@
 import { useEffect } from 'react'
-import { createRootRoute, createRoute, createRouter, lazyRouteComponent, Outlet, Navigate, useRouterState, useNavigate } from '@tanstack/react-router'
+import { createRootRoute, createRoute, createRouter, Outlet, Navigate, useRouterState, useNavigate } from '@tanstack/react-router'
 import { SurfaceProvider } from './lib/surfaceContext'
 import { surfaceForPath } from './lib/surface'
 import { shouldRedirectToMobileNow } from './lib/mobileRedirect'
@@ -25,7 +25,8 @@ import {
   upgradeSearchSchema,
   workflowSearchSchema,
 } from './routeSchemas'
-import { ErrorFallbackUI } from './components/ErrorBoundary'
+import { reportCaughtError, RouteErrorFallback } from './components/ErrorBoundary'
+import { lazyRoute } from './lib/lazyRoute'
 import { AuthGuard } from './components/AuthGuard'
 import { ModalLayer } from './components/Modals/ModalLayer'
 import { AnonSignInNudge } from './components/AnonSignInNudge'
@@ -50,98 +51,103 @@ import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
 //
 // `AuthGuard`, the overlay components and `lib/toast` stay static — they mount
 // on every route, so deferring them would only add a waterfall.
-const AuthScreen = lazyRouteComponent(
+//
+// Each goes through `lazyRoute` (lib/lazyRoute.tsx), never TanStack's
+// lazyRouteComponent directly: after a deploy a tab can ask for a chunk that
+// no longer exists, and lazyRoute reloads from an effect where TanStack would
+// reload during render.
+const AuthScreen = lazyRoute(
   () => import('./components/AuthScreen'), 'AuthScreen')
-const OAuthCallback = lazyRouteComponent(
+const OAuthCallback = lazyRoute(
   () => import('./components/OAuthCallback'), 'OAuthCallback')
-const GitHubOAuthCallback = lazyRouteComponent(
+const GitHubOAuthCallback = lazyRoute(
   () => import('./components/GitHubOAuthCallback'), 'GitHubOAuthCallback')
-const ConnectionOAuthCallback = lazyRouteComponent(
+const ConnectionOAuthCallback = lazyRoute(
   () => import('./components/ConnectionOAuthCallback'), 'ConnectionOAuthCallback')
-const ProxyAuth = lazyRouteComponent(
+const ProxyAuth = lazyRoute(
   () => import('./components/ProxyAuth'), 'ProxyAuth')
-const ResetPasswordScreen = lazyRouteComponent(
+const ResetPasswordScreen = lazyRoute(
   () => import('./components/ResetPasswordScreen'), 'ResetPasswordScreen')
-const EmailVerification = lazyRouteComponent(
+const EmailVerification = lazyRoute(
   () => import('./components/EmailVerification'), 'EmailVerification')
-const UpgradeAccount = lazyRouteComponent(
+const UpgradeAccount = lazyRoute(
   () => import('./components/UpgradeAccount'), 'UpgradeAccount')
-const DesignSandboxPage = lazyRouteComponent(
+const DesignSandboxPage = lazyRoute(
   () => import('./components/DesignSandbox/DesignSandboxPage'), 'DesignSandboxPage')
 // Proving harness for the forge → reliant token bridge (see index.css).
-const ForgeTokenSandbox = lazyRouteComponent(
+const ForgeTokenSandbox = lazyRoute(
   () => import('./components/forge-ui/ForgeTokenSandbox'), 'default')
 // Proving harness for the cluster-workload inventory, rendering REAL captured
 // `forge env status --json` output in every color scheme without a session.
-const WorkloadInventoryPreview = lazyRouteComponent(
+const WorkloadInventoryPreview = lazyRoute(
   () => import('./components/Forge/Environments/__preview__/WorkloadInventoryPreview'), 'default')
-const SecretsPreview = lazyRouteComponent(
+const SecretsPreview = lazyRoute(
   () => import('./components/Forge/Secrets/__preview__/SecretsPreview'), 'default')
 // The whole Forge pane against a fake network (control-plane's real state as
 // fixtures) — see ForgePanePreview for why the fake sits at fetch.
-const ForgePanePreview = lazyRouteComponent(
+const ForgePanePreview = lazyRoute(
   () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
-const SettingsPage = lazyRouteComponent(
+const SettingsPage = lazyRoute(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
-const ConnectorConsentPage = lazyRouteComponent(
+const ConnectorConsentPage = lazyRoute(
   () => import('./components/Settings/ConnectorConsentPage'), 'ConnectorConsentPage')
-const WorkflowPage = lazyRouteComponent(
+const WorkflowPage = lazyRoute(
   () => import('./components/workflow/WorkflowPage'), 'WorkflowPage')
-const AutomationsListPage = lazyRouteComponent(
+const AutomationsListPage = lazyRoute(
   () => import('./components/Automations/AutomationsListPage'), 'AutomationsListPage')
-const AutomationDetailPage = lazyRouteComponent(
+const AutomationDetailPage = lazyRoute(
   () => import('./components/Automations/AutomationDetailPage'), 'AutomationDetailPage')
-const RunsPage = lazyRouteComponent(
+const RunsPage = lazyRoute(
   () => import('./components/runs/RunsPage'), 'RunsPage')
-const RunDetailPage = lazyRouteComponent(
+const RunDetailPage = lazyRoute(
   () => import('./components/runs/RunDetailPage'), 'RunDetailPage')
-const WorkflowsLayout = lazyRouteComponent(
+const WorkflowsLayout = lazyRoute(
   () => import('./components/workflows/WorkflowsShell'), 'WorkflowsLayout')
-const LibraryPage = lazyRouteComponent(
+const LibraryPage = lazyRoute(
   () => import('./components/workflows/library/LibraryPage'), 'LibraryPage')
-const WorkflowDetailPage = lazyRouteComponent(
+const WorkflowDetailPage = lazyRoute(
   () => import('./components/workflows/detail/WorkflowDetailPage'), 'WorkflowDetailPage')
-const InboxPage = lazyRouteComponent(
+const InboxPage = lazyRoute(
   () => import('./components/inbox/InboxPage'), 'InboxPage')
-const OnboardingRoute = lazyRouteComponent(
+const OnboardingRoute = lazyRoute(
   () => import('./components/OnboardingFlow/OnboardingRoute'), 'OnboardingRoute')
-const MobileShell = lazyRouteComponent(
+const MobileShell = lazyRoute(
   () => import('./components/Mobile/MobileShell'), 'MobileShell')
-const MobileChatList = lazyRouteComponent(
+const MobileChatList = lazyRoute(
   () => import('./components/Mobile/MobileChatList'), 'MobileChatList')
-const MobileChatScreen = lazyRouteComponent(
+const MobileChatScreen = lazyRoute(
   () => import('./components/Mobile/MobileChatScreen'), 'MobileChatScreen')
-const MobileNewChat = lazyRouteComponent(
+const MobileNewChat = lazyRoute(
   () => import('./components/Mobile/MobileNewChat'), 'MobileNewChat')
-const MobileDaemonList = lazyRouteComponent(
+const MobileDaemonList = lazyRoute(
   () => import('./components/Mobile/MobileDaemonList'), 'MobileDaemonList')
-const MobileDaemonScreen = lazyRouteComponent(
+const MobileDaemonScreen = lazyRoute(
   () => import('./components/Mobile/MobileDaemonScreen'), 'MobileDaemonScreen')
-const MobileAccountScreen = lazyRouteComponent(
+const MobileAccountScreen = lazyRoute(
   () => import('./components/Mobile/MobileAccountScreen'), 'MobileAccountScreen')
-const MobileProjectList = lazyRouteComponent(
+const MobileProjectList = lazyRoute(
   () => import('./components/Mobile/MobileProjectList'), 'MobileProjectList')
-const MobileSearchScreen = lazyRouteComponent(
+const MobileSearchScreen = lazyRoute(
   () => import('./components/Mobile/MobileSearchScreen'), 'MobileSearchScreen')
-const MobileWorkflowCatalog = lazyRouteComponent(
+const MobileWorkflowCatalog = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowCatalog'), 'MobileWorkflowCatalog')
-const MobileSettingsScreen = lazyRouteComponent(
+const MobileSettingsScreen = lazyRoute(
   () => import('./components/Mobile/MobileSettingsScreen'), 'MobileSettingsScreen')
-const MobileGitHubScreen = lazyRouteComponent(
+const MobileGitHubScreen = lazyRoute(
   () => import('./components/Mobile/MobileGitHubScreen'), 'MobileGitHubScreen')
-const MobileWorkflowDetailRoute = lazyRouteComponent(
+const MobileWorkflowDetailRoute = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileWorkflowDetailRoute')
-const MobileChatWorkflowRoute = lazyRouteComponent(
+const MobileChatWorkflowRoute = lazyRoute(
   () => import('./components/Mobile/MobileWorkflowDetailRoute'), 'MobileChatWorkflowRoute')
-const ForgeLayout = lazyRouteComponent(
+const ForgeLayout = lazyRoute(
   () => import('./components/Forge/ForgeLayout'), 'ForgeLayout')
-const ForgeOverviewPage = lazyRouteComponent(
+const ForgeOverviewPage = lazyRoute(
   () => import('./components/Forge/Overview/ForgeOverviewPage'), 'ForgeOverviewPage')
-const ForgeEnvPage = lazyRouteComponent(
+const ForgeEnvPage = lazyRoute(
   () => import('./components/Forge/EnvPage/ForgeEnvPage'), 'ForgeEnvPage')
-const ForgeDomainsPage = lazyRouteComponent(
+const ForgeDomainsPage = lazyRoute(
   () => import('./components/Forge/Domains/ForgeDomainsPage'), 'ForgeDomainsPage')
-const App = lazyRouteComponent(() => import('./App'), 'default')
+const App = lazyRoute(() => import('./App'), 'default')
 
 // Search schemas live in ./routeSchemas (kept dependency-free so tests can
 // import them without dragging in the route-tree's component graph).
@@ -221,12 +227,7 @@ function RootShell() {
 const rootRoute = createRootRoute({
   component: RootShell,
   notFoundComponent: () => <Navigate to="/" search={{}} />,
-  errorComponent: ({ error }) => (
-    <ErrorFallbackUI
-      error={error}
-      onReload={() => window.location.reload()}
-    />
-  ),
+  errorComponent: RouteErrorFallback,
 })
 
 const authRoute = createRoute({
@@ -292,7 +293,7 @@ const oauthConsentRoute = createRoute({
   // time-to-interactive is a step in someone else's flow rather than
   // navigation within ours. It is also why the Monaco preload is gated off
   // this path (see lib/monacoPreload).
-  component: lazyRouteComponent(
+  component: lazyRoute(
     () => import('./components/Auth/OAuthConsent'),
     'OAuthConsent',
   ),
@@ -306,7 +307,7 @@ const oauthConsentRoute = createRoute({
 const cliLoginRoute = createRoute({
   getParentRoute: () => rootRoute,
   path: '/oauth/cli',
-  component: lazyRouteComponent(() => import('./components/Auth/CliLogin'), 'CliLogin'),
+  component: lazyRoute(() => import('./components/Auth/CliLogin'), 'CliLogin'),
 })
 
 const proxyAuthRoute = createRoute({
@@ -849,7 +850,15 @@ const routeTree = rootRoute.addChildren([
   appLayoutRoute.addChildren([indexRoute, projectRoute]),
 ])
 
-export const router = createRouter({ routeTree })
+export const router = createRouter({
+  routeTree,
+  // Every route is its own failure domain. Without a default, only the root
+  // route had a boundary, so a screen that threw replaced the whole app —
+  // the overlays beside the outlet (toasts, modals, onboarding) included —
+  // rather than just itself.
+  defaultErrorComponent: RouteErrorFallback,
+  defaultOnCatch: (error, errorInfo) => reportCaughtError(error, errorInfo.componentStack),
+})
 
 // Register the router on globalThis so non-React modules (e.g. projectStore)
 // can drive URL changes without importing this file. Static-importing the
