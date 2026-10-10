@@ -107,3 +107,28 @@ describe("ChatPresenter: a run held for its machine", () => {
     expect(screen.queryByText(/your machine/)).toBeNull();
   });
 });
+
+// The run that held the message ended because the machine never came up —
+// it failed to start (the prod workspace crash-looped for hours), was
+// removed, or was still down after hours. The server keeps the message queued
+// and sends it when the machine connects; the transcript must not leave it
+// looking dropped under an error card.
+describe("ChatPresenter: a message queued for a machine whose run ended", () => {
+  beforeEach(() => {
+    state.chat = { id: "chat-1", workflowId: "chat-1", activity: ChatActivity.ERROR, launchKind: "chat.start" };
+    useActivityStore.getState().setActivity("chat-1", ChatActivity.QUEUED_FOR_MACHINE);
+  });
+
+  it("marks the unanswered message as queued until the machine is back, without a thinking indicator", () => {
+    renderPresenter([message("m1", MessageRole.ASSISTANT), message("m2", MessageRole.USER)]);
+    expect(screen.getByTestId("queued-for-machine-note")).toHaveTextContent(
+      "Queued — will send when your machine is back",
+    );
+    expect(screen.queryByTestId("thinking-indicator")).toBeNull();
+  });
+
+  it("says nothing under a message that was already answered", () => {
+    renderPresenter([message("m1", MessageRole.USER), message("m2", MessageRole.ASSISTANT)]);
+    expect(screen.queryByTestId("queued-for-machine-note")).toBeNull();
+  });
+});

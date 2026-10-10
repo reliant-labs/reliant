@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useActivityStore,
   ChatActivity,
+  isBusyActivity,
 } from "../activityStore";
 
 vi.mock("../../api/client", () => ({
@@ -141,6 +142,28 @@ describe("activityStore", () => {
         activity === ChatActivity.AWAITING_INPUT;
 
       expect(isRunning).toBe(false);
+    });
+  });
+
+  // QUEUED_FOR_MACHINE is the highest enum value only because it came last:
+  // its run has ended (the machine never came up). Nothing is busy, so ESC
+  // must not try to pause it and the app must not count it as running.
+  describe("isBusyActivity", () => {
+    it("treats every in-progress activity as busy", () => {
+      for (const activity of [
+        ChatActivity.RUNNING,
+        ChatActivity.AWAITING_INPUT,
+        ChatActivity.PAUSED,
+        ChatActivity.WAITING_FOR_DAEMON,
+      ]) {
+        expect(isBusyActivity(activity)).toBe(true);
+      }
+    });
+
+    it("does not treat a message queued for an ended run's machine as busy", () => {
+      expect(isBusyActivity(ChatActivity.QUEUED_FOR_MACHINE)).toBe(false);
+      expect(isBusyActivity(ChatActivity.IDLE)).toBe(false);
+      expect(isBusyActivity(undefined)).toBe(false);
     });
   });
 });

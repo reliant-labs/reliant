@@ -272,6 +272,25 @@ type ChatUpdate struct {
 	CreatedAt      time.Time                `json:"created_at"`
 }
 
+// QueuedForMachineChat is a chat holding a message queued for its machine: its
+// last run ended because the machine never came up, and the message it was
+// started for is still owed a reply (chats.queued_for_machine_at).
+type QueuedForMachineChat struct {
+	ChatID string
+	UserID string
+	// ActiveDaemonID is the machine the chat is pinned to; nil means the
+	// user's default machine.
+	ActiveDaemonID *string
+	QueuedAt       time.Time
+}
+
+// WaitingForMachineRun is a chat's live root run parked waiting for its
+// machine.
+type WaitingForMachineRun struct {
+	ChatID     string
+	WorkflowID string
+}
+
 // ChatStore is the shared contract for chat persistence across drivers.
 type ChatStore interface {
 	CreateChat(ctx context.Context, chat *Chat) error
@@ -288,6 +307,17 @@ type ChatStore interface {
 	// SetChatDaemonBlocked sets or clears the daemon-pending marker and reports
 	// whether the stored value changed.
 	SetChatDaemonBlocked(ctx context.Context, chatID string, blocked bool) (bool, error)
+	// SetChatQueuedForMachine sets or clears the queued-for-machine marker and
+	// reports whether the stored value changed. Clearing is a claim: of two
+	// callers that race, exactly one sees true.
+	SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error)
+	// ListChatsQueuedForMachine lists non-archived chats holding a message
+	// queued for their machine, oldest first, at most limit. An empty userID
+	// lists every user's.
+	ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]QueuedForMachineChat, error)
+	// ListChatsWaitingForMachine lists a user's chats whose live root run is
+	// parked waiting for a machine.
+	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]WaitingForMachineRun, error)
 	ListArchivedChats(ctx context.Context, userID string) ([]*ArchivedChatInfo, error)
 	CreateChatUpdate(ctx context.Context, update ChatUpdate) error
 }

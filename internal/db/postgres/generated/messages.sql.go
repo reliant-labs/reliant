@@ -330,6 +330,24 @@ func (q *Queries) GetLatestMessageWithTokensByThread(ctx context.Context, arg Ge
 	return i, err
 }
 
+const getLatestTurnRoleByThread = `-- name: GetLatestTurnRoleByThread :one
+SELECT role FROM messages
+WHERE thread_id = $1 AND role <> 3
+ORDER BY seq DESC
+LIMIT 1
+`
+
+// The role of the latest TURN in a thread: its newest message that is not a
+// system note (role 3). Notes the server posts about a run, and the hidden
+// "params changed" note a send can write after the user's message, are not
+// turns, so they must not make an unanswered message look answered.
+func (q *Queries) GetLatestTurnRoleByThread(ctx context.Context, threadID string) (int32, error) {
+	row := q.db.QueryRowContext(ctx, getLatestTurnRoleByThread, threadID)
+	var role int32
+	err := row.Scan(&role)
+	return role, err
+}
+
 const getMessage = `-- name: GetMessage :one
 SELECT id, chat_id, ordinal, thread_id, context_window_id, role, display_style, model, agent, token_count, cost, workflow_id, run_id, node_id, node_path, activity_id, created_at, updated_at, seq FROM messages WHERE id = $1
 `

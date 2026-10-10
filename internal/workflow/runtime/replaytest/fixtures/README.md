@@ -37,6 +37,8 @@ fixtures make that class of change fail at **test time** instead.
 | `spawn.json` | `builtin://agent` | Spawn: a spawn tool call dispatches the child agent detached (`dispatchSpawnBackground`), settling immediately with a handle; the parent's loop blocks without spinning (`InlineLoopExecutor.awaitLiveDetachedSpawns`) until the detached child's completion lands in its mailbox, then reacts to it on its next turn. |
 | `action_approval.json` | `builtin://agent` (`tools: [http__request]`) | Action approval gate: an attended turn calls a mutating integration action, so the batch first raises an approval (`ApprovalCreate`, a timer, `signal.approval.*`); it is denied, and `ExecuteTools` refuses the call (`refused_tool_calls`) before the next turn completes the run. |
 | `late_user_message.json` | `builtin://agent` | Late wake: a `thread_wake` signal lands while the run's only (tool-less) turn is in flight, with nothing queued for its `pending_inbox` probe and nothing live. The loop-exit gate re-enters for it (`late-user-wake-gets-a-turn` version marker, a second `CallLLM`) instead of completing. A history recorded before that change — one `CallLLM`, then completion, with the signal unanswered — must keep replaying that way; that is what the version marker is for. |
+| `machine_wait.json` | `builtin://agent` (a `RemoteExecutor` over a router whose machine attaches 65s after the first check; text-only) | A run held for a machine that is still starting: the first `PreflightDaemonCheck` polls a whole 60s slice and reports `waiting`, the run sleeps on its 30s recheck timer, and the next check finds the machine up before the first `CallLLM`. |
+| `machine_wait_signaled.json` | same | The same wait woken by its machine: the `machine_wait` signal (sent by the api-server when one of the user's machines connects) lands while the run sleeps on the recheck timer, the timer is cancelled, and the check runs at once. |
 
 ## Frozen sets
 
@@ -58,6 +60,7 @@ that shape.
 | Set | Pins | Kept replaying by |
 |---|---|---|
 | `2026-10-08-preflight-before-started` | Every fixture at `fbca55fe^`: `PreflightDaemonCheck` scheduled before the "started" `WorkflowStatus` | `preflightAfterStartedChangeID` (`runtime/workflow.go`) |
+| `2026-10-10-machine-wait-ten-minute-budget` | `machine_wait.json` at `43c3e8fc`: the old 10-minute wait, 60s slices with a 2s timer between them | No gate: the durable wait issues the same commands (a timer is matched by id, not duration; an activity by type, not input) — this set is the proof |
 
 Retire a set only together with its gate, once no run older than the gate's
 deploy can still be open.
@@ -76,7 +79,10 @@ calls, changing an activity's registered name, adding/removing timers
 structure, changing side effects, or changing any branch condition that gates
 the above. Things that do NOT break replay: activity *implementation* changes,
 changes to values that don't alter the command sequence (activity inputs and
-options included), logging.
+options included, and a timer's duration — a replayed timer is matched by its
+id), logging. If you rely on that to skip a gate, prove it the way
+`frozen/2026-10-10-machine-wait-ten-minute-budget` does: record the old shape
+with the old code, freeze it, and replay it against the new.
 
 **Make the change replay-compatible, then freeze the old shape:**
 

@@ -126,6 +126,46 @@ func (s *chatStore) SetChatDaemonBlocked(ctx context.Context, chatID string, blo
 	return n > 0, nil
 }
 
+func (s *chatStore) SetChatQueuedForMachine(ctx context.Context, chatID string, queued bool) (bool, error) {
+	n, err := s.q.SetChatQueuedForMachine(ctx, pgdb.SetChatQueuedForMachineParams{Queued: queued, ID: chatID})
+	if err != nil {
+		return false, fmt.Errorf("failed to set chat queued-for-machine marker: %w", err)
+	}
+	return n > 0, nil
+}
+
+func (s *chatStore) ListChatsQueuedForMachine(ctx context.Context, userID string, limit int) ([]core.QueuedForMachineChat, error) {
+	rows, err := s.q.ListChatsQueuedForMachine(ctx, pgdb.ListChatsQueuedForMachineParams{UserID: userID, MaxRows: int32(limit)})
+	if err != nil {
+		return nil, fmt.Errorf("failed to list chats queued for their machine: %w", err)
+	}
+	chats := make([]core.QueuedForMachineChat, len(rows))
+	for i, row := range rows {
+		chats[i] = core.QueuedForMachineChat{
+			ChatID:         row.ID,
+			UserID:         row.UserID,
+			ActiveDaemonID: chatNullStringToPtr(row.ActiveDaemonID),
+			QueuedAt:       row.QueuedForMachineAt.Time,
+		}
+	}
+	return chats, nil
+}
+
+func (s *chatStore) ListChatsWaitingForMachine(ctx context.Context, userID string) ([]core.WaitingForMachineRun, error) {
+	rows, err := s.q.ListChatsWaitingForMachine(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to list chats waiting for their machine: %w", err)
+	}
+	runs := make([]core.WaitingForMachineRun, 0, len(rows))
+	for _, row := range rows {
+		if !row.WorkflowID.Valid {
+			continue
+		}
+		runs = append(runs, core.WaitingForMachineRun{ChatID: row.ID, WorkflowID: row.WorkflowID.String})
+	}
+	return runs, nil
+}
+
 func (s *chatStore) DeleteChat(ctx context.Context, id string) error {
 	return s.q.DeleteChat(ctx, id)
 }

@@ -1,7 +1,9 @@
 # Queue a run until its machine is up (instead of failing preflight)
 
-**Status:** design settled; being built on branch `feat/queue-until-daemon`
-(worktree `reliant-queue-until-daemon`).
+**Status:** shipped (#641, #672). The 10-minute budget and the "send your
+message again" ending were replaced on 2026-10-10 by a durable wait and
+server-side delivery — see §5, which supersedes the budget and the polling
+loop described in §2.
 
 **User report (verbatim):** "i sent a chat with no daemon connected (it was
 waking up). we recently added some chats that can run with no daemons, which we
@@ -176,3 +178,60 @@ The repo's own `docker-compose.yml` does not run as-is (Dockerfile targets that
 do not exist, auth-gated base images, a NATS flag removed in 2.15, Temporal
 namespace mismatch, per-service vault keys, self-signed TLS); a working
 override was used.
+
+## 5. A queued message is never dropped (2026-10-10)
+
+Prod report after #672: "Sending a new message while the daemon is spinning up
+is supposed to enqueue it, but it just looks like it gets stuck." Two gaps
+remained: the wait gave up after 10 minutes (a cold start with an image pull,
+or a crash-looping machine the controller later rolls, outlasts that) and the
+run then failed with the message unsent; and a run the reconciler ended as
+wedged left the user's "continue" unanswered until they sent it again.
+
+**The wait** (`runtime.waitForDaemon` / `waitForMachine`). The first check is
+unchanged: wake once, poll every 2s for up to 60s. After that no activity runs
+while the run waits: it sleeps on a durable timer (30s, doubling to 5m) and
+checks once (a 15s poll) when the timer fires or when its machine signals
+(`machinewait.SignalName`). The api-server sends that signal to every run of a
+user parked waiting (`chats.daemon_blocked_at` on a running root) when one of
+their machines connects (`internal/queueddelivery`, a durable consumer on
+`daemon.v1.events.connected`). The wait ends:
+
+- machine attached — the run proceeds;
+- machine FAILED (unattached, mirrored lifecycle `failed`) or REMOVED (no
+  record matches) — `toolexec.NATSDaemonRouter.MachineState`, read by the
+  activity after the wake and at each slice's end;
+- "Continue without machine" — `BranchChat` with `no_machine` signals
+  `{abandon: true}`; the run ends CANCELLED (a CanceledError, which
+  `handleWorkflowCompletion` now records as cancelled);
+- the 6-hour cap (`preflightMachineWaitCap`), the safety net for a forgotten
+  chat.
+
+No version gate: the new loop issues the same command sequence as the old
+(timer, activity, timer, …; a replayed timer matches by id, not duration), so
+runs in flight at the deploy replay into the new wait. Pinned by the frozen
+fixture set `2026-10-10-machine-wait-ten-minute-budget` (recorded with the old
+code), plus `machine_wait.json` / `machine_wait_signaled.json`.
+
+**The message stays queued.** Every terminal end of an attended run's wait
+(failed, removed, none available, cap) sets `chats.queued_for_machine_at` and
+says "Your message is queued and will be sent as soon as your machine
+connects". The chat's activity reads `CHAT_ACTIVITY_QUEUED_FOR_MACHINE` (6)
+while no run is live: the transcript shows "Queued — will send when your
+machine is back", the composer keeps Try again / Continue without machine.
+Cleared by whatever starts the next run: a send, the delivery below, or the
+preflight that finds the machine up; dropped by Continue without machine.
+Unattended (trigger) runs are not queued — their failure is the trigger's to
+report.
+
+**Delivery.** `ChatService.ContinueQueued` starts the run the user's next send
+would have, without the new message: SendMessage's resume of an interrupted
+run (reset-and-replay when the history replays, else a fresh run at the
+checkpoint with the ended run's own inputs). It runs under the chat's
+run-control lock, claims the marker atomically, and starts nothing unless the
+root run is FAILED in the database and closed in Temporal, so concurrent
+callers deliver once. Callers: a machine connect (`queueddelivery`), the
+reconciler's sweep (backstop for a missed connect), and the reconciler right
+after it ends a wedged run whose thread holds an unanswered user message or a
+queued mailbox row. The orphaned-mailbox sweep leaves a queued chat's rows
+alone.

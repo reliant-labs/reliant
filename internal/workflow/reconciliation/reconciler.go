@@ -119,6 +119,11 @@ type Reconciler struct {
 	// started, so the set and the loop's read are on different goroutines.
 	bgDaemons atomic.Pointer[backgroundProcessDaemonsHolder]
 
+	// queued starts the runs that deliver undelivered messages: a wedged
+	// run's, and those queued for a machine that is back. Unset disables
+	// both. Atomic for the same reason as bgDaemons.
+	queued atomic.Pointer[queuedDeliveryHolder]
+
 	// stuckMu guards stuckObservations, the in-memory debounce state for
 	// stuck-task handling. In-memory tracking is acceptable here: a single
 	// reconciler process runs per deployment, and even if multiple replicas
@@ -1408,11 +1413,17 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 		return
 	}
 
-	// Tell the user what happened and how to continue. Accurate because
-	// SendMessage starts the next run in resume-at-position mode for
-	// failed/terminated predecessors, and never resets a history that no
-	// longer replays.
-	if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), wedgeInterruptedChatMessage, &wf.ID, nil, nil); err != nil {
+	// A message the run took in and never answered is continued now, in a
+	// fresh run at the checkpoint — the user already sent it once. Only when
+	// there is none (or the continuation could not start) is the user told
+	// how to continue: SendMessage starts the next run in resume-at-position
+	// mode for failed/terminated predecessors, and never resets a history
+	// that no longer replays.
+	note := wedgeInterruptedChatMessage
+	if r.continueAfterWedge(ctx, wf) {
+		note = wedgeContinuedChatMessage
+	}
+	if _, err := r.repo.SaveMessageToThread(ctx, wf.ChatID, wf.Thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), note, &wf.ID, nil, nil); err != nil {
 		logging.Warn("[Reconciler] Failed to add wedge interruption message to chat",
 			"error", err,
 			"workflowID", wf.ID,
@@ -2397,8 +2408,17 @@ func (r *Reconciler) mailboxMayStillBeDelivered(ctx context.Context, threadID st
 		return false
 	}
 	ownerID := threadID
-	if thread, err := r.repo.GetThread(ctx, threadID); err == nil && thread != nil && thread.WorkflowID != nil && *thread.WorkflowID != "" {
+	thread, err := r.repo.GetThread(ctx, threadID)
+	if err == nil && thread != nil && thread.WorkflowID != nil && *thread.WorkflowID != "" {
 		ownerID = *thread.WorkflowID
+	}
+	// A chat holding a message queued for its machine is owed a run, and
+	// that run drains this mailbox (queueddelivery). Its rows are not
+	// orphaned, however long the machine takes.
+	if err == nil && thread != nil && r.chatHoldsQueuedMessage(ctx, thread.ChatID) {
+		logging.Debug("[Reconciler] Leaving a terminal thread's queued mail: its chat holds a message queued for its machine",
+			"threadID", threadID, "chatID", thread.ChatID)
+		return true
 	}
 	desc, err := r.tempClient.DescribeWorkflowExecution(ctx, ownerID, "")
 	if err != nil {
@@ -2470,6 +2490,12 @@ func (r *Reconciler) ReconcileRunningWorkflows(ctx context.Context) (reconciled 
 	// just as easily strand a backgrounded spawn's mailbox report as it can
 	// strand a synchronous spawn's tool result.
 	if _, repairErr := r.repairStrandedBackgroundSpawns(ctx, stats); repairErr != nil {
+		errors = append(errors, repairErr)
+	}
+	// Before the mailbox sweep: a message queued for a machine that is back
+	// gets its run (and its thread revived) here, so the sweep below finds
+	// the thread live rather than orphaned.
+	if repairErr := r.sweepQueuedDeliveries(ctx); repairErr != nil {
 		errors = append(errors, repairErr)
 	}
 	// Last of the three, for the same reason the two above run after the

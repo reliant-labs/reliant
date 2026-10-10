@@ -104,6 +104,9 @@ type MessageStore interface {
 	// an honest count.
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error)
+	// ThreadAwaitsReply reports whether a thread's latest turn — its newest
+	// message that is not a system note — is a user message.
+	ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error)
 	GetLatestContextSequenceByThread(ctx context.Context, threadID string) (int64, error)
 	GetLatestMessageWithTokensInThread(ctx context.Context, threadID string, contextSequence int) (*Message, error)
 	CountMessagesInThread(ctx context.Context, threadID string) (int, error)

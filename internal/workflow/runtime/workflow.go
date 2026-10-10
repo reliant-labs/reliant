@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/ptr"
 	workflow_constants "github.com/reliant-labs/reliant/internal/workflow"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
+	"github.com/reliant-labs/reliant/internal/workflow/machinewait"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/reliant-labs/reliant/internal/workflow/threadcancel"
@@ -4759,8 +4760,11 @@ func handleWorkflowCompletion(ctx workflow.Context, workflowID, chatID, workflow
 	// This allows us to run cleanup activities even when the workflow is cancelled
 	cleanupCtx, _ := workflow.NewDisconnectedContext(ctx)
 
-	// Check if workflow was cancelled
-	if ctx.Err() != nil {
+	// Check if workflow was cancelled. A run whose user continued without its
+	// machine ends itself cancelled, with nobody having cancelled it (see
+	// errMachineWaitAbandoned); Temporal records that as CANCELED, so the row
+	// must say cancelled too.
+	if ctx.Err() != nil || isMachineWaitAbandoned(retErr) {
 		logger.Info("[Workflow Runtime] Cancelled", "workflowID", workflowID)
 		// Delta identity: finalize any outstanding message ids (aborted).
 		// emitStreamFinalized detects the cancelled ctx and switches to a
@@ -5050,21 +5054,38 @@ func preflightDaemonCheck(ctx workflow.Context, input WorkflowInput, execCtx *Ex
 }
 
 const (
-	// preflightWaitBudget bounds how long a run waits for its machine: long
-	// enough for a managed resume or a fresh provision, short enough that a
-	// stuck one fails with a clear message.
-	preflightWaitBudget = 10 * time.Minute
-	// preflightWaitSlice is how long one PreflightDaemonCheck execution polls.
-	// Slices (not one long activity) mean a worker restart mid-wait costs at
-	// most one slice, and history stays ~10 activities over the whole budget.
+	// preflightWaitSlice is how long the first PreflightDaemonCheck polls a
+	// machine that is coming up (every 2s, inside the activity): a resume
+	// usually attaches within it and is picked up within seconds. After it,
+	// the run waits on a timer (waitForMachine).
 	preflightWaitSlice = 60 * time.Second
-	// preflightSliceBackoff guards against a hot loop if a slice returns early.
-	preflightSliceBackoff = 2 * time.Second
 	// preflightHeartbeatTimeout deliberately differs from
 	// activityHeartbeatTimeout so resolveMaxAttempts does not treat the check
 	// as a retried graph step.
 	preflightHeartbeatTimeout = 20 * time.Second
 	preflightSliceMargin      = 30 * time.Second
+
+	// preflightMachineWaitCap is the safety net behind the machine's own
+	// states: a run whose machine is still neither up, failed nor removed
+	// after this long stops holding a workflow. Its message is not dropped —
+	// the activity queues it for the machine (chats.queued_for_machine_at),
+	// so a forgotten chat costs nothing and still gets its answer.
+	preflightMachineWaitCap = 6 * time.Hour
+	// machineRecheckFirst and machineRecheckMax bound the timer a waiting run
+	// sleeps on between checks, doubling from one to the other. A machine
+	// that connects signals the run (machinewait), so these only decide how
+	// late it notices what sends no signal: a machine that failed or was
+	// removed, or a connect whose signal was lost. machineRecheckMax stays
+	// under the reconciler's progress-stall window (10m), so a waiting run's
+	// history moves often enough never to read as stalled. Over the whole
+	// cap that is ~75 checks, about a thousand history events.
+	machineRecheckFirst = 30 * time.Second
+	machineRecheckMax   = 5 * time.Minute
+	// machineRecheckSlice is how long one recheck polls: long enough to ride
+	// out the gap between a machine's connect signal and its attachment
+	// lease landing, short enough that a recheck holds an activity slot
+	// briefly.
+	machineRecheckSlice = 15 * time.Second
 )
 
 // preflightFailureMessage is the text the daemon_unavailable card shows: the
@@ -5080,11 +5101,23 @@ func preflightFailureMessage(err error) string {
 	return err.Error()
 }
 
-// waitForDaemon runs PreflightDaemonCheck, repeating it in bounded slices
-// while it reports the daemon is still coming up. The ready path is a single
-// activity. The last slice sets final so the activity itself returns the
-// terminal error (it must stay an activity error: resume resets to the
-// decision that scheduled the failing activity).
+// waitForDaemon runs PreflightDaemonCheck, and while it reports the machine
+// still coming up, waits for it (waitForMachine). The ready path is a single
+// activity. Every way the wait ends badly is the activity's own error (it must
+// stay an activity error: resume resets to the decision that scheduled the
+// failing activity).
+//
+// The wait needs no version gate. It used to poll in 60s slices with a 2s
+// timer between them and give up after 10 minutes, which a cold start with an
+// image pull — or a crash-looping machine the controller later rolls — could
+// outlast, leaving the message unsent. It now sleeps on a longer timer between
+// shorter checks, bounded by the machine's own states and a cap of hours; but
+// a slice-and-timer is still an activity then a timer, and Temporal matches a
+// replayed timer by its id, not its duration, and an activity by its type, not
+// its input. So a run recorded by the old loop replays through this one
+// command for command, and simply keeps waiting longer — which the frozen
+// fixture set replaytest/fixtures/frozen/2026-10-10-machine-wait-ten-minute-budget
+// (recorded by the old loop) pins.
 func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) error {
 	actCtx := workflow.WithActivityOptions(ctx, workflow.ActivityOptions{
 		StartToCloseTimeout: preflightWaitSlice + preflightSliceMargin,
@@ -5092,16 +5125,50 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 		RetryPolicy:         &temporal.RetryPolicy{MaximumAttempts: 1},
 	})
 	waitStart := workflow.Now(ctx)
-	for {
-		final := workflow.Now(ctx).Sub(waitStart)+preflightWaitSlice >= preflightWaitBudget
-		in := make(map[string]interface{}, len(preflightInput)+2)
-		for k, v := range preflightInput {
-			in[k] = v
-		}
-		in["wait_seconds"] = int(preflightWaitSlice / time.Second)
-		in["wait_budget_seconds"] = int(preflightWaitBudget / time.Second)
-		in["final"] = final
+	in := preflightSliceInput(preflightInput, preflightWaitSlice, preflightMachineWaitCap, false)
+	var result map[string]interface{}
+	if err := workflow.ExecuteActivity(actCtx, "PreflightDaemonCheck", in).Get(ctx, &result); err != nil {
+		return err
+	}
+	if waiting, _ := result["waiting"].(bool); !waiting {
+		return nil
+	}
+	return waitForMachine(ctx, actCtx, preflightInput, waitStart)
+}
 
+// waitForMachine is the rest of a run's wait for a machine that is still
+// coming up after the first slice. The run sleeps on a durable timer — no
+// activity holds a worker slot meanwhile — until its machine signals
+// (machinewait: one of the user's machines connected, or the user continued
+// without it) or the timer comes due, then checks once.
+//
+// It ends when the check finds the machine attached (nil), when the check
+// itself ends the wait — the machine failed to start or was removed, or the
+// final check past preflightMachineWaitCap still finds it down; the activity
+// queues the message for the machine and returns the reason — or when the
+// user gives up on the machine, which ends the run cancelled.
+func waitForMachine(ctx, actCtx workflow.Context, preflightInput map[string]interface{}, waitStart time.Time) error {
+	signals := workflow.GetSignalChannel(ctx, machinewait.SignalName)
+	recheck := machineRecheckFirst
+	for {
+		signaled, abandon, err := awaitMachineChange(ctx, signals, recheck)
+		if err != nil {
+			return err
+		}
+		if abandon {
+			workflow.GetLogger(ctx).Info("[Workflow Runtime] Machine wait ended: the user continued without the machine")
+			return errMachineWaitAbandoned()
+		}
+
+		// Past the cap this is the last check, and it polls a whole slice: a
+		// run reset to this point long after it began (a resume) gets the same
+		// grace a fresh wait does before it gives up again.
+		final := workflow.Now(ctx).Sub(waitStart) >= preflightMachineWaitCap
+		slice := machineRecheckSlice
+		if final {
+			slice = preflightWaitSlice
+		}
+		in := preflightSliceInput(preflightInput, slice, preflightMachineWaitCap, final)
 		var result map[string]interface{}
 		if err := workflow.ExecuteActivity(actCtx, "PreflightDaemonCheck", in).Get(ctx, &result); err != nil {
 			return err
@@ -5109,8 +5176,83 @@ func waitForDaemon(ctx workflow.Context, preflightInput map[string]interface{}) 
 		if waiting, _ := result["waiting"].(bool); !waiting {
 			return nil
 		}
-		if err := workflow.Sleep(ctx, preflightSliceBackoff); err != nil {
-			return err
+		// A connect that was not this run's machine (another of the user's)
+		// is no reason to look less often; only a quiet interval backs off.
+		if !signaled {
+			recheck = min(recheck*2, machineRecheckMax)
 		}
 	}
+}
+
+// errMachineWaitAbandoned is how a run ends when its user continued without
+// the machine it was waiting for: cancelled — a CanceledError returned from
+// the workflow is recorded as CANCELED — with the reason as its detail, so
+// handleWorkflowCompletion can tell it from any other error and record the
+// run cancelled rather than failed. Nothing is resumed or delivered after it:
+// the conversation continues in the no-machine branch.
+func errMachineWaitAbandoned() error {
+	return temporal.NewCanceledError(machinewait.ReasonContinuedWithoutMachine)
+}
+
+// isMachineWaitAbandoned reports whether err is errMachineWaitAbandoned's.
+func isMachineWaitAbandoned(err error) bool {
+	var canceled *temporal.CanceledError
+	if !errors.As(err, &canceled) || !canceled.HasDetails() {
+		return false
+	}
+	var reason string
+	return canceled.Details(&reason) == nil && reason == machinewait.ReasonContinuedWithoutMachine
+}
+
+// awaitMachineChange blocks until the machine's signal arrives or recheck
+// elapses. It reports whether a signal woke it and whether any signal received
+// (a burst is drained and coalesced) asked to abandon the wait. A cancelled
+// run returns the cancellation.
+func awaitMachineChange(ctx workflow.Context, signals workflow.ReceiveChannel, recheck time.Duration) (signaled, abandon bool, err error) {
+	timerCtx, cancelTimer := workflow.WithCancel(ctx)
+	defer cancelTimer()
+	timer := workflow.NewTimer(timerCtx, recheck)
+
+	receive := func(s machinewait.Signal) {
+		signaled = true
+		abandon = abandon || s.Abandon
+	}
+	var timerErr error
+	sel := workflow.NewSelector(ctx)
+	sel.AddFuture(timer, func(f workflow.Future) { timerErr = f.Get(timerCtx, nil) })
+	sel.AddReceive(signals, func(c workflow.ReceiveChannel, _ bool) {
+		var s machinewait.Signal
+		c.Receive(ctx, &s)
+		receive(s)
+	})
+	sel.Select(ctx)
+	for {
+		var s machinewait.Signal
+		if !signals.ReceiveAsync(&s) {
+			break
+		}
+		receive(s)
+	}
+
+	if ctx.Err() != nil {
+		if timerErr != nil {
+			return false, false, timerErr
+		}
+		return false, false, temporal.NewCanceledError()
+	}
+	return signaled, abandon, nil
+}
+
+// preflightSliceInput is one PreflightDaemonCheck's input: the run's
+// preflight input plus how long this execution may wait, the workflow's whole
+// budget (for the terminal message) and whether it is the last check.
+func preflightSliceInput(preflightInput map[string]interface{}, slice, budget time.Duration, final bool) map[string]interface{} {
+	in := make(map[string]interface{}, len(preflightInput)+3)
+	for k, v := range preflightInput {
+		in[k] = v
+	}
+	in["wait_seconds"] = int(slice / time.Second)
+	in["wait_budget_seconds"] = int(budget / time.Second)
+	in["final"] = final
+	return in
 }

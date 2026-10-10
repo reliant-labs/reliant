@@ -33,6 +33,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/natsutil"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/internal/queueddelivery"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
@@ -448,6 +449,20 @@ func Run(ctx context.Context, opts Options) error {
 		go func() {
 			if err := projectSvc.StartDaemonEventConsumer(ctx, nc); err != nil {
 				logging.Warn("daemon-events consumer exited with error", "error", err)
+			}
+		}()
+	}
+
+	// Messages sent while a chat's machine was down: wake the runs waiting
+	// for it when one of the user's machines connects, and deliver the ones
+	// whose run already ended. The reconciler sweeps for connects this misses
+	// and continues the message of a run it ends as wedged.
+	if chatSvc := grpcSrv.ChatService(); chatSvc != nil {
+		queued := queueddelivery.New(repo, daemonRouter, chatSvc, temporalClient)
+		reconciler.SetQueuedDelivery(queued)
+		go func() {
+			if err := queued.Run(ctx, nc); err != nil {
+				logging.Warn("queued-delivery consumer exited with error; the reconciler's sweep still delivers", "error", err)
 			}
 		}()
 	}

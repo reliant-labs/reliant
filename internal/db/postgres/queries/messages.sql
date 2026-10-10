@@ -115,6 +115,16 @@ WHERE thread_id = $1
 ORDER BY seq DESC
 LIMIT 1;
 
+-- name: GetLatestTurnRoleByThread :one
+-- The role of the latest TURN in a thread: its newest message that is not a
+-- system note (role 3). Notes the server posts about a run, and the hidden
+-- "params changed" note a send can write after the user's message, are not
+-- turns, so they must not make an unanswered message look answered.
+SELECT role FROM messages
+WHERE thread_id = $1 AND role <> 3
+ORDER BY seq DESC
+LIMIT 1;
+
 -- name: GetLatestMessageByContextWindow :one
 -- Get latest message in a specific context window
 SELECT * FROM messages

@@ -59,6 +59,14 @@ export const QUEUED_FOR_MACHINE_DETAIL = `will send when your ${MACHINE_NOUN} co
 export const WAITING_FOR_MACHINE = `Waiting for your ${MACHINE_NOUN}`;
 
 /**
+ * What a message says once the run that held it has ended because its machine
+ * never came up — it failed to start, was removed, or was still down after
+ * hours (ChatActivity.QUEUED_FOR_MACHINE). Still nothing is lost: the server
+ * sends it the moment the machine connects, with no resend.
+ */
+export const QUEUED_UNTIL_MACHINE_IS_BACK = `Queued — will send when your ${MACHINE_NOUN} is back`;
+
+/**
  * How long a consumer should retry before it starts saying more than
  * "connecting". Not a deadline — nothing fails here, the copy just escalates.
  */

@@ -88,7 +88,7 @@ export interface ToolExecutionStateUpdate {
 import { triggerRefetch, type RefetchType } from "../store/refetchStore";
 
 import { useProjectStore } from "./projectStore";
-import { useActivityStore, ChatActivity } from "./activityStore";
+import { useActivityStore, ChatActivity, isBusyActivity } from "./activityStore";
 import { useThreadActivityStore } from "./threadActivityStore";
 import { useChatNavigationStore } from "./chatNavigationStore";
 import { useTasksStore } from "./tasksStore";
@@ -3147,8 +3147,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         // of requiring the one event it already missed.
         if (isSnapshot) {
           const activity = useActivityStore.getState().activities.get(chatId);
-          const chatIsIdle =
-            activity === undefined || activity < ChatActivity.RUNNING;
+          const chatIsIdle = !isBusyActivity(activity);
           if (chatIsIdle && get().streamingMessages[chatId]) {
             logger.info(
               "[Streaming] Snapshot for an idle chat — dropping stranded streaming placeholder",
@@ -3907,8 +3906,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
 
   // Get computed busy state for a chat (delegates to activityStore as single source of truth)
   getIsChatBusy: (chatId: string) => {
-    const activity = useActivityStore.getState().activities.get(chatId);
-    return activity !== undefined && activity >= ChatActivity.RUNNING;
+    return isBusyActivity(useActivityStore.getState().activities.get(chatId));
   },
 
   // Release all retained state for one chat. The messages cache and the

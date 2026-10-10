@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/automationcred"
@@ -113,9 +114,11 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	// (chat.start, agent start_run, builder test) acts as the signed-in user or
 	// not at all. The kind is the chat's launch event, the record of what
 	// started it.
+	attended := true
 	if ev, evErr := a.repo.GetTriggerEventByChatID(ctx, input.ChatID); evErr == nil && ev != nil &&
 		ev.Kind.Unattended() {
 		ctx = automationcred.Allow(ctx)
+		attended = false
 	}
 
 	online, err := router.IsDaemonOnline(ctx, project.UserID, input.DaemonSelector)
@@ -123,7 +126,11 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 		// Infrastructure error — don't fail, let it proceed and fail at tool execution.
 		return PreflightDaemonCheckOutput{DaemonAvailable: true}, nil
 	}
+	// Marker writes on exit paths must survive a cancelled ctx.
+	exitCtx := context.WithoutCancel(ctx)
+
 	if online {
+		a.machineReady(exitCtx, input.ChatID)
 		return PreflightDaemonCheckOutput{DaemonAvailable: true}, nil
 	}
 
@@ -132,11 +139,17 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	// per execution, then waits for the daemon to attach.
 	waker, ok := router.(toolexec.DaemonWaker)
 	if !ok {
-		return PreflightDaemonCheckOutput{}, errPreflightNoDaemon("")
+		return a.terminal(exitCtx, input.ChatID, attended, errPreflightNoDaemon(""))
 	}
 	daemonID, wakeErr := waker.EnsureAwake(ctx, project.UserID, input.DaemonSelector)
 	if wakeErr != nil && !toolexec.IsDaemonPending(wakeErr) {
-		return PreflightDaemonCheckOutput{}, errPreflightNoDaemon(wakeErr.Error())
+		return a.terminal(exitCtx, input.ChatID, attended, errPreflightNoDaemon(wakeErr.Error()))
+	}
+	// A machine that failed to start is not on its way up, however long the
+	// run waits: only its owner (Try again) or the control plane can rebuild
+	// it.
+	if notComing := machineNotComing(ctx, router, project.UserID, input.DaemonSelector); notComing != nil {
+		return a.terminal(exitCtx, input.ChatID, attended, notComing)
 	}
 
 	// The daemon exists and is on its way up: this run waits rather than fails.
@@ -151,8 +164,6 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 	ticker := time.NewTicker(poll)
 	defer ticker.Stop()
 
-	// Marker writes on exit paths must survive a cancelled ctx.
-	exitCtx := context.WithoutCancel(ctx)
 	for {
 		if input.WaitSeconds > 0 {
 			select {
@@ -162,34 +173,118 @@ func (a *PreflightDaemonCheckActivity) Execute(ctx context.Context, input Prefli
 				a.setBlocked(exitCtx, input.ChatID, false)
 				return PreflightDaemonCheckOutput{Waiting: true}, nil
 			case <-deadline.C:
-				return a.sliceEnd(exitCtx, input)
+				return a.sliceEnd(ctx, exitCtx, router, project.UserID, attended, input)
 			case <-ticker.C:
 			}
 			if up, upErr := router.IsDaemonOnline(ctx, project.UserID, input.DaemonSelector); upErr == nil && up {
 				a.setBlocked(exitCtx, input.ChatID, false)
+				a.machineReady(exitCtx, input.ChatID)
 				return PreflightDaemonCheckOutput{DaemonAvailable: true, DaemonID: daemonID}, nil
 			}
 			continue
 		}
-		return a.sliceEnd(exitCtx, input)
+		return a.sliceEnd(ctx, exitCtx, router, project.UserID, attended, input)
 	}
 }
 
-// sliceEnd closes a wait slice that ended with the daemon still down: the
-// final slice is the terminal failure, any other reports Waiting so the
-// workflow schedules the next slice.
-func (a *PreflightDaemonCheckActivity) sliceEnd(ctx context.Context, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
+// sliceEnd closes a wait slice that ended with the daemon still down. A
+// machine that failed (or was removed) during the slice ends the wait; so does
+// the final slice of the workflow's budget. Otherwise it reports Waiting and
+// the workflow decides when to look again.
+func (a *PreflightDaemonCheckActivity) sliceEnd(ctx, exitCtx context.Context, router toolexec.DaemonRouter, userID string, attended bool, input PreflightDaemonCheckInput) (PreflightDaemonCheckOutput, error) {
+	if notComing := machineNotComing(ctx, router, userID, input.DaemonSelector); notComing != nil {
+		return a.terminal(exitCtx, input.ChatID, attended, notComing)
+	}
 	if !input.Final {
 		return PreflightDaemonCheckOutput{Waiting: true}, nil
 	}
-	a.setBlocked(ctx, input.ChatID, false)
-	within := "in time"
-	if mins := input.WaitBudgetSeconds / 60; mins == 1 {
-		within = "within a minute"
-	} else if mins > 1 {
-		within = fmt.Sprintf("within %d minutes", mins)
+	return a.terminal(exitCtx, input.ChatID, attended,
+		fmt.Errorf("Your machine didn't come online %s. Check that it is running (or start it from the machines page)", waitBudgetPhrase(input.WaitBudgetSeconds)))
+}
+
+// terminal ends the run's wait for its machine with cause, the text the
+// user is shown. The run that returns it fails, but an attended run's message
+// is not dropped with it: the chat is marked as holding a message queued for
+// its machine, and the api-server starts a run to deliver it once the machine
+// connects (internal/queueddelivery). An unattended run's failure is its
+// trigger's to report, as before.
+func (a *PreflightDaemonCheckActivity) terminal(ctx context.Context, chatID string, attended bool, cause error) (PreflightDaemonCheckOutput, error) {
+	a.setBlocked(ctx, chatID, false)
+	if !attended {
+		return PreflightDaemonCheckOutput{}, cause
 	}
-	return PreflightDaemonCheckOutput{}, fmt.Errorf("Your machine didn't come online %s. Check that it is running (or start it from the machines page) and send your message again", within)
+	if _, err := a.repo.SetChatQueuedForMachine(ctx, chatID, true); err != nil {
+		logging.Error("[PreflightDaemonCheck] Failed to queue the message for the machine; the user will have to send it again",
+			"chatID", chatID, "error", err)
+		return PreflightDaemonCheckOutput{}, cause
+	}
+	return PreflightDaemonCheckOutput{}, fmt.Errorf("%s. %s", strings.TrimRight(cause.Error(), ". "), queuedForMachineNote)
+}
+
+// queuedForMachineNote is appended to every terminal wait failure of an
+// attended run: the message stays queued (see terminal).
+const queuedForMachineNote = "Your message is queued and will be sent as soon as your machine connects"
+
+// waitBudgetPhrase renders the workflow's wait budget for the terminal
+// message: "within 10 minutes", "within 6 hours".
+func waitBudgetPhrase(budgetSeconds int) string {
+	switch budget := time.Duration(budgetSeconds) * time.Second; {
+	case budget >= 2*time.Hour:
+		return fmt.Sprintf("within %d hours", int(budget/time.Hour))
+	case budget >= 2*time.Minute:
+		return fmt.Sprintf("within %d minutes", int(budget/time.Minute))
+	case budget >= time.Minute:
+		return "within a minute"
+	default:
+		return "in time"
+	}
+}
+
+// machineStateReader is the registry read that tells a machine still coming
+// up from one that is not coming: failed to start, or removed. Declared here,
+// at the consumer; *toolexec.NATSDaemonRouter implements it. A router that
+// does not is read as always coming up.
+type machineStateReader interface {
+	MachineState(ctx context.Context, userID string, selector *toolexec.DaemonSelector) (toolexec.MachineState, error)
+}
+
+// machineNotComing returns the user-facing reason the machine this run waits
+// for will not attach on its own, or nil while it may still come up. A failed
+// registry read is not a reason: the wait goes on and asks again.
+func machineNotComing(ctx context.Context, router toolexec.DaemonRouter, userID string, selector *toolexec.DaemonSelector) error {
+	reader, ok := router.(machineStateReader)
+	if !ok {
+		return nil
+	}
+	state, err := reader.MachineState(ctx, userID, selector)
+	if err != nil {
+		logging.Warn("[PreflightDaemonCheck] Could not read the machine's state; still waiting for it",
+			"userID", userID, "error", err)
+		return nil
+	}
+	switch {
+	case !state.Exists:
+		return errors.New("This chat's machine was removed")
+	case state.Failed:
+		if reason := strings.TrimSpace(state.StatusMessage); reason != "" {
+			return fmt.Errorf("Your machine failed to start: %s", strings.TrimRight(reason, ". "))
+		}
+		return errors.New("Your machine failed to start")
+	default:
+		return nil
+	}
+}
+
+// machineReady clears a queued-for-machine marker an earlier run left: this
+// run has its machine and is about to read the message, so nothing is queued
+// any more. Whichever path started the run (the delivery the machine's
+// connect triggered, or the user's own send) normally cleared it already; this
+// is the backstop that keeps a stale marker from outliving the run that
+// answered it. A cheap UPDATE that matches no row when there is none.
+func (a *PreflightDaemonCheckActivity) machineReady(ctx context.Context, chatID string) {
+	if _, err := a.repo.SetChatQueuedForMachine(ctx, chatID, false); err != nil {
+		logging.Warn("[PreflightDaemonCheck] Failed to clear the queued-for-machine marker", "chatID", chatID, "error", err)
+	}
 }
 
 // setBlocked records whether the run is parked waiting for its machine, which

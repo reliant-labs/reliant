@@ -9,6 +9,7 @@ import { useRef, useState, memo, useMemo, useEffect, useCallback } from "react";
 import { GripHorizontal, GripVertical, Loader2 } from "lucide-react";
 import { ChatInputWrapper } from "./ChatInputWrapper";
 import { ChatThinkingIndicator } from "./ChatThinkingIndicator";
+import { QueuedForMachineNote } from "./QueuedForMachineNote";
 import { ChatMessagesContainer } from "./ChatMessagesContainer";
 import { ScrollToBottomButton } from "./ScrollToBottomButton";
 import { PermissionsPanelWrapper } from "./PermissionsPanelWrapper";
@@ -187,7 +188,15 @@ export const ChatPresenter = memo(function ChatPresenter({
   // follow the run into (or out of) the wait. WAITING_FOR_DAEMON is also not
   // "running", so isChatBusy is false throughout it — everything that should
   // still speak for a held run (the footer, the queued strip) takes this too.
-  const waitingOnMachine = useChatActivity(chatId || "") === ChatActivity.WAITING_FOR_DAEMON;
+  const chatActivity = useChatActivity(chatId || "");
+  const waitingOnMachine = chatActivity === ChatActivity.WAITING_FOR_DAEMON;
+  // The run that held the user's message ended because its machine never
+  // came up (failed to start, removed, or still down after hours). Nothing is
+  // running, but the message is still queued for the machine: the server
+  // sends it when the machine connects. The composer, the queued strip and
+  // the footer speak for it as they do for a held run.
+  const queuedForMachine = chatActivity === ChatActivity.QUEUED_FOR_MACHINE;
+  const heldForMachine = waitingOnMachine || queuedForMachine;
 
   // A held run drains its mailbox on its first turn, so the strip keeps
   // polling while it waits; only interrupting needs work in flight.
@@ -449,23 +458,28 @@ export const ChatPresenter = memo(function ChatPresenter({
     (isChatBusy || waitingOnMachine) && pendingApprovals.length === 0 && !hasPendingQuestion;
   // A held run that has not read the user's latest message yet is holding
   // THAT message: the footer says it is queued, not that it is stuck.
-  const messageQueuedForMachine =
-    waitingOnMachine && latestTurnIsUsers(messages, currentChat?.workflowId || chatId || undefined);
+  const latestMessageUnanswered = latestTurnIsUsers(messages, currentChat?.workflowId || chatId || undefined);
+  const messageQueuedForMachine = waitingOnMachine && latestMessageUnanswered;
+  // The run ended and its message waits for the machine: a static line, not
+  // the thinking indicator — nothing is running.
+  const hasQueuedForMachineFooter =
+    !hasThinkingFooter && queuedForMachine && latestMessageUnanswered && pendingApprovals.length === 0 && !hasPendingQuestion;
   // Memoized because it is a prop of the memo()'d timeline: a fresh element
   // on every render would re-render the whole transcript on each pass —
   // which, during streaming, is many times per second.
-  const thinkingFooter = useMemo(
-    () =>
-      hasThinkingFooter ? (
+  const thinkingFooter = useMemo(() => {
+    if (hasThinkingFooter) {
+      return (
         <ChatThinkingIndicator
           chatId={chatId || undefined}
           filterThreadId={selectedThreadId}
           waitingOnMachine={waitingOnMachine}
           messageQueuedForMachine={messageQueuedForMachine}
         />
-      ) : undefined,
-    [hasThinkingFooter, chatId, selectedThreadId, waitingOnMachine, messageQueuedForMachine]
-  );
+      );
+    }
+    return hasQueuedForMachineFooter ? <QueuedForMachineNote /> : undefined;
+  }, [hasThinkingFooter, hasQueuedForMachineFooter, chatId, selectedThreadId, waitingOnMachine, messageQueuedForMachine]);
 
   // With a thread selected, render THAT THREAD's own messages rather than the
   // chat-wide list narrowed down to it. Filtering only showed whatever part of
@@ -646,7 +660,7 @@ export const ChatPresenter = memo(function ChatPresenter({
               onForget={forgetQueuedMessage}
               onInterrupted={refreshQueuedMessages}
               isRunning={isAgentWorking}
-              waitingOnMachine={waitingOnMachine}
+              waitingOnMachine={heldForMachine}
             />
           </div>
         </div>
@@ -677,7 +691,7 @@ export const ChatPresenter = memo(function ChatPresenter({
           <ComposerWakeStatus
             sending={!!chatId && sendingChatId === chatId}
             daemonId={currentChat?.activeDaemonId}
-            waitingOnMachine={waitingOnMachine}
+            waitingOnMachine={heldForMachine}
             continueWithoutMachine={
               chatId ? <ContinueWithoutMachineButton chatId={chatId} messageId={continueFromMessageId} /> : undefined
             }

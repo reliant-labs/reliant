@@ -351,6 +351,11 @@ type Querier interface {
 	// the latest 'launched' event; the detail view asks for the latest of any
 	// outcome. A NULL outcome means no filter.
 	GetLatestTriggerEvent(ctx context.Context, arg GetLatestTriggerEventParams) (TriggerEvent, error)
+	// The role of the latest TURN in a thread: its newest message that is not a
+	// system note (role 3). Notes the server posts about a run, and the hidden
+	// "params changed" note a send can write after the user's message, are not
+	// turns, so they must not make an unanswered message look answered.
+	GetLatestTurnRoleByThread(ctx context.Context, threadID string) (int32, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (interface{}, error)
 	GetMessage(ctx context.Context, id string) (Message, error)
 	GetMessageByActivityID(ctx context.Context, arg GetMessageByActivityIDParams) (Message, error)
@@ -588,6 +593,14 @@ type Querier interface {
 	ListBackgroundedProcessToolCalls(ctx context.Context) ([]ListBackgroundedProcessToolCallsRow, error)
 	ListBlockersForTask(ctx context.Context, toTaskID string) ([]TaskDependency, error)
 	ListChats(ctx context.Context, arg ListChatsParams) ([]ChatsWithActivity, error)
+	// Chats holding a message queued for their machine, oldest first. An empty
+	// user_id lists every user's (the delivery sweep); otherwise one user's (a
+	// machine of theirs just connected). Archived chats are left alone.
+	ListChatsQueuedForMachine(ctx context.Context, arg ListChatsQueuedForMachineParams) ([]ListChatsQueuedForMachineRow, error)
+	// One user's chats whose root run is live and parked waiting for a machine
+	// (the daemon-pending marker on a running root workflow): the runs to tell
+	// when one of the user's machines connects.
+	ListChatsWaitingForMachine(ctx context.Context, userID string) ([]ListChatsWaitingForMachineRow, error)
 	// Get all threads that fork from a given thread (direct children only)
 	ListChildThreads(ctx context.Context, parentThreadID sql.NullString) ([]Thread, error)
 	ListChildWorkflows(ctx context.Context, parentID sql.NullString) ([]Workflow, error)
@@ -1193,6 +1206,10 @@ type Querier interface {
 	// actually changed, so callers emit chat_activity_changed on transitions and
 	// not on every tool call.
 	SetChatDaemonBlocked(ctx context.Context, arg SetChatDaemonBlockedParams) (int64, error)
+	// Sets or clears the queued-for-machine marker. Returns 1 only when the value
+	// actually changed: clearing is how a deliverer CLAIMS the queued message, so
+	// of two that race exactly one sees the row change.
+	SetChatQueuedForMachine(ctx context.Context, arg SetChatQueuedForMachineParams) (int64, error)
 	SetCompactionSummaryMessage(ctx context.Context, arg SetCompactionSummaryMessageParams) (ContextWindow, error)
 	SetDefaultPresetAssignment(ctx context.Context, arg SetDefaultPresetAssignmentParams) error
 	// Records how the run a trigger fired ended, on the chat's launch event (the

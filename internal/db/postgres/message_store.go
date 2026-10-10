@@ -155,6 +155,17 @@ func (s *messageStore) GetLatestMessageInThread(ctx context.Context, threadID st
 	return messageFromPG(msg), nil
 }
 
+func (s *messageStore) ThreadAwaitsReply(ctx context.Context, threadID string) (bool, error) {
+	role, err := s.q.GetLatestTurnRoleByThread(ctx, threadID)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return false, nil
+		}
+		return false, fmt.Errorf("failed to get latest turn: %w", err)
+	}
+	return role == int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), nil
+}
+
 func (s *messageStore) GetLatestContextSequenceByThread(ctx context.Context, threadID string) (int64, error) {
 	result, err := s.q.GetLatestContextSequenceByThread(ctx, threadID)
 	if err != nil {
