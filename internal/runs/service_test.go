@@ -123,6 +123,11 @@ func (f *fakeRepo) LockChatRunControl(context.Context, string) (func(), error) {
 	return func() {}, nil
 }
 
+// RunTx runs f inline; the fake has no transactions.
+func (f *fakeRepo) RunTx(ctx context.Context, fn func(context.Context) error) error {
+	return fn(ctx)
+}
+
 type fakeTemporal struct {
 	status enumspb.WorkflowExecutionStatus
 	runID  string

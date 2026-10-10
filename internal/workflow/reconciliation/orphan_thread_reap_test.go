@@ -35,7 +35,11 @@ import (
 
 func TestReconciler_ReapsOrphanedThreadsEveryPass(t *testing.T) {
 	repo := newMockRepo()
-	repo.reapThreadsRows = 3
+	repo.reapedThreads = []db.ReapedThread{
+		{ThreadID: "th-1", ChatID: "chat-1", WorkflowID: "wf-1", Status: db.ThreadStatusCompleted},
+		{ThreadID: "th-2", ChatID: "chat-1", WorkflowID: "wf-1", Status: db.ThreadStatusCompleted},
+		{ThreadID: "th-3", ChatID: "chat-2", WorkflowID: "wf-2", Status: db.ThreadStatusCancelled},
+	}
 	// Deliberately EMPTY, mirroring the workflow-reap test: after a cancel
 	// the root is terminal and nothing is listed as running. A pass that
 	// returns early here is exactly the state that let the 288 rows survive
@@ -57,7 +61,7 @@ func TestReconciler_ReapsOrphanedThreadsEveryPass(t *testing.T) {
 func TestReconciler_ReapThreadsRunsAfterWorkflowReapSameBefore(t *testing.T) {
 	repo := newMockRepo()
 	repo.reapRows = 1
-	repo.reapThreadsRows = 1
+	repo.reapedThreads = []db.ReapedThread{{ThreadID: "th-1", ChatID: "chat-1", WorkflowID: "wf-1", Status: db.ThreadStatusFailed}}
 	repo.workflowsByStatus[db.Active()] = []*db.Workflow{runningWorkflow()}
 
 	tempClient := &mockReconcilerTemporalClient{}

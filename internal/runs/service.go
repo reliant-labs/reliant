@@ -389,29 +389,37 @@ func (s *Service) Reconcile(ctx context.Context, workflowID string, dbStatus, te
 	logging.Debug("[runs] Reconciling run status: database differs from Temporal",
 		"workflowID", workflowID, "dbStatus", dbStatus, "temporalStatus", temporalStatus)
 
-	if err := s.repo.UpdateWorkflowStatus(ctx, workflowID, temporalStatus); err != nil {
+	// The status and the cascade commit together: written apart, the
+	// reconciler's thread reap could run between them and close the threads
+	// itself, reporting a cascade that was one statement away as a missed one.
+	err := s.repo.RunTx(ctx, func(txCtx context.Context) error {
+		if err := s.repo.UpdateWorkflowStatus(txCtx, workflowID, temporalStatus); err != nil {
+			return err
+		}
+		if !temporalStatus.IsStopped() || temporalStatus.StopReason == db.StopReasonPaused {
+			return nil
+		}
+		// The subtree inherits the reason the run actually stopped, so a
+		// repaired cancel does not read as a repaired success.
+		return s.cascadeTerminal(txCtx, workflowID, temporalStatus.StopReason)
+	})
+	if err != nil {
 		logging.Warn("[runs] Failed to reconcile run status",
 			"workflowID", workflowID, "error", err)
-		return
 	}
+}
 
-	if !temporalStatus.IsStopped() || temporalStatus.StopReason == db.StopReasonPaused {
-		return
-	}
-
-	// The subtree inherits the reason the run actually stopped, so a repaired
-	// cancel does not read as a repaired success.
-	reason := temporalStatus.StopReason
+// cascadeTerminal ends workflowID's descendant workflows and their threads at
+// reason. Threads are not a workflows row and need their own cascade call —
+// see dev-docs/incidents/2026-08-12-spawn-history-cap.md.
+func (s *Service) cascadeTerminal(ctx context.Context, workflowID string, reason db.WorkflowStopReason) error {
 	if err := s.repo.CascadeTerminalStatusToDescendants(ctx, workflowID, reason); err != nil {
-		logging.Warn("[runs] Failed to cascade reconciled terminal status to child workflows",
-			"workflowID", workflowID, "error", err)
+		return fmt.Errorf("cascade terminal status to child workflows of %s: %w", workflowID, err)
 	}
-	// Threads are not a workflows row and need their own cascade call — see
-	// dev-docs/incidents/2026-08-12-spawn-history-cap.md.
 	if err := s.repo.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, reason); err != nil {
-		logging.Warn("[runs] Failed to cascade reconciled terminal status to threads",
-			"workflowID", workflowID, "error", err)
+		return fmt.Errorf("cascade terminal status to threads of %s: %w", workflowID, err)
 	}
+	return nil
 }
 
 func (s *Service) reconcileStoppedRun(ctx context.Context, workflowID string, status db.WorkflowStatus) {
@@ -436,25 +444,18 @@ func (s *Service) markTerminated(ctx context.Context, workflowID string) error {
 		return nil
 	}
 
-	swapped, err := s.repo.CompareAndSwapWorkflowStatus(ctx, workflowID, db.Cancelled(), wf.Status)
-	if err != nil {
-		return fmt.Errorf("mark terminated workflow %s: %w", workflowID, err)
-	}
-	if swapped {
-		s.cascadeTerminated(ctx, workflowID)
-	}
-	return nil
-}
-
-func (s *Service) cascadeTerminated(ctx context.Context, workflowID string) {
-	if err := s.repo.CascadeTerminalStatusToDescendants(ctx, workflowID, db.StopReasonCancelled); err != nil {
-		logging.Warn("[runs] Failed to cascade terminated status to child workflows",
-			"workflowID", workflowID, "error", err)
-	}
-	if err := s.repo.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, db.StopReasonCancelled); err != nil {
-		logging.Warn("[runs] Failed to cascade terminated status to threads",
-			"workflowID", workflowID, "error", err)
-	}
+	// The terminate ran no workflow code, so this is the only cascade the run
+	// gets — in the same commit as its status, like every terminal write.
+	return s.repo.RunTx(ctx, func(txCtx context.Context) error {
+		swapped, err := s.repo.CompareAndSwapWorkflowStatus(txCtx, workflowID, db.Cancelled(), wf.Status)
+		if err != nil {
+			return fmt.Errorf("mark terminated workflow %s: %w", workflowID, err)
+		}
+		if !swapped {
+			return nil
+		}
+		return s.cascadeTerminal(txCtx, workflowID, db.StopReasonCancelled)
+	})
 }
 
 func (s *Service) voidPendingQuestion(ctx context.Context, chatID string) {

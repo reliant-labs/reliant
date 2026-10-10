@@ -61,7 +61,7 @@ func TestReapOrphanedThreads_UnblocksOrphanedMailboxSweep(t *testing.T) {
 
 	reaped, err := repo.ReapOrphanedThreads(ctx)
 	require.NoError(t, err)
-	require.Equal(t, int64(1), reaped)
+	require.Len(t, reaped, 1)
 
 	// AFTER: the thread is terminal, so the sweep that exists to resolve
 	// this mailbox can finally reach it.

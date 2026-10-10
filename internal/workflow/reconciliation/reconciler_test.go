@@ -195,10 +195,12 @@ type mockRepo struct {
 	callOrder []string
 
 	// Orphaned-thread reap: same shape as the workflow-descendant reap above,
-	// for ReapOrphanedThreads.
-	reapThreadsRows  int64
+	// for ReapOrphanedThreads. workflowRows is what GetWorkflow can load, so
+	// the reap can walk a reaped thread's workflow up to its run's root.
+	reapedThreads    []db.ReapedThread
 	reapThreadsErr   error
 	reapThreadsCalls int
+	workflowRows     map[string]*db.Workflow
 
 	strandedSpawns    []*db.ToolCall
 	strandedSpawnsErr error
@@ -233,10 +235,14 @@ type mockRepo struct {
 	daemons                  map[string]bool
 	emittedToolCallUpdates   []db.ToolCallUpdate
 
-	// Terminal cascades and checkpoint drops a repair performs.
+	// Terminal cascades and checkpoint drops a repair performs, and whether
+	// each cascade ran inside RunTx (i.e. in the status write's commit).
 	cascadedDescendants    []string
 	cascadedThreadSubtrees []string
 	cascadedReason         db.WorkflowStopReason
+	cascadedThreadReason   db.WorkflowStopReason
+	cascadedInTx           []bool
+	inTx                   bool
 	deletedCheckpoints     []string
 }
 
@@ -245,13 +251,16 @@ func (m *mockRepo) CascadeTerminalStatusToDescendants(_ context.Context, workflo
 	defer m.mu.Unlock()
 	m.cascadedDescendants = append(m.cascadedDescendants, workflowID)
 	m.cascadedReason = reason
+	m.cascadedInTx = append(m.cascadedInTx, m.inTx)
 	return nil
 }
 
-func (m *mockRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, workflowID string, _ db.WorkflowStopReason) error {
+func (m *mockRepo) CascadeTerminalStatusToThreadSubtree(_ context.Context, workflowID string, reason db.WorkflowStopReason) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.cascadedThreadSubtrees = append(m.cascadedThreadSubtrees, workflowID)
+	m.cascadedThreadReason = reason
+	m.cascadedInTx = append(m.cascadedInTx, m.inTx)
 	return nil
 }
 
@@ -365,8 +374,18 @@ func (m *mockRepo) UpdateWorkflowStatus(_ context.Context, id string, status db.
 }
 
 // RunTx runs f inline: the mock has no transactions, and the reconciler's
-// status repair wraps its CAS in one so the run-event outbox row commits with it.
+// status repair wraps its CAS in one so the run-event outbox row and the
+// terminal cascade commit with it. inTx records that f is running, so a test
+// can tell a write made inside the commit from one made after it.
 func (m *mockRepo) RunTx(ctx context.Context, f func(ctx context.Context) error) error {
+	m.mu.Lock()
+	m.inTx = true
+	m.mu.Unlock()
+	defer func() {
+		m.mu.Lock()
+		m.inTx = false
+		m.mu.Unlock()
+	}()
 	return f(ctx)
 }
 
@@ -419,12 +438,26 @@ func (m *mockRepo) ReapOrphanedWorkflowDescendants(_ context.Context) (int64, er
 	return m.reapRows, m.reapErr
 }
 
-func (m *mockRepo) ReapOrphanedThreads(_ context.Context) (int64, error) {
+func (m *mockRepo) ReapOrphanedThreads(_ context.Context) ([]db.ReapedThread, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.reapThreadsCalls++
 	m.callOrder = append(m.callOrder, "reap-threads")
-	return m.reapThreadsRows, m.reapThreadsErr
+	if m.reapThreadsErr != nil {
+		return nil, m.reapThreadsErr
+	}
+	return m.reapedThreads, nil
+}
+
+// GetWorkflow serves workflowRows; a row absent from it reads as not found,
+// matching the real store's sql.ErrNoRows.
+func (m *mockRepo) GetWorkflow(_ context.Context, id string) (*db.Workflow, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if wf, ok := m.workflowRows[id]; ok {
+		return wf, nil
+	}
+	return nil, sql.ErrNoRows
 }
 
 // The embedded db.Repository is a nil interface, so every method the pass calls

@@ -390,7 +390,7 @@ func (q *Queries) ListThreadsByOrigin(ctx context.Context, arg ListThreadsByOrig
 	return items, nil
 }
 
-const reapOrphanedThreads = `-- name: ReapOrphanedThreads :execrows
+const reapOrphanedThreads = `-- name: ReapOrphanedThreads :many
 UPDATE threads AS t
 SET status = CASE w.stop_reason
         WHEN 1 THEN 3  -- COMPLETED -> thread completed
@@ -402,7 +402,15 @@ FROM workflows w
 WHERE t.workflow_id = w.id
   AND w.state = 3 AND w.stop_reason IN (1, 2, 4)
   AND t.status IN (2, 6)
+RETURNING t.id AS thread_id, t.chat_id, w.id AS workflow_id, t.status
 `
+
+type ReapOrphanedThreadsRow struct {
+	ThreadID   string `json:"thread_id"`
+	ChatID     string `json:"chat_id"`
+	WorkflowID string `json:"workflow_id"`
+	Status     int32  `json:"status"`
+}
 
 // Enforce the invariant CascadeTerminalStatusToThreadSubtree asserts from
 // the other direction: a thread whose WORKFLOW is terminal is not running.
@@ -433,12 +441,37 @@ WHERE t.workflow_id = w.id
 // pending/active distinction to make). This is the SQL twin of
 // core.ThreadStatusForStopReason — a repaired cancel must not read as a
 // repaired success.
-func (q *Queries) ReapOrphanedThreads(ctx context.Context) (int64, error) {
-	result, err := q.db.ExecContext(ctx, reapOrphanedThreads)
+//
+// Returns each thread it moved and the workflow that owns it. A reap is the
+// evidence that some write path ended a workflow without cascading, and a
+// count alone cannot say which run, which chat, or how that run ended — the
+// reconciler needs the ids to ask Temporal and to log something actionable.
+func (q *Queries) ReapOrphanedThreads(ctx context.Context) ([]ReapOrphanedThreadsRow, error) {
+	rows, err := q.db.QueryContext(ctx, reapOrphanedThreads)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected()
+	defer rows.Close()
+	items := []ReapOrphanedThreadsRow{}
+	for rows.Next() {
+		var i ReapOrphanedThreadsRow
+		if err := rows.Scan(
+			&i.ThreadID,
+			&i.ChatID,
+			&i.WorkflowID,
+			&i.Status,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const reviveThread = `-- name: ReviveThread :execrows

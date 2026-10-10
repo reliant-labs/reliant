@@ -72,8 +72,25 @@ func TestReapOrphanedThreads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReapOrphanedThreads: %v", err)
 	}
-	if reaped != 3 {
-		t.Errorf("reaped %d rows, want 3 (completed, cancelled, failed)", reaped)
+	if len(reaped) != 3 {
+		t.Errorf("reaped %d rows, want 3 (completed, cancelled, failed)", len(reaped))
+	}
+
+	// Each reaped row names the thread, its chat, the workflow whose terminal
+	// status it was missing, and the status it took — the ids the reconciler
+	// logs and the workflow it asks Temporal about.
+	gotReaped := map[string]ReapedThread{}
+	for _, row := range reaped {
+		gotReaped[row.ThreadID] = row
+	}
+	for thread, want := range map[string]ReapedThread{
+		completedThread: {ThreadID: completedThread, ChatID: chatID, WorkflowID: completedWf, Status: ThreadStatusCompleted},
+		cancelledThread: {ThreadID: cancelledThread, ChatID: chatID, WorkflowID: cancelledWf, Status: ThreadStatusCancelled},
+		failedThread:    {ThreadID: failedThread, ChatID: chatID, WorkflowID: failedWf, Status: ThreadStatusFailed},
+	} {
+		if got := gotReaped[thread]; got != want {
+			t.Errorf("reaped row for %s = %+v, want %+v", thread, got, want)
+		}
 	}
 
 	assertThreadStatus := func(id string, want int32, why string) {
@@ -125,7 +142,7 @@ func TestReapOrphanedThreads(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ReapOrphanedThreads (second pass): %v", err)
 	}
-	if again != 0 {
-		t.Errorf("second pass reaped %d rows, want 0 — the repair must converge", again)
+	if len(again) != 0 {
+		t.Errorf("second pass reaped %d rows, want 0 — the repair must converge", len(again))
 	}
 }

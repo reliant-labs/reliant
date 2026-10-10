@@ -209,6 +209,11 @@ const (
 	anomalyOrphanThreadReaped              = "orphan_thread_reaped"
 	anomalyStrandedSpawnRepaired           = "stranded_spawn_repaired"
 	anomalyStrandedBackgroundSpawnRepaired = "stranded_background_spawn_repaired"
+	// anomalyOrphanThreadReapedAfterTerminate is anomalyOrphanThreadReaped
+	// for a run Temporal ended by hard stop (terminate, execution timeout),
+	// where no workflow code ran to cascade. Expected, not a bug; see
+	// reapOrphanedThreads.
+	anomalyOrphanThreadReapedAfterTerminate = "orphan_thread_reaped_after_terminate"
 	// anomalyStrandedBackgroundSpawnUndeliverable is the same repair, but
 	// for a spawn whose parent thread was ALREADY terminal when the repair
 	// ran — the common case, because the parent dying is usually what
@@ -1428,7 +1433,7 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 		}
 	}
 
-	// CAS prevents duplicate transitions.
+	// CAS prevents duplicate transitions; the subtree ends in the same commit.
 	swapped, err := r.swapStatus(ctx, wf, to, temporalState.RunID)
 	if err != nil {
 		result.Error = fmt.Errorf("failed to mark wedged workflow as %s: %w", to.Label(), err)
@@ -1436,19 +1441,6 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 	}
 	if !swapped {
 		return // another reconciler already handled this
-	}
-
-	if err := r.repo.CascadeTerminalStatusToDescendants(ctx, wf.ID, to.StopReason); err != nil {
-		logging.Warn("[Reconciler] Failed to end the sub-agents of a wedged run",
-			"error", err,
-			"workflowID", wf.ID,
-		)
-	}
-	if err := r.repo.CascadeTerminalStatusToThreadSubtree(ctx, wf.ID, to.StopReason); err != nil {
-		logging.Warn("[Reconciler] Failed to end the threads of a wedged run",
-			"error", err,
-			"workflowID", wf.ID,
-		)
 	}
 
 	result.WasStale = true
@@ -1475,20 +1467,39 @@ func (r *Reconciler) recoverWedgedWorkflow(ctx context.Context, wf *db.Workflow,
 	}
 }
 
-// swapStatus is CompareAndSwapWorkflowStatus plus the workflow-event outbox
-// row, in ONE transaction. The reconciler is the only component that observes
-// a run Temporal killed outright — no workflow code runs again, so the
-// WorkflowStatus activity that normally emits the event never will — and a
-// repair that moved a ROOT run to a terminal state is exactly the transition a
-// workflow_event trigger listens for. The event commits with the repair, or
-// neither does, and only the pass whose CAS wins emits it.
+// swapStatus is CompareAndSwapWorkflowStatus plus, in ONE transaction, the
+// terminal cascade and the workflow-event outbox row. It is the only way the
+// reconciler moves a run's status, so every repair it makes carries both.
+//
+// The reconciler is the only component that observes a run Temporal killed
+// outright — no workflow code runs again, so the WorkflowStatus activity that
+// normally does all of this never will.
+//
+//   - The cascade: a run repaired to a terminal status ends its descendant
+//     workflows and every thread they own, at the run's own stop reason. Its
+//     completion handler never ran, so nothing else will. Before this lived
+//     here only the wedge path cascaded; the lost-run, stuck-task,
+//     progress-stall and status-drift repairs moved the root alone, and the
+//     next pass's reapOrphanedThreads found the stranded thread and paged
+//     (chat 66a045ce, an operator terminate on 2026-10-10). Committing it with
+//     the status means no pass can ever observe the root terminal and its
+//     threads running.
+//   - The event: a repair that moved a ROOT run to a terminal state is exactly
+//     the transition a workflow_event trigger listens for. It commits with the
+//     repair, or neither does, and only the pass whose CAS wins emits it.
 func (r *Reconciler) swapStatus(ctx context.Context, wf *db.Workflow, to db.WorkflowStatus, temporalRunID string) (bool, error) {
 	var swapped bool
 	err := r.repo.RunTx(ctx, func(txCtx context.Context) error {
 		var err error
 		swapped, err = r.repo.CompareAndSwapWorkflowStatus(txCtx, wf.ID, to, wf.Status)
-		if err != nil || !swapped || wf.ParentID != nil {
+		if err != nil || !swapped {
 			return err
+		}
+		if err := r.cascadeTerminalStatus(txCtx, wf.ID, to); err != nil {
+			return err
+		}
+		if wf.ParentID != nil {
+			return nil
 		}
 		var outcome core.RunEventOutcome
 		switch to {
@@ -1510,6 +1521,23 @@ func (r *Reconciler) swapStatus(ctx context.Context, wf *db.Workflow, to db.Work
 		return err
 	})
 	return swapped, err
+}
+
+// cascadeTerminalStatus ends workflowID's descendant workflows and the threads
+// of its whole subtree at to's stop reason. A status that has not ended the
+// run — running, or stopped only to pause — leaves the subtree alone: a
+// paused run is coming back, and draining it would kill that work.
+func (r *Reconciler) cascadeTerminalStatus(ctx context.Context, workflowID string, to db.WorkflowStatus) error {
+	if !to.IsStopped() || to.StopReason == db.StopReasonPaused {
+		return nil
+	}
+	if err := r.repo.CascadeTerminalStatusToDescendants(ctx, workflowID, to.StopReason); err != nil {
+		return fmt.Errorf("ending the descendants of %s: %w", workflowID, err)
+	}
+	if err := r.repo.CascadeTerminalStatusToThreadSubtree(ctx, workflowID, to.StopReason); err != nil {
+		return fmt.Errorf("ending the threads of %s: %w", workflowID, err)
+	}
+	return nil
 }
 
 // reconciledFailureText is the error a reconciler-repaired failure reports. The
@@ -1989,22 +2017,142 @@ func (r *Reconciler) reapOrphanedDescendants(ctx context.Context, stats *passSta
 // after it: a workflow reaped there becomes exactly the condition this reaps,
 // so running this second lets both repairs land in the same pass instead of
 // leaving the thread stranded until the next one.
+//
+// Whether a reap is a bug depends on how the run ended, so each reaped run is
+// looked up in Temporal and logged at its own level:
+//   - Terminated or timed out: Temporal stopped the run without executing any
+//     more workflow code, so nothing could cascade. The reap is the designed
+//     recovery and is logged at INFO. (Every repair that observes such a run
+//     now cascades in the same commit — see swapStatus — so even this is
+//     rare; the terminate itself, when it is a fault, is reported where it is
+//     observed, as silent_terminal_drift.)
+//   - Anything else: workflow code ran to an end (or the run's end is
+//     unknown), and a path that could have cascaded did not. That is a real
+//     cascade bug, logged at ERROR so it pages.
 func (r *Reconciler) reapOrphanedThreads(ctx context.Context, stats *passStats) (int, error) {
 	reaped, err := r.repo.ReapOrphanedThreads(ctx)
 	if err != nil {
 		logging.Error("[Reconciler] Failed to reap orphaned threads", "error", err)
 		return 0, fmt.Errorf("failed to reap orphaned threads: %w", err)
 	}
-	if reaped == 0 {
+	if len(reaped) == 0 {
 		return 0, nil
 	}
-	for i := int64(0); i < reaped; i++ {
-		r.recordAnomaly(stats, anomalyOrphanThreadReaped)
+	for _, run := range r.groupReapedThreadsByRun(ctx, reaped) {
+		closeStatus := r.runCloseStatus(ctx, run.rootWorkflowID)
+		fields := []any{
+			"workflowID", run.rootWorkflowID,
+			"chatID", run.chatID,
+			"threadIDs", run.threadIDs,
+			"threadWorkflowIDs", run.threadWorkflowIDs,
+			"rows", len(run.threadIDs),
+			"closeStatus", closeStatusLabel(closeStatus),
+		}
+		if len(run.threadIDs) == 1 {
+			fields = append(fields, "threadID", run.threadIDs[0])
+		}
+		if ranNoWorkflowCode(closeStatus) {
+			for range run.threadIDs {
+				r.recordAnomaly(stats, anomalyOrphanThreadReapedAfterTerminate)
+			}
+			logging.Info("[Reconciler] Reaped the threads of a run Temporal stopped outright — no workflow code ran to cascade, as expected",
+				fields...)
+			continue
+		}
+		for range run.threadIDs {
+			r.recordAnomaly(stats, anomalyOrphanThreadReaped)
+		}
+		logging.Error("[Reconciler] Reaped orphaned threads — a terminal workflow did not cascade to its thread",
+			fields...)
 	}
-	logging.Error("[Reconciler] Reaped orphaned threads — a terminal workflow did not cascade to its thread",
-		"rows", reaped,
-	)
-	return int(reaped), nil
+	return len(reaped), nil
+}
+
+// reapedRun is the reaped threads of one run: everything under one root
+// workflow, which is the unit Temporal executes and the unit that ended.
+type reapedRun struct {
+	rootWorkflowID    string
+	chatID            string
+	threadIDs         []string
+	threadWorkflowIDs []string
+}
+
+// groupReapedThreadsByRun groups reaped threads under the root workflow of
+// their run, in first-seen order. A spawned agent's thread belongs to a child
+// workflow row that never existed in Temporal; its run is its root's.
+func (r *Reconciler) groupReapedThreadsByRun(ctx context.Context, reaped []db.ReapedThread) []*reapedRun {
+	var runs []*reapedRun
+	byRoot := map[string]*reapedRun{}
+	roots := map[string]string{} // workflow id -> root, memoised across rows
+	for _, thread := range reaped {
+		root, ok := roots[thread.WorkflowID]
+		if !ok {
+			root = r.rootWorkflowID(ctx, thread.WorkflowID)
+			roots[thread.WorkflowID] = root
+		}
+		run := byRoot[root]
+		if run == nil {
+			run = &reapedRun{rootWorkflowID: root, chatID: thread.ChatID}
+			byRoot[root] = run
+			runs = append(runs, run)
+		}
+		run.threadIDs = append(run.threadIDs, thread.ThreadID)
+		run.threadWorkflowIDs = append(run.threadWorkflowIDs, thread.WorkflowID)
+	}
+	return runs
+}
+
+// maxWorkflowDepth bounds the parent walk. Spawn depth is capped far below
+// this; the bound only keeps a corrupt parent cycle from spinning.
+const maxWorkflowDepth = 64
+
+// rootWorkflowID walks workflowID's parents to the root. A row it cannot load
+// ends the walk there: the deepest id known is the best answer available, and
+// classifying the reap must never fail the pass.
+func (r *Reconciler) rootWorkflowID(ctx context.Context, workflowID string) string {
+	id := workflowID
+	for range maxWorkflowDepth {
+		wf, err := r.repo.GetWorkflow(ctx, id)
+		if err != nil || wf == nil || wf.ParentID == nil || *wf.ParentID == "" {
+			return id
+		}
+		id = *wf.ParentID
+	}
+	return id
+}
+
+// runCloseStatus is how Temporal says the latest run of workflowID ended, or
+// UNSPECIFIED when it cannot say (no client, not found, describe failed).
+func (r *Reconciler) runCloseStatus(ctx context.Context, workflowID string) enums.WorkflowExecutionStatus {
+	if r.tempClient == nil {
+		return enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED
+	}
+	resp, err := r.tempClient.DescribeWorkflowExecution(ctx, workflowID, "")
+	if err != nil || resp.GetWorkflowExecutionInfo() == nil {
+		return enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED
+	}
+	return resp.GetWorkflowExecutionInfo().GetStatus()
+}
+
+// ranNoWorkflowCode reports whether Temporal ended the run without executing
+// any more of its code — the closes no completion handler can observe, so the
+// ones a missing cascade is expected after.
+func ranNoWorkflowCode(status enums.WorkflowExecutionStatus) bool {
+	switch status {
+	case enums.WORKFLOW_EXECUTION_STATUS_TERMINATED, enums.WORKFLOW_EXECUTION_STATUS_TIMED_OUT:
+		return true
+	default:
+		return false
+	}
+}
+
+// closeStatusLabel renders a close status for the log: "Terminated",
+// "Completed", ..., or "unknown" when Temporal could not say.
+func closeStatusLabel(status enums.WorkflowExecutionStatus) string {
+	if status == enums.WORKFLOW_EXECUTION_STATUS_UNSPECIFIED {
+		return "unknown"
+	}
+	return status.String()
 }
 
 // repairStrandedSpawnToolCalls closes spawn tool calls whose child workflow has

@@ -168,10 +168,19 @@ type ThreadStore interface {
 	// queries/threads.sql for why.
 	CascadeTerminalStatusToThreadSubtree(ctx context.Context, workflowID string, status int32) error
 	// ReapOrphanedThreads ends every running/paused thread whose workflow is
-	// already terminal, at the workflow's own status, and reports how many
-	// rows it moved. The backstop for a write path that reached a terminal
-	// workflow status without cascading to the thread.
-	ReapOrphanedThreads(ctx context.Context) (int64, error)
+	// already terminal, at the workflow's own status, and returns the rows it
+	// moved. The backstop for a write path that reached a terminal workflow
+	// status without cascading to the thread.
+	ReapOrphanedThreads(ctx context.Context) ([]ReapedThread, error)
+}
+
+// ReapedThread is one thread ReapOrphanedThreads closed: the thread, its chat,
+// the workflow whose terminal status it was missing, and the status it took.
+type ReapedThread struct {
+	ThreadID   string
+	ChatID     string
+	WorkflowID string
+	Status     int32
 }
 
 // ContextWindowStore is the shared contract for context-window persistence across drivers.

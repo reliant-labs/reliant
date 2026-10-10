@@ -265,18 +265,24 @@ var (
 	//                              before draining them; marked undelivered
 	//   orphan_thread_reaped     - thread whose workflow is terminal but the
 	//                              thread itself was still running/paused;
-	//                              moved to the workflow's status
+	//                              moved to the workflow's status. The run
+	//                              ended by running workflow code, so a
+	//                              cascade was missed: a bug
+	//   orphan_thread_reaped_after_terminate
+	//                            - the same repair after Temporal stopped the
+	//                              run outright (terminate, timeout), when no
+	//                              code could cascade. Expected; logged at INFO
 	//   silent_terminal_drift    - run ended terminally in Temporal (typically
 	//                              a hard terminate) without ever reporting
 	//                              it; DB repaired and the user notified
-	// Every increment is paired with a Sentry-visible ERROR log; alert on any
-	// sustained non-zero rate.
+	// Every increment of the fault classes is paired with a Sentry-visible
+	// ERROR log; alert on any sustained non-zero rate of those.
 	ReconcilerAnomaliesTotal = newCounterVec(
 		prometheus.CounterOpts{
 			Namespace: "reliant",
 			Subsystem: "reconciler",
 			Name:      "anomalies_total",
-			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_thread_reaped, silent_terminal_drift, backgrounded_process_closed).",
+			Help:      "Workflow reconciler anomalies by class (stuck_reset, wedge_terminated, lost_workflow_repaired, progress_stall_detected, progress_stall_confirmed, reset_failed_terminated, reset_attempts_exhausted, orphaned_agent_messages_resolved, stranded_background_spawn_repaired, stranded_background_spawn_undeliverable, orphan_thread_reaped, orphan_thread_reaped_after_terminate, silent_terminal_drift, backgrounded_process_closed).",
 		},
 		[]string{"class"},
 	)

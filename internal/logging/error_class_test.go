@@ -43,6 +43,16 @@ func (r *recordingReporter) CaptureExceptionWithContext(err error, _ map[string]
 	return "event"
 }
 
+// CaptureLogEvent records a forwarded log record by its error, or its
+// message when it carries none: the Sentry bridge sends log events.
+func (r *recordingReporter) CaptureLogEvent(event telemetry.LogEvent) string {
+	err := event.Err
+	if err == nil {
+		err = errors.New(event.Message)
+	}
+	return r.CaptureExceptionWithContext(err, event.Tags, event.Extra)
+}
+
 func (r *recordingReporter) captured() []error {
 	r.mu.Lock()
 	defer r.mu.Unlock()

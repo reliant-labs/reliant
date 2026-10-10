@@ -128,7 +128,7 @@ FROM subtree
 WHERE t.workflow_id = subtree.id
   AND t.status IN (2, 6);
 
--- name: ReapOrphanedThreads :execrows
+-- name: ReapOrphanedThreads :many
 -- Enforce the invariant CascadeTerminalStatusToThreadSubtree asserts from
 -- the other direction: a thread whose WORKFLOW is terminal is not running.
 -- The thread-status mirror of ReapOrphanedWorkflowDescendants (workflows.sql)
@@ -158,6 +158,11 @@ WHERE t.workflow_id = subtree.id
 -- pending/active distinction to make). This is the SQL twin of
 -- core.ThreadStatusForStopReason — a repaired cancel must not read as a
 -- repaired success.
+--
+-- Returns each thread it moved and the workflow that owns it. A reap is the
+-- evidence that some write path ended a workflow without cascading, and a
+-- count alone cannot say which run, which chat, or how that run ended — the
+-- reconciler needs the ids to ask Temporal and to log something actionable.
 UPDATE threads AS t
 SET status = CASE w.stop_reason
         WHEN 1 THEN 3  -- COMPLETED -> thread completed
@@ -168,7 +173,8 @@ SET status = CASE w.stop_reason
 FROM workflows w
 WHERE t.workflow_id = w.id
   AND w.state = 3 AND w.stop_reason IN (1, 2, 4)
-  AND t.status IN (2, 6);
+  AND t.status IN (2, 6)
+RETURNING t.id AS thread_id, t.chat_id, w.id AS workflow_id, t.status;
 
 -- name: DeleteThread :exec
 DELETE FROM threads WHERE id = $1;

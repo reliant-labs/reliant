@@ -22,8 +22,8 @@ type capturingReporter struct {
 	extra map[string]interface{}
 }
 
-func (r *capturingReporter) CaptureExceptionWithContext(err error, tags map[string]string, extra map[string]interface{}) string {
-	r.err, r.tags, r.extra = err, tags, extra
+func (r *capturingReporter) CaptureLogEvent(event telemetry.LogEvent) string {
+	r.err, r.tags, r.extra = event.Err, event.Tags, event.Extra
 	return "event"
 }
 
@@ -42,7 +42,7 @@ func installCapturingReporter(t *testing.T) *capturingReporter {
 func reportRecord(handler *sentryHandler, attrs ...slog.Attr) {
 	record := slog.NewRecord(time.Time{}, slog.LevelError, "tool execution failed", 0)
 	record.AddAttrs(attrs...)
-	handler.reportToSentry(record)
+	handler.reportToSentry(record, nil)
 }
 
 // Short content is still content. Before the allowlist, every attribute of 64
@@ -183,8 +183,8 @@ type waitingReporter struct {
 	done chan struct{}
 }
 
-func (r *waitingReporter) CaptureExceptionWithContext(_ error, tags map[string]string, _ map[string]interface{}) string {
-	r.tags = tags
+func (r *waitingReporter) CaptureLogEvent(event telemetry.LogEvent) string {
+	r.tags = event.Tags
 	close(r.done)
 	return "event"
 }
