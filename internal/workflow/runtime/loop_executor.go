@@ -662,8 +662,9 @@ func (e *InlineLoopExecutor) loadAndMergePresets(ctx workflow.Context, iterInput
 		return nil
 	}
 
-	// Terminal, not transient: retrying never supplies an unset project path.
-	if e.projectPath == "" {
+	// See the matching gate in InlineWorkflowExecutor.loadAndMergePresets: an
+	// empty path no longer blocks preset loading (presetsNeedNoPathChangeID).
+	if presetsRefuseUnsetPath(ctx, e.projectPath) {
 		return &TerminalError{Message: "project path not set, cannot load presets"}
 	}
 

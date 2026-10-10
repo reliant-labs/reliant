@@ -253,10 +253,11 @@ func (e *InlineWorkflowExecutor) loadAndMergePresets(subInputs map[string]interf
 		return nil
 	}
 
-	// Terminal, not transient: no amount of retrying supplies a project path
-	// that was never set. The spawn retry loop is unbounded, so an error that
-	// cannot resolve itself has to say so in its type or it is retried forever.
-	if e.projectPath == "" {
+	// A run with no project path loads its presets like any other:
+	// LoadPresetParams never reads the path (presetsNeedNoPathChangeID). Only a
+	// history recorded before that gate replays the old refusal — terminal,
+	// because the spawn retry loop is unbounded.
+	if presetsRefuseUnsetPath(e.ctx, e.projectPath) {
 		return &TerminalError{Message: "project path not set, cannot load presets"}
 	}
 

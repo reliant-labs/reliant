@@ -1,11 +1,17 @@
 package runtime
 
 import (
+	"context"
+	"fmt"
 	"strings"
 	"testing"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/core"
+	"go.temporal.io/sdk/activity"
+	"go.temporal.io/sdk/temporal"
+	"go.temporal.io/sdk/workflow"
 	"google.golang.org/protobuf/types/known/structpb"
 )
 
@@ -65,34 +71,57 @@ func TestInlineWorkflowExecutor_BuildSubWorkflowInputs_UsesCoreInputPolicy(t *te
 	// to the workflow's defaults. Falling back ran the agent under a different
 	// model, tool set and prompt than the caller asked for while reporting
 	// success.
+	//
+	// Loading a preset runs the LoadPresetParams activity, so this runs where
+	// production does: inside a workflow, with the loader failing the way the
+	// real one fails for a preset that does not exist. The project path is
+	// empty on purpose — that alone no longer refuses the load
+	// (presetsNeedNoPathChangeID), so the failure here is the preset's own.
 	t.Run("ref policy preset merge failure is fatal", func(t *testing.T) {
-		executor := &InlineWorkflowExecutor{
-			workflowInputs:    map[string]interface{}{"parent_only": "secret"},
-			subWorkflowInputs: map[string]interface{}{"task": "analyze"},
-			logger:            &runtimeBridgeNoopLogger{},
-			subWorkflow: &reliantv1.Workflow{Inputs: map[string]*reliantv1.Input{
-				"mode": {
-					Type:   "string",
-					Config: &reliantv1.Input_StringInput{StringInput: &reliantv1.StringInputConfig{Default: stringPointer("manual")}},
-				},
-			}},
-			node: &reliantv1.Node{
-				Id:   "wf_call",
-				Type: "workflow",
-				Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{Presets: map[string]string{DefaultPresetGroup: "unknown"}}},
-			},
-			projectPath: "",
-			invocationContract: &core.SubWorkflowContract{
-				InputPolicy: core.InputPolicyRefPresetsArgsDefaults,
-			},
-		}
+		var suite temporaltest.WorkflowTestSuite
+		env := suite.NewTestWorkflowEnvironment()
+		env.RegisterActivityWithOptions(func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+			// Non-retryable so the activity's retry ladder does not wait out
+			// backoff timers; whether the error retries is not what this pins.
+			return nil, temporal.NewNonRetryableApplicationError(
+				fmt.Sprintf("preset not found: %v", input["preset_name"]), "PresetNotFound", nil)
+		}, activity.RegisterOptions{Name: "LoadPresetParams"})
 
-		_, _, err := executor.buildSubWorkflowInputsWithOwnership()
+		var err error
+		env.ExecuteWorkflow(func(ctx workflow.Context) error {
+			executor := &InlineWorkflowExecutor{
+				ctx:               ctx,
+				workflowInputs:    map[string]interface{}{"parent_only": "secret"},
+				subWorkflowInputs: map[string]interface{}{"task": "analyze"},
+				logger:            &runtimeBridgeNoopLogger{},
+				subWorkflow: &reliantv1.Workflow{Inputs: map[string]*reliantv1.Input{
+					"mode": {
+						Type:   "string",
+						Config: &reliantv1.Input_StringInput{StringInput: &reliantv1.StringInputConfig{Default: stringPointer("manual")}},
+					},
+				}},
+				node: &reliantv1.Node{
+					Id:   "wf_call",
+					Type: "workflow",
+					Args: &reliantv1.Node_Workflow{Workflow: &reliantv1.SubWorkflowArgs{Presets: map[string]string{DefaultPresetGroup: "unknown"}}},
+				},
+				projectPath: "",
+				invocationContract: &core.SubWorkflowContract{
+					InputPolicy: core.InputPolicyRefPresetsArgsDefaults,
+				},
+			}
+			_, _, err = executor.buildSubWorkflowInputsWithOwnership()
+			return nil
+		})
+
+		if !env.IsWorkflowCompleted() {
+			t.Fatal("the workflow running the preset load did not complete")
+		}
 		if err == nil {
 			t.Fatal("expected an error when the preset cannot be loaded, got nil")
 		}
-		if !strings.Contains(err.Error(), "load presets") {
-			t.Fatalf("expected a preset-load error, got %v", err)
+		if !strings.Contains(err.Error(), "load presets") || !strings.Contains(err.Error(), "preset not found: unknown") {
+			t.Fatalf("expected a preset-load error naming the missing preset, got %v", err)
 		}
 	})
 }
