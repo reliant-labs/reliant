@@ -56,8 +56,14 @@ func NewReporterFromEnv() ErrorReporter {
 	}
 
 	reporter, err := NewSentryReporter(SentryConfig{
-		Enabled:          true,
-		DSN:              dsn,
+		Enabled: true,
+		DSN:     dsn,
+		// The deploy's own statement of which environment this is. Unset,
+		// clientOptions guesses from the version string, which is right for a
+		// desktop build and only coincidentally right for a server: a
+		// prerelease tag deployed to prod would file prod's errors under
+		// "prerelease".
+		Environment:      os.Getenv("SENTRY_ENVIRONMENT"),
 		TracesSampleRate: tracesSampleRate,
 	})
 	if err != nil || reporter == nil {

@@ -1,7 +1,11 @@
 // Copyright (c) 2025 Reliant Labs
 package telemetry
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/getsentry/sentry-go"
+)
 
 func TestNewReporterFromEnv(t *testing.T) {
 	tests := []struct {
@@ -64,6 +68,33 @@ func TestNewReporterFromEnv(t *testing.T) {
 			if isSentry != tt.wantSentry {
 				t.Fatalf("NewReporterFromEnv() with RELIANT_ENV=%q: got sentry=%v, want sentry=%v (%T)",
 					tt.reliantEnv, isSentry, tt.wantSentry, reporter)
+			}
+		})
+	}
+}
+
+// The deploy states its environment in SENTRY_ENVIRONMENT. Before, the server
+// reporter ignored it and guessed from the version string, so the deploy could
+// not say which environment its events belong to.
+func TestNewReporterFromEnv_EnvironmentFromDeploy(t *testing.T) {
+	t.Setenv("RELIANT_ENV", "prod")
+	t.Setenv("NODE_ENV", "")
+	t.Setenv("SENTRY_DSN", "https://public@example.ingest.sentry.io/1")
+	t.Setenv("SENTRY_ENABLED", "")
+
+	for _, tt := range []struct {
+		name, env, want string
+	}{
+		{"declared by the deploy", "staging", "staging"},
+		{"unset falls back to the version guess", "", "production"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv("SENTRY_ENVIRONMENT", tt.env)
+			if _, ok := NewReporterFromEnv().(*SentryReporter); !ok {
+				t.Fatal("expected a Sentry reporter")
+			}
+			if got := sentry.CurrentHub().Client().Options().Environment; got != tt.want {
+				t.Errorf("Environment = %q, want %q", got, tt.want)
 			}
 		})
 	}
