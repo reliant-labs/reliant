@@ -3185,9 +3185,16 @@ NO VERSION DOES ALL THE DEPLOYMENT BITS. In order: build the env's artifacts at
 the current checkout (images, static artifacts) exactly as `forge env build`
 does, push them, cut a release named `<YYYYMMDD>.<HHMMSS>-<tree12>` for this
 tree, record the env's declared shape, compute the plan, ask you to confirm it,
-then promote, apply and wait. A release whose provenance tree already matches
-this checkout is REUSED rather than cut again, so a retried deploy never cuts
-twice.
+then promote, apply and wait.
+
+A RELEASE THAT ALREADY HOLDS THIS CHECKOUT IS DEPLOYED, NOT REBUILT. When a
+release — whatever it is named, `forge env build --release`'s included —
+records this checkout's clean tree and this forge version, covers every
+artifact the env declares, and every image it pins still resolves in its
+registry, nothing is built or cut: forge prints "reusing release `<v>`" and
+deploys it. Otherwise it prints "cutting new release `<v>` because …" before
+building. A dirty checkout, another forge version, a -D option, an artifact the
+release lacks, or an image the registry no longer holds each cut a new one.
 
 A SCOPED DEPLOY NEEDS A RELEASE. --frontends-only and --target ship part of the
 env, so they are refused with NO version: a no-version deploy cuts a release
