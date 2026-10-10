@@ -347,10 +347,11 @@ function routeChatErrorMarker(
       return;
     }
     case CHAT_MARKER_KINDS.ProviderStreamStalled: {
-      // The prefix already names the provider and says the turn is being
-      // retried, so stripping the tail leaves a complete message. The
-      // payload duplicates the provider name that prefix carries, so there
-      // is nothing extra to surface here.
+      // The prefix already names the model and provider and says what the
+      // silence means; whether the turn is retrying or paused is the row's
+      // own is_retrying state. The error_summary the timeline prefers is the
+      // same sentence without the marker, and the payload duplicates the
+      // provider name, so there is nothing extra to surface here.
       errorUpdate.error_message = stripChatMarker(errorUpdate.error_message);
       return;
     }

@@ -83,6 +83,15 @@ func classifyError(err error) error {
 		return temporal.NewNonRetryableApplicationError(terminalErr.Error(), "TerminalError", terminalErr.Cause)
 	}
 
+	// An error that knows its own retry schedule (a stalled LLM stream) gets
+	// it, rather than the step's blanket policy.
+	var scheduled selfSchedulingRetry
+	if errors.As(err, &scheduled) {
+		delay, retry := scheduled.RetryAfter()
+		return temporal.NewApplicationErrorWithOptions(err.Error(), scheduled.TemporalErrorType(),
+			temporal.ApplicationErrorOptions{NonRetryable: !retry, NextRetryDelay: delay, Cause: err})
+	}
+
 	// A provider usage window (Anthropic's 5-hour / 7-day subscription limit)
 	// clears in hours, not seconds: retrying only delays the error the user
 	// needs to see. Fail the turn now so the executor shows it and pauses.
@@ -433,6 +442,19 @@ func workerStopped(ch <-chan struct{}) bool {
 	}
 }
 
+// selfSchedulingRetry is an activity error that decides its own retry: whether
+// another attempt is worth it, and after how long. classifyError hands that to
+// Temporal as the failure's NonRetryable flag and NextRetryDelay.
+//
+// Implemented by CallLLM's stalled-stream failure, whose attempts each cost a
+// full stall deadline, so the step's blanket 5-attempt, seconds-apart policy
+// fits it badly.
+type selfSchedulingRetry interface {
+	error
+	RetryAfter() (delay time.Duration, retry bool)
+	TemporalErrorType() string
+}
+
 // isTerminal checks if an error is terminal (non-retryable)
 func isTerminal(err error) bool {
 	if err == nil {
@@ -443,6 +465,14 @@ func isTerminal(err error) bool {
 	var terminalErr *TerminalError
 	if errors.As(err, &terminalErr) {
 		return true
+	}
+
+	// An error that schedules its own retry is terminal once it declines one,
+	// so the chat row stops saying "retrying" on the attempt that pauses.
+	var scheduled selfSchedulingRetry
+	if errors.As(err, &scheduled) {
+		_, retry := scheduled.RetryAfter()
+		return !retry
 	}
 
 	// Check for Temporal ApplicationError. NonRetryable is the durable signal;
@@ -1952,9 +1982,9 @@ func wrapActivity[TInput any, TOutput any](
 					"activity", name, "error", err, "category", category, "is_terminal", terminal)
 			}
 
-			// Return the classified error (terminal or transient)
-			// Temporal will handle retry logic based on error type
-			return output, classified
+			// Return the classified error (terminal or transient), as ONE
+			// failure. Temporal will handle retry logic based on error type.
+			return output, flattenForTemporal(classified)
 		}
 
 		return output, nil

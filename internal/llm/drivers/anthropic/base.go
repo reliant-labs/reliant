@@ -576,8 +576,13 @@ func (b *baseClient) streamResponseInternal(ctx context.Context, params anthropi
 				_ = stream.Close()
 			}
 		}()
+		// The transport sizes how long an open content block may stream only
+		// keepalives from this: a thinking block under the redact-thinking
+		// beta sends nothing else for as long as the model thinks, and the
+		// most it can think is max_tokens.
+		requestCtx := llm.WithStreamOutputBudget(ctx, params.MaxTokens)
 		for attempt := 1; ; attempt++ {
-			stream = b.client.Messages.NewStreaming(ctx, params, option.WithMaxRetries(0))
+			stream = b.client.Messages.NewStreaming(requestCtx, params, option.WithMaxRetries(0))
 			if hasNext = stream.Next(); hasNext {
 				break
 			}

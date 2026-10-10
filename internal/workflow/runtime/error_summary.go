@@ -292,6 +292,12 @@ func extractLLMErrorSummary(errMsg string) string {
 	if summary := chatmarkers.ProviderUsageLimitSummary(errMsg); summary != "" {
 		return summary
 	}
+	// A stalled stream names the model, the provider and what the silence
+	// usually means; matched on "timeout" below it read as a bare
+	// "Request to the AI provider timed out".
+	if summary := chatmarkers.ProviderStreamStalledSummary(errMsg); summary != "" {
+		return summary
+	}
 
 	errLower := strings.ToLower(errMsg)
 

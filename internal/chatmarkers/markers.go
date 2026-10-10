@@ -72,16 +72,18 @@ const (
 	KindDaemonOfflineHalt Kind = "RELIANT_DAEMON_OFFLINE_HALT"
 
 	// KindProviderStreamStalled signals the upstream provider accepted the
-	// request and then produced only keepalives until the content-stall
-	// deadline, so the turn was cut and will be retried. Payload is the
-	// provider name (e.g. "claude-code"), which is the one thing that makes
-	// the message actionable — it tells the user WHICH subscription to check.
+	// request and then produced only keepalives until a content-stall
+	// deadline, so the turn was cut. Payload is the provider name (e.g.
+	// "anthropic"), which is the one thing that makes the message actionable
+	// — it tells the user WHICH subscription to check.
 	//
-	// The observed cause is a subscription with no remaining credit: the
-	// provider answers 200, pings for 28-43 minutes, and never sends content
-	// nor an error. Without this marker the user saw an active chat with no
-	// output and no explanation.
-	// Producer: internal/llm/drivers/anthropic (via llm.ErrStreamContentStalled).
+	// The observed cause with no content block open is a subscription with no
+	// remaining credit: the provider answers 200, pings for 28-43 minutes, and
+	// never sends content nor an error. Without this marker the user saw an
+	// active chat with no output and no explanation.
+	// The human-readable message starts with ProviderStreamStalledLead.
+	// Producer: internal/workflow/runtime/activities/handlers (CallLLM, from
+	// an llm.StreamStallError).
 	KindProviderStreamStalled Kind = "RELIANT_PROVIDER_STREAM_STALLED"
 
 	// KindProviderUsageLimit signals the provider refused the request with a
@@ -104,12 +106,29 @@ const ProviderUsageLimitLead = "AI provider usage limit reached"
 // ProviderUsageLimitSummary returns the human-readable sentence of a
 // KindProviderUsageLimit error message, or "" if msg carries none.
 func ProviderUsageLimitSummary(msg string) string {
-	kind, _, found := Extract(msg)
-	if !found || kind != KindProviderUsageLimit {
+	return leadSentence(msg, KindProviderUsageLimit, ProviderUsageLimitLead)
+}
+
+// ProviderStreamStalledLead opens the human-readable message of every
+// KindProviderStreamStalled error, for the same reason as
+// ProviderUsageLimitLead.
+const ProviderStreamStalledLead = "AI provider stopped responding"
+
+// ProviderStreamStalledSummary returns the human-readable sentence of a
+// KindProviderStreamStalled error message, or "" if msg carries none.
+func ProviderStreamStalledSummary(msg string) string {
+	return leadSentence(msg, KindProviderStreamStalled, ProviderStreamStalledLead)
+}
+
+// leadSentence recovers the sentence that runs from lead to kind's marker,
+// from inside whatever wrap chain carried it.
+func leadSentence(msg string, kind Kind, lead string) string {
+	found, _, ok := Extract(msg)
+	if !ok || found != kind {
 		return ""
 	}
-	start := strings.Index(msg, ProviderUsageLimitLead)
-	end := strings.Index(msg, "["+string(KindProviderUsageLimit)+":")
+	start := strings.Index(msg, lead)
+	end := strings.Index(msg, "["+string(kind)+":")
 	if start < 0 || end < start {
 		return ""
 	}
