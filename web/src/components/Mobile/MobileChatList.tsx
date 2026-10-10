@@ -45,7 +45,13 @@ import {
 } from "lucide-react";
 import { GroupedVirtuoso } from "react-virtuoso";
 import { useQueryClient } from "@tanstack/react-query";
-import { useChatList, chatKeys } from "../../hooks/chat-queries";
+import {
+  useChatList,
+  chatKeys,
+  getChatFromCache,
+  seedChatDetail,
+} from "../../hooks/chat-queries";
+import { prefetchChatMessages } from "../../hooks/message-queries";
 import { useProjectStore } from "../../store/projectStore";
 import { useWorktreeStore } from "../../store/worktreeStore";
 import { cn } from "../../lib/utils";
@@ -185,6 +191,11 @@ function buildGroups(
  * rows in between stay square. `isLast` comes from the flattened index rather
  * than CSS because `last:` cannot see across Virtuoso's item boundaries.
  */
+function primeChatOpen(chat: Chat): void {
+  if (!getChatFromCache(chat.id)) seedChatDetail(chat);
+  prefetchChatMessages(chat.id);
+}
+
 function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
   const state = { activity: chat.activity, needsRecovery: chat.needsRecovery };
   const attention = needsUserAttention(state);
@@ -195,6 +206,11 @@ function ChatRow({ chat, isLast }: { chat: Chat; isLast: boolean }) {
       <Link
         to="/m/chats/$chatId"
         params={{ chatId: chat.id }}
+        // The press lands well before the tap completes and the chat screen
+        // mounts: start a cold chat's transcript read now, and home the row's
+        // Chat so the screen has it on the first frame (without it, a send in
+        // that window had no chat and started a new one).
+        onPointerDown={() => primeChatOpen(chat)}
         // 64px min touch target — comfortably above the 44px floor, and it
         // gives two lines of text room to breathe.
         className={cn(

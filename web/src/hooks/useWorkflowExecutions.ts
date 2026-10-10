@@ -137,6 +137,13 @@ export function useWorkflowExecutions(
     // until the refetch landed. Both caches are released together by
     // evictChat (archive/delete) and queryClient.clear() (logout).
     gcTime: Infinity,
+    // Freshness is the stream's job, not a timer's. A change to the tree is
+    // announced as a "workflow_executions" refetch, which is a PERSISTED chat
+    // update: delivered live while the chat is subscribed, and replayed from
+    // the chat's cursor (or carried in its snapshot) when it is reopened. So
+    // the cached tree is never silently behind, and the 30s default only
+    // re-fetched it on every chat open past that window, for no new answer.
+    staleTime: Infinity,
   });
 
   // Behavior-preserving bridge: the backend drives freshness via

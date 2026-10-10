@@ -2,6 +2,7 @@ import {
   useQuery,
   useMutation,
   useQueryClient,
+  type QueryClient,
 } from "@tanstack/react-query";
 import { api, type Message } from "../api/client";
 import { queryClient } from "../lib/query-client";
@@ -383,6 +384,60 @@ export function clearAllMessagesCache(): void {
 // ── Query hooks ─────────────────────────────────────────────────────────────
 
 /**
+ * The cold-start seed read for a chat's messages.
+ *
+ * It races the stream: opening a cold chat issues this read AND subscribes,
+ * and the subscription's snapshot can land first. The snapshot is what the
+ * stream's cursor describes — every later increment is applied on top of it —
+ * so it must not be overwritten by a read that may have been taken before it:
+ * a message persisted between the two reads would be in the snapshot, missing
+ * from this answer, and never re-sent. Whatever real messages the cache holds
+ * by the time this resolves therefore win. Optimistic sends made while it was
+ * in flight are kept on top of the answer.
+ */
+async function seedChatMessages(
+  client: QueryClient,
+  chatId: string,
+  recent: number
+): Promise<MessageListResult> {
+  // Always bounded. useChatMessages calls this with no options, so an
+  // unbounded default would make any cold key (first open of a chat the stream
+  // snapshot hasn't seeded) fetch the ENTIRE history — the exact payload the
+  // bounded snapshot was introduced to avoid. Older messages are reachable via
+  // chatStore.loadOlderMessages.
+  const fetched = await api.chatsV2.listMessages(chatId, { recent });
+  const current = client.getQueryData<MessageListResult>(
+    messageKeys.list(chatId)
+  );
+  if (!current) return fetched;
+  if (current.messages.some((m) => !isOptimisticMessageId(m.id))) {
+    return current;
+  }
+  return current.messages.length === 0
+    ? fetched
+    : { ...fetched, messages: [...fetched.messages, ...current.messages] };
+}
+
+function isOptimisticMessageId(id: string): boolean {
+  return id.startsWith("optimistic-");
+}
+
+/**
+ * Start a cold chat's seed read before it is opened (a press on its row), so
+ * the transcript is closer to ready by the time the screen mounts. A no-op for
+ * a chat whose messages are already cached — the stream keeps those live.
+ */
+export function prefetchChatMessages(chatId: string): void {
+  if (hasMessagesCache(chatId)) return;
+  void queryClient.prefetchQuery({
+    queryKey: messageKeys.list(chatId),
+    queryFn: ({ client }) =>
+      seedChatMessages(client, chatId, DEFAULT_RECENT_MESSAGES),
+    ...messageListQueryOptions,
+  });
+}
+
+/**
  * Reactive read of a chat's message envelope. The SINGLE useQuery definition
  * for messageKeys.list — chatStoreHooks.useChatMessages wraps this with a
  * select-to-array. The queryFn is only a cold-start seed; the chat stream is
@@ -394,15 +449,12 @@ export function useMessages(
 ) {
   return useQuery({
     queryKey: messageKeys.list(chatId!),
-    queryFn: () =>
-      api.chatsV2.listMessages(chatId!, {
-        // Always bounded. useChatMessages calls this with no options, so an
-        // unbounded default would make any cold key (first open of a chat the
-        // stream snapshot hasn't seeded) fetch the ENTIRE history — the exact
-        // payload the bounded snapshot was introduced to avoid. Older messages
-        // are reachable via chatStore.loadOlderMessages.
-        recent: options?.recent ?? DEFAULT_RECENT_MESSAGES,
-      }),
+    queryFn: ({ client }) =>
+      seedChatMessages(
+        client,
+        chatId!,
+        options?.recent ?? DEFAULT_RECENT_MESSAGES
+      ),
     enabled: !!chatId,
     ...messageListQueryOptions,
   });

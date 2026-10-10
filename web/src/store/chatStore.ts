@@ -1566,8 +1566,14 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // State cleanup happens when chat is deleted or after timeout
       set({ activeChatId: null });
 
-      // Stop polling per-chat events for the deselected chat
-      getGlobalUpdatesStore()?.unsubscribeFromChatDetails();
+      // The stream's chat subscription is deliberately left in place. The
+      // stream can only change chats by reconnecting, so dropping it here cost
+      // a full reconnect now and another one to open the next chat — and
+      // coming back to this chat (the commonest move from the new-chat view
+      // or the mobile list) cost two, for a chat whose state never left the
+      // cache. Lingering, it stays live: returning is free, and opening a
+      // different chat replaces it in the one reconnect that would happen
+      // anyway. evictChat releases it when the chat goes away.
 
       // Clear from workspace state
       const projectId = useProjectStore.getState().currentProject?.id;
@@ -3916,6 +3922,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   // logout. Chat objects themselves (chatKeys.list/detail) are removed by
   // removeChatFromListCache in the delete path; this handles everything else.
   evictChat: (chatId: string) => {
+    // A chat left on screen keeps its stream subscription (clearCurrentChat),
+    // so an archived or deleted one may still hold it. Release it: an archived
+    // chat has nothing left to stream, and a deleted one would get every
+    // future reconnect refused. A no-op unless this chat is the subscribed one.
+    getGlobalUpdatesStore()?.unsubscribeFromChatDetails(chatId);
     clearStreamingBuffersForChat(chatId);
     clearMessagesCache(chatId);
     // The execution tree is retained exactly as long as the messages (gcTime:
