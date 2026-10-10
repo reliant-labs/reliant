@@ -213,6 +213,8 @@ func questionResumeResponseData(answer string) (string, error) {
 // Returns (response, resumed, presavedMessageID). When resumed is false the
 // caller falls back to the coarse restart; the question has already been
 // resolved and the message saved (presavedMessageID), so the caller reuses it.
+//
+// inputUpdate reaches the replayed run before the answer does.
 func (s *ChatService) resumeFailedQuestionWorkflow(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SendMessageRequest],
@@ -221,6 +223,7 @@ func (s *ChatService) resumeFailedQuestionWorkflow(
 	question *db.Question,
 	targetThread, userID, userContent string,
 	systemMessages []*reliantv1.InputMessage,
+	inputUpdate map[string]interface{},
 ) (*connect.Response[reliantv1.SendMessageResponse], bool, string) {
 	workflowID := existingWorkflow.ID
 
@@ -280,6 +283,7 @@ func (s *ChatService) resumeFailedQuestionWorkflow(
 			"status":        "resolved",
 			"response_data": responseData,
 		},
+		InputUpdate: inputUpdate,
 	})
 	if err != nil || outcome.Kind != runs.OutcomeResumed {
 		logging.Info("Question-parked workflow not reset-resumable - coarse restart at position",
@@ -669,32 +673,27 @@ func (s *ChatService) SendMessage(
 					runID = *chat.RunID
 				}
 
-				// Signal workflow with the param/preset input update validated
-				// above, after the send-time model policy (#685) has moved any
-				// model no connected provider can serve.
-				if len(stateUpdate) > 0 {
-					s.fallBackFromUnservableModels(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, targetThread, stateUpdate, func(input string) bool {
-						return s.checkParamsActuallyChanged(ctx, workflowID, runID, map[string]interface{}{input: stateUpdate[input]})
-					})
+				// The input update the run resumes with: the param/preset
+				// update validated above and the run's own model pin, each
+				// moved off a provider that cannot serve it (#685) — even
+				// when this send carries no model at all (resumeInputUpdate).
+				runInputs := s.runInputsForSend(ctx, workflowID, runID)
+				inputUpdate, modelNotices := s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID, stateUpdate, runInputs)
 
-					// Only add "params changed" message if params actually changed from current workflow state
-					if s.checkParamsActuallyChanged(ctx, workflowID, runID, stateUpdate) {
-						hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
-						_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
-						if err != nil {
-							logging.Warn("Failed to save system message about param changes", "error", err, "chatID", req.Msg.ChatId)
-						}
-					}
-
-					if err := s.tempClient.SignalWorkflow(ctx, workflowID, runID, "update_workflow_state", stateUpdate); err != nil {
-						logging.Warn("Failed to signal workflow with param updates", "error", err, "workflowID", workflowID)
+				// Only add "params changed" message if params actually changed from current workflow state
+				if len(inputUpdate) > 0 && (runInputs == nil || inputsDiffer(runInputs, inputUpdate)) {
+					hiddenStyle := int32(reliantv1.DisplayStyle_DISPLAY_STYLE_HIDDEN)
+					_, err := s.database.SaveMessageToThread(ctx, req.Msg.ChatId, targetThread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), "Some of your params have changed, which may include mode, tools, temperature, or something else. Please continue as planned.", &workflowID, nil, &hiddenStyle)
+					if err != nil {
+						logging.Warn("Failed to save system message about param changes", "error", err, "chatID", req.Msg.ChatId)
 					}
 				}
 
 				// Resume the run. The service signals a live execution,
 				// reset-replays a dead-but-replayable one, and refreshes the
-				// chat's run id when a reset minted a new one.
-				outcome, resumeErr := s.runs.Resume(ctx, req.Msg.ChatId)
+				// chat's run id when a reset minted a new one — and whichever
+				// run wakes gets the input update first.
+				outcome, resumeErr := s.runs.Resume(ctx, req.Msg.ChatId, inputUpdate)
 				if resumeErr != nil {
 					// The resume is the step that actually restarts the run.
 					// Swallowing this failure and returning
@@ -718,6 +717,9 @@ func (s *ChatService) SendMessage(
 					// Fall through to start a new workflow below
 					break
 				}
+				// Told only now: the run that has the moved models is awake.
+				// A fresh run (above) makes and announces its own.
+				s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
 
 				// The run is awake. Correct the DB status now that the
 				// authoritative step has succeeded. Best-effort on purpose: if
@@ -917,8 +919,22 @@ func (s *ChatService) SendMessage(
 				// same inputs, so the same check applies (in memory only: the
 				// new-run path below persists the presets once it starts).
 				applyRequestPresets(chat, req.Msg.SelectedPresets)
-				if _, err := s.liveRunStateUpdate(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), req); err != nil {
+				stateUpdate, err := s.liveRunStateUpdate(ctx, userID, chat, activeWorkflowNameForResume(chat, existingWorkflow), req)
+				if err != nil {
 					return nil, err
+				}
+
+				// What a reset-and-replay hands the replayed run, before it
+				// wakes. Replay rebuilds the run from the inputs its history
+				// recorded, so without this a model the user just picked —
+				// or a pin no connected provider can serve, which the send
+				// moves (resumeInputUpdate) — never reaches it. The coarse
+				// restart below builds its own inputs from this send.
+				var inputUpdate map[string]interface{}
+				var modelNotices []launch.ModelSubstitution
+				if inspection.Recoverable {
+					inputUpdate, modelNotices = s.resumeInputUpdate(ctx, userID, req.Msg.ChatId, chat.ProjectID, existingWorkflow.WorkflowName, workflowID,
+						stateUpdate, s.runInputsForSend(ctx, workflowID, ""))
 				}
 
 				// A run that died parked on an unanswered ask_question wakes on
@@ -935,8 +951,9 @@ func (s *ChatService) SendMessage(
 					if req.Msg.TargetThread != nil && *req.Msg.TargetThread != "" {
 						targetThread = *req.Msg.TargetThread
 					}
-					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, userID, userContent, systemMessages)
+					resp, resumed, presavedID := s.resumeFailedQuestionWorkflow(ctx, req, chat, existingWorkflow, pendingQuestion, targetThread, userID, userContent, systemMessages, inputUpdate)
 					if resumed {
+						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
 						return resp, nil
 					}
 					// Guard-exhausted / not reset-resumable: the question is already
@@ -975,11 +992,12 @@ func (s *ChatService) SendMessage(
 					resumeMessagesSaved = true
 					resumePresavedMessageID = presavedID
 
-					outcome, resumeErr := s.runs.ResumeInterrupted(ctx, req.Msg.ChatId)
+					outcome, resumeErr := s.runs.ResumeInterrupted(ctx, req.Msg.ChatId, inputUpdate)
 					if resumeErr != nil {
 						return nil, connect.NewError(connect.CodeInternal, resumeErr)
 					}
 					if outcome.Kind == runs.OutcomeResumed {
+						s.postModelFallbackNotices(ctx, req.Msg.ChatId, workflowID, targetThread, modelNotices)
 						workflowStatus := fmt.Sprintf("%d", db.Active())
 						go s.trackMessageSent(ctx, userID, chat, presavedID, targetThread, userContent, len(req.Msg.Attachments))
 						return connect.NewResponse(&reliantv1.SendMessageResponse{

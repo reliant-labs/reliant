@@ -79,6 +79,9 @@ const DynamicWorkflowTaskTimeout = 60 * time.Second
 const (
 	SignalPause  = "signal.pause"  // Signal to pause workflow at next step boundary
 	SignalResume = "signal.resume" // Signal to resume a paused workflow
+	// SignalUpdateWorkflowState carries an input update (model, mode,
+	// tools...) the run applies to its live inputs.
+	SignalUpdateWorkflowState = "update_workflow_state"
 )
 
 // RuntimeInjectedInputs is a set of input names that are injected at runtime

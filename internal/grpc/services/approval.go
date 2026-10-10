@@ -601,7 +601,7 @@ func (s *ApprovalService) signalApproval(ctx context.Context, approval *db.Appro
 		return
 	}
 	signalName := "signal.approval." + approval.ID
-	if err := s.pauseService.SignalWithRecovery(ctx, approval.TemporalWorkflowID, signalName, signalData); err != nil {
+	if err := s.pauseService.SignalWithRecovery(ctx, approval.TemporalWorkflowID, signalName, signalData, nil); err != nil {
 		logging.Warn("[Approval] Failed to signal approval resolution",
 			"error", err,
 			"approvalID", approval.ID,

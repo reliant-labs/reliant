@@ -34,15 +34,15 @@ func (p orderRecordingPauseController) PauseWorkflow(_ context.Context, _, _, _ 
 	return nil
 }
 
-func (p orderRecordingPauseController) ResumeWorkflow(context.Context, string, string) error {
+func (p orderRecordingPauseController) ResumeWorkflow(context.Context, string, string, map[string]interface{}) error {
 	return nil
 }
 
-func (p orderRecordingPauseController) ResumeInterruptedWorkflow(context.Context, string, string) (string, error) {
+func (p orderRecordingPauseController) ResumeInterruptedWorkflow(context.Context, string, string, map[string]interface{}) (string, error) {
 	return "", nil
 }
 
-func (p orderRecordingPauseController) SignalWithRecovery(context.Context, string, string, interface{}) error {
+func (p orderRecordingPauseController) SignalWithRecovery(context.Context, string, string, interface{}, map[string]interface{}) error {
 	return nil
 }
 

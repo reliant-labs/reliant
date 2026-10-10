@@ -104,12 +104,14 @@ type resetPause struct {
 }
 
 func (p *resetPause) PauseWorkflow(context.Context, string, string, string) error { return nil }
-func (p *resetPause) ResumeWorkflow(context.Context, string, string) error        { return nil }
-func (p *resetPause) SignalWithRecovery(context.Context, string, string, interface{}) error {
+func (p *resetPause) ResumeWorkflow(context.Context, string, string, map[string]interface{}) error {
+	return nil
+}
+func (p *resetPause) SignalWithRecovery(context.Context, string, string, interface{}, map[string]interface{}) error {
 	return nil
 }
 
-func (p *resetPause) ResumeInterruptedWorkflow(ctx context.Context, workflowID, _ string) (string, error) {
+func (p *resetPause) ResumeInterruptedWorkflow(ctx context.Context, workflowID, _ string, _ map[string]interface{}) (string, error) {
 	if !p.replays {
 		return "", workflow.ErrReplayDiverged
 	}

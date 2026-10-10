@@ -58,11 +58,13 @@ func (c *wakeTestTemporalClient) QueryWorkflow(
 type succeedingPauseController struct{}
 
 func (succeedingPauseController) PauseWorkflow(_ context.Context, _, _, _ string) error { return nil }
-func (succeedingPauseController) ResumeWorkflow(_ context.Context, _, _ string) error   { return nil }
-func (succeedingPauseController) ResumeInterruptedWorkflow(_ context.Context, _, _ string) (string, error) {
+func (succeedingPauseController) ResumeWorkflow(_ context.Context, _, _ string, _ map[string]interface{}) error {
+	return nil
+}
+func (succeedingPauseController) ResumeInterruptedWorkflow(_ context.Context, _, _ string, _ map[string]interface{}) (string, error) {
 	return "run-resumed", nil
 }
-func (succeedingPauseController) SignalWithRecovery(_ context.Context, _, _ string, _ interface{}) error {
+func (succeedingPauseController) SignalWithRecovery(_ context.Context, _, _ string, _ interface{}, _ map[string]interface{}) error {
 	return nil
 }
 

@@ -190,18 +190,18 @@ func (f *fakePause) PauseWorkflow(_ context.Context, workflowID, _, _ string) er
 	return f.pauseErr
 }
 
-func (f *fakePause) ResumeWorkflow(_ context.Context, workflowID, _ string) error {
+func (f *fakePause) ResumeWorkflow(_ context.Context, workflowID, _ string, _ map[string]interface{}) error {
 	f.resumeCalls = append(f.resumeCalls, workflowID)
 	f.resumeWorkflowIDArg = workflowID
 	return f.resumeErr
 }
 
-func (f *fakePause) ResumeInterruptedWorkflow(_ context.Context, workflowID, _ string) (string, error) {
+func (f *fakePause) ResumeInterruptedWorkflow(_ context.Context, workflowID, _ string, _ map[string]interface{}) (string, error) {
 	f.interruptedCalls = append(f.interruptedCalls, workflowID)
 	return f.interruptedRunID, f.interruptedErr
 }
 
-func (f *fakePause) SignalWithRecovery(_ context.Context, workflowID, signalName string, _ interface{}) error {
+func (f *fakePause) SignalWithRecovery(_ context.Context, workflowID, signalName string, _ interface{}, _ map[string]interface{}) error {
 	f.signalCalls = append(f.signalCalls, signalName)
 	f.signalTargetWfIDs = append(f.signalTargetWfIDs, workflowID)
 	return f.signalErr
@@ -328,7 +328,7 @@ func TestResume_StuckRunIsRefusedWithoutSignalling(t *testing.T) {
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Failed()}
 	temporal.status = enumspb.WORKFLOW_EXECUTION_STATUS_RUNNING
 
-	outcome, err := svc.Resume(context.Background(), "chat-1")
+	outcome, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeUnresumable, outcome.Kind)
@@ -343,7 +343,7 @@ func TestResume_FailedButClosedInTemporalIsNotStuck(t *testing.T) {
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Failed()}
 	temporal.status = enumspb.WORKFLOW_EXECUTION_STATUS_FAILED
 
-	outcome, err := svc.Resume(context.Background(), "chat-1")
+	outcome, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeResumed, outcome.Kind)
@@ -358,7 +358,7 @@ func TestResume_TemporalQueryFailureIsNotTreatedAsStuck(t *testing.T) {
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Failed()}
 	temporal.err = errors.New("connection refused")
 
-	outcome, err := svc.Resume(context.Background(), "chat-1")
+	outcome, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeResumed, outcome.Kind)
@@ -377,7 +377,7 @@ func TestResume_RefreshesRunIDAfterReset(t *testing.T) {
 	repo, temporal, _, svc := fixture(t)
 	temporal.runID = "run-new-after-reset"
 
-	outcome, err := svc.Resume(context.Background(), "chat-1")
+	outcome, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeResumed, outcome.Kind)
@@ -390,7 +390,7 @@ func TestResume_RefreshesRunIDAfterReset(t *testing.T) {
 func TestResume_UnchangedRunIDIsNotRewritten(t *testing.T) {
 	repo, _, _, svc := fixture(t)
 
-	outcome, err := svc.Resume(context.Background(), "chat-1")
+	outcome, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, "run-old", outcome.RunID)
@@ -404,7 +404,7 @@ func TestResume_FallsBackToStoredRunIDWhenTemporalUnreadable(t *testing.T) {
 	repo.workflow = &db.Workflow{ID: "wf-1", Status: db.Paused()}
 	temporal.notFound = true
 
-	outcome, err := svc.Resume(context.Background(), "chat-1")
+	outcome, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeResumed, outcome.Kind)
@@ -421,7 +421,7 @@ func TestResume_LostWorkflowMapsToNeedsRecovery(t *testing.T) {
 	_, _, pause, svc := fixture(t)
 	pause.resumeErr = workflow.ErrWorkflowNotFound
 
-	outcome, err := svc.Resume(context.Background(), "chat-1")
+	outcome, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeNeedsRecovery, outcome.Kind)
@@ -434,7 +434,7 @@ func TestResume_UnexpectedErrorSurfaces(t *testing.T) {
 	_, _, pause, svc := fixture(t)
 	pause.resumeErr = errors.New("temporal unavailable")
 
-	_, err := svc.Resume(context.Background(), "chat-1")
+	_, err := svc.Resume(context.Background(), "chat-1", nil)
 
 	require.Error(t, err)
 }
@@ -460,7 +460,7 @@ func TestResumeInterrupted_MapsSentinelsToOutcomes(t *testing.T) {
 			pause.interruptedErr = tt.err
 			pause.interruptedRunID = "run-reset"
 
-			outcome, err := svc.ResumeInterrupted(context.Background(), "chat-1")
+			outcome, err := svc.ResumeInterrupted(context.Background(), "chat-1", nil)
 
 			require.NoError(t, err, "a fallback is a normal result, never an error")
 			assert.Equal(t, tt.wantKind, outcome.Kind)
@@ -477,7 +477,7 @@ func TestResumeInterrupted_HistoryLimitIsDistinguishableFromOtherFallbacks(t *te
 	_, _, pause, svc := fixture(t)
 	pause.interruptedErr = workflow.ErrNoReplayableHistory
 
-	outcome, err := svc.ResumeInterrupted(context.Background(), "chat-1")
+	outcome, err := svc.ResumeInterrupted(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeNeedsRestart, outcome.Kind)
@@ -489,7 +489,7 @@ func TestResumeInterrupted_SuccessRecordsNewRunID(t *testing.T) {
 	repo, _, pause, svc := fixture(t)
 	pause.interruptedRunID = "run-reset"
 
-	outcome, err := svc.ResumeInterrupted(context.Background(), "chat-1")
+	outcome, err := svc.ResumeInterrupted(context.Background(), "chat-1", nil)
 
 	require.NoError(t, err)
 	assert.Equal(t, OutcomeResumed, outcome.Kind)
@@ -651,7 +651,7 @@ func TestLifecycleCalls_RejectChatWithoutWorkflow(t *testing.T) {
 	repo.chat = &db.Chat{ID: "chat-1"} // never started a root workflow
 	svc := NewService(repo, temporal, pause)
 
-	_, resumeErr := svc.Resume(context.Background(), "chat-1")
+	_, resumeErr := svc.Resume(context.Background(), "chat-1", nil)
 	assert.ErrorIs(t, resumeErr, ErrNoWorkflow)
 	assert.ErrorIs(t, svc.Pause(context.Background(), "chat-1"), ErrNoWorkflow)
 	assert.ErrorIs(t, svc.Terminate(context.Background(), "chat-1"), ErrNoWorkflow)
@@ -662,7 +662,7 @@ func TestLifecycleCalls_RejectMissingChat(t *testing.T) {
 	repo.chatErr = errors.New("no rows")
 	svc := NewService(repo, temporal, pause)
 
-	_, err := svc.Resume(context.Background(), "chat-1")
+	_, err := svc.Resume(context.Background(), "chat-1", nil)
 	assert.ErrorIs(t, err, ErrChatNotFound)
 	assert.ErrorIs(t, svc.Terminate(context.Background(), "chat-1"), ErrChatNotFound)
 }

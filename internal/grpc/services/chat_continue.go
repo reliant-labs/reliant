@@ -113,7 +113,10 @@ func (s *ChatService) ContinueQueued(ctx context.Context, chatID string) (bool, 
 	}
 
 	if inspection.Recoverable {
-		outcome, err := s.runs.ResumeInterrupted(ctx, chatID)
+		// No send, so nothing to change: the run keeps its own inputs. A
+		// model its provider can no longer serve is moved only by a send,
+		// where the user acts and is told (#685).
+		outcome, err := s.runs.ResumeInterrupted(ctx, chatID, nil)
 		if err != nil {
 			requeue(err)
 			return false, err
