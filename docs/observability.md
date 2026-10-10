@@ -18,9 +18,10 @@ Each process has a stable resource identity:
 `service.version` comes from Reliant build metadata and `service.instance.id`
 comes from the hostname. `Config.Environment` is resolved from
 `SENTRY_ENVIRONMENT`, then `ENVIRONMENT`, then legacy `RELIANT_ENV`; it is not
-currently exported as an OTel resource attribute. Forge's current
-`observe.Setup` API has no typed resource-attribute extension, so a Forge change
-is required before Reliant can safely add `deployment.environment.name`.
+exported as an OTel resource attribute by Reliant. The platform contract sets
+`deployment.environment.name` through `OTEL_RESOURCE_ATTRIBUTES`, which the
+Forge runtime reads once its pin includes forge#604/#617. Until then the
+attribute is absent.
 
 ## Configuration
 
@@ -30,19 +31,18 @@ the switch is on, a missing endpoint fails startup. This preserves the current
 hosted rollout while preventing an enabled deployment from silently becoming
 Prometheus-only.
 
-`OTEL_EXPORTER_OTLP_ENDPOINT` must be an OTLP/gRPC collector endpoint on port
-`4317` (for example `http://otel-collector:4317`), and
-`OTEL_EXPORTER_OTLP_PROTOCOL`, when set, must be `grpc`. OTLP/HTTP
-(`http/protobuf`), port `4318`, and `/v1/*` paths are rejected. Startup does not probe the collector, so a later
-collector outage does not crash a serving process; exporter failures surface
-during flush.
+`OTEL_EXPORTER_OTLP_ENDPOINT` must be an `http(s)` collector base URL (or bare
+`host:port`) with no `/v1/<signal>` path. Reliant never infers a wire protocol
+from the port: `:4317`, `:4318` and `https://…:443` are all accepted, and
+protocol selection (`OTEL_EXPORTER_OTLP_PROTOCOL`) belongs to the Forge runtime.
+Startup does not probe the collector, so a later collector outage does not crash
+a serving process; exporter failures surface during flush.
 
-Reliant retains its existing Prometheus endpoint for custom application metrics;
-`PROMETHEUS_ENABLED=false` makes it return 404. Forge's returned Prometheus
-handler is not mounted because it owns an independent registry, so Reliant's
-`/metrics` does **not** expose OTel-instrumented runtime metrics yet. They still
-export over Forge's OTLP periodic metric reader when OTLP is enabled. Merging
-those Prometheus registries requires a Forge API follow-up.
+Reliant's `/metrics` serves its custom registry plus the OTel instrumentation
+metrics (otelhttp, otelconnect) that Forge's Prometheus reader records on the
+default registry. The default registry's Go/process collectors are filtered out
+because the custom registry already exposes them. `PROMETHEUS_ENABLED=false`
+makes the endpoint return 404.
 
 Structured logs stay on stdout and are collected by the runtime collector agent;
 Reliant does not install an OTel logs SDK.
@@ -52,8 +52,26 @@ flushed independently of OTel.
 
 ## Propagation
 
-The Connect server uses one `otelconnect` server interceptor with trusted
-internal trace context. Forge's generic tracing interceptor is intentionally
-not enabled there, preventing duplicate server spans. Outbound Connect clients
-should use `observe.NewClientStack`; plain outbound HTTP clients use
-`otelhttp.NewTransport` over their existing transport.
+`observability.Init` always installs the W3C TraceContext+Baggage propagator,
+even when export is disabled, so NATS and Connect propagation keep working in
+mixed deployments. (TODO(forge#617): remove the reliant-side install once the
+forge pin includes #617.)
+
+The Connect server uses one `otelconnect` server interceptor; Forge's generic
+tracing interceptor is intentionally not enabled there, preventing duplicate
+server spans.
+
+Remote trace context is trusted only on the public API server, for
+browser-to-API trace continuity. The daemon-facing server (daemon-gateway)
+does **not** trust it: daemons run on user machines, so a caller-supplied
+`traceparent` starts a new root span and is recorded only as a span link.
+Outbound Connect clients should use `observe.NewClientStack`; plain outbound
+HTTP clients use `otelhttp.NewTransport` over their existing transport.
+
+## Known gaps
+
+- Temporal: no `ContextPropagator`/OTel interceptor, so API → workflow →
+  activity are separate traces.
+- NATS: only the inject/extract helpers in `internal/observability/nats.go`
+  exist; not every publisher/consumer uses them yet.
+- Logs carry no `trace_id`/`span_id` (no slog hook yet).
