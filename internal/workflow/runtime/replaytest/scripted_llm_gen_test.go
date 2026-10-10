@@ -68,6 +68,33 @@ type ScriptedLLM struct {
 	turns     []Turn
 	next      int
 	exhausted bool
+	// failWhen, when set, sees every agent-loop request before the script
+	// does. A non-nil error fails that request WITHOUT consuming a turn, so a
+	// scenario can fail one thread's calls (a sub-agent's) while the other
+	// threads keep playing the script in order. See FailWhen.
+	failWhen func(msgs []message.Message) error
+}
+
+// FailWhen installs fn as the request-failure rule (see ScriptedLLM.failWhen).
+func (s *ScriptedLLM) FailWhen(fn func(msgs []message.Message) error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.failWhen = fn
+}
+
+// conversationMentions reports whether any text in msgs contains marker. A
+// spawned agent's conversation opens with the prompt its parent wrote, so a
+// marker placed in that prompt identifies the sub-agent's requests — and only
+// its: the parent carries the prompt inside a tool call's input, not as text.
+func conversationMentions(msgs []message.Message, marker string) bool {
+	for i := range msgs {
+		for _, text := range msgs[i].TextContents() {
+			if strings.Contains(text.Text, marker) {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // NewScriptedLLM builds a driver that plays the given turns in order.
@@ -169,6 +196,16 @@ func (s *ScriptedLLM) StreamResponse(ctx context.Context, prompts []string, msgs
 			},
 			TokenCount: 10,
 		})
+	}
+
+	if s.failWhen != nil {
+		if err := s.failWhen(msgs); err != nil {
+			s.mu.Unlock()
+			ch := make(chan llm.DriverEvent, 1)
+			ch <- llm.DriverEvent{Type: llm.EventError, Model: s.Model(), Error: err}
+			close(ch)
+			return ch
+		}
 	}
 
 	var turn Turn

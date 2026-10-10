@@ -2368,6 +2368,8 @@ KEEP ABOUT 6 SUB-AGENTS OUTSTANDING AT ONCE. Past that the provider starts throt
 
 While a spawned agent runs you can steer, observe and stop it: spawn_status(agent_id, wait: true) to block until it finishes when you genuinely cannot proceed without the answer, or without wait to just check progress; spawn_send to give it new instructions mid-flight; spawn_stop(agent_id) to abandon work you no longer need — note that the stop takes effect at that agent's next step boundary, so confirm it with spawn_status(agent_id, wait: true) rather than assuming. Prefer spawn_send to REDIRECT an agent whose work is still useful; stopping discards whatever it has not reported. spawn_status with no agent_id lists your children and their states, which is how you count what is outstanding before spawning more.
 
+If an agent fails for good (its provider keeps erroring, say), only that agent stops — you keep running — and you are notified with status="failed", the error and its agent_id. Deciding what happens next is yours: resume it where it stopped with spawn(agent_id, prompt), retry the work with a fresh agent, or continue without it.
+
 Available presets:
 %s
 

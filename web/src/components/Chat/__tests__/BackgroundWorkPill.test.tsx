@@ -18,9 +18,13 @@
  *    ThreadTabs; mixing them here was explicitly not wanted.
  *  - background commands are chat-attributed when the daemon set a chat_id,
  *    so another chat's dev server does not sit in your strip forever.
+ *  - a sub-agent that FAILED shows here, on that agent, with Retry — its
+ *    failure stopped it and nothing else, so it is not a chat-wide banner.
+ *    Retry asks the agent's PARENT to resume it; a resumed or dismissed
+ *    failure leaves the strip.
  */
 
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi, beforeEach } from "vitest";
 import { renderWithQuery } from "../../../test/renderWithQuery";
@@ -49,7 +53,9 @@ import { useActivityStore } from "../../../store/activityStore";
 import { useChatStore } from "../../../store/chatStore";
 import { ChatActivity, WorkflowState, WorkflowStopReason } from "../../../gen/reliant/v1/chat_pb";
 import { BackgroundProcessStatus } from "../../../api/background-grpc";
-import { BackgroundWorkPill } from "../BackgroundWorkPill";
+import { BackgroundWorkPill, DISMISSED_FAILED_AGENTS_KEY } from "../BackgroundWorkPill";
+import { chatGrpc } from "../../../api/chat-grpc";
+import { toast } from "../../../lib/toast-manager";
 
 const originalCancelToolCall = useChatStore.getState().cancelToolCall;
 
@@ -103,6 +109,8 @@ function renderPill(props: Partial<React.ComponentProps<typeof BackgroundWorkPil
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks();
+  localStorage.removeItem(DISMISSED_FAILED_AGENTS_KEY);
   usePendingQuestionMock.mockReturnValue({ data: null });
   useWorkflowExecutionsMock.mockReturnValue({ allWorkflows: [] });
   useThreadActivityStore.getState().clearAll();
@@ -368,5 +376,134 @@ describe("BackgroundWorkPill", () => {
 
     fireEvent.click(screen.getByTestId("background-work-command-proc-mine"));
     expect(onSelectCommand).toHaveBeenCalledWith("proc-mine");
+  });
+
+  describe("failed agents", () => {
+    // The chat's root run with one spawned agent under it. parentThread is the
+    // thread that spawned the agent — the one Retry must address.
+    function chatWithSpawns(...spawns: WorkflowExecutionData[]) {
+      useWorkflowExecutionsMock.mockReturnValue({
+        allWorkflows: [
+          workflow({ id: "wf-root", thread: "main-thread", origin: "", children: spawns }),
+        ],
+      });
+    }
+
+    function failedSpawn(overrides: Partial<WorkflowExecutionData> = {}) {
+      return workflow({
+        id: "wf-42",
+        thread: "thread-42",
+        parentThread: "main-thread",
+        threadTitle: "implementer",
+        state: WorkflowState.STOPPED,
+        stopReason: WorkflowStopReason.FAILED,
+        completedAt: new Date().toISOString(),
+        ...overrides,
+      });
+    }
+
+    it("shows a failed agent on its own row, and Retry asks its parent to resume it", async () => {
+      chatWithSpawns(failedSpawn());
+      const send = vi
+        .spyOn(chatGrpc, "sendAgentMessage")
+        .mockResolvedValue({ success: true, message: "Queued" });
+      const onSelectThread = vi.fn();
+
+      renderPill({ onSelectThread });
+
+      const pill = screen.getByTestId("background-work-pill");
+      expect(pill).toHaveTextContent("implementer failed");
+
+      fireEvent.click(pill);
+      const row = screen.getByTestId("background-work-failed-thread-42");
+      expect(row).toHaveTextContent("Failed");
+
+      fireEvent.click(screen.getByLabelText("Retry failed agent implementer"));
+
+      expect(send).toHaveBeenCalledTimes(1);
+      const [chatId, toThread, message] = send.mock.calls[0];
+      expect(chatId).toBe(CHAT_ID);
+      expect(toThread).toBe("main-thread");
+      expect(message).toContain('spawn(agent_id="thread-42"');
+      expect(onSelectThread).not.toHaveBeenCalled();
+      expect(await screen.findByText("Retry requested")).toBeTruthy();
+      expect(screen.getByLabelText("Retry failed agent implementer")).toBeDisabled();
+
+      // The row itself still opens the agent's thread, where its error is.
+      fireEvent.click(row);
+      expect(onSelectThread).toHaveBeenCalledWith("thread-42");
+    });
+
+    it("surfaces a refused retry and lets the user try again", async () => {
+      chatWithSpawns(failedSpawn());
+      vi.spyOn(chatGrpc, "sendAgentMessage").mockResolvedValue({
+        success: false,
+        message: "This agent isn't currently running",
+      });
+      const toastError = vi.spyOn(toast, "error").mockImplementation(() => "");
+
+      renderPill();
+      fireEvent.click(screen.getByTestId("background-work-pill"));
+      fireEvent.click(screen.getByLabelText("Retry failed agent implementer"));
+
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith("This agent isn't currently running"));
+      expect(screen.getByLabelText("Retry failed agent implementer")).not.toBeDisabled();
+      expect(screen.queryByText("Retry requested")).toBeNull();
+    });
+
+    it("drops a failure once the agent was resumed on the same thread", () => {
+      const failedAt = new Date(Date.now() - 60_000).toISOString();
+      chatWithSpawns(
+        failedSpawn({ createdAt: failedAt, completedAt: failedAt }),
+        workflow({
+          id: "wf-42-resumed",
+          thread: "thread-42",
+          parentThread: "main-thread",
+          threadTitle: "implementer",
+          state: WorkflowState.STOPPED,
+          stopReason: WorkflowStopReason.COMPLETED,
+          createdAt: new Date().toISOString(),
+        }),
+      );
+
+      renderPill();
+
+      expect(screen.queryByTestId("background-work-pill")).toBeNull();
+    });
+
+    it("keeps a dismissed failure dismissed", () => {
+      chatWithSpawns(failedSpawn());
+
+      const { unmount } = renderPill();
+      fireEvent.click(screen.getByTestId("background-work-pill"));
+      fireEvent.click(screen.getByLabelText("Dismiss failed agent implementer"));
+      expect(screen.queryByTestId("background-work-pill")).toBeNull();
+
+      unmount();
+      renderPill();
+      expect(screen.queryByTestId("background-work-pill")).toBeNull();
+    });
+
+    it("does not resurface a failure from days ago", () => {
+      const longAgo = new Date(Date.now() - 3 * 24 * 60 * 60 * 1000).toISOString();
+      chatWithSpawns(failedSpawn({ createdAt: longAgo, completedAt: longAgo }));
+
+      renderPill();
+
+      expect(screen.queryByTestId("background-work-pill")).toBeNull();
+    });
+
+    it("names the failure alongside agents still running", () => {
+      chatWithSpawns(failedSpawn());
+      useThreadActivityStore
+        .getState()
+        .setThreads(CHAT_ID, [thread({ thread: "thread-7", workflow_id: "wf-7", thread_title: "reviewer" })]);
+
+      renderPill();
+
+      const pill = screen.getByTestId("background-work-pill");
+      expect(pill).toHaveTextContent("implementer failed");
+      expect(pill).toHaveTextContent("1 agent running");
+    });
   });
 });

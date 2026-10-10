@@ -58,6 +58,15 @@ type PauseController struct {
 	// flag is left alone: it names exactly one run and is never reused.
 	// nil when not wired.
 	ResetCancelled func()
+
+	// SubAgent marks the controller of a spawned sub-agent's thread. Its
+	// CheckPause and RequestPause are still the run's shared ones — a user
+	// pause stops a sub-agent like any other thread — but a step that exhausts
+	// its retries on this thread ends the agent and reports to its parent
+	// instead of pausing the run (see failsAlone). Set by the spawn path for
+	// the spawn's own controller, which every executor inside the spawn
+	// inherits.
+	SubAgent bool
 }
 
 // IsCancelled reports whether this thread has been cancelled by the user.

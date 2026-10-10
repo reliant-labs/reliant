@@ -10,6 +10,11 @@
  *     processStore, and a single worktree is shared by every chat open
  *     against it.
  *
+ * Failed spawns come from the workflow tree alone. A sub-agent whose step
+ * fails for good ends on its own — the rest of the chat keeps running — and
+ * reports to its parent, so the failure belongs here, on the agent, rather
+ * than in a chat-wide banner.
+ *
  * The blocked attribution is the reason this hook exists rather than a pair
  * of counters. A spawned agent that is waiting on a question or a tool
  * approval has stopped making progress and needs the user, but the spawn
@@ -25,7 +30,8 @@ import { useProcessStore } from "../../store/processStore";
 import { BackgroundProcessStatus } from "../../api/background-grpc";
 import { usePendingQuestion } from "../../hooks/approval-queries";
 import { useWorkflowExecutions } from "../../hooks/useWorkflowExecutions";
-import { isWorkflowLive } from "../../lib/workflowLifecycle";
+import { isWorkflowLive, workflowStoppedBecause } from "../../lib/workflowLifecycle";
+import { WorkflowStopReason } from "../../gen/reliant/v1/chat_pb";
 import type { WorkflowExecutionData } from "../../types/chat";
 import type { ActiveThreadUpdate } from "../../types/streaming";
 import { isSpawnOrigin } from "./thread-views/threadUtils";
@@ -44,6 +50,24 @@ export interface ActiveSpawn {
   blockReason?: string;
 }
 
+/**
+ * A spawned agent whose latest run failed and has not been resumed.
+ *
+ * Only that agent stopped: its parent was told (an agent_result with
+ * status="failed") and decides what happens next. Retrying from here asks the
+ * parent to resume it, so the parent's plan never has an agent restarted
+ * behind its back.
+ */
+export interface FailedSpawn {
+  /** The failed run's workflow row. A resumption is a new row on the same thread. */
+  workflowId: string;
+  threadId: string;
+  title: string;
+  /** The thread that spawned this agent, which is the one asked to resume it. */
+  parentThreadId: string | null;
+  failedAt: number | null;
+}
+
 export interface ActiveCommand {
   id: string;
   command: string;
@@ -52,6 +76,8 @@ export interface ActiveCommand {
 
 export interface BackgroundWork {
   spawns: ActiveSpawn[];
+  /** Agents that failed recently and are waiting on a decision; see FailedSpawn. */
+  failedSpawns: FailedSpawn[];
   commands: ActiveCommand[];
   /** Spawns waiting on the user — the subset worth interrupting for. */
   blockedSpawns: ActiveSpawn[];
@@ -60,6 +86,7 @@ export interface BackgroundWork {
 
 const EMPTY: BackgroundWork = {
   spawns: [],
+  failedSpawns: [],
   commands: [],
   blockedSpawns: [],
   hasWork: false,
@@ -116,6 +143,60 @@ function indexSpawnWorkflows(workflows: WorkflowExecutionData[]): {
 
   for (const workflow of workflows) visit(workflow);
   return { byId, byThread };
+}
+
+/**
+ * How long a failed agent stays in the strip. A failure is a call for a
+ * decision about the current work, not a permanent record — the spawn card in
+ * the transcript keeps that — so one from yesterday is not "background work".
+ */
+export const FAILED_SPAWN_VISIBLE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * The spawned agents whose latest run failed. A thread's newest spawn run
+ * decides it: spawn(agent_id=...) resumes an agent as a new run on the same
+ * thread, so a failure that was resumed is superseded and no longer shown.
+ */
+function failedSpawnsOf(workflows: WorkflowExecutionData[], now: number): FailedSpawn[] {
+  const latestByThread = new Map<string, { workflow: WorkflowExecutionData; rootThread: string }>();
+
+  const visit = (workflow: WorkflowExecutionData, rootThread: string) => {
+    if (isSpawnOrigin(workflow.origin) && workflow.thread) {
+      const current = latestByThread.get(workflow.thread);
+      if (!current || (parseTime(workflow.createdAt) ?? 0) >= (parseTime(current.workflow.createdAt) ?? 0)) {
+        latestByThread.set(workflow.thread, { workflow, rootThread });
+      }
+    }
+    for (const child of workflow.children || []) visit(child, rootThread);
+  };
+  for (const root of workflows) visit(root, root.thread);
+
+  const failed: FailedSpawn[] = [];
+  for (const { workflow, rootThread } of latestByThread.values()) {
+    if (!workflowStoppedBecause(workflow.state, workflow.stopReason, WorkflowStopReason.FAILED)) continue;
+    const failedAt = parseTime(workflow.completedAt) ?? parseTime(workflow.createdAt);
+    if (failedAt !== null && now - failedAt > FAILED_SPAWN_VISIBLE_MS) continue;
+    failed.push({
+      workflowId: workflow.id,
+      threadId: workflow.thread,
+      title: workflowTitle(workflow) || "Agent",
+      parentThreadId: workflow.parentThread || rootThread || null,
+      failedAt,
+    });
+  }
+  return failed.sort((a, b) => (b.failedAt ?? 0) - (a.failedAt ?? 0));
+}
+
+/**
+ * What the strip's Retry sends to a failed agent's parent. It names the
+ * resume handle the parent's failed agent_result already carries, so the
+ * request maps onto one tool call rather than leaving the parent to guess.
+ */
+export function failedAgentRetryMessage(spawn: Pick<FailedSpawn, "title" | "threadId">): string {
+  return (
+    `Retry the agent "${spawn.title}" that failed: resume it where it stopped with ` +
+    `spawn(agent_id="${spawn.threadId}", prompt=...), then carry on.`
+  );
 }
 
 function workflowForThread(
@@ -207,9 +288,11 @@ export function useBackgroundWork(
     }
 
     const blockedSpawns = liveSpawns.filter((s) => s.isBlocked);
+    const failedSpawns = failedSpawnsOf(allWorkflows, Date.now());
 
     return {
       spawns: liveSpawns,
+      failedSpawns,
       commands,
       blockedSpawns,
       hasWork: liveSpawns.length > 0 || commands.length > 0,

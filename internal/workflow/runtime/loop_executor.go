@@ -1882,6 +1882,26 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 				// This handles rate limits, transient errors, etc. that exhaust
 				// Temporal's retry budget.
 				if stepEvent.RetryExhausted {
+					// A sub-agent ends alone and reports to its parent; only
+					// the root pauses the run. See failsAlone.
+					if e.pauseCtrl.failsAlone(e.ctx) {
+						e.logger.Warn("[InlineLoop] Sub-agent step exhausted retries; ending this agent and reporting to its parent",
+							"loopID", e.loopID,
+							"iteration", e.iteration,
+							"stepID", running.StepID,
+							"thread", e.threadForError(),
+							"error", stepEvent.Error,
+						)
+						return nil, endSubAgent(e.ctx, retryExhaustionError{
+							ChatID:       e.chatID,
+							WorkflowID:   e.workflowID,
+							WorkflowName: e.workflowName,
+							Message:      stepEvent.Error.Error(),
+							Thread:       e.threadForError(),
+							Err:          stepEvent.Error,
+						}, running.StepID)
+					}
+
 					e.logger.Warn("[InlineLoop] Activity exhausted retries; pausing until resume",
 						"loopID", e.loopID,
 						"iteration", e.iteration,

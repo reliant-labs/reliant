@@ -1059,6 +1059,26 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 
 				// Handle retry exhaustion - pause workflow and retry on resume.
 				if stepEvent.RetryExhausted {
+					// A sub-agent ends alone and reports to its parent; only
+					// the root pauses the run. See failsAlone.
+					if e.pauseCtrl.failsAlone(e.ctx) {
+						e.logger.Warn("[InlineWorkflow] Sub-agent step exhausted retries; ending this agent and reporting to its parent",
+							"nodeID", e.nodeID,
+							"subWorkflow", e.subWorkflowName,
+							"stepID", running.StepID,
+							"thread", e.threadForError(),
+							"error", stepEvent.Error,
+						)
+						return nil, endSubAgent(e.ctx, retryExhaustionError{
+							ChatID:       e.chatID,
+							WorkflowID:   e.workflowID,
+							WorkflowName: e.workflowName,
+							Message:      stepEvent.Error.Error(),
+							Thread:       e.threadForError(),
+							Err:          stepEvent.Error,
+						}, running.StepID)
+					}
+
 					e.logger.Warn("[InlineWorkflow] Activity exhausted retries; pausing until resume",
 						"nodeID", e.nodeID,
 						"subWorkflow", e.subWorkflowName,

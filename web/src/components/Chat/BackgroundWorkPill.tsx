@@ -9,15 +9,29 @@
  * Deliberately NOT merged into ThreadTabs: those are a navigation control with
  * per-thread context meters, and ThreadTabs filters spawn-origin threads out of
  * its own visible set. This is a transient activity readout.
+ *
+ * A spawned agent that FAILS shows here too, with Retry. Its failure stopped
+ * that agent and nothing else, so this row — not a chat-wide banner — is where
+ * the user sees it. Retry asks the agent's parent to resume it (the parent was
+ * already told it failed and holds the plan the agent belongs to); dismissing
+ * the row is remembered on this device.
  */
 
 import { Tooltip } from "../ui/Tooltip";
 import { useEffect, useMemo, useState } from "react";
-import { Bot, ChevronDown, Terminal, HelpCircle, Square } from "lucide-react";
+import { AlertTriangle, Bot, ChevronDown, Terminal, HelpCircle, RotateCw, Square, X } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { logger } from "../../lib/logger";
+import { toast } from "../../lib/toast-manager";
+import { chatGrpc } from "../../api/chat-grpc";
 import { useChatStore } from "../../store/chatStore";
-import { useBackgroundWork, type ActiveSpawn, type ActiveCommand } from "./useBackgroundWork";
+import {
+  useBackgroundWork,
+  failedAgentRetryMessage,
+  type ActiveSpawn,
+  type ActiveCommand,
+  type FailedSpawn,
+} from "./useBackgroundWork";
 
 interface BackgroundWorkPillProps {
   chatId?: string;
@@ -143,6 +157,136 @@ function SpawnRow({
   );
 }
 
+/** localStorage key for failed agents the user dismissed, by workflow id. */
+export const DISMISSED_FAILED_AGENTS_KEY = "reliant.backgroundWork.dismissedFailedAgents";
+const MAX_DISMISSED_FAILED_AGENTS = 500;
+
+function readDismissedFailedAgents(): Set<string> {
+  try {
+    const raw = localStorage.getItem(DISMISSED_FAILED_AGENTS_KEY);
+    const ids: unknown = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(ids) ? ids.filter((id): id is string => typeof id === "string") : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function writeDismissedFailedAgents(ids: Set<string>) {
+  try {
+    // Oldest first, so the cap drops the dismissals least likely to matter.
+    const kept = [...ids].slice(-MAX_DISMISSED_FAILED_AGENTS);
+    localStorage.setItem(DISMISSED_FAILED_AGENTS_KEY, JSON.stringify(kept));
+  } catch {
+    // Storage full or unavailable: the row stays dismissed for this session.
+  }
+}
+
+function FailedSpawnRow({
+  chatId,
+  spawn,
+  onSelect,
+  onDismiss,
+}: {
+  chatId?: string;
+  spawn: FailedSpawn;
+  onSelect?: (threadId: string) => void;
+  onDismiss: (workflowId: string) => void;
+}) {
+  const [retry, setRetry] = useState<"idle" | "sending" | "requested">("idle");
+
+  const handleSelect = () => onSelect?.(spawn.threadId);
+
+  const handleRetry = async (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    if (!chatId || !spawn.parentThreadId || retry !== "idle") return;
+
+    setRetry("sending");
+    try {
+      // To the PARENT, not the agent: the parent was told this agent failed
+      // and owns the plan it belongs to, so it is the one that resumes it.
+      const response = await chatGrpc.sendAgentMessage(
+        chatId,
+        spawn.parentThreadId,
+        failedAgentRetryMessage(spawn),
+      );
+      if (!response.success) {
+        toast.error(response.message);
+        setRetry("idle");
+        return;
+      }
+      setRetry("requested");
+    } catch (error) {
+      logger.error("[BackgroundWorkPill] Failed to ask the parent to retry a failed agent", {
+        chatId,
+        threadId: spawn.threadId,
+        error,
+      });
+      toast.error(error);
+      setRetry("idle");
+    }
+  };
+
+  const handleDismiss = (event: React.MouseEvent<HTMLButtonElement>) => {
+    event.stopPropagation();
+    onDismiss(spawn.workflowId);
+  };
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={handleSelect}
+      onKeyDown={(event) => {
+        if (event.currentTarget !== event.target) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          handleSelect();
+        }
+      }}
+      className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors hover:bg-accent focus:outline-none focus:ring-1 focus:ring-ring"
+      data-testid={`background-work-failed-${spawn.threadId}`}
+    >
+      <AlertTriangle className="h-3.5 w-3.5 flex-shrink-0 text-destructive" />
+      <span className="truncate font-medium text-foreground">{spawn.title}</span>
+      <span className={cn("truncate", retry === "requested" ? "text-muted-foreground" : "text-destructive")}>
+        {retry === "requested" ? "Retry requested" : "Failed"}
+      </span>
+      <span className="ml-auto flex flex-shrink-0 items-center gap-1.5">
+        <Tooltip
+          content={
+            spawn.parentThreadId
+              ? "Ask its parent to resume this agent where it stopped"
+              : "This agent's parent is not known, so it cannot be asked to retry it"
+          }
+          placement="bottom"
+          delay={300}
+          wrapperClassName="inline-flex"
+        >
+          <button
+            type="button"
+            onClick={handleRetry}
+            aria-label={`Retry failed agent ${spawn.title}`}
+            disabled={retry !== "idle" || !spawn.parentThreadId}
+            className="rounded p-0.5 transition-colors hover:bg-muted disabled:opacity-60"
+          >
+            <RotateCw className={cn("h-3.5 w-3.5 text-foreground", retry === "sending" && "animate-spin")} />
+          </button>
+        </Tooltip>
+        <Tooltip content="Dismiss" placement="bottom" delay={300} wrapperClassName="inline-flex">
+          <button
+            type="button"
+            onClick={handleDismiss}
+            aria-label={`Dismiss failed agent ${spawn.title}`}
+            className="rounded p-0.5 transition-colors hover:bg-muted"
+          >
+            <X className="h-3.5 w-3.5 text-muted-foreground" />
+          </button>
+        </Tooltip>
+      </span>
+    </div>
+  );
+}
+
 function CommandRow({
   command,
   onSelect,
@@ -172,11 +316,27 @@ export function BackgroundWorkPill({
   onSelectThread,
   onSelectCommand,
 }: BackgroundWorkPillProps) {
-  const { spawns, commands, blockedSpawns, hasWork } = useBackgroundWork(
+  const { spawns, failedSpawns, commands, blockedSpawns, hasWork } = useBackgroundWork(
     chatId,
     worktreeId,
   );
   const [isExpanded, setIsExpanded] = useState(false);
+  const [dismissed, setDismissed] = useState(readDismissedFailedAgents);
+
+  const visibleFailed = useMemo(
+    () => failedSpawns.filter((spawn) => !dismissed.has(spawn.workflowId)),
+    [failedSpawns, dismissed],
+  );
+  const dismissFailed = (workflowId: string) => {
+    setDismissed((current) => {
+      const next = new Set(current);
+      next.add(workflowId);
+      writeDismissedFailedAgents(next);
+      return next;
+    });
+  };
+  const hasFailed = visibleFailed.length > 0;
+  const hasAnything = hasWork || hasFailed;
 
   const summary = useMemo(() => {
     const parts: string[] = [];
@@ -194,12 +354,13 @@ export function BackgroundWorkPill({
   // Collapse when the work drains so the next batch starts collapsed rather
   // than reopening onto an empty list.
   useEffect(() => {
-    if (!hasWork) setIsExpanded(false);
-  }, [hasWork]);
+    if (!hasAnything) setIsExpanded(false);
+  }, [hasAnything]);
 
-  if (!hasWork) return null;
+  if (!hasAnything) return null;
 
   const isBlocked = blockedSpawns.length > 0;
+  const failedLabel = `${visibleFailed.length === 1 ? visibleFailed[0].title : `${visibleFailed.length} agents`} failed`;
 
   return (
     <div className="flex-shrink-0 border-t border-border bg-muted/20 px-3 py-1.5">
@@ -215,6 +376,8 @@ export function BackgroundWorkPill({
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-amber-500 opacity-75" />
             <span className="relative inline-flex h-2 w-2 rounded-full bg-amber-500" />
           </span>
+        ) : hasFailed ? (
+          <span className="relative inline-flex h-2 w-2 flex-shrink-0 rounded-full bg-destructive" />
         ) : (
           <span className="relative flex h-2 w-2 flex-shrink-0">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-success opacity-75" />
@@ -222,13 +385,23 @@ export function BackgroundWorkPill({
           </span>
         )}
 
-        <span className={cn("font-medium", isBlocked ? "text-amber-500" : "text-foreground")}>
+        <span
+          className={cn(
+            "font-medium",
+            isBlocked ? "text-amber-500" : hasFailed ? "text-destructive" : "text-foreground",
+          )}
+        >
           {isBlocked
             ? `${blockedSpawns.length === 1 ? blockedSpawns[0].title : `${blockedSpawns.length} agents`} waiting on you`
-            : summary}
+            : hasFailed
+              ? failedLabel
+              : summary}
         </span>
 
-        {isBlocked && summary && (
+        {isBlocked && hasFailed && (
+          <span className="text-destructive">· {failedLabel}</span>
+        )}
+        {(isBlocked || hasFailed) && summary && (
           <span className="text-muted-foreground">· {summary} running</span>
         )}
 
@@ -242,6 +415,15 @@ export function BackgroundWorkPill({
 
       {isExpanded && (
         <div className="mt-1 flex flex-col gap-0.5">
+          {visibleFailed.map((spawn) => (
+            <FailedSpawnRow
+              key={spawn.workflowId}
+              chatId={chatId}
+              spawn={spawn}
+              onSelect={onSelectThread}
+              onDismiss={dismissFailed}
+            />
+          ))}
           {spawns.map((spawn) => (
             <SpawnRow
               key={spawn.threadId}
