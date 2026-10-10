@@ -160,6 +160,11 @@ type stuckObservation struct {
 	// acted" WARN already fired for this streak, so a confirmed condition
 	// logs once rather than on every 30s pass until it clears.
 	disabledLogged bool
+
+	// wedgeAttempt is the pending workflow task's attempt count when a wedge
+	// streak was first observed (wedge observations only). See
+	// wedgeRetriedSinceObserved.
+	wedgeAttempt int32
 }
 
 // progressObservation tracks one RUNNING workflow's static-history streak for
@@ -981,8 +986,11 @@ func (r *Reconciler) reconcileWorkflow(ctx context.Context, wf *db.Workflow, pol
 	// chat reads "active" with nothing running until someone notices.
 	if temporalState.HasWedgedWorkflowTask &&
 		(wf.Status == db.Active() || wf.Status == db.Paused()) {
-		if !r.observeTask(ctx, wf, wedgeObservationTaskType, "", pollers) {
-			// Not yet confirmed (pollers absent, or debounce still counting).
+		confirmed := r.observeTask(ctx, wf, wedgeObservationTaskType, "", pollers)
+		retried := r.wedgeRetriedSinceObserved(wf.ID, temporalState.WedgedTaskAttempt)
+		if !confirmed || !retried {
+			// Not yet confirmed (pollers absent, debounce still counting), or
+			// no worker has retried the task since the streak began.
 			return result
 		}
 		r.recoverWedgedWorkflow(ctx, wf, temporalState, stats, result)
@@ -1520,6 +1528,33 @@ func (r *Reconciler) observeTask(ctx context.Context, wf *db.Workflow, taskType,
 
 	obs.passes++
 	return obs.passes >= r.stuckConfirmationPasses && time.Since(obs.firstObserved) >= r.stuckConfirmationWindow
+}
+
+// wedgeRetriedSinceObserved reports whether the wedged workflow task has been
+// retried — and failed again — since this streak began: its attempt count has
+// moved past the count first observed. Call it after observeTask, which owns
+// the streak's lifetime.
+//
+// The recorded failure is evidence about the code that recorded it, not about
+// the code the workers run now. The fix for a replay break ships in the same
+// release as this reconciler, and Temporal backs a failing workflow task off
+// to minutes between attempts, so right after that deploy every run the fix
+// heals still shows a high attempt count and a TMPRL1100 in its history — and
+// would be killed before the fixed worker's first attempt healed it. Only a
+// failure that happened again while this process watched is a failure of the
+// current workers.
+func (r *Reconciler) wedgeRetriedSinceObserved(workflowID string, attempt int32) bool {
+	r.stuckMu.Lock()
+	defer r.stuckMu.Unlock()
+	obs := r.stuckObservations[workflowID]
+	if obs == nil {
+		return false
+	}
+	if obs.wedgeAttempt == 0 {
+		obs.wedgeAttempt = attempt
+		return false
+	}
+	return attempt > obs.wedgeAttempt
 }
 
 // clearStuckObservation drops the debounce entry for a workflow.

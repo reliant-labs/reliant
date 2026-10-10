@@ -93,6 +93,7 @@ func wedgedClient(attempt int32, tail []*historypb.HistoryEvent) *mockReconciler
 			"wf-1": {resp: makeWedgedWorkflowTaskDescribeResp("run-1", attempt)},
 		},
 		historyEvents: tail,
+		retryingWedge: true,
 	}
 	c.setPollersActive(true)
 	return c
@@ -134,6 +135,34 @@ func TestReconciler_ReplayDivergedRun_RecoveredWithShippedConfig(t *testing.T) {
 
 	require.Len(t, repo.savedMessages, 1)
 	assert.Contains(t, repo.savedMessages[0].content, "send a message")
+}
+
+// Right after the deploy that fixes a replay break, a run the fix heals still
+// shows what the old workers recorded: a high attempt count and a TMPRL1100 in
+// its history. Temporal backs the task off for minutes, so the fixed worker
+// may not have retried it yet. Until a worker retries it and it fails again,
+// the evidence is about the old code, and the run must be left to heal.
+func TestReconciler_RecordedDivergenceNotYetRetried_IsLeftToHeal(t *testing.T) {
+	repo := newMockRepo()
+	tempClient := wedgedClient(28, replayDivergedTail())
+	tempClient.retryingWedge = false // no worker has retried it since
+	reconciler := NewReconciler(repo, tempClient, shippedConfigWithFastDebounce())
+	wf := runningWorkflow()
+
+	for i := 1; i <= 5; i++ {
+		result := reconciler.ReconcileWorkflow(context.Background(), wf)
+		require.NoError(t, result.Error)
+		assert.False(t, result.WasStale, "pass %d", i)
+	}
+	assert.Empty(t, tempClient.terminateCalls, "the fixed worker has not tried yet; terminating would throw away a run it heals")
+
+	// The fixed worker's attempt fails too: now the current code is the one
+	// that cannot replay it.
+	tempClient.retryingWedge = true
+	result := reconciler.ReconcileWorkflow(context.Background(), wf)
+	require.NoError(t, result.Error)
+	assert.True(t, result.WasStale)
+	assert.Equal(t, []string{"wf-1"}, tempClient.terminateCalls)
 }
 
 func TestReconciler_HighAttemptCountFromTimeouts_IsNotAWedge(t *testing.T) {
