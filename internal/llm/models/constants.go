@@ -45,8 +45,6 @@ const (
 const (
 	Gemini31ProPreview            ModelID = "gemini-3.1-pro-preview"
 	Gemini31ProPreviewCustomTools ModelID = "gemini-3.1-pro-preview-customtools"
-	Gemini31FlashLitePreview      ModelID = "gemini-3.1-flash-lite-preview"
-	Gemini3ProPreview             ModelID = "gemini-3-pro-preview"
 	Gemini3FlashPreview           ModelID = "gemini-3-flash-preview"
 	Gemini38Flash                 ModelID = "gemini-3.8-flash"
 	Gemini37Flash                 ModelID = "gemini-3.7-flash"

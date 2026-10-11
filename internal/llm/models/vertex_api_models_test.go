@@ -26,8 +26,9 @@ import (
 // routes the same bare ids (vertex_ai/claude-haiku-4-5) to Vertex in prod.
 //
 // A model page that announces a retirement date gets a row in
-// documentedVertexRetirements instead, once the date is known: its entry
-// leaves the catalog and its id redirects to Google's replacement.
+// providerRetirements (provider_retirements_test.go) instead, once the date is
+// known: its entry leaves the catalog and its id redirects to Google's
+// replacement.
 var documentedVertexModelIDs = map[string]string{
 	// partner-models/claude/opus-5-5
 	"claude-5.5-opus":        "claude-opus-5-5",
@@ -53,7 +54,7 @@ var documentedVertexModelIDs = map[string]string{
 	"vertex-claude-4.5-haiku": "claude-haiku-4-5",
 	// models/gemini/3-8-flash. Replaces vertex-gemini-2.5-pro and
 	// vertex-gemini-2.5-flash (models/gemini/2-5-pro, 2-5-flash), which Vertex
-	// retires on 2026-10-20 — see documentedVertexRetirements.
+	// retires on 2026-10-20 — see providerRetirements.
 	"vertex-gemini-3.8-flash": "gemini-3.8-flash",
 }
 
@@ -72,42 +73,6 @@ func TestVertexAPIModelsMatchVertexDocs(t *testing.T) {
 			if assert.True(t, ok, "%s has no vertexai mapping", id) {
 				assert.Equal(t, documentedVertexModelIDs[id], got,
 					"%s: vertexai api_model must be the Model ID on its Vertex AI model page", id)
-			}
-		})
-	}
-}
-
-// documentedVertexRetirements is every Vertex model the catalog mapped that
-// Google retires, with the replacement Google names first under "Replacement
-// model ID" on its lifecycle page:
-//
-//	docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
-//
-// Checked 2026-10-11. The retired id must keep resolving, to that replacement
-// on Vertex: a chat pinned to it would otherwise 404 from the retirement date.
-var documentedVertexRetirements = map[string]struct{ retiredOn, replacement string }{
-	// gemini-2.5-pro: "gemini-3.8-flash or gemini-3.5-flash"
-	"vertex-gemini-2.5-pro": {"2026-10-20", "gemini-3.8-flash"},
-	// gemini-2.5-flash: "gemini-3.8-flash or gemini-3.5-flash-lite or
-	// gemini-3.1-flash-lite"
-	"vertex-gemini-2.5-flash": {"2026-10-20", "gemini-3.8-flash"},
-}
-
-func TestRetiredVertexModelsMoveToGooglesReplacement(t *testing.T) {
-	reg := MustGetRegistry()
-	for id, want := range documentedVertexRetirements {
-		t.Run(id, func(t *testing.T) {
-			_, defined := reg.GetDefinition(id)
-			assert.False(t, defined, "%s is retired on Vertex; it must have no vertexai mapping", id)
-
-			resolved, err := reg.Resolve(ModelSelector{ID: id + "@vertexai"}, []string{"vertexai"})
-			if assert.NoError(t, err, "a chat pinned to %s must still resolve", id) {
-				assert.Equal(t, "vertexai", resolved.Provider.Driver)
-				assert.Equal(t, want.replacement, resolved.Provider.APIModel,
-					"%s must move to the replacement Google names on its lifecycle page", id)
-				if assert.NotNil(t, resolved.Retirement) {
-					assert.Equal(t, want.retiredOn, resolved.Retirement.RetiredOn, "%s: Google's retirement date", id)
-				}
 			}
 		})
 	}

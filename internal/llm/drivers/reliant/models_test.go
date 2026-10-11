@@ -66,8 +66,6 @@ func TestSupportedModelsOnlyExposeCodingFocusedGeminiModels(t *testing.T) {
 	// The gateway serves Gemini from Vertex, which retires gemini-2.5-pro on
 	// 2026-10-20; chats pinned to it here move to gemini-3.8-flash.
 	assert.NotContains(t, SupportedModels, models.Gemini25Pro)
-	assert.NotContains(t, SupportedModels, models.Gemini3ProPreview)
-	assert.NotContains(t, SupportedModels, models.Gemini31FlashLitePreview)
 	assert.NotContains(t, SupportedModels, models.Gemini25Flash)
 	assert.NotContains(t, SupportedModels, models.Gemini25FlashLite)
 }

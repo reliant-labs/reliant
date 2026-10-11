@@ -81,7 +81,6 @@ tags:
     - {model: gemini-3.8-flash, thinking_level: high}
     - {model: gemini-3.7-flash, thinking_level: high}
     - {model: gemini-3.1-pro-preview, thinking_level: high}
-    - {model: gemini-3-pro-preview, thinking_level: high}
     - {model: vertex-claude-5.5-opus, thinking_level: xhigh}
     - {model: vertex-claude-5-opus, thinking_level: high}
     - {model: vertex-claude-4.8-opus, thinking_level: high}
@@ -136,7 +135,7 @@ tags:
     - {model: gpt-5-mini, thinking_level: high}
     - {model: gpt-6-luna, thinking_level: high}
     - {model: gemini-3-flash-preview}
-    - {model: gemini-3.1-flash-lite-preview}
+    - {model: gemini-3.5-flash-lite, thinking_level: high}
     - {model: gemini-2.5-flash}
     - {model: gemini-2.5-flash-lite}
     - {model: vertex-claude-4.5-haiku}
@@ -159,7 +158,7 @@ tags:
     - {model: gpt-5.4-mini, thinking_level: high}
     - {model: gpt-5-mini, thinking_level: high}
     - {model: gpt-6-luna, thinking_level: high}
-    - {model: gemini-3.1-flash-lite-preview}
+    - {model: gemini-3.5-flash-lite, thinking_level: high}
     - {model: gemini-2.5-flash}
     - {model: gemini-2.5-flash-lite}
     - {model: vertex-claude-4.5-haiku}
@@ -205,8 +204,10 @@ tags:
     # Trailing per-provider coverage. Internal meta work (titling, routing,
     # summarizing) must be possible on every provider; these are reached only
     # when the user has none of the models above (codex: gpt-6-luna above, terra
-    # when the plan does not serve luna).
-    - {model: gemini-3.1-flash-lite-preview}            # gemini
+    # when the plan does not serve luna). The gemini entry is Google's cheapest
+    # current text model: without it a Gemini-only user's meta work falls
+    # through to gemini-3.8-flash, the Gemini flagship.
+    - {model: gemini-3.5-flash-lite, thinking_level: high}  # gemini
     - {model: gpt-5.6-terra, thinking_level: high}        # codex
     - {model: gemini-3.8-flash, thinking_level: high}     # antigravity
 
@@ -238,7 +239,6 @@ tags:
     - {model: gemini-3.8-flash, thinking_level: high}
     - {model: gemini-3.7-flash, thinking_level: high}
     - {model: gemini-3.1-pro-preview, thinking_level: high}
-    - {model: gemini-3-pro-preview, thinking_level: high}
     - {model: gemini-3.1-pro-preview-customtools, thinking_level: high}
     - {model: claude-4.6-sonnet, thinking_level: high}
     - {model: claude-4.5-sonnet, thinking_level: high}
@@ -284,8 +284,11 @@ retired:
   # Vertex AI retires the Gemini 2.5 family on 2026-10-20. Google's lifecycle
   # page names gemini-3.8-flash first among the replacements for both
   # (docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions,
-  # "Replacement model ID", checked 2026-10-11). Pinned by
-  # TestRetiredVertexModelsMoveToGooglesReplacement.
+  # "Replacement model ID", checked 2026-10-11).
+  #
+  # Every entry is pinned, with its source, by providerRetirements
+  # (provider_retirements_test.go); TestNoTierRoutesToARetiredMapping keeps
+  # every tier off a retired mapping.
   - {model: vertex-gemini-2.5-pro, drivers: [vertexai], replacement: vertex-gemini-3.8-flash, retired_on: "2026-10-20"}
   - {model: vertex-gemini-2.5-flash, drivers: [vertexai], replacement: vertex-gemini-3.8-flash, retired_on: "2026-10-20"}
   # The managed gateway serves Gemini FROM Vertex (control-plane's LiteLLM
@@ -294,6 +297,22 @@ retired:
   # shutdown date (ai.google.dev/gemini-api/docs/deprecations), so a user's own
   # key, and OpenRouter, keep serving it.
   - {model: gemini-2.5-pro, drivers: [reliant], replacement: gemini-3.8-flash, retired_on: "2026-10-20"}
+  # Gemini API shutdowns (ai.google.dev/gemini-api/docs/deprecations, checked
+  # 2026-10-11). Only the gemini driver mapped either model, so both leave the
+  # catalog. gemini-3-pro-preview shut down 2026-03-09; Google recommends
+  # gemini-3.1-pro-preview.
+  - {model: gemini-3-pro-preview, drivers: [gemini], replacement: gemini-3.1-pro-preview, retired_on: "2026-03-09"}
+  # gemini-3.1-flash-lite-preview shut down 2026-05-25. Google's row names
+  # gemini-3.1-flash-lite, which is itself deprecated (shutdown 2027-05-07) in
+  # favour of gemini-3.5-flash-lite. A redirect is one hop, so it names the end
+  # of that chain. The preview was the gemini entry in [fast], [cheap] and
+  # [meta]; gemini-3.5-flash-lite takes its slots.
+  - {model: gemini-3.1-flash-lite-preview, drivers: [gemini], replacement: gemini-3.5-flash-lite, retired_on: "2026-05-25"}
+  # The OpenAI API shut gpt-5.2-codex down on 2026-07-23 and names gpt-5.6-sol
+  # as its substitute (developers.openai.com/api/docs/deprecations, checked
+  # 2026-10-11). Only that mapping retires: OpenRouter still serves it, from
+  # Azure (probed 2026-10-11).
+  - {model: gpt-5.2-codex, drivers: [openai], replacement: gpt-5.6-sol, retired_on: "2026-07-23"}
 
 models:
   # ============================================================================
@@ -904,10 +923,12 @@ models:
       temperature_mode: omit
       use_max_completion_tokens: true
 
-  # GPT-5.6 family. These are Codex-subscription-only and use a different request
-  # envelope than GPT-5.5 and earlier (system prompt and tools ride inside `input`
-  # rather than as top-level `instructions`/`tools`). See the codex driver's
-  # buildParams and .dev/codex/SOL_PROTOCOL_NOTES.md for the wire details.
+  # GPT-5.6 family. On the Codex backend these use a different request envelope
+  # than GPT-5.5 and earlier (system prompt and tools ride inside `input` rather
+  # than as top-level `instructions`/`tools`). See the codex driver's buildParams
+  # and .dev/codex/SOL_PROTOCOL_NOTES.md for the wire details. Sol is also mapped
+  # on the OpenAI API, where it takes the standard Responses request, because
+  # OpenAI names it the substitute for the shut-down gpt-5.2-codex.
   #
   # They add one reasoning effort above xhigh: `max` (Codex's 400 enumerates none/minimal/low/medium/high/xhigh/max; there is no `ultra`, probed
   # 2026-10-04). They also
@@ -948,6 +969,12 @@ models:
       supported_file_types: [image, text]
     providers:
       - driver: codex
+        api_model: gpt-5.6-sol
+      # OpenAI API: Responses and Chat Completions, the same 1,050,000 /
+      # 128,000 and none…max effort (developers.openai.com/api/docs/models/
+      # gpt-5.6-sol, checked 2026-10-11). It is the API's named substitute for
+      # gpt-5.2-codex, so chats pinned to gpt-5.2-codex@openai land here.
+      - driver: openai
         api_model: gpt-5.6-sol
     driver_settings:
       preferred_endpoint: responses
@@ -1133,8 +1160,10 @@ models:
       # No codex provider: the ChatGPT-account Codex backend refuses this model
       # with `not supported when using Codex with a ChatGPT account`. See the
       # note above gpt-5.5 for the full accepted/refused list.
-      - driver: openai
-        api_model: gpt-5.2-codex
+      #
+      # No openai provider: the OpenAI API shut it down on 2026-07-23, and a
+      # chat pinned to gpt-5.2-codex@openai moves to gpt-5.6-sol (`retired:`).
+      # OpenRouter still serves it, from Azure (probed 2026-10-11).
       - driver: openrouter
         api_model: openai/gpt-5.2-codex
     driver_settings:
@@ -1229,26 +1258,6 @@ models:
         api_model: google/gemini-3.1-pro-preview
       - driver: reliant
         api_model: gemini-3.1-pro-preview
-    default_temperature: 1.0
-
-  - id: gemini-3-pro-preview
-    name: Gemini 3 Pro Preview
-    visibility: user
-    capabilities:
-      can_reason: true
-      supports_tools: true
-      supports_attachments: true
-      supports_streaming: true
-      supports_caching: false
-      max_context_window: 1048576
-      max_output_tokens: 65536
-      thinking_levels: [low, high]
-      supported_file_types: [image, pdf, text, audio, video]
-    providers:
-      - driver: gemini
-        api_model: gemini-3-pro-preview
-      # Removed 2026-10-04 (live probe): OpenRouter 404s "No endpoints found";
-      # its /api/v1/models lists gemini-3.1-pro-preview but not gemini-3-pro-preview.
     default_temperature: 1.0
 
   - id: gemini-3.1-pro-preview-customtools
@@ -1550,20 +1559,32 @@ models:
         api_model: gemini-3-flash-preview
     default_temperature: 1.0
 
-  - id: gemini-3.1-flash-lite-preview
-    name: Gemini 3.1 Flash-Lite Preview
+  # Replaces gemini-3.1-flash-lite-preview, which the Gemini API shut down on
+  # 2026-05-25 (see `retired:`), in [fast], [cheap] and [meta]. Google's model
+  # page: 1,048,576 in / 65,536 out, text/image/video/audio/PDF in, caching
+  # supported, stable with no shutdown date (ai.google.dev/gemini-api/docs/
+  # models/gemini-3.5-flash-lite). Thinking takes minimal/low/medium/high
+  # (docs/thinking); the catalog's vocabulary has no `minimal`, so it declares
+  # the other three. OpenRouter serves the same limits (probed 2026-10-11).
+  - id: gemini-3.5-flash-lite
+    name: Gemini 3.5 Flash-Lite
     visibility: user
     capabilities:
-      can_reason: false
+      can_reason: true
       supports_tools: true
       supports_attachments: true
       supports_streaming: true
-      supports_caching: false
+      supports_caching: true
       max_context_window: 1048576
       max_output_tokens: 65536
+      thinking_levels: [low, medium, high]
+      supported_file_types: [image, pdf, text, audio, video]
     providers:
       - driver: gemini
-        api_model: gemini-3.1-flash-lite-preview
+        api_model: gemini-3.5-flash-lite
+      - driver: openrouter
+        api_model: google/gemini-3.5-flash-lite
+    default_temperature: 1.0
 
   - id: gemini-2.5-flash
     name: Gemini 2.5 Flash

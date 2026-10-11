@@ -12,7 +12,7 @@ import (
 )
 
 // testdata/openrouter_models.json is GET https://openrouter.ai/api/v1/models
-// (public, no credential) fetched 2026-10-10, reduced to the models
+// (public, no credential) fetched 2026-10-11, reduced to the models
 // models.yaml maps to `openrouter` and to the two limits reliant uses.
 // Refresh with:
 //
