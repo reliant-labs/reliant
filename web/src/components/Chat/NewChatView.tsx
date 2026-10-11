@@ -39,6 +39,7 @@ import {
 } from "lucide-react";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
+import { DiskPressureBanner } from "./DiskPressureBanner";
 import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
@@ -522,6 +523,7 @@ export function NewChatView({
 
       {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
       <OomKillBanner />
+      <DiskPressureBanner />
 
       {/* Message Input - Collapsible when not focused */}
       {/* A machine that is BOOTING is not the same as one that was never

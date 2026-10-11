@@ -26,6 +26,7 @@ vi.mock("../PermissionsPanel", () => ({ PermissionsPanel: () => null }));
 vi.mock("../ChatHeader", () => ({ ChatHeader: () => <div data-testid="chat-header" /> }));
 vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
+vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../BackgroundWorkPill", () => ({ BackgroundWorkPill: () => null }));
 vi.mock("../QueuedMessages", () => ({ QueuedMessages: () => null }));
 vi.mock("../../../hooks/queued-agent-messages", () => ({

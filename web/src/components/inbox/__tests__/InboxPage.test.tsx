@@ -37,6 +37,7 @@ import {
 const mocks = vi.hoisted(() => ({
   listInbox: vi.fn(),
   cleanupStorage: vi.fn(),
+  clearMachineCaches: vi.fn(),
   dismissInboxItem: vi.fn(),
   restoreInboxItem: vi.fn(),
   approve: vi.fn(),
@@ -55,6 +56,7 @@ vi.mock("@/api/grpc-client", () => ({
       dismissInboxItem: mocks.dismissInboxItem,
       restoreInboxItem: mocks.restoreInboxItem,
     }),
+    daemonRegistry: () => ({ clearMachineCaches: mocks.clearMachineCaches }),
   },
 }));
 vi.mock("@/api/client", () => ({
@@ -364,14 +366,42 @@ describe("InboxPage states", () => {
 
 
 describe("InboxPage storage item", () => {
-  it("shows the machine's disk and what it kept, under its own heading", async () => {
+  it("names the volume that is full and what fills it, and what it kept, under its own heading", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
     expect(screen.getByTestId(`inbox-section-${InboxItemKind.STORAGE}`)).toHaveTextContent(/^Storage1/);
     expect(within(row).getByText("MacBook storage")).toBeInTheDocument();
-    expect(within(row).getByText(/12 GB free of 500 GB/)).toBeInTheDocument();
+    // The full volume, not the home volume (124 GB free) the old item measured.
+    expect(within(row).getByText(/build caches & docker: 38 GB of 40 GB used — Docker 21 GB · Build caches 15 GB/)).toBeInTheDocument();
+    expect(within(row).queryByText(/124 GB/)).not.toBeInTheDocument();
     expect(within(row).getByText(/3 workspaces kept \(3\.3 GB\)/)).toBeInTheDocument();
+  });
+
+  it("Free up space offers only the safe caches, explains what it leaves alone, and calls nothing until confirmed", async () => {
+    respond([storageItem()]);
+    renderInboxAt(<InboxPage />);
+    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    await userEvent.click(within(row).getByRole("button", { name: "Free up space" }));
+
+    const dialog = await screen.findByRole("dialog");
+    const safe = within(dialog).getByRole("group", { name: "Safe to clear" });
+    expect(within(safe).getByText("Go build cache")).toBeInTheDocument();
+    expect(within(safe).getByText("Docker build cache")).toBeInTheDocument();
+    expect(within(safe).getByText(/no build has used for 2 hours/)).toBeInTheDocument();
+    const leftAlone = within(dialog).getByRole("list", { name: "Not cleared from here" });
+    expect(within(leftAlone).getByText("Docker volumes")).toBeInTheDocument();
+    expect(within(leftAlone).getByText(/can hold databases/)).toBeInTheDocument();
+    expect(within(leftAlone).getByText("Go module cache")).toBeInTheDocument();
+    expect(within(safe).queryByText("Docker volumes")).not.toBeInTheDocument();
+    expect(mocks.clearMachineCaches).not.toHaveBeenCalled();
+
+    // Untick the docker build cache: only what stays ticked is sent.
+    await userEvent.click(within(safe).getAllByRole("checkbox")[1]);
+    mocks.clearMachineCaches.mockResolvedValue({ started: ["go_build_cache"], skipped: [] });
+    await userEvent.click(within(dialog).getByRole("button", { name: /Clear 1 cache \(about 6\.0 GB\)/ }));
+    await waitFor(() => expect(mocks.clearMachineCaches).toHaveBeenCalledTimes(1));
+    expect(mocks.clearMachineCaches.mock.calls[0][0]).toMatchObject({ daemonId: "d-1", kinds: ["go_build_cache"] });
   });
 
   it("sorts after the blocking kinds and does not count as blocking", async () => {

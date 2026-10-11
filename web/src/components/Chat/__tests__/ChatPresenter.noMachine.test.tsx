@@ -60,6 +60,7 @@ vi.mock("../PermissionsPanel", () => ({ PermissionsPanel: () => null }));
 vi.mock("../ChatHeader", () => ({ ChatHeader: () => null }));
 vi.mock("../ResumeDaemonPill", () => ({ ResumeDaemonPill: () => <div data-testid="resume-daemon-pill" /> }));
 vi.mock("../OomKillBanner", () => ({ OomKillBanner: () => null }));
+vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../BackgroundWorkPill", () => ({ BackgroundWorkPill: () => null }));
 vi.mock("../QueuedMessages", () => ({ QueuedMessages: () => null }));
 vi.mock("../thread-views", () => ({

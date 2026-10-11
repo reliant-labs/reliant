@@ -113,6 +113,7 @@ import {
 } from "@/components/Billing/daemonUsage";
 import { formatMachineSpec } from "@/components/Billing/machineSpecs";
 import { CardInset } from "@/components/forge-ui/card";
+import { MachineDiskCard } from "./MachineDiskCard";
 import { CLOUD_PROJECT_ROOT, cloudPathForRepo } from "@/lib/cloudProjectPath";
 import { toast } from "@/lib/toast-manager";
 import { machineDisplayName, type NameableMachine } from "@/lib/machineName";
@@ -2008,6 +2009,9 @@ function EnvironmentDetail({
               </CardContent>
             </Card>
           </div>
+
+          {/* Every volume the machine reports, and what fills the full one. */}
+          <MachineDiskCard daemon={daemon} machineLabel={daemonDisplayName(daemon)} />
 
           {/* Which outside AI apps can reach this machine. Above port access:
               it is the broader grant — tools on the machine, not one port. */}

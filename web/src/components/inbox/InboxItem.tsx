@@ -46,6 +46,7 @@ import { ApprovalActions } from "../Chat/ApprovalActions";
 import { QuestionPrompt, type QuestionAnswer } from "../Chat/QuestionPrompt";
 import { askUserQuestionItems } from "../Chat/askUserUtils";
 import { formatBytes } from "@/lib/formatBytes";
+import { consumerSummary, pressuredVolume, volumeUsage } from "@/lib/machineDisk";
 import { StorageAction, totalHeldBytes } from "./StorageAction";
 
 /** How long "Already handled" shows before the row leaves. */
@@ -303,11 +304,18 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
   }
 }
 
-/** "12 GB free of 500 GB · 3 workspaces kept (8.4 GB)". */
+/**
+ * "build caches & docker: 38 of 40 GB used — Docker 18 GB · Build caches 15 GB
+ * · 3 workspaces kept (8.4 GB)". Names the volume that is full: on a cloud
+ * machine it is not the home volume, and "12 GB free of 157 GB" there said
+ * nothing about why every build was failing.
+ */
 export function storageDetail(storage: InboxStorageData): string {
   const parts: string[] = [];
-  if (storage.diskTotalBytes > 0n) {
-    parts.push(`${formatBytes(storage.diskFreeBytes)} free of ${formatBytes(storage.diskTotalBytes)}`);
+  const full = pressuredVolume(storage);
+  if (full) {
+    const using = consumerSummary(full, 2);
+    parts.push(using ? `${volumeUsage(full)} — ${using}` : volumeUsage(full));
   }
   if (storage.held.length > 0) {
     const size = totalHeldBytes(storage.held);

@@ -173,9 +173,27 @@ export function storageItem(
       value: create(InboxStorageSchema, {
         daemonId: "d-1",
         daemonName: "MacBook",
-        diskFreeBytes: 12_000_000_000n,
-        diskTotalBytes: 500_000_000_000n,
         diskLow: true,
+        // The cloud-machine shape: the build-cache & docker volume is full,
+        // the home volume is not. Fullest first, as the server sends them.
+        volumes: [
+          {
+            label: "build caches & docker",
+            paths: ["/var/cache/workspace/go-build", "/var/lib/docker"],
+            totalBytes: 40_000_000_000n,
+            freeBytes: 2_000_000_000n,
+            pressure: true,
+            consumersMeasuredAtMs: BigInt(Date.now()),
+            consumers: [
+              { kind: "docker_images", label: "Docker images", category: "docker", bytes: 13_000_000_000n, reclaimableBytes: 11_000_000_000n },
+              { kind: "go_build_cache", label: "Go build cache", category: "caches", path: "/var/cache/workspace/go-build", bytes: 9_000_000_000n, reclaimableBytes: 6_000_000_000n, clearable: true },
+              { kind: "go_mod_cache", label: "Go module cache", category: "caches", path: "/var/cache/workspace/go-mod", bytes: 6_000_000_000n },
+              { kind: "docker_volumes", label: "Docker volumes", category: "docker", bytes: 5_000_000_000n, reclaimableBytes: 4_500_000_000n },
+              { kind: "docker_build_cache", label: "Docker build cache", category: "docker", bytes: 3_000_000_000n, reclaimableBytes: 1_000_000_000n, clearable: true },
+            ],
+          },
+          { label: "home", paths: ["/home/workspace"], totalBytes: 157_000_000_000n, freeBytes: 124_000_000_000n },
+        ],
         online: true,
         held: [
           {

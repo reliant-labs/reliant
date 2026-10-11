@@ -79,6 +79,7 @@ vi.mock("../../../hooks/chat-queries", async () => {
 vi.mock("../OomKillBanner", () => ({
   OomKillBanner: () => null,
 }));
+vi.mock("../DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../thread-views", () => ({
   InterleavedTimeline: () => <div data-testid="timeline" />,
 }));

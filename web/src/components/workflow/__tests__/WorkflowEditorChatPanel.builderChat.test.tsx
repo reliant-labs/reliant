@@ -113,6 +113,7 @@ vi.mock("../../Chat/ChatInput", () => ({
 }));
 vi.mock("../../Chat/ResumeDaemonPill", () => ({ ResumeDaemonPill: () => null }));
 vi.mock("../../Chat/OomKillBanner", () => ({ OomKillBanner: () => null }));
+vi.mock("../../Chat/DiskPressureBanner", () => ({ DiskPressureBanner: () => null }));
 vi.mock("../../DaemonWaitState", () => ({
   DaemonWaitState: ({ state }: { state: { title: string } }) => <div role="status">{state.title}</div>,
 }));

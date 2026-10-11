@@ -21,8 +21,11 @@ import { useState } from "react";
 import { toast } from "sonner";
 
 import { type InboxStorage, type HeldWorktree, CleanupStorageOutcome } from "@/gen/reliant/v1/inbox_pb";
+import type { DiskVolume } from "@/gen/reliant/v1/tools_daemon_pb";
 import { useCleanupStorage } from "@/hooks/inbox-queries";
 import { formatBytes } from "@/lib/formatBytes";
+import { pressuredVolume } from "@/lib/machineDisk";
+import { FreeDiskSpaceDialog } from "../MachineDisk/FreeDiskSpaceDialog";
 import { Button } from "../ui/Button";
 import { Modal } from "../ui/Modal";
 import { CardInset } from "../forge-ui/card";
@@ -73,14 +76,50 @@ export function totalHeldBytes(held: HeldWorktree[]): number {
   return held.reduce((sum, w) => sum + Number(w.sizeBytes), 0);
 }
 
+/**
+ * The storage item's actions: "Free up space" when one of the machine's
+ * volumes is under pressure (what is using it, and the rebuildable caches it
+ * can clear), and "Clean up" when it holds archived workspaces.
+ */
 export function StorageAction({ storage, label }: { storage: InboxStorage; label: string }) {
+  const full = pressuredVolume(storage);
+  if (!full && storage.held.length === 0) return null;
+  return (
+    <div className="flex items-center gap-2">
+      {full && <FreeSpaceAction storage={storage} label={label} volume={full} />}
+      {storage.held.length > 0 && <CleanupWorkspacesAction storage={storage} label={label} />}
+    </div>
+  );
+}
+
+function FreeSpaceAction({ storage, label, volume }: { storage: InboxStorage; label: string; volume: DiskVolume }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Free up space
+      </Button>
+      {open && (
+        <FreeDiskSpaceDialog
+          isOpen
+          onClose={() => setOpen(false)}
+          daemonId={storage.daemonId}
+          machineLabel={label}
+          volume={volume}
+          online={storage.online}
+        />
+      )}
+    </>
+  );
+}
+
+function CleanupWorkspacesAction({ storage, label }: { storage: InboxStorage; label: string }) {
   const [open, setOpen] = useState(false);
   const cleanup = useCleanupStorage();
   // Frozen at open so a refetch while the user is reading cannot change what a
   // click on Remove acts on.
   const [shown, setShown] = useState<HeldWorktree[]>([]);
 
-  if (storage.held.length === 0) return null;
   const cleaning = storage.held.filter((w) => w.cleaning).length;
   const canClean = removable(storage.held).length > 0;
 

@@ -18,6 +18,7 @@ import { PermissionsPanel } from "./PermissionsPanel";
 import { ChatHeader } from "./ChatHeader";
 import { ResumeDaemonPill } from "./ResumeDaemonPill";
 import { OomKillBanner } from "./OomKillBanner";
+import { DiskPressureBanner } from "./DiskPressureBanner";
 import { ComposerWakeStatus } from "./ComposerWakeStatus";
 import { ContinueWithoutMachineButton, NoMachineComposerHint } from "./NoMachine";
 import { continueBranchPoint } from "../../lib/chatMachine";
@@ -760,6 +761,8 @@ export const ChatPresenter = memo(function ChatPresenter({
 
         {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
         {!noMachine && <OomKillBanner />}
+        {/* Disk banner — a volume on the chat's machine is (nearly) full */}
+        {!noMachine && <DiskPressureBanner daemonId={currentChat?.activeDaemonId} />}
 
         {noMachine && chatId ? (
           <NoMachineComposerHint chatId={chatId} />
