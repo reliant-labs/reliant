@@ -55,7 +55,10 @@ type Options struct {
 	// Database
 	DatabaseDriver string
 	DatabaseURL    string
-	DataDir        string
+	// DatabaseDirectURL is the session-capable URL for session-scoped work
+	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
+	DatabaseDirectURL string
+	DataDir           string
 
 	// Temporal
 	TemporalHost      string
@@ -148,10 +151,11 @@ func Run(ctx context.Context, opts Options) error {
 	// api-server owns the schema; block here until it has applied migrations
 	// rather than racing it (see db.MigrationPolicy).
 	repo, err := db.NewRepoFromConfig(db.DatabaseConfig{
-		Driver:  dbDriver,
-		DataDir: opts.DataDir,
-		URL:     opts.DatabaseURL,
-		Migrate: db.MigrateWait,
+		Driver:    dbDriver,
+		DataDir:   opts.DataDir,
+		URL:       opts.DatabaseURL,
+		DirectURL: opts.DatabaseDirectURL,
+		Migrate:   db.MigrateWait,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)

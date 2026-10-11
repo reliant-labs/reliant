@@ -27,6 +27,11 @@ type ModelRegistry struct {
 	byID   map[string]*ModelDefinition // Fast lookup by model ID
 	tags   map[string][]TagEntry       // tag -> ordered entries (resolution order)
 
+	// retired maps a retired model id to its retirements, in YAML order. Read
+	// only after parse, except that a user's custom model of the same id
+	// drops them (addCustomModels).
+	retired map[string][]*RetiredModel
+
 	// avail is the per-account availability filter set by WithAvailability.
 	// Nil on the shared global registry.
 	avail AvailabilityFunc
@@ -165,16 +170,17 @@ func ParseRegistryFromBytes(data []byte) (*ModelRegistry, error) {
 	if err := yaml.Unmarshal(data, &config); err != nil {
 		return nil, fmt.Errorf("failed to parse models YAML: %w", err)
 	}
-	return buildRegistry(config.Models, config.Tags)
+	return buildRegistry(config.Models, config.Tags, config.Retired)
 }
 
-// buildRegistry creates a ModelRegistry from model definitions and the tag
-// lists that map tiers onto them.
-func buildRegistry(models []ModelDefinition, tags map[string][]TagEntry) (*ModelRegistry, error) {
+// buildRegistry creates a ModelRegistry from model definitions, the tag lists
+// that map tiers onto them, and the retirements that redirect retired ids.
+func buildRegistry(models []ModelDefinition, tags map[string][]TagEntry, retired []RetiredModel) (*ModelRegistry, error) {
 	reg := &ModelRegistry{
-		models: models,
-		byID:   make(map[string]*ModelDefinition, len(models)),
-		tags:   make(map[string][]TagEntry, len(tags)),
+		models:  models,
+		byID:    make(map[string]*ModelDefinition, len(models)),
+		tags:    make(map[string][]TagEntry, len(tags)),
+		retired: make(map[string][]*RetiredModel, len(retired)),
 	}
 
 	for i := range models {
@@ -187,6 +193,12 @@ func buildRegistry(models []ModelDefinition, tags map[string][]TagEntry) (*Model
 
 	for tag, entries := range tags {
 		if err := reg.setTag(tag, entries); err != nil {
+			return nil, err
+		}
+	}
+
+	for i, retirement := range retired {
+		if err := reg.addRetirement(i, retirement); err != nil {
 			return nil, err
 		}
 	}
@@ -343,7 +355,9 @@ func (r *ModelRegistry) ListAllTags() []string {
 
 // Resolve takes a ModelSelector and available providers, and returns the best match.
 // Resolution rules:
-//  1. If selector.ID is set, find exact match by ID
+//  1. If selector.ID is set, find exact match by ID. An id a provider retired
+//     resolves to its replacement on that provider, with Retirement set
+//     (see RetiredModel)
 //  2. If selector.Tags is set, use best-match scoring (not strict AND):
 //     - Earlier tags in the list have higher weight
 //     - Models are scored by the weights of the selector tags that list them
@@ -375,47 +389,7 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 
 	// Case 1: Resolve by exact ID
 	if selector.ID != "" {
-		// Parse ID to handle @driver suffix (e.g. "model@provider")
-		idToLookup := selector.ID
-		var driverSuffix string
-
-		if idx := strings.LastIndex(selector.ID, "@"); idx != -1 {
-			idToLookup = selector.ID[:idx]
-			driverSuffix = selector.ID[idx+1:]
-		}
-
-		model, ok := r.byID[idToLookup]
-		if !ok {
-			return nil, fmt.Errorf("model not found: %s", selector.ID)
-		}
-
-		// An explicitly named model still has to be able to do the job. Failing
-		// here names both the model and the modality, which is a far better
-		// error than whatever the driver would produce on a generation call to
-		// a text-only endpoint.
-		if selector.RequireOutputModality != "" && !model.Capabilities.CanOutput(selector.RequireOutputModality) {
-			return nil, fmt.Errorf("model %s cannot generate %s (it produces %v)",
-				model.ID, selector.RequireOutputModality, model.Capabilities.EffectiveOutputModalities())
-		}
-
-		// Use driver suffix if present, otherwise use selector's providers
-		// Driver suffix (@provider) is a hard constraint; selector.Providers is a preference
-		preferredProviders := selector.Providers
-		hardConstraint := false
-		if driverSuffix != "" {
-			preferredProviders = []string{driverSuffix}
-			hardConstraint = true // @suffix means user explicitly wants this provider
-		}
-
-		servable, disabledReason := restrictProviders(model, availableSet, avail)
-		provider, err := r.findBestProvider(model, preferredProviders, servable, hardConstraint)
-		if err != nil {
-			if disabledReason != "" {
-				return nil, fmt.Errorf("model %s is unavailable: %s: %w", model.ID, disabledReason, drivererrors.ErrNoServableProvider)
-			}
-			return nil, err
-		}
-		return resolvedWithAvailability(model, provider, ThinkingLevelFor(model), avail), nil
+		return r.resolveID(selector, availableSet, true)
 	}
 
 	// Case 2: Resolve by tags using best-match scoring
@@ -452,6 +426,74 @@ func (r *ModelRegistry) Resolve(selector ModelSelector, availableProviders []str
 	}
 
 	return nil, fmt.Errorf("no available provider for models with tags: %v (tried %d candidates): %w", selector.Tags, len(candidates), drivererrors.ErrNoServableProvider)
+}
+
+// resolveID resolves a selector by its exact id, "model" or "model@driver".
+//
+// With followRetired, an id a provider retired resolves to its replacement on
+// the same provider (see RetiredModel): pinned, when the pinned driver retired
+// it; unpinned, when the model cannot be served otherwise and a provider the
+// user has retired it.
+func (r *ModelRegistry) resolveID(selector ModelSelector, availableSet map[string]bool, followRetired bool) (*ResolvedModel, error) {
+	avail := r.avail
+
+	// Parse ID to handle @driver suffix (e.g. "model@provider")
+	idToLookup := selector.ID
+	var driverSuffix string
+
+	if idx := strings.LastIndex(selector.ID, "@"); idx != -1 {
+		idToLookup = selector.ID[:idx]
+		driverSuffix = selector.ID[idx+1:]
+	}
+
+	if followRetired && driverSuffix != "" {
+		if retirement := r.retirementOn(idToLookup, driverSuffix); retirement != nil {
+			return r.resolveReplacement(selector, retirement, driverSuffix, availableSet)
+		}
+	}
+
+	model, ok := r.byID[idToLookup]
+	if !ok {
+		if followRetired && driverSuffix == "" {
+			if retirement := r.unpinnedRetirement(idToLookup, availableSet); retirement != nil {
+				return r.resolveReplacement(selector, retirement, "", availableSet)
+			}
+		}
+		return nil, fmt.Errorf("model not found: %s", selector.ID)
+	}
+
+	// An explicitly named model still has to be able to do the job. Failing
+	// here names both the model and the modality, which is a far better
+	// error than whatever the driver would produce on a generation call to
+	// a text-only endpoint.
+	if selector.RequireOutputModality != "" && !model.Capabilities.CanOutput(selector.RequireOutputModality) {
+		return nil, fmt.Errorf("model %s cannot generate %s (it produces %v)",
+			model.ID, selector.RequireOutputModality, model.Capabilities.EffectiveOutputModalities())
+	}
+
+	// Use driver suffix if present, otherwise use selector's providers
+	// Driver suffix (@provider) is a hard constraint; selector.Providers is a preference
+	preferredProviders := selector.Providers
+	hardConstraint := false
+	if driverSuffix != "" {
+		preferredProviders = []string{driverSuffix}
+		hardConstraint = true // @suffix means user explicitly wants this provider
+	}
+
+	servable, disabledReason := restrictProviders(model, availableSet, avail)
+	provider, err := r.findBestProvider(model, preferredProviders, servable, hardConstraint)
+	if err != nil {
+		if followRetired && driverSuffix == "" {
+			if retirement := r.unpinnedRetirement(model.ID, availableSet); retirement != nil {
+				return r.resolveReplacement(selector, retirement, "", availableSet)
+			}
+		}
+		if disabledReason != "" {
+			return nil, fmt.Errorf("model %s is unavailable: %s: %w", model.ID, disabledReason, drivererrors.ErrNoServableProvider)
+		}
+		return nil, err
+	}
+	return resolvedWithAvailability(model, provider, ThinkingLevelFor(model), avail), nil
 }
 
 // tagCandidate is a model a tag selector may resolve to, with the entry that
@@ -591,12 +633,16 @@ func (r *ModelRegistry) ResolveWithFallback(primary, fallback ModelSelector, ava
 // This is useful for applying user configurations without modifying the global registry.
 func (r *ModelRegistry) Clone() *ModelRegistry {
 	cloned := &ModelRegistry{
-		models: slices.Clone(r.models),
-		byID:   make(map[string]*ModelDefinition, len(r.byID)),
-		tags:   make(map[string][]TagEntry, len(r.tags)),
+		models:  slices.Clone(r.models),
+		byID:    make(map[string]*ModelDefinition, len(r.byID)),
+		tags:    make(map[string][]TagEntry, len(r.tags)),
+		retired: make(map[string][]*RetiredModel, len(r.retired)),
 	}
 	for tag, entries := range r.tags {
 		cloned.tags[tag] = slices.Clone(entries)
+	}
+	for model, retirements := range r.retired {
+		cloned.retired[model] = slices.Clone(retirements)
 	}
 	// Rebuild the index pointing into the new models slice.
 	for i := range cloned.models {

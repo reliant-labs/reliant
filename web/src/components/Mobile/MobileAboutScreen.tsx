@@ -6,21 +6,16 @@
  * spotlight tour `OnboardingWizard` suppresses on this surface — see
  * `MobileLayout`'s module comment), Electron CLI install, and
  * `UpdateSection` (an Electron auto-updater UI with no meaning in a mobile
- * browser tab). None of that is reimplemented here; this reads the same
- * `systemGrpc.version()` call desktop uses and renders just the version and
- * a couple of links worth keeping on a phone.
+ * browser tab). None of that is reimplemented here; this renders the same
+ * `VersionDetails` block desktop does (this app's build, the server's, the
+ * release) and a couple of links worth keeping on a phone.
  */
 
-import { useEffect, useState } from "react";
 import { ExternalLink, Github, Globe } from "lucide-react";
-import { systemGrpc } from "../../api/system-grpc";
 import { BrandMark } from "../icons/BrandMark";
+import { VersionDetails } from "../Settings/VersionDetails";
 import { MobileCardGroup } from "./MobileChrome";
 import { MobileSettingsSectionHeader } from "./MobileSettingsSectionHeader";
-
-interface VersionInfo {
-  version: string;
-}
 
 const LINKS = [
   { icon: Globe, label: "Website", href: "https://reliantlabs.io" },
@@ -32,33 +27,13 @@ const LINKS = [
 ];
 
 export function MobileAboutScreen({ onBack }: { onBack: () => void }) {
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    systemGrpc
-      .version()
-      .then((data) => {
-        if (!cancelled) setVersionInfo({ version: data.version });
-      })
-      .catch((error) => {
-        console.error("Failed to fetch version info:", error);
-        if (!cancelled) setVersionInfo({ version: "1.0.0" });
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   return (
     <div className="flex h-full min-h-0 flex-col">
       <MobileSettingsSectionHeader title="About" onBack={onBack} />
       <div className="min-h-0 flex-1 overflow-y-auto p-6 text-center">
         <BrandMark className="mx-auto mb-4 h-16 w-16" />
         <h1 className="text-2xl font-semibold text-foreground">Reliant</h1>
-        <p className="mt-1 text-sm text-muted-foreground">
-          v{versionInfo?.version || "1.0.0"}
-        </p>
+        <VersionDetails />
 
         <div className="mx-auto mt-6 max-w-sm text-left">
           <MobileCardGroup>

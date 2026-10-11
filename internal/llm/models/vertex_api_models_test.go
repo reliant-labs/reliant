@@ -24,6 +24,11 @@ import (
 // Google lists one version per model, the bare Model ID; it does not document
 // @YYYYMMDD snapshot ids for these models. control-plane's LiteLLM gateway
 // routes the same bare ids (vertex_ai/claude-haiku-4-5) to Vertex in prod.
+//
+// A model page that announces a retirement date gets a row in
+// providerRetirements (provider_retirements_test.go) instead, once the date is
+// known: its entry leaves the catalog and its id redirects to Google's
+// replacement.
 var documentedVertexModelIDs = map[string]string{
 	// partner-models/claude/opus-5-5
 	"claude-5.5-opus":        "claude-opus-5-5",
@@ -47,10 +52,10 @@ var documentedVertexModelIDs = map[string]string{
 	"vertex-claude-4.5-sonnet": "claude-sonnet-4-5",
 	// partner-models/claude/haiku-4-5
 	"vertex-claude-4.5-haiku": "claude-haiku-4-5",
-	// models/gemini/2-5-pro
-	"vertex-gemini-2.5-pro": "gemini-2.5-pro",
-	// models/gemini/2-5-flash
-	"vertex-gemini-2.5-flash": "gemini-2.5-flash",
+	// models/gemini/3-8-flash. Replaces vertex-gemini-2.5-pro and
+	// vertex-gemini-2.5-flash (models/gemini/2-5-pro, 2-5-flash), which Vertex
+	// retires on 2026-10-20 — see providerRetirements.
+	"vertex-gemini-3.8-flash": "gemini-3.8-flash",
 }
 
 func TestVertexAPIModelsMatchVertexDocs(t *testing.T) {

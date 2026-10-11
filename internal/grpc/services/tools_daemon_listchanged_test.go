@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -21,7 +22,9 @@ type listChangedRepo struct {
 	daemons map[string]*db.Daemon
 }
 
-func (listChangedRepo) DeleteDaemonAttachment(context.Context, string) error { return nil }
+func (listChangedRepo) ReleaseDaemonAttachment(context.Context, string, time.Time) error {
+	return nil
+}
 
 func (r listChangedRepo) GetDaemon(_ context.Context, id string) (*db.Daemon, error) {
 	if d, ok := r.daemons[id]; ok {

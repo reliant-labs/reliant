@@ -229,7 +229,7 @@ func TestImportWorktree_RejectsAnArchivedRowsPath(t *testing.T) {
 	require.NoError(t, e.repo.ArchiveWorktree(e.ctx, wt.ID))
 	_, err := e.svc.ImportWorktree(e.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{ProjectId: e.project.ID, Path: path}))
 	require.Error(t, err)
-	assert.Equal(t, connect.CodeAlreadyExists, connect.CodeOf(err))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err), "an archived row's path is excluded from discovery, so it cannot be imported")
 }
 
 // NIT: storeCleanupMetadata merges instead of wiping held state.

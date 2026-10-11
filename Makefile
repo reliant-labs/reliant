@@ -1,6 +1,9 @@
 
 # Build metadata
-VERSION ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo "dev")
+# VERSION is the release identity — 1.8.1 at a tag, 1.8.2-dev+<sha8> after it —
+# from scripts/release-identity.sh, the resolver every shipped build (web
+# bundle, release.yml, control-plane's prod image) stamps from.
+VERSION ?= $(shell ./scripts/release-identity.sh 2>/dev/null || echo "unknown")
 COMMIT ?= $(shell git rev-parse --short HEAD 2>/dev/null || echo "unknown")
 DATE ?= $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 BRANCH ?= $(shell git rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")

@@ -179,6 +179,11 @@ type CreateWorkflowWithThreadOpts struct {
 	// OriginNodeID names the creating graph node; only set for ThreadOriginNode.
 	OriginNodeID *string
 
+	// WorktreeID binds the new thread to a workspace other than its chat's.
+	// Applies only when the thread is created here; ignored for an inherited
+	// (already existing) thread and for forks.
+	WorktreeID *string
+
 	// Fork configuration (mutually exclusive - set at most one)
 	// ForkFromMessage: Fork from a specific message (extracts thread, CW, ordinal internally)
 	// ForkFromThread: Fork from a thread's latest state (uses ordinal 0 to include all messages)
@@ -321,7 +326,7 @@ func (s *Service) CreateWorkflowWithThread(ctx context.Context, opts CreateWorkf
 				if origin == "" {
 					origin = db.ThreadOriginNode
 				}
-				thread, cw, err = s.createThreadInternal(txCtx, opts.ChatID, threadID, opts.ThreadTitle, opts.ParentThread, &workflowID, origin, opts.OriginNodeID)
+				thread, cw, err = s.createThreadInternal(txCtx, opts.ChatID, threadID, opts.ThreadTitle, opts.ParentThread, &workflowID, origin, opts.OriginNodeID, opts.WorktreeID)
 				if err != nil {
 					return fmt.Errorf("failed to create thread: %w", err)
 				}

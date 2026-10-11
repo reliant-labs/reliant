@@ -250,6 +250,13 @@ func (s *agentMessageStore) CountQueuedAgentMessagesForThread(ctx context.Contex
 	return s.q.CountQueuedAgentMessagesForThread(ctx, toThreadID)
 }
 
+func (s *agentMessageStore) MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error) {
+	return s.q.MarkQueuedAgentMessagesPreempting(ctx, pgdb.MarkQueuedAgentMessagesPreemptingParams{
+		ToThreadID:  toThreadID,
+		PreemptedAt: sql.NullTime{Time: preemptedAt, Valid: true},
+	})
+}
+
 // CancelQueuedAgentMessage deletes a mailbox row only if it is still
 // queued -- see the CancelQueuedAgentMessage SQL query for why this is a
 // conditional DELETE rather than a SELECT-then-DELETE.

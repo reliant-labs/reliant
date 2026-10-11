@@ -85,6 +85,46 @@ func TestSubstituteUnservableModel_SameModelElsewhereKeepsTheEffort(t *testing.T
 	assert.Equal(t, "low", sub.Selector["thinking_level"])
 }
 
+// A chat pinned to a model its provider retired moves to the replacement on
+// that same provider at the next send, and says so — the pin would otherwise
+// 404 on every request after the retirement date. The user's effort carries
+// over: both models think on the same scale.
+func TestSubstituteUnservableModel_RetiredModelMovesToItsReplacement(t *testing.T) {
+	t.Parallel()
+	vertexOnly := models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{"vertexai": cfgFor("vertexai")}}
+	selector := map[string]interface{}{"id": "vertex-gemini-2.5-pro@vertexai", "thinking_level": "high"}
+
+	sub, ok := SubstituteUnservableModel(selector, vertexOnly)
+	require.True(t, ok, "a pin to a retired model must move to its replacement")
+	assert.Equal(t, "vertex-gemini-2.5-pro@vertexai", sub.From)
+	assert.Equal(t, "vertex-gemini-3.8-flash@vertexai", sub.To)
+	assert.Equal(t, sub.To, sub.Selector["id"])
+	assert.Equal(t, "high", sub.Selector["thinking_level"])
+	assert.Equal(t,
+		"vertex-gemini-2.5-pro is retired on Vertex AI as of 2026-10-20. So this chat continues on its replacement, "+
+			"vertex-gemini-3.8-flash via Vertex AI. To use a different model, pick one in the composer's model picker.",
+		sub.Notice)
+}
+
+// The gateway serves Gemini from Vertex, so a chat pinned to gemini-2.5-pro on
+// Reliant moves with it — and stays on Reliant, even for a user whose own
+// Gemini key still reaches gemini-2.5-pro: the pin chose Reliant's bill.
+func TestSubstituteUnservableModel_RetiredGatewayModelStaysOnTheGateway(t *testing.T) {
+	t.Parallel()
+	available := models.AvailableDrivers{Drivers: map[models.DriverID]models.DriverConfig{
+		"reliant": cfgFor("reliant"),
+		"gemini":  cfgFor("gemini"),
+	}}
+
+	sub, ok := SubstituteUnservableModel(map[string]interface{}{"id": "gemini-2.5-pro@reliant"}, available)
+	require.True(t, ok)
+	assert.Equal(t, "gemini-3.8-flash@reliant", sub.To)
+	assert.Contains(t, sub.Notice, "gemini-2.5-pro is retired on Reliant as of 2026-10-20.")
+
+	_, ok = SubstituteUnservableModel(map[string]interface{}{"id": "gemini-2.5-pro@gemini"}, available)
+	assert.False(t, ok, "the Gemini API still serves gemini-2.5-pro; that pin stays")
+}
+
 // Only a selector that cannot be served is substituted. One that resolves,
 // one that names no model, a tag selector and a user with nothing that could
 // stand in are all left alone.

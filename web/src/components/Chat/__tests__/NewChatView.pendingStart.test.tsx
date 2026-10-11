@@ -55,7 +55,7 @@ vi.mock("../../../store/chatParamsStore", () => ({
   useChatParamsStore: storeMock(() => ({ transferTempToChat: vi.fn() })),
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => ({ activeDaemon: laptop, daemons: [laptop], loading: false, refresh: vi.fn() }),
+  useDaemonStatus: () => ({ activeDaemon: laptop, daemons: [laptop], loading: false, answered: true, refresh: vi.fn() }),
 }));
 vi.mock("@/hooks/useDaemonWait", () => ({
   useDaemonWait: () => ({ state: null, retryNow: vi.fn() }),

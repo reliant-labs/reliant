@@ -227,6 +227,15 @@ func (r *Repo) CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID
 	return r.agentMessages.CountQueuedAgentMessagesForThread(ctx, toThreadID)
 }
 
+// MarkQueuedAgentMessagesPreempting marks the thread's queued messages that
+// have not yet cut a waiting call short — see core.AgentMessageStore.
+func (r *Repo) MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error) {
+	if toThreadID == "" {
+		return 0, fmt.Errorf("to thread ID cannot be empty")
+	}
+	return r.agentMessages.MarkQueuedAgentMessagesPreempting(ctx, toThreadID, preemptedAt)
+}
+
 // CancelQueuedAgentMessage deletes a mailbox row only if it is still
 // queued — see core.AgentMessageStore for the race this guards against.
 func (r *Repo) CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (bool, error) {

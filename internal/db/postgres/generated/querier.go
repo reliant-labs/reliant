@@ -374,6 +374,9 @@ type Querier interface {
 	// "params changed" note a send can write after the user's message, are not
 	// turns, so they must not make an unanswered message look answered.
 	GetLatestTurnRoleByThread(ctx context.Context, threadID string) (int32, error)
+	// The one unarchived row holding a name; worktrees_project_id_name_live_key
+	// guarantees there is at most one.
+	GetLiveWorktreeByName(ctx context.Context, arg GetLiveWorktreeByNameParams) (Worktree, error)
 	GetMaxSequenceForThread(ctx context.Context, threadID string) (interface{}, error)
 	GetMessage(ctx context.Context, id string) (Message, error)
 	GetMessageByActivityID(ctx context.Context, arg GetMessageByActivityIDParams) (Message, error)
@@ -670,7 +673,7 @@ type Querier interface {
 	// (2) or paused (3) run is resumable and keeps its items.
 	//
 	// Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
-	//   approval:        a_text title, b_text metadata JSON, a_int approval_type
+	//   approval:        a_text title, a_int approval_type
 	//   question:        a_text thread_id, b_text metadata JSON
 	//   launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 	//   waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat
@@ -994,6 +997,9 @@ type Querier interface {
 	// Used for startup recovery to restart workers for active workflows.
 	ListWorkflowsByStatus(ctx context.Context, arg ListWorkflowsByStatusParams) ([]Workflow, error)
 	ListWorktrees(ctx context.Context, arg ListWorktreesParams) ([]Worktree, error)
+	// Every row, archived included, recorded against a branch: an archived row's
+	// checkout or branch may outlive the archive.
+	ListWorktreesByBranch(ctx context.Context, arg ListWorktreesByBranchParams) ([]Worktree, error)
 	// Every workspace whose directory a daemon may still hold: not main, has a
 	// path, and not already known to be removed. Status 5 is CREATING and 6 is
 	// FAILED (WorktreeStatus in worktree.proto); neither has a directory yet. Archived rows are the ones to remove; the rest are locked as
@@ -1030,6 +1036,17 @@ type Querier interface {
 	MarkProjectDaemonInstalled(ctx context.Context, arg MarkProjectDaemonInstalledParams) error
 	// The daemon reported the queued clone succeeded.
 	MarkProjectDaemonInstalledByRequest(ctx context.Context, installRequestID string) error
+	// Marks every queued message for a thread that has not yet cut a waiting tool
+	// call short, and reports how many it marked. Non-zero is execute_tools' signal
+	// to end the thread's preemptable calls (ToolDefinition.Preemptable) so the
+	// agent reads its mail now.
+	//
+	// Marking rather than counting is what bounds preemption to once per message.
+	// A message the drain cannot deliver stays queued; counted, it would cut every
+	// wait the agent started short for as long as it stayed there. Marked, it does
+	// so once and is then left to the drain. One statement, so two calls polling the
+	// same thread cannot both claim one message.
+	MarkQueuedAgentMessagesPreempting(ctx context.Context, arg MarkQueuedAgentMessagesPreemptingParams) (int64, error)
 	// Resolve a dead thread's mailbox: every row still queued for a thread whose
 	// loop has exited becomes status 3 (undelivered), because no future loop
 	// boundary will ever drain it.

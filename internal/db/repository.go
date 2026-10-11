@@ -163,6 +163,12 @@ type Repository interface {
 	CreateWorktree(ctx context.Context, worktree *Worktree) error
 	GetWorktree(ctx context.Context, id string) (*Worktree, error)
 	GetWorktreeByPath(ctx context.Context, path string) (*Worktree, error)
+	// GetLiveWorktreeByName returns the project's unarchived worktree called
+	// name, or (nil, nil). At most one exists.
+	GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*Worktree, error)
+	// ListWorktreesByBranch returns every row of the project recorded against
+	// the branch, archived ones included.
+	ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*Worktree, error)
 	// GetWorktreeByIdempotencyKey returns a prior create's worktree for this
 	// key, or (nil, nil) when there is none.
 	GetWorktreeByIdempotencyKey(ctx context.Context, projectID, key string) (*Worktree, error)
@@ -390,6 +396,9 @@ type Repository interface {
 	// already claimed by MarkAgentMessagesDelivered.
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	// MarkQueuedAgentMessagesPreempting marks the thread's queued messages that
+	// have not yet cut a waiting call short — see core.AgentMessageStore.
+	MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error)
 	// CancelQueuedAgentMessage deletes a mailbox row only if it is still
 	// queued -- see core.AgentMessageStore for the race it guards against.
 	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)
@@ -429,10 +438,10 @@ type Repository interface {
 	// control plane's authoritative set. See daemon_registry.go.
 	ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error)
 	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
-	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
-	// RenewDaemonAttachment renews a held stream's lease, re-creating a row
-	// the TTL reaper deleted under it. See repository_impl.go.
-	RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
+	// RenewDaemonAttachment renews a held stream's reachability lease on a
+	// heartbeat, re-creating the row when something removed it under the
+	// live stream. See repository_impl.go.
+	RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) (created bool, err error)
 	// UpdateDaemonAttachmentMemory records heartbeat-reported workspace memory
 	// telemetry (used/limit/pressure) on the attachment record. No-op when the
 	// row doesn't exist.
@@ -465,12 +474,14 @@ type Repository interface {
 	UpdateModelEndpoint(ctx context.Context, e *ModelEndpoint) error
 	SetModelEndpointProbe(ctx context.Context, userID, id, probeJSON string) error
 	DeleteModelEndpoint(ctx context.Context, userID, id string) error
-	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
+	// ReleaseDaemonAttachment deletes the lease a stream session created
+	// (attached_at <= attachedAt) and never a newer session's. See
+	// repository_impl.go.
+	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
 	// DeleteStaleDaemonAttachments GCs attachment rows whose lease has not
 	// been renewed for olderThan. Rows are deleted on graceful teardown only,
 	// so a crashed/rescheduled gateway strands its rows forever; this is the
-	// TTL that bounds the leak. Driven by daemonstate.Derivation, the single
-	// writer to the table.
+	// TTL that bounds the leak. Driven by daemonstate.Derivation's reaper.
 	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	// IsDaemonIDAttached is IsDaemonAttached for one daemon.

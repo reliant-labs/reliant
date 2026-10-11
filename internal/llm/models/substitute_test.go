@@ -10,8 +10,9 @@ import (
 )
 
 // A model only an unconnected provider serves is replaced by the pick of its
-// most capable tier among the providers the user has: gpt-5.6-sol is codex-only
-// and listed under powerful, so a Claude-only user gets powerful's Claude pick.
+// most capable tier among the providers the user has: gpt-5.6-sol is served by
+// codex and openai only, and listed under powerful, so a Claude-only user gets
+// powerful's Claude pick.
 func TestSubstitute_UnservedModelTakesItsTiersPick(t *testing.T) {
 	t.Parallel()
 	reg := MustGetRegistry()

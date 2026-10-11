@@ -644,7 +644,6 @@ function ChatMessageComponent({
               executions={otherTools}
               messageId={message.id}
               defaultCollapsed={true}
-              approvals={approvals}
               chatId={chatId || undefined}
               showRichContent={true}
               onSelectThread={onSelectThread}

@@ -96,6 +96,7 @@ vi.mock("@/hooks/useDaemonStatus", () => ({
     // One connected machine (DaemonStatus.ACTIVE = 1): the chat defaults to it.
     daemons: [{ daemonId: "d1", hostname: "laptop", status: 1 }],
     loading: false,
+    answered: true,
     refresh: vi.fn(),
   }),
 }));

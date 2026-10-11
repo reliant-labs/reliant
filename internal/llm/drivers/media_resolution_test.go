@@ -88,6 +88,15 @@ func TestResolveVideo_TierSelectsModelAndPreferenceOnlyAppliesToDefault(t *testi
 		return resolved.Definition.ID
 	}
 
+	// A Gemini key alone serves only Omni: the Gemini API shut its Veo
+	// previews down. Every tier degrades onto it, and the generate_video tool
+	// reports fast and cinematic unavailable (mediaTier.Requires).
+	for _, tier := range []string{"flagship", "cinematic", "cheap"} {
+		assert.Equal(t, "gemini-omni-1.1-flash", resolve("video-gen", tier), "gemini-only %s", tier)
+	}
+
+	// Veo is served on Reliant credits, from Vertex.
+	require.NoError(t, repo.SetProviderAPIKey(ctx, userID, "reliant", "rlat_abcdef0123456789abcdef0123456789"))
 	assert.Equal(t, "gemini-omni-1.1-flash", resolve("video-gen", "flagship"), "standard -> Omni")
 	assert.Equal(t, "veo-3.1-generate", resolve("video-gen", "cinematic"), "cinematic -> Veo 3.1")
 	assert.Equal(t, "veo-3.1-lite-generate", resolve("video-gen", "cheap"), "fast -> Veo Lite")

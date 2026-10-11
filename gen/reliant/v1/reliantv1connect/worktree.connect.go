@@ -62,6 +62,9 @@ const (
 	// WorktreeServiceDiscoverWorktreesProcedure is the fully-qualified name of the WorktreeService's
 	// DiscoverWorktrees RPC.
 	WorktreeServiceDiscoverWorktreesProcedure = "/reliant.v1.WorktreeService/DiscoverWorktrees"
+	// WorktreeServicePruneWorktreesProcedure is the fully-qualified name of the WorktreeService's
+	// PruneWorktrees RPC.
+	WorktreeServicePruneWorktreesProcedure = "/reliant.v1.WorktreeService/PruneWorktrees"
 	// WorktreeServiceRecreateWorktreeProcedure is the fully-qualified name of the WorktreeService's
 	// RecreateWorktree RPC.
 	WorktreeServiceRecreateWorktreeProcedure = "/reliant.v1.WorktreeService/RecreateWorktree"
@@ -121,6 +124,10 @@ type WorktreeServiceClient interface {
 	// Import/Discovery Operations
 	ImportWorktree(context.Context, *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error)
 	DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error)
+	// PruneWorktrees runs `git worktree prune` in each repo of the project. It
+	// only drops records whose directories are already gone; it never touches a
+	// directory that exists. Explicit user action only, never automatic.
+	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
 	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
 	// Git Read Operations
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
@@ -205,6 +212,12 @@ func NewWorktreeServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 			httpClient,
 			baseURL+WorktreeServiceDiscoverWorktreesProcedure,
 			connect.WithSchema(worktreeServiceMethods.ByName("DiscoverWorktrees")),
+			connect.WithClientOptions(opts...),
+		),
+		pruneWorktrees: connect.NewClient[v1.PruneWorktreesRequest, v1.PruneWorktreesResponse](
+			httpClient,
+			baseURL+WorktreeServicePruneWorktreesProcedure,
+			connect.WithSchema(worktreeServiceMethods.ByName("PruneWorktrees")),
 			connect.WithClientOptions(opts...),
 		),
 		recreateWorktree: connect.NewClient[v1.RecreateWorktreeRequest, v1.RecreateWorktreeResponse](
@@ -299,6 +312,7 @@ type worktreeServiceClient struct {
 	unarchiveWorktree        *connect.Client[v1.UnarchiveWorktreeRequest, v1.UnarchiveWorktreeResponse]
 	importWorktree           *connect.Client[v1.ImportWorktreeRequest, v1.ImportWorktreeResponse]
 	discoverWorktrees        *connect.Client[v1.DiscoverWorktreesRequest, v1.DiscoverWorktreesResponse]
+	pruneWorktrees           *connect.Client[v1.PruneWorktreesRequest, v1.PruneWorktreesResponse]
 	recreateWorktree         *connect.Client[v1.RecreateWorktreeRequest, v1.RecreateWorktreeResponse]
 	getWorktreeChanges       *connect.Client[v1.GetWorktreeChangesRequest, v1.GetWorktreeChangesResponse]
 	getWorktreeGitStatus     *connect.Client[v1.GetWorktreeGitStatusRequest, v1.GetWorktreeGitStatusResponse]
@@ -357,6 +371,11 @@ func (c *worktreeServiceClient) ImportWorktree(ctx context.Context, req *connect
 // DiscoverWorktrees calls reliant.v1.WorktreeService.DiscoverWorktrees.
 func (c *worktreeServiceClient) DiscoverWorktrees(ctx context.Context, req *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error) {
 	return c.discoverWorktrees.CallUnary(ctx, req)
+}
+
+// PruneWorktrees calls reliant.v1.WorktreeService.PruneWorktrees.
+func (c *worktreeServiceClient) PruneWorktrees(ctx context.Context, req *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error) {
+	return c.pruneWorktrees.CallUnary(ctx, req)
 }
 
 // RecreateWorktree calls reliant.v1.WorktreeService.RecreateWorktree.
@@ -442,6 +461,10 @@ type WorktreeServiceHandler interface {
 	// Import/Discovery Operations
 	ImportWorktree(context.Context, *connect.Request[v1.ImportWorktreeRequest]) (*connect.Response[v1.ImportWorktreeResponse], error)
 	DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error)
+	// PruneWorktrees runs `git worktree prune` in each repo of the project. It
+	// only drops records whose directories are already gone; it never touches a
+	// directory that exists. Explicit user action only, never automatic.
+	PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error)
 	RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error)
 	// Git Read Operations
 	GetWorktreeChanges(context.Context, *connect.Request[v1.GetWorktreeChangesRequest]) (*connect.Response[v1.GetWorktreeChangesResponse], error)
@@ -522,6 +545,12 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 		WorktreeServiceDiscoverWorktreesProcedure,
 		svc.DiscoverWorktrees,
 		connect.WithSchema(worktreeServiceMethods.ByName("DiscoverWorktrees")),
+		connect.WithHandlerOptions(opts...),
+	)
+	worktreeServicePruneWorktreesHandler := connect.NewUnaryHandler(
+		WorktreeServicePruneWorktreesProcedure,
+		svc.PruneWorktrees,
+		connect.WithSchema(worktreeServiceMethods.ByName("PruneWorktrees")),
 		connect.WithHandlerOptions(opts...),
 	)
 	worktreeServiceRecreateWorktreeHandler := connect.NewUnaryHandler(
@@ -622,6 +651,8 @@ func NewWorktreeServiceHandler(svc WorktreeServiceHandler, opts ...connect.Handl
 			worktreeServiceImportWorktreeHandler.ServeHTTP(w, r)
 		case WorktreeServiceDiscoverWorktreesProcedure:
 			worktreeServiceDiscoverWorktreesHandler.ServeHTTP(w, r)
+		case WorktreeServicePruneWorktreesProcedure:
+			worktreeServicePruneWorktreesHandler.ServeHTTP(w, r)
 		case WorktreeServiceRecreateWorktreeProcedure:
 			worktreeServiceRecreateWorktreeHandler.ServeHTTP(w, r)
 		case WorktreeServiceGetWorktreeChangesProcedure:
@@ -691,6 +722,10 @@ func (UnimplementedWorktreeServiceHandler) ImportWorktree(context.Context, *conn
 
 func (UnimplementedWorktreeServiceHandler) DiscoverWorktrees(context.Context, *connect.Request[v1.DiscoverWorktreesRequest]) (*connect.Response[v1.DiscoverWorktreesResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.DiscoverWorktrees is not implemented"))
+}
+
+func (UnimplementedWorktreeServiceHandler) PruneWorktrees(context.Context, *connect.Request[v1.PruneWorktreesRequest]) (*connect.Response[v1.PruneWorktreesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.WorktreeService.PruneWorktrees is not implemented"))
 }
 
 func (UnimplementedWorktreeServiceHandler) RecreateWorktree(context.Context, *connect.Request[v1.RecreateWorktreeRequest]) (*connect.Response[v1.RecreateWorktreeResponse], error) {

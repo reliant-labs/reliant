@@ -15,6 +15,7 @@ import {
 } from "@/gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo as Daemon } from "@/gen/reliant/v1/daemon_registry_pb";
 import {
+  CANT_REACH_RELIANT,
   classifyDaemonWait,
   daemonWaitSummary,
   DAEMON_WAIT_SLOW_MS,
@@ -137,6 +138,45 @@ describe("classifyDaemonWait", () => {
 
       expect(state.shouldRetry).toBe(true);
       expect(state.title.toLowerCase()).toContain("disconnected");
+    });
+  });
+
+  // Prod 2026-10-11: a tab waking from sleep had every RPC time out on a dead
+  // connection, ListDaemons among them. What the list last said is not news
+  // about the machine, and failing to reach Reliant is not the machine's
+  // doing — the copy must blame the connection, never the machine.
+  describe("when Reliant itself cannot be reached", () => {
+    const lastKnown = [
+      DaemonStatus.DISCONNECTED,
+      DaemonStatus.FAILED,
+      DaemonStatus.SUSPENDED,
+      DaemonStatus.PENDING,
+      DaemonStatus.UNSPECIFIED,
+    ];
+    for (const status of lastKnown) {
+      it(`says so instead of narrating a last-known ${DaemonStatus[status]} machine`, () => {
+        const state = classifyDaemonWait({
+          daemon: daemon({ status, lastStatusMessage: "image pull failed" }),
+          elapsedMs: DAEMON_WAIT_STUCK_MS,
+          isCloud: true,
+          registryUnreachable: true,
+        });
+
+        expect(state.title).toBe(CANT_REACH_RELIANT);
+        const words = `${state.title} ${state.detail ?? ""} ${state.reason ?? ""}`.toLowerCase();
+        expect(words).not.toMatch(/disconnected|offline|failed|suspended|asleep|starting/);
+        expect(state.shouldRetry).toBe(true);
+        expect(state.showRetry).toBe(true);
+        // Managing the machine cannot fix our connection.
+        expect(state.showManage).toBe(false);
+      });
+    }
+
+    it("says so before the list has ever loaded, self-hosted too", () => {
+      for (const isCloud of [true, false]) {
+        const state = classifyDaemonWait({ elapsedMs: 0, isCloud, registryUnreachable: true });
+        expect(state.title).toBe(CANT_REACH_RELIANT);
+      }
     });
   });
 

@@ -40,6 +40,11 @@ type toolExecutionContext struct {
 	chat     *db.Chat
 	project  *db.Project
 	worktree *rctx.WorktreeInfo
+	// worktreeThreadBound: the worktree is this thread's own (a sub-agent
+	// spawned with `worktree`), not its chat's. It is then authoritative for the
+	// thread: neither an inherited project-path override nor an inherited daemon
+	// selector may move its tools off that checkout.
+	worktreeThreadBound bool
 
 	// repos lists the project's nested repos. Threaded into ToolRequest so
 	// tools with a `repo` param can resolve it without a DB call. Empty for
@@ -106,7 +111,12 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	tec.project = project
 
 	// Load worktree (defaults to project path if not set or not found)
-	tec.worktree = a.loadWorktreeInfo(ctx, chat, project)
+	wt, threadBound, err := a.loadWorktreeInfo(ctx, chat, project, thread)
+	if err != nil {
+		return nil, err.Error()
+	}
+	tec.worktree = wt
+	tec.worktreeThreadBound = threadBound
 
 	// Load nested repos. Failures degrade gracefully: tools fall back to
 	// single-repo behavior when repos is empty.
@@ -117,31 +127,47 @@ func (a *ExecuteToolsActivity) loadToolExecutionContext(
 	return tec, ""
 }
 
-// loadWorktreeInfo loads worktree information, defaulting to project path
-func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Chat, project *db.Project) *rctx.WorktreeInfo {
-	if chat.WorktreeID == nil || *chat.WorktreeID == "" {
-		return &rctx.WorktreeInfo{ID: "", Path: project.Path}
+// loadWorktreeInfo loads worktree information, defaulting to project path.
+//
+// The worktree is the thread's when the thread has its own (a sub-agent
+// spawned with a `worktree`), else the chat's. A chat's worktree that cannot be
+// loaded degrades to the project path, as it always has; a thread's does not,
+// because that thread was sent to a specific workspace and running its tools in
+// the project checkout instead would write to the wrong branch.
+func (a *ExecuteToolsActivity) loadWorktreeInfo(ctx context.Context, chat *db.Chat, project *db.Project, thread string) (*rctx.WorktreeInfo, bool, error) {
+	worktreeID, threadBound, err := effectiveWorktreeID(ctx, a.repo, chat, thread)
+	if err != nil {
+		return nil, false, err
+	}
+	if worktreeID == nil || *worktreeID == "" {
+		return &rctx.WorktreeInfo{ID: "", Path: project.Path}, false, nil
 	}
 
-	worktree, err := a.repo.GetWorktree(ctx, *chat.WorktreeID)
+	worktree, err := a.repo.GetWorktree(ctx, *worktreeID)
 	if err != nil {
+		if threadBound {
+			return nil, true, fmt.Errorf("this agent's workspace %s could not be loaded: %w", *worktreeID, err)
+		}
 		// Worktree not found, fall back to project path
-		return &rctx.WorktreeInfo{ID: "", Path: project.Path}
+		return &rctx.WorktreeInfo{ID: "", Path: project.Path}, false, nil
+	}
+	if threadBound && worktree.DeletedAt != nil {
+		return nil, true, fmt.Errorf("this agent's workspace %q was archived, so its tools cannot run there", worktree.Name)
 	}
 
 	daemonID := ""
 	if worktree.DaemonID != nil {
 		daemonID = *worktree.DaemonID
 	}
-	return &rctx.WorktreeInfo{ID: worktree.ID, Path: worktree.Path, DaemonID: daemonID}
+	return &rctx.WorktreeInfo{ID: worktree.ID, Path: worktree.Path, DaemonID: daemonID}, threadBound, nil
 }
 
 // buildToolRequest creates a ToolRequest from the loaded context
 func (tec *toolExecutionContext) buildToolRequest() *toolexec.ToolRequest {
 	// Determine effective working directory path
-	// Priority: projectPathOverride > worktree.Path > project.Path
+	// Priority: thread-bound worktree > projectPathOverride > worktree.Path > project.Path
 	effectiveWorktreePath := tec.worktree.Path
-	if tec.projectPathOverride != "" {
+	if tec.projectPathOverride != "" && !tec.worktreeThreadBound {
 		effectiveWorktreePath = tec.projectPathOverride
 	}
 
@@ -275,9 +301,11 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	caps := tools.CapabilitiesFromProto(protoArgs.GetCapabilities())
 	ctx = tools.WithCapabilities(ctx, caps)
 
-	// Calls the workflow decided must not run: a mutating integration action
-	// the person attending did not approve. Each is answered with its reason.
-	refusedByWorkflow := protoArgs.GetRefusedToolCalls()
+	// Calls the workflow decided must not run, each answered with its reason.
+	// Only a run that recorded the removed integration action approval prompt
+	// sends any: a call the person attending did not approve
+	// (runtime/action_approval_legacy.go).
+	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: sent only by the legacy approval gate
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))
@@ -314,6 +342,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	if workspace.path != "" {
 		workingPath = workspace.path
 	}
+
+	// Mail for the thread ends the batch's waits early; see
+	// execute_tools_preemption.go.
+	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread))
 
 	// Execute all tool calls in parallel using goroutines
 	// This significantly improves performance when multiple tools are called together
@@ -674,13 +706,15 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	// owning daemon > default resolution. A worktree-bound (e.g. branch) chat
 	// must run on the daemon that has its checkout on disk; a nil worktree
 	// DaemonID (main checkout / legacy rows) leaves routing at the default.
-	// ensureBatchWorkspace routes with the same function, so the directory it
-	// checked is on the disk these calls run on.
+	// ensureBatchWorkspace routes with the same functions, so the directory it
+	// checked is on the disk these calls run on. A thread-bound worktree
+	// exists on its owner alone, so an inherited selector (the parent's pin,
+	// the workflow's daemon) cannot override it (threadBoundExplicit).
 	worktreeDaemon := ""
 	if tec.worktree != nil {
 		worktreeDaemon = tec.worktree.DaemonID
 	}
-	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, daemonSel)
+	tec.daemonSelector = toolDaemonSelector(worktreeDaemon, threadBoundExplicit(tec.worktreeThreadBound, worktreeDaemon, daemonSel))
 
 	// The call is about to enter real execution -- record it durably as
 	// PENDING before dispatch so a reload mid-execution sees at least this
@@ -691,7 +725,15 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	a.upsertToolCall(ctx, tec, core.ToolCallStatusPending, toolCallUpsertOpts{})
 
 	// Execute tool with status tracking
-	return a.executeToolWithStatus(ctx, tec)
+	result := a.executeToolWithStatus(ctx, tec)
+
+	// A shell call that made a git worktree by hand is told — after it ran,
+	// never instead of running — that the worktree tool makes one the UI
+	// shows. See execute_tools_worktree_hint.go.
+	if suggestion := a.worktreeAddSuggestion(ctx, caps, tec); suggestion != "" {
+		result.Content = tools.WithShellSuggestion(result.Content, suggestion)
+	}
+	return result
 }
 
 // checkPriorTerminalResult is the fix for the interrupt livelock (chat
@@ -776,8 +818,28 @@ func (a *ExecuteToolsActivity) executeToolWithStatus(ctx context.Context, tec *t
 	startedAt := time.Now()
 	a.upsertToolCall(ctx, tec, core.ToolCallStatusExecuting, toolCallUpsertOpts{startedAt: &startedAt})
 
-	// Execute the tool
-	execResult, execErr := a.toolExecutor.ExecuteTool(ctx, tec.buildToolRequest())
+	// Execute the tool. A preemptable one runs under the batch's preemption,
+	// and a preempted call answers for itself (preemptedOutcome) before the
+	// usual handling: it is a success, not a cancellation.
+	var execResult *toolexec.ToolResult
+	var execErr error
+	batch := batchPreemptionFrom(ctx)
+	switch {
+	case batch != nil && tools.IsPreemptable(toolName) && batch.fired():
+		// The batch was preempted before this call started (a sibling saw the
+		// mail first). Starting it now would only race a stop the daemon may
+		// not yet know how to deliver, for a call with nothing to lose by
+		// not running.
+		execResult = preemptedOutcome(nil, nil)
+	case batch != nil && tools.IsPreemptable(toolName):
+		execCtx, release := batch.arm(ctx)
+		execResult, execErr = a.toolExecutor.ExecuteTool(execCtx, tec.buildToolRequest())
+		if release() {
+			execResult, execErr = preemptedOutcome(execResult, execErr), nil
+		}
+	default:
+		execResult, execErr = a.toolExecutor.ExecuteTool(ctx, tec.buildToolRequest())
+	}
 
 	// Handle execution result
 	return a.handleToolExecutionResult(ctx, tec, execResult, execErr, startedAt)

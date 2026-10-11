@@ -28,7 +28,7 @@ import type { BackgroundProcess } from "../api/background-grpc";
 import { logger } from "../lib/logger";
 import { getEventBus } from "../lib/events";
 import { queryClient } from "../lib/query-client";
-import { invalidateDaemonList } from "../hooks/useDaemonStatus";
+import { invalidateDaemonList, reconcileDaemonHeartbeat } from "../hooks/useDaemonStatus";
 import { useGlobalDataStore } from "./globalDataStore";
 import { chatKeys, patchChatCaches, removeChatFromListCache, getChatFromCache, resolveChat } from "../hooks/chat-queries";
 import { setMessagesMetaInCache } from "../hooks/message-queries";
@@ -455,6 +455,9 @@ export const useGlobalUpdatesStore = create<GlobalUpdatesState>((set, get) => ({
           }
           if (data?.daemon_id) {
             noteDaemonHeartbeat(data.daemon_id as string);
+            // Proof the daemon is attached right now: a cached list that
+            // says otherwise is re-read (throttled).
+            reconcileDaemonHeartbeat(queryClient, data.daemon_id as string);
           }
           // detected_ports is present (possibly empty) on real heartbeats and
           // absent on synthetic connection events — only update when carried,

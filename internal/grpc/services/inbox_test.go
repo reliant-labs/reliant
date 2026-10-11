@@ -54,10 +54,10 @@ func (f *inboxFixture) list(t *testing.T, limit *int32) *reliantv1.ListInboxResp
 
 func (f *inboxFixture) approval(t *testing.T, id, chatID string, at time.Time) {
 	t.Helper()
-	meta := `{"tool_name":"bash","tool_call_id":"tc-1","arguments":{"command":"git push origin main"}}`
+	meta := `{"workflow_id":"` + chatID + `"}`
 	require.NoError(t, f.repo.CreateApproval(f.ctx, &db.Approval{
-		ID: id, ChatID: chatID, ApprovalType: 1, EntityID: id, Status: 1,
-		Title: "Run bash", Metadata: &meta, CreatedAt: at,
+		ID: id, ChatID: chatID, ApprovalType: int32(reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP), EntityID: id, Status: 1,
+		Title: "Deploy to production?", Metadata: &meta, CreatedAt: at,
 	}))
 }
 
@@ -113,7 +113,7 @@ func inboxByKind(items []*reliantv1.InboxItem, kind reliantv1.InboxItemKind) []*
 	return out
 }
 
-func TestListInbox_ApprovalAppearsWithToolAndClearsWhenResolved(t *testing.T) {
+func TestListInbox_ApprovalAppearsAndClearsWhenResolved(t *testing.T) {
 	f := newInboxFixture(t)
 	now := time.Now().UTC().Add(-time.Minute)
 	f.seed(t, "chat-a", "wf", db.Active(), now) // interactive: no trigger event behind it
@@ -133,8 +133,8 @@ func TestListInbox_ApprovalAppearsWithToolAndClearsWhenResolved(t *testing.T) {
 	assert.NotEmpty(t, it.WaitingSince)
 	a := it.GetApproval()
 	require.NotNil(t, a)
-	assert.Equal(t, "bash", a.GetToolName())
-	assert.Contains(t, a.ArgumentSummary, "git push origin main")
+	assert.Equal(t, "Deploy to production?", a.GetTitle())
+	assert.Equal(t, reliantv1.ApprovalType_APPROVAL_TYPE_WORKFLOW_STEP, a.GetApprovalType())
 	assert.EqualValues(t, 1, resp.BlockingCount)
 	assert.False(t, resp.HasInformational)
 
@@ -685,23 +685,4 @@ func TestListInbox_WaitingForMachineIsANewItemPerBlock(t *testing.T) {
 	again := f.list(t, nil).Items
 	require.Len(t, again, 1)
 	assert.NotEqual(t, first[0].ItemId, again[0].ItemId)
-}
-
-// An approval row has one line for the tool's arguments, so they read as the
-// value (one argument) or "key: value" pairs, never as a JSON object.
-func TestSummarizeArguments_ReadsAsTextNotJSON(t *testing.T) {
-	for name, tc := range map[string]struct {
-		in   any
-		want string
-	}{
-		"one argument is its value":       {map[string]any{"command": "git push origin main"}, "git push origin main"},
-		"several are key: value, sorted":  {map[string]any{"path": "a.go", "line": float64(3)}, "line: 3 · path: a.go"},
-		"nested values stay compact JSON": {map[string]any{"edits": []any{"x"}, "path": "a.go"}, `edits: ["x"] · path: a.go`},
-		"a string is itself":              {"ls -la", "ls -la"},
-		"whitespace collapses":            {map[string]any{"command": "echo  a\n\tb"}, "echo a b"},
-	} {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, summarizeArguments(tc.in))
-		})
-	}
 }

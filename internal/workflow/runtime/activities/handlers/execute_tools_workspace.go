@@ -83,16 +83,31 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	if err != nil || project == nil {
 		return out
 	}
+	// The worktree the calls run in, as loadWorktreeInfo picks it: the
+	// thread's own when a spawn gave it one, else the chat's.
+	worktreeID, threadBound, err := effectiveWorktreeID(ctx, a.repo, chat, rtx.Thread)
+	if err != nil {
+		return out
+	}
 	var worktree *db.Worktree
-	if chat.WorktreeID != nil && *chat.WorktreeID != "" {
-		if wt, err := a.repo.GetWorktree(ctx, *chat.WorktreeID); err == nil {
+	if worktreeID != nil && *worktreeID != "" {
+		if wt, err := a.repo.GetWorktree(ctx, *worktreeID); err == nil {
 			worktree = wt
 		}
 	}
+	// A thread-bound workspace that cannot be loaded, or was archived, is
+	// refused call by call with the reason (loadWorktreeInfo); there is
+	// nothing here to check.
+	if threadBound && (worktree == nil || worktree.DeletedAt != nil) {
+		return out
+	}
 
-	// The directory the calls would run in: buildToolRequest's own priority.
+	// The directory the calls would run in: buildToolRequest's own priority,
+	// where a thread-bound worktree beats the run's path.
 	path := rtx.ProjectPath
-	if path == "" {
+	if threadBound {
+		path = worktree.Path
+	} else if path == "" {
 		path = project.Path
 		if worktree != nil && worktree.Path != "" {
 			path = worktree.Path
@@ -106,7 +121,9 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	if req.Audience == "" {
 		req.Audience = rtx.ChatID
 	}
-	if !samePath(path, project.Path) {
+	// A thread-bound workspace never falls back to the main checkout: the
+	// sub-agent's tools would write to the wrong branch there.
+	if !threadBound && !samePath(path, project.Path) {
 		req.FallbackPath = project.Path
 	}
 	// Only the chat's own worktree is recreated — a directory reliant made for
@@ -130,10 +147,20 @@ func (a *ExecuteToolsActivity) ensureBatchWorkspace(
 	if worktree != nil && worktree.DaemonID != nil {
 		worktreeDaemon = *worktree.DaemonID
 	}
-	resp, err := ensureWorkspace(ctx, ensurer, project.UserID, toolDaemonSelector(worktreeDaemon, rtx.DaemonSelector), req)
+	selector := toolDaemonSelector(worktreeDaemon, threadBoundExplicit(threadBound, worktreeDaemon, rtx.DaemonSelector))
+	resp, err := ensureWorkspace(ctx, ensurer, project.UserID, selector, req)
 	if err != nil {
 		logging.Warn("[ExecuteTools] Could not check the batch's working directory; running it as is",
 			"chatID", rtx.ChatID, "path", path, "error", err)
+		return out
+	}
+	if threadBound && resp.Status == toolexec.WorkspaceFallback {
+		// The batch stays in the thread's workspace (buildToolRequest never
+		// moves a thread-bound call), so its calls fail there; say why once,
+		// in place of a fallback note that would claim they ran elsewhere.
+		logging.Warn("[ExecuteTools] Thread's worktree is missing and could not be recreated",
+			"chatID", rtx.ChatID, "thread", rtx.Thread, "path", path, "detail", resp.Detail)
+		out.note = threadWorkspaceMissingNote(worktree, resp.Detail)
 		return out
 	}
 	if resp.Path != "" && !samePath(resp.Path, path) {
@@ -170,6 +197,21 @@ func samePath(a, b string) bool {
 // a conversation continue after its directory went away: the model learns
 // where it is now, what was lost, and how the branch comes back — instead of
 // a wall of identical errors it cannot act on.
+// threadWorkspaceMissingNote tells a sub-agent working in its own worktree
+// that the worktree's directory is gone for good. Its tools are not moved to
+// another directory, so the conversation can only continue by reporting back.
+func threadWorkspaceMissingNote(worktree *db.Worktree, reason string) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "[Workspace missing] Your worktree %q (%s, branch `%s`) no longer exists on its machine and could not be recreated",
+		worktree.Name, worktree.Path, worktree.Branch)
+	if reason = strings.TrimSpace(reason); reason != "" {
+		fmt.Fprintf(&b, ": %s", reason)
+	}
+	b.WriteString(". Tools that use the machine cannot run until it is restored (Recreate in the Reliant UI's worktree list). " +
+		"Report this to the agent that spawned you rather than retrying.\n\n")
+	return b.String()
+}
+
 func workspaceNoticeText(n *toolexec.WorkspaceNotice, project *db.Project) string {
 	if n == nil {
 		return ""

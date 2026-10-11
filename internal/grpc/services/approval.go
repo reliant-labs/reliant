@@ -22,7 +22,6 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
-	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/workflow"
 )
@@ -83,12 +82,6 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 	if a.Metadata != nil {
 		var metadata map[string]interface{}
 		if err := json.Unmarshal([]byte(*a.Metadata), &metadata); err == nil {
-			if toolName, ok := metadata["tool_name"].(string); ok {
-				proto.ToolName = &toolName
-			}
-			if toolCallID, ok := metadata["tool_call_id"].(string); ok {
-				proto.ToolCallId = &toolCallID
-			}
 			if messageID, ok := metadata["message_id"].(string); ok {
 				proto.MessageId = &messageID
 			}
@@ -98,55 +91,24 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 			if runID, ok := metadata["run_id"].(string); ok {
 				proto.RunId = &runID
 			}
-			if input, ok := metadata["input"].(string); ok && input != "" {
-				proto.ToolInput = &input
-			}
-			if name, ok := metadata["integration_name"].(string); ok && name != "" {
-				proto.IntegrationName = &name
-			}
-			if icon, ok := metadata["integration_icon"].(string); ok && icon != "" {
-				proto.IntegrationIcon = &icon
-			}
 		}
 	}
 
 	return proto
 }
 
-// isToolApproval reports whether a asks about one tool call (the action
-// approval gate) rather than a workflow's approval node.
-func isToolApproval(a *db.Approval) bool {
-	return a.ApprovalType == int32(reliantv1.ApprovalType_APPROVAL_TYPE_TOOL)
-}
+// retiredToolApprovalType is the approval_type of a row recorded by the
+// removed integration action approval prompt: 1, the reserved
+// APPROVAL_TYPE_TOOL. Retire it with runtime's actionApprovalRemovedChangeID.
+const retiredToolApprovalType = 1
 
-// approvalToolName is the tool a tool approval asks about, or "".
-func approvalToolName(a *db.Approval) string {
-	if a.Metadata == nil {
-		return ""
-	}
-	var metadata struct {
-		ToolName string `json:"tool_name"`
-	}
-	if err := json.Unmarshal([]byte(*a.Metadata), &metadata); err != nil {
-		return ""
-	}
-	return metadata.ToolName
-}
-
-// rememberAlwaysAllow records the caller's standing "always allow" for the
-// action a tool approval asks about, when that is what they chose. The row is
-// what ApprovalCreate consults before asking again; deleting it revokes the
-// decision.
-func (s *ApprovalService) rememberAlwaysAllow(ctx context.Context, approval *db.Approval, actionTaken *string) error {
-	if actionTaken == nil || *actionTaken != tools.ActionApprovalAlwaysAllow || !isToolApproval(approval) {
-		return nil
-	}
-	action, ok := tools.MutatingIntegrationActionInfo(approvalToolName(approval))
-	if !ok {
-		return nil
-	}
-	userID, _ := auth.GetUserIDFromContext(ctx)
-	return s.database.SetString(ctx, userID, nil, tools.ActionApprovalSettingKey(action.Tool), tools.AlwaysAllowSettingValue(action))
+// answeredByItsRun reports whether denying a reaches the model through its own
+// run. A row the removed prompt recorded asked about one call, and the run
+// still waiting on it refuses that call in ExecuteTools with the reason, so a
+// denial message — a tool_result for every call in the turn — would duplicate
+// that result.
+func answeredByItsRun(a *db.Approval) bool {
+	return a.ApprovalType == retiredToolApprovalType
 }
 
 // ListApprovalsByChat lists all pending approvals for a chat
@@ -213,10 +175,6 @@ func (s *ApprovalService) Approve(
 		// Update approval status
 		if err := s.database.UpdateApprovalStatus(txCtx, approval.ID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_APPROVED), nil, actionTaken, nil); err != nil {
 			return fmt.Errorf("failed to update approval status: %w", err)
-		}
-
-		if err := s.rememberAlwaysAllow(txCtx, approval, actionTaken); err != nil {
-			return fmt.Errorf("failed to remember always allow: %w", err)
 		}
 
 		// Build chat_update data
@@ -293,8 +251,8 @@ func (s *ApprovalService) Deny(
 		return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("approval already processed"))
 	}
 
-	// Use default denial reason if not provided
-	denialReason := "User denied this tool call"
+	// Use default denial reason if not provided.
+	denialReason := "User denied this approval"
 	if req.Msg.DenialReason != nil && *req.Msg.DenialReason != "" {
 		denialReason = *req.Msg.DenialReason
 	}
@@ -348,10 +306,9 @@ func (s *ApprovalService) Deny(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to deny"))
 	}
 
-	// Create denial message with tool_results marked as denied. Not for a tool
-	// approval: the ExecuteTools activity answers the one call it asked about,
-	// and a second tool_result for every call in the turn would duplicate it.
-	if !isToolApproval(approval) {
+	// Create denial message with tool_results marked as denied — unless the
+	// run answers the call itself (answeredByItsRun).
+	if !answeredByItsRun(approval) {
 		if err := s.createDenialMessage(ctx, approval.ChatID, denialReason); err != nil {
 			logging.Error("Failed to create denial message", "error", err, "approvalID", approval.ID)
 			// Don't fail the request, just log the error
@@ -484,8 +441,8 @@ func (s *ApprovalService) BatchDeny(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("request_ids cannot be empty"))
 	}
 
-	// Use default denial reason if not provided
-	denialReason := "User denied one or more tool calls"
+	// Use default denial reason if not provided.
+	denialReason := "User denied one or more approvals"
 	if req.Msg.DenialReason != nil && *req.Msg.DenialReason != "" {
 		denialReason = *req.Msg.DenialReason
 	}
@@ -506,7 +463,7 @@ func (s *ApprovalService) BatchDeny(
 			logging.Error("Approval not found in batch", "requestID", requestID)
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
 		}
-		deniedStepApproval = deniedStepApproval || !isToolApproval(approval)
+		deniedStepApproval = deniedStepApproval || !answeredByItsRun(approval)
 
 		// Validate all approvals belong to the same chat, and that the chat is
 		// the caller's (checked once, on first resolution — the same-chat rule
@@ -578,8 +535,8 @@ func (s *ApprovalService) BatchDeny(
 		})
 	}
 
-	// Create denial message once for the chat (all approvals are same chat).
-	// Tool approvals are answered by the call they asked about (see Deny).
+	// Create one denial message for the chat (all approvals are in the same
+	// chat), unless every one of them is answered by its run.
 	if chatID != "" && deniedStepApproval {
 		if err := s.createDenialMessage(ctx, chatID, denialReason); err != nil {
 			logging.Error("Failed to create denial message", "error", err, "chatID", chatID)

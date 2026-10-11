@@ -74,6 +74,20 @@ WHERE id = ANY(sqlc.arg('ids')::text[]);
 SELECT count(*) FROM agent_messages
 WHERE to_thread_id = $1 AND status = 1;
 
+-- name: MarkQueuedAgentMessagesPreempting :execrows
+-- Marks every queued message for a thread that has not yet cut a waiting tool
+-- call short, and reports how many it marked. Non-zero is execute_tools' signal
+-- to end the thread's preemptable calls (ToolDefinition.Preemptable) so the
+-- agent reads its mail now.
+--
+-- Marking rather than counting is what bounds preemption to once per message.
+-- A message the drain cannot deliver stays queued; counted, it would cut every
+-- wait the agent started short for as long as it stayed there. Marked, it does
+-- so once and is then left to the drain. One statement, so two calls polling the
+-- same thread cannot both claim one message.
+UPDATE agent_messages SET preempted_at = $2
+WHERE to_thread_id = $1 AND status = 1 AND preempted_at IS NULL;
+
 -- name: CancelQueuedAgentMessage :execrows
 -- Conditional on status = 1 so this can never delete a row that has already
 -- been drained -- the caller and the agent's own drain loop are racing for

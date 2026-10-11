@@ -1385,8 +1385,24 @@ type DeployEnvironmentSpec struct {
 	// declared surfaces on the ensure the operator is already running rather
 	// than at the next publish.
 	ClusterBindings []*ClusterBinding `protobuf:"bytes,14,rep,name=cluster_bindings,json=clusterBindings,proto3" json:"cluster_bindings,omitempty"`
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
+	// WHO APPLIES a SELF_MANAGED environment's bound clusters, as forge decided
+	// from the same render as `shape`: true when the control plane's hub
+	// converges the promoted bundle onto them and forge applies nothing; false
+	// when forge applies them from the author's machine (a ledger-only or mixed
+	// env, such as one that also ships a frontend from there).
+	//
+	// A BINDING SAYS WHERE AN ENVIRONMENT LANDS, NOT WHO PUTS IT THERE. Reading
+	// "bound" as "the hub applies it" is what gave control-plane prod hub
+	// Kustomizations over the objects `forge env deploy` applies itself — two
+	// appliers, one of which would spend every interval reverting the other.
+	//
+	// PART OF THE DECLARATION, so it rides beside `shape` and is refused
+	// without one. Absent leaves the stored value untouched. An environment
+	// that never declared it is treated as forge-applied: the hub becomes an
+	// applier only when the render says so.
+	HubConverged  *bool `protobuf:"varint,15,opt,name=hub_converged,json=hubConverged,proto3,oneof" json:"hub_converged,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DeployEnvironmentSpec) Reset() {
@@ -1501,6 +1517,13 @@ func (x *DeployEnvironmentSpec) GetClusterBindings() []*ClusterBinding {
 		return x.ClusterBindings
 	}
 	return nil
+}
+
+func (x *DeployEnvironmentSpec) GetHubConverged() bool {
+	if x != nil && x.HubConverged != nil {
+		return *x.HubConverged
+	}
+	return false
 }
 
 // ClusterBinding maps ONE cluster the bundle renders for to ONE registered
@@ -5782,7 +5805,7 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"declaredBy\x12;\n" +
 	"\vdeclared_at\x18\x16 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"declaredAt\x121\n" +
-	"\x05holds\x18\x17 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holdsJ\x04\b\x12\x10\x13J\x04\b\x13\x10\x14\"\x9a\x05\n" +
+	"\x05holds\x18\x17 \x03(\v2\x1b.controlplane.v1.DeployHoldR\x05holdsJ\x04\b\x12\x10\x13J\x04\b\x13\x10\x14\"\xd6\x05\n" +
 	"\x15DeployEnvironmentSpec\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12:\n" +
 	"\x04kind\x18\x02 \x01(\x0e2&.controlplane.v1.DeployEnvironmentKindR\x04kind\x12*\n" +
@@ -5798,7 +5821,9 @@ const file_controlplane_v1_deploy_proto_rawDesc = "" +
 	"\x05shape\x18\f \x01(\v2\x17.google.protobuf.StructR\x05shape\x12H\n" +
 	"\vdeclared_by\x18\r \x01(\v2'.controlplane.v1.DeploySourceProvenanceR\n" +
 	"declaredBy\x12J\n" +
-	"\x10cluster_bindings\x18\x0e \x03(\v2\x1f.controlplane.v1.ClusterBindingR\x0fclusterBindingsJ\x04\b\n" +
+	"\x10cluster_bindings\x18\x0e \x03(\v2\x1f.controlplane.v1.ClusterBindingR\x0fclusterBindings\x12(\n" +
+	"\rhub_converged\x18\x0f \x01(\bH\x00R\fhubConverged\x88\x01\x01B\x10\n" +
+	"\x0e_hub_convergedJ\x04\b\n" +
 	"\x10\vJ\x04\b\v\x10\f\"I\n" +
 	"\x0eClusterBinding\x12\x18\n" +
 	"\acluster\x18\x01 \x01(\tR\acluster\x12\x1d\n" +
@@ -6458,6 +6483,7 @@ func file_controlplane_v1_deploy_proto_init() {
 	if File_controlplane_v1_deploy_proto != nil {
 		return
 	}
+	file_controlplane_v1_deploy_proto_msgTypes[2].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

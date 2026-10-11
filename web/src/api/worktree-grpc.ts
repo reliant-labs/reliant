@@ -7,6 +7,7 @@ import type {
   Worktree as ProtoWorktree,
   CleanupMetadata as ProtoCleanupMetadata,
   DiscoveredWorktree as ProtoDiscoveredWorktree,
+  StaleWorktree as ProtoStaleWorktree,
   GitCommit as ProtoGitCommit,
   WorktreeFileChange as ProtoFileChange,
 } from "../gen/reliant/v1/worktree_pb";
@@ -24,6 +25,7 @@ import {
   UnarchiveWorktreeRequestSchema,
   ImportWorktreeRequestSchema,
   DiscoverWorktreesRequestSchema,
+  PruneWorktreesRequestSchema,
   RecreateWorktreeRequestSchema,
   GetWorktreeChangesRequestSchema,
   GetWorktreeGitStatusRequestSchema,
@@ -74,9 +76,18 @@ export interface DiscoveredWorktree {
   path: string;
   name: string;
   branch: string;
-  is_imported: boolean;
-  is_prunable: boolean;
-  imported_id?: string;
+  repo_id: string;
+  repo_name: string;
+  head: string;
+  locked: boolean;
+  moves_on_import: boolean;
+}
+
+export interface StaleWorktree {
+  path: string;
+  repo_id: string;
+  repo_name: string;
+  reason: string;
 }
 
 export interface GitCommit {
@@ -187,9 +198,20 @@ function protoDiscoveredToFrontend(proto: ProtoDiscoveredWorktree): DiscoveredWo
     path: proto.path,
     name: proto.name,
     branch: proto.branch,
-    is_imported: proto.isImported,
-    is_prunable: proto.isPrunable,
-    imported_id: proto.importedId || undefined,
+    repo_id: proto.repoId,
+    repo_name: proto.repoName,
+    head: proto.head,
+    locked: proto.locked,
+    moves_on_import: proto.movesOnImport,
+  };
+}
+
+function protoStaleToFrontend(proto: ProtoStaleWorktree): StaleWorktree {
+  return {
+    path: proto.path,
+    repo_id: proto.repoId,
+    repo_name: proto.repoName,
+    reason: proto.reason,
   };
 }
 
@@ -352,14 +374,16 @@ export const worktreeGrpc = {
   async import(
     projectId: string,
     path: string,
-    options?: { name?: string; chatId?: string }
+    options: { repoId: string; confirmMove: boolean; name?: string; chatId?: string }
   ): Promise<Worktree> {
     const client = grpcClient.worktree();
     const request = create(ImportWorktreeRequestSchema, {
       projectId,
       path,
-      name: options?.name,
-      chatId: options?.chatId,
+      name: options.name,
+      chatId: options.chatId,
+      repoId: options.repoId,
+      confirmMove: options.confirmMove,
     });
     const response = await client.importWorktree(request);
     if (!response.worktree) throw new Error("No worktree in response");
@@ -367,14 +391,34 @@ export const worktreeGrpc = {
   },
 
   // Discover existing git worktrees
-  async discover(projectId: string): Promise<{ discovered: DiscoveredWorktree[]; total: number }> {
+  // background: a caller nobody asked for (the sidebar hint) never wakes a
+  // sleeping machine; the server answers Unavailable instead.
+  async discover(
+    projectId: string,
+    options?: { background?: boolean }
+  ): Promise<{
+    discovered: DiscoveredWorktree[];
+    stale: StaleWorktree[];
+    workspacesRoot: string;
+  }> {
     const client = grpcClient.worktree();
-    const request = create(DiscoverWorktreesRequestSchema, { projectId });
+    const request = create(DiscoverWorktreesRequestSchema, {
+      projectId,
+      background: options?.background ?? false,
+    });
     const response = await client.discoverWorktrees(request);
     return {
       discovered: response.discovered.map(protoDiscoveredToFrontend),
-      total: response.total,
+      stale: response.stale.map(protoStaleToFrontend),
+      workspacesRoot: response.workspacesRoot,
     };
+  },
+
+  // Remove git's records of worktrees whose directories are gone
+  async prune(projectId: string): Promise<StaleWorktree[]> {
+    const client = grpcClient.worktree();
+    const response = await client.pruneWorktrees(create(PruneWorktreesRequestSchema, { projectId }));
+    return response.pruned.map(protoStaleToFrontend);
   },
 
   // Recreate an archived worktree from its branch

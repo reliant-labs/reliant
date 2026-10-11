@@ -32,7 +32,7 @@ func modalityTestRegistry(t *testing.T) *ModelRegistry {
 		"cheap":     {{Model: "text-cheap"}, {Model: "image-model"}},
 		"fast":      {{Model: "text-cheap"}},
 		"image-gen": {{Model: "image-model"}},
-	})
+	}, nil)
 	if err != nil {
 		t.Fatalf("buildRegistry: %v", err)
 	}

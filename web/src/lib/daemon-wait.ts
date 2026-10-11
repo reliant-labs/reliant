@@ -45,6 +45,15 @@ import { machineWsStatus, presentMachineStatus } from "./machineWake";
 export const MACHINE_NOUN = "machine";
 
 /**
+ * What a surface says when it cannot read the machine's status at all: the
+ * daemon list failed (a tab waking from sleep with its connection dead, our
+ * API restarting, the network gone). That is our side or the network, never
+ * news about the machine — prod 2026-10-11, a user's serving machine was
+ * reported "disconnected" while their terminal on it worked.
+ */
+export const CANT_REACH_RELIANT = "Can't reach Reliant";
+
+/**
  * What a message the server accepted, but that no turn has read yet, says
  * while its run is held for the machine (ChatActivity.WAITING_FOR_DAEMON).
  * Nothing is lost and nothing is stuck: the run reads it as soon as the
@@ -155,6 +164,11 @@ export interface DaemonWaitInput {
   wakeStartedAt?: number;
   /** The clock `wakeStartedAt` is read against. Defaults to now. */
   now?: number;
+  /**
+   * The daemon list's latest read failed, so `daemon` (if any) is only what
+   * the list said last time — not the machine's current state.
+   */
+  registryUnreachable?: boolean;
 }
 
 /**
@@ -174,7 +188,25 @@ function statusMessage(daemon: Daemon | null | undefined): string | null {
  * the backend hasn't told us anything more specific.
  */
 export function classifyDaemonWait(input: DaemonWaitInput): DaemonWaitState {
-  const { daemon, elapsedMs, isCloud, wakeStartedAt, now = Date.now() } = input;
+  const { daemon, elapsedMs, isCloud, wakeStartedAt, now = Date.now(), registryUnreachable } = input;
+
+  // ── We can't ask ─────────────────────────────────────────────────────────
+  // First, because nothing below is current: every other branch narrates
+  // what the list last said, and the list is what we failed to read. The
+  // machine may be fine; blaming it (or offering to manage it) would send the
+  // user to fix something that is not broken.
+  if (registryUnreachable) {
+    return {
+      tone: elapsedMs >= DAEMON_WAIT_SLOW_MS ? "slow" : "waiting",
+      title: CANT_REACH_RELIANT,
+      detail: `Your ${MACHINE_NOUN} may be fine — reconnecting, and this updates on its own.`,
+      reason: null,
+      shouldRetry: true,
+      showRetry: true,
+      showManage: false,
+    };
+  }
+
   const reason = statusMessage(daemon);
 
   // ── Terminal, and the backend said so ────────────────────────────────────

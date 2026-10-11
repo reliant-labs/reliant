@@ -199,7 +199,12 @@ export function useDaemonWait({
   // each fetch returns, so it stops the moment the answer is "suspended".
   // Cloud-only: without a control plane there is no record to read, and the
   // copy falls back to the self-hosted branch which needs no status.
-  const { data: daemons, refetch } = useQuery<Daemon[]>({
+  //
+  // A failed read keeps the last answer (React Query does), but that answer
+  // is then history, not status: the copy says Reliant cannot be reached
+  // rather than narrating it (registryUnreachable), and the poll keeps going
+  // so it recovers on the first read that succeeds.
+  const { data: daemons, refetch, isError, failureCount } = useQuery<Daemon[]>({
     queryKey: DAEMON_LIST_QUERY_KEY,
     queryFn: fetchDaemonList,
     enabled: waiting && capabilities.cloudDaemons,
@@ -211,6 +216,7 @@ export function useDaemonWait({
         elapsedMs: 0,
         isCloud: capabilities.cloudDaemons,
         wakeStartedAt: d ? waking.get(d.daemonId) : undefined,
+        registryUnreachable: query.state.status === "error" || query.state.fetchFailureCount > 0,
       });
       return next.shouldRetry ? DAEMON_WAIT_STATUS_POLL_MS : false;
     },
@@ -231,6 +237,7 @@ export function useDaemonWait({
   // Drive the caller's retry on the poll cadence, but only while the state
   // says retrying is still worthwhile — a FAILED or SUSPENDED machine will
   // not start serving because we asked a fourth time.
+  const registryUnreachable = isError || failureCount > 0;
   const state = useMemo<DaemonWaitState | null>(() => {
     if (!waiting) return null;
     return classifyDaemonWait({
@@ -238,8 +245,9 @@ export function useDaemonWait({
       elapsedMs,
       isCloud: capabilities.cloudDaemons,
       wakeStartedAt: daemon ? waking.get(daemon.daemonId) : undefined,
+      registryUnreachable,
     });
-  }, [waiting, daemon, elapsedMs, waking]);
+  }, [waiting, daemon, elapsedMs, waking, registryUnreachable]);
 
   const shouldRetry = state?.shouldRetry ?? false;
 
@@ -267,8 +275,12 @@ export function useDaemonWait({
   // re-reads the same FAILED row. The control plane treats ResumeDaemon on a
   // Failed machine as a retry and rebuilds its pod on the current image, which
   // is what unsticks a machine whose pod crash-looped on a bad release.
+  // Not while Reliant is unreachable: FAILED is then only what the list said
+  // last, and "Try again" means "read it again".
   const failedDaemonId =
-    capabilities.cloudDaemons && daemon?.status === DaemonStatus.FAILED ? daemon.daemonId : null;
+    capabilities.cloudDaemons && !registryUnreachable && daemon?.status === DaemonStatus.FAILED
+      ? daemon.daemonId
+      : null;
   const retryNow = useCallback(() => {
     if (sharedWait.waiters > 0) sharedWait.startedAt = Date.now();
     setElapsedMs(0);

@@ -56,6 +56,17 @@ func ResolveVideoGenerator(ctx context.Context, userID string, selector models.M
 		return nil, fmt.Errorf("model %s resolved to provider %s, which is not configured", resolved.Definition.ID, driverID)
 	}
 
+	config := videoGenConfig(resolved, driverConfig)
+	logging.Debug("Resolved video generation model",
+		"model", config.ModelID, "api_model", config.APIModel, "driver", config.Driver)
+
+	return newVideoGenClient(config)
+}
+
+// videoGenConfig binds a resolved video model to the credentials of the
+// provider it resolved on.
+func videoGenConfig(resolved *models.ResolvedModel, driverConfig models.DriverConfig) videogen.Config {
+	driverID := resolved.Provider.Driver
 	config := videogen.Config{
 		APIKey:       driverConfig.APIKey,
 		ExtraHeaders: driverConfig.ExtraHeaders,
@@ -75,16 +86,15 @@ func ResolveVideoGenerator(ctx context.Context, userID string, selector models.M
 		baseURL = videoGenBaseURLs[driverID]
 	}
 	config.BaseURL = baseURL
-
-	logging.Debug("Resolved video generation model",
-		"model", config.ModelID, "api_model", config.APIModel, "driver", config.Driver)
-
-	return newVideoGenClient(config)
+	return config
 }
 
 // newVideoGenClient picks the client whose wire format the resolved provider
-// speaks. The branch is on the model family, because the gemini driver serves
-// both Veo (predictLongRunning) and, later, Omni (Interactions).
+// speaks. The branch is on the model family, because on the gemini driver Omni
+// speaks the Interactions API and Veo predictLongRunning. The Gemini API shut
+// its Veo previews down in favour of Omni (models.yaml `retired:`), so a
+// selector naming one resolves to Omni, and its api_model is what lands it on
+// the Interactions client.
 func newVideoGenClient(config videogen.Config) (VideoGenerator, error) {
 	switch config.Driver {
 	case "gemini":

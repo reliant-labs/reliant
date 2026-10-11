@@ -7,14 +7,6 @@ import { ApprovalStatus, ApprovalType } from "../gen/reliant/v1/approval_pb";
 
 export { ApprovalStatus, ApprovalType };
 
-/**
- * The action_taken an approval of an integration action records when the
- * person chose "Always allow": the server also remembers the decision for that
- * action, and asks no more until it is revoked in Settings.
- */
-export const ALWAYS_ALLOW_ACTION = "always_allow";
-/** The action_taken for "Allow once". */
-export const ALLOW_ONCE_ACTION = "allow_once";
 import {
   ListApprovalsByChatRequestSchema,
   ApproveRequestSchema,
@@ -28,43 +20,15 @@ export interface ToolApprovalRequest {
   chat_id: string;
   content_block_id: string;
   message_id?: string;
-  tool_call_id?: string;
-  tool_name?: string;
   description?: string;
   status: ApprovalStatus;
   created_at: string;
   responded_at?: string;
   responded_by?: string;
   denial_reason?: string;
-  action_taken?: string;  // Which action button was clicked
-  /** The question the approval asks, e.g. "Post message in #general?". */
+  action_taken?: string;
   title?: string;
-  /**
-   * TOOL: one call to an integration action that changes something, asked
-   * about before it runs (rendered by ActionApprovalCard). WORKFLOW_STEP: a
-   * workflow's approval node.
-   */
   approval_type?: ApprovalType;
-  /** A tool approval's call parameters, parsed from the JSON the call carried. */
-  params?: Record<string, unknown> | string;
-  /** A tool approval's integration, e.g. "Slack". */
-  integration_name?: string;
-  /** The integration's manifest icon, for IntegrationLogo, e.g. "slack". */
-  integration_icon?: string;
-}
-
-/** A tool call's parameters as the card shows them: an object when they parse. */
-export function parseApprovalParams(input?: string): Record<string, unknown> | string | undefined {
-  if (!input) return undefined;
-  try {
-    const parsed: unknown = JSON.parse(input);
-    if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-      return parsed as Record<string, unknown>;
-    }
-  } catch {
-    // Not JSON: shown as written.
-  }
-  return input;
 }
 
 // Convert proto Approval to frontend ToolApprovalRequest
@@ -74,8 +38,6 @@ function protoToFrontend(proto: ProtoApproval): ToolApprovalRequest {
     chat_id: proto.chatId,
     content_block_id: proto.entityId, // entity_id maps to content_block_id for tool approvals
     message_id: proto.messageId,
-    tool_call_id: proto.toolCallId,
-    tool_name: proto.toolName,
     description: proto.description,
     status: proto.status,
     created_at: proto.createdAt,
@@ -84,9 +46,6 @@ function protoToFrontend(proto: ProtoApproval): ToolApprovalRequest {
     action_taken: proto.actionTaken,
     title: proto.title,
     approval_type: proto.approvalType,
-    params: parseApprovalParams(proto.toolInput),
-    integration_name: proto.integrationName,
-    integration_icon: proto.integrationIcon,
   };
 }
 

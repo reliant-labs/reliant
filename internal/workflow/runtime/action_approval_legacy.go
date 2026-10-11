@@ -2,7 +2,6 @@
 package runtime
 
 import (
-	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
@@ -14,31 +13,59 @@ import (
 	"go.temporal.io/sdk/workflow"
 )
 
-// The action approval gate. In a run a person is attending, an integration
-// action that changes something outside Reliant (posting to Slack, sending an
-// email or a text, opening or commenting on an issue, an HTTP request) does
-// not run on the model's say-so. Each such call first goes through
-// executeApprovalSignalFlow — the approval node's own row-card-signal flow —
-// titled from the action and its parameters. Approved, it runs with the rest
-// of its batch. Denied or unanswered, the ExecuteTools activity refuses it, so
-// it is recorded FAILED with the reason like every other refusal.
+// The integration action approval prompt, kept only so the runs that recorded
+// it keep replaying.
 //
-// Which calls ask is DATA: the call_llm turn's capability set lists them
-// (ToolCapabilities.approval_required — the offered mutating integration
-// actions, and none when the run is unattended). "Always allow" is the user's
-// standing decision for one action; ApprovalCreate reads it and resolves the
-// approval without a card.
+// Until it was removed, a call to an integration action that changes something
+// outside Reliant (posting to Slack, sending an email, an HTTP request) did not
+// run on the model's say-so in a run a person was attending. The call_llm turn
+// listed those calls in ToolCapabilities.approval_required, and the batch first
+// asked about each one through executeApprovalSignalFlow — ApprovalCreate, a
+// timer, a signal or ApprovalResolve — and only then started ExecuteTools,
+// with every call that was not approved refused (ExecuteToolsArgs.
+// refused_tool_calls). Now a batch starts at once.
 //
-// The commands this adds — ApprovalCreate, a timer, maybe ApprovalResolve —
-// are issued only for a batch holding such a call, so a history without one
-// replays exactly as before.
+// Nothing writes approval_required any more, so only a turn recorded before
+// the removal can reach this file, and only one recorded without the version
+// marker takes it. Retire it — with both deprecated proto fields and
+// frozen/2026-10-11-integration-action-approval — once no run that old can
+// still be open.
 
-// actionApprovalCalls are the calls in a batch that ask before they run: those
-// the turn's capability set says require approval. A call it does not offer
-// at all is not among them — the ExecuteTools activity refuses it, and a card
-// for a call that cannot run would be noise.
-func actionApprovalCalls(calls []*reliantv1.ToolCallMsg, caps *reliantv1.ToolCapabilities) []*reliantv1.ToolCallMsg {
-	required := caps.GetApprovalRequired()
+// actionApprovalRemovedChangeID gates the removal of the integration action
+// approval prompt (workflow.GetVersion).
+//
+// It is consulted only where the two shapes first differ: a batch holding a
+// call that its turn's recorded capability set says must ask first. Such a
+// turn was recorded before the removal, and if the worker that recorded it
+// also scheduled the batch, the history holds the approval's commands and no
+// marker, so it replays them — and a run still waiting on one of those
+// approvals keeps waiting and answers the call the way it always did (as does
+// any later such batch in that execution: GetVersion answers once per run). A
+// turn recorded before the removal whose batch this code schedules first
+// records the marker and runs the batch at once. A run with no such turn never
+// consults the gate, so it records no marker.
+const actionApprovalRemovedChangeID = "integration-action-approval-removed"
+
+// legacyActionApprovalGate returns the calls in a batch that must still ask
+// before they run: those its turn's recorded capability set listed, when the
+// run recorded that turn's batch before the prompt was removed. Nil for every
+// other batch.
+func legacyActionApprovalGate(ctx workflow.Context, calls []*reliantv1.ToolCallMsg, caps *reliantv1.ToolCapabilities) []*reliantv1.ToolCallMsg {
+	gated := legacyActionApprovalCalls(calls, caps)
+	if len(gated) == 0 {
+		return nil
+	}
+	if workflow.GetVersion(ctx, actionApprovalRemovedChangeID, workflow.DefaultVersion, 1) != workflow.DefaultVersion {
+		return nil
+	}
+	return gated
+}
+
+// legacyActionApprovalCalls are the calls in a batch that the turn's recorded
+// capability set says asked before they ran. A call it did not offer at all is
+// not among them: the ExecuteTools activity refuses it.
+func legacyActionApprovalCalls(calls []*reliantv1.ToolCallMsg, caps *reliantv1.ToolCapabilities) []*reliantv1.ToolCallMsg {
+	required := caps.GetApprovalRequired() //nolint:staticcheck // SA1019: read only to replay runs recorded before the prompt was removed
 	if len(required) == 0 {
 		return nil
 	}
@@ -51,8 +78,8 @@ func actionApprovalCalls(calls []*reliantv1.ToolCallMsg, caps *reliantv1.ToolCap
 	return gated
 }
 
-// afterActionApprovals asks about every gated call at once — one card each,
-// answered in any order — then starts the batch with run, handing it the
+// afterActionApprovals asks about every gated call at once — one approval
+// each, answered in any order — then starts the batch with run, handing it the
 // calls that were not approved as refusals. The returned future resolves to
 // that batch's own result, so the batch's output and who saves it are what
 // they would have been without the gate.
@@ -60,7 +87,7 @@ func actionApprovalCalls(calls []*reliantv1.ToolCallMsg, caps *reliantv1.ToolCap
 // The asks wait on activityCtx, the context the batch itself runs on, so an
 // interrupt or pause that would cancel the batch also ends the wait: the batch
 // then starts on a cancelled context and fails the way any interrupted batch
-// does, instead of the turn sitting on a card nobody will answer.
+// does, instead of the turn sitting on an approval nobody will answer.
 func afterActionApprovals(
 	ctx workflow.Context,
 	activityCtx workflow.Context,
@@ -100,7 +127,7 @@ func afterActionApprovals(
 }
 
 // askActionApproval asks the person attending about one call, and returns why
-// it may not run, or "" when they approved it (or always allow it).
+// it may not run, or "" when they approved it.
 func askActionApproval(ctx workflow.Context, rtx types.RuntimeContext, tc *reliantv1.ToolCallMsg, logger log.Logger) string {
 	name := tc.GetName()
 	output, err := executeApprovalSignalFlow(ctx, approvalExecution{
@@ -111,10 +138,10 @@ func askActionApproval(ctx workflow.Context, rtx types.RuntimeContext, tc *relia
 		LoopNodeID:    rtx.LoopNodeID,
 		LoopIteration: rtx.LoopIteration,
 		NodePath:      rtx.NodePath,
-		ToolName:      name,
-		ToolCallID:    tc.GetId(),
-		ToolInput:     unwrapToolMetaInput(tc.GetInput()),
-		Logger:        logger,
+		// Only an ApprovalCreate that first runs after the removal reads it;
+		// a replayed one is matched by type, never by input.
+		Title:  fmt.Sprintf("Run %s?", name),
+		Logger: logger,
 	})
 	if err != nil {
 		// Nobody could be asked, so nobody approved: refuse rather than fail
@@ -123,9 +150,9 @@ func askActionApproval(ctx workflow.Context, rtx types.RuntimeContext, tc *relia
 		return fmt.Sprintf("Approval for %s could not be requested, so it was not run.", name)
 	}
 	if ctx.Err() != nil {
-		// Interrupted or paused while the card was up. The flow could not
-		// resolve its row on the cancelled context, so close it here, or the
-		// card would still be asking about a call that will never run.
+		// Interrupted or paused while the approval was up. The flow could not
+		// resolve its row on the cancelled context, so close it here, or it
+		// would still be asking about a call that will never run.
 		if approvalID, _ := output["approval_id"].(string); approvalID != "" {
 			disconnected, _ := workflow.NewDisconnectedContext(ctx)
 			resolveCtx := workflow.WithActivityOptions(disconnected, workflow.ActivityOptions{
@@ -150,20 +177,4 @@ func askActionApproval(ctx workflow.Context, rtx types.RuntimeContext, tc *relia
 	default:
 		return fmt.Sprintf("The user did not approve %s, so it was not run. Do not attempt it another way.", name)
 	}
-}
-
-// unwrapToolMetaInput is the arguments the model wrote, out of the metadata
-// envelope ({"input": "<raw>", "__reliant_tool_meta__": {...}}) when a call
-// carries one.
-func unwrapToolMetaInput(input string) string {
-	var envelope map[string]interface{}
-	if err := json.Unmarshal([]byte(input), &envelope); err != nil {
-		return input
-	}
-	if _, hasMeta := envelope["__reliant_tool_meta__"]; hasMeta {
-		if inner, ok := envelope["input"].(string); ok {
-			return inner
-		}
-	}
-	return input
 }

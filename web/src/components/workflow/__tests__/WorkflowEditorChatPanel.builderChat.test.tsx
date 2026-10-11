@@ -67,7 +67,8 @@ vi.mock("../../../store/chatParamsStore", () => ({
   useChatParamsStore: storeMock(() => ({ transferTempToChat: vi.fn() })),
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => ({ ...daemonState.current, refresh: vi.fn() }),
+  // The registry has answered whenever the scenario is not loading.
+  useDaemonStatus: () => ({ answered: !daemonState.current.loading, ...daemonState.current, refresh: vi.fn() }),
 }));
 // The real wait copy for a machine that is not connected yet.
 vi.mock("@/hooks/useDaemonWait", () => ({

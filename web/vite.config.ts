@@ -23,8 +23,10 @@ export default defineConfig({
   // browserLogSink is dev-only (apply: "serve"): it gives a plain browser tab
   // the file-backed logging that only the Electron build otherwise has. See
   // vite-plugin-browser-logs.ts.
-  // versionJson is build-only (apply: "build"): it emits dist/version.json, a
-  // real static file so the SPA rewrite cannot swallow a request for it. See
+  // versionJson bakes this bundle's release identity in as __RELIANT_BUILD__
+  // (the About page, Sentry's release) and emits dist/version.json, a real
+  // static file so the SPA rewrite cannot swallow a request for it. It FAILS a
+  // production build that cannot name its version. Inactive under vitest. See
   // vite-plugin-version-json.ts.
   // cspPlugin is build-only (apply: "build"): it injects the Content-Security-
   // Policy as a <meta> tag so ONE bundle carries its own policy to both the

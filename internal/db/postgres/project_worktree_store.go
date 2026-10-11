@@ -4,9 +4,11 @@ import (
 	"context"
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	pgdb "github.com/reliant-labs/reliant/internal/db/postgres/generated"
 )
@@ -238,9 +240,42 @@ type worktreeStore struct{ q pgdb.Querier }
 // NewWorktreeStore creates the Postgres worktree store implementation.
 func NewWorktreeStore(q pgdb.Querier) core.WorktreeStore { return &worktreeStore{q: q} }
 
+// liveNameIndex is the partial unique index that holds a worktree name for the
+// project's unarchived rows.
+const liveNameIndex = "worktrees_project_id_name_live_key"
+
+// nameTakenOr turns a violation of the live-name index into
+// core.ErrWorktreeNameTaken and leaves any other error alone.
+func nameTakenOr(err error) error {
+	var pg *pgconn.PgError
+	if errors.As(err, &pg) && pg.Code == "23505" && pg.ConstraintName == liveNameIndex {
+		return core.ErrWorktreeNameTaken
+	}
+	return err
+}
+
+func (s *worktreeStore) GetLiveWorktreeByName(ctx context.Context, projectID, name string) (*core.Worktree, error) {
+	row, err := s.q.GetLiveWorktreeByName(ctx, pgdb.GetLiveWorktreeByNameParams{ProjectID: projectID, Name: name})
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return worktreeFromPG(row), nil
+}
+
+func (s *worktreeStore) ListWorktreesByBranch(ctx context.Context, projectID, branch string) ([]*core.Worktree, error) {
+	rows, err := s.q.ListWorktreesByBranch(ctx, pgdb.ListWorktreesByBranchParams{ProjectID: projectID, Branch: branch})
+	if err != nil {
+		return nil, err
+	}
+	return worktreesFromPG(rows), nil
+}
+
 func (s *worktreeStore) CreateWorktree(ctx context.Context, worktree *core.Worktree) error {
 	baseBranchesJSON, _ := encodeBaseBranches(worktree.BaseBranches)
-	return s.q.CreateWorktree(ctx, pgdb.CreateWorktreeParams{
+	return nameTakenOr(s.q.CreateWorktree(ctx, pgdb.CreateWorktreeParams{
 		ID:             worktree.ID,
 		Name:           worktree.Name,
 		Path:           worktree.Path,
@@ -257,7 +292,7 @@ func (s *worktreeStore) CreateWorktree(ctx context.Context, worktree *core.Workt
 		DeletedAt:      projectPtrToNullTime(worktree.DeletedAt),
 		DaemonID:       ptrToNullString(worktree.DaemonID),
 		IdempotencyKey: ptrToNullString(worktree.IdempotencyKey),
-	})
+	}))
 }
 
 // GetWorktreeByIdempotencyKey returns the worktree a previous create already
@@ -438,7 +473,7 @@ func (s *worktreeStore) ArchiveWorktree(ctx context.Context, id string) error {
 }
 
 func (s *worktreeStore) UnarchiveWorktree(ctx context.Context, id string) error {
-	return s.q.UnarchiveWorktree(ctx, id)
+	return nameTakenOr(s.q.UnarchiveWorktree(ctx, id))
 }
 
 func projectFromPG(row pgdb.Project) *core.Project {

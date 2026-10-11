@@ -145,6 +145,14 @@
    }
   },
   {
+   "id": "google/gemini-3.5-flash-lite",
+   "context_length": 1048576,
+   "top_provider": {
+    "context_length": 1048576,
+    "max_completion_tokens": 65536
+   }
+  },
+  {
    "id": "google/gemini-3.6-flash",
    "context_length": 1048576,
    "top_provider": {

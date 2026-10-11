@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/activities/types"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"go.temporal.io/sdk/activity"
 	"go.temporal.io/sdk/temporal"
@@ -21,12 +22,10 @@ import (
 
 const (
 	gateSlackPost = "slack__message_post"
-	// gateIssueGet is a read-only GitHub action: it changes nothing.
-	gateIssueGet = "github__issue_get"
-	gateView     = "view"
+	gateView      = "view"
 )
 
-// gateRecorder captures what the gate asked and what the batch was handed.
+// gateRecorder captures what a batch asked and what it was handed.
 type gateRecorder struct {
 	mu               sync.Mutex
 	approvalCreates  []map[string]interface{}
@@ -36,6 +35,9 @@ type gateRecorder struct {
 	// person's answer had been delivered when it started.
 	executedAfterAnswer []bool
 	answered            bool
+	// versionConsulted is whether the batch asked GetVersion about the
+	// removal at all.
+	versionConsulted bool
 	// elapsed is the workflow's run time on the test clock.
 	elapsed time.Duration
 }
@@ -46,12 +48,15 @@ func (r *gateRecorder) refused() map[string]string {
 	if len(r.executeInputs) == 0 {
 		return nil
 	}
-	return r.executeInputs[len(r.executeInputs)-1].GetRefusedToolCalls()
+	return r.executeInputs[len(r.executeInputs)-1].GetRefusedToolCalls() //nolint:staticcheck // the legacy gate's output
 }
 
 type gateScenario struct {
 	calls []*reliantv1.ToolCallMsg
 	caps  *reliantv1.ToolCapabilities
+	// recordedBeforeRemoval replays the batch the way a run recorded before
+	// the prompt was removed does: GetVersion answers DefaultVersion.
+	recordedBeforeRemoval bool
 	// createOutput is what ApprovalCreate answers.
 	createOutput map[string]interface{}
 	// signal, when set, is delivered on signal.approval.<approval_id> after
@@ -79,6 +84,18 @@ func runGateWorkflow(t *testing.T, sc gateScenario) (*gateRecorder, error) {
 	env := suite.NewTestWorkflowEnvironment()
 	rec := &gateRecorder{}
 
+	version := workflow.Version(1)
+	if sc.recordedBeforeRemoval {
+		version = workflow.DefaultVersion
+	}
+	env.OnGetVersion(actionApprovalRemovedChangeID, workflow.DefaultVersion, 1).
+		Run(func(mock.Arguments) {
+			rec.mu.Lock()
+			rec.versionConsulted = true
+			rec.mu.Unlock()
+		}).
+		Return(version)
+
 	env.RegisterActivityWithOptions(func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 		rec.mu.Lock()
 		rec.approvalCreates = append(rec.approvalCreates, input)
@@ -98,7 +115,7 @@ func runGateWorkflow(t *testing.T, sc gateScenario) (*gateRecorder, error) {
 		rec.mu.Unlock()
 		var results []interface{}
 		for _, tc := range input.Node.GetExecuteTools().GetResolvedToolCalls() {
-			if reason := input.Node.GetExecuteTools().GetRefusedToolCalls()[tc.GetId()]; reason != "" {
+			if reason := input.Node.GetExecuteTools().GetRefusedToolCalls()[tc.GetId()]; reason != "" { //nolint:staticcheck // the legacy gate's output
 				results = append(results, map[string]interface{}{"tool_call_id": tc.GetId(), "content": reason, "is_error": true})
 				continue
 			}
@@ -157,19 +174,17 @@ func runGateWorkflow(t *testing.T, sc gateScenario) (*gateRecorder, error) {
 	}
 	var out map[string]interface{}
 	require.NoError(t, env.GetWorkflowResult(&out))
-	assert.EqualValues(t, 42, out["thread_token_count"], "the batch's own output passes through the gate untouched")
+	assert.EqualValues(t, 42, out["thread_token_count"], "the batch's own output passes through untouched")
 	return rec, nil
 }
 
-// capsFor is a turn's capability set as call_llm records it
-// (tools.Capabilities.Proto): what it offered, and which of those ask first.
-// That attended runs list the mutating actions and unattended runs list none
-// is pinned in internal/llm/tools; here it is the data the gate reads.
-func capsFor(offered []string, approvalRequired ...string) *reliantv1.ToolCapabilities {
+// recordedCaps is a capability set as a call_llm turn recorded before the
+// prompt was removed: what it offered, and which of those asked first.
+func recordedCaps(offered []string, approvalRequired ...string) *reliantv1.ToolCapabilities {
 	return &reliantv1.ToolCapabilities{
 		Permission:       "mutating",
 		Offered:          offered,
-		ApprovalRequired: approvalRequired,
+		ApprovalRequired: approvalRequired, //nolint:staticcheck // what a turn recorded before the removal carries
 	}
 }
 
@@ -178,35 +193,65 @@ func slackCall(id string) *reliantv1.ToolCallMsg {
 	return &reliantv1.ToolCallMsg{Id: id, Name: gateSlackPost, Input: string(input)}
 }
 
-func TestActionApproval_AttendedMutatingCallWaitsAndRunsOnAllow(t *testing.T) {
+// The removal itself: a batch this code schedules runs a mutating
+// integration action at once — even when its turn was recorded before the
+// removal and still lists the call as needing approval.
+func TestActionApprovalRemoved_MutatingCallRunsWithoutAsking(t *testing.T) {
 	t.Parallel()
 	rec := runGate(t, gateScenario{
-		calls:        []*reliantv1.ToolCallMsg{slackCall("tc-slack"), {Id: "tc-view", Name: gateView, Input: `{"file_path":"a"}`}},
-		caps:         capsFor([]string{gateSlackPost, gateView}, gateSlackPost),
-		createOutput: map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
-		signal:       map[string]interface{}{"status": "approved", "action_taken": "allow_once"},
-		signalAfter:  10 * time.Minute,
+		calls: []*reliantv1.ToolCallMsg{slackCall("tc-slack"), {Id: "tc-view", Name: gateView, Input: `{"file_path":"a"}`}},
+		caps:  recordedCaps([]string{gateSlackPost, gateView}, gateSlackPost),
+	})
+	assert.True(t, rec.versionConsulted, "the batch differs from the recorded shape, so it is gated")
+	assert.Empty(t, rec.approvalCreates, "nobody is asked")
+	require.Len(t, rec.executeInputs, 1)
+	assert.Len(t, rec.executeInputs[0].GetResolvedToolCalls(), 2, "the whole batch runs")
+	assert.Empty(t, rec.refused())
+	assert.Less(t, rec.elapsed, time.Minute, "nothing waited")
+}
+
+// A batch whose turn lists nothing needing approval — every turn recorded
+// since the removal — never consults the gate, so its run records no marker.
+func TestActionApprovalRemoved_OtherBatchesNeverConsultTheGate(t *testing.T) {
+	t.Parallel()
+	rec := runGate(t, gateScenario{
+		calls: []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
+		caps:  recordedCaps([]string{gateSlackPost}),
+	})
+	assert.False(t, rec.versionConsulted)
+	assert.Empty(t, rec.approvalCreates)
+	require.Len(t, rec.executeInputs, 1)
+}
+
+// A run recorded before the removal keeps the prompt it recorded: it waits
+// for the answer, then runs the batch.
+func TestActionApprovalLegacy_RecordedRunWaitsAndRunsOnAllow(t *testing.T) {
+	t.Parallel()
+	rec := runGate(t, gateScenario{
+		calls:                 []*reliantv1.ToolCallMsg{slackCall("tc-slack"), {Id: "tc-view", Name: gateView, Input: `{"file_path":"a"}`}},
+		caps:                  recordedCaps([]string{gateSlackPost, gateView}, gateSlackPost),
+		recordedBeforeRemoval: true,
+		createOutput:          map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
+		signal:                map[string]interface{}{"status": "approved", "action_taken": "allow_once"},
+		signalAfter:           10 * time.Minute,
 	})
 
-	require.Len(t, rec.approvalCreates, 1, "one card for the one mutating call")
-	create := rec.approvalCreates[0]
-	assert.Equal(t, gateSlackPost, create["tool_name"])
-	assert.Equal(t, "tc-slack", create["tool_call_id"])
-	assert.JSONEq(t, `{"channel":"#general","text":"Ship it"}`, create["tool_input"].(string))
-
+	require.Len(t, rec.approvalCreates, 1, "one approval for the one gated call")
+	assert.Equal(t, "Run slack__message_post?", rec.approvalCreates[0]["title"])
 	require.Len(t, rec.executeInputs, 1, "the whole batch runs once, after the answer")
 	assert.Empty(t, rec.refused(), "an approved call is not refused")
 	assert.True(t, rec.executedAfterAnswer[0], "nothing ran before the person answered")
 }
 
-func TestActionApproval_DenyRefusesTheCall(t *testing.T) {
+func TestActionApprovalLegacy_DenyRefusesTheCall(t *testing.T) {
 	t.Parallel()
 	rec := runGate(t, gateScenario{
-		calls:        []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
-		caps:         capsFor([]string{gateSlackPost}, gateSlackPost),
-		createOutput: map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
-		signal:       map[string]interface{}{"status": "denied", "denial_reason": "no"},
-		signalAfter:  time.Minute,
+		calls:                 []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
+		caps:                  recordedCaps([]string{gateSlackPost}, gateSlackPost),
+		recordedBeforeRemoval: true,
+		createOutput:          map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
+		signal:                map[string]interface{}{"status": "denied", "denial_reason": "no"},
+		signalAfter:           time.Minute,
 	})
 	require.Len(t, rec.executeInputs, 1)
 	assert.Equal(t,
@@ -214,76 +259,29 @@ func TestActionApproval_DenyRefusesTheCall(t *testing.T) {
 		rec.refused()["tc-slack"])
 }
 
-func TestActionApproval_UnansweredTimesOutAndRefuses(t *testing.T) {
+func TestActionApprovalLegacy_UnansweredTimesOutAndRefuses(t *testing.T) {
 	t.Parallel()
 	rec := runGate(t, gateScenario{
-		calls:        []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
-		caps:         capsFor([]string{gateSlackPost}, gateSlackPost),
-		createOutput: map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
+		calls:                 []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
+		caps:                  recordedCaps([]string{gateSlackPost}, gateSlackPost),
+		recordedBeforeRemoval: true,
+		createOutput:          map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
 	})
 	require.Len(t, rec.approvalResolves, 1, "the row is resolved as timed out")
 	assert.Contains(t, rec.refused()["tc-slack"], "did not approve slack__message_post in time")
 }
 
-func TestActionApproval_AlwaysAllowedRunsWithoutWaiting(t *testing.T) {
-	t.Parallel()
-	rec := runGate(t, gateScenario{
-		calls: []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
-		caps:  capsFor([]string{gateSlackPost}, gateSlackPost),
-		// ApprovalCreate found the user's "always allow" and made no row.
-		createOutput: map[string]interface{}{"already_resolved": true, "status": "approved", "action_taken": "always_allow"},
-	})
-	require.Len(t, rec.executeInputs, 1)
-	assert.Empty(t, rec.refused())
-	assert.Less(t, rec.elapsed, time.Minute, "no wait for an answer")
-}
-
-func TestActionApproval_ReadOnlyAndOtherToolsNeverAsk(t *testing.T) {
-	t.Parallel()
-	rec := runGate(t, gateScenario{
-		calls: []*reliantv1.ToolCallMsg{
-			{Id: "tc-get", Name: gateIssueGet, Input: `{"owner":"acme","repo":"api","issue_number":1}`},
-			{Id: "tc-view", Name: gateView, Input: `{"file_path":"a"}`},
-		},
-		caps: capsFor([]string{gateIssueGet, gateView}),
-	})
-	assert.Empty(t, rec.approvalCreates)
-	require.Len(t, rec.executeInputs, 1)
-}
-
-// An unattended run that names the tool keeps it (the author's approval) and
-// is never asked: nobody is there to answer.
-func TestActionApproval_UnattendedOptedInRunDoesNotAsk(t *testing.T) {
-	t.Parallel()
-	caps := capsFor([]string{gateSlackPost})
-	caps.Unattended = true
-	caps.UnattendedOptIn = []string{gateSlackPost}
-	rec := runGate(t, gateScenario{calls: []*reliantv1.ToolCallMsg{slackCall("tc-slack")}, caps: caps})
-	assert.Empty(t, rec.approvalCreates)
-	require.Len(t, rec.executeInputs, 1)
-	assert.Empty(t, rec.refused())
-}
-
-// A call the turn did not offer is not asked about; the activity refuses it.
-func TestActionApproval_CallNotOfferedIsNotAskedAbout(t *testing.T) {
-	t.Parallel()
-	rec := runGate(t, gateScenario{
-		calls: []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
-		caps:  capsFor([]string{gateView}),
-	})
-	assert.Empty(t, rec.approvalCreates)
-}
-
-// An interrupt while the card is up ends the wait: the batch is cancelled like
-// any interrupted batch (nothing runs, nothing is recorded FAILED), and the
-// card is closed rather than left asking about a call that will never run.
-func TestActionApproval_InterruptEndsTheWaitAndClosesTheCard(t *testing.T) {
+// An interrupt while the approval is up ends the wait: the batch is cancelled
+// like any interrupted batch, and the approval is closed rather than left
+// asking about a call that will never run.
+func TestActionApprovalLegacy_InterruptEndsTheWaitAndClosesTheApproval(t *testing.T) {
 	t.Parallel()
 	rec, err := runGateWorkflow(t, gateScenario{
-		calls:          []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
-		caps:           capsFor([]string{gateSlackPost}, gateSlackPost),
-		createOutput:   map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
-		interruptAfter: 5 * time.Minute,
+		calls:                 []*reliantv1.ToolCallMsg{slackCall("tc-slack")},
+		caps:                  recordedCaps([]string{gateSlackPost}, gateSlackPost),
+		recordedBeforeRemoval: true,
+		createOutput:          map[string]interface{}{"approval_id": "appr-1", "already_resolved": false},
+		interruptAfter:        5 * time.Minute,
 	})
 	require.Error(t, err, "the interrupted batch is cancelled")
 	assert.True(t, temporal.IsCanceledError(err), "cancelled, not failed: %v", err)
@@ -295,27 +293,21 @@ func TestActionApproval_InterruptEndsTheWaitAndClosesTheCard(t *testing.T) {
 			closed = true
 		}
 	}
-	assert.True(t, closed, "the card is closed as interrupted: %v", rec.approvalResolves)
+	assert.True(t, closed, "the approval is closed as interrupted: %v", rec.approvalResolves)
 }
 
-// The meta envelope a call may carry is unwrapped, so the card shows the
-// arguments the model wrote.
-func TestUnwrapToolMetaInput(t *testing.T) {
+// The legacy branch reads approval_required from the call_llm output a run
+// recorded, so the field must keep decoding until the branch is retired —
+// reserving it first would make every such run take the new path on replay.
+func TestActionApprovalLegacy_RecordedApprovalRequiredStillDecodes(t *testing.T) {
 	t.Parallel()
-	wrapped, _ := json.Marshal(map[string]interface{}{"input": `{"to":["a@b.c"]}`, "__reliant_tool_meta__": map[string]interface{}{}})
-	assert.Equal(t, `{"to":["a@b.c"]}`, unwrapToolMetaInput(string(wrapped)))
-	assert.Equal(t, `{"to":["a@b.c"]}`, unwrapToolMetaInput(`{"to":["a@b.c"]}`))
-}
-
-// Old call_llm outputs carry no approval_required, so a recorded batch replays
-// without the gate's commands.
-func TestActionApproval_CapabilitiesWithoutTheFieldDoNotGate(t *testing.T) {
-	t.Parallel()
-	caps := capsFor([]string{gateSlackPost})
-	encoded, err := protojson.Marshal(caps)
+	encoded, err := protojson.MarshalOptions{UseProtoNames: true}.Marshal(recordedCaps([]string{gateSlackPost}, gateSlackPost))
 	require.NoError(t, err)
+	require.Contains(t, string(encoded), `"approval_required"`, "the recorded spelling")
 	var decoded map[string]interface{}
 	require.NoError(t, json.Unmarshal(encoded, &decoded))
 	fromHistory := capabilitiesFromNodeOutput(map[string]interface{}{"capabilities": decoded})
-	assert.Empty(t, actionApprovalCalls([]*reliantv1.ToolCallMsg{slackCall("tc")}, fromHistory))
+	gated := legacyActionApprovalCalls([]*reliantv1.ToolCallMsg{slackCall("tc")}, fromHistory)
+	require.Len(t, gated, 1)
+	assert.Equal(t, "tc", gated[0].GetId())
 }

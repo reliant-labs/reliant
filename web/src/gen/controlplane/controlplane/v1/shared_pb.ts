@@ -821,9 +821,10 @@ export type DaemonSizePrice = Message<"controlplane.v1.DaemonSizePrice"> & {
   hourlyPriceCents: string;
 
   /**
-   * The disk a daemon of this size is given, in GiB
+   * The data (home) disk a daemon of this size is given, in GiB
    * (config.DaemonTierStorageGiB) — the number the suspended-disk fee is
-   * charged on.
+   * charged on. The docker/cache volume every daemon also gets is platform
+   * overhead and is not included.
    *
    * @generated from field: int64 storage_gib = 4;
    */

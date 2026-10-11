@@ -55,8 +55,6 @@ type ApprovalServiceClient interface {
 	// ListApprovalsByChat lists all pending approvals for a chat
 	ListApprovalsByChat(context.Context, *connect.Request[v1.ListApprovalsByChatRequest]) (*connect.Response[v1.ListApprovalsByChatResponse], error)
 	// Approve approves a pending approval request (signals workflow to continue).
-	// For a tool approval, action_taken "always_allow" also records the caller's
-	// standing decision to allow that action without asking.
 	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
 	// Deny denies a pending approval request (cancels workflow)
 	Deny(context.Context, *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error)
@@ -149,8 +147,6 @@ type ApprovalServiceHandler interface {
 	// ListApprovalsByChat lists all pending approvals for a chat
 	ListApprovalsByChat(context.Context, *connect.Request[v1.ListApprovalsByChatRequest]) (*connect.Response[v1.ListApprovalsByChatResponse], error)
 	// Approve approves a pending approval request (signals workflow to continue).
-	// For a tool approval, action_taken "always_allow" also records the caller's
-	// standing decision to allow that action without asking.
 	Approve(context.Context, *connect.Request[v1.ApproveRequest]) (*connect.Response[v1.ApproveResponse], error)
 	// Deny denies a pending approval request (cancels workflow)
 	Deny(context.Context, *connect.Request[v1.DenyRequest]) (*connect.Response[v1.DenyResponse], error)

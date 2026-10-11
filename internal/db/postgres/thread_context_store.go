@@ -281,6 +281,7 @@ func threadFromPG(st pgdb.Thread) *core.Thread {
 		OriginNodeID:    nullStringToPtr(st.OriginNodeID),
 		Status:          st.Status,
 		CompletedAt:     threadNullTimeToPtr(st.CompletedAt),
+		WorktreeID:      nullStringToPtr(st.WorktreeID),
 	}
 }
 
@@ -332,6 +333,7 @@ func threadToCreateParams(t *core.Thread) pgdb.CreateThreadParams {
 		Origin:          origin,
 		OriginNodeID:    ptrToNullString(t.OriginNodeID),
 		Status:          status,
+		WorktreeID:      ptrToNullString(t.WorktreeID),
 	}
 }
 

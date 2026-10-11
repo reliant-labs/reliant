@@ -145,12 +145,10 @@ message InboxApproval {
   ApprovalType approval_type = 2;
   // The approval's title.
   string title = 3;
-  // Set for tool approvals.
-  optional string tool_name = 4;
-  optional string tool_call_id = 5;
-  // A short, single-line summary of the tool's arguments, when the approval's
-  // metadata carries them. Empty otherwise.
-  string argument_summary = 6;
+  // Described the call a tool approval (the removed APPROVAL_TYPE_TOOL) asked
+  // about.
+  reserved 4, 5, 6;
+  reserved "tool_name", "tool_call_id", "argument_summary";
 }
 
 message InboxQuestion {

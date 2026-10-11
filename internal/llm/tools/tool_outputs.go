@@ -49,6 +49,9 @@ type ShellOutput struct {
 	// learns to skip, while a duration that appears when two clocks contradict
 	// each other is a claim.
 	Timing *BashTiming `json:"timing,omitempty"`
+	// Suggestion is one line of advice about what the command did, added
+	// after it ran — never a refusal. See shell_worktree_hint.go.
+	Suggestion string `json:"suggestion,omitempty"`
 }
 
 // BashTiming reports the two independent clocks that measured one command:

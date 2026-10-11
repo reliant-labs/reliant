@@ -65,7 +65,10 @@ func (s *DaemonRegistryService) ListDaemons(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list daemons: %w", err))
 	}
 
-	attached := s.attachedDaemonSet(ctx, userID)
+	attached, err := s.attachedDaemonSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	inventories := s.storedLocalModels(ctx, userID)
 	disks := s.storedDiskReports(ctx, userID)
 
@@ -82,20 +85,25 @@ func (s *DaemonRegistryService) ListDaemons(
 
 // attachedDaemonSet returns the user's fresh daemon_attachment rows keyed by
 // daemon ID. A daemon is attached (routable) iff its entry is non-nil; the
-// row also carries heartbeat-reported memory telemetry. Errors are logged
-// and treated as "no daemons attached" so a transient DB hiccup doesn't
-// break list/get responses.
-func (s *DaemonRegistryService) attachedDaemonSet(ctx context.Context, userID string) map[string]*db.DaemonAttachment {
+// row also carries heartbeat-reported memory telemetry.
+//
+// A failed read is an error (Unavailable), not an empty set. Treating it as
+// "nothing attached" turned a DB hiccup into a confident answer that every one
+// of the user's machines had disconnected — the client cannot tell that from
+// the truth, so it shows "Your machine disconnected" for machines that are
+// serving. An error lets the client keep the last status it knew and say that
+// it cannot reach Reliant, which is what actually happened.
+func (s *DaemonRegistryService) attachedDaemonSet(ctx context.Context, userID string) (map[string]*db.DaemonAttachment, error) {
 	attachments, err := s.database.ListFreshDaemonAttachmentsForUser(ctx, userID, daemonAttachmentStaleThreshold)
 	if err != nil {
 		logging.Warn("[DaemonRegistry] Failed to list attached daemons", "error", err, "userID", userID)
-		return map[string]*db.DaemonAttachment{}
+		return nil, connect.NewError(connect.CodeUnavailable, fmt.Errorf("reading daemon liveness: %w", err))
 	}
 	attached := make(map[string]*db.DaemonAttachment, len(attachments))
 	for _, att := range attachments {
 		attached[att.DaemonID] = att
 	}
-	return attached
+	return attached, nil
 }
 
 func (s *DaemonRegistryService) GetDaemon(
@@ -118,7 +126,10 @@ func (s *DaemonRegistryService) GetDaemon(
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
 	}
 
-	attached := s.attachedDaemonSet(ctx, userID)
+	attached, err := s.attachedDaemonSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 	info := daemonToProto(daemon, attached[daemon.ID])
 	info.LocalModels = localModelsFromJSON(s.storedLocalModels(ctx, userID)[daemon.ID])
 	info.Disk = diskwatch.Decode(s.storedDiskReports(ctx, userID)[daemon.ID])
@@ -212,7 +223,11 @@ func (s *DaemonRegistryService) ownedOnlineDaemon(ctx context.Context, daemonID 
 	if err != nil || daemon == nil || daemon.UserID != userID {
 		return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("daemon not found"))
 	}
-	if s.attachedDaemonSet(ctx, userID)[daemon.ID] == nil {
+	attached, err := s.attachedDaemonSet(ctx, userID)
+	if err != nil {
+		return "", err
+	}
+	if attached[daemon.ID] == nil {
 		return "", connect.NewError(connect.CodeUnavailable, fmt.Errorf("daemon %s is offline", daemonID))
 	}
 	if s.router == nil {
@@ -289,7 +304,10 @@ func (s *DaemonRegistryService) ResolveDaemon(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("listing daemons: %w", err))
 	}
 
-	attached := s.attachedDaemonSet(ctx, userID)
+	attached, err := s.attachedDaemonSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
 
 	var best *db.Daemon
 	for _, d := range daemons {
@@ -341,7 +359,11 @@ func (s *DaemonRegistryService) ResumeDaemon(
 	}
 
 	// If the daemon currently has a fresh attachment row, it's already routable.
-	if s.attachedDaemonSet(ctx, userID)[daemon.ID] != nil {
+	attached, err := s.attachedDaemonSet(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if attached[daemon.ID] != nil {
 		return connect.NewResponse(&reliantv1.ResumeDaemonResponse{Resumed: true}), nil
 	}
 

@@ -66,6 +66,10 @@ type RemoteExecutor struct {
 	// requesting user, which is thread-safe (no shared mutable state).
 	// When nil, executeOnServer falls back to the serverExecutor's default daemon.
 	daemonFactory DaemonClientFactory
+
+	// preemptGrace overrides defaultPreemptReplyGrace. Zero means the default;
+	// tests shorten it.
+	preemptGrace time.Duration
 }
 
 // ToolExecutionRequest is the payload sent to daemon over WebSocket
@@ -211,6 +215,8 @@ func (e *RemoteExecutor) executeOnServer(ctx context.Context, req *ToolRequest, 
 	// MCP tools bind a daemon-backed runtime from this context; carrying the
 	// run's selector keeps them on the daemon built-in tools use.
 	ctx = WithDaemonSelector(ctx, req.DaemonSelector)
+	ctx, releasePreemption := cancelOnPreemption(ctx)
+	defer releasePreemption()
 	result := e.serverExecutor.ExecuteToolWithDaemon(ctx, req.ToolName, req.ToolInput, req.ToolCallID, timeoutMs, contextMap, daemonClient)
 
 	return &ToolResult{
@@ -333,13 +339,18 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		}
 	}()
 
+	// A preempted call is told to stop and then still waited on, for its own
+	// answer; see relayPreemptionToDaemon.
+	waitCtx, releasePreemption := e.relayPreemptionToDaemon(ctx, req)
+	defer releasePreemption()
+
 	// Use selector-aware routing if a daemon selector is provided
 	var resp *ToolExecutionResponse
 	var err error
 	if req.DaemonSelector != nil {
-		resp, err = e.router.SendToolRequestSyncWithSelector(ctx, req.UserID, execReq, req.DaemonSelector)
+		resp, err = e.router.SendToolRequestSyncWithSelector(waitCtx, req.UserID, execReq, req.DaemonSelector)
 	} else {
-		resp, err = e.router.SendToolRequestSync(ctx, req.UserID, execReq)
+		resp, err = e.router.SendToolRequestSync(waitCtx, req.UserID, execReq)
 	}
 	if err != nil {
 		// This call was given up on, rather than answered. Only here is the

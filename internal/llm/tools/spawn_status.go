@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -60,6 +61,10 @@ type SpawnStatusResponseMetadata struct {
 	// running. Distinct from an error: the agent is fine and the call can be
 	// repeated.
 	TimedOut bool `json:"timed_out,omitempty"`
+	// StoppedEarly reports that a wait was cut short before its budget —
+	// preempted by a message for the caller, or interrupted — with the agent
+	// still running. Like TimedOut, not an error.
+	StoppedEarly bool `json:"stopped_early,omitempty"`
 }
 
 type spawnStatusTool struct {
@@ -118,6 +123,12 @@ TIMEOUTS ARE NOT FAILURES:
 If the agent is still running when the budget elapses, this returns normally
 with timed_out: true and the agent untouched. Call spawn_status again with
 wait: true to keep waiting.
+
+RETURNS EARLY WHEN A MESSAGE ARRIVES:
+If a message arrives for you while you wait — from the user, your parent, or
+ANY of your sub-agents finishing or reporting — the wait ends early so you can
+read it; the message follows the result. The agent you were waiting on is NOT
+stopped. Call spawn_status with wait: true again to keep waiting.
 
 Use spawn_send to message an agent that is still running.`
 )
@@ -432,7 +443,7 @@ func (s *spawnStatusTool) waitForTerminal(rctx *rctx.ToolContext, params SpawnSt
 		// loop would keep polling the DB for a call nobody is waiting on.
 		select {
 		case <-rctx.Done():
-			return s.stillRunningResponse(thread, time.Since(start))
+			return s.stoppedEarly(rctx, thread, params, time.Since(start))
 		case <-time.After(spawnStatusPollInterval):
 		}
 
@@ -471,6 +482,43 @@ func (s *spawnStatusTool) stillRunningResponse(thread *db.Thread, waited time.Du
 		HasExited: false,
 		WaitedMs:  waited.Milliseconds(),
 		TimedOut:  true,
+	}
+	return WithResponseMetadata(NewTextResponse(output), metadata), nil
+}
+
+// stoppedEarly answers a wait that was cut short — preempted by a message for
+// the caller (ToolDefinition.Preemptable), or interrupted. It takes one last
+// look first, and the look matters more here than anywhere: the agent being
+// waited on finishing is ITSELF a message to the caller (its completion
+// report), so the most common reason this wait is preempted is that it was
+// about to succeed. Reporting "still running" then would be wrong, and would
+// cost the caller a turn to find out otherwise.
+//
+// The look runs on a detached, bounded context, because the call's own context
+// is the one that just died.
+func (s *spawnStatusTool) stoppedEarly(rctx *rctx.ToolContext, thread *db.Thread, params SpawnStatusParams, waited time.Duration) (ToolResponse, error) {
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(rctx.Context), stoppedEarlyCheckTimeout)
+	defer cancel()
+	settle := rctx.WithContext(checkCtx)
+
+	if latest, err := s.repo.GetThread(settle.Context, params.AgentID); err == nil && latest != nil {
+		thread = latest
+		if core.ThreadStatusIsTerminal(thread.Status) {
+			return s.terminalResponse(settle, thread, params, waited)
+		}
+	}
+
+	output := fmt.Sprintf(
+		"Stopped waiting on agent %s after %s. It is STILL RUNNING and has not been stopped.\n\n"+
+			"Call spawn_status(agent_id=%q, wait=true) again to keep waiting, or omit wait to peek at its progress so far.",
+		thread.ID, formatWaitDuration(waited), thread.ID)
+
+	metadata := SpawnStatusResponseMetadata{
+		AgentID:      thread.ID,
+		Status:       core.ThreadStatusLabel(thread.Status),
+		HasExited:    false,
+		WaitedMs:     waited.Milliseconds(),
+		StoppedEarly: true,
 	}
 	return WithResponseMetadata(NewTextResponse(output), metadata), nil
 }

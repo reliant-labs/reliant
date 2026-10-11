@@ -44,6 +44,7 @@ type AgentMessage struct {
 	DeliveredMessageID sql.NullString        `json:"delivered_message_id"`
 	Attachments        pqtype.NullRawMessage `json:"attachments"`
 	Synthesized        bool                  `json:"synthesized"`
+	PreemptedAt        sql.NullTime          `json:"preempted_at"`
 }
 
 type AntigravityAuthToken struct {
@@ -697,6 +698,7 @@ type Thread struct {
 	Status          int32          `json:"status"`
 	CompletedAt     sql.NullTime   `json:"completed_at"`
 	ForkAtMessageID sql.NullString `json:"fork_at_message_id"`
+	WorktreeID      sql.NullString `json:"worktree_id"`
 }
 
 type ToolCall struct {

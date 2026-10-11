@@ -31,10 +31,10 @@ import (
 
 // DerivationRepository is the narrow persistence surface the Derivation
 // consumer needs. Satisfied by *db.Repo.
+//
+// No attachment writes beyond the reaper: a lease is written only by the
+// gateway that holds its stream (see Derivation.dispatch).
 type DerivationRepository interface {
-	UpsertDaemonAttachment(ctx context.Context, att *db.DaemonAttachment) error
-	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
-	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
 	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
 	ApplyDaemonLifecycle(ctx context.Context, lc db.DaemonLifecycleUpdate) (bool, error)
 	UpsertDaemonIdentity(ctx context.Context, id db.DaemonIdentity) (bool, error)
@@ -54,7 +54,7 @@ const (
 	// is margin enough for a NATS hiccup or a paused DB.
 	//
 	// Deletion is the ONLY way these rows ever leave: the disconnect path
-	// (teardownConnection → DeleteDaemonAttachment) requires the owning
+	// (teardownConnection → ReleaseDaemonAttachment) requires the owning
 	// process to still be alive to run it, so a crashed, rescheduled, or
 	// redeployed gateway strands its rows permanently. Dev's registry on
 	// 2026-08-24 held two such orphans — one 29 days old, one for a
@@ -92,13 +92,19 @@ const (
 )
 
 // Derivation is the reliant-side consumer of the daemon.v1.state.> subject.
-// It mirrors lifecycle events into the daemon_attachment table so the
-// existing readers (IsDaemonAttached, ListAttachedDaemonIDsForUser) see the
-// gateway's view without each writer touching the table directly.
+// It mirrors the control plane's lifecycle, removal and registry-snapshot
+// events onto the daemons table — state this service does not own — and runs
+// the attachment lease reaper.
 //
-// Plain NATS, not JetStream: liveness is "newest wins". A lost event is
-// re-supplied by the next activity tick from the gateway publisher; durable
-// replay of stale state on restart is worse than starting cold.
+// It does NOT write liveness. The connected / activity / disconnected events
+// on the same subject come from the gateway that holds the stream, and that
+// gateway already wrote the lease itself, in stream order. Applying them here
+// as well made every replica a second, unordered writer of the same row; see
+// dispatch.
+//
+// Plain NATS, not JetStream: durable replay of stale state on restart is worse
+// than starting cold, and the control plane's periodic registry snapshot
+// re-supplies anything lost.
 type Derivation struct {
 	nc     *nats.Conn
 	repo   DerivationRepository
@@ -156,13 +162,12 @@ func (d *Derivation) Start(ctx context.Context) error {
 	}
 	defer func() { _ = snapSub.Unsubscribe() }()
 
-	// The reaper rides along with the consumer because this type is the
-	// single writer to daemon_attachment: expiring a lease is a write, and
-	// keeping every write in one place is what makes the table's contents
-	// explainable. It is NOT the gateway's stale-connection sweeper — that
-	// one reaps entries in ONE process's connection map and deletes their
-	// rows as a side effect, which by construction can never touch a row
-	// whose process is gone.
+	// The reaper rides along with the consumer because it is the one
+	// lease write no live stream can make: expiring the rows of a gateway
+	// that died without releasing them. It is NOT the gateway's
+	// stale-connection sweeper — that one reaps entries in ONE process's
+	// connection map and releases their own leases as a side effect, which
+	// by construction can never touch a row whose process is gone.
 	go d.reapLoop(ctx)
 
 	logging.Info(logPrefix+" derivation consumer started", "subject", daemonwire.SubjectWildcard)
@@ -229,12 +234,21 @@ func (d *Derivation) handle(ctx context.Context, msg *nats.Msg) {
 // dispatch routes one event to the appropriate handler. Idempotent.
 func (d *Derivation) dispatch(ctx context.Context, evt daemonwire.Event) error {
 	switch evt.Type {
-	case daemonwire.EventConnected:
-		return d.onConnected(ctx, evt)
-	case daemonwire.EventActivity:
-		return d.onActivity(ctx, evt)
-	case daemonwire.EventDisconnected:
-		return d.onDisconnected(ctx, evt)
+	case daemonwire.EventConnected, daemonwire.EventActivity, daemonwire.EventDisconnected:
+		// Liveness. The publishing gateway wrote the lease directly and in
+		// stream order (ToolsDaemonService: upsert on connect, renew on every
+		// keepalive, release on teardown, each scoped to its own session);
+		// the events still flow for the control plane's consumers.
+		//
+		// Mirroring them here made every replica a second writer of that
+		// row, applying each event on its own goroutine with nothing
+		// ordering one against another, and the delete keyed by daemon id
+		// alone. A "disconnected" from the session a gateway drain ended,
+		// applied after the reconnect's lease was written, deleted the NEW
+		// session's lease, and a serving daemon read DISCONNECTED until a
+		// heartbeat re-created it — before renewal could re-create a row
+		// (prod 2026-10-11), until it next reconnected.
+		return nil
 	case daemonwire.EventLifecycle:
 		return d.onLifecycle(ctx, evt)
 	case daemonwire.EventRemoved:
@@ -416,36 +430,4 @@ func snapshotApply(snap daemonwire.RegistrySnapshot, now time.Time) db.RegistryS
 		apply.Daemons = append(apply.Daemons, entry)
 	}
 	return apply
-}
-
-func (d *Derivation) onConnected(ctx context.Context, evt daemonwire.Event) error {
-	att := &db.DaemonAttachment{
-		DaemonID:           evt.DaemonID,
-		UserID:             evt.UserID,
-		Source:             db.DaemonAttachmentSourceInbound,
-		AttachedAt:         evt.At,
-		LastStreamActivity: evt.At,
-	}
-	if err := d.repo.UpsertDaemonAttachment(ctx, att); err != nil {
-		return fmt.Errorf("upsert attachment %s: %w", evt.DaemonID, err)
-	}
-	return nil
-}
-
-func (d *Derivation) onActivity(ctx context.Context, evt daemonwire.Event) error {
-	// No-op when the row doesn't exist (activity racing ahead of connected)
-	// or when the stored timestamp is already newer (out-of-order NATS
-	// delivery). The next connected event creates the row; the next in-order
-	// activity catches us up.
-	if err := d.repo.TouchDaemonAttachmentIfNewer(ctx, evt.DaemonID, evt.At); err != nil {
-		return fmt.Errorf("touch attachment %s: %w", evt.DaemonID, err)
-	}
-	return nil
-}
-
-func (d *Derivation) onDisconnected(ctx context.Context, evt daemonwire.Event) error {
-	if err := d.repo.DeleteDaemonAttachment(ctx, evt.DaemonID); err != nil {
-		return fmt.Errorf("delete attachment %s: %w", evt.DaemonID, err)
-	}
-	return nil
 }

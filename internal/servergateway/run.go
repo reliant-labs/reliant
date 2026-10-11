@@ -54,6 +54,9 @@ type Options struct {
 	DatabaseDriver string
 	// DatabaseURL is the Postgres connection string (required).
 	DatabaseURL string
+	// DatabaseDirectURL is the session-capable URL for session-scoped work
+	// (db.DatabaseConfig.DirectURL); empty when DatabaseURL already is one.
+	DatabaseDirectURL string
 	// DataDir is the directory for local data (logs, certs).
 	DataDir string
 
@@ -143,10 +146,11 @@ func Run(ctx context.Context, opts Options) error {
 	// api-server owns the schema; block here until it has applied migrations
 	// rather than racing it (see db.MigrationPolicy).
 	repo, err := db.NewRepoFromConfig(db.DatabaseConfig{
-		Driver:  dbDriver,
-		DataDir: opts.DataDir,
-		URL:     opts.DatabaseURL,
-		Migrate: db.MigrateWait,
+		Driver:    dbDriver,
+		DataDir:   opts.DataDir,
+		URL:       opts.DatabaseURL,
+		DirectURL: opts.DatabaseDirectURL,
+		Migrate:   db.MigrateWait,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize database: %w", err)
@@ -230,10 +234,10 @@ func Run(ctx context.Context, opts Options) error {
 	toolsDaemonService.SetUserUpdateHub(userUpdateHub)
 
 	// Reliant-side derivation consumer: subscribes to the same subject and
-	// mirrors lifecycle events into daemon_attachment. Replaces the legacy
-	// debounced TouchDaemonAttachment / heartbeat-special-cased touch in
-	// ToolsDaemonService — the publisher above is now the single writer
-	// upstream, and this consumer is the single writer downstream.
+	// mirrors the control plane's lifecycle, removal and registry-snapshot
+	// events onto the daemons table, and reaps expired attachment leases.
+	// Liveness (daemon_attachment) is NOT its to write: ToolsDaemonService
+	// writes each stream's lease itself, in stream order.
 	derivation := daemonstate.NewDerivation(nc, repo)
 	// A control-plane lifecycle transition (provisioning → running, suspend,
 	// an OOM kill) changes what ListDaemons reports, so tell the owner's web

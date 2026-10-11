@@ -1,0 +1,166 @@
+// Copyright (c) 2025 Reliant Labs
+package db_test
+
+import (
+	"context"
+	"database/sql"
+	"database/sql/driver"
+	"io"
+	"strings"
+	"sync"
+	"testing"
+
+	"github.com/reliant-labs/reliant/internal/db"
+)
+
+// recordingDriver is a database/sql driver whose connections record every
+// statement they run, keyed by the DSN they were opened with. It answers any
+// query with a single `true`, which is all TryAdvisoryLock reads.
+type recordingDriver struct {
+	mu   sync.Mutex
+	seen map[string][]string
+}
+
+func (d *recordingDriver) Open(dsn string) (driver.Conn, error) {
+	return &recordingConn{driver: d, dsn: dsn}, nil
+}
+
+func (d *recordingDriver) record(dsn, query string) {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	d.seen[dsn] = append(d.seen[dsn], query)
+}
+
+func (d *recordingDriver) statements(dsn string) []string {
+	d.mu.Lock()
+	defer d.mu.Unlock()
+	return append([]string(nil), d.seen[dsn]...)
+}
+
+type recordingConn struct {
+	driver *recordingDriver
+	dsn    string
+}
+
+func (c *recordingConn) Prepare(string) (driver.Stmt, error) { return nil, driver.ErrSkip }
+func (c *recordingConn) Close() error                        { return nil }
+func (c *recordingConn) Begin() (driver.Tx, error)           { return nil, driver.ErrSkip }
+
+func (c *recordingConn) QueryContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Rows, error) {
+	c.driver.record(c.dsn, query)
+	return &oneTrueRow{}, nil
+}
+
+func (c *recordingConn) ExecContext(_ context.Context, query string, _ []driver.NamedValue) (driver.Result, error) {
+	c.driver.record(c.dsn, query)
+	return driver.RowsAffected(0), nil
+}
+
+type oneTrueRow struct{ done bool }
+
+func (r *oneTrueRow) Columns() []string { return []string{"locked"} }
+func (r *oneTrueRow) Close() error      { return nil }
+func (r *oneTrueRow) Next(dest []driver.Value) error {
+	if r.done {
+		return io.EOF
+	}
+	r.done = true
+	dest[0] = true
+	return nil
+}
+
+var (
+	recorder     = &recordingDriver{seen: map[string][]string{}}
+	registerOnce sync.Once
+)
+
+func openRecording(t *testing.T, dsn string) *sql.DB {
+	t.Helper()
+	registerOnce.Do(func() { sql.Register("reliant-session-recorder", recorder) })
+	pool, err := sql.Open("reliant-session-recorder", dsn)
+	if err != nil {
+		t.Fatalf("open %s: %v", dsn, err)
+	}
+	return pool
+}
+
+func countContaining(statements []string, needle string) int {
+	n := 0
+	for _, s := range statements {
+		if strings.Contains(s, needle) {
+			n++
+		}
+	}
+	return n
+}
+
+// TryAdvisoryLock takes a SESSION-level lock, so behind a transaction-pooling
+// PgBouncer it must not run on the main pool: the lock would land on whichever
+// server backend served that one statement, the unlock on another, and a
+// second replica handed the first backend would re-enter the lock and think it
+// won. With a session pool configured (DatabaseConfig.DirectURL), the lock AND
+// its release must both go there, and nothing about it may touch the main pool.
+func TestTryAdvisoryLockTakesItsSessionFromTheSessionPool(t *testing.T) {
+	pooled := openRecording(t, t.Name()+"/pooled")
+	session := openRecording(t, t.Name()+"/session")
+
+	repo := db.NewRepo(pooled).WithSessionPool(session)
+	t.Cleanup(func() { _ = repo.Close() })
+
+	release, ok, err := repo.TryAdvisoryLock(context.Background(), 42)
+	if err != nil {
+		t.Fatalf("TryAdvisoryLock: %v", err)
+	}
+	if !ok {
+		t.Fatal("TryAdvisoryLock reported the lock as not taken; the fake answers true")
+	}
+	release()
+
+	sessionStatements := recorder.statements(t.Name() + "/session")
+	pooledStatements := recorder.statements(t.Name() + "/pooled")
+	if got := countContaining(sessionStatements, "pg_try_advisory_lock"); got != 1 {
+		t.Errorf("pg_try_advisory_lock on the session pool: got %d, want 1 (session pool saw %q, main pool saw %q)",
+			got, sessionStatements, pooledStatements)
+	}
+	if got := countContaining(sessionStatements, "pg_advisory_unlock"); got != 1 {
+		t.Errorf("pg_advisory_unlock on the session pool: got %d, want 1 — the release must reach the session that holds the lock (session pool saw %q)",
+			got, sessionStatements)
+	}
+	if len(pooledStatements) != 0 {
+		t.Errorf("the main (possibly transaction-pooled) pool ran %q; the advisory lock must never touch it", pooledStatements)
+	}
+}
+
+// Without a session pool the main pool is the session pool: every deployment
+// that does not run a transaction pooler keeps behaving exactly as before.
+func TestTryAdvisoryLockUsesTheMainPoolWhenNoSessionPoolIsConfigured(t *testing.T) {
+	pooled := openRecording(t, t.Name()+"/pooled")
+
+	repo := db.NewRepo(pooled)
+	t.Cleanup(func() { _ = repo.Close() })
+
+	release, ok, err := repo.TryAdvisoryLock(context.Background(), 42)
+	if err != nil || !ok {
+		t.Fatalf("TryAdvisoryLock: ok=%v err=%v", ok, err)
+	}
+	release()
+
+	statements := recorder.statements(t.Name() + "/pooled")
+	if countContaining(statements, "pg_try_advisory_lock") != 1 || countContaining(statements, "pg_advisory_unlock") != 1 {
+		t.Errorf("main pool statements = %q, want one lock and one unlock", statements)
+	}
+}
+
+func TestResolveDatabaseConfigReadsTheDirectURL(t *testing.T) {
+	t.Setenv("DATABASE_DRIVER", "postgres")
+	t.Setenv("DATABASE_URL", "postgres://reliant@pgbouncer:6432/reliant_cp")
+	t.Setenv("DATABASE_DIRECT_URL", " postgres://reliant@pgbouncer:6432/reliant_cp_session ")
+
+	cfg, err := db.ResolveDatabaseConfig("")
+	if err != nil {
+		t.Fatalf("ResolveDatabaseConfig: %v", err)
+	}
+	if cfg.DirectURL != "postgres://reliant@pgbouncer:6432/reliant_cp_session" {
+		t.Errorf("DirectURL = %q, want the trimmed DATABASE_DIRECT_URL", cfg.DirectURL)
+	}
+}

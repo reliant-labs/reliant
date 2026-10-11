@@ -44,8 +44,8 @@ import { useDaemonList, useResumeDaemon } from "@/hooks/useOnboardingQueries";
 import StatusDot from "../forge-ui/status_dot";
 import { DaemonWaitState } from "../DaemonWaitState";
 import { machineDisplayName } from "@/lib/machineName";
+import { CANT_REACH_RELIANT, classifyDaemonWait, WAITING_FOR_MACHINE } from "@/lib/daemon-wait";
 import { defaultMachineDaemon } from "@/lib/chatMachine";
-import { classifyDaemonWait, WAITING_FOR_MACHINE } from "@/lib/daemon-wait";
 
 interface ComposerWakeStatusProps {
   /** A send for this chat is awaiting the server. */
@@ -111,10 +111,33 @@ export function ComposerWakeStatus({
 }
 
 const WAITING_LABEL = `${WAITING_FOR_MACHINE}…`;
+const CANT_REACH_LABEL = `${CANT_REACH_RELIANT} — reconnecting…`;
+
+/**
+ * The registry's latest read failed, so what the list holds is only what it
+ * said last. A tab waking from sleep has every request time out on a dead
+ * connection (prod 2026-10-11); that is the connection to Reliant, and the
+ * line must not turn it into news about the machine ("is offline").
+ */
+function registryUnreachable(query: { isError: boolean; failureCount: number }): boolean {
+  return query.isError || query.failureCount > 0;
+}
+
+function CantReachLine({ continueWithoutMachine }: { continueWithoutMachine?: ReactNode }) {
+  return (
+    <StatusLine label={CANT_REACH_LABEL} pulse continueWithoutMachine={continueWithoutMachine}>
+      {CANT_REACH_LABEL}
+    </StatusLine>
+  );
+}
 
 function UnpinnedWaitLine({ continueWithoutMachine }: { continueWithoutMachine?: ReactNode }) {
-  const { data: daemons } = useDaemonList();
+  const list = useDaemonList();
+  const { data: daemons } = list;
   const daemon = daemons ? defaultMachineDaemon(daemons) : undefined;
+  if (registryUnreachable(list) && (!daemon || daemon.status === DaemonStatus.FAILED)) {
+    return <CantReachLine continueWithoutMachine={continueWithoutMachine} />;
+  }
   if (daemon?.status === DaemonStatus.FAILED) {
     return <FailedMachineLine daemon={daemon} continueWithoutMachine={continueWithoutMachine} />;
   }
@@ -139,13 +162,20 @@ function WakeLine({
   waitingOnMachine: boolean;
   continueWithoutMachine?: ReactNode;
 }) {
-  const { data: daemons } = useDaemonList();
+  const list = useDaemonList();
+  const { data: daemons } = list;
+  const unreachable = registryUnreachable(list);
   // Undefined until the registry has answered: absence is only evidence the
   // machine is gone once there is a list to be absent from.
-  if (!daemons) return null;
+  if (!daemons) return unreachable ? <CantReachLine continueWithoutMachine={continueWithoutMachine} /> : null;
   const daemon = daemons.find((d) => d.daemonId === daemonId);
   const name = daemon ? machineDisplayName(daemon) : "your machine";
 
+  // Failed, offline or gone are verdicts about the machine; read from a list
+  // we just failed to refresh they would be guesses, so say what we know.
+  if (unreachable && (!daemon || daemon.status === DaemonStatus.FAILED || isOffline(daemon.status))) {
+    return <CantReachLine continueWithoutMachine={continueWithoutMachine} />;
+  }
   if (daemon?.status === DaemonStatus.FAILED) {
     return <FailedMachineLine daemon={daemon} continueWithoutMachine={continueWithoutMachine} />;
   }

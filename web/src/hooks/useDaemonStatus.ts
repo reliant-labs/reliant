@@ -43,6 +43,42 @@ export function invalidateDaemonList(
 }
 
 /**
+ * How often, at most, a heartbeat that contradicts the cached list re-reads it
+ * (per daemon). See reconcileDaemonHeartbeat.
+ */
+export const HEARTBEAT_CONTRADICTION_REFETCH_MS = 30_000;
+const lastContradictionRead = new Map<string, number>();
+
+/**
+ * A heartbeat from a daemon the cached list does not show as connected means
+ * the list is stale: only the gateway holding the daemon's stream publishes
+ * one, and it renews the registry lease first. So re-read it — the UI then
+ * recovers by itself, without a reload, once the registry knows the truth.
+ *
+ * The cache can disagree because an announcement was lost while the user
+ * stream was down, or because the registry lost the lease while the stream
+ * lived (prod 2026-10-11: a serving machine read DISCONNECTED for hours).
+ * Throttled per daemon, so a registry that keeps disagreeing costs one read
+ * per window rather than one per 15s heartbeat. A list nobody has loaded is
+ * left alone: its first reader's fetch answers.
+ */
+export function reconcileDaemonHeartbeat(queryClient: QueryClient, daemonId: string, now = Date.now()): void {
+  const list = queryClient.getQueryData<DaemonInfo[]>(DAEMON_LIST_QUERY_KEY);
+  if (!list) return;
+  const daemon = list.find((d) => d.daemonId === daemonId);
+  if (daemon && (daemon.status === DaemonStatus.ACTIVE || daemon.status === DaemonStatus.IDLE)) return;
+  const last = lastContradictionRead.get(daemonId);
+  if (last !== undefined && now - last < HEARTBEAT_CONTRADICTION_REFETCH_MS) return;
+  lastContradictionRead.set(daemonId, now);
+  invalidateDaemonList(queryClient);
+}
+
+/** Forget the per-daemon throttle. Exported for tests. */
+export function resetDaemonHeartbeatReconcile(): void {
+  lastContradictionRead.clear();
+}
+
+/**
  * Tracks the user's daemon list (the registry's ListDaemons).
  *
  * Eight-plus components mount this hook simultaneously (ModernApp,
@@ -108,7 +144,7 @@ export function useDaemonStatus() {
     });
   }, [queryClient]);
 
-  const { data, isLoading } = useQuery<DaemonInfo[]>({
+  const { data, dataUpdatedAt, isError, failureCount } = useQuery<DaemonInfo[]>({
     queryKey: DAEMON_LIST_QUERY_KEY,
     queryFn: fetchDaemonList,
     refetchInterval: DAEMON_LIST_FALLBACK_POLL_MS,
@@ -135,5 +171,23 @@ export function useDaemonStatus() {
 
   const daemons = data ?? [];
   const activeDaemon = daemons.find((d) => d.status === DaemonStatus.ACTIVE);
-  return { daemons, activeDaemon, loading: isLoading, refresh };
+  // dataUpdatedAt is set only by a real answer; the placeholder never sets it.
+  const answered = dataUpdatedAt > 0;
+  return {
+    daemons,
+    activeDaemon,
+    // The first read is in flight. NOT `isLoading`: the placeholder puts the
+    // query in `success` before anything has been read, so isLoading was
+    // false the whole time, and callers took the empty placeholder for "this
+    // user has no machine" — a new chat defaulted to the one-way No machine
+    // until the list arrived.
+    loading: !answered && !isError,
+    // Whether the registry has answered at all. A first read that FAILED is
+    // neither loading nor an answer: nothing is known about the machines.
+    answered,
+    // The latest read failed (or is failing and being retried): `daemons` is
+    // the last answer, not the machines' current state.
+    unreachable: isError || failureCount > 0,
+    refresh,
+  };
 }

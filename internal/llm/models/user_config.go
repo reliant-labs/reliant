@@ -89,6 +89,9 @@ func (r *ModelRegistry) addCustomModels(custom []ModelDefinition) error {
 		if _, exists := r.byID[model.ID]; exists {
 			return fmt.Errorf("custom model ID conflicts with existing model: %s", model.ID)
 		}
+		// A user who defines a retired id means their model, not the
+		// catalog's replacement for it.
+		delete(r.retired, model.ID)
 		r.addModel(model)
 	}
 

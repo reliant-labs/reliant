@@ -228,7 +228,6 @@ type Harness struct {
 
 	ChatSvc     *services.ChatService
 	QuestionSvc *services.QuestionService
-	ApprovalSvc *services.ApprovalService
 	Pause       *workflow.PauseService
 
 	Ctx context.Context
@@ -348,7 +347,6 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 	// settles as skipped_no_daemon_router without touching a filesystem.
 	chatSvc := services.NewChatService(s.Repo, s.Temporal, pause, workersetup.TaskQueueName(taskQueueSuffix), hub, nil)
 	questionSvc := services.NewQuestionService(s.Repo, pause)
-	approvalSvc := services.NewApprovalService(s.Repo, pause)
 
 	return &Harness{
 		T:           t,
@@ -359,7 +357,6 @@ func newHarnessWith(t *testing.T, llmScript *ScriptedLLM, executor toolexec.Tool
 		LLM:         llmScript,
 		ChatSvc:     chatSvc,
 		QuestionSvc: questionSvc,
-		ApprovalSvc: approvalSvc,
 		Pause:       pause,
 		Ctx:         ctx,
 	}
@@ -522,29 +519,6 @@ func (h *Harness) WaitWorkflowStatus(workflowID string, want db.WorkflowStatus) 
 		}
 		return wf.Status == want, fmt.Sprintf("status=%s", wf.Status)
 	})
-}
-
-// WaitPendingApproval polls until the chat has a pending approval.
-func (h *Harness) WaitPendingApproval(chatID string) *db.Approval {
-	h.T.Helper()
-	var approval *db.Approval
-	h.eventually("pending approval on chat "+chatID, func() (bool, string) {
-		pending, err := h.Stack.Repo.ListPendingApprovalsByChat(h.Ctx, chatID)
-		if err != nil || len(pending) == 0 {
-			return false, fmt.Sprintf("pending approvals: %d, %v", len(pending), err)
-		}
-		approval = pending[0]
-		return true, ""
-	})
-	return approval
-}
-
-// DenyApproval answers a pending approval Deny through the production
-// ApprovalService handler.
-func (h *Harness) DenyApproval(approvalID string) {
-	h.T.Helper()
-	_, err := h.ApprovalSvc.Deny(h.Ctx, connect.NewRequest(&reliantv1.DenyRequest{RequestId: approvalID}))
-	require.NoError(h.T, err, "Deny")
 }
 
 // RequireToolCallStatus fails unless a scripted tool call's durable row ended

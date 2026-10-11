@@ -568,26 +568,7 @@ func (c *Capabilities) Proto() *reliantv1.ToolCapabilities {
 		BoundParams:          boundParamsProto(c.BoundParams),
 		Unattended:           c.Unattended,
 		UnattendedOptIn:      c.UnattendedOptIn,
-		ApprovalRequired:     c.ApprovalRequired(),
 	}
-}
-
-// ApprovalRequired are the offered tools whose calls the workflow asks the
-// person attending about before running (the runtime's action approval gate):
-// every mutating integration action — unless nobody is attending. An
-// unattended run is handed one only when its step names it, and that name is
-// the author's approval; besides, nobody is there to answer.
-func (c *Capabilities) ApprovalRequired() []string {
-	if c == nil || c.Unattended {
-		return nil
-	}
-	var names []string
-	for _, name := range c.Offered {
-		if MutatingIntegrationAction(name) {
-			names = append(names, name)
-		}
-	}
-	return names
 }
 
 // boundParamsProto is the wire form of a set's bound parameters. A literal is

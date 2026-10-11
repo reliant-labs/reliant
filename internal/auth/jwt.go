@@ -16,6 +16,8 @@ import (
 	"io"
 	"math/big"
 	"net/http"
+	"os"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -78,7 +80,20 @@ type JWTValidator struct {
 	// the old and new key; picking Keys[0] unconditionally rejects every
 	// token signed with the other one.
 	keysByKid map[string]*ecdsa.PublicKey
+	// requireEmailVerifiedClaim: a token with no email_verified claim
+	// carries no email. Read from RequireEmailVerifiedClaimEnv at
+	// construction; see verifiedEmailClaim.
+	requireEmailVerifiedClaim bool
 }
+
+// RequireEmailVerifiedClaimEnv names the switch for the second half of the
+// email_verified rollout. control-plane's validator reads the same variable
+// (its typed config auth.require_email_verified_claim), and its KCL hands both
+// processes one value. "true" (any strconv.ParseBool truth) makes a token
+// WITHOUT the claim carry no email; unset or false keeps that token's email.
+// Turn it on only once the Supabase custom access-token hook is live on the
+// project (control-plane docs/runbook.md, "Supabase email_verified hook").
+const RequireEmailVerifiedClaimEnv = "AUTH_REQUIRE_EMAIL_VERIFIED_CLAIM"
 
 // NewJWTValidator creates a new JWT validator with ECDSA public key from PEM format
 func NewJWTValidator(publicKeyPEM string) (*JWTValidator, error) {
@@ -102,7 +117,8 @@ func NewJWTValidator(publicKeyPEM string) (*JWTValidator, error) {
 	}
 
 	return &JWTValidator{
-		publicKey: ecdsaPub,
+		publicKey:                 ecdsaPub,
+		requireEmailVerifiedClaim: requireEmailVerifiedClaimFromEnv(),
 	}, nil
 }
 
@@ -191,9 +207,55 @@ func NewJWTValidatorFromJWKS(jwksJSON string) (*JWTValidator, error) {
 	}
 
 	return &JWTValidator{
-		publicKey: firstKey,
-		keysByKid: keysByKid,
+		publicKey:                 firstKey,
+		keysByKid:                 keysByKid,
+		requireEmailVerifiedClaim: requireEmailVerifiedClaimFromEnv(),
 	}, nil
+}
+
+// requireEmailVerifiedClaimFromEnv reads RequireEmailVerifiedClaimEnv. An
+// unset or unparseable value is false — the pre-hook behaviour — because a
+// typo that silently stripped every user's email would be the worse failure.
+func requireEmailVerifiedClaimFromEnv() bool {
+	require, err := strconv.ParseBool(strings.TrimSpace(os.Getenv(RequireEmailVerifiedClaimEnv)))
+	return err == nil && require
+}
+
+// emailVerifiedClaim is the top-level claim the Supabase custom access-token
+// hook stamps from auth.users.email_confirmed_at (control-plane
+// deploy/supabase/hooks/custom_access_token_hook.sql).
+const emailVerifiedClaim = "email_verified"
+
+// verifiedEmailClaim returns the token's top-level email when the token
+// vouches for it, and "" otherwise. The same rule as control-plane's
+// internal/auth, so both services agree on who a caller's address is:
+//
+//   - An anonymous token never carries a confirmed address: GoTrue clears
+//     is_anonymous in the same transaction that confirms one.
+//   - When email_verified is PRESENT it decides, and only a JSON boolean true
+//     keeps the address. GoTrue's top-level email is not proof of ownership
+//     on its own: unlinking an identity promotes another identity's
+//     unverified address onto the account and mints it into the next token.
+//   - When it is ABSENT the hook did not mint the token. requireClaim off
+//     keeps the address (the behaviour before the hook, so this ships first);
+//     on, the address is dropped.
+//
+// Only the top level counts: user_metadata.email_verified is user-writable.
+func verifiedEmailClaim(email string, raw map[string]any, requireClaim bool) string {
+	if anonymous, _ := raw["is_anonymous"].(bool); anonymous {
+		return ""
+	}
+	verified, present := raw[emailVerifiedClaim]
+	if !present {
+		if requireClaim {
+			return ""
+		}
+		return email
+	}
+	if ok, _ := verified.(bool); !ok {
+		return ""
+	}
+	return email
 }
 
 // LoadJWKS fetches a JWKS document from the given URL and returns a JWTValidator.
@@ -281,6 +343,14 @@ func (v *JWTValidator) ValidateToken(tokenString string) (*JWTClaims, error) {
 	if claims.Exp > 0 && time.Now().Unix() > claims.Exp {
 		return nil, ErrExpiredToken
 	}
+
+	// The email rule reads claims JWTClaims does not model, and must not
+	// reject a token over their shape — so a second, untyped decode.
+	var raw map[string]any
+	if err := json.Unmarshal(payload, &raw); err != nil {
+		return nil, fmt.Errorf("%w: failed to parse claims", ErrInvalidToken)
+	}
+	claims.Email = verifiedEmailClaim(claims.Email, raw, v.requireEmailVerifiedClaim)
 
 	return &claims, nil
 }

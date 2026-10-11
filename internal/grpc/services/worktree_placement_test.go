@@ -36,6 +36,8 @@ type placementRouter struct {
 	// goroutine while the test body reads.
 	mu      sync.Mutex
 	targets map[string][]string
+	// discoverPath is the one linked worktree worktree.discover_repos reports.
+	discoverPath string
 }
 
 func (r *placementRouter) ResolveDaemonID(context.Context, string) (string, error) {
@@ -66,10 +68,19 @@ func (r *placementRouter) deliver(daemonID, commandType string, payload []byte) 
 		})
 	case "worktree.copy_paths":
 		return json.Marshal(map[string]any{})
-	case "worktree.import_validate":
-		var req map[string]string
+	case "worktree.discover_repos":
+		var req struct {
+			Repos []struct {
+				RepoID string `json:"repo_id"`
+			} `json:"repos"`
+		}
 		_ = json.Unmarshal(payload, &req)
-		return json.Marshal(map[string]any{"valid": true, "abs_path": req["path"], "branch": "imported"})
+		r.mu.Lock()
+		path := r.discoverPath
+		r.mu.Unlock()
+		return json.Marshal(map[string]any{"worktrees": []map[string]any{
+			{"repo_id": req.Repos[0].RepoID, "path": path, "name": filepath.Base(path), "branch": "imported"},
+		}})
 	case "worktree.validate_path":
 		return json.Marshal(map[string]any{"exists": true})
 	case "worktree.git_status":
@@ -259,9 +270,11 @@ func TestCreateWorktree_RejectsAnotherUsersChat(t *testing.T) {
 func TestImportWorktree_PlacesOnChatMachine(t *testing.T) {
 	f := newPlacementFixture(t)
 	chatID := f.chat(t, f.userID, "daemon-b", "")
+	path := filepath.Join(t.TempDir(), "hand-made")
+	f.router.discoverPath = path
 
 	resp, err := f.svc.ImportWorktree(f.ctx, connect.NewRequest(&reliantv1.ImportWorktreeRequest{
-		Path:      t.TempDir(),
+		Path:      path,
 		ProjectId: f.projectID,
 		ChatId:    &chatID,
 	}))
@@ -271,7 +284,9 @@ func TestImportWorktree_PlacesOnChatMachine(t *testing.T) {
 	require.NoError(t, err)
 	require.NotNil(t, stored.DaemonID)
 	assert.Equal(t, "daemon-b", *stored.DaemonID)
-	assert.Equal(t, []string{"daemon-b"}, f.router.daemonsFor("worktree.import_validate"))
+	assert.Equal(t, []string{"daemon-b"}, f.router.daemonsFor("worktree.discover_repos"))
+	assert.Equal(t, path, stored.Path, "a single-repo project registers in place")
+	assert.Equal(t, "imported", stored.Branch)
 }
 
 // TestWorktreeGitOps_RouteToOwningDaemon: once a worktree lives on a machine

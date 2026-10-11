@@ -12,7 +12,7 @@
 //
 //   - The daemon registers ~74 commands, most of them UI plumbing. This catalog
 //     exposes a curated subset. Large tool lists measurably degrade model tool
-//     selection, and commands like worktree.generate_repo_id mean nothing to an
+//     selection, and commands like worktree.reconcile mean nothing to an
 //     outside caller.
 //   - Every call carries a policy that the daemon enforces at dispatch. This
 //     package decides what to OFFER; it is not the security boundary. See

@@ -94,6 +94,7 @@ Designed to run as N replicas behind a load balancer.`,
 	// Database
 	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
 	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
+	cmd.Flags().StringVar(&opts.DatabaseDirectURL, "db-direct-url", serverEnvOrDefault("DATABASE_DIRECT_URL", ""), "Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer")
 	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs and certs")
 
 	// Temporal
@@ -141,6 +142,7 @@ Designed to run as N replicas for horizontal scaling.`,
 	// Database
 	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
 	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
+	cmd.Flags().StringVar(&opts.DatabaseDirectURL, "db-direct-url", serverEnvOrDefault("DATABASE_DIRECT_URL", ""), "Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer")
 	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs")
 
 	// Temporal
@@ -183,6 +185,7 @@ Designed to run as few stateful replicas.`,
 	// Database
 	cmd.Flags().StringVar(&opts.DatabaseDriver, "db-driver", serverEnvOrDefault("DATABASE_DRIVER", "postgres"), "Database driver (postgres)")
 	cmd.Flags().StringVar(&opts.DatabaseURL, "db-url", serverEnvOrDefault("DATABASE_URL", ""), "Database connection URL (required)")
+	cmd.Flags().StringVar(&opts.DatabaseDirectURL, "db-direct-url", serverEnvOrDefault("DATABASE_DIRECT_URL", ""), "Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer")
 	cmd.Flags().StringVar(&opts.DataDir, "data-dir", serverEnvOrDefault("DATA_DIR", "./data"), "Data directory for logs and certs")
 
 	// NATS

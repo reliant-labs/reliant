@@ -2,6 +2,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"math"
@@ -64,6 +65,27 @@ type DatabaseConfig struct {
 	DataDir string
 	URL     string
 
+	// DirectURL is an optional second connection string for the SAME
+	// database, used only for work that needs a Postgres session to itself —
+	// today, the session-level advisory lock behind Repo.TryAdvisoryLock.
+	//
+	// Set it when URL points at a transaction-pooling PgBouncer. Behind one,
+	// consecutive statements on a single client connection can run on
+	// different server backends, so a session lock taken by one statement is
+	// held by a backend the caller no longer owns: the unlock lands elsewhere
+	// and fails, and any other client that is later handed that backend
+	// re-enters the "held" lock and believes it won. DirectURL must reach a
+	// backend that stays the caller's for as long as the connection is open —
+	// Postgres itself, or a session-mode pool.
+	//
+	// Empty means URL already has session semantics, which is true of every
+	// deployment that does not run a transaction pooler.
+	//
+	// Migrations deliberately stay on URL: goose's Up takes no lock and runs
+	// each migration in its own transaction (or statement by statement), so it
+	// needs nothing a transaction pooler takes away.
+	DirectURL string
+
 	// Migrate defaults to MigrateApply; see MigrationPolicy.
 	Migrate MigrationPolicy
 }
@@ -84,9 +106,10 @@ func ResolveDatabaseConfig(dataDir string) (DatabaseConfig, error) {
 	}
 
 	cfg := DatabaseConfig{
-		Driver:  driver,
-		DataDir: dataDir,
-		URL:     strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		Driver:    driver,
+		DataDir:   dataDir,
+		URL:       strings.TrimSpace(os.Getenv("DATABASE_URL")),
+		DirectURL: strings.TrimSpace(os.Getenv("DATABASE_DIRECT_URL")),
 	}
 
 	if cfg.URL == "" {
@@ -163,6 +186,34 @@ func connectPostgres(cfg DatabaseConfig) (*sql.DB, error) {
 
 	logging.Info("Database ready", "driver", DriverPostgres)
 	return db, nil
+}
+
+// sessionPoolMaxOpen bounds the DirectURL pool. Each session-scoped caller
+// holds one connection for as long as its session state must live (the worktree
+// sweep holds its lock for one pass), and there is one such caller per process
+// today; the second slot keeps a slow release from blocking the next attempt.
+const sessionPoolMaxOpen = 2
+
+// openSessionPool opens the pool DatabaseConfig.DirectURL names. It keeps no
+// idle connections: a caller takes one, holds it exactly as long as its session
+// state must live, and closes it, so between uses the pool costs the database
+// nothing. It pings once so a wrong DirectURL fails startup, not the first
+// sweep an hour later.
+func openSessionPool(url string) (*sql.DB, error) {
+	pool, err := sql.Open("pgx", url)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open the direct (session) database pool: %w", err)
+	}
+	pool.SetMaxOpenConns(sessionPoolMaxOpen)
+	pool.SetMaxIdleConns(0)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	defer cancel()
+	if err := pool.PingContext(ctx); err != nil {
+		_ = pool.Close()
+		return nil, fmt.Errorf("failed to connect to the direct (session) database URL: %w", err)
+	}
+	return pool, nil
 }
 
 // envInt reads a non-negative integer from the named env var, falling back to
