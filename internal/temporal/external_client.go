@@ -75,7 +75,7 @@ func NewExternalClient(ctx context.Context, cfg ExternalClientConfig) (client.Cl
 		nopHandler := slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelError + 10})
 		opts.Logger = log.NewStructuredLogger(slog.New(nopHandler))
 	} else {
-		opts.Logger = log.NewStructuredLogger(slog.Default())
+		opts.Logger = NewSDKLogger(slog.Default())
 	}
 
 	return client.Dial(opts)

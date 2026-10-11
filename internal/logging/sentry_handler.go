@@ -50,7 +50,7 @@ func (h *sentryHandler) Handle(ctx context.Context, r slog.Record) error {
 	// reporter: the record belongs to the one in force when it was logged.
 	// Read on the report goroutine, a record logged just before a reporter
 	// swap reached the reporter installed after it.
-	frames := callerFrames()
+	frames := callerFrames(r.PC)
 	go h.reportToSentry(telemetry.GetReporter(), r, frames)
 
 	return err
@@ -59,16 +59,15 @@ func (h *sentryHandler) Handle(ctx context.Context, r slog.Record) error {
 // maxLogStackDepth bounds the stack captured for a forwarded record.
 const maxLogStackDepth = 64
 
-// slogFramePrefix marks slog's own frames. Every handler in the chain — this
-// one, the metrics bridge, forge's error-class policy, whatever wraps them
-// next — runs inside slog's Logger.log, so the frames below the outermost
-// slog frame are handler machinery whichever handlers are installed.
+// slogFramePrefix marks slog's own frames. For a record with no PC, the
+// frames below the outermost slog frame are taken to be handler machinery.
 const slogFramePrefix = "log/slog."
 
 // loggerWrapperPrefixes are the loggers that adapt into slog from the call
-// site's side: this package's Error/Warn/... and the Temporal loggers. r.PC
-// cannot locate the call site — every logging.Error call records
-// logging.Error as its caller — so the call site is the first frame past slog
+// site's side: this package's Error/Warn/... and the Temporal loggers. A
+// record's PC can name one of them — every logging.Error call records
+// logging.Error as its caller, and a workflow logger can record the SDK's
+// replay wrapper — so the call site is the first frame from the PC outward
 // that is not one of these.
 var loggerWrapperPrefixes = []string{
 	reflect.TypeOf(sentryHandler{}).PkgPath() + ".",
@@ -77,8 +76,23 @@ var loggerWrapperPrefixes = []string{
 }
 
 // callerFrames is the stack of the code that logged, innermost first, so
-// frames[0] is the call site.
-func callerFrames() []runtime.Frame {
+// frames[0] is the call site. pc is the record's.
+//
+// The record's PC is the anchor. Every front end records it outside the
+// handler machinery: slog's Logger records the caller of Logger.Error; the
+// Temporal SDK's adapter records the caller of its Error, building the record
+// itself and calling the handler directly, so no slog frame is on the stack
+// at all; this package's Error records logging.Error. So the call site is the
+// frame the PC names, moved outward past any logger wrapper, and every handler
+// between there and here — this one, the metrics bridge, forge's error-class
+// policy, whatever wraps them next — is passed over without being named.
+//
+// The call site used to be found as the first frame past slog's. On a
+// Temporal-logged record there is none, so forge's errorClassHandler.Handle,
+// the outermost handler, was named the culprit of every ERROR the workflow
+// and activity loggers wrote (ELECTRON-CM, CK, CE). That rule survives only
+// for a record that carries no PC.
+func callerFrames(pc uintptr) []runtime.Frame {
 	var pcs [maxLogStackDepth]uintptr
 	n := runtime.Callers(1, pcs[:])
 	iter := runtime.CallersFrames(pcs[:n])
@@ -90,20 +104,59 @@ func callerFrames() []runtime.Frame {
 			break
 		}
 	}
-	// Past the first run of slog frames — or, for a handler driven directly
-	// with no slog in the stack, from the top — then past the wrappers that
-	// adapt into slog.
-	start, inSlog := 0, false
+
+	anchor, ok := frameAt(pc)
+	if !ok {
+		return pastLoggerWrappers(stack[pastSlog(stack):])
+	}
+	for i, frame := range stack {
+		if sameLocation(frame, anchor) {
+			return pastLoggerWrappers(stack[i:])
+		}
+	}
+	// The record was built on another goroutine and handed to this one —
+	// a handler that queues records does that — so this stack says nothing
+	// about who logged. The PC still does.
+	return []runtime.Frame{anchor}
+}
+
+// frameAt is the frame pc names: when the call was inlined, the innermost
+// function, which is the frame runtime.Callers gave that PC.
+func frameAt(pc uintptr) (runtime.Frame, bool) {
+	if pc == 0 {
+		return runtime.Frame{}, false
+	}
+	frame, _ := runtime.CallersFrames([]uintptr{pc}).Next()
+	return frame, frame.Function != ""
+}
+
+// sameLocation compares frames by where they are, not by PC: a front end that
+// records the PC of the call instruction (runtime.Caller's) rather than the
+// return address (runtime.Callers') still names the same line.
+func sameLocation(a, b runtime.Frame) bool {
+	return a.Function == b.Function && a.File == b.File && a.Line == b.Line
+}
+
+// pastSlog is the index of the first frame past the first run of slog
+// frames, or 0 when slog is not on the stack.
+func pastSlog(stack []runtime.Frame) int {
+	inSlog := false
 	for i, frame := range stack {
 		if strings.HasPrefix(frame.Function, slogFramePrefix) {
 			inSlog = true
 			continue
 		}
 		if inSlog {
-			start = i
-			break
+			return i
 		}
 	}
+	return 0
+}
+
+// pastLoggerWrappers drops the leading frames that are loggers adapting into
+// slog rather than the code that logged.
+func pastLoggerWrappers(stack []runtime.Frame) []runtime.Frame {
+	start := 0
 	for start < len(stack) && isLoggerWrapperFrame(stack[start]) {
 		start++
 	}
@@ -111,9 +164,9 @@ func callerFrames() []runtime.Frame {
 }
 
 // isLoggerWrapperFrame reports whether frame is a logger adapting into slog
-// (or, for a handler driven directly, this package's own machinery) rather
-// than the code that logged. A test file is never a wrapper: a test in this
-// package that logs is the call site.
+// (or, for a record with no PC, this package's own machinery) rather than the
+// code that logged. A test file is never a wrapper: a test in this package
+// that logs is the call site.
 func isLoggerWrapperFrame(frame runtime.Frame) bool {
 	if strings.HasSuffix(frame.File, "_test.go") {
 		return false
@@ -162,21 +215,28 @@ var sentryWarnPatterns = []string{
 // logging goroutine), with its fields as tags and context. Runs in a separate
 // goroutine to avoid blocking log callers.
 func (h *sentryHandler) reportToSentry(reporter telemetry.ErrorReporter, r slog.Record, frames []runtime.Frame) {
-	// Build tags and extra context from record attributes.
-	tags := make(map[string]string)
-	extra := make(map[string]interface{})
-	var capturedErr error
-
-	// Collect preformatted attrs (from WithAttrs calls).
+	// Every attribute, resolved once: the logger's (from WithAttrs calls),
+	// then the record's own.
+	attrs := make([]slog.Attr, 0, len(h.preformatted)+r.NumAttrs())
 	for _, a := range h.preformatted {
-		h.collectAttr(a, tags, extra, &capturedErr)
+		attrs = append(attrs, slog.Attr{Key: a.Key, Value: a.Value.Resolve()})
 	}
-
-	// Collect record-level attrs.
+	own := len(attrs)
 	r.Attrs(func(a slog.Attr) bool {
-		h.collectAttr(a, tags, extra, &capturedErr)
+		attrs = append(attrs, slog.Attr{Key: a.Key, Value: a.Value.Resolve()})
 		return true
 	})
+
+	// The error travels as the event's context; everything else is judged
+	// by collectField.
+	capturedErr := recordError(attrs[own:], attrs[:own])
+	tags := make(map[string]string)
+	extra := make(map[string]interface{})
+	for _, a := range attrs {
+		if !isErrorAttr(a) {
+			collectField(a.Key, a.Value, tags, extra)
+		}
+	}
 
 	// The suppression patterns match the error when there is one, and the
 	// message otherwise.
@@ -230,27 +290,49 @@ func matchesAny(err error, patterns []string) bool {
 	return false
 }
 
-// collectAttr processes a single slog.Attr: an "error"/"err" attribute becomes
-// the captured error (whose text and type the event carries as context and a
-// tag), and every other attribute goes through collectField.
-func (h *sentryHandler) collectAttr(a slog.Attr, tags map[string]string, extra map[string]interface{}, capturedErr *error) {
-	key := a.Key
-	val := a.Value.Resolve()
-
-	// Check for error-typed attributes.
-	if key == "error" || key == "err" {
-		if e, ok := val.Any().(error); ok && e != nil {
-			*capturedErr = e
-			return
-		}
-		// Even if it's a string representation of an error, capture it.
-		if val.Kind() == slog.KindString {
-			*capturedErr = errors.New(val.String())
-			return
+// recordError is the error a forwarded record carries, whose text and type
+// the event shows as context and a tag: the record's first error-valued
+// attribute whatever its key, else the logger's. That is the rule forge's
+// error-class policy classifies a record by, so Sentry shows the error that
+// decided the record's level. Failing an error value, an "error"/"err" string
+// is the error's text.
+//
+// Only "error"/"err" used to be read. The Temporal SDK logs its errors under
+// "Error", so its "Activity error." line reached Sentry with no error at all
+// (ELECTRON-CK).
+func recordError(own, logger []slog.Attr) error {
+	for _, attrs := range [][]slog.Attr{own, logger} {
+		for _, a := range attrs {
+			if err := attrError(a); err != nil {
+				return err
+			}
 		}
 	}
+	for _, attrs := range [][]slog.Attr{own, logger} {
+		for _, a := range attrs {
+			if isErrorText(a) {
+				return errors.New(a.Value.String())
+			}
+		}
+	}
+	return nil
+}
 
-	collectField(key, val, tags, extra)
+// isErrorAttr reports whether a is one recordError reads. Error text is
+// content: whichever error the event carries, none becomes a tag.
+func isErrorAttr(a slog.Attr) bool {
+	return attrError(a) != nil || isErrorText(a)
+}
+
+func attrError(a slog.Attr) error {
+	if err, ok := a.Value.Any().(error); ok && err != nil {
+		return err
+	}
+	return nil
+}
+
+func isErrorText(a slog.Attr) bool {
+	return (a.Key == "error" || a.Key == "err") && a.Value.Kind() == slog.KindString
 }
 
 // collectField decides what, if anything, one attribute contributes to the

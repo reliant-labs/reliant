@@ -88,6 +88,9 @@ func installSentryTransport(t *testing.T) *fakeTransport {
 	client, err := sentry.NewClient(sentry.ClientOptions{
 		Dsn:       "https://public@example.ingest.sentry.io/1",
 		Transport: transport,
+		// Without one the SDK derives a release by running `git describe
+		// --dirty` over the checkout: ~1.5s per client, every test.
+		Release: "reliant@test",
 	})
 	require.NoError(t, err)
 	hub.BindClient(client)

@@ -27,6 +27,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/telemetry"
+	rtemporal "github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/workflow/lifecycle"
 	"github.com/reliant-labs/reliant/internal/workflow/model"
 	"github.com/reliant-labs/reliant/internal/workflow/runtime/schema"
@@ -2027,6 +2028,9 @@ func (r *ActivityRegistry) RegisterWithWorker(w worker.Worker) {
 		w.RegisterActivityWithOptions(activityFn, activity.RegisterOptions{
 			Name: name,
 		})
+		// wrapActivity logs every error the activity returns, at the level
+		// it chose; the SDK's own echo of it is a duplicate.
+		rtemporal.DeclareSelfReportingActivity(name)
 	}
 }
 
