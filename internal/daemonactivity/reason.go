@@ -134,12 +134,17 @@ var userActionCommands = map[string]bool{
 
 	"skills.delete_global": true,
 
+	// adopt_move / adopt_restore move a worktree the user chose to import;
+	// prune removes the stale records the user asked to clear.
+	"worktree.adopt_move":           true,
+	"worktree.adopt_restore":        true,
 	"worktree.commit":               true,
 	"worktree.copy_paths":           true,
 	"worktree.create":               true,
 	"worktree.create_pr":            true,
 	"worktree.delete_directory":     true,
 	"worktree.force_cleanup":        true,
+	"worktree.prune":                true,
 	"worktree.pull":                 true,
 	"worktree.push":                 true,
 	"worktree.recreate":             true,
@@ -216,9 +221,12 @@ var backgroundCommands = map[string]bool{
 	"terminal.resize": true,
 
 	// worktree.reconcile, snapshot_remove and delete_branch are sent by the
-	// worktree sweeper on its own schedule.
+	// worktree sweeper on its own schedule. discover_repos backs the
+	// sidebar's background discovery of worktrees made outside Reliant,
+	// which must never wake a machine.
 	"worktree.delete_branch":      true,
 	"worktree.discover":           true,
+	"worktree.discover_repos":     true,
 	"worktree.ensure":             true,
 	"worktree.generate_repo_id":   true,
 	"worktree.get_default_branch": true,

@@ -221,7 +221,7 @@ func adoptMove(t *testing.T, repoPath, src, ws, sub, id string) worktreeAdoptMov
 	return resp
 }
 
-func gitOut(t *testing.T, dir string, args ...string) string {
+func gitOutIn(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
 	require.NoError(t, err, string(out))
@@ -233,10 +233,13 @@ func TestAdoptMove_RealGit(t *testing.T) {
 		t.Skip("-short: spawns git; runs in the full lane")
 	}
 	f := newDiscoverFixture(t)
-	home := t.TempDir()
+	// Resolved like the fixture root: git reports real paths (macOS /var is
+	// /private/var), and the assertions compare against them.
+	home, err := filepath.EvalSymlinks(t.TempDir())
+	require.NoError(t, err)
 	t.Setenv("HOME", home)
 	require.NoError(t, os.WriteFile(filepath.Join(f.aWT, "dirty.txt"), []byte("wip"), 0o644))
-	headBefore := gitOut(t, f.aWT, "rev-parse", "HEAD")
+	headBefore := gitOutIn(t, f.aWT, "rev-parse", "HEAD")
 
 	t.Run("moves, keeps branch/HEAD/dirty file, locks", func(t *testing.T) {
 		resp := adoptMove(t, f.a, f.aWT, "proj/ws-1", "a", "row-1")
@@ -244,12 +247,12 @@ func TestAdoptMove_RealGit(t *testing.T) {
 		dest := filepath.Join(home, ".reliant", "worktrees", "proj", "ws-1", "a")
 		assert.Equal(t, dest, resp.WorktreePath)
 		assert.NoDirExists(t, f.aWT)
-		assert.Equal(t, "feat-a", gitOut(t, dest, "rev-parse", "--abbrev-ref", "HEAD"))
-		assert.Equal(t, headBefore, gitOut(t, dest, "rev-parse", "HEAD"))
+		assert.Equal(t, "feat-a", gitOutIn(t, dest, "rev-parse", "--abbrev-ref", "HEAD"))
+		assert.Equal(t, headBefore, gitOutIn(t, dest, "rev-parse", "HEAD"))
 		b, err := os.ReadFile(filepath.Join(dest, "dirty.txt"))
 		require.NoError(t, err)
 		assert.Equal(t, "wip", string(b))
-		list := gitOut(t, f.a, "worktree", "list", "--porcelain")
+		list := gitOutIn(t, f.a, "worktree", "list", "--porcelain")
 		assert.Contains(t, list, "worktree "+dest)
 		assert.Contains(t, list, "locked")
 
@@ -261,7 +264,7 @@ func TestAdoptMove_RealGit(t *testing.T) {
 		require.NoError(t, json.Unmarshal(raw, &rr))
 		require.True(t, rr.Success, rr.Error)
 		assert.NoDirExists(t, dest)
-		assert.Equal(t, headBefore, gitOut(t, f.aWT, "rev-parse", "HEAD"))
+		assert.Equal(t, headBefore, gitOutIn(t, f.aWT, "rev-parse", "HEAD"))
 		_, err = os.Stat(filepath.Join(f.aWT, "dirty.txt"))
 		assert.NoError(t, err)
 	})
@@ -301,15 +304,15 @@ func TestAdoptFinish_RollbackMovesCheckoutBack(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	require.NoError(t, os.WriteFile(filepath.Join(f.aWT, "dirty.txt"), []byte("wip"), 0o644))
-	headBefore := gitOut(t, f.aWT, "rev-parse", "HEAD")
+	headBefore := gitOutIn(t, f.aWT, "rev-parse", "HEAD")
 	// b already has the adopted branch name AND it is checked out elsewhere:
 	// the adopt must fail without touching that branch.
 	gitIn(t, f.b, "branch", "feat-a")
 	bWT := filepath.Join(f.root, "b-has-feat-a")
 	gitIn(t, f.b, "worktree", "add", "-q", bWT, "feat-a")
-	bTip := gitOut(t, f.b, "rev-parse", "feat-a")
+	bTip := gitOutIn(t, f.b, "rev-parse", "feat-a")
 
-	runAdopt := func(t *testing.T, ws string) (*db.Worktree, error, workspacecreate.Request) {
+	runAdopt := func(t *testing.T, ws string) (*db.Worktree, error) {
 		project := &db.Project{ID: "p", Name: "proj", Path: f.root}
 		repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
 		store := &adoptStore{rows: map[string]db.Worktree{}}
@@ -320,23 +323,23 @@ func TestAdoptFinish_RollbackMovesCheckoutBack(t *testing.T) {
 		require.True(t, moved.Success, moved.Error)
 		req.Existing = map[string]workspacecreate.ExistingCheckout{"ra": {Path: moved.WorktreePath, Base: "main", OriginalPath: f.aWT}}
 		ferr := workspacecreate.Finish(context.Background(), store, handlerMachine{t}, req, wt)
-		return wt, ferr, req
+		return wt, ferr
 	}
 
-	wt, ferr, _ := runAdopt(t, "proj/ws-fail")
+	wt, ferr := runAdopt(t, "proj/ws-fail")
 	require.Error(t, ferr)
 	assert.Contains(t, ferr.Error(), "already checked out in another worktree")
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED), wt.Status)
 	assert.Empty(t, wt.Path)
 	// Back at its original path, intact.
-	assert.Equal(t, "feat-a", gitOut(t, f.aWT, "rev-parse", "--abbrev-ref", "HEAD"))
-	assert.Equal(t, headBefore, gitOut(t, f.aWT, "rev-parse", "HEAD"))
+	assert.Equal(t, "feat-a", gitOutIn(t, f.aWT, "rev-parse", "--abbrev-ref", "HEAD"))
+	assert.Equal(t, headBefore, gitOutIn(t, f.aWT, "rev-parse", "HEAD"))
 	b, err := os.ReadFile(filepath.Join(f.aWT, "dirty.txt"))
 	require.NoError(t, err)
 	assert.Equal(t, "wip", string(b))
 	assert.NoDirExists(t, filepath.Join(home, ".reliant", "worktrees", "proj", "ws-fail"))
 	// b's branch and its existing checkout were not reset or removed.
-	assert.Equal(t, bTip, gitOut(t, f.b, "rev-parse", "feat-a"))
+	assert.Equal(t, bTip, gitOutIn(t, f.b, "rev-parse", "feat-a"))
 	assert.DirExists(t, bWT)
 }
 
@@ -351,7 +354,7 @@ func TestAdoptFinish_ReusesExistingBranchAsIs(t *testing.T) {
 	gitIn(t, f.b, "checkout", "-q", "-b", "feat-a")
 	gitIn(t, f.b, "commit", "-q", "--allow-empty", "-m", "b work")
 	gitIn(t, f.b, "checkout", "-q", "main")
-	bTip := gitOut(t, f.b, "rev-parse", "feat-a")
+	bTip := gitOutIn(t, f.b, "rev-parse", "feat-a")
 
 	project := &db.Project{ID: "p", Name: "proj", Path: f.root}
 	repos := []*core.Repo{{ID: "ra", Name: "a", RelativePath: "a"}, {ID: "rb", Name: "b", RelativePath: "b"}}
@@ -367,9 +370,9 @@ func TestAdoptFinish_ReusesExistingBranchAsIs(t *testing.T) {
 	root := filepath.Join(home, ".reliant", "worktrees", "proj", "ws-ok")
 	assert.Equal(t, root, wt.Path)
 	assert.Equal(t, int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), wt.Status)
-	assert.Equal(t, bTip, gitOut(t, filepath.Join(root, "b"), "rev-parse", "HEAD"), "b's branch was checked out as it was, not reset to main")
-	assert.Equal(t, bTip, gitOut(t, f.b, "rev-parse", "feat-a"))
-	assert.Equal(t, "feat-a", gitOut(t, filepath.Join(root, "a"), "rev-parse", "--abbrev-ref", "HEAD"))
+	assert.Equal(t, bTip, gitOutIn(t, filepath.Join(root, "b"), "rev-parse", "HEAD"), "b's branch was checked out as it was, not reset to main")
+	assert.Equal(t, bTip, gitOutIn(t, f.b, "rev-parse", "feat-a"))
+	assert.Equal(t, "feat-a", gitOutIn(t, filepath.Join(root, "a"), "rev-parse", "--abbrev-ref", "HEAD"))
 	assert.Equal(t, "main", wt.BaseBranches["ra"])
 }
 
@@ -389,5 +392,5 @@ func TestAdoptFinish_CreatesBranchWhenAbsent(t *testing.T) {
 	require.True(t, moved.Success, moved.Error)
 	req.Existing = map[string]workspacecreate.ExistingCheckout{"ra": {Path: moved.WorktreePath, Base: "main", OriginalPath: f.aWT}}
 	require.NoError(t, workspacecreate.Finish(context.Background(), store, handlerMachine{t}, req, wt))
-	assert.Equal(t, "feat-a", gitOut(t, filepath.Join(wt.Path, "b"), "rev-parse", "--abbrev-ref", "HEAD"))
+	assert.Equal(t, "feat-a", gitOutIn(t, filepath.Join(wt.Path, "b"), "rev-parse", "--abbrev-ref", "HEAD"))
 }

@@ -721,7 +721,15 @@ func (a *ExecuteToolsActivity) executeSingleTool(
 	a.upsertToolCall(ctx, tec, core.ToolCallStatusPending, toolCallUpsertOpts{})
 
 	// Execute tool with status tracking
-	return a.executeToolWithStatus(ctx, tec)
+	result := a.executeToolWithStatus(ctx, tec)
+
+	// A shell call that made a git worktree by hand is told — after it ran,
+	// never instead of running — that the worktree tool makes one the UI
+	// shows. See execute_tools_worktree_hint.go.
+	if suggestion := a.worktreeAddSuggestion(ctx, caps, tec); suggestion != "" {
+		result.Content = tools.WithShellSuggestion(result.Content, suggestion)
+	}
+	return result
 }
 
 // checkPriorTerminalResult is the fix for the interrupt livelock (chat

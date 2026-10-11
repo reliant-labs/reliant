@@ -2478,13 +2478,14 @@ func (a *CallLLMActivity) getSystemPrompts(
 	bb.WriteString("You are Reliant, a world class Software Engineer with advanced reasoning and capabilities. Note: it is very likely you are working in parallel with other agents, potentially in the same directory, or across multiple git worktrees. Please be careful of other's work. Be extremely careful with destructive commands that can discard another agent's uncommitted work, such as git checkout, git stash, and git reset.")
 	// Agents left to themselves run `git worktree add ../<repo>-<feature>`,
 	// which litters the user's project folder with checkouts the UI never
-	// sees (the shell refuses it; see shell_worktree_guard.go). Saying where
-	// worktrees come from up front saves the refused turn.
+	// sees. Saying where worktrees come from up front steers them; it is a
+	// preference, not a rule, because the user's own memory may name a
+	// worktree layout of its own, and that wins (shell_worktree_hint.go).
 	// Only said when the worktree tool is reachable this step (preloaded or
 	// grantable by load_tool); otherwise it points at a tool the agent
 	// cannot have.
 	if worktreeReachable {
-		bb.WriteString(" To work on a separate branch, create a worktree with the worktree tool — never `git worktree add` — and hand it to a sub-agent with spawn(worktree=<name>).")
+		bb.WriteString(" To work on a separate branch, prefer to create a worktree with the worktree tool over `git worktree add`: it makes the workspace the Reliant UI shows, and spawn(worktree=<name>) runs a sub-agent in it. If the user's or project's memory says where worktrees go, follow that instead.")
 	}
 
 	// The working directory is stated as an ABSOLUTE PATH and as the literal

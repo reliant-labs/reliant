@@ -126,7 +126,7 @@ func (w *worktreeTool) Name() string {
 func (w *worktreeTool) Description() string {
 	return `Create and manage worktrees: isolated workspaces for working on a separate branch.
 
-This is the ONLY way to make a worktree. Never run "git worktree add" yourself: the shell refuses it, because a checkout made by hand is invisible to Reliant and litters the project folder.
+Prefer this to running "git worktree add" yourself: a checkout made by hand is invisible to Reliant — the user cannot open a chat on it, nothing locks or cleans it up — and one placed beside the repository litters the project folder. If the user's or project's memory (reliant.md) says where worktrees go, follow that instead.
 
 A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/<project>/<name>-<id>/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
 

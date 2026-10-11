@@ -506,8 +506,12 @@ func TestWorktreeTool_WithoutAProject_Refuses(t *testing.T) {
 
 func TestWorktreeTool_DescriptionTeachesTheWorkspaceWorkflow(t *testing.T) {
 	desc := (&worktreeTool{}).Description()
-	for _, want := range []string{"ONLY way", "git worktree add", "spawn(worktree=", "~/.reliant/worktrees/", "Reliant sidebar"} {
+	for _, want := range []string{"Prefer this", "git worktree add", "spawn(worktree=", "~/.reliant/worktrees/", "Reliant sidebar"} {
 		assert.Contains(t, desc, want)
 	}
 	assert.NotContains(t, desc, "repo_id")
+	// It steers, it does not forbid, and the user's own rule wins.
+	assert.NotContains(t, desc, "ONLY way")
+	assert.NotContains(t, desc, "refuses")
+	assert.Contains(t, desc, "memory (reliant.md) says where worktrees go, follow that instead")
 }

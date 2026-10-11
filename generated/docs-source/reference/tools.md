@@ -2089,7 +2089,7 @@ _Miscellaneous tools and utilities._
 | [`twilio__message_list`](#twilio__message_list) | integration | List the account's messages, newest first, optionally only those to or from one address (E.164, o... |
 | [`twilio__message_send`](#twilio__message_send) | integration | Send a message from one of your Twilio senders. For SMS give E.164 numbers (+15551234567); for Wh... |
 | [`twilio__phone_number_list`](#twilio__phone_number_list) | integration | List the phone numbers the account owns, with what each can do (sms, mms, voice) and where its in... |
-| [`worktree`](#worktree) | - | Manage git worktrees for parallel development workflows. |
+| [`worktree`](#worktree) | - | Create and manage worktrees: isolated workspaces for working on a separate branch. |
 
 ### ask_user
 
@@ -2763,56 +2763,45 @@ List the phone numbers the account owns, with what each can do (sms, mms, voice)
 
 ### worktree
 
-Manage git worktrees for parallel development workflows.
+Create and manage worktrees: isolated workspaces for working on a separate branch.
 
-WHEN TO USE:
-- Creating isolated development environments for features/bugs
-- Setting up parallel workspaces for agents
-- Managing multiple concurrent work streams
+Prefer this to running "git worktree add" yourself: a checkout made by hand is invisible to Reliant — the user cannot open a chat on it, nothing locks or cleans it up — and one placed beside the repository litters the project folder. If the user's or project's memory (reliant.md) says where worktrees go, follow that instead.
+
+A worktree made here is the same workspace the "new worktree" button in the Reliant UI makes. It lives at ~/.reliant/worktrees/<project>/<name>-<id>/ and holds one checkout per repository of the project (laid out like the project itself), each on its own branch. It appears in the Reliant sidebar.
+
 ACTIONS:
-1. create - Create a new git worktree
-   Required: name
-   Optional: branch, base_branch, copy_files, force, session_id
+1. create - Required: name. Optional: branch, base_branch, copy_files, force
+   Returns the worktree id, the workspace root path, the branch, and the path of each repository's checkout.
+   The name must be unique among the project's live worktrees; an archived (deleted) worktree's name can be reused.
 
-2. list - List all worktrees
-   No parameters required
+2. list - List the project's worktrees (any state: creating, active, failed)
 
-3. get - Get details of a specific worktree
-   Required: name
+3. get - Required: name. Details, paths and owner of one worktree
 
-4. delete - Delete a worktree
-   Required: name
+4. delete - Required: name. Archives the worktree; its directory is removed later, only when it is clean, pushed and unused. Refuses your own current worktree and any worktree a chat is using.
 
-WORKTREE DATA STORAGE:
-- Worktree information is automatically stored in CEL context as 'worktree_data'
-- Available fields: id, name, path, branch, base_branch, repo_id
-- Use in subsequent steps: worktree_data.path, worktree_data.branch, etc.
+WORKING IN A WORKTREE:
+- Pass its name to spawn: spawn(worktree=<name>) runs the sub-agent inside it, so its shell and file tools work on that branch.
+- Or use the absolute paths from the result with commands that take a path (cd <path> && ...).
+- Commit and push from inside the worktree; each repository's checkout is on its own branch.
 
 FILE COPYING:
-- copy_files: exact paths relative to the repository root, for gitignored files a fresh checkout lacks
+- copy_files: exact paths relative to the project root, for gitignored files a fresh checkout lacks (the new worktree mirrors the project's layout)
 - Nothing is searched for: ".env" copies only the root .env; name "frontend/.env" to copy that one
 - A directory is copied whole (e.g. "web/node_modules"); a missing path is skipped
+- When you are working inside a worktree, files are copied from that worktree
 
-EXAMPLES:
+WORKFLOW DATA:
+- Result fields are stored in CEL context as 'worktree_data': id, name, path, branch, base_branch, project_id, status, session_id, checkouts
 
-Create a worktree that carries over local env files:
+EXAMPLE:
 {
   "action": "create",
   "name": "feature-auth",
   "base_branch": "main",
   "copy_files": [".env", "frontend/.env.local"]
 }
-
-List all worktrees:
-{
-  "action": "list"
-}
-
-NOTES:
-- Worktree paths are stored in ~/.reliant/worktrees/<repo_id>/<name>
-- Each worktree gets its own branch and working directory
-- Use force=true to recreate existing worktrees
-- Worktree data is stored globally for cleanup tracking
+then spawn a sub-agent in it with spawn(worktree="feature-auth").
 
 ---
 

@@ -315,6 +315,11 @@ func TestSystemPromptWorkingDirectory_IsTheThreadWorktree(t *testing.T) {
 func TestSystemPrompt_WorktreeLineFollowsReachability(t *testing.T) {
 	activity := &CallLLMActivity{}
 	const line = "create a worktree with the worktree tool"
+	// The line steers; it does not forbid, and the user's own memory wins.
+	steer := strings.Join(activity.getSystemPrompts(nil, "/p", "", nil, nil, nil, true), "\n")
+	assert.Contains(t, steer, "prefer to "+line)
+	assert.Contains(t, steer, "memory says where worktrees go, follow that instead")
+	assert.NotContains(t, steer, "never `git worktree add`")
 	with := strings.Join(activity.getSystemPrompts(nil, "/p", "", nil, nil, nil, true), "\n")
 	without := strings.Join(activity.getSystemPrompts(nil, "/p", "", nil, nil, nil, false), "\n")
 	assert.Contains(t, with, line)
@@ -342,4 +347,52 @@ func TestSpawnWorktree_ResolvesTheLiveRowOfAReusedName(t *testing.T) {
 	require.NoError(t, f.repo.ArchiveWorktree(ctx, liveID))
 	out = f.spawn(t, "feat", "")
 	assert.Contains(t, out.Refusal, "is archived")
+}
+
+// A sub-agent spawned into a worktree has its batch's directory checked — and
+// recovered — at that worktree's path on that worktree's owner, whatever the
+// run inherited from its parent: the same directory and daemon its calls run
+// on. When the worktree cannot be recreated, the batch is not moved to the
+// main checkout (it would write to the wrong branch); the sub-agent is told
+// its workspace is gone instead.
+func TestEnsureBatchWorkspace_ThreadBoundWorktree(t *testing.T) {
+	f := newSpawnWorktreeFixture(t)
+	ctx := context.Background()
+	wtID := f.worktree(t, "feature-x", "daemon-b")
+	spawned := f.spawn(t, "feature-x", "")
+	require.Empty(t, spawned.Refusal)
+	wt := mustWorktree(t, f, wtID)
+
+	executor := &daemonLikeExecutor{}
+	a := NewExecuteToolsActivity(f.repo, executor)
+	rtx := &types.RuntimeContext{
+		ChatID: f.chatID, Thread: spawned.ThreadID,
+		ProjectPath:    "/home/u/projects/p",
+		DaemonSelector: &types.DaemonSelector{ID: "daemon-parent"},
+	}
+	calls := []message.ToolCall{bashCall("git status")}
+	runsAll := func(message.ToolCall) bool { return false }
+
+	got := a.ensureBatchWorkspace(ctx, rtx, calls, runsAll)
+	require.Equal(t, 1, executor.ensureCount())
+	req := executor.ensures[0]
+	assert.Equal(t, wt.Path, req.Path, "the thread's worktree, not the inherited project path")
+	assert.True(t, req.Repair, "the thread's worktree is recreatable from its branch")
+	assert.Equal(t, wtID, req.WorktreeID)
+	assert.Equal(t, "feature-x", req.Branch)
+	assert.Empty(t, req.FallbackPath, "a thread-bound workspace never falls back to the main checkout")
+	assert.Equal(t, spawned.ThreadID, req.Audience)
+	require.NotNil(t, executor.selectors[0])
+	assert.Equal(t, "daemon-b", executor.selectors[0].ID, "checked on the worktree's owner, not the parent's pin")
+	assert.Empty(t, got.path)
+	assert.Empty(t, got.note)
+
+	executor.ensure = func(req toolexec.WorkspaceEnsureRequest) (*toolexec.WorkspaceEnsureResponse, error) {
+		return &toolexec.WorkspaceEnsureResponse{Status: toolexec.WorkspaceFallback, Path: "/home/u", Detail: "branch 'feature-x' no longer exists"}, nil
+	}
+	got = a.ensureBatchWorkspace(ctx, rtx, calls, runsAll)
+	assert.Empty(t, got.path, "the batch is not moved off the thread's workspace")
+	assert.Contains(t, got.note, `"feature-x"`)
+	assert.Contains(t, got.note, "no longer exists")
+	assert.NotContains(t, got.note, "ran in", "it must not claim the calls ran elsewhere")
 }
