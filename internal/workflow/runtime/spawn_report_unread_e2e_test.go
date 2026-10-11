@@ -147,10 +147,13 @@ func newReportUnreadEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment) *r
 		activity.RegisterOptions{Name: "ActivityLoadWorkflow"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+		func(ctx context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 			toThread, _ := input["to_thread_id"].(string)
 			toolCallID, _ := input["tool_call_id"].(string)
 			e.mailbox.enqueue(toThread, toolCallID)
+			e.mu.Lock()
+			e.milestoneOf[activity.GetInfo(ctx).ActivityID] = milestoneReportDelivered
+			e.mu.Unlock()
 			return map[string]interface{}{"id": "am-" + toolCallID}, nil
 		},
 		activity.RegisterOptions{Name: "EnqueueAgentMessage"},
@@ -246,4 +249,43 @@ func (s *SpawnReportUnreadE2ESuite) TestReportLandingBeforeTheLastProbeRidesPend
 	s.Require().True(env.IsWorkflowCompleted())
 	s.Require().NoError(env.GetWorkflowError())
 	e.requireReportDelivered(s.T())
+}
+
+// The report is in the mailbox BEFORE the parent's turn begins, and the child
+// is only counted complete during that turn — the order a real worker
+// produces, because the spawn's terminal child and tool-call statuses come
+// after its report. The turn drains the report and answers it with no tool
+// calls; nothing is live at the gate.
+//
+// The gate must exit. Counting the completion alone, it re-entered for a
+// report that turn had just delivered: the extra turn drained nothing, found
+// history ending with the assistant, and logged "History ends with an
+// assistant message after the mailbox drain" at ERROR. Chat 9fbaace8 (Sentry
+// ELECTRON-CM) in production: the parent's blocking spawn_status returned in
+// the same workflow task as the child's report, and the child's tool-call
+// status landed 230ms into the parent's next turn.
+func (s *SpawnReportUnreadE2ESuite) TestReportDeliveredBeforeTheChildSettlesEarnsNoExtraTurn() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newReportUnreadEnv(s.T(), env)
+	// Turn 1 spawns; turn 2 calls a tool that, like spawn_status waiting on
+	// its agent, returns only once the report has landed. The child's turn is
+	// the script's exhausted "done".
+	e.script = []scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{spawnToolCall("tc1", "research something")}},
+		{toolCalls: []map[string]interface{}{{"id": "tc2", "name": "shell", "input": `{"command":"true"}`}}},
+	}
+	e.childTurnWaitsFor = milestoneParentTurnDelivered(2)
+	e.toolsWaitFor = milestoneReportDelivered
+	// The child settles only once turn 3 is under way, and turn 3 does not
+	// return until it has, so nothing is live when the parent reaches the gate.
+	e.childSettleWaitsFor = milestoneParentTurnStarted(3)
+	e.parentTurnWaitsFor = map[int]string{3: milestoneChildSettled}
+
+	e.execute("chat-report-before-turn")
+
+	s.Require().True(env.IsWorkflowCompleted())
+	s.Require().NoError(env.GetWorkflowError())
+	e.requireReportDelivered(s.T())
+	s.Require().Equal(3, e.parentTurns(),
+		"turn 3 delivered the report; a turn 4 would have nothing to answer")
 }

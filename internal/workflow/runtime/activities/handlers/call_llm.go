@@ -869,6 +869,50 @@ func (a *CallLLMActivity) hasQueuedAgentMessages(ctx context.Context, thread str
 	return len(queued) > 0
 }
 
+// yieldLogger is the subset of the activity logger logAssistantTailYield uses.
+type yieldLogger interface {
+	Info(msg string, keyvals ...interface{})
+	Error(msg string, keyvals ...interface{})
+}
+
+// logAssistantTailYield reports a turn that yields because history still ends
+// with the assistant after the mailbox drain.
+//
+// Whether that is a fault depends on why the loop took the turn, which only
+// the workflow knows (RuntimeContext.SpeculativeTurn). A turn taken on a tool
+// result or on a pending_inbox the probe saw was promised new input, so an
+// assistant tail means something upstream is wrong: ERROR, worded as before
+// so it stays one Sentry issue. A turn the loop-exit gate took on a hint was
+// promised nothing — the gate counts wakes and reports, not rows, and the
+// previous turn may already have read what they were for — so the yield is
+// that turn's correct answer: INFO.
+func logAssistantTailYield(logger yieldLogger, speculative bool, chatID, thread, lastMsgID string, msgCount int) {
+	if speculative {
+		logger.Info("[CallLLM] Nothing new since the previous turn — yielding without calling the provider. "+
+			"The loop re-entered on a hint (a wake, or a background spawn's report, counted after the "+
+			"previous turn began) that the previous turn had already read.",
+			"chatID", chatID,
+			"thread", thread,
+			"lastMsgID", lastMsgID,
+			"msgCount", msgCount,
+		)
+		return
+	}
+	logger.Error(
+		"[CallLLM] History ends with an assistant message after the mailbox drain — "+
+			"yielding the turn instead of calling the provider. Causes, in order of "+
+			"likelihood: the previous turn produced text with no tool calls and the loop "+
+			"re-entered anyway (a pending_inbox that did not correspond to a real queued "+
+			"message); an interrupted turn persisted a partial assistant message and the "+
+			"mailbox it expected to drain was empty; or, rarely, the user message was "+
+			"written to a different thread than this one.",
+		"chatID", chatID,
+		"thread", thread,
+		"lastMsgID", lastMsgID,
+		"msgCount", msgCount,
+	)
+}
+
 // loadConversationHistory loads all messages for the conversation.
 // For branched chats, this automatically includes inherited parent messages.
 //
@@ -1494,7 +1538,12 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	//
 	// Logged at ERROR because reaching here is still a bug upstream (see
 	// below for the real causes); it must stay greppable rather than being
-	// silently absorbed. What changes is that the chat survives it.
+	// silently absorbed. What changes is that the chat survives it — except
+	// on a SPECULATIVE turn, where it is the expected answer and logged at
+	// INFO: the loop-exit gate re-entered on a hint (a wake, or a background
+	// spawn's report, counted after the previous turn began) without knowing
+	// whether that turn had already read what it was for. See
+	// logAssistantTailYield.
 	//
 	// The one exception is a turn the provider PAUSED (stop_reason
 	// "incomplete"): it ended with the assistant on purpose and expects the
@@ -1512,19 +1561,7 @@ func (a *CallLLMActivity) streamLLMResponse(ctx context.Context, chat *db.Chat, 
 	if len(history) > 0 && !continueTurn {
 		lastMsg := history[len(history)-1]
 		if lastMsg.Role == message.Assistant {
-			activity.GetLogger(ctx).Error(
-				"[CallLLM] History ends with an assistant message after the mailbox drain — "+
-					"yielding the turn instead of calling the provider. Causes, in order of "+
-					"likelihood: the previous turn produced text with no tool calls and the loop "+
-					"re-entered anyway (a pending_inbox that did not correspond to a real queued "+
-					"message); an interrupted turn persisted a partial assistant message and the "+
-					"mailbox it expected to drain was empty; or, rarely, the user message was "+
-					"written to a different thread than this one.",
-				"chatID", chat.ID,
-				"thread", thread,
-				"lastMsgID", lastMsg.ID,
-				"msgCount", len(history),
-			)
+			logAssistantTailYield(activity.GetLogger(ctx), rtx.SpeculativeTurn, chat.ID, thread, lastMsg.ID, len(history))
 			return &reliantv1.CallLLMOutput{
 				Message: &reliantv1.MessageOutput{Role: "assistant", Text: ""},
 				// No tool calls and (set by the caller from a real mailbox

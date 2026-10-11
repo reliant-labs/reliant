@@ -83,6 +83,16 @@ type RuntimeContext struct {
 	// capability set with it, so it is set on call_llm nodes only.
 	Unattended bool `json:"unattended,omitempty"`
 
+	// SpeculativeTurn marks a call_llm turn the agent loop took on a hint
+	// rather than on known input: its loop-exit gate re-entered because a
+	// wake (a mailbox row or a user message) or a background spawn's report
+	// arrived after the previous turn began, and that turn may already have
+	// read it. If it did, this turn finds history ending with the assistant
+	// and yields without calling the provider — the expected answer to a
+	// hint that was already consumed, where on any other turn the same yield
+	// means something upstream is wrong. Set on call_llm nodes only.
+	SpeculativeTurn bool `json:"speculative_turn,omitempty"`
+
 	// Project context
 	ProjectPath string `json:"project_path,omitempty"`
 

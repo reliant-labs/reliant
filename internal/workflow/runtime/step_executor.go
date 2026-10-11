@@ -1092,6 +1092,9 @@ func (e *StepExecutor) buildRuntimeContext(node *reliantv1.Node) types.RuntimeCo
 		// loop body and spawned sub-agent inherits unattended into
 		// (propagateUnattended).
 		rtx.Unattended = IsUnattended(e.workflowInputs)
+		// Whether the loop took this turn on a hint (see
+		// RuntimeContext.SpeculativeTurn).
+		rtx.SpeculativeTurn = e.childTracker.isSpeculativeTurn(rtx.Thread)
 	}
 
 	// Loop context

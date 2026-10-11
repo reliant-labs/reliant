@@ -238,6 +238,25 @@ type ChildWorkflowTracker struct {
 	// int and workflow.AwaitWithTimeout instead.
 	detachedCompletions map[string]int
 
+	// detachedReports counts, per parent thread, the background-spawn reports
+	// that have landed in that thread's mailbox (EnqueueAgentMessage
+	// returned) since the tracker was created.
+	//
+	// A report is written BEFORE its spawn's terminal bookkeeping — the
+	// child's status and the tool call's status — so it leads
+	// detachedCompletions by two activities. That gap is what the loop-exit
+	// gate reads this for: a report already in the mailbox when a turn began
+	// was drained by that turn's call_llm, however late its spawn's
+	// completion is counted. Counting completions alone, the gate re-entered
+	// for a report the turn had just delivered, and the extra turn found
+	// nothing new (chat 9fbaace8, Sentry ELECTRON-CM). See
+	// awaitLiveDetachedSpawnsOrHandoff.
+	detachedReports map[string]int
+
+	// speculativeTurns marks the threads whose current loop turn was taken
+	// on a hint rather than on known input — see setSpeculativeTurn.
+	speculativeTurns map[string]bool
+
 	// threadWakes counts, per RECIPIENT thread, how many "there is something
 	// for you to react to" notifications have arrived since the tracker was
 	// created. Incremented by setupThreadWakeHandler from the
@@ -358,6 +377,47 @@ func (t *ChildWorkflowTracker) completeDetachedSpawn(toolCallID, parentThread st
 		t.detachedCompletions = make(map[string]int)
 	}
 	t.detachedCompletions[parentThread]++
+}
+
+// recordDetachedReport records that a background spawn's report is now in
+// parentThread's mailbox.
+func (t *ChildWorkflowTracker) recordDetachedReport(parentThread string) {
+	if t.detachedReports == nil {
+		t.detachedReports = make(map[string]int)
+	}
+	t.detachedReports[parentThread]++
+}
+
+// detachedReportCount returns how many background-spawn reports have landed
+// in thread's mailbox so far. Monotonic, and read like detachedCompletionCount.
+func (t *ChildWorkflowTracker) detachedReportCount(thread string) int {
+	return t.detachedReports[thread]
+}
+
+// setSpeculativeTurn records whether thread's current loop turn was taken on
+// a hint: the loop-exit gate re-entered because a wake or a background
+// spawn's report arrived after the previous turn began, and that turn may
+// already have read it. The loop sets it at the start of every turn, so it
+// describes exactly one turn; call_llm reads it (RuntimeContext.SpeculativeTurn)
+// to tell a hint that was already consumed from a real fault.
+func (t *ChildWorkflowTracker) setSpeculativeTurn(thread string, speculative bool) {
+	if t == nil {
+		return
+	}
+	if !speculative {
+		delete(t.speculativeTurns, thread)
+		return
+	}
+	if t.speculativeTurns == nil {
+		t.speculativeTurns = make(map[string]bool)
+	}
+	t.speculativeTurns[thread] = true
+}
+
+// isSpeculativeTurn reports whether thread's current loop turn was taken on a
+// hint (see setSpeculativeTurn).
+func (t *ChildWorkflowTracker) isSpeculativeTurn(thread string) bool {
+	return t != nil && t.speculativeTurns[thread]
 }
 
 // hasLiveDetachedSpawns reports whether thread has any background spawns
@@ -3709,6 +3769,8 @@ func runDetachedSpawnChild(
 			"childThread", config.childThread,
 			"error", err,
 		)
+	} else {
+		childTracker.recordDetachedReport(parentThread)
 	}
 
 	if result.terminalStatus != "" {

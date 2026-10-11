@@ -108,6 +108,13 @@ type spawnE2EEnv struct {
 	childTurnWaitsFor  string
 	parentTurnWaitsFor map[int]string
 
+	// toolsWaitFor holds the parent's ExecuteTools (a regular, non-spawn
+	// tool) until the named milestone; childSettleWaitsFor holds the spawn's
+	// terminal tool status — the last thing its detached goroutine waits on
+	// before it is counted complete — likewise.
+	toolsWaitFor        string
+	childSettleWaitsFor string
+
 	// wakeDuringParentTurn > 0 rings the parent thread's wake doorbell (a
 	// user message arriving) while the parent's turn N is in flight. The
 	// signal is posted before that turn's result, so the workflow sees the
@@ -130,6 +137,10 @@ type spawnE2EEnv struct {
 // been delivered: its detached goroutine has finished and left the live
 // registry.
 const milestoneChildSettled = "child-settled"
+
+// milestoneReportDelivered is reached once the spawn's mailbox report has been
+// written and the workflow has acted on that.
+const milestoneReportDelivered = "report-delivered"
 
 func milestoneParentTurnStarted(turn int) string {
 	return fmt.Sprintf("parent-turn-%d-started", turn)
@@ -243,10 +254,15 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 			e.events = append(e.events, fmt.Sprintf("tool-status:%v:%v", input["tool_call_id"], input["status"]))
 			// The spawn's terminal status is the last thing its detached
 			// goroutine waits on before leaving the live registry.
+			waitFor := ""
 			if input["tool_call_id"] == "tc1" && input["status"] == "completed" {
 				e.milestoneOf[activity.GetInfo(ctx).ActivityID] = milestoneChildSettled
+				waitFor = e.childSettleWaitsFor
 			}
 			e.mu.Unlock()
+			if waitFor != "" {
+				e.awaitMilestone(waitFor)
+			}
 			return map[string]interface{}{"success": true}, nil
 		},
 		activity.RegisterOptions{Name: "EmitToolCallStatus"},
@@ -287,9 +303,10 @@ func newSpawnE2EEnv(t *testing.T, env *testsuite.TestWorkflowEnvironment, script
 		activity.RegisterOptions{Name: "DrainAgentMessages"},
 	)
 	env.RegisterActivityWithOptions(
-		func(_ context.Context, input map[string]interface{}) (map[string]interface{}, error) {
+		func(ctx context.Context, input map[string]interface{}) (map[string]interface{}, error) {
 			e.mu.Lock()
 			e.events = append(e.events, fmt.Sprintf("report:%v", input["tool_call_id"]))
+			e.milestoneOf[activity.GetInfo(ctx).ActivityID] = milestoneReportDelivered
 			e.mu.Unlock()
 			return map[string]interface{}{"id": "am-" + input["tool_call_id"].(string)}, nil
 		},
@@ -374,11 +391,32 @@ func (e *spawnE2EEnv) callLLMStub(ctx context.Context, input types.ActivityInput
 // the ExecuteTools activity contract for the regular (non-spawn) split, which
 // spawnBackgroundE2EYAML's scripts never populate.
 func (e *spawnE2EEnv) executeToolsStub(input types.ActivityInput) (map[string]interface{}, error) {
-	// Every tool call in these tests is "spawn" and is intercepted before
-	// reaching the ExecuteTools activity (splitProtoToolCalls in
-	// executeToolsWithSpawnSupport). If this stub is ever invoked, it means
-	// a non-spawn regular tool call reached here — return an empty result.
+	// Spawn calls are intercepted before reaching the ExecuteTools activity
+	// (splitProtoToolCalls in executeToolsWithSpawnSupport), so this only
+	// runs for a regular tool call, which a test scripts to stand in for a
+	// tool that blocks — spawn_status waiting on its agent — and holds with
+	// toolsWaitFor. Its result does not matter here.
+	e.mu.Lock()
+	waitFor := e.toolsWaitFor
+	e.mu.Unlock()
+	if waitFor != "" {
+		e.awaitMilestone(waitFor)
+	}
 	return map[string]interface{}{"tool_results": []interface{}{}}, nil
+}
+
+// parentSpeculativeTurns is RuntimeContext.SpeculativeTurn for each of the
+// parent's CallLLM turns, in order.
+func (e *spawnE2EEnv) parentSpeculativeTurns() []bool {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	var flags []bool
+	for _, rtx := range e.callLLMRuntimes {
+		if rtx.Thread == e.parentThread {
+			flags = append(flags, rtx.SpeculativeTurn)
+		}
+	}
+	return flags
 }
 
 func (e *spawnE2EEnv) callLLMInvocations() int {
@@ -537,6 +575,31 @@ func (s *SpawnBackgroundE2ESuite) TestBackground_SpawnFinishingMidTurnStillGetsA
 		"a spawn that finished during turn 2 must still earn the parent a turn 3 to deliver its result")
 	require.Equal(s.T(), 4, e.callLLMInvocations(),
 		"and exactly one: three parent turns plus the child's one")
+}
+
+// TestBackground_GateReentryIsSpeculative: the turn the loop-exit gate buys is
+// taken on a hint — it counted a completion, not a row it has seen — and
+// call_llm is told so. If the hint turns out to be something the previous
+// turn already read, call_llm yields at INFO instead of reporting the
+// assistant tail as a fault. Turns the loop takes for any other reason are
+// promised input, and are not marked.
+func (s *SpawnBackgroundE2ESuite) TestBackground_GateReentryIsSpeculative() {
+	env := s.NewTestWorkflowEnvironment()
+	e := newSpawnE2EEnv(s.T(), env, []scriptedToolCallsResponse{
+		{toolCalls: []map[string]interface{}{spawnToolCall("tc1", "research something")}},
+		{toolCalls: nil},
+	})
+	// TestBackground_SpawnFinishingMidTurnStillGetsATurn's interleaving: the
+	// child finishes during turn 2, so turn 3 is the gate's.
+	e.childTurnWaitsFor = milestoneParentTurnStarted(2)
+	e.parentTurnWaitsFor = map[int]string{2: milestoneChildSettled}
+
+	e.execute("chat-bg-speculative")
+
+	require.True(s.T(), env.IsWorkflowCompleted())
+	require.NoError(s.T(), env.GetWorkflowError())
+	require.Equal(s.T(), []bool{false, false, true}, e.parentSpeculativeTurns(),
+		"turn 1 starts the run and turn 2 answers a tool result; only turn 3, bought by the gate, is speculative")
 }
 
 // TestBackground_WakeDuringTurnIsNotMissed is the same lost wakeup for the

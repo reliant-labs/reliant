@@ -134,12 +134,13 @@ type InlineLoopExecutor struct {
 	turnBaseline *detachedSpawnBaseline
 }
 
-// detachedSpawnBaseline is a snapshot of a thread's two monotonic
-// "something for you to react to" counters (ChildWorkflowTracker's
-// detachedCompletions and threadWakes).
+// detachedSpawnBaseline is a snapshot of a thread's monotonic "something for
+// you to react to" counters (ChildWorkflowTracker's detachedCompletions,
+// threadWakes and detachedReports).
 type detachedSpawnBaseline struct {
 	completions int
 	wakes       int
+	reports     int
 }
 
 // gateMeasuresFromTurnStartChangeID gates the loop-exit gate measuring child
@@ -147,6 +148,12 @@ type detachedSpawnBaseline struct {
 // (workflow.GetVersion): histories recorded before the fix must replay the
 // exit they took.
 const gateMeasuresFromTurnStartChangeID = "detached-spawn-gate-turn-baseline"
+
+// gateCountsReportsChangeID gates the loop-exit gate declining a turn for a
+// spawn that finished during the last one when that spawn's report was
+// already in the mailbox before the turn began (workflow.GetVersion):
+// histories recorded before it re-entered, and must replay that turn.
+const gateCountsReportsChangeID = "detached-spawn-gate-counts-reports"
 
 // threadForError is the thread this loop's failures belong to, or "" when the
 // loop has no execution context to read one from.
@@ -407,7 +414,8 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 	if thread == "" {
 		return false, nil
 	}
-	startCompletions, startWakes := e.gateBaseline(thread)
+	start := e.gateBaseline(thread)
+	startCompletions, startWakes := start.completions, start.wakes
 
 	if !e.childTracker.hasLiveDetachedSpawns(thread) {
 		// Nothing left to wait on — but a spawn that finished DURING the turn
@@ -421,15 +429,18 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 		// no progress, because the completion had already happened, and exited.
 		// See TestBackground_SpawnFinishingMidTurnStillGetsATurn.
 		//
-		// If the report did make it into that turn after all, the extra turn
-		// drains nothing and call_llm yields without calling the provider.
+		// What earns the turn is the REPORT, not the completion: see
+		// spawnReportMayBeUnread. If the report made it into that turn after
+		// all, the extra turn drains nothing and call_llm yields without
+		// calling the provider.
 		//
 		// Cancellation still wins: re-entering would only reach the boundary
 		// check that stops the thread.
 		if e.pauseCtrl.IsCancelled() {
 			return false, nil
 		}
-		if e.childTracker.detachedCompletionCount(thread) > startCompletions {
+		if e.childTracker.detachedCompletionCount(thread) > startCompletions &&
+			e.spawnReportMayBeUnread(thread, start) {
 			return true, nil
 		}
 		// The same goes for a wake. A user message (SendMessage or
@@ -564,18 +575,48 @@ func (e *InlineLoopExecutor) awaitLiveDetachedSpawnsOrHandoff() (bool, error) {
 //
 // With no turn behind it — the resume-time wait before the first iteration,
 // or a caller outside the loop — the baseline is simply "now".
-func (e *InlineLoopExecutor) gateBaseline(thread string) (completions, wakes int) {
-	completions = e.childTracker.detachedCompletionCount(thread)
-	wakes = e.childTracker.threadWakeCount(thread)
+func (e *InlineLoopExecutor) gateBaseline(thread string) detachedSpawnBaseline {
+	now := detachedSpawnBaseline{
+		completions: e.childTracker.detachedCompletionCount(thread),
+		wakes:       e.childTracker.threadWakeCount(thread),
+		reports:     e.childTracker.detachedReportCount(thread),
+	}
 	turn := e.turnBaseline
 	e.turnBaseline = nil
-	if turn == nil || (turn.completions == completions && turn.wakes == wakes) {
-		return completions, wakes
+	if turn == nil || (turn.completions == now.completions && turn.wakes == now.wakes) {
+		return now
 	}
 	if workflow.GetVersion(e.ctx, gateMeasuresFromTurnStartChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion {
-		return completions, wakes
+		return now
 	}
-	return turn.completions, turn.wakes
+	return *turn
+}
+
+// spawnReportMayBeUnread reports whether a background spawn of thread that
+// finished during the turn that just ended may have left its report unread
+// by that turn — which is the only reason its completion earns another one.
+//
+// A report that landed after the turn began may have missed both looks the
+// turn's call_llm takes at the mailbox, so it does. One that landed BEFORE
+// cannot have: the turn's call_llm was scheduled after EnqueueAgentMessage
+// had returned, so the row was committed before the drain that opens the
+// turn ran. Its spawn still completes during the turn — the terminal child
+// and tool-call statuses come after the report — and counting that
+// completion alone re-entered the loop for a report the turn had just
+// delivered. The extra turn found history ending with the assistant and
+// yielded. Chat 9fbaace8 (Sentry ELECTRON-CM): the parent's spawn_status
+// wait returned in the same workflow task as the child's report, its next
+// turn drained the report and answered, and the child's tool-call status
+// landed 230ms into that turn.
+//
+// A spawn that finished with no report at all (its enqueue failed, or it
+// panicked) leaves nothing in the mailbox to deliver; the stranded-spawn
+// reconciler owns it either way.
+func (e *InlineLoopExecutor) spawnReportMayBeUnread(thread string, start detachedSpawnBaseline) bool {
+	if e.childTracker.detachedReportCount(thread) > start.reports {
+		return true
+	}
+	return workflow.GetVersion(e.ctx, gateCountsReportsChangeID, workflow.DefaultVersion, 1) == workflow.DefaultVersion
 }
 
 // parkSpawn records a background spawn as parked at iteration for the
@@ -842,6 +883,10 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 	// Track outputs from the last iteration
 	var lastIterationOutputs map[string]interface{}
 
+	// reenteredOnHint is set when the loop-exit gate sends the loop round
+	// again, and recorded for the turn that follows (setSpeculativeTurn).
+	reenteredOnHint := false
+
 	// A background spawn relaunched by a successor execution resumes its
 	// agent loop at the boundary it was carried from. Consumed once, so a
 	// transient-error retry of the spawn starts over like any spawn retry.
@@ -980,9 +1025,12 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 			e.turnBaseline = &detachedSpawnBaseline{
 				completions: e.childTracker.detachedCompletionCount(thread),
 				wakes:       e.childTracker.threadWakeCount(thread),
+				reports:     e.childTracker.detachedReportCount(thread),
 			}
 			e.childTracker.recordTurnStart(thread)
+			e.childTracker.setSpeculativeTurn(thread, reenteredOnHint)
 		}
+		reenteredOnHint = false
 
 		// Execute this iteration
 		iterOutputs, err := e.executeIteration()
@@ -1035,6 +1083,10 @@ func (e *InlineLoopExecutor) execute() (*reliantv1.LoopOutput, error) {
 					"loopID", e.loopID,
 					"iteration", e.iteration-1,
 				)
+				// The gate re-enters on counters, never on a row it has
+				// seen: what it counted may be something the turn that just
+				// ended already read. The next turn is call_llm's to settle.
+				reenteredOnHint = true
 				continue
 			}
 			e.logger.Debug("[InlineLoop] While condition no longer satisfied, exiting",
