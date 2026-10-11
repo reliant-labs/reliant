@@ -234,10 +234,10 @@ func Run(ctx context.Context, opts Options) error {
 	toolsDaemonService.SetUserUpdateHub(userUpdateHub)
 
 	// Reliant-side derivation consumer: subscribes to the same subject and
-	// mirrors lifecycle events into daemon_attachment. Replaces the legacy
-	// debounced TouchDaemonAttachment / heartbeat-special-cased touch in
-	// ToolsDaemonService — the publisher above is now the single writer
-	// upstream, and this consumer is the single writer downstream.
+	// mirrors the control plane's lifecycle, removal and registry-snapshot
+	// events onto the daemons table, and reaps expired attachment leases.
+	// Liveness (daemon_attachment) is NOT its to write: ToolsDaemonService
+	// writes each stream's lease itself, in stream order.
 	derivation := daemonstate.NewDerivation(nc, repo)
 	// A control-plane lifecycle transition (provisioning → running, suspend,
 	// an OOM kill) changes what ListDaemons reports, so tell the owner's web

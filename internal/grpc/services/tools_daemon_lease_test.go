@@ -3,6 +3,12 @@ package services
 
 import (
 	"context"
+	"crypto/tls"
+	"database/sql"
+	"errors"
+	"net"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -10,21 +16,29 @@ import (
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/net/http2"
+	"golang.org/x/net/http2/h2c"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // These tests pin the gateway half of the prod outage of 2026-10-11: a cloud
-// daemon whose stream stayed registered on the gateway for nine hours read
-// DISCONNECTED to every chat for the last six of them. Nothing was read from
-// its stream for ~20 minutes (11:51-12:11 UTC); the TTL reaper deleted its
-// daemon_attachment lease at 12:11:13; the stream then recovered, but the
-// renewal every later heartbeat performed was an UPDATE, so the lease never
-// came back. And throughout the stall the stale-connection sweeper — the one
-// component meant to notice a stream gone quiet — counted the gateway's own
-// heartbeat sends as liveness and never fired.
+// daemon whose stream stayed registered on the gateway read DISCONNECTED to
+// every chat for hours while its terminal and tool calls worked (routing does
+// not read the lease). Nothing was read from its stream for ~20 minutes
+// (11:51-12:11 UTC); the TTL reaper deleted its daemon_attachment lease at
+// 12:11:13; the stream then recovered, but the renewal every later heartbeat
+// performed was an UPDATE, so the lease never came back. Throughout the stall
+// the stale-connection sweeper counted the gateway's own heartbeat sends as
+// liveness and never fired.
+//
+// The lease has exactly one writer, the gateway holding the stream: upsert on
+// connect, renew on every heartbeat its receive loop reads, release — of its
+// own session's row only — on teardown.
 
 func heartbeatMsg(ts int64) *reliantv1.DaemonMessage {
 	return &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Heartbeat{
@@ -48,29 +62,51 @@ func runIncoming(t *testing.T, svc *ToolsDaemonService, conn *daemonConnection, 
 	})
 }
 
-// A heartbeat read off a live stream must restore a lease the reaper deleted.
+// A heartbeat read off a live stream must restore a lease the reaper deleted,
+// tell the owner's clients — which were showing the machine disconnected — to
+// re-read, and put back the detected ports the fresh row lost.
 func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
-	repo, cleanup := db.SetupTestDB(t)
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
 	defer cleanup()
 	ctx := context.Background()
 
 	userID, daemonID := "lease-user", uuid.NewString()
 	require.NoError(t, repo.UpsertDaemon(ctx, &db.Daemon{ID: daemonID, UserID: userID}))
-	require.NoError(t, repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
-		DaemonID: daemonID, UserID: userID, Source: db.DaemonAttachmentSourceInbound,
-	}))
 
 	svc := NewToolsDaemonService(repo)
+	hub := &recordingUserHub{}
+	svc.SetUserUpdateHub(hub)
 	stream := newParkedStream()
 	conn := newTestConn(userID, daemonID, stream)
+	require.NoError(t, repo.UpsertDaemonAttachment(ctx, &db.DaemonAttachment{
+		DaemonID: daemonID, UserID: userID, Source: db.DaemonAttachmentSourceInbound,
+		AttachedAt: conn.attachedAt, LastStreamActivity: conn.attachedAt,
+	}))
 	runIncoming(t, svc, conn, stream)
+
+	beat := func() {
+		stream.recv <- &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Heartbeat{
+			Heartbeat: &reliantv1.DaemonHeartbeat{Timestamp: time.Now().UnixMilli(), DetectedPorts: []uint32{3000}},
+		}}
+	}
+	ports := func() string {
+		var p sql.NullString
+		if err := rawDB.QueryRow(`SELECT detected_ports FROM daemon_attachment WHERE daemon_id = $1`, daemonID).Scan(&p); err != nil {
+			return ""
+		}
+		return p.String
+	}
+	beat()
+	require.Eventually(t, func() bool { return ports() == "[3000]" }, 3*time.Second, 20*time.Millisecond)
 
 	// The reaper deletes the lease while the stream is still held (it does
 	// so whenever no renewal landed for 15 minutes).
-	require.NoError(t, repo.DeleteDaemonAttachment(ctx, daemonID))
+	_, err := rawDB.Exec(`DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
+	require.NoError(t, err)
+	refetchesBefore := len(daemonListRefetches(t, hub)[userID])
 
 	// The stream is moving again: the daemon's next heartbeat is read.
-	stream.recv <- heartbeatMsg(time.Now().UnixMilli())
+	beat()
 
 	require.Eventually(t, func() bool {
 		attached, err := repo.IsDaemonIDAttached(ctx, daemonID, daemonAttachmentStaleThreshold)
@@ -78,6 +114,16 @@ func TestHeartbeatOnALiveStreamRecreatesAReapedLease(t *testing.T) {
 	}, 3*time.Second, 20*time.Millisecond,
 		"a heartbeat read off a live stream must re-create the lease the reaper deleted; "+
 			"otherwise ListDaemons reports the daemon DISCONNECTED until it happens to reconnect")
+	require.Eventually(t, func() bool { return len(daemonListRefetches(t, hub)[userID]) > refetchesBefore },
+		3*time.Second, 20*time.Millisecond,
+		"re-creating a lease must tell the owner's clients to re-read the daemon list; "+
+			"they were showing the machine disconnected and nothing else would correct them before the slow fallback poll")
+
+	// The re-created row starts with no detected ports; the next heartbeat
+	// must rewrite them even though the set did not change.
+	beat()
+	require.Eventually(t, func() bool { return ports() == "[3000]" }, 3*time.Second, 20*time.Millisecond,
+		"the re-created lease lost the daemon's detected ports and the unchanged set was never rewritten")
 }
 
 // leaseRecordingRepo parks state-message writes (a FileSystemChanged's project
@@ -98,17 +144,11 @@ func (r *leaseRecordingRepo) GetProjectByPathAndUser(context.Context, string, st
 	return nil, nil
 }
 
-func (r *leaseRecordingRepo) RenewDaemonAttachment(_ context.Context, att *db.DaemonAttachment) error {
+func (r *leaseRecordingRepo) RenewDaemonAttachment(_ context.Context, att *db.DaemonAttachment) (bool, error) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 	r.renewals = append(r.renewals, att)
-	return nil
-}
-
-func (r *leaseRecordingRepo) TouchDaemonAttachmentIfNewer(_ context.Context, daemonID string, at time.Time) error {
-	// The pre-fix renewal path. Recorded the same way so this test measures
-	// WHEN a renewal happens, not which method performed it.
-	return r.RenewDaemonAttachment(context.Background(), &db.DaemonAttachment{DaemonID: daemonID, LastStreamActivity: at})
+	return false, nil
 }
 
 func (r *leaseRecordingRepo) UpdateDaemonAttachmentPorts(context.Context, string, []uint32) error {
@@ -151,19 +191,22 @@ func TestLeaseRenewalIsNotQueuedBehindStatePersistence(t *testing.T) {
 	renewal := repo.renewals[0]
 	repo.mu.Unlock()
 	require.Equal(t, "user-1", renewal.UserID, "a renewal must carry the owner it needs to re-create the row")
+	require.True(t, renewal.AttachedAt.Equal(conn.attachedAt),
+		"a renewal must name its session's attached_at (got %v, want %v), or a re-created row cannot be released by its own session",
+		renewal.AttachedAt, conn.attachedAt)
 }
 
-// deleteRecordingRepo satisfies teardown's lease delete without a database.
-type deleteRecordingRepo struct {
+// releaseRecordingRepo satisfies teardown's lease release without a database.
+type releaseRecordingRepo struct {
 	db.Repository
-	mu      sync.Mutex
-	deleted []string
+	mu       sync.Mutex
+	released []string
 }
 
-func (r *deleteRecordingRepo) DeleteDaemonAttachment(_ context.Context, daemonID string) error {
+func (r *releaseRecordingRepo) ReleaseDaemonAttachment(_ context.Context, daemonID string, _ time.Time) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	r.deleted = append(r.deleted, daemonID)
+	r.released = append(r.released, daemonID)
 	return nil
 }
 
@@ -172,7 +215,7 @@ func (r *deleteRecordingRepo) DeleteDaemonAttachment(_ context.Context, daemonID
 // heartbeat send succeeds into a buffer whether or not the daemon's side is
 // moving, so liveness keyed on it never runs out.
 func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.T) {
-	repo := &deleteRecordingRepo{}
+	repo := &releaseRecordingRepo{}
 	svc := NewToolsDaemonService(repo)
 	t.Cleanup(svc.Close)
 
@@ -184,6 +227,7 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 			userID:            uuid.NewString(),
 			daemonID:          uuid.NewString(),
 			connectedAt:       base.Add(-9 * time.Hour),
+			attachedAt:        base.Add(-9 * time.Hour),
 			lastActivity:      base, // the gateway's heartbeat just went out
 			lastReceived:      lastReceived,
 			done:              make(chan struct{}),
@@ -210,7 +254,7 @@ func TestSweeperReapsAStreamSilentInboundWhileTheGatewayKeepsSending(t *testing.
 	}
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(silent.closedReason()),
 		"the stream must end with a status the daemon treats as retryable, not a bare EOF")
-	require.Equal(t, []string{silent.daemonID}, repo.deleted)
+	require.Equal(t, []string{silent.daemonID}, repo.released)
 	require.True(t, svc.HasConnectedDaemonsForUser(reading.userID),
 		"a stream read from 10s ago is alive and must not be reaped")
 }
@@ -232,4 +276,180 @@ func TestServerHeartbeatAcknowledgesTheNewestDaemonHeartbeatRead(t *testing.T) {
 	require.Eventually(t, func() bool {
 		return newServerHeartbeat(conn, time.Now()).GetHeartbeat().GetAckedDaemonHeartbeat() == 2_000
 	}, 2*time.Second, 5*time.Millisecond, "the keepalive must acknowledge the newest daemon heartbeat read")
+}
+
+// ---------------------------------------------------------------------------
+// Across replicas: the registry's status for a daemon must follow its stream,
+// whatever order the gateways' lease writes land in. These run the real
+// ConnectDaemon path on gateway replicas sharing one database, with the
+// registry reading it.
+// ---------------------------------------------------------------------------
+
+// dialDaemon registers daemonID as userID on svc over a real ConnectDaemon
+// stream and returns it once the gateway has acknowledged the registration.
+// The stream stays open until the test closes it or ends.
+func dialDaemon(t *testing.T, svc *ToolsDaemonService, userID, daemonID string) *connect.BidiStreamForClient[reliantv1.DaemonMessage, reliantv1.ServerMessage] {
+	t.Helper()
+	path, h := reliantv1connect.NewToolsDaemonServiceHandler(svc)
+	wrapped := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), auth.UserIDContextKey, r.Header.Get("X-Test-User"))
+		h.ServeHTTP(w, r.WithContext(ctx))
+	})
+	mux := http.NewServeMux()
+	mux.Handle(path, wrapped)
+	srv := httptest.NewUnstartedServer(h2c.NewHandler(mux, &http2.Server{}))
+	srv.Start()
+	t.Cleanup(srv.Close)
+
+	cl := &http.Client{Transport: &http2.Transport{
+		AllowHTTP: true,
+		DialTLSContext: func(ctx context.Context, network, addr string, _ *tls.Config) (net.Conn, error) {
+			var d net.Dialer
+			return d.DialContext(ctx, network, addr)
+		},
+	}}
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	client := reliantv1connect.NewToolsDaemonServiceClient(cl, srv.URL, connect.WithGRPC())
+	stream := client.ConnectDaemon(ctx)
+	stream.RequestHeader().Set("X-Test-User", userID)
+	t.Cleanup(func() { _ = stream.CloseRequest(); _ = stream.CloseResponse() })
+	require.NoError(t, stream.Send(&reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_Register{
+		Register: &reliantv1.DaemonRegister{DaemonId: daemonID, Hostname: "ws-" + daemonID[:8], Platform: "linux", DaemonType: "local"},
+	}}))
+	msg, err := stream.Receive()
+	require.NoError(t, err)
+	require.NotNil(t, msg.GetRegistrationAck(), "first server message must be the registration ack")
+	return stream
+}
+
+// registryStatus is what ListDaemons tells the web about daemonID.
+func registryStatus(t *testing.T, registry *DaemonRegistryService, userID, daemonID string) reliantv1.DaemonStatus {
+	t.Helper()
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, userID)
+	resp, err := registry.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	require.NoError(t, err)
+	for _, d := range resp.Msg.GetDaemons() {
+		if d.GetDaemonId() == daemonID {
+			return d.GetStatus()
+		}
+	}
+	t.Fatalf("daemon %s not listed", daemonID)
+	return reliantv1.DaemonStatus_DAEMON_STATUS_UNSPECIFIED
+}
+
+func heldConn(svc *ToolsDaemonService, daemonID string) *daemonConnection {
+	svc.mu.RLock()
+	defer svc.mu.RUnlock()
+	return svc.connections[daemonID]
+}
+
+func leaseFixture(t *testing.T) (repo *db.Repo, rawDB *sql.DB, registry *DaemonRegistryService, userID, daemonID string) {
+	t.Helper()
+	repo, rawDB, cleanup := db.SetupTestDBWithRawDB(t)
+	t.Cleanup(cleanup)
+	return repo, rawDB, NewDaemonRegistryService(repo, nil), "lease-user-" + uuid.NewString()[:8], uuid.NewString()
+}
+
+// The old replica tearing down its half of the stream after the daemon has
+// re-attached elsewhere must not take the new session's lease with it: a
+// release deletes only its own session's row. Deleting by daemon id alone
+// left a serving daemon DISCONNECTED until its next heartbeat re-created the
+// row — and the old replica's list-changed announcement sent every client to
+// read exactly that.
+func TestDaemonStaysActiveWhenTheOldReplicaTearsDownAfterAReconnect(t *testing.T) {
+	repo, _, registry, userID, daemonID := leaseFixture(t)
+
+	replicaA := NewToolsDaemonService(repo)
+	t.Cleanup(replicaA.Close)
+	replicaB := NewToolsDaemonService(repo)
+	t.Cleanup(replicaB.Close)
+
+	dialDaemon(t, replicaA, userID, daemonID)
+	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE, registryStatus(t, registry, userID, daemonID))
+	connA := heldConn(replicaA, daemonID)
+	require.NotNil(t, connA)
+
+	// The daemon re-attaches to replica B while A still holds its half —
+	// a drain, or a half-open connection A's sweeper has not noticed yet.
+	time.Sleep(2 * time.Millisecond) // the new session's attach is strictly later
+	dialDaemon(t, replicaB, userID, daemonID)
+	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE, registryStatus(t, registry, userID, daemonID))
+
+	// A finally tears its half down.
+	replicaA.teardownConnection(connA, "test: stale sweeper on the old replica")
+
+	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE, registryStatus(t, registry, userID, daemonID),
+		"the old replica's teardown deleted the lease of the session now serving on another replica")
+}
+
+// The fence must not cost the ordinary case: a lease a heartbeat re-created is
+// still this session's, and a real disconnect releases it at once rather than
+// leaving a serving-looking lease to expire.
+func TestHeartbeatRestoresAMissingLeaseAndDisconnectIsStillPrompt(t *testing.T) {
+	repo, rawDB, registry, userID, daemonID := leaseFixture(t)
+
+	gateway := NewToolsDaemonService(repo)
+	t.Cleanup(gateway.Close)
+	stream := dialDaemon(t, gateway, userID, daemonID)
+	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE, registryStatus(t, registry, userID, daemonID))
+
+	// The lease disappears while the stream lives.
+	_, err := rawDB.Exec(`DELETE FROM daemon_attachment WHERE daemon_id = $1`, daemonID)
+	require.NoError(t, err)
+	require.Equal(t, reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED, registryStatus(t, registry, userID, daemonID))
+
+	require.NoError(t, stream.Send(heartbeatMsg(time.Now().UnixMilli())))
+	require.Eventually(t, func() bool {
+		return registryStatus(t, registry, userID, daemonID) == reliantv1.DaemonStatus_DAEMON_STATUS_ACTIVE
+	}, 3*time.Second, 20*time.Millisecond,
+		"the daemon's keepalive did not restore its missing lease; the registry keeps reporting a serving daemon as DISCONNECTED")
+
+	// The daemon goes away for real: reported without waiting out a lease.
+	require.NoError(t, stream.CloseRequest())
+	require.Eventually(t, func() bool {
+		return registryStatus(t, registry, userID, daemonID) == reliantv1.DaemonStatus_DAEMON_STATUS_DISCONNECTED
+	}, 3*time.Second, 20*time.Millisecond, "a real disconnect must still release the (re-created) lease at once")
+}
+
+// livenessDownRepo lists the user's daemon but cannot read the lease table.
+type livenessDownRepo struct {
+	db.Repository
+	daemon *db.Daemon
+}
+
+func (r livenessDownRepo) ListDaemonsByUserID(context.Context, string) ([]*db.Daemon, error) {
+	return []*db.Daemon{r.daemon}, nil
+}
+
+func (r livenessDownRepo) GetDaemon(context.Context, string) (*db.Daemon, error) {
+	return r.daemon, nil
+}
+
+func (livenessDownRepo) ListFreshDaemonAttachmentsForUser(context.Context, string, time.Duration) ([]*db.DaemonAttachment, error) {
+	return nil, errors.New("pq: canceling statement due to statement timeout")
+}
+
+func (livenessDownRepo) ListDaemonLocalModels(context.Context, string) (map[string]string, error) {
+	return nil, nil
+}
+
+// A registry that cannot read liveness must say so, not report every one of
+// the user's machines DISCONNECTED: the client cannot tell that answer from
+// the truth, keeps it, and tells the user their machine dropped. An error lets
+// it keep the status it last knew and blame the connection to Reliant.
+func TestRegistryReportsUnavailableRatherThanDisconnectedWhenLivenessCannotBeRead(t *testing.T) {
+	selfHosted := "self_hosted"
+	daemon := &db.Daemon{ID: uuid.NewString(), UserID: "u-1", DaemonType: &selfHosted}
+	registry := NewDaemonRegistryService(livenessDownRepo{daemon: daemon}, nil)
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, "u-1")
+
+	resp, err := registry.ListDaemons(ctx, connect.NewRequest(&reliantv1.ListDaemonsRequest{}))
+	if err == nil {
+		t.Fatalf("ListDaemons answered %v for a daemon whose liveness it could not read", resp.Msg.GetDaemons()[0].GetStatus())
+	}
+	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
+
+	_, err = registry.GetDaemon(ctx, connect.NewRequest(&reliantv1.GetDaemonRequest{DaemonId: daemon.ID}))
+	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 }

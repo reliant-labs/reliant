@@ -110,11 +110,13 @@ func (p *Publisher) Activity(daemonID, userID, daemonType, reason string) {
 	})
 }
 
-// NOTE: reachability-lease renewal on the daemon keepalive is intentionally NOT
-// a daemonstate event. The gateway writes daemon_attachment.last_stream_activity
-// directly (ToolsDaemonService.renewLease → RenewDaemonAttachment, on each heartbeat read)
-// because the authoritative daemon.v1.state.* consumer lives in the control-plane
-// repo and strictly rejects unknown event types. See tools_daemon.go for detail.
+// NOTE: the reachability lease (daemon_attachment) is never written from these
+// events. The gateway holding the stream writes it directly, in stream order
+// (ToolsDaemonService: upsert on connect, renewLease → RenewDaemonAttachment on
+// every heartbeat its receive loop reads, releaseLease →
+// ReleaseDaemonAttachment on teardown); renewal is not an event at all because
+// the control plane's daemon.v1.state.* consumer strictly rejects unknown event
+// types. See tools_daemon.go and Derivation.dispatch.
 
 func (p *Publisher) publish(evt daemonwire.Event) {
 	payload, err := json.Marshal(evt)

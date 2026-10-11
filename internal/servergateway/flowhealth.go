@@ -20,7 +20,7 @@ import (
 // the connection registry (daemon_attachment) must still vouch for that
 // daemon. The registry lease (last_stream_activity) is renewed ONLY by
 // INBOUND traffic — the receive loop's lease renewal on every heartbeat it
-// reads (renewLease) and the daemonstate activity events — while the
+// reads (ToolsDaemonService.renewLease) — while the
 // in-memory conn.lastActivity ALSO bumps on our own sends (runSender). So a
 // held stream whose registry row has gone stale means nothing is arriving
 // from that daemon even though the gateway is still talking to it: a dead

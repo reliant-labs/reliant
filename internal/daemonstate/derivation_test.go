@@ -18,9 +18,10 @@ import (
 
 // fakeRepo captures the side effects the Derivation consumer performs.
 // Models just enough of DerivationRepository to exercise dispatch + ordering
-// rules without touching Postgres — the SQL guard for out-of-order delivery
-// (WHERE last_stream_activity < new) is mirrored here so the test fails for
-// either a missing repo guard OR a missing consumer guard.
+// rules without touching Postgres — the SQL guards for out-of-order delivery
+// are mirrored here so a test fails for either a missing repo guard OR a
+// missing consumer guard. rows holds attachment leases, which only the reaper
+// may delete.
 type fakeRepo struct {
 	mu      sync.Mutex
 	rows    map[string]*db.DaemonAttachment
@@ -57,36 +58,6 @@ func newFakeRepo() *fakeRepo {
 		rows:    map[string]*db.DaemonAttachment{},
 		daemons: map[string]*db.Daemon{},
 	}
-}
-
-func (f *fakeRepo) UpsertDaemonAttachment(_ context.Context, att *db.DaemonAttachment) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	cp := *att
-	f.rows[att.DaemonID] = &cp
-	return nil
-}
-
-func (f *fakeRepo) TouchDaemonAttachmentIfNewer(_ context.Context, daemonID string, activityAt time.Time) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	row, ok := f.rows[daemonID]
-	if !ok {
-		return nil // matches SQL: zero rows updated when no row exists
-	}
-	if !activityAt.After(row.LastStreamActivity) {
-		return nil // mirrors WHERE last_stream_activity < new guard
-	}
-	row.LastStreamActivity = activityAt
-	return nil
-}
-
-func (f *fakeRepo) DeleteDaemonAttachment(_ context.Context, daemonID string) error {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	delete(f.rows, daemonID)
-	f.deletes = append(f.deletes, daemonID)
-	return nil
 }
 
 func (f *fakeRepo) DeleteStaleDaemonAttachments(_ context.Context, olderThan time.Duration) (int64, error) {
@@ -222,11 +193,17 @@ func waitFor(t *testing.T, timeout time.Duration, pred func() bool) bool {
 	return pred()
 }
 
-// TestDerivation_DispatchesAndIsOutOfOrderSafe exercises the full event
-// lifecycle plus the out-of-order activity guard. One test covers the three
-// behaviours the spec calls out: dispatch correctness, idempotency on
-// repeated activity, and "older timestamp must not regress last_stream_activity".
-func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
+// TestDerivation_StaleDisconnectNeverDeletesALiveLease pins one way a serving
+// daemon's lease row went missing (prod 2026-10-11: a daemon attached and
+// serving for hours while the registry reported it DISCONNECTED).
+//
+// The gateway that holds a stream writes that stream's lease itself, in
+// stream order. This consumer used to ALSO apply every connected / activity /
+// disconnected event to the same row — on every replica, each event on its own
+// goroutine, the delete keyed by daemon id alone. So a "disconnected" from the
+// session a gateway drain ended, applied after the reconnect's lease was
+// written, deleted the new session's lease.
+func TestDerivation_StaleDisconnectNeverDeletesALiveLease(t *testing.T) {
 	nc := startTestNATS(t)
 	repo := newFakeRepo()
 
@@ -236,70 +213,37 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 	d := NewDerivation(nc, repo)
 	done := make(chan error, 1)
 	go func() { done <- d.Start(ctx) }()
-
 	if !waitFor(t, 500*time.Millisecond, func() bool { return nc.NumSubscriptions() > 0 }) {
 		t.Fatal("subscription did not register")
 	}
 
-	t0 := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
+	drained := time.Date(2026, 10, 11, 2, 55, 7, 0, time.UTC)
+	reattached := time.Date(2026, 10, 11, 2, 56, 37, 0, time.UTC)
 
-	// 1. connected: row appears with attached_at == last_stream_activity == t0
-	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventConnected, At: t0, DaemonType: "cloud"})
-	if !waitFor(t, 500*time.Millisecond, func() bool {
-		row, ok := repo.snapshot("d-1")
-		return ok && row.LastStreamActivity.Equal(t0)
-	}) {
-		t.Fatalf("connected: row not created at t0")
+	// The reconnect's lease, as the new session's gateway wrote it.
+	repo.mu.Lock()
+	repo.rows["d-1"] = &db.DaemonAttachment{
+		DaemonID: "d-1", UserID: "u-1", Source: db.DaemonAttachmentSourceInbound,
+		AttachedAt: reattached, LastStreamActivity: reattached.Add(15 * time.Second),
 	}
-	row, _ := repo.snapshot("d-1")
-	if row.UserID != "u-1" {
-		t.Errorf("connected: userID = %q, want %q", row.UserID, "u-1")
-	}
-	if row.Source != db.DaemonAttachmentSourceInbound {
-		t.Errorf("connected: source = %q, want %q", row.Source, db.DaemonAttachmentSourceInbound)
-	}
-	if !row.AttachedAt.Equal(t0) {
-		t.Errorf("connected: attached_at = %v, want %v", row.AttachedAt, t0)
-	}
+	repo.mu.Unlock()
 
-	// 2. activity at t1 > t0: advances last_stream_activity.
-	t1 := t0.Add(45 * time.Second)
-	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: t1})
-	if !waitFor(t, 500*time.Millisecond, func() bool {
-		row, _ := repo.snapshot("d-1")
-		return row.LastStreamActivity.Equal(t1)
-	}) {
-		row, _ := repo.snapshot("d-1")
-		t.Fatalf("activity: last_stream_activity = %v, want %v", row.LastStreamActivity, t1)
-	}
+	// The new session's own events, then the drained session's disconnect
+	// arriving late.
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventConnected, At: reattached})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: reattached.Add(time.Second)})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventDisconnected, At: drained})
+	time.Sleep(150 * time.Millisecond)
 
-	// 3. activity at t0+10s (older than t1): must NOT regress.
-	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: t0.Add(10 * time.Second)})
-	time.Sleep(75 * time.Millisecond)
-	row, _ = repo.snapshot("d-1")
-	if !row.LastStreamActivity.Equal(t1) {
-		t.Fatalf("out-of-order activity regressed last_stream_activity; got %v want %v", row.LastStreamActivity, t1)
+	row, ok := repo.snapshot("d-1")
+	if !ok {
+		t.Fatal("a stale disconnected event deleted the live session's lease")
 	}
-
-	// 4. activity at t1 again (idempotent, same timestamp): must NOT regress
-	// and must not error; guard is "strictly newer".
-	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: t1})
-	time.Sleep(75 * time.Millisecond)
-	row, _ = repo.snapshot("d-1")
-	if !row.LastStreamActivity.Equal(t1) {
-		t.Fatalf("idempotent activity at same timestamp changed last_stream_activity; got %v", row.LastStreamActivity)
+	if !row.AttachedAt.Equal(reattached) || !row.LastStreamActivity.Equal(reattached.Add(15*time.Second)) {
+		t.Errorf("liveness events rewrote the gateway's lease: %+v", row)
 	}
-
-	// 5. disconnected: row removed.
-	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventDisconnected, At: t1.Add(time.Minute)})
-	if !waitFor(t, 500*time.Millisecond, func() bool {
-		_, ok := repo.snapshot("d-1")
-		return !ok
-	}) {
-		t.Fatal("disconnected: row not deleted")
-	}
-	if repo.deleteCount() != 1 {
-		t.Errorf("expected 1 delete, got %d", repo.deleteCount())
+	if n := repo.deleteCount(); n != 0 {
+		t.Errorf("expected no attachment deletes from liveness events, got %d", n)
 	}
 
 	cancel()
@@ -314,6 +258,8 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 func TestDerivation_DropsInvalidEventsAtParse(t *testing.T) {
 	nc := startTestNATS(t)
 	repo := newFakeRepo()
+	repo.seedDaemon(&db.Daemon{ID: "d-bad", UserID: "u-1"})
+	repo.seedDaemon(&db.Daemon{ID: "d-ok", UserID: "u-1"})
 
 	ctx, cancel := context.WithCancel(context.Background())
 	t.Cleanup(cancel)
@@ -325,27 +271,33 @@ func TestDerivation_DropsInvalidEventsAtParse(t *testing.T) {
 	at := `"at":"2026-05-30T12:00:00Z"`
 	for _, payload := range []string{
 		`not-json`,
-		`{"daemon_id":"d-bad","user_id":"u-1","type":"weird",` + at + `}`,
-		`{"daemon_id":"d-bad","user_id":"u-1",` + at + `}`,
-		`{"daemon_id":"d-bad","user_id":"u-1","type":"connected"}`,
+		`{"daemon_id":"d-bad","user_id":"u-1","type":"weird","phase":"ready",` + at + `}`,
+		`{"daemon_id":"d-bad","user_id":"u-1","phase":"ready",` + at + `}`,
+		`{"daemon_id":"d-bad","user_id":"u-1","type":"lifecycle","phase":"ready"}`,
 	} {
-		if err := nc.Publish(daemonwire.Subject("d-bad", daemonwire.EventConnected), []byte(payload)); err != nil {
+		if err := nc.Publish(daemonwire.Subject("d-bad", daemonwire.EventLifecycle), []byte(payload)); err != nil {
 			t.Fatalf("publish: %v", err)
 		}
 	}
 	// A valid event after them, so there is something to wait on.
-	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-ok", UserID: "u-1", Type: daemonwire.EventConnected, At: time.Now().UTC()})
-	if !waitFor(t, 500*time.Millisecond, func() bool { _, ok := repo.snapshot("d-ok"); return ok }) {
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-ok", UserID: "u-1", Type: daemonwire.EventLifecycle, At: time.Now().UTC(), Phase: daemonwire.LifecyclePhaseReady})
+	if !waitFor(t, 500*time.Millisecond, func() bool {
+		row, ok := repo.daemonSnapshot("d-ok")
+		return ok && row.LifecyclePhase != nil
+	}) {
 		t.Fatal("valid event after the invalid ones was not applied")
 	}
 	time.Sleep(100 * time.Millisecond)
-	if _, ok := repo.snapshot("d-bad"); ok {
-		t.Error("an invalid payload produced an attachment row")
+	if row, _ := repo.daemonSnapshot("d-bad"); row.LifecyclePhase != nil {
+		t.Error("an invalid payload reached the repository")
+	}
+	if n := repo.lifecycleCallCount(); n != 1 {
+		t.Errorf("lifecycle applications = %d, want 1 (the valid event only)", n)
 	}
 }
 
 // TestDerivation_ReapsExpiredAttachmentsOnStart covers the GC for the leak
-// that has no other cure: DeleteDaemonAttachment runs on graceful teardown
+// that has no other cure: ReleaseDaemonAttachment runs on graceful teardown
 // only, so a gateway that crashes or is rescheduled strands every row it
 // owned and nothing left alive knows to clean them up. Dev's registry carried
 // two such orphans (29 and 51 days) which pinned /flow-health at 503 for the
@@ -422,11 +374,12 @@ func TestDerivation_ReapFailureIsNotFatal(t *testing.T) {
 	if !waitFor(t, 500*time.Millisecond, func() bool { return nc.NumSubscriptions() > 0 }) {
 		t.Fatal("subscription did not register")
 	}
+	repo.seedDaemon(&db.Daemon{ID: "d-9", UserID: "u-9"})
 	t0 := time.Date(2026, 8, 24, 15, 0, 0, 0, time.UTC)
-	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-9", UserID: "u-9", Type: daemonwire.EventConnected, At: t0})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-9", UserID: "u-9", Type: daemonwire.EventLifecycle, At: t0, Phase: daemonwire.LifecyclePhaseReady})
 	if !waitFor(t, 500*time.Millisecond, func() bool {
-		_, ok := repo.snapshot("d-9")
-		return ok
+		row, ok := repo.daemonSnapshot("d-9")
+		return ok && row.LifecyclePhase != nil
 	}) {
 		t.Fatal("consumer stopped processing events after a reap failure")
 	}

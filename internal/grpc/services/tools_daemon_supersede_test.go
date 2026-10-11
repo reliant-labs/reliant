@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -58,6 +59,8 @@ func newTestConn(userID, daemonID string, stream daemonStream) *daemonConnection
 		daemonID:            daemonID,
 		connectedAt:         time.Now().UTC(),
 		lastActivity:        time.Now().UTC(),
+		attachedAt:          leaseTime(time.Now()),
+		attachSource:        db.DaemonAttachmentSourceInbound,
 		stream:              stream,
 		sendCh:              make(chan *reliantv1.ServerMessage, 8),
 		done:                make(chan struct{}),

@@ -34,9 +34,9 @@ func (r *stallingRepo) stall(name string) {
 	<-r.release
 }
 
-func (r *stallingRepo) RenewDaemonAttachment(context.Context, *db.DaemonAttachment) error {
+func (r *stallingRepo) RenewDaemonAttachment(context.Context, *db.DaemonAttachment) (bool, error) {
 	r.stall("RenewDaemonAttachment")
-	return nil
+	return false, nil
 }
 
 func (r *stallingRepo) UpdateDaemonAttachmentPorts(context.Context, string, []uint32) error {

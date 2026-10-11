@@ -144,15 +144,26 @@ type daemonConnection struct {
 	lastReceived time.Time
 	stream       daemonStream
 
-	// What this connection's daemon_attachment lease records about it, so a
-	// renewal can re-create a row the TTL reaper deleted (renewLease).
+	// The session's reachability lease (daemon_attachment), as its connect
+	// wrote it. attachedAt is that row's attached_at, at the column's
+	// microsecond precision (leaseTime): it names THIS session's lease, so
+	// teardown releases only a row this session (or an older one) wrote and
+	// never a newer session's (releaseLease). The source and pod address
+	// ride along so a renewal can re-create a lost row exactly as the
+	// connect wrote it (renewLease).
+	attachedAt   time.Time
 	attachSource db.DaemonAttachmentSource
 	podIP        *string
 	podPort      *int
-	// leaseMu orders lease renewals against teardown's delete, so a renewal
-	// can never land after teardownConnection removed the row and leave a
+	// leaseMu orders lease renewals against teardown's release, so a renewal
+	// can never land after teardownConnection released the row and leave a
 	// lease for a stream that is gone.
 	leaseMu sync.Mutex
+	// leaseRecreated is set by the renewer when it had to re-create a
+	// missing lease row, whose detected_ports then holds the column default;
+	// the inbound state worker clears it and rewrites the ports
+	// (lastDetectedPortsKey is the worker's alone).
+	leaseRecreated atomic.Bool
 
 	// ackedDaemonHeartbeat is the timestamp of the newest DaemonHeartbeat the
 	// receive loop has read, echoed to the daemon in every ServerHeartbeat.
@@ -325,7 +336,7 @@ func (s *ToolsDaemonService) Start(ctx context.Context) {
 // minutes, every command it was sent timed out, and the sweeper never fired.
 //
 // For each reaped connection: fires OnDaemonDisconnected listeners, closes
-// done + subscribers, and deletes the daemon_attachment row — same as a
+// done + subscribers, and releases its daemon_attachment lease — same as a
 // normal disconnect, just driven by the sweeper rather than the stream's
 // receive-loop returning. Closing done ends the stream handler, so the daemon
 // redials and gets a fresh stream.
@@ -452,7 +463,7 @@ func (s *ToolsDaemonService) removeConnection(daemonID, userID string, expected 
 // teardownConnection performs the full disconnect path for a daemon
 // connection: remove from the connections/userDaemons maps, close the
 // connection's done channel + subscribers, fire OnDaemonDisconnected
-// listeners, and best-effort delete the daemon_attachment row.
+// listeners, and best-effort release the session's daemon_attachment lease.
 //
 // Idempotent and safe to call multiple times (e.g. from both a `defer` in
 // the stream handler AND from the stale-connection sweeper) — only the
@@ -476,19 +487,46 @@ func (s *ToolsDaemonService) teardownConnection(conn *daemonConnection, reason s
 	if removed {
 		s.notifyDisconnected(userID, daemonID)
 		s.statePublisher.Disconnected(daemonID, userID, daemonType)
-		// Under leaseMu, and after closeDone above: a renewal already in
-		// flight finishes first and this delete wins; any later one sees
-		// done closed and does nothing (renewLease).
-		conn.leaseMu.Lock()
-		err := s.database.DeleteDaemonAttachment(context.Background(), daemonID)
-		conn.leaseMu.Unlock()
-		if err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID, "reason", reason)
+		// Only when this connection still held the slot: one superseded in
+		// this process leaves the lease to its successor, which wrote its
+		// own.
+		if err := s.releaseLease(context.Background(), conn); err != nil {
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to release daemon attachment", "error", err, "daemonID", daemonID, "reason", reason)
 		}
-		// After the delete, so a client refetching on this signal already
+		// After the release, so a client refetching on this signal already
 		// reads the daemon as detached.
 		s.publishDaemonListChanged(userID, daemonID)
 	}
+}
+
+// leaseTime is a lease timestamp at daemon_attachment's precision
+// (timestamptz, microseconds), so the attached_at a session remembers is the
+// attached_at it wrote, and ReleaseDaemonAttachment's bound compares equal.
+func leaseTime(t time.Time) time.Time {
+	return t.UTC().Truncate(time.Microsecond)
+}
+
+// releaseLease deletes this session's reachability lease as its stream ends:
+// the row for the daemon whose attached_at is this session's or older
+// (db.Repo.ReleaseDaemonAttachment), never a newer session's.
+//
+// A daemon id is held by one stream at a time, but not by one PROCESS. A
+// daemon that loses this gateway reconnects to another replica, while this
+// replica may only tear its half of the stream down a sweep later — and a
+// delete keyed by daemon id alone then removed the lease the new session had
+// just written, so the registry read a serving daemon as DISCONNECTED, and the
+// list-changed announcement below sent every client to read exactly that.
+//
+// Under leaseMu, and after teardown closed done: a renewal already in flight
+// finishes first and this release wins; any later one sees done closed and
+// does nothing (renewLease).
+func (s *ToolsDaemonService) releaseLease(ctx context.Context, conn *daemonConnection) error {
+	if s.database == nil || conn.attachedAt.IsZero() {
+		return nil // no lease was written for this connection
+	}
+	conn.leaseMu.Lock()
+	defer conn.leaseMu.Unlock()
+	return s.database.ReleaseDaemonAttachment(ctx, conn.daemonID, conn.attachedAt)
 }
 
 // DaemonStatus implements daemonquery.StatusSource. Returns the connection's
@@ -866,7 +904,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to list project paths: %w", err))
 	}
 
-	now := time.Now().UTC()
+	now := leaseTime(time.Now())
 	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
 	if err != nil {
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("failed to encode capabilities: %w", err))
@@ -899,7 +937,12 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		AttachedAt:         now,
 		LastStreamActivity: now,
 	}); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to upsert daemon attachment", "error", err, "daemonID", daemonID)
+		// The stream is still accepted: the first keepalive re-creates the
+		// lease (renewLease) and says so. Until then the registry reports
+		// this daemon detached, so this is an error, not a warning.
+		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
+			"the registry reports it detached until its first keepalive re-creates the lease",
+			"error", err, "daemonID", daemonID, "userID", userID)
 	}
 
 	logging.Info(LOG_PREFIX_TOOLS_DAEMON+" Daemon registered",
@@ -921,6 +964,7 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		connectedAt:         now2,
 		lastActivity:        now2,
 		lastReceived:        now2,
+		attachedAt:          now,
 		stream:              &inboundStream{stream: stream},
 		attachSource:        db.DaemonAttachmentSourceInbound,
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
@@ -1030,7 +1074,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		return nil, fmt.Errorf("missing daemonID or userID")
 	}
 
-	now := time.Now().UTC()
+	now := leaseTime(time.Now())
 	capabilitiesJSON, err := jsonStringSlicePtr(reg.Capabilities)
 	if err != nil {
 		return nil, fmt.Errorf("failed to encode capabilities: %w", err)
@@ -1059,7 +1103,10 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		AttachedAt:         now,
 		LastStreamActivity: now,
 	}); err != nil {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to upsert daemon attachment", "error", err, "daemonID", daemonID)
+		// See the inbound path: the first keepalive re-creates it.
+		logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Failed to write the reachability lease for a new daemon stream; "+
+			"the registry reports it detached until its first keepalive re-creates the lease",
+			"error", err, "daemonID", daemonID, "userID", userID)
 	}
 
 	conn := &daemonConnection{
@@ -1073,6 +1120,7 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		connectedAt:         now,
 		lastActivity:        now,
 		lastReceived:        now,
+		attachedAt:          now,
 		stream:              &outboundStream{stream: stream},
 		attachSource:        db.DaemonAttachmentSourceOutbound,
 		podIP:               &podIP,
@@ -1298,11 +1346,13 @@ func (s *ToolsDaemonService) runLeaseRenewer(ctx context.Context, conn *daemonCo
 }
 
 // renewLease writes "this stream is alive as of now" to daemon_attachment,
-// re-creating the row if the TTL reaper deleted it (RenewDaemonAttachment).
+// re-creating the row if it went missing while the stream lived
+// (RenewDaemonAttachment): the TTL reaper expired it during an inbound stall,
+// or the connect-time upsert never landed.
 //
 // A renewal pending when the stream ends is dropped: it would tell the UI the
 // daemon is up after it has gone. The check and the write happen under
-// leaseMu, which teardownConnection also takes around its delete, so a
+// leaseMu, which teardownConnection also takes around its release, so a
 // renewal can never land after the row was deliberately removed.
 func (s *ToolsDaemonService) renewLease(ctx context.Context, conn *daemonConnection, streamEnded <-chan struct{}) {
 	if s.database == nil {
@@ -1316,29 +1366,44 @@ func (s *ToolsDaemonService) renewLease(ctx context.Context, conn *daemonConnect
 				"panic", r, "daemonID", conn.daemonID)
 		}
 	}()
-	conn.leaseMu.Lock()
-	defer conn.leaseMu.Unlock()
-	select {
-	case <-streamEnded:
-		return
-	case <-conn.done:
-		return
-	default:
-	}
-	renewCtx, cancel := context.WithTimeout(ctx, leaseRenewTimeout)
-	defer cancel()
-	now := time.Now().UTC()
-	if err := s.database.RenewDaemonAttachment(renewCtx, &db.DaemonAttachment{
-		DaemonID:           conn.daemonID,
-		UserID:             conn.userID,
-		Source:             conn.attachSource,
-		PodIP:              conn.podIP,
-		PodPort:            conn.podPort,
-		AttachedAt:         conn.connectedAt,
-		LastStreamActivity: now,
-	}); err != nil {
+	created, err := func() (bool, error) {
+		conn.leaseMu.Lock()
+		defer conn.leaseMu.Unlock()
+		select {
+		case <-streamEnded:
+			return false, nil
+		case <-conn.done:
+			return false, nil
+		default:
+		}
+		renewCtx, cancel := context.WithTimeout(ctx, leaseRenewTimeout)
+		defer cancel()
+		return s.database.RenewDaemonAttachment(renewCtx, &db.DaemonAttachment{
+			DaemonID:           conn.daemonID,
+			UserID:             conn.userID,
+			Source:             conn.attachSource,
+			PodIP:              conn.podIP,
+			PodPort:            conn.podPort,
+			AttachedAt:         conn.attachedAt,
+			LastStreamActivity: leaseTime(time.Now()),
+		})
+	}()
+	if err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
+		return
 	}
+	if !created {
+		return
+	}
+	// Until now the registry reported this live daemon as detached, and its
+	// owner's clients are showing that. Repairing the row is not enough:
+	// nothing else would tell them to re-read before their slow fallback
+	// poll. The fresh row also lost the detected ports the state worker
+	// believes it already wrote.
+	logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Re-created a missing reachability lease for a live daemon stream",
+		"daemonID", conn.daemonID, "userID", conn.userID, "attachedAt", conn.attachedAt)
+	conn.leaseRecreated.Store(true)
+	s.publishDaemonListChanged(conn.userID, conn.daemonID)
 }
 
 // runInboundStateWorker applies one connection's state messages in the order
@@ -1387,6 +1452,11 @@ func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemon
 		// types, and it must never feed the workspace idle-suspend timer
 		// (which keys off EventActivity).
 		//
+		// The heartbeat announced above may reach a client before the
+		// renewer has re-created a missing lease; the renewer announces the
+		// re-creation itself, so the client's re-read is not lost to that
+		// race.
+		//
 		// Persist heartbeat-carried workspace memory telemetry on the
 		// attachment record so the daemon registry (and the UI behind it)
 		// can surface memory pressure. limit==0 means the daemon has no
@@ -1404,6 +1474,11 @@ func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemon
 		// churn is rare. UpsertDaemonAttachment resets the column on
 		// re-attach, matching the empty initial cache key here.
 		if hb := m.Heartbeat; hb != nil {
+			if conn.leaseRecreated.Swap(false) {
+				// The renewer re-created the row with the column default:
+				// whatever this cache says was written is gone.
+				conn.lastDetectedPortsKey = ""
+			}
 			portsKey := fmt.Sprint(hb.DetectedPorts)
 			if portsKey != conn.lastDetectedPortsKey {
 				if err := s.database.UpdateDaemonAttachmentPorts(ctx, conn.daemonID, hb.DetectedPorts); err != nil {

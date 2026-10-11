@@ -865,7 +865,7 @@ func TestSweepStaleConnectionsRemovesHalfOpenAndFiresListeners(t *testing.T) {
 	listener := &fakeDisconnectListener{}
 	svc.AddConnectionListener(listener)
 
-	// Pre-seed daemon row so DeleteDaemonAttachment (in teardown) doesn't choke.
+	// Pre-seed daemon rows so the lease writes have an owner to check.
 	staleUserID := "stale-user"
 	staleDaemonID := uuid.New().String()
 	require.NoError(t, repo.UpsertDaemon(context.Background(), &db.Daemon{

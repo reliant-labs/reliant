@@ -429,10 +429,10 @@ type Repository interface {
 	// control plane's authoritative set. See daemon_registry.go.
 	ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error)
 	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
-	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
-	// RenewDaemonAttachment renews a held stream's lease, re-creating a row
-	// the TTL reaper deleted under it. See repository_impl.go.
-	RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
+	// RenewDaemonAttachment renews a held stream's reachability lease on a
+	// heartbeat, re-creating the row when something removed it under the
+	// live stream. See repository_impl.go.
+	RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) (created bool, err error)
 	// UpdateDaemonAttachmentMemory records heartbeat-reported workspace memory
 	// telemetry (used/limit/pressure) on the attachment record. No-op when the
 	// row doesn't exist.
@@ -465,12 +465,14 @@ type Repository interface {
 	UpdateModelEndpoint(ctx context.Context, e *ModelEndpoint) error
 	SetModelEndpointProbe(ctx context.Context, userID, id, probeJSON string) error
 	DeleteModelEndpoint(ctx context.Context, userID, id string) error
-	DeleteDaemonAttachment(ctx context.Context, daemonID string) error
+	// ReleaseDaemonAttachment deletes the lease a stream session created
+	// (attached_at <= attachedAt) and never a newer session's. See
+	// repository_impl.go.
+	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
 	// DeleteStaleDaemonAttachments GCs attachment rows whose lease has not
 	// been renewed for olderThan. Rows are deleted on graceful teardown only,
 	// so a crashed/rescheduled gateway strands its rows forever; this is the
-	// TTL that bounds the leak. Driven by daemonstate.Derivation, the single
-	// writer to the table.
+	// TTL that bounds the leak. Driven by daemonstate.Derivation's reaper.
 	DeleteStaleDaemonAttachments(ctx context.Context, olderThan time.Duration) (int64, error)
 	IsDaemonAttached(ctx context.Context, userID string, staleThreshold time.Duration) (bool, error)
 	// IsDaemonIDAttached is IsDaemonAttached for one daemon.

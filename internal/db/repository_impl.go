@@ -1562,86 +1562,76 @@ func (r *Repo) UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment
 	return nil
 }
 
-// TouchDaemonAttachmentIfNewer advances last_stream_activity only when the
-// incoming timestamp is strictly newer than what's already stored. The
-// derivation consumer is the sole caller; the guard makes out-of-order NATS
-// delivery a no-op rather than a regression.
-func (r *Repo) TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error {
-	if daemonID == "" {
-		return fmt.Errorf("daemon ID cannot be empty")
-	}
-	query := `UPDATE daemon_attachment SET last_stream_activity = ? WHERE daemon_id = ? AND last_stream_activity < ?`
-	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, activityAt, daemonID, activityAt); err != nil {
-		return fmt.Errorf("touching daemon attachment: %w", err)
-	}
-	return nil
-}
-
 // RenewDaemonAttachment renews the lease of a stream the caller is holding
-// RIGHT NOW, re-creating the row if it is gone.
+// RIGHT NOW — the gateway calls it on every heartbeat its receive loop reads
+// — re-creating the row if it is gone, and reports whether it had to.
 //
-// It is what the gateway calls on every inbound heartbeat, and it differs from
-// TouchDaemonAttachmentIfNewer in exactly one way that matters: a missing row
-// is re-inserted instead of silently left missing. The row can vanish under a
-// live stream — the TTL reaper (daemonstate.AttachmentTTL) deletes any lease
-// left unrenewed for 15 minutes, and a gateway whose inbound path stalls that
-// long is still holding the stream when it recovers. An UPDATE-only renewal
-// then matched nothing on every heartbeat for the rest of the session: prod
-// 2026-10-11, a daemon serving terminal commands for six hours read
-// DISCONNECTED to every chat because its lease had been reaped at 12:11 and
-// nothing could ever write it back short of a reconnect.
+// Re-creating it is the point. The lease used to be renewed with an UPDATE,
+// which matches nothing once the row is gone, so a lease lost while its stream
+// lived stayed lost for the rest of the session: the TTL reaper
+// (daemonstate.AttachmentTTL) expiring it during a 15-minute inbound stall, or
+// a connect-time upsert that never landed. Prod 2026-10-11: a daemon serving
+// terminal commands for six hours read DISCONNECTED to every chat because its
+// lease was reaped at 12:11 and nothing could write it back short of a
+// reconnect. Routing does not read the lease, which is why the machine kept
+// working while every chat said it was gone.
 //
-// On conflict only last_stream_activity moves, and only forward: attached_at,
-// memory telemetry and detected ports belong to the session that registered,
-// and a late renewal from a superseded connection must not reset them.
+// The row only moves forward. last_stream_activity and attached_at each keep
+// the later of the stored and renewed values, so an out-of-order renewal is a
+// no-op, and a renewal from a session NEWER than the row's (its own connect
+// upsert never replaced an older session's row) adopts the row: that older
+// session's release (ReleaseDaemonAttachment, attached_at <= its own) can then
+// no longer delete the lease the live session is renewing. Memory telemetry
+// and detected ports are left alone — they belong to the registered session,
+// and the gateway rewrites them on its next heartbeat.
 //
 // The insert is fenced on the daemons row still belonging to the user, the
 // same ownership rule UpsertDaemonAttachment enforces: a daemon the control
-// plane deleted while its stream was up is not resurrected by a heartbeat.
-func (r *Repo) RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) error {
-	if att == nil {
-		return fmt.Errorf("daemon attachment cannot be nil")
+// plane deleted while its stream was up is not resurrected by a heartbeat, and
+// another user's lease is never touched. Either refusal leaves nothing of the
+// caller's to renew, so it is not an error: created is false.
+//
+// created reports that the row was inserted: the lease was missing while its
+// stream was live, and every reader had been reporting the daemon detached.
+func (r *Repo) RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) (created bool, err error) {
+	if att == nil || att.DaemonID == "" || att.UserID == "" || att.Source == "" {
+		return false, fmt.Errorf("renewing daemon attachment requires daemon_id, user_id and source")
 	}
-	if att.DaemonID == "" || att.UserID == "" {
-		return fmt.Errorf("daemon attachment renewal requires daemon_id and user_id")
+	// A renewal names its session (attached_at). Defaulting it would make a
+	// renewal look like a newer session and adopt — and so outlive — a lease
+	// its real session can then no longer release.
+	if att.AttachedAt.IsZero() || att.LastStreamActivity.IsZero() {
+		return false, fmt.Errorf("renewing daemon attachment requires attached_at and last_stream_activity")
 	}
-	source := att.Source
-	if source == "" {
-		source = DaemonAttachmentSourceInbound
-	}
-	now := time.Now().UTC()
-	activityAt := att.LastStreamActivity
-	if activityAt.IsZero() {
-		activityAt = now
-	}
-	attachedAt := att.AttachedAt
-	if attachedAt.IsZero() {
-		attachedAt = activityAt
-	}
+	// xmax = 0 holds only for a row this statement inserted.
 	query := r.bindQuery(`
 		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
 		SELECT ?, ?, ?, ?, ?, ?, ?
 		WHERE EXISTS (SELECT 1 FROM daemons d WHERE d.id = ? AND d.user_id = ?)
 		ON CONFLICT (daemon_id) DO UPDATE SET
-			last_stream_activity = EXCLUDED.last_stream_activity
+			last_stream_activity = GREATEST(daemon_attachment.last_stream_activity, EXCLUDED.last_stream_activity),
+			attached_at = GREATEST(daemon_attachment.attached_at, EXCLUDED.attached_at)
 		WHERE daemon_attachment.user_id = EXCLUDED.user_id
-		  AND daemon_attachment.last_stream_activity < EXCLUDED.last_stream_activity
+		RETURNING (xmax = 0)
 	`)
-	if _, err := r.DB.ExecContext(ctx, query,
-		att.DaemonID, att.UserID, string(source), att.PodIP, att.PodPort, attachedAt, activityAt,
+	err = r.DB.QueryRowContext(ctx, query,
+		att.DaemonID, att.UserID, string(att.Source), att.PodIP, att.PodPort, att.AttachedAt, att.LastStreamActivity,
 		att.DaemonID, att.UserID,
-	); err != nil {
-		return fmt.Errorf("renewing daemon attachment: %w", err)
+	).Scan(&created)
+	if errors.Is(err, sql.ErrNoRows) {
+		return false, nil // not the caller's to renew; see above
 	}
-	return nil
+	if err != nil {
+		return false, fmt.Errorf("renewing daemon attachment: %w", err)
+	}
+	return created, nil
 }
 
 // UpdateDaemonAttachmentMemory records the workspace memory telemetry carried
 // by a daemon heartbeat on the attachment (liveness) record. A no-op when the
 // attachment row doesn't exist — telemetry is only meaningful for a live
 // stream. It deliberately does NOT touch last_stream_activity; the lease
-// renewal stays with TouchDaemonAttachmentIfNewer.
+// renewal stays with RenewDaemonAttachment.
 func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string, usedBytes, limitBytes int64, pressure bool) error {
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
@@ -1658,7 +1648,7 @@ func (r *Repo) UpdateDaemonAttachmentMemory(ctx context.Context, daemonID string
 // listener ports on the attachment (liveness) record. Mirrors
 // UpdateDaemonAttachmentMemory: a no-op when the attachment row doesn't
 // exist, and it deliberately does NOT touch last_stream_activity — the lease
-// renewal stays with TouchDaemonAttachmentIfNewer.
+// renewal stays with RenewDaemonAttachment.
 func (r *Repo) UpdateDaemonAttachmentPorts(ctx context.Context, daemonID string, ports []uint32) error {
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
@@ -1793,14 +1783,33 @@ func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[s
 	return states, rows.Err()
 }
 
-func (r *Repo) DeleteDaemonAttachment(ctx context.Context, daemonID string) error {
+// ReleaseDaemonAttachment deletes the lease a stream session created when
+// that session ends: the row for daemonID whose attached_at is at or before
+// the session's own attachedAt.
+//
+// The bound is what keeps a stale teardown from deleting a newer session's
+// lease. A daemon id is held by one stream at a time, but not by one PROCESS:
+// a daemon that loses its gateway reconnects to another replica, while the old
+// replica may only notice its half of the stream died a sweep later — and an
+// unconditional delete by daemon_id then removed the lease the NEW session had
+// just written. Rows older than the session (one its connect-time upsert
+// failed to replace) are released with it; rows newer than it are not its to
+// delete.
+//
+// attached_at comes from the clock of the gateway that wrote it. One daemon's
+// sessions are strictly sequential (a session ends before the daemon redials),
+// so ordering them only needs the replicas' clocks to agree to within one
+// reconnect.
+func (r *Repo) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
 	}
-	query := `DELETE FROM daemon_attachment WHERE daemon_id = ?`
-	query = r.bindQuery(query)
-	if _, err := r.DB.ExecContext(ctx, query, daemonID); err != nil {
-		return fmt.Errorf("deleting daemon attachment: %w", err)
+	if attachedAt.IsZero() {
+		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
+	}
+	query := r.bindQuery(`DELETE FROM daemon_attachment WHERE daemon_id = ? AND attached_at <= ?`)
+	if _, err := r.DB.ExecContext(ctx, query, daemonID, attachedAt); err != nil {
+		return fmt.Errorf("releasing daemon attachment: %w", err)
 	}
 	return nil
 }
@@ -1810,7 +1819,7 @@ func (r *Repo) DeleteDaemonAttachment(ctx context.Context, daemonID string) erro
 // returns how many were deleted.
 //
 // This is the GC for a leak that is structural, not incidental:
-// DeleteDaemonAttachment runs only on graceful teardown, so a gateway that
+// ReleaseDaemonAttachment runs only on graceful teardown, so a gateway that
 // crashes, is rescheduled, or is redeployed strands every row it owned with
 // nothing left in the world that knows to clean it up. Dev's registry on
 // 2026-08-24 still carried 0c9cff04 (29 days stale) and 81dc53c1 (a workspace
