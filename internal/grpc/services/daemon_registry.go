@@ -15,10 +15,10 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // daemonAttachmentStaleThreshold is the freshness window for daemon_attachment
@@ -323,18 +323,18 @@ func lifecyclePhaseToProto(phase *string) reliantv1.DaemonLifecyclePhase {
 	if phase == nil {
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED
 	}
-	switch daemonstate.LifecyclePhase(*phase) {
-	case daemonstate.LifecyclePhaseProvisioning:
+	switch daemonwire.LifecyclePhase(*phase) {
+	case daemonwire.LifecyclePhaseProvisioning:
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_PROVISIONING
-	case daemonstate.LifecyclePhaseCloning:
+	case daemonwire.LifecyclePhaseCloning:
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_CLONING
-	case daemonstate.LifecyclePhaseReady:
+	case daemonwire.LifecyclePhaseReady:
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_READY
-	case daemonstate.LifecyclePhaseSuspending:
+	case daemonwire.LifecyclePhaseSuspending:
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDING
-	case daemonstate.LifecyclePhaseSuspended:
+	case daemonwire.LifecyclePhaseSuspended:
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_SUSPENDED
-	case daemonstate.LifecyclePhaseFailed:
+	case daemonwire.LifecyclePhaseFailed:
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_FAILED
 	default:
 		return reliantv1.DaemonLifecyclePhase_DAEMON_LIFECYCLE_PHASE_UNSPECIFIED

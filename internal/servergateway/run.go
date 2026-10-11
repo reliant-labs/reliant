@@ -38,6 +38,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // Options holds all configurable values for the daemon-gateway server.
@@ -214,7 +215,7 @@ func Run(ctx context.Context, opts Options) error {
 	// CR). See .dev/simplification-proposal.md, Step 3.
 	toolsDaemonService.SetStatePublisher(daemonstate.NewPublisher(nc))
 	logging.Info("Daemon state publisher wired",
-		"subjectPrefix", daemonstate.SubjectPrefix,
+		"subjectPrefix", daemonwire.SubjectPrefix,
 	)
 
 	// User-update hub, publish-only: the gateway is the one process that
@@ -244,7 +245,7 @@ func Run(ctx context.Context, opts Options) error {
 		}
 	}()
 	logging.Info("Daemon state derivation consumer started",
-		"subject", daemonstate.SubjectWildcard,
+		"subject", daemonwire.SubjectWildcard,
 	)
 
 	// Stale-connection sweeper: nukes connections whose application-level

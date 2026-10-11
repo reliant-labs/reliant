@@ -7,8 +7,8 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 func strp(s string) *string { return &s }
@@ -121,7 +121,7 @@ func TestDaemonToProto_ManagedCarriesLifecycleDetail(t *testing.T) {
 		ID: "d-cloud", UserID: "u-1",
 		Hostname: strp("onboarding-daemon"), Platform: strp("linux"),
 		DaemonType:          strp("managed"),
-		LifecyclePhase:      strp(string(daemonstate.LifecyclePhaseCloning)),
+		LifecyclePhase:      strp(string(daemonwire.LifecyclePhaseCloning)),
 		Size:                strp("medium"),
 		LastStatusMessage:   "cloning your repository",
 		LastStatusChangedAt: &changedAt,

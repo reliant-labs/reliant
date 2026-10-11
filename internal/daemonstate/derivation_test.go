@@ -13,6 +13,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // fakeRepo captures the side effects the Derivation consumer performs.
@@ -195,13 +196,13 @@ func (f *fakeRepo) deleteCount() int {
 	return len(f.deletes)
 }
 
-func publishEvent(t *testing.T, nc *nats.Conn, evt Event) {
+func publishEvent(t *testing.T, nc *nats.Conn, evt daemonwire.Event) {
 	t.Helper()
 	body, err := json.Marshal(evt)
 	if err != nil {
 		t.Fatalf("marshal event: %v", err)
 	}
-	if err := nc.Publish(Subject(evt.DaemonID, evt.Type), body); err != nil {
+	if err := nc.Publish(daemonwire.Subject(evt.DaemonID, evt.Type), body); err != nil {
 		t.Fatalf("publish: %v", err)
 	}
 	if err := nc.Flush(); err != nil {
@@ -243,7 +244,7 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 	t0 := time.Date(2026, 5, 30, 12, 0, 0, 0, time.UTC)
 
 	// 1. connected: row appears with attached_at == last_stream_activity == t0
-	publishEvent(t, nc, Event{DaemonID: "d-1", UserID: "u-1", Type: EventConnected, At: t0, DaemonType: "cloud"})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventConnected, At: t0, DaemonType: "cloud"})
 	if !waitFor(t, 500*time.Millisecond, func() bool {
 		row, ok := repo.snapshot("d-1")
 		return ok && row.LastStreamActivity.Equal(t0)
@@ -263,7 +264,7 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 
 	// 2. activity at t1 > t0: advances last_stream_activity.
 	t1 := t0.Add(45 * time.Second)
-	publishEvent(t, nc, Event{DaemonID: "d-1", UserID: "u-1", Type: EventActivity, At: t1})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: t1})
 	if !waitFor(t, 500*time.Millisecond, func() bool {
 		row, _ := repo.snapshot("d-1")
 		return row.LastStreamActivity.Equal(t1)
@@ -273,7 +274,7 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 	}
 
 	// 3. activity at t0+10s (older than t1): must NOT regress.
-	publishEvent(t, nc, Event{DaemonID: "d-1", UserID: "u-1", Type: EventActivity, At: t0.Add(10 * time.Second)})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: t0.Add(10 * time.Second)})
 	time.Sleep(75 * time.Millisecond)
 	row, _ = repo.snapshot("d-1")
 	if !row.LastStreamActivity.Equal(t1) {
@@ -282,7 +283,7 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 
 	// 4. activity at t1 again (idempotent, same timestamp): must NOT regress
 	// and must not error; guard is "strictly newer".
-	publishEvent(t, nc, Event{DaemonID: "d-1", UserID: "u-1", Type: EventActivity, At: t1})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventActivity, At: t1})
 	time.Sleep(75 * time.Millisecond)
 	row, _ = repo.snapshot("d-1")
 	if !row.LastStreamActivity.Equal(t1) {
@@ -290,7 +291,7 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 	}
 
 	// 5. disconnected: row removed.
-	publishEvent(t, nc, Event{DaemonID: "d-1", UserID: "u-1", Type: EventDisconnected, At: t1.Add(time.Minute)})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-1", UserID: "u-1", Type: daemonwire.EventDisconnected, At: t1.Add(time.Minute)})
 	if !waitFor(t, 500*time.Millisecond, func() bool {
 		_, ok := repo.snapshot("d-1")
 		return !ok
@@ -304,6 +305,42 @@ func TestDerivation_DispatchesAndIsOutOfOrderSafe(t *testing.T) {
 	cancel()
 	if err := <-done; err != nil {
 		t.Fatalf("Start returned err: %v", err)
+	}
+}
+
+// TestDerivation_DropsInvalidEventsAtParse pins that a payload the wire
+// contract rejects (daemonwire.UnmarshalEvent) never reaches the repository,
+// even on a subject that names a real event type.
+func TestDerivation_DropsInvalidEventsAtParse(t *testing.T) {
+	nc := startTestNATS(t)
+	repo := newFakeRepo()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go func() { _ = NewDerivation(nc, repo).Start(ctx) }()
+	if !waitFor(t, 500*time.Millisecond, func() bool { return nc.NumSubscriptions() > 0 }) {
+		t.Fatal("subscription did not register")
+	}
+
+	at := `"at":"2026-05-30T12:00:00Z"`
+	for _, payload := range []string{
+		`not-json`,
+		`{"daemon_id":"d-bad","user_id":"u-1","type":"weird",` + at + `}`,
+		`{"daemon_id":"d-bad","user_id":"u-1",` + at + `}`,
+		`{"daemon_id":"d-bad","user_id":"u-1","type":"connected"}`,
+	} {
+		if err := nc.Publish(daemonwire.Subject("d-bad", daemonwire.EventConnected), []byte(payload)); err != nil {
+			t.Fatalf("publish: %v", err)
+		}
+	}
+	// A valid event after them, so there is something to wait on.
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-ok", UserID: "u-1", Type: daemonwire.EventConnected, At: time.Now().UTC()})
+	if !waitFor(t, 500*time.Millisecond, func() bool { _, ok := repo.snapshot("d-ok"); return ok }) {
+		t.Fatal("valid event after the invalid ones was not applied")
+	}
+	time.Sleep(100 * time.Millisecond)
+	if _, ok := repo.snapshot("d-bad"); ok {
+		t.Error("an invalid payload produced an attachment row")
 	}
 }
 
@@ -386,7 +423,7 @@ func TestDerivation_ReapFailureIsNotFatal(t *testing.T) {
 		t.Fatal("subscription did not register")
 	}
 	t0 := time.Date(2026, 8, 24, 15, 0, 0, 0, time.UTC)
-	publishEvent(t, nc, Event{DaemonID: "d-9", UserID: "u-9", Type: EventConnected, At: t0})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "d-9", UserID: "u-9", Type: daemonwire.EventConnected, At: t0})
 	if !waitFor(t, 500*time.Millisecond, func() bool {
 		_, ok := repo.snapshot("d-9")
 		return ok

@@ -23,11 +23,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/automationcred"
 	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/daemonquery"
-	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 	"github.com/reliant-labs/reliant/internal/toolexec"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // enforcingControlPlane behaves like control-plane#582: a daemon-bound
@@ -133,7 +133,7 @@ func newAutomationHarnessWithChat(t *testing.T, launchKind core.TriggerEventKind
 	}))
 	suspendedAt := now
 	applied, err := repo.ApplyDaemonLifecycle(ctx, db.DaemonLifecycleUpdate{
-		DaemonID: daemonID, Phase: string(daemonstate.LifecyclePhaseSuspended), ChangedAt: suspendedAt,
+		DaemonID: daemonID, Phase: string(daemonwire.LifecyclePhaseSuspended), ChangedAt: suspendedAt,
 	})
 	require.NoError(t, err)
 	require.True(t, applied)
@@ -229,7 +229,7 @@ func (h *automationHarness) attach(t *testing.T) {
 func (h *automationHarness) markReady(t *testing.T) {
 	t.Helper()
 	applied, err := h.repo.ApplyDaemonLifecycle(context.Background(), db.DaemonLifecycleUpdate{
-		DaemonID: h.daemonID, Phase: string(daemonstate.LifecyclePhaseReady), ChangedAt: h.suspendedAt.Add(time.Second),
+		DaemonID: h.daemonID, Phase: string(daemonwire.LifecyclePhaseReady), ChangedAt: h.suspendedAt.Add(time.Second),
 	})
 	require.NoError(t, err)
 	require.True(t, applied, "a later lifecycle event must replace the suspension")

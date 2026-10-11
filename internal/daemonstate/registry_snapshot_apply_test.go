@@ -5,6 +5,8 @@ package daemonstate
 import (
 	"testing"
 	"time"
+
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // TestSnapshotApply_Guards pins the translation: the created-after guard is
@@ -18,13 +20,13 @@ func TestSnapshotApply_Guards(t *testing.T) {
 	created := at.Add(-48 * time.Hour)
 	changed := at.Add(-time.Hour)
 
-	apply := snapshotApply(RegistrySnapshot{
+	apply := snapshotApply(daemonwire.RegistrySnapshot{
 		UserID: "u",
 		At:     at,
-		Daemons: []RegistryDaemon{
-			{DaemonID: "a", Name: "a", DaemonType: "managed", CreatedAt: created, Phase: LifecyclePhaseReady, PhaseChangedAt: &changed},
-			{DaemonID: "b", Name: "b", DaemonType: "managed", CreatedAt: created, Phase: LifecyclePhaseProvisioning},
-			{DaemonID: "c", Name: "c", DaemonType: "managed", CreatedAt: created, Phase: LifecyclePhase("hibernating")},
+		Daemons: []daemonwire.RegistryDaemon{
+			{DaemonID: "a", Name: "a", DaemonType: "managed", CreatedAt: created, Phase: daemonwire.LifecyclePhaseReady, PhaseChangedAt: &changed},
+			{DaemonID: "b", Name: "b", DaemonType: "managed", CreatedAt: created, Phase: daemonwire.LifecyclePhaseProvisioning},
+			{DaemonID: "c", Name: "c", DaemonType: "managed", CreatedAt: created, Phase: daemonwire.LifecyclePhase("hibernating")},
 			{DaemonID: "d", DaemonType: "self_hosted", CreatedAt: created},
 			{DaemonID: "", Name: "no id"},
 		},

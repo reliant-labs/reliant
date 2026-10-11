@@ -10,6 +10,8 @@ import (
 
 	natstest "github.com/nats-io/nats-server/v2/test"
 	"github.com/nats-io/nats.go"
+
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 func startTestNATS(t *testing.T) *nats.Conn {
@@ -37,11 +39,11 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 
 	var (
 		mu     sync.Mutex
-		byType = map[EventType]int{}
-		got    []Event
+		byType = map[daemonwire.EventType]int{}
+		got    []daemonwire.Event
 	)
-	sub, err := nc.Subscribe(SubjectWildcard, func(msg *nats.Msg) {
-		var e Event
+	sub, err := nc.Subscribe(daemonwire.SubjectWildcard, func(msg *nats.Msg) {
+		var e daemonwire.Event
 		if err := json.Unmarshal(msg.Data, &e); err != nil {
 			t.Errorf("unmarshal: %v", err)
 			return
@@ -74,7 +76,7 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 	deadline := time.Now().Add(500 * time.Millisecond)
 	for time.Now().Before(deadline) {
 		mu.Lock()
-		total := byType[EventConnected] + byType[EventDisconnected] + byType[EventActivity]
+		total := byType[daemonwire.EventConnected] + byType[daemonwire.EventDisconnected] + byType[daemonwire.EventActivity]
 		mu.Unlock()
 		if total >= 3 {
 			break
@@ -84,14 +86,14 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 
 	mu.Lock()
 	defer mu.Unlock()
-	if byType[EventConnected] != 1 {
-		t.Errorf("connected count = %d, want 1", byType[EventConnected])
+	if byType[daemonwire.EventConnected] != 1 {
+		t.Errorf("connected count = %d, want 1", byType[daemonwire.EventConnected])
 	}
-	if byType[EventActivity] != 1 {
-		t.Errorf("activity count = %d, want 1 (3 calls should collapse under rate limit)", byType[EventActivity])
+	if byType[daemonwire.EventActivity] != 1 {
+		t.Errorf("activity count = %d, want 1 (3 calls should collapse under rate limit)", byType[daemonwire.EventActivity])
 	}
-	if byType[EventDisconnected] != 1 {
-		t.Errorf("disconnected count = %d, want 1", byType[EventDisconnected])
+	if byType[daemonwire.EventDisconnected] != 1 {
+		t.Errorf("disconnected count = %d, want 1", byType[daemonwire.EventDisconnected])
 	}
 	for _, e := range got {
 		if e.DaemonID != daemonID {

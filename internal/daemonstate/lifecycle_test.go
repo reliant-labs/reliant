@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // startLifecycleDerivation boots a Derivation against a test NATS server and
@@ -18,7 +19,7 @@ import (
 // every test below shares: lifecycle events ride plain NATS, so an event
 // published before the subscription registers is simply lost and the test would
 // fail for the wrong reason.
-func startLifecycleDerivation(t *testing.T, repo *fakeRepo) func(Event) {
+func startLifecycleDerivation(t *testing.T, repo *fakeRepo) func(daemonwire.Event) {
 	t.Helper()
 	nc := startTestNATS(t)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -39,7 +40,7 @@ func startLifecycleDerivation(t *testing.T, repo *fakeRepo) func(Event) {
 		}
 	})
 
-	return func(evt Event) { publishEvent(t, nc, evt) }
+	return func(evt daemonwire.Event) { publishEvent(t, nc, evt) }
 }
 
 // TestDerivation_LifecycleMirrorsManagedPhase is the core of option (b): the
@@ -58,12 +59,12 @@ func TestDerivation_LifecycleMirrorsManagedPhase(t *testing.T) {
 	publish := startLifecycleDerivation(t, repo)
 
 	at := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
-	publish(Event{
+	publish(daemonwire.Event{
 		DaemonID:      "d-managed",
 		UserID:        "u-1",
-		Type:          EventLifecycle,
+		Type:          daemonwire.EventLifecycle,
 		At:            at,
-		Phase:         LifecyclePhaseProvisioning,
+		Phase:         daemonwire.LifecyclePhaseProvisioning,
 		Size:          "medium",
 		StatusMessage: "pulling image",
 	})
@@ -76,8 +77,8 @@ func TestDerivation_LifecycleMirrorsManagedPhase(t *testing.T) {
 	}
 
 	row, _ := repo.daemonSnapshot("d-managed")
-	if got := *row.LifecyclePhase; got != string(LifecyclePhaseProvisioning) {
-		t.Errorf("lifecycle_phase = %q, want %q", got, LifecyclePhaseProvisioning)
+	if got := *row.LifecyclePhase; got != string(daemonwire.LifecyclePhaseProvisioning) {
+		t.Errorf("lifecycle_phase = %q, want %q", got, daemonwire.LifecyclePhaseProvisioning)
 	}
 	if row.Size == nil || *row.Size != "medium" {
 		t.Errorf("size = %v, want \"medium\"", row.Size)
@@ -104,28 +105,28 @@ func TestDerivation_LifecycleIsOutOfOrderSafe(t *testing.T) {
 	early := time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC)
 	late := early.Add(2 * time.Minute)
 
-	publish(Event{
-		DaemonID: "d-ooo", UserID: "u-1", Type: EventLifecycle,
-		At: late, Phase: LifecyclePhaseReady,
+	publish(daemonwire.Event{
+		DaemonID: "d-ooo", UserID: "u-1", Type: daemonwire.EventLifecycle,
+		At: late, Phase: daemonwire.LifecyclePhaseReady,
 	})
 	if !waitFor(t, time.Second, func() bool {
 		row, ok := repo.daemonSnapshot("d-ooo")
-		return ok && row.LifecyclePhase != nil && *row.LifecyclePhase == string(LifecyclePhaseReady)
+		return ok && row.LifecyclePhase != nil && *row.LifecyclePhase == string(daemonwire.LifecyclePhaseReady)
 	}) {
 		t.Fatal("ready phase never applied")
 	}
 
 	// The stale one arrives second, as it would after a reconnect or a
 	// redelivered burst.
-	publish(Event{
-		DaemonID: "d-ooo", UserID: "u-1", Type: EventLifecycle,
-		At: early, Phase: LifecyclePhaseProvisioning,
+	publish(daemonwire.Event{
+		DaemonID: "d-ooo", UserID: "u-1", Type: daemonwire.EventLifecycle,
+		At: early, Phase: daemonwire.LifecyclePhaseProvisioning,
 	})
 	time.Sleep(100 * time.Millisecond)
 
 	row, _ := repo.daemonSnapshot("d-ooo")
-	if got := *row.LifecyclePhase; got != string(LifecyclePhaseReady) {
-		t.Fatalf("stale lifecycle event regressed the phase to %q; want %q", got, LifecyclePhaseReady)
+	if got := *row.LifecyclePhase; got != string(daemonwire.LifecyclePhaseReady) {
+		t.Fatalf("stale lifecycle event regressed the phase to %q; want %q", got, daemonwire.LifecyclePhaseReady)
 	}
 	if !row.LastStatusChangedAt.Equal(late) {
 		t.Fatalf("stale event moved last_status_changed_at to %v; want %v", row.LastStatusChangedAt, late)
@@ -146,9 +147,9 @@ func TestDerivation_LifecycleForUnregisteredDaemonIsNotAnError(t *testing.T) {
 	repo := newFakeRepo()
 	publish := startLifecycleDerivation(t, repo) // no seeded daemon row
 
-	publish(Event{
-		DaemonID: "d-not-yet", UserID: "u-1", Type: EventLifecycle,
-		At: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC), Phase: LifecyclePhaseProvisioning,
+	publish(daemonwire.Event{
+		DaemonID: "d-not-yet", UserID: "u-1", Type: daemonwire.EventLifecycle,
+		At: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC), Phase: daemonwire.LifecyclePhaseProvisioning,
 	})
 
 	if !waitFor(t, time.Second, func() bool { return repo.lifecycleCallCount() > 0 }) {
@@ -173,9 +174,9 @@ func TestDerivation_LifecycleUnknownPhaseIsDropped(t *testing.T) {
 	repo.seedDaemon(&db.Daemon{ID: "d-future", UserID: "u-1"})
 	publish := startLifecycleDerivation(t, repo)
 
-	publish(Event{
-		DaemonID: "d-future", UserID: "u-1", Type: EventLifecycle,
-		At: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC), Phase: LifecyclePhase("hibernating"),
+	publish(daemonwire.Event{
+		DaemonID: "d-future", UserID: "u-1", Type: daemonwire.EventLifecycle,
+		At: time.Date(2026, 10, 2, 9, 0, 0, 0, time.UTC), Phase: daemonwire.LifecyclePhase("hibernating"),
 	})
 	time.Sleep(150 * time.Millisecond)
 
@@ -199,9 +200,9 @@ func TestDerivation_LifecycleOOMAccountingAccumulates(t *testing.T) {
 	publish := startLifecycleDerivation(t, repo)
 
 	killedAt := time.Date(2026, 10, 2, 9, 30, 0, 0, time.UTC)
-	publish(Event{
-		DaemonID: "d-oom", UserID: "u-1", Type: EventLifecycle,
-		At: killedAt, Phase: LifecyclePhaseReady, Size: "large",
+	publish(daemonwire.Event{
+		DaemonID: "d-oom", UserID: "u-1", Type: daemonwire.EventLifecycle,
+		At: killedAt, Phase: daemonwire.LifecyclePhaseReady, Size: "large",
 		LastOOMKilledAt: &killedAt, OOMKillCount: 2,
 	})
 	if !waitFor(t, time.Second, func() bool {
@@ -212,13 +213,13 @@ func TestDerivation_LifecycleOOMAccountingAccumulates(t *testing.T) {
 	}
 
 	// A later phase transition carrying no OOM data must not erase it.
-	publish(Event{
-		DaemonID: "d-oom", UserID: "u-1", Type: EventLifecycle,
-		At: killedAt.Add(time.Minute), Phase: LifecyclePhaseSuspended,
+	publish(daemonwire.Event{
+		DaemonID: "d-oom", UserID: "u-1", Type: daemonwire.EventLifecycle,
+		At: killedAt.Add(time.Minute), Phase: daemonwire.LifecyclePhaseSuspended,
 	})
 	if !waitFor(t, time.Second, func() bool {
 		row, ok := repo.daemonSnapshot("d-oom")
-		return ok && row.LifecyclePhase != nil && *row.LifecyclePhase == string(LifecyclePhaseSuspended)
+		return ok && row.LifecyclePhase != nil && *row.LifecyclePhase == string(daemonwire.LifecyclePhaseSuspended)
 	}) {
 		t.Fatal("suspended phase never applied")
 	}
@@ -244,9 +245,9 @@ func TestDerivation_LifecycleRepoFailurePropagates(t *testing.T) {
 	repo.lifecycleErr = errors.New("connection reset")
 	d := NewDerivation(nil, repo)
 
-	err := d.onLifecycle(context.Background(), Event{
-		DaemonID: "d-err", Type: EventLifecycle,
-		At: time.Now().UTC(), Phase: LifecyclePhaseReady,
+	err := d.onLifecycle(context.Background(), daemonwire.Event{
+		DaemonID: "d-err", Type: daemonwire.EventLifecycle,
+		At: time.Now().UTC(), Phase: daemonwire.LifecyclePhaseReady,
 	})
 	if err == nil {
 		t.Fatal("onLifecycle swallowed a repository error")
@@ -271,7 +272,7 @@ func TestDerivation_LifecycleNotifiesOnlyWhenApplied(t *testing.T) {
 
 	ctx := context.Background()
 	at := time.Date(2026, 10, 6, 9, 0, 0, 0, time.UTC)
-	ready := Event{DaemonID: "d-managed", Type: EventLifecycle, At: at, Phase: LifecyclePhaseReady}
+	ready := daemonwire.Event{DaemonID: "d-managed", Type: daemonwire.EventLifecycle, At: at, Phase: daemonwire.LifecyclePhaseReady}
 
 	if err := d.dispatch(ctx, ready); err != nil {
 		t.Fatalf("dispatch: %v", err)
@@ -285,7 +286,7 @@ func TestDerivation_LifecycleNotifiesOnlyWhenApplied(t *testing.T) {
 		t.Fatalf("dispatch: %v", err)
 	}
 	// A daemon with no registry row has nothing a client could list.
-	if err := d.dispatch(ctx, Event{DaemonID: "d-unknown", Type: EventLifecycle, At: at.Add(time.Minute), Phase: LifecyclePhaseReady}); err != nil {
+	if err := d.dispatch(ctx, daemonwire.Event{DaemonID: "d-unknown", Type: daemonwire.EventLifecycle, At: at.Add(time.Minute), Phase: daemonwire.LifecyclePhaseReady}); err != nil {
 		t.Fatalf("dispatch: %v", err)
 	}
 	if len(calls) != 1 {

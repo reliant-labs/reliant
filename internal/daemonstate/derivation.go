@@ -1,12 +1,18 @@
 // Copyright (c) 2025 Reliant Labs
 
+// Package daemonstate is Reliant's end of the daemon state stream whose wire
+// contract is pkg/daemonwire. The gateway's Publisher emits liveness events
+// (connected, disconnected, activity); the Derivation consumes those together
+// with the control plane's lifecycle and removed events and its registry
+// snapshots, and is the single writer of the daemon registry they feed.
+//
 // Leaf utility package: the exported surface is concrete helpers over the
 // stdlib or the OS, with no collaborator to fake and no second implementation.
 // An interface here would have exactly one implementor and one caller shape,
 // which is indirection without a seam.
 //
 //forge:lint-disable-next-line forge-exclude-contract-outbound-io: the package IS the NATS liveness publisher; adapter conversion deferred (reliant is not forge-generated); tracked in H-RELIANT-CI-lint follow-ups
-//forge:exclude-contract: wire contract + gateway publisher for the daemon liveness event stream
+//forge:exclude-contract: gateway publisher + registry derivation for the daemon state stream
 package daemonstate
 
 import (
@@ -20,6 +26,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // DerivationRepository is the narrow persistence surface the Derivation
@@ -116,8 +123,8 @@ func (d *Derivation) NotifyLifecycleApplied(n LifecycleNotifier) {
 	d.notify = n
 }
 
-// Start subscribes to SubjectWildcard and blocks until ctx is cancelled.
-// Returns nil on clean shutdown.
+// Start subscribes to daemonwire.SubjectWildcard and blocks until ctx is
+// cancelled. Returns nil on clean shutdown.
 func (d *Derivation) Start(ctx context.Context) error {
 	if d.nc == nil {
 		return errors.New("daemonstate: nil NATS connection")
@@ -126,14 +133,14 @@ func (d *Derivation) Start(ctx context.Context) error {
 		return errors.New("daemonstate: nil repository")
 	}
 
-	sub, err := d.nc.Subscribe(SubjectWildcard, func(msg *nats.Msg) {
+	sub, err := d.nc.Subscribe(daemonwire.SubjectWildcard, func(msg *nats.Msg) {
 		// Detach from the NATS dispatch goroutine so a slow DB call doesn't
 		// stall the subscription. NATS-side delivery has no backpressure here;
 		// the gateway publisher is rate-limited.
 		go d.handle(ctx, msg)
 	})
 	if err != nil {
-		return fmt.Errorf("daemonstate: subscribe %s: %w", SubjectWildcard, err)
+		return fmt.Errorf("daemonstate: subscribe %s: %w", daemonwire.SubjectWildcard, err)
 	}
 	defer func() { _ = sub.Unsubscribe() }()
 
@@ -141,11 +148,11 @@ func (d *Derivation) Start(ctx context.Context) error {
 	// subscription goroutine rather than detached: snapshots arrive one per
 	// owner per sweep, and applying them in order keeps two snapshots for the
 	// same owner from interleaving.
-	snapSub, err := d.nc.QueueSubscribe(SubjectRegistrySnapshot, registrySnapshotQueue, func(msg *nats.Msg) {
+	snapSub, err := d.nc.QueueSubscribe(daemonwire.SubjectRegistrySnapshot, registrySnapshotQueue, func(msg *nats.Msg) {
 		d.handleSnapshot(ctx, msg)
 	})
 	if err != nil {
-		return fmt.Errorf("daemonstate: subscribe %s: %w", SubjectRegistrySnapshot, err)
+		return fmt.Errorf("daemonstate: subscribe %s: %w", daemonwire.SubjectRegistrySnapshot, err)
 	}
 	defer func() { _ = snapSub.Unsubscribe() }()
 
@@ -158,7 +165,7 @@ func (d *Derivation) Start(ctx context.Context) error {
 	// whose process is gone.
 	go d.reapLoop(ctx)
 
-	logging.Info(logPrefix+" derivation consumer started", "subject", SubjectWildcard)
+	logging.Info(logPrefix+" derivation consumer started", "subject", daemonwire.SubjectWildcard)
 	<-ctx.Done()
 	logging.Info(logPrefix + " derivation consumer shutting down")
 	return nil
@@ -204,13 +211,11 @@ func (d *Derivation) reapOnce(ctx context.Context) {
 }
 
 func (d *Derivation) handle(ctx context.Context, msg *nats.Msg) {
-	var evt Event
-	if err := json.Unmarshal(msg.Data, &evt); err != nil {
+	// UnmarshalEvent rejects a payload with no daemon_id, no at, or a type the
+	// contract does not define, so dispatch only ever sees a known type.
+	evt, err := daemonwire.UnmarshalEvent(msg.Data)
+	if err != nil {
 		logging.Warn(logPrefix+" malformed event, dropping", "subject", msg.Subject, "error", err)
-		return
-	}
-	if evt.DaemonID == "" || evt.At.IsZero() {
-		logging.Warn(logPrefix+" event missing required fields, dropping", "subject", msg.Subject)
 		return
 	}
 	if err := d.dispatch(ctx, evt); err != nil {
@@ -222,19 +227,22 @@ func (d *Derivation) handle(ctx context.Context, msg *nats.Msg) {
 }
 
 // dispatch routes one event to the appropriate handler. Idempotent.
-func (d *Derivation) dispatch(ctx context.Context, evt Event) error {
+func (d *Derivation) dispatch(ctx context.Context, evt daemonwire.Event) error {
 	switch evt.Type {
-	case EventConnected:
+	case daemonwire.EventConnected:
 		return d.onConnected(ctx, evt)
-	case EventActivity:
+	case daemonwire.EventActivity:
 		return d.onActivity(ctx, evt)
-	case EventDisconnected:
+	case daemonwire.EventDisconnected:
 		return d.onDisconnected(ctx, evt)
-	case EventLifecycle:
+	case daemonwire.EventLifecycle:
 		return d.onLifecycle(ctx, evt)
-	case EventRemoved:
+	case daemonwire.EventRemoved:
 		return d.onRemoved(ctx, evt)
 	default:
+		// Unreachable from handle, which drops an unknown type at parse.
+		// Kept so a type added to the contract but not routed here fails
+		// loudly instead of being silently ignored.
 		return fmt.Errorf("unknown event type %q", evt.Type)
 	}
 }
@@ -260,8 +268,8 @@ func (d *Derivation) dispatch(ctx context.Context, evt Event) error {
 // one at create time, which is what makes a machine appear in the list the
 // moment it is created, in its provisioning state and under its own name —
 // rather than minutes later, when its pod first reaches the gateway.
-func (d *Derivation) onLifecycle(ctx context.Context, evt Event) error {
-	if !ValidLifecyclePhase(evt.Phase) {
+func (d *Derivation) onLifecycle(ctx context.Context, evt daemonwire.Event) error {
+	if !daemonwire.ValidLifecyclePhase(evt.Phase) {
 		logging.Warn(logPrefix+" lifecycle event with unknown phase, dropping",
 			"daemonID", evt.DaemonID, "phase", string(evt.Phase))
 		return nil
@@ -315,7 +323,7 @@ func (d *Derivation) onLifecycle(ctx context.Context, evt Event) error {
 // Idempotent: a removal for a row that is already gone (or never existed) is
 // not an error. The owner's clients are told only when a row actually went,
 // using the owner the row itself recorded — the event need not carry one.
-func (d *Derivation) onRemoved(ctx context.Context, evt Event) error {
+func (d *Derivation) onRemoved(ctx context.Context, evt daemonwire.Event) error {
 	userID, removed, err := d.repo.RemoveDaemon(ctx, evt.DaemonID)
 	if err != nil {
 		return fmt.Errorf("remove daemon %s: %w", evt.DaemonID, err)
@@ -334,7 +342,7 @@ func (d *Derivation) onRemoved(ctx context.Context, evt Event) error {
 // handleSnapshot applies one owner's authoritative daemon set. See
 // db.Repo.ApplyDaemonRegistrySnapshot for the guards that make removal safe.
 func (d *Derivation) handleSnapshot(ctx context.Context, msg *nats.Msg) {
-	var snap RegistrySnapshot
+	var snap daemonwire.RegistrySnapshot
 	if err := json.Unmarshal(msg.Data, &snap); err != nil {
 		logging.Warn(logPrefix+" malformed registry snapshot, dropping", "error", err)
 		return
@@ -370,7 +378,7 @@ func (d *Derivation) handleSnapshot(ctx context.Context, msg *nats.Msg) {
 // snapshotApply translates the wire snapshot into the repository's terms.
 // Daemons with no id are dropped; an entry with an unrecognised phase keeps
 // its identity but carries no lifecycle, the same rule onLifecycle applies.
-func snapshotApply(snap RegistrySnapshot, now time.Time) db.RegistrySnapshotApply {
+func snapshotApply(snap daemonwire.RegistrySnapshot, now time.Time) db.RegistrySnapshotApply {
 	apply := db.RegistrySnapshotApply{
 		UserID:            snap.UserID,
 		Daemons:           make([]db.RegistrySnapshotDaemon, 0, len(snap.Daemons)),
@@ -388,7 +396,7 @@ func snapshotApply(snap RegistrySnapshot, now time.Time) db.RegistrySnapshotAppl
 			DaemonType: rd.DaemonType,
 			CreatedAt:  rd.CreatedAt,
 		}}
-		if rd.Phase != "" && ValidLifecyclePhase(rd.Phase) {
+		if rd.Phase != "" && daemonwire.ValidLifecyclePhase(rd.Phase) {
 			changedAt := rd.CreatedAt
 			if rd.PhaseChangedAt != nil {
 				changedAt = *rd.PhaseChangedAt
@@ -410,7 +418,7 @@ func snapshotApply(snap RegistrySnapshot, now time.Time) db.RegistrySnapshotAppl
 	return apply
 }
 
-func (d *Derivation) onConnected(ctx context.Context, evt Event) error {
+func (d *Derivation) onConnected(ctx context.Context, evt daemonwire.Event) error {
 	att := &db.DaemonAttachment{
 		DaemonID:           evt.DaemonID,
 		UserID:             evt.UserID,
@@ -424,7 +432,7 @@ func (d *Derivation) onConnected(ctx context.Context, evt Event) error {
 	return nil
 }
 
-func (d *Derivation) onActivity(ctx context.Context, evt Event) error {
+func (d *Derivation) onActivity(ctx context.Context, evt daemonwire.Event) error {
 	// No-op when the row doesn't exist (activity racing ahead of connected)
 	// or when the stored timestamp is already newer (out-of-order NATS
 	// delivery). The next connected event creates the row; the next in-order
@@ -435,7 +443,7 @@ func (d *Derivation) onActivity(ctx context.Context, evt Event) error {
 	return nil
 }
 
-func (d *Derivation) onDisconnected(ctx context.Context, evt Event) error {
+func (d *Derivation) onDisconnected(ctx context.Context, evt daemonwire.Event) error {
 	if err := d.repo.DeleteDaemonAttachment(ctx, evt.DaemonID); err != nil {
 		return fmt.Errorf("delete attachment %s: %w", evt.DaemonID, err)
 	}

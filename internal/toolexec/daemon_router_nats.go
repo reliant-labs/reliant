@@ -16,11 +16,11 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonliveness"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
-	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/nomachine"
 	"github.com/reliant-labs/reliant/internal/observability"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // NATS subject patterns for tool execution and daemon routing.
@@ -254,10 +254,10 @@ func daemonRecordStateOf(d *db.Daemon, attached bool) daemonRecordState {
 	if d.LifecyclePhase == nil {
 		return recordUnconfirmed
 	}
-	switch daemonstate.LifecyclePhase(*d.LifecyclePhase) {
-	case daemonstate.LifecyclePhaseProvisioning, daemonstate.LifecyclePhaseCloning:
+	switch daemonwire.LifecyclePhase(*d.LifecyclePhase) {
+	case daemonwire.LifecyclePhaseProvisioning, daemonwire.LifecyclePhaseCloning:
 		return recordStarting
-	case daemonstate.LifecyclePhaseSuspending, daemonstate.LifecyclePhaseSuspended:
+	case daemonwire.LifecyclePhaseSuspending, daemonwire.LifecyclePhaseSuspended:
 		return recordSuspended
 	default:
 		return recordUnconfirmed
@@ -351,7 +351,7 @@ func (r *NATSDaemonRouter) lookupDaemonRecord(ctx context.Context, userID string
 			state:   daemonRecordStateOf(d, attached[d.ID]),
 			managed: d.DaemonType != nil && canonicalDaemonType(*d.DaemonType) == "managed",
 			failed: !attached[d.ID] && d.LifecyclePhase != nil &&
-				daemonstate.LifecyclePhase(*d.LifecyclePhase) == daemonstate.LifecyclePhaseFailed,
+				daemonwire.LifecyclePhase(*d.LifecyclePhase) == daemonwire.LifecyclePhaseFailed,
 			statusMessage: d.LastStatusMessage,
 		}
 		switch candidate.state {

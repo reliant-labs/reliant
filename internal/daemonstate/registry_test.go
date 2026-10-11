@@ -12,6 +12,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 // These tests pin the three ways the registry learns what the control plane
@@ -144,13 +145,13 @@ func startRegistryDerivation(t *testing.T, repo *fakeRepo, wantSubs int) (*nats.
 	return nc, rec
 }
 
-func publishSnapshot(t *testing.T, nc *nats.Conn, snap RegistrySnapshot) {
+func publishSnapshot(t *testing.T, nc *nats.Conn, snap daemonwire.RegistrySnapshot) {
 	t.Helper()
 	body, err := json.Marshal(snap)
 	if err != nil {
 		t.Fatalf("marshal snapshot: %v", err)
 	}
-	if err := nc.Publish(SubjectRegistrySnapshot, body); err != nil {
+	if err := nc.Publish(daemonwire.SubjectRegistrySnapshot, body); err != nil {
 		t.Fatalf("publish snapshot: %v", err)
 	}
 	if err := nc.Flush(); err != nil {
@@ -166,12 +167,12 @@ func publishSnapshot(t *testing.T, nc *nats.Conn, snap RegistrySnapshot) {
 // the owner the row recorded because the event need not carry one.
 func TestDerivation_RemovedEventDeletesRegistryRow(t *testing.T) {
 	repo := newFakeRepo()
-	phase := string(LifecyclePhaseProvisioning)
+	phase := string(daemonwire.LifecyclePhaseProvisioning)
 	repo.seedDaemon(&db.Daemon{ID: "cda8a89b", UserID: "u-owner", LifecyclePhase: &phase})
 	repo.rows["cda8a89b"] = &db.DaemonAttachment{DaemonID: "cda8a89b", UserID: "u-owner"}
 	nc, rec := startRegistryDerivation(t, repo, 1)
 
-	publishEvent(t, nc, Event{DaemonID: "cda8a89b", Type: EventRemoved, At: time.Now().UTC()})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "cda8a89b", Type: daemonwire.EventRemoved, At: time.Now().UTC()})
 
 	if !waitFor(t, time.Second, func() bool {
 		_, ok := repo.daemonSnapshot("cda8a89b")
@@ -197,7 +198,7 @@ func TestDerivation_RemovedEventForUnknownDaemonIsQuiet(t *testing.T) {
 	repo := newFakeRepo()
 	nc, rec := startRegistryDerivation(t, repo, 1)
 
-	publishEvent(t, nc, Event{DaemonID: "never-registered", Type: EventRemoved, At: time.Now().UTC()})
+	publishEvent(t, nc, daemonwire.Event{DaemonID: "never-registered", Type: daemonwire.EventRemoved, At: time.Now().UTC()})
 	time.Sleep(100 * time.Millisecond)
 	if calls := rec.snapshot(); len(calls) != 0 {
 		t.Fatalf("removing nothing notified: %+v", calls)
@@ -215,10 +216,10 @@ func TestDerivation_IdentityLifecycleCreatesRowWithName(t *testing.T) {
 	nc, rec := startRegistryDerivation(t, repo, 1)
 
 	created := time.Date(2026, 10, 7, 14, 41, 36, 0, time.UTC)
-	publishEvent(t, nc, Event{
-		DaemonID: "2aab1465", Type: EventLifecycle, At: created,
+	publishEvent(t, nc, daemonwire.Event{
+		DaemonID: "2aab1465", Type: daemonwire.EventLifecycle, At: created,
 		UserID: "u-owner", DaemonType: "managed", Name: "default", CreatedAt: &created,
-		Phase: LifecyclePhaseProvisioning, Size: "small",
+		Phase: daemonwire.LifecyclePhaseProvisioning, Size: "small",
 	})
 
 	if !waitFor(t, time.Second, func() bool {
@@ -234,7 +235,7 @@ func TestDerivation_IdentityLifecycleCreatesRowWithName(t *testing.T) {
 	if row.UserID != "u-owner" {
 		t.Errorf("user_id = %q, want u-owner", row.UserID)
 	}
-	if *row.LifecyclePhase != string(LifecyclePhaseProvisioning) {
+	if *row.LifecyclePhase != string(daemonwire.LifecyclePhaseProvisioning) {
 		t.Errorf("phase = %q, want provisioning", *row.LifecyclePhase)
 	}
 	if !row.CreatedAt.Equal(created) {
@@ -270,14 +271,14 @@ func TestDerivation_RegistrySnapshotReconciles(t *testing.T) {
 	nc, rec := startRegistryDerivation(t, repo, 2)
 
 	suspendedAt := time.Date(2026, 9, 22, 0, 0, 0, 0, time.UTC)
-	publishSnapshot(t, nc, RegistrySnapshot{
+	publishSnapshot(t, nc, daemonwire.RegistrySnapshot{
 		UserID: "u-owner",
 		At:     time.Now().UTC(),
-		Daemons: []RegistryDaemon{
+		Daemons: []daemonwire.RegistryDaemon{
 			{DaemonID: "2aab1465", Name: "default", DaemonType: "managed", CreatedAt: longAgo},
 			{
 				DaemonID: "dea98d67", Name: "test", DaemonType: "managed", CreatedAt: longAgo,
-				Phase: LifecyclePhaseSuspended, PhaseChangedAt: &suspendedAt, Size: "small",
+				Phase: daemonwire.LifecyclePhaseSuspended, PhaseChangedAt: &suspendedAt, Size: "small",
 			},
 		},
 	})
@@ -325,7 +326,7 @@ func TestDerivation_EmptySnapshotRemovesEveryGhost(t *testing.T) {
 	repo.seedDaemon(&db.Daemon{ID: "ghost-b", UserID: "u-owner", CreatedAt: longAgo})
 	nc, _ := startRegistryDerivation(t, repo, 2)
 
-	publishSnapshot(t, nc, RegistrySnapshot{UserID: "u-owner", At: time.Now().UTC(), Daemons: []RegistryDaemon{}})
+	publishSnapshot(t, nc, daemonwire.RegistrySnapshot{UserID: "u-owner", At: time.Now().UTC(), Daemons: []daemonwire.RegistryDaemon{}})
 
 	if !waitFor(t, time.Second, func() bool {
 		_, a := repo.daemonSnapshot("ghost-a")

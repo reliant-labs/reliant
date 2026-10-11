@@ -10,6 +10,7 @@ import (
 	"github.com/nats-io/nats.go"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/pkg/daemonwire"
 )
 
 const logPrefix = "[daemonstate]"
@@ -48,10 +49,10 @@ func (p *Publisher) Connected(daemonID, userID, daemonType string) {
 	if p == nil || p.nc == nil || daemonID == "" {
 		return
 	}
-	p.publish(Event{
+	p.publish(daemonwire.Event{
 		DaemonID:   daemonID,
 		UserID:     userID,
-		Type:       EventConnected,
+		Type:       daemonwire.EventConnected,
 		At:         time.Now().UTC(),
 		DaemonType: daemonType,
 	})
@@ -70,10 +71,10 @@ func (p *Publisher) Disconnected(daemonID, userID, daemonType string) {
 	p.mu.Lock()
 	delete(p.lastActivityAt, daemonID)
 	p.mu.Unlock()
-	p.publish(Event{
+	p.publish(daemonwire.Event{
 		DaemonID:   daemonID,
 		UserID:     userID,
-		Type:       EventDisconnected,
+		Type:       daemonwire.EventDisconnected,
 		At:         time.Now().UTC(),
 		DaemonType: daemonType,
 	})
@@ -94,10 +95,10 @@ func (p *Publisher) Activity(daemonID, userID, daemonType string) {
 	}
 	p.lastActivityAt[daemonID] = now
 	p.mu.Unlock()
-	p.publish(Event{
+	p.publish(daemonwire.Event{
 		DaemonID:   daemonID,
 		UserID:     userID,
-		Type:       EventActivity,
+		Type:       daemonwire.EventActivity,
 		At:         now,
 		DaemonType: daemonType,
 	})
@@ -109,14 +110,14 @@ func (p *Publisher) Activity(daemonID, userID, daemonType string) {
 // because the authoritative daemon.v1.state.* consumer lives in the control-plane
 // repo and strictly rejects unknown event types. See tools_daemon.go for detail.
 
-func (p *Publisher) publish(evt Event) {
+func (p *Publisher) publish(evt daemonwire.Event) {
 	payload, err := json.Marshal(evt)
 	if err != nil {
 		// Impossible for the fixed Event shape, but log if it ever happens.
 		logging.Debug(logPrefix+" marshal failed", "daemonID", evt.DaemonID, "type", evt.Type, "error", err)
 		return
 	}
-	subj := Subject(evt.DaemonID, evt.Type)
+	subj := daemonwire.Subject(evt.DaemonID, evt.Type)
 	if err := p.nc.Publish(subj, payload); err != nil {
 		logging.Debug(logPrefix+" publish failed", "subject", subj, "daemonID", evt.DaemonID, "type", evt.Type, "error", err)
 	}

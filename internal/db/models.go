@@ -234,7 +234,7 @@ type Daemon struct {
 	// (derived from daemon_attachment, which this service does own) and
 	// lifecycle. All nil/zero for self-hosted daemons, permanently.
 	//
-	// LifecyclePhase holds the public vocabulary (daemonstate.LifecyclePhase
+	// LifecyclePhase holds the public vocabulary (daemonwire.LifecyclePhase
 	// values), never a raw Kubernetes phase.
 	LifecyclePhase *string
 	Size           *string
