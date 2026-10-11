@@ -80,6 +80,11 @@ jobs:
       # the jobs. A new top-level directory nobody thought about makes this
       # true and everything runs, which is the safe direction to be wrong in.
       non_gomod: ${{ steps.filter.outputs.non_gomod }}
+      # true when the change touches the vendored control-plane contract or the
+      # script that produces it — the only changes in THIS repo that can move
+      # proto-vendor/controlplane/ relative to control-plane. Unusable or empty
+      # ranges set it true, like non_gomod.
+      cp_contract: ${{ steps.filter.outputs.cp_contract }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -109,6 +114,7 @@ jobs:
               || [ "${base}" = "0000000000000000000000000000000000000000" ] \
               || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
               echo "non_gomod=true" >> "$GITHUB_OUTPUT"
+              echo "cp_contract=true" >> "$GITHUB_OUTPUT"
               echo "push with no usable 'before' (${base:-unset}) — running everything"
               exit 0
             fi
@@ -134,8 +140,16 @@ jobs:
           # empty PR is possible.
           if [ -z "${changed}" ]; then
             echo "non_gomod=true" >> "$GITHUB_OUTPUT"
+            echo "cp_contract=true" >> "$GITHUB_OUTPUT"
             echo "empty diff — running everything"
             exit 0
+          fi
+
+          if echo "${changed}" | grep -qE '^(proto-vendor/controlplane/|\.github/scripts/sync-controlplane-proto\.mjs$)'; then
+            echo "cp_contract=true" >> "$GITHUB_OUTPUT"
+            echo "touches the vendored control-plane contract — its drift gate runs."
+          else
+            echo "cp_contract=false" >> "$GITHUB_OUTPUT"
           fi
 
           if echo "${changed}" | grep -qvE '^(go\.mod|go\.sum)$'; then
@@ -216,6 +230,99 @@ jobs:
       # a fork could not supply one. The skip is the expected path.
       - name: Validate committed electron/release.config.json values
         run: node .github/scripts/sync-release-config.mjs --check
+
+  # proto-vendor/controlplane/ is a GENERATED `buf export` of control-plane's
+  # public protos (.github/scripts/sync-controlplane-proto.mjs), and every
+  # control-plane client here is generated from it.
+  #
+  # control-plane's CI already runs this comparison ("Validate KCL" → "Verify
+  # reliant's vendored public proto matches this repo"). It runs only on
+  # control-plane's commits, though, so a change made HERE was never judged here.
+  # A re-vendor from a stale control-plane checkout, a hand edit, or a sync from
+  # a control-plane branch that never merged all passed this repo's CI. Each one
+  # surfaced later as a red control-plane main on some unrelated commit.
+  #
+  # This job is the other half. A PR that changes the vendored tree has to prove,
+  # on the PR, that the tree is exactly what control-plane's main exports.
+  #
+  # Path-filtered by `changes` to what can break that pairing from this side:
+  # proto-vendor/controlplane/ and the sync script. A PR touching neither cannot
+  # move the tree relative to control-plane. A control-plane proto change is
+  # control-plane's gate to catch.
+  #
+  # Reading control-plane, which is private, needs SIBLING_READ_TOKEN: the same
+  # read-only cross-repo credential pin-drift.yml uses for forge, here also
+  # needing contents:read on reliant-labs/control-plane. Without it the job FAILS
+  # rather than skipping: a drift gate that skips cannot be told apart from one
+  # that passes, which is why control-plane passes --require. Fork PRs are the
+  # one exception. GitHub never gives them secrets, so they are skipped with a
+  # notice, and control-plane's gate judges the tree once it reaches main.
+  #
+  # Ordering: with a strict gate on each side, one side's PR is red until the
+  # other merges (control-plane's release skill, "The public proto contract is
+  # gated from BOTH sides"). Re-vendoring from a control-plane branch fails here
+  # until that branch is on control-plane main. Re-run this job after it lands.
+  cp-contract:
+    name: Vendored control-plane contract matches control-plane main
+    needs: changes
+    if: needs.changes.outputs.cp_contract == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Decide whether this run can read control-plane
+        id: access
+        env:
+          IS_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
+          HAS_TOKEN: ${{ secrets.SIBLING_READ_TOKEN != '' }}
+        run: |
+          set -euo pipefail
+          if [ "${IS_FORK}" = "true" ]; then
+            echo "::notice title=control-plane contract not checked::Fork PRs get no secrets, so control-plane (private) cannot be read. control-plane's CI gates proto-vendor/controlplane/ once it reaches main."
+            echo "check=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          if [ "${HAS_TOKEN}" != "true" ]; then
+            echo "::error title=SIBLING_READ_TOKEN is not configured::This PR changes proto-vendor/controlplane/, which must match control-plane main, and control-plane is private. Add a SIBLING_READ_TOKEN Actions secret with contents:read on reliant-labs/control-plane. This gate fails rather than skipping, because a skip would report success without checking anything."
+            exit 1
+          fi
+          echo "check=true" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/checkout@v6
+        if: steps.access.outputs.check == 'true'
+
+      - name: Check out control-plane main (private, read-only)
+        if: steps.access.outputs.check == 'true'
+        uses: actions/checkout@v6
+        with:
+          repository: reliant-labs/control-plane
+          ref: main
+          path: control-plane-sibling
+          token: ${{ secrets.SIBLING_READ_TOKEN }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      # The vendored tree is a byte-for-byte `buf export`, so both sides must run
+      # the same buf: this matches control-plane's .github/actions/setup-buf pin.
+      - name: Install buf
+        if: steps.access.outputs.check == 'true'
+        uses: bufbuild/buf-action@v1
+        with:
+          setup_only: true
+          version: '1.57.0'
+          github_token: ${{ github.token }}
+
+      - name: Verify proto-vendor/controlplane/ matches control-plane main
+        if: steps.access.outputs.check == 'true'
+        env:
+          CONTROL_PLANE_DIR: ${{ github.workspace }}/control-plane-sibling
+        run: |
+          set -euo pipefail
+          control_plane_sha="$(git -C "${CONTROL_PLANE_DIR}" rev-parse --short HEAD)"
+          echo "comparing against reliant-labs/control-plane main @ ${control_plane_sha}"
+          node .github/scripts/sync-controlplane-proto.mjs --check --require || {
+            echo "::error title=proto-vendor/controlplane/ differs from control-plane main (${control_plane_sha})::Re-vendor from a control-plane tree at origin/main: CONTROL_PLANE_DIR=<cp-tree> node .github/scripts/sync-controlplane-proto.mjs && make proto-generate-controlplane. If this PR deliberately vendors an unmerged control-plane branch, this fails until that branch merges. Re-run the job then."
+            exit 1
+          }
 
   # The generators moved OFF the critical path, and this job is what keeps
   # that safe.
