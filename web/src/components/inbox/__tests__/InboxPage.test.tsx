@@ -115,12 +115,11 @@ beforeEach(() => {
 });
 
 describe("InboxPage item kinds", () => {
-  it("an approval shows its tool and arguments on one line, with Approve / Deny", async () => {
+  it("an approval shows its title on one line, with Approve / Deny", async () => {
     respond([approvalItem()]);
     renderInboxAt(<InboxPage />);
     const row = await screen.findByTestId("inbox-item-approval:appr-1");
-    expect(within(row).getByText("bash")).toBeInTheDocument();
-    expect(within(row).getByText(/git push origin main/)).toBeInTheDocument();
+    expect(within(row).getByText("Deploy to production?")).toBeInTheDocument();
 
     await userEvent.click(within(row).getByRole("button", { name: "Approve" }));
     await waitFor(() => expect(mocks.approve).toHaveBeenCalledWith("appr-1", undefined));

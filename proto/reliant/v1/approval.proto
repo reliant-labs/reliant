@@ -5,7 +5,13 @@ package reliant.v1;
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
+// ApprovalType is the kind of approval request. Workflow step approvals are
+// the only kind left.
 enum ApprovalType {
+  // 1 was APPROVAL_TYPE_TOOL: the integration action approval prompt, removed.
+  // Rows recorded with it can still exist and still carry 1.
+  reserved 1;
+  reserved "APPROVAL_TYPE_TOOL";
   APPROVAL_TYPE_UNSPECIFIED = 0;
   APPROVAL_TYPE_WORKFLOW_STEP = 2;
 }
@@ -54,6 +60,11 @@ message Approval {
   optional string workflow_id = 16;
   optional string run_id = 17;
   optional string action_taken = 19;  // Which action button was clicked (e.g., "Deploy Now")
+
+  // Tool approvals (the removed APPROVAL_TYPE_TOOL) asked about one call to an
+  // integration action, and described it with these.
+  reserved 13, 14, 20, 21, 22;
+  reserved "tool_name", "tool_call_id", "tool_input", "integration_name", "integration_icon";
 }
 
 // ListApprovalsByChatRequest lists pending approvals for a chat

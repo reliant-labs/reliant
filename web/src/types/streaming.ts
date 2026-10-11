@@ -22,7 +22,7 @@ export interface ToolApprovalUpdate {
   update_type: "approval";
   id: string;
   chat_id: string;
-  approval_type: "tool" | "workflow_step";
+  approval_type: "workflow_step";
   entity_id: string;
   title: string;
   description?: string;
@@ -33,13 +33,6 @@ export interface ToolApprovalUpdate {
   created_at: string;
   responded_at?: string;
   action_taken?: string;
-  // A tool approval's call, as ApprovalCreate broadcasts it.
-  tool_name?: string;
-  tool_call_id?: string;
-  /** The call's parameters, as JSON. */
-  input?: string;
-  integration_name?: string;
-  integration_icon?: string;
 }
 
 // RouterDecisionInfo carries routing decision metadata from a router node.

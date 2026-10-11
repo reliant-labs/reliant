@@ -269,3 +269,65 @@ func TestApprovalService_Approve_MissingRequestID(t *testing.T) {
 	require.ErrorAs(t, err, &connectErr)
 	assert.Equal(t, connect.CodeInvalidArgument, connectErr.Code())
 }
+
+// createRetiredToolApproval creates a pending approval as the removed
+// integration action approval prompt recorded it: type 1, the reserved
+// APPROVAL_TYPE_TOOL, asking about one call in the turn.
+func createRetiredToolApproval(t *testing.T, repo *db.Repo, chatID, workflowID string) string {
+	t.Helper()
+	approvalID := uuid.NewString()
+	require.NoError(t, repo.CreateApproval(context.Background(), &db.Approval{
+		ID:                 approvalID,
+		ChatID:             chatID,
+		ApprovalType:       retiredToolApprovalType,
+		EntityID:           workflowID + ":" + uuid.NewString(),
+		Status:             int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING),
+		Title:              "Post message in #general?",
+		TemporalWorkflowID: workflowID,
+		CreatedAt:          time.Now().UTC(),
+	}))
+	return approvalID
+}
+
+// Denying an approval the removed prompt recorded writes no denial message:
+// the run still waiting on it refuses that one call in ExecuteTools, so a
+// tool_result for every call in the turn would duplicate that result. Denying
+// a workflow step approval in the same turn still writes one.
+func TestApprovalService_DenyRetiredToolApprovalWritesNoDenialMessage(t *testing.T) {
+	ctx := approvalTestCtx()
+
+	for name, deny := range map[string]func(*ApprovalService, string) error{
+		"Deny": func(s *ApprovalService, id string) error {
+			_, err := s.Deny(ctx, connect.NewRequest(&reliantv1.DenyRequest{RequestId: id}))
+			return err
+		},
+		"BatchDeny": func(s *ApprovalService, id string) error {
+			_, err := s.BatchDeny(ctx, connect.NewRequest(&reliantv1.BatchDenyRequest{RequestIds: []string{id}}))
+			return err
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			service, repo, mockClient := setupTestApprovalServiceWithMockClient(t)
+			f := setupToolCallDurableFixture(t, ctx, repo, `{"channel":"#general","text":"Ship it"}`)
+			workflowID := uuid.NewString()
+			require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{ID: workflowID, ChatID: f.chatID, WorkflowName: "agent", Thread: f.threadID, Status: db.Active()}))
+
+			retired := createRetiredToolApproval(t, repo, f.chatID, workflowID)
+			before, err := repo.ListMessages(ctx, f.chatID, db.MessageListOptions{})
+			require.NoError(t, err)
+			require.NoError(t, deny(service, retired))
+			after, err := repo.ListMessages(ctx, f.chatID, db.MessageListOptions{})
+			require.NoError(t, err)
+			assert.Len(t, after, len(before), "the run answers the call; no denial message")
+			signal, ok := mockClient.signalArg.(map[string]interface{})
+			require.True(t, ok)
+			assert.Equal(t, "denied", signal["status"], "the waiting run is still told")
+
+			step := createTestApproval(t, repo, f.chatID, workflowID, int32(reliantv1.ApprovalStatus_APPROVAL_STATUS_PENDING))
+			require.NoError(t, deny(service, step))
+			afterStep, err := repo.ListMessages(ctx, f.chatID, db.MessageListOptions{})
+			require.NoError(t, err)
+			assert.Len(t, afterStep, len(after)+1, "a step approval's denial still writes its message")
+		})
+	}
+}

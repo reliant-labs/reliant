@@ -31,7 +31,6 @@ import { toast } from "sonner";
 
 import { api } from "@/api/client";
 import { InboxItemKind, type InboxItem as InboxItemData, type InboxStorage as InboxStorageData } from "@/gen/reliant/v1/inbox_pb";
-import { ApprovalType } from "@/gen/reliant/v1/approval_pb";
 import { answerQuestion } from "@/hooks/approval-queries";
 import { inboxKeys, removeInboxItems } from "@/hooks/inbox-queries";
 import { useResumeDaemon } from "@/hooks/useOnboardingQueries";
@@ -258,20 +257,8 @@ function rowDetail(item: InboxItemData): { node: ReactNode; title: string } | nu
   const { payload } = item;
   switch (payload.case) {
     case "approval": {
-      const approval = payload.value;
-      const args = approval.argumentSummary || approval.title;
-      if (approval.approvalType === ApprovalType.TOOL && approval.toolName) {
-        return {
-          node: (
-            <>
-              <code className="font-mono text-foreground/80">{approval.toolName}</code>
-              {args ? <span className="font-mono"> {args}</span> : null}
-            </>
-          ),
-          title: `${approval.toolName} ${args}`.trim(),
-        };
-      }
-      return args ? { node: args, title: args } : null;
+      const title = payload.value.title;
+      return title ? { node: title, title } : null;
     }
     case "question":
       return payload.value.prompt ? { node: payload.value.prompt, title: payload.value.prompt } : null;

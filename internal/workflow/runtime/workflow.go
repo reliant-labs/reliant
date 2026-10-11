@@ -4052,26 +4052,39 @@ func executeToolsWithSpawnSupport(
 
 	// Execute regular tools via ExecuteTools activity
 	if len(split.regularToolCalls) > 0 {
-		regularNode := &reliantv1.Node{
-			Id:   evalNode.GetId(),
-			Type: model.NodeTypeExecuteTools,
-			Args: &reliantv1.Node_ExecuteTools{ExecuteTools: &reliantv1.ExecuteToolsArgs{
-				ResolvedToolCalls:     split.regularToolCalls,
-				ExpectedResponseTools: etArgs.GetExpectedResponseTools(),
-				ResponseToolSchemas:   etArgs.GetResponseToolSchemas(),
-				CompactionThreshold:   etArgs.GetCompactionThreshold(),
-				Capabilities:          etArgs.GetCapabilities(),
-			}},
+		runRegular := func(refused map[string]string) workflow.Future {
+			regularNode := &reliantv1.Node{
+				Id:   evalNode.GetId(),
+				Type: model.NodeTypeExecuteTools,
+				Args: &reliantv1.Node_ExecuteTools{ExecuteTools: &reliantv1.ExecuteToolsArgs{
+					ResolvedToolCalls:     split.regularToolCalls,
+					ExpectedResponseTools: etArgs.GetExpectedResponseTools(),
+					ResponseToolSchemas:   etArgs.GetResponseToolSchemas(),
+					CompactionThreshold:   etArgs.GetCompactionThreshold(),
+					Capabilities:          etArgs.GetCapabilities(),
+					RefusedToolCalls:      refused, //nolint:staticcheck // SA1019: set only by the legacy approval gate
+				}},
+			}
+
+			logger.Debug("[executeToolsWithSpawnSupport] Executing regular tools",
+				"step_id", rtx.StepID,
+				"count", len(split.regularToolCalls),
+				"refused", len(refused),
+				"loop_node_id", rtx.LoopNodeID,
+				"loop_iteration", rtx.LoopIteration,
+			)
+
+			return workflow.ExecuteActivity(activityCtx, "ExecuteTools", makeInput(regularNode))
 		}
 
-		logger.Debug("[executeToolsWithSpawnSupport] Executing regular tools",
-			"step_id", rtx.StepID,
-			"count", len(split.regularToolCalls),
-			"loop_node_id", rtx.LoopNodeID,
-			"loop_iteration", rtx.LoopIteration,
-		)
-
-		regularToolsFuture = workflow.ExecuteActivity(activityCtx, "ExecuteTools", makeInput(regularNode))
+		// A run that recorded this batch behind the removed integration action
+		// approval prompt replays it (action_approval_legacy.go); every other
+		// batch runs at once.
+		if gated := legacyActionApprovalGate(ctx, split.regularToolCalls, etArgs.GetCapabilities()); len(gated) > 0 {
+			regularToolsFuture = afterActionApprovals(ctx, activityCtx, rtx, gated, runRegular)
+		} else {
+			regularToolsFuture = runRegular(nil)
+		}
 	}
 
 	// OPTIMIZATION: If only regular tools, return directly to avoid goroutine wrapper

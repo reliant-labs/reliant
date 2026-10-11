@@ -23,6 +23,8 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// ApprovalType is the kind of approval request. Workflow step approvals are
+// the only kind left.
 type ApprovalType int32
 
 const (
@@ -831,7 +833,7 @@ var File_reliant_v1_approval_proto protoreflect.FileDescriptor
 const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\n" +
 	"\x19reliant/v1/approval.proto\x12\n" +
-	"reliant.v1\"\xea\x04\n" +
+	"reliant.v1\"\xd1\x05\n" +
 	"\bApproval\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x17\n" +
 	"\achat_id\x18\x02 \x01(\tR\x06chatId\x12=\n" +
@@ -857,7 +859,8 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\v_message_idB\x0e\n" +
 	"\f_workflow_idB\t\n" +
 	"\a_run_idB\x0f\n" +
-	"\r_action_taken\"5\n" +
+	"\r_action_takenJ\x04\b\r\x10\x0eJ\x04\b\x0e\x10\x0fJ\x04\b\x14\x10\x15J\x04\b\x15\x10\x16J\x04\b\x16\x10\x17R\ttool_nameR\ftool_call_idR\n" +
+	"tool_inputR\x10integration_nameR\x10integration_icon\"5\n" +
 	"\x1aListApprovalsByChatRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\"g\n" +
 	"\x1bListApprovalsByChatResponse\x122\n" +
@@ -900,10 +903,10 @@ const file_reliant_v1_approval_proto_rawDesc = "" +
 	"\x11BatchDenyResponse\x12\x18\n" +
 	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x16\n" +
 	"\x06denied\x18\x02 \x01(\x05R\x06denied\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage*N\n" +
+	"\amessage\x18\x03 \x01(\tR\amessage*h\n" +
 	"\fApprovalType\x12\x1d\n" +
 	"\x19APPROVAL_TYPE_UNSPECIFIED\x10\x00\x12\x1f\n" +
-	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02*\x88\x01\n" +
+	"\x1bAPPROVAL_TYPE_WORKFLOW_STEP\x10\x02\"\x04\b\x01\x10\x01*\x12APPROVAL_TYPE_TOOL*\x88\x01\n" +
 	"\x0eApprovalStatus\x12\x1f\n" +
 	"\x1bAPPROVAL_STATUS_UNSPECIFIED\x10\x00\x12\x1b\n" +
 	"\x17APPROVAL_STATUS_PENDING\x10\x01\x12\x1c\n" +

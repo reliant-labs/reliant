@@ -64,10 +64,8 @@ export function approvalItem(overrides: Partial<InboxItem> = {}, id = "appr-1"):
       case: "approval",
       value: {
         approvalId: id,
-        approvalType: ApprovalType.TOOL,
-        title: "Run git push",
-        toolName: "bash",
-        argumentSummary: "git push origin main",
+        approvalType: ApprovalType.WORKFLOW_STEP,
+        title: "Deploy to production?",
       },
     },
     ...overrides,

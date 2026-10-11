@@ -80,7 +80,7 @@ SELECT kind, item_key, chat_id, run_id, trigger_id, project_id, project_name, wo
         COALESCE(t.name, '')::text AS trigger_name,
         a.created_at::timestamptz AS waiting_since,
         a.title::text AS a_text,
-        COALESCE(a.metadata, '')::text AS b_text,
+        ''::text AS b_text,
         a.approval_type::integer AS a_int
     FROM approvals a
     JOIN chats_with_activity c ON c.id = a.chat_id
@@ -276,7 +276,7 @@ type ListInboxPendingRow struct {
 //
 // Generic payload columns (a_text, b_text, a_int) carry the kind-specific bits:
 //
-//	approval:        a_text title, b_text metadata JSON, a_int approval_type
+//	approval:        a_text title, a_int approval_type
 //	question:        a_text thread_id, b_text metadata JSON
 //	launch failed:   a_text newest outcome_detail, b_text event kind, a_int failures in the episode
 //	waiting machine: a_text daemon_id, b_text daemon name; item_key is the chat

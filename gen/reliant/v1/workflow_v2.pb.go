@@ -2353,10 +2353,14 @@ type ExecuteToolsArgs struct {
 	// recorded no set (a run that predates it, or tool calls not from an LLM).
 	// See research/TOOL_CAPABILITIES.md.
 	Capabilities *ToolCapabilities `protobuf:"bytes,6,opt,name=capabilities,proto3" json:"capabilities,omitempty"`
-	// RefusedToolCalls are calls the workflow decided must not run, keyed by
-	// tool call id, each with the reason the model is told: a mutating
-	// integration action the person attending did not approve. Set by the
-	// runtime (never authored); the activity records each FAILED with its reason.
+	// Deprecated: the integration action approval prompt that set this was
+	// removed. Only the replay branch that keeps runs recorded before the
+	// removal working still sets it (runtime/action_approval_legacy.go): a call
+	// the person attending denied, keyed by tool call id, with the reason the
+	// model is told; the activity records each FAILED with it. Reserve the tag
+	// when that branch and its version gate are retired.
+	//
+	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 	RefusedToolCalls map[string]string `protobuf:"bytes,7,rep,name=refused_tool_calls,json=refusedToolCalls,proto3" json:"refused_tool_calls,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -2434,6 +2438,7 @@ func (x *ExecuteToolsArgs) GetCapabilities() *ToolCapabilities {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 func (x *ExecuteToolsArgs) GetRefusedToolCalls() map[string]string {
 	if x != nil {
 		return x.RefusedToolCalls
@@ -5746,10 +5751,14 @@ type ToolCapabilities struct {
 	// exactly (not through a tag, a glob or "*"), sorted: an unattended run keeps
 	// them. Only set when unattended is.
 	UnattendedOptIn []string `protobuf:"bytes,11,rep,name=unattended_opt_in,json=unattendedOptIn,proto3" json:"unattended_opt_in,omitempty"`
-	// ApprovalRequired are the offered tools whose calls ask the person
-	// attending before they run: the integration actions that change something
-	// outside Reliant. Empty when unattended — such a run is handed one only by
-	// naming it, which is the author's approval, and nobody is there to ask.
+	// Deprecated: never written. It listed the offered tools whose calls asked
+	// the person attending before they ran — the integration action approval
+	// prompt, since removed. A call_llm output recorded before the removal still
+	// carries it, and the replay branch that keeps those runs working reads it
+	// (runtime/action_approval_legacy.go). Reserve the tag when that branch and
+	// its version gate are retired.
+	//
+	// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 	ApprovalRequired []string `protobuf:"bytes,12,rep,name=approval_required,json=approvalRequired,proto3" json:"approval_required,omitempty"`
 	unknownFields    protoimpl.UnknownFields
 	sizeCache        protoimpl.SizeCache
@@ -5862,6 +5871,7 @@ func (x *ToolCapabilities) GetUnattendedOptIn() []string {
 	return nil
 }
 
+// Deprecated: Marked as deprecated in reliant/v1/workflow_v2.proto.
 func (x *ToolCapabilities) GetApprovalRequired() []string {
 	if x != nil {
 		return x.ApprovalRequired
@@ -7743,7 +7753,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
 	"\acontent\x18\x03 \x01(\tR\acontent\x12\x19\n" +
 	"\bis_error\x18\x04 \x01(\bR\aisError\x12%\n" +
-	"\x0eattachment_ids\x18\x05 \x03(\tR\rattachmentIds\"\x8f\b\n" +
+	"\x0eattachment_ids\x18\x05 \x03(\tR\rattachmentIds\"\x91\b\n" +
 	"\x10ExecuteToolsArgs\x12\xdc\x01\n" +
 	"\n" +
 	"tool_calls\x18\x01 \x01(\v2\x15.reliant.v1.CelStringB\xa5\x01\x82\xb5\x18\xa0\x01\n" +
@@ -7753,8 +7763,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\x17expected_response_tools\x18\x03 \x03(\tB\x06\x82\xb5\x18\x02 \x01R\x15expectedResponseTools\x12q\n" +
 	"\x15response_tool_schemas\x18\x04 \x03(\v25.reliant.v1.ExecuteToolsArgs.ResponseToolSchemasEntryB\x06\x82\xb5\x18\x02 \x01R\x13responseToolSchemas\x12M\n" +
 	"\x14compaction_threshold\x18\x05 \x01(\v2\x12.reliant.v1.CelIntB\x06\x82\xb5\x18\x02 \x01R\x13compactionThreshold\x12H\n" +
-	"\fcapabilities\x18\x06 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x06\x82\xb5\x18\x02 \x01R\fcapabilities\x12h\n" +
-	"\x12refused_tool_calls\x18\a \x03(\v22.reliant.v1.ExecuteToolsArgs.RefusedToolCallsEntryB\x06\x82\xb5\x18\x02 \x01R\x10refusedToolCalls\x1a_\n" +
+	"\fcapabilities\x18\x06 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x06\x82\xb5\x18\x02 \x01R\fcapabilities\x12j\n" +
+	"\x12refused_tool_calls\x18\a \x03(\v22.reliant.v1.ExecuteToolsArgs.RefusedToolCallsEntryB\b\x82\xb5\x18\x02 \x01\x18\x01R\x10refusedToolCalls\x1a_\n" +
 	"\x18ResponseToolSchemasEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12-\n" +
 	"\x05value\x18\x02 \x01(\v2\x17.google.protobuf.StructR\x05value:\x028\x01\x1aC\n" +
@@ -8151,7 +8161,7 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"\rfinish_reason\x18\x11 \x01(\tB\x0e\x82\xb5\x18\n" +
 	"Z\badvancedR\ffinishReason\x12P\n" +
 	"\fcapabilities\x18\x13 \x01(\v2\x1c.reliant.v1.ToolCapabilitiesB\x0e\x82\xb5\x18\n" +
-	"Z\badvancedR\fcapabilities\"\xca\x05\n" +
+	"Z\badvancedR\fcapabilities\"\xce\x05\n" +
 	"\x10ToolCapabilities\x12\x18\n" +
 	"\aoffered\x18\x01 \x03(\tR\aoffered\x12!\n" +
 	"\floadable_all\x18\x02 \x01(\bR\vloadableAll\x12\x1a\n" +
@@ -8169,8 +8179,8 @@ const file_reliant_v1_workflow_v2_proto_rawDesc = "" +
 	"unattended\x18\n" +
 	" \x01(\bR\n" +
 	"unattended\x12*\n" +
-	"\x11unattended_opt_in\x18\v \x03(\tR\x0funattendedOptIn\x12+\n" +
-	"\x11approval_required\x18\f \x03(\tR\x10approvalRequired\x1aG\n" +
+	"\x11unattended_opt_in\x18\v \x03(\tR\x0funattendedOptIn\x12/\n" +
+	"\x11approval_required\x18\f \x03(\tB\x02\x18\x01R\x10approvalRequired\x1aG\n" +
 	"\x19WithheldIntegrationsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
 	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\x1a[\n" +

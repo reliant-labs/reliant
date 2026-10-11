@@ -391,71 +391,11 @@ func inboxItemFromPending(p *core.InboxPending) *reliantv1.InboxItem {
 }
 
 func inboxApproval(p *core.InboxPending) *reliantv1.InboxApproval {
-	a := &reliantv1.InboxApproval{
+	return &reliantv1.InboxApproval{
 		ApprovalId:   p.ItemKey,
 		ApprovalType: reliantv1.ApprovalType(p.Int1),
 		Title:        p.Text1,
 	}
-	var meta map[string]any
-	if p.Text2 == "" || json.Unmarshal([]byte(p.Text2), &meta) != nil {
-		return a
-	}
-	if v, ok := meta["tool_name"].(string); ok && v != "" {
-		a.ToolName = &v
-	}
-	if v, ok := meta["tool_call_id"].(string); ok && v != "" {
-		a.ToolCallId = &v
-	}
-	for _, key := range []string{"arguments", "args", "input"} {
-		if v, ok := meta[key]; ok {
-			a.ArgumentSummary = summarizeArguments(v)
-			break
-		}
-	}
-	return a
-}
-
-// summarizeArguments renders tool arguments as one short line of text: a lone
-// argument is its value ("git push origin main"), several are "key: value"
-// pairs in key order. Only nested values fall back to compact JSON.
-func summarizeArguments(v any) string {
-	var text string
-	switch t := v.(type) {
-	case map[string]any:
-		keys := make([]string, 0, len(t))
-		for k := range t {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		if len(keys) == 1 {
-			text = argumentValue(t[keys[0]])
-			break
-		}
-		parts := make([]string, 0, len(keys))
-		for _, k := range keys {
-			parts = append(parts, k+": "+argumentValue(t[k]))
-		}
-		text = strings.Join(parts, " · ")
-	default:
-		text = argumentValue(t)
-	}
-	text = strings.Join(strings.Fields(text), " ")
-	const max = 200
-	if r := []rune(text); len(r) > max {
-		text = string(r[:max-1]) + "…"
-	}
-	return text
-}
-
-func argumentValue(v any) string {
-	if s, ok := v.(string); ok {
-		return s
-	}
-	b, err := json.Marshal(v)
-	if err != nil {
-		return ""
-	}
-	return string(b)
 }
 
 func firstQuestionPrompt(metadata string) string {

@@ -144,6 +144,10 @@ message InboxApproval {
   ApprovalType approval_type = 2;
   // The approval's title.
   string title = 3;
+  // Described the call a tool approval (the removed APPROVAL_TYPE_TOOL) asked
+  // about.
+  reserved 4, 5, 6;
+  reserved "tool_name", "tool_call_id", "argument_summary";
 }
 
 message InboxQuestion {

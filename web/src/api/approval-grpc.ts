@@ -20,8 +20,6 @@ export interface ToolApprovalRequest {
   chat_id: string;
   content_block_id: string;
   message_id?: string;
-  tool_call_id?: string;
-  tool_name?: string;
   description?: string;
   status: ApprovalStatus;
   created_at: string;
@@ -40,8 +38,6 @@ function protoToFrontend(proto: ProtoApproval): ToolApprovalRequest {
     chat_id: proto.chatId,
     content_block_id: proto.entityId, // entity_id maps to content_block_id for tool approvals
     message_id: proto.messageId,
-    tool_call_id: proto.toolCallId,
-    tool_name: proto.toolName,
     description: proto.description,
     status: proto.status,
     created_at: proto.createdAt,

@@ -1493,12 +1493,12 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x18automation_launch_failed\x18\x18 \x01(\v2'.reliant.v1.InboxAutomationLaunchFailedH\x00R\x16automationLaunchFailed\x12A\n" +
 	"\frun_finished\x18\x19 \x01(\v2\x1c.reliant.v1.InboxRunFinishedH\x00R\vrunFinished\x124\n" +
 	"\astorage\x18\x1a \x01(\v2\x18.reliant.v1.InboxStorageH\x00R\astorageB\t\n" +
-	"\apayload\"\x85\x01\n" +
+	"\apayload\"\xc2\x01\n" +
 	"\rInboxApproval\x12\x1f\n" +
 	"\vapproval_id\x18\x01 \x01(\tR\n" +
 	"approvalId\x12=\n" +
 	"\rapproval_type\x18\x02 \x01(\x0e2\x18.reliant.v1.ApprovalTypeR\fapprovalType\x12\x14\n" +
-	"\x05title\x18\x03 \x01(\tR\x05title\"\x93\x01\n" +
+	"\x05title\x18\x03 \x01(\tR\x05titleJ\x04\b\x04\x10\x05J\x04\b\x05\x10\x06J\x04\b\x06\x10\aR\ttool_nameR\ftool_call_idR\x10argument_summary\"\x93\x01\n" +
 	"\rInboxQuestion\x12\x1f\n" +
 	"\vquestion_id\x18\x01 \x01(\tR\n" +
 	"questionId\x12\x1b\n" +

@@ -275,9 +275,11 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 	caps := tools.CapabilitiesFromProto(protoArgs.GetCapabilities())
 	ctx = tools.WithCapabilities(ctx, caps)
 
-	// Calls the workflow decided must not run: a mutating integration action
-	// the person attending did not approve. Each is answered with its reason.
-	refusedByWorkflow := protoArgs.GetRefusedToolCalls()
+	// Calls the workflow decided must not run, each answered with its reason.
+	// Only a run that recorded the removed integration action approval prompt
+	// sends any: a call the person attending did not approve
+	// (runtime/action_approval_legacy.go).
+	refusedByWorkflow := protoArgs.GetRefusedToolCalls() //nolint:staticcheck // SA1019: sent only by the legacy approval gate
 
 	// Build set for O(1) response tool lookups in worker goroutines
 	responseToolSet := make(map[string]bool, len(expectedResponseTools))

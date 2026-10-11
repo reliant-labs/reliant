@@ -34,8 +34,6 @@ const pendingApproval: ToolApprovalRequest = {
   id: "approval-1",
   chat_id: "chat-1",
   content_block_id: "block-1",
-  tool_call_id: "toolu_1",
-  tool_name: "edit",
   description: "Edit src/index.ts",
   status: ApprovalStatus.PENDING,
   created_at: new Date().toISOString(),

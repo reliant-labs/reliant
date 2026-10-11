@@ -97,6 +97,20 @@ func approvalToProto(a *db.Approval) *reliantv1.Approval {
 	return proto
 }
 
+// retiredToolApprovalType is the approval_type of a row recorded by the
+// removed integration action approval prompt: 1, the reserved
+// APPROVAL_TYPE_TOOL. Retire it with runtime's actionApprovalRemovedChangeID.
+const retiredToolApprovalType = 1
+
+// answeredByItsRun reports whether denying a reaches the model through its own
+// run. A row the removed prompt recorded asked about one call, and the run
+// still waiting on it refuses that call in ExecuteTools with the reason, so a
+// denial message — a tool_result for every call in the turn — would duplicate
+// that result.
+func answeredByItsRun(a *db.Approval) bool {
+	return a.ApprovalType == retiredToolApprovalType
+}
+
 // ListApprovalsByChat lists all pending approvals for a chat
 func (s *ApprovalService) ListApprovalsByChat(
 	ctx context.Context,
@@ -292,10 +306,13 @@ func (s *ApprovalService) Deny(
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to deny"))
 	}
 
-	// Create denial message with tool_results marked as denied.
-	if err := s.createDenialMessage(ctx, approval.ChatID, denialReason); err != nil {
-		logging.Error("Failed to create denial message", "error", err, "approvalID", approval.ID)
-		// Don't fail the request, just log the error
+	// Create denial message with tool_results marked as denied — unless the
+	// run answers the call itself (answeredByItsRun).
+	if !answeredByItsRun(approval) {
+		if err := s.createDenialMessage(ctx, approval.ChatID, denialReason); err != nil {
+			logging.Error("Failed to create denial message", "error", err, "approvalID", approval.ID)
+			// Don't fail the request, just log the error
+		}
 	}
 
 	// Signal denial to the workflow — edge conditions handle routing
@@ -439,12 +456,14 @@ func (s *ApprovalService) BatchDeny(
 
 	// Process each approval
 	var chatID string
+	deniedStepApproval := false
 	for _, requestID := range req.Msg.RequestIds {
 		approval, err := s.database.GetApproval(ctx, requestID)
 		if err != nil || approval == nil {
 			logging.Error("Approval not found in batch", "requestID", requestID)
 			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("approval not found: %s", requestID))
 		}
+		deniedStepApproval = deniedStepApproval || !answeredByItsRun(approval)
 
 		// Validate all approvals belong to the same chat, and that the chat is
 		// the caller's (checked once, on first resolution — the same-chat rule
@@ -516,8 +535,9 @@ func (s *ApprovalService) BatchDeny(
 		})
 	}
 
-	// Create one denial message for the chat (all approvals are in the same chat).
-	if chatID != "" {
+	// Create one denial message for the chat (all approvals are in the same
+	// chat), unless every one of them is answered by its run.
+	if chatID != "" && deniedStepApproval {
 		if err := s.createDenialMessage(ctx, chatID, denialReason); err != nil {
 			logging.Error("Failed to create denial message", "error", err, "chatID", chatID)
 			// Don't fail the request, just log the error

@@ -1,4 +1,4 @@
-import { useMemo, useState, memo, useEffect, useCallback } from "react";
+import { useMemo, useState, memo, useEffect } from "react";
 import { ChevronDown, ChevronRight, ListTree, CheckCircle2, AlertCircle, Loader2, XCircle } from "lucide-react";
 import { cn } from "../../lib/utils";
 import { ToolExecution, durableStatusToDisplayStatus, workflowLifecycleToDisplayStatus, type ToolResultData } from "./ToolExecution";
@@ -48,7 +48,6 @@ interface ToolExecutionGroupProps {
   }>;
   messageId?: string;
   defaultCollapsed?: boolean;
-  approvals?: ToolApprovalRequest[];
   chatId?: string;
   showRichContent?: boolean;
   onSelectThread?: (threadId: string | null) => void;
@@ -59,23 +58,14 @@ function ToolExecutionGroupComponent({
   executions,
   messageId,
   defaultCollapsed: _defaultCollapsed = true,
-  approvals = [],
   chatId,
   showRichContent = false,
   onSelectThread,
   density = "compact",
 }: ToolExecutionGroupProps) {
-  // Check both embedded approvals and separate approvals list
-  const getApprovalStatus = useCallback((toolCallId: string): ToolApprovalRequest | undefined => {
-    return approvals.find(approval => approval.tool_call_id === toolCallId);
-  }, [approvals]);
-
   const hasPendingApprovals = useMemo(() => {
-    return executions.some(execution => {
-      const approval = execution.approval || getApprovalStatus(execution.call.id);
-      return approval && approval.status === ApprovalStatus.PENDING;
-    });
-  }, [executions, getApprovalStatus]);
+    return executions.some(execution => execution.approval?.status === ApprovalStatus.PENDING);
+  }, [executions]);
 
   // Honor the per-tool collapse settings: the group starts open only if at
   // least one tool in it would have opened on its own. Collapsing the group
@@ -247,8 +237,6 @@ function ToolExecutionGroupComponent({
       {expanded && (
         <div className={cn("border-t border-muted/50 p-1", density === "card" ? "space-y-2" : "space-y-1")}>
           {executions.map((execution, index) => {
-            const approval = execution.approval || getApprovalStatus(execution.call.id);
-
             return (
               <ToolExecution
                 key={`${messageId || "msg"}-group-exec-${index}-${execution.call.id}`}
@@ -257,7 +245,7 @@ function ToolExecutionGroupComponent({
                 status={execution.status}
                 onCancel={execution.onCancel}
                 onConvertToBackground={execution.onConvertToBackground}
-                approval={approval}
+                approval={execution.approval}
                 chatId={chatId}
                 showRichContent={showRichContent}
                 onSelectThread={onSelectThread}
