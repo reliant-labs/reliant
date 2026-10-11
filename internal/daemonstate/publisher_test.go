@@ -64,9 +64,9 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 	p := NewPublisher(nc)
 	const daemonID = "d-1"
 	p.Connected(daemonID, "u-1", "cloud")
-	p.Activity(daemonID, "u-1", "cloud")
-	p.Activity(daemonID, "u-1", "cloud")
-	p.Activity(daemonID, "u-1", "cloud")
+	p.Activity(daemonID, "u-1", "cloud", "tool call shell")
+	p.Activity(daemonID, "u-1", "cloud", "terminal input")
+	p.Activity(daemonID, "u-1", "cloud", "terminal input")
 	p.Disconnected(daemonID, "u-1", "cloud")
 
 	if err := nc.Flush(); err != nil {
@@ -104,6 +104,11 @@ func TestPublisher_LifecycleAndRateLimit(t *testing.T) {
 		}
 		if e.At.IsZero() {
 			t.Errorf("event At zero")
+		}
+		// The window's first reason is the one that travels: it is what the
+		// control plane logs as having kept the machine awake.
+		if e.Type == daemonwire.EventActivity && e.Reason != "tool call shell" {
+			t.Errorf("activity reason = %q, want %q", e.Reason, "tool call shell")
 		}
 	}
 }

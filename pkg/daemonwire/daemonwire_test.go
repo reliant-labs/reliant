@@ -66,6 +66,18 @@ func TestGoldenWire(t *testing.T) {
 			want: `{"daemon_id":"d-1","user_id":"u-1","type":"connected","at":"2026-10-07T09:30:00Z","daemon_type":"self_hosted"}`,
 		},
 		{
+			name: "activity event carries its reason",
+			value: &daemonwire.Event{
+				DaemonID:   "d-1",
+				UserID:     "u-1",
+				Type:       daemonwire.EventActivity,
+				At:         goldenAt,
+				DaemonType: "managed",
+				Reason:     "tool call shell",
+			},
+			want: `{"daemon_id":"d-1","user_id":"u-1","type":"activity","at":"2026-10-07T09:30:00Z","daemon_type":"managed","reason":"tool call shell"}`,
+		},
+		{
 			name:  "removed event keeps an empty user_id",
 			value: &daemonwire.Event{DaemonID: "d-1", Type: daemonwire.EventRemoved, At: goldenAt},
 			want:  `{"daemon_id":"d-1","user_id":"","type":"removed","at":"2026-10-07T09:30:00Z"}`,

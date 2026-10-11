@@ -7,9 +7,10 @@
 // daemon.v1.state.<daemonID>.<type>, carries one Event per message, and it
 // flows in both directions:
 //
-//   - Reliant's daemon gateway publishes EventConnected, EventDisconnected and
-//     EventActivity as a daemon's stream attaches, detaches and carries
-//     traffic. The control plane consumes them into its liveness cache,
+//   - Reliant's daemon gateway publishes EventConnected and EventDisconnected
+//     as a daemon's stream attaches and detaches, and EventActivity when a
+//     person or an agent does work on the machine. The control plane
+//     consumes them into its liveness cache, workspace idle clock,
 //     daemon status and billing; Reliant's own registry consumes them too,
 //     into the attachment leases every gateway replica reads.
 //   - The control plane publishes EventLifecycle and EventRemoved, because it
@@ -51,10 +52,17 @@ import (
 type EventType string
 
 const (
-	// EventConnected, EventDisconnected and EventActivity are liveness. The
-	// gateway publishes them when a daemon's stream attaches, detaches, or
-	// carries traffic (activity is rate-limited at the publisher), and the
+	// EventConnected and EventDisconnected are liveness: the gateway
+	// publishes them when a daemon's stream attaches and detaches, and the
 	// control plane consumes them.
+	//
+	// EventActivity means a person or an agent did something to the machine
+	// — an agent's tool call, terminal input, a command someone asked for —
+	// and Event.Reason says which. It is NOT "the stream carried traffic":
+	// the control plane republishes it onto the Workspace CR as the activity
+	// that keeps a cloud machine from idle-suspending, so a daemon's own
+	// replies, output and housekeeping must never produce one. The gateway's
+	// policy lives in internal/daemonactivity. Rate-limited at the publisher.
 	EventConnected    EventType = "connected"
 	EventDisconnected EventType = "disconnected"
 	EventActivity     EventType = "activity"
@@ -149,6 +157,13 @@ type Event struct {
 	Type       EventType `json:"type"`
 	At         time.Time `json:"at"`
 	DaemonType string    `json:"daemon_type,omitempty"`
+
+	// Reason is why an EventActivity counts as activity, in words an
+	// operator can read: "tool call shell", "terminal input",
+	// "command fs.write_file". It travels to the Workspace CR so "why did
+	// this machine not go to sleep?" is answered by the CR and one log line.
+	// Empty on every other type.
+	Reason string `json:"reason,omitempty"`
 
 	// The fields below are populated only on EventLifecycle. They are on the
 	// one Event struct rather than a second payload type because the subject

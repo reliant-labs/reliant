@@ -16,10 +16,10 @@ import (
 const logPrefix = "[daemonstate]"
 
 // ActivityRateLimit is the minimum interval between two activity publishes
-// for the same daemon. The receive loop bumps lastActivity on every inbound
-// message — without a rate limit, a chatty daemon would flood the stream at
-// hundreds of events per second, which is pure overhead since the derivation
-// consumer collapses anything finer than 1s into a single attachment write.
+// for the same daemon. An agent issues tool calls and a person types far
+// faster than anything downstream needs to hear about — the control plane
+// collapses activity into one Workspace CR write per 30s — so a burst
+// becomes one event, carrying the first reason in its window.
 const ActivityRateLimit = 1 * time.Second
 
 // Publisher publishes daemon lifecycle events on the daemon.v1.state.>
@@ -80,9 +80,14 @@ func (p *Publisher) Disconnected(daemonID, userID, daemonType string) {
 	})
 }
 
-// Activity publishes an activity event, rate-limited to at most one per
-// daemon per ActivityRateLimit. Returns silently when throttled.
-func (p *Publisher) Activity(daemonID, userID, daemonType string) {
+// Activity publishes an activity event — a person or an agent did work on the
+// machine, for the reason given (see daemonwire.Event.Reason) — rate-limited
+// to at most one per daemon per ActivityRateLimit. Returns silently when
+// throttled.
+//
+// What counts is decided by the caller, against internal/daemonactivity's
+// policy: every event published here keeps a cloud machine awake.
+func (p *Publisher) Activity(daemonID, userID, daemonType, reason string) {
 	if p == nil || p.nc == nil || daemonID == "" {
 		return
 	}
@@ -101,6 +106,7 @@ func (p *Publisher) Activity(daemonID, userID, daemonType string) {
 		Type:       daemonwire.EventActivity,
 		At:         now,
 		DaemonType: daemonType,
+		Reason:     reason,
 	})
 }
 

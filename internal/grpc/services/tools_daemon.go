@@ -22,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -1233,12 +1234,12 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 		conn.lastReceived = now
 		s.mu.Unlock()
 		// conn.lastReceived (above) feeds the dead-connection sweeper and MUST
-		// bump on every message, heartbeats included. But workspace idle-suspend
-		// keys off statePublisher.Activity -> Workspace.Status.LastActivity, and a
-		// heartbeat is the daemon's own 15s keepalive, NOT user activity. Counting
-		// heartbeats as activity refreshes LastActivity forever, so the idle reaper
-		// never fires and the workspace never auto-suspends. Only publish real,
-		// user-driven inbound traffic as activity.
+		// bump on every message, heartbeats included. It is NOT the activity
+		// that keeps a cloud machine from idle-suspending: nothing the daemon
+		// sends is. Its replies, output and notices arrive whether or not
+		// anyone is there — a reply to the reconciler's 30s bg_status poll
+		// kept an unused machine up for hours — so that activity is published
+		// on the way OUT, for work someone asked for (runSender).
 		if hb, isHeartbeat := msg.Message.(*reliantv1.DaemonMessage_Heartbeat); isHeartbeat {
 			// Read off the stream just now: acknowledge it to the daemon
 			// (runHeartbeat echoes this) and renew the lease. Both happen
@@ -1249,8 +1250,6 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 			case leaseRenew <- struct{}{}:
 			default: // a renewal is already pending; it covers this one
 			}
-		} else {
-			s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType)
 		}
 
 		if conn.routeInboundReply(msg) {
@@ -2333,7 +2332,27 @@ func (s *ToolsDaemonService) runSender(conn *daemonConnection) {
 			s.mu.Lock()
 			conn.lastActivity = time.Now().UTC()
 			s.mu.Unlock()
+			// The one place a cloud machine's idle clock is restarted: work a
+			// person or an agent asked this daemon to do, judged by
+			// daemonactivity's policy, at the moment it is handed over.
+			if reason, ok := daemonactivity.ReasonForServerMessage(msg); ok {
+				s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType, reason)
+			}
 		}
+	}
+}
+
+// reassertInFlightActivity keeps the machine awake while an agent's tool call
+// is still running on it. The call's activity is published once, when it is
+// sent; a test suite or build that outlasts the idle timeout would otherwise
+// be suspended mid-run. Called on every gateway heartbeat, so the re-assertion
+// costs no timer of its own and stops the moment the call returns.
+func (s *ToolsDaemonService) reassertInFlightActivity(conn *daemonConnection) {
+	conn.pendingToolRequestsMu.Lock()
+	inFlight := len(conn.pendingToolRequests)
+	conn.pendingToolRequestsMu.Unlock()
+	if inFlight > 0 {
+		s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType, daemonactivity.ReasonToolCallInFlight)
 	}
 }
 
@@ -2352,6 +2371,7 @@ func (s *ToolsDaemonService) runHeartbeat(conn *daemonConnection) {
 			default:
 				// Buffer full, skip heartbeat
 			}
+			s.reassertInFlightActivity(conn)
 		}
 	}
 }

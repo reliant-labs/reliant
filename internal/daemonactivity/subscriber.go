@@ -1,11 +1,18 @@
 // Copyright (c) 2025 Reliant Labs
 
-// Package daemonactivity implements the gateway side of the cross-process
-// activity ping. Anyone (e.g. the control-plane LLM proxy) can publish to
+// Package daemonactivity is the gateway's notion of a daemon being in use.
+//
+// reason.go is the idle policy for cloud machines: which traffic forwarded to
+// a daemon is work a person or an agent asked for, and so keeps the machine
+// from idle-suspending.
+//
+// subscriber.go is the gateway side of the cross-process activity ping.
+// Anyone (e.g. the control-plane LLM proxy) can publish to
 // `daemon.v1.activity.user.<userID>` to signal "this user is doing something
 // right now". The gateway bumps lastActivity for every daemon connection it
 // holds for that user, so the pull-RPC status query reflects real usage and
-// not just the 15s heartbeat cadence.
+// not just the 15s heartbeat cadence. That ping touches only the gateway's
+// in-memory connection state; it does not keep a machine awake.
 //
 // Fire-and-forget: no JetStream, no replay, no reply. If the signal is lost
 // the next heartbeat or the next inbound/outbound message will close the gap.
