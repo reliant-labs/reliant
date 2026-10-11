@@ -33,6 +33,11 @@ func (f fakeSettingsReader) ListSettingsByKey(_ context.Context, _ string, _ str
 func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 	f64 := func(v float64) *float64 { return &v }
 	moderate := models.ModelSelector{Tags: []string{models.TagModerate}}
+	// [moderate] carries claude-5.5-sonnet at high (#649 floored every tier
+	// entry at high). A case that sets a level through the preference sets
+	// xhigh, so "the preference applied" stays distinguishable from "nothing
+	// applied".
+	const tierEffort = "high"
 
 	tests := []struct {
 		name          string
@@ -49,16 +54,16 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 			name:         "no preference leaves the tier untouched",
 			selector:     moderate,
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "medium",
+			wantThinking: tierEffort,
 		},
 		{
 			name:     "thinking level and temperature apply to the tier's model",
 			selector: moderate,
 			reader: fakeSettingsReader{rows: map[string]string{
-				"model.tag_config.moderate": `{"thinking_level":"high","temperature":0.3}`,
+				"model.tag_config.moderate": `{"thinking_level":"xhigh","temperature":0.3}`,
 			}},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "high",
+			wantThinking: "xhigh",
 			wantTemp:     f64(0.3),
 		},
 		{
@@ -83,10 +88,10 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 			name:     "model_id the user cannot serve is ignored, other fields still apply",
 			selector: moderate,
 			reader: fakeSettingsReader{rows: map[string]string{
-				"model.tag_config.moderate": `{"model_id":"gpt-6-sol","thinking_level":"high"}`,
+				"model.tag_config.moderate": `{"model_id":"gpt-6-sol","thinking_level":"xhigh"}`,
 			}},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "high",
+			wantThinking: "xhigh",
 		},
 		{
 			name:     "model_id missing from the registry is ignored",
@@ -95,7 +100,7 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 				"model.tag_config.moderate": `{"model_id":"no-such-model"}`,
 			}},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "medium",
+			wantThinking: tierEffort,
 		},
 		{
 			name:        "node arg beats the preference",
@@ -116,14 +121,14 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 				"model.tag_config.moderate": `{not json`,
 			}},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "medium",
+			wantThinking: tierEffort,
 		},
 		{
 			name:         "a read failure is ignored, not fatal",
 			selector:     moderate,
 			reader:       fakeSettingsReader{err: errors.New("db down")},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "medium",
+			wantThinking: tierEffort,
 		},
 		{
 			name:     "unknown thinking level in the pref is ignored",
@@ -132,17 +137,17 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 				"model.tag_config.moderate": `{"thinking_level":"ultra"}`,
 			}},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "medium",
+			wantThinking: tierEffort,
 		},
 		{
 			name:     "multi-tag selector uses the FIRST tag's preference only",
 			selector: models.ModelSelector{Tags: []string{models.TagModerate, models.TagFast}},
 			reader: fakeSettingsReader{rows: map[string]string{
-				"model.tag_config.moderate": `{"thinking_level":"high"}`,
+				"model.tag_config.moderate": `{"thinking_level":"xhigh"}`,
 				"model.tag_config.fast":     `{"thinking_level":"low"}`,
 			}},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "high",
+			wantThinking: "xhigh",
 		},
 		{
 			name:     "id-based selectors have no tier, so no preference",
@@ -160,7 +165,7 @@ func TestResolveLLMCall_AppliesTagPreferences(t *testing.T) {
 				"model.tag_config.moderate": `{"compaction_threshold":50000}`,
 			}},
 			wantModelID:   "claude-5.5-sonnet@anthropic",
-			wantThinking:  "medium",
+			wantThinking:  tierEffort,
 			wantCompactAt: 50000,
 		},
 	}
@@ -219,5 +224,6 @@ func TestResolveLLMCall_NoTagPrefsReaderIgnoresPreferences(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "claude-5.5-sonnet@anthropic", resolved.ModelID)
-	assert.Equal(t, "medium", resolved.ThinkingLevel)
+	// The [moderate] entry's own effort (#649: high), untouched by any pref.
+	assert.Equal(t, "high", resolved.ThinkingLevel)
 }

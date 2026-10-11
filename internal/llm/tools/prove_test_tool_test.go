@@ -54,6 +54,19 @@ func proveTestCtx(dir string) *rctx.ToolContext {
 		WithDaemon(daemon.NewLocalClient())
 }
 
+// logProveOutputOnFailure attaches the tool's report to a failing test only.
+// The report quotes the sample module's own go test output, so a passing
+// run's report put "--- FAIL: TestAdd" and "FAIL example.com/calc [build
+// failed]" into CI's -v log, where they read as failures of this suite.
+func logProveOutputOnFailure(t *testing.T, content string) {
+	t.Helper()
+	t.Cleanup(func() {
+		if t.Failed() {
+			t.Logf("prove_test output:\n%s", content)
+		}
+	})
+}
+
 func requireGo(t *testing.T) {
 	t.Helper()
 	if testing.Short() {
@@ -75,7 +88,7 @@ func TestProveTest_ProvesARealGoTest(t *testing.T) {
 		Files:   []string{"calc.go"},
 	})
 	require.NoError(t, err)
-	t.Logf("prove_test output:\n%s", resp.Content)
+	logProveOutputOnFailure(t, resp.Content)
 
 	require.False(t, resp.IsError, resp.Content)
 	assert.Contains(t, resp.Content, "VERDICT: proven")
@@ -101,7 +114,7 @@ func TestProveTest_ReportsATestThatDoesNotTestTheFix(t *testing.T) {
 		Files:   []string{"calc.go"},
 	})
 	require.NoError(t, err)
-	t.Logf("prove_test output:\n%s", resp.Content)
+	logProveOutputOnFailure(t, resp.Content)
 	assert.Contains(t, resp.Content, "VERDICT: passes_without_fix")
 	assert.Contains(t, resp.Content, "does not test your change")
 }
@@ -119,7 +132,7 @@ func TestProveTest_ReportsABaselineThatDoesNotCompile(t *testing.T) {
 		Files:   []string{"calc.go"},
 	})
 	require.NoError(t, err)
-	t.Logf("prove_test output:\n%s", resp.Content)
+	logProveOutputOnFailure(t, resp.Content)
 	assert.Contains(t, resp.Content, "VERDICT: baseline_does_not_compile")
 	assert.Contains(t, resp.Content, "Build failure marker")
 	assert.Contains(t, resp.Content, "undefined: Mul")
@@ -136,7 +149,7 @@ func TestProveTest_KeepsAConcurrentWritersContent(t *testing.T) {
 		Files:   []string{"calc.go"},
 	})
 	require.NoError(t, err)
-	t.Logf("prove_test output:\n%s", resp.Content)
+	logProveOutputOnFailure(t, resp.Content)
 
 	assert.Contains(t, resp.Content, "VERDICT: conflict")
 	assert.Contains(t, resp.Content, "AFTER (fix in place) — skipped")
@@ -164,7 +177,7 @@ func TestProveTest_RestoresWhenTheCommandTimesOut(t *testing.T) {
 		Timeout: 300,
 	})
 	require.NoError(t, err)
-	t.Logf("prove_test output:\n%s", resp.Content)
+	logProveOutputOnFailure(t, resp.Content)
 
 	assert.Less(t, time.Since(start), 25*time.Second)
 	assert.Contains(t, resp.Content, "VERDICT: inconclusive")

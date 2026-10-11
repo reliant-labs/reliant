@@ -14,7 +14,8 @@
 # The same model may appear under several tags at different efforts — that is
 # how one model serves several tiers. Each tier is tuned independently:
 # [flagship] is claude-5.5-opus at xhigh, [moderate] is claude-5.5-sonnet at
-# medium. Retuning a tier is an edit HERE, never in a preset.
+# high. No entry runs below high: output quality drops sharply under it (#649).
+# Retuning a tier is an edit HERE, never in a preset.
 #
 # thinking_level is an aspiration: it is clamped down to the model's declared
 # capabilities.thinking_levels. Omit it (or name the model by id instead of by
@@ -274,7 +275,7 @@ models:
   #
   # Claude 5.5 Opus leads [flagship] (at xhigh) in the tags section above: the
   # general agent and orchestrators ask for flagship. It is deliberately NOT
-  # in [moderate] — implementation runs on Sonnet 5.5 at medium. Nor is it
+  # in [moderate] — implementation runs on Sonnet 5.5 at high. Nor is it
   # listed under `powerful` — that would collapse the powerful tier onto the
   # flagship model; `powerful` stays on fable-5.1 until that is an explicit
   # decision.
@@ -398,7 +399,7 @@ models:
   # claude-5-sonnet below, which differs in one that is easy to miss:
   # max_tokens is 128000, double sonnet-5's 64000.
   #
-  # It leads [moderate] at medium and remains directly above claude-5-sonnet in
+  # It leads [moderate] at high and remains directly above claude-5-sonnet in
   # the other tiers sonnet-5 is in.
   #
   # Two API differences from sonnet-5 that the drivers already satisfy:
@@ -793,7 +794,7 @@ models:
   # GPT-6 Terra (2026-09-22) — OpenAI's moderate GPT-6 model. Figures from
   # developers.openai.com/api/docs/models/gpt-6-terra.
   #
-  # Terra leads the GPT moderate slot at medium effort. It is not tagged fast or
+  # Terra leads the GPT moderate slot at high effort. It is not tagged fast or
   # cheap: those tiers run chat titling, compaction and other internal calls for
   # every OpenAI user, and the existing mini/luna entries stay the lower-latency
   # picks there.
@@ -1784,7 +1785,7 @@ models:
 
   # The Vertex-only twin of claude-5.5-sonnet, which carries no vertexai
   # mapping of its own (see the note there). It leads Vertex-only [moderate] at
-  # medium and sits directly above vertex-claude-5-sonnet in the other tiers.
+  # high and sits directly above vertex-claude-5-sonnet in the other tiers.
   - id: vertex-claude-5.5-sonnet
     name: Vertex Claude 5.5 Sonnet
     visibility: user

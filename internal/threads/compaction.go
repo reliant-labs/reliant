@@ -41,6 +41,15 @@ func (s *Service) Compact(ctx context.Context, threadID string, summaryMessageID
 		return nil, fmt.Errorf("failed to get latest context window: %w", err)
 	}
 
+	// A retry of the compaction that opened the latest window IS that window.
+	// The new window's id derives from the next sequence, so without this a
+	// retry after the first attempt committed opened a second window over the
+	// same summary, and whatever had been saved into the first one dropped out
+	// of the conversation's context.
+	if currentCW != nil && currentCW.CompactionSummaryMessageID != nil && *currentCW.CompactionSummaryMessageID == summaryMessageID {
+		return currentCW, nil
+	}
+
 	// Get current max sequence
 	currentSeq, err := s.repo.GetMaxSequenceForThread(ctx, threadID)
 	if err != nil {

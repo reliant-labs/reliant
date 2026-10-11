@@ -2,6 +2,7 @@
 package runtime
 
 import (
+	"sync/atomic"
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
@@ -19,6 +20,28 @@ const DaemonOfflinePauseThreshold = 3
 // reconnects. Counting three quick tool attempts during that window must not
 // make the user manually resume a chat that would have recovered by itself.
 const DaemonOfflinePauseGrace = 2 * time.Minute
+
+// daemonOfflinePauseGraceOverride, in nanoseconds, replaces
+// DaemonOfflinePauseGrace for every breaker this process creates when it is
+// positive. Only SetDaemonOfflinePauseGraceForTest sets it.
+var daemonOfflinePauseGraceOverride atomic.Int64
+
+func daemonOfflinePauseGrace() time.Duration {
+	if d := daemonOfflinePauseGraceOverride.Load(); d > 0 {
+		return time.Duration(d)
+	}
+	return DaemonOfflinePauseGrace
+}
+
+// SetDaemonOfflinePauseGraceForTest shortens the grace every breaker created
+// in this process waits before pausing, and returns a restore func. The e2e
+// stories run DynamicWorkflow on a real Temporal dev server, which cannot skip
+// workflow time, so a story that drives the pause would otherwise wait out
+// the full two minutes. A breaker reads the grace when its workflow starts.
+func SetDaemonOfflinePauseGraceForTest(d time.Duration) (restore func()) {
+	previous := daemonOfflinePauseGraceOverride.Swap(int64(d))
+	return func() { daemonOfflinePauseGraceOverride.Store(previous) }
+}
 
 // DaemonOfflinePauseMessage is the user-facing chat message emitted (via the
 // WorkflowError activity) when the circuit breaker pauses the workflow.
@@ -79,7 +102,7 @@ type DaemonOfflineCircuitBreaker struct {
 // after both the consecutive-offline threshold and DaemonOfflinePauseGrace.
 // pause may be nil (the breaker then only counts — useful in tests).
 func NewDaemonOfflineCircuitBreaker(threshold int, pause func(callerCtx workflow.Context, streak int)) *DaemonOfflineCircuitBreaker {
-	return newDaemonOfflineCircuitBreaker(threshold, DaemonOfflinePauseGrace, pause)
+	return newDaemonOfflineCircuitBreaker(threshold, daemonOfflinePauseGrace(), pause)
 }
 
 func newDaemonOfflineCircuitBreaker(threshold int, grace time.Duration, pause func(callerCtx workflow.Context, streak int)) *DaemonOfflineCircuitBreaker {

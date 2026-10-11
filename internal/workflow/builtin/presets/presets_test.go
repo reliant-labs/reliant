@@ -509,13 +509,16 @@ func TestPresetThinkingLevelsAreSupported(t *testing.T) {
 // ([flagship] / [moderate]) and the registry owns what that tier costs — so a
 // pinned level here would silently override the catalog (as implementer's
 // `medium` once did). These are cost/quality choices; changing one must fail.
+//
+// implementer runs at high since #649 floored every tier entry at high
+// ("output quality drops sharply below it").
 func TestAgentPresetThinkingLevels(t *testing.T) {
 	want := map[string]struct {
 		pinned    string // explicit preset thinking_level; "" = none
 		effective string // what an Anthropic user's request carries
 	}{
 		"general.yaml":     {pinned: "", effective: "xhigh"},
-		"implementer.yaml": {pinned: "", effective: "medium"},
+		"implementer.yaml": {pinned: "", effective: "high"},
 		"researcher.yaml":  {pinned: "low", effective: "low"},
 	}
 

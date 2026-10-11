@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -42,7 +43,7 @@ func installCapturingReporter(t *testing.T) *capturingReporter {
 func reportRecord(handler *sentryHandler, attrs ...slog.Attr) {
 	record := slog.NewRecord(time.Time{}, slog.LevelError, "tool execution failed", 0)
 	record.AddAttrs(attrs...)
-	handler.reportToSentry(record, nil)
+	handler.reportToSentry(telemetry.GetReporter(), record, nil)
 }
 
 // Short content is still content. Before the allowlist, every attribute of 64
@@ -175,6 +176,53 @@ func TestSentryHandler_HandleStillReports(t *testing.T) {
 	}
 	assert.Equal(t, "chat-1", reporter.tags["chat_id"])
 	assert.NotContains(t, reporter.tags, "command")
+}
+
+// A record belongs to the reporter in force when it was logged. The report
+// runs on its own goroutine, which used to read the process reporter itself,
+// so a record logged just before a reporter swap reached the reporter
+// installed after it: TestSentryHandler_GroupsByMessageAndCallSite received
+// TestSetupWithRotation's "Test error" on a loaded CI runner.
+func TestSentryHandler_ReportsToTheReporterInForceWhenLogged(t *testing.T) {
+	logged := &waitingReporter{done: make(chan struct{})}
+	installedAfter := &waitingReporter{done: make(chan struct{})}
+	previous := telemetry.GetReporter()
+	t.Cleanup(func() { telemetry.SetReporter(previous) })
+	telemetry.SetReporter(logged)
+
+	// Hold the report goroutine until the swap, so the outcome does not
+	// depend on how it happens to be scheduled.
+	release := make(chan struct{})
+	handler := newSentryHandler(slog.NewTextHandler(io.Discard, nil))
+	record := slog.NewRecord(time.Time{}, slog.LevelError, "boom", 0)
+	record.AddAttrs(slog.Any("rows", &heldValue{release: release}))
+	require.NoError(t, handler.Handle(context.Background(), record))
+
+	telemetry.SetReporter(installedAfter)
+	close(release)
+
+	select {
+	case <-logged.done:
+	case <-installedAfter.done:
+		t.Fatal("a record logged before the swap was sent to the reporter installed after it")
+	case <-time.After(5 * time.Second):
+		t.Fatal("ERROR record was never reported")
+	}
+}
+
+// heldValue resolves at once the first time — the line handler, on the
+// logging goroutine — and holds every later resolution, the Sentry report's,
+// until release is closed.
+type heldValue struct {
+	release  chan struct{}
+	resolved atomic.Bool
+}
+
+func (v *heldValue) LogValue() slog.Value {
+	if v.resolved.Swap(true) {
+		<-v.release
+	}
+	return slog.IntValue(1)
 }
 
 type waitingReporter struct {

@@ -86,12 +86,13 @@ func TestResolveLLMCall_AppliesTagThinkingLevel(t *testing.T) {
 			wantThinking: "xhigh",
 		},
 		{
-			// The implementer preset: [moderate] → claude-5.5-sonnet at medium.
-			name:         "moderate tier runs claude-5.5-sonnet at medium",
+			// The implementer preset: [moderate] → claude-5.5-sonnet at the
+			// moderate entry's high (#649 floored every tier entry at high).
+			name:         "moderate tier runs claude-5.5-sonnet at high",
 			selector:     models.ModelSelector{Tags: []string{models.TagModerate}},
 			providers:    []string{"anthropic"},
 			wantModelID:  "claude-5.5-sonnet@anthropic",
-			wantThinking: "medium",
+			wantThinking: "high",
 		},
 		{
 			name:          "an explicit level still beats the tier effort",
