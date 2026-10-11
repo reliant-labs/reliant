@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"strings"
 	"sync"
 	"time"
 
@@ -81,6 +82,19 @@ func closeDaemonTerminalSession(ctx context.Context, router toolexec.DaemonRoute
 	}
 }
 
+// terminalSessionNotFound is how the daemon's terminal manager says a session
+// id names no live session (terminal.Manager.CloseSession). The daemon
+// transport carries a command's error as its message only
+// (daemon_router_nats.go), so the text is what reaches this server; daemons
+// already in the field send exactly this.
+const terminalSessionNotFound = "session not found"
+
+// isTerminalSessionNotFound reports whether a terminal.close failure is the
+// daemon having no such session.
+func isTerminalSessionNotFound(err error) bool {
+	return err != nil && strings.Contains(err.Error(), terminalSessionNotFound)
+}
+
 // ListSessions returns all active terminal sessions.
 func (s *TerminalProxyService) ListSessions(
 	ctx context.Context,
@@ -98,8 +112,8 @@ func (s *TerminalProxyService) ListSessions(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.list", payload, 30000)
 	if err != nil {
-		if toolexec.IsDaemonPending(err) {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+		if cerr, ok := machineStateConnectError("", err); ok {
+			return nil, cerr
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -162,8 +176,19 @@ func (s *TerminalProxyService) CloseSession(
 
 	respBytes, err := s.router.SendDaemonCommand(ctx, userID, "terminal.close", payload, 30000)
 	if err != nil {
-		if toolexec.IsDaemonPending(err) {
-			return nil, connect.NewError(connect.CodeUnavailable, err)
+		// Closing a session that is already gone has achieved what close
+		// asks for. The race is built in: the terminal connection's deferred
+		// close (closeDaemonTerminalSession) and the browser's explicit
+		// CloseSession both close the same session when a tab is closed,
+		// and whichever lands second used to fail as INTERNAL (ELECTRON-97).
+		if isTerminalSessionNotFound(err) {
+			return connect.NewResponse(&reliantv1.CloseTerminalSessionResponse{
+				Success: true,
+				Message: "Session already closed",
+			}), nil
+		}
+		if cerr, ok := machineStateConnectError("", err); ok {
+			return nil, cerr
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
@@ -225,6 +250,9 @@ func (s *TerminalProxyService) StreamTerminal(
 			logging.Warn("[Terminal] Stream working directory unavailable",
 				"requested_working_dir", createReq.GetWorkingDir(), "user_id", userID, "error", err)
 			return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("create terminal session: %w", err))
+		}
+		if cerr, ok := machineStateConnectError("create terminal session", err); ok {
+			return cerr
 		}
 		return connect.NewError(connect.CodeInternal, fmt.Errorf("create terminal session: %w", err))
 	}

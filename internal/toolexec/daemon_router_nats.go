@@ -421,7 +421,7 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 		case recordAttached, recordUnconfirmed:
 			return rec.id, nil
 		case recordSuspended:
-			logging.Info("[DaemonRouter] daemon is suspended; not waking it from tool-time resolution",
+			logMachineState("suspended", userID, "[DaemonRouter] daemon is suspended; not waking it from tool-time resolution",
 				append([]any{"user_id", userID, "daemon_id", rec.id}, selectorLogFields(selector)...)...)
 			return "", fmt.Errorf("the machine for this request is suspended and will wake when you next message it: %w", ErrDaemonPending)
 		}
@@ -447,8 +447,12 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 	// failure — ErrDaemonPending lets callers tell it from "no daemon at all",
 	// and its own text carries the "no daemon connected" marker the frontend's
 	// wait machinery keys on (isDaemonConnectingError / classifyDaemonWait).
+	//
+	// Both lines below are throttled per user and state (logMachineState): a
+	// polling surface hits this on every request, and one line a minute with
+	// a count says everything the per-request flood did.
 	if sawDaemonRecord {
-		logging.Warn("[DaemonRouter] daemon record exists but is not routable yet",
+		logMachineState("starting", userID, "[DaemonRouter] daemon record exists but is not routable yet",
 			append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 		if selector != nil {
 			return "", fmt.Errorf("the machine for this request is still starting: %w", ErrDaemonPending)
@@ -456,12 +460,43 @@ func routableDaemonID(userID string, selector *DaemonSelector, rec daemonRecord,
 		return "", fmt.Errorf("your machine is still starting: %w", ErrDaemonPending)
 	}
 
-	logging.Warn("[DaemonRouter] no daemon could be resolved",
+	logMachineState("none", userID, "[DaemonRouter] no daemon could be resolved",
 		append([]any{"user_id", userID}, selectorLogFields(selector)...)...)
 	if selector != nil {
 		return "", fmt.Errorf("%w: the machine this request asked for is not connected", ErrNoDaemon)
 	}
 	return "", fmt.Errorf("%w: no machine is connected to your account yet", ErrNoDaemon)
+}
+
+// machineStateLogWindow is how often the router writes one user's
+// machine-state line for the same state.
+//
+// The line exists for an operator asking "why did this user's requests fail?"
+// — and one line a minute, with a count of the ones it stands for, answers
+// that. Without the window it was one WARN per request: a user whose Files tab
+// polled while their machine booted produced 63 lines a minute (resolution
+// and the wake step both resolve), 313 in a day from one account
+// (2026-10-08).
+const machineStateLogWindow = time.Minute
+
+// routerMachineStateLog is package-scoped because routableDaemonID is a free
+// function, called from both resolution and the wake step.
+var routerMachineStateLog = logging.NewThrottle(machineStateLogWindow, time.Now)
+
+// logMachineState writes a per-request machine-state line at INFO when the
+// (state, user) key admits it, carrying the count of lines it stands for.
+// INFO, not WARN: a machine that is starting, asleep or absent is a state the
+// product handles, and the request's own outcome is already on the RPC's
+// "rpc failed" line.
+func logMachineState(state, userID, msg string, args ...any) {
+	suppressed, ok := routerMachineStateLog.Allow(state + "|" + userID)
+	if !ok {
+		return
+	}
+	if suppressed > 0 {
+		args = append(args, "suppressed", suppressed)
+	}
+	logging.Info(msg, args...)
 }
 
 // selectorLogFields renders an optional selector as structured log key/values,

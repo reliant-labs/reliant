@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"sync"
@@ -11,7 +12,10 @@ import (
 
 	"github.com/gorilla/websocket"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/terminal"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -46,12 +50,85 @@ type wsMessage struct {
 	SessionID string `json:"session_id,omitempty"`
 }
 
-// wsErrorWorkingDirUnavailable is the Code of an "error" sent when the daemon
-// refused the requested working directory — most often a project whose clone
-// has not finished, so the directory does not exist yet. The browser waits
-// for the directory and retries, instead of spending its reconnect budget as
-// it would on a broken session.
-const wsErrorWorkingDirUnavailable = "working_dir_unavailable"
+// Codes of an "error" sent when the daemon refused the requested working
+// directory. Neither is a server fault, so neither is logged as an error.
+const (
+	// wsErrorWorkingDirUnavailable: the directory may still appear — most
+	// often a project whose clone has not finished, a workspace still being
+	// created, or one the server cannot classify. The browser waits for the
+	// directory and retries, instead of spending its reconnect budget as it
+	// would on a broken session.
+	wsErrorWorkingDirUnavailable = "working_dir_unavailable"
+
+	// wsErrorWorkingDirMissing: nothing is going to create the directory —
+	// its workspace was archived or deleted, failed to set up, or finished
+	// setting up and the directory has since been removed. Retrying cannot
+	// succeed; the browser stops and says so. In prod one persisted terminal
+	// for a removed worktree retried every ~12s for five hours (905 refusals
+	// on 2026-10-08) while the server answered working_dir_unavailable.
+	wsErrorWorkingDirMissing = "working_dir_missing"
+)
+
+// terminalCheckouts is what TerminalWSHandler reads to tell a working
+// directory that may still appear from one that will not. The api-server
+// cannot see the filesystem, so this is the workspace's recorded state.
+type terminalCheckouts interface {
+	GetWorktree(ctx context.Context, id string) (*db.Worktree, error)
+	ListProjectDaemonsForProject(ctx context.Context, projectID string) ([]*db.ProjectDaemon, error)
+}
+
+// TerminalWSOption configures TerminalWSHandler.
+type TerminalWSOption func(*terminalWSConfig)
+
+type terminalWSConfig struct {
+	checkouts terminalCheckouts
+}
+
+// WithTerminalCheckouts lets the handler classify a missing working directory
+// as one that may still appear (working_dir_unavailable) or one that will not
+// (working_dir_missing). Without it every missing directory is
+// working_dir_unavailable, which the browser waits on.
+func WithTerminalCheckouts(checkouts terminalCheckouts) TerminalWSOption {
+	return func(c *terminalWSConfig) { c.checkouts = checkouts }
+}
+
+// workingDirMayAppear reports whether a working directory the daemon could
+// not find may still be created. When the answer cannot be known it is true:
+// waiting on a directory that never appears costs a retry loop, while giving
+// up on a clone that is about to land strands the user.
+func (c terminalWSConfig) workingDirMayAppear(ctx context.Context, router toolexec.DaemonRouter, userID, worktreeID string) bool {
+	if c.checkouts == nil || worktreeID == "" {
+		return true
+	}
+	wt, err := c.checkouts.GetWorktree(ctx, worktreeID)
+	switch {
+	case errors.Is(err, core.ErrWorktreeNotFound):
+		return false
+	case err != nil || wt == nil:
+		return true
+	case wt.DeletedAt != nil:
+		return false // archived
+	}
+	switch reliantv1.WorktreeStatus(wt.Status) {
+	case reliantv1.WorktreeStatus_WORKTREE_STATUS_CREATING:
+		return true
+	case reliantv1.WorktreeStatus_WORKTREE_STATUS_FAILED:
+		return false
+	}
+	if !wt.IsMain {
+		// Set up and since removed: nothing recreates a worktree directory.
+		return false
+	}
+	// The main checkout is the project's clone; only a clone still installing
+	// on the machine this terminal reached will create it.
+	rows, err := c.checkouts.ListProjectDaemonsForProject(ctx, wt.ProjectID)
+	if err != nil {
+		return true
+	}
+	daemonID, _ := router.ResolveDaemonID(ctx, userID)
+	state, _ := checkoutStateOn(rows, daemonID)
+	return state == reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_CLONING
+}
 
 // wsResizeMessage is the JSON message the browser sends for resize events.
 type wsResizeMessage struct {
@@ -71,7 +148,11 @@ type wsResizeMessage struct {
 //
 // The handler works identically with NATSDaemonRouter (daemon-gateway) and
 // LocalDaemonRouter.
-func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator) http.HandlerFunc {
+func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidator, opts ...TerminalWSOption) http.HandlerFunc {
+	var cfg terminalWSConfig
+	for _, opt := range opts {
+		opt(&cfg)
+	}
 	return func(w http.ResponseWriter, r *http.Request) {
 		q := r.URL.Query()
 		token := q.Get("token")
@@ -125,9 +206,16 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 		respBytes, err := router.SendDaemonCommand(ctx, userID, "terminal.create", payload, 30000)
 		if err != nil {
 			if terminal.IsWorkingDirUnavailable(err) {
-				logging.Warn("[TerminalWS] Working directory unavailable",
-					append([]any{"requested_working_dir", workingDir, "error", err}, logFields...)...)
-				writeWSJSON(conn, wsMessage{Type: "error", Code: wsErrorWorkingDirUnavailable, Data: err.Error()})
+				// The user's own state — a directory that is not there — so
+				// INFO, not an error.
+				mayAppear := cfg.workingDirMayAppear(ctx, router, userID, worktreeID)
+				code := wsErrorWorkingDirMissing
+				if mayAppear {
+					code = wsErrorWorkingDirUnavailable
+				}
+				logging.Info("[TerminalWS] Working directory unavailable",
+					append([]any{"requested_working_dir", workingDir, "may_appear", mayAppear, "error", err}, logFields...)...)
+				writeWSJSON(conn, wsMessage{Type: "error", Code: code, Data: err.Error()})
 				return
 			}
 			message := fmt.Sprintf("create terminal session: %v", err)
@@ -322,7 +410,7 @@ func writeWSError(conn *websocket.Conn, msg string, logFields ...any) {
 // project or machine id to say whose.
 const terminalMachineStateLogWindow = 5 * time.Minute
 
-var terminalMachineStateLog = newThrottledLog(terminalMachineStateLogWindow, time.Now)
+var terminalMachineStateLog = logging.NewThrottle(terminalMachineStateLogWindow, time.Now)
 
 // terminalMachineState names why a terminal could not be created when the
 // reason is the machine's state rather than a failure: the user has no
@@ -345,7 +433,7 @@ func terminalMachineState(err error) (state string, ok bool) {
 // per window per user and state, with how many were suppressed since and the
 // machine default resolution names, when it names one.
 func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, userID, state string, err error, logFields []any) {
-	suppressed, ok := terminalMachineStateLog.allow(userID + "|" + state)
+	suppressed, ok := terminalMachineStateLog.Allow(userID + "|" + state)
 	if !ok {
 		return
 	}

@@ -252,3 +252,17 @@ func TestFileSystemService_GetFileTree_HonorsGitignoreAndSkipSet(t *testing.T) {
 	assert.Nil(t, find(".git"), ".git must not appear")
 	assert.NotNil(t, find("Assets"), "tracked sources must still appear")
 }
+
+// A directory that is not there is the user's disk, not a server fault: the
+// tree for it is NOT_FOUND, as the proxy service reports it, not INTERNAL.
+func TestFileSystemService_GetFileTree_MissingDirectoryIsNotFound(t *testing.T) {
+	svc, projectPath := setupTestFileSystemService(t)
+	require.NoError(t, os.RemoveAll(projectPath))
+
+	_, err := svc.GetFileTree(context.Background(), connect.NewRequest(&reliantv1.GetFileTreeRequest{
+		ProjectId: "test-project",
+		Path:      "/",
+	}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+}

@@ -14,20 +14,30 @@ import (
 )
 
 // missingDirMarkers are how a daemon's filesystem error says "that path does
-// not exist". The daemon reports errors as text across the wire, so the text is
-// what there is to match: Go's ENOENT on Unix, and the two Win32 messages for a
-// missing file and a missing directory.
+// not exist". The daemon reports errors as text across the wire — a
+// DaemonCommandResponse carries error_message and no error kind — so the text
+// is what there is to match: Go's ENOENT on Unix, and the two Win32 messages
+// for a missing file and a missing directory.
 var missingDirMarkers = []string{
 	"no such file or directory",
 	"cannot find the file specified",
 	"cannot find the path specified",
 }
 
+// isMissingPathError reports whether a daemon fs command failed because the
+// path it was asked about does not exist.
+//
+// A program the daemon could not start fails with ENOENT too ("fork/exec
+// /usr/bin/rg: no such file or directory"). That is the daemon's install, not
+// the user's files, so it is excluded and stays a server error.
 func isMissingPathError(err error) bool {
 	if err == nil {
 		return false
 	}
 	msg := strings.ToLower(err.Error())
+	if strings.Contains(msg, "fork/exec") {
+		return false
+	}
 	for _, marker := range missingDirMarkers {
 		if strings.Contains(msg, marker) {
 			return true
@@ -40,9 +50,10 @@ func isMissingPathError(err error) bool {
 // machine" into NOT_FOUND carrying a ProjectCheckoutMissing detail, or returns
 // nil when err is anything else.
 //
-// Only the ROOT of the MAIN checkout qualifies. A missing subdirectory is an
-// ordinary race with the user's own edits (the tree already handles it), and a
-// worktree's directory is not described by the clone record this consults.
+// Only the ROOT of the MAIN checkout qualifies — requested with no worktree or
+// with the project's main worktree. A missing subdirectory is an ordinary race
+// with the user's own edits, and a worktree's directory is not described by the
+// clone record this consults; both are plain NOT_FOUND (see sendCommand).
 //
 // The state comes from project_daemons for the machine the request reached:
 // a clone still installing there is CLONING (the window between "Clone from
@@ -53,11 +64,17 @@ func isMissingPathError(err error) bool {
 func (s *FileSystemProxyService) checkoutMissingError(
 	ctx context.Context, userID, projectID string, worktreeID *string, scope workspaceScope, resolvedPath string, err error,
 ) error {
-	if worktreeID != nil && *worktreeID != "" {
-		return nil
-	}
 	if filepath.Clean(resolvedPath) != filepath.Clean(scope.basePath) || !isMissingPathError(err) {
 		return nil
+	}
+	// The client names the main worktree when the user is on the project's
+	// own checkout, which is still the clone this describes. Only a real
+	// worktree is out of scope.
+	if worktreeID != nil && *worktreeID != "" {
+		wt, werr := s.database.GetWorktree(ctx, *worktreeID)
+		if werr != nil || wt == nil || !wt.IsMain {
+			return nil
+		}
 	}
 
 	detail := &reliantv1.ProjectCheckoutMissing{

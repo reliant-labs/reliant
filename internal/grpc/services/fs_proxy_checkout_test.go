@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -112,6 +114,68 @@ func TestFileSystemProxy_GetFileTree_MissingSubdirStaysAsItWas(t *testing.T) {
 	var cerr *connect.Error
 	require.True(t, errors.As(err, &cerr))
 	assert.Empty(t, cerr.Details(), "a missing subdirectory must not be reported as a missing checkout")
+	// ...but it is still the state of the user's disk, not a server fault:
+	// as INTERNAL it was reported to Sentry by the server and the browser.
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+}
+
+// ELECTRON-9Y: the client names the project's MAIN worktree when the user is on
+// the main checkout, so a missing project root arrived with a worktree id and
+// skipped the checkout classification entirely, coming back INTERNAL.
+func TestFileSystemProxy_GetFileTree_MissingRootViaMainWorktreeIsACheckoutState(t *testing.T) {
+	repo, projectID, base := seedFSProxyProject(t)
+	ctx := fsProxyContext()
+	now := time.Now()
+	mainID := uuid.NewString()
+	require.NoError(t, repo.CreateWorktree(ctx, &db.Worktree{
+		ID: mainID, Name: "main", Path: base, Branch: "main", BaseBranch: "main", ProjectID: projectID,
+		Status: int32(reliantv1.WorktreeStatus_WORKTREE_STATUS_ACTIVE), IsMain: true,
+		CreatedAt: now, UpdatedAt: now, LastActive: now,
+	}))
+
+	svc := NewFileSystemProxyService(&fsMissingDirRouter{daemonID: "2aab1465"}, repo)
+	_, err := svc.GetFileTree(ctx, connect.NewRequest(&reliantv1.GetFileTreeRequest{ProjectId: projectID, WorktreeId: &mainID}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+	d := checkoutMissingDetail(t, err)
+	assert.Equal(t, reliantv1.ProjectCheckoutState_PROJECT_CHECKOUT_STATE_ABSENT, d.GetState())
+}
+
+// fsFailRouter fails every daemon command with a fixed error.
+type fsFailRouter struct {
+	worktreeTestDaemonRouter
+	err error
+}
+
+func (r *fsFailRouter) SendDaemonCommand(context.Context, string, string, []byte, int32) ([]byte, error) {
+	return nil, r.err
+}
+
+// sendCommand is where every proxied fs command's daemon failure gets its
+// code, so a missing path is NOT_FOUND for all of them — not only the tree.
+func TestFileSystemProxy_SendCommand_ClassifiesMissingPath(t *testing.T) {
+	cases := []struct {
+		name string
+		err  string
+		want connect.Code
+	}{
+		{"missing dir (linux)", `daemon command "fs.get_tree" failed: read dir /home/workspace/projects/laptop: open /home/workspace/projects/laptop: no such file or directory`, connect.CodeNotFound},
+		{"missing file", `daemon command "fs.read_file" failed: open /w/a.txt: no such file or directory`, connect.CodeNotFound},
+		{"missing path (windows)", `daemon command "fs.stat" failed: CreateFile C:\\w\\a: The system cannot find the path specified.`, connect.CodeNotFound},
+		// The daemon's own install, not the user's files: still a server fault.
+		{"missing binary", `daemon command "fs.search" failed: ripgrep failed: fork/exec /usr/local/bin/rg: no such file or directory`, connect.CodeInternal},
+		{"anything else", `daemon command "fs.read_file" failed: read /w/a.txt: input/output error`, connect.CodeInternal},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			svc := &FileSystemProxyService{router: &fsFailRouter{err: errors.New(tc.err)}}
+			svc.wake = machineWake{router: svc.router}
+			var resp struct{}
+			err := svc.sendCommand(fsProxyContext(), fsProxyTestUser, wakeTarget{}, "fs.read_file", map[string]any{}, &resp, 1000)
+			require.Error(t, err)
+			assert.Equal(t, tc.want, connect.CodeOf(err))
+		})
+	}
 }
 
 func TestCheckoutStateOn(t *testing.T) {

@@ -41,11 +41,14 @@ package instanceid
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/google/uuid"
@@ -180,11 +183,26 @@ func resolve() string {
 	id, err := resolveIn(dir)
 	if err != nil {
 		id = uuid.NewString()
+		if stateDirUnwritable(err) {
+			logging.Info("instanceid: state dir is not writable; using a process-lifetime id (set "+EnvOverride+" to pin one)",
+				"error", err, "dir", dir, "instance_id", id)
+			return id
+		}
 		logging.Warn("instanceid: could not persist instance id; using a process-lifetime id",
 			"error", err, "dir", dir, "instance_id", id)
 		return id
 	}
 	return id
+}
+
+// stateDirUnwritable reports whether err is the state directory being
+// unwritable by design rather than by fault: a read-only root filesystem, or a
+// directory this process may not write. The hosted server containers are
+// exactly that — HOME is "/" on a read-only root — and for them a
+// process-lifetime id is the correct reading (see "Scope" above), so it is
+// not worth a warning on every boot.
+func stateDirUnwritable(err error) bool {
+	return errors.Is(err, syscall.EROFS) || errors.Is(err, fs.ErrPermission)
 }
 
 // resolveIn reads — or mints and persists — the instance id in dir.

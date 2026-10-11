@@ -15,6 +15,7 @@ import (
 	"github.com/gorilla/websocket"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -54,7 +55,7 @@ func logRecords(logs *logCapture, msg string) []map[string]any {
 func freshTerminalMachineStateLog(t *testing.T) {
 	t.Helper()
 	previous := terminalMachineStateLog
-	terminalMachineStateLog = newThrottledLog(terminalMachineStateLogWindow, time.Now)
+	terminalMachineStateLog = logging.NewThrottle(terminalMachineStateLogWindow, time.Now)
 	t.Cleanup(func() { terminalMachineStateLog = previous })
 }
 

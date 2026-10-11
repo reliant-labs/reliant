@@ -3,6 +3,8 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -209,4 +211,49 @@ func TestStreamTerminal_ClosesDaemonSessionOnceOnExplicitClose(t *testing.T) {
 	requireSingleClose(t, router)
 	require.NoError(t, stream.CloseRequest())
 	require.NoError(t, stream.CloseResponse())
+}
+
+// sessionGoneRouter answers terminal.close the way a daemon does for a session
+// it no longer has, verbatim from ELECTRON-97.
+type sessionGoneRouter struct{ fakeDaemonRouter }
+
+func (*sessionGoneRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, _ int32) ([]byte, error) {
+	return nil, fmt.Errorf(`daemon command %q failed: close session: session not found: e0f413d9-94c0-44f2-aa5c-4b9f1ac1d167`, commandType)
+}
+
+// Closing a tab closes its session twice by design: the browser calls
+// CloseSession and the terminal connection's teardown closes it too. The
+// second close finds nothing, which is the outcome close asks for — not an
+// INTERNAL error reported to Sentry from both server and browser.
+func TestCloseSession_AlreadyClosedIsSuccess(t *testing.T) {
+	svc := NewTerminalProxyService(&sessionGoneRouter{})
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, terminalTestUserID)
+
+	resp, err := svc.CloseSession(ctx, connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{
+		SessionId: "e0f413d9-94c0-44f2-aa5c-4b9f1ac1d167",
+	}))
+
+	require.NoError(t, err)
+	require.True(t, resp.Msg.GetSuccess())
+}
+
+// Any other close failure is still a failure.
+func TestCloseSession_OtherDaemonFailureIsStillAnError(t *testing.T) {
+	router := &closeFailsRouter{err: errors.New(`daemon command "terminal.close" failed: terminal manager not initialized`)}
+	svc := NewTerminalProxyService(router)
+	ctx := context.WithValue(context.Background(), auth.UserIDContextKey, terminalTestUserID)
+
+	_, err := svc.CloseSession(ctx, connect.NewRequest(&reliantv1.CloseTerminalSessionRequest{SessionId: "s1"}))
+
+	require.Error(t, err)
+	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+}
+
+type closeFailsRouter struct {
+	fakeDaemonRouter
+	err error
+}
+
+func (r *closeFailsRouter) SendDaemonCommand(context.Context, string, string, []byte, int32) ([]byte, error) {
+	return nil, r.err
 }

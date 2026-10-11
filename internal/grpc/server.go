@@ -381,7 +381,7 @@ func NewServer(cfg *Config) (*Server, error) {
 				wsValidator, _ = auth.LoadJWKS(context.Background(), cfg.JWKSURL)
 			}
 		}
-		mux.HandleFunc("/api/v2/terminal/ws", services.TerminalWSHandler(router, wsValidator))
+		mux.HandleFunc("/api/v2/terminal/ws", services.TerminalWSHandler(router, wsValidator, services.WithTerminalCheckouts(database)))
 	} else {
 		// No daemon router available: use DB-backed FileSystem and provider-backed Background.
 		// These provide read-only / limited functionality without a connected daemon.
