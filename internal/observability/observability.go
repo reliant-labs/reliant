@@ -18,8 +18,6 @@ import (
 	forgeobserve "github.com/reliant-labs/forge/pkg/observe"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/version"
-	"go.opentelemetry.io/otel"
-	"go.opentelemetry.io/otel/propagation"
 )
 
 // Config holds observability configuration.
@@ -35,8 +33,11 @@ type Config struct {
 	// does not infer a wire protocol from its port or scheme; the Forge
 	// runtime owns protocol selection.
 	OTLPEndpoint string
-	// OTLPEnabled is the explicit rollout gate. A disabled runtime never
-	// configures OTLP, including in production before the rollout is activated.
+	// OTLPEnabled makes a missing endpoint a startup error, so a deployment
+	// that means to export cannot silently become Prometheus-only. It does
+	// not gate export on its own: the Forge runtime exports whenever the
+	// standard OTEL_EXPORTER_OTLP_ENDPOINT is set (and OTEL_SDK_DISABLED is
+	// not true), so a deployment keeps export off by leaving that unset.
 	OTLPEnabled bool
 
 	// PrometheusEnabled controls Reliant's existing custom Prometheus endpoint.
@@ -44,8 +45,8 @@ type Config struct {
 }
 
 // ConfigFromEnv builds a Config from environment variables. Service identity is
-// chosen by the owning binary and cannot be replaced with an arbitrary collector
-// value through OTEL_SERVICE_NAME.
+// the owning binary's canonical name; the Forge runtime lets a set
+// OTEL_SERVICE_NAME override it (forge derives that from the workload name).
 func ConfigFromEnv(serviceName string) Config {
 	instanceID, err := os.Hostname()
 	if err != nil || instanceID == "" {
@@ -114,15 +115,6 @@ func Init(cfg Config) (*Provider, error) {
 			return nil, err
 		}
 	}
-
-	// TODO(forge#617): remove once the forge pin includes #617, which makes
-	// observe.Setup install this propagator even when export is off. Until
-	// then Setup only sets it in the OTLP branch, which would turn NATS and
-	// Connect propagation into no-ops whenever a binary runs with OTEL off.
-	otel.SetTextMapPropagator(propagation.NewCompositeTextMapPropagator(
-		propagation.TraceContext{},
-		propagation.Baggage{},
-	))
 
 	metricsOnce.Do(initMetrics)
 	prometheusEnabled.Store(cfg.PrometheusEnabled)

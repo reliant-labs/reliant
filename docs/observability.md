@@ -19,17 +19,21 @@ Each process has a stable resource identity:
 comes from the hostname. `Config.Environment` is resolved from
 `SENTRY_ENVIRONMENT`, then `ENVIRONMENT`, then legacy `RELIANT_ENV`; it is not
 exported as an OTel resource attribute by Reliant. The platform contract sets
-`deployment.environment.name` through `OTEL_RESOURCE_ATTRIBUTES`, which the
-Forge runtime reads once its pin includes forge#604/#617. Until then the
-attribute is absent.
+`deployment.environment.name` through `OTEL_RESOURCE_ATTRIBUTES`, which forge's
+KCL renders for every workload and the Forge runtime merges into the resource.
+`OTEL_SERVICE_NAME`, when set, overrides the compiled-in name above; forge
+derives it from the workload name, which matches that table.
 
 ## Configuration
 
-`OTEL_ENABLED=true` is the explicit rollout gate. A production deployment with
-`ENVIRONMENT=production` and the switch off boots without an OTLP endpoint; once
-the switch is on, a missing endpoint fails startup. This preserves the current
-hosted rollout while preventing an enabled deployment from silently becoming
-Prometheus-only.
+Export follows the standard OTel environment, which the Forge runtime owns: a
+process exports traces and metrics whenever `OTEL_EXPORTER_OTLP_ENDPOINT` is
+set (an empty value counts as unset), and `OTEL_SDK_DISABLED=true` turns export
+off. To keep a deployment's export off, leave the endpoint unset.
+
+`OTEL_ENABLED=true` no longer gates export by itself: it makes a missing
+endpoint fail startup, so a deployment that means to export cannot silently
+become Prometheus-only.
 
 `OTEL_EXPORTER_OTLP_ENDPOINT` must be an `http(s)` collector base URL (or bare
 `host:port`) with no `/v1/<signal>` path. Reliant never infers a wire protocol
@@ -52,10 +56,9 @@ flushed independently of OTel.
 
 ## Propagation
 
-`observability.Init` always installs the W3C TraceContext+Baggage propagator,
-even when export is disabled, so NATS and Connect propagation keep working in
-mixed deployments. (TODO(forge#617): remove the reliant-side install once the
-forge pin includes #617.)
+Forge's `observe.Setup` (called by `observability.Init`) always installs the
+W3C TraceContext+Baggage propagator, even when export is disabled, so NATS and
+Connect propagation keep working in mixed deployments.
 
 The Connect server uses one `otelconnect` server interceptor; Forge's generic
 tracing interceptor is intentionally not enabled there, preventing duplicate
