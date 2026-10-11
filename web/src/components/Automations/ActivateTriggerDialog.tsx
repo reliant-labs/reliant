@@ -77,9 +77,17 @@ export interface ActivateTriggerDialogProps {
 
 const NO_MACHINE = "__no_machine__";
 
-/** The API origin a bare `/hooks/…` webhook path is relative to. */
+/**
+ * The API origin a bare `/hooks/…` webhook path is relative to.
+ *
+ * Not `typeof window !== "undefined" ? window.location.origin : ""`: that
+ * minifies to `?window.location.origin:`, the exact text the release's
+ * verify-bundle guard (.github/scripts/verify-bundle.mjs, "no dev-mode leak")
+ * treats as a surviving same-origin transport branch, so it failed every
+ * Electron release cut after this dialog landed.
+ */
 export function apiOrigin(): string {
-  return getGRPCBaseURLPublic() ?? (typeof window !== "undefined" ? window.location.origin : "");
+  return getGRPCBaseURLPublic() ?? globalThis.location?.origin ?? "";
 }
 
 export function ActivateTriggerDialog(props: ActivateTriggerDialogProps) {
