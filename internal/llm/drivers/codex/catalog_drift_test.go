@@ -22,20 +22,31 @@ import (
 
 // capturedCodexModel is the part of a /codex/models entry these tests compare.
 type capturedCodexModel struct {
-	Slug                 string `json:"slug"`
-	Visibility           string `json:"visibility"`
-	MinimalClientVersion string `json:"minimal_client_version"`
-	UseResponsesLite     bool   `json:"use_responses_lite"`
+	Slug             string `json:"slug"`
+	Visibility       string `json:"visibility"`
+	UseResponsesLite bool   `json:"use_responses_lite"`
+}
+
+// codexCapture is testdata/codex_models.json: the catalog bundled with one
+// codex-tui release, and that release's version (the client_version key Codex
+// CLI's own models_cache.json carries).
+type codexCapture struct {
+	ClientVersion string               `json:"client_version"`
+	Models        []capturedCodexModel `json:"models"`
+}
+
+func readCodexCapture(t *testing.T) codexCapture {
+	t.Helper()
+	body, err := os.ReadFile("testdata/codex_models.json")
+	require.NoError(t, err)
+	var parsed codexCapture
+	require.NoError(t, json.Unmarshal(body, &parsed))
+	return parsed
 }
 
 func listedCodexModels(t *testing.T) []capturedCodexModel {
 	t.Helper()
-	body, err := os.ReadFile("testdata/codex_models.json")
-	require.NoError(t, err)
-	var parsed struct {
-		Models []capturedCodexModel `json:"models"`
-	}
-	require.NoError(t, json.Unmarshal(body, &parsed))
+	parsed := readCodexCapture(t)
 
 	var listed []capturedCodexModel
 	for _, m := range parsed.Models {
@@ -102,18 +113,25 @@ func TestSupportedModelsMatchCodexMappings(t *testing.T) {
 	assert.ElementsMatch(t, mapped, SupportedModels)
 }
 
-// The backend gates each model on the client version the request claims
-// (minimal_client_version), so a CodexVersion below a listed model's minimum
-// hides that model from /codex/models — and the authoritative report then
-// disables it — even with a correct mapping.
+// The backend decides which models /codex/models lists — and which it serves —
+// from the client_version the request claims. A CodexVersion that is too old
+// hides a model (the authoritative report then disables it) and 400s every
+// request for it, even with a correct mapping.
+//
+// The catalog's per-model minimal_client_version is NOT that gate. Probed live
+// 2026-10-11: the bundle says gpt-6.1-sol needs 0.153.0, but /codex/models
+// omits it below 0.159.0 and /responses refuses it ("not supported when using
+// Codex with a ChatGPT account") at 0.155.0. What holds is that a release is
+// served every model it bundles, so CodexVersion must be at least the release
+// the capture came from — refresh the two together.
 func TestCodexVersionServesEveryListedModel(t *testing.T) {
-	for _, m := range listedCodexModels(t) {
-		if m.MinimalClientVersion == "" {
-			continue
-		}
-		assert.Truef(t, versionAtLeast(t, CodexVersion, m.MinimalClientVersion),
-			"%s needs codex-tui %s; CodexVersion is %s", m.Slug, m.MinimalClientVersion, CodexVersion)
-	}
+	capture := readCodexCapture(t)
+	require.NotEmpty(t, capture.ClientVersion,
+		"testdata/codex_models.json has no client_version; capture it from a codex-tui release tag (see recordedReport)")
+	assert.Truef(t, versionAtLeast(t, CodexVersion, capture.ClientVersion),
+		"the capture is codex-tui %s's catalog, but CodexVersion is %s: the backend withholds models newer than "+
+			"the version the request claims, so the codex picker would not offer every model the capture lists",
+		capture.ClientVersion, CodexVersion)
 }
 
 // use_responses_lite is what moves Codex's instructions and tools into `input`
@@ -163,7 +181,7 @@ func TestCodexCatalogCeilingCoversAdvertisedLimit(t *testing.T) {
 	}
 }
 
-// versionAtLeast compares dotted numeric versions ("0.155.0").
+// versionAtLeast compares dotted numeric versions ("0.162.1").
 func versionAtLeast(t *testing.T, have, need string) bool {
 	t.Helper()
 	parse := func(v string) []int {

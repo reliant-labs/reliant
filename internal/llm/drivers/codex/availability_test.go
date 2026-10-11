@@ -11,18 +11,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// testdata/codex_models.json is the model catalog Codex CLI bundles —
-// openai/codex codex-rs/models-manager/models.json at d63a9b8344 (2026-10-06,
-// fetched 2026-10-10; gpt-6.1-sol arrived in b1e72963c3 on 2026-09-29) —
-// projected onto the fields this package and its tests read. Codex CLI
-// deserializes that file and GET /codex/models into the same type
-// (codex_protocol::openai_models::ModelsResponse), so it is a /codex/models
-// body. The 2026-10-04 live recording it replaced listed the same windows and
-// levels for every model both carry. Refresh with:
+// testdata/codex_models.json is the model catalog bundled with codex-tui
+// 0.162.1 — openai/codex codex-rs/models-manager/models.json at tag
+// rust-v0.162.1 (7a078f6bb4, fetched 2026-10-11; byte-identical to main's
+// d63a9b8344 that day; gpt-6.1-sol arrived in b1e72963c3 on 2026-09-29) —
+// projected onto the fields this package and its tests read, plus the
+// release's client_version. Codex CLI deserializes that file and GET
+// /codex/models into the same type (codex_protocol::openai_models::
+// ModelsResponse), so it is a /codex/models body. Capture it from a release
+// TAG, never main: the backend serves a client the models its release
+// bundles, and the drift tests hold CodexVersion to client_version. Refresh
+// with (V = the new CodexVersion):
 //
-//	gh api repos/openai/codex/contents/codex-rs/models-manager/models.json \
-//	  -H 'Accept: application/vnd.github.raw' | jq --indent 1 '{models: [.models[] |
-//	  {slug, display_name, description, visibility, priority, minimal_client_version,
+//	gh api "repos/openai/codex/contents/codex-rs/models-manager/models.json?ref=rust-v$V" \
+//	  -H 'Accept: application/vnd.github.raw' | jq --indent 1 --arg v "$V" \
+//	  '{client_version: $v, source: "openai/codex rust-v\($v) codex-rs/models-manager/models.json",
+//	    models: [.models[] | {slug, display_name, description, visibility, priority,
 //	   context_window, max_context_window, default_reasoning_level,
 //	   supported_reasoning_levels, supported_in_api, tool_mode, use_responses_lite,
 //	   default_service_tier}]}'

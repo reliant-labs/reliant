@@ -738,9 +738,9 @@ models:
   # low..max: unlike the rest of the GPT-6 family it rejects `none`/`minimal`.
   #
   # Codex serves it (see the note on gpt-6.1-sol): it is Codex's "Previous
-  # generation workhorse", behind gpt-6.1-sol in every codex tier. Codex CLI
-  # requires codex-tui 0.155.0 for it (minimal_client_version), which is why
-  # the codex driver claims 0.155.0. No reliant/vertexai mapping, for astra's
+  # generation workhorse", behind gpt-6.1-sol in every codex tier. The backend
+  # serves it from codex-tui 0.155.0 (the codex driver's CodexVersion is held
+  # above every listed model's gate). No reliant/vertexai mapping, for astra's
   # reason: Vertex serves no OpenAI frontier models, and the gateway routes
   # through it.
   - id: gpt-6-sol
@@ -832,8 +832,8 @@ models:
   # and other internal calls for every OpenAI user; promoting it above the
   # existing mini picks should be a measured decision. For a codex user neither
   # mini is servable, so luna — Codex's "Fast and affordable model for easier
-  # tasks" — is codex's [fast], [cheap] and [meta] model. Codex CLI requires
-  # codex-tui 0.155.0 for it, as for gpt-6-sol.
+  # tasks" — is codex's [fast], [cheap] and [meta] model. The backend serves
+  # it from codex-tui 0.155.0, as for gpt-6-sol.
   #
   # Not the same model as gpt-5.6-luna (the older ChatGPT-family model).
   # Same provider reasoning as gpt-6-sol above.

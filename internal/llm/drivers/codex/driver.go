@@ -34,16 +34,24 @@ const (
 	// CodexBaseURL is the base URL for the Codex API (SDK appends /responses)
 	CodexBaseURL = "https://chatgpt.com/backend-api/codex"
 
-	// CodexVersion is the version header to send.
-	// Keep aligned with a current codex-tui (CLI) release; backend DOES gate on
-	// this: each model in Codex's catalog carries a minimal_client_version, and
-	// /codex/models omits a model the claimed version is too old for (the
-	// authoritative availability report then hides it). gpt-6-sol and
-	// gpt-6-luna need 0.155.0; astra and gpt-6.1-sol 0.153.0; the 5.6 family
-	// 0.144.0. 0.155.0 is the oldest release that reaches every listed model —
-	// the smallest step past 0.153.4, the release in the astra capture.
-	// TestCodexVersionServesEveryListedModel pins this to testdata.
-	CodexVersion = "0.155.0"
+	// CodexVersion is the version header (and /models client_version) to send.
+	// Keep aligned with a current codex-tui (CLI) release; the backend DOES
+	// gate on this: /codex/models omits a model the claimed version is too old
+	// for (the authoritative availability report then hides it) and /responses
+	// refuses it.
+	//
+	// The catalog's per-model minimal_client_version understates the gate.
+	// Probed live 2026-10-11 with a ChatGPT account: at 0.155.0 gpt-6.1-sol
+	// (Codex's default) was absent from /codex/models and 400'd "not supported
+	// when using Codex with a ChatGPT account", although its bundled minimum is
+	// 0.153.0; it is listed from 0.159.0. At 0.162.1 every listed model
+	// (gpt-6.1-sol, gpt-6-astra, gpt-6-sol, gpt-6-luna, gpt-5.6-sol/terra/luna,
+	// gpt-5.5) streamed a reply with tools attached.
+	//
+	// testdata/codex_models.json is the catalog bundled with a release, and
+	// TestCodexVersionServesEveryListedModel holds this at or above that
+	// release: refresh the two together.
+	CodexVersion = "0.162.1"
 
 	// CodexOriginator identifies the client to the Codex backend.
 	CodexOriginator = "codex-tui"

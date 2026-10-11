@@ -224,8 +224,9 @@ func TestAggregateAvailableModels_CodexUserIsOfferedGPT61Sol(t *testing.T) {
 	infos, err := aggregateAvailableModels(context.Background(), available, clientForDriver)
 	require.NoError(t, err)
 
+	// The backend gates models on this; codex.TestCodexVersionServesEveryListedModel
+	// holds CodexVersion at or above the release the fixture was captured from.
 	assert.Equal(t, codex.CodexVersion, seenVersion)
-	assert.Equal(t, "0.155.0", seenVersion, "the version #673 moved to; gpt-6-sol and gpt-6-luna need it")
 	assert.Equal(t, "Bearer "+token, seenAuth)
 	assert.True(t, strings.HasSuffix(seenPath, "/models"), "GET %s", seenPath)
 
