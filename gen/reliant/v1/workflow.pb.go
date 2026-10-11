@@ -1903,1299 +1903,6 @@ func (x *CopyWorkflowResponse) GetId() string {
 	return ""
 }
 
-// SimulatedEvent represents a single event in the simulation.
-// The output_json contains the mock output that will be returned by the node,
-// matching the activity's output structure directly (no translation needed).
-type SimulatedEvent struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Node targets a specific node (supports qualified IDs for inner loops and workflows).
-	// Use dot-notation: "loop_id.inner_node_id" or "outer.inner.node_id".
-	// If omitted, events are applied sequentially.
-	Node string `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
-	// Output is the mock output returned by the node as JSON.
-	// This should match the activity's output structure directly:
-	//   - call_llm: message, response_text, tool_calls, input_tokens, etc.
-	//   - execute_tools: message, tool_results, thread_token_count, etc.
-	//   - approval: approval_id, status, action_taken, data
-	//   - run: exit_code, stdout, stderr
-	OutputJson    string `protobuf:"bytes,2,opt,name=output_json,json=outputJson,proto3" json:"output_json,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *SimulatedEvent) Reset() {
-	*x = SimulatedEvent{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *SimulatedEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*SimulatedEvent) ProtoMessage() {}
-
-func (x *SimulatedEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use SimulatedEvent.ProtoReflect.Descriptor instead.
-func (*SimulatedEvent) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *SimulatedEvent) GetNode() string {
-	if x != nil {
-		return x.Node
-	}
-	return ""
-}
-
-func (x *SimulatedEvent) GetOutputJson() string {
-	if x != nil {
-		return x.OutputJson
-	}
-	return ""
-}
-
-// ScenarioExpectation defines what we expect from the simulation
-type ScenarioExpectation struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Outcome       string                 `protobuf:"bytes,1,opt,name=outcome,proto3" json:"outcome,omitempty"`                                  // Expected outcome: completed, error
-	Reached       []string               `protobuf:"bytes,2,rep,name=reached,proto3" json:"reached,omitempty"`                                  // Nodes that should be executed
-	NotReached    []string               `protobuf:"bytes,3,rep,name=not_reached,json=notReached,proto3" json:"not_reached,omitempty"`          // Nodes that should NOT be executed
-	ErrorContains string                 `protobuf:"bytes,4,opt,name=error_contains,json=errorContains,proto3" json:"error_contains,omitempty"` // Substring in error message
-	ErrorNode     string                 `protobuf:"bytes,5,opt,name=error_node,json=errorNode,proto3" json:"error_node,omitempty"`             // Node where error should occur
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ScenarioExpectation) Reset() {
-	*x = ScenarioExpectation{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ScenarioExpectation) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ScenarioExpectation) ProtoMessage() {}
-
-func (x *ScenarioExpectation) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ScenarioExpectation.ProtoReflect.Descriptor instead.
-func (*ScenarioExpectation) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *ScenarioExpectation) GetOutcome() string {
-	if x != nil {
-		return x.Outcome
-	}
-	return ""
-}
-
-func (x *ScenarioExpectation) GetReached() []string {
-	if x != nil {
-		return x.Reached
-	}
-	return nil
-}
-
-func (x *ScenarioExpectation) GetNotReached() []string {
-	if x != nil {
-		return x.NotReached
-	}
-	return nil
-}
-
-func (x *ScenarioExpectation) GetErrorContains() string {
-	if x != nil {
-		return x.ErrorContains
-	}
-	return ""
-}
-
-func (x *ScenarioExpectation) GetErrorNode() string {
-	if x != nil {
-		return x.ErrorNode
-	}
-	return ""
-}
-
-// ScenarioDefinition defines a complete test scenario
-type ScenarioDefinition struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`                               // Scenario name
-	Description   string                 `protobuf:"bytes,2,opt,name=description,proto3" json:"description,omitempty"`                 // What this scenario tests
-	Events        []*SimulatedEvent      `protobuf:"bytes,3,rep,name=events,proto3" json:"events,omitempty"`                           // Sequence of simulated events
-	Expect        *ScenarioExpectation   `protobuf:"bytes,4,opt,name=expect,proto3" json:"expect,omitempty"`                           // Expected outcome
-	InputsJson    string                 `protobuf:"bytes,5,opt,name=inputs_json,json=inputsJson,proto3" json:"inputs_json,omitempty"` // Override workflow inputs (JSON)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ScenarioDefinition) Reset() {
-	*x = ScenarioDefinition{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ScenarioDefinition) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ScenarioDefinition) ProtoMessage() {}
-
-func (x *ScenarioDefinition) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ScenarioDefinition.ProtoReflect.Descriptor instead.
-func (*ScenarioDefinition) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *ScenarioDefinition) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *ScenarioDefinition) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *ScenarioDefinition) GetEvents() []*SimulatedEvent {
-	if x != nil {
-		return x.Events
-	}
-	return nil
-}
-
-func (x *ScenarioDefinition) GetExpect() *ScenarioExpectation {
-	if x != nil {
-		return x.Expect
-	}
-	return nil
-}
-
-func (x *ScenarioDefinition) GetInputsJson() string {
-	if x != nil {
-		return x.InputsJson
-	}
-	return ""
-}
-
-// ErrorDetails contains information about an error that occurred
-type ErrorDetails struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Node          string                 `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`             // Node where error occurred
-	Step          string                 `protobuf:"bytes,2,opt,name=step,proto3" json:"step,omitempty"`             // Step within the node
-	Message       string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`       // Error message
-	Expression    string                 `protobuf:"bytes,4,opt,name=expression,proto3" json:"expression,omitempty"` // CEL expression that failed
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ErrorDetails) Reset() {
-	*x = ErrorDetails{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ErrorDetails) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ErrorDetails) ProtoMessage() {}
-
-func (x *ErrorDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ErrorDetails.ProtoReflect.Descriptor instead.
-func (*ErrorDetails) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *ErrorDetails) GetNode() string {
-	if x != nil {
-		return x.Node
-	}
-	return ""
-}
-
-func (x *ErrorDetails) GetStep() string {
-	if x != nil {
-		return x.Step
-	}
-	return ""
-}
-
-func (x *ErrorDetails) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *ErrorDetails) GetExpression() string {
-	if x != nil {
-		return x.Expression
-	}
-	return ""
-}
-
-// ExecutionDetails contains details about the simulation execution
-type ExecutionDetails struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	NodesReached  []string               `protobuf:"bytes,1,rep,name=nodes_reached,json=nodesReached,proto3" json:"nodes_reached,omitempty"` // Nodes that were executed
-	Outcome       string                 `protobuf:"bytes,2,opt,name=outcome,proto3" json:"outcome,omitempty"`                               // "completed" or "error"
-	Error         *ErrorDetails          `protobuf:"bytes,3,opt,name=error,proto3" json:"error,omitempty"`                                   // Error details if outcome is "error"
-	DurationMs    int64                  `protobuf:"varint,4,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`      // Execution duration in milliseconds
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExecutionDetails) Reset() {
-	*x = ExecutionDetails{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[26]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExecutionDetails) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExecutionDetails) ProtoMessage() {}
-
-func (x *ExecutionDetails) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[26]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExecutionDetails.ProtoReflect.Descriptor instead.
-func (*ExecutionDetails) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{26}
-}
-
-func (x *ExecutionDetails) GetNodesReached() []string {
-	if x != nil {
-		return x.NodesReached
-	}
-	return nil
-}
-
-func (x *ExecutionDetails) GetOutcome() string {
-	if x != nil {
-		return x.Outcome
-	}
-	return ""
-}
-
-func (x *ExecutionDetails) GetError() *ErrorDetails {
-	if x != nil {
-		return x.Error
-	}
-	return nil
-}
-
-func (x *ExecutionDetails) GetDurationMs() int64 {
-	if x != nil {
-		return x.DurationMs
-	}
-	return 0
-}
-
-// ScenarioResult contains the result of running a scenario
-type ScenarioResult struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Status        string                 `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`                                 // passed, failed, error
-	ScenarioName  string                 `protobuf:"bytes,2,opt,name=scenario_name,json=scenarioName,proto3" json:"scenario_name,omitempty"` // Name of the scenario
-	Execution     *ExecutionDetails      `protobuf:"bytes,3,opt,name=execution,proto3" json:"execution,omitempty"`                           // Execution details
-	Expected      *ScenarioExpectation   `protobuf:"bytes,4,opt,name=expected,proto3" json:"expected,omitempty"`                             // Expected outcome (if set)
-	Mismatches    []string               `protobuf:"bytes,5,rep,name=mismatches,proto3" json:"mismatches,omitempty"`                         // Expectation mismatches
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ScenarioResult) Reset() {
-	*x = ScenarioResult{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[27]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ScenarioResult) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ScenarioResult) ProtoMessage() {}
-
-func (x *ScenarioResult) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[27]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ScenarioResult.ProtoReflect.Descriptor instead.
-func (*ScenarioResult) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{27}
-}
-
-func (x *ScenarioResult) GetStatus() string {
-	if x != nil {
-		return x.Status
-	}
-	return ""
-}
-
-func (x *ScenarioResult) GetScenarioName() string {
-	if x != nil {
-		return x.ScenarioName
-	}
-	return ""
-}
-
-func (x *ScenarioResult) GetExecution() *ExecutionDetails {
-	if x != nil {
-		return x.Execution
-	}
-	return nil
-}
-
-func (x *ScenarioResult) GetExpected() *ScenarioExpectation {
-	if x != nil {
-		return x.Expected
-	}
-	return nil
-}
-
-func (x *ScenarioResult) GetMismatches() []string {
-	if x != nil {
-		return x.Mismatches
-	}
-	return nil
-}
-
-// Scenario is a saved scenario with metadata
-type Scenario struct {
-	state           protoimpl.MessageState `protogen:"open.v1"`
-	Id              string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
-	WorkflowDraftId string                 `protobuf:"bytes,2,opt,name=workflow_draft_id,json=workflowDraftId,proto3" json:"workflow_draft_id,omitempty"` // FK to workflow draft (optional)
-	UserId          string                 `protobuf:"bytes,3,opt,name=user_id,json=userId,proto3" json:"user_id,omitempty"`
-	Name            string                 `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
-	Description     string                 `protobuf:"bytes,5,opt,name=description,proto3" json:"description,omitempty"`
-	Events          []*SimulatedEvent      `protobuf:"bytes,6,rep,name=events,proto3" json:"events,omitempty"`
-	Expect          *ScenarioExpectation   `protobuf:"bytes,7,opt,name=expect,proto3" json:"expect,omitempty"`
-	LastRunStatus   string                 `protobuf:"bytes,8,opt,name=last_run_status,json=lastRunStatus,proto3" json:"last_run_status,omitempty"` // passed, failed, error
-	LastRunResult   *ScenarioResult        `protobuf:"bytes,9,opt,name=last_run_result,json=lastRunResult,proto3" json:"last_run_result,omitempty"`
-	CreatedAt       string                 `protobuf:"bytes,10,opt,name=created_at,json=createdAt,proto3" json:"created_at,omitempty"`
-	UpdatedAt       string                 `protobuf:"bytes,11,opt,name=updated_at,json=updatedAt,proto3" json:"updated_at,omitempty"`
-	Source          string                 `protobuf:"bytes,12,opt,name=source,proto3" json:"source,omitempty"` // "user" (DB) or "project" (file)
-	Path            string                 `protobuf:"bytes,13,opt,name=path,proto3" json:"path,omitempty"`     // File path for project scenarios
-	unknownFields   protoimpl.UnknownFields
-	sizeCache       protoimpl.SizeCache
-}
-
-func (x *Scenario) Reset() {
-	*x = Scenario{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[28]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *Scenario) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Scenario) ProtoMessage() {}
-
-func (x *Scenario) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[28]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Scenario.ProtoReflect.Descriptor instead.
-func (*Scenario) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{28}
-}
-
-func (x *Scenario) GetId() string {
-	if x != nil {
-		return x.Id
-	}
-	return ""
-}
-
-func (x *Scenario) GetWorkflowDraftId() string {
-	if x != nil {
-		return x.WorkflowDraftId
-	}
-	return ""
-}
-
-func (x *Scenario) GetUserId() string {
-	if x != nil {
-		return x.UserId
-	}
-	return ""
-}
-
-func (x *Scenario) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Scenario) GetDescription() string {
-	if x != nil {
-		return x.Description
-	}
-	return ""
-}
-
-func (x *Scenario) GetEvents() []*SimulatedEvent {
-	if x != nil {
-		return x.Events
-	}
-	return nil
-}
-
-func (x *Scenario) GetExpect() *ScenarioExpectation {
-	if x != nil {
-		return x.Expect
-	}
-	return nil
-}
-
-func (x *Scenario) GetLastRunStatus() string {
-	if x != nil {
-		return x.LastRunStatus
-	}
-	return ""
-}
-
-func (x *Scenario) GetLastRunResult() *ScenarioResult {
-	if x != nil {
-		return x.LastRunResult
-	}
-	return nil
-}
-
-func (x *Scenario) GetCreatedAt() string {
-	if x != nil {
-		return x.CreatedAt
-	}
-	return ""
-}
-
-func (x *Scenario) GetUpdatedAt() string {
-	if x != nil {
-		return x.UpdatedAt
-	}
-	return ""
-}
-
-func (x *Scenario) GetSource() string {
-	if x != nil {
-		return x.Source
-	}
-	return ""
-}
-
-func (x *Scenario) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-// ListScenarios
-type ListScenariosRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	WorkflowSlug  string                 `protobuf:"bytes,2,opt,name=workflow_slug,json=workflowSlug,proto3" json:"workflow_slug,omitempty"` // Workflow to list scenarios for
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListScenariosRequest) Reset() {
-	*x = ListScenariosRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[29]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListScenariosRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListScenariosRequest) ProtoMessage() {}
-
-func (x *ListScenariosRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[29]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListScenariosRequest.ProtoReflect.Descriptor instead.
-func (*ListScenariosRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{29}
-}
-
-func (x *ListScenariosRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *ListScenariosRequest) GetWorkflowSlug() string {
-	if x != nil {
-		return x.WorkflowSlug
-	}
-	return ""
-}
-
-type ListScenariosResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Scenarios     []*Scenario            `protobuf:"bytes,1,rep,name=scenarios,proto3" json:"scenarios,omitempty"`
-	ScenariosDir  string                 `protobuf:"bytes,2,opt,name=scenarios_dir,json=scenariosDir,proto3" json:"scenarios_dir,omitempty"` // Directory path for file-based scenarios
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ListScenariosResponse) Reset() {
-	*x = ListScenariosResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[30]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ListScenariosResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ListScenariosResponse) ProtoMessage() {}
-
-func (x *ListScenariosResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[30]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ListScenariosResponse.ProtoReflect.Descriptor instead.
-func (*ListScenariosResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{30}
-}
-
-func (x *ListScenariosResponse) GetScenarios() []*Scenario {
-	if x != nil {
-		return x.Scenarios
-	}
-	return nil
-}
-
-func (x *ListScenariosResponse) GetScenariosDir() string {
-	if x != nil {
-		return x.ScenariosDir
-	}
-	return ""
-}
-
-// CreateScenario
-type CreateScenarioRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	WorkflowSlug  string                 `protobuf:"bytes,2,opt,name=workflow_slug,json=workflowSlug,proto3" json:"workflow_slug,omitempty"` // Workflow to test (optional if workflow_yaml provided)
-	WorkflowYaml  string                 `protobuf:"bytes,3,opt,name=workflow_yaml,json=workflowYaml,proto3" json:"workflow_yaml,omitempty"` // Raw YAML to test (optional)
-	Scenario      *ScenarioDefinition    `protobuf:"bytes,4,opt,name=scenario,proto3" json:"scenario,omitempty"`                             // Scenario to create
-	Run           bool                   `protobuf:"varint,5,opt,name=run,proto3" json:"run,omitempty"`                                      // Run immediately after creating
-	Save          bool                   `protobuf:"varint,6,opt,name=save,proto3" json:"save,omitempty"`                                    // Save the scenario for future runs
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateScenarioRequest) Reset() {
-	*x = CreateScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[31]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateScenarioRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateScenarioRequest) ProtoMessage() {}
-
-func (x *CreateScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[31]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateScenarioRequest.ProtoReflect.Descriptor instead.
-func (*CreateScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{31}
-}
-
-func (x *CreateScenarioRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *CreateScenarioRequest) GetWorkflowSlug() string {
-	if x != nil {
-		return x.WorkflowSlug
-	}
-	return ""
-}
-
-func (x *CreateScenarioRequest) GetWorkflowYaml() string {
-	if x != nil {
-		return x.WorkflowYaml
-	}
-	return ""
-}
-
-func (x *CreateScenarioRequest) GetScenario() *ScenarioDefinition {
-	if x != nil {
-		return x.Scenario
-	}
-	return nil
-}
-
-func (x *CreateScenarioRequest) GetRun() bool {
-	if x != nil {
-		return x.Run
-	}
-	return false
-}
-
-func (x *CreateScenarioRequest) GetSave() bool {
-	if x != nil {
-		return x.Save
-	}
-	return false
-}
-
-type CreateScenarioResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Scenario      *Scenario              `protobuf:"bytes,3,opt,name=scenario,proto3" json:"scenario,omitempty"` // Created scenario (if save=true)
-	Result        *ScenarioResult        `protobuf:"bytes,4,opt,name=result,proto3" json:"result,omitempty"`     // Run result (if run=true)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *CreateScenarioResponse) Reset() {
-	*x = CreateScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[32]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *CreateScenarioResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CreateScenarioResponse) ProtoMessage() {}
-
-func (x *CreateScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[32]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CreateScenarioResponse.ProtoReflect.Descriptor instead.
-func (*CreateScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{32}
-}
-
-func (x *CreateScenarioResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *CreateScenarioResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *CreateScenarioResponse) GetScenario() *Scenario {
-	if x != nil {
-		return x.Scenario
-	}
-	return nil
-}
-
-func (x *CreateScenarioResponse) GetResult() *ScenarioResult {
-	if x != nil {
-		return x.Result
-	}
-	return nil
-}
-
-// RunScenario
-type RunScenarioRequest struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId  string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	ScenarioId string                 `protobuf:"bytes,2,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"` // ID of saved scenario to run
-	// OR run ad-hoc:
-	WorkflowSlug  string              `protobuf:"bytes,3,opt,name=workflow_slug,json=workflowSlug,proto3" json:"workflow_slug,omitempty"` // Workflow to test
-	Scenario      *ScenarioDefinition `protobuf:"bytes,4,opt,name=scenario,proto3" json:"scenario,omitempty"`                             // Ad-hoc scenario to run
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RunScenarioRequest) Reset() {
-	*x = RunScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[33]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RunScenarioRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RunScenarioRequest) ProtoMessage() {}
-
-func (x *RunScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[33]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RunScenarioRequest.ProtoReflect.Descriptor instead.
-func (*RunScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{33}
-}
-
-func (x *RunScenarioRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *RunScenarioRequest) GetScenarioId() string {
-	if x != nil {
-		return x.ScenarioId
-	}
-	return ""
-}
-
-func (x *RunScenarioRequest) GetWorkflowSlug() string {
-	if x != nil {
-		return x.WorkflowSlug
-	}
-	return ""
-}
-
-func (x *RunScenarioRequest) GetScenario() *ScenarioDefinition {
-	if x != nil {
-		return x.Scenario
-	}
-	return nil
-}
-
-type RunScenarioResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Result        *ScenarioResult        `protobuf:"bytes,1,opt,name=result,proto3" json:"result,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RunScenarioResponse) Reset() {
-	*x = RunScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[34]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RunScenarioResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RunScenarioResponse) ProtoMessage() {}
-
-func (x *RunScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[34]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RunScenarioResponse.ProtoReflect.Descriptor instead.
-func (*RunScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{34}
-}
-
-func (x *RunScenarioResponse) GetResult() *ScenarioResult {
-	if x != nil {
-		return x.Result
-	}
-	return nil
-}
-
-// DeleteScenario
-type DeleteScenarioRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	ScenarioId    string                 `protobuf:"bytes,2,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteScenarioRequest) Reset() {
-	*x = DeleteScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[35]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteScenarioRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteScenarioRequest) ProtoMessage() {}
-
-func (x *DeleteScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[35]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteScenarioRequest.ProtoReflect.Descriptor instead.
-func (*DeleteScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{35}
-}
-
-func (x *DeleteScenarioRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *DeleteScenarioRequest) GetScenarioId() string {
-	if x != nil {
-		return x.ScenarioId
-	}
-	return ""
-}
-
-type DeleteScenarioResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *DeleteScenarioResponse) Reset() {
-	*x = DeleteScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[36]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *DeleteScenarioResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DeleteScenarioResponse) ProtoMessage() {}
-
-func (x *DeleteScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[36]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DeleteScenarioResponse.ProtoReflect.Descriptor instead.
-func (*DeleteScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{36}
-}
-
-func (x *DeleteScenarioResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *DeleteScenarioResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-// UploadScenario - saves a scenario YAML file to the project directory
-type UploadScenarioRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	WorkflowSlug  string                 `protobuf:"bytes,2,opt,name=workflow_slug,json=workflowSlug,proto3" json:"workflow_slug,omitempty"` // Workflow to associate with
-	Filename      string                 `protobuf:"bytes,3,opt,name=filename,proto3" json:"filename,omitempty"`                             // Filename without extension (e.g., "happy-path")
-	YamlContent   string                 `protobuf:"bytes,4,opt,name=yaml_content,json=yamlContent,proto3" json:"yaml_content,omitempty"`    // YAML content of the scenario
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UploadScenarioRequest) Reset() {
-	*x = UploadScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[37]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UploadScenarioRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UploadScenarioRequest) ProtoMessage() {}
-
-func (x *UploadScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[37]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UploadScenarioRequest.ProtoReflect.Descriptor instead.
-func (*UploadScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{37}
-}
-
-func (x *UploadScenarioRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *UploadScenarioRequest) GetWorkflowSlug() string {
-	if x != nil {
-		return x.WorkflowSlug
-	}
-	return ""
-}
-
-func (x *UploadScenarioRequest) GetFilename() string {
-	if x != nil {
-		return x.Filename
-	}
-	return ""
-}
-
-func (x *UploadScenarioRequest) GetYamlContent() string {
-	if x != nil {
-		return x.YamlContent
-	}
-	return ""
-}
-
-type UploadScenarioResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Success       bool                   `protobuf:"varint,1,opt,name=success,proto3" json:"success,omitempty"`
-	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
-	Path          string                 `protobuf:"bytes,3,opt,name=path,proto3" json:"path,omitempty"`         // Full path to the created file
-	Scenario      *Scenario              `protobuf:"bytes,4,opt,name=scenario,proto3" json:"scenario,omitempty"` // The created scenario
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UploadScenarioResponse) Reset() {
-	*x = UploadScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[38]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UploadScenarioResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UploadScenarioResponse) ProtoMessage() {}
-
-func (x *UploadScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[38]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UploadScenarioResponse.ProtoReflect.Descriptor instead.
-func (*UploadScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{38}
-}
-
-func (x *UploadScenarioResponse) GetSuccess() bool {
-	if x != nil {
-		return x.Success
-	}
-	return false
-}
-
-func (x *UploadScenarioResponse) GetMessage() string {
-	if x != nil {
-		return x.Message
-	}
-	return ""
-}
-
-func (x *UploadScenarioResponse) GetPath() string {
-	if x != nil {
-		return x.Path
-	}
-	return ""
-}
-
-func (x *UploadScenarioResponse) GetScenario() *Scenario {
-	if x != nil {
-		return x.Scenario
-	}
-	return nil
-}
-
-// ExportScenario - exports a scenario to YAML format
-type ExportScenarioRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ProjectId     string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
-	ScenarioId    string                 `protobuf:"bytes,2,opt,name=scenario_id,json=scenarioId,proto3" json:"scenario_id,omitempty"` // ID of the scenario to export
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExportScenarioRequest) Reset() {
-	*x = ExportScenarioRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[39]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExportScenarioRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExportScenarioRequest) ProtoMessage() {}
-
-func (x *ExportScenarioRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[39]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExportScenarioRequest.ProtoReflect.Descriptor instead.
-func (*ExportScenarioRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{39}
-}
-
-func (x *ExportScenarioRequest) GetProjectId() string {
-	if x != nil {
-		return x.ProjectId
-	}
-	return ""
-}
-
-func (x *ExportScenarioRequest) GetScenarioId() string {
-	if x != nil {
-		return x.ScenarioId
-	}
-	return ""
-}
-
-type ExportScenarioResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	YamlContent   string                 `protobuf:"bytes,1,opt,name=yaml_content,json=yamlContent,proto3" json:"yaml_content,omitempty"` // YAML content of the scenario
-	Filename      string                 `protobuf:"bytes,2,opt,name=filename,proto3" json:"filename,omitempty"`                          // Suggested filename
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *ExportScenarioResponse) Reset() {
-	*x = ExportScenarioResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[40]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *ExportScenarioResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ExportScenarioResponse) ProtoMessage() {}
-
-func (x *ExportScenarioResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[40]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ExportScenarioResponse.ProtoReflect.Descriptor instead.
-func (*ExportScenarioResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{40}
-}
-
-func (x *ExportScenarioResponse) GetYamlContent() string {
-	if x != nil {
-		return x.YamlContent
-	}
-	return ""
-}
-
-func (x *ExportScenarioResponse) GetFilename() string {
-	if x != nil {
-		return x.Filename
-	}
-	return ""
-}
-
 // CreateWorkflowDraftRequest creates an empty draft for the workflow builder.
 // Called when user clicks "New Workflow" to get a draft ID before any chat starts.
 type CreateWorkflowDraftRequest struct {
@@ -3218,7 +1925,7 @@ type CreateWorkflowDraftRequest struct {
 
 func (x *CreateWorkflowDraftRequest) Reset() {
 	*x = CreateWorkflowDraftRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[41]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3230,7 +1937,7 @@ func (x *CreateWorkflowDraftRequest) String() string {
 func (*CreateWorkflowDraftRequest) ProtoMessage() {}
 
 func (x *CreateWorkflowDraftRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[41]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[22]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3243,7 +1950,7 @@ func (x *CreateWorkflowDraftRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorkflowDraftRequest.ProtoReflect.Descriptor instead.
 func (*CreateWorkflowDraftRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{41}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *CreateWorkflowDraftRequest) GetProjectId() string {
@@ -3287,7 +1994,7 @@ type CreateWorkflowDraftResponse struct {
 
 func (x *CreateWorkflowDraftResponse) Reset() {
 	*x = CreateWorkflowDraftResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[42]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3299,7 +2006,7 @@ func (x *CreateWorkflowDraftResponse) String() string {
 func (*CreateWorkflowDraftResponse) ProtoMessage() {}
 
 func (x *CreateWorkflowDraftResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[42]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[23]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3312,7 +2019,7 @@ func (x *CreateWorkflowDraftResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateWorkflowDraftResponse.ProtoReflect.Descriptor instead.
 func (*CreateWorkflowDraftResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{42}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{23}
 }
 
 func (x *CreateWorkflowDraftResponse) GetDraftId() string {
@@ -3362,7 +2069,7 @@ type SetWorkflowStatusRequest struct {
 
 func (x *SetWorkflowStatusRequest) Reset() {
 	*x = SetWorkflowStatusRequest{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[43]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3374,7 +2081,7 @@ func (x *SetWorkflowStatusRequest) String() string {
 func (*SetWorkflowStatusRequest) ProtoMessage() {}
 
 func (x *SetWorkflowStatusRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[43]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[24]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3387,7 +2094,7 @@ func (x *SetWorkflowStatusRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWorkflowStatusRequest.ProtoReflect.Descriptor instead.
 func (*SetWorkflowStatusRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{43}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *SetWorkflowStatusRequest) GetProjectId() string {
@@ -3431,7 +2138,7 @@ type SetWorkflowStatusResponse struct {
 
 func (x *SetWorkflowStatusResponse) Reset() {
 	*x = SetWorkflowStatusResponse{}
-	mi := &file_reliant_v1_workflow_proto_msgTypes[44]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -3443,7 +2150,7 @@ func (x *SetWorkflowStatusResponse) String() string {
 func (*SetWorkflowStatusResponse) ProtoMessage() {}
 
 func (x *SetWorkflowStatusResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_workflow_proto_msgTypes[44]
+	mi := &file_reliant_v1_workflow_proto_msgTypes[25]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3456,7 +2163,7 @@ func (x *SetWorkflowStatusResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetWorkflowStatusResponse.ProtoReflect.Descriptor instead.
 func (*SetWorkflowStatusResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{44}
+	return file_reliant_v1_workflow_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *SetWorkflowStatusResponse) GetSuccess() bool {
@@ -3701,120 +2408,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
 	"\bworkflow\x18\x03 \x01(\v2\x14.reliant.v1.WorkflowR\bworkflow\x12\x12\n" +
 	"\x04slug\x18\x04 \x01(\tR\x04slug\x12\x0e\n" +
-	"\x02id\x18\x05 \x01(\tR\x02id\"E\n" +
-	"\x0eSimulatedEvent\x12\x12\n" +
-	"\x04node\x18\x01 \x01(\tR\x04node\x12\x1f\n" +
-	"\voutput_json\x18\x02 \x01(\tR\n" +
-	"outputJson\"\xb0\x01\n" +
-	"\x13ScenarioExpectation\x12\x18\n" +
-	"\aoutcome\x18\x01 \x01(\tR\aoutcome\x12\x18\n" +
-	"\areached\x18\x02 \x03(\tR\areached\x12\x1f\n" +
-	"\vnot_reached\x18\x03 \x03(\tR\n" +
-	"notReached\x12%\n" +
-	"\x0eerror_contains\x18\x04 \x01(\tR\rerrorContains\x12\x1d\n" +
-	"\n" +
-	"error_node\x18\x05 \x01(\tR\terrorNode\"\xd8\x01\n" +
-	"\x12ScenarioDefinition\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x02 \x01(\tR\vdescription\x122\n" +
-	"\x06events\x18\x03 \x03(\v2\x1a.reliant.v1.SimulatedEventR\x06events\x127\n" +
-	"\x06expect\x18\x04 \x01(\v2\x1f.reliant.v1.ScenarioExpectationR\x06expect\x12\x1f\n" +
-	"\vinputs_json\x18\x05 \x01(\tR\n" +
-	"inputsJson\"p\n" +
-	"\fErrorDetails\x12\x12\n" +
-	"\x04node\x18\x01 \x01(\tR\x04node\x12\x12\n" +
-	"\x04step\x18\x02 \x01(\tR\x04step\x12\x18\n" +
-	"\amessage\x18\x03 \x01(\tR\amessage\x12\x1e\n" +
-	"\n" +
-	"expression\x18\x04 \x01(\tR\n" +
-	"expression\"\xa2\x01\n" +
-	"\x10ExecutionDetails\x12#\n" +
-	"\rnodes_reached\x18\x01 \x03(\tR\fnodesReached\x12\x18\n" +
-	"\aoutcome\x18\x02 \x01(\tR\aoutcome\x12.\n" +
-	"\x05error\x18\x03 \x01(\v2\x18.reliant.v1.ErrorDetailsR\x05error\x12\x1f\n" +
-	"\vduration_ms\x18\x04 \x01(\x03R\n" +
-	"durationMs\"\xe6\x01\n" +
-	"\x0eScenarioResult\x12\x16\n" +
-	"\x06status\x18\x01 \x01(\tR\x06status\x12#\n" +
-	"\rscenario_name\x18\x02 \x01(\tR\fscenarioName\x12:\n" +
-	"\texecution\x18\x03 \x01(\v2\x1c.reliant.v1.ExecutionDetailsR\texecution\x12;\n" +
-	"\bexpected\x18\x04 \x01(\v2\x1f.reliant.v1.ScenarioExpectationR\bexpected\x12\x1e\n" +
-	"\n" +
-	"mismatches\x18\x05 \x03(\tR\n" +
-	"mismatches\"\xd8\x03\n" +
-	"\bScenario\x12\x0e\n" +
-	"\x02id\x18\x01 \x01(\tR\x02id\x12*\n" +
-	"\x11workflow_draft_id\x18\x02 \x01(\tR\x0fworkflowDraftId\x12\x17\n" +
-	"\auser_id\x18\x03 \x01(\tR\x06userId\x12\x12\n" +
-	"\x04name\x18\x04 \x01(\tR\x04name\x12 \n" +
-	"\vdescription\x18\x05 \x01(\tR\vdescription\x122\n" +
-	"\x06events\x18\x06 \x03(\v2\x1a.reliant.v1.SimulatedEventR\x06events\x127\n" +
-	"\x06expect\x18\a \x01(\v2\x1f.reliant.v1.ScenarioExpectationR\x06expect\x12&\n" +
-	"\x0flast_run_status\x18\b \x01(\tR\rlastRunStatus\x12B\n" +
-	"\x0flast_run_result\x18\t \x01(\v2\x1a.reliant.v1.ScenarioResultR\rlastRunResult\x12\x1d\n" +
-	"\n" +
-	"created_at\x18\n" +
-	" \x01(\tR\tcreatedAt\x12\x1d\n" +
-	"\n" +
-	"updated_at\x18\v \x01(\tR\tupdatedAt\x12\x16\n" +
-	"\x06source\x18\f \x01(\tR\x06source\x12\x12\n" +
-	"\x04path\x18\r \x01(\tR\x04path\"Z\n" +
-	"\x14ListScenariosRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12#\n" +
-	"\rworkflow_slug\x18\x02 \x01(\tR\fworkflowSlug\"p\n" +
-	"\x15ListScenariosResponse\x122\n" +
-	"\tscenarios\x18\x01 \x03(\v2\x14.reliant.v1.ScenarioR\tscenarios\x12#\n" +
-	"\rscenarios_dir\x18\x02 \x01(\tR\fscenariosDir\"\xe2\x01\n" +
-	"\x15CreateScenarioRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12#\n" +
-	"\rworkflow_slug\x18\x02 \x01(\tR\fworkflowSlug\x12#\n" +
-	"\rworkflow_yaml\x18\x03 \x01(\tR\fworkflowYaml\x12:\n" +
-	"\bscenario\x18\x04 \x01(\v2\x1e.reliant.v1.ScenarioDefinitionR\bscenario\x12\x10\n" +
-	"\x03run\x18\x05 \x01(\bR\x03run\x12\x12\n" +
-	"\x04save\x18\x06 \x01(\bR\x04save\"\xb2\x01\n" +
-	"\x16CreateScenarioResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x120\n" +
-	"\bscenario\x18\x03 \x01(\v2\x14.reliant.v1.ScenarioR\bscenario\x122\n" +
-	"\x06result\x18\x04 \x01(\v2\x1a.reliant.v1.ScenarioResultR\x06result\"\xb5\x01\n" +
-	"\x12RunScenarioRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1f\n" +
-	"\vscenario_id\x18\x02 \x01(\tR\n" +
-	"scenarioId\x12#\n" +
-	"\rworkflow_slug\x18\x03 \x01(\tR\fworkflowSlug\x12:\n" +
-	"\bscenario\x18\x04 \x01(\v2\x1e.reliant.v1.ScenarioDefinitionR\bscenario\"I\n" +
-	"\x13RunScenarioResponse\x122\n" +
-	"\x06result\x18\x01 \x01(\v2\x1a.reliant.v1.ScenarioResultR\x06result\"W\n" +
-	"\x15DeleteScenarioRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1f\n" +
-	"\vscenario_id\x18\x02 \x01(\tR\n" +
-	"scenarioId\"L\n" +
-	"\x16DeleteScenarioResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\"\x9a\x01\n" +
-	"\x15UploadScenarioRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12#\n" +
-	"\rworkflow_slug\x18\x02 \x01(\tR\fworkflowSlug\x12\x1a\n" +
-	"\bfilename\x18\x03 \x01(\tR\bfilename\x12!\n" +
-	"\fyaml_content\x18\x04 \x01(\tR\vyamlContent\"\x92\x01\n" +
-	"\x16UploadScenarioResponse\x12\x18\n" +
-	"\asuccess\x18\x01 \x01(\bR\asuccess\x12\x18\n" +
-	"\amessage\x18\x02 \x01(\tR\amessage\x12\x12\n" +
-	"\x04path\x18\x03 \x01(\tR\x04path\x120\n" +
-	"\bscenario\x18\x04 \x01(\v2\x14.reliant.v1.ScenarioR\bscenario\"W\n" +
-	"\x15ExportScenarioRequest\x12\x1d\n" +
-	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1f\n" +
-	"\vscenario_id\x18\x02 \x01(\tR\n" +
-	"scenarioId\"W\n" +
-	"\x16ExportScenarioResponse\x12!\n" +
-	"\fyaml_content\x18\x01 \x01(\tR\vyamlContent\x12\x1a\n" +
-	"\bfilename\x18\x02 \x01(\tR\bfilename\"\xa6\x01\n" +
+	"\x02id\x18\x05 \x01(\tR\x02id\"\xa6\x01\n" +
 	"\x1aCreateWorkflowDraftRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x127\n" +
@@ -3855,14 +2449,7 @@ const file_reliant_v1_workflow_proto_rawDesc = "" +
 	"\x15SetWorkflowVisibility\x12(.reliant.v1.SetWorkflowVisibilityRequest\x1a).reliant.v1.SetWorkflowVisibilityResponse\"\x00\x12S\n" +
 	"\fCopyWorkflow\x12\x1f.reliant.v1.CopyWorkflowRequest\x1a .reliant.v1.CopyWorkflowResponse\"\x00\x12h\n" +
 	"\x13CreateWorkflowDraft\x12&.reliant.v1.CreateWorkflowDraftRequest\x1a'.reliant.v1.CreateWorkflowDraftResponse\"\x00\x12b\n" +
-	"\x11SetWorkflowStatus\x12$.reliant.v1.SetWorkflowStatusRequest\x1a%.reliant.v1.SetWorkflowStatusResponse\"\x002\xa7\x04\n" +
-	"\x0fScenarioService\x12V\n" +
-	"\rListScenarios\x12 .reliant.v1.ListScenariosRequest\x1a!.reliant.v1.ListScenariosResponse\"\x00\x12Y\n" +
-	"\x0eCreateScenario\x12!.reliant.v1.CreateScenarioRequest\x1a\".reliant.v1.CreateScenarioResponse\"\x00\x12P\n" +
-	"\vRunScenario\x12\x1e.reliant.v1.RunScenarioRequest\x1a\x1f.reliant.v1.RunScenarioResponse\"\x00\x12Y\n" +
-	"\x0eDeleteScenario\x12!.reliant.v1.DeleteScenarioRequest\x1a\".reliant.v1.DeleteScenarioResponse\"\x00\x12Y\n" +
-	"\x0eUploadScenario\x12!.reliant.v1.UploadScenarioRequest\x1a\".reliant.v1.UploadScenarioResponse\"\x00\x12Y\n" +
-	"\x0eExportScenario\x12!.reliant.v1.ExportScenarioRequest\x1a\".reliant.v1.ExportScenarioResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x11SetWorkflowStatus\x12$.reliant.v1.SetWorkflowStatusRequest\x1a%.reliant.v1.SetWorkflowStatusResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_workflow_proto_rawDescOnce sync.Once
@@ -3877,7 +2464,7 @@ func file_reliant_v1_workflow_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_workflow_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_reliant_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 47)
+var file_reliant_v1_workflow_proto_msgTypes = make([]protoimpl.MessageInfo, 28)
 var file_reliant_v1_workflow_proto_goTypes = []any{
 	(WorkflowDraftStatus)(0),              // 0: reliant.v1.WorkflowDraftStatus
 	(*WorkflowListItem)(nil),              // 1: reliant.v1.WorkflowListItem
@@ -3902,128 +2489,82 @@ var file_reliant_v1_workflow_proto_goTypes = []any{
 	(*SetWorkflowVisibilityResponse)(nil), // 20: reliant.v1.SetWorkflowVisibilityResponse
 	(*CopyWorkflowRequest)(nil),           // 21: reliant.v1.CopyWorkflowRequest
 	(*CopyWorkflowResponse)(nil),          // 22: reliant.v1.CopyWorkflowResponse
-	(*SimulatedEvent)(nil),                // 23: reliant.v1.SimulatedEvent
-	(*ScenarioExpectation)(nil),           // 24: reliant.v1.ScenarioExpectation
-	(*ScenarioDefinition)(nil),            // 25: reliant.v1.ScenarioDefinition
-	(*ErrorDetails)(nil),                  // 26: reliant.v1.ErrorDetails
-	(*ExecutionDetails)(nil),              // 27: reliant.v1.ExecutionDetails
-	(*ScenarioResult)(nil),                // 28: reliant.v1.ScenarioResult
-	(*Scenario)(nil),                      // 29: reliant.v1.Scenario
-	(*ListScenariosRequest)(nil),          // 30: reliant.v1.ListScenariosRequest
-	(*ListScenariosResponse)(nil),         // 31: reliant.v1.ListScenariosResponse
-	(*CreateScenarioRequest)(nil),         // 32: reliant.v1.CreateScenarioRequest
-	(*CreateScenarioResponse)(nil),        // 33: reliant.v1.CreateScenarioResponse
-	(*RunScenarioRequest)(nil),            // 34: reliant.v1.RunScenarioRequest
-	(*RunScenarioResponse)(nil),           // 35: reliant.v1.RunScenarioResponse
-	(*DeleteScenarioRequest)(nil),         // 36: reliant.v1.DeleteScenarioRequest
-	(*DeleteScenarioResponse)(nil),        // 37: reliant.v1.DeleteScenarioResponse
-	(*UploadScenarioRequest)(nil),         // 38: reliant.v1.UploadScenarioRequest
-	(*UploadScenarioResponse)(nil),        // 39: reliant.v1.UploadScenarioResponse
-	(*ExportScenarioRequest)(nil),         // 40: reliant.v1.ExportScenarioRequest
-	(*ExportScenarioResponse)(nil),        // 41: reliant.v1.ExportScenarioResponse
-	(*CreateWorkflowDraftRequest)(nil),    // 42: reliant.v1.CreateWorkflowDraftRequest
-	(*CreateWorkflowDraftResponse)(nil),   // 43: reliant.v1.CreateWorkflowDraftResponse
-	(*SetWorkflowStatusRequest)(nil),      // 44: reliant.v1.SetWorkflowStatusRequest
-	(*SetWorkflowStatusResponse)(nil),     // 45: reliant.v1.SetWorkflowStatusResponse
-	nil,                                   // 46: reliant.v1.WorkflowListItem.InputsEntry
-	nil,                                   // 47: reliant.v1.WorkflowListItem.OutputsEntry
-	(*Node)(nil),                          // 48: reliant.v1.Node
-	(*Edge)(nil),                          // 49: reliant.v1.Edge
-	(*WorkflowTrigger)(nil),               // 50: reliant.v1.WorkflowTrigger
-	(*Workflow)(nil),                      // 51: reliant.v1.Workflow
-	(ConfigScope)(0),                      // 52: reliant.v1.ConfigScope
-	(*Input)(nil),                         // 53: reliant.v1.Input
+	(*CreateWorkflowDraftRequest)(nil),    // 23: reliant.v1.CreateWorkflowDraftRequest
+	(*CreateWorkflowDraftResponse)(nil),   // 24: reliant.v1.CreateWorkflowDraftResponse
+	(*SetWorkflowStatusRequest)(nil),      // 25: reliant.v1.SetWorkflowStatusRequest
+	(*SetWorkflowStatusResponse)(nil),     // 26: reliant.v1.SetWorkflowStatusResponse
+	nil,                                   // 27: reliant.v1.WorkflowListItem.InputsEntry
+	nil,                                   // 28: reliant.v1.WorkflowListItem.OutputsEntry
+	(*Node)(nil),                          // 29: reliant.v1.Node
+	(*Edge)(nil),                          // 30: reliant.v1.Edge
+	(*WorkflowTrigger)(nil),               // 31: reliant.v1.WorkflowTrigger
+	(*Workflow)(nil),                      // 32: reliant.v1.Workflow
+	(ConfigScope)(0),                      // 33: reliant.v1.ConfigScope
+	(*Input)(nil),                         // 34: reliant.v1.Input
 }
 var file_reliant_v1_workflow_proto_depIdxs = []int32{
-	48, // 0: reliant.v1.WorkflowListItem.nodes:type_name -> reliant.v1.Node
-	49, // 1: reliant.v1.WorkflowListItem.edges:type_name -> reliant.v1.Edge
-	46, // 2: reliant.v1.WorkflowListItem.inputs:type_name -> reliant.v1.WorkflowListItem.InputsEntry
-	47, // 3: reliant.v1.WorkflowListItem.outputs:type_name -> reliant.v1.WorkflowListItem.OutputsEntry
+	29, // 0: reliant.v1.WorkflowListItem.nodes:type_name -> reliant.v1.Node
+	30, // 1: reliant.v1.WorkflowListItem.edges:type_name -> reliant.v1.Edge
+	27, // 2: reliant.v1.WorkflowListItem.inputs:type_name -> reliant.v1.WorkflowListItem.InputsEntry
+	28, // 3: reliant.v1.WorkflowListItem.outputs:type_name -> reliant.v1.WorkflowListItem.OutputsEntry
 	0,  // 4: reliant.v1.WorkflowListItem.status:type_name -> reliant.v1.WorkflowDraftStatus
 	3,  // 5: reliant.v1.WorkflowListItem.validation_errors:type_name -> reliant.v1.ValidationError
-	50, // 6: reliant.v1.WorkflowListItem.triggers:type_name -> reliant.v1.WorkflowTrigger
+	31, // 6: reliant.v1.WorkflowListItem.triggers:type_name -> reliant.v1.WorkflowTrigger
 	2,  // 7: reliant.v1.ValidationError.highlights:type_name -> reliant.v1.HighlightSpan
 	1,  // 8: reliant.v1.ListWorkflowsResponse.workflows:type_name -> reliant.v1.WorkflowListItem
 	6,  // 9: reliant.v1.ListWorkflowsResponse.invalid_workflows:type_name -> reliant.v1.InvalidWorkflow
-	51, // 10: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	32, // 10: reliant.v1.GetWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
 	0,  // 11: reliant.v1.GetWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
 	3,  // 12: reliant.v1.GetWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	51, // 13: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	32, // 13: reliant.v1.ValidateWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
 	3,  // 14: reliant.v1.ValidateWorkflowResponse.errors:type_name -> reliant.v1.ValidationError
-	51, // 15: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
-	52, // 16: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	32, // 15: reliant.v1.SaveWorkflowRequest.workflow:type_name -> reliant.v1.Workflow
+	33, // 16: reliant.v1.SaveWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
 	0,  // 17: reliant.v1.SaveWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	51, // 18: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	32, // 18: reliant.v1.SaveWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
 	3,  // 19: reliant.v1.SaveWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
 	0,  // 20: reliant.v1.SaveWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	52, // 21: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
+	33, // 21: reliant.v1.ImportWorkflowRequest.scope:type_name -> reliant.v1.ConfigScope
 	0,  // 22: reliant.v1.ImportWorkflowRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	51, // 23: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	32, // 23: reliant.v1.ImportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
 	3,  // 24: reliant.v1.ImportWorkflowResponse.validation_errors:type_name -> reliant.v1.ValidationError
 	0,  // 25: reliant.v1.ImportWorkflowResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	51, // 26: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	32, // 26: reliant.v1.ExportWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
 	1,  // 27: reliant.v1.SetWorkflowVisibilityResponse.workflow:type_name -> reliant.v1.WorkflowListItem
-	51, // 28: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
-	23, // 29: reliant.v1.ScenarioDefinition.events:type_name -> reliant.v1.SimulatedEvent
-	24, // 30: reliant.v1.ScenarioDefinition.expect:type_name -> reliant.v1.ScenarioExpectation
-	26, // 31: reliant.v1.ExecutionDetails.error:type_name -> reliant.v1.ErrorDetails
-	27, // 32: reliant.v1.ScenarioResult.execution:type_name -> reliant.v1.ExecutionDetails
-	24, // 33: reliant.v1.ScenarioResult.expected:type_name -> reliant.v1.ScenarioExpectation
-	23, // 34: reliant.v1.Scenario.events:type_name -> reliant.v1.SimulatedEvent
-	24, // 35: reliant.v1.Scenario.expect:type_name -> reliant.v1.ScenarioExpectation
-	28, // 36: reliant.v1.Scenario.last_run_result:type_name -> reliant.v1.ScenarioResult
-	29, // 37: reliant.v1.ListScenariosResponse.scenarios:type_name -> reliant.v1.Scenario
-	25, // 38: reliant.v1.CreateScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	29, // 39: reliant.v1.CreateScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	28, // 40: reliant.v1.CreateScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	25, // 41: reliant.v1.RunScenarioRequest.scenario:type_name -> reliant.v1.ScenarioDefinition
-	28, // 42: reliant.v1.RunScenarioResponse.result:type_name -> reliant.v1.ScenarioResult
-	29, // 43: reliant.v1.UploadScenarioResponse.scenario:type_name -> reliant.v1.Scenario
-	0,  // 44: reliant.v1.CreateWorkflowDraftRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 45: reliant.v1.CreateWorkflowDraftResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 46: reliant.v1.SetWorkflowStatusRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
-	0,  // 47: reliant.v1.SetWorkflowStatusResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
-	3,  // 48: reliant.v1.SetWorkflowStatusResponse.validation_errors:type_name -> reliant.v1.ValidationError
-	53, // 49: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
-	4,  // 50: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
-	13, // 51: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
-	7,  // 52: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
-	9,  // 53: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
-	11, // 54: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
-	15, // 55: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
-	17, // 56: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
-	19, // 57: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
-	21, // 58: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
-	42, // 59: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
-	44, // 60: reliant.v1.WorkflowService.SetWorkflowStatus:input_type -> reliant.v1.SetWorkflowStatusRequest
-	30, // 61: reliant.v1.ScenarioService.ListScenarios:input_type -> reliant.v1.ListScenariosRequest
-	32, // 62: reliant.v1.ScenarioService.CreateScenario:input_type -> reliant.v1.CreateScenarioRequest
-	34, // 63: reliant.v1.ScenarioService.RunScenario:input_type -> reliant.v1.RunScenarioRequest
-	36, // 64: reliant.v1.ScenarioService.DeleteScenario:input_type -> reliant.v1.DeleteScenarioRequest
-	38, // 65: reliant.v1.ScenarioService.UploadScenario:input_type -> reliant.v1.UploadScenarioRequest
-	40, // 66: reliant.v1.ScenarioService.ExportScenario:input_type -> reliant.v1.ExportScenarioRequest
-	5,  // 67: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
-	14, // 68: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
-	8,  // 69: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
-	10, // 70: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
-	12, // 71: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
-	16, // 72: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
-	18, // 73: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
-	20, // 74: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
-	22, // 75: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
-	43, // 76: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
-	45, // 77: reliant.v1.WorkflowService.SetWorkflowStatus:output_type -> reliant.v1.SetWorkflowStatusResponse
-	31, // 78: reliant.v1.ScenarioService.ListScenarios:output_type -> reliant.v1.ListScenariosResponse
-	33, // 79: reliant.v1.ScenarioService.CreateScenario:output_type -> reliant.v1.CreateScenarioResponse
-	35, // 80: reliant.v1.ScenarioService.RunScenario:output_type -> reliant.v1.RunScenarioResponse
-	37, // 81: reliant.v1.ScenarioService.DeleteScenario:output_type -> reliant.v1.DeleteScenarioResponse
-	39, // 82: reliant.v1.ScenarioService.UploadScenario:output_type -> reliant.v1.UploadScenarioResponse
-	41, // 83: reliant.v1.ScenarioService.ExportScenario:output_type -> reliant.v1.ExportScenarioResponse
-	67, // [67:84] is the sub-list for method output_type
-	50, // [50:67] is the sub-list for method input_type
-	50, // [50:50] is the sub-list for extension type_name
-	50, // [50:50] is the sub-list for extension extendee
-	0,  // [0:50] is the sub-list for field type_name
+	32, // 28: reliant.v1.CopyWorkflowResponse.workflow:type_name -> reliant.v1.Workflow
+	0,  // 29: reliant.v1.CreateWorkflowDraftRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 30: reliant.v1.CreateWorkflowDraftResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 31: reliant.v1.SetWorkflowStatusRequest.status:type_name -> reliant.v1.WorkflowDraftStatus
+	0,  // 32: reliant.v1.SetWorkflowStatusResponse.status:type_name -> reliant.v1.WorkflowDraftStatus
+	3,  // 33: reliant.v1.SetWorkflowStatusResponse.validation_errors:type_name -> reliant.v1.ValidationError
+	34, // 34: reliant.v1.WorkflowListItem.InputsEntry.value:type_name -> reliant.v1.Input
+	4,  // 35: reliant.v1.WorkflowService.ListWorkflows:input_type -> reliant.v1.ListWorkflowsRequest
+	13, // 36: reliant.v1.WorkflowService.SaveWorkflow:input_type -> reliant.v1.SaveWorkflowRequest
+	7,  // 37: reliant.v1.WorkflowService.GetWorkflow:input_type -> reliant.v1.GetWorkflowRequest
+	9,  // 38: reliant.v1.WorkflowService.DeleteWorkflow:input_type -> reliant.v1.DeleteWorkflowRequest
+	11, // 39: reliant.v1.WorkflowService.ValidateWorkflow:input_type -> reliant.v1.ValidateWorkflowRequest
+	15, // 40: reliant.v1.WorkflowService.ImportWorkflow:input_type -> reliant.v1.ImportWorkflowRequest
+	17, // 41: reliant.v1.WorkflowService.ExportWorkflow:input_type -> reliant.v1.ExportWorkflowRequest
+	19, // 42: reliant.v1.WorkflowService.SetWorkflowVisibility:input_type -> reliant.v1.SetWorkflowVisibilityRequest
+	21, // 43: reliant.v1.WorkflowService.CopyWorkflow:input_type -> reliant.v1.CopyWorkflowRequest
+	23, // 44: reliant.v1.WorkflowService.CreateWorkflowDraft:input_type -> reliant.v1.CreateWorkflowDraftRequest
+	25, // 45: reliant.v1.WorkflowService.SetWorkflowStatus:input_type -> reliant.v1.SetWorkflowStatusRequest
+	5,  // 46: reliant.v1.WorkflowService.ListWorkflows:output_type -> reliant.v1.ListWorkflowsResponse
+	14, // 47: reliant.v1.WorkflowService.SaveWorkflow:output_type -> reliant.v1.SaveWorkflowResponse
+	8,  // 48: reliant.v1.WorkflowService.GetWorkflow:output_type -> reliant.v1.GetWorkflowResponse
+	10, // 49: reliant.v1.WorkflowService.DeleteWorkflow:output_type -> reliant.v1.DeleteWorkflowResponse
+	12, // 50: reliant.v1.WorkflowService.ValidateWorkflow:output_type -> reliant.v1.ValidateWorkflowResponse
+	16, // 51: reliant.v1.WorkflowService.ImportWorkflow:output_type -> reliant.v1.ImportWorkflowResponse
+	18, // 52: reliant.v1.WorkflowService.ExportWorkflow:output_type -> reliant.v1.ExportWorkflowResponse
+	20, // 53: reliant.v1.WorkflowService.SetWorkflowVisibility:output_type -> reliant.v1.SetWorkflowVisibilityResponse
+	22, // 54: reliant.v1.WorkflowService.CopyWorkflow:output_type -> reliant.v1.CopyWorkflowResponse
+	24, // 55: reliant.v1.WorkflowService.CreateWorkflowDraft:output_type -> reliant.v1.CreateWorkflowDraftResponse
+	26, // 56: reliant.v1.WorkflowService.SetWorkflowStatus:output_type -> reliant.v1.SetWorkflowStatusResponse
+	46, // [46:57] is the sub-list for method output_type
+	35, // [35:46] is the sub-list for method input_type
+	35, // [35:35] is the sub-list for extension type_name
+	35, // [35:35] is the sub-list for extension extendee
+	0,  // [0:35] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_workflow_proto_init() }
@@ -4043,16 +2584,16 @@ func file_reliant_v1_workflow_proto_init() {
 	file_reliant_v1_workflow_proto_msgTypes[14].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[16].OneofWrappers = []any{}
 	file_reliant_v1_workflow_proto_msgTypes[20].OneofWrappers = []any{}
-	file_reliant_v1_workflow_proto_msgTypes[43].OneofWrappers = []any{}
+	file_reliant_v1_workflow_proto_msgTypes[24].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_workflow_proto_rawDesc), len(file_reliant_v1_workflow_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   47,
+			NumMessages:   28,
 			NumExtensions: 0,
-			NumServices:   2,
+			NumServices:   1,
 		},
 		GoTypes:           file_reliant_v1_workflow_proto_goTypes,
 		DependencyIndexes: file_reliant_v1_workflow_proto_depIdxs,

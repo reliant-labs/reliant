@@ -25,7 +25,7 @@ import {
 } from 'lucide-react'
 import { cn } from '../../lib/utils'
 import { exportScenario, type Scenario } from '../../api/scenarios'
-import type { SimulatedEvent, ScenarioExpectation } from '../../gen/reliant/v1/workflow_pb'
+import type { SimulatedEvent, ScenarioExpectation } from '../../gen/reliant/v1/scenario_pb'
 
 // ─── EventSequence ──────────────────────────────────────────────────────────
 

@@ -8,7 +8,7 @@ import {
   type ScenarioResult,
   type SimulatedEvent,
   type ScenarioExpectation,
-} from '../gen/reliant/v1/workflow_pb'
+} from '../gen/reliant/v1/scenario_pb'
 
 // Re-export types for convenience
 export type { 
