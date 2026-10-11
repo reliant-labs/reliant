@@ -281,11 +281,6 @@ func TestStart_ManagedDaemonExitsWhenItsHomeVolumeIsLost(t *testing.T) {
 	if testing.Short() {
 		t.Skip("-short: waits out the guard's reply-flush delay (2s); runs in the full lane")
 	}
-	if _, err := os.Stat(managedProjectsDir); err == nil {
-		// A managed Start also heals git remotes under this fixed path; on a
-		// real cloud workspace those are the user's repos.
-		t.Skip("this machine is a managed workspace; a managed Start would touch its real projects")
-	}
 	ws := newIncidentWorkspace(t)
 	t.Setenv("HOME", ws.home)
 	t.Setenv(DaemonTypeEnvVar, "managed")

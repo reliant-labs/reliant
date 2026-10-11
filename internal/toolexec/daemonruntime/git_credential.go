@@ -34,7 +34,9 @@ import (
 // credential.helper: a user's other hosts are not ours to answer.
 const gitCredentialURL = "https://github.com"
 
-const managedProjectsDir = "/home/workspace/projects"
+// managedProjectsDir is a variable only so the package tests can point it away
+// from a real workspace's repositories.
+var managedProjectsDir = "/home/workspace/projects"
 
 var gitHelper struct {
 	sync.Mutex
