@@ -39,9 +39,23 @@ func TestDaemonResolutionErrorsAreUserErrors(t *testing.T) {
 	assert.True(t, daemonoffline.IsError(notConnected), "the daemon-offline marker must survive")
 	assert.Contains(t, ErrDaemonPending.Error(), daemonoffline.ErrorSubstring)
 
-	// A timeout is not the machine being closed: it stays a server fault.
+	// A timeout is not the machine being closed: it stays a server fault —
+	// but of the DeadlineExceeded kind, which forge logs at WARN, not ERROR.
 	timeout := daemonRequestError("daemon command fs.get_tree", nats.ErrTimeout)
 	require.Error(t, timeout)
 	assert.Equal(t, svcerr.ClassServer, svcerr.Classify(timeout))
+	assert.Equal(t, connect.CodeDeadlineExceeded, svcerr.Code(timeout))
+	assert.True(t, IsDaemonTimeout(timeout))
 	assert.True(t, errors.Is(timeout, nats.ErrTimeout))
+	assert.False(t, daemonoffline.IsError(timeout), "a slow machine is not an offline one")
+
+	// The chunked reply's reassembly deadline is the same timeout.
+	chunked := daemonRequestError("daemon command fs.search",
+		fmt.Errorf("chunked reply: deadline exceeded after 2/5 chunks: %w", nats.ErrTimeout))
+	assert.True(t, IsDaemonTimeout(chunked))
+
+	// Any other transport failure is neither.
+	closed := daemonRequestError("daemon command fs.get_tree", nats.ErrConnectionClosed)
+	assert.False(t, IsDaemonTimeout(closed))
+	assert.Equal(t, connect.CodeInternal, svcerr.Code(closed))
 }

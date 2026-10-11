@@ -27,6 +27,13 @@ import (
 // the logging call's stack, and carrying the record's fields as tags and
 // context. Repeats of one log line from one place are one issue, whatever ids
 // and error text each carries.
+//
+// The exception is a record that names the RPC procedure it is about. Forge's
+// logging interceptor writes "rpc failed" — ONE log line from ONE place —
+// for every failed RPC in the product, so message and call site alone made a
+// single issue of every RPC failure, whichever procedure and code failed. Such
+// a record is grouped per procedure and code instead, and its culprit is the
+// procedure: the call site there is the interceptor, which names nothing.
 
 // LogEventLogger is the Sentry "logger" every forwarded log record carries,
 // and the first element of its fingerprint.
@@ -125,6 +132,16 @@ func logEventToSentry(record LogEvent) *sentry.Event {
 		// Rendered as the issue's culprit, under its title.
 		event.Transaction = shortFunctionName(stableFunctionName(callSite))
 	}
+	if procedure := record.Tags["procedure"]; procedure != "" {
+		event.Fingerprint = append(event.Fingerprint, procedure)
+		if code := record.Tags["code"]; code != "" {
+			event.Fingerprint = append(event.Fingerprint, code)
+		}
+		// The culprit is what failed, not the interceptor that said so.
+		// Service/Method rather than the full "/reliant.v1.Service/Method":
+		// the package is the same for every procedure and only crowds the line.
+		event.Transaction = shortProcedureName(procedure)
+	}
 
 	tags := make(map[string]string, len(record.Tags)+2)
 	for key, value := range record.Tags {
@@ -155,12 +172,14 @@ func logEventToSentry(record LogEvent) *sentry.Event {
 	return event
 }
 
-// LogEventFingerprint is the grouping key of a forwarded log record: the
+// LogEventFingerprint is the base grouping key of a forwarded log record: the
 // source, the function that logged, and the message with its variable parts
-// folded. Message alone would merge unrelated call sites that happen to say
-// the same thing ("Failed to update status"); call site alone would merge
-// every distinct line one function logs. A message that interpolates an id or
-// a count stays one issue across values.
+// folded. A record that carries a "procedure" tag has that procedure, and its
+// "code" tag when present, appended by logEventToSentry; records without one
+// keep exactly these three elements. Message alone would merge unrelated call
+// sites that happen to say the same thing ("Failed to update status"); call
+// site alone would merge every distinct line one function logs. A message
+// that interpolates an id or a count stays one issue across values.
 //
 // The function, not the file and line: a line number moves with every edit
 // above it, and each move would open a new issue for the same defect.
@@ -194,6 +213,19 @@ func normalizeLogMessage(message string) string {
 // stableFunctionName is a runtime function name without closure suffixes.
 func stableFunctionName(function string) string {
 	return closureSuffix.ReplaceAllString(function, "")
+}
+
+// shortProcedureName is "FileSystemService/GetFileTree" for
+// "/reliant.v1.FileSystemService/GetFileTree".
+func shortProcedureName(procedure string) string {
+	service, method, ok := strings.Cut(strings.TrimPrefix(procedure, "/"), "/")
+	if !ok {
+		return procedure
+	}
+	if dot := strings.LastIndex(service, "."); dot >= 0 {
+		service = service[dot+1:]
+	}
+	return service + "/" + method
 }
 
 // shortFunctionName drops the import path: "reconciliation.(*Reconciler).reap"

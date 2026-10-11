@@ -38,6 +38,15 @@ describe("classifyRpcFailure", () => {
     ).toBe("report");
   });
 
+  it("reads the server's DeadlineExceeded as a deadline, not a report", () => {
+    // 2026-10-10: a saturated cloud machine answered file-tree polls after
+    // the rpc deadline; each one was an exception.
+    const busy = new ConnectError("the machine did not answer in time", Code.DeadlineExceeded);
+    expect(classifyRpcFailure(busy, reliant)).toBe("deadline");
+    // The transport's own deadline aborts the request first: still an abort.
+    expect(classifyRpcFailure(busy, { ...reliant, signalAborted: true })).toBe("aborted");
+  });
+
   it("keeps the expected-code list and reports the rest", () => {
     expect(classifyRpcFailure(new ConnectError("x", Code.NotFound), reliant)).toBe("expected");
     expect(classifyRpcFailure(new ConnectError("x", Code.Internal), reliant)).toBe("report");

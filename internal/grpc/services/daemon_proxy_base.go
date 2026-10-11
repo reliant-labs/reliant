@@ -101,24 +101,29 @@ func DaemonOutdatedConnectError(err error) *connect.Error {
 	return connect.NewError(connect.CodeFailedPrecondition, err)
 }
 
-// machineStateConnectError returns a daemon-command failure that never reached
-// a machine as the Connect error the machine's state calls for, wrapped with
-// what the handler was doing (doing may be empty). ok is false for any other
-// failure, which the handler maps itself.
+// machineStateConnectError returns a daemon-command failure that the machine's
+// state explains — rather than the command itself — as the Connect error that
+// state calls for, wrapped with what the handler was doing (doing may be
+// empty). ok is false for any other failure, which the handler maps itself.
 //
 //   - not reachable right now — starting, asleep, or not connected (NATS had
 //     no responder) — is Unavailable: retryable, what the web's daemon-wait
 //     machinery expects, and the message keeps the "no daemon connected"
 //     marker isDaemonConnectingError keys on;
 //   - no machine at all (toolexec.ErrNoDaemon) is FailedPrecondition: waiting
-//     cannot produce a machine the user has not connected.
+//     cannot produce a machine the user has not connected;
+//   - connected but too busy to answer before the deadline
+//     (toolexec.ErrDaemonTimeout) is DeadlineExceeded: retryable, and still a
+//     server condition — forge logs it at WARN, visible but never a page.
 //
 // Every handler that forwards to a daemon checks this before choosing its own
 // code. The OAuth helper and ListProcesses did not, and answered "no machine
 // is connected to your account yet" as Internal (ELECTRON-B1, A6): a 500 for a
-// user who simply has no machine. The wire code is the handler's choice, so it
-// is made here rather than read off the error (forge svcerr: a cause never
-// decides what the client sees).
+// user who simply has no machine. A timeout fell through the same way: one
+// saturated cloud machine's file-tree polls answered Internal, logged ERROR,
+// and paged as "[gRPC] Request error" (2026-10-10). The wire code is the
+// handler's choice, so it is made here rather than read off the error (forge
+// svcerr: a cause never decides what the client sees).
 func machineStateConnectError(doing string, err error) (*connect.Error, bool) {
 	var code connect.Code
 	switch {
@@ -126,6 +131,8 @@ func machineStateConnectError(doing string, err error) (*connect.Error, bool) {
 		code = connect.CodeUnavailable
 	case toolexec.IsNoDaemon(err):
 		code = connect.CodeFailedPrecondition
+	case toolexec.IsDaemonTimeout(err):
+		code = connect.CodeDeadlineExceeded
 	default:
 		return nil, false
 	}
@@ -153,9 +160,10 @@ func mapDaemonDispatchError(commandType string, err error) *connect.Error {
 		return DaemonOutdatedConnectError(err)
 	}
 
-	// The command never reached a machine: its state picks the code. "No
+	// The machine's state explains the failure: its state picks the code. "No
 	// machine at all" is FailedPrecondition here, not the Unavailable below —
-	// waiting cannot produce a machine the user has not connected.
+	// waiting cannot produce a machine the user has not connected — and a
+	// machine too busy to answer in time is DeadlineExceeded.
 	if cerr, ok := machineStateConnectError(fmt.Sprintf("daemon command %s failed", commandType), err); ok {
 		return cerr
 	}
@@ -168,7 +176,7 @@ func mapDaemonDispatchError(commandType string, err error) *connect.Error {
 			fmt.Errorf("daemon command %s: %w", commandType, err))
 	}
 
-	// Everything else — daemon unreachable, dispatch timeout, command not
+	// Everything else — daemon unreachable, a transport failure, command not
 	// registered on the daemon, unexpected daemon-side failure, or a daemon
 	// that exists but hasn't connected yet (toolexec.ErrDaemonPending) —
 	// surfaces as a loud, retryable Unavailable. The pending case is the one

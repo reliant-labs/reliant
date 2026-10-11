@@ -32,19 +32,21 @@ func TestNewInterceptorsUsesForgeChainWithExtras(t *testing.T) {
 
 	result := newInterceptors(true, timeout, auth)
 	// Forge's five middleware slots stay stable. otelconnect is the first extra
-	// and owns the only Connect server span; the remaining extras are Reliant's.
-	require.Len(t, result, 10)
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[7])
-	require.Same(t, timeout, result[8])
-	require.Same(t, auth, result[9])
+	// and owns the only Connect server span; the remaining extras are Reliant's:
+	// the slow-RPC watchdog, timeout and auth. There is no error reporter: a
+	// failed RPC reaches Sentry once, as forge's "rpc failed" log line.
+	require.Len(t, result, 9)
+	require.IsType(t, &interceptors.SlowRPCWatchdogInterceptor{}, result[6])
+	require.Same(t, timeout, result[7])
+	require.Same(t, auth, result[8])
 }
 
 func TestNewInterceptorsSkipsNilAuthInterceptor(t *testing.T) {
 	timeout := &testNamedInterceptor{}
 
 	result := newInterceptors(true, timeout, (*interceptors.AuthInterceptor)(nil))
-	// Forge's five + otelconnect + Reliant's three extras = 9 (nil auth skipped).
-	require.Len(t, result, 9)
-	require.IsType(t, &interceptors.ErrorReporterInterceptor{}, result[7])
-	require.Same(t, timeout, result[8])
+	// Forge's five + otelconnect + watchdog + timeout = 8 (nil auth skipped).
+	require.Len(t, result, 8)
+	require.IsType(t, &interceptors.SlowRPCWatchdogInterceptor{}, result[6])
+	require.Same(t, timeout, result[7])
 }

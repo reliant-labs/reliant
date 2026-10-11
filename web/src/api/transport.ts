@@ -386,6 +386,12 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
       logger.info("[gRPC Client] Machine not serving yet", context);
       throw error;
     }
+    if (kind === "deadline") {
+      // Retryable, and the server already logged it at WARN. Visible here
+      // too, but not an exception: the caller's retry is the remedy.
+      logger.warn("[gRPC Client] Server deadline exceeded", context);
+      throw error;
+    }
 
     logger.error("[gRPC Client] Request failed:", {
       ...context,

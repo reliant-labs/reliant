@@ -254,7 +254,9 @@ func (s *FileSystemProxyService) sendCommand(ctx context.Context, userID string,
 //     the web's daemon-wait machinery expects, and its message keeps the
 //     "no daemon connected" marker isDaemonConnectingError keys on;
 //   - no machine at all is FailedPrecondition: nothing to wait for, and the
-//     file tree says "no machine" instead of an error.
+//     file tree says "no machine" instead of an error;
+//   - connected but too busy to answer in time is DeadlineExceeded (see
+//     machineStateConnectError).
 //
 // The path the request named not being on the machine — a folder the user
 // deleted, a worktree that was removed, a checkout never cloned there — is the

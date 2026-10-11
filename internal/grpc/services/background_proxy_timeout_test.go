@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -11,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // bgProxyRouter records the timeout the proxy asks the daemon for. It embeds
@@ -21,6 +23,7 @@ type bgProxyRouter struct {
 	lastCommandType string
 	lastTimeoutMs   int32
 	reply           []byte
+	err             error
 }
 
 func (r *bgProxyRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _ string, commandType string, payload []byte, timeoutMs int32) ([]byte, error) {
@@ -30,7 +33,7 @@ func (r *bgProxyRouter) SendDaemonCommandToDaemon(ctx context.Context, userID, _
 func (r *bgProxyRouter) SendDaemonCommand(_ context.Context, _ string, commandType string, _ []byte, timeoutMs int32) ([]byte, error) {
 	r.lastCommandType = commandType
 	r.lastTimeoutMs = timeoutMs
-	return r.reply, nil
+	return r.reply, r.err
 }
 
 // A process LIST must not be able to pin an API request for 30 seconds. Listing
@@ -50,6 +53,20 @@ func TestBackgroundProxy_ListProcesses_UsesAShortDaemonTimeout(t *testing.T) {
 	assert.Equal(t, "exec.bg_list", router.lastCommandType)
 	assert.Equal(t, int32(5_000), router.lastTimeoutMs,
 		"a list must fail fast rather than hold an API request for the 30s start/kill budget")
+}
+
+// Failing fast must not mean failing loud: the list budget running out on a
+// busy machine is DeadlineExceeded (a WARN), not Internal (an ERROR and a
+// Sentry event per poll). The proxies share machineStateConnectError with the
+// file tree, whose 2026-10-10 timeouts paged as "[gRPC] Request error".
+func TestBackgroundProxy_DaemonTimeoutIsDeadlineExceeded(t *testing.T) {
+	router := &bgProxyRouter{err: fmt.Errorf("daemon command exec.bg_list (subject s) via NATS failed: %w: %w",
+		toolexec.ErrDaemonTimeout, context.DeadlineExceeded)}
+	svc := NewBackgroundProxyService(router)
+
+	_, err := svc.ListProcesses(authedCtx(), connect.NewRequest(&reliantv1.ListBackgroundProcessesRequest{}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeDeadlineExceeded, connect.CodeOf(err), "error: %v", err)
 }
 
 // The mutating commands keep the longer budget: killing a process group can

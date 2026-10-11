@@ -889,12 +889,16 @@ func (r *NATSDaemonRouter) SendToolExecutionBackground(ctx context.Context, user
 // subscribes on connect and unsubscribes on disconnect), i.e. the daemon is not
 // connected. That is the ground-truth reachability signal — we deliberately do
 // NOT pre-check a decaying DB freshness timestamp, which produced false
-// "offline" for connected-but-idle daemons. Any other error (timeouts, wedged
-// daemon, transport failure) is surfaced as-is rather than mislabeled as
+// "offline" for connected-but-idle daemons. A timeout (the request went out to
+// a live subscription and no reply came back in time) is ErrDaemonTimeout. Any
+// other error (transport failure) is surfaced as-is rather than mislabeled as
 // "no daemon connected".
 func daemonRequestError(op string, err error) error {
 	if err == nats.ErrNoResponders {
 		return connect.NewError(connect.CodeUnavailable, errDaemonNotConnected)
+	}
+	if errors.Is(err, nats.ErrTimeout) {
+		return fmt.Errorf("%s via NATS failed: %w: %w", op, ErrDaemonTimeout, err)
 	}
 	return fmt.Errorf("%s via NATS failed: %w", op, err)
 }
@@ -976,7 +980,7 @@ func (r *NATSDaemonRouter) buildDaemonCommand(ctx context.Context, commandType s
 		RequestID:   requestID,
 		CommandType: commandType,
 		Payload:     json.RawMessage(payload),
-		TimeoutMs:   timeoutMs,
+		TimeoutMs:   callerBoundedTimeoutMs(ctx, timeoutMs),
 		// Connector callers carry a confinement policy in context; first-party
 		// callers carry none and the field is omitted, leaving the daemon's
 		// behavior unchanged. Reading it from context rather than taking it as
@@ -1004,10 +1008,43 @@ func (r *NATSDaemonRouter) buildDaemonCommand(ctx context.Context, commandType s
 	return data, requestID, nil
 }
 
+// defaultDaemonCommandTimeout is a daemon command's budget when its caller
+// names none.
+const defaultDaemonCommandTimeout = 30 * time.Second
+
+// callerBoundedTimeoutMs is the budget a daemon command's envelope carries:
+// the caller's, cut to what is left of the caller's deadline. The gateway
+// waits that long for the reply and the daemon bounds the handler by it
+// (handleDaemonCommand), so neither keeps working for a caller that has
+// already given up.
+//
+// Without the cut, a budget past the caller's deadline was dead on the
+// requester side (sendDaemonCommandData already clamps its own wait) and very
+// much alive everywhere else: GetFileTree asks for 30s under a 10s rpc
+// deadline, and on 2026-10-10 a saturated machine kept walking the tree, and
+// the gateway kept waiting, for 20s after each request had failed.
+func callerBoundedTimeoutMs(ctx context.Context, timeoutMs int32) int32 {
+	deadline, ok := ctx.Deadline()
+	if !ok {
+		return timeoutMs
+	}
+	budget := defaultDaemonCommandTimeout
+	if timeoutMs > 0 {
+		budget = time.Duration(timeoutMs) * time.Millisecond
+	}
+	remaining := time.Until(deadline)
+	if remaining >= budget {
+		return timeoutMs
+	}
+	// Never 0, which the envelope reads as "no budget given": a deadline
+	// already past still means "do not start".
+	return int32(max(remaining.Milliseconds(), 1))
+}
+
 // sendDaemonCommandData performs the NATS round trip for a pre-marshalled,
 // pre-checked daemon command envelope addressed to a specific daemon.
 func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, daemonID, commandType string, data []byte, requestID string, timeoutMs int32) ([]byte, error) {
-	timeout := 30 * time.Second
+	timeout := defaultDaemonCommandTimeout
 	if timeoutMs > 0 {
 		timeout = time.Duration(timeoutMs) * time.Millisecond
 	}
@@ -1065,7 +1102,15 @@ func (r *NATSDaemonRouter) sendDaemonCommandData(ctx context.Context, userID, da
 	case <-ctx.Done():
 		_ = r.sendCancelToDaemon(context.Background(), userID, daemonID, requestID, "daemon command caller cancelled")
 		observability.NATSErrorsTotal.WithLabelValues("daemon.command", "timeout").Inc()
-		return nil, fmt.Errorf("daemon command via NATS failed: %w", ctx.Err())
+		// Named like the reply-side failure above: "daemon command via NATS
+		// failed: context deadline exceeded" said neither which command nor
+		// which daemon. The caller's deadline passing is a daemon timeout;
+		// the caller going away is a cancellation and stays one.
+		op := fmt.Sprintf("daemon command %s (subject %s)", commandType, subject)
+		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+			return nil, fmt.Errorf("%s via NATS failed: %w: %w", op, ErrDaemonTimeout, ctx.Err())
+		}
+		return nil, fmt.Errorf("%s via NATS failed: %w", op, ctx.Err())
 	}
 
 	var resp struct {

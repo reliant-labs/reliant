@@ -3,6 +3,7 @@ package logging
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -179,3 +180,38 @@ func TestSentryHandler_ErrorAttributeIsContextNotTheException(t *testing.T) {
 type timeoutError struct{ seconds int }
 
 func (e *timeoutError) Error() string { return fmt.Sprintf("timed out after %ds", e.seconds) }
+
+// logRPCFailed logs the line forge's observe.LoggingInterceptor writes for a
+// failed RPC: one message from one place for every procedure in the product.
+func logRPCFailed(logger *slog.Logger, procedure, code string, err error) {
+	logger.Error("rpc failed",
+		"procedure", procedure,
+		"duration", 12*time.Millisecond,
+		"request_id", "req-1",
+		"error", err,
+		"error_class", "server",
+		"code", code,
+	)
+}
+
+// A failed RPC is one Sentry event, grouped by the procedure it names: the
+// shared "rpc failed" line must not make one issue of every RPC failure.
+func TestSentryHandler_GroupsRPCFailuresByProcedure(t *testing.T) {
+	transport := installSentryTransport(t)
+	logger := slog.New(withReporting(slog.NewTextHandler(io.Discard, nil)))
+
+	const getFileTree = "/reliant.v1.FileSystemService/GetFileTree"
+	logRPCFailed(logger, getFileTree, "internal", fmt.Errorf("daemon command via NATS failed: %w", context.DeadlineExceeded))
+	events := transport.await(t, 1)
+	require.Len(t, events, 1, "one failed RPC is one event")
+	assert.Equal(t, "rpc failed", events[0].Message)
+	require.Len(t, events[0].Fingerprint, 5)
+	assert.Equal(t, []string{getFileTree, "internal"}, events[0].Fingerprint[3:])
+	assert.Equal(t, "FileSystemService/GetFileTree", events[0].Transaction)
+
+	logRPCFailed(logger, "/reliant.v1.ChatService/SendMessage", "internal", errors.New("boom"))
+	events = transport.await(t, 1)
+	require.Len(t, events, 2)
+	assert.NotEqual(t, events[0].Fingerprint, events[1].Fingerprint,
+		"another procedure failing is another issue")
+}

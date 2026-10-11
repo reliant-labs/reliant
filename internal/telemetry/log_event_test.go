@@ -170,3 +170,62 @@ func TestCaptureBugReport_GroupingIsIndependentOfLogEvents(t *testing.T) {
 	assert.NotEqual(t, bugReport.Fingerprint, logEvent.Fingerprint,
 		"a log line worded like a report title is not that report's issue")
 }
+
+func rpcFailedEvent(procedure, code string, err error) LogEvent {
+	tags := map[string]string{"error_class": "server"}
+	if procedure != "" {
+		tags["procedure"] = procedure
+	}
+	if code != "" {
+		tags["code"] = code
+	}
+	return LogEvent{
+		Message: "rpc failed",
+		Frames: []runtime.Frame{
+			{Function: "github.com/reliant-labs/forge/pkg/observe.(*loggingInterceptor).log", File: "/src/observe/logging.go", Line: 120},
+		},
+		Err:  err,
+		Tags: tags,
+	}
+}
+
+// Forge logs "rpc failed" for every failed RPC from one function, so the log
+// line alone is not an identity: the procedure and code it names are.
+func TestLogEventFingerprint_GroupsRPCFailuresByProcedureAndCode(t *testing.T) {
+	const getFileTree = "/reliant.v1.FileSystemService/GetFileTree"
+	const sendMessage = "/reliant.v1.ChatService/SendMessage"
+	fingerprint := func(event LogEvent) []string { return logEventToSentry(event).Fingerprint }
+
+	base := fingerprint(rpcFailedEvent(getFileTree, "internal", errors.New("daemon command via NATS failed: context deadline exceeded")))
+	assert.Equal(t,
+		[]string{"slog", "github.com/reliant-labs/forge/pkg/observe.(*loggingInterceptor).log", "rpc failed", getFileTree, "internal"},
+		base)
+
+	assert.NotEqual(t, base, fingerprint(rpcFailedEvent(sendMessage, "internal", nil)),
+		"the same log line for another procedure is another issue")
+	assert.NotEqual(t, base, fingerprint(rpcFailedEvent(getFileTree, "unknown", nil)),
+		"the same procedure failing with another code is another issue")
+	assert.Equal(t, base, fingerprint(rpcFailedEvent(getFileTree, "internal", errors.New("open 66a045ce-5872-4efe-a510-910f63fcb8a6: no such file"))),
+		"error text and ids do not split a procedure's issue")
+	assert.Equal(t,
+		[]string{"slog", "github.com/reliant-labs/forge/pkg/observe.(*loggingInterceptor).log", "rpc failed", getFileTree},
+		fingerprint(rpcFailedEvent(getFileTree, "", nil)),
+		"a missing code is left out, not recorded as empty")
+}
+
+func TestLogEventFingerprint_RecordWithoutProcedureKeepsThreeElements(t *testing.T) {
+	event := rpcFailedEvent("", "internal", nil)
+	assert.Equal(t,
+		[]string{"slog", "github.com/reliant-labs/forge/pkg/observe.(*loggingInterceptor).log", "rpc failed"},
+		logEventToSentry(event).Fingerprint,
+		"only a record that names a procedure is grouped by it")
+	assert.Equal(t, "observe.(*loggingInterceptor).log", logEventToSentry(event).Transaction)
+}
+
+func TestLogEventCulprit_IsTheProcedureWhenPresent(t *testing.T) {
+	assert.Equal(t, "FileSystemService/GetFileTree",
+		logEventToSentry(rpcFailedEvent("/reliant.v1.FileSystemService/GetFileTree", "internal", nil)).Transaction)
+	assert.Equal(t, "odd-procedure",
+		logEventToSentry(rpcFailedEvent("odd-procedure", "internal", nil)).Transaction,
+		"a procedure without the Service/Method shape is shown as is")
+}

@@ -61,6 +61,28 @@ func IsNoDaemon(err error) bool {
 	return errors.Is(err, ErrNoDaemon)
 }
 
+// ErrDaemonTimeout means a command reached a connected daemon (NATS had a
+// responder, else it would be errDaemonNotConnected) and its deadline passed
+// before the daemon answered: the machine is up but slow, saturated or
+// wedged. Both ways a deadline ends a daemon command wrap it — the NATS
+// request's own timeout and the caller's context deadline.
+//
+// It is a server error, deliberately NOT marked ClassUser: a machine that
+// stops answering may be ours to fix (a managed cloud machine whose CPU or
+// disk is exhausted), so it stays visible. But its kind is DeadlineExceeded
+// (it wraps svcerr.ErrDeadlineExceeded), and a deadline says "try again", not
+// "page someone": forge logs a DeadlineExceeded failure at WARN, which never
+// reaches Sentry. Surfaced as Internal instead, one saturated 4-vCPU cloud
+// machine (load average 40) turned its file-tree polls into ERRORs and the
+// "[gRPC] Request error" Sentry page of 2026-10-10.
+var ErrDaemonTimeout = svcerr.DeadlineExceeded("the machine did not answer in time")
+
+// IsDaemonTimeout reports whether err is ErrDaemonTimeout: the daemon is
+// connected but did not answer a command before its deadline.
+func IsDaemonTimeout(err error) bool {
+	return errors.Is(err, ErrDaemonTimeout)
+}
+
 // TerminalOutputEvent represents a terminal output message or session lifecycle event.
 type TerminalOutputEvent struct {
 	SessionID string

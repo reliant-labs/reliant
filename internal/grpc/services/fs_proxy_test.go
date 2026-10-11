@@ -101,8 +101,16 @@ func TestFileSystemProxy_MachineStateIsNotAnInternalError(t *testing.T) {
 			want: connect.CodeFailedPrecondition,
 		},
 		{
+			// Prod, 2026-10-10: a saturated cloud machine answered file-tree
+			// polls after the 10s deadline; as Internal each one paged.
+			name: "connected but too slow: the deadline passed",
+			err: fmt.Errorf("daemon command fs.mkdir (subject s) via NATS failed: %w: %w",
+				toolexec.ErrDaemonTimeout, context.DeadlineExceeded),
+			want: connect.CodeDeadlineExceeded,
+		},
+		{
 			name: "a real failure stays Internal",
-			err:  errors.New("fs.mkdir via NATS failed: nats: timeout"),
+			err:  errors.New("fs.mkdir via NATS failed: nats: connection closed"),
 			want: connect.CodeInternal,
 		},
 	}

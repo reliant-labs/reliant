@@ -182,7 +182,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	authInterceptor.SetAccessTokenIntrospector(accesstokenclient.NewCachedIntrospector(authority))
 	domainWhitelistInterceptor := interceptors.NewDomainWhitelistInterceptor(cfg.AllowedEmailDomains)
 
-	// Order matters: recovery (outermost) -> error reporter -> timeout -> auth -> domain whitelist (innermost).
+	// Order matters: recovery (outermost) -> timeout -> auth -> domain whitelist (innermost).
+	// A failed RPC reaches Sentry once, as forge's "rpc failed" line through
+	// the slog bridge (internal/logging), grouped per procedure and code.
 	timeouts := interceptors.NewTimeoutInterceptor().WithMethodTimeouts(services.ForgeRPCDeadlines())
 	opts := newHandlerOptions(true, timeouts.Interceptor(), authInterceptor, domainWhitelistInterceptor)
 
@@ -746,7 +748,7 @@ func newHandlerOptions(trustRemoteTrace bool, timeoutInterceptor connect.Interce
 //
 //	Recovery → RequestID → Logging → Tracing → Metrics → Extras
 //
-// Reliant-specific interceptors (error reporter, timeout, auth) are passed as Extras.
+// Reliant-specific interceptors (slow-RPC watchdog, timeout, auth) are passed as Extras.
 //
 // trustRemoteTrace controls whether a caller-supplied traceparent becomes the
 // parent of the server span. The public API trusts it for browser-to-API trace
@@ -757,7 +759,6 @@ func newHandlerOptions(trustRemoteTrace bool, timeoutInterceptor connect.Interce
 func newInterceptors(trustRemoteTrace bool, timeoutInterceptor connect.Interceptor, authInterceptors ...connect.Interceptor) []connect.Interceptor {
 	extras := []connect.Interceptor{
 		interceptors.NewSlowRPCWatchdogInterceptor(),
-		interceptors.NewErrorReporterInterceptor(),
 		timeoutInterceptor,
 	}
 	for _, ai := range authInterceptors {

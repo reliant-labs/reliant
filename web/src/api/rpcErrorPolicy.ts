@@ -22,6 +22,14 @@
  *    marker. That is a state the UI renders and retries (useDaemonWait), not a
  *    failure; the file tree reported it on every 2s retry.
  *
+ *  - DEADLINE (2026-10-10, the "[gRPC] Request error" page). The server ran
+ *    out of time — most often a daemon command a busy machine did not answer
+ *    before the rpc's deadline — and said so with DeadlineExceeded. The server
+ *    logs that at WARN, never as a page, because a deadline says "try again";
+ *    reporting it here put one exception per poll back into Sentry for a
+ *    saturated cloud machine's file tree. The transport's OWN deadline is an
+ *    abort, above.
+ *
  *  - VERSION SKEW (ELECTRON-B3). A route the reliant API does not serve answers
  *    with a bare HTTP 404, which connect maps to Unimplemented with the message
  *    "HTTP 404". That is an app older than the server (desktop 1.7.16 calling
@@ -45,6 +53,8 @@ export type RpcFailureKind =
   | "expected"
   /** The user's machine is not serving yet; the UI waits on it. */
   | "machine-wait"
+  /** The server's deadline passed (a busy machine); retryable, not a defect. */
+  | "deadline"
   /** This app calls an RPC the server does not route: the app is out of date. */
   | "version-skew"
   /** Anything else: worth a report. */
@@ -99,6 +109,7 @@ export function classifyRpcFailure(error: unknown, ctx: RpcFailureContext): RpcF
   if (error.code === Code.Unavailable && isDaemonConnectingError(error)) {
     return "machine-wait";
   }
+  if (error.code === Code.DeadlineExceeded) return "deadline";
   if (
     ctx.serviceTypeName.startsWith(RELIANT_API_SERVICE_PREFIX) &&
     isUnroutedProcedure(error)
