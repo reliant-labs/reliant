@@ -1731,13 +1731,14 @@ func (r *Repo) GetSettingValue(ctx context.Context, userID, key string) (string,
 // connection, so exactly one replica at a time holds it. The lock dies with the
 // connection, so a crashed holder never strands it.
 //
-// Session-level locks need a connection that stays the same one for the
-// session. That holds on direct Postgres and with session-pooled pgbouncer; it
-// does NOT hold behind transaction-pooling pgbouncer, where the lock can be
-// taken on one backend and released (or silently lost) on another. If this
-// service is ever fronted by one, switch the sweep to a lease row with an expiry.
+// Session-level locks need a connection that stays the same backend for the
+// whole session. That holds on direct Postgres and with session-pooled
+// pgbouncer; it does NOT hold behind transaction-pooling pgbouncer, where the
+// lock can be taken on one backend and released (or silently re-entered by
+// another replica) on another. So the connection comes from sessionPool: the
+// DatabaseConfig.DirectURL pool when the main pool is transaction-pooled.
 func (r *Repo) TryAdvisoryLock(ctx context.Context, key int64) (func(), bool, error) {
-	conn, err := r.DB.SQLDB().Conn(ctx)
+	conn, err := r.sessionPool().Conn(ctx)
 	if err != nil {
 		return nil, false, err
 	}

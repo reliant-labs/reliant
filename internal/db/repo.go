@@ -136,6 +136,11 @@ type Repo struct {
 	runEvents       core.RunEventStore
 	tokenCounts     tokenCountStore
 
+	// session is the DatabaseConfig.DirectURL pool, for work that needs a
+	// Postgres session to itself. Nil means DB already has session
+	// semantics; see sessionPool.
+	session *sql.DB
+
 	// Update notifiers — set via SetUpdateNotifiers to push events to
 	// streaming hubs after DB writes. Nil = no notification (tests, CLI).
 	onUserUpdate UserUpdateNotifier
@@ -234,7 +239,34 @@ func NewRepoFromConfig(cfg DatabaseConfig) (*Repo, error) {
 		return nil, err
 	}
 
-	return NewRepoWithDriver(db, cfg.Driver), nil
+	repo := NewRepoWithDriver(db, cfg.Driver)
+	if cfg.DirectURL != "" {
+		session, err := openSessionPool(cfg.DirectURL)
+		if err != nil {
+			_ = db.Close()
+			return nil, err
+		}
+		repo.WithSessionPool(session)
+	}
+	return repo, nil
+}
+
+// WithSessionPool routes session-scoped work (see DatabaseConfig.DirectURL) to
+// pool instead of the main one. The Repo owns pool from here on: Close closes
+// it.
+func (r *Repo) WithSessionPool(pool *sql.DB) *Repo {
+	r.session = pool
+	return r
+}
+
+// sessionPool is where a caller that needs a Postgres session to itself takes
+// its connection: the DirectURL pool when one is configured, else the main pool,
+// which then has session semantics already.
+func (r *Repo) sessionPool() *sql.DB {
+	if r.session != nil {
+		return r.session
+	}
+	return r.DB.SQLDB()
 }
 
 func DatabaseDriverFromEnv() DatabaseDriver {
@@ -246,7 +278,11 @@ func DatabaseDriverFromEnv() DatabaseDriver {
 }
 
 func (r *Repo) Close() error {
-	return r.DB.Close()
+	err := r.DB.Close()
+	if r.session != nil {
+		err = errors.Join(err, r.session.Close())
+	}
+	return err
 }
 
 func (r *Repo) Ping(ctx context.Context) error {
