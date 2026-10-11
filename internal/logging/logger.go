@@ -23,6 +23,14 @@ var TraceEnabled bool = false
 // activeLogger holds a reference to the lumberjack logger for cleanup
 var activeLogger *lumberjack.Logger
 
+// levelVar is the level every installed handler filters on. It is a LevelVar
+// rather than a literal so a later runtime override (a TTL-bound level change
+// pushed to one daemon) can move it without rebuilding the handler chain.
+var levelVar slog.LevelVar
+
+// CurrentLevel is the level the process logger is filtering at.
+func CurrentLevel() slog.Level { return levelVar.Level() }
+
 // RotationConfig holds log rotation settings
 type RotationConfig struct {
 	Filename   string // Path to log file
@@ -66,13 +74,16 @@ func Error(msg string, args ...any) {
 // the same two values.
 const logFormatEnv = "LOG_FORMAT"
 
-// resolveLogFormat reads LOG_FORMAT. Text is the default, so dev logs — and
-// every grep written against them — only change when a deploy asks for JSON.
+// resolveLogFormat reads LOG_FORMAT. Text is the default unless the caller
+// passes defaultJSON, so dev logs — and every grep written against them — only
+// change when a deploy asks for JSON.
 // recognised is false for a value that is set but is neither, so the caller can
 // say so once a logger exists to say it with.
-func resolveLogFormat() (asJSON, recognised bool) {
+func resolveLogFormat(defaultJSON bool) (asJSON, recognised bool) {
 	switch strings.ToLower(strings.TrimSpace(os.Getenv(logFormatEnv))) {
-	case "", "text":
+	case "":
+		return defaultJSON, true
+	case "text":
 		return false, true
 	case "json":
 		return true, true
@@ -93,12 +104,23 @@ func resolveLogFormat() (asJSON, recognised bool) {
 //
 // The Sentry handler lazily checks the global reporter, so it's safe to create
 // before Sentry is initialised — it will be a no-op until then.
-func install(output io.Writer, level slog.Level) {
-	requested := level
-	level = capLevel(level)
+func install(output io.Writer, level slog.Level, options ...installOption) {
+	var cfg installConfig
+	for _, apply := range options {
+		apply(&cfg)
+	}
 
-	opts := &slog.HandlerOptions{Level: level}
-	asJSON, recognised := resolveLogFormat()
+	requested := level
+	if !cfg.allowProdDebug {
+		level = capLevel(level)
+	}
+	levelVar.Set(level)
+
+	opts := &slog.HandlerOptions{Level: &levelVar}
+	if cfg.redact {
+		opts.ReplaceAttr = newRedactor().replaceAttr
+	}
+	asJSON, recognised := resolveLogFormat(cfg.defaultJSON)
 
 	var handler slog.Handler
 	if asJSON {
@@ -106,13 +128,43 @@ func install(output io.Writer, level slog.Level) {
 	} else {
 		handler = slog.NewTextHandler(output, opts)
 	}
-	slog.SetDefault(slog.New(withReporting(handler)))
+	handler = withReporting(handler)
+	if cfg.fields != nil {
+		handler = newIdentityHandler(handler, cfg.fields)
+		handler = observe.NewTraceHandler(handler)
+	}
+	slog.SetDefault(slog.New(handler))
 
 	if !recognised {
 		slog.Warn("Unrecognised LOG_FORMAT, logging as text", "log_format", os.Getenv(logFormatEnv), "allowed", "json,text")
 	}
-	warnRefusedDebug(requested, level)
+	if bad := unrecognisedLogLevel(); bad != "" {
+		slog.Warn("Unrecognised RELIANT_LOG_LEVEL, ignoring it", "value", bad, "allowed", "debug,info,warn,error")
+	}
+	if !cfg.allowProdDebug {
+		warnRefusedDebug(requested, level)
+	}
 }
+
+// installConfig is what only some callers ask install for. Every field's zero
+// value is what the API server, worker and gateway have always had, so a new
+// option can never change them by being added.
+type installConfig struct {
+	// defaultJSON makes JSON the format when LOG_FORMAT is unset. An explicit
+	// LOG_FORMAT=text still wins.
+	defaultJSON bool
+	// allowProdDebug lifts the prod INFO floor. Only the daemon uses it: its
+	// logs are read by us, the redactor is in the chain, and the other
+	// processes keep the floor because their DEBUG lines carry request bodies.
+	allowProdDebug bool
+	// redact masks secrets and caps attribute and message sizes.
+	redact bool
+	// fields, when set, stamps the daemon's identity on every record and adds
+	// trace_id/span_id for records logged with a span in their context.
+	fields *DaemonFields
+}
+
+type installOption func(*installConfig)
 
 // withReporting wraps the line-writing handler with everything that routes on a
 // record's level: the Sentry bridge (ERROR and above) and the dead-end error
@@ -148,6 +200,31 @@ func warnRefusedDebug(requested, effective slog.Level) {
 	)
 }
 
+// newRotator builds the rotating file writer, applying the defaults for zero
+// values in config.
+func newRotator(config *RotationConfig) *lumberjack.Logger {
+	maxSize := config.MaxSizeMB
+	if maxSize <= 0 {
+		maxSize = 50 // 50MB default
+	}
+	maxBackups := config.MaxBackups
+	if maxBackups <= 0 {
+		maxBackups = 3
+	}
+	maxAge := config.MaxAgeDays
+	if maxAge <= 0 {
+		maxAge = 30
+	}
+	return &lumberjack.Logger{
+		Filename:   config.Filename,
+		MaxSize:    maxSize,
+		MaxBackups: maxBackups,
+		MaxAge:     maxAge,
+		Compress:   config.Compress,
+		LocalTime:  true, // Use local time for backup file names
+	}
+}
+
 // SetupWithTrace configures the logging system with optional trace logging
 func SetupWithTrace(defaultLevel slog.Level, enableTrace bool) {
 	TraceEnabled = enableTrace
@@ -174,29 +251,7 @@ func SetupWithRotation(defaultLevel slog.Level, enableTrace bool, config *Rotati
 			// Fall back to stdout if we can't create the directory
 			slog.Warn("Failed to create log directory, using stdout", "dir", logDir, "error", err)
 		} else {
-			// Apply defaults for zero values
-			maxSize := config.MaxSizeMB
-			if maxSize <= 0 {
-				maxSize = 50 // 50MB default
-			}
-			maxBackups := config.MaxBackups
-			if maxBackups <= 0 {
-				maxBackups = 3
-			}
-			maxAge := config.MaxAgeDays
-			if maxAge <= 0 {
-				maxAge = 30
-			}
-
-			// Create lumberjack logger
-			activeLogger = &lumberjack.Logger{
-				Filename:   config.Filename,
-				MaxSize:    maxSize,
-				MaxBackups: maxBackups,
-				MaxAge:     maxAge,
-				Compress:   config.Compress,
-				LocalTime:  true, // Use local time for backup file names
-			}
+			activeLogger = newRotator(config)
 
 			// Write to both file and stdout for visibility
 			output = io.MultiWriter(os.Stdout, activeLogger)
@@ -234,27 +289,7 @@ func SetupFileOnly(defaultLevel slog.Level, config *RotationConfig) {
 		return
 	}
 
-	maxSize := config.MaxSizeMB
-	if maxSize <= 0 {
-		maxSize = 50
-	}
-	maxBackups := config.MaxBackups
-	if maxBackups <= 0 {
-		maxBackups = 3
-	}
-	maxAge := config.MaxAgeDays
-	if maxAge <= 0 {
-		maxAge = 30
-	}
-
-	activeLogger = &lumberjack.Logger{
-		Filename:   config.Filename,
-		MaxSize:    maxSize,
-		MaxBackups: maxBackups,
-		MaxAge:     maxAge,
-		Compress:   config.Compress,
-		LocalTime:  true,
-	}
+	activeLogger = newRotator(config)
 
 	DefaultOutput = activeLogger
 

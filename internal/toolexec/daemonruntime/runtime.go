@@ -404,6 +404,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 	// Seed the process-wide identity from persisted creds so exec.bg_list can
 	// stamp ProcessInfo.DaemonID even before the RegistrationAck re-asserts it.
 	SetDaemonIdentity(bootCfg.DaemonID)
+	logging.SetDaemonID(bootCfg.DaemonID)
 
 	// One transport for the process. A bad URL or TLS mode is named here, at
 	// startup, rather than becoming a session error that reconnect retries
@@ -514,11 +515,12 @@ func (d *daemonClient) setAsideForeignDaemonID(err error) bool {
 	d.daemonID = ""
 	d.bootCfg.DaemonID = ""
 	SetDaemonIdentity("")
+	logging.SetDaemonID("")
 
 	logging.Warn(logPrefix+" Saved daemon id belongs to another account — set it aside; registering as a new machine",
 		"daemonID", asserted, "setAsideTo", setAsideTo, "dataDir", dataDir)
 	if !d.bootCfg.Verbose {
-		fmt.Printf("  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
+		fmt.Fprintf(logging.Notices(), "  ! The machine identity saved for this workspace belongs to a different Reliant account.\n"+
 			"    Moved it aside (%s) and registering this machine with your account.\n", setAsideTo)
 	}
 	return true
@@ -597,7 +599,7 @@ func (d *daemonClient) recordStreamTransition(s daemonstate.Stream, detail strin
 	// the stat-poll fallback still sees the transition in the on-disk record,
 	// which stays authoritative in both modes.
 	if d.bootCfg.Verbose {
-		fmt.Printf("%s %s\n", daemonstate.StreamNoticePrefix, string(s))
+		fmt.Fprintf(os.Stdout, "%s %s\n", daemonstate.StreamNoticePrefix, string(s))
 	}
 
 	d.announceStatus(s, detail, retrying)
@@ -618,10 +620,10 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 
 	switch s {
 	case daemonstate.StreamConnected:
-		fmt.Printf("\n  ✓ Daemon connected — you can head back to Reliant and start working.\n\n")
-		fmt.Printf("    Press Ctrl+C to disconnect.\n\n")
+		fmt.Fprintf(logging.Notices(), "\n  ✓ Daemon connected — you can head back to Reliant and start working.\n\n")
+		fmt.Fprintf(logging.Notices(), "    Press Ctrl+C to disconnect.\n\n")
 	case daemonstate.StreamAwaitingCredentials:
-		fmt.Printf("  … Waiting for sign-in to finish.\n")
+		fmt.Fprintf(logging.Notices(), "  … Waiting for sign-in to finish.\n")
 	case daemonstate.StreamDisconnected:
 		// Only worth a line when it carries a reason; a bare disconnect is
 		// immediately followed by a reconnect attempt, and narrating both
@@ -630,11 +632,11 @@ func (d *daemonClient) announceStatus(s daemonstate.Stream, detail string, retry
 			break
 		}
 		if retrying {
-			fmt.Printf("  ! Disconnected: %s\n    Reconnecting…\n", detail)
+			fmt.Fprintf(logging.Notices(), "  ! Disconnected: %s\n    Reconnecting…\n", detail)
 		} else {
 			// Stopping for good: the error that follows says why and what
 			// to do, so this line must not promise a retry.
-			fmt.Printf("  ! Disconnected: %s\n", detail)
+			fmt.Fprintf(logging.Notices(), "  ! Disconnected: %s\n", detail)
 		}
 	}
 }
@@ -962,6 +964,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 				// Publish to the process-wide identity so static command handlers
 				// (e.g. exec.bg_list) can stamp ProcessInfo.DaemonID for preview URLs.
 				SetDaemonIdentity(d.daemonID)
+				logging.SetDaemonID(d.daemonID)
 				logging.Info(logPrefix+" Daemon identity assigned by gateway", "daemonID", d.daemonID)
 				// Persist the assigned id per-origin so it survives restarts and
 				// hostname changes; next reconnect re-asserts it in Register.

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log/slog"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -26,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/toolexec/bootstrap"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonruntime"
 	"github.com/reliant-labs/reliant/internal/toolexec/daemonstate"
+	"github.com/reliant-labs/reliant/internal/version"
 	"github.com/spf13/cobra"
 )
 
@@ -37,30 +37,35 @@ func toolsDaemonLogPath(dataDir string) string {
 
 // setupToolsDaemonLogging routes the daemon's structured logs.
 //
-// The full INFO stream always goes to the rotating file, so `reliant daemon
-// logs` and any post-mortem see exactly what they always did. What changes is
-// stdout: it carries the structured stream only when verbose is set.
+// The full stream always goes to the rotating file, so `reliant daemon logs`
+// and any post-mortem see exactly what they always did. Where else it goes
+// depends on who is reading:
 //
-// A person running `reliant daemon start --token` in a terminal is not reading
-// slog output — they want to know whether it worked. Nineteen INFO lines
-// naming a gateway URL, a TLS mode and a data dir bury the one line that
-// answers that. `--verbose` (the existing global flag) brings them back for
-// debugging, and the file keeps them regardless, so nothing is lost.
+//   - A hosted daemon (a workspace pod) logs JSON to stdout as well. Nobody
+//     watches a pod's terminal; the node log agent reads its stdout, and the
+//     file on the workspace volume is unreachable without exec'ing in. Its
+//     human status lines become INFO records in that same stream rather than
+//     raw text between JSON lines.
+//   - A person running `reliant daemon start --token` in a terminal wants to
+//     know whether it worked, not read nineteen INFO lines, so stdout carries
+//     the stream only with --verbose.
+//
+// The level is RELIANT_LOG_LEVEL (default INFO) and the format is LOG_FORMAT
+// (text, or JSON for a hosted daemon); see logging.SetupDaemon.
 func setupToolsDaemonLogging(dataDir string, verboseOutput bool) {
-	rotation := &logging.RotationConfig{
-		Filename:   toolsDaemonLogPath(dataDir),
-		MaxSizeMB:  50,
-		MaxBackups: 3,
-		MaxAgeDays: 30,
-		Compress:   true,
-	}
-
-	if verboseOutput {
-		logging.SetupWithRotation(slog.LevelInfo, false, rotation)
-		return
-	}
-
-	logging.SetupFileOnly(slog.LevelInfo, rotation)
+	managed := daemonruntime.IsManagedEnvironment()
+	logging.SetupDaemon(logging.DaemonLogConfig{
+		Rotation: &logging.RotationConfig{
+			Filename:   toolsDaemonLogPath(dataDir),
+			MaxSizeMB:  50,
+			MaxBackups: 3,
+			MaxAgeDays: 30,
+			Compress:   true,
+		},
+		Stdout:  verboseOutput || managed,
+		Managed: managed,
+		Fields:  logging.DaemonFields{DaemonID: bootstrap.ReadDaemonID(dataDir), Version: version.Version},
+	})
 }
 
 func newDaemonCmd() *cobra.Command {

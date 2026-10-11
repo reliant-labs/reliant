@@ -39,9 +39,10 @@ func SetOutput(w io.Writer) {
 
 // GetLogLevel returns the current log level from environment or default.
 //
-// Prod never logs DEBUG, and nothing overrides that: RELIANT_LOG_LEVEL=debug,
-// DEBUG=true and RELIANT_DEV_DEBUG=true are all held at INFO there, because
-// DEBUG lines are where request bodies and tool payloads end up.
+// The servers never log DEBUG in prod, and nothing overrides that:
+// RELIANT_LOG_LEVEL=debug, DEBUG=true and RELIANT_DEV_DEBUG=true are all held at
+// INFO there, because DEBUG lines are where request bodies and tool payloads
+// end up. The tools daemon is the one exception (see DaemonLogLevel).
 // RELIANT_LOG_LEVEL=INFO/WARN/ERROR is honoured in every environment, since it
 // can only make prod quieter. The refusal is reported once, as a WARN, when
 // the logger is installed (see install) — this function runs before that
@@ -56,24 +57,55 @@ func GetLogLevel() slog.Level {
 }
 
 // requestedLevel is the level the environment variables ask for, before any
-// environment cap. Precedence and spellings are the ones dev has always had:
-// one of RELIANT_LOG_LEVEL's four upper-case values wins; otherwise
-// DEBUG=true or RELIANT_DEV_DEBUG=true selects DEBUG; otherwise INFO.
+// environment cap. RELIANT_LOG_LEVEL (debug|info|warn|error, any case) wins;
+// otherwise DEBUG=true or RELIANT_DEV_DEBUG=true selects DEBUG; otherwise INFO.
 func requestedLevel() slog.Level {
-	switch os.Getenv("RELIANT_LOG_LEVEL") {
-	case "DEBUG":
-		return slog.LevelDebug
-	case "INFO":
-		return slog.LevelInfo
-	case "WARN":
-		return slog.LevelWarn
-	case "ERROR":
-		return slog.LevelError
+	if level, ok := explicitLevel(); ok {
+		return level
 	}
 	if os.Getenv("DEBUG") == "true" || os.Getenv("RELIANT_DEV_DEBUG") == "true" {
 		return slog.LevelDebug
 	}
 	return slog.LevelInfo
+}
+
+// logLevelEnv is the one variable that names a log level. The daemon reads it
+// too, so a pod and a developer's shell spell the request the same way.
+const logLevelEnv = "RELIANT_LOG_LEVEL"
+
+// parseEnvLevel parses a level name, case-insensitively. ok is false for a
+// name that is not one of the four, so a typo is reported rather than quietly
+// becoming INFO.
+func parseEnvLevel(raw string) (slog.Level, bool) {
+	switch strings.ToLower(strings.TrimSpace(raw)) {
+	case "debug":
+		return slog.LevelDebug, true
+	case "info":
+		return slog.LevelInfo, true
+	case "warn", "warning":
+		return slog.LevelWarn, true
+	case "error":
+		return slog.LevelError, true
+	}
+	return slog.LevelInfo, false
+}
+
+// explicitLevel is RELIANT_LOG_LEVEL when it is set to a valid name.
+func explicitLevel() (slog.Level, bool) {
+	return parseEnvLevel(os.Getenv(logLevelEnv))
+}
+
+// unrecognisedLogLevel returns RELIANT_LOG_LEVEL when it is set but names no
+// level, so the logger can say so once it exists.
+func unrecognisedLogLevel() string {
+	raw := os.Getenv(logLevelEnv)
+	if strings.TrimSpace(raw) == "" {
+		return ""
+	}
+	if _, ok := parseEnvLevel(raw); ok {
+		return ""
+	}
+	return raw
 }
 
 // capLevel holds prod at INFO or quieter. Every other environment gets the
@@ -86,15 +118,15 @@ func capLevel(level slog.Level) slog.Level {
 }
 
 // debugRequest names the setting asking for DEBUG ("DEBUG=true"), or "" when
-// none is. It follows requestedLevel's precedence — an explicit
-// RELIANT_LOG_LEVEL=INFO/WARN/ERROR outranks the DEBUG flags, so they are not
-// a request at all — except that any capitalisation of RELIANT_LOG_LEVEL=debug
-// counts. A request prod refuses must be reported however it was spelled.
+// none is. It follows requestedLevel's precedence: an explicit
+// RELIANT_LOG_LEVEL outranks the DEBUG flags, so with a quieter explicit level
+// they are not a request at all. A request prod refuses must be reported
+// however it was spelled.
 func debugRequest() string {
-	switch level := os.Getenv("RELIANT_LOG_LEVEL"); {
-	case strings.EqualFold(strings.TrimSpace(level), "debug"):
-		return "RELIANT_LOG_LEVEL=" + level
-	case level == "INFO" || level == "WARN" || level == "ERROR":
+	if level, ok := explicitLevel(); ok {
+		if level < slog.LevelInfo {
+			return logLevelEnv + "=" + os.Getenv(logLevelEnv)
+		}
 		return ""
 	}
 	for _, flag := range []string{"DEBUG", "RELIANT_DEV_DEBUG"} {

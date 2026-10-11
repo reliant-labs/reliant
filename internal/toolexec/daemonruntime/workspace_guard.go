@@ -164,7 +164,7 @@ func (d *daemonClient) armWorkspaceGuard(ctx context.Context, stopRuntime func()
 	if !d.bootCfg.Verbose {
 		// Verbose mode already has the ERROR line on stdout; a person running
 		// `reliant daemon start` in a terminal otherwise sees only the file log.
-		guard.announce = func(line string) { fmt.Println(line) }
+		guard.announce = func(line string) { fmt.Fprintln(logging.Notices(), line) }
 	}
 	d.guard = guard
 

@@ -2,6 +2,9 @@
 package commands
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"log/slog"
 	"os"
 	"strings"
@@ -53,5 +56,51 @@ func TestSetupToolsDaemonLoggingPersistsOutput(t *testing.T) {
 	}
 	if !strings.Contains(string(contents), "tools-daemon persistence test") {
 		t.Fatalf("tools-daemon log did not contain emitted message: %q", contents)
+	}
+}
+
+// A hosted daemon (RELIANT_DAEMON_TYPE=managed) is read through its stdout by
+// the node log agent, so it must emit JSON there as well as to the file, with
+// no --verbose, and must not leave its logging variables in the environment
+// its children inherit.
+func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
+	dataDir := t.TempDir()
+	t.Setenv("RELIANT_DAEMON_TYPE", "managed")
+	t.Setenv("RELIANT_WORKSPACE_ID", "ws_42")
+	t.Setenv("LOG_FORMAT", "json")
+	t.Setenv("RELIANT_LOG_LEVEL", "info")
+	t.Cleanup(func() { logging.Setup(slog.LevelInfo) })
+
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	prev := os.Stdout
+	os.Stdout = w
+	setupToolsDaemonLogging(dataDir, false)
+	logging.Info("managed stdout test")
+	os.Stdout = prev
+	_ = w.Close()
+	if err := logging.Close(); err != nil {
+		t.Fatalf("close tools-daemon log: %v", err)
+	}
+	stdout, _ := io.ReadAll(r)
+
+	var rec map[string]any
+	if err := json.Unmarshal(bytes.TrimSpace(stdout), &rec); err != nil {
+		t.Fatalf("managed stdout is not one JSON record: %q: %v", stdout, err)
+	}
+	if rec["msg"] != "managed stdout test" || rec["workspace_id"] != "ws_42" || rec["service"] != "reliant-daemon" {
+		t.Fatalf("record is missing required fields: %v", rec)
+	}
+	onDisk, err := os.ReadFile(toolsDaemonLogPath(dataDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(onDisk, stdout) {
+		t.Fatalf("file and stdout diverged:\nfile:   %q\nstdout: %q", onDisk, stdout)
+	}
+	if os.Getenv("LOG_FORMAT") != "" {
+		t.Fatal("LOG_FORMAT must not leak into the daemon's children")
 	}
 }
