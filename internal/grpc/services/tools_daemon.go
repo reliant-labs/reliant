@@ -1830,12 +1830,35 @@ func (s *ToolsDaemonService) ensureOwnedProjectForPath(ctx context.Context, conn
 	return project, nil
 }
 
+// projectConfigPushedAtReader reads when the daemon pushed a project's stored
+// config record, and nothing else from it (db.Repo.GetProjectConfigPushedAt).
+// It returns sql.ErrNoRows, unwrapped, when the project has no record.
+type projectConfigPushedAtReader interface {
+	GetProjectConfigPushedAt(ctx context.Context, projectID string) (time.Time, error)
+}
+
+// The repository every server wires in must answer it, checked at build time.
+var _ projectConfigPushedAtReader = (*db.Repo)(nil)
+
+// shouldApplyProjectConfigUpdate drops a snapshot or delta older than the one
+// already stored. It runs on every push a daemon sends, and it needs only the
+// stored pushed_at: the whole record it used to read for that one timestamp
+// carries every skill body and repo memory the daemon indexed — 18 MB in
+// prod — so it reads the one column instead.
 func (s *ToolsDaemonService) shouldApplyProjectConfigUpdate(ctx context.Context, projectID string, daemonTSUnixMs int64) (bool, error) {
 	if daemonTSUnixMs <= 0 {
 		return true, nil
 	}
 
-	record, err := s.database.GetProjectConfigRecord(ctx, projectID)
+	// The method lives on *db.Repo, not on db.Repository; every production
+	// wiring passes a *db.Repo. A repository that cannot answer is a wiring
+	// fault, and it fails loudly here rather than quietly falling back to the
+	// full-record read.
+	reader, ok := s.database.(projectConfigPushedAtReader)
+	if !ok {
+		return false, fmt.Errorf("project config staleness check: %T cannot read pushed_at (GetProjectConfigPushedAt)", s.database)
+	}
+	pushedAt, err := reader.GetProjectConfigPushedAt(ctx, projectID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return true, nil
@@ -1843,7 +1866,7 @@ func (s *ToolsDaemonService) shouldApplyProjectConfigUpdate(ctx context.Context,
 		return false, err
 	}
 
-	existingTSUnixMs := record.PushedAt.UTC().UnixMilli()
+	existingTSUnixMs := pushedAt.UTC().UnixMilli()
 	if existingTSUnixMs <= 0 {
 		return true, nil
 	}

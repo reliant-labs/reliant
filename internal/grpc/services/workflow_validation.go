@@ -12,6 +12,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 	"github.com/reliant-labs/reliant/internal/workflow/validation"
+	"github.com/reliant-labs/reliant/internal/workflow/workflowsource"
 	wfyaml "github.com/reliant-labs/reliant/internal/workflow/yaml"
 )
 
@@ -145,12 +146,28 @@ func (c workflowCheck) summary() string {
 
 // validateWorkflowDefinition validates a YAML definition with the user's
 // workflow loader.
+//
+// Refs resolve the way run start does (workflowsource.DraftLoader): only a
+// complete workflow loads, and a draft child is an error (a parent that refs
+// a draft would fail at run start). The workflow being validated resolves to
+// itself, so a workflow that spawns itself can be validated — and marked
+// complete — while it is still a draft.
 func (s *WorkflowService) validateWorkflowDefinition(ctx context.Context, userID string, definition []byte) workflowCheck {
+	return validateWorkflowDefinitionWith(definition, func(self *reliantv1.Workflow) v2.WorkflowLoader {
+		return workflowsource.DraftLoader(ctx, s.database, userID, self)
+	})
+}
+
+// validateWorkflowDefinitionWith validates definition, resolving its refs
+// with the loader loaderFor returns for the parsed definition. A listing
+// passes one built over its workflowCatalog and shared by every workflow it
+// validates (see ListWorkflows).
+func validateWorkflowDefinitionWith(definition []byte, loaderFor func(self *reliantv1.Workflow) v2.WorkflowLoader) workflowCheck {
 	self, err := wfyaml.ParseWorkflow(definition)
 	if err != nil {
 		return workflowCheck{parseErr: fmt.Errorf("failed to parse workflow: %w", err)}
 	}
-	result, err := v2.ValidateYAMLResult(definition, s.createValidationWorkflowLoader(ctx, userID, self))
+	result, err := v2.ValidateYAMLResult(definition, loaderFor(self))
 	if err != nil {
 		return workflowCheck{parseErr: err}
 	}

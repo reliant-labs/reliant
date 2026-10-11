@@ -25,9 +25,13 @@ import (
 	"github.com/reliant-labs/reliant/internal/workflow/workflowref"
 )
 
-// ProjectStore reads a project's synced configuration.
+// ProjectStore reads a project's synced workflows.
+//
+// It is the one column, not the whole config record: the record also carries
+// every skill body the daemon indexed, which ran to 18 MB in prod and made each
+// resolution on the send path cost hundreds of milliseconds.
 type ProjectStore interface {
-	GetProjectConfigRecord(ctx context.Context, projectID string) (*db.ProjectConfigRecord, error)
+	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
 }
 
 // Store is every repository read resolution makes.
@@ -65,14 +69,14 @@ func ProjectIndex(ctx context.Context, store ProjectStore, projectID string) (*w
 	if projectID == "" || store == nil {
 		return nil, nil
 	}
-	record, err := store.GetProjectConfigRecord(ctx, projectID)
-	if errors.Is(err, sql.ErrNoRows) || (err == nil && record == nil) {
+	workflowsJSON, err := store.GetProjectWorkflowsJSON(ctx, projectID)
+	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil
 	}
 	if err != nil {
 		return nil, &StoreError{Err: fmt.Errorf("read project workflows: %w", err)}
 	}
-	workflows, err := config.ParseStoredWorkflows(record.ProjectWorkflowsJSON)
+	workflows, err := config.ParseStoredWorkflows(workflowsJSON)
 	if err != nil {
 		return nil, err
 	}
@@ -125,7 +129,14 @@ func userWorkflows(ctx context.Context, store Store, opts Options) func(slug str
 }
 
 // Resolve resolves one ref.
+//
+// A builtin:// ref is answered from the embedded catalog without reading the
+// store: no user or project workflow can shadow it, so reading them only adds
+// round trips to every run start and send of the default workflow.
 func Resolve(ctx context.Context, store Store, opts Options, ref string) (*workflowref.Resolved, error) {
+	if parsed, err := workflowref.Parse(ref); err != nil || parsed.Kind == workflowref.Builtin {
+		return workflowref.Resolve(ref, workflowref.Sources{})
+	}
 	sources, err := Sources(ctx, store, opts)
 	if err != nil {
 		return nil, err

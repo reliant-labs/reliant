@@ -134,6 +134,14 @@ type Repository interface {
 	TouchProject(ctx context.Context, id string, userID string) error
 	DeleteProject(ctx context.Context, id string, userID string) error
 	GetProjectConfigRecord(ctx context.Context, projectID string) (*ProjectConfigRecord, error)
+	// GetProjectWorkflowsJSON and GetProjectPresetsJSON read one column of the
+	// config record. Prefer them to GetProjectConfigRecord whenever that column
+	// is all a caller needs: the full row carries every indexed skill body and
+	// can run to tens of MB.
+	GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error)
+	GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error)
+	// GetProjectMCPConfigsJSON is the same for the stored scoped MCP configs.
+	GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error)
 
 	// Project ↔ Daemon installations (which daemons have a clone of a project).
 	UpsertProjectDaemon(ctx context.Context, projectID, daemonID, path string, defaultBranch *string) error

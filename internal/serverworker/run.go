@@ -211,8 +211,11 @@ func Run(ctx context.Context, opts Options) error {
 	// -----------------------------------------------------------------
 	remoteExecutor := toolexec.NewRemoteExecutor(nil)
 
-	// Stored config provider
-	storedConfigProvider := config.NewStoredConfigProvider(configadapter.NewRepoConfigStore(repo))
+	// Stored config provider. Cached: CallLLM resolves the project config on
+	// every turn, and the record can be tens of MB of skills. Each call still
+	// checks the record's version, so a daemon push is seen immediately on
+	// every worker replica.
+	storedConfigProvider := config.NewCachedStoredConfigProvider(configadapter.NewRepoConfigStore(repo), repo, config.DefaultParsedConfigCacheBytes)
 
 	// -----------------------------------------------------------------
 	// 7. Streaming hub

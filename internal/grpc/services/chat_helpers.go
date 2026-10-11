@@ -55,14 +55,34 @@ func (s *ChatService) getChatForUser(ctx context.Context, chatID, userID string)
 	return chat, nil
 }
 
+// paramsChangeQueryTimeout bounds checkParamsActuallyChanged's workflow query.
+//
+// A query on a running workflow is answered by the WORKER, after any workflow
+// task it is processing for that run — and after replaying the run's history
+// if it is not cached. A busy worker made this one advisory question cost a
+// send 5+ seconds in prod (SendMessage 22:15:36, 9.2s, sampled in this query
+// for 5s straight), and since SendMessage holds the chat's run-control lock
+// through it, a second send to the same chat queued behind it. An idle,
+// cached workflow answers in milliseconds.
+const paramsChangeQueryTimeout = 500 * time.Millisecond
+
 // checkParamsActuallyChanged queries the workflow for its current inputs and compares
 // with the incoming params. Returns true only if at least one param value actually changed.
 // This prevents the "params changed" message from being sent when params haven't changed.
+//
+// The answer only decides whether a hidden "params changed" note is saved; the
+// params reach the run through update_workflow_state either way. So a query
+// that cannot answer in paramsChangeQueryTimeout is treated like one that
+// failed: assume changed, and never hold the user's send for it.
 func (s *ChatService) checkParamsActuallyChanged(ctx context.Context, workflowID, runID string, incomingParams map[string]interface{}) bool {
-	currentInputs, err := s.queryRunInputs(ctx, workflowID, runID)
+	queryCtx, cancel := context.WithTimeout(ctx, paramsChangeQueryTimeout)
+	defer cancel()
+	currentInputs, err := s.queryRunInputs(queryCtx, workflowID, runID)
 	if err != nil {
-		// If query fails (e.g., workflow not running yet), assume params changed to be safe
-		logging.Warn("Failed to query workflow inputs, assuming params changed", "error", err, "workflowID", workflowID)
+		// If query fails (e.g., workflow not running yet) or the worker is too
+		// busy to answer in time, assume params changed to be safe
+		logging.Warn("Failed to query workflow inputs, assuming params changed", "error", err, "workflowID", workflowID,
+			"timed_out", errors.Is(queryCtx.Err(), context.DeadlineExceeded))
 		return true
 	}
 	return inputsDiffer(currentInputs, incomingParams)

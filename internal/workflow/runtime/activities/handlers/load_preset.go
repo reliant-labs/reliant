@@ -44,11 +44,13 @@ func (a *LoadPresetParamsActivity) Execute(ctx context.Context, input LoadPreset
 		return nil, fmt.Errorf("preset_name is required")
 	}
 
-	// Try stored project presets from daemon config sync
+	// Try stored project presets from daemon config sync. One column, not
+	// the whole config row: the row carries every indexed skill and can run
+	// to tens of MB.
 	if input.ProjectID != "" && a.repo != nil {
-		record, err := a.repo.GetProjectConfigRecord(ctx, input.ProjectID)
+		presetsJSON, err := a.repo.GetProjectPresetsJSON(ctx, input.ProjectID)
 		if err == nil {
-			presets, err := cfg.ParseStoredPresets(record.ProjectPresetsJSON)
+			presets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil {
 				sp := cfg.FindStoredPresetByName(presets, input.PresetName)
 				if sp != nil {

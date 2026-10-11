@@ -9,6 +9,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -206,6 +207,9 @@ func ptrValue(s *string) string {
 type ExecuteToolsActivity struct {
 	repo         db.Repository
 	toolExecutor toolexec.ToolExecutor
+	// configProvider resolves the project's skills for the skill tool. Set by
+	// WithConfigProvider; nil means the skill tool sees none.
+	configProvider cfgpkg.ConfigProvider
 }
 
 // NewExecuteToolsActivity creates a new ExecuteToolsActivity

@@ -2023,6 +2023,53 @@ func (r *Repo) GetProjectConfigRecord(ctx context.Context, projectID string) (*P
 	return &record, nil
 }
 
+// GetProjectWorkflowsJSON reads one column of the project config record: the
+// synced .reliant/workflows. See getProjectConfigColumn for why it exists.
+func (r *Repo) GetProjectWorkflowsJSON(ctx context.Context, projectID string) (*string, error) {
+	return r.getProjectConfigColumn(ctx, projectID, "project_workflows_json")
+}
+
+// GetProjectPresetsJSON reads one column of the project config record: the
+// synced .reliant/presets. See getProjectConfigColumn for why it exists.
+func (r *Repo) GetProjectPresetsJSON(ctx context.Context, projectID string) (*string, error) {
+	return r.getProjectConfigColumn(ctx, projectID, "project_presets_json")
+}
+
+// GetProjectMCPConfigsJSON reads one column of the project config record: the
+// stored scoped MCP configs. See getProjectConfigColumn for why it exists.
+func (r *Repo) GetProjectMCPConfigsJSON(ctx context.Context, projectID string) (*string, error) {
+	return r.getProjectConfigColumn(ctx, projectID, "mcp_configs")
+}
+
+// getProjectConfigColumn reads a single column of a project's config record.
+// Like GetProjectConfigRecord it returns sql.ErrNoRows, unwrapped, when the
+// project has no record.
+//
+// The whole row is the wrong read for anything that needs one part of it. It
+// carries every skill body and repo memory the daemon indexed, recursively
+// across nested repos: a workspace of ~30 checkouts of the same repos synced an
+// 18 MB row, nearly all of it project_skills_json. Workflow resolution and
+// preset loading need a column that is empty or a few KB, yet read that row
+// three or more times per send — measured in prod as ~95% of SendMessage,
+// StartChat and UpdateWorkflowParams wall time (p50 1.7s / 2.3s / 1.0s).
+//
+// column is one of the fixed names above, never caller input.
+func (r *Repo) getProjectConfigColumn(ctx context.Context, projectID, column string) (*string, error) {
+	if projectID == "" {
+		return nil, fmt.Errorf("project ID cannot be empty")
+	}
+	query := r.bindQuery(`SELECT ` + column + ` FROM project_configs WHERE project_id = ? LIMIT 1`)
+
+	var value *string
+	if err := r.DB.QueryRowContext(ctx, query, projectID).Scan(&value); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, err
+		}
+		return nil, fmt.Errorf("failed to load %s for project %s: %w", column, projectID, err)
+	}
+	return value, nil
+}
+
 func (r *Repo) CreateWorktree(ctx context.Context, worktree *Worktree) error {
 	if worktree == nil {
 		return fmt.Errorf("worktree cannot be nil")

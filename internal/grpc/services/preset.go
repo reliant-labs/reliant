@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"sync"
 
 	"connectrpc.com/connect"
 	"github.com/google/uuid"
@@ -210,20 +211,56 @@ func (s *PresetService) ListPresetsForWorkflow(
 		return nil, err
 	}
 
-	// Load workflow to check compatibility
-	wf, err := s.loadWorkflow(ctx, req.Msg.WorkflowName, req.Msg.ProjectId)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %w", err))
+	// The reads below are independent, so they overlap: the workflow (then the
+	// user's presets for its tag), the builtin + stored project presets, and
+	// the two visibility lookups.
+	presetItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET)
+	var (
+		wf             *reliantv1.Workflow
+		wfErr          error
+		dbPresets      []*db.Preset
+		dbPresetsErr   error
+		loadResult     *preset.LoadResult
+		overrides      map[string]bool
+		overridesErr   error
+		hiddenDefaults []string
+		hiddenErr      error
+		wg             sync.WaitGroup
+	)
+	wg.Add(4)
+	go func() {
+		defer wg.Done()
+		wf, wfErr = s.loadWorkflow(ctx, req.Msg.WorkflowName, req.Msg.ProjectId)
+		if wfErr != nil {
+			return
+		}
+		if tag := wf.GetPresets().GetTag(); tag != "" {
+			dbPresets, dbPresetsErr = s.database.ListPresetsByTag(ctx, userID, tag, req.Msg.ProjectId)
+		}
+	}()
+	go func() {
+		defer wg.Done()
+		loadResult = s.loadAllPresetsFromDB(ctx, req.Msg.ProjectId)
+	}()
+	go func() {
+		defer wg.Done()
+		overrides, overridesErr = s.database.ListVisibilityOverrides(ctx, userID, presetItemType)
+	}()
+	go func() {
+		defer wg.Done()
+		hiddenDefaults, hiddenErr = s.database.ListHiddenItemDefaults(ctx, presetItemType)
+	}()
+	wg.Wait()
+
+	if wfErr != nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("workflow not found: %w", wfErr))
 	}
 
 	// Use a map to deduplicate by slug (user presets take priority)
 	presetsBySlug := make(map[string]*reliantv1.PresetInfo)
 	var invalidPresets []*reliantv1.InvalidPreset
 
-	// 1. Load all builtin + stored project presets, then filter by workflow compatibility
-	loadResult := s.loadAllPresetsFromDB(ctx, req.Msg.ProjectId)
-
-	// Convert invalid presets to proto format
+	// 1. Builtin + stored project presets, filtered by workflow compatibility
 	for _, inv := range loadResult.Invalid {
 		invalidPresets = append(invalidPresets, &reliantv1.InvalidPreset{
 			Name:   inv.Name,
@@ -232,8 +269,6 @@ func (s *PresetService) ListPresetsForWorkflow(
 			Errors: inv.Errors,
 		})
 	}
-
-	// Filter valid presets by workflow compatibility
 	for _, p := range loadResult.Valid {
 		result := preset.ValidatePreset(p, wf)
 		if !result.Valid {
@@ -247,13 +282,10 @@ func (s *PresetService) ListPresetsForWorkflow(
 		presetsBySlug[p.Name] = protoPreset
 	}
 
-	// 2. Load user presets from database that match this workflow's tag (highest priority)
-	// Get the workflow's tag for matching
-	workflowTag := wf.GetPresets().GetTag()
-	if workflowTag != "" {
-		dbPresets, err := s.database.ListPresetsByTag(ctx, userID, workflowTag, req.Msg.ProjectId)
-		if err != nil {
-			logging.Warn("Failed to load user presets from database", "tag", workflowTag, "error", err)
+	// 2. User presets from the database that match this workflow's tag (highest priority)
+	if workflowTag := wf.GetPresets().GetTag(); workflowTag != "" {
+		if dbPresetsErr != nil {
+			logging.Warn("Failed to load user presets from database", "tag", workflowTag, "error", dbPresetsErr)
 		} else {
 			for _, dbPreset := range dbPresets {
 				presetsBySlug[dbPreset.Slug] = dbPresetToProto(dbPreset)
@@ -261,16 +293,12 @@ func (s *PresetService) ListPresetsForWorkflow(
 		}
 	}
 
-	// Batch-fetch visibility state (2 queries instead of 2×N)
-	presetItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_PRESET)
-	overrides, err := s.database.ListVisibilityOverrides(ctx, userID, presetItemType)
-	if err != nil {
-		logging.Warn("Failed to batch-load visibility overrides for presets", "error", err)
+	if overridesErr != nil {
+		logging.Warn("Failed to batch-load visibility overrides for presets", "error", overridesErr)
 		overrides = nil
 	}
-	hiddenDefaults, err := s.database.ListHiddenItemDefaults(ctx, presetItemType)
-	if err != nil {
-		logging.Warn("Failed to batch-load hidden defaults for presets", "error", err)
+	if hiddenErr != nil {
+		logging.Warn("Failed to batch-load hidden defaults for presets", "error", hiddenErr)
 		hiddenDefaults = nil
 	}
 	hiddenDefaultSet := make(map[string]bool, len(hiddenDefaults))
@@ -298,40 +326,73 @@ func (s *PresetService) ListPresetsForWorkflow(
 	}), nil
 }
 
+// builtinPreset is one embedded preset file, parsed: exactly one of preset and
+// invalid is set.
+type builtinPreset struct {
+	name    string
+	preset  *preset.Preset
+	invalid *preset.InvalidPreset
+}
+
+var (
+	builtinPresetsOnce   sync.Once
+	builtinPresetsParsed []builtinPreset
+)
+
+// builtinPresets parses the embedded presets once per process. They are
+// compiled into the binary yet were re-parsed on every ListPresetsForWorkflow
+// (~4ms each). Callers copy what they take; Params is shared and read-only.
+func builtinPresets() []builtinPreset {
+	builtinPresetsOnce.Do(func() {
+		entries, err := builtin.BuiltinPresetsFS.ReadDir("presets")
+		if err != nil {
+			return
+		}
+		for _, entry := range entries {
+			if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
+				continue
+			}
+			name := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
+			path := "presets/" + entry.Name()
+			data, readErr := builtin.BuiltinPresetsFS.ReadFile(path)
+			if readErr != nil {
+				builtinPresetsParsed = append(builtinPresetsParsed, builtinPreset{name: name, invalid: &preset.InvalidPreset{Name: name, Source: "builtin", Path: path, Errors: []string{fmt.Sprintf("failed to read file: %v", readErr)}}})
+				continue
+			}
+			p, parseErr := preset.ParsePreset(data, name)
+			if parseErr != nil {
+				builtinPresetsParsed = append(builtinPresetsParsed, builtinPreset{name: name, invalid: &preset.InvalidPreset{Name: name, Source: "builtin", Path: path, Errors: []string{parseErr.Error()}}})
+				continue
+			}
+			p.Source = "builtin"
+			builtinPresetsParsed = append(builtinPresetsParsed, builtinPreset{name: name, preset: p})
+		}
+	})
+	return builtinPresetsParsed
+}
+
 // loadAllPresetsFromDB loads all builtin presets then overlays stored project presets from the DB.
 // Project presets override builtins by name (same layering as the old filesystem loader).
 func (s *PresetService) loadAllPresetsFromDB(ctx context.Context, projectID string) *preset.LoadResult {
 	presetMap := make(map[string]*preset.Preset)
 	invalidMap := make(map[string]*preset.InvalidPreset)
 
-	// 1. Load builtin presets
-	entries, err := builtin.BuiltinPresetsFS.ReadDir("presets")
-	if err == nil {
-		for _, entry := range entries {
-			if entry.IsDir() || (!strings.HasSuffix(entry.Name(), ".yaml") && !strings.HasSuffix(entry.Name(), ".yml")) {
-				continue
-			}
-			name := strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name()))
-			data, readErr := builtin.BuiltinPresetsFS.ReadFile("presets/" + entry.Name())
-			if readErr != nil {
-				invalidMap[name] = &preset.InvalidPreset{Name: name, Source: "builtin", Path: "presets/" + entry.Name(), Errors: []string{fmt.Sprintf("failed to read file: %v", readErr)}}
-				continue
-			}
-			p, parseErr := preset.ParsePreset(data, name)
-			if parseErr != nil {
-				invalidMap[name] = &preset.InvalidPreset{Name: name, Source: "builtin", Path: "presets/" + entry.Name(), Errors: []string{parseErr.Error()}}
-				continue
-			}
-			p.Source = "builtin"
-			presetMap[name] = p
+	// 1. Builtin presets (parsed once per process)
+	for _, bp := range builtinPresets() {
+		if bp.invalid != nil {
+			inv := *bp.invalid
+			invalidMap[bp.name] = &inv
+			continue
 		}
+		p := *bp.preset
+		presetMap[bp.name] = &p
 	}
 
 	// 2. Overlay stored project presets from DB
 	if projectID != "" {
-		record, err := s.database.GetProjectConfigRecord(ctx, projectID)
+		presetsJSON, err := s.database.GetProjectPresetsJSON(ctx, projectID)
 		if err == nil {
-			storedPresets, err := cfg.ParseStoredPresets(record.ProjectPresetsJSON)
+			storedPresets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil {
 				for _, sp := range storedPresets {
 					p, parseErr := preset.ParsePreset([]byte(sp.YAMLContent), sp.Name)
@@ -362,10 +423,10 @@ func (s *PresetService) loadAllPresetsFromDB(ctx context.Context, projectID stri
 func (s *PresetService) loadPresetByNameFromDB(ctx context.Context, projectID, name string) (*preset.Preset, error) {
 	// Try stored project presets first
 	if projectID != "" {
-		record, err := s.database.GetProjectConfigRecord(ctx, projectID)
+		presetsJSON, err := s.database.GetProjectPresetsJSON(ctx, projectID)
 		if err == nil || !errors.Is(err, sql.ErrNoRows) {
 			if err == nil {
-				storedPresets, parseErr := cfg.ParseStoredPresets(record.ProjectPresetsJSON)
+				storedPresets, parseErr := cfg.ParseStoredPresets(presetsJSON)
 				if parseErr == nil {
 					sp := cfg.FindStoredPresetByName(storedPresets, name)
 					if sp != nil {
@@ -463,9 +524,9 @@ func (s *PresetService) CreatePreset(
 		if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
 			return nil, err
 		}
-		record, err := s.database.GetProjectConfigRecord(ctx, req.Msg.ProjectId)
+		presetsJSON, err := s.database.GetProjectPresetsJSON(ctx, req.Msg.ProjectId)
 		if err == nil {
-			storedPresets, err := cfg.ParseStoredPresets(record.ProjectPresetsJSON)
+			storedPresets, err := cfg.ParseStoredPresets(presetsJSON)
 			if err == nil && cfg.FindStoredPresetByName(storedPresets, slug) != nil {
 				return connect.NewResponse(&reliantv1.CreatePresetResponse{
 					Success: false,
@@ -854,7 +915,8 @@ func (s *PresetService) GetDefaultPreset(
 		return nil, err
 	}
 
-	defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, req.Msg.WorkflowName, nil)
+	defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, req.Msg.WorkflowName, nil,
+		func(ref string) (*reliantv1.Workflow, error) { return s.loadWorkflow(ctx, ref, req.Msg.ProjectId) })
 
 	return connect.NewResponse(&reliantv1.GetDefaultPresetResponse{
 		Presets: defaults,
@@ -874,10 +936,11 @@ func (s *PresetService) resolveDefaultPresets(
 	ctx context.Context,
 	userID, projectID, workflowName string,
 	userOverrides map[string]string,
+	load func(ref string) (*reliantv1.Workflow, error),
 ) map[string]string {
 	defaults := make(map[string]string)
 
-	wf, err := s.loadWorkflow(ctx, workflowName, projectID)
+	wf, err := load(workflowName)
 	if err != nil {
 		logging.Warn("resolveDefaultPresets: workflow not found", "workflowName", workflowName, "error", err)
 		return defaults
@@ -942,18 +1005,44 @@ func (s *PresetService) GetDefaultPresetsBatch(
 		return nil, err
 	}
 
-	// Load every `preset.defaults.*` override the user has, once. A failure
-	// here is not fatal: it only means no overrides are applied, leaving the
-	// workflow-defined defaults, which is the same outcome as a user who has
-	// never set one.
+	// The user's `preset.defaults.*` overrides and the workflow catalog are
+	// independent reads: one query each, whatever the batch size. A settings
+	// failure is not fatal — no overrides apply, the same outcome as a user
+	// who has never set one.
+	var (
+		settings    []*db.Setting
+		settingsErr error
+		catalog     *workflowCatalog
+		wg          sync.WaitGroup
+	)
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		settings, settingsErr = s.database.ListSettingsByKey(ctx, userIDStr, "preset.defaults.%")
+	}()
+	go func() {
+		defer wg.Done()
+		catalog = loadWorkflowCatalog(ctx, s.database, userIDStr, req.Msg.ProjectId)
+	}()
+	wg.Wait()
+
 	userOverrides := make(map[string]string)
-	if settings, err := s.database.ListSettingsByKey(ctx, userIDStr, "preset.defaults.%"); err == nil {
+	if settingsErr == nil {
 		for _, setting := range settings {
 			userOverrides[setting.Key] = setting.Value
 		}
 	} else {
-		logging.Warn("GetDefaultPresetsBatch: failed to load preset default overrides", "error", err)
+		logging.Warn("GetDefaultPresetsBatch: failed to load preset default overrides", "error", settingsErr)
 	}
+
+	opts := workflowsource.Options{UserID: userIDStr, ProjectID: req.Msg.ProjectId}
+	load := memoizeRefLoader(withBuiltinCache(func(ref string) (*reliantv1.Workflow, error) {
+		resolved, err := workflowsource.Resolve(ctx, catalog, opts, ref)
+		if err != nil {
+			return nil, fmt.Errorf("workflow %q: %w", ref, err)
+		}
+		return resolved.Workflow, nil
+	}))
 
 	presetsByWorkflow := make(map[string]*reliantv1.WorkflowDefaultPresets)
 	seen := make(map[string]bool, len(req.Msg.WorkflowNames))
@@ -964,7 +1053,7 @@ func (s *PresetService) GetDefaultPresetsBatch(
 		}
 		seen[workflowName] = true
 
-		defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, workflowName, userOverrides)
+		defaults := s.resolveDefaultPresets(ctx, userIDStr, req.Msg.ProjectId, workflowName, userOverrides, load)
 		// Omit empty results so the response mirrors the single RPC's
 		// "no defaults" outcome without inventing an entry for it.
 		if len(defaults) == 0 {

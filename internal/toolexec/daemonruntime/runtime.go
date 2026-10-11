@@ -2138,7 +2138,34 @@ func buildSkillsIndex(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 	results := make([]*reliantv1.IndexedSkill, 0, len(snapshot.Definitions))
 	acc := strings.Builder{}
 
+	// Each nested repo is its own discovery source, so a workspace holding
+	// several clones of one repo (linked worktrees already collapse in
+	// repo.Discover) — or several forge
+	// projects, every one of which surfaces forge's whole embedded catalog —
+	// yields the same skill once per checkout, differing only in Source.
+	// Discovery keys them apart (NormalizedKey carries the source), but the
+	// synced catalog is addressed by SkillPath alone: the skill tool has no
+	// source parameter, so only the first copy of a path is ever loadable, and
+	// the rest make every shorter spelling of it ambiguous. A prod workspace of
+	// ~30 checkouts synced 23.6 MB of skills this way, which the server then
+	// read and parsed on every LLM call.
+	//
+	// So a copy identical to one already indexed — same path, scope and
+	// content — is dropped. Definitions are sorted by scope priority, then
+	// path, so the copy kept is the one a load already resolved to (the
+	// project root's when it has one). Copies that differ in content are all
+	// kept: this removes repetition, never a distinct skill.
+	type skillIdentity struct{ path, scope, hash string }
+	indexed := make(map[skillIdentity]struct{}, len(snapshot.Definitions))
+
 	for _, def := range snapshot.Definitions {
+		h := hashBytes([]byte(def.Body), []byte(def.Description), []byte(def.SkillPath))
+		id := skillIdentity{path: def.SkillPath, scope: string(def.Scope), hash: h}
+		if _, dup := indexed[id]; dup {
+			continue
+		}
+		indexed[id] = struct{}{}
+
 		// Compute relative path for project-scoped skills; global / builtin
 		// skills stay absolute.
 		var relPath string
@@ -2152,8 +2179,6 @@ func buildSkillsIndex(projectPath string) ([]*reliantv1.IndexedSkill, []byte) {
 		if st, err := os.Stat(def.Path); err == nil {
 			mtimeMs = st.ModTime().UTC().UnixMilli()
 		}
-
-		h := hashBytes([]byte(def.Body), []byte(def.Description), []byte(def.SkillPath))
 
 		userInvocable := ""
 		if def.UserInvocable != nil {

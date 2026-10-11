@@ -58,8 +58,15 @@ type StoredConfigStore interface {
 // StoredConfigProvider loads project config from persisted records.
 type StoredConfigProvider struct {
 	store StoredConfigStore
+	// cache is nil for an uncached provider (NewStoredConfigProvider). See
+	// NewCachedStoredConfigProvider.
+	cache *parsedConfigCache
 }
 
+// NewStoredConfigProvider returns a provider that reads and parses the
+// stored record on every call. Fine for a store that is cheap to read (the
+// daemon's filesystem store) or a caller that reads rarely; a hot reader of
+// the DB-backed store wants NewCachedStoredConfigProvider.
 func NewStoredConfigProvider(store StoredConfigStore) *StoredConfigProvider {
 	return &StoredConfigProvider{store: store}
 }
@@ -72,32 +79,67 @@ func (p *StoredConfigProvider) GetProjectConfig(ctx context.Context, ref Project
 		return nil, fmt.Errorf("project ID is required for StoredConfigProvider")
 	}
 
-	record, err := p.store.GetProjectConfigRecord(ctx, ref.ProjectID)
-	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			// Return a default empty config when the daemon hasn't synced yet.
-			// This handles the race where a workflow starts before the daemon
-			// sends the initial config snapshot (e.g. new project first chat).
-			// The daemon will sync the real config shortly; subsequent LLM calls
-			// in the same conversation will pick it up.
-			logging.Warn("Config snapshot not yet synced for project, using default empty config",
-				"projectID", ref.ProjectID,
-			)
-			return &Config{}, nil
-		}
-		return nil, fmt.Errorf("failed to load stored config for project %s: %w", ref.ProjectID, err)
+	if p.cache != nil {
+		return p.cache.get(ctx, ref.ProjectID, p.load)
 	}
 
-	cfg, err := mergeStoredConfigRecord(record)
+	cfg, _, err := p.load(ctx, ref.ProjectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return notSyncedConfig(ref.ProjectID), nil
+	}
+	return cfg, err
+}
+
+// notSyncedConfig is the answer for a project with no stored record: a
+// default empty config. This handles the race where a workflow starts before
+// the daemon sends the initial config snapshot (e.g. new project first chat).
+// The daemon will sync the real config shortly; subsequent LLM calls in the
+// same conversation will pick it up.
+func notSyncedConfig(projectID string) *Config {
+	logging.Warn("Config snapshot not yet synced for project, using default empty config",
+		"projectID", projectID,
+	)
+	return &Config{}
+}
+
+// load reads the project's stored record and parses it into a Config. size is
+// the record's payload in bytes, the cache's estimate of what the parsed
+// Config retains. A project with no record returns sql.ErrNoRows unwrapped.
+func (p *StoredConfigProvider) load(ctx context.Context, projectID string) (cfg *Config, size int64, err error) {
+	record, err := p.store.GetProjectConfigRecord(ctx, projectID)
 	if err != nil {
-		return nil, err
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, 0, err
+		}
+		return nil, 0, fmt.Errorf("failed to load stored config for project %s: %w", projectID, err)
+	}
+
+	cfg, err = mergeStoredConfigRecord(record)
+	if err != nil {
+		return nil, 0, err
 	}
 
 	if err := Validate(cfg); err != nil {
-		return nil, fmt.Errorf("stored config validation failed: %w", err)
+		return nil, 0, fmt.Errorf("stored config validation failed: %w", err)
 	}
 
-	return cfg, nil
+	return cfg, storedRecordBytes(record), nil
+}
+
+// storedRecordBytes sums the record's payload columns.
+func storedRecordBytes(record *StoredProjectConfigRecord) int64 {
+	var n int64
+	for _, s := range []*string{
+		record.UserConfigYAML, record.ProjectConfigYAML, record.LocalConfigYAML,
+		record.GlobalMemoryMD, record.ProjectMemoryMD, record.MCPConfigs,
+		record.ProjectWorkflowsJSON, record.ProjectPresetsJSON, record.ProjectScenariosJSON,
+		record.ProjectSkillsJSON, record.RepoMemoriesJSON, record.RuntimeType,
+	} {
+		if s != nil {
+			n += int64(len(*s))
+		}
+	}
+	return n
 }
 
 func mergeStoredConfigRecord(record *StoredProjectConfigRecord) (*Config, error) {

@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	cfgpkg "github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -46,6 +47,13 @@ func NewInvokeToolActivity(repo db.Repository, toolExecutor toolexec.ToolExecuto
 	return &InvokeToolActivity{
 		executeTools: NewExecuteToolsActivity(repo, toolExecutor),
 	}
+}
+
+// WithConfigProvider gives the tool-execution path the worker's project
+// config provider; see ExecuteToolsActivity.WithConfigProvider.
+func (a *InvokeToolActivity) WithConfigProvider(provider cfgpkg.ConfigProvider) *InvokeToolActivity {
+	a.executeTools.WithConfigProvider(provider)
+	return a
 }
 
 // Name returns the activity name for registration.

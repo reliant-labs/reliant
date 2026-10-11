@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"connectrpc.com/connect"
@@ -49,14 +50,23 @@ func NewWorkflowService(database db.Repository, daemonRouter toolexec.DaemonRout
 // projectBelongsToUser verifies the authenticated user owns the given project,
 // returning a Connect error if not (or if the project doesn't exist).
 func (s *WorkflowService) projectBelongsToUser(ctx context.Context, projectID string, userID string) error {
-	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.ownedProject(ctx, projectID, userID)
+	return err
+}
+
+// ownedProject is projectBelongsToUser returning the project it read.
+func (s *WorkflowService) ownedProject(ctx context.Context, projectID string, userID string) (*db.Project, error) {
+	project, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "access denied") {
-			return connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
 		}
-		return connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("database error"))
 	}
-	return nil
+	if project == nil {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("project not found"))
+	}
+	return project, nil
 }
 
 // ============================================================================
@@ -77,9 +87,38 @@ func (s *WorkflowService) ListWorkflows(
 	}
 
 	userID := auth.MustGetUserID(ctx)
-	if err := s.projectBelongsToUser(ctx, req.Msg.ProjectId, userID); err != nil {
+	project, err := s.ownedProject(ctx, req.Msg.ProjectId, userID)
+	if err != nil {
 		return nil, err
 	}
+
+	// Every read the listing makes, made once and concurrently: the user's
+	// workflows, the project's synced ones, and the builtin visibility
+	// overrides. Validation and machine analysis below resolve every ref
+	// against the catalog in memory.
+	workflowItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW)
+	var (
+		catalog          *workflowCatalog
+		wfOverrides      map[string]bool
+		wfHiddenDefaults []string
+		overridesErr     error
+		hiddenErr        error
+		reads            sync.WaitGroup
+	)
+	reads.Add(3)
+	go func() {
+		defer reads.Done()
+		catalog = loadWorkflowCatalog(ctx, s.database, userID, project.ID)
+	}()
+	go func() {
+		defer reads.Done()
+		wfOverrides, overridesErr = s.database.ListVisibilityOverrides(ctx, userID, workflowItemType)
+	}()
+	go func() {
+		defer reads.Done()
+		wfHiddenDefaults, hiddenErr = s.database.ListHiddenItemDefaults(ctx, workflowItemType)
+	}()
+	reads.Wait()
 
 	// Track workflows by slug - more specific sources override less specific
 	// Order: builtin (lowest) < project files < user (highest)
@@ -113,7 +152,7 @@ func (s *WorkflowService) ListWorkflows(
 			continue
 		}
 
-		protoWf, err := parseWorkflowYAML(data)
+		protoWf, err := parseBuiltinWorkflowFile(entry.Name(), data)
 		if err != nil {
 			logging.Error("Failed to parse builtin workflow", "error", err, "file", entry.Name())
 			invalidWorkflows = append(invalidWorkflows, &reliantv1.InvalidWorkflow{
@@ -155,31 +194,25 @@ func (s *WorkflowService) ListWorkflows(
 	}
 
 	// 2. Load project workflows from .reliant/workflows/*.yaml files (read-only, team-shared)
-	// Get project path to discover project-specific workflows
-	project, err := s.database.GetProject(ctx, req.Msg.ProjectId)
-	if err != nil {
-		logging.Warn("Failed to get project for workflow discovery", "error", err, "project_id", req.Msg.ProjectId)
-	} else if project != nil {
-		projectWorkflows, projectInvalid := discoverProjectWorkflowsFromDB(s.database, ctx, project.ID)
-		for _, pwf := range projectWorkflows {
-			// Project workflows use slug generated from workflow name (not filename) as key
-			// This ensures user workflows with the same name properly override project workflows
-			// Use generateSlug to match user workflow slug generation
-			// Fallback to filename if name is empty (shouldn't happen, but safety check)
-			if pwf.Name == "" {
-				workflowsBySlug[pwf.Filename] = pwf
-				continue
-			}
-			slug := generateSlug(pwf.Name)
-			if slug == "" {
-				// If slug generation fails, fallback to filename
-				workflowsBySlug[pwf.Filename] = pwf
-				continue
-			}
-			workflowsBySlug[slug] = pwf
+	projectWorkflows, projectInvalid := discoverProjectWorkflowsFromDB(catalog, ctx, project.ID)
+	for _, pwf := range projectWorkflows {
+		// Project workflows use slug generated from workflow name (not filename) as key
+		// This ensures user workflows with the same name properly override project workflows
+		// Use generateSlug to match user workflow slug generation
+		// Fallback to filename if name is empty (shouldn't happen, but safety check)
+		if pwf.Name == "" {
+			workflowsBySlug[pwf.Filename] = pwf
+			continue
 		}
-		invalidWorkflows = append(invalidWorkflows, projectInvalid...)
+		slug := generateSlug(pwf.Name)
+		if slug == "" {
+			// If slug generation fails, fallback to filename
+			workflowsBySlug[pwf.Filename] = pwf
+			continue
+		}
+		workflowsBySlug[slug] = pwf
 	}
+	invalidWorkflows = append(invalidWorkflows, projectInvalid...)
 
 	// 3. Load user's workflows from database (user-owned, available across all projects).
 	// Default listing is chat-safe: only workflows a run would accept — status
@@ -187,16 +220,23 @@ func (s *WorkflowService) ListWorkflows(
 	// a complete workflow can fall behind a stricter validator). Management UIs
 	// such as the Workflow Hub opt into every workflow, drafts included, with
 	// include_hidden=true; each carries its status and current findings.
-	dbDrafts, err := s.database.ListWorkflowDraftsByUser(ctx, userID)
-	if err != nil {
-		logging.Error("Failed to list workflows from database", "error", err, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
+	if catalog.draftsErr != nil {
+		logging.Error("Failed to list workflows from database", "error", catalog.draftsErr, "user_id", userID, "include_hidden", req.Msg.IncludeHidden)
 		// Continue with builtins and project workflows
 	} else {
-		for _, draft := range dbDrafts {
+		// One loader for every workflow validated here, so a ref several of
+		// them share (builtin://agent, a helper of the user's) resolves once.
+		// Its rule is validateWorkflowDefinition's: DraftLoader's, with each
+		// workflow resolving to itself.
+		validationRefs := memoizeRefLoader(withBuiltinCache(workflowsource.DraftLoader(ctx, catalog, userID, nil)))
+		validationLoader := func(self *reliantv1.Workflow) v2.WorkflowLoader {
+			return resolvingToSelf(self, validationRefs)
+		}
+		for _, draft := range catalog.drafts {
 			if !req.Msg.IncludeHidden && (draft.IsHidden || draft.Status != db.WorkflowDraftStatusComplete) {
 				continue
 			}
-			check := s.validateWorkflowDefinition(ctx, userID, []byte(draft.Definition))
+			check := validateWorkflowDefinitionWith([]byte(draft.Definition), validationLoader)
 			if !req.Msg.IncludeHidden && !check.valid() {
 				continue
 			}
@@ -210,16 +250,13 @@ func (s *WorkflowService) ListWorkflows(
 		}
 	}
 
-	// Batch-fetch visibility state for builtin workflows (2 queries instead of 2×N)
-	workflowItemType := int32(reliantv1.HiddenItemType_HIDDEN_ITEM_TYPE_WORKFLOW)
-	wfOverrides, err := s.database.ListVisibilityOverrides(ctx, userID, workflowItemType)
-	if err != nil {
-		logging.Warn("Failed to batch-load visibility overrides for workflows", "error", err)
+	// Visibility state for builtin workflows (read above, 2 queries instead of 2×N)
+	if overridesErr != nil {
+		logging.Warn("Failed to batch-load visibility overrides for workflows", "error", overridesErr)
 		wfOverrides = nil
 	}
-	wfHiddenDefaults, err := s.database.ListHiddenItemDefaults(ctx, workflowItemType)
-	if err != nil {
-		logging.Warn("Failed to batch-load hidden defaults for workflows", "error", err)
+	if hiddenErr != nil {
+		logging.Warn("Failed to batch-load hidden defaults for workflows", "error", hiddenErr)
 		wfHiddenDefaults = nil
 	}
 	wfHiddenDefaultSet := make(map[string]bool, len(wfHiddenDefaults))
@@ -229,11 +266,17 @@ func (s *WorkflowService) ListWorkflows(
 
 	// What keeps each workflow from running with no machine, at its declared
 	// defaults: the Automations form offers "No machine" only when this is
-	// empty. Refs resolve through the same loader a run uses.
-	refLoader := func(ref string) (*reliantv1.Workflow, error) {
-		return launch.ResolveRunWorkflow(ctx, s.database, userID, ref, req.Msg.ProjectId)
-	}
-	preflight := tools.PreflightConfig()
+	// empty. Refs resolve by the rule a run uses (workflowsource), against
+	// the catalog read above, and each distinct ref once.
+	refOpts := workflowsource.Options{UserID: userID, ProjectID: project.ID}
+	refLoader := memoizeRefLoader(withBuiltinCache(func(ref string) (*reliantv1.Workflow, error) {
+		resolved, err := workflowsource.Resolve(ctx, catalog, refOpts, ref)
+		if err != nil {
+			return nil, err
+		}
+		return resolved.Workflow, nil
+	}))
+	preflight := memoizePreflight(tools.PreflightConfig())
 	for _, wf := range workflowsBySlug {
 		def := &reliantv1.Workflow{Name: wf.Name, Nodes: wf.Nodes, Edges: wf.Edges, Inputs: wf.Inputs}
 		req := v2.MachineRequirements(def, nil, refLoader, preflight)
@@ -298,7 +341,7 @@ func userWorkflowListItem(draft *db.WorkflowDraft, check workflowCheck) (*relian
 
 // discoverProjectWorkflowsFromDB loads project workflows from the stored config record (synced by daemon).
 // Returns both valid workflows and invalid workflows that failed to parse.
-func discoverProjectWorkflowsFromDB(repo db.Repository, ctx context.Context, projectID string) ([]*reliantv1.WorkflowListItem, []*reliantv1.InvalidWorkflow) {
+func discoverProjectWorkflowsFromDB(repo workflowsource.ProjectStore, ctx context.Context, projectID string) ([]*reliantv1.WorkflowListItem, []*reliantv1.InvalidWorkflow) {
 	// The project's workflows as the CLI indexes them on disk
 	// (workflowref): a file no ref can address — no name:, a name another
 	// file also declares — is listed as invalid, with the reason, rather
@@ -1427,14 +1470,4 @@ func (s *WorkflowService) ValidateWorkflow(
 		Valid:  check.valid(),
 		Errors: check.protoErrors(true),
 	}), nil
-}
-
-// createValidationWorkflowLoader creates a WorkflowLoader for validating one of
-// the user's workflows, resolving refs the way run start does
-// (workflowsource.DraftLoader): only a complete workflow loads, and a draft
-// child is an error (a parent that refs a draft would fail at run start). The
-// workflow being validated resolves to itself, so a workflow that spawns
-// itself can be validated — and marked complete — while it is still a draft.
-func (s *WorkflowService) createValidationWorkflowLoader(ctx context.Context, userID string, self *reliantv1.Workflow) v2.WorkflowLoader {
-	return workflowsource.DraftLoader(ctx, s.database, userID, self)
 }
