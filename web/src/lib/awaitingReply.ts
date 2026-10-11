@@ -14,12 +14,15 @@
  * send can write right after the user's message, and the notices the server
  * posts about a run, must not make an unanswered message look answered.
  * Messages on another thread (a sub-agent's) are not the conversation's turns
- * either.
+ * either, and nor is a send that failed ("Not sent", lib/pendingSends.ts): no
+ * run will ever read it.
  */
 
 import { MessageRole } from "@/gen/reliant/v1/chat_pb";
+import { FAILED_SEND_PREFIX } from "./pendingSends";
 
 export interface TurnLike {
+  id?: string;
   role: MessageRole;
   thread?: string;
 }
@@ -40,6 +43,7 @@ export function unansweredMessage<T extends TurnLike>(
     const message = messages[i]!;
     if (mainThreadId && message.thread && message.thread !== mainThreadId) continue;
     if (message.role === MessageRole.SYSTEM) continue;
+    if (message.id?.startsWith(FAILED_SEND_PREFIX)) continue;
     return message.role === MessageRole.USER ? message : undefined;
   }
   return undefined;

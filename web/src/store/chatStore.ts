@@ -105,9 +105,17 @@ import { notifyManager } from "@tanstack/react-query";
 import { initEventBus } from "../lib/events";
 import {
   beginPendingSend,
+  beginQueuedSend,
   endPendingSend,
+  endQueuedSend,
+  failedSendId,
   newClientMessageId,
+  optimisticSendId,
+  type QueuedRow,
 } from "../lib/pendingSends";
+import { isDaemonConnectingError } from "../lib/daemon-errors";
+import { sendWithDaemonWait } from "../lib/daemon-retry";
+import { sendOnExistingChat } from "../lib/chatSendRouting";
 import { QUEUED_SENDER_KIND_HUMAN } from "../api/chat-grpc";
 import {
   approvalKeys,
@@ -923,6 +931,8 @@ interface ChatStoreState {
       workflow?: string | null;
       workflowParams?: Record<string, unknown>;
       selectedPresets?: Record<string, string>;
+      // Same as sendMessage's: the id this message keeps on screen.
+      clientMessageId?: string;
     },
   ) => Promise<Chat>;
   // Methods for chat state management
@@ -943,8 +953,21 @@ interface ChatStoreState {
       workflowParams?: Record<string, unknown>;
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
+      // The id this message keeps on screen. A caller that may send the same
+      // message more than once (ChatContainer's retry across a machine coming
+      // up) passes one id for every attempt, so they are one bubble.
+      clientMessageId?: string;
     },
   ) => Promise<void>;
+  // A send that will not go through: its bubble becomes "Not sent", with Retry
+  // and Remove (FailedSendStatus). sendMessage and startExistingChat call it
+  // for a final error; a caller that gave up retrying a machine calls it too.
+  markSendFailed: (chatId: string, clientMessageId: string) => void;
+  // Send a failed message again, the way the composer sends. Rejects if this
+  // attempt fails too (its bubble is "Not sent" again).
+  retryFailedSend: (chatId: string, clientMessageId: string) => Promise<void>;
+  // Drop a failed message from the transcript.
+  discardFailedSend: (chatId: string, clientMessageId: string) => void;
   loadMessages: (chatId: string) => Promise<void>;
   // Fetch the next page of OLDER messages and PREPEND them to the cache.
   // Resolves to true when more history may still remain, false when the top of
@@ -1118,6 +1141,51 @@ function buildOptimisticUserMessage(
     sequenceNumber: BigInt(0),
     attachments: optimisticAttachments.length > 0 ? optimisticAttachments : [],
   };
+}
+
+// What it takes to send a message again: everything the send was given. Kept
+// from the start of a send on an existing chat until it succeeds or is
+// discarded, so a send that fails can be retried as the same message. Keyed by
+// client message id. In memory only: after a reload a failed message can be
+// removed but not resent (canRetryFailedSend).
+interface SendPayload {
+  chatId: string;
+  content: string;
+  attachmentIds?: string[];
+  options: {
+    workflow?: string | null;
+    workflowParams?: Record<string, unknown>;
+    targetThread?: string | null;
+    selectedPresets?: Record<string, string>;
+  };
+}
+const sendPayloads = new Map<string, SendPayload>();
+
+/** Whether a failed send can still be sent again from here. */
+export function canRetryFailedSend(clientMessageId: string): boolean {
+  return sendPayloads.has(clientMessageId);
+}
+
+/**
+ * The chat's run is executing, so SendMessage will queue a message in the
+ * thread's mailbox rather than save it (the server's test is "the workflow is
+ * Active"). A run waiting on its machine or on an answer is still executing.
+ */
+function isRunExecuting(chatId: string): boolean {
+  const activity = useActivityStore.getState().activities.get(chatId);
+  return (
+    activity === ChatActivity.RUNNING ||
+    activity === ChatActivity.AWAITING_INPUT ||
+    activity === ChatActivity.WAITING_FOR_DAEMON
+  );
+}
+
+/** Take a send's row back out of the pending-queue strip. */
+function withdrawFromQueueStrip(chatId: string, thread: string, rowId: string): void {
+  // The strip's one "this row is gone" path (useQueuedAgentMessages): it drops
+  // the row now, and a stale read cannot bring it back. Safe because the row id
+  // is never sent again — a retry mints a new one.
+  initEventBus().emit("agentMailbox:drained", { chatId, thread, messageIds: [rowId] });
 }
 
 // Shared by startChat and startExistingChat: home the chat the server returned,
@@ -1302,33 +1370,59 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       workflow?: string | null;
       workflowParams?: Record<string, unknown>;
       selectedPresets?: Record<string, string>;
+      clientMessageId?: string;
     },
   ) => {
-    const workflowParams = options?.workflowParams ?? {};
+    const { clientMessageId: givenId, ...sendOptions } = options ?? {};
+    const workflowParams = sendOptions.workflowParams ?? {};
+    const clientMessageId = givenId ?? newClientMessageId();
+    const optimisticId = optimisticSendId(clientMessageId);
+    sendPayloads.set(clientMessageId, {
+      chatId,
+      content: firstMessage,
+      attachmentIds,
+      options: sendOptions,
+    });
 
     // Seed the placeholder BEFORE the request. This chat (a branch) is already
     // open and subscribed, so the server's echo of the persisted message can
     // arrive on the stream before StartChat resolves. Seeded after, the
     // placeholder lands behind its own echo, nothing ever retires it, and the
     // message renders twice until the next snapshot. Appended, not replaced:
-    // the cache holds the branch's inherited history. Same as sendMessage, a
-    // failed start leaves it in place as the recoverable copy of the text.
+    // the cache holds the branch's inherited history. An earlier attempt at
+    // this message — a SendMessage the server refused as "not started" — is
+    // replaced, not added to.
     patchMessagesCache(chatId, (msgs) => [
-      ...msgs,
-      buildOptimisticUserMessage(firstMessage, attachmentIds),
+      ...msgs.filter(
+        (m) => m.id !== optimisticId && m.id !== failedSendId(clientMessageId),
+      ),
+      buildOptimisticUserMessage(firstMessage, attachmentIds, {
+        id: optimisticId,
+        sentAt: new Date().toISOString(),
+      }),
     ]);
 
-    // The chat names its own project; the selected project may be a different
-    // one (deep link, cross-project tab), and the server rejects a mismatch.
-    const chat = await api.chatsV2.start({
-      chat_id: chatId,
-      messages: [{ role: MessageRole.USER, content: firstMessage }],
-      attachments: attachmentIds,
-      workflow: options?.workflow ?? undefined,
-      workflow_params:
-        Object.keys(workflowParams).length > 0 ? workflowParams : undefined,
-      selectedPresets: options?.selectedPresets,
-    });
+    let chat: Chat;
+    try {
+      // The chat names its own project; the selected project may be a different
+      // one (deep link, cross-project tab), and the server rejects a mismatch.
+      chat = await api.chatsV2.start({
+        chat_id: chatId,
+        messages: [{ role: MessageRole.USER, content: firstMessage }],
+        attachments: attachmentIds,
+        workflow: sendOptions.workflow ?? undefined,
+        workflow_params:
+          Object.keys(workflowParams).length > 0 ? workflowParams : undefined,
+        selectedPresets: sendOptions.selectedPresets,
+      });
+    } catch (error) {
+      // Same as sendMessage: a machine coming up is the caller's to retry.
+      if (!isDaemonConnectingError(error)) {
+        get().markSendFailed(chatId, clientMessageId);
+      }
+      throw error;
+    }
+    sendPayloads.delete(clientMessageId);
 
     applyFirstSend(chat, chat.projectId, firstMessage, attachmentIds);
     return chat;
@@ -1595,38 +1689,75 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       workflowParams?: Record<string, unknown>;
       targetThread?: string | null;
       selectedPresets?: Record<string, string>;
+      clientMessageId?: string;
     },
   ) => {
     if (!getChatFromCache(chatId)) {
       throw new Error(`No state for chat ${chatId}`);
     }
 
+    // The id this message keeps wherever it is shown. If the run is
+    // executing, the server queues the message under this id instead of
+    // writing it to the transcript (see lib/pendingSends.ts).
+    const { clientMessageId: givenId, ...sendOptions } = options ?? {};
+    const clientMessageId = givenId ?? newClientMessageId();
+    const optimisticId = optimisticSendId(clientMessageId);
+    const sentAt = new Date().toISOString();
+    const thread =
+      options?.targetThread || getChatFromCache(chatId)?.workflowId || "";
+    const queuedRow: QueuedRow = {
+      id: clientMessageId,
+      body: content,
+      created_at: sentAt,
+      sender_kind: QUEUED_SENDER_KIND_HUMAN,
+      attachments: attachmentIds ?? [],
+    };
+    sendPayloads.set(clientMessageId, { chatId, content, attachmentIds, options: sendOptions });
+
+    // Where the message is shown while the request is in flight: where it will
+    // end up. A run that is executing gets it queued, so it goes in the
+    // pending-queue strip from the start (the composer's queue does the same,
+    // ChatInput.handleQueue); otherwise in the transcript. The server has the
+    // final word, and the response handling below moves it if this was wrong.
+    const showInQueue = !!thread && isRunExecuting(chatId);
+
     try {
       logger.info("[sendMessage] 📤 Sending message", {
         chatId: chatId.slice(0, 8),
         content: content.slice(0, 50),
         workflow: options?.workflow,
+        showInQueue,
       });
 
       // DON'T set busy=true optimistically - let WebSocket workflow_execution updates drive busy state
       // This prevents stuck state if backend crashes before creating workflow_execution
 
-      // The id this message keeps wherever it is shown. If the run is
-      // executing, the server queues the message under this id instead of
-      // writing it to the transcript (see lib/pendingSends.ts).
-      const clientMessageId = newClientMessageId();
-      const optimisticId = `optimistic-user-${clientMessageId}`;
-      const sentAt = new Date().toISOString();
-      // Append the optimistic user message to the RQ message cache (the single
-      // source of truth) BEFORE the request, so the streamed echo of the
-      // persisted message always arrives after it and retires it.
-      patchMessagesCache(chatId, (msgs) => [
-        ...msgs,
-        buildOptimisticUserMessage(content, attachmentIds, {
-          id: optimisticId,
-          sentAt,
-        }),
-      ]);
+      notifyManager.batch(() => {
+        // An earlier attempt at this message (one id across a machine wait)
+        // is replaced, not added to.
+        patchMessagesCache(chatId, (msgs) =>
+          msgs.filter(
+            (m) => m.id !== optimisticId && m.id !== failedSendId(clientMessageId),
+          ),
+        );
+        if (showInQueue) {
+          // Kept by every mailbox read until the server's row (same id) is in
+          // one, so a read that lands mid-send cannot erase it.
+          beginQueuedSend({ chatId, thread, row: queuedRow });
+          initEventBus().emit("agentMailbox:queued", { chatId, thread, message: queuedRow });
+        } else {
+          // Append the optimistic user message to the RQ message cache (the
+          // single source of truth) BEFORE the request, so the streamed echo
+          // of the persisted message always arrives after it and retires it.
+          patchMessagesCache(chatId, (msgs) => [
+            ...msgs,
+            buildOptimisticUserMessage(content, attachmentIds, {
+              id: optimisticId,
+              sentAt,
+            }),
+          ]);
+        }
+      });
       // Bump the chat timestamp when a message is sent, in the React Query
       // DETAIL cache only (projectId omitted → list untouched). The sidebar
       // renders from the RQ list, so patching the list would newly reorder
@@ -1645,7 +1776,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // The pause settles either way (its rejection is handled in pauseChat).
       await pausesInFlight.get(chatId);
 
-      const sendOptions = {
+      const rpcOptions = {
         ...(options?.workflow !== undefined && { workflow: options.workflow }),
         ...(Object.keys(workflowParams).length > 0 && {
           workflow_params: workflowParams,
@@ -1659,25 +1790,39 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       };
 
       let response: Awaited<ReturnType<typeof api.chatsV2.sendMessage>>;
-      beginPendingSend(clientMessageId);
+      // In the transcript, the strip must not show the server's row a second
+      // time while the request is in flight.
+      if (!showInQueue) beginPendingSend(clientMessageId);
       try {
         response = await api.chatsV2.sendMessage(
           chatId,
           content,
           attachmentIds,
-          sendOptions,
+          rpcOptions,
         );
+      } catch (error) {
+        // A machine still coming up is retried by the caller with this same
+        // id (ChatContainer, sendWithDaemonWait), so the message stays as it
+        // is, pending. Anything else is final: the message did not go, and
+        // saying so — with a way to send it again — beats a dimmed bubble that
+        // never resolves (a refused send leaves nothing on the server, #688).
+        if (!isDaemonConnectingError(error)) {
+          get().markSendFailed(chatId, clientMessageId);
+        }
+        throw error;
       } finally {
         endPendingSend(clientMessageId);
+        endQueuedSend(clientMessageId);
       }
+      sendPayloads.delete(clientMessageId);
 
-      // Queued, not saved: the run was executing, so the message waits in the
-      // thread's mailbox for its next turn and is shown in the pending-queue
-      // strip, not the transcript. Drop the optimistic entry and hand the row
-      // to the strip in ONE batch, so no render shows it twice or not at all.
       if (response.queued) {
-        const thread =
-          options?.targetThread || getChatFromCache(chatId)?.workflowId || "";
+        // Queued, not saved: the run was executing, so the message waits in
+        // the thread's mailbox for its next turn and is shown in the
+        // pending-queue strip, not the transcript. Drop any optimistic entry
+        // and hand the row to the strip in ONE batch, so no render shows it
+        // twice or not at all. (Already in the strip, this is a no-op: the
+        // strip dedups by id, and the row's id is clientMessageId.)
         notifyManager.batch(() => {
           patchMessagesCache(chatId, (msgs) =>
             msgs.filter((m) => m.id !== optimisticId),
@@ -1685,14 +1830,28 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           initEventBus().emit("agentMailbox:queued", {
             chatId,
             thread,
-            message: {
-              id: response.messageId,
-              body: content,
-              created_at: sentAt,
-              sender_kind: QUEUED_SENDER_KIND_HUMAN,
-              attachments: attachmentIds ?? [],
-            },
+            message: { ...queuedRow, id: response.messageId },
           });
+        });
+      } else if (showInQueue) {
+        // The run had stopped by the time the message arrived, so the server
+        // saved it to the transcript after all. Move it there in one batch —
+        // as an optimistic entry its echo will retire, unless the echo has
+        // already arrived, in which case the transcript has it.
+        notifyManager.batch(() => {
+          withdrawFromQueueStrip(chatId, thread, clientMessageId);
+          const echoed = getMessagesFromCache(chatId).some(
+            (m) => m.id === response.messageId,
+          );
+          if (!echoed) {
+            patchMessagesCache(chatId, (msgs) => [
+              ...msgs,
+              buildOptimisticUserMessage(content, attachmentIds, {
+                id: optimisticId,
+                sentAt,
+              }),
+            ]);
+          }
         });
       }
 
@@ -1739,6 +1898,79 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       logger.error("Failed to send message:", error);
       throw error;
     }
+  },
+
+  markSendFailed: (chatId: string, clientMessageId: string) => {
+    const payload = sendPayloads.get(clientMessageId);
+    const optimisticId = optimisticSendId(clientMessageId);
+    const failedId = failedSendId(clientMessageId);
+    const thread =
+      payload?.options.targetThread || getChatFromCache(chatId)?.workflowId || "";
+    notifyManager.batch(() => {
+      // A send shown in the strip comes back to the transcript to fail: the
+      // strip lists messages the agent WILL read, and this one it never will.
+      if (thread) withdrawFromQueueStrip(chatId, thread, clientMessageId);
+      patchMessagesCache(chatId, (msgs) => {
+        const pending = msgs.find((m) => m.id === optimisticId);
+        const rest = msgs.filter((m) => m.id !== optimisticId && m.id !== failedId);
+        if (pending) return [...rest, { ...pending, id: failedId }];
+        if (!payload) return msgs;
+        return [
+          ...rest,
+          buildOptimisticUserMessage(payload.content, payload.attachmentIds, {
+            id: failedId,
+            sentAt: new Date().toISOString(),
+          }),
+        ];
+      });
+    });
+  },
+
+  retryFailedSend: async (chatId: string, clientMessageId: string) => {
+    const payload = sendPayloads.get(clientMessageId);
+    if (!payload) {
+      // A reload drops the payload, never the text on screen: leave the entry
+      // for the user to copy.
+      throw new Error("This message can no longer be resent. Copy it and send it again.");
+    }
+    // The retry is a new send with a new id, replacing the failed entry in the
+    // same commit. Not the old id: a strip tombstone, or a row the server kept
+    // from a failure it never reported, may already hold it.
+    get().discardFailedSend(chatId, clientMessageId);
+    const retryId = newClientMessageId();
+    try {
+      // The same path the composer takes (ChatContainer): routed for a chat
+      // that still needs starting, and retried while its machine comes up.
+      await sendWithDaemonWait({
+        action: () =>
+          sendOnExistingChat(
+            getChatFromCache(chatId),
+            chatId,
+            payload.content,
+            payload.attachmentIds,
+            {
+              ...payload.options,
+              workflow: payload.options.workflow ?? null,
+              clientMessageId: retryId,
+            },
+            {
+              startExistingChat: get().startExistingChat,
+              sendMessage: get().sendMessage,
+            },
+          ),
+      });
+    } catch (error) {
+      // sendMessage leaves a machine-wait failure pending for its caller —
+      // which is this. Out of budget, it is a failure like any other.
+      if (isDaemonConnectingError(error)) get().markSendFailed(chatId, retryId);
+      throw error;
+    }
+  },
+
+  discardFailedSend: (chatId: string, clientMessageId: string) => {
+    sendPayloads.delete(clientMessageId);
+    const failedId = failedSendId(clientMessageId);
+    patchMessagesCache(chatId, (msgs) => msgs.filter((m) => m.id !== failedId));
   },
 
   // Load recent messages for a chat (paginated from the end)
@@ -3349,7 +3581,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     if (!hasMessagesCache(chatId)) return 0n;
     // An optimistic user message is local-only: no cursor describes it. A
     // replay retires it only when the real message arrives, so one stranded
-    // by a failed send would outlive the reopen. A snapshot replaces it.
+    // by a send that never answered would outlive the reopen. A snapshot
+    // replaces it. (A send that failed is "optimistic-failed-*" instead, and
+    // both a replay and a snapshot keep it, with its Retry.)
     if (
       getMessagesFromCache(chatId).some((m) =>
         m.id.startsWith("optimistic-user-"),
@@ -3927,6 +4161,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // chat has nothing left to stream, and a deleted one would get every
     // future reconnect refused. A no-op unless this chat is the subscribed one.
     getGlobalUpdatesStore()?.unsubscribeFromChatDetails(chatId);
+    for (const [clientMessageId, payload] of sendPayloads) {
+      if (payload.chatId === chatId) sendPayloads.delete(clientMessageId);
+    }
     clearStreamingBuffersForChat(chatId);
     clearMessagesCache(chatId);
     // The execution tree is retained exactly as long as the messages (gcTime:
@@ -3982,6 +4219,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     processedTaskToolCallIds.clear();
     olderMessagesInFlight.clear();
     chatStreamCursors.clear();
+    sendPayloads.clear();
 
     // Drop the homed Chat objects from the React Query caches (the single
     // source of truth) so a logout clears chat data everywhere.

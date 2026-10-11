@@ -57,6 +57,30 @@ describe("latestTurnIsUsers", () => {
     ).toBe(true);
   });
 
+  it("does not count a send that failed: no run will read it", () => {
+    // A held run's footer must not say the failed message is "queued".
+    expect(
+      latestTurnIsUsers(
+        [
+          { id: "m1", role: MessageRole.USER, thread: MAIN },
+          { id: "m2", role: MessageRole.ASSISTANT, thread: MAIN },
+          { id: "optimistic-failed-5f2c", role: MessageRole.USER, thread: "" },
+        ],
+        MAIN,
+      ),
+    ).toBe(false);
+    // A send still in flight does count.
+    expect(
+      latestTurnIsUsers(
+        [
+          { id: "m2", role: MessageRole.ASSISTANT, thread: MAIN },
+          { id: "optimistic-user-5f2c", role: MessageRole.USER, thread: "" },
+        ],
+        MAIN,
+      ),
+    ).toBe(true);
+  });
+
   it("is false for an empty conversation", () => {
     expect(latestTurnIsUsers([], MAIN)).toBe(false);
   });

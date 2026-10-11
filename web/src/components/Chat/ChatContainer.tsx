@@ -37,6 +37,7 @@ import { logger } from "../../lib/logger";
 import { toast } from "../../lib/toast-manager";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
+import { newClientMessageId } from "../../lib/pendingSends";
 
 // Stable empty references
 const EMPTY_ARRAY: never[] = [];
@@ -147,8 +148,11 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
       });
 
       // The send is wrapped so a machine that is still coming online defers the
-      // message instead of rejecting it. The composer only clears once this
-      // resolves, so the user's text survives either way.
+      // message instead of rejecting it. Every attempt is the same message —
+      // one id — so a retry replaces its bubble rather than adding another.
+      // A send that fails for good stays in the transcript as "Not sent", with
+      // Retry (chatStore.markSendFailed).
+      const clientMessageId = newClientMessageId();
       const performSend = async () => {
         if (!currentChat) {
           logger.info(
@@ -193,6 +197,7 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
                 workflowParams,
                 targetThread,
                 selectedPresets: presetsForSend,
+                clientMessageId,
               },
               {
                 startExistingChat: chatActions.startExistingChat,
@@ -212,7 +217,11 @@ export function ChatContainer({ tabId, isFocused = true, hideChatTitle }: ChatCo
         if (isDaemonConnectingError(error)) {
           // Retried for the full budget and the machine never came up. This is
           // now a real failure, so say so plainly rather than implying it will
-          // resolve on its own.
+          // resolve on its own. The store left the message pending for these
+          // retries; it is failed now, with a Retry on it.
+          if (currentChat && chatId) {
+            useChatStore.getState().markSendFailed(chatId, clientMessageId);
+          }
           toast.error(
             new Error("Your machine didn't come online, so the message wasn't sent."),
           );

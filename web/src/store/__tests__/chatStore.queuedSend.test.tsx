@@ -5,10 +5,12 @@
  * SendMessage to an executing run does not write the message into the
  * transcript: it queues it in the thread's mailbox (it would otherwise land
  * before the in-flight reply that never saw it) and answers queued=true with
- * the queued row's id. The composer still shows the send at once, as an
- * optimistic transcript entry; that entry and the pending-queue strip's row are
- * the same message, keyed by the id the client chose and sent as
- * client_message_id.
+ * the queued row's id. When the client's activity does not (yet) say the run is
+ * executing, the composer shows the send at once as an optimistic transcript
+ * entry; that entry and the pending-queue strip's row are the same message,
+ * keyed by the id the client chose and sent as client_message_id. (A run the
+ * client knows is executing gets the message in the strip from the start:
+ * chatStore.sendLifecycle.test.tsx.)
  *
  * Driven through the real send action, the real strip hook and the real
  * chat-update path (globalUpdatesStore.handleChatUpdate) that delivers the
