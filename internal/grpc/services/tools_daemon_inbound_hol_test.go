@@ -34,8 +34,8 @@ func (r *stallingRepo) stall(name string) {
 	<-r.release
 }
 
-func (r *stallingRepo) TouchDaemonAttachmentIfNewer(context.Context, string, time.Time) error {
-	r.stall("TouchDaemonAttachmentIfNewer")
+func (r *stallingRepo) RenewDaemonAttachment(context.Context, *db.DaemonAttachment) error {
+	r.stall("RenewDaemonAttachment")
 	return nil
 }
 

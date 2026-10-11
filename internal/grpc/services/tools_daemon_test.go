@@ -880,13 +880,14 @@ func TestSweepStaleConnectionsRemovesHalfOpenAndFiresListeners(t *testing.T) {
 		UserID: freshUserID,
 	}))
 
-	// Stale connection: registered long ago, last activity 5 minutes ago —
-	// well past the 90s threshold.
+	// Stale connection: registered long ago, nothing read from it for 5
+	// minutes — well past the 90s threshold.
 	staleConn := &daemonConnection{
 		userID:            staleUserID,
 		daemonID:          staleDaemonID,
 		connectedAt:       baseTime.Add(-10 * time.Minute),
 		lastActivity:      baseTime.Add(-5 * time.Minute),
+		lastReceived:      baseTime.Add(-5 * time.Minute),
 		sendCh:            make(chan *reliantv1.ServerMessage, 4),
 		done:              make(chan struct{}),
 		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),
@@ -899,6 +900,7 @@ func TestSweepStaleConnectionsRemovesHalfOpenAndFiresListeners(t *testing.T) {
 		daemonID:          freshDaemonID,
 		connectedAt:       baseTime.Add(-10 * time.Minute),
 		lastActivity:      baseTime, // active now
+		lastReceived:      baseTime,
 		sendCh:            make(chan *reliantv1.ServerMessage, 4),
 		done:              make(chan struct{}),
 		terminalSubs:      make(map[string][]chan *toolexec.TerminalOutputEvent),

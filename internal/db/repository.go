@@ -430,6 +430,9 @@ type Repository interface {
 	ApplyDaemonRegistrySnapshot(ctx context.Context, snap RegistrySnapshotApply) (RegistrySnapshotResult, error)
 	UpsertDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
 	TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string, activityAt time.Time) error
+	// RenewDaemonAttachment renews a held stream's lease, re-creating a row
+	// the TTL reaper deleted under it. See repository_impl.go.
+	RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) error
 	// UpdateDaemonAttachmentMemory records heartbeat-reported workspace memory
 	// telemetry (used/limit/pressure) on the attachment record. No-op when the
 	// row doesn't exist.

@@ -19,8 +19,8 @@ import (
 // OWN vantage point: for every daemon stream THIS process currently holds,
 // the connection registry (daemon_attachment) must still vouch for that
 // daemon. The registry lease (last_stream_activity) is renewed ONLY by
-// INBOUND traffic — the heartbeat handler's direct TouchDaemonAttachmentIfNewer
-// and the daemonstate activity events, both in handleIncoming — while the
+// INBOUND traffic — the receive loop's lease renewal on every heartbeat it
+// reads (renewLease) and the daemonstate activity events — while the
 // in-memory conn.lastActivity ALSO bumps on our own sends (runSender). So a
 // held stream whose registry row has gone stale means nothing is arriving
 // from that daemon even though the gateway is still talking to it: a dead

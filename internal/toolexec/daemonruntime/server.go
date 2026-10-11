@@ -80,7 +80,9 @@ func (s *daemonServer) ConnectGateway(
 
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat()
-	go d.runHeartbeats(heartbeatCtx)
+	// No session liveness here: the gateway dialed this stream and owns
+	// noticing its death (its stale-connection sweeper).
+	go d.runHeartbeats(heartbeatCtx, nil)
 
 	// Receive loop — same as runSession but reading from the server-side stream.
 	for {

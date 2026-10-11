@@ -18,6 +18,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"connectrpc.com/connect"
@@ -132,6 +133,11 @@ type daemonClient struct {
 	// daemon id aside because the gateway said another user owns it. The
 	// recovery runs at most once per process; see setAsideForeignDaemonID.
 	foreignIDSetAside bool
+
+	// timing is the session's heartbeat and liveness cadence
+	// (session_liveness.go). Zero in production, meaning the defaults; tests
+	// shorten it.
+	timing sessionTiming
 }
 
 // projectSnapshot builds the config snapshot for projectPath.
@@ -835,9 +841,35 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 		logging.Warn(logPrefix+" Failed to send project discovery", "error", err)
 	}
 
+	// End-to-end liveness (session_liveness.go). A stream the gateway has
+	// stopped reading, or stopped writing, is closed from this side so the
+	// loop below returns and run() redials — the transport would otherwise
+	// keep it open indefinitely.
+	liveness := newSessionLiveness(d.timing, time.Now())
+	var deadStream atomic.Pointer[error]
+	go func() {
+		ticker := time.NewTicker(liveness.timing.livenessCheckInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-sessionOver:
+				return
+			case now := <-ticker.C:
+				if err := liveness.check(now); err != nil {
+					deadStream.Store(&err)
+					logging.Warn(logPrefix+" Gateway stream is dead; ending the session to reconnect", "reason", err.Error())
+					// Same close the cancellation path uses: it unparks the
+					// Receive below without touching the send half.
+					_ = stream.CloseResponse()
+					return
+				}
+			}
+		}
+	}()
+
 	heartbeatCtx, cancelHeartbeat := context.WithCancel(ctx)
 	defer cancelHeartbeat()
-	go d.runHeartbeats(heartbeatCtx)
+	go d.runHeartbeats(heartbeatCtx, liveness)
 	go d.localModelMgr().run(heartbeatCtx, d.send)
 
 	for {
@@ -854,11 +886,17 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 			if ctxErr := ctx.Err(); ctxErr != nil {
 				return ctxErr
 			}
+			// Likewise when the liveness check closed it: the reason is the
+			// news, the closed body is only how it was delivered.
+			if dead := deadStream.Load(); dead != nil {
+				return fmt.Errorf("daemon stream: %w", *dead)
+			}
 			return fmt.Errorf("daemon stream receive: %w", err)
 		}
 		if msg == nil {
 			continue
 		}
+		liveness.received(msg, time.Now())
 		if err := d.handleServerMessage(ctx, msg); err != nil {
 			logging.Warn(logPrefix+" Failed handling server message", "error", err)
 		}
@@ -1325,8 +1363,11 @@ func (d *daemonClient) sendCommandFailure(req *reliantv1.DaemonCommandRequest, c
 	}
 }
 
-func (d *daemonClient) runHeartbeats(ctx context.Context) {
-	ticker := time.NewTicker(transport.DaemonHeartbeatInterval)
+// runHeartbeats sends the daemon's keepalive until ctx ends. liveness, when
+// non-nil, is told about each heartbeat sent so the session can tell whether
+// the gateway acknowledges them.
+func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiveness) {
+	ticker := time.NewTicker(d.timing.withDefaults().heartbeatInterval)
 	defer ticker.Stop()
 
 	sendHeartbeat := func(now time.Time) error {
@@ -1344,9 +1385,13 @@ func (d *daemonClient) runHeartbeats(ctx context.Context) {
 		if ports, ok := d.portWatcher.Latest(); ok {
 			hb.DetectedPorts = ports
 		}
-		return d.send(&reliantv1.DaemonMessage{
+		if err := d.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
-		})
+		}); err != nil {
+			return err
+		}
+		liveness.heartbeatSent(hb.Timestamp, time.Now())
+		return nil
 	}
 
 	for {

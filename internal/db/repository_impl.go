@@ -1578,6 +1578,65 @@ func (r *Repo) TouchDaemonAttachmentIfNewer(ctx context.Context, daemonID string
 	return nil
 }
 
+// RenewDaemonAttachment renews the lease of a stream the caller is holding
+// RIGHT NOW, re-creating the row if it is gone.
+//
+// It is what the gateway calls on every inbound heartbeat, and it differs from
+// TouchDaemonAttachmentIfNewer in exactly one way that matters: a missing row
+// is re-inserted instead of silently left missing. The row can vanish under a
+// live stream — the TTL reaper (daemonstate.AttachmentTTL) deletes any lease
+// left unrenewed for 15 minutes, and a gateway whose inbound path stalls that
+// long is still holding the stream when it recovers. An UPDATE-only renewal
+// then matched nothing on every heartbeat for the rest of the session: prod
+// 2026-10-11, a daemon serving terminal commands for six hours read
+// DISCONNECTED to every chat because its lease had been reaped at 12:11 and
+// nothing could ever write it back short of a reconnect.
+//
+// On conflict only last_stream_activity moves, and only forward: attached_at,
+// memory telemetry and detected ports belong to the session that registered,
+// and a late renewal from a superseded connection must not reset them.
+//
+// The insert is fenced on the daemons row still belonging to the user, the
+// same ownership rule UpsertDaemonAttachment enforces: a daemon the control
+// plane deleted while its stream was up is not resurrected by a heartbeat.
+func (r *Repo) RenewDaemonAttachment(ctx context.Context, att *DaemonAttachment) error {
+	if att == nil {
+		return fmt.Errorf("daemon attachment cannot be nil")
+	}
+	if att.DaemonID == "" || att.UserID == "" {
+		return fmt.Errorf("daemon attachment renewal requires daemon_id and user_id")
+	}
+	source := att.Source
+	if source == "" {
+		source = DaemonAttachmentSourceInbound
+	}
+	now := time.Now().UTC()
+	activityAt := att.LastStreamActivity
+	if activityAt.IsZero() {
+		activityAt = now
+	}
+	attachedAt := att.AttachedAt
+	if attachedAt.IsZero() {
+		attachedAt = activityAt
+	}
+	query := r.bindQuery(`
+		INSERT INTO daemon_attachment (daemon_id, user_id, source, pod_ip, pod_port, attached_at, last_stream_activity)
+		SELECT ?, ?, ?, ?, ?, ?, ?
+		WHERE EXISTS (SELECT 1 FROM daemons d WHERE d.id = ? AND d.user_id = ?)
+		ON CONFLICT (daemon_id) DO UPDATE SET
+			last_stream_activity = EXCLUDED.last_stream_activity
+		WHERE daemon_attachment.user_id = EXCLUDED.user_id
+		  AND daemon_attachment.last_stream_activity < EXCLUDED.last_stream_activity
+	`)
+	if _, err := r.DB.ExecContext(ctx, query,
+		att.DaemonID, att.UserID, string(source), att.PodIP, att.PodPort, attachedAt, activityAt,
+		att.DaemonID, att.UserID,
+	); err != nil {
+		return fmt.Errorf("renewing daemon attachment: %w", err)
+	}
+	return nil
+}
+
 // UpdateDaemonAttachmentMemory records the workspace memory telemetry carried
 // by a daemon heartbeat on the attachment (liveness) record. A no-op when the
 // attachment row doesn't exist — telemetry is only meaningful for a live

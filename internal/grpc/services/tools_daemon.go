@@ -42,12 +42,26 @@ const (
 	// daemon connections.
 	staleConnectionSweepInterval = 60 * time.Second
 
-	// staleConnectionThreshold is how long a connection can be silent (no
-	// heartbeats, no receives, no sends) before the sweeper treats it as
-	// dead and removes it. Daemon heartbeat interval is 15s, so 90s = 6
-	// missed heartbeats — comfortably beyond any plausible transient
-	// network blip but well within human-noticeable latency.
+	// staleConnectionThreshold is how long the gateway may go without READING
+	// anything from a daemon before the sweeper treats the stream as dead and
+	// removes it. Daemon heartbeat interval is 15s, so 90s = 6 missed
+	// heartbeats — comfortably beyond any plausible transient network blip but
+	// well within human-noticeable latency.
 	staleConnectionThreshold = 90 * time.Second
+
+	// leaseRenewTimeout bounds one daemon_attachment lease renewal. A renewal
+	// is a single-row upsert; one that has not finished in this long is a
+	// hung connection, and it must not hold the renewer (and with it every
+	// later heartbeat's renewal) hostage.
+	leaseRenewTimeout = 10 * time.Second
+
+	// inboundStateApplyTimeout bounds the database work for ONE state message
+	// on a connection's inbound state worker. The worker is a FIFO in front
+	// of the receive loop (inboundStateQueueSize): a write that never returns
+	// fills the queue, the receive loop stops reading, and every reply from
+	// that daemon is held behind it. Generous on purpose — a 10MB
+	// project-config snapshot persists in about a second.
+	inboundStateApplyTimeout = 30 * time.Second
 )
 
 // ToolsDaemonService implements bidirectional streaming for tool execution.
@@ -106,19 +120,47 @@ func (s *outboundStream) Receive() (*reliantv1.DaemonMessage, error) { return s.
 
 // daemonConnection represents an active daemon connection
 type daemonConnection struct {
-	userID       string
-	daemonID     string
-	name         string
-	hostname     string
-	platform     string
-	labels       map[string]string
-	daemonType   string // "local" or "cloud"
-	connectedAt  time.Time
+	userID      string
+	daemonID    string
+	name        string
+	hostname    string
+	platform    string
+	labels      map[string]string
+	daemonType  string // "local" or "cloud"
+	connectedAt time.Time
+	// lastActivity is when anything last happened on this connection in
+	// EITHER direction — a message read, a message sent, an LLM call the
+	// control plane attributed to the user (TouchDaemonsForUser). It answers
+	// "is this daemon in use" (DaemonStatus), not "is this stream alive".
 	lastActivity time.Time
+	// lastReceived is when the receive loop last READ a message off the
+	// stream. It is the only liveness signal the stale-connection sweeper
+	// trusts: the gateway's own 15s heartbeat sends succeed into a buffer
+	// whether or not the daemon's side of the stream is moving, so a
+	// liveness clock our own sends could bump never runs out on a stream
+	// that has gone quiet inbound — exactly the stream the sweeper exists to
+	// reap. Guarded by ToolsDaemonService.mu, like lastActivity.
+	lastReceived time.Time
 	stream       daemonStream
-	sendCh       chan *reliantv1.ServerMessage
-	done         chan struct{}
-	doneOnce     sync.Once
+
+	// What this connection's daemon_attachment lease records about it, so a
+	// renewal can re-create a row the TTL reaper deleted (renewLease).
+	attachSource db.DaemonAttachmentSource
+	podIP        *string
+	podPort      *int
+	// leaseMu orders lease renewals against teardown's delete, so a renewal
+	// can never land after teardownConnection removed the row and leave a
+	// lease for a stream that is gone.
+	leaseMu sync.Mutex
+
+	// ackedDaemonHeartbeat is the timestamp of the newest DaemonHeartbeat the
+	// receive loop has read, echoed to the daemon in every ServerHeartbeat.
+	// It is the daemon's end-to-end proof that the gateway is reading what it
+	// sends; written only by the receive loop.
+	ackedDaemonHeartbeat atomic.Int64
+	sendCh               chan *reliantv1.ServerMessage
+	done                 chan struct{}
+	doneOnce             sync.Once
 	// closeReason records why done was closed, so the stream handler can
 	// return a distinguishable error instead of a bare EOF.
 	closeReason atomic.Pointer[error]
@@ -269,15 +311,23 @@ func (s *ToolsDaemonService) Start(ctx context.Context) {
 	}
 }
 
-// sweepStaleConnections removes daemon connections whose lastActivity is
-// older than staleConnectionThreshold, provided the connection has been
-// registered for at least staleConnectionThreshold (so we don't reap a
+// sweepStaleConnections removes daemon connections the gateway has not read
+// anything from for staleConnectionThreshold, provided the connection has
+// been registered for at least staleConnectionThreshold (so we don't reap a
 // brand-new connection that hasn't sent its first message yet).
+//
+// Silence is measured INBOUND only (lastReceived). It used to be lastActivity,
+// which our own sends and the control plane's LLM-activity pings also bump —
+// so a stream whose daemon-to-gateway direction had stalled stayed "active"
+// forever on the strength of the gateway's own 15s heartbeat, and was never
+// reaped. Prod 2026-10-11: nothing was read from one daemon for twenty
+// minutes, every command it was sent timed out, and the sweeper never fired.
 //
 // For each reaped connection: fires OnDaemonDisconnected listeners, closes
 // done + subscribers, and deletes the daemon_attachment row — same as a
 // normal disconnect, just driven by the sweeper rather than the stream's
-// receive-loop returning.
+// receive-loop returning. Closing done ends the stream handler, so the daemon
+// redials and gets a fresh stream.
 func (s *ToolsDaemonService) sweepStaleConnections() {
 	now := s.now()
 	threshold := staleConnectionThreshold
@@ -285,7 +335,11 @@ func (s *ToolsDaemonService) sweepStaleConnections() {
 	// Collect stale connections under the read lock, then release before
 	// calling teardownConnection (which acquires the write lock + fires
 	// listeners outside it).
-	var stale []*daemonConnection
+	type staleConn struct {
+		conn         *daemonConnection
+		lastReceived time.Time
+	}
+	var stale []staleConn
 	s.mu.RLock()
 	for _, conn := range s.connections {
 		if now.Sub(conn.connectedAt) < threshold {
@@ -293,23 +347,35 @@ func (s *ToolsDaemonService) sweepStaleConnections() {
 			// chance to send anything yet.
 			continue
 		}
-		if now.Sub(conn.lastActivity) <= threshold {
+		lastReceived := conn.lastReceived
+		if lastReceived.IsZero() {
+			lastReceived = conn.connectedAt
+		}
+		if now.Sub(lastReceived) <= threshold {
 			continue
 		}
-		stale = append(stale, conn)
+		stale = append(stale, staleConn{conn: conn, lastReceived: lastReceived})
 	}
 	s.mu.RUnlock()
 
-	for _, conn := range stale {
-		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Reaping stale daemon connection",
-			"daemonID", conn.daemonID,
-			"userID", conn.userID,
-			"lastActivity", conn.lastActivity,
-			"silentFor", now.Sub(conn.lastActivity).Round(time.Second),
+	for _, sc := range stale {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Reaping daemon connection that has gone silent inbound",
+			"daemonID", sc.conn.daemonID,
+			"userID", sc.conn.userID,
+			"lastReceived", sc.lastReceived,
+			"silentFor", now.Sub(sc.lastReceived).Round(time.Second),
 		)
-		s.teardownConnection(conn, "stale-connection sweeper")
+		// Say why, in case the daemon can still hear us: Unavailable puts it
+		// on the redial path rather than leaving it with a bare EOF.
+		sc.conn.closeWith(errDaemonStreamSilent)
+		s.teardownConnection(sc.conn, "stale-connection sweeper")
 	}
 }
+
+// errDaemonStreamSilent ends a stream the stale-connection sweeper reaped.
+var errDaemonStreamSilent = connect.NewError(connect.CodeUnavailable, fmt.Errorf(
+	"daemon-gateway has read nothing from this stream for over %s; closing it so the daemon redials",
+	staleConnectionThreshold))
 
 // AddConnectionListener registers a listener that will be notified when
 // daemon connections are established or torn down. Safe to call before Start.
@@ -409,7 +475,13 @@ func (s *ToolsDaemonService) teardownConnection(conn *daemonConnection, reason s
 	if removed {
 		s.notifyDisconnected(userID, daemonID)
 		s.statePublisher.Disconnected(daemonID, userID, daemonType)
-		if err := s.database.DeleteDaemonAttachment(context.Background(), daemonID); err != nil {
+		// Under leaseMu, and after closeDone above: a renewal already in
+		// flight finishes first and this delete wins; any later one sees
+		// done closed and does nothing (renewLease).
+		conn.leaseMu.Lock()
+		err := s.database.DeleteDaemonAttachment(context.Background(), daemonID)
+		conn.leaseMu.Unlock()
+		if err != nil {
 			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to delete daemon attachment", "error", err, "daemonID", daemonID, "reason", reason)
 		}
 		// After the delete, so a client refetching on this signal already
@@ -847,7 +919,9 @@ func (s *ToolsDaemonService) ConnectDaemon(
 		daemonType:          reg.GetDaemonType(),
 		connectedAt:         now2,
 		lastActivity:        now2,
+		lastReceived:        now2,
 		stream:              &inboundStream{stream: stream},
+		attachSource:        db.DaemonAttachmentSourceInbound,
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
@@ -997,7 +1071,11 @@ func (s *ToolsDaemonService) RegisterOutboundConnection(
 		daemonType:          reg.GetDaemonType(),
 		connectedAt:         now,
 		lastActivity:        now,
+		lastReceived:        now,
 		stream:              &outboundStream{stream: stream},
+		attachSource:        db.DaemonAttachmentSourceOutbound,
+		podIP:               &podIP,
+		podPort:             &podPort,
 		sendCh:              make(chan *reliantv1.ServerMessage, 256),
 		done:                make(chan struct{}),
 		pendingCommands:     make(map[string]chan *reliantv1.DaemonCommandResponse),
@@ -1098,10 +1176,19 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 	// received is still applied after the stream ends — a DaemonCommandFailed
 	// is the only trace a fire-and-forget clone failure ever leaves.
 	go s.runInboundStateWorker(context.WithoutCancel(ctx), conn, stateQueue, streamEnded)
+	// The lease renewer has its own goroutine and a one-slot, coalescing
+	// signal, so the lease reflects THIS loop reading heartbeats — not how
+	// far the state worker has got through its queue. Renewal used to ride
+	// the state FIFO, so a backlog of slow state writes aged a live stream's
+	// lease out from under it.
+	leaseRenew := make(chan struct{}, 1)
+	go s.runLeaseRenewer(context.WithoutCancel(ctx), conn, leaseRenew, streamEnded)
 	defer func() {
 		close(streamEnded)
 		close(stateQueue)
+		close(leaseRenew)
 	}()
+	var lastQueueFullLog time.Time
 
 	received := make(chan receivedMessage)
 	go func() {
@@ -1143,15 +1230,26 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 		now := time.Now().UTC()
 		s.mu.Lock()
 		conn.lastActivity = now
+		conn.lastReceived = now
 		s.mu.Unlock()
-		// conn.lastActivity (above) feeds the dead-connection sweeper and MUST
+		// conn.lastReceived (above) feeds the dead-connection sweeper and MUST
 		// bump on every message, heartbeats included. But workspace idle-suspend
 		// keys off statePublisher.Activity -> Workspace.Status.LastActivity, and a
 		// heartbeat is the daemon's own 15s keepalive, NOT user activity. Counting
 		// heartbeats as activity refreshes LastActivity forever, so the idle reaper
 		// never fires and the workspace never auto-suspends. Only publish real,
 		// user-driven inbound traffic as activity.
-		if _, isHeartbeat := msg.Message.(*reliantv1.DaemonMessage_Heartbeat); !isHeartbeat {
+		if hb, isHeartbeat := msg.Message.(*reliantv1.DaemonMessage_Heartbeat); isHeartbeat {
+			// Read off the stream just now: acknowledge it to the daemon
+			// (runHeartbeat echoes this) and renew the lease. Both happen
+			// here, at the read, because what they vouch for is that this
+			// loop is consuming the stream.
+			conn.recordDaemonHeartbeat(hb.Heartbeat.GetTimestamp())
+			select {
+			case leaseRenew <- struct{}{}:
+			default: // a renewal is already pending; it covers this one
+			}
+		} else {
 			s.statePublisher.Activity(conn.daemonID, conn.userID, conn.daemonType)
 		}
 
@@ -1160,11 +1258,87 @@ func (s *ToolsDaemonService) handleIncoming(ctx context.Context, conn *daemonCon
 		}
 		select {
 		case stateQueue <- msg:
+			continue
+		default:
+		}
+		// The state worker is behind by a full queue, so this loop is about
+		// to stop reading the stream: every reply from this daemon now waits
+		// for a database write. Said out loud, at most once a minute, because
+		// a silent stall here is indistinguishable from a dead daemon.
+		if time.Since(lastQueueFullLog) >= time.Minute {
+			lastQueueFullLog = time.Now()
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Inbound state queue full; stream reads are blocked until the state worker catches up",
+				"daemonID", conn.daemonID, "userID", conn.userID, "queued", len(stateQueue))
+		}
+		select {
+		case stateQueue <- msg:
 		case <-conn.done:
 			return conn.closedReason()
 		case <-ctx.Done():
 			return nil
 		}
+	}
+}
+
+// recordDaemonHeartbeat notes the newest daemon heartbeat the receive loop
+// has read. Called only from the receive loop, so a plain compare-and-store is
+// race-free against itself; runHeartbeat only loads.
+func (c *daemonConnection) recordDaemonHeartbeat(timestamp int64) {
+	if timestamp > c.ackedDaemonHeartbeat.Load() {
+		c.ackedDaemonHeartbeat.Store(timestamp)
+	}
+}
+
+// runLeaseRenewer renews this connection's daemon_attachment lease each time
+// the receive loop signals that it read a heartbeat. It exits when the
+// receive loop closes renew.
+func (s *ToolsDaemonService) runLeaseRenewer(ctx context.Context, conn *daemonConnection, renew <-chan struct{}, streamEnded <-chan struct{}) {
+	for range renew {
+		s.renewLease(ctx, conn, streamEnded)
+	}
+}
+
+// renewLease writes "this stream is alive as of now" to daemon_attachment,
+// re-creating the row if the TTL reaper deleted it (RenewDaemonAttachment).
+//
+// A renewal pending when the stream ends is dropped: it would tell the UI the
+// daemon is up after it has gone. The check and the write happen under
+// leaseMu, which teardownConnection also takes around its delete, so a
+// renewal can never land after the row was deliberately removed.
+func (s *ToolsDaemonService) renewLease(ctx context.Context, conn *daemonConnection, streamEnded <-chan struct{}) {
+	if s.database == nil {
+		return
+	}
+	// Its own goroutine, like the state worker: an unrecovered panic here
+	// would take down the whole gateway rather than one renewal.
+	defer func() {
+		if r := recover(); r != nil {
+			logging.Error(LOG_PREFIX_TOOLS_DAEMON+" Panic renewing daemon reachability lease",
+				"panic", r, "daemonID", conn.daemonID)
+		}
+	}()
+	conn.leaseMu.Lock()
+	defer conn.leaseMu.Unlock()
+	select {
+	case <-streamEnded:
+		return
+	case <-conn.done:
+		return
+	default:
+	}
+	renewCtx, cancel := context.WithTimeout(ctx, leaseRenewTimeout)
+	defer cancel()
+	now := time.Now().UTC()
+	if err := s.database.RenewDaemonAttachment(renewCtx, &db.DaemonAttachment{
+		DaemonID:           conn.daemonID,
+		UserID:             conn.userID,
+		Source:             conn.attachSource,
+		PodIP:              conn.podIP,
+		PodPort:            conn.podPort,
+		AttachedAt:         conn.connectedAt,
+		LastStreamActivity: now,
+	}); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
 	}
 }
 
@@ -1187,6 +1361,11 @@ func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemon
 				"panic", r, "daemonID", conn.daemonID, "messageType", fmt.Sprintf("%T", msg.GetMessage()))
 		}
 	}()
+	// One message's writes may not hold the worker indefinitely: everything
+	// queued behind it, and once the queue is full every reply on the stream,
+	// waits for them (inboundStateApplyTimeout).
+	ctx, cancel := context.WithTimeout(ctx, inboundStateApplyTimeout)
+	defer cancel()
 
 	switch m := msg.Message.(type) {
 	case *reliantv1.DaemonMessage_Heartbeat:
@@ -1199,21 +1378,16 @@ func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemon
 		default:
 		}
 		s.publishDaemonHeartbeat(ctx, conn.userID, conn.daemonID, time.Now().UTC(), m.Heartbeat)
-		// Renew the reachability lease (last_stream_activity) on the
-		// keepalive so an idle-but-connected daemon doesn't decay to
-		// "offline". We write daemon_attachment DIRECTLY here (the gateway
-		// already owns direct writes to this table — see teardownConnection's
-		// DeleteDaemonAttachment) instead of publishing a daemonstate event.
-		// A dedicated EventHeartbeat would land on the shared daemon.v1.state.*
-		// stream, whose authoritative consumer lives in the control-plane repo
-		// and STRICTLY rejects unknown event types ("daemon state event unknown
-		// type") — so it would both error-spam and, worse, drop the event
-		// without renewing the lease. A direct touch renews the lease
-		// unconditionally and never feeds the workspace idle-suspend timer
-		// (which keys off EventActivity), preserving the exclusion above.
-		if err := s.database.TouchDaemonAttachmentIfNewer(ctx, conn.daemonID, time.Now().UTC()); err != nil {
-			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to renew daemon reachability lease", "error", err, "daemonID", conn.daemonID)
-		}
+		// The reachability lease (last_stream_activity) is NOT renewed here:
+		// the receive loop renews it the moment it reads the heartbeat
+		// (renewLease), so a backlog in this FIFO cannot age out a live
+		// stream. The gateway writes daemon_attachment directly rather than
+		// publishing a daemonstate event: a dedicated EventHeartbeat would land
+		// on the shared daemon.v1.state.* stream, whose authoritative consumer
+		// lives in the control-plane repo and STRICTLY rejects unknown event
+		// types, and it must never feed the workspace idle-suspend timer
+		// (which keys off EventActivity).
+		//
 		// Persist heartbeat-carried workspace memory telemetry on the
 		// attachment record so the daemon registry (and the UI behind it)
 		// can surface memory pressure. limit==0 means the daemon has no
@@ -2173,19 +2347,27 @@ func (s *ToolsDaemonService) runHeartbeat(conn *daemonConnection) {
 		case <-conn.done:
 			return
 		case <-ticker.C:
-			msg := &reliantv1.ServerMessage{
-				Message: &reliantv1.ServerMessage_Heartbeat{
-					Heartbeat: &reliantv1.ServerHeartbeat{
-						Timestamp: time.Now().Unix(),
-					},
-				},
-			}
 			select {
-			case conn.sendCh <- msg:
+			case conn.sendCh <- newServerHeartbeat(conn, time.Now()):
 			default:
 				// Buffer full, skip heartbeat
 			}
 		}
+	}
+}
+
+// newServerHeartbeat builds the gateway's keepalive for one connection. It
+// carries the newest daemon heartbeat the receive loop has read, which is how
+// the daemon tells a gateway that is reading its stream from one that has
+// stopped (see ServerHeartbeat.acked_daemon_heartbeat).
+func newServerHeartbeat(conn *daemonConnection, now time.Time) *reliantv1.ServerMessage {
+	return &reliantv1.ServerMessage{
+		Message: &reliantv1.ServerMessage_Heartbeat{
+			Heartbeat: &reliantv1.ServerHeartbeat{
+				Timestamp:            now.Unix(),
+				AckedDaemonHeartbeat: conn.ackedDaemonHeartbeat.Load(),
+			},
+		},
 	}
 }
 
