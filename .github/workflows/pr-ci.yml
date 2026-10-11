@@ -145,7 +145,7 @@ jobs:
             exit 0
           fi
 
-          if echo "${changed}" | grep -qE '^(proto-vendor/controlplane/|\.github/scripts/sync-controlplane-proto\.mjs$)'; then
+          if echo "${changed}" | grep -qE '^(proto-vendor/controlplane/|\.github/scripts/sync-controlplane-proto\.mjs$|\.github/workflows/pr-ci\.yml$)'; then
             echo "cp_contract=true" >> "$GITHUB_OUTPUT"
             echo "touches the vendored control-plane contract — its drift gate runs."
           else
@@ -250,9 +250,10 @@ jobs:
   # move the tree relative to control-plane. A control-plane proto change is
   # control-plane's gate to catch.
   #
-  # Reading control-plane, which is private, needs SIBLING_READ_TOKEN: the same
-  # read-only cross-repo credential pin-drift.yml uses for forge, here also
-  # needing contents:read on reliant-labs/control-plane. Without it the job FAILS
+  # Reading control-plane, which is private, uses CONTROL_PLANE_DEPLOY_KEY: the
+  # private half of a READ-ONLY deploy key on reliant-labs/control-plane (and
+  # nothing else). A deploy key is scoped to that one repo, is not a person's
+  # credential, and does not expire, which a PAT is not. Without it the job FAILS
   # rather than skipping: a drift gate that skips cannot be told apart from one
   # that passes, which is why control-plane passes --require. Fork PRs are the
   # one exception. GitHub never gives them secrets, so they are skipped with a
@@ -273,7 +274,7 @@ jobs:
         id: access
         env:
           IS_FORK: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository }}
-          HAS_TOKEN: ${{ secrets.SIBLING_READ_TOKEN != '' }}
+          HAS_KEY: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY != '' }}
         run: |
           set -euo pipefail
           if [ "${IS_FORK}" = "true" ]; then
@@ -281,8 +282,8 @@ jobs:
             echo "check=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if [ "${HAS_TOKEN}" != "true" ]; then
-            echo "::error title=SIBLING_READ_TOKEN is not configured::This PR changes proto-vendor/controlplane/, which must match control-plane main, and control-plane is private. Add a SIBLING_READ_TOKEN Actions secret with contents:read on reliant-labs/control-plane. This gate fails rather than skipping, because a skip would report success without checking anything."
+          if [ "${HAS_KEY}" != "true" ]; then
+            echo "::error title=CONTROL_PLANE_DEPLOY_KEY is not configured::This PR changes proto-vendor/controlplane/, which must match control-plane main, and control-plane is private. Add a read-only deploy key to reliant-labs/control-plane and its private half as the CONTROL_PLANE_DEPLOY_KEY Actions secret here. This gate fails rather than skipping, because a skip would report success without checking anything."
             exit 1
           fi
           echo "check=true" >> "$GITHUB_OUTPUT"
@@ -297,7 +298,7 @@ jobs:
           repository: reliant-labs/control-plane
           ref: main
           path: control-plane-sibling
-          token: ${{ secrets.SIBLING_READ_TOKEN }}
+          ssh-key: ${{ secrets.CONTROL_PLANE_DEPLOY_KEY }}
           fetch-depth: 1
           persist-credentials: false
 
