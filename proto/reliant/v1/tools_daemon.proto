@@ -322,6 +322,14 @@ message ToolRequest {
 // ServerHeartbeat is sent periodically to keep connection alive
 message ServerHeartbeat {
   int64 timestamp = 1;
+  // The `timestamp` of the newest DaemonHeartbeat the gateway has READ off
+  // this stream (0 until the first one arrives). It is the daemon's only
+  // end-to-end proof that what it sends is reaching the gateway's receive
+  // loop: transport keepalives (HTTP/2 PING) are answered by the nearest
+  // proxy and a successful local Send only means the bytes were buffered, so
+  // neither notices a gateway that has stopped reading. A daemon that sees
+  // this stop advancing ends the session and redials.
+  int64 acked_daemon_heartbeat = 2;
 }
 
 // RegistrationAck contains daemon registration status and requested config pushes.

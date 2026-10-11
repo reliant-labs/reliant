@@ -1850,10 +1850,18 @@ func (x *ToolRequest) GetTimeoutMs() int32 {
 
 // ServerHeartbeat is sent periodically to keep connection alive
 type ServerHeartbeat struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Timestamp     int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Timestamp int64                  `protobuf:"varint,1,opt,name=timestamp,proto3" json:"timestamp,omitempty"`
+	// The `timestamp` of the newest DaemonHeartbeat the gateway has READ off
+	// this stream (0 until the first one arrives). It is the daemon's only
+	// end-to-end proof that what it sends is reaching the gateway's receive
+	// loop: transport keepalives (HTTP/2 PING) are answered by the nearest
+	// proxy and a successful local Send only means the bytes were buffered, so
+	// neither notices a gateway that has stopped reading. A daemon that sees
+	// this stop advancing ends the session and redials.
+	AckedDaemonHeartbeat int64 `protobuf:"varint,2,opt,name=acked_daemon_heartbeat,json=ackedDaemonHeartbeat,proto3" json:"acked_daemon_heartbeat,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
 }
 
 func (x *ServerHeartbeat) Reset() {
@@ -1889,6 +1897,13 @@ func (*ServerHeartbeat) Descriptor() ([]byte, []int) {
 func (x *ServerHeartbeat) GetTimestamp() int64 {
 	if x != nil {
 		return x.Timestamp
+	}
+	return 0
+}
+
+func (x *ServerHeartbeat) GetAckedDaemonHeartbeat() int64 {
+	if x != nil {
+		return x.AckedDaemonHeartbeat
 	}
 	return 0
 }
@@ -4368,9 +4383,10 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x10content_block_id\x18\x05 \x01(\tR\x0econtentBlockId\x12!\n" +
 	"\fcontext_json\x18\x06 \x01(\tR\vcontextJson\x12\x1d\n" +
 	"\n" +
-	"timeout_ms\x18\b \x01(\x05R\ttimeoutMs\"/\n" +
+	"timeout_ms\x18\b \x01(\x05R\ttimeoutMs\"e\n" +
 	"\x0fServerHeartbeat\x12\x1c\n" +
-	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\"\x9b\x01\n" +
+	"\ttimestamp\x18\x01 \x01(\x03R\ttimestamp\x124\n" +
+	"\x16acked_daemon_heartbeat\x18\x02 \x01(\x03R\x14ackedDaemonHeartbeat\"\x9b\x01\n" +
 	"\x0fRegistrationAck\x12\x1a\n" +
 	"\baccepted\x18\x01 \x01(\bR\baccepted\x126\n" +
 	"\x17requested_project_paths\x18\x02 \x03(\tR\x15requestedProjectPaths\x12\x1b\n" +
