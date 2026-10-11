@@ -1789,9 +1789,10 @@ type DaemonSizePrice struct {
 	// Overage price per wall-clock hour at this size, in cents, as an exact
 	// decimal string: multiplier × the small hourly price.
 	HourlyPriceCents string `protobuf:"bytes,3,opt,name=hourly_price_cents,json=hourlyPriceCents,proto3" json:"hourly_price_cents,omitempty"`
-	// The disk a daemon of this size is given, in GiB
+	// The data (home) disk a daemon of this size is given, in GiB
 	// (config.DaemonTierStorageGiB) — the number the suspended-disk fee is
-	// charged on.
+	// charged on. The docker/cache volume every daemon also gets is platform
+	// overhead and is not included.
 	StorageGib    int64 `protobuf:"varint,4,opt,name=storage_gib,json=storageGib,proto3" json:"storage_gib,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

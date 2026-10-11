@@ -475,6 +475,23 @@ message DeployEnvironmentSpec {
   // declared surfaces on the ensure the operator is already running rather
   // than at the next publish.
   repeated ClusterBinding cluster_bindings = 14;
+
+  // WHO APPLIES a SELF_MANAGED environment's bound clusters, as forge decided
+  // from the same render as `shape`: true when the control plane's hub
+  // converges the promoted bundle onto them and forge applies nothing; false
+  // when forge applies them from the author's machine (a ledger-only or mixed
+  // env, such as one that also ships a frontend from there).
+  //
+  // A BINDING SAYS WHERE AN ENVIRONMENT LANDS, NOT WHO PUTS IT THERE. Reading
+  // "bound" as "the hub applies it" is what gave control-plane prod hub
+  // Kustomizations over the objects `forge env deploy` applies itself — two
+  // appliers, one of which would spend every interval reverting the other.
+  //
+  // PART OF THE DECLARATION, so it rides beside `shape` and is refused
+  // without one. Absent leaves the stored value untouched. An environment
+  // that never declared it is treated as forge-applied: the hub becomes an
+  // applier only when the render says so.
+  optional bool hub_converged = 15;
 }
 
 // ClusterBinding maps ONE cluster the bundle renders for to ONE registered
