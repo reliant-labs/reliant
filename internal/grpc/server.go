@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
@@ -781,6 +782,13 @@ func newInterceptors(trustRemoteTrace bool, timeoutInterceptor connect.Intercept
 		// otelconnect owns the Connect server span and propagation. Supplying a
 		// Forge tracing interceptor here would create a duplicate span per RPC.
 		Extras: extras,
+		// A failed RPC's one record — forge's "rpc failed" — is classified by
+		// the logging interceptor, and the process handler trusts a record
+		// that already carries error_class, so it never applies its own
+		// classifier (internal/logging) to it. Without the same one here, a
+		// failure Temporal carries as Benign — nobody has to act — logged at
+		// ERROR, error_class=server, and counted as a dead-end error.
+		LogOptions: []observe.LogOption{observe.WithErrorClassifier(errclass.Library)},
 	})
 }
 
