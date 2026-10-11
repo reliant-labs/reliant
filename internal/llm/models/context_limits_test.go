@@ -129,7 +129,6 @@ var catalogContextLimits = []struct {
 	{"gemini-3.5-flash", "openrouter", 1048576, 65536, "OpenRouter"},
 	{"gemini-2.5-pro", "gemini", 1048576, 65536, "Gemini API gemini-2.5-pro"},
 	{"gemini-2.5-pro", "openrouter", 1048576, 65536, "OpenRouter"},
-	{"gemini-2.5-pro", "reliant", 1048576, 65536, "Gemini API gemini-2.5-pro (gateway)"},
 	{"claude-4.5-haiku", "anthropic", 200000, 64000, "Anthropic haiku-4-5"},
 	{"claude-4.5-haiku", "openrouter", 200000, 64000, "OpenRouter"},
 	{"claude-4.5-haiku", "reliant", 200000, 64000, "Anthropic haiku-4-5 (gateway)"},
@@ -162,8 +161,7 @@ var catalogContextLimits = []struct {
 	{"vertex-claude-4.6-opus", "vertexai", 1000000, 128000, "Vertex claude/opus-4-6"},
 	{"vertex-claude-4.5-sonnet", "vertexai", 200000, 64000, "Vertex claude/sonnet-4-5 (200K GA; the 1M preview needs context-1m, not sent)"},
 	{"vertex-claude-4.5-haiku", "vertexai", 200000, 64000, "Vertex claude/haiku-4-5"},
-	{"vertex-gemini-2.5-pro", "vertexai", 1048576, 65536, "Vertex gemini/2-5-pro"},
-	{"vertex-gemini-2.5-flash", "vertexai", 1048576, 65536, "Vertex gemini/2-5-flash"},
+	{"vertex-gemini-3.8-flash", "vertexai", 1048576, 65536, "Vertex gemini/3-8-flash"},
 }
 
 // TestCatalogContextLimitsMatchProviders pins the window and max output every

@@ -56,13 +56,13 @@ export GOOGLE_APPLICATION_CREDENTIALS="/path/to/key.json"
 import "github.com/reliant-labs/reliant/internal/llm/models"
 
 preferences := models.Preferences{
-    {ModelID: models.VertexGemini25Flash},
+    {ModelID: models.VertexGemini38Flash},
 }
 
 // With custom settings
 preferences := models.Preferences{
     {
-        ModelID:     models.VertexGemini25Pro,
+        ModelID:     models.VertexGemini38Flash,
         Temperature: models.TempMedium(),
         TokenBudget: genai.Ptr(int64(8000)),
     },

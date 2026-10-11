@@ -124,7 +124,7 @@ tags:
     - {model: vertex-claude-5-opus, thinking_level: high}
     - {model: vertex-claude-5-sonnet, thinking_level: high}
     - {model: vertex-claude-4.5-sonnet, thinking_level: high}
-    - {model: vertex-gemini-2.5-pro, thinking_level: high}
+    - {model: vertex-gemini-3.8-flash, thinking_level: high}
     # Trailing per-provider coverage — reached only by a user whose only
     # provider is antigravity. See the note under `powerful`.
     - {model: gemini-3.8-flash, thinking_level: high} # antigravity
@@ -140,7 +140,7 @@ tags:
     - {model: gemini-2.5-flash}
     - {model: gemini-2.5-flash-lite}
     - {model: vertex-claude-4.5-haiku}
-    - {model: vertex-gemini-2.5-flash}
+    - {model: vertex-gemini-3.8-flash, thinking_level: high}
     - {model: gpt-image-2.5-flare}
     - {model: gemini-3.1-flash-lite-image}
     # Trailing per-provider coverage. A provider that ships no genuinely cheap
@@ -163,7 +163,7 @@ tags:
     - {model: gemini-2.5-flash}
     - {model: gemini-2.5-flash-lite}
     - {model: vertex-claude-4.5-haiku}
-    - {model: vertex-gemini-2.5-flash}
+    - {model: vertex-gemini-3.8-flash, thinking_level: high}
     - {model: gemini-3.1-flash-lite-image}
     - {model: veo-3.1-lite-generate}
     # Trailing per-provider coverage — reached only by an antigravity-only user,
@@ -256,7 +256,44 @@ tags:
     - {model: vertex-claude-5-fable, thinking_level: high}
     - {model: vertex-claude-4.6-opus, thinking_level: high}
     - {model: vertex-claude-4.5-sonnet, thinking_level: high}
-    - {model: vertex-gemini-2.5-pro, thinking_level: high}
+    - {model: vertex-gemini-3.8-flash, thinking_level: high}
+
+# ============================================================================
+# RETIRED — what a selector naming a retired model runs on instead
+# ============================================================================
+#
+# When a provider shuts a model down, deleting it from `models:` is not
+# enough: chats, presets and workflow inputs still NAME it, usually pinned to a
+# provider (`vertex-gemini-2.5-pro@vertexai`), and a name the catalog does not
+# know fails every request. An entry here keeps that name resolving — to its
+# replacement, on the same provider — and the next send in a chat pinned to it
+# moves the chat to the replacement and says so in the chat
+# (drivers.SubstituteUnservableModel). See RetiredModel.
+#
+#   model        the retired id. Retired by every provider: delete its
+#                definition. Still served by some: keep the definition and
+#                drop only the retired drivers' mappings.
+#   drivers      the providers that no longer serve it.
+#   replacement  a model below that every listed driver serves — normally the
+#                successor the provider recommends.
+#   retired_on   the provider's published retirement date.
+#
+# Parse fails on an unknown replacement, a replacement a listed driver does
+# not serve, or a listed driver the model still maps.
+retired:
+  # Vertex AI retires the Gemini 2.5 family on 2026-10-20. Google's lifecycle
+  # page names gemini-3.8-flash first among the replacements for both
+  # (docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions,
+  # "Replacement model ID", checked 2026-10-11). Pinned by
+  # TestRetiredVertexModelsMoveToGooglesReplacement.
+  - {model: vertex-gemini-2.5-pro, drivers: [vertexai], replacement: vertex-gemini-3.8-flash, retired_on: "2026-10-20"}
+  - {model: vertex-gemini-2.5-flash, drivers: [vertexai], replacement: vertex-gemini-3.8-flash, retired_on: "2026-10-20"}
+  # The managed gateway serves Gemini FROM Vertex (control-plane's LiteLLM
+  # routes vertex_ai/<api_model>), so gemini-2.5-pro leaves it the same day.
+  # Only that mapping retires: the Gemini API lists gemini-2.5-pro with no
+  # shutdown date (ai.google.dev/gemini-api/docs/deprecations), so a user's own
+  # key, and OpenRouter, keep serving it.
+  - {model: gemini-2.5-pro, drivers: [reliant], replacement: gemini-3.8-flash, retired_on: "2026-10-20"}
 
 models:
   # ============================================================================
@@ -1392,8 +1429,8 @@ models:
         api_model: gemini-2.5-pro
       - driver: openrouter
         api_model: google/gemini-2.5-pro
-      - driver: reliant
-        api_model: gemini-2.5-pro
+      # No `reliant` mapping: the gateway serves Gemini from Vertex, which
+      # retires gemini-2.5-pro on 2026-10-20. See `retired:` above.
     default_temperature: 1.0
 
   # ============================================================================
@@ -1925,43 +1962,31 @@ models:
         api_model: claude-haiku-4-5
     default_temperature: 1.0
 
-  - id: vertex-gemini-2.5-pro
-    name: Vertex Gemini 2.5 Pro
+  # Replaces vertex-gemini-2.5-pro and vertex-gemini-2.5-flash, which Vertex
+  # retires on 2026-10-20 (see `retired:` above). Its own entry rather than a
+  # vertexai mapping on gemini-3.8-flash: that model sits above the vertex-claude
+  # entries in [powerful] and [flagship], so the mapping would move every Vertex
+  # user's top tiers from Claude to Gemini. Here it takes only the tier slots the
+  # 2.5 models held.
+  - id: vertex-gemini-3.8-flash
+    name: Vertex Gemini 3.8 Flash
     visibility: user
     capabilities:
       can_reason: true
       supports_tools: true
       supports_attachments: true
       supports_streaming: true
-      supports_caching: false
-      # Vertex: context window 1,048,576, max output 65,536
-      # (cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-pro).
+      supports_caching: true
+      # Vertex: context window 1,048,576, max output 65,536; thinking,
+      # implicit and explicit context caching supported
+      # (docs.cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/3-8-flash).
       max_context_window: 1048576
       max_output_tokens: 65536
       thinking_levels: [low, medium, high]
       supported_file_types: [image, pdf, text, audio, video]
     providers:
       - driver: vertexai
-        api_model: gemini-2.5-pro
-    default_temperature: 1.0
-
-  - id: vertex-gemini-2.5-flash
-    name: Vertex Gemini 2.5 Flash
-    visibility: user
-    capabilities:
-      can_reason: false
-      supports_tools: true
-      supports_attachments: true
-      supports_streaming: true
-      supports_caching: false
-      # Vertex: context window 1,048,576, max output 65,536
-      # (cloud.google.com/vertex-ai/generative-ai/docs/models/gemini/2-5-flash).
-      max_context_window: 1048576
-      max_output_tokens: 65536
-      supported_file_types: [image, pdf, text, audio, video]
-    providers:
-      - driver: vertexai
-        api_model: gemini-2.5-flash
+        api_model: gemini-3.8-flash
     default_temperature: 1.0
 
   # ============================================================================

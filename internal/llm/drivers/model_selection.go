@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 
 	"github.com/reliant-labs/reliant/internal/llm/drivererrors"
@@ -197,16 +198,21 @@ type ModelSubstitution struct {
 // selector value (a workflow "model" input): when the selector names a model
 // that none of the account's servable providers can serve — its pinned
 // provider is not connected, rejected the credential, or does not offer it on
-// this plan — it returns the substitute and true. Any other selector,
-// including one that resolves, one naming an unknown model, and one with no
-// substitute at all, returns false and must be left as it is: the run's own
-// resolution then fails it with the explained, terminal error.
+// this plan — it returns the substitute and true. A selector naming a model
+// its provider retired moves to the replacement the registry resolves it to
+// (models.RetiredModel), so the run's inputs and the picker name the model
+// that actually serves the chat. Any other selector, including one that
+// resolves, one naming an unknown model, and one with no substitute at all,
+// returns false and must be left as it is: the run's own resolution then
+// fails it with the explained, terminal error.
 //
 // This is deliberately a SEND-time decision. The runtime never reroutes a pin
 // (defaultGetDriver: a silent switch runs the request on a different bill):
 // a send is the user acting, so the switch is announced in the chat and
 // recorded on the run's inputs, where every later record names the provider
-// that actually serves it.
+// that actually serves it. A retired model is not a reroute: Resolve already
+// runs it as its replacement on the SAME provider wherever it is met, so a run
+// with no user present keeps working, and a send only makes that visible.
 func SubstituteUnservableModel(value interface{}, available models.AvailableDrivers) (ModelSubstitution, bool) {
 	ms, err := toModelSelector(value)
 	if err != nil || ms.ID == "" || isTestModel(ms.ID) {
@@ -217,8 +223,14 @@ func SubstituteUnservableModel(value interface{}, available models.AvailableDriv
 		return ModelSubstitution{}, false
 	}
 	reg := models.MustGetRegistry().WithAvailability(available.Availability)
-	_, err = reg.Resolve(ms, providers)
-	if err == nil || !errors.Is(err, drivererrors.ErrNoServableProvider) {
+	current, err := reg.Resolve(ms, providers)
+	if err == nil {
+		if current.Retirement == nil {
+			return ModelSubstitution{}, false
+		}
+		return retiredModelSubstitution(value, ms.ID, current), true
+	}
+	if !errors.Is(err, drivererrors.ErrNoServableProvider) {
 		return ModelSubstitution{}, false
 	}
 	baseID, _ := ParseModelIDWithDriver(ms.ID)
@@ -228,15 +240,7 @@ func SubstituteUnservableModel(value interface{}, available models.AvailableDriv
 	}
 
 	to := resolved.Definition.ID + "@" + resolved.Provider.Driver
-	selector := map[string]interface{}{}
-	if original, isMap := value.(map[string]interface{}); isMap {
-		for k, v := range original {
-			selector[k] = v
-		}
-	}
-	selector["id"] = to
-	delete(selector, "tags")
-	delete(selector, "providers")
+	selector := replacementSelector(value, to)
 	// The same model elsewhere keeps the effort the user chose; a different
 	// model runs at its tier's effort, which may not even exist on the
 	// original's scale.
@@ -253,14 +257,65 @@ func SubstituteUnservableModel(value interface{}, available models.AvailableDriv
 	if errors.As(err, &pinned) {
 		why = pinned.Reason(available.Unavailable)
 	}
-	goBack := fmt.Sprintf("pick %s in the composer's model picker once it is available again", baseID)
+	// A retired model is not coming back; going back means its replacement.
+	goBackTo := baseID
+	var retired *models.RetiredModelError
+	if errors.As(err, &retired) {
+		goBackTo = retired.Retirement.Replacement
+	}
+	goBack := fmt.Sprintf("pick %s in the composer's model picker once it is available again", goBackTo)
 	if pinned != nil {
-		goBack = fmt.Sprintf("reconnect %s in Settings → Providers, then pick %s in the composer's model picker", pinned.ProviderNames(), baseID)
+		goBack = fmt.Sprintf("reconnect %s in Settings → Providers, then pick %s in the composer's model picker", pinned.ProviderNames(), goBackTo)
 	}
 	notice := fmt.Sprintf("%s. So this chat continues on %s via %s, the same tier on a provider you have connected. To go back, %s.",
 		why, resolved.Definition.ID, models.ProviderDisplayName(resolved.Provider.Driver), goBack)
 
 	return ModelSubstitution{From: ms.ID, To: to, Selector: selector, Notice: notice}, true
+}
+
+// retiredModelSubstitution moves a selector naming a retired model onto the
+// replacement the registry already resolved it to, on the same provider. The
+// user's effort carries over, clamped to what the replacement supports: unlike
+// a tier pick, the replacement is the provider's successor to the model the
+// user chose, not a different model on someone else's scale.
+func retiredModelSubstitution(value interface{}, from string, resolved *models.ResolvedModel) ModelSubstitution {
+	to := resolved.Definition.ID + "@" + resolved.Provider.Driver
+	selector := replacementSelector(value, to)
+	if level, ok := selector["thinking_level"].(string); ok && level != "" {
+		clamped := models.ClampThinkingLevel(models.ResolveThinkingCapability(resolved.Definition.Capabilities), level)
+		if clamped != "" {
+			selector["thinking_level"] = clamped
+		} else {
+			delete(selector, "thinking_level")
+		}
+	}
+
+	retirement := resolved.Retirement
+	retiredOn := retirement.Drivers[0]
+	if slices.Contains(retirement.Drivers, resolved.Provider.Driver) {
+		retiredOn = resolved.Provider.Driver
+	}
+	notice := fmt.Sprintf("%s is retired on %s as of %s. So this chat continues on its replacement, %s via %s. To use a different model, pick one in the composer's model picker.",
+		retirement.Model, models.ProviderDisplayName(retiredOn), retirement.RetiredOn,
+		resolved.Definition.ID, models.ProviderDisplayName(resolved.Provider.Driver))
+
+	return ModelSubstitution{From: from, To: to, Selector: selector, Notice: notice}
+}
+
+// replacementSelector is the selector value that pins to: the original's
+// fields with id replaced and tags/providers dropped. The caller's value is
+// not mutated.
+func replacementSelector(value interface{}, to string) map[string]interface{} {
+	selector := map[string]interface{}{}
+	if original, isMap := value.(map[string]interface{}); isMap {
+		for k, v := range original {
+			selector[k] = v
+		}
+	}
+	selector["id"] = to
+	delete(selector, "tags")
+	delete(selector, "providers")
+	return selector
 }
 
 // servableProviderIDs is the account's providers that can take a request,

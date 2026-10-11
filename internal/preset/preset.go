@@ -430,8 +430,9 @@ func validateModelParam(preset *Preset) error {
 			return nil // No id or empty id - skip validation
 		}
 		// Check if the model exists in the registry
+		// A retired id still resolves, to its replacement.
 		registry := models.MustGetRegistry()
-		if _, found := registry.GetDefinition(id); !found {
+		if _, found := registry.GetDefinition(id); !found && !registry.IsRetired(id) {
 			return fmt.Errorf("preset %q: invalid model %q - see docs/models.md for available models", preset.Name, id)
 		}
 		return nil

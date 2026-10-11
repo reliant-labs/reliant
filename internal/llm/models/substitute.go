@@ -20,9 +20,15 @@ var substituteTiers = []string{TagPowerful, TagFlagship, TagReasoning, TagModera
 // the account (AvailableDrivers.Drivers does), and the registry should carry
 // the account's availability (WithAvailability), so the substitute is one the
 // next request can actually reach.
+//
+// A model every provider retired stands in through its replacement: the
+// replacement where a provider serves it, else the replacement's tiers.
 func (r *ModelRegistry) Substitute(modelID string, availableProviders []string) (*ResolvedModel, bool) {
 	if _, ok := r.byID[modelID]; !ok {
-		return nil, false
+		if !r.IsRetired(modelID) {
+			return nil, false
+		}
+		modelID = r.retired[modelID][0].Replacement
 	}
 	if resolved, err := r.Resolve(ModelSelector{ID: modelID}, availableProviders); err == nil {
 		return resolved, true

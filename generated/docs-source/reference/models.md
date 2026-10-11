@@ -96,7 +96,7 @@ Models are tagged to help with selection. You can also [bring your own model](/d
 |----------|------|------|---------|--------------|----------|
 | `gemini-2.5-flash` | Gemini 2.5 Flash | cheap, fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} | gemini, openrouter |
 | `gemini-2.5-flash-lite` | Gemini 2.5 Flash Lite | cheap, fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} | gemini, openrouter |
-| `gemini-2.5-pro` | Gemini 2.5 Pro | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini, openrouter, reliant |
+| `gemini-2.5-pro` | Gemini 2.5 Pro | moderate, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini, openrouter |
 | `gemini-3-flash-preview` | Gemini 3 Flash Preview | fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} | gemini, openrouter, reliant |
 | `gemini-3-pro-preview` | Gemini 3 Pro Preview | flagship, reasoning | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} {{< icon "light-bulb" >}} | gemini |
 | `gemini-3.1-flash-lite-preview` | Gemini 3.1 Flash-Lite Preview | cheap, fast | 1M | {{< icon "wrench-screwdriver" >}} {{< icon "paper-clip" >}} {{< icon "lightning-bolt" >}} | gemini |

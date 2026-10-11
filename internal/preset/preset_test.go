@@ -184,6 +184,23 @@ params:
 			wantErr:     false,
 		},
 		{
+			// Vertex retired it; it resolves to its replacement, so a preset
+			// written before the retirement keeps loading.
+			name: "retired model id still loads",
+			yaml: `
+name: retired-model
+tag: agent
+params:
+  model:
+    id: vertex-gemini-2.5-pro
+`,
+			defaultName: "default",
+			wantName:    "retired-model",
+			wantTag:     "agent",
+			wantParams:  map[string]interface{}{"model": map[string]interface{}{"id": "vertex-gemini-2.5-pro"}},
+			wantErr:     false,
+		},
+		{
 			name: "valid model with tags",
 			yaml: `
 name: tag-model

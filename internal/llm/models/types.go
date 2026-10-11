@@ -676,6 +676,11 @@ type ResolvedModel struct {
 	// Empty only for a model that cannot reason. An explicit per-call
 	// thinking_level still overrides it.
 	ThinkingLevel string
+
+	// Retirement is set when the selector named a retired model (or a
+	// provider's retired mapping of one): Definition is then its replacement.
+	// A send announces the move (drivers.SubstituteUnservableModel).
+	Retirement *RetiredModel
 }
 
 // ModelTag constants for common tags.
@@ -701,6 +706,13 @@ type ModelsConfig struct {
 	//
 	// YAML key: tags
 	Tags map[string][]TagEntry `yaml:"tags" json:"tags"`
+
+	// Retired lists the models (or one provider's mappings of a model) that
+	// their provider has shut down, and what a selector naming one runs on
+	// instead. See RetiredModel.
+	//
+	// YAML key: retired
+	Retired []RetiredModel `yaml:"retired" json:"retired"`
 
 	Models []ModelDefinition `yaml:"models" json:"models"`
 }
