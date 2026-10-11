@@ -267,6 +267,73 @@ func TestSpawnStatus_Wait_TimeoutIsNotAnError(t *testing.T) {
 	require.Equal(t, db.ThreadStatusRunning, thread.Status)
 }
 
+// A wait cut short — a message arrived for the caller, or it was interrupted —
+// is not an error, says it stopped early, and leaves the agent alone.
+func TestSpawnStatus_Wait_CutShortSaysItStoppedEarly(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
+
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	time.AfterFunc(200*time.Millisecond, cancel)
+	rc := rctx.NewToolContext(callCtx, chatID, callerID, nil, nil)
+
+	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+
+	require.False(t, resp.IsError, "response: %+v", resp)
+	require.True(t, meta.StoppedEarly, "metadata: %+v", meta)
+	require.False(t, meta.TimedOut, "the budget did not run out")
+	require.False(t, meta.HasExited)
+	require.Contains(t, resp.Content, "Stopped waiting")
+	require.Contains(t, resp.Content, "has not been stopped")
+
+	thread, err := repo.GetThread(ctx, childID)
+	require.NoError(t, err)
+	require.Equal(t, db.ThreadStatusRunning, thread.Status, "cutting the wait short must not touch the agent")
+}
+
+// The agent being waited on finishing is ITSELF a message to the caller — its
+// completion report — so the commonest reason this wait is preempted is that it
+// was about to succeed. The wait must report the finish, not "still running".
+func TestSpawnStatus_Wait_CutShortReportsTheAgentFinishing(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	callerID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusRunning)
+	seedMessage(t, repo, ctx, chatID, childID, reliantv1.MessageRole_MESSAGE_ROLE_ASSISTANT, "the answer is 42")
+
+	callCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	// The agent finishes, and its report preempts the wait, both well inside
+	// the 500ms poll — so only the last look can see the finish.
+	time.AfterFunc(100*time.Millisecond, func() {
+		now := time.Now()
+		_, err := repo.UpdateThreadStatus(context.Background(), childID, db.ThreadStatusCompleted, &now)
+		if err != nil {
+			t.Errorf("complete the agent: %v", err)
+		}
+		cancel()
+	})
+	rc := rctx.NewToolContext(callCtx, chatID, callerID, nil, nil)
+
+	resp, meta := runSpawnStatus(t, NewSpawnStatusTool(repo), rc, SpawnStatusParams{AgentID: childID, Wait: true, TimeoutSeconds: 60})
+
+	require.False(t, resp.IsError, "response: %+v", resp)
+	require.True(t, meta.HasExited, "the agent finished; metadata: %+v", meta)
+	require.False(t, meta.StoppedEarly)
+	require.Contains(t, resp.Content, "the answer is 42")
+}
+
 // timeout_seconds above the 240s ceiling must be clamped, not rejected — an
 // already-terminal agent proves the call still completes normally rather
 // than erroring on the oversized value.

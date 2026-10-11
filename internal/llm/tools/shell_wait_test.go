@@ -267,3 +267,76 @@ func TestShellWait_StopsWhenToolCallCancelled(t *testing.T) {
 		t.Error("cancellation should report the last known state, not an error")
 	}
 }
+
+// cutShortWait runs a wait whose context ends after delay — what a preemption
+// (a message arrived for the agent) or an interrupt looks like from inside the
+// tool.
+func cutShortWait(t *testing.T, d daemon.Client, delay time.Duration) (ToolResponse, ShellWaitResponseMetadata) {
+	t.Helper()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	tc := &rctx.ToolContext{
+		Daemon:   d,
+		Context:  ctx,
+		ChatID:   "chat-1",
+		Worktree: &rctx.WorktreeInfo{Path: t.TempDir()},
+	}
+	time.AfterFunc(delay, cancel)
+
+	resp, err := (&shellWaitTool{}).Execute(tc, ShellWaitParams{ProcessID: "p1", TimeoutSeconds: 240})
+	if err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	var meta ShellWaitResponseMetadata
+	if err := json.Unmarshal([]byte(resp.Metadata), &meta); err != nil {
+		t.Fatalf("metadata: %v", err)
+	}
+	return resp, meta
+}
+
+// A wait cut short says so, and says the process is untouched — not that its
+// budget ran out, which is what it used to claim.
+func TestShellWait_CutShortSaysItStoppedEarly(t *testing.T) {
+	t.Parallel()
+	d := &scriptedDaemon{steps: []*daemon.ProcessInfo{running("p1")}, listErrAfter: -1}
+
+	resp, meta := cutShortWait(t, d, 200*time.Millisecond)
+
+	if resp.IsError {
+		t.Fatalf("a wait cut short is not an error: %s", resp.Content)
+	}
+	if !meta.StoppedEarly || meta.TimedOut || meta.HasExited {
+		t.Errorf("metadata = %+v, want stopped_early and neither timed_out nor has_exited", meta)
+	}
+	for _, want := range []string{"Stopped waiting", "has not been killed", "Call shell_wait again"} {
+		if !strings.Contains(resp.Content, want) {
+			t.Errorf("content missing %q:\n%s", want, resp.Content)
+		}
+	}
+}
+
+// A wait cut short in the instant the process exited reports the exit. "Still
+// running, call again" would be false, and would cost the agent a turn to
+// learn what this call already knew.
+func TestShellWait_CutShortReportsAnExitThatJustHappened(t *testing.T) {
+	t.Parallel()
+	// The first listing is the pre-wait check; the second is the last look
+	// the cut-short wait takes, 200ms in — before the 500ms poll would have.
+	d := &scriptedDaemon{
+		steps:        []*daemon.ProcessInfo{running("p1"), exited("p1", 0)},
+		output:       "ok\n",
+		listErrAfter: -1,
+	}
+
+	resp, meta := cutShortWait(t, d, 200*time.Millisecond)
+
+	if resp.IsError {
+		t.Fatalf("unexpected error: %s", resp.Content)
+	}
+	if !meta.HasExited || meta.ExitCode == nil || *meta.ExitCode != 0 {
+		t.Errorf("metadata = %+v, want the exit the last look found", meta)
+	}
+	if !strings.Contains(resp.Content, "exit code: 0") {
+		t.Errorf("content should report the exit:\n%s", resp.Content)
+	}
+}

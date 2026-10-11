@@ -396,6 +396,9 @@ type Repository interface {
 	// already claimed by MarkAgentMessagesDelivered.
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	// MarkQueuedAgentMessagesPreempting marks the thread's queued messages that
+	// have not yet cut a waiting call short — see core.AgentMessageStore.
+	MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error)
 	// CancelQueuedAgentMessage deletes a mailbox row only if it is still
 	// queued -- see core.AgentMessageStore for the race it guards against.
 	CancelQueuedAgentMessage(ctx context.Context, id, chatID string) (cancelled bool, err error)

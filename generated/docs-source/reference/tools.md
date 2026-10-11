@@ -2021,6 +2021,11 @@ Because a single call cannot block past the tool-execution ceiling, a very long
 build may need a few consecutive shell_wait calls. That is still dramatically
 cheaper than polling, and unlike a sleep it cannot lose the wait.
 
+RETURNS EARLY WHEN A MESSAGE ARRIVES:
+If a message arrives for you while you wait — from the user, your parent, or a
+sub-agent — the wait ends early so you can read it; the message follows the
+result. The process is NOT killed. Call shell_wait again to keep waiting.
+
 RETURNS:
 - Exit code and status once the process has exited
 - The last tail_lines lines of output (default 50), so a passing build or a
@@ -2677,6 +2682,12 @@ TIMEOUTS ARE NOT FAILURES:
 If the agent is still running when the budget elapses, this returns normally
 with timed_out: true and the agent untouched. Call spawn_status again with
 wait: true to keep waiting.
+
+RETURNS EARLY WHEN A MESSAGE ARRIVES:
+If a message arrives for you while you wait — from the user, your parent, or
+ANY of your sub-agents finishing or reporting — the wait ends early so you can
+read it; the message follows the result. The agent you were waiting on is NOT
+stopped. Call spawn_status with wait: true again to keep waiting.
 
 Use spawn_send to message an agent that is still running.
 

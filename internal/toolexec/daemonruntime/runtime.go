@@ -97,6 +97,7 @@ type daemonClient struct {
 	// exec.Run) — the same correlation cancel uses, and the only handle the
 	// daemon keeps for a running execution.
 	backgroundByReq map[string]string // requestID -> toolCallID
+	preemptedByReq  map[string]bool   // cancel was a preemption; see markToolExecutionPreempted
 	watchersMu      sync.Mutex
 	watchersByPr    map[string]context.CancelFunc
 	fsWatchersMu    sync.Mutex
@@ -916,6 +917,9 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 		if m.ToolCancel == nil {
 			return nil
 		}
+		if m.ToolCancel.Reason == toolexec.PreemptedCancelReason {
+			d.markToolExecutionPreempted(m.ToolCancel.RequestId)
+		}
 		d.cancelToolExecution(m.ToolCancel.RequestId)
 		return nil
 
@@ -1510,7 +1514,7 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 		}
 	}
 
-	if execCtx.Err() != nil {
+	if execCtx.Err() != nil && !d.answersPreemption(req, result) {
 		result = &toolexec.ExecutionResult{
 			Success:      false,
 			IsError:      true,
@@ -1678,6 +1682,41 @@ func (d *daemonClient) unregisterCancel(requestID string) {
 	defer d.cancelMu.Unlock()
 	delete(d.cancelByReq, requestID)
 	delete(d.backgroundByReq, requestID)
+	delete(d.preemptedByReq, requestID)
+}
+
+// markToolExecutionPreempted records that the cancel about to reach this
+// execution is a preemption, not an abandonment. Set BEFORE the cancel fires,
+// so the execution reads it as it unwinds. A mark for an execution that has
+// already finished is harmless: nothing reads it, and unregisterCancel clears
+// it.
+func (d *daemonClient) markToolExecutionPreempted(requestID string) {
+	if strings.TrimSpace(requestID) == "" {
+		return
+	}
+	d.cancelMu.Lock()
+	defer d.cancelMu.Unlock()
+	if d.preemptedByReq == nil {
+		d.preemptedByReq = make(map[string]bool)
+	}
+	d.preemptedByReq[requestID] = true
+}
+
+// answersPreemption reports whether a cancelled execution's own result is its
+// answer. That is so only for a preemption of a preemptable tool that answered
+// cleanly: such a tool promises that being cut short loses nothing, and its
+// "stopped waiting; still running" is what the agent needs, where the generic
+// "Tool execution cancelled" would tell it nothing. Every other cancellation
+// still reports as cancelled.
+func (d *daemonClient) answersPreemption(req *reliantv1.ToolRequest, result *toolexec.ExecutionResult) bool {
+	if result == nil || !result.Success || result.IsError || !tools.IsPreemptable(req.ToolName) {
+		return false
+	}
+	d.cancelMu.Lock()
+	defer d.cancelMu.Unlock()
+	// The server names the execution by its tool call id; either id is
+	// registered for it.
+	return d.preemptedByReq[req.RequestId] || d.preemptedByReq[req.ToolCallId]
 }
 
 // markToolExecutionBackgrounded records that the user asked to detach this

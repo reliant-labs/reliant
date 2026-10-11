@@ -343,6 +343,10 @@ func (a *ExecuteToolsActivity) Execute(ctx context.Context, input ActivityInput)
 		workingPath = workspace.path
 	}
 
+	// Mail for the thread ends the batch's waits early; see
+	// execute_tools_preemption.go.
+	ctx = withBatchPreemption(ctx, newBatchPreemption(a.repo, rtx.Thread))
+
 	// Execute all tool calls in parallel using goroutines
 	// This significantly improves performance when multiple tools are called together
 	type toolCallJob struct {
@@ -814,8 +818,28 @@ func (a *ExecuteToolsActivity) executeToolWithStatus(ctx context.Context, tec *t
 	startedAt := time.Now()
 	a.upsertToolCall(ctx, tec, core.ToolCallStatusExecuting, toolCallUpsertOpts{startedAt: &startedAt})
 
-	// Execute the tool
-	execResult, execErr := a.toolExecutor.ExecuteTool(ctx, tec.buildToolRequest())
+	// Execute the tool. A preemptable one runs under the batch's preemption,
+	// and a preempted call answers for itself (preemptedOutcome) before the
+	// usual handling: it is a success, not a cancellation.
+	var execResult *toolexec.ToolResult
+	var execErr error
+	batch := batchPreemptionFrom(ctx)
+	switch {
+	case batch != nil && tools.IsPreemptable(toolName) && batch.fired():
+		// The batch was preempted before this call started (a sibling saw the
+		// mail first). Starting it now would only race a stop the daemon may
+		// not yet know how to deliver, for a call with nothing to lose by
+		// not running.
+		execResult = preemptedOutcome(nil, nil)
+	case batch != nil && tools.IsPreemptable(toolName):
+		execCtx, release := batch.arm(ctx)
+		execResult, execErr = a.toolExecutor.ExecuteTool(execCtx, tec.buildToolRequest())
+		if release() {
+			execResult, execErr = preemptedOutcome(execResult, execErr), nil
+		}
+	default:
+		execResult, execErr = a.toolExecutor.ExecuteTool(ctx, tec.buildToolRequest())
+	}
 
 	// Handle execution result
 	return a.handleToolExecutionResult(ctx, tec, execResult, execErr, startedAt)

@@ -41,7 +41,7 @@ const claimQueuedAgentMessagesForThread = `-- name: ClaimQueuedAgentMessagesForT
 DELETE FROM agent_messages
 WHERE to_thread_id = $1 AND chat_id = $2 AND status = 1 AND kind = 5
     AND ($3::text IS NULL OR id = $3::text)
-RETURNING id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized
+RETURNING id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized, preempted_at
 `
 
 type ClaimQueuedAgentMessagesForThreadParams struct {
@@ -87,6 +87,7 @@ func (q *Queries) ClaimQueuedAgentMessagesForThread(ctx context.Context, arg Cla
 			&i.DeliveredMessageID,
 			&i.Attachments,
 			&i.Synthesized,
+			&i.PreemptedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -373,7 +374,7 @@ func (q *Queries) EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReport
 }
 
 const getAgentMessage = `-- name: GetAgentMessage :one
-SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized FROM agent_messages WHERE id = $1
+SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized, preempted_at FROM agent_messages WHERE id = $1
 `
 
 func (q *Queries) GetAgentMessage(ctx context.Context, id string) (AgentMessage, error) {
@@ -393,12 +394,13 @@ func (q *Queries) GetAgentMessage(ctx context.Context, id string) (AgentMessage,
 		&i.DeliveredMessageID,
 		&i.Attachments,
 		&i.Synthesized,
+		&i.PreemptedAt,
 	)
 	return i, err
 }
 
 const getTerminalSpawnReport = `-- name: GetTerminalSpawnReport :one
-SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized FROM agent_messages
+SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized, preempted_at FROM agent_messages
 WHERE chat_id = $1 AND tool_call_id = $2 AND kind IN (2, 3, 4)
 `
 
@@ -427,12 +429,13 @@ func (q *Queries) GetTerminalSpawnReport(ctx context.Context, arg GetTerminalSpa
 		&i.DeliveredMessageID,
 		&i.Attachments,
 		&i.Synthesized,
+		&i.PreemptedAt,
 	)
 	return i, err
 }
 
 const listQueuedAgentMessagesForThread = `-- name: ListQueuedAgentMessagesForThread :many
-SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized FROM agent_messages
+SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized, preempted_at FROM agent_messages
 WHERE to_thread_id = $1 AND status = 1
 ORDER BY created_at ASC
 `
@@ -462,6 +465,7 @@ func (q *Queries) ListQueuedAgentMessagesForThread(ctx context.Context, toThread
 			&i.DeliveredMessageID,
 			&i.Attachments,
 			&i.Synthesized,
+			&i.PreemptedAt,
 		); err != nil {
 			return nil, err
 		}
@@ -570,6 +574,34 @@ func (q *Queries) MarkAgentMessagesDelivered(ctx context.Context, arg MarkAgentM
 		return nil, err
 	}
 	return items, nil
+}
+
+const markQueuedAgentMessagesPreempting = `-- name: MarkQueuedAgentMessagesPreempting :execrows
+UPDATE agent_messages SET preempted_at = $2
+WHERE to_thread_id = $1 AND status = 1 AND preempted_at IS NULL
+`
+
+type MarkQueuedAgentMessagesPreemptingParams struct {
+	ToThreadID  string       `json:"to_thread_id"`
+	PreemptedAt sql.NullTime `json:"preempted_at"`
+}
+
+// Marks every queued message for a thread that has not yet cut a waiting tool
+// call short, and reports how many it marked. Non-zero is execute_tools' signal
+// to end the thread's preemptable calls (ToolDefinition.Preemptable) so the
+// agent reads its mail now.
+//
+// Marking rather than counting is what bounds preemption to once per message.
+// A message the drain cannot deliver stays queued; counted, it would cut every
+// wait the agent started short for as long as it stayed there. Marked, it does
+// so once and is then left to the drain. One statement, so two calls polling the
+// same thread cannot both claim one message.
+func (q *Queries) MarkQueuedAgentMessagesPreempting(ctx context.Context, arg MarkQueuedAgentMessagesPreemptingParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, markQueuedAgentMessagesPreempting, arg.ToThreadID, arg.PreemptedAt)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
 }
 
 const markQueuedAgentMessagesUndeliveredForThread = `-- name: MarkQueuedAgentMessagesUndeliveredForThread :execrows

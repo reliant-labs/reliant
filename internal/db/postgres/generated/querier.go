@@ -1036,6 +1036,17 @@ type Querier interface {
 	MarkProjectDaemonInstalled(ctx context.Context, arg MarkProjectDaemonInstalledParams) error
 	// The daemon reported the queued clone succeeded.
 	MarkProjectDaemonInstalledByRequest(ctx context.Context, installRequestID string) error
+	// Marks every queued message for a thread that has not yet cut a waiting tool
+	// call short, and reports how many it marked. Non-zero is execute_tools' signal
+	// to end the thread's preemptable calls (ToolDefinition.Preemptable) so the
+	// agent reads its mail now.
+	//
+	// Marking rather than counting is what bounds preemption to once per message.
+	// A message the drain cannot deliver stays queued; counted, it would cut every
+	// wait the agent started short for as long as it stayed there. Marked, it does
+	// so once and is then left to the drain. One statement, so two calls polling the
+	// same thread cannot both claim one message.
+	MarkQueuedAgentMessagesPreempting(ctx context.Context, arg MarkQueuedAgentMessagesPreemptingParams) (int64, error)
 	// Resolve a dead thread's mailbox: every row still queued for a thread whose
 	// loop has exited becomes status 3 (undelivered), because no future loop
 	// boundary will ever drain it.

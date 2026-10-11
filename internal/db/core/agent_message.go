@@ -209,6 +209,12 @@ type AgentMessageStore interface {
 	// the caller already claimed via MarkAgentMessagesDelivered.
 	SetAgentMessagesDeliveredMessageID(ctx context.Context, ids []string, deliveredMessageID string) error
 	CountQueuedAgentMessagesForThread(ctx context.Context, toThreadID string) (int64, error)
+	// MarkQueuedAgentMessagesPreempting marks every queued message for the
+	// thread that has not yet cut a waiting tool call short, and returns how
+	// many it marked. Non-zero means "preempt the thread's waits now". Each
+	// message preempts at most once, so one the drain cannot deliver does not
+	// cut every later wait short too.
+	MarkQueuedAgentMessagesPreempting(ctx context.Context, toThreadID string, preemptedAt time.Time) (int64, error)
 	// CancelQueuedAgentMessage deletes a mailbox row identified by (id,
 	// chatID) ONLY IF it is still queued -- this races against the target
 	// agent's own drain loop, so the deletion is conditioned on status = 1

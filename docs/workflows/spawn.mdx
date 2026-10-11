@@ -34,6 +34,8 @@ When an agent calls the spawn tool:
 
 The parent agent can then use this result to inform its next steps. While a child is running, the parent can call `spawn_status` to check on it (passing `wait: true` to block until it finishes, when the parent truly cannot proceed without the answer) or `spawn_send` to give it new instructions mid-flight.
 
+A wait never makes the parent deaf. If a message arrives for the parent while it waits — from the user, from its own parent, or from any of its children finishing or reporting — the wait ends early so the parent reads it on its next turn. Nothing is stopped: the child it was waiting on keeps running, and the parent calls `spawn_status` with `wait: true` again to resume. `shell_wait` behaves the same way.
+
 Once an agent has spawned at least one child, `spawn_status`, `spawn_send` and `spawn_stop` are on its tool list from its next turn on — there is nothing to load by hand. Before its first spawn, `spawn_status` is left off, so an agent that never fans out does not pay for its schema on every request.
 
 ### Branching a chat that has sub-agents

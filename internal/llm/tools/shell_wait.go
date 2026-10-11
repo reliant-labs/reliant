@@ -2,6 +2,7 @@
 package tools
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -32,6 +33,10 @@ type ShellWaitResponseMetadata struct {
 	// TimedOut reports that the budget elapsed with the process still running.
 	// Distinct from an error: the process is fine and the call can be repeated.
 	TimedOut bool `json:"timed_out"`
+	// StoppedEarly reports that the call was cut short before its budget —
+	// preempted by a message for the agent, or interrupted — with the process
+	// still running. Like TimedOut, not an error.
+	StoppedEarly bool `json:"stopped_early,omitempty"`
 }
 
 type shellWaitTool struct{}
@@ -67,6 +72,10 @@ const (
 
 	shellWaitDefaultTailLines = 50
 
+	// stoppedEarlyCheckTimeout bounds the one last look a cut-short wait takes
+	// before answering. The call's own context is already dead by then.
+	stoppedEarlyCheckTimeout = 5 * time.Second
+
 	shellWaitDescription = `Block until a background process exits, then return its exit code and recent output.
 
 WHY THIS EXISTS:
@@ -100,6 +109,11 @@ waiting. It never kills the process — use shell_kill for that.
 Because a single call cannot block past the tool-execution ceiling, a very long
 build may need a few consecutive shell_wait calls. That is still dramatically
 cheaper than polling, and unlike a sleep it cannot lose the wait.
+
+RETURNS EARLY WHEN A MESSAGE ARRIVES:
+If a message arrives for you while you wait — from the user, your parent, or a
+sub-agent — the wait ends early so you can read it; the message follows the
+result. The process is NOT killed. Call shell_wait again to keep waiting.
 
 RETURNS:
 - Exit code and status once the process has exited
@@ -184,7 +198,7 @@ func (b *shellWaitTool) Execute(rctx *rctx.ToolContext, params ShellWaitParams) 
 		// loop would keep polling a daemon for a call nobody is waiting on.
 		select {
 		case <-rctx.Done():
-			return b.stillRunningResponse(proc, time.Since(start))
+			return b.stoppedEarly(rctx, proc, tailLines, time.Since(start))
 		case <-time.After(shellWaitPollInterval):
 		}
 
@@ -249,6 +263,43 @@ func (b *shellWaitTool) stillRunningResponse(proc *daemon.ProcessInfo, waited ti
 		HasExited: false,
 		WaitedMs:  waited.Milliseconds(),
 		TimedOut:  true,
+	}
+	return WithResponseMetadata(NewTextResponse(output), metadata), nil
+}
+
+// stoppedEarly answers a wait that was cut short — preempted by a message for
+// the agent (ToolDefinition.Preemptable), or interrupted. It takes one last look
+// first: the process may have exited in the instant before, and "it finished,
+// exit 0" is the answer the agent was waiting for, where "still running, call
+// again" would cost it a turn to learn the same thing.
+//
+// The look runs on a detached, bounded context, because the call's own context
+// is the one that just died.
+func (b *shellWaitTool) stoppedEarly(rctx *rctx.ToolContext, proc *daemon.ProcessInfo, tailLines int, waited time.Duration) (ToolResponse, error) {
+	checkCtx, cancel := context.WithTimeout(context.WithoutCancel(rctx.Context), stoppedEarlyCheckTimeout)
+	defer cancel()
+	settle := rctx.WithContext(checkCtx)
+
+	if latest, err := findProcess(settle, proc.ID); err == nil {
+		switch {
+		case latest == nil:
+			return b.vanishedResponse(proc, waited)
+		case latest.Status != "running":
+			return b.exitedResponse(settle, latest, tailLines, waited)
+		}
+	}
+
+	output := fmt.Sprintf(
+		"Stopped waiting on process %s after %s. It is STILL RUNNING and has not been killed.\nCommand: %s\n\nCall shell_wait again to keep waiting, or shell_output to see progress so far.",
+		proc.ID, formatWaitDuration(waited), proc.Command)
+
+	metadata := ShellWaitResponseMetadata{
+		ProcessID:    proc.ID,
+		Status:       proc.Status,
+		Command:      proc.Command,
+		HasExited:    false,
+		WaitedMs:     waited.Milliseconds(),
+		StoppedEarly: true,
 	}
 	return WithResponseMetadata(NewTextResponse(output), metadata), nil
 }
