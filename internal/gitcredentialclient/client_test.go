@@ -77,7 +77,7 @@ func connectError(status int, code, reason, msg string) func(w http.ResponseWrit
 	}
 }
 
-func newClient(t *testing.T, cp *fakeCP) *gitcredentialclient.Client {
+func newClient(t *testing.T, cp *fakeCP) gitcredentialclient.Service {
 	t.Helper()
 	cp.t = t
 	srv := httptest.NewServer(cp)

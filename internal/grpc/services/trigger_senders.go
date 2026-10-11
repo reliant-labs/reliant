@@ -17,7 +17,7 @@ import (
 // SenderDirectory looks people up on one integration for a trigger's "Only
 // from", with the caller's own credential for it: handles (GitHub logins) to
 // the ids trigger.sender.id carries, and ids to the person's current name.
-// Satisfied by *ghusers.Directory via an adapter in serverapi.
+// Satisfied by ghusers.Service via an adapter in serverapi.
 type SenderDirectory interface {
 	Resolve(ctx context.Context, userID string, handles, ids []string) ([]ResolvedSender, error)
 	// IsPermanent reports whether a Resolve error needs the user to act

@@ -32,7 +32,7 @@ type fakeGitHub struct {
 	users  []map[string]any
 }
 
-func (g *fakeGitHub) serve(t *testing.T) *Directory {
+func (g *fakeGitHub) serve(t *testing.T) Service {
 	t.Helper()
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		g.mu.Lock()
@@ -56,7 +56,7 @@ func (g *fakeGitHub) serve(t *testing.T) *Directory {
 		http.Error(w, `{"message":"Not Found"}`, http.StatusNotFound)
 	}))
 	t.Cleanup(srv.Close)
-	return New(tokenFunc(ownToken), Options{APIBaseURL: srv.URL, HTTPClient: srv.Client()})
+	return New(Deps{Tokens: tokenFunc(ownToken), APIBaseURL: srv.URL, HTTPClient: srv.Client()})
 }
 
 func itoa(n int) string { b, _ := json.Marshal(n); return string(b) }
@@ -121,7 +121,7 @@ func TestResolveLeavesOutWhatIsNotAPerson(t *testing.T) {
 // user".
 func TestResolveErrors(t *testing.T) {
 	notConnected := errors.New("not connected")
-	dir := New(tokenFunc(func(context.Context, string) (string, error) { return "", notConnected }), Options{})
+	dir := New(Deps{Tokens: tokenFunc(func(context.Context, string) (string, error) { return "", notConnected })})
 	_, err := dir.Resolve(context.Background(), "alice", []string{"octocat"}, nil)
 	require.ErrorIs(t, err, notConnected)
 
@@ -144,10 +144,10 @@ func TestResolveErrors(t *testing.T) {
 
 // Nothing to ask is no request, and needs no token.
 func TestResolveNothingAsksNothing(t *testing.T) {
-	dir := New(tokenFunc(func(context.Context, string) (string, error) {
+	dir := New(Deps{Tokens: tokenFunc(func(context.Context, string) (string, error) {
 		t.Fatal("no token is needed to look nobody up")
 		return "", nil
-	}), Options{})
+	})})
 	found, err := dir.Resolve(context.Background(), "alice", nil, []string{" "})
 	require.NoError(t, err)
 	assert.Empty(t, found)

@@ -27,10 +27,10 @@ type gitHubAccess struct{ *ghaccess.Refresher }
 
 func (gitHubAccess) IsPermanent(err error) bool { return ghaccess.IsPermanent(err) }
 
-// gitHubSenders adapts *ghusers.Directory to services.SenderDirectory. It
+// gitHubSenders adapts ghusers.Service to services.SenderDirectory. It
 // asks GitHub with the same token source the access refresher uses: the
 // caller's own GitHub token, delegated by control-plane when hosted.
-type gitHubSenders struct{ dir *ghusers.Directory }
+type gitHubSenders struct{ dir ghusers.Service }
 
 func (g gitHubSenders) Resolve(ctx context.Context, userID string, handles, ids []string) ([]services.ResolvedSender, error) {
 	found, err := g.dir.Resolve(ctx, userID, handles, ids)
@@ -65,7 +65,7 @@ func wireGitHubSenders(repo *db.Repo, keys *vault.Vault, getenv func(string) str
 		return nil, err
 	}
 	return map[string]services.SenderDirectory{
-		ghusers.IntegrationID: gitHubSenders{dir: ghusers.New(tokens, ghusers.Options{})},
+		ghusers.IntegrationID: gitHubSenders{dir: ghusers.New(ghusers.Deps{Tokens: tokens})},
 	}, nil
 }
 

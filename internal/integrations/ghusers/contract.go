@@ -23,6 +23,7 @@ package ghusers
 import (
 	"context"
 	"errors"
+	"net/http"
 )
 
 // IntegrationID is the integration whose users this package looks up.
@@ -32,6 +33,15 @@ const IntegrationID = "github"
 // caller's rate limit.
 const MaxQueries = 25
 
+// Service is the adapter's surface. *Directory implements it.
+type Service interface {
+	// Resolve looks up logins (to their ids) and ids (to their current
+	// logins) as userID. A query GitHub does not know is absent from the
+	// result rather than an error; an error is the token (TokenSource's, or
+	// ErrTokenRejected), too many queries, or GitHub being unreachable.
+	Resolve(ctx context.Context, userID string, logins, ids []string) ([]Found, error)
+}
+
 // TokenSource returns a user's current GitHub token. ghaccess's token sources
 // satisfy it; an error the user must act on (not connected, needs reconnect)
 // is passed through for the caller to classify.
@@ -39,19 +49,15 @@ type TokenSource interface {
 	Token(ctx context.Context, userID string) (string, error)
 }
 
-// User is one GitHub user.
-type User struct {
-	// ID is GitHub's numeric user id, as a string: trigger.sender.id.
-	ID string
-	// Login is the user's login now. For display only.
-	Login string
-}
-
-// Found is one query Resolve answered.
-type Found struct {
-	// Query is the login or id as it was asked.
-	Query string
-	User  User
+// Deps are the adapter's collaborators.
+type Deps struct {
+	// Tokens supplies the caller's own GitHub token for each Resolve.
+	Tokens TokenSource
+	// APIBaseURL overrides GitHub's API (tests). Empty is DefaultAPIBaseURL.
+	APIBaseURL string
+	// HTTPClient performs the calls. nil is an SSRF-guarded client with a
+	// 15s timeout.
+	HTTPClient *http.Client
 }
 
 var (
@@ -61,3 +67,5 @@ var (
 	// must reconnect GitHub.
 	ErrTokenRejected = errors.New("ghusers: GitHub rejected the token")
 )
+
+var _ Service = (*Directory)(nil)

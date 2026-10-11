@@ -39,13 +39,19 @@ var (
 	idPattern    = regexp.MustCompile(`^[1-9][0-9]{0,19}$`)
 )
 
-// Options configures a Directory.
-type Options struct {
-	// APIBaseURL overrides GitHub's API (tests). Empty is DefaultAPIBaseURL.
-	APIBaseURL string
-	// HTTPClient performs the calls. nil is an SSRF-guarded client with a
-	// 15s timeout.
-	HTTPClient *http.Client
+// User is one GitHub user.
+type User struct {
+	// ID is GitHub's numeric user id, as a string: trigger.sender.id.
+	ID string
+	// Login is the user's login now. For display only.
+	Login string
+}
+
+// Found is one query Resolve answered.
+type Found struct {
+	// Query is the login or id as it was asked.
+	Query string
+	User  User
 }
 
 // Directory looks GitHub users up with the caller's own token.
@@ -55,17 +61,19 @@ type Directory struct {
 	client *http.Client
 }
 
-// New builds a Directory over tokens.
-func New(tokens TokenSource, opts Options) *Directory {
-	base := strings.TrimSuffix(strings.TrimSpace(opts.APIBaseURL), "/")
+// New builds a Directory over deps.Tokens.
+//
+// forge:constructor
+func New(deps Deps) Service {
+	base := strings.TrimSuffix(strings.TrimSpace(deps.APIBaseURL), "/")
 	if base == "" {
 		base = DefaultAPIBaseURL
 	}
-	client := opts.HTTPClient
+	client := deps.HTTPClient
 	if client == nil {
 		client = &http.Client{Timeout: 15 * time.Second, Transport: netguard.New().Transport()}
 	}
-	return &Directory{tokens: tokens, base: base, client: client}
+	return &Directory{tokens: deps.Tokens, base: base, client: client}
 }
 
 // Resolve looks up logins (to their ids) and ids (to their current logins)

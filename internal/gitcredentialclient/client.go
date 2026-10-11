@@ -33,7 +33,7 @@ type Client struct {
 // New returns a client for the control-plane at deps.BaseURL.
 //
 // forge:constructor
-func New(deps Deps) *Client {
+func New(deps Deps) Service {
 	httpClient := deps.HTTPClient
 	if httpClient == nil {
 		httpClient = &http.Client{Timeout: 10 * time.Second}
