@@ -15,7 +15,10 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { renderHook, waitFor } from "@testing-library/react";
+import { renderHook as renderHookBare, waitFor } from "@testing-library/react";
+import { QueryClientProvider } from "@tanstack/react-query";
+import type { ReactNode } from "react";
+import { createTestQueryClient } from "../../test/renderWithQuery";
 
 const listPresetsForWorkflow = vi.fn();
 
@@ -46,6 +49,17 @@ vi.mock("@/store/projectStore", () => {
 });
 
 import { usePresetsForWorkflow, useWorkflowPresets } from "../globalDataStore";
+
+// The preset list is a React Query read (cached across composer mounts); the
+// app always provides a client, so the hooks are rendered under one here.
+function renderHook<T>(hook: () => T) {
+  const client = createTestQueryClient();
+  return renderHookBare(hook, {
+    wrapper: ({ children }: { children: ReactNode }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+  });
+}
 import { useWorkflowInputs } from "@/components/workflow/useWorkflowInputs";
 
 describe("workflow presets follow the right project", () => {

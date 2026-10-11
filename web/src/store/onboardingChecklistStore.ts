@@ -598,6 +598,12 @@ export const useOnboardingChecklistStore = create<OnboardingChecklistState>(
         // Skipping a tick (rather than clearing the interval) means the poll
         // resumes by itself the moment a session lands, with no re-arming.
         if (!hasSession()) return;
+        // Nobody is reading a hidden tab, and a returning user is caught up by
+        // the focus refetch. Background tabs throttle this timer to once a
+        // minute rather than stopping it, which is how one forgotten tab made
+        // 1,096 of prod's 1,183 GetProviderStatuses in a day (2026-10-08,
+        // exactly 60s apart for fourteen hours).
+        if (typeof document !== "undefined" && document.visibilityState === "hidden") return;
         void queryClient.fetchQuery({
           queryKey: settingsKeys.providers(),
           queryFn: () => api.settings.getProviders(),

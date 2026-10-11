@@ -14,7 +14,14 @@ import { create } from "zustand";
 export type ModalId =
   | "api-key-setup"
   | "upgrade-required"
-  | "billing-email-required";
+  | "billing-email-required"
+  | "app-out-of-date";
+
+export interface AppOutOfDateData {
+  // The `<service>/<method>` the server did not serve (api/versionSkew.ts).
+  // Not shown to the user; kept for the support conversation.
+  procedure: string;
+}
 
 export interface UpgradeRequiredData {
   // Machine-readable reason (X-Reliant-Reason header). The modal uses this
@@ -42,6 +49,7 @@ export interface ModalData {
   "api-key-setup": undefined;
   "upgrade-required": UpgradeRequiredData;
   "billing-email-required": BillingEmailRequiredData;
+  "app-out-of-date": AppOutOfDateData;
 }
 
 interface ModalState {

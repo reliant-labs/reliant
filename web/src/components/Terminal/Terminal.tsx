@@ -8,11 +8,12 @@ import "@xterm/xterm/css/xterm.css";
 import { logger } from "../../lib/logger";
 import { supabase } from "../../lib/supabase";
 import { cn } from "../../lib/utils";
-import { isDaemonConnectingError } from "../../lib/daemon-errors";
+import { isDaemonConnectingError, isNoMachineError } from "../../lib/daemon-errors";
 import { MONACO_FONT_FAMILY } from "../../lib/monacoTheme";
 import { useDaemonStatus } from "../../hooks/useDaemonStatus";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { DaemonWaitState } from "../DaemonWaitState";
+import { NoMachineState } from "../NoMachineState";
 import { useTerminalStore } from "../../store/terminalStore";
 import { useSidebarStore } from "../../store/sidebarStore";
 import { getGRPCBaseURLPublic } from "../../api/grpc-client";
@@ -51,6 +52,18 @@ const DAEMON_OFFLINE_GRACE_DELAY = 6000;
 // whose clone is still running. See wsErrorWorkingDirUnavailable in
 // internal/grpc/services/terminal_ws.go.
 const WORKING_DIR_UNAVAILABLE_CODE = "working_dir_unavailable";
+// The working directory is gone for good — its workspace was archived,
+// deleted, or removed from disk — so no retry can open a shell there. The
+// server's working_dir_unavailable used to cover this too, and the client
+// retried it forever: one hidden terminal for a removed worktree retried every
+// ~12s for five hours in prod (2026-10-08, 905 server WARNs).
+const WORKING_DIR_MISSING_CODE = "working_dir_missing";
+// The account has no machine at all. The server sends the router's
+// "no daemon available" text today; a dedicated code is accepted ahead of it.
+const TERMINAL_NO_MACHINE_CODE = "no_machine";
+// The machine is asleep or still starting. Typed so the client stops matching
+// the message prose (which the server still sends, for older clients).
+const DAEMON_UNAVAILABLE_CODE = "daemon_unavailable";
 // Retry cadence while waiting for that directory. Polling is the only signal
 // that it has appeared, so the cap stays short enough that the shell opens
 // soon after a clone lands. Not counted against WS_MAX_RECONNECT_ATTEMPTS: a
@@ -66,6 +79,8 @@ const WORKING_DIR_RETRY_MAX_DELAY = 10000;
  * - reconnecting:          session dropped while a daemon is online; auto-retrying with backoff
  * - waiting_for_daemon:    no daemon connected; retries are gated on daemon status
  * - waiting_for_directory: the working directory is not on the machine (yet); retrying until it is
+ * - folder_missing:        the working directory no longer exists and will not come back; no retry
+ * - no_machine:            the account has no machine at all; offers to connect one, reconnects when one appears
  * - disconnected:          terminal ended or retries exhausted; manual reconnect offered
  */
 type TerminalConnectionState =
@@ -74,6 +89,8 @@ type TerminalConnectionState =
   | "reconnecting"
   | "waiting_for_daemon"
   | "waiting_for_directory"
+  | "folder_missing"
+  | "no_machine"
   | "disconnected";
 
 export function Terminal({ sessionId, workingDir, worktreeId, projectId, className }: TerminalProps) {
@@ -91,6 +108,10 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
   // count of consecutive such refusals (drives the retry delay).
   const workingDirUnavailableRef = useRef(false);
   const workingDirAttemptsRef = useRef(0);
+  // Set when the server says this attempt's working directory is gone for good.
+  const workingDirMissingRef = useRef(false);
+  // Set when the server says the account has no machine at all (lib/daemon-errors isNoMachineError).
+  const noMachineRef = useRef(false);
   // Armed while the daemon looks offline but has not yet been offline long
   // enough to act on. See DAEMON_OFFLINE_GRACE_DELAY.
   const daemonOfflineGraceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -120,7 +141,12 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
     const wasOnline = daemonOnlineRef.current;
     daemonOnlineRef.current = daemonOnline;
 
-    if (!wasOnline && daemonOnline && connectionStateRef.current === "waiting_for_daemon") {
+    if (
+      !wasOnline &&
+      daemonOnline &&
+      (connectionStateRef.current === "waiting_for_daemon" ||
+        connectionStateRef.current === "no_machine")
+    ) {
       logger.info("[Terminal] Daemon came online, reconnecting", { sessionId });
       if (reconnectTimerRef.current) {
         clearTimeout(reconnectTimerRef.current);
@@ -215,6 +241,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
     reconnectAttemptsRef.current = 0;
     daemonUnavailableRef.current = false;
     workingDirUnavailableRef.current = false;
+    workingDirMissingRef.current = false;
+    noMachineRef.current = false;
     workingDirAttemptsRef.current = 0;
     updateConnectionState("connecting");
 
@@ -388,6 +416,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
       // Per-attempt evidence: cleared here, set by this attempt's messages.
       daemonUnavailableRef.current = false;
       workingDirUnavailableRef.current = false;
+      workingDirMissingRef.current = false;
+      noMachineRef.current = false;
       closedForDaemonOfflineRef.current = false;
 
       // Use the main gRPC base URL for terminal WebSocket connections.
@@ -472,7 +502,28 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
             } else if (data.type === "output") {
               term.write(data.data);
             } else if (data.type === "error") {
-              if (data.code === WORKING_DIR_UNAVAILABLE_CODE) {
+              if (
+                data.code === TERMINAL_NO_MACHINE_CODE ||
+                isNoMachineError(data.data)
+              ) {
+                // No machine at all. Checked before daemon_unavailable, which
+                // the server also sends for this today: waiting for a machine
+                // that does not exist would spin forever. The overlay offers
+                // to connect one; the daemon-status subscription reconnects
+                // when one appears.
+                noMachineRef.current = true;
+                logger.info("[Terminal] No machine connected to this account", { sessionId });
+              } else if (data.code === WORKING_DIR_MISSING_CODE) {
+                // Gone for good. Not an error the user caused just now, and
+                // not one a retry can fix: the overlay says so and offers to
+                // close the tab. The server closes this socket.
+                workingDirMissingRef.current = true;
+                logger.info("[Terminal] Working directory no longer exists", {
+                  sessionId,
+                  workingDir,
+                  detail: data.data,
+                });
+              } else if (data.code === WORKING_DIR_UNAVAILABLE_CODE) {
                 // The daemon could not start the shell in workingDir because
                 // the directory is not on the machine — typically a clone
                 // still running. It used to start the shell in $HOME instead.
@@ -484,7 +535,10 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
                   workingDir,
                   detail: data.data,
                 });
-              } else if (isDaemonConnectingError(data.data)) {
+              } else if (
+                data.code === DAEMON_UNAVAILABLE_CODE ||
+                isDaemonConnectingError(data.data)
+              ) {
                 // "no daemon connected" — expected while the daemon is
                 // offline. The waiting overlay owns the messaging; writing a
                 // red error per retry was spamming the buffer.
@@ -526,6 +580,21 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
         // "disconnected" instead of the waiting overlay.
         const closedForDaemonOffline = closedForDaemonOfflineRef.current;
         closedForDaemonOfflineRef.current = false;
+
+        // No machine at all: stop retrying and offer to connect one. A
+        // machine connecting is what ends this, and the daemon-status
+        // subscription above reconnects when it does.
+        if (noMachineRef.current) {
+          updateConnectionState("no_machine");
+          return;
+        }
+
+        // The working directory is gone and will not return: stop. Checked
+        // before everything else, for the same reason as the case below.
+        if (workingDirMissingRef.current) {
+          updateConnectionState("folder_missing");
+          return;
+        }
 
         // The daemon refused this attempt's working directory. Checked first:
         // it is this attempt's own evidence, and it proves the daemon was
@@ -859,10 +928,15 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
     reconnectAttemptsRef.current = 0;
     daemonUnavailableRef.current = false;
     workingDirUnavailableRef.current = false;
+    workingDirMissingRef.current = false;
+    noMachineRef.current = false;
     workingDirAttemptsRef.current = 0;
     updateConnectionState("connecting");
     void connectWebSocketRef.current?.();
   }, [updateConnectionState]);
+
+  const killSession = useTerminalStore((state) => state.killSession);
+  const handleCloseClick = useCallback(() => killSession(sessionId), [killSession, sessionId]);
 
   // The terminal keeps its own websocket backoff (that's a connection concern),
   // but the words shown while a machine is down come from the shared policy —
@@ -945,6 +1019,36 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
                 className="px-3 py-1.5 text-xs font-medium rounded-md border border-border bg-background hover:bg-accent transition-colors"
               >
                 Try now
+              </button>
+            </div>
+          )}
+          {connectionState === "no_machine" && (
+            // No onMachineConnected: the daemon-status effect above already
+            // reconnects from this state when a machine appears.
+            <NoMachineState
+              variant="overlay"
+              purpose="open a terminal"
+              className="pointer-events-auto"
+            />
+          )}
+          {connectionState === "folder_missing" && (
+            <div
+              className="pointer-events-auto flex max-w-md flex-col items-center gap-2 rounded-lg border border-border bg-card px-4 py-3 text-center text-foreground shadow-lg"
+              role="status"
+            >
+              <span className="text-xs font-medium">This folder no longer exists</span>
+              {workingDir && (
+                <code className="break-all font-mono text-xs text-muted-foreground">{workingDir}</code>
+              )}
+              <span className="text-xs text-muted-foreground">
+                Its workspace was archived or removed from the machine, so this terminal can&rsquo;t
+                reopen here.
+              </span>
+              <button
+                onClick={handleCloseClick}
+                className="px-3 py-1.5 text-xs font-medium rounded-md bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+              >
+                Close terminal
               </button>
             </div>
           )}

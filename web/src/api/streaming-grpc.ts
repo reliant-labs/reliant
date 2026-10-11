@@ -2,10 +2,11 @@
 // Unified gRPC streaming client for user and chat updates
 // A single stream handles BOTH global user-level events and per-chat detail events.
 
-import { createClient } from "@connectrpc/connect";
+import { Code, ConnectError, createClient } from "@connectrpc/connect";
 import { create, fromJsonString } from "@bufbuild/protobuf";
 import { getStreamingTransport } from "./grpc-client";
 import { logger } from "../lib/logger";
+import { pageActivity } from "../lib/pageActivity";
 import { tabSwitchProfiler } from "../lib/tabSwitchProfiler";
 import {
   StreamingService,
@@ -124,6 +125,37 @@ const SHORT_LIVED_CONNECTION_MS = 10_000;
 // for 2.5 heartbeat intervals" as dead and force a reconnect.
 const STREAM_STALE_TIMEOUT_MS = 75_000;
 const WATCHDOG_TICK_MS = 15_000;
+
+// Resume liveness check. A tab that comes back after a phone lock or a
+// laptop sleep usually still believes its stream is "connected" — iOS
+// suspended the socket without closing it — and the watchdog above would
+// leave it sitting on that dead socket for up to 75s, missing every update
+// while the reads multiplexed onto the same HTTP/2 connection hang with it.
+// A live stream delivers a heartbeat every 30s, so if nothing at all has
+// arrived for longer than that by the time the page has had a moment to
+// drain whatever was buffered, the connection is gone: replace it now.
+export const RESUME_LIVENESS_GRACE_MS = 2_000;
+export const RESUME_STALE_AFTER_MS = 40_000;
+
+/**
+ * Whether a stream failure means the network connection under it died (as
+ * opposed to the server ending the stream with a status). Every request
+ * multiplexed onto that connection is stranded too.
+ */
+export function isConnectionLevelFailure(error: unknown): boolean {
+  if (!(error instanceof ConnectError)) return true;
+  return error.code === Code.Unknown || error.code === Code.Unavailable;
+}
+
+/**
+ * The stream was refused because of its chat subscription. StreamUserUpdates
+ * answers NotFound for a subscribed chat that no longer exists or belongs to
+ * someone else (both deliberately indistinguishable), and for nothing else
+ * during setup.
+ */
+function isChatRefused(error: unknown): boolean {
+  return error instanceof ConnectError && error.code === Code.NotFound;
+}
 
 // ============================================================================
 // Type Converters
@@ -471,6 +503,12 @@ export class UserStreamingService {
   // reconnects in between, but a reconnect of an already-synced subscription
   // (gap resync, network blip) does not re-open it.
   private chatSyncPendingFor: string | null = null;
+  // Chats the server refused to subscribe this stream to (NotFound: deleted,
+  // or not this user's). Remembered so the self-healing reconcile, which
+  // re-asserts the rendered chat on every connection change, cannot turn one
+  // refusal into a reconnect loop. Per service instance: a fresh connect()
+  // tries once more.
+  private rejectedChatIds = new Set<string>();
   // Liveness / lifecycle bookkeeping. `connectAttemptInFlight` and
   // `reconnectTimer` exist so start() can tell "a connection is genuinely being
   // worked on" from "we hold a stale AbortController that will never fire".
@@ -497,10 +535,34 @@ export class UserStreamingService {
 
   private handleVisibilityChange = (): void => {
     if (document.visibilityState !== "visible") return;
-    if (this.isIntentionallyClosed || this.isConnected_) return;
+    if (this.isIntentionallyClosed) return;
+    if (this.isConnected_) {
+      this.scheduleResumeLivenessCheck();
+      return;
+    }
     logger.info(`${LOG_PREFIX_STREAM} Tab visible again — reconnecting now`);
     this.reconnectNow("visible");
   };
+
+  private resumeCheckTimer: ReturnType<typeof setTimeout> | null = null;
+
+  private scheduleResumeLivenessCheck(): void {
+    if (this.resumeCheckTimer !== null) clearTimeout(this.resumeCheckTimer);
+    this.resumeCheckTimer = setTimeout(() => {
+      this.resumeCheckTimer = null;
+      if (this.isIntentionallyClosed || !this.isConnected_) return;
+      const silentFor = Date.now() - this.lastEventAt;
+      if (silentFor < RESUME_STALE_AFTER_MS) return;
+      logger.warn(
+        `${LOG_PREFIX_STREAM} Tab visible again but the stream has been silent — replacing the connection`,
+        { silentForMs: silentFor },
+      );
+      pageActivity().noteConnectionLost();
+      this.isConnected_ = false;
+      this.callbacks.onStatusChange("disconnected");
+      this.reconnectNow("visible");
+    }, RESUME_LIVENESS_GRACE_MS);
+  }
 
   private bindWakeHandlers(): void {
     if (this.wakeHandlersBound || typeof window === "undefined") return;
@@ -547,6 +609,7 @@ export class UserStreamingService {
       // The socket is dead but `for await` will never unblock on its own.
       // reconnectNow() aborts it, which makes the orphaned loop's catch see a
       // superseded controller and bail out quietly.
+      pageActivity().noteConnectionLost();
       this.isConnected_ = false;
       this.callbacks.onStatusChange("disconnected");
       this.reconnectNow("stale");
@@ -639,6 +702,13 @@ export class UserStreamingService {
    *    (chat_since_seq, latest] instead of sending a snapshot.
    */
   subscribeToChatDetails(chatId: string): void {
+    if (this.rejectedChatIds.has(chatId)) {
+      logger.debug(
+        `${LOG_PREFIX_STREAM} Not subscribing to a chat the server refused`,
+        { chatId: chatId.slice(0, 8) },
+      );
+      return;
+    }
     if (this.subscribedChatId === chatId) {
       if (this.isConnected_ || this.connectAttemptInFlight) {
         logger.debug(
@@ -693,6 +763,22 @@ export class UserStreamingService {
       this.subscribedChatId,
       this.lastChatSequence,
     );
+  }
+
+  /**
+   * Forget a chat the server will not stream to this user. No cursor is
+   * handed back: there is no state left on the server for one to describe.
+   */
+  private dropRefusedChat(chatId: string): void {
+    logger.warn(
+      `${LOG_PREFIX_STREAM} Server refused the chat subscription — continuing without it`,
+      { chatId: chatId.slice(0, 8) },
+    );
+    this.rejectedChatIds.add(chatId);
+    this.subscribedChatId = undefined;
+    this.lastChatSequence = 0n;
+    this.setChatSyncPendingFor(null);
+    this.callbacks.onChatSubscriptionRejected?.(chatId);
   }
 
   private setChatSyncPendingFor(chatId: string | null): void {
@@ -830,6 +916,9 @@ export class UserStreamingService {
     // Capture this connection's abort controller so we can detect if it gets
     // replaced by reconnectWithNewSubscription() before our catch block runs.
     const myAbortController = this.abortController;
+    // Whether this attempt got as far as a first event. A refusal of the chat
+    // subscription happens during stream setup, before anything is sent.
+    let delivered = false;
 
     try {
       const client = createClient(StreamingService, getStreamingTransport());
@@ -858,6 +947,7 @@ export class UserStreamingService {
 
         // Any event — including a bare heartbeat — proves the socket is alive.
         this.lastEventAt = Date.now();
+        delivered = true;
 
         if (!this.isConnected_) {
           this.isConnected_ = true;
@@ -909,11 +999,27 @@ export class UserStreamingService {
         return;
       }
 
+      // The server refuses the whole stream when the subscribed chat is gone
+      // (deleted, possibly from another device) or is not this user's. Every
+      // retry would carry the same chat and be refused the same way, so the
+      // user-level stream — the app's only push path — would stay down for
+      // good. Drop the chat and come straight back without it.
+      if (!delivered && this.subscribedChatId && isChatRefused(error)) {
+        this.dropRefusedChat(this.subscribedChatId);
+        void this.establishConnection();
+        return;
+      }
+
       const errorMessage =
         error instanceof Error ? error.message : String(error);
       logger.error(`${LOG_PREFIX_STREAM} Stream error`, {
         error: errorMessage,
       });
+      // The connection under the stream died; reads in flight on it will not
+      // be answered either. Let the transport replace them now.
+      if (isConnectionLevelFailure(error)) {
+        pageActivity().noteConnectionLost();
+      }
       this.callbacks.onError(errorMessage);
       this.callbacks.onStatusChange("error");
 
@@ -1167,6 +1273,10 @@ export class UserStreamingService {
     if (this.reconnectTimer !== null) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+    if (this.resumeCheckTimer !== null) {
+      clearTimeout(this.resumeCheckTimer);
+      this.resumeCheckTimer = null;
     }
     if (this.abortController) {
       this.abortController.abort();

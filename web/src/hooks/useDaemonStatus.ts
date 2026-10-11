@@ -1,17 +1,13 @@
 import { useCallback, useEffect } from "react";
-import { useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query";
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "../api/grpc-client";
-import { DaemonStatus, ListDaemonsRequestSchema } from "../gen/reliant/v1/daemon_registry_pb";
+import { useQuery, useQueryClient, type Query, type QueryClient } from "@tanstack/react-query";
+import { DaemonStatus } from "../gen/reliant/v1/daemon_registry_pb";
 import type { DaemonInfo } from "../gen/reliant/v1/daemon_registry_pb";
 import { logger } from "../lib/logger";
+import { DAEMON_LIST_QUERY_KEY, fetchDaemonList } from "./daemonListQuery";
 
-/**
- * THE daemon list. Every reader of ListDaemons — this hook, useDaemonList, the
- * project picker's no-machine panel — shares this one cache entry, so a screen
- * full of readers costs one request, not one per hook.
- */
-export const DAEMON_LIST_QUERY_KEY = ["reliant", "daemonRegistry", "list"] as const;
+// The key and fetcher live in daemonListQuery so readers that are not this
+// hook (useDaemonWait) can share the cache without importing it.
+export { DAEMON_LIST_QUERY_KEY, fetchDaemonList };
 
 /**
  * Safety net, not the freshness mechanism.
@@ -37,9 +33,13 @@ export const DAEMON_LIST_FALLBACK_POLL_MS = 60_000;
  * (["onboarding", "daemons", "gate", …]), which waits on a daemon appearing
  * and has to hear about it the moment it does.
  */
-export function invalidateDaemonList(queryClient: QueryClient): void {
-  void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY });
-  void queryClient.invalidateQueries({ queryKey: ["onboarding", "daemons"] });
+export function invalidateDaemonList(
+  queryClient: QueryClient,
+  options: { predicate?: (query: Query) => boolean } = {},
+): void {
+  const { predicate } = options;
+  void queryClient.invalidateQueries({ queryKey: DAEMON_LIST_QUERY_KEY, predicate });
+  void queryClient.invalidateQueries({ queryKey: ["onboarding", "daemons"], predicate });
 }
 
 /**
@@ -56,20 +56,6 @@ export function invalidateDaemonList(queryClient: QueryClient): void {
  * DAEMON_LIST_QUERY_KEY, refreshed by push and backstopped by a slow poll —
  * see DAEMON_LIST_FALLBACK_POLL_MS.
  */
-export async function fetchDaemonList(): Promise<DaemonInfo[]> {
-  // Let failures THROW. React Query keeps the last successful result on
-  // error, so a transient RPC failure (auth-token refresh, proxy hiccup,
-  // api-server restart) leaves the UI showing the last-known daemon state.
-  // The old `catch { return [] }` resolved errors to an empty list, which
-  // REPLACED the cache — one failed poll flipped every consumer to
-  // "daemon disconnected" for at least a full poll cycle even though the
-  // daemon was connected the whole time.
-  const resp = await grpcClient
-    .daemonRegistry()
-    .listDaemons(create(ListDaemonsRequestSchema));
-  return resp.daemons;
-}
-
 export function useDaemonStatus() {
   const queryClient = useQueryClient();
 

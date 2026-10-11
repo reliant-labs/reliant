@@ -57,6 +57,10 @@ import { logger } from "../lib/logger";
 import { getAuthTokenProvider } from "./authProvider";
 import { upgradeInterceptor } from "./upgradeInterceptor";
 import { machineWakeInterceptor } from "./machineWakeInterceptor";
+import { createDeadlineInterceptor } from "./rpcDeadline";
+import { classifyRpcFailure } from "./rpcErrorPolicy";
+import { noteVersionSkew } from "./versionSkew";
+import { pageActivity } from "../lib/pageActivity";
 import {
   DEFAULT_GRPC_TIMEOUT_MS,
   FILE_OPERATION_TIMEOUT_MS,
@@ -226,50 +230,26 @@ export function timeoutForProcedure(serviceTypeName: string, methodName: string)
   );
 }
 
-// ─── In-flight unary RPC registry (starvation diagnostics) ───────────
+// ─── Deadlines (active time) and stranded-request recovery ───────────
+// See rpcDeadline.ts. In short: a call's budget is measured in time the page
+// was visible and running, a read stranded across a sleep / network change /
+// dead connection is replaced with a fresh request instead of waiting out its
+// timer, and a fast read whose answer was lost is replaced at STALL_RETRY_MS.
+//
 // During the 2026-07-09 incident a hung daemon command (worktree.git_changes)
-// left GetWorktreeChanges pending; every later unary RPC queued behind it and
-// the console showed NOTHING until the first client timeout fired — with no
-// hint of what was blocking. This registry lets the timeout handler print a
-// snapshot of every in-flight unary RPC so a single console line identifies
-// the wedge.
-let _nextInFlightId = 0;
-const _inFlightUnary = new Map<number, { method: string; startedAt: number }>();
+// left GetWorktreeChanges pending and every later unary RPC queued behind it
+// with nothing in the console until the first timeout. The timeout handler
+// therefore prints a snapshot of every in-flight unary RPC, so a single
+// console line identifies the wedge.
 
-const IN_FLIGHT_DESCRIBE_CAP = 8;
-
-/**
- * Pure formatter for the in-flight diagnostic line, e.g.
- * "7 in flight, oldest: GetWorktreeChanges 43s [GetWorktreeChanges:43s, ListApprovalsByChat:9s, +1 more]"
- * Exported for tests; production code goes through describeInFlight().
- */
-export function formatInFlight(
-  entries: ReadonlyArray<{ method: string; startedAt: number }>,
-  now: number,
-): string {
-  if (entries.length === 0) return "0 in flight";
-  const oldestFirst = [...entries].sort((a, b) => a.startedAt - b.startedAt);
-  const age = (e: { startedAt: number }) =>
-    `${Math.round((now - e.startedAt) / 1000)}s`;
-  const shown = oldestFirst
-    .slice(0, IN_FLIGHT_DESCRIBE_CAP)
-    .map((e) => `${e.method}:${age(e)}`);
-  const overflow =
-    oldestFirst.length > IN_FLIGHT_DESCRIBE_CAP
-      ? `, +${oldestFirst.length - IN_FLIGHT_DESCRIBE_CAP} more`
-      : "";
-  const oldest = oldestFirst[0];
-  return `${oldestFirst.length} in flight, oldest: ${oldest.method} ${age(oldest)} [${shown.join(", ")}${overflow}]`;
-}
-
-/** Snapshot of currently in-flight unary RPCs, oldest first. */
-export function describeInFlight(): string {
-  return formatInFlight([..._inFlightUnary.values()], Date.now());
-}
+export { formatInFlight } from "./rpcDeadline";
 
 // Rate-limit rpc-timeout Sentry events: a wedged connection times out many
 // queued RPCs in a burst, and each event would carry the same diagnostic
 // snapshot — one event per minute captures the incident without flooding.
+// This warning is the ONE report of a client timeout; errorInterceptor does
+// not also capture each timed-out call as an exception (ELECTRON-8X was one
+// incident reported thirteen times).
 const RPC_TIMEOUT_REPORT_INTERVAL_MS = 60_000;
 let _lastRpcTimeoutReportAt = 0;
 
@@ -278,6 +258,9 @@ function reportRpcTimeout(
   timeoutMs: number,
   diagnostics: string,
 ): void {
+  logger.error(
+    `[gRPC Client] ${method} timed out after ${timeoutMs}ms of active time — ${diagnostics}`,
+  );
   const now = Date.now();
   if (now - _lastRpcTimeoutReportAt < RPC_TIMEOUT_REPORT_INTERVAL_MS) return;
   _lastRpcTimeoutReportAt = now;
@@ -290,69 +273,23 @@ function reportRpcTimeout(
   );
 }
 
-// Timeout interceptor to prevent requests from hanging indefinitely.
-// Races the RPC against a timer since req.signal is readonly and timeoutMs
-// is consumed by the transport before interceptors run.
-const timeoutInterceptor: Interceptor = (next) => async (req) => {
-  const methodName = req.method.name;
-  const timeoutMs = timeoutForProcedure(req.service.typeName, methodName);
-
-  // Skip timeout for streaming methods (timeout = 0)
-  if (timeoutMs === 0) {
-    return next(req);
-  }
-
-  const inFlightId = _nextInFlightId++;
-  _inFlightUnary.set(inFlightId, {
-    method: methodName,
-    startedAt: Date.now(),
-  });
-
-  const controller = new AbortController();
-  const timer = setTimeout(() => {
-    // Log BEFORE aborting so the snapshot still includes this RPC and every
-    // other call queued behind the same wedged connection — this line alone
-    // would have diagnosed the 2026-07-09 starvation from the console.
-    const diagnostics = describeInFlight();
-    logger.error(
-      `[gRPC Client] ${methodName} timed out after ${timeoutMs}ms — ${diagnostics}`,
+const deadline = createDeadlineInterceptor({
+  timeoutFor: timeoutForProcedure,
+  activity: pageActivity,
+  onTimeout: reportRpcTimeout,
+  onReplace: (method, why, diagnostics) => {
+    logger.warn(
+      `[gRPC Client] ${method} replaced with a fresh request (${why}) — ${diagnostics}`,
     );
-    reportRpcTimeout(methodName, timeoutMs, diagnostics);
-    controller.abort(
-      new ConnectError(
-        `${methodName} timed out after ${timeoutMs}ms`,
-        Code.DeadlineExceeded,
-      ),
-    );
-  }, timeoutMs);
+  },
+});
 
-  // Abort our timer if the request's own signal fires first
-  const onUpstreamAbort = () => {
-    clearTimeout(timer);
-    controller.abort(req.signal.reason);
-  };
-  if (req.signal.aborted) {
-    clearTimeout(timer);
-    _inFlightUnary.delete(inFlightId);
-    throw ConnectError.from(req.signal.reason);
-  }
-  req.signal.addEventListener("abort", onUpstreamAbort);
+/** Snapshot of currently in-flight unary RPCs, oldest first. */
+export function describeInFlight(): string {
+  return deadline.describeInFlight();
+}
 
-  try {
-    return await Promise.race([
-      next(req),
-      new Promise<never>((_, reject) => {
-        controller.signal.addEventListener("abort", () => {
-          reject(ConnectError.from(controller.signal.reason));
-        });
-      }),
-    ]);
-  } finally {
-    clearTimeout(timer);
-    _inFlightUnary.delete(inFlightId);
-    req.signal.removeEventListener("abort", onUpstreamAbort);
-  }
-};
+const timeoutInterceptor: Interceptor = deadline.interceptor;
 
 // OTel tracing interceptor — creates a span per RPC and injects W3C
 // traceparent/tracestate headers.
@@ -395,20 +332,6 @@ const tracingInterceptor: Interceptor = (next) => async (req) => {
   );
 };
 
-// Connect error codes that are client-side / expected and should NOT be reported to Sentry.
-const SENTRY_SKIP_CODES = new Set([
-  Code.Canceled,
-  Code.InvalidArgument,
-  Code.NotFound,
-  Code.AlreadyExists,
-  Code.PermissionDenied,
-  Code.Unauthenticated,
-  Code.FailedPrecondition,
-  Code.Aborted,
-  Code.OutOfRange,
-  Code.ResourceExhausted,
-]);
-
 // Warn when a unary RPC takes at least this long. Streams are excluded —
 // their duration is the lifetime of the subscription, not a latency.
 //
@@ -419,7 +342,8 @@ const SENTRY_SKIP_CODES = new Set([
 // unary long-poll is added later, exempt it here by name and say why.
 const SLOW_REQUEST_THRESHOLD_MS = 1000;
 
-// Error logging interceptor
+// Error logging interceptor. What counts as a reportable failure is decided in
+// rpcErrorPolicy.ts; this only acts on the verdict.
 const errorInterceptor: Interceptor = (next) => async (req) => {
   const startTime = Date.now();
   try {
@@ -435,27 +359,48 @@ const errorInterceptor: Interceptor = (next) => async (req) => {
     return result;
   } catch (error) {
     const duration = Date.now() - startTime;
-    // Log detailed error info
-    logger.error("[gRPC Client] Request failed:", {
+    const kind = classifyRpcFailure(error, {
+      serviceTypeName: req.service.typeName,
+      signalAborted: req.signal.aborted,
+    });
+    const context = {
       service: req.service.typeName,
       method: req.method.name,
+      durationMs: duration,
+      errorMessage: error instanceof Error ? error.message : String(error),
+      errorCode: (error as { code?: unknown })?.code,
+    };
+
+    if (kind === "aborted") {
+      // Not a failure: the abort is the cause, and its owner (the caller, a
+      // superseding reconnect, the deadline) already knows. Surface it as the
+      // cancellation it is — connect-web can throw a bare string here.
+      logger.debug("[gRPC Client] Request aborted", context);
+      throw error instanceof ConnectError ? error : ConnectError.from(req.signal.reason ?? error);
+    }
+    if (kind === "account-required") {
+      logger.info("[gRPC Client] Account required", context);
+      throw error;
+    }
+    if (kind === "machine-wait") {
+      logger.info("[gRPC Client] Machine not serving yet", context);
+      throw error;
+    }
+
+    logger.error("[gRPC Client] Request failed:", {
+      ...context,
       baseUrl: _currentBaseURL,
       isElectron: typeof window !== "undefined" ? !!window.electronAPI : false,
       protocol:
         typeof window !== "undefined" ? window.location.protocol : undefined,
-      durationMs: duration,
       error,
-      errorMessage: error instanceof Error ? error.message : String(error),
-      errorCode: (error as { code?: unknown })?.code,
       errorName: (error as { name?: unknown })?.name,
       errorCause: (error as { cause?: unknown })?.cause,
     });
 
-    // Report non-trivial errors to Sentry
-    const shouldReport =
-      !(error instanceof ConnectError) || !SENTRY_SKIP_CODES.has(error.code);
-
-    if (shouldReport) {
+    if (kind === "version-skew") {
+      noteVersionSkew(req.service.typeName, req.method.name);
+    } else if (kind === "report") {
       Sentry.captureException(error, {
         tags: {
           grpc_service: req.service.typeName,

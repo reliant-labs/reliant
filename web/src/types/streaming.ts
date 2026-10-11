@@ -424,4 +424,7 @@ export interface GlobalWebSocketCallbacks {
   // The chat whose initial sync is still outstanding for the current
   // subscription (until the server's chat_caught_up), or null.
   onChatSyncPending?: (chatId: string | null) => void;
+  // The server refused to stream `chatId` (gone, or not this user's). The
+  // service has already dropped it and reconnected without it.
+  onChatSubscriptionRejected?: (chatId: string) => void;
 }

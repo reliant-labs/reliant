@@ -19,20 +19,19 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
-import { create } from "@bufbuild/protobuf";
-import { grpcClient } from "@/api/grpc-client";
 import {
   DaemonLifecyclePhase,
   DaemonStatus,
-  ListDaemonsRequestSchema,
   type DaemonInfo as Daemon,
 } from "@/gen/reliant/v1/daemon_registry_pb";
+import { DAEMON_LIST_QUERY_KEY, fetchDaemonList } from "./daemonListQuery";
 import { capabilities } from "@/services/controlPlane/capabilities";
 import { resumeDaemon } from "@/services/controlPlane/daemon";
 import { isAlreadyResumedError } from "@/lib/daemon-resume";
 import {
   classifyDaemonWait,
   DAEMON_WAIT_POLL_MS,
+  DAEMON_WAIT_SLOW_MS,
   type DaemonWaitState,
 } from "@/lib/daemon-wait";
 import {
@@ -44,6 +43,28 @@ import {
 
 /** How often the elapsed clock re-renders the copy while waiting. */
 const TICK_MS = 1_000;
+
+/**
+ * Backstop poll of the machine's status while a wait is in progress.
+ *
+ * NOT the freshness mechanism: the list is the shared, push-invalidated
+ * DAEMON_LIST_QUERY_KEY, and the gateway announces every attach, detach and
+ * lifecycle transition (provisioning, cloning, suspend, failure) on the user
+ * stream. This used to poll its own key every 2s for as long as anything
+ * waited — including a terminal parked on a SUSPENDED machine, which waits
+ * until the user acts. In prod that was ~1,700 of 2,750 ListDaemons a day
+ * from one open tab (2026-10-08 api-server log: 30/min, exactly 2s apart).
+ */
+export const DAEMON_WAIT_STATUS_POLL_MS = 15_000;
+
+/**
+ * Caller retry cadence once the wait is past DAEMON_WAIT_SLOW_MS. A machine
+ * that has not come up in 20s is a cold boot (minutes, see
+ * DaemonConnectingGate); the moment it attaches, the pushed daemon list flips
+ * to ACTIVE and the caller is retried at once, so a slower cadence costs no
+ * latency.
+ */
+export const DAEMON_WAIT_SLOW_RETRY_MS = 5_000;
 
 /**
  * When the current wait on the machine began — ONE clock for every surface.
@@ -137,23 +158,6 @@ export function useDaemonWait({
     };
   }, [waiting]);
 
-  // Poll the machine's real status while waiting. Cloud-only: without a
-  // control plane there is no record to read, and the copy falls back to the
-  // self-hosted branch which needs no status.
-  const { data: daemons, refetch } = useQuery<Daemon[]>({
-    queryKey: ["daemonWait", "daemons"],
-    queryFn: async () =>
-      (
-        await grpcClient
-          .daemonRegistry()
-          .listDaemons(create(ListDaemonsRequestSchema))
-      ).daemons,
-    enabled: waiting && capabilities.cloudDaemons,
-    refetchInterval: waiting ? DAEMON_WAIT_POLL_MS : false,
-    refetchIntervalInBackground: false,
-    staleTime: 0,
-  });
-
   // Wakes in flight (lib/machineWake). A request that found its machine
   // asleep comes back naming the machine the server woke, and the transport
   // records it there.
@@ -169,14 +173,6 @@ export function useDaemonWait({
     [waking],
   );
 
-  // Forget wakes that are over (the machine came up, failed, or never left
-  // sleep), so a later wait on the same machine is not mislabelled as a wake.
-  useEffect(() => {
-    for (const d of daemons ?? []) {
-      if (waking.has(d.daemonId) && !isWaking(d)) clearWaking(d.daemonId);
-    }
-  }, [daemons, waking, isWaking]);
-
   // Which machine are we actually waiting on?
   //
   // Ordered by what best explains the wait, because picking wrong means
@@ -185,17 +181,52 @@ export function useDaemonWait({
   // "suspended". A machine being woken for this user wins — the server named
   // it as the one a request needed; then one reporting an in-flight startup
   // phase; then one the backend has said something about; then anything.
-  const daemon = useMemo<Daemon | null>(() => {
-    const list = daemons ?? [];
-    if (list.length === 0) return null;
-    return (
+  const pickDaemon = useCallback(
+    (list: readonly Daemon[]): Daemon | null =>
       list.find(isWaking) ??
       list.find((d) => STARTUP_PHASES.has(d.lifecyclePhase)) ??
       list.find((d) => d.lastStatusMessage?.trim()) ??
       list[0] ??
-      null
-    );
-  }, [daemons, isWaking]);
+      null,
+    [isWaking],
+  );
+
+  // The machine's real status, from the shared push-invalidated list. Read
+  // once when a wait begins (staleTime 0), then kept current by push. The
+  // backstop poll runs only while the machine is on its way somewhere — a
+  // SUSPENDED or FAILED one will not change until someone acts, and the push
+  // says when they do (see DAEMON_WAIT_STATUS_POLL_MS). Decided from the data
+  // each fetch returns, so it stops the moment the answer is "suspended".
+  // Cloud-only: without a control plane there is no record to read, and the
+  // copy falls back to the self-hosted branch which needs no status.
+  const { data: daemons, refetch } = useQuery<Daemon[]>({
+    queryKey: DAEMON_LIST_QUERY_KEY,
+    queryFn: fetchDaemonList,
+    enabled: waiting && capabilities.cloudDaemons,
+    refetchInterval: (query) => {
+      if (!waiting) return false;
+      const d = pickDaemon(query.state.data ?? []);
+      const next = classifyDaemonWait({
+        daemon: d,
+        elapsedMs: 0,
+        isCloud: capabilities.cloudDaemons,
+        wakeStartedAt: d ? waking.get(d.daemonId) : undefined,
+      });
+      return next.shouldRetry ? DAEMON_WAIT_STATUS_POLL_MS : false;
+    },
+    refetchIntervalInBackground: false,
+    staleTime: 0,
+  });
+
+  // Forget wakes that are over (the machine came up, failed, or never left
+  // sleep), so a later wait on the same machine is not mislabelled as a wake.
+  useEffect(() => {
+    for (const d of daemons ?? []) {
+      if (waking.has(d.daemonId) && !isWaking(d)) clearWaking(d.daemonId);
+    }
+  }, [daemons, waking, isWaking]);
+
+  const daemon = useMemo<Daemon | null>(() => pickDaemon(daemons ?? []), [daemons, pickDaemon]);
 
   // Drive the caller's retry on the poll cadence, but only while the state
   // says retrying is still worthwhile — a FAILED or SUSPENDED machine will
@@ -211,11 +242,23 @@ export function useDaemonWait({
   }, [waiting, daemon, elapsedMs, waking]);
 
   const shouldRetry = state?.shouldRetry ?? false;
+
+  const slow = elapsedMs >= DAEMON_WAIT_SLOW_MS;
   useEffect(() => {
     if (!waiting || !shouldRetry) return;
-    const id = setInterval(() => onRetryRef.current?.(), DAEMON_WAIT_POLL_MS);
+    const id = setInterval(
+      () => onRetryRef.current?.(),
+      slow ? DAEMON_WAIT_SLOW_RETRY_MS : DAEMON_WAIT_POLL_MS,
+    );
     return () => clearInterval(id);
-  }, [waiting, shouldRetry]);
+  }, [waiting, shouldRetry, slow]);
+
+  // The machine just attached (the gateway's push refetched the list): retry
+  // now rather than on the next tick.
+  const daemonActive = daemon?.status === DaemonStatus.ACTIVE;
+  useEffect(() => {
+    if (waiting && daemonActive) onRetryRef.current?.();
+  }, [waiting, daemonActive]);
 
   // Restarts the shared clock, so every surface's escalation starts over
   // together; the others pick it up on their next tick.

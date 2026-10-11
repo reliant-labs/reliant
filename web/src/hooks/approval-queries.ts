@@ -135,12 +135,22 @@ export async function approveAllPendingApprovals(chatId: string): Promise<void> 
 }
 
 // --- Query hooks ---
+//
+// The fetch is only the cold-start seed; freshness comes from the chat stream.
+// Approval and question events are durable chat updates, so the stream both
+// patches them live and REPLAYS the ones a chat missed when it is reopened
+// (cursor resume) or re-snapshotted — the latest per entity is in every
+// snapshot. A time-based staleTime added nothing on top of that except a
+// ListApprovalsByChat + GetPendingQuestion pair on every chat open past 30s,
+// racing the replay that was already bringing the same answer.
+const streamMaintained = { staleTime: Infinity } as const;
 
 export function useApprovals(chatId?: string) {
   return useQuery<ToolApprovalRequest[]>({
     queryKey: approvalKeys.list(chatId!),
     queryFn: () => api.approvals.listByChat(chatId!),
     enabled: !!chatId,
+    ...streamMaintained,
   });
 }
 
@@ -149,6 +159,7 @@ export function usePendingApprovals(chatId?: string) {
     queryKey: approvalKeys.list(chatId!),
     queryFn: () => api.approvals.listByChat(chatId!),
     enabled: !!chatId,
+    ...streamMaintained,
     select: (data) =>
       data.filter((a) => a.status === ApprovalStatus.PENDING),
   });
@@ -159,6 +170,7 @@ export function usePendingQuestion(chatId?: string) {
     queryKey: questionKeys.pending(chatId!),
     queryFn: () => questionGrpc.getPendingQuestion(chatId!),
     enabled: !!chatId,
+    ...streamMaintained,
   });
 }
 

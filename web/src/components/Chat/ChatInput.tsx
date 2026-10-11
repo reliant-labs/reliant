@@ -44,7 +44,6 @@ import { InlineParamInput } from "../workflow/InlineParamInput";
 import { InlinePresetPicker } from "../workflow/InlinePresetPicker";
 import type { InputDef } from "../../lib/inputHelpers";
 import { workflowGrpc } from "../../api/workflow-grpc";
-import { presetGrpc } from "../../api/preset-grpc";
 import { chatGrpc, QUEUED_SENDER_KIND_HUMAN } from "../../api/chat-grpc";
 import { useProjectStore } from "../../store/projectStore";
 import { usePreferencesStore, DEFAULT_WORKFLOW } from "../../store/preferencesStore";
@@ -63,6 +62,21 @@ import {
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
 import { useQueuedAgentMessages } from "../../hooks/queued-agent-messages";
+import {
+  fetchDefaultPresets,
+  useWorkflowDefinitionQuery,
+} from "../../hooks/workflow-config-queries";
+
+/** Workflow tag metadata for preset matching. */
+interface WorkflowTagInfo {
+  workflowTag?: string;
+  groupTags: Record<string, string>; // groupName -> tag
+  groupUIs: Record<string, string | undefined>; // groupName -> ui
+}
+
+// Stable while the definition is loading or unavailable: the default-presets
+// effect lists this object in its dependencies.
+const EMPTY_WORKFLOW_TAG_INFO: WorkflowTagInfo = { groupTags: {}, groupUIs: {} };
 import { findPinnedModel } from "../../lib/modelId";
 import { ComposerModelName } from "./ComposerModelName";
 import {
@@ -309,16 +323,6 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
     );
     const showAskOnly = hasPendingQuestion && !!askUserQuestion;
 
-    // Workflow params panel state
-    const [workflowInputs, setWorkflowInputs] = useState<WorkflowInputs | null>(
-      null
-    );
-    // Workflow tag metadata for preset matching
-    const [workflowTagInfo, setWorkflowTagInfo] = useState<{
-      workflowTag?: string;
-      groupTags: Record<string, string>; // groupName -> tag
-      groupUIs: Record<string, string | undefined>; // groupName -> ui
-    }>({ groupTags: {}, groupUIs: {} });
     // Initialize workflowParams from persisted storage for existing chats
     // For new chats (no chatId), start empty so workflow defaults are used
     const [workflowParams, setWorkflowParams] = useState<
@@ -401,45 +405,38 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       return useChatParamsStore.getState().tempNewChatPresets;
     });
 
-    // Load workflow inputs when selection changes
-    useEffect(() => {
-      const loadInputs = async () => {
-        if (!currentProjectFromStore?.id) {
-          setWorkflowInputs(null);
-          setWorkflowTagInfo({ groupTags: {}, groupUIs: {} });
-          return;
-        }
-
-        const targetWorkflow = workflowName;
-
-        try {
-          const result = await workflowGrpc.getWorkflow(
-            currentProjectFromStore.id,
-            { name: targetWorkflow }
-          );
-          const workflow = result.workflow;
-          const { inputs, groupTags, groupUIs } = buildWorkflowInputsFromProto(
-            workflow?.inputs as Record<string, any> | undefined
-          );
-
-          setWorkflowInputs(inputs);
-          setWorkflowTagInfo({
-            workflowTag: workflow?.presets?.tag,
-            groupTags,
-            groupUIs,
-          });
-        } catch (error) {
-          logger.warn("[ChatInput] Failed to load workflow inputs", {
-            error,
-            targetWorkflow,
-          });
-          setWorkflowInputs(null);
-          setWorkflowTagInfo({ groupTags: {}, groupUIs: {} });
-        }
+    // The selected workflow's inputs. Cached per (project, workflow), so a
+    // reopened chat has its params UI on the first frame instead of after a
+    // GetWorkflow round trip on every mount.
+    const workflowDefinition = useWorkflowDefinitionQuery(
+      currentProjectFromStore?.id,
+      workflowName
+    );
+    const { workflowInputs, workflowTagInfo } = useMemo((): {
+      workflowInputs: WorkflowInputs | null;
+      workflowTagInfo: WorkflowTagInfo;
+    } => {
+      const result = workflowDefinition.data;
+      if (!result) {
+        return { workflowInputs: null, workflowTagInfo: EMPTY_WORKFLOW_TAG_INFO };
+      }
+      const workflow = result.workflow;
+      const { inputs, groupTags, groupUIs } = buildWorkflowInputsFromProto(
+        workflow?.inputs as Record<string, any> | undefined
+      );
+      return {
+        workflowInputs: inputs,
+        workflowTagInfo: { workflowTag: workflow?.presets?.tag, groupTags, groupUIs },
       };
-
-      loadInputs();
-    }, [currentProjectFromStore?.id, workflowName]);
+    }, [workflowDefinition.data]);
+    useEffect(() => {
+      if (workflowDefinition.error) {
+        logger.warn("[ChatInput] Failed to load workflow inputs", {
+          error: workflowDefinition.error,
+          targetWorkflow: workflowName,
+        });
+      }
+    }, [workflowDefinition.error, workflowName]);
 
     // Fetch thread-specific workflow inputs when a non-main thread is selected
     useEffect(() => {
@@ -588,8 +585,9 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
           return;
         }
 
-        // Get all default presets for this workflow (one RPC)
-        const defaults = await presetGrpc.getDefaultPresets(
+        // Get all default presets for this workflow (one RPC, cached across
+        // chat opens alongside the definition and preset list).
+        const defaults = await fetchDefaultPresets(
           currentProjectFromStore.id,
           workflowName
         );

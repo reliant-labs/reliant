@@ -113,4 +113,29 @@ describe("daemon list push", () => {
     store.handleStatusChange("connected");
     expect(listInvalidated()).toBe(true);
   });
+
+  it("does not re-read on reconnect what the user already re-read since the stream dropped", () => {
+    // Returning to the tab: the window-focus refetch lands before the stream
+    // finishes reconnecting. Re-reading the same lists again on "connected"
+    // was the duplicate half of every resume burst.
+    vi.spyOn(useChatStore.getState(), "loadChats").mockResolvedValue(undefined as never);
+    const store = useGlobalUpdatesStore.getState();
+    const CHAT_LIST = ["chats", "list", "p1"] as const;
+    const ARCHIVED = ["chats", "archived"] as const;
+    queryClient.setQueryData(ARCHIVED, []);
+
+    vi.advanceTimersByTime(1_000);
+    store.handleStatusChange("error");
+
+    vi.advanceTimersByTime(1_000);
+    queryClient.setQueryData(DAEMON_LIST_QUERY_KEY, []);
+    queryClient.setQueryData(CHAT_LIST, { chats: [], lastUserUpdateSequence: 0 });
+
+    store.handleStatusChange("connected");
+    expect(listInvalidated()).toBe(false);
+    expect(queryClient.getQueryState(CHAT_LIST)?.isInvalidated).toBe(false);
+    // Read before the drop: may have missed an ephemeral signal.
+    expect(queryClient.getQueryState(ARCHIVED)?.isInvalidated).toBe(true);
+    expect(queryClient.getQueryState(GATE_KEY)?.isInvalidated).toBe(true);
+  });
 });

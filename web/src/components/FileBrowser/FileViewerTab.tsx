@@ -31,6 +31,8 @@ import { getRelativePath } from "../../lib/fileUtils";
 import { isDaemonConnectingError } from "../../lib/daemon-errors";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
 import { DaemonWaitState } from "../DaemonWaitState";
+import { NoMachineState } from "../NoMachineState";
+import { isNoMachineError } from "../../lib/daemon-errors";
 import { useDaemonWait } from "../../hooks/useDaemonWait";
 import { AddToChatPopup } from "./AddToChatPopup";
 import { ImagePreviewModal } from "../ui/ImagePreviewModal";
@@ -84,6 +86,8 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
   const [error, setError] = useState<string | null>(null);
   // Blocked on the machine rather than broken — rendered as a wait, not an error.
   const [waitingOnDaemon, setWaitingOnDaemon] = useState(false);
+  // The account has no machine at all (lib/daemon-errors isNoMachineError) — not a broken file.
+  const [noMachine, setNoMachine] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showImageModal, setShowImageModal] = useState(false);
@@ -153,6 +157,7 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
     setLoading(true);
     setShowLoadingSpinner(false);
     setError(null);
+    setNoMachine(false);
     setSaveSuccess(false);
     setShowImageModal(false);
     setPreviewInfo(null);
@@ -211,6 +216,10 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
         return;
       }
       setWaitingOnDaemon(false);
+      if (isNoMachineError(err)) {
+        setNoMachine(true);
+        return;
+      }
       console.error("Failed to load file preview:", err);
       setError(mapLoadError(err));
     } finally {
@@ -432,6 +441,8 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
       setError(
         isDaemonConnectingError(err)
           ? "Your machine didn't come online, so this file wasn't saved. Your changes are still here — try again."
+          : isNoMachineError(err)
+            ? "No machine is connected, so this file wasn't saved. Your changes are still here — connect a machine and try again."
           : err instanceof Error
             ? err.message
             : "Failed to save file",
@@ -896,6 +907,15 @@ export function FileViewerTab({ file, worktreeId, isActive, viewerId, embedded =
           variant="panel"
           secondary
           onRetry={daemonWait.retryNow}
+        />
+      );
+    }
+
+    if (noMachine) {
+      return (
+        <NoMachineState
+          purpose="open this file"
+          onMachineConnected={() => void loadPreview()}
         />
       );
     }

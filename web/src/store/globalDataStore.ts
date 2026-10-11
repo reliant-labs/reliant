@@ -5,6 +5,10 @@ import { presetGrpc, type Preset } from "../api/preset-grpc";
 import { logger } from "../lib/logger";
 import { waitForConfig } from "../lib/configReady";
 import { useProjectStore } from "./projectStore";
+import {
+  invalidateWorkflowConfig,
+  usePresetsForWorkflowQuery,
+} from "../hooks/workflow-config-queries";
 
 // Re-export Preset type for consumers
 export type { Preset } from "../api/preset-grpc";
@@ -77,9 +81,6 @@ interface GlobalDataState {
   isInitialized: boolean;
   isPrefetching: boolean; // Track if prefetch is in progress
 
-  // Version counter to trigger re-fetches in dependent hooks
-  presetsVersion: number;
-
   // Actions
   prefetch: () => Promise<void>;
   refetchModels: () => Promise<void>;
@@ -108,7 +109,6 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
 
   isInitialized: false,
   isPrefetching: false,
-  presetsVersion: 0,
 
   // Prefetch all static data in parallel on app load
   prefetch: async () => {
@@ -212,6 +212,9 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   },
 
   refetchWorkflows: async (projectId: string) => {
+    // Every caller is a change (save, copy, delete, visibility) or a project
+    // switch; the cached definitions and preset lists go stale with it.
+    invalidateWorkflowConfig("workflows");
     // Deduplicate concurrent calls for the same project
     if (pendingWorkflowFetch && pendingWorkflowFetch.projectId === projectId) {
       return pendingWorkflowFetch.promise;
@@ -235,6 +238,9 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
   },
 
   refetchPresets: async (projectId: string) => {
+    // Every caller just saved, edited or deleted a preset (or switched
+    // project), so the cached per-workflow preset lists are stale.
+    invalidateWorkflowConfig("presets");
     // Deduplicate concurrent calls for the same project
     if (pendingPresetFetch && pendingPresetFetch.projectId === projectId) {
       return pendingPresetFetch.promise;
@@ -243,12 +249,7 @@ export const useGlobalDataStore = create<GlobalDataState>((set, get) => ({
     const promise = (async () => {
       try {
         const presets = await presetGrpc.listPresets(projectId);
-        // Increment presetsVersion to trigger re-fetch in usePresetsForWorkflow
-        set((state) => ({
-          presets,
-          presetsLoading: false,
-          presetsVersion: state.presetsVersion + 1,
-        }));
+        set({ presets, presetsLoading: false });
       } catch (error) {
         const errorMessage =
           error instanceof Error ? error.message : "Failed to fetch presets";
@@ -320,6 +321,8 @@ export const usePresetsForWorkflow = (workflowName: string) => {
   return useWorkflowPresets(projectId, workflowName);
 };
 
+const EMPTY_PRESETS: Preset[] = [];
+
 // Get presets filtered for a specific workflow in an explicit project.
 // This calls the ListPresetsForWorkflow gRPC endpoint which validates
 // that preset params exist in the workflow and match tags.
@@ -328,46 +331,33 @@ export const usePresetsForWorkflow = (workflowName: string) => {
 // automation being edited for another project) must use this one: project
 // presets differ per project, so reading the current one would offer — and
 // store — presets the run's project does not have.
+//
+// Cached per (project, workflow) — see hooks/workflow-config-queries.ts. A
+// chat reopened within the stale window renders its presets on the first
+// frame instead of refetching them on every mount.
 export const useWorkflowPresets = (projectId: string | undefined, workflowName: string) => {
-  const [presets, setPresets] = React.useState<Preset[]>([]);
-  const [loading, setLoading] = React.useState(true);
-  const [error, setError] = React.useState<string | null>(null);
-
-  // Subscribe to presetsVersion to re-fetch when presets are updated
-  const presetsVersion = useGlobalDataStore((state) => state.presetsVersion);
+  const query = usePresetsForWorkflowQuery(projectId, workflowName);
+  const enabled = !!projectId && !!workflowName;
 
   React.useEffect(() => {
-    if (!projectId || !workflowName) {
-      setPresets([]);
-      setLoading(false);
-      return;
-    }
-
-    let cancelled = false;
-    setLoading(true);
-    setError(null);
-
-    presetGrpc.listPresetsForWorkflow(projectId, workflowName)
-      .then((result) => {
-        if (!cancelled) {
-          setPresets(result);
-          setLoading(false);
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) {
-          logger.error("[usePresetsForWorkflow] Failed to load presets", { error: err, workflowName });
-          setError(err instanceof Error ? err.message : "Failed to load presets");
-          setLoading(false);
-        }
+    if (query.error) {
+      logger.error("[usePresetsForWorkflow] Failed to load presets", {
+        error: query.error,
+        workflowName,
       });
+    }
+  }, [query.error, workflowName]);
 
-    return () => {
-      cancelled = true;
-    };
-  }, [projectId, workflowName, presetsVersion]);
-
-  return { presets, loading, error };
+  return {
+    // Stable when empty: consumers list `presets` in effect dependencies.
+    presets: query.data ?? EMPTY_PRESETS,
+    loading: enabled && query.isPending,
+    error: query.error
+      ? query.error instanceof Error
+        ? query.error.message
+        : "Failed to load presets"
+      : null,
+  };
 };
 
 // Usage:

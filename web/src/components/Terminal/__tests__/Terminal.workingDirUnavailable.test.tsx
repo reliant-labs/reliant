@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import React from "react";
 
 // ---------------------------------------------------------------------------
@@ -55,16 +55,15 @@ class FakeWebSocket {
    * The daemon refused the directory. The server sends the coded error, then
    * its handler returns and drops the connection without a close frame (1006).
    */
-  refuseWorkingDir(dir: string) {
+  refuseWorkingDir(dir: string, code = "working_dir_unavailable") {
+    this.fail(code, `create terminal session: terminal working directory unavailable: ${dir} does not exist`);
+  }
+
+  /** The server sends a coded error, then drops the connection (1006). */
+  fail(code: string, data: string) {
     this.readyState = FakeWebSocket.OPEN;
     this.onopen?.();
-    this.onmessage?.({
-      data: JSON.stringify({
-        type: "error",
-        code: "working_dir_unavailable",
-        data: `create terminal session: terminal working directory unavailable: ${dir} does not exist`,
-      }),
-    });
+    this.onmessage?.({ data: JSON.stringify({ type: "error", code, data }) });
     this.readyState = FakeWebSocket.CLOSED;
     this.onclose?.({ code: 1006, reason: "" });
   }
@@ -134,6 +133,7 @@ vi.mock("../../../api/grpc-client", () => ({
 const terminalStoreState = vi.hoisted(() => ({
   updateSessionPID: () => {},
   setDaemonSessionId: () => {},
+  killSession: vi.fn(),
   activeSessionId: "session-1",
 }));
 
@@ -246,5 +246,94 @@ describe("Terminal working directory not on the machine yet", () => {
     });
     expect(screen.queryByText(PROJECT_DIR)).toBeNull();
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("Terminal working directory gone for good", () => {
+  // Prod, 2026-10-08: a hidden terminal for a removed worktree retried every
+  // ~12s for five hours, because "not there yet" and "never coming back" were
+  // the same server code. The server now says working_dir_missing for the
+  // second; the terminal must stop and say so.
+  const REMOVED_DIR = "/home/workspace/.reliant/worktrees/reliant-labs/365-95b57228";
+
+  it("stops retrying and offers to close the terminal", async () => {
+    render(React.createElement(Terminal, { sessionId: "session-1", workingDir: REMOVED_DIR }));
+    await flushConnect();
+
+    await act(async () => {
+      sockets[0].refuseWorkingDir(REMOVED_DIR, "working_dir_missing");
+    });
+
+    expect(screen.getByText("This folder no longer exists")).toBeTruthy();
+    expect(screen.getByText(REMOVED_DIR)).toBeTruthy();
+
+    await act(async () => {
+      vi.advanceTimersByTime(LONGEST_RETRY_MS * 5);
+    });
+    await flushConnect();
+    expect(sockets).toHaveLength(1);
+    expect(xtermWrites.join("")).not.toContain("Error:");
+
+    fireEvent.click(screen.getByRole("button", { name: "Close terminal" }));
+    expect(terminalStoreState.killSession).toHaveBeenCalledWith("session-1");
+  });
+});
+
+describe("Terminal machine not serving", () => {
+  it("reads the typed daemon_unavailable code, not the prose", async () => {
+    render(React.createElement(Terminal, { sessionId: "session-1", workingDir: "/w" }));
+    await flushConnect();
+
+    await act(async () => {
+      sockets[0].fail("daemon_unavailable", "your machine is asleep");
+    });
+
+    // A wait, not a red error line in the user's scrollback.
+    expect(xtermWrites.join("")).not.toContain("Error:");
+  });
+});
+
+describe("Terminal with no machine on the account", () => {
+  // The server reports "no machine at all" under the same daemon_unavailable
+  // code as a machine that is asleep. Treated as a wait, the terminal showed
+  // "Waiting for your machine" and retried forever for a machine that does
+  // not exist. It must say there is none, offer to connect one, and stop.
+  const NO_MACHINE =
+    "create terminal session: no daemon available: no machine is connected to your account yet";
+
+  it("offers to connect a machine and stops retrying", async () => {
+    daemonStatusMock.mockReturnValue({ daemons: [], activeDaemon: undefined, loading: false, refresh: () => {} });
+    render(React.createElement(Terminal, { sessionId: "session-1", workingDir: "/w" }));
+    await flushConnect();
+
+    await act(async () => {
+      sockets[0].fail("daemon_unavailable", NO_MACHINE);
+    });
+
+    expect(screen.getByTestId("no-machine-state").textContent).toContain("No machine connected");
+    expect(screen.getByRole("button", { name: "Connect a machine" })).toBeTruthy();
+
+    await act(async () => {
+      vi.advanceTimersByTime(LONGEST_RETRY_MS * 5);
+    });
+    await flushConnect();
+    expect(sockets).toHaveLength(1);
+    expect(xtermWrites.join("")).not.toContain("Error:");
+  });
+
+  it("connects by itself once a machine appears", async () => {
+    daemonStatusMock.mockReturnValue({ daemons: [], activeDaemon: undefined, loading: false, refresh: () => {} });
+    const view = render(React.createElement(Terminal, { sessionId: "session-1", workingDir: "/w" }));
+    await flushConnect();
+    await act(async () => {
+      sockets[0].fail("no_machine", NO_MACHINE);
+    });
+
+    daemonStatusMock.mockReturnValue({ daemons: [], activeDaemon: { daemonId: "d1" }, loading: false, refresh: () => {} });
+    view.rerender(React.createElement(Terminal, { sessionId: "session-1", workingDir: "/w" }));
+    await flushConnect();
+
+    expect(sockets).toHaveLength(2);
+    expect(screen.queryByTestId("no-machine-state")).toBeNull();
   });
 });

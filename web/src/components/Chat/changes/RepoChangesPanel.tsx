@@ -9,6 +9,8 @@ import { retryAcrossWake } from "../../../lib/daemon-retry";
 import { cn } from "../../../lib/utils";
 import { useDaemonWait } from "../../../hooks/useDaemonWait";
 import { DaemonWaitState } from "../../DaemonWaitState";
+import { NoMachineState } from "../../NoMachineState";
+import { isNoMachineError } from "../../../lib/daemon-errors";
 import { Button } from "../../ui/Button";
 import ConfirmationDialog from "../../forge-ui/confirmation_dialog";
 import { PRDialog } from "../../SourceControl/PRDialog";
@@ -532,6 +534,9 @@ export function RepoChangesPanel({
     >
       {waitingOnDaemon && daemonWait.state && !data ? (
         <DaemonWaitState state={daemonWait.state} secondary onRetry={daemonWait.retryNow} />
+      ) : loadError && !data && isNoMachineError(loadError) ? (
+        // No machine at all: not a failure to retry, a machine to connect.
+        <NoMachineState purpose="see this workspace's changes" onMachineConnected={retry} />
       ) : loadError && !data ? (
         <div role="alert" className="mx-1.5 flex flex-col items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
           <p className="text-sm font-semibold text-destructive">Couldn't load changes</p>
