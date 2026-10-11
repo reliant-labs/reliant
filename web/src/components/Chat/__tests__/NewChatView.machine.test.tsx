@@ -19,6 +19,7 @@ const daemonState = vi.hoisted(() => ({
     activeDaemon: undefined as { daemonId: string; hostname: string; status: number } | undefined,
     daemons: [] as Array<{ daemonId: string; hostname: string; status: number }>,
     loading: false,
+    answered: undefined as boolean | undefined,
   },
 }));
 const startChat = vi.hoisted(() => vi.fn(async () => ({ id: "chat-new" })));
@@ -64,7 +65,7 @@ vi.mock("../../../store/chatParamsStore", () => ({
   useChatParamsStore: storeMock(() => ({ transferTempToChat: vi.fn() })),
 }));
 vi.mock("@/hooks/useDaemonStatus", () => ({
-  useDaemonStatus: () => ({ ...daemonState.current, refresh: vi.fn() }),
+  useDaemonStatus: () => ({ answered: !daemonState.current.loading, ...daemonState.current, refresh: vi.fn() }),
 }));
 vi.mock("@/hooks/useDaemonWait", () => ({
   useDaemonWait: ({ waiting }: { waiting: boolean }) => ({
@@ -149,6 +150,17 @@ describe("NewChatView: where the chat runs", () => {
     await waitFor(() => expect(startChat).toHaveBeenCalled());
     expect((startChat.mock.calls[0] as unknown[])[0]).toBe("w-main");
     expect(machineArg()).toEqual({ daemonId: undefined, noMachine: true });
+  });
+
+  // Prod 2026-10-11: a tab waking from sleep had every RPC time out,
+  // ListDaemons among them. A first read that failed is not an empty list:
+  // nothing is known, and No machine (one-way) must not become the default.
+  it("does not default to No machine when the first daemon-list read failed", () => {
+    daemonState.current = { activeDaemon: undefined, daemons: [], loading: false, answered: false };
+    render(<NewChatView tabId="t1" />);
+
+    expect(screen.getByTestId("machine-picker")).not.toHaveTextContent("No machine");
+    expect(screen.queryByTestId("new-chat-no-machine-hint")).toBeNull();
   });
 
   it("keeps an asleep machine as the default: the send wakes it", () => {

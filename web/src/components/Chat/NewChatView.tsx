@@ -103,8 +103,13 @@ export function NewChatView({
   const ensureApiKeyOrShowModal = useApiKeySetupStore(
     (state) => state.ensureApiKeyOrShowModal
   );
-  const { activeDaemon, daemons, loading: daemonLoading, refresh: refreshDaemons } =
-    useDaemonStatus();
+  const {
+    activeDaemon,
+    daemons,
+    loading: daemonLoading,
+    answered: daemonsAnswered,
+    refresh: refreshDaemons,
+  } = useDaemonStatus();
   const daemonConnected = Boolean(activeDaemon);
 
   // Where the chat runs (NO_MACHINE_CHATS.md §2.1). Null until the user picks:
@@ -116,9 +121,13 @@ export function NewChatView({
   const canPickMachine = useCapability("chatDaemonSelection");
   const [machineChoice, setMachineChoice] = useState<ChatMachineChoice | null>(null);
   const awaitingBundledDaemon = useBundledDaemonPending(hasMachine(daemons));
+  // Until the registry has answered, nothing is known about the user's
+  // machines — including when the first read failed (a tab waking with a dead
+  // connection). An empty list then is not "no machine", and No machine is a
+  // one-way choice.
   const defaultMachine = defaultChatMachine({
     daemons,
-    loading: daemonLoading,
+    loading: !daemonsAnswered,
     awaitingBundledDaemon,
   });
   const machine = (canPickMachine ? machineChoice : null) ?? defaultMachine ?? DEFAULT_MACHINE;

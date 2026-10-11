@@ -7,7 +7,10 @@
  *     that died outright leaves — the registry flips the daemon to offline
  *     90s later with no event of its own;
  *   - the stream reconnecting, because the announcements are ephemeral and
- *     anything sent while it was down is gone.
+ *     anything sent while it was down is gone;
+ *   - a heartbeat from a daemon the cached list does not show as connected,
+ *     which is proof the list is stale (prod 2026-10-11: a serving machine
+ *     read "disconnected" for hours and nothing made the list re-read).
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +27,9 @@ vi.mock("../../api/streaming-grpc", () => ({
 }));
 
 import { queryClient } from "../../lib/query-client";
-import { DAEMON_LIST_QUERY_KEY } from "../../hooks/useDaemonStatus";
+import { DAEMON_LIST_QUERY_KEY, resetDaemonHeartbeatReconcile } from "../../hooks/useDaemonStatus";
+import { create } from "@bufbuild/protobuf";
+import { DaemonInfoSchema, DaemonStatus } from "../../gen/reliant/v1/daemon_registry_pb";
 import { useChatStore } from "../chatStore";
 import { resetDaemonHeartbeatWatchdogs, useGlobalUpdatesStore } from "../globalUpdatesStore";
 
@@ -58,6 +63,7 @@ beforeEach(() => {
   queryClient.setQueryData(DAEMON_LIST_QUERY_KEY, []);
   queryClient.setQueryData(GATE_KEY, []);
   resetDaemonHeartbeatWatchdogs();
+  resetDaemonHeartbeatReconcile();
 });
 
 afterEach(() => {
@@ -85,6 +91,10 @@ describe("daemon list push", () => {
   });
 
   it("re-reads the list once a heartbeating daemon goes silent past the registry's lease", () => {
+    // A heartbeating daemon is one the list shows attached.
+    queryClient.setQueryData(DAEMON_LIST_QUERY_KEY, [
+      create(DaemonInfoSchema, { daemonId: "d1", status: DaemonStatus.ACTIVE }),
+    ]);
     const store = useGlobalUpdatesStore.getState();
     store.handleUpdate([heartbeat("d1")]);
 
@@ -100,6 +110,16 @@ describe("daemon list push", () => {
     expect(listInvalidated()).toBe(false);
 
     vi.advanceTimersByTime(5_000);
+    expect(listInvalidated()).toBe(true);
+  });
+
+  it("re-reads the list when a daemon it calls disconnected heartbeats", () => {
+    queryClient.setQueryData(DAEMON_LIST_QUERY_KEY, [
+      create(DaemonInfoSchema, { daemonId: "d1", status: DaemonStatus.DISCONNECTED }),
+    ]);
+
+    useGlobalUpdatesStore.getState().handleUpdate([heartbeat("d1")]);
+
     expect(listInvalidated()).toBe(true);
   });
 
