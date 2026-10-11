@@ -1718,6 +1718,10 @@ models:
   # ============================================================================
   # VERTEX AI MODELS - Google Cloud Vertex AI hosted models
   # ============================================================================
+  #
+  # A vertexai api_model is the "Model ID" on the model's Vertex AI page
+  # (bare, no @YYYYMMDD snapshot — Google documents none for these models).
+  # TestVertexAPIModelsMatchVertexDocs pins every one of them.
 
   # The Vertex-only twin of claude-5.5-opus (which carries its own vertexai
   # mapping and so is what tag selectors actually reach). Its tier entries
@@ -1901,7 +1905,7 @@ models:
       supported_file_types: [image, pdf, text]
     providers:
       - driver: vertexai
-        api_model: claude-sonnet-4-5@20250929
+        api_model: claude-sonnet-4-5
     default_temperature: 1.0
 
   - id: vertex-claude-4.5-haiku
@@ -1918,7 +1922,7 @@ models:
       supported_file_types: [image, pdf, text]
     providers:
       - driver: vertexai
-        api_model: claude-haiku-4-5@20250512
+        api_model: claude-haiku-4-5
     default_temperature: 1.0
 
   - id: vertex-gemini-2.5-pro
