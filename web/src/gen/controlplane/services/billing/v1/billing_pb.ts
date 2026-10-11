@@ -2071,7 +2071,8 @@ export const GetCurrentUserBillingEmailRequestSchema: GenMessage<GetCurrentUserB
  */
 export type GetCurrentUserBillingEmailResponse = Message<"controlplane.v1.GetCurrentUserBillingEmailResponse"> & {
   /**
-   * billing_email is the user-supplied billing address, empty when unset.
+   * billing_email is the user-supplied billing address once CONFIRMED; empty
+   * when unset or unconfirmed (billing flows ignore an unconfirmed one).
    *
    * @generated from field: string billing_email = 1;
    */
@@ -2099,6 +2100,8 @@ export const GetCurrentUserBillingEmailResponseSchema: GenMessage<GetCurrentUser
 export type UpdateBillingEmailRequest = Message<"controlplane.v1.UpdateBillingEmailRequest"> & {
   /**
    * email is the billing address to persist. Empty clears any stored value.
+   * Must currently equal the caller's verified account email
+   * (case-insensitive), or the call fails FAILED_PRECONDITION.
    *
    * @generated from field: string email = 1;
    */
@@ -2598,10 +2601,13 @@ export const BillingService: GenService<{
     output: typeof GetInvoicePreviewResponseSchema;
   },
   /**
-   * Per-user billing email. UpdateBillingEmail persists a user-supplied
-   * billing address (empty clears it); GetCurrentUserBillingEmail returns the
-   * stored value plus the fallback (users.email / JWT) the billing flows use
-   * when no billing email is set. Backs reliant/web's BillingEmailRequiredModal.
+   * Per-user billing email. UpdateBillingEmail persists a CONFIRMED billing
+   * address (empty clears it) and, until an emailed confirmation exists,
+   * accepts only the caller's own verified account email — any other address
+   * is FAILED_PRECONDITION and nothing is stored. GetCurrentUserBillingEmail
+   * returns the confirmed value plus the fallback (users.email / JWT) the
+   * billing flows use when there is none. Backs reliant/web's
+   * BillingEmailRequiredModal.
    *
    * @generated from rpc controlplane.v1.BillingService.GetCurrentUserBillingEmail
    */

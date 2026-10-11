@@ -4308,7 +4308,8 @@ func (*GetCurrentUserBillingEmailRequest) Descriptor() ([]byte, []int) {
 
 type GetCurrentUserBillingEmailResponse struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// billing_email is the user-supplied billing address, empty when unset.
+	// billing_email is the user-supplied billing address once CONFIRMED; empty
+	// when unset or unconfirmed (billing flows ignore an unconfirmed one).
 	BillingEmail string `protobuf:"bytes,1,opt,name=billing_email,json=billingEmail,proto3" json:"billing_email,omitempty"`
 	// fallback_email is the address billing flows use when billing_email is
 	// empty (users.email, else the JWT email). May also be empty.
@@ -4364,6 +4365,8 @@ func (x *GetCurrentUserBillingEmailResponse) GetFallbackEmail() string {
 type UpdateBillingEmailRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// email is the billing address to persist. Empty clears any stored value.
+	// Must currently equal the caller's verified account email
+	// (case-insensitive), or the call fails FAILED_PRECONDITION.
 	Email         string `protobuf:"bytes,1,opt,name=email,proto3" json:"email,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache

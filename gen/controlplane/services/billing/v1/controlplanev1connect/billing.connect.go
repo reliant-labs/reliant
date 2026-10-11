@@ -256,10 +256,13 @@ type BillingServiceClient interface {
 	GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error)
 	GetComputeUsage(context.Context, *connect.Request[v1.GetComputeUsageRequest]) (*connect.Response[v1.GetComputeUsageResponse], error)
 	GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error)
-	// Per-user billing email. UpdateBillingEmail persists a user-supplied
-	// billing address (empty clears it); GetCurrentUserBillingEmail returns the
-	// stored value plus the fallback (users.email / JWT) the billing flows use
-	// when no billing email is set. Backs reliant/web's BillingEmailRequiredModal.
+	// Per-user billing email. UpdateBillingEmail persists a CONFIRMED billing
+	// address (empty clears it) and, until an emailed confirmation exists,
+	// accepts only the caller's own verified account email — any other address
+	// is FAILED_PRECONDITION and nothing is stored. GetCurrentUserBillingEmail
+	// returns the confirmed value plus the fallback (users.email / JWT) the
+	// billing flows use when there is none. Backs reliant/web's
+	// BillingEmailRequiredModal.
 	GetCurrentUserBillingEmail(context.Context, *connect.Request[v1.GetCurrentUserBillingEmailRequest]) (*connect.Response[v1.GetCurrentUserBillingEmailResponse], error)
 	UpdateBillingEmail(context.Context, *connect.Request[v1.UpdateBillingEmailRequest]) (*connect.Response[v1.UpdateBillingEmailResponse], error)
 }
@@ -800,10 +803,13 @@ type BillingServiceHandler interface {
 	GetUsageSummary(context.Context, *connect.Request[v1.GetUsageSummaryRequest]) (*connect.Response[v1.GetUsageSummaryResponse], error)
 	GetComputeUsage(context.Context, *connect.Request[v1.GetComputeUsageRequest]) (*connect.Response[v1.GetComputeUsageResponse], error)
 	GetInvoicePreview(context.Context, *connect.Request[v1.GetInvoicePreviewRequest]) (*connect.Response[v1.GetInvoicePreviewResponse], error)
-	// Per-user billing email. UpdateBillingEmail persists a user-supplied
-	// billing address (empty clears it); GetCurrentUserBillingEmail returns the
-	// stored value plus the fallback (users.email / JWT) the billing flows use
-	// when no billing email is set. Backs reliant/web's BillingEmailRequiredModal.
+	// Per-user billing email. UpdateBillingEmail persists a CONFIRMED billing
+	// address (empty clears it) and, until an emailed confirmation exists,
+	// accepts only the caller's own verified account email — any other address
+	// is FAILED_PRECONDITION and nothing is stored. GetCurrentUserBillingEmail
+	// returns the confirmed value plus the fallback (users.email / JWT) the
+	// billing flows use when there is none. Backs reliant/web's
+	// BillingEmailRequiredModal.
 	GetCurrentUserBillingEmail(context.Context, *connect.Request[v1.GetCurrentUserBillingEmailRequest]) (*connect.Response[v1.GetCurrentUserBillingEmailResponse], error)
 	UpdateBillingEmail(context.Context, *connect.Request[v1.UpdateBillingEmailRequest]) (*connect.Response[v1.UpdateBillingEmailResponse], error)
 }
