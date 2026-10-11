@@ -91,20 +91,21 @@ jobs:
       # and Settings → About rendered "vmain". A version that is a branch name
       # identifies no build.
       #
-      # Two cases, both honest:
-      #   tag push  -> the semver, without the leading "v" (matches release.yml,
-      #                which stamps ${VERSION#v})
-      #   otherwise -> 0.0.0-dev-<short-sha>, a pseudo-version that sorts below
-      #                every real release and names the exact commit.
+      # scripts/release-identity.sh decides it — the resolver release.yml, the
+      # web bundle and control-plane's prod image all stamp from:
+      #   tag push  -> the semver, without the leading "v" (1.8.1)
+      #   otherwise -> the commit's dev identity (1.8.2-dev+<sha8>): the next
+      #                release's dev build, naming the exact commit.
+      # The script exits non-zero rather than print nothing; set -e makes that
+      # fatal, so an image never ships reporting "unknown".
       - name: Determine stamped version
         id: stamp
         run: |
           set -euo pipefail
-          SHORT_SHA="$(echo "${{ github.sha }}" | cut -c1-7)"
           if [ "${{ github.ref_type }}" = "tag" ]; then
-            STAMP_VERSION="${GITHUB_REF_NAME#v}"
+            STAMP_VERSION="$(bash scripts/release-identity.sh --tag "$GITHUB_REF_NAME" --commit "$GITHUB_SHA")"
           else
-            STAMP_VERSION="0.0.0-dev-${SHORT_SHA}"
+            STAMP_VERSION="$(bash scripts/release-identity.sh --commit "$GITHUB_SHA")"
           fi
           echo "version=$STAMP_VERSION" >> "$GITHUB_OUTPUT"
           echo "date=$(date -u +'%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_OUTPUT"

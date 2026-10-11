@@ -1,5 +1,6 @@
 import * as Sentry from "@sentry/react";
 import { getPrivacySettings } from "../store/privacyStore";
+import { appBuild } from "./appBuild";
 import { isDev } from "./constants";
 import { scrubBreadcrumb, scrubEvent, scrubRecordingEvent } from "./sentryScrub";
 
@@ -74,8 +75,10 @@ export async function initSentry() {
     return;
   }
 
-  // Get version from Electron API to determine environment
-  let version = "unknown";
+  // The desktop app's own version when Electron provides one, else this
+  // bundle's baked identity — without which every hosted-web event was filed
+  // under `reliant@unknown`.
+  let version = appBuild()?.version ?? "unknown";
   let isPrerelease = false;
   
   try {

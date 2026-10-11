@@ -6,26 +6,41 @@
  */
 
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const version = vi.fn();
 vi.mock("../../../api/system-grpc", () => ({
   systemGrpc: { version: () => version() },
 }));
+const appBuild = vi.fn();
+vi.mock("../../../lib/appBuild", () => ({ appBuild: () => appBuild() }));
 
 const { MobileAboutScreen } = await import("../MobileAboutScreen");
 
 describe("MobileAboutScreen", () => {
-  it("shows the version once loaded", async () => {
-    version.mockResolvedValue({ version: "2.3.4" });
+  beforeEach(() => {
+    appBuild.mockReturnValue({
+      version: "1.8.2-dev+10c676b6",
+      commit: "10c676b6f2fa66a4b13e68f2f995289a7245b8f0",
+      ref: "10c676b6f2fa66a4b13e68f2f995289a7245b8f0",
+      built: "2026-10-11T18:47:32.000Z",
+    });
+  });
+
+  it("shows this app's build and the server's", async () => {
+    version.mockResolvedValue({ version: "2.3.4", commit: "abc" });
     render(<MobileAboutScreen onBack={vi.fn()} />);
+    expect(screen.getByText("v1.8.2-dev+10c676b6")).toBeInTheDocument();
     expect(await screen.findByText("v2.3.4")).toBeInTheDocument();
   });
 
-  it("falls back to a default version on fetch failure", async () => {
+  it("never invents a version when the server cannot be reached", async () => {
+    // It used to print "v1.0.0" here — a release that never shipped.
     version.mockRejectedValue(new Error("network down"));
     render(<MobileAboutScreen onBack={vi.fn()} />);
-    expect(await screen.findByText("v1.0.0")).toBeInTheDocument();
+    expect(await screen.findByText("unreachable")).toBeInTheDocument();
+    expect(screen.queryByText("v1.0.0")).not.toBeInTheDocument();
+    expect(screen.getByText("v1.8.2-dev+10c676b6")).toBeInTheDocument();
   });
 
   it("does not render an update-check UI", async () => {

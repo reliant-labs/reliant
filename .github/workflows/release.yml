@@ -415,7 +415,22 @@ jobs:
         run: |
           set -euo pipefail
 
-          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${VERSION#v}"
+          # THE VERSION STAMP comes from scripts/release-identity.sh, the one
+          # resolver the web bundle and control-plane's prod image use too, so
+          # the About page's app and server lines agree. A tag build passes its
+          # tag (-> 1.8.1); a dispatch from a branch gets the commit's dev
+          # identity (-> 1.8.2-dev+<sha8>). --commit names HEAD so the generated
+          # sources unpacked above do not read as a dirty tree. The script exits
+          # non-zero rather than print nothing, and set -e makes that fatal: a
+          # release must never ship a binary that reports "unknown".
+          COMMIT="$(git rev-parse HEAD)"
+          if [[ "$VERSION" == v[0-9]* ]]; then
+            IDENTITY="$(bash scripts/release-identity.sh --tag "$VERSION" --commit "$COMMIT")"
+          else
+            IDENTITY="$(bash scripts/release-identity.sh --commit "$COMMIT")"
+          fi
+          echo "Stamping version=${IDENTITY} commit=${COMMIT}"
+          LDFLAGS="-s -w -X github.com/reliant-labs/reliant/internal/build.BuildType=production -X github.com/reliant-labs/reliant/internal/version.Version=${IDENTITY} -X github.com/reliant-labs/reliant/internal/version.Commit=${COMMIT}"
 
           # Compiled-in hosted endpoints. Same defect as build-config.js on the
           # Electron side: internal/builddefaults documents these as injected

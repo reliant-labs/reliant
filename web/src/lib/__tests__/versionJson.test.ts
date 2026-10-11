@@ -1,63 +1,241 @@
-import { describe, expect, it } from "vitest";
+import { execFileSync } from "node:child_process";
+import { mkdtempSync, rmSync, writeFileSync, mkdirSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import type { ConfigEnv, UserConfig } from "vite";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import {
+  ALLOW_UNVERSIONED_ENV,
+  RELEASE_IDENTITY_SCRIPT,
   VERSION_JSON_FILE,
-  resolveVersionPayload,
+  resolveBuild,
+  unversionedBuildError,
+  versionJson,
+  type ResolveDeps,
 } from "../../../vite-plugin-version-json";
 
-// The deployed SPA rewrites every unmatched path to index.html (Firebase
-// Hosting `** -> /index.html`). A client-side route named "version" would be
-// served BY that rewrite, as HTML — which is the state this replaced, where
-// /version, /version.json and /__version all returned the app shell with 200.
-//
-// Emitting a real file into the bundle root is what takes it out of the
-// rewrite's reach, so the file NAME is the contract these tests pin.
+const SHA = "10c676b6f2fa66a4b13e68f2f995289a7245b8f0";
+const NOW = new Date("2026-10-11T18:47:32.000Z");
+
+/** Deps that record the resolver's arguments and answer from a table. */
+function fakeDeps(identity: string | Error, git: Record<string, string> = {}) {
+  const calls: string[][] = [];
+  const deps: ResolveDeps = {
+    identity: (args) => {
+      calls.push(args);
+      if (identity instanceof Error) throw identity;
+      return identity;
+    },
+    git: (args) => git[args.join(" ")] ?? "",
+    now: () => NOW,
+  };
+  return { deps, calls };
+}
+
+function argValue(args: string[], flag: string): string | undefined {
+  const i = args.indexOf(flag);
+  return i === -1 ? undefined : args[i + 1];
+}
+
+// The deployed SPA rewrites unmatched paths to index.html, so a client-side
+// "version" route would be served BY that rewrite, as HTML. A real file in the
+// bundle root is what takes it out of the rewrite's reach.
 describe("version.json", () => {
   it("is emitted at the bundle root so the SPA rewrite cannot shadow it", () => {
     expect(VERSION_JSON_FILE).toBe("version.json");
-    // No leading slash and no nesting: Firebase matches a static file by its
-    // path under the public dir, and a nested one would not answer /version.json.
     expect(VERSION_JSON_FILE).not.toContain("/");
   });
+});
 
-  it("prefers the release version the CI workflow provides", () => {
-    const payload = resolveVersionPayload({
-      RELEASE_VERSION: "v1.7.11",
-      GITHUB_SHA: "abc1234def",
-      GITHUB_REF_NAME: "v1.7.11",
-    } as NodeJS.ProcessEnv);
-
-    // The leading "v" is stripped to match release.yml, which stamps ${VERSION#v}.
-    expect(payload.version).toBe("1.7.11");
-    expect(payload.commit).toBe("abc1234def");
-    expect(payload.branch).toBe("v1.7.11");
-    expect(payload.built).not.toBe("");
+describe("resolveBuild", () => {
+  it("hands forge's GitSource pin and release to the resolver", () => {
+    // forge fetches the pin shallow with no tags; the env is the only way a
+    // tag-pinned build can learn its tag.
+    const { deps, calls } = fakeDeps("1.8.1");
+    const { info } = resolveBuild(
+      {
+        FORGE_SOURCE_REF: "v1.8.1",
+        FORGE_SOURCE_COMMIT: SHA,
+        FORGE_RELEASE: "20261011.184732-0b1d2c3e4f5a",
+      } as NodeJS.ProcessEnv,
+      deps,
+    );
+    expect(argValue(calls[0], "--ref")).toBe("v1.8.1");
+    expect(argValue(calls[0], "--commit")).toBe(SHA);
+    expect(info).toEqual({
+      version: "1.8.1",
+      commit: SHA,
+      ref: "v1.8.1",
+      release: "20261011.184732-0b1d2c3e4f5a",
+      built: NOW.toISOString(),
+    });
   });
 
-  it("never reports a branch name as the version", () => {
-    // The vmain bug in one assertion: a branch push must not produce a
-    // "version" of "main". With no RELEASE_VERSION the resolver falls through
-    // to git describe, which yields a tag/sha — never the branch.
-    const payload = resolveVersionPayload({
-      GITHUB_REF_NAME: "main",
-      GITHUB_SHA: "6f78293",
-    } as NodeJS.ProcessEnv);
-
-    expect(payload.version).not.toBe("main");
-    expect(payload.version).not.toBe("master");
-    // The branch is still reported — as `branch`, which is what it is.
-    expect(payload.branch).toBe("main");
+  it("reads the checkout itself when no one says otherwise", () => {
+    const { deps, calls } = fakeDeps("1.8.2-dev+10c676b6", {
+      "rev-parse HEAD": SHA,
+      "rev-parse --abbrev-ref HEAD": "main",
+    });
+    const { info } = resolveBuild({} as NodeJS.ProcessEnv, deps);
+    // No --commit: the resolver must keep its dirty check for a working tree.
+    expect(calls[0]).not.toContain("--commit");
+    expect(info.version).toBe("1.8.2-dev+10c676b6");
+    expect(info.commit).toBe(SHA);
+    expect(info.ref).toBe("main");
+    expect(info).not.toHaveProperty("release");
   });
 
-  it("admits it does not know rather than inventing a plausible version", () => {
-    // Env carries nothing and git is unavailable to the resolver's caller: the
-    // honest answer is "unknown". A fake-but-plausible "1.0.0" is worse than a
-    // blank, because a bug report then names a build that never shipped.
-    const payload = resolveVersionPayload({} as NodeJS.ProcessEnv);
+  it("ignores GITHUB_SHA, which names control-plane's commit in its CI", () => {
+    const { deps } = fakeDeps("1.8.2-dev+10c676b6", { "rev-parse HEAD": SHA });
+    const { info } = resolveBuild({ GITHUB_SHA: "ffffffffffffffffffffffffffffffffffffffff" } as NodeJS.ProcessEnv, deps);
+    expect(info.commit).toBe(SHA);
+  });
 
-    for (const field of [payload.version, payload.commit, payload.branch]) {
-      expect(field).not.toBe("1.0.0");
-      expect(field).not.toBe("");
+  it("passes an explicit release tag through", () => {
+    const { deps, calls } = fakeDeps("1.7.11");
+    resolveBuild({ RELEASE_VERSION: "v1.7.11" } as NodeJS.ProcessEnv, deps);
+    expect(argValue(calls[0], "--tag")).toBe("v1.7.11");
+  });
+
+  it("never reports a detached HEAD as the ref", () => {
+    const { deps } = fakeDeps("1.8.2-dev+10c676b6", { "rev-parse --abbrev-ref HEAD": "HEAD" });
+    expect(resolveBuild({} as NodeJS.ProcessEnv, deps).info.ref).toBe("unknown");
+  });
+
+  it("admits it does not know, and keeps the resolver's reason", () => {
+    const failure = Object.assign(new Error("exit 1"), {
+      stderr: "release-identity.sh: cannot name this build — no release tag and no commit\n",
+    });
+    const { deps } = fakeDeps(failure);
+    const resolved = resolveBuild({} as NodeJS.ProcessEnv, deps);
+    expect(resolved.info.version).toBe("unknown");
+    expect(resolved.info.commit).toBe("unknown");
+    expect(resolved.problem).toContain("cannot name this build");
+  });
+});
+
+// The release guard: a shipped bundle must never say "unknown".
+describe("unversioned production build", () => {
+  const failure = Object.assign(new Error("exit 1"), { stderr: "no tag, no commit" });
+  const buildEnv: ConfigEnv = { command: "build", mode: "production" };
+
+  function runConfigHook(env: NodeJS.ProcessEnv, configEnv: ConfigEnv) {
+    const plugin = versionJson(env, fakeDeps(failure).deps);
+    const hook = plugin.config as (c: UserConfig, e: ConfigEnv) => UserConfig;
+    return () => hook({}, configEnv);
+  }
+
+  it("fails the build", () => {
+    expect(runConfigHook({} as NodeJS.ProcessEnv, buildEnv)).toThrow(/cannot name its own version/);
+  });
+
+  it("does not stop the dev server", () => {
+    expect(runConfigHook({} as NodeJS.ProcessEnv, { command: "serve", mode: "development" })).not.toThrow();
+  });
+
+  it("can be waived for a build with no history", () => {
+    expect(runConfigHook({ [ALLOW_UNVERSIONED_ENV]: "1" } as NodeJS.ProcessEnv, buildEnv)).not.toThrow();
+  });
+
+  it("lets a versioned build through and bakes its identity in", () => {
+    const plugin = versionJson({} as NodeJS.ProcessEnv, fakeDeps("1.8.1").deps);
+    const hook = plugin.config as (c: UserConfig, e: ConfigEnv) => UserConfig;
+    const define = hook({}, buildEnv).define as Record<string, string>;
+    expect(JSON.parse(define.__RELIANT_BUILD__).version).toBe("1.8.1");
+    expect(unversionedBuildError(resolveBuild({} as NodeJS.ProcessEnv, fakeDeps("1.8.1").deps))).toBeNull();
+  });
+});
+
+// scripts/release-identity.sh itself, against real git repositories shaped
+// like the clones that build releases.
+describe("release-identity.sh", () => {
+  let root: string;
+  let repo: string;
+  let releaseSha: string;
+  let devSha: string;
+  // Hermetic git: no user or system config (signing, hooks, templates).
+  const gitEnv = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: "/dev/null",
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_AUTHOR_NAME: "t",
+    GIT_AUTHOR_EMAIL: "t@example.com",
+    GIT_COMMITTER_NAME: "t",
+    GIT_COMMITTER_EMAIL: "t@example.com",
+  };
+  const git = (cwd: string, ...args: string[]) =>
+    execFileSync("git", args, { cwd, env: gitEnv, encoding: "utf8" }).trim();
+  const identity = (...args: string[]) =>
+    execFileSync("bash", [RELEASE_IDENTITY_SCRIPT, ...args], { env: gitEnv, encoding: "utf8" }).trim();
+  const writePackage = (dir: string, version: string) => {
+    mkdirSync(path.join(dir, "electron"), { recursive: true });
+    writeFileSync(path.join(dir, "electron", "package.json"), JSON.stringify({ name: "reliant", version }, null, 2) + "\n");
+  };
+
+  beforeAll(() => {
+    root = mkdtempSync(path.join(tmpdir(), "release-identity-"));
+    repo = path.join(root, "reliant");
+    mkdirSync(repo);
+    git(repo, "init", "-q");
+    writePackage(repo, "1.8.1");
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "chore: release v1.8.1");
+    git(repo, "tag", "v1.8.1");
+    releaseSha = git(repo, "rev-parse", "HEAD");
+    writeFileSync(path.join(repo, "README"), "after the release\n");
+    git(repo, "add", ".");
+    git(repo, "commit", "-q", "-m", "fix: something");
+    devSha = git(repo, "rev-parse", "HEAD");
+  });
+
+  afterAll(() => {
+    rmSync(root, { recursive: true, force: true });
+  });
+
+  it("names a build at a tag by the tag", () => {
+    expect(identity("--repo", repo, "--commit", releaseSha)).toBe("1.8.1");
+  });
+
+  it("names a build at a later commit as the next patch's dev build", () => {
+    expect(identity("--repo", repo)).toBe(`1.8.2-dev+${devSha.slice(0, 8)}`);
+  });
+
+  it("works in a shallow, tagless clone — how forge and actions/checkout fetch", () => {
+    const shallow = path.join(root, "shallow");
+    git(root, "clone", "-q", "--depth", "1", "--no-tags", `file://${repo}`, shallow);
+    expect(identity("--repo", shallow)).toBe(`1.8.2-dev+${devSha.slice(0, 8)}`);
+    // …and forge's ref is what lets a tag-pinned shallow build name its tag.
+    expect(identity("--repo", shallow, "--ref", "v1.8.1", "--commit", devSha)).toBe("1.8.1");
+    // A sha or branch ref is not a version and must not be taken for one.
+    expect(identity("--repo", shallow, "--ref", devSha, "--commit", devSha)).toBe(`1.8.2-dev+${devSha.slice(0, 8)}`);
+    expect(identity("--repo", shallow, "--ref", "main")).toBe(`1.8.2-dev+${devSha.slice(0, 8)}`);
+  });
+
+  it("follows a prerelease to its own version, not past it", () => {
+    const rc = path.join(root, "rc");
+    mkdirSync(rc);
+    git(rc, "init", "-q");
+    writePackage(rc, "1.8.2-rc1");
+    git(rc, "add", ".");
+    git(rc, "commit", "-q", "-m", "rc");
+    const sha = git(rc, "rev-parse", "HEAD");
+    expect(identity("--repo", rc)).toBe(`1.8.2-dev+${sha.slice(0, 8)}`);
+  });
+
+  it("marks a dirty working tree, but not a commit named explicitly", () => {
+    writeFileSync(path.join(repo, "README"), "edited\n");
+    try {
+      expect(identity("--repo", repo)).toBe(`1.8.2-dev+${devSha.slice(0, 8)}.dirty`);
+      expect(identity("--repo", repo, "--commit", devSha)).toBe(`1.8.2-dev+${devSha.slice(0, 8)}`);
+    } finally {
+      git(repo, "checkout", "-q", "--", "README");
     }
+  });
+
+  it("refuses when it can name nothing", () => {
+    const empty = path.join(root, "empty");
+    mkdirSync(empty);
+    expect(() => identity("--repo", empty)).toThrow();
   });
 });

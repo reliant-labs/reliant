@@ -1,12 +1,12 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { ExternalLink, BookOpen, FileText, Shield, Globe, Terminal, Calendar, Github, Slack, WandSparkles } from "lucide-react";
 import { useNavigate } from "@tanstack/react-router";
 import { toast } from "../../lib/toast-manager";
 import { UpdateSection } from "./UpdateSection";
-import { systemGrpc } from "../../api/system-grpc";
 import { useTourStore } from "../../store/tourStore";
 import { ONBOARDING_STEPS } from "../Onboarding/constants";
 import { BrandMark } from "../icons/BrandMark";
+import { VersionDetails } from "./VersionDetails";
 
 type LinkItem = {
   icon: React.ComponentType<{ className?: string }>;
@@ -15,15 +15,7 @@ type LinkItem = {
   onClick?: () => void;
 };
 
-interface VersionInfo {
-  version: string;
-  commit: string;
-  date: string;
-  branch: string;
-}
-
 export function AboutSection() {
-  const [versionInfo, setVersionInfo] = useState<VersionInfo | null>(null);
   const [isInstallingCLI, setIsInstallingCLI] = useState(false);
   const isElectron = !!window.electronAPI;
   const navigate = useNavigate();
@@ -45,35 +37,6 @@ export function AboutSection() {
       setIsInstallingCLI(false);
     }
   };
-
-  useEffect(() => {
-    const fetchVersionInfo = async () => {
-      try {
-        const data = await systemGrpc.version();
-        setVersionInfo({
-          version: data.version,
-          commit: data.commit,
-          date: data.date,
-          branch: data.branch,
-        });
-      } catch (error) {
-        console.error("Failed to fetch version info:", error);
-        // Every field says "unknown", including the date. The previous
-        // fallback invented "1.0.0" / today's date / "main" — a version that
-        // looks like a real release and is not one, so a user reporting a bug
-        // reports a version that never shipped. A blank is recoverable; a
-        // plausible lie is not.
-        setVersionInfo({
-          version: "unknown",
-          commit: "unknown",
-          date: "unknown",
-          branch: "unknown",
-        });
-      }
-    };
-
-    fetchVersionInfo();
-  }, []);
 
   const links: LinkItem[] = [
     {
@@ -147,11 +110,7 @@ export function AboutSection() {
           <h1 className="text-3xl font-semibold text-foreground tracking-tight">
             Reliant
           </h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            {versionInfo?.version && versionInfo.version !== "unknown"
-              ? `v${versionInfo.version}`
-              : "version unknown"}
-          </p>
+          <VersionDetails />
         </div>
 
         {/* Quick Links */}
