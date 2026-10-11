@@ -7892,6 +7892,7 @@ reliant server api [flags]
 | `--bind-address` | `string` | `0.0.0.0` | Network address to bind to |
 | `--cors-origins` | `string` | `*` | Comma-separated CORS allowed origins, or * for all |
 | `--data-dir` | `string` | `./data` | Data directory for logs and certs |
+| `--db-direct-url` | `string` | - | Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer |
 | `--db-driver` | `string` | `postgres` | Database driver (postgres) |
 | `--db-url` | `string` | - | Database connection URL (required) |
 | `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) |
@@ -7932,6 +7933,7 @@ reliant server gateway [flags]
 | `--bind-address` | `string` | `0.0.0.0` | Network address to bind to |
 | `--daemon-port` | `int` | `9190` | Daemon bidi-streaming gRPC listen port |
 | `--data-dir` | `string` | `./data` | Data directory for logs and certs |
+| `--db-direct-url` | `string` | - | Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer |
 | `--db-driver` | `string` | `postgres` | Database driver (postgres) |
 | `--db-url` | `string` | - | Database connection URL (required) |
 | `--disable-tls` | `bool` | - | Disable TLS (use plaintext HTTP) |
@@ -7961,6 +7963,7 @@ reliant server worker [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--data-dir` | `string` | `./data` | Data directory for logs |
+| `--db-direct-url` | `string` | - | Session-capable connection URL for the same database, for session-scoped work (advisory locks); set when --db-url is a transaction-pooling PgBouncer |
 | `--db-driver` | `string` | `postgres` | Database driver (postgres) |
 | `--db-url` | `string` | - | Database connection URL (required) |
 | `--health-port` | `int` | `8081` | Health check endpoint port |
