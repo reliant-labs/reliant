@@ -68,8 +68,8 @@ func (d *daemonClient) handleTerminalInput(
 	}
 
 	if err := tm.Write(sessionID, data); err != nil {
-		logging.Warn(logPrefix+" Failed to write terminal input",
-			"sessionID", sessionID, "error", err)
+		terminalFailureLog(err, logPrefix+" Failed to write terminal input",
+			"session_id", sessionID, "error", err)
 		// Notify the server that the session has an error.
 		_ = d.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
@@ -100,8 +100,8 @@ func (d *daemonClient) handleTerminalResize(
 	rows := uint16(msg.GetRows())
 
 	if err := tm.Resize(sessionID, cols, rows); err != nil {
-		logging.Warn(logPrefix+" Failed to resize terminal",
-			"sessionID", sessionID, "cols", cols, "rows", rows, "error", err)
+		terminalFailureLog(err, logPrefix+" Failed to resize terminal",
+			"session_id", sessionID, "cols", cols, "rows", rows, "error", err)
 		_ = d.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_TerminalSessionEvent{
 				TerminalSessionEvent: &reliantv1.TerminalSessionEvent{
@@ -169,8 +169,8 @@ func (d *daemonClient) startTerminalOutputPump(
 					},
 				})
 				if sendErr != nil {
-					logging.Warn(logPrefix+" Failed to send terminal output",
-						"sessionID", sessionID, "error", sendErr)
+					logSendFailure(logPrefix+" Failed to send terminal output",
+						sendErr, "session_id", sessionID)
 					return
 				}
 			}

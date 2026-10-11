@@ -5,9 +5,14 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	forgecli "github.com/reliant-labs/forge/cli"
+	"github.com/reliant-labs/reliant/internal/logging"
 )
+
+// forgeMemoryWarn limits the render-failure WARN to one per project per hour.
+var forgeMemoryWarn = logging.NewThrottle(time.Hour, time.Now)
 
 // projectMemoryWithForgeFramework returns the project's memory bytes
 // for snapshot injection. When forge.yaml is present at projectPath, it
@@ -44,8 +49,13 @@ func forgeFrameworkMemory(projectPath string) ([]byte, bool) {
 	if err != nil {
 		// Best-effort: a forge.yaml that can't be rendered (parse
 		// error, missing name, etc.) shouldn't break the snapshot.
-		slog.Debug("forge framework memory render failed",
-			"projectPath", projectPath, "error", err)
+		// WARN, not DEBUG: every LLM session for this project starts without
+		// the framework memory, and nothing else says so. Throttled per
+		// project, because it is re-rendered for every snapshot.
+		if suppressed, ok := forgeMemoryWarn.Allow(projectPath); ok {
+			slog.Warn("forge framework memory render failed; sessions start without it",
+				"project_path", projectPath, "error", err, "suppressed", suppressed)
+		}
 		return nil, false
 	}
 	return framework, true

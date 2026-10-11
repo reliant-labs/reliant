@@ -68,6 +68,12 @@ func Error(msg string, args ...any) {
 	slog.Error(msg, args...)
 }
 
+// Log writes a record at a level chosen at the call site, for callers whose
+// level depends on the cause. Not for hot paths: a fixed level is cheaper.
+func Log(level slog.Level, msg string, args ...any) {
+	slog.Log(context.Background(), level, msg, args...)
+}
+
 // logFormatEnv selects the line format: "json" writes one JSON object per line,
 // which is what a log pipeline indexes; "text" writes key=value, which is what
 // a person greps. It is the variable forge's config block already sets, with

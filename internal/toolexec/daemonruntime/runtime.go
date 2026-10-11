@@ -142,6 +142,12 @@ type daemonClient struct {
 	// recovery runs at most once per process; see setAsideForeignDaemonID.
 	foreignIDSetAside bool
 
+	// Log policy state: see log_policy.go. Zero values are ready to use, so a
+	// daemonClient built as a literal (as tests do) needs no setup.
+	reconnects  reconnectTracker
+	rejections  rejectionTracker
+	transitions streamTransitions
+
 	// timing is the session's heartbeat and liveness cadence
 	// (session_liveness.go). Zero in production, meaning the defaults; tests
 	// shorten it.
@@ -569,6 +575,9 @@ func (d *daemonClient) recordStreamStopped(detail string) {
 }
 
 func (d *daemonClient) recordStreamTransition(s daemonstate.Stream, detail string, retrying bool) {
+	if level, attrs, ok := d.transitions.transition(s, summarizeReason(detail)); ok {
+		logging.Log(level, logPrefix+" daemon stream state", attrs...)
+	}
 	if err := daemonstate.SetStream(d.bootCfg.DataDir, s, detail); err != nil {
 		logging.Warn(logPrefix+" Failed to record daemon stream state", "error", err, "stream", string(s))
 	}
@@ -734,24 +743,51 @@ func (d *daemonClient) run(ctx context.Context) error {
 				//
 				// PermissionDenied stays fatal: there the identity was accepted
 				// and the answer was still no, which redialing cannot change.
-				logging.Error(logPrefix+" Rejected: credentials not accepted — retrying. "+
-					"Causes, in order of likelihood: the daemon's PAT is stale and the "+
-					"supervisor has not re-minted it yet; the gateway is validating against a "+
-					"DIFFERENT database than the one the PAT was minted into (compare the "+
-					"gateway's DATABASE_URL with the minting service's); or this identity's "+
-					"token was revoked.",
-					"error", err,
-					"code", connect.CodeOf(err).String(),
-					"delay", delay,
-					"grpc_url", d.bootCfg.GRPCURL,
-				)
+				// ERROR once per streak, with the causes; then one line per
+				// window carrying a count. The retry itself is DEBUG.
+				rej := d.rejections.rejected()
+				switch {
+				case rej.first:
+					logging.Error(logPrefix+" Rejected: credentials not accepted — retrying. "+
+						"Causes, in order of likelihood: the daemon's PAT is stale and the "+
+						"supervisor has not re-minted it yet; the gateway is validating against a "+
+						"DIFFERENT database than the one the PAT was minted into (compare the "+
+						"gateway's DATABASE_URL with the minting service's); or this identity's "+
+						"token was revoked.",
+						"error", err,
+						"code", connect.CodeOf(err).String(),
+						"delay", delay,
+						"grpc_url", d.bootCfg.GRPCURL,
+					)
+				case rej.emit:
+					logging.Error(logPrefix+" Credentials still not accepted",
+						"error", err,
+						"code", connect.CodeOf(err).String(),
+						"rejections", rej.total,
+						"suppressed", rej.suppressed,
+						"grpc_url", d.bootCfg.GRPCURL,
+					)
+				default:
+					logging.Debug(logPrefix+" Credentials not accepted; retrying",
+						"rejections", rej.total, "delay", delay)
+				}
 			} else {
-				logging.Error(logPrefix+" Session ended; reconnecting",
+				// A dropped stream is routine (gateway rollout, idle timeout,
+				// node drain): INFO with an attempt count, WARN once the
+				// streak is long, ERROR once the outage needs an operator.
+				d.rejections.reset()
+				dec := d.reconnects.failed(time.Since(sessionStart))
+				attrs := append(dec.attrs,
 					"error", err,
 					"code", connect.CodeOf(err).String(),
 					"delay", delay,
 					"grpc_url", d.bootCfg.GRPCURL,
 				)
+				if dec.emit {
+					logging.Log(dec.level, logPrefix+" Session ended; reconnecting", attrs...)
+				} else {
+					logging.Debug(logPrefix+" Session ended; reconnecting", attrs...)
+				}
 			}
 		}
 
@@ -853,7 +889,7 @@ func (d *daemonClient) runSession(ctx context.Context) error {
 	defer d.drainSender(senderDrainTimeout)
 
 	if err := d.sendProjectDiscovery(); err != nil {
-		logging.Warn(logPrefix+" Failed to send project discovery", "error", err)
+		logSendFailure(logPrefix+" Failed to send project discovery", err)
 	}
 
 	// End-to-end liveness (session_liveness.go). A stream the gateway has
@@ -954,6 +990,11 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 			// registration and bound the connection. Record it — a successful
 			// local Send() proves nothing about the far end.
 			d.recordStream(daemonstate.StreamConnected, "")
+			d.rejections.reset()
+			if failures, outage := d.reconnects.recovered(); failures > 0 {
+				logging.Info(logPrefix+" Gateway stream recovered",
+					"failed_attempts", failures, "disconnected_for_ms", outage.Milliseconds())
+			}
 			d.localModelMgr().signalRegistered()
 
 			// Gateway derives both identities from the PAT used to authenticate
@@ -1020,8 +1061,7 @@ func (d *daemonClient) handleServerMessage(ctx context.Context, msg *reliantv1.S
 		// (2026-07-09 incident).
 		go func(req *reliantv1.LoadProjectConfigsRequest) {
 			if err := d.sendLoadProjectConfigResponse(req.ProjectPath, req.RequestId); err != nil {
-				logging.Warn(logPrefix+" Failed to send project config response",
-					"projectPath", req.ProjectPath, "requestID", req.RequestId, "error", err)
+				logSendFailure(logPrefix+" Failed to send project config response", err, "project_path", req.ProjectPath, "request_id", req.RequestId)
 			}
 		}(m.LoadProjectConfigs)
 		return nil
@@ -1131,7 +1171,7 @@ func (d *daemonClient) handleKillProcess(req *reliantv1.DaemonKillProcessRequest
 		resp.GetKillProcessResponse().ErrorMessage = err.Error()
 	}
 	if sendErr := d.send(resp); sendErr != nil {
-		logging.Warn(logPrefix+" Failed to send kill process response", "processID", req.ProcessId, "error", sendErr)
+		logSendFailure(logPrefix+" Failed to send kill process response", sendErr, "process_id", req.ProcessId)
 	}
 }
 
@@ -1156,8 +1196,8 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	policy := daemonpolicy.FromProto(req.GetPolicy())
 	if err := policy.Check(req.CommandType, req.Payload); err != nil {
 		logging.Warn(logPrefix+" daemon command handled",
-			"commandType", req.CommandType, "requestID", req.RequestId,
-			"elapsed", "0s", "outcome", "denied",
+			"command_type", req.CommandType, "request_id", req.RequestId,
+			"elapsed_ms", 0, "outcome", "denied",
 			"grantID", policy.GrantIDForLog(), "error", err)
 		d.sendCommandFailure(req, err)
 		return
@@ -1168,8 +1208,8 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 	// with: whatever the command touches would be the wrong disk.
 	if refusal := d.guard.commandPreflight(); refusal != nil {
 		logging.Warn(logPrefix+" daemon command handled",
-			"commandType", req.CommandType, "requestID", req.RequestId,
-			"elapsed", "0s", "outcome", "refused: workspace directory changed", "error", refusal)
+			"command_type", req.CommandType, "request_id", req.RequestId,
+			"elapsed_ms", 0, "outcome", "refused: workspace directory changed", "error", refusal)
 		d.sendCommandFailure(req, refusal)
 		return
 	}
@@ -1215,8 +1255,7 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 		resp.GetDaemonCommandResponse().ErrorMessage = withNoSpaceExplanation(d.diskWatcher, err.Error())
 	}
 	if sendErr := d.send(resp); sendErr != nil {
-		logging.Warn(logPrefix+" Failed to send daemon command response",
-			"requestID", req.RequestId, "commandType", req.CommandType, "error", sendErr)
+		logSendFailure(logPrefix+" Failed to send daemon command response", sendErr, "request_id", req.RequestId, "command_type", req.CommandType)
 	}
 
 	d.announceFilesystemMutation(req.RequestId, req.CommandType, resultPayload, err)
@@ -1250,20 +1289,16 @@ func logDaemonCommandHandled(req *reliantv1.DaemonCommandRequest, elapsed time.D
 		outcome = "error"
 	}
 	args := []any{
-		"commandType", req.GetCommandType(),
-		"requestID", req.GetRequestId(),
-		"elapsed", elapsed.Round(100 * time.Microsecond).String(),
+		"command_type", req.GetCommandType(),
+		"request_id", req.GetRequestId(),
+		"elapsed_ms", elapsed.Milliseconds(),
 		"outcome", outcome,
-		"sendBacklog", sendBacklog,
+		"send_backlog", sendBacklog,
 	}
 	if err != nil {
 		args = append(args, "error", err)
 	}
-	if elapsed >= slowDaemonCommandThreshold {
-		logging.Warn(logPrefix+" daemon command handled", args...)
-		return
-	}
-	logging.Info(logPrefix+" daemon command handled", args...)
+	logging.Log(daemonCommandLogLevel(elapsed, err != nil), logPrefix+" daemon command handled", args...)
 }
 
 // sendBacklog reports how many messages are waiting for the stream writer.
@@ -1377,8 +1412,7 @@ func (d *daemonClient) sendCommandFailure(req *reliantv1.DaemonCommandRequest, c
 		},
 	}
 	if sendErr := d.send(resp); sendErr != nil {
-		logging.Warn(logPrefix+" Failed to send daemon command failure",
-			"requestID", req.RequestId, "commandType", req.CommandType, "error", sendErr)
+		logSendFailure(logPrefix+" Failed to send daemon command failure", sendErr, "request_id", req.RequestId, "command_type", req.CommandType)
 	}
 }
 
@@ -1424,7 +1458,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 			return
 		case now := <-ticker.C:
 			if err := sendHeartbeat(now); err != nil {
-				logging.Warn(logPrefix+" Failed to send heartbeat", "error", err)
+				logSendFailure(logPrefix+" Failed to send heartbeat", err)
 				return
 			}
 		case <-d.memWatcher.Changed():
@@ -1432,7 +1466,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 			// to a full heartbeat interval. Nil-safe: a nil channel (no
 			// watcher) never fires.
 			if err := sendHeartbeat(time.Now()); err != nil {
-				logging.Warn(logPrefix+" Failed to send pressure heartbeat", "error", err)
+				logSendFailure(logPrefix+" Failed to send pressure heartbeat", err)
 				return
 			}
 		case <-d.diskWatcher.Changed():
@@ -1440,7 +1474,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 			// command just failed with ENOSPC, or a cache clean-up started or
 			// finished — the UI should know now, not up to 15s later.
 			if err := sendHeartbeat(time.Now()); err != nil {
-				logging.Warn(logPrefix+" Failed to send disk heartbeat", "error", err)
+				logSendFailure(logPrefix+" Failed to send disk heartbeat", err)
 				return
 			}
 		case <-d.portWatcher.Changed():
@@ -1448,7 +1482,7 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 			// disappearance) immediately so the UI preview affordance tracks
 			// dev-server starts without a heartbeat-interval lag.
 			if err := sendHeartbeat(time.Now()); err != nil {
-				logging.Warn(logPrefix+" Failed to send port-change heartbeat", "error", err)
+				logSendFailure(logPrefix+" Failed to send port-change heartbeat", err)
 				return
 			}
 		}
@@ -1510,6 +1544,7 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 		projectPath = d.ensureMCPServersLoadedForRequest(execCtx, req, contextMap)
 	}
 
+	toolStart := time.Now()
 	result := d.localExecutor.ExecuteTool(
 		execCtx,
 		req.ToolName,
@@ -1568,6 +1603,7 @@ func (d *daemonClient) executeTool(req *reliantv1.ToolRequest) {
 		}
 	}
 
+	logToolFinished(req.ToolName, result, time.Since(toolStart))
 	d.sendToolResult(req.RequestId, result)
 }
 
@@ -1603,7 +1639,7 @@ func (d *daemonClient) sendToolResult(requestID string, result *toolexec.Executi
 		}},
 	}
 	if err := d.send(resp); err != nil {
-		logging.Warn(logPrefix+" Failed to send tool response via stream", "requestID", requestID, "error", err)
+		logSendFailure(logPrefix+" Failed to send tool response via stream", err, "request_id", requestID)
 	}
 }
 
@@ -1614,7 +1650,7 @@ func (d *daemonClient) send(msg *reliantv1.DaemonMessage) error {
 	case d.sendCh <- msg:
 		return nil
 	case <-d.sessionDone:
-		return fmt.Errorf("daemon session ended")
+		return errSessionEnded
 	}
 }
 
@@ -2000,7 +2036,7 @@ func (d *daemonClient) runProjectWatcher(ctx context.Context, projectPath string
 		}
 		msg := &reliantv1.DaemonMessage{Message: &reliantv1.DaemonMessage_ProjectConfigDelta{ProjectConfigDelta: delta}}
 		if err := d.send(msg); err != nil {
-			logging.Warn(logPrefix+" Failed to send project config delta", "projectPath", projectPath, "error", err)
+			logSendFailure(logPrefix+" Failed to send project config delta", err, "project_path", projectPath)
 		}
 	}
 

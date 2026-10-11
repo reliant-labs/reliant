@@ -109,18 +109,56 @@ func (r *Reader) OOMKillCount() (count uint64, ok bool) {
 // parseMemoryEventsOOMKill extracts the "oom_kill" counter from the flat
 // keyed format of memory.events ("<key> <value>" per line).
 func parseMemoryEventsOOMKill(data []byte) (uint64, bool) {
+	events, ok := parseMemoryEvents(data)
+	return events.OOMKill, ok && events.hasOOMKill
+}
+
+// Events are the cumulative counters in memory.events that say how hard the
+// cgroup is being squeezed. High counts times usage went over memory.high and
+// the kernel throttled the cgroup into reclaim; Max counts times it hit
+// memory.max and had to reclaim or fail an allocation; OOMKill counts kills.
+type Events struct {
+	High, Max, OOMKill uint64
+	hasOOMKill         bool
+}
+
+// parseMemoryEvents reads the counters it knows and ignores the rest. ok is
+// false when the file has none of them.
+func parseMemoryEvents(data []byte) (Events, bool) {
+	var ev Events
+	found := false
 	for _, line := range strings.Split(string(data), "\n") {
 		fields := strings.Fields(line)
-		if len(fields) != 2 || fields[0] != "oom_kill" {
+		if len(fields) != 2 {
 			continue
 		}
 		v, err := strconv.ParseUint(fields[1], 10, 64)
 		if err != nil {
-			return 0, false
+			continue
 		}
-		return v, true
+		switch fields[0] {
+		case "high":
+			ev.High, found = v, true
+		case "max":
+			ev.Max, found = v, true
+		case "oom_kill":
+			ev.OOMKill, ev.hasOOMKill, found = v, true, true
+		}
 	}
-	return 0, false
+	return ev, found
+}
+
+// Events returns the cgroup's cumulative memory.events counters. ok is false
+// when the file is absent or has none of them.
+func (r *Reader) Events() (Events, bool) {
+	if r == nil || r.root == "" {
+		return Events{}, false
+	}
+	data, err := os.ReadFile(filepath.Join(r.root, "memory.events"))
+	if err != nil {
+		return Events{}, false
+	}
+	return parseMemoryEvents(data)
 }
 
 // OOMSnapshot captures the oom_kill counter before running a command so an

@@ -172,6 +172,8 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 	// what a failure looks like — see daemon.ClassifyExecOutcome.
 	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stdoutBuf.String(), stderrBuf.String(), memReader, oomSnap, diskwatch.Default())
 
+	logExecFinished(outcome, duration)
+
 	resp := daemon.CommandResult{
 		Stdout:           stdoutBuf.String(),
 		Stderr:           outcome.Stderr,

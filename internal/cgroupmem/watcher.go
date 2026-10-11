@@ -42,6 +42,13 @@ type Watcher struct {
 	latest Sample
 	valid  bool
 
+	// events is the previous memory.events reading, so a poll can report what
+	// grew. eventsSeen is false until the first reading, which is the baseline
+	// and never reported: counters started before the daemon did.
+	events      Events
+	eventsSeen  bool
+	lastSqueeze time.Time
+
 	// changed receives one token when the pressure bit flips, letting the
 	// heartbeat loop emit immediately instead of waiting for the next tick.
 	// Buffered(1) + non-blocking send: transitions coalesce, never block.
@@ -111,6 +118,8 @@ func (w *Watcher) poll() {
 		return
 	}
 
+	w.logEvents(stats)
+
 	w.mu.Lock()
 	prev := w.latest.Pressure
 	next := nextPressure(prev, stats.UsedBytes, stats.LimitBytes)
@@ -121,7 +130,8 @@ func (w *Watcher) poll() {
 	if next != prev {
 		if next {
 			logging.Warn("[cgroupmem] Workspace memory pressure",
-				"used", FormatBytes(stats.UsedBytes), "limit", FormatBytes(stats.LimitBytes))
+				"used", FormatBytes(stats.UsedBytes), "limit", FormatBytes(stats.LimitBytes),
+				"memory_used_bytes", stats.UsedBytes, "memory_limit_bytes", stats.LimitBytes)
 		} else {
 			logging.Info("[cgroupmem] Workspace memory pressure cleared",
 				"used", FormatBytes(stats.UsedBytes), "limit", FormatBytes(stats.LimitBytes))
@@ -130,6 +140,50 @@ func (w *Watcher) poll() {
 		case w.changed <- struct{}{}:
 		default:
 		}
+	}
+}
+
+// squeezeLogEvery bounds how often growth in the high/max counters is logged.
+// Under sustained pressure they climb on every poll, and the pressure
+// transition line already says it started.
+const squeezeLogEvery = time.Minute
+
+// logEvents reports growth in memory.events since the previous poll: an OOM
+// kill is an ERROR the moment it is seen (the exec path only names kills it
+// can attribute to one of its own commands), and growth in high/max is a WARN,
+// at most once a minute, carrying the counts since the last line.
+func (w *Watcher) logEvents(stats Stats) {
+	ev, ok := w.reader.Events()
+	if !ok {
+		return
+	}
+	w.mu.Lock()
+	prev, seen := w.events, w.eventsSeen
+	w.events, w.eventsSeen = ev, true
+	logSqueeze := false
+	if seen && (ev.High > prev.High || ev.Max > prev.Max) && time.Since(w.lastSqueeze) >= squeezeLogEvery {
+		logSqueeze = true
+		w.lastSqueeze = time.Now()
+	}
+	w.mu.Unlock()
+	if !seen {
+		return
+	}
+
+	if ev.OOMKill > prev.OOMKill {
+		logging.Error("[cgroupmem] Workspace cgroup OOM kill",
+			"oom_kills", ev.OOMKill-prev.OOMKill,
+			"oom_kills_total", ev.OOMKill,
+			"memory_limit_bytes", stats.LimitBytes,
+			"memory_used_bytes", stats.UsedBytes,
+			"memory_peak_bytes", stats.PeakBytes)
+	}
+	if logSqueeze {
+		logging.Warn("[cgroupmem] Workspace cgroup under memory pressure",
+			"high_events", ev.High-prev.High,
+			"max_events", ev.Max-prev.Max,
+			"memory_limit_bytes", stats.LimitBytes,
+			"memory_used_bytes", stats.UsedBytes)
 	}
 }
 
