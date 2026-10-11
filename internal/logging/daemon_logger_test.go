@@ -22,7 +22,7 @@ import (
 func isolateDaemonLogging(t *testing.T) {
 	t.Helper()
 	isolateLogging(t)
-	for _, name := range []string{"LOG_FORMAT", workspaceIDEnv, orgIDEnv, "RELIANT_ENV", "NODE_ENV"} {
+	for _, name := range []string{"LOG_FORMAT", "RELIANT_ENV", "NODE_ENV"} {
 		t.Setenv(name, "")
 	}
 	prevFields := daemonFields.Load()
@@ -147,8 +147,9 @@ func TestUnrecognisedLogLevelIsReported(t *testing.T) {
 // between JSON lines.
 func TestSetupDaemonManagedWritesJSONToStdoutAndFile(t *testing.T) {
 	isolateDaemonLogging(t)
-	t.Setenv(workspaceIDEnv, "ws_42")
-	t.Setenv(orgIDEnv, "org_7")
+	// Even if these are present, tenant identity never comes from the daemon.
+	t.Setenv("RELIANT_WORKSPACE_ID", "ws_42")
+	t.Setenv("RELIANT_ORG_ID", "org_7")
 	dir := t.TempDir()
 	file := filepath.Join(dir, "logs", "tools-daemon.log")
 
@@ -172,8 +173,9 @@ func TestSetupDaemonManagedWritesJSONToStdoutAndFile(t *testing.T) {
 		assert.Equal(t, "reliant-daemon", rec["service"])
 		assert.Equal(t, "v9.9.9", rec["version"])
 		assert.Equal(t, "dmn_1", rec["daemon_id"])
-		assert.Equal(t, "ws_42", rec["workspace_id"])
-		assert.Equal(t, "org_7", rec["org_id"])
+		assert.NotContains(t, rec, "workspace_id", "tenant identity is attached by the collector, never by the daemon")
+		assert.NotContains(t, rec, "org_id")
+		assert.NotContains(t, rec, "user_id")
 		assert.Equal(t, "INFO", rec["level"])
 	}
 	assert.Equal(t, "v", recs[0]["k"])
@@ -191,15 +193,13 @@ func TestSetupDaemonManagedScrubsLoggingEnv(t *testing.T) {
 	isolateDaemonLogging(t)
 	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("RELIANT_LOG_LEVEL", "info")
-	t.Setenv(workspaceIDEnv, "ws_1")
 
 	SetupDaemon(DaemonLogConfig{Managed: true, Output: io.Discard})
 
-	for _, name := range []string{"LOG_FORMAT", "RELIANT_LOG_LEVEL", workspaceIDEnv, orgIDEnv} {
+	for _, name := range []string{"LOG_FORMAT", "RELIANT_LOG_LEVEL"} {
 		_, set := os.LookupEnv(name)
 		assert.False(t, set, "%s left in the process environment", name)
 	}
-	assert.Equal(t, "ws_1", daemonFields.Load().WorkspaceID, "the value was read before it was removed")
 }
 
 // A person's own daemon keeps its environment and its text output.

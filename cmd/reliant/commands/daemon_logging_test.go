@@ -66,7 +66,6 @@ func TestSetupToolsDaemonLoggingPersistsOutput(t *testing.T) {
 func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 	dataDir := t.TempDir()
 	t.Setenv("RELIANT_DAEMON_TYPE", "managed")
-	t.Setenv("RELIANT_WORKSPACE_ID", "ws_42")
 	t.Setenv("LOG_FORMAT", "json")
 	t.Setenv("RELIANT_LOG_LEVEL", "info")
 	t.Cleanup(func() { logging.Setup(slog.LevelInfo) })
@@ -90,8 +89,11 @@ func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 	if err := json.Unmarshal(bytes.TrimSpace(stdout), &rec); err != nil {
 		t.Fatalf("managed stdout is not one JSON record: %q: %v", stdout, err)
 	}
-	if rec["msg"] != "managed stdout test" || rec["workspace_id"] != "ws_42" || rec["service"] != "reliant-daemon" {
+	if rec["msg"] != "managed stdout test" || rec["service"] != "reliant-daemon" {
 		t.Fatalf("record is missing required fields: %v", rec)
+	}
+	if _, ok := rec["workspace_id"]; ok {
+		t.Fatalf("a daemon line must not claim a workspace: %v", rec)
 	}
 	onDisk, err := os.ReadFile(toolsDaemonLogPath(dataDir))
 	if err != nil {

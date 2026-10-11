@@ -15,21 +15,20 @@ import (
 // stream can be split by process kind.
 const DaemonService = "reliant-daemon"
 
-// Environment the workspace operator stamps on a hosted daemon pod. The daemon
-// reads them once at startup; they are not secrets.
-const (
-	workspaceIDEnv = "RELIANT_WORKSPACE_ID"
-	orgIDEnv       = "RELIANT_ORG_ID"
-)
-
-// DaemonFields are the identity fields stamped on every daemon log line. An
-// empty field is omitted: a laptop daemon has no workspace, and a daemon that
-// has not registered yet has no daemon_id.
+// DaemonFields are the fields stamped on every daemon log line. An empty field
+// is omitted: a daemon that has not registered yet has no daemon_id.
+//
+// EVERY field in a daemon log line is untrusted. The customer has a shell in
+// the workspace pod, so anything that reaches stdout can be written by them,
+// including a line that claims to be this daemon's. These fields are for
+// correlation only: daemon_id is self-reported so a line can be joined with the
+// gateway's server-side logs, which hold the authoritative record. Tenant
+// identity (workspace, org, user) is deliberately not here: the log collector
+// attaches it from the pod's labels, which only the operator can set, and
+// discards any same-named key found in the line.
 type DaemonFields struct {
-	DaemonID    string
-	WorkspaceID string
-	OrgID       string
-	Version     string
+	DaemonID string
+	Version  string
 }
 
 // DaemonLogConfig is how one daemon process wants its logger built.
@@ -47,8 +46,7 @@ type DaemonLogConfig struct {
 	// the daemon's children inherit its environment, and a customer's
 	// `forge env up` must not start emitting JSON because the pod asked for it.
 	Managed bool
-	// Fields seeds the identity stamped on every line. WorkspaceID and OrgID
-	// fall back to the environment when empty.
+	// Fields seeds the correlation fields stamped on every line.
 	Fields DaemonFields
 }
 
@@ -71,18 +69,12 @@ func DaemonLogLevel() (level slog.Level, explicit bool) {
 
 // SetupDaemon installs the process logger for the tools daemon: the level and
 // format from the environment, secrets masked and sizes bounded, and the
-// daemon's identity on every line (plus trace_id/span_id for a record logged
+// daemon's correlation fields on every line (plus trace_id/span_id for a record logged
 // with a span in its context).
 func SetupDaemon(cfg DaemonLogConfig) {
 	level, explicit := DaemonLogLevel()
 
 	fields := cfg.Fields
-	if fields.WorkspaceID == "" {
-		fields.WorkspaceID = strings.TrimSpace(os.Getenv(workspaceIDEnv))
-	}
-	if fields.OrgID == "" {
-		fields.OrgID = strings.TrimSpace(os.Getenv(orgIDEnv))
-	}
 	daemonFields.Store(&fields)
 
 	output := daemonOutput(cfg)
@@ -101,7 +93,7 @@ func SetupDaemon(cfg DaemonLogConfig) {
 
 	if cfg.Managed {
 		// Read above; see DaemonLogConfig.Managed for why they must not stay.
-		for _, name := range []string{logFormatEnv, logLevelEnv, workspaceIDEnv, orgIDEnv} {
+		for _, name := range []string{logFormatEnv, logLevelEnv} {
 			_ = os.Unsetenv(name)
 		}
 	}
@@ -211,8 +203,6 @@ func (h *identityHandler) Handle(ctx context.Context, r slog.Record) error {
 	add("service", DaemonService)
 	add("version", f.Version)
 	add("daemon_id", f.DaemonID)
-	add("workspace_id", f.WorkspaceID)
-	add("org_id", f.OrgID)
 	return h.next.Handle(ctx, r)
 }
 
