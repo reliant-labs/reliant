@@ -313,6 +313,18 @@ retired:
   # 2026-10-11). Only that mapping retires: OpenRouter still serves it, from
   # Azure (probed 2026-10-11).
   - {model: gpt-5.2-codex, drivers: [openai], replacement: gpt-5.6-sol, retired_on: "2026-07-23"}
+  # The Gemini API shuts the Veo 3.1 previews down on 2026-10-22 and names
+  # gemini-omni-1.1-flash as the replacement for all three
+  # (ai.google.dev/gemini-api/docs/deprecations, checked 2026-10-11). Omni is a
+  # different API — Interactions, not predictLongRunning — and
+  # drivers.newVideoGenClient routes it by its api_model, so a selector pinned
+  # to a Veo preview keeps generating video, on Omni. Only the gemini mappings
+  # retire: `reliant` serves Veo from Vertex (veo-3.1-*-001), which lists
+  # standard and fast as GA with no announced retirement, and lite as a preview
+  # with no date.
+  - {model: veo-3.1-generate, drivers: [gemini], replacement: gemini-omni-1.1-flash, retired_on: "2026-10-22"}
+  - {model: veo-3.1-fast-generate, drivers: [gemini], replacement: gemini-omni-1.1-flash, retired_on: "2026-10-22"}
+  - {model: veo-3.1-lite-generate, drivers: [gemini], replacement: gemini-omni-1.1-flash, retired_on: "2026-10-22"}
 
 models:
   # ============================================================================
@@ -2251,12 +2263,13 @@ models:
   # images and edit/extend against it and names the model and the allowed
   # values in the error, rather than carrying per-model branches.
   #
-  # Veo through a user's own gemini (AI Studio) key, or on Reliant credits via
+  # Omni through a user's own gemini (AI Studio) key; Veo on Reliant credits via
   # Vertex (`reliant` mapping, served by videogen/managed.go through the
   # control-plane /v1/videos route). Omni has no `reliant` mapping: it is not
-  # on Vertex.
+  # on Vertex. Veo has no `gemini` mapping: the Gemini API shut its Veo
+  # previews down on 2026-10-22 in favour of Omni (see `retired:`).
   # Prices (paid tier, per second): omni ~$0.10, veo-3.1 $0.40, fast $0.10,
-  # lite $0.05 at 720p. Veo 3.1 renders audio natively on the Gemini API.
+  # lite $0.05 at 720p. Veo 3.1 renders audio natively.
   # ============================================================================
 
   # Omni is the DEFAULT video model: it comes first in [video-gen] and is the
@@ -2264,8 +2277,8 @@ models:
   # on the Gemini API, about a quarter of Veo 3.1's per-second price at 720p
   # (~$0.10/s), and the only one the agent can iterate on conversationally
   # (previous_interaction_id), which matters because the agent cannot see the
-  # output and refines by talking. Veo stays selectable with [video-gen,
-  # cinematic] for one-shot cinematic work.
+  # output and refines by talking. Veo stays selectable on Reliant credits with
+  # [video-gen, cinematic] for one-shot cinematic work.
   #
   # Omni uses the Interactions API, which Vertex does not serve, so this is a
   # `gemini` (AI Studio key) mapping only. It has no negative_prompt and no
@@ -2314,8 +2327,6 @@ models:
         full_resolution_duration: 8
         high_resolutions: [1080p, 4k]
     providers:
-      - driver: gemini
-        api_model: veo-3.1-generate-preview
       - driver: reliant
         api_model: veo-3.1-generate-001
 
@@ -2339,8 +2350,6 @@ models:
         full_resolution_duration: 8
         high_resolutions: [1080p, 4k]
     providers:
-      - driver: gemini
-        api_model: veo-3.1-fast-generate-preview
       - driver: reliant
         api_model: veo-3.1-fast-generate-001
 
@@ -2363,8 +2372,6 @@ models:
         full_resolution_duration: 8
         high_resolutions: [1080p]
     providers:
-      - driver: gemini
-        api_model: veo-3.1-lite-generate-preview
       - driver: reliant
         api_model: veo-3.1-lite-generate-001
 

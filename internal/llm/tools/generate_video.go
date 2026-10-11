@@ -239,6 +239,11 @@ func (t *generateVideoTool) Execute(tc *rctx.ToolContext, params GenerateVideoPa
 		return NewTextErrorResponse(mediaResolveFailure("Could not select a video model", err)), nil
 	}
 	info := generator.Info()
+	if edit != nil && !boundTo(generator, edit) {
+		return NewTextErrorResponse(fmt.Sprintf(
+			"Edit handle unavailable: the clip was made by %s on %s, which no longer serves it there, and only the model that made a clip can edit it; regenerate with a full prompt instead.",
+			edit.ModelID, edit.Driver)), nil
+	}
 	if msg := t.tierUnavailable(tc, userID, choice, info.ModelID); msg != "" {
 		return NewTextErrorResponse(msg), nil
 	}
@@ -343,7 +348,7 @@ func (t *generateVideoTool) resume(tc *rctx.ToolContext, userID string, prior *v
 			Prompt: request.Prompt, ProviderJob: prior.ProviderJob,
 		}
 		generator, err := t.resolve(tc.Context, userID, models.ModelSelector{ID: prior.ModelID, Providers: []string{prior.Driver}})
-		if err == nil {
+		if err == nil && boundTo(generator, prior) {
 			if caps := generator.Info().Capabilities; caps != nil && caps.SupportsEdit {
 				output.EditHandle = att.ID
 			}
@@ -357,8 +362,28 @@ func (t *generateVideoTool) resume(tc *rctx.ToolContext, userID string, prior *v
 	if err != nil {
 		return NewTextErrorResponse(fmt.Sprintf("Could not resume the video render: %v", err)), nil
 	}
+	if !boundTo(generator, prior) {
+		info := generator.Info()
+		msg := fmt.Sprintf("Could not resume the video render: it was started on %s via %s, which no longer serves it there "+
+			"(it now resolves to %s via %s), and a render can only be fetched by the model that started it. "+
+			"Call generate_video again to start a new render.", prior.ModelID, prior.Driver, info.ModelID, info.Driver)
+		t.finish(tc, prior, videojobs.StateFailed, msg)
+		return NewTextErrorResponse(msg), nil
+	}
 	logging.Info("Resuming video render", "tool_call_id", prior.ToolCallID, "provider_job", prior.ProviderJob, "model", prior.ModelID)
 	return t.await(tc, generator, prior, providerJob, params, request, prior.CreatedAt, chosenLine(prior.ModelID, "resumed render"))
+}
+
+// boundTo reports whether generator is bound to the model and provider that
+// accepted job. A provider job means something only to the client that
+// created it: a Veo operation name is not an Omni interaction id, and one
+// provider's job is not another's. When the catalog has since moved the job's
+// model — retired it to a replacement, or dropped the provider's mapping —
+// resolving it again yields a different binding, which must never be handed
+// the job.
+func boundTo(generator VideoGenerator, job *videojobs.Job) bool {
+	info := generator.Info()
+	return info.ModelID == job.ModelID && info.Driver == job.Driver
 }
 
 // await polls a submitted job to its end and turns the outcome into a result.

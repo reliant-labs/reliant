@@ -86,13 +86,23 @@ func TestVideoGenResolution(t *testing.T) {
 		t.Errorf("resolved %s for a user with no video provider; want an error", resolved.Definition.ID)
 	}
 
-	cheap, err := registry.Resolve(models.ModelSelector{Tags: []string{DefaultVideoGenTag, models.TagCheap}, RequireOutputModality: models.ModalityVideo}, []string{"gemini"})
-	if err != nil || cheap.Definition.ID != "veo-3.1-lite-generate" {
-		t.Errorf("[video-gen, cheap] = %v, %v; want veo-3.1-lite-generate", cheap, err)
+	// The Gemini API shut its Veo previews down in favour of Omni, so Omni is
+	// the only video model a Gemini key serves. The fast and cinematic tiers
+	// degrade onto it, and the generate_video tool reports them unavailable
+	// (mediaTier.Requires) rather than calling Omni cinematic.
+	for _, tier := range []string{models.TagCheap, "cinematic"} {
+		resolved, err := registry.Resolve(models.ModelSelector{Tags: []string{DefaultVideoGenTag, tier}, RequireOutputModality: models.ModalityVideo}, []string{"gemini"})
+		if err != nil || resolved.Definition.ID != "gemini-omni-1.1-flash" {
+			t.Errorf("[video-gen, %s] for a gemini-only user = %v, %v; want gemini-omni-1.1-flash", tier, resolved, err)
+		}
 	}
-	cinematic, err := registry.Resolve(models.ModelSelector{Tags: []string{DefaultVideoGenTag, "cinematic"}, RequireOutputModality: models.ModalityVideo}, []string{"gemini"})
-	if err != nil || cinematic.Definition.ID != "veo-3.1-generate" {
-		t.Errorf("[video-gen, cinematic] = %v, %v; want veo-3.1-generate", cinematic, err)
+	for _, id := range veoModelIDs {
+		def, _ := registry.GetDefinition(id)
+		for _, p := range def.Providers {
+			if p.Driver == "gemini" {
+				t.Errorf("%s maps gemini (%s); the Gemini API shuts its Veo previews down on 2026-10-22", id, p.APIModel)
+			}
+		}
 	}
 
 	// Naming a text model explicitly fails with the modality in the message.

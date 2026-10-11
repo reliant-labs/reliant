@@ -28,6 +28,7 @@ type providerRetirement struct {
 //
 //	Gemini API  ai.google.dev/gemini-api/docs/deprecations
 //	Vertex AI   docs.cloud.google.com/vertex-ai/generative-ai/docs/learn/model-versions
+//	            (Veo: docs.cloud.google.com/vertex-ai/generative-ai/docs/models/veo/3-1-generate)
 //	OpenAI      developers.openai.com/api/docs/deprecations
 //
 // Anthropic (platform.claude.com/docs/en/about-claude/model-deprecations) and
@@ -52,6 +53,14 @@ var providerRetirements = []providerRetirement{
 	{"vertex-gemini-2.5-pro", "vertexai", "2026-10-20", "vertex-gemini-3.8-flash"},
 	{"vertex-gemini-2.5-flash", "vertexai", "2026-10-20", "vertex-gemini-3.8-flash"},
 	{"gemini-2.5-pro", "reliant", "2026-10-20", "gemini-3.8-flash"},
+	// Gemini API: the Veo 3.1 previews shut down 2026-10-22; recommended
+	// replacement gemini-omni-1.1-flash for all three. Only the gemini
+	// mappings retire: `reliant` serves Veo from Vertex (veo-3.1-*-001), where
+	// standard and fast are GA with no announced retirement ("November 17, 2026
+	// or later") and lite is a preview with no date.
+	{"veo-3.1-generate", "gemini", "2026-10-22", "gemini-omni-1.1-flash"},
+	{"veo-3.1-fast-generate", "gemini", "2026-10-22", "gemini-omni-1.1-flash"},
+	{"veo-3.1-lite-generate", "gemini", "2026-10-22", "gemini-omni-1.1-flash"},
 }
 
 func isProviderRetired(model, driver string) bool {

@@ -15,6 +15,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/attachment"
 	"github.com/reliant-labs/reliant/internal/ctxkeys"
+	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/drivers/videogen"
 	"github.com/reliant-labs/reliant/internal/llm/models"
 	"github.com/reliant-labs/reliant/internal/rctx"
@@ -169,6 +170,75 @@ func TestGenerateVideo_ResumesPersistedJobInsteadOfSubmitting(t *testing.T) {
 	stored := jobs.jobs["tc-1"]
 	assert.Equal(t, videojobs.StateCompleted, stored.State)
 	assert.Equal(t, output.AttachmentID, stored.AttachmentID)
+}
+
+// A deploy that retires a model restarts the workers, and Temporal re-dispatches
+// any render that was in flight on it. Resolving the job's model again now
+// yields its replacement, a client for a different API: a Veo operation name
+// is not an Omni interaction id. Polling the job through it would report the
+// running clip "expired" and lose it, so the resume must refuse, say why, and
+// close the job.
+func TestGenerateVideo_ResumeNeverPollsAJobThroughAReplacementModel(t *testing.T) {
+	jobs := newFakeVideoJobs()
+	require.NoError(t, jobs.Create(context.Background(), &videojobs.Job{
+		ToolCallID: "tc-retired", UserID: "test-user", ChatID: "chat-1", Driver: "gemini", ModelID: "veo-3.1-generate",
+		APIModel: "veo-3.1-generate-preview", ProviderJob: "models/veo-3.1-generate-preview/operations/in-flight", State: videojobs.StateSubmitted,
+	}))
+	replacement := &fakeVideoGenerator{caps: omniCaps(), modelID: "gemini-omni-1.1-flash"}
+
+	resp, err := newVideoTool(newFakeAttachmentRepo(), jobs, replacement).
+		Execute(videoCtx(t, "tc-retired"), GenerateVideoParams{Prompt: "a red ball"})
+	require.NoError(t, err)
+	require.True(t, resp.IsError, "resuming through another model must fail visibly: %s", resp.Content)
+
+	assert.Equal(t, 0, replacement.polls, "a job is only ever polled by the model that started it")
+	assert.Equal(t, 0, replacement.submits, "a resume never submits")
+	assert.Contains(t, resp.Content, "veo-3.1-generate")
+	assert.Contains(t, resp.Content, "gemini-omni-1.1-flash")
+	assert.Contains(t, resp.Content, "Call generate_video again", "the agent is told how to recover")
+	assert.Equal(t, videojobs.StateFailed, jobs.jobs["tc-retired"].State, "the job is closed, not left to be resumed again")
+}
+
+// A completed clip re-dispatched after its model moved keeps its result, but an
+// edit handle would point the replacement at a clip it never made.
+func TestGenerateVideo_CompletedResumeOffersNoEditHandleFromAReplacementModel(t *testing.T) {
+	repo := newFakeAttachmentRepo()
+	now := time.Now()
+	require.NoError(t, repo.CreateAttachment(context.Background(), &db.Attachment{
+		ID: "att-veo", UserID: "test-user", Filename: "generated-veo.mp4", MimeType: "video/mp4", Size: int64(len(mp4Bytes)),
+		AttachmentType: string(attachment.TypeVideo), Content: mp4Bytes, CreatedAt: now, UpdatedAt: now,
+	}))
+	jobs := newFakeVideoJobs()
+	require.NoError(t, jobs.Create(context.Background(), &videojobs.Job{
+		ToolCallID: "tc-done", UserID: "test-user", ChatID: "chat-1", Driver: "gemini", ModelID: "veo-3.1-generate",
+		APIModel: "veo-3.1-generate-preview", ProviderJob: "models/veo-3.1-generate-preview/operations/done",
+		State: videojobs.StateCompleted, AttachmentID: "att-veo",
+	}))
+	replacement := &fakeVideoGenerator{caps: omniCaps(), modelID: "gemini-omni-1.1-flash"}
+
+	resp, err := newVideoTool(repo, jobs, replacement).Execute(videoCtx(t, "tc-done"), GenerateVideoParams{Prompt: "a red ball"})
+	require.NoError(t, err)
+	require.False(t, resp.IsError, resp.Content)
+	var output GenerateVideoOutput
+	require.NoError(t, json.Unmarshal([]byte(resp.Metadata), &output))
+	assert.Equal(t, "att-veo", output.AttachmentID, "the finished clip is still returned")
+	assert.Empty(t, output.EditHandle, "no edit handle for a clip the bound model did not make")
+	assert.Equal(t, 0, replacement.polls+replacement.submits)
+}
+
+// Edit state lives with one provider session. A handle whose model now
+// resolves somewhere else (retired, or its provider mapping dropped) cannot be
+// continued there.
+func TestGenerateVideo_EditRefusesAClipWhoseModelNowResolvesElsewhere(t *testing.T) {
+	repo, jobs, handle := editHandleFixture(t)
+	replacement := &fakeVideoGenerator{caps: omniCaps(), modelID: "gemini-omni-1.1-flash"}
+
+	resp, err := newVideoTool(repo, jobs, replacement).Execute(videoCtx(t, "tc-edit-moved"), GenerateVideoParams{Prompt: "make it slower", EditFrom: handle})
+	require.NoError(t, err)
+	assert.True(t, resp.IsError)
+	assert.Contains(t, resp.Content, "Edit handle unavailable")
+	assert.Contains(t, resp.Content, "regenerate with a full prompt")
+	assert.Equal(t, 0, replacement.submits, "the replacement must not be sent another model's provider job as previous_interaction_id")
 }
 
 // A finished job re-dispatched (the worker died after storing but before the
