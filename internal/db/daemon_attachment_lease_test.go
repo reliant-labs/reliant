@@ -253,6 +253,84 @@ func TestReleaseDaemonAttachmentKeepsANewerSessionsLease(t *testing.T) {
 	}
 }
 
+// Releasing a lease keeps when the daemon was last heard from. A gateway
+// rollout drains every stream (prod 2026-10-10: ten in one day), and the
+// release used to erase the only trace that the daemon had been there seconds
+// earlier, so a tool call could not tell a daemon about to redial from a
+// laptop closed last week.
+func TestReleaseDaemonAttachmentRecordsWhenTheDaemonWasLastSeen(t *testing.T) {
+	repo, _, cleanup := SetupTestDBWithRawDB(t)
+	defer cleanup()
+	ctx := context.Background()
+
+	const (
+		userID   = "seen-user"
+		daemonID = "seen-daemon"
+	)
+	seedLeaseDaemon(t, repo, daemonID, userID)
+	lastSeen := func(user string) time.Time {
+		t.Helper()
+		seen, err := repo.DaemonLastSeenAt(ctx, user, daemonID)
+		if err != nil {
+			t.Fatalf("DaemonLastSeenAt: %v", err)
+		}
+		return seen
+	}
+	lease := func(attachedAt, activity time.Time) {
+		t.Helper()
+		if err := repo.UpsertDaemonAttachment(ctx, &DaemonAttachment{
+			DaemonID: daemonID, UserID: userID, Source: DaemonAttachmentSourceInbound,
+			AttachedAt: attachedAt, LastStreamActivity: activity,
+		}); err != nil {
+			t.Fatalf("upsert lease: %v", err)
+		}
+	}
+	release := func(attachedAt time.Time) {
+		t.Helper()
+		if err := repo.ReleaseDaemonAttachment(ctx, daemonID, attachedAt); err != nil {
+			t.Fatalf("release: %v", err)
+		}
+	}
+
+	if seen := lastSeen(userID); !seen.IsZero() {
+		t.Fatalf("a daemon never attached was last seen at %v, want never", seen)
+	}
+
+	session := time.Date(2026, 10, 10, 16, 0, 0, 0, time.UTC)
+	heartbeat := time.Date(2026, 10, 10, 16, 53, 45, 0, time.UTC)
+	lease(session, heartbeat)
+	if seen := lastSeen(userID); !seen.Equal(heartbeat) {
+		t.Errorf("while the lease exists last seen = %v, want its last activity %v", seen, heartbeat)
+	}
+	if seen := lastSeen("someone-else"); !seen.IsZero() {
+		t.Errorf("another user read this daemon as last seen at %v", seen)
+	}
+
+	release(session)
+	if attached, _ := repo.IsDaemonIDAttached(ctx, daemonID, 90*time.Second); attached {
+		t.Fatal("precondition: the release must delete the lease")
+	}
+	if seen := lastSeen(userID); !seen.Equal(heartbeat) {
+		t.Errorf("after the release last seen = %v, want the released lease's last activity %v", seen, heartbeat)
+	}
+
+	// The next session runs longer; its release moves last seen on.
+	next := time.Date(2026, 10, 10, 16, 54, 24, 0, time.UTC)
+	nextHeartbeat := next.Add(10 * time.Minute)
+	lease(next, nextHeartbeat)
+	release(next)
+	if seen := lastSeen(userID); !seen.Equal(nextHeartbeat) {
+		t.Errorf("after the second release last seen = %v, want %v", seen, nextHeartbeat)
+	}
+
+	// A row a superseded session left behind, released late, never rewinds it.
+	lease(session, heartbeat)
+	release(session)
+	if seen := lastSeen(userID); !seen.Equal(nextHeartbeat) {
+		t.Errorf("an older lease's release rewound last seen to %v, want %v", seen, nextHeartbeat)
+	}
+}
+
 // A renewal adopts the newer session, so the older session's later release
 // cannot delete the row the live stream is renewing. Without it, a new
 // session whose connect upsert failed renewed the old session's row in place,

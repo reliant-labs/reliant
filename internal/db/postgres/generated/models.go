@@ -356,6 +356,7 @@ type Daemon struct {
 	LocalModels         string         `json:"local_models"`
 	StorageState        string         `json:"storage_state"`
 	Name                string         `json:"name"`
+	LastSeenAt          sql.NullTime   `json:"last_seen_at"`
 }
 
 type DaemonAttachment struct {

@@ -102,15 +102,18 @@ type ProcessOutputEvent struct {
 	ExitCode   int32
 }
 
-// Transport-failure error codes. These say the tool NEVER RAN — the request
-// did not complete a round trip to a daemon. They are emitted only by the
-// transport itself:
+// Transport-failure error codes. These say the request did not complete a
+// round trip to a daemon, so no result of the tool's came back. They are
+// emitted only by the transport itself:
 //
-//	ErrorCodeDaemonUnreached — RemoteExecutor, when the router call failed
-//	                           (no daemon connected, NATS timeout, ...)
-//	ErrorCodeDaemonRoundTrip — the NATS bridge, when the gateway could not
-//	                           complete the round trip (the connection holding
-//	                           the request closed under it)
+//	ErrorCodeDaemonUnreached   — RemoteExecutor, when the router call failed
+//	                             (no daemon connected, NATS timeout, ...)
+//	ErrorCodeDaemonRoundTrip   — the NATS bridge, when the gateway could not
+//	                             complete the round trip (overloaded, a request
+//	                             that did not reassemble)
+//	ErrorCodeDaemonInterrupted — the NATS bridge, when the daemon's connection
+//	                             closed while the request was in flight: the
+//	                             daemon may have run it, and may still be
 //
 // Everything the TOOL reports about its own execution — including a command
 // that exited non-zero — comes back Success=true / IsError=false with the exit
@@ -119,23 +122,32 @@ type ProcessOutputEvent struct {
 // IsTransportErrorCode draws, and it is what keeps "the daemon vanished" from
 // being recorded as "your lint failed".
 const (
-	ErrorCodeDaemonUnreached = "DAEMON_EXECUTION_ERROR"
-	ErrorCodeDaemonRoundTrip = "DAEMON_ERROR"
+	ErrorCodeDaemonUnreached   = "DAEMON_EXECUTION_ERROR"
+	ErrorCodeDaemonRoundTrip   = "DAEMON_ERROR"
+	ErrorCodeDaemonInterrupted = "DAEMON_INTERRUPTED"
 )
 
-// IsTransportErrorCode reports whether an ErrorCode means the tool never ran,
-// as opposed to ran-and-failed. Callers that turn a tool result into a
-// command verdict MUST branch on this: a lane that never ran is not a lane
-// that failed, and must not consume a retry or be reported as a lint/test/build
-// failure.
+// IsTransportErrorCode reports whether an ErrorCode means no result came back
+// from the tool, as opposed to ran-and-failed. Callers that turn a tool result
+// into a command verdict MUST branch on this: a lane whose result never came
+// back is not a lane that failed, and must not consume a retry or be reported
+// as a lint/test/build failure.
 func IsTransportErrorCode(code string) bool {
 	switch code {
-	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip:
+	case ErrorCodeDaemonUnreached, ErrorCodeDaemonRoundTrip, ErrorCodeDaemonInterrupted:
 		return true
 	default:
 		return false
 	}
 }
+
+// ErrDaemonConnectionInterrupted means the daemon's connection closed while a
+// request to it was in flight, so its outcome is unknown: the daemon runs each
+// request independently of its stream and may finish it after it redials. The
+// gateway wraps it; the bridge carries it to the requester as
+// ErrorCodeDaemonInterrupted, and the router decides from the request whether
+// asking again after the reconnect is safe (see daemon_reconnect.go).
+var ErrDaemonConnectionInterrupted = errors.New("daemon connection interrupted")
 
 // TransportError says a tool request never reached a daemon. It exists so
 // callers that would otherwise flatten a failure into an exit code can tell

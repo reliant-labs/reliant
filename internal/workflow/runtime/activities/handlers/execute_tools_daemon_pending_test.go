@@ -73,6 +73,31 @@ func TestExecuteTools_DaemonPendingFromWrappedExecutorError(t *testing.T) {
 	assert.Equal(t, activityWaitingOnDaemon, activityOfChat(t, f))
 }
 
+// While a tool call waits for its daemon to reconnect (a gateway rollout drops
+// every daemon for ~20s), the run reads WAITING_FOR_DAEMON instead of hanging
+// silently in RUNNING; the daemon coming back clears it, and a wait that ends
+// without the daemon leaves it for the next call that reaches one.
+func TestExecuteTools_ReconnectWaitShowsWaitingForDaemon(t *testing.T) {
+	f := setupDurableStatusFixture(t)
+	defer f.h.Cleanup()
+	ctx := context.Background()
+	f.h.CreateTestWorkflow(ctx, f.chatID, f.chatID)
+	a := NewExecuteToolsActivity(f.h.Repo(), newMockToolExecutor())
+	observe := a.daemonWaitObserver(ctx, f.chatID)
+	require.NotNil(t, observe)
+
+	ended := observe("daemon-1")
+	assert.Equal(t, activityWaitingOnDaemon, activityOfChat(t, f), "a waiting call shows the run waiting for its machine")
+	ended(true)
+	assert.Equal(t, activityRunning, activityOfChat(t, f), "the daemon coming back clears it")
+
+	ended = observe("daemon-1")
+	ended(false)
+	assert.Equal(t, activityWaitingOnDaemon, activityOfChat(t, f), "a wait that gave up leaves the run waiting")
+
+	assert.Nil(t, a.daemonWaitObserver(ctx, ""), "no chat, nothing to mark")
+}
+
 // A failure that is not "machine pending" must not touch the state.
 func TestExecuteTools_OtherFailuresDoNotMarkDaemonPending(t *testing.T) {
 	f := setupDurableStatusFixture(t)

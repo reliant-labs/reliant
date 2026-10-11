@@ -705,6 +705,7 @@ CREATE TABLE public.daemons (
     local_models text DEFAULT ''::text NOT NULL,
     storage_state text DEFAULT ''::text NOT NULL,
     name text DEFAULT ''::text NOT NULL,
+    last_seen_at timestamp with time zone,
     CONSTRAINT daemons_lifecycle_phase_check CHECK (((lifecycle_phase IS NULL) OR (lifecycle_phase = ANY (ARRAY['provisioning'::text, 'cloning'::text, 'ready'::text, 'suspending'::text, 'suspended'::text, 'failed'::text]))))
 );
 

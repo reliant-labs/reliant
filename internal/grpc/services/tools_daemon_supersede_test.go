@@ -253,6 +253,10 @@ func TestSendToolRequestFailsAsSoonAsItsConnectionEnds(t *testing.T) {
 		require.Error(t, err)
 		require.Contains(t, err.Error(), "connection interrupted")
 		require.Contains(t, err.Error(), "may still complete")
+		// Typed, so the bridge can tell the requester the outcome is unknown
+		// (and the requester can ask again when that is safe) without
+		// parsing this message.
+		require.ErrorIs(t, err, toolexec.ErrDaemonConnectionInterrupted)
 	case <-time.After(3 * time.Second):
 		t.Fatal("the caller was still waiting after its daemon connection ended")
 	}

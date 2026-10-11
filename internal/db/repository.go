@@ -475,9 +475,13 @@ type Repository interface {
 	SetModelEndpointProbe(ctx context.Context, userID, id, probeJSON string) error
 	DeleteModelEndpoint(ctx context.Context, userID, id string) error
 	// ReleaseDaemonAttachment deletes the lease a stream session created
-	// (attached_at <= attachedAt) and never a newer session's. See
-	// repository_impl.go.
+	// (attached_at <= attachedAt) and never a newer session's, recording its
+	// last activity as the daemon's last_seen_at. See repository_impl.go.
 	ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error
+	// DaemonLastSeenAt is when a gateway last heard from the user's daemon,
+	// from its lease or the last one released; zero when never. See
+	// repository_impl.go.
+	DaemonLastSeenAt(ctx context.Context, userID, daemonID string) (time.Time, error)
 	// DeleteStaleDaemonAttachments GCs attachment rows whose lease has not
 	// been renewed for olderThan. Rows are deleted on graceful teardown only,
 	// so a crashed/rescheduled gateway strands its rows forever; this is the

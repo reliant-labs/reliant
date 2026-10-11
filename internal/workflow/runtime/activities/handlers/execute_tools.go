@@ -818,9 +818,14 @@ func (a *ExecuteToolsActivity) executeToolWithStatus(ctx context.Context, tec *t
 	startedAt := time.Now()
 	a.upsertToolCall(ctx, tec, core.ToolCallStatusExecuting, toolCallUpsertOpts{startedAt: &startedAt})
 
-	// Execute the tool. A preemptable one runs under the batch's preemption,
-	// and a preempted call answers for itself (preemptedOutcome) before the
-	// usual handling: it is a success, not a cancellation.
+	// Execute the tool. If its machine drops for a moment (a gateway rollout),
+	// the call waits for it to reconnect, and the chat says so meanwhile.
+	//
+	// A preemptable one runs under the batch's preemption, and a preempted
+	// call answers for itself (preemptedOutcome) before the usual handling:
+	// it is a success, not a cancellation. Preemption also ends a reconnect
+	// wait, since the wait is bound to the call's context.
+	execCtx := toolexec.WithDaemonReconnectWait(ctx, a.daemonWaitObserver(ctx, tec.getChatID()))
 	var execResult *toolexec.ToolResult
 	var execErr error
 	batch := batchPreemptionFrom(ctx)
@@ -832,13 +837,13 @@ func (a *ExecuteToolsActivity) executeToolWithStatus(ctx context.Context, tec *t
 		// not running.
 		execResult = preemptedOutcome(nil, nil)
 	case batch != nil && tools.IsPreemptable(toolName):
-		execCtx, release := batch.arm(ctx)
-		execResult, execErr = a.toolExecutor.ExecuteTool(execCtx, tec.buildToolRequest())
+		armedCtx, release := batch.arm(execCtx)
+		execResult, execErr = a.toolExecutor.ExecuteTool(armedCtx, tec.buildToolRequest())
 		if release() {
 			execResult, execErr = preemptedOutcome(execResult, execErr), nil
 		}
 	default:
-		execResult, execErr = a.toolExecutor.ExecuteTool(ctx, tec.buildToolRequest())
+		execResult, execErr = a.toolExecutor.ExecuteTool(execCtx, tec.buildToolRequest())
 	}
 
 	// Handle execution result
@@ -987,6 +992,34 @@ func (a *ExecuteToolsActivity) trackDaemonPending(ctx context.Context, chatID st
 	if chatID == "" || (!blocked && !ran) {
 		return
 	}
+	a.setDaemonBlocked(ctx, chatID, blocked)
+}
+
+// daemonWaitObserver marks the chat as waiting for its machine while a tool
+// call waits for its daemon to reconnect (toolexec.WithDaemonReconnectWait),
+// so the run reads WAITING_FOR_DAEMON rather than hanging silently, and clears
+// the mark once the daemon is back — including for a worker-side tool such as
+// view, whose result never says it ran on a daemon. A wait that ends without
+// the daemon leaves the mark for the next round trip to clear, exactly as a
+// call that failed on a pending machine does (trackDaemonPending).
+func (a *ExecuteToolsActivity) daemonWaitObserver(ctx context.Context, chatID string) toolexec.DaemonWaitObserver {
+	if chatID == "" {
+		return nil
+	}
+	return func(string) func(bool) {
+		a.setDaemonBlocked(ctx, chatID, true)
+		return func(reconnected bool) {
+			if reconnected {
+				a.setDaemonBlocked(ctx, chatID, false)
+			}
+		}
+	}
+}
+
+// setDaemonBlocked records chats.daemon_blocked_at, which drives
+// ChatActivity.WAITING_FOR_DAEMON. Best-effort: failing to record it must not
+// fail the tool call.
+func (a *ExecuteToolsActivity) setDaemonBlocked(ctx context.Context, chatID string, blocked bool) {
 	if err := a.repo.SetChatDaemonBlocked(ctx, chatID, blocked); err != nil {
 		activity.GetLogger(ctx).Warn("[ExecuteTools] Failed to record daemon-pending state",
 			"chatID", chatID, "blocked", blocked, "error", err)

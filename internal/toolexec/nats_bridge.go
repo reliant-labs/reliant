@@ -573,10 +573,14 @@ func (b *NATSToolBridge) respondDaemonCommand(ctx context.Context, msg *nats.Msg
 
 	resp, err := b.mgr.SendDaemonCommandToDaemon(ctx, userID, daemonID, protoReq)
 	if err != nil {
-		errResp, _ := json.Marshal(map[string]interface{}{
+		reply := map[string]interface{}{
 			"success":       false,
 			"error_message": err.Error(),
-		})
+		}
+		if errors.Is(err, ErrDaemonConnectionInterrupted) {
+			reply["error_code"] = ErrorCodeDaemonInterrupted
+		}
+		errResp, _ := json.Marshal(reply)
 		_ = msg.Respond(errResp)
 		return
 	}
@@ -631,7 +635,7 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 			Success:      false,
 			IsError:      true,
 			ErrorMessage: err.Error(),
-			ErrorCode:    ErrorCodeDaemonRoundTrip,
+			ErrorCode:    transportErrorCode(err),
 		})
 		_ = msg.Respond(errResp)
 		return
@@ -674,6 +678,17 @@ func (b *NATSToolBridge) respondToolRequestSync(ctx context.Context, msg *nats.M
 			"toolName", request.ToolName, "requestID", request.RequestID,
 			"replyBytes", len(respData), "chunks", chunks, "maxPayload", b.nc.MaxPayload())
 	}
+}
+
+// transportErrorCode is the code a failed daemon round trip is reported under.
+// An interruption gets its own: the requester may ask again after the daemon
+// redials, but only for a request it knows is safe to repeat, and it cannot
+// tell that from a message.
+func transportErrorCode(err error) string {
+	if errors.Is(err, ErrDaemonConnectionInterrupted) {
+		return ErrorCodeDaemonInterrupted
+	}
+	return ErrorCodeDaemonRoundTrip
 }
 
 // finishDaemonConnected stores the subscription set for a daemon and kicks off

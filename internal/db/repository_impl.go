@@ -1800,6 +1800,12 @@ func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[s
 // sessions are strictly sequential (a session ends before the daemon redials),
 // so ordering them only needs the replicas' clocks to agree to within one
 // reconnect.
+//
+// The released lease's last_stream_activity moves onto daemons.last_seen_at in
+// the same statement: deleting the lease is otherwise the moment the registry
+// forgets the daemon was ever there, and a tool call deciding whether to wait
+// for a daemon that just dropped (DaemonLastSeenAt) needs exactly that fact.
+// It only moves forward, so a stale session's release cannot rewind it.
 func (r *Repo) ReleaseDaemonAttachment(ctx context.Context, daemonID string, attachedAt time.Time) error {
 	if daemonID == "" {
 		return fmt.Errorf("daemon ID cannot be empty")
@@ -1807,11 +1813,53 @@ func (r *Repo) ReleaseDaemonAttachment(ctx context.Context, daemonID string, att
 	if attachedAt.IsZero() {
 		return fmt.Errorf("releasing daemon attachment %s requires the session's attached_at", daemonID)
 	}
-	query := r.bindQuery(`DELETE FROM daemon_attachment WHERE daemon_id = ? AND attached_at <= ?`)
+	query := r.bindQuery(`
+		WITH released AS (
+			DELETE FROM daemon_attachment
+			WHERE daemon_id = ? AND attached_at <= ?
+			RETURNING daemon_id, last_stream_activity
+		)
+		UPDATE daemons d
+		SET last_seen_at = GREATEST(d.last_seen_at, released.last_stream_activity)
+		FROM released
+		WHERE d.id = released.daemon_id
+	`)
 	if _, err := r.DB.ExecContext(ctx, query, daemonID, attachedAt); err != nil {
 		return fmt.Errorf("releasing daemon attachment: %w", err)
 	}
 	return nil
+}
+
+// DaemonLastSeenAt reports the last time a gateway heard from the user's
+// daemon: its attachment lease's last_stream_activity while a lease exists,
+// else the last_seen_at its most recent released lease left behind. Zero when
+// neither exists, or the daemon is not the user's.
+//
+// A lease outlives its stream when the gateway holding it dies without a
+// teardown, so the lease is read whatever its age: a crashed gateway's lease
+// is the only record that its daemon was there a moment ago.
+func (r *Repo) DaemonLastSeenAt(ctx context.Context, userID, daemonID string) (time.Time, error) {
+	if userID == "" || daemonID == "" {
+		return time.Time{}, fmt.Errorf("daemon last-seen lookup requires user ID and daemon ID")
+	}
+	query := r.bindQuery(`
+		SELECT GREATEST(d.last_seen_at, a.last_stream_activity)
+		FROM daemons d
+		LEFT JOIN daemon_attachment a ON a.daemon_id = d.id AND a.user_id = d.user_id
+		WHERE d.id = ? AND d.user_id = ?
+	`)
+	var seen sql.NullTime
+	err := r.DB.QueryRowContext(ctx, query, daemonID, userID).Scan(&seen)
+	if errors.Is(err, sql.ErrNoRows) {
+		return time.Time{}, nil
+	}
+	if err != nil {
+		return time.Time{}, fmt.Errorf("reading daemon last seen: %w", err)
+	}
+	if !seen.Valid {
+		return time.Time{}, nil
+	}
+	return seen.Time, nil
 }
 
 // DeleteStaleDaemonAttachments removes attachment rows whose reachability

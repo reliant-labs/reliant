@@ -163,6 +163,17 @@ func (e *RemoteExecutor) ExecuteTool(ctx context.Context, req *ToolRequest) (*To
 		return nil, fmt.Errorf("server executor not configured: wiring bug — all tools require server-side execution")
 	}
 
+	// A tool call rides out a short disconnect of its daemon — a gateway
+	// rollout drops every daemon for ~20s — instead of failing at once. This
+	// covers both placements: daemon-placed tools go to the daemon through
+	// the router, and server-placed ones (view, write, edit) reach the
+	// user's files through it. A caller that wants to hear about the wait
+	// (execute_tools, which shows the run as waiting for its machine) set
+	// its own observer already.
+	if reconnectWaitFrom(ctx) == nil {
+		ctx = WithDaemonReconnectWait(ctx, nil)
+	}
+
 	placement, err := tools.PlacementOf(req.ToolName)
 	if err != nil {
 		return nil, err
@@ -386,7 +397,11 @@ func (e *RemoteExecutor) executeOnDaemon(ctx context.Context, req *ToolRequest, 
 		Backgrounded: resp.Backgrounded,
 		Content:      capLLMToolContent(content),
 		Metadata:     resp.Metadata,
-		RanOnDaemon:  true,
+		// A transport failure the gateway answered for — the daemon's
+		// connection dropped under the request, or the gateway was too busy
+		// to deliver it — is a reply, but not from the daemon: it proves
+		// nothing about the machine being reachable.
+		RanOnDaemon:  !IsTransportErrorCode(resp.ErrorCode),
 		DaemonID:     resp.DaemonID,
 		StartTime:    startTime,
 		EndTime:      time.Now(),

@@ -85,9 +85,6 @@ func (r *NATSDaemonRouter) SendDaemonCommandWithSelector(ctx context.Context, us
 	if err != nil {
 		return nil, err
 	}
-	daemonID, err := r.resolveDaemonID(ctx, userID, selector)
-	if err != nil {
-		return nil, fmt.Errorf("resolving daemon for command: %w", err)
-	}
-	return r.sendDaemonCommandData(ctx, userID, daemonID, commandType, data, reqID, timeoutMs)
+	return r.dispatchDaemonCommand(ctx, userID, commandType, payload, timeoutMs, data, reqID,
+		r.commandResolver(ctx, userID, selector))
 }
