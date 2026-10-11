@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"connectrpc.com/connect"
 	"github.com/stretchr/testify/assert"
@@ -53,7 +54,9 @@ func TestDiskReport_HeartbeatToRegistryAndKeptWhileOffline(t *testing.T) {
 	assert.EqualValues(t, 1760000000000, disk.Volumes[0].LastNoSpaceAtMs)
 	assert.NotZero(t, disk.ReportedAtMs)
 
-	require.NoError(t, repo.DeleteDaemonAttachment(context.Background(), "daemon-1"))
+	// The session ends: release every attachment row up to now (#722 made a
+	// release take the session's attached_at, so it cannot drop a newer one).
+	require.NoError(t, repo.ReleaseDaemonAttachment(context.Background(), "daemon-1", time.Now()))
 	got, err := reg.GetDaemon(userCtx("user-1"), connect.NewRequest(&reliantv1.GetDaemonRequest{DaemonId: "daemon-1"}))
 	require.NoError(t, err)
 	require.NotNil(t, got.Msg.Daemon.GetDisk(), "the report outlives the connection")
