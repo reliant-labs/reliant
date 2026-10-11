@@ -248,9 +248,21 @@ export function Dropdown({
         )
       : null;
 
+  // An uncontrolled Dropdown owns its open state, so it must also own the
+  // toggle for a custom trigger — otherwise the trigger renders but clicking it
+  // does nothing. Controlled callers toggle from their own trigger's onClick;
+  // wiring it here too would double-toggle them back to closed.
+  const isUncontrolled = controlledIsOpen === undefined;
+  const handleCustomTriggerClick = trigger && isUncontrolled ? handleToggle : undefined;
+
   const dropdownContent = (
     <>
-      <div className={cn("relative", className)} ref={dropdownRef} data-dropdown-open={isOpen}>
+      <div
+        className={cn("relative", className)}
+        ref={dropdownRef}
+        data-dropdown-open={isOpen}
+        onClick={handleCustomTriggerClick}
+      >
         {trigger || defaultTrigger}
       </div>
       {portalledContent}

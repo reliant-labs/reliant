@@ -17,6 +17,33 @@ describe("Dropdown", () => {
     expect(container).not.toContainElement(screen.getByText("Menu item"));
   });
 
+  it("toggles an uncontrolled dropdown from a custom trigger", () => {
+    render(
+      <Dropdown trigger={<button type="button">Open menu</button>}>
+        <button type="button">Menu item</button>
+      </Dropdown>
+    );
+
+    expect(screen.queryByText("Menu item")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Open menu"));
+    expect(screen.getByText("Menu item")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("Open menu"));
+    expect(screen.queryByText("Menu item")).not.toBeInTheDocument();
+  });
+
+  it("leaves a controlled dropdown's custom trigger to the caller", () => {
+    render(
+      <Dropdown trigger={<button type="button">Open menu</button>} isOpen={false} onOpenChange={() => {}}>
+        <button type="button">Menu item</button>
+      </Dropdown>
+    );
+
+    fireEvent.click(screen.getByText("Open menu"));
+    expect(screen.queryByText("Menu item")).not.toBeInTheDocument();
+  });
+
   it("closes when clicking outside the trigger and portalled content", () => {
     render(
       <Dropdown>

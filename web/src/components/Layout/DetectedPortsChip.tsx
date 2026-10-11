@@ -114,12 +114,16 @@ export function DetectedPortsChip() {
         }
         align="right"
         trigger={
-          <span className="header-icon-btn relative flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground">
+          <button
+            type="button"
+            aria-label={ports.length === 1 ? `Port ${ports[0]} detected` : `${ports.length} ports detected`}
+            className="header-icon-btn relative flex h-7 items-center gap-1 rounded px-1.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+          >
             <Globe className="h-4 w-4 text-primary" aria-hidden="true" />
             <span className="font-mono">
               {ports.length === 1 ? ports[0] : ports.length}
             </span>
-          </span>
+          </button>
         }
       >
         <div className="min-w-[16rem] py-1">
