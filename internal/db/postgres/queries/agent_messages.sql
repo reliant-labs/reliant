@@ -6,6 +6,30 @@ INSERT INTO agent_messages (
     $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
 );
 
+-- name: EnqueueAgentMessageOnce :one
+-- A human send names its mailbox row (client_message_id), so a repeat of that
+-- send arrives with an id that is already taken. ON CONFLICT (id) DO NOTHING is
+-- what lets exactly one of two racing repeats insert; the other gets no row
+-- back (sql.ErrNoRows) and reads the winner's row instead of failing.
+INSERT INTO agent_messages (
+    id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
+    status, created_at, attachments, synthesized
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+)
+ON CONFLICT (id) DO NOTHING
+RETURNING id;
+
+-- name: GetAgentMessage :one
+SELECT * FROM agent_messages WHERE id = $1;
+
+-- name: DeleteUndeliveredAgentMessage :execrows
+-- Removes a row that was never read: its thread's loop exited before a drain
+-- reached it. A repeat of the send that wrote it is a fresh send, and has to
+-- be able to take its id; a queued or delivered row is never touched.
+DELETE FROM agent_messages
+WHERE id = $1 AND chat_id = $2 AND status = 3;
+
 -- name: ListQueuedAgentMessagesForThread :many
 -- Ordering is load-bearing: messages must be delivered in the order they
 -- were sent.

@@ -76,6 +76,7 @@ import { chatKeys } from "../../hooks/chat-queries";
 import { queryClient } from "../../lib/query-client";
 import { initEventBus } from "../../lib/events";
 import { sendWithDaemonWait } from "../../lib/daemon-retry";
+import { clearAttempts } from "../../lib/pendingSends";
 
 type Placement = { transcript: string[]; strip: string[] };
 let renders: Placement[] = [];
@@ -180,6 +181,7 @@ function homeChat(workflowState = WorkflowState.COMPLETED) {
 
 beforeEach(() => {
   initEventBus();
+  clearAttempts();
   renders = [];
   sendMessageMock.mockReset();
   startMock.mockReset();
@@ -244,12 +246,56 @@ describe("a send that fails for good", () => {
 
     expect(sendMessageMock).toHaveBeenCalledTimes(2);
     expect(sendMessageMock.mock.calls[1][1]).toBe(TEXT);
-    // A new send, under a new id; the failed entry is gone.
-    const retryId = sentIds()[1];
-    expect(retryId).not.toBe(failedId);
-    expect(transcriptIds()).toEqual([`optimistic-user-${retryId}`]);
+    // The same send, under the same id: the server saved it once already if
+    // the failure was a lost response, and recognizes the repeat by this id.
+    // A new id here saves the message twice.
+    expect(sentIds()).toEqual([failedId, failedId]);
+    expect(transcriptIds()).toEqual([`optimistic-user-${failedId}`]);
     expect(canRetryFailedSend(failedId)).toBe(false);
     expect(Math.max(...renders.map((r) => r.transcript.length + r.strip.length))).toBe(1);
+  });
+
+  it("is sent again under the same id however many times it fails", async () => {
+    await failOnce();
+    const failedId = clientIdOf(failedEntry()!);
+
+    for (let attempt = 0; attempt < 3; attempt++) {
+      sendMessageMock.mockRejectedValueOnce(
+        new ConnectError("the connection dropped", Code.Unavailable),
+      );
+      await act(async () => {
+        await expect(
+          useChatStore.getState().retryFailedSend(CHAT, failedId),
+        ).rejects.toThrow();
+      });
+      await settle();
+      expect(transcriptIds()).toEqual([`optimistic-failed-${failedId}`]);
+    }
+    expect(new Set(sentIds())).toEqual(new Set([failedId]));
+    expect(sentIds()).toHaveLength(4);
+  });
+
+  it("goes back into the queue strip under its own id when Retry finds the run executing", async () => {
+    await failOnce();
+    const failedId = clientIdOf(failedEntry()!);
+    useActivityStore.getState().setActivity(CHAT, ChatActivity.RUNNING);
+
+    let answer!: (value: unknown) => void;
+    sendMessageMock.mockReturnValueOnce(new Promise((r) => (answer = r)));
+    let retried!: Promise<void>;
+    act(() => {
+      retried = useChatStore.getState().retryFailedSend(CHAT, failedId);
+    });
+    await settle();
+
+    // The strip withdrew this id when the send failed; the resend takes it back.
+    expect(latest()).toEqual({ transcript: [], strip: [failedId] });
+    expect(sentIds()).toEqual([failedId, failedId]);
+
+    await act(async () => {
+      answer({ ...saved(failedId), queued: true });
+      await retried;
+    });
   });
 
   it("is Not sent again, once, when the retry fails too", async () => {
@@ -262,7 +308,7 @@ describe("a send that fails for good", () => {
     });
     await settle();
 
-    expect(transcriptIds()).toEqual([`optimistic-failed-${sentIds()[1]}`]);
+    expect(transcriptIds()).toEqual([`optimistic-failed-${firstId}`]);
   });
 
   it("can be removed", async () => {
@@ -295,6 +341,83 @@ describe("a send that fails for good", () => {
     expect(startMock).toHaveBeenCalledTimes(2);
     expect(sendMessageMock).not.toHaveBeenCalled();
     expect(failedEntry()).toBeUndefined();
+    // StartChat carries the id too, and the retry's is the failed attempt's:
+    // that is what makes a start that committed and lost its response a
+    // replay instead of a second chat.
+    const startIds = startMock.mock.calls.map((call) => call[0].client_message_id);
+    expect(startIds[0]).toBe(clientIdOf(failed!));
+    expect(startIds[1]).toBe(clientIdOf(failed!));
+  });
+});
+
+describe("a send carries its id to the server", () => {
+  it("names the message on SendMessage", async () => {
+    sendMessageMock.mockResolvedValueOnce(saved());
+    await act(async () => {
+      await useChatStore.getState().sendMessage(CHAT, TEXT);
+    });
+    expect(sentIds()[0]).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/);
+  });
+
+  it("gives two different messages two different ids", async () => {
+    sendMessageMock.mockResolvedValue(saved());
+    await act(async () => {
+      await useChatStore.getState().sendMessage(CHAT, TEXT);
+      await useChatStore.getState().sendMessage(CHAT, "something else");
+    });
+    expect(new Set(sentIds()).size).toBe(2);
+  });
+});
+
+describe("the first message of a new chat", () => {
+  const startOnce = () =>
+    useChatStore.getState().startChat("w1", TEXT, undefined, undefined, "builtin://agent");
+  const startedChat = { id: "new-chat", projectId: "p1", workflowId: "new-chat" };
+  const startedIds = () => startMock.mock.calls.map((call) => call[0].client_message_id);
+
+  it("is sent again under the same id after a failed start, so a start that committed is a replay", async () => {
+    startMock
+      .mockRejectedValueOnce(new ConnectError("timed out", Code.DeadlineExceeded))
+      .mockResolvedValueOnce(startedChat);
+
+    await act(async () => {
+      await expect(startOnce()).rejects.toThrow();
+    });
+    await act(async () => {
+      await startOnce();
+    });
+
+    expect(startedIds()).toHaveLength(2);
+    expect(startedIds()[0]).toMatch(/^[0-9a-f-]{36}$/);
+    expect(startedIds()[1]).toBe(startedIds()[0]);
+  });
+
+  it("gets a new id once the start succeeded, so the next chat is a different one", async () => {
+    startMock.mockResolvedValue(startedChat);
+
+    await act(async () => {
+      await startOnce();
+      await startOnce();
+    });
+
+    expect(new Set(startedIds()).size).toBe(2);
+  });
+
+  it("is a new message, with a new id, when the user changed the text before sending again", async () => {
+    startMock
+      .mockRejectedValueOnce(new ConnectError("timed out", Code.DeadlineExceeded))
+      .mockResolvedValueOnce(startedChat);
+
+    await act(async () => {
+      await expect(startOnce()).rejects.toThrow();
+    });
+    await act(async () => {
+      await useChatStore
+        .getState()
+        .startChat("w1", "an edited message", undefined, undefined, "builtin://agent");
+    });
+
+    expect(new Set(startedIds()).size).toBe(2);
   });
 });
 

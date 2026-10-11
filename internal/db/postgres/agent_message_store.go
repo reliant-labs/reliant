@@ -50,6 +50,53 @@ func (s *agentMessageStore) EnqueueAgentMessage(ctx context.Context, msg *core.A
 	})
 }
 
+func (s *agentMessageStore) EnqueueAgentMessageOnce(ctx context.Context, msg *core.AgentMessage) (bool, error) {
+	attachments, err := agentMessageAttachmentsToNullRawMessage(msg.Attachments)
+	if err != nil {
+		return false, err
+	}
+	_, err = s.q.EnqueueAgentMessageOnce(ctx, pgdb.EnqueueAgentMessageOnceParams{
+		ID:           msg.ID,
+		ChatID:       msg.ChatID,
+		FromThreadID: msg.FromThreadID,
+		ToThreadID:   msg.ToThreadID,
+		Kind:         int32(msg.Kind),
+		Body:         msg.Body,
+		ToolCallID:   agentMessagePtrToNullString(msg.ToolCallID),
+		Status:       int32(msg.Status),
+		CreatedAt:    msg.CreatedAt,
+		Attachments:  attachments,
+		Synthesized:  msg.Synthesized,
+	})
+	if err == sql.ErrNoRows {
+		// RETURNING produced no row: the id was already taken.
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return true, nil
+}
+
+func (s *agentMessageStore) GetAgentMessage(ctx context.Context, id string) (*core.AgentMessage, error) {
+	row, err := s.q.GetAgentMessage(ctx, id)
+	if err == sql.ErrNoRows {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return agentMessageFromPG(row), nil
+}
+
+func (s *agentMessageStore) DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (bool, error) {
+	rows, err := s.q.DeleteUndeliveredAgentMessage(ctx, pgdb.DeleteUndeliveredAgentMessageParams{ID: id, ChatID: chatID})
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 // EnqueueAgentMessageIfAbsent writes msg unless a terminal report for its
 // ToolCallID already exists. sql.ErrNoRows is the constraint's ordinary
 // "already reported" outcome (RETURNING id produces no row on a DO NOTHING

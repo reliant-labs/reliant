@@ -4,6 +4,7 @@ package services
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -85,23 +86,58 @@ func (s *ChatService) saveIncomingMessages(
 	userContent string,
 	hasUserContent bool,
 ) (string, error) {
+	// A send the client named is saved once. When this message is already
+	// there — in the transcript or queued in a mailbox — an earlier attempt of
+	// this same send wrote it, along with the notes that went with it, and the
+	// message the caller is owed is that one.
+	clientID := canonicalClientMessageID(req.Msg.GetClientMessageId())
+	hasMessage := hasUserContent || len(req.Msg.Attachments) > 0
 	var savedMessageID string
 	err := s.database.RunTx(ctx, func(txCtx context.Context) error {
+		savedMessageID = ""
+		if clientID != "" && hasMessage {
+			existingID, err := s.savedSendID(txCtx, req.Msg.ChatId, clientID)
+			if err != nil {
+				return err
+			}
+			if existingID != "" {
+				savedMessageID = existingID
+				return nil
+			}
+		}
+
 		for _, sysMsg := range systemMessages {
 			if _, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &workflowID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
 				return fmt.Errorf("failed to save system message: %w", err)
 			}
 		}
 
-		if hasUserContent || len(req.Msg.Attachments) > 0 {
-			savedMsg, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
+		if hasMessage {
+			if clientID == "" {
+				savedMsg, err := s.database.SaveMessageToThread(txCtx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil)
+				if err != nil {
+					return fmt.Errorf("failed to save message: %w", err)
+				}
+				savedMessageID = savedMsg.ID
+				return nil
+			}
+			// The id is the row's id, so of two repeats racing past the check
+			// above exactly one inserts. The other rolls back the notes it
+			// wrote and answers with the winner's message.
+			savedMsg, created, err := s.database.SaveMessageToThreadOnce(txCtx, req.Msg.ChatId, thread, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), userContent, &workflowID, req.Msg.Attachments, nil, clientID)
 			if err != nil {
 				return fmt.Errorf("failed to save message: %w", err)
+			}
+			if !created {
+				return errSendAlreadySaved
 			}
 			savedMessageID = savedMsg.ID
 		}
 		return nil
 	})
+	if errors.Is(err, errSendAlreadySaved) {
+		return s.savedSendID(ctx, req.Msg.ChatId, clientID)
+	}
 	if err != nil {
 		return "", err
 	}
@@ -472,11 +508,28 @@ func (s *ChatService) SendMessage(
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("at least one user message or attachment is required"))
 	}
 
+	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
+	if err != nil {
+		return nil, err
+	}
+
 	// Get chat with ownership check (defense-in-depth via single query)
 	chat, err := s.getChatForUser(ctx, req.Msg.ChatId, userID)
 	if err != nil {
 		logging.Error("Failed to get chat", "error", err, "chatID", req.Msg.ChatId)
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("chat not found"))
+	}
+
+	// A repeat of a send whose message has already been read is answered
+	// before anything else happens. The machine wake and the queued-for-machine
+	// bookkeeping below are about THIS send reaching a run, and a repeat of a
+	// finished one must not disturb state that belongs to a later send. Safe
+	// without the run-control lock because "read" never un-happens; every
+	// other outcome is decided under the lock, below.
+	if early, err := s.findPriorSend(ctx, chat, clientID, userContent, req.Msg.Attachments); err != nil {
+		return nil, asConnectError(connect.CodeInternal, err)
+	} else if early != nil && early.settled {
+		return replayResponse(chat, early), nil
 	}
 
 	s.wakeDaemonForAttendedTurn(ctx, userID, chat)
@@ -541,6 +594,22 @@ func (s *ChatService) SendMessage(
 	// section. See runs.Service.LockRunControl.
 	releaseRunControl := s.runs.LockRunControl(ctx, req.Msg.ChatId)
 	defer releaseRunControl()
+
+	// Decided under the lock, so an attempt of this same send that is still
+	// finishing has committed by now. The chat is read again for the same
+	// reason: that attempt may have started the run.
+	prior, replay, err := s.priorSendOrReplay(ctx, chat, clientID, userContent, req.Msg.Attachments)
+	if err != nil {
+		return nil, err
+	}
+	if replay != nil {
+		return replay, nil
+	}
+	if prior != nil {
+		if fresh, err := s.getChatForUser(ctx, req.Msg.ChatId, userID); err == nil {
+			chat = fresh
+		}
+	}
 
 	// Check workflow status to decide: resume paused, send to running, or start
 	// new. The transaction below only reads; what keeps the decision from going
@@ -759,6 +828,14 @@ func (s *ChatService) SendMessage(
 				}), nil
 
 			case db.Active():
+				// The earlier attempt of this send wrote the message to the
+				// transcript and the run it started or resumed is the one that
+				// is live now. It has the message; queueing it again would
+				// hand the agent the same words twice.
+				if prior != nil && prior.history != nil {
+					return replayResponse(chat, prior), nil
+				}
+
 				// Refuse bad params before anything is written or queued; see
 				// liveRunStateUpdate.
 				presetsChanged := applyRequestPresets(chat, req.Msg.SelectedPresets)
@@ -802,7 +879,7 @@ func (s *ChatService) SendMessage(
 					queuedMsg = &db.AgentMessage{
 						// The client's own id for the message, so the copy it
 						// is already showing and the queued row are one item.
-						ID:           clientMessageID(req.Msg.GetClientMessageId()),
+						ID:           queuedMessageID(clientID),
 						FromThreadID: chat.MainThreadID(),
 						ChatID:       req.Msg.ChatId,
 						ToThreadID:   targetThread,
@@ -812,10 +889,15 @@ func (s *ChatService) SendMessage(
 						Status:       core.AgentMessageStatusQueued,
 						CreatedAt:    time.Now(),
 					}
-					if err := s.database.EnqueueAgentMessage(ctx, queuedMsg); err != nil {
+					// Queued once: an attempt of this send that already queued
+					// the message left its row, and this one finishes around it
+					// (the wake below is what the first may not have reached).
+					queued, _, err := s.enqueueHumanMessage(ctx, queuedMsg, clientID != "")
+					if err != nil {
 						logging.Error("Failed to queue message for running workflow", "error", err)
-						return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
+						return nil, asConnectError(connect.CodeInternal, fmt.Errorf("failed to save message: %w", err))
 					}
+					queuedMsg = queued
 				}
 
 				// Signal workflow with the param/preset input update validated
@@ -901,6 +983,14 @@ func (s *ChatService) SendMessage(
 			// which is where it was already being routed in practice.
 
 			case db.Failed():
+				// An earlier attempt of this very send already restarted the
+				// run: the row says failed until that run's first activity
+				// writes "started", and Inspect below would call the live run
+				// "stuck" and refuse the repeat.
+				if s.runStartedForPriorSend(ctx, prior, workflowID) {
+					return replayResponse(chat, prior), nil
+				}
+
 				// Stuck (database says failed while Temporal says running)
 				// cannot be restarted - user must branch to continue.
 				inspection, inspectErr := s.runs.Inspect(ctx, req.Msg.ChatId)
@@ -1037,6 +1127,15 @@ func (s *ChatService) SendMessage(
 				// User-cancelled or completed: start a fresh workflow at graph
 				// entry (thread history is still the conversation context).
 				// Fall through to normal flow.
+				//
+				// Unless an earlier attempt of this very send already started
+				// it: the row says "completed" until the new run's first
+				// activity writes "started", so a repeat that lands in that
+				// window would start a second run over the first (the start
+				// terminates whatever holds the workflow id).
+				if s.runStartedForPriorSend(ctx, prior, workflowID) {
+					return replayResponse(chat, prior), nil
+				}
 			}
 		}
 	}
@@ -1205,11 +1304,11 @@ func (s *ChatService) SendMessage(
 	}), nil
 }
 
-// clientMessageID is the id the client chose for its message, when it is one a
-// queued row can carry; otherwise a fresh one.
-func clientMessageID(clientMessageID string) string {
-	if id, err := uuid.Parse(clientMessageID); err == nil {
-		return id.String()
+// queuedMessageID is the id of a queued row: the id the client chose for its
+// message (already vetted as a UUID), otherwise a fresh one.
+func queuedMessageID(clientID string) string {
+	if clientID != "" {
+		return clientID
 	}
 	return uuid.New().String()
 }
@@ -1238,6 +1337,10 @@ func (s *ChatService) SendAgentMessage(
 	if strings.TrimSpace(req.Msg.Message) == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("message is required"))
 	}
+	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
+	if err != nil {
+		return nil, err
+	}
 
 	// Ownership check: the chat must belong to the caller. Combined with the
 	// thread.ChatID check below, this is what stops a user from addressing
@@ -1257,6 +1360,29 @@ func (s *ChatService) SendAgentMessage(
 		// thread ID exists but belongs to a different chat is an
 		// enumeration leak we don't need to offer.
 		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("thread not found"))
+	}
+
+	// A repeat of a send whose message the agent already read is answered with
+	// the receipt it got the first time, before any liveness check: the run
+	// that read it may well have finished since, and "this agent has finished"
+	// is not the answer to a message that was delivered. A repeat of one still
+	// queued carries on below and finds its row there.
+	if clientID != "" {
+		prior, err := s.database.GetAgentMessage(ctx, clientID)
+		if err != nil {
+			return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to check for an earlier send: %w", err))
+		}
+		if prior != nil {
+			if !humanMessageIs(prior, chat.ID, req.Msg.Message, req.Msg.Attachments) {
+				return nil, errClientMessageReused()
+			}
+			if prior.Status == core.AgentMessageStatusDelivered {
+				return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+					Success: true,
+					Message: queuedReceipt,
+				}), nil
+			}
+		}
 	}
 
 	owningWorkflow := s.owningWorkflow(ctx, target)
@@ -1349,7 +1475,7 @@ func (s *ChatService) SendAgentMessage(
 	}
 
 	msg := &db.AgentMessage{
-		ID: clientMessageID(req.Msg.GetClientMessageId()),
+		ID: queuedMessageID(clientID),
 		// FromThreadID is a required FK to threads(id), and the human
 		// sending this has no thread of their own. The chat's root thread
 		// is the closest stable stand-in for "the user's side of this
@@ -1365,9 +1491,28 @@ func (s *ChatService) SendAgentMessage(
 		Status:       core.AgentMessageStatusQueued,
 		CreatedAt:    time.Now(),
 	}
-	if err := s.database.EnqueueAgentMessage(ctx, msg); err != nil {
+	// Queued once: a repeat of a send that already queued the message finds its
+	// row and finishes around it, so what the first attempt may not have
+	// reached (the wake, the run to start) still happens, and nothing is
+	// queued twice.
+	queued, inserted, err := s.enqueueHumanMessage(ctx, msg, clientID != "")
+	if err != nil {
+		if connect.CodeOf(err) != connect.CodeUnknown {
+			return nil, err
+		}
 		logging.Error("Failed to queue agent message", "error", err, "chatID", req.Msg.ChatId, "threadID", req.Msg.ThreadId)
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to queue message"))
+	}
+	msg = queued
+	if !inserted && msg.Status != core.AgentMessageStatusQueued {
+		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: true, Message: queuedReceipt}), nil
+	}
+	if !inserted && restartMainRun {
+		// The first attempt may have started the run for this row already;
+		// starting another would terminate it.
+		if state, stateErr := s.runs.State(ctx, chat.MainThreadID()); stateErr == nil && state.Exists && state.IsRunning {
+			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: true, Message: queuedReceipt}), nil
+		}
 	}
 
 	switch {
@@ -1392,9 +1537,11 @@ func (s *ChatService) SendAgentMessage(
 	// mean read, and does not mean acted on.
 	return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 		Success: true,
-		Message: "Queued for delivery. It will be read at that agent's next turn — it has not been read yet.",
+		Message: queuedReceipt,
 	}), nil
 }
+
+const queuedReceipt = "Queued for delivery. It will be read at that agent's next turn — it has not been read yet."
 
 // owningWorkflow is the workflow row that owns a thread: the thread's own
 // workflow, or the one named after it. Nil when it cannot be read.

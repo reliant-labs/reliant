@@ -37,6 +37,44 @@ export function newClientMessageId(): string {
   return crypto.randomUUID();
 }
 
+// ── One id per logical send ─────────────────────────────────────────────────
+//
+// The id is how the server tells a repeat of a send from a new message: a send
+// whose response was lost may well have been saved, and sending it again under
+// a new id saves it twice. So an id belongs to the logical send — the same
+// message to the same place — and every attempt at that send reuses it.
+//
+// A send that fails keeps its id for the next attempt at the same message, and
+// a send that succeeds retires it. The key says what "the same message" is, so
+// a message the user edited, or sent somewhere else, is a new one: the server
+// refuses one id for two messages. Kept in memory, like the failed sends.
+
+const attemptIds = new Map<string, string>();
+const MAX_KEPT_ATTEMPTS = 32;
+
+/** The id for this logical send: the one an earlier failed attempt used, else a new one. */
+export function attemptIdFor(key: string): string {
+  const kept = attemptIds.get(key);
+  if (kept) return kept;
+  const id = newClientMessageId();
+  attemptIds.set(key, id);
+  if (attemptIds.size > MAX_KEPT_ATTEMPTS) {
+    const oldest = attemptIds.keys().next().value;
+    if (oldest !== undefined) attemptIds.delete(oldest);
+  }
+  return id;
+}
+
+/** The send is settled (it succeeded, or the id is spent): the next one is new. */
+export function endAttempt(key: string): void {
+  attemptIds.delete(key);
+}
+
+/** Forget every kept id. For tests and sign-out. */
+export function clearAttempts(): void {
+  attemptIds.clear();
+}
+
 /** A row as the pending-queue strip shows it (QueuedAgentMessageView). */
 export interface QueuedRow {
   id: string;

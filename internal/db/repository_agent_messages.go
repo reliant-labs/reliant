@@ -59,6 +59,58 @@ func (r *Repo) EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
 	return nil
 }
 
+// EnqueueAgentMessageOnce is EnqueueAgentMessage for a row whose id the caller
+// does not control: a human send names its row (the client's message id), so a
+// repeat of that send arrives with an id that is already taken. It reports
+// inserted=false, and writes and announces nothing, when the id is. Concurrent
+// repeats are arbitrated by the primary key, not by a read.
+func (r *Repo) EnqueueAgentMessageOnce(ctx context.Context, msg *AgentMessage) (bool, error) {
+	if msg == nil {
+		return false, fmt.Errorf("agent message cannot be nil")
+	}
+	if msg.ID == "" {
+		return false, fmt.Errorf("agent message ID is required")
+	}
+	if msg.ChatID == "" {
+		return false, fmt.Errorf("chat ID is required")
+	}
+	if msg.FromThreadID == "" {
+		return false, fmt.Errorf("from thread ID is required")
+	}
+	if msg.ToThreadID == "" {
+		return false, fmt.Errorf("to thread ID is required")
+	}
+	inserted, err := r.agentMessages.EnqueueAgentMessageOnce(ctx, msg)
+	if err != nil {
+		return false, err
+	}
+	if inserted {
+		r.announceAgentMailboxChanged(ctx, msg.ChatID)
+	}
+	return inserted, nil
+}
+
+// GetAgentMessage returns the mailbox row with this id in any status, or
+// (nil, nil) when there is none.
+func (r *Repo) GetAgentMessage(ctx context.Context, id string) (*AgentMessage, error) {
+	if id == "" {
+		return nil, fmt.Errorf("message ID cannot be empty")
+	}
+	return r.agentMessages.GetAgentMessage(ctx, id)
+}
+
+// DeleteUndeliveredAgentMessage removes a row nobody ever read, so a repeat of
+// the send that wrote it can take its id. See core.AgentMessageStore.
+func (r *Repo) DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (bool, error) {
+	if id == "" {
+		return false, fmt.Errorf("message ID cannot be empty")
+	}
+	if chatID == "" {
+		return false, fmt.Errorf("chat ID cannot be empty")
+	}
+	return r.agentMessages.DeleteUndeliveredAgentMessage(ctx, id, chatID)
+}
+
 // EnqueueAgentMessageIfAbsent is EnqueueAgentMessage's conditional sibling,
 // used only by the stranded-background-spawn reconciler sweep to write
 // Synthesized placeholders (a real report later supersedes them via

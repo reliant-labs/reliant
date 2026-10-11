@@ -85,6 +85,11 @@ type MessageListOptions struct {
 type MessageStore interface {
 	CreateMessage(ctx context.Context, msg *Message) error
 	CreateMessageIfNotExists(ctx context.Context, msg *Message) error
+	// CreateMessageOnce inserts msg unless a row already holds its id, and
+	// reports which happened. The id is the arbiter between racing writers of
+	// one message: exactly one of them creates it, and the rest get
+	// created=false instead of an error.
+	CreateMessageOnce(ctx context.Context, msg *Message) (created bool, err error)
 	GetMessage(ctx context.Context, id string) (*Message, error)
 	GetNextOrdinal(ctx context.Context, threadID string) (int64, error)
 	// GetNextSeq returns the next seq for a message being written to threadID in

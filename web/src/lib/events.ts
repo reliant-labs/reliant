@@ -85,6 +85,13 @@ export interface EventMap {
     };
   };
 
+  // The composer is about to send a message again under the id it already
+  // used (Retry on a failed send). The strip tombstones an id it was told to
+  // let go of — a stale read must not bring a withdrawn row back — and a
+  // tombstone outlives the id's retirement, so without this the re-sent row
+  // would be dropped from the strip as if the agent had already read it.
+  "agentMailbox:resend": { chatId: string; thread: string; messageId: string };
+
   // Daemon
   "daemon:heartbeat": undefined;
 

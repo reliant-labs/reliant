@@ -130,6 +130,25 @@ func (r *Repo) CreateMessageIfNotExists(ctx context.Context, msg *Message) error
 	return r.messages.CreateMessageIfNotExists(ctx, msg)
 }
 
+// CreateMessageOnce creates a message record unless a row already holds its id,
+// and reports which happened. Unlike CreateMessageIfNotExists the caller is
+// told, because a caller that lost the race must not go on to write the rest
+// of the message (content blocks, the chat_update) a second time.
+//
+// WARNING: Same caveats as CreateMessage - prefer SaveMessageToThreadOnce.
+func (r *Repo) CreateMessageOnce(ctx context.Context, msg *Message) (bool, error) {
+	if msg == nil {
+		return false, fmt.Errorf("message cannot be nil")
+	}
+	if msg.ID == "" {
+		return false, fmt.Errorf("message ID cannot be empty")
+	}
+	if msg.ChatID == "" {
+		return false, fmt.Errorf("message ChatID cannot be empty")
+	}
+	return r.messages.CreateMessageOnce(ctx, msg)
+}
+
 // SaveMessageToThread atomically creates a message with text and optional image content blocks.
 // This is the PREFERRED method for saving messages outside of workflow activities.
 // It automatically handles:
@@ -155,14 +174,34 @@ func (r *Repo) SaveMessageToThread(ctx context.Context, chatID, thread string, r
 // SaveMessageToThreadWithID is SaveMessageToThread with a caller-supplied
 // message id (delta identity protocol). Empty messageID generates a uuid.
 func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*Message, error) {
+	msg, _, err := r.saveMessageToThread(ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle, messageID, false)
+	return msg, err
+}
+
+// SaveMessageToThreadOnce saves a message under an id the CLIENT chose, and is
+// safe to repeat: when a row already holds the id it writes nothing (no
+// message, no content blocks, no chat_update) and returns created=false with a
+// nil message. The id is the arbiter between two repeats racing each other, so
+// exactly one of them creates the row.
+//
+// It does not check that the existing row is the same message or is in the
+// same chat; the caller decides what a taken id means.
+func (r *Repo) SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*Message, bool, error) {
+	if messageID == "" {
+		return nil, false, fmt.Errorf("messageID cannot be empty")
+	}
+	return r.saveMessageToThread(ctx, chatID, thread, role, content, workflowID, attachmentIDs, displayStyle, messageID, true)
+}
+
+func (r *Repo) saveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string, once bool) (*Message, bool, error) {
 	if chatID == "" {
-		return nil, fmt.Errorf("chatID cannot be empty")
+		return nil, false, fmt.Errorf("chatID cannot be empty")
 	}
 	if thread == "" {
-		return nil, fmt.Errorf("thread cannot be empty")
+		return nil, false, fmt.Errorf("thread cannot be empty")
 	}
 	if role == 0 {
-		return nil, fmt.Errorf("role cannot be unspecified")
+		return nil, false, fmt.Errorf("role cannot be unspecified")
 	}
 
 	// A message's workflow_id must name the workflow running THIS thread.
@@ -187,7 +226,12 @@ func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread str
 	}
 
 	var savedMsg *Message
+	created := true
 	err := r.RunTx(ctx, func(txCtx context.Context) error {
+		// The transaction is retried on a serialization conflict, and a retry
+		// starts over.
+		savedMsg, created = nil, true
+
 		// Get next ordinal for the thread
 		ordinal, err := r.GetNextOrdinal(txCtx, thread)
 		if err != nil {
@@ -245,7 +289,21 @@ func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread str
 			UpdatedAt:       now,
 		}
 
-		if err := r.CreateMessage(txCtx, msg); err != nil {
+		if once {
+			// Under SERIALIZABLE a repeat whose twin committed after this
+			// snapshot does not get here: Postgres fails the insert with a
+			// serialization error and the retry above finds the row already
+			// visible. DO NOTHING covers the row that was visible from the
+			// start.
+			ok, err := r.CreateMessageOnce(txCtx, msg)
+			if err != nil {
+				return fmt.Errorf("failed to create message: %w", err)
+			}
+			if !ok {
+				created = false
+				return nil
+			}
+		} else if err := r.CreateMessage(txCtx, msg); err != nil {
 			return fmt.Errorf("failed to create message: %w", err)
 		}
 
@@ -392,10 +450,9 @@ func (r *Repo) SaveMessageToThreadWithID(ctx context.Context, chatID, thread str
 	})
 
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
-	return savedMsg, nil
-
+	return savedMsg, created, nil
 }
 
 func (r *Repo) GetMessage(ctx context.Context, id string) (*Message, error) {

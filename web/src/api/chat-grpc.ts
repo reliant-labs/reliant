@@ -188,6 +188,9 @@ export interface StartChatOptions {
   workflow_params?: Record<string, unknown>;
   selected_presets?: Record<string, string>; // Preset selections per target
   builder_test?: boolean; // Test run from the workflow builder: recorded as launch kind builder.test; workflow must be a saved draft the caller owns
+  // The id the client gave the first message. Makes the start idempotent: a
+  // repeat with the same id returns the chat the first call made.
+  client_message_id?: string;
 }
 
 // Chat updates only affect title and worktree_id
@@ -271,6 +274,7 @@ export const chatGrpc = {
       workflowParams,
       selectedPresets: options.selected_presets || {},
       builderTest: options.builder_test || undefined,
+      clientMessageId: options.client_message_id,
     });
     const response = await client.startChat(request);
     if (!response.chat) throw new Error("No chat in response");

@@ -21,6 +21,7 @@ type ChatWriter interface {
 	UpdateChatActiveDaemon(ctx context.Context, chatID string, daemonID *string) error
 	CountMessagesInChat(ctx context.Context, chatID string) (int, error)
 	SaveMessageToThread(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32) (*db.Message, error)
+	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (msg *db.Message, created bool, err error)
 	CreateUserUpdate(ctx context.Context, update *db.UserUpdate) error
 }
 

@@ -109,6 +109,8 @@ import {
   endPendingSend,
   endQueuedSend,
   failedSendId,
+  attemptIdFor,
+  endAttempt,
   newClientMessageId,
   optimisticSendId,
   type QueuedRow,
@@ -1333,6 +1335,18 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     // Backend can resolve user defaults, but we've had cases where "" ended up as Agent.
     const effectiveWorkflow = workflow ?? DEFAULT_WORKFLOW;
 
+    // One id for this first message, however many times it is sent. A start
+    // whose response was lost may well have made the chat; sending it again
+    // under a new id makes a second one. The composer puts the text back when
+    // a start fails, so the user's next send is the same message and must find
+    // the same id: that is what the server recognizes it by.
+    const attemptKey = JSON.stringify([
+      "start",
+      projectId,
+      worktreeId ?? "",
+      firstMessage,
+      attachmentIds ?? [],
+    ]);
     const chat = await api.chatsV2.start({
       project_id: projectId,
       messages: firstMessage
@@ -1348,7 +1362,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           ? effectiveWorkflowParams
           : undefined,
       selectedPresets: selectedPresets,
+      client_message_id: attemptIdFor(attemptKey),
     });
+    endAttempt(attemptKey);
 
     applyFirstSend(chat, projectId, firstMessage, attachmentIds);
     // Safe to seed after the request: a brand-new chat has no id until
@@ -1414,6 +1430,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         workflow_params:
           Object.keys(workflowParams).length > 0 ? workflowParams : undefined,
         selectedPresets: sendOptions.selectedPresets,
+        client_message_id: clientMessageId,
       });
     } catch (error) {
       // Same as sendMessage: a machine coming up is the caller's to retry.
@@ -1744,6 +1761,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           // Kept by every mailbox read until the server's row (same id) is in
           // one, so a read that lands mid-send cannot erase it.
           beginQueuedSend({ chatId, thread, row: queuedRow });
+          // A resend (Retry) reuses the id of a send that was withdrawn from
+          // the strip when it failed; the strip must take the id back.
+          initEventBus().emit("agentMailbox:resend", { chatId, thread, messageId: clientMessageId });
           initEventBus().emit("agentMailbox:queued", { chatId, thread, message: queuedRow });
         } else {
           // Append the optimistic user message to the RQ message cache (the
@@ -1933,11 +1953,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // for the user to copy.
       throw new Error("This message can no longer be resent. Copy it and send it again.");
     }
-    // The retry is a new send with a new id, replacing the failed entry in the
-    // same commit. Not the old id: a strip tombstone, or a row the server kept
-    // from a failure it never reported, may already hold it.
+    // The retry is the same send, under the same id, replacing the failed entry
+    // in the same commit. The id is how the server recognizes it: a send can
+    // fail on the way back (a dropped connection, a timeout) after the server
+    // saved it, and an id of its own would save it twice. Under the old id the
+    // server answers with the message it already has, and starts nothing.
     get().discardFailedSend(chatId, clientMessageId);
-    const retryId = newClientMessageId();
+    const retryId = clientMessageId;
     try {
       // The same path the composer takes (ChatContainer): routed for a chat
       // that still needs starting, and retried while its machine comes up.

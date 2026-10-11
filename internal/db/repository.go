@@ -34,6 +34,9 @@ type Repository interface {
 	// FindMessage is GetMessage's does-it-exist variant: (nil, nil) on a miss
 	// rather than an error. Used by SaveMessage's idempotency checks.
 	FindMessage(ctx context.Context, id string) (*Message, error)
+	// IsLatestTurnInThread reports whether messageID is the thread's newest
+	// non-system message, i.e. nothing has followed it yet.
+	IsLatestTurnInThread(ctx context.Context, threadID, messageID string) (bool, error)
 	GetMessageByActivityID(ctx context.Context, chatID, activityID string) (*Message, error)
 	GetMessageByWorkflowAndActivityID(ctx context.Context, chatID, workflowID, activityID string) (*Message, error)
 	GetLatestMessageInThread(ctx context.Context, threadID string) (*Message, error)
@@ -106,6 +109,10 @@ type Repository interface {
 	// message id (delta identity protocol — the persisted row must match the
 	// id stamped on streamed deltas). Empty messageID generates a uuid.
 	SaveMessageToThreadWithID(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (*Message, error)
+	// SaveMessageToThreadOnce saves a message under an id the client chose and
+	// is safe to repeat: created=false (and nothing written) when a row already
+	// holds the id.
+	SaveMessageToThreadOnce(ctx context.Context, chatID, thread string, role int32, content string, workflowID *string, attachmentIDs []string, displayStyle *int32, messageID string) (msg *Message, created bool, err error)
 
 	// Content Blocks
 	CreateContentBlock(ctx context.Context, block *MessageContentBlock) error
@@ -354,6 +361,14 @@ type Repository interface {
 
 	// Agent mailbox (spawn_send, sub-agent completion notifications)
 	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
+	// EnqueueAgentMessageOnce is EnqueueAgentMessage for a row named by the
+	// client: inserted=false when the id is already taken, instead of an error.
+	EnqueueAgentMessageOnce(ctx context.Context, msg *AgentMessage) (inserted bool, err error)
+	// GetAgentMessage returns a mailbox row in any status, (nil, nil) if none.
+	GetAgentMessage(ctx context.Context, id string) (*AgentMessage, error)
+	// DeleteUndeliveredAgentMessage removes a row nobody ever read (only an
+	// Undelivered one) so a repeat of its send can take the id.
+	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
 	// EnqueueSpawnReport writes a real terminal spawn report, superseding a
 	// reconciler placeholder for the same tool call. See
 	// core.AgentMessageStore and dev-docs/incidents/2026-10-04-spawn-report-collision.md.

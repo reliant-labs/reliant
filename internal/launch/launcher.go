@@ -94,6 +94,49 @@ type seedContent struct {
 // when the event and chat are committed but the run never started, calling
 // Launch again finishes the start instead of reporting a duplicate.
 func (l *Launcher) Launch(ctx context.Context, ev Event, spec Spec) (*Result, error) {
+	result, err := l.launch(ctx, ev, spec)
+	var already *AlreadyLaunchedError
+	if spec.ClientMessageID != "" && errors.As(err, &already) && already.ChatID != "" {
+		// A start the client named is idempotent: its repeat is answered with
+		// the chat the first call started, not reported as a duplicate.
+		if replayed, replayErr := l.replayOfNamedStart(ctx, ev, spec, already); replayed != nil || replayErr != nil {
+			return replayed, replayErr
+		}
+	}
+	return result, err
+}
+
+// replayOfNamedStart answers a start the client named (Spec.ClientMessageID)
+// that has already launched: the same message gets the chat it started, a
+// different one under the same id is refused. Nil, nil when the earlier launch
+// was not this send (another id, or no record of it), which leaves the caller
+// with the duplicate report.
+func (l *Launcher) replayOfNamedStart(ctx context.Context, ev Event, spec Spec, already *AlreadyLaunchedError) (*Result, error) {
+	if ev.DedupeKey == "" {
+		return nil, nil
+	}
+	stored, err := l.repo.GetTriggerEventByDedupe(ctx, ev.Kind, ev.DedupeKey)
+	if err != nil {
+		return nil, nil
+	}
+	if recordedClientMessageID(stored) != spec.ClientMessageID {
+		return nil, nil
+	}
+	if !isRetryOf(stored, ev.Kind, seedFingerprint(spec.Messages, spec.Attachments)) {
+		return nil, ErrClientMessageReused
+	}
+	chat, err := l.repo.GetChat(ctx, already.ChatID)
+	if err != nil || chat == nil || chat.UserID != spec.OwnerUserID {
+		return nil, nil
+	}
+	result := &Result{Chat: chat, WorkflowID: chat.MainThreadID(), EventID: stored.ID}
+	if chat.RunID != nil {
+		result.RunID = *chat.RunID
+	}
+	return result, nil
+}
+
+func (l *Launcher) launch(ctx context.Context, ev Event, spec Spec) (*Result, error) {
 	userContent, systemMessages, hasUserContent := splitSeedMessages(spec.Messages)
 	seed := seedContent{userContent: userContent, systemMessages: systemMessages, hasUserContent: hasUserContent}
 
@@ -297,11 +340,12 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 	}
 
 	eventRow := newEventRow(ev, userID, chatID, workflowName, worktreeID, startRecord{
-		Fingerprint: seedFingerprint(spec.Messages, spec.Attachments),
-		Workflow:    workflowName,
-		Presets:     spec.Presets,
-		Params:      spec.Params,
-		Prompt:      seed.userContent,
+		Fingerprint:     seedFingerprint(spec.Messages, spec.Attachments),
+		ClientMessageID: spec.ClientMessageID,
+		Workflow:        workflowName,
+		Presets:         spec.Presets,
+		Params:          spec.Params,
+		Prompt:          seed.userContent,
 	})
 	if pending != nil {
 		// The adopted row keeps its identity, the time the source says the
@@ -374,7 +418,7 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 			return fmt.Errorf("failed to create workflow and thread: %w", err)
 		}
 
-		if err := l.saveSeedMessages(txCtx, chatID, workflowID, seed.systemMessages, seed, spec.Attachments); err != nil {
+		if err := l.saveSeedMessages(txCtx, chatID, workflowID, seed.systemMessages, seed, spec.Attachments, spec.ClientMessageID); err != nil {
 			return err
 		}
 
@@ -401,6 +445,9 @@ func (l *Launcher) launchNew(ctx context.Context, ev Event, spec Spec, seed seed
 		if errors.Is(err, errEventExists) {
 			// Lost a race with a concurrent launch of the same event.
 			return l.finishExisting(ctx, ev, spec, seed)
+		}
+		if errors.Is(err, ErrClientMessageReused) {
+			return nil, ErrClientMessageReused
 		}
 		logging.Error("Failed to create chat", "error", err, "chatID", chatID)
 		return nil, &InternalError{Reason: "failed to create chat", Err: err}
@@ -493,6 +540,11 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 			}
 			return l.startRecorded(ctx, existing, spec, seed)
 		}
+		if spec.ClientMessageID != "" && recordedClientMessageID(existing) == spec.ClientMessageID {
+			// The id names the message already written; a second message under
+			// it would be a second row with the same primary key.
+			return nil, ErrClientMessageReused
+		}
 	case !errors.Is(err, core.ErrTriggerEventNotFound):
 		return nil, &InternalError{Reason: "failed to check for an earlier launch", Err: err}
 	}
@@ -555,11 +607,12 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 
 		workflowName, presets, switching := effectiveStart(cur, spec)
 		eventRow := newEventRow(ev, userID, cur.ID, workflowName, cur.WorktreeID, startRecord{
-			Fingerprint: fingerprint,
-			Workflow:    workflowName,
-			Presets:     presets,
-			Params:      spec.Params,
-			Prompt:      seed.userContent,
+			Fingerprint:     fingerprint,
+			ClientMessageID: spec.ClientMessageID,
+			Workflow:        workflowName,
+			Presets:         presets,
+			Params:          spec.Params,
+			Prompt:          seed.userContent,
 		})
 
 		created, err := l.repo.CreateTriggerEvent(txCtx, eventRow)
@@ -605,7 +658,7 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 		// append to it. Whether the run probes for greenfield is the
 		// caller's Spec.GreenfieldProbe, which a branch's first send leaves
 		// off: a branch is not a first turn of new work.
-		return l.saveSeedMessages(txCtx, cur.ID, workflowID, seed.systemMessages, seed, spec.Attachments)
+		return l.saveSeedMessages(txCtx, cur.ID, workflowID, seed.systemMessages, seed, spec.Attachments, spec.ClientMessageID)
 	}); err != nil {
 		if errors.Is(err, ErrNotPending) {
 			// The chat started between the check above and the transaction.
@@ -614,6 +667,9 @@ func (l *Launcher) launchPending(ctx context.Context, ev Event, spec Spec, seed 
 				return nil, &AlreadyLaunchedError{ChatID: chat.ID, EventID: stored.ID}
 			}
 			return nil, ErrNotPending
+		}
+		if errors.Is(err, ErrClientMessageReused) {
+			return nil, ErrClientMessageReused
 		}
 		logging.Error("Failed to start pending chat", "error", err, "chatID", chat.ID)
 		return nil, &InternalError{Reason: "failed to start chat", Err: err}
@@ -749,7 +805,14 @@ func (l *Launcher) finishExisting(ctx context.Context, ev Event, spec Spec, seed
 const (
 	payloadSeedFingerprint = "seed_fingerprint"
 	payloadStart           = "start"
+	payloadClientMessageID = "client_message_id"
 )
+
+// recordedClientMessageID is the client message id a start was recorded with.
+func recordedClientMessageID(row *core.TriggerEvent) string {
+	id, _ := row.Payload[payloadClientMessageID].(string)
+	return id
+}
 
 // startRecord is what the event row remembers about a start, so a retry can be
 // told from a new turn and can rebuild the run without trusting the retrying
@@ -759,6 +822,8 @@ type startRecord struct {
 	Workflow    string
 	Presets     map[string]string
 	Params      map[string]*structpb.Value
+	// ClientMessageID is the id the client gave the first message, when it did.
+	ClientMessageID string
 	// Prompt is the seed user text, so a re-run starts from exactly what this
 	// run did instead of guessing it back out of the transcript.
 	Prompt string
@@ -780,6 +845,9 @@ func (r startRecord) addTo(payload map[string]any) {
 		presets[key] = value
 	}
 	payload[payloadSeedFingerprint] = r.Fingerprint
+	if r.ClientMessageID != "" {
+		payload[payloadClientMessageID] = r.ClientMessageID
+	}
 	start := map[string]any{
 		"workflow": r.Workflow,
 		"presets":  presets,
@@ -902,6 +970,7 @@ func (l *Launcher) saveSeedMessages(
 	systemMessages []SeedMessage,
 	seed seedContent,
 	attachments []string,
+	userMessageID string,
 ) error {
 	for _, sysMsg := range systemMessages {
 		if _, err := l.repo.SaveMessageToThread(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_SYSTEM), sysMsg.Content, &threadID, nil, displayStyleProtoToInt32Ptr(sysMsg.DisplayStyle)); err != nil {
@@ -909,8 +978,22 @@ func (l *Launcher) saveSeedMessages(
 		}
 	}
 	if seed.hasUserContent || len(attachments) > 0 {
-		if _, err := l.repo.SaveMessageToThread(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), seed.userContent, &threadID, attachments, nil); err != nil {
+		if userMessageID == "" {
+			if _, err := l.repo.SaveMessageToThread(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), seed.userContent, &threadID, attachments, nil); err != nil {
+				return fmt.Errorf("failed to save first message: %w", err)
+			}
+			return nil
+		}
+		// The client's id is the row's id, and rows share one id space: this
+		// chat is new (or pending, with no message under this id yet), so a
+		// row that already holds the id belongs to some other send, and the id
+		// cannot be the key of this one.
+		_, created, err := l.repo.SaveMessageToThreadOnce(ctx, chatID, threadID, int32(reliantv1.MessageRole_MESSAGE_ROLE_USER), seed.userContent, &threadID, attachments, nil, userMessageID)
+		if err != nil {
 			return fmt.Errorf("failed to save first message: %w", err)
+		}
+		if !created {
+			return ErrClientMessageReused
 		}
 	}
 	return nil

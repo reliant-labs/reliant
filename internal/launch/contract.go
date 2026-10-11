@@ -72,6 +72,12 @@ type Spec struct {
 	Messages    []SeedMessage
 	Attachments []string
 
+	// ClientMessageID is the id of the first user message when the client
+	// chose it (a canonical UUID). The message is written under it, which is
+	// what lets a later send of the same message find it. Empty means a
+	// generated id.
+	ClientMessageID string
+
 	// DaemonID is the daemon every tool call in this run executes on. It
 	// becomes the chat's ActiveDaemonID, which the launcher injects as
 	// inputs.session_daemon_id. Empty leaves daemon selection to the runtime.
@@ -143,6 +149,11 @@ func (e *AlreadyLaunchedError) Error() string {
 
 // Is makes errors.Is(err, ErrAlreadyLaunched) match.
 func (e *AlreadyLaunchedError) Is(target error) bool { return target == ErrAlreadyLaunched }
+
+// ErrClientMessageReused reports that Spec.ClientMessageID already names a
+// different message: the same id with other text or attachments. A repeat of
+// the same message is not an error; it is answered with the chat it started.
+var ErrClientMessageReused = errors.New("client message id already used for a different message")
 
 // ErrDeclined reports that Spec.Guard declined the launch. Nothing was
 // written. Match with errors.Is; *DeclinedError carries the reason.

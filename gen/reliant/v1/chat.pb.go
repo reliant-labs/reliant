@@ -1587,9 +1587,18 @@ type StartChatRequest struct {
 	// draft runs as saved even if it is not marked complete. The client does not
 	// choose the launch kind: this flag is the only way to ask for builder.test,
 	// and no other kind can be claimed through StartChat.
-	BuilderTest   *bool `protobuf:"varint,19,opt,name=builder_test,json=builderTest,proto3,oneof" json:"builder_test,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	BuilderTest *bool `protobuf:"varint,19,opt,name=builder_test,json=builderTest,proto3,oneof" json:"builder_test,omitempty"`
+	// Client-chosen UUID for the first user message, which makes the start
+	// idempotent: a repeat with the same id (a retry after a lost response, a
+	// timed-out call that had in fact committed) returns the chat the first
+	// call made instead of creating a second one, and starts no second run. The
+	// id names a message, so reusing it with different message text or
+	// attachments is refused with ALREADY_EXISTS. Scoped to the caller. Unset
+	// makes no promise: every call starts a new chat. A value that is not a UUID
+	// is refused with INVALID_ARGUMENT.
+	ClientMessageId *string `protobuf:"bytes,21,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *StartChatRequest) Reset() {
@@ -1711,6 +1720,13 @@ func (x *StartChatRequest) GetBuilderTest() bool {
 		return *x.BuilderTest
 	}
 	return false
+}
+
+func (x *StartChatRequest) GetClientMessageId() string {
+	if x != nil && x.ClientMessageId != nil {
+		return *x.ClientMessageId
+	}
+	return ""
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.
@@ -2607,10 +2623,17 @@ type SendMessageRequest struct {
 	TargetThread    *string                    `protobuf:"bytes,13,opt,name=target_thread,json=targetThread,proto3,oneof" json:"target_thread,omitempty"`                                                                              // Target thread ID for the message (defaults to main thread if not specified)
 	SelectedPresets map[string]string          `protobuf:"bytes,14,rep,name=selected_presets,json=selectedPresets,proto3" json:"selected_presets,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Update preset selections (persisted with chat)
 	Messages        []*InputMessage            `protobuf:"bytes,15,rep,name=messages,proto3" json:"messages,omitempty"`                                                                                                                // Messages to send (user and system). At least one user message required.
-	// Client-chosen UUID for the user message. When the message is queued for a
-	// running thread (see SendMessageResponse.queued) it becomes the queued
-	// row's id, so a client can key its optimistic copy by the id the queue
-	// will report from the moment it sends. Ignored when not a UUID.
+	// Client-chosen UUID for the user message. It makes the send idempotent: a
+	// repeat with the same id (a retry after a lost response) returns the
+	// message the first call saved instead of saving it again, and does not
+	// start a second run or take a second turn. The id names a message, so
+	// reusing it with different message text or attachments is refused with
+	// ALREADY_EXISTS. When the message is queued for a running thread (see
+	// SendMessageResponse.queued) it becomes the queued row's id, so a client
+	// can key its optimistic copy by the id the queue will report from the
+	// moment it sends. Scoped to the caller's chat. Unset makes no promise:
+	// every call is a new message. A value that is not a UUID is refused with
+	// INVALID_ARGUMENT.
 	ClientMessageId *string `protobuf:"bytes,18,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -2832,7 +2855,11 @@ type SendAgentMessageRequest struct {
 	Message     string                 `protobuf:"bytes,3,opt,name=message,proto3" json:"message,omitempty"`
 	Attachments []string               `protobuf:"bytes,4,rep,name=attachments,proto3" json:"attachments,omitempty"` // Attachment IDs
 	// Client-chosen UUID for the queued mailbox row. Lets the client reconcile
-	// its optimistic queue entry with the server row without matching message text.
+	// its optimistic queue entry with the server row without matching message
+	// text, and makes the send idempotent: a repeat with the same id returns
+	// the earlier receipt and queues nothing again. Reusing it with different
+	// message text is refused with ALREADY_EXISTS. A value that is not a UUID is
+	// refused with INVALID_ARGUMENT.
 	ClientMessageId *string `protobuf:"bytes,5,opt,name=client_message_id,json=clientMessageId,proto3,oneof" json:"client_message_id,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
@@ -6138,7 +6165,7 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\x04role\x18\x01 \x01(\x0e2\x17.reliant.v1.MessageRoleR\x04role\x12\x18\n" +
 	"\acontent\x18\x02 \x01(\tR\acontent\x12B\n" +
 	"\rdisplay_style\x18\x03 \x01(\x0e2\x18.reliant.v1.DisplayStyleH\x00R\fdisplayStyle\x88\x01\x01B\x10\n" +
-	"\x0e_display_style\"\xc0\x06\n" +
+	"\x0e_display_style\"\x87\a\n" +
 	"\x10StartChatRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x19\n" +
@@ -6155,7 +6182,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x12 \x01(\tH\x04R\bdaemonId\x88\x01\x01\x12\"\n" +
 	"\n" +
 	"no_machine\x18\x14 \x01(\bH\x05R\tnoMachine\x88\x01\x01\x12&\n" +
-	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x1aY\n" +
+	"\fbuilder_test\x18\x13 \x01(\bH\x06R\vbuilderTest\x88\x01\x01\x12/\n" +
+	"\x11client_message_id\x18\x15 \x01(\tH\aR\x0fclientMessageId\x88\x01\x01\x1aY\n" +
 	"\x13WorkflowParamsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\x1aB\n" +
@@ -6170,7 +6198,8 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\n" +
 	"_daemon_idB\r\n" +
 	"\v_no_machineB\x0f\n" +
-	"\r_builder_test\"q\n" +
+	"\r_builder_testB\x14\n" +
+	"\x12_client_message_id\"q\n" +
 	"\x11StartChatResponse\x12$\n" +
 	"\x04chat\x18\x01 \x01(\v2\x10.reliant.v1.ChatR\x04chat\x12\x1f\n" +
 	"\vworkflow_id\x18\x02 \x01(\tR\n" +

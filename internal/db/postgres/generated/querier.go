@@ -144,6 +144,14 @@ type Querier interface {
 	CreateMessage(ctx context.Context, arg CreateMessageParams) error
 	// ON CONFLICT DO NOTHING for idempotent message creation
 	CreateMessageIfNotExists(ctx context.Context, arg CreateMessageIfNotExistsParams) error
+	// A user's send names its message (client_message_id), so a repeat of that send
+	// arrives with an id that is already taken. ON CONFLICT (id) DO NOTHING is the
+	// arbiter between two such repeats racing each other: exactly one inserts, the
+	// other affects zero rows and reports that instead of failing. Only the id
+	// conflict is absorbed; any other unique violation (messages_chat_seq_key,
+	// two different sends racing for one seq) still raises and the transaction
+	// retries as before.
+	CreateMessageOnce(ctx context.Context, arg CreateMessageOnceParams) (int64, error)
 	CreatePlan(ctx context.Context, arg CreatePlanParams) (Plan, error)
 	CreatePreset(ctx context.Context, arg CreatePresetParams) (Preset, error)
 	CreateProject(ctx context.Context, arg CreateProjectParams) error
@@ -223,6 +231,10 @@ type Querier interface {
 	DeleteThreadsByConversation(ctx context.Context, chatID string) error
 	DeleteTrigger(ctx context.Context, id string) error
 	DeleteTriggerRegistration(ctx context.Context, triggerID string) error
+	// Removes a row that was never read: its thread's loop exited before a drain
+	// reached it. A repeat of the send that wrote it is a fresh send, and has to
+	// be able to take its id; a queued or delivered row is never touched.
+	DeleteUndeliveredAgentMessage(ctx context.Context, arg DeleteUndeliveredAgentMessageParams) (int64, error)
 	DeleteVisibilityOverride(ctx context.Context, arg DeleteVisibilityOverrideParams) error
 	DeleteWorkflow(ctx context.Context, id string) error
 	DeleteWorkflowCheckpoint(ctx context.Context, workflowID string) error
@@ -253,6 +265,11 @@ type Querier interface {
 	// This is the PLACEHOLDER writer: the reconciler passes synthesized = true, and
 	// a real report later supersedes the row via EnqueueSpawnReport.
 	EnqueueAgentMessageIfAbsent(ctx context.Context, arg EnqueueAgentMessageIfAbsentParams) (string, error)
+	// A human send names its mailbox row (client_message_id), so a repeat of that
+	// send arrives with an id that is already taken. ON CONFLICT (id) DO NOTHING is
+	// what lets exactly one of two racing repeats insert; the other gets no row
+	// back (sql.ErrNoRows) and reads the winner's row instead of failing.
+	EnqueueAgentMessageOnce(ctx context.Context, arg EnqueueAgentMessageOnceParams) (string, error)
 	// A REAL terminal spawn report. Unlike EnqueueAgentMessageIfAbsent (the
 	// reconciler's placeholder write, DO NOTHING), a real report replaces a
 	// placeholder the reconciler synthesized for the same tool_call_id -- see
@@ -285,6 +302,7 @@ type Querier interface {
 	// Releases the lease and records the outcome. refreshed_at moves only on
 	// success; last_error is cleared on success.
 	FinishIntegrationAccessRefresh(ctx context.Context, arg FinishIntegrationAccessRefreshParams) error
+	GetAgentMessage(ctx context.Context, id string) (AgentMessage, error)
 	// Get all step executions in a workflow (for full history reconstruction)
 	GetAllStepExecutionsForWorkflow(ctx context.Context, workflowID string) ([]StepExecution, error)
 	// Get a specific approval by ID

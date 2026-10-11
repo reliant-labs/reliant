@@ -14,6 +14,7 @@ export interface StartChatRequest {
   no_machine?: boolean;       // Optional - no machine by design (web & integrations only)
   workflow_params?: Record<string, unknown>;  // Workflow inputs: model, mode, etc.
   selectedPresets?: Record<string, string>;   // Preset selections per target ("" = workflow-level, "Agent A" = group)
+  client_message_id?: string; // Optional - the id of the first message; a repeat with it returns the same chat
 }
 
 // NOTE: model/temperature/maxTokens are workflow params, not chat fields

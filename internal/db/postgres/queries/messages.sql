@@ -39,6 +39,23 @@ INSERT INTO messages (
 ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 ON CONFLICT(id) DO NOTHING;
 
+-- name: CreateMessageOnce :execrows
+-- A user's send names its message (client_message_id), so a repeat of that send
+-- arrives with an id that is already taken. ON CONFLICT (id) DO NOTHING is the
+-- arbiter between two such repeats racing each other: exactly one inserts, the
+-- other affects zero rows and reports that instead of failing. Only the id
+-- conflict is absorbed; any other unique violation (messages_chat_seq_key,
+-- two different sends racing for one seq) still raises and the transaction
+-- retries as before.
+INSERT INTO messages (
+    id, chat_id, ordinal, seq, thread_id, context_window_id,
+    node_id, node_path,
+    role, display_style, model, agent,
+    token_count, cost,
+    workflow_id, run_id, activity_id, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+ON CONFLICT (id) DO NOTHING;
+
 -- name: GetNextOrdinalByThread :one
 -- Get next ordinal for a thread (uses denormalized thread_id)
 SELECT COALESCE(MAX(ordinal), -1) + 1 AS next_ordinal

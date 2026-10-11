@@ -261,6 +261,7 @@ export const api = {
         attachments: request.attachments,
         workflow_params: request.workflow_params,
         selected_presets: request.selectedPresets,
+        client_message_id: request.client_message_id,
       });
       return result.chat;
     },

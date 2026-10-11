@@ -159,6 +159,19 @@ var ErrSpawnReportSlotTaken = errors.New("another spawn already reported under t
 // drivers.
 type AgentMessageStore interface {
 	EnqueueAgentMessage(ctx context.Context, msg *AgentMessage) error
+	// EnqueueAgentMessageOnce inserts msg unless a row already holds its id,
+	// and reports which happened. A human send names its row (the client's
+	// message id), so a repeat of that send arrives with an id that is taken;
+	// the id is the arbiter between racing repeats, and the losers get
+	// inserted=false instead of an error.
+	EnqueueAgentMessageOnce(ctx context.Context, msg *AgentMessage) (inserted bool, err error)
+	// GetAgentMessage returns the row with this id, or (nil, nil) when none
+	// exists, whatever its status.
+	GetAgentMessage(ctx context.Context, id string) (*AgentMessage, error)
+	// DeleteUndeliveredAgentMessage removes the row with this id in this chat
+	// only if it is Undelivered -- nobody ever read it -- and reports whether it
+	// did. A queued or delivered row is left alone.
+	DeleteUndeliveredAgentMessage(ctx context.Context, id, chatID string) (deleted bool, err error)
 	// EnqueueSpawnReport writes a REAL terminal spawn report (Synthesized must
 	// be false; ToolCallID required). A spawn's slot is (ChatID, ToolCallID):
 	// the call inserts, supersedes a synthesized placeholder for the same

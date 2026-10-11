@@ -464,6 +464,16 @@ message StartChatRequest {
   // choose the launch kind: this flag is the only way to ask for builder.test,
   // and no other kind can be claimed through StartChat.
   optional bool builder_test = 19;
+
+  // Client-chosen UUID for the first user message, which makes the start
+  // idempotent: a repeat with the same id (a retry after a lost response, a
+  // timed-out call that had in fact committed) returns the chat the first
+  // call made instead of creating a second one, and starts no second run. The
+  // id names a message, so reusing it with different message text or
+  // attachments is refused with ALREADY_EXISTS. Scoped to the caller. Unset
+  // makes no promise: every call starts a new chat. A value that is not a UUID
+  // is refused with INVALID_ARGUMENT.
+  optional string client_message_id = 21;
 }
 
 // StartChatResponse returns the started chat and the ids of its root run.
@@ -584,10 +594,17 @@ message SendMessageRequest {
   repeated InputMessage messages = 15; // Messages to send (user and system). At least one user message required.
   reserved 17;
   reserved "discuss";
-  // Client-chosen UUID for the user message. When the message is queued for a
-  // running thread (see SendMessageResponse.queued) it becomes the queued
-  // row's id, so a client can key its optimistic copy by the id the queue
-  // will report from the moment it sends. Ignored when not a UUID.
+  // Client-chosen UUID for the user message. It makes the send idempotent: a
+  // repeat with the same id (a retry after a lost response) returns the
+  // message the first call saved instead of saving it again, and does not
+  // start a second run or take a second turn. The id names a message, so
+  // reusing it with different message text or attachments is refused with
+  // ALREADY_EXISTS. When the message is queued for a running thread (see
+  // SendMessageResponse.queued) it becomes the queued row's id, so a client
+  // can key its optimistic copy by the id the queue will report from the
+  // moment it sends. Scoped to the caller's chat. Unset makes no promise:
+  // every call is a new message. A value that is not a UUID is refused with
+  // INVALID_ARGUMENT.
   optional string client_message_id = 18;
 }
 
@@ -617,7 +634,11 @@ message SendAgentMessageRequest {
   string message = 3;
   repeated string attachments = 4;  // Attachment IDs
   // Client-chosen UUID for the queued mailbox row. Lets the client reconcile
-  // its optimistic queue entry with the server row without matching message text.
+  // its optimistic queue entry with the server row without matching message
+  // text, and makes the send idempotent: a repeat with the same id returns
+  // the earlier receipt and queues nothing again. Reusing it with different
+  // message text is refused with ALREADY_EXISTS. A value that is not a UUID is
+  // refused with INVALID_ARGUMENT.
   optional string client_message_id = 5;
 }
 

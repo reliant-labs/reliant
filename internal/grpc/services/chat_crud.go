@@ -27,6 +27,10 @@ import (
 	v2 "github.com/reliant-labs/reliant/internal/workflow/runtime"
 )
 
+// startChatIDNamespace derives the id of a chat a client named its first
+// message for (StartChatRequest.client_message_id).
+var startChatIDNamespace = uuid.MustParse("c1d6c3a4-5f0e-4b7a-9a2d-8e3b7f4a1c59")
+
 // StartChat starts a chat's root run: it creates the chat, or starts an
 // existing pending one (a branch's first send).
 //
@@ -41,6 +45,11 @@ func (s *ChatService) StartChat(
 ) (*connect.Response[reliantv1.StartChatResponse], error) {
 	userID := auth.MustGetUserID(ctx)
 
+	clientID, err := parseClientMessageID(req.Msg.GetClientMessageId())
+	if err != nil {
+		return nil, err
+	}
+
 	// An interactive chat start is a trigger event too, of kind chat.start: it
 	// has no stored definition, and its dedupe key is the chat id, which is what
 	// makes "a chat starts exactly once" a database invariant rather than
@@ -51,6 +60,13 @@ func (s *ChatService) StartChat(
 	newChatID := ""
 	if chatID == "" {
 		newChatID = uuid.NewString()
+		if clientID != "" {
+			// A start the client named is the same chat however many times it
+			// is sent: the chat id, which is also this launch's dedupe key,
+			// follows from the message id. Scoped to the caller, so another
+			// user's start under the same id is a different chat.
+			newChatID = uuid.NewSHA1(startChatIDNamespace, []byte(userID+":"+clientID)).String()
+		}
 		chatID = newChatID
 	}
 	// The launch kind is the server's decision. A client can ask for exactly
@@ -86,6 +102,8 @@ func (s *ChatService) StartChat(
 		Mode:        req.Msg.Mode,
 		Messages:    seedMessagesFromInput(req.Msg.Messages),
 		Attachments: req.Msg.Attachments,
+
+		ClientMessageID: clientID,
 
 		// An interactive start always had both of these, and still does. A
 		// branch is not a first turn of new work, so it skips the probe.
@@ -145,8 +163,22 @@ func (s *ChatService) StartChat(
 		s.wakeDaemonForAttendedTurn(ctx, userID, wakeChat)
 	}
 
+	if clientID != "" {
+		// Attempts of one named start run one after another, so the second
+		// finds the first's launch finished and replays it. Without this the
+		// loser of a race finishes the start itself, and only Temporal's
+		// USE_EXISTING stands between that and a second run: a first run that
+		// completes before the loser reaches Temporal would be started again.
+		// The chat id is known up front, new or named, so the lock is the same
+		// for every attempt of this send.
+		defer s.runs.LockRunControl(ctx, chatID)()
+	}
+
 	result, err := s.launcher().Launch(ctx, event, spec)
 	if err != nil {
+		if errors.Is(err, launch.ErrClientMessageReused) {
+			return nil, errClientMessageReused()
+		}
 		return nil, launchErrorToConnect(err)
 	}
 

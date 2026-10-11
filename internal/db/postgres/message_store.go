@@ -30,6 +30,15 @@ func (s *messageStore) CreateMessageIfNotExists(ctx context.Context, msg *core.M
 	return s.q.CreateMessageIfNotExists(ctx, messageToCreateIfNotExistsParams(msg))
 }
 
+func (s *messageStore) CreateMessageOnce(ctx context.Context, msg *core.Message) (bool, error) {
+	p := messageToCreateParams(msg)
+	rows, err := s.q.CreateMessageOnce(ctx, pgdb.CreateMessageOnceParams(p))
+	if err != nil {
+		return false, err
+	}
+	return rows > 0, nil
+}
+
 func (s *messageStore) GetMessage(ctx context.Context, id string) (*core.Message, error) {
 	sqlcMsg, err := s.q.GetMessage(ctx, id)
 	if err != nil {

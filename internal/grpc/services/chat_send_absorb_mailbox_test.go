@@ -257,9 +257,10 @@ func TestSendMessage_RunningWorkflowNeverWritesIntoHistoryMidTurn(t *testing.T) 
 	assert.Equal(t, clientID, resp.Msg.MessageId, "the receipt names the queued message")
 }
 
-// A client id that is not a UUID cannot name a row; the server picks one and
-// the send still goes through.
-func TestSendMessage_RunningWorkflowIgnoresAMalformedClientID(t *testing.T) {
+// A client id that is not a UUID cannot name a row. The id is the message's
+// row id and the key a retry is recognized by, so one the server quietly
+// replaced would defeat both: the send is refused, and nothing is queued.
+func TestSendMessage_RunningWorkflowRefusesAMalformedClientID(t *testing.T) {
 	repo, cleanup := db.SetupTestDB(t)
 	t.Cleanup(cleanup)
 
@@ -272,11 +273,13 @@ func TestSendMessage_RunningWorkflowIgnoresAMalformedClientID(t *testing.T) {
 	req := sendMessageRequest(t, fx.chatID, "steer")
 	bad := "not-a-uuid"
 	req.Msg.ClientMessageId = &bad
-	resp, err := service.SendMessage(ctx, req)
+	_, err := service.SendMessage(ctx, req)
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, fx.rootThreadID)
 	require.NoError(t, err)
-	_, parseErr := uuid.Parse(resp.Msg.MessageId)
-	require.NoError(t, parseErr)
-	assert.True(t, resp.Msg.Queued)
+	assert.Empty(t, queued, "a refused send must not queue anything")
 }
 
 // TestSendMessage_LeavesEveryMailboxKindQueued verifies SendMessage does not

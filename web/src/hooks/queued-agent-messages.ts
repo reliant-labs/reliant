@@ -222,6 +222,17 @@ export function useQueuedAgentMessages(
     });
   }, [chatId, threadId, enabled, forgetIds]);
 
+  // The composer is sending a withdrawn message again under its own id. Its
+  // tombstone was made for the first attempt; the new one is a different
+  // question, so the id is let back in before the row is announced.
+  useEffect(() => {
+    if (!enabled) return;
+    return initEventBus().on("agentMailbox:resend", (payload) => {
+      if (payload.chatId !== chatId || payload.thread !== threadId) return;
+      tombstones.current.delete(payload.messageId);
+    });
+  }, [chatId, threadId, enabled]);
+
   // The composer's send was queued rather than saved: take the row now, in the
   // same commit that drops its optimistic transcript entry, instead of on the
   // next read. A tombstoned id is one the agent already drained — the response

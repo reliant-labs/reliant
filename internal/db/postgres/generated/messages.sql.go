@@ -194,6 +194,74 @@ func (q *Queries) CreateMessageIfNotExists(ctx context.Context, arg CreateMessag
 	return err
 }
 
+const createMessageOnce = `-- name: CreateMessageOnce :execrows
+INSERT INTO messages (
+    id, chat_id, ordinal, seq, thread_id, context_window_id,
+    node_id, node_path,
+    role, display_style, model, agent,
+    token_count, cost,
+    workflow_id, run_id, activity_id, created_at, updated_at
+) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+ON CONFLICT (id) DO NOTHING
+`
+
+type CreateMessageOnceParams struct {
+	ID              string          `json:"id"`
+	ChatID          string          `json:"chat_id"`
+	Ordinal         int64           `json:"ordinal"`
+	Seq             int64           `json:"seq"`
+	ThreadID        string          `json:"thread_id"`
+	ContextWindowID string          `json:"context_window_id"`
+	NodeID          sql.NullString  `json:"node_id"`
+	NodePath        sql.NullString  `json:"node_path"`
+	Role            int32           `json:"role"`
+	DisplayStyle    sql.NullInt32   `json:"display_style"`
+	Model           sql.NullString  `json:"model"`
+	Agent           sql.NullString  `json:"agent"`
+	TokenCount      sql.NullInt64   `json:"token_count"`
+	Cost            sql.NullFloat64 `json:"cost"`
+	WorkflowID      sql.NullString  `json:"workflow_id"`
+	RunID           sql.NullString  `json:"run_id"`
+	ActivityID      sql.NullString  `json:"activity_id"`
+	CreatedAt       time.Time       `json:"created_at"`
+	UpdatedAt       time.Time       `json:"updated_at"`
+}
+
+// A user's send names its message (client_message_id), so a repeat of that send
+// arrives with an id that is already taken. ON CONFLICT (id) DO NOTHING is the
+// arbiter between two such repeats racing each other: exactly one inserts, the
+// other affects zero rows and reports that instead of failing. Only the id
+// conflict is absorbed; any other unique violation (messages_chat_seq_key,
+// two different sends racing for one seq) still raises and the transaction
+// retries as before.
+func (q *Queries) CreateMessageOnce(ctx context.Context, arg CreateMessageOnceParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, createMessageOnce,
+		arg.ID,
+		arg.ChatID,
+		arg.Ordinal,
+		arg.Seq,
+		arg.ThreadID,
+		arg.ContextWindowID,
+		arg.NodeID,
+		arg.NodePath,
+		arg.Role,
+		arg.DisplayStyle,
+		arg.Model,
+		arg.Agent,
+		arg.TokenCount,
+		arg.Cost,
+		arg.WorkflowID,
+		arg.RunID,
+		arg.ActivityID,
+		arg.CreatedAt,
+		arg.UpdatedAt,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const deleteMessage = `-- name: DeleteMessage :exec
 DELETE FROM messages WHERE id = $1
 `

@@ -113,6 +113,27 @@ func (q *Queries) CountQueuedAgentMessagesForThread(ctx context.Context, toThrea
 	return count, err
 }
 
+const deleteUndeliveredAgentMessage = `-- name: DeleteUndeliveredAgentMessage :execrows
+DELETE FROM agent_messages
+WHERE id = $1 AND chat_id = $2 AND status = 3
+`
+
+type DeleteUndeliveredAgentMessageParams struct {
+	ID     string `json:"id"`
+	ChatID string `json:"chat_id"`
+}
+
+// Removes a row that was never read: its thread's loop exited before a drain
+// reached it. A repeat of the send that wrote it is a fresh send, and has to
+// be able to take its id; a queued or delivered row is never touched.
+func (q *Queries) DeleteUndeliveredAgentMessage(ctx context.Context, arg DeleteUndeliveredAgentMessageParams) (int64, error) {
+	result, err := q.db.ExecContext(ctx, deleteUndeliveredAgentMessage, arg.ID, arg.ChatID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected()
+}
+
 const enqueueAgentMessage = `-- name: EnqueueAgentMessage :exec
 INSERT INTO agent_messages (
     id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
@@ -197,6 +218,54 @@ type EnqueueAgentMessageIfAbsentParams struct {
 // a real report later supersedes the row via EnqueueSpawnReport.
 func (q *Queries) EnqueueAgentMessageIfAbsent(ctx context.Context, arg EnqueueAgentMessageIfAbsentParams) (string, error) {
 	row := q.db.QueryRowContext(ctx, enqueueAgentMessageIfAbsent,
+		arg.ID,
+		arg.ChatID,
+		arg.FromThreadID,
+		arg.ToThreadID,
+		arg.Kind,
+		arg.Body,
+		arg.ToolCallID,
+		arg.Status,
+		arg.CreatedAt,
+		arg.Attachments,
+		arg.Synthesized,
+	)
+	var id string
+	err := row.Scan(&id)
+	return id, err
+}
+
+const enqueueAgentMessageOnce = `-- name: EnqueueAgentMessageOnce :one
+INSERT INTO agent_messages (
+    id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id,
+    status, created_at, attachments, synthesized
+) VALUES (
+    $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+)
+ON CONFLICT (id) DO NOTHING
+RETURNING id
+`
+
+type EnqueueAgentMessageOnceParams struct {
+	ID           string                `json:"id"`
+	ChatID       string                `json:"chat_id"`
+	FromThreadID string                `json:"from_thread_id"`
+	ToThreadID   string                `json:"to_thread_id"`
+	Kind         int32                 `json:"kind"`
+	Body         string                `json:"body"`
+	ToolCallID   sql.NullString        `json:"tool_call_id"`
+	Status       int32                 `json:"status"`
+	CreatedAt    time.Time             `json:"created_at"`
+	Attachments  pqtype.NullRawMessage `json:"attachments"`
+	Synthesized  bool                  `json:"synthesized"`
+}
+
+// A human send names its mailbox row (client_message_id), so a repeat of that
+// send arrives with an id that is already taken. ON CONFLICT (id) DO NOTHING is
+// what lets exactly one of two racing repeats insert; the other gets no row
+// back (sql.ErrNoRows) and reads the winner's row instead of failing.
+func (q *Queries) EnqueueAgentMessageOnce(ctx context.Context, arg EnqueueAgentMessageOnceParams) (string, error) {
+	row := q.db.QueryRowContext(ctx, enqueueAgentMessageOnce,
 		arg.ID,
 		arg.ChatID,
 		arg.FromThreadID,
@@ -300,6 +369,31 @@ func (q *Queries) EnqueueSpawnReport(ctx context.Context, arg EnqueueSpawnReport
 	)
 	var i EnqueueSpawnReportRow
 	err := row.Scan(&i.ID, &i.Inserted)
+	return i, err
+}
+
+const getAgentMessage = `-- name: GetAgentMessage :one
+SELECT id, chat_id, from_thread_id, to_thread_id, kind, body, tool_call_id, status, created_at, delivered_at, delivered_message_id, attachments, synthesized FROM agent_messages WHERE id = $1
+`
+
+func (q *Queries) GetAgentMessage(ctx context.Context, id string) (AgentMessage, error) {
+	row := q.db.QueryRowContext(ctx, getAgentMessage, id)
+	var i AgentMessage
+	err := row.Scan(
+		&i.ID,
+		&i.ChatID,
+		&i.FromThreadID,
+		&i.ToThreadID,
+		&i.Kind,
+		&i.Body,
+		&i.ToolCallID,
+		&i.Status,
+		&i.CreatedAt,
+		&i.DeliveredAt,
+		&i.DeliveredMessageID,
+		&i.Attachments,
+		&i.Synthesized,
+	)
 	return i, err
 }
 
