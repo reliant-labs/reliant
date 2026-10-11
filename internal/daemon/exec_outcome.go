@@ -102,6 +102,13 @@ type OOMChecker interface {
 	CheckOOMKill(exitCode int, snap cgroupmem.OOMSnapshot) (bool, string)
 }
 
+// NoSpaceExplainer turns a failure's "no space left on device" into which of
+// the machine's volumes is full and what is using it (*diskwatch.Watcher).
+// "" when the text reports no ENOSPC or no watched volume can be blamed.
+type NoSpaceExplainer interface {
+	ExplainNoSpace(text string) string
+}
+
 // ExecOutcome is the classified result of running a child process: the exit
 // code to report, why it died, and the stderr the caller should return.
 type ExecOutcome struct {
@@ -132,8 +139,9 @@ type ExecOutcome struct {
 //
 // cmdErr is the error from Start/Wait; ctxErr is why the command was stopped,
 // from ExecDeadline.Err() (anything wrapping context.DeadlineExceeded marks a
-// timeout); stderr is the child's captured stderr so far.
-func ClassifyExecOutcome(cmdErr, ctxErr error, stderr string, mem OOMChecker, snap cgroupmem.OOMSnapshot) ExecOutcome {
+// timeout); stdout and stderr are the child's captured output so far (stdout
+// is only read, to find an ENOSPC a tool printed there); disk explains one.
+func ClassifyExecOutcome(cmdErr, ctxErr error, stdout, stderr string, mem OOMChecker, snap cgroupmem.OOMSnapshot, disk NoSpaceExplainer) ExecOutcome {
 	out := ExecOutcome{Stderr: stderr}
 	if cmdErr == nil {
 		return out
@@ -214,6 +222,16 @@ func ClassifyExecOutcome(cmdErr, ctxErr error, stderr string, mem OOMChecker, sn
 			out.OOMKilled = true
 			out.Stderr = appendStderr(out.Stderr, msg)
 		}
+	}
+
+	// A command that failed because a disk filled gets told WHICH of the
+	// machine's volumes is full and what is using it. "no space left on
+	// device" alone names neither — on a cloud machine the full volume is the
+	// build-cache/docker one, not the home directory the agent can see — and
+	// an agent left with the bare error retries the build against the same
+	// full disk.
+	if out.ExitCode != 0 && disk != nil {
+		out.Stderr = appendStderr(out.Stderr, disk.ExplainNoSpace(stdout+"\n"+out.Stderr))
 	}
 
 	return out

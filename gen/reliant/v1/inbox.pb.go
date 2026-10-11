@@ -1086,25 +1086,28 @@ func (*RestoreInboxItemResponse) Descriptor() ([]byte, []int) {
 }
 
 // InboxStorage describes one machine's disk and the archived worktrees it is
-// holding. The item exists while the disk is low or any worktree is held.
+// holding. The item exists while any of its volumes is under pressure or any
+// worktree is held.
 type InboxStorage struct {
 	state      protoimpl.MessageState `protogen:"open.v1"`
 	DaemonId   string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
 	DaemonName string                 `protobuf:"bytes,2,opt,name=daemon_name,json=daemonName,proto3" json:"daemon_name,omitempty"`
-	// The volume holding the worktree root, as the machine last reported it.
-	// Both 0 when the machine has not reported yet.
-	DiskFreeBytes  int64 `protobuf:"varint,3,opt,name=disk_free_bytes,json=diskFreeBytes,proto3" json:"disk_free_bytes,omitempty"`
-	DiskTotalBytes int64 `protobuf:"varint,4,opt,name=disk_total_bytes,json=diskTotalBytes,proto3" json:"disk_total_bytes,omitempty"`
-	// True when free space is under the threshold (below 10% or below 50 GiB).
+	// True when any of the machine's volumes is under pressure (the daemon's
+	// hysteresis bit, DiskVolume.pressure).
 	DiskLow bool `protobuf:"varint,5,opt,name=disk_low,json=diskLow,proto3" json:"disk_low,omitempty"`
-	// RFC 3339 of the machine's last report; empty when it has not reported.
+	// RFC 3339 of the machine's last disk report; empty when it has not
+	// reported.
 	ReportedAt string `protobuf:"bytes,6,opt,name=reported_at,json=reportedAt,proto3" json:"reported_at,omitempty"`
 	// Archived worktrees the machine would not remove by itself. Clean up acts
 	// on the removable ones; the rest are listed for manual removal.
 	Held []*HeldWorktree `protobuf:"bytes,7,rep,name=held,proto3" json:"held,omitempty"`
 	// False when the machine is offline: the item still shows what it last
 	// reported, but Clean up cannot run until it reconnects.
-	Online        bool `protobuf:"varint,8,opt,name=online,proto3" json:"online,omitempty"`
+	Online bool `protobuf:"varint,8,opt,name=online,proto3" json:"online,omitempty"`
+	// Every volume the machine last reported, fullest first: the one under
+	// pressure names itself ("build caches & docker") and, while it is, what is
+	// using it.
+	Volumes       []*DiskVolume `protobuf:"bytes,9,rep,name=volumes,proto3" json:"volumes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1153,20 +1156,6 @@ func (x *InboxStorage) GetDaemonName() string {
 	return ""
 }
 
-func (x *InboxStorage) GetDiskFreeBytes() int64 {
-	if x != nil {
-		return x.DiskFreeBytes
-	}
-	return 0
-}
-
-func (x *InboxStorage) GetDiskTotalBytes() int64 {
-	if x != nil {
-		return x.DiskTotalBytes
-	}
-	return 0
-}
-
 func (x *InboxStorage) GetDiskLow() bool {
 	if x != nil {
 		return x.DiskLow
@@ -1193,6 +1182,13 @@ func (x *InboxStorage) GetOnline() bool {
 		return x.Online
 	}
 	return false
+}
+
+func (x *InboxStorage) GetVolumes() []*DiskVolume {
+	if x != nil {
+		return x.Volumes
+	}
+	return nil
 }
 
 // HeldWorktree is one archived workspace kept on a machine, and why.
@@ -1484,7 +1480,7 @@ var File_reliant_v1_inbox_proto protoreflect.FileDescriptor
 const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\n" +
 	"\x16reliant/v1/inbox.proto\x12\n" +
-	"reliant.v1\x1a\x19reliant/v1/approval.proto\x1a\x18reliant/v1/trigger.proto\"j\n" +
+	"reliant.v1\x1a\x19reliant/v1/approval.proto\x1a\x1dreliant/v1/tools_daemon.proto\x1a\x18reliant/v1/trigger.proto\"j\n" +
 	"\x10ListInboxRequest\x12\x19\n" +
 	"\x05limit\x18\x01 \x01(\x05H\x00R\x05limit\x88\x01\x01\x12\"\n" +
 	"\n" +
@@ -1558,18 +1554,17 @@ const file_reliant_v1_inbox_proto_rawDesc = "" +
 	"\x18DismissInboxItemResponse\"4\n" +
 	"\x17RestoreInboxItemRequest\x12\x19\n" +
 	"\bitem_ids\x18\x01 \x03(\tR\aitemIds\"\x1a\n" +
-	"\x18RestoreInboxItemResponse\"\xa0\x02\n" +
+	"\x18RestoreInboxItemResponse\"\xaf\x02\n" +
 	"\fInboxStorage\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1f\n" +
 	"\vdaemon_name\x18\x02 \x01(\tR\n" +
-	"daemonName\x12&\n" +
-	"\x0fdisk_free_bytes\x18\x03 \x01(\x03R\rdiskFreeBytes\x12(\n" +
-	"\x10disk_total_bytes\x18\x04 \x01(\x03R\x0ediskTotalBytes\x12\x19\n" +
+	"daemonName\x12\x19\n" +
 	"\bdisk_low\x18\x05 \x01(\bR\adiskLow\x12\x1f\n" +
 	"\vreported_at\x18\x06 \x01(\tR\n" +
 	"reportedAt\x12,\n" +
 	"\x04held\x18\a \x03(\v2\x18.reliant.v1.HeldWorktreeR\x04held\x12\x16\n" +
-	"\x06online\x18\b \x01(\bR\x06online\"\x83\x02\n" +
+	"\x06online\x18\b \x01(\bR\x06online\x120\n" +
+	"\avolumes\x18\t \x03(\v2\x16.reliant.v1.DiskVolumeR\avolumesJ\x04\b\x03\x10\x04J\x04\b\x04\x10\x05R\x0fdisk_free_bytesR\x10disk_total_bytes\"\x83\x02\n" +
 	"\fHeldWorktree\x12\x1f\n" +
 	"\vworktree_id\x18\x01 \x01(\tR\n" +
 	"worktreeId\x12\x12\n" +
@@ -1648,6 +1643,7 @@ var file_reliant_v1_inbox_proto_goTypes = []any{
 	(*CleanupStorageResult)(nil),        // 19: reliant.v1.CleanupStorageResult
 	(ApprovalType)(0),                   // 20: reliant.v1.ApprovalType
 	(*TriggerHealth)(nil),               // 21: reliant.v1.TriggerHealth
+	(*DiskVolume)(nil),                  // 22: reliant.v1.DiskVolume
 }
 var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	4,  // 0: reliant.v1.ListInboxResponse.items:type_name -> reliant.v1.InboxItem
@@ -1662,21 +1658,22 @@ var file_reliant_v1_inbox_proto_depIdxs = []int32{
 	20, // 9: reliant.v1.InboxApproval.approval_type:type_name -> reliant.v1.ApprovalType
 	21, // 10: reliant.v1.InboxAutomationFailing.health:type_name -> reliant.v1.TriggerHealth
 	16, // 11: reliant.v1.InboxStorage.held:type_name -> reliant.v1.HeldWorktree
-	19, // 12: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
-	1,  // 13: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
-	2,  // 14: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
-	17, // 15: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
-	11, // 16: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
-	13, // 17: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
-	3,  // 18: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
-	18, // 19: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
-	12, // 20: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
-	14, // 21: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
-	18, // [18:22] is the sub-list for method output_type
-	14, // [14:18] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	22, // 12: reliant.v1.InboxStorage.volumes:type_name -> reliant.v1.DiskVolume
+	19, // 13: reliant.v1.CleanupStorageResponse.results:type_name -> reliant.v1.CleanupStorageResult
+	1,  // 14: reliant.v1.CleanupStorageResult.outcome:type_name -> reliant.v1.CleanupStorageOutcome
+	2,  // 15: reliant.v1.InboxService.ListInbox:input_type -> reliant.v1.ListInboxRequest
+	17, // 16: reliant.v1.InboxService.CleanupStorage:input_type -> reliant.v1.CleanupStorageRequest
+	11, // 17: reliant.v1.InboxService.DismissInboxItem:input_type -> reliant.v1.DismissInboxItemRequest
+	13, // 18: reliant.v1.InboxService.RestoreInboxItem:input_type -> reliant.v1.RestoreInboxItemRequest
+	3,  // 19: reliant.v1.InboxService.ListInbox:output_type -> reliant.v1.ListInboxResponse
+	18, // 20: reliant.v1.InboxService.CleanupStorage:output_type -> reliant.v1.CleanupStorageResponse
+	12, // 21: reliant.v1.InboxService.DismissInboxItem:output_type -> reliant.v1.DismissInboxItemResponse
+	14, // 22: reliant.v1.InboxService.RestoreInboxItem:output_type -> reliant.v1.RestoreInboxItemResponse
+	19, // [19:23] is the sub-list for method output_type
+	15, // [15:19] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_inbox_proto_init() }
@@ -1685,6 +1682,7 @@ func file_reliant_v1_inbox_proto_init() {
 		return
 	}
 	file_reliant_v1_approval_proto_init()
+	file_reliant_v1_tools_daemon_proto_init()
 	file_reliant_v1_trigger_proto_init()
 	file_reliant_v1_inbox_proto_msgTypes[0].OneofWrappers = []any{}
 	file_reliant_v1_inbox_proto_msgTypes[2].OneofWrappers = []any{

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/pkg/daemonwire"
@@ -66,11 +67,13 @@ func (s *DaemonRegistryService) ListDaemons(
 
 	attached := s.attachedDaemonSet(ctx, userID)
 	inventories := s.storedLocalModels(ctx, userID)
+	disks := s.storedDiskReports(ctx, userID)
 
 	resp := &reliantv1.ListDaemonsResponse{Daemons: make([]*reliantv1.DaemonInfo, 0, len(daemons))}
 	for _, d := range daemons {
 		info := daemonToProto(d, attached[d.ID])
 		info.LocalModels = localModelsFromJSON(inventories[d.ID])
+		info.Disk = diskwatch.Decode(disks[d.ID])
 		resp.Daemons = append(resp.Daemons, info)
 	}
 
@@ -118,7 +121,55 @@ func (s *DaemonRegistryService) GetDaemon(
 	attached := s.attachedDaemonSet(ctx, userID)
 	info := daemonToProto(daemon, attached[daemon.ID])
 	info.LocalModels = localModelsFromJSON(s.storedLocalModels(ctx, userID)[daemon.ID])
+	info.Disk = diskwatch.Decode(s.storedDiskReports(ctx, userID)[daemon.ID])
 	return connect.NewResponse(&reliantv1.GetDaemonResponse{Daemon: info}), nil
+}
+
+// storedDiskReports returns the user's stored disk reports (heartbeat
+// telemetry the gateway keeps on the daemon row) keyed by daemon id. A read
+// failure is logged and treated as "none reported" so it cannot break the
+// daemon list.
+func (s *DaemonRegistryService) storedDiskReports(ctx context.Context, userID string) map[string]string {
+	reports, err := s.database.ListDaemonStorageState(ctx, userID)
+	if err != nil {
+		logging.Warn("[DaemonRegistry] Failed to list stored disk reports", "error", err, "userID", userID)
+		return map[string]string{}
+	}
+	return reports
+}
+
+// ClearMachineCaches relays a confirmed cache clean-up to the machine. The
+// daemon decides what is safe (diskwatch.ClearCaches) and starts it in the
+// background; this returns what started and what it refused.
+func (s *DaemonRegistryService) ClearMachineCaches(
+	ctx context.Context,
+	req *connect.Request[reliantv1.ClearMachineCachesRequest],
+) (*connect.Response[reliantv1.ClearMachineCachesResponse], error) {
+	daemonID := req.Msg.GetDaemonId()
+	if len(req.Msg.GetKinds()) == 0 {
+		return nil, connect.NewError(connect.CodeInvalidArgument, fmt.Errorf("kinds is required"))
+	}
+	userID, err := s.ownedOnlineDaemon(ctx, daemonID)
+	if err != nil {
+		return nil, err
+	}
+	payload, err := json.Marshal(diskwatch.ClearCachesRequest{Kinds: req.Msg.GetKinds()})
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	raw, err := s.router.SendDaemonCommandToDaemon(ctx, userID, daemonID, diskwatch.ClearCachesCommand, payload, 15000)
+	if err != nil {
+		return nil, localModelRelayError(err)
+	}
+	var out diskwatch.ClearCachesResponse
+	if err := json.Unmarshal(raw, &out); err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("decode %s response: %w", diskwatch.ClearCachesCommand, err))
+	}
+	resp := &reliantv1.ClearMachineCachesResponse{Started: out.Started}
+	for _, sk := range out.Skipped {
+		resp.Skipped = append(resp.Skipped, &reliantv1.ClearMachineCachesSkip{Kind: sk.Kind, Reason: sk.Reason})
+	}
+	return connect.NewResponse(resp), nil
 }
 
 // storedLocalModels returns the user's stored inventories keyed by daemon id.

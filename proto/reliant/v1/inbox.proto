@@ -4,6 +4,7 @@ syntax = "proto3";
 package reliant.v1;
 
 import "reliant/v1/approval.proto";
+import "reliant/v1/tools_daemon.proto"; // for DiskVolume
 import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
@@ -202,17 +203,22 @@ message RestoreInboxItemRequest {
 message RestoreInboxItemResponse {}
 
 // InboxStorage describes one machine's disk and the archived worktrees it is
-// holding. The item exists while the disk is low or any worktree is held.
+// holding. The item exists while any of its volumes is under pressure or any
+// worktree is held.
 message InboxStorage {
+  // disk_free_bytes / disk_total_bytes described only the volume holding the
+  // worktree root — on a cloud machine the one volume that never fills. The
+  // volumes field replaced them.
+  reserved 3, 4;
+  reserved "disk_free_bytes", "disk_total_bytes";
+
   string daemon_id = 1;
   string daemon_name = 2;
-  // The volume holding the worktree root, as the machine last reported it.
-  // Both 0 when the machine has not reported yet.
-  int64 disk_free_bytes = 3;
-  int64 disk_total_bytes = 4;
-  // True when free space is under the threshold (below 10% or below 50 GiB).
+  // True when any of the machine's volumes is under pressure (the daemon's
+  // hysteresis bit, DiskVolume.pressure).
   bool disk_low = 5;
-  // RFC 3339 of the machine's last report; empty when it has not reported.
+  // RFC 3339 of the machine's last disk report; empty when it has not
+  // reported.
   string reported_at = 6;
   // Archived worktrees the machine would not remove by itself. Clean up acts
   // on the removable ones; the rest are listed for manual removal.
@@ -220,6 +226,10 @@ message InboxStorage {
   // False when the machine is offline: the item still shows what it last
   // reported, but Clean up cannot run until it reconnects.
   bool online = 8;
+  // Every volume the machine last reported, fullest first: the one under
+  // pressure names itself ("build caches & docker") and, while it is, what is
+  // using it.
+  repeated DiskVolume volumes = 9;
 }
 
 // HeldWorktree is one archived workspace kept on a machine, and why.

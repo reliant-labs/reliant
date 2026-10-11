@@ -25,6 +25,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/daemonactivity"
 	"github.com/reliant-labs/reliant/internal/daemonstate"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/ospath"
 	"github.com/reliant-labs/reliant/internal/streaming"
@@ -189,6 +190,14 @@ type daemonConnection struct {
 	// every 15s but the port set rarely changes; caching the last write
 	// avoids a per-heartbeat UPDATE. Only the inbound state worker touches it.
 	lastDetectedPortsKey string
+
+	// Disk report bookkeeping (see recordDiskReport). lastDiskSig is the
+	// material signature last stored, lastDiskWrite when, and lastDiskUrgent
+	// the part of it the UI must hear about at once. Only the inbound state
+	// worker touches them.
+	lastDiskSig    string
+	lastDiskUrgent string
+	lastDiskWrite  time.Time
 
 	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
 	localModelMu sync.Mutex
@@ -563,6 +572,45 @@ func (s *ToolsDaemonService) publishDaemonHeartbeat(_ context.Context, userID, d
 			CreatedAt:  ts,
 		},
 	})
+}
+
+// diskReportRefresh is how old a stored disk report may get while nothing
+// material changes: the reported-at time the UI shows stays honest without a
+// write per 15s heartbeat.
+const diskReportRefresh = 5 * time.Minute
+
+// recordDiskReport stores a heartbeat's disk report on the daemon row
+// (daemons.storage_state). Unlike the memory telemetry, which lives and dies
+// with the attachment row, a disk report outlives the connection: a disk that
+// was full is still full when the machine resumes, and the storage inbox item
+// keeps saying so with the time it was reported.
+//
+// It writes only when the report changed materially (diskwatch.Signature) or
+// the stored one is diskReportRefresh old, and tells the user's web clients to
+// refetch the daemon list when the part they must see at once changed — a
+// volume coming under pressure, a breakdown measured, a command failing with
+// ENOSPC, a cache clean-up starting or ending.
+func (s *ToolsDaemonService) recordDiskReport(ctx context.Context, conn *daemonConnection, rep *reliantv1.DiskReport) {
+	now := time.Now().UTC()
+	sig := diskwatch.Signature(rep)
+	if sig == conn.lastDiskSig && now.Sub(conn.lastDiskWrite) < diskReportRefresh {
+		return
+	}
+	stored, err := diskwatch.Encode(rep, now)
+	if err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to encode disk report", "error", err, "daemonID", conn.daemonID)
+		return
+	}
+	if err := s.database.SetDaemonStorageState(ctx, conn.daemonID, stored); err != nil {
+		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record disk report", "error", err, "daemonID", conn.daemonID)
+		return
+	}
+	urgent := diskwatch.UrgentSignature(rep)
+	urgentChanged := urgent != conn.lastDiskUrgent
+	conn.lastDiskSig, conn.lastDiskUrgent, conn.lastDiskWrite = sig, urgent, now
+	if urgentChanged {
+		s.publishDaemonListChanged(conn.userID, conn.daemonID)
+	}
 }
 
 // daemonListRefetchType is the ephemeral REFETCH payload type published when
@@ -1396,6 +1444,11 @@ func (s *ToolsDaemonService) applyInboundState(ctx context.Context, conn *daemon
 				int64(hb.MemoryUsedBytes), int64(hb.MemoryLimitBytes), hb.MemoryPressure); err != nil {
 				logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to record daemon memory telemetry", "error", err, "daemonID", conn.daemonID)
 			}
+		}
+		// Persist the heartbeat's disk report on the daemon row, where the
+		// registry and the storage inbox item read it.
+		if hb := m.Heartbeat; hb != nil && hb.Disk != nil && len(hb.Disk.Volumes) > 0 {
+			s.recordDiskReport(ctx, conn, hb.Disk)
 		}
 		// Persist heartbeat-carried detected listener ports on the
 		// attachment record (same flow as the memory telemetry above) so

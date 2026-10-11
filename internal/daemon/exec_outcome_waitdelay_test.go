@@ -48,7 +48,7 @@ func TestClassifyExecOutcome_WaitDelay(t *testing.T) {
 	err := realWaitDelayError(t)
 
 	t.Run("reports success, not a fabricated failure", func(t *testing.T) {
-		out := ClassifyExecOutcome(err, nil, "", nil, noSnap)
+		out := ClassifyExecOutcome(err, nil, "", "", nil, noSnap, nil)
 		if out.ExitCode != 0 {
 			t.Errorf("ExitCode = %d, want 0 — the command itself exited 0", out.ExitCode)
 		}
@@ -61,7 +61,7 @@ func TestClassifyExecOutcome_WaitDelay(t *testing.T) {
 	})
 
 	t.Run("explains itself on stderr and hides the os/exec wording", func(t *testing.T) {
-		out := ClassifyExecOutcome(err, nil, "", nil, noSnap)
+		out := ClassifyExecOutcome(err, nil, "", "", nil, noSnap, nil)
 		if !strings.Contains(out.Stderr, "output collection was cut off") {
 			t.Errorf("Stderr = %q, want the actionable explanation", out.Stderr)
 		}
@@ -71,7 +71,7 @@ func TestClassifyExecOutcome_WaitDelay(t *testing.T) {
 	})
 
 	t.Run("keeps the command's own stderr", func(t *testing.T) {
-		out := ClassifyExecOutcome(err, nil, "a real warning", nil, noSnap)
+		out := ClassifyExecOutcome(err, nil, "", "a real warning", nil, noSnap, nil)
 		if !strings.HasPrefix(out.Stderr, "a real warning") {
 			t.Errorf("Stderr = %q, want the captured stderr kept ahead of the explanation", out.Stderr)
 		}
@@ -80,7 +80,7 @@ func TestClassifyExecOutcome_WaitDelay(t *testing.T) {
 	t.Run("a timeout still wins", func(t *testing.T) {
 		// If the deadline fired, the caller needs the timeout classification;
 		// an incidental drain overrun must not downgrade it to success.
-		out := ClassifyExecOutcome(err, context.DeadlineExceeded, "", nil, noSnap)
+		out := ClassifyExecOutcome(err, context.DeadlineExceeded, "", "", nil, noSnap, nil)
 		if !out.TimedOut {
 			t.Errorf("TimedOut = false, want true")
 		}

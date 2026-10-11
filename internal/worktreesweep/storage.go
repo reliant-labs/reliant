@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -13,19 +12,13 @@ import (
 	"strings"
 	"time"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
 const (
-	// LowDiskFraction is the free fraction under which a disk is "low". The
-	// absolute floor applies only to big disks: a 20 GiB cloud workspace is
-	// always under 50 GiB free and must not raise a permanent alert.
-	LowDiskFraction   = 0.10
-	LowDiskFloorBytes = 50 << 30
-	// FloorMinCapacity is the smallest disk the absolute floor applies to.
-	FloorMinCapacity = 500 << 30
-
 	cleanupBatchSize = 5
 	// cleanupBudget covers a whole confirmed clean-up, run detached from the
 	// request that started it.
@@ -62,25 +55,19 @@ type Held struct {
 // MachineStorage is one machine's storage picture. A machine appears only when
 // it has something worth showing.
 type MachineStorage struct {
-	DaemonID   string
-	Held       []Held
-	Disk       *StorageState
+	DaemonID string
+	Held     []Held
+	// Disk is the machine's last heartbeat disk report (diskwatch), every
+	// volume fullest first; nil when it has not reported one.
+	Disk *reliantv1.DiskReport
+	// DiskLow: at least one volume is under pressure — the daemon's own
+	// hysteresis bit, for whichever volume it is. On a cloud machine that is
+	// the build-cache/docker volume, which the worktree-root reading this
+	// replaced never saw.
 	DiskLow    bool
 	Online     bool
 	ItemSuffix string // changes when the picture changes, so a dismissal does not hide a new problem
 	Since      time.Time
-}
-
-// DiskIsLow applies the thresholds: under 10% free, or under 50 GiB free on a
-// disk of at least 500 GiB.
-func DiskIsLow(freeBytes, totalBytes int64) bool {
-	if totalBytes <= 0 {
-		return false
-	}
-	if float64(freeBytes) < LowDiskFraction*float64(totalBytes) {
-		return true
-	}
-	return totalBytes >= FloorMinCapacity && freeBytes < LowDiskFloorBytes
 }
 
 // StorageView builds the per-machine storage picture for a user.
@@ -130,28 +117,24 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 		}
 	}
 	for id, raw := range states {
-		var st StorageState
-		if json.Unmarshal([]byte(raw), &st) != nil || st.TotalBytes <= 0 {
+		rep := diskwatch.Decode(raw)
+		if rep == nil {
 			continue
 		}
-		if DiskIsLow(st.FreeBytes, st.TotalBytes) {
+		diskwatch.SortFullestFirst(rep.Volumes)
+		if len(diskwatch.UnderPressure(rep)) > 0 {
 			m := get(id)
-			m.Disk, m.DiskLow = &st, true
-			if m.Since.IsZero() || st.ReportedAt.Before(m.Since) {
-				m.Since = st.ReportedAt
+			m.Disk, m.DiskLow = rep, true
+			if at := time.UnixMilli(rep.ReportedAtMs); m.Since.IsZero() || at.Before(m.Since) {
+				m.Since = at
 			}
 		} else if m := machines[id]; m != nil {
-			m.Disk = &st
+			m.Disk = rep
 		}
 	}
 
 	out := make([]*MachineStorage, 0, len(machines))
 	for _, m := range machines {
-		// A disk alert with nothing to act on is noise, unless the disk is
-		// nearly full: then it is worth seeing even without an action.
-		if len(m.Held) == 0 && !(m.DiskLow && m.Disk != nil && float64(m.Disk.FreeBytes) < 0.05*float64(m.Disk.TotalBytes)) {
-			continue
-		}
 		sort.Slice(m.Held, func(i, j int) bool { return m.Held[i].WorktreeID < m.Held[j].WorktreeID })
 		m.ItemSuffix = storageSignature(m)
 		out = append(out, m)
@@ -160,18 +143,21 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 	return out, nil
 }
 
-// storageSignature changes when the picture does: low disk starting, a worktree
-// newly held, or the disk getting much worse (each halving of free space).
+// storageSignature changes when the picture does: a volume coming under
+// pressure, a worktree newly held, a volume getting much worse (each halving
+// of free space), or commands starting to fail on it.
 func storageSignature(m *MachineStorage) string {
 	h := sha256.New()
 	fmt.Fprintf(h, "low=%t", m.DiskLow)
-	if m.Disk != nil && m.Disk.TotalBytes > 0 {
-		pct := 100 * float64(m.Disk.FreeBytes) / float64(m.Disk.TotalBytes)
+	for _, v := range diskwatch.UnderPressure(m.Disk) {
 		band := 0
-		for p := 10.0; pct < p && band < 6; p /= 2 {
-			band++
+		if v.TotalBytes > 0 {
+			pct := 100 * float64(v.FreeBytes) / float64(v.TotalBytes)
+			for p := 10.0; pct < p && band < 6; p /= 2 {
+				band++
+			}
 		}
-		fmt.Fprintf(h, "|band=%d", band)
+		fmt.Fprintf(h, "|%s:band=%d:failing=%t", v.Label, band, v.LastNoSpaceAtMs > 0)
 	}
 	for _, w := range m.Held {
 		fmt.Fprintf(h, "|%s:%s", w.WorktreeID, w.Reason)
@@ -365,7 +351,6 @@ func (s *Sweeper) cleanBatch(ctx context.Context, t target, batch []*core.Reclai
 		}
 		return 0
 	}
-	s.recordDisk(ctx, t.daemonID, resp.Disk)
 	byID := map[string]*core.ReclaimCandidate{}
 	for _, c := range batch {
 		byID[c.Worktree.ID] = c

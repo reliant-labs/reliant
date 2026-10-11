@@ -53,6 +53,9 @@ const (
 	// DaemonRegistryServiceSetLocalModelEndpointsProcedure is the fully-qualified name of the
 	// DaemonRegistryService's SetLocalModelEndpoints RPC.
 	DaemonRegistryServiceSetLocalModelEndpointsProcedure = "/reliant.v1.DaemonRegistryService/SetLocalModelEndpoints"
+	// DaemonRegistryServiceClearMachineCachesProcedure is the fully-qualified name of the
+	// DaemonRegistryService's ClearMachineCaches RPC.
+	DaemonRegistryServiceClearMachineCachesProcedure = "/reliant.v1.DaemonRegistryService/ClearMachineCaches"
 )
 
 // DaemonRegistryServiceClient is a client for the reliant.v1.DaemonRegistryService service.
@@ -78,6 +81,15 @@ type DaemonRegistryServiceClient interface {
 	// re-probed inventory. Auto-detected well-known ports need no
 	// configuration and are not listed here.
 	SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error)
+	// ClearMachineCaches frees space on an online machine by clearing the
+	// rebuildable caches the user confirmed — only kinds the daemon reports as
+	// clearable (DiskConsumer.clearable): a Go-format cache trim of entries
+	// untouched for 2h+, and docker's build cache. It never touches docker
+	// images, containers or volumes, the Go module cache, or anything else that
+	// could hold data. The clean-up runs in the background on the machine;
+	// progress shows as DiskConsumer.clearing and then as freed space in the
+	// next disk report. Fails with Unavailable when the machine is offline.
+	ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error)
 }
 
 // NewDaemonRegistryServiceClient constructs a client for the reliant.v1.DaemonRegistryService
@@ -127,6 +139,12 @@ func NewDaemonRegistryServiceClient(httpClient connect.HTTPClient, baseURL strin
 			connect.WithSchema(daemonRegistryServiceMethods.ByName("SetLocalModelEndpoints")),
 			connect.WithClientOptions(opts...),
 		),
+		clearMachineCaches: connect.NewClient[v1.ClearMachineCachesRequest, v1.ClearMachineCachesResponse](
+			httpClient,
+			baseURL+DaemonRegistryServiceClearMachineCachesProcedure,
+			connect.WithSchema(daemonRegistryServiceMethods.ByName("ClearMachineCaches")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -138,6 +156,7 @@ type daemonRegistryServiceClient struct {
 	resumeDaemon           *connect.Client[v1.ResumeDaemonRequest, v1.ResumeDaemonResponse]
 	refreshLocalModels     *connect.Client[v1.RefreshLocalModelsRequest, v1.RefreshLocalModelsResponse]
 	setLocalModelEndpoints *connect.Client[v1.SetLocalModelEndpointsRequest, v1.SetLocalModelEndpointsResponse]
+	clearMachineCaches     *connect.Client[v1.ClearMachineCachesRequest, v1.ClearMachineCachesResponse]
 }
 
 // ListDaemons calls reliant.v1.DaemonRegistryService.ListDaemons.
@@ -170,6 +189,11 @@ func (c *daemonRegistryServiceClient) SetLocalModelEndpoints(ctx context.Context
 	return c.setLocalModelEndpoints.CallUnary(ctx, req)
 }
 
+// ClearMachineCaches calls reliant.v1.DaemonRegistryService.ClearMachineCaches.
+func (c *daemonRegistryServiceClient) ClearMachineCaches(ctx context.Context, req *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error) {
+	return c.clearMachineCaches.CallUnary(ctx, req)
+}
+
 // DaemonRegistryServiceHandler is an implementation of the reliant.v1.DaemonRegistryService
 // service.
 type DaemonRegistryServiceHandler interface {
@@ -194,6 +218,15 @@ type DaemonRegistryServiceHandler interface {
 	// re-probed inventory. Auto-detected well-known ports need no
 	// configuration and are not listed here.
 	SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error)
+	// ClearMachineCaches frees space on an online machine by clearing the
+	// rebuildable caches the user confirmed — only kinds the daemon reports as
+	// clearable (DiskConsumer.clearable): a Go-format cache trim of entries
+	// untouched for 2h+, and docker's build cache. It never touches docker
+	// images, containers or volumes, the Go module cache, or anything else that
+	// could hold data. The clean-up runs in the background on the machine;
+	// progress shows as DiskConsumer.clearing and then as freed space in the
+	// next disk report. Fails with Unavailable when the machine is offline.
+	ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error)
 }
 
 // NewDaemonRegistryServiceHandler builds an HTTP handler from the service implementation. It
@@ -239,6 +272,12 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 		connect.WithSchema(daemonRegistryServiceMethods.ByName("SetLocalModelEndpoints")),
 		connect.WithHandlerOptions(opts...),
 	)
+	daemonRegistryServiceClearMachineCachesHandler := connect.NewUnaryHandler(
+		DaemonRegistryServiceClearMachineCachesProcedure,
+		svc.ClearMachineCaches,
+		connect.WithSchema(daemonRegistryServiceMethods.ByName("ClearMachineCaches")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/reliant.v1.DaemonRegistryService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case DaemonRegistryServiceListDaemonsProcedure:
@@ -253,6 +292,8 @@ func NewDaemonRegistryServiceHandler(svc DaemonRegistryServiceHandler, opts ...c
 			daemonRegistryServiceRefreshLocalModelsHandler.ServeHTTP(w, r)
 		case DaemonRegistryServiceSetLocalModelEndpointsProcedure:
 			daemonRegistryServiceSetLocalModelEndpointsHandler.ServeHTTP(w, r)
+		case DaemonRegistryServiceClearMachineCachesProcedure:
+			daemonRegistryServiceClearMachineCachesHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -284,4 +325,8 @@ func (UnimplementedDaemonRegistryServiceHandler) RefreshLocalModels(context.Cont
 
 func (UnimplementedDaemonRegistryServiceHandler) SetLocalModelEndpoints(context.Context, *connect.Request[v1.SetLocalModelEndpointsRequest]) (*connect.Response[v1.SetLocalModelEndpointsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.SetLocalModelEndpoints is not implemented"))
+}
+
+func (UnimplementedDaemonRegistryServiceHandler) ClearMachineCaches(context.Context, *connect.Request[v1.ClearMachineCachesRequest]) (*connect.Response[v1.ClearMachineCachesResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("reliant.v1.DaemonRegistryService.ClearMachineCaches is not implemented"))
 }

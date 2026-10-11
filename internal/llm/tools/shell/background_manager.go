@@ -23,6 +23,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
@@ -583,6 +584,17 @@ func (m *BackgroundManager) handleProcessCompletion(process *BackgroundProcess, 
 				})
 				process.stderr.WriteString(msg + "\n")
 				logging.Warn("Background process OOM-killed", "id", process.ID, "exit_code", exitCode)
+			}
+			// A process that failed for want of disk says which volume is full
+			// and what is using it, the same way exec.run results do.
+			if note := diskwatch.Default().ExplainNoSpace(bufferTail(process.stderr) + "\n" + bufferTail(process.stdout)); note != "" {
+				process.outputSeq++
+				process.combinedOutput = append(process.combinedOutput, OutputLineWithSeq{
+					Type:     "stderr",
+					Text:     note,
+					Sequence: process.outputSeq,
+				})
+				process.stderr.WriteString(note + "\n")
 			}
 		} else {
 			// No exit status means the process never ran to completion, so
@@ -1578,4 +1590,21 @@ func (m *BackgroundManager) GetProcessStatus(processID string) (status string, i
 
 	isComplete = process.Status != "running"
 	return process.Status, isComplete, process.ExitCode, nil
+}
+
+// noSpaceScanBytes bounds how much of a finished background process's output
+// is searched for an ENOSPC: the failure is at the end, and a long-running dev
+// server can hold megabytes.
+const noSpaceScanBytes = 64 << 10
+
+// bufferTail is the last noSpaceScanBytes of buf.
+func bufferTail(buf *bytes.Buffer) string {
+	if buf == nil {
+		return ""
+	}
+	b := buf.Bytes()
+	if len(b) > noSpaceScanBytes {
+		b = b[len(b)-noSpaceScanBytes:]
+	}
+	return string(b)
 }

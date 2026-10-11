@@ -780,13 +780,6 @@ func TestReclaimer_SerializesOperationsPerPath(t *testing.T) {
 	}
 }
 
-func TestDiskUsage(t *testing.T) {
-	d, err := DiskUsage(filepath.Join(t.TempDir(), "does", "not", "exist"))
-	if err != nil || d.TotalBytes <= 0 || d.FreeBytes <= 0 || d.FreeBytes > d.TotalBytes {
-		t.Fatalf("DiskUsage = %+v, %v", d, err)
-	}
-}
-
 // The real lsof probe parses on this OS (no LLM, no network).
 func TestProcessCwds_RealProbeSeesThisProcess(t *testing.T) {
 	cwds, err := ProcessCwds(context.Background())

@@ -2,7 +2,8 @@
 
 // Package worktreereclaim is the daemon-side half of worktree disk hygiene: it
 // locks the worktrees reliant creates, decides whether an archived one is safe
-// to delete, snapshots work before a user-confirmed removal, and measures disk.
+// to delete, and snapshots work before a user-confirmed removal. (Disk space is
+// measured by internal/diskwatch, for every volume, on the heartbeat.)
 //
 // Only the daemon sees the filesystem, so every decision about a directory is
 // made here. The server sends a description of the worktrees it wants settled
@@ -169,22 +170,16 @@ type Result struct {
 	Error string            `json:"error,omitempty"`
 }
 
-// Disk is the free/total space of the volume holding the worktree root.
-type Disk struct {
-	Path       string `json:"path"`
-	FreeBytes  int64  `json:"free_bytes"`
-	TotalBytes int64  `json:"total_bytes"`
-}
-
 // Request is the payload of worktree.reconcile and worktree.snapshot_remove.
 type Request struct {
 	Worktrees []Worktree `json:"worktrees"`
 }
 
-// Response is the reply to either command.
+// Response is the reply to either command. It carried the worktree root's
+// disk once; disk telemetry now rides the heartbeat (internal/diskwatch),
+// covering every volume rather than the one that never fills.
 type Response struct {
 	Results []Result `json:"results"`
-	Disk    *Disk    `json:"disk,omitempty"`
 }
 
 const lockReasonPrefix = "reliant: worktree "

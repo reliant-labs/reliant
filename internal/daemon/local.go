@@ -16,6 +16,7 @@ import (
 	"github.com/pmezard/go-difflib/difflib"
 	"github.com/reliant-labs/reliant/internal/cgroupmem"
 	"github.com/reliant-labs/reliant/internal/cmdutil"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/fileutil"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/logging"
@@ -861,9 +862,9 @@ func (c *LocalClient) RunCommand(ctx context.Context, req *RunCommandRequest) (*
 
 	// Shared with the daemon's exec.run handler so the two exec paths cannot
 	// drift on what a failure looks like — see daemon.ClassifyExecOutcome.
-	outcome := ClassifyExecOutcome(err, deadline.Err(), stderrBuf.String(), localMemReader, oomSnap)
-
 	stdout := stdoutBuf.String()
+	outcome := ClassifyExecOutcome(err, deadline.Err(), stdout, stderrBuf.String(), localMemReader, oomSnap, diskwatch.Default())
+
 	return &CommandResult{
 		ExitCode:         outcome.ExitCode,
 		Stdout:           stdout,

@@ -14,6 +14,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/osutil"
 )
@@ -169,7 +170,7 @@ func handleExecRun(ctx context.Context, payload []byte) ([]byte, error) {
 
 	// Shared with LocalClient.RunCommand so the two exec paths cannot drift on
 	// what a failure looks like — see daemon.ClassifyExecOutcome.
-	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stderrBuf.String(), memReader, oomSnap)
+	outcome := daemon.ClassifyExecOutcome(err, deadline.Err(), stdoutBuf.String(), stderrBuf.String(), memReader, oomSnap, diskwatch.Default())
 
 	resp := daemon.CommandResult{
 		Stdout:           stdoutBuf.String(),

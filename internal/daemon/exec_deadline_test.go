@@ -185,7 +185,7 @@ func TestClassifyExecOutcome_DeadlineStop(t *testing.T) {
 	// os/exec reports a command stopped by ExecDeadline as context.Canceled,
 	// because the deadline cancels with a cause. It is still a timeout and
 	// must read as one.
-	out := ClassifyExecOutcome(context.Canceled, context.DeadlineExceeded, "", nil, cgroupmem.OOMSnapshot{})
+	out := ClassifyExecOutcome(context.Canceled, context.DeadlineExceeded, "", "", nil, cgroupmem.OOMSnapshot{}, nil)
 	if !out.TimedOut || out.ExitCode != TimeoutExitCode {
 		t.Errorf("outcome = %+v, want a timeout with exit %d", out, TimeoutExitCode)
 	}
@@ -193,7 +193,7 @@ func TestClassifyExecOutcome_DeadlineStop(t *testing.T) {
 		t.Errorf("Stderr = %q, want %q", out.Stderr, context.DeadlineExceeded.Error())
 	}
 
-	wall := ClassifyExecOutcome(context.Canceled, ErrWallClockDeadline, "partial", nil, cgroupmem.OOMSnapshot{})
+	wall := ClassifyExecOutcome(context.Canceled, ErrWallClockDeadline, "", "partial", nil, cgroupmem.OOMSnapshot{}, nil)
 	if !wall.TimedOut {
 		t.Errorf("TimedOut = false for a wall-clock timeout")
 	}

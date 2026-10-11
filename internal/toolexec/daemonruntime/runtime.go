@@ -30,6 +30,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/config"
 	"github.com/reliant-labs/reliant/internal/daemon"
 	"github.com/reliant-labs/reliant/internal/daemonpolicy"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/instanceid"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
@@ -112,6 +113,12 @@ type daemonClient struct {
 	// so heartbeats can carry used/limit/pressure telemetry to the gateway.
 	// Inert on hosts without cgroup v2 accounting (macOS, local daemons).
 	memWatcher *cgroupmem.Watcher
+
+	// diskWatcher samples the filesystems builds and tools write to (the
+	// build-cache/docker volume, home, temp) so heartbeats can carry a
+	// DiskReport, and explains ENOSPC failures in tool results. The
+	// process-wide diskwatch.Default(), shared with the exec paths.
+	diskWatcher *diskwatch.Watcher
 
 	// portWatcher scans /proc/net/tcp{,6} for loopback/wildcard LISTEN
 	// sockets so heartbeats can carry the detected ports (the preview
@@ -219,6 +226,10 @@ func Start(ctx context.Context, opts StartOptions) error {
 	// local/mac daemons. Runs for the daemon's whole lifetime, across
 	// reconnects, in both server and client modes.
 	go client.memWatcher.Run(ctx)
+	// Same lifetime for disk telemetry: statfs of a handful of paths every
+	// 10s, plus a bounded "what is using it" scan only while a volume is
+	// under pressure.
+	go client.diskWatcher.Run(ctx)
 
 	// Managed daemons: route github.com auth through the credential helper and
 	// scrub any token an older release left on disk. Local daemons are left
@@ -423,6 +434,7 @@ func newDaemonClient(bootCfg bootstrap.DaemonBootstrapConfig) (*daemonClient, er
 		terminalPumps:     newTerminalPumpTracker(),
 		processOutputSubs: newProcessOutputSubTracker(),
 		memWatcher:        cgroupmem.NewWatcher(memReader, cgroupmem.DefaultPollInterval),
+		diskWatcher:       diskwatch.Default(),
 	}, nil
 }
 
@@ -1193,7 +1205,7 @@ func (d *daemonClient) handleDaemonCommand(req *reliantv1.DaemonCommandRequest) 
 		},
 	}
 	if err != nil {
-		resp.GetDaemonCommandResponse().ErrorMessage = err.Error()
+		resp.GetDaemonCommandResponse().ErrorMessage = withNoSpaceExplanation(d.diskWatcher, err.Error())
 	}
 	if sendErr := d.send(resp); sendErr != nil {
 		logging.Warn(logPrefix+" Failed to send daemon command response",
@@ -1385,6 +1397,11 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 		if ports, ok := d.portWatcher.Latest(); ok {
 			hb.DetectedPorts = ports
 		}
+		// Piggyback the disk report (every daemon that can statfs; ok stays
+		// false until the first sample).
+		if rep, ok := d.diskWatcher.Report(); ok {
+			hb.Disk = rep
+		}
 		if err := d.send(&reliantv1.DaemonMessage{
 			Message: &reliantv1.DaemonMessage_Heartbeat{Heartbeat: hb},
 		}); err != nil {
@@ -1409,6 +1426,14 @@ func (d *daemonClient) runHeartbeats(ctx context.Context, liveness *sessionLiven
 			// watcher) never fires.
 			if err := sendHeartbeat(time.Now()); err != nil {
 				logging.Warn(logPrefix+" Failed to send pressure heartbeat", "error", err)
+				return
+			}
+		case <-d.diskWatcher.Changed():
+			// A volume's pressure flipped, its consumers were measured, a
+			// command just failed with ENOSPC, or a cache clean-up started or
+			// finished — the UI should know now, not up to 15s later.
+			if err := sendHeartbeat(time.Now()); err != nil {
+				logging.Warn(logPrefix+" Failed to send disk heartbeat", "error", err)
 				return
 			}
 		case <-d.portWatcher.Changed():
@@ -1547,6 +1572,16 @@ func (d *daemonClient) sendToolResult(requestID string, result *toolexec.Executi
 	result.Content = strings.ToValidUTF8(result.Content, "\uFFFD")
 	result.Metadata = strings.ToValidUTF8(result.Metadata, "\uFFFD")
 	result.ErrorMessage = strings.ToValidUTF8(result.ErrorMessage, "\uFFFD")
+	if result.IsError || !result.Success {
+		// A tool that failed for want of disk says which volume is full, so
+		// the agent stops retrying the build blindly.
+		if note := d.diskWatcher.ExplainNoSpace(result.Content + "\n" + result.ErrorMessage); note != "" {
+			result.Content = appendLine(result.Content, note)
+			if result.ErrorMessage != "" {
+				result.ErrorMessage = appendLine(result.ErrorMessage, note)
+			}
+		}
+	}
 
 	resp := &reliantv1.DaemonMessage{
 		Message: &reliantv1.DaemonMessage_ToolResponse{ToolResponse: &reliantv1.ToolResponse{

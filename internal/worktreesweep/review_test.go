@@ -14,8 +14,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/worktreereclaim"
 )
 
@@ -177,34 +179,52 @@ func TestSweep_MissingRootDoesNotMarkRowsDeleted(t *testing.T) {
 	_ = path
 }
 
-// S9
-func TestDiskIsLow_Thresholds(t *testing.T) {
-	const gib = 1 << 30
-	assert.False(t, DiskIsLow(8*gib, 20*gib+gib*0), "a 20 GiB cloud workspace with 40% free is fine")
-	assert.True(t, DiskIsLow(1*gib, 20*gib), "5% of a small disk is low")
-	assert.False(t, DiskIsLow(30*gib, 256*gib), "30 GiB free of 256 GiB is not an alert under 500 GiB capacity")
-	assert.True(t, DiskIsLow(40*gib, 1000*gib), "under 50 GiB on a big disk")
-	assert.True(t, DiskIsLow(40*gib, 600*gib), "40 GiB is under 10% of 600")
-	assert.False(t, DiskIsLow(120*gib, 1000*gib))
-}
-
-// S9: a disk-only alert needs the disk to be critical, since there is nothing
-// to act on.
-func TestStorageView_DiskOnlyAlertNeedsACriticalDisk(t *testing.T) {
+// The storage item fires for the volume that is actually full. The machine of
+// the 2026-10-10/11 incidents had its home volume at 21% and its build-cache
+// and docker volume at 100%; the item used to measure only the former.
+func TestStorageView_DiskAlertIsTheVolumeUnderPressure(t *testing.T) {
 	e := newEnv(t)
-	put := func(free, total int64) {
-		raw := `{"free_bytes":` + itoa(free) + `,"total_bytes":` + itoa(total) + `,"reported_at":"` + time.Now().UTC().Format(time.RFC3339) + `"}`
+	const gib = 1 << 30
+	put := func(cacheFree uint64, pressure bool) {
+		raw, err := diskwatch.Encode(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
+			{Label: "home", Paths: []string{"/home/workspace"}, TotalBytes: 157 * gib, FreeBytes: 124 * gib},
+			{Label: "build caches & docker", Paths: []string{"/var/cache/workspace/go-build", "/var/lib/docker"}, TotalBytes: 40 * gib, FreeBytes: cacheFree, Pressure: pressure},
+		}}, time.Now())
+		require.NoError(t, err)
 		require.NoError(t, e.repo.SetDaemonStorageState(e.ctx, e.daemon, raw))
 	}
-	const gib = 1 << 30
-	put(8*gib, 100*gib) // low, but not critical
+
+	put(12*gib, false)
 	view, err := StorageView(e.ctx, e.repo, e.userID)
 	require.NoError(t, err)
-	assert.Empty(t, view)
-	put(3*gib, 100*gib) // under 5%
+	assert.Empty(t, view, "no volume under pressure and nothing held: no item")
+
+	put(0, true)
 	view, err = StorageView(e.ctx, e.repo, e.userID)
 	require.NoError(t, err)
-	assert.Len(t, view, 1)
+	require.Len(t, view, 1, "a full cache volume raises the item even with nothing held")
+	assert.True(t, view[0].DiskLow)
+	require.NotNil(t, view[0].Disk)
+	assert.Equal(t, "build caches & docker", view[0].Disk.Volumes[0].Label, "fullest volume first")
+	low := view[0].ItemSuffix
+
+	// Commands starting to fail on it is a new state, not the dismissed one.
+	raw, err := diskwatch.Encode(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
+		{Label: "build caches & docker", TotalBytes: 40 * gib, FreeBytes: 0, Pressure: true, LastNoSpaceAtMs: time.Now().UnixMilli()},
+	}}, time.Now())
+	require.NoError(t, err)
+	require.NoError(t, e.repo.SetDaemonStorageState(e.ctx, e.daemon, raw))
+	view, err = StorageView(e.ctx, e.repo, e.userID)
+	require.NoError(t, err)
+	require.Len(t, view, 1)
+	assert.NotEqual(t, low, view[0].ItemSuffix)
+
+	// The pre-report shape measured the worktree root; it is not a report.
+	require.NoError(t, e.repo.SetDaemonStorageState(e.ctx, e.daemon,
+		`{"free_bytes":1,"total_bytes":`+itoa(100*gib)+`,"reported_at":"`+time.Now().UTC().Format(time.RFC3339)+`"}`))
+	view, err = StorageView(e.ctx, e.repo, e.userID)
+	require.NoError(t, err)
+	assert.Empty(t, view)
 }
 
 func itoa(n int64) string { return strconv.FormatInt(n, 10) }

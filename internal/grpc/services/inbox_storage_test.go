@@ -3,7 +3,6 @@ package services
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
 	"time"
 
@@ -14,6 +13,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/db"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/grpc/interceptors"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
 )
@@ -26,7 +26,8 @@ func (n *neverSender) SendDaemonCommandToDaemon(context.Context, string, string,
 }
 
 // storageFixture is a user with one daemon, one archived worktree the daemon
-// holds as dirty, and a low-disk report.
+// holds as dirty, and a disk report whose build-cache volume is under pressure
+// while its home volume is fine (the cloud-machine incident's shape).
 func storageFixture(t *testing.T) (*inboxFixture, string, string) {
 	t.Helper()
 	f := newInboxFixture(t)
@@ -42,9 +43,19 @@ func storageFixture(t *testing.T) (*inboxFixture, string, string) {
 	}))
 	require.NoError(t, f.repo.ArchiveWorktree(f.ctx, wtID))
 	require.NoError(t, f.repo.UpdateWorktreeCleanupMetadata(f.ctx, wtID, &db.CleanupMetadata{HeldReason: "dirty", HeldDetail: "2 changed", SizeBytes: 5_000_000}))
-	state, _ := json.Marshal(worktreesweep.StorageState{Path: "/home/u/.reliant/worktrees", FreeBytes: 20 << 30, TotalBytes: 500 << 30, ReportedAt: now})
-	require.NoError(t, f.repo.SetDaemonStorageState(f.ctx, daemonID, string(state)))
+	putDiskReport(t, f, daemonID, &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
+		{Label: "home", Paths: []string{"/home/u"}, TotalBytes: 157 << 30, FreeBytes: 124 << 30},
+		{Label: "build caches & docker", Paths: []string{"/var/cache/workspace/go-build", "/var/lib/docker"}, TotalBytes: 40 << 30, FreeBytes: 1 << 30, Pressure: true,
+			Consumers: []*reliantv1.DiskConsumer{{Kind: "docker_images", Label: "Docker images", Category: "docker", Bytes: 18 << 30}}},
+	}})
 	return f, daemonID, wtID
+}
+
+func putDiskReport(t *testing.T, f *inboxFixture, daemonID string, rep *reliantv1.DiskReport) {
+	t.Helper()
+	stored, err := diskwatch.Encode(rep, time.Now())
+	require.NoError(t, err)
+	require.NoError(t, f.repo.SetDaemonStorageState(f.ctx, daemonID, stored))
 }
 
 func TestListInbox_StorageItemShowsDiskAndHeldWorktrees(t *testing.T) {
@@ -58,7 +69,13 @@ func TestListInbox_StorageItemShowsDiskAndHeldWorktrees(t *testing.T) {
 	assert.Equal(t, "MacBook", s.DaemonName)
 	assert.True(t, s.DiskLow)
 	assert.True(t, s.Online)
-	assert.EqualValues(t, 500<<30, s.DiskTotalBytes)
+	require.Len(t, s.Volumes, 2)
+	assert.Equal(t, "build caches & docker", s.Volumes[0].Label, "the full volume leads, not the home volume")
+	assert.True(t, s.Volumes[0].Pressure)
+	assert.EqualValues(t, 40<<30, s.Volumes[0].TotalBytes)
+	require.Len(t, s.Volumes[0].Consumers, 1)
+	assert.Equal(t, "Docker images", s.Volumes[0].Consumers[0].Label)
+	assert.NotEmpty(t, s.ReportedAt)
 	require.Len(t, s.Held, 1)
 	assert.Equal(t, wtID, s.Held[0].WorktreeId)
 	assert.Equal(t, "dirty", s.Held[0].Reason)
@@ -79,8 +96,9 @@ func TestListInbox_NoStorageItemWhenDiskIsFineAndNothingHeld(t *testing.T) {
 	f := newInboxFixture(t)
 	daemonID := "d-" + uuid.NewString()
 	require.NoError(t, f.repo.UpsertDaemon(f.ctx, &db.Daemon{ID: daemonID, UserID: f.userID}))
-	state, _ := json.Marshal(worktreesweep.StorageState{FreeBytes: 800 << 30, TotalBytes: 1000 << 30, ReportedAt: time.Now()})
-	require.NoError(t, f.repo.SetDaemonStorageState(f.ctx, daemonID, string(state)))
+	putDiskReport(t, f, daemonID, &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
+		{Label: "home", TotalBytes: 1000 << 30, FreeBytes: 800 << 30},
+	}})
 	assert.Empty(t, inboxByKind(f.list(t, nil).Items, reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE))
 }
 

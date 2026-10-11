@@ -115,7 +115,6 @@ func (r *Reclaimer) Reconcile(ctx context.Context, req Request) Response {
 		}
 		resp.Results = append(resp.Results, r.settle(ctx, w, false))
 	}
-	resp.Disk = r.disk()
 	return resp
 }
 
@@ -136,7 +135,6 @@ func (r *Reclaimer) SnapshotRemove(ctx context.Context, req Request) Response {
 		}
 		resp.Results = append(resp.Results, r.settle(ctx, w, true))
 	}
-	resp.Disk = r.disk()
 	return resp
 }
 
@@ -145,14 +143,6 @@ func (r *Reclaimer) deadline() time.Time {
 		return time.Time{}
 	}
 	return time.Now().Add(r.Budget)
-}
-
-func (r *Reclaimer) disk() *Disk {
-	d, err := DiskUsage(r.Root)
-	if err != nil {
-		return nil
-	}
-	return d
 }
 
 func (r *Reclaimer) cwds(ctx context.Context, fresh bool) ([]string, error) {

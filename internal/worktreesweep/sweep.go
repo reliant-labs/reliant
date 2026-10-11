@@ -74,7 +74,6 @@ type Store interface {
 	ListReposByProject(ctx context.Context, projectID string) ([]*core.Repo, error)
 	UpdateWorktreeCleanupMetadata(ctx context.Context, id string, metadata *core.CleanupMetadata) error
 	AdoptWorktreeDaemon(ctx context.Context, id, daemonID string) error
-	SetDaemonStorageState(ctx context.Context, daemonID string, stateJSON string) error
 	ListAttachedDaemonIDsForUser(ctx context.Context, userID string, staleThreshold time.Duration) ([]string, error)
 	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
 }
@@ -105,15 +104,6 @@ func New(store Store, sender Sender) *Sweeper {
 func (s *Sweeper) WithKeepFiles(k KeepFilesSetting) *Sweeper {
 	s.keep = k
 	return s
-}
-
-// StorageState is what a daemon last reported about its disk, as stored in
-// daemons.storage_state.
-type StorageState struct {
-	Path       string    `json:"path"`
-	FreeBytes  int64     `json:"free_bytes"`
-	TotalBytes int64     `json:"total_bytes"`
-	ReportedAt time.Time `json:"reported_at"`
 }
 
 // Fence is the archive token for a row: its archive time in nanoseconds.
@@ -275,7 +265,6 @@ func (s *Sweeper) settleBatch(ctx context.Context, t target, batch []*core.Recla
 		logging.Warn("[WorktreeSweep] reconcile failed", "daemonID", t.daemonID, "error", err)
 		return false
 	}
-	s.recordDisk(ctx, t.daemonID, resp.Disk)
 
 	var second []worktreereclaim.Worktree
 	for _, r := range resp.Results {
@@ -430,16 +419,6 @@ func (s *Sweeper) send(ctx context.Context, t target, cmd string, timeoutMs int3
 		return nil, fmt.Errorf("decode %s response: %w", cmd, err)
 	}
 	return &resp, nil
-}
-
-func (s *Sweeper) recordDisk(ctx context.Context, daemonID string, d *worktreereclaim.Disk) {
-	if d == nil {
-		return
-	}
-	state, _ := json.Marshal(StorageState{Path: d.Path, FreeBytes: d.FreeBytes, TotalBytes: d.TotalBytes, ReportedAt: s.now().UTC()})
-	if err := s.store.SetDaemonStorageState(ctx, daemonID, string(state)); err != nil {
-		logging.Warn("[WorktreeSweep] could not record disk state", "daemonID", daemonID, "error", err)
-	}
 }
 
 // apply records one worktree's outcome. It re-reads the row and merges into

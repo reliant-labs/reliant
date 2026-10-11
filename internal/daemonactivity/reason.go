@@ -101,6 +101,9 @@ var userActionCommands = map[string]bool{
 	"auth.open_oauth_helper": true,
 	"auth.start_oauth":       true,
 
+	// The user confirmed clearing caches in the "Free up space" dialog.
+	"disk.clear_caches": true,
+
 	"exec.bg_kill":  true,
 	"exec.bg_start": true,
 	"exec.run":      true,

@@ -251,6 +251,81 @@ message DaemonHeartbeat {
   // memory fields are; empty for daemons without /proc/net/tcp (macOS,
   // local daemons) and for local daemons that don't run the port watcher.
   repeated uint32 detected_ports = 5;
+  // The filesystems builds and tools write to, as the daemon last sampled
+  // them (internal/diskwatch). Unset for daemons that cannot statfs.
+  DiskReport disk = 6;
+}
+
+// DiskReport is a machine's view of the filesystems that matter to the work
+// running on it: the home/worktree volume, the build caches (GOCACHE,
+// GOMODCACHE, npm, ...), docker's data root, TMPDIR, and the system dirs apt
+// writes to. On a cloud machine several of those share one small volume, and
+// it is that volume — not the home volume — that fills.
+message DiskReport {
+  // One entry per distinct filesystem, deduplicated (bind mounts and overlays
+  // whose upper dir lives on a volume count as that volume).
+  repeated DiskVolume volumes = 1;
+  // When the server stored this report (unix ms). Daemons leave it 0; the
+  // gateway stamps its own clock so readers never compare against a skewed
+  // one.
+  int64 reported_at_ms = 2;
+}
+
+// DiskVolume is one filesystem and what is using it.
+message DiskVolume {
+  // What the volume holds, for people: "build caches & docker", "home",
+  // "temp", "system".
+  string label = 1;
+  // The watched paths that resolved to this volume, e.g.
+  // "/var/cache/workspace/go-build", "/var/lib/docker", "/etc".
+  repeated string paths = 2;
+  uint64 total_bytes = 3;
+  // Bytes an unprivileged process can still write (statfs f_bavail).
+  uint64 free_bytes = 4;
+  // Hysteresis-smoothed pressure bit. Asserts when free < 2 GiB, or used >=
+  // 90% with free < 20 GiB, or inodes >= 95% used; clears only when free >=
+  // 3 GiB and (used < 85% or free >= 24 GiB) and inodes < 90%.
+  bool pressure = 5;
+  // Inode totals; both 0 when the filesystem does not report them.
+  uint64 files_total = 6;
+  uint64 files_free = 7;
+  // Biggest first. Measured only while the volume is under pressure (at most
+  // every few minutes), so empty otherwise.
+  repeated DiskConsumer consumers = 8;
+  // When consumers were measured (unix ms); 0 when they were not.
+  int64 consumers_measured_at_ms = 9;
+  // The most recent command or file write on this machine that failed with
+  // "no space left on device" attributed to this volume (unix ms); 0 when
+  // none since the daemon started.
+  int64 last_no_space_at_ms = 10;
+}
+
+// DiskConsumer is one thing taking space on a volume.
+message DiskConsumer {
+  // Stable key: "go_build_cache", "go_mod_cache", "npm_cache", "pnpm_store",
+  // "yarn_cache", "golangci_lint_cache", "xdg_cache", "docker_images",
+  // "docker_containers", "docker_volumes", "docker_build_cache",
+  // "system_packages", "worktrees", "other".
+  string kind = 1;
+  // For people: "Go build cache", "Docker images".
+  string label = 2;
+  // Group the UI sums by: "caches", "docker", "system", "workspaces",
+  // "other".
+  string category = 3;
+  // The directory measured; empty for docker (measured by dockerd).
+  string path = 4;
+  uint64 bytes = 5;
+  // The measurement stopped at its time or entry budget: bytes is a lower
+  // bound.
+  bool approximate = 6;
+  // What a safe clean-up could free: entries untouched for 2h+ for Go-format
+  // caches, docker's own estimate for its build cache. 0 when unknown.
+  uint64 reclaimable_bytes = 7;
+  // ClearMachineCaches can act on it (Go-format cache trim, docker build
+  // cache prune). Everything else needs a person to decide.
+  bool clearable = 8;
+  // A clean-up of it is running on the machine now.
+  bool clearing = 9;
 }
 
 // ============================================

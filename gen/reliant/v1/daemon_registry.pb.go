@@ -174,6 +174,166 @@ func (DaemonLifecyclePhase) EnumDescriptor() ([]byte, []int) {
 	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{1}
 }
 
+type ClearMachineCachesRequest struct {
+	state    protoimpl.MessageState `protogen:"open.v1"`
+	DaemonId string                 `protobuf:"bytes,1,opt,name=daemon_id,json=daemonId,proto3" json:"daemon_id,omitempty"`
+	// DiskConsumer.kind values from the confirmation dialog.
+	Kinds         []string `protobuf:"bytes,2,rep,name=kinds,proto3" json:"kinds,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearMachineCachesRequest) Reset() {
+	*x = ClearMachineCachesRequest{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearMachineCachesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearMachineCachesRequest) ProtoMessage() {}
+
+func (x *ClearMachineCachesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearMachineCachesRequest.ProtoReflect.Descriptor instead.
+func (*ClearMachineCachesRequest) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *ClearMachineCachesRequest) GetDaemonId() string {
+	if x != nil {
+		return x.DaemonId
+	}
+	return ""
+}
+
+func (x *ClearMachineCachesRequest) GetKinds() []string {
+	if x != nil {
+		return x.Kinds
+	}
+	return nil
+}
+
+type ClearMachineCachesResponse struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Kinds the machine started clearing.
+	Started []string `protobuf:"bytes,1,rep,name=started,proto3" json:"started,omitempty"`
+	// Kinds it refused, with why ("not clearable", "already clearing", "no
+	// such cache on this machine").
+	Skipped       []*ClearMachineCachesSkip `protobuf:"bytes,2,rep,name=skipped,proto3" json:"skipped,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearMachineCachesResponse) Reset() {
+	*x = ClearMachineCachesResponse{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearMachineCachesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearMachineCachesResponse) ProtoMessage() {}
+
+func (x *ClearMachineCachesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearMachineCachesResponse.ProtoReflect.Descriptor instead.
+func (*ClearMachineCachesResponse) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *ClearMachineCachesResponse) GetStarted() []string {
+	if x != nil {
+		return x.Started
+	}
+	return nil
+}
+
+func (x *ClearMachineCachesResponse) GetSkipped() []*ClearMachineCachesSkip {
+	if x != nil {
+		return x.Skipped
+	}
+	return nil
+}
+
+type ClearMachineCachesSkip struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ClearMachineCachesSkip) Reset() {
+	*x = ClearMachineCachesSkip{}
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ClearMachineCachesSkip) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ClearMachineCachesSkip) ProtoMessage() {}
+
+func (x *ClearMachineCachesSkip) ProtoReflect() protoreflect.Message {
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ClearMachineCachesSkip.ProtoReflect.Descriptor instead.
+func (*ClearMachineCachesSkip) Descriptor() ([]byte, []int) {
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *ClearMachineCachesSkip) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *ClearMachineCachesSkip) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
 type ListDaemonsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -182,7 +342,7 @@ type ListDaemonsRequest struct {
 
 func (x *ListDaemonsRequest) Reset() {
 	*x = ListDaemonsRequest{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[0]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -194,7 +354,7 @@ func (x *ListDaemonsRequest) String() string {
 func (*ListDaemonsRequest) ProtoMessage() {}
 
 func (x *ListDaemonsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[0]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -207,7 +367,7 @@ func (x *ListDaemonsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDaemonsRequest.ProtoReflect.Descriptor instead.
 func (*ListDaemonsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{0}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{3}
 }
 
 type ListDaemonsResponse struct {
@@ -219,7 +379,7 @@ type ListDaemonsResponse struct {
 
 func (x *ListDaemonsResponse) Reset() {
 	*x = ListDaemonsResponse{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[1]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -231,7 +391,7 @@ func (x *ListDaemonsResponse) String() string {
 func (*ListDaemonsResponse) ProtoMessage() {}
 
 func (x *ListDaemonsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[1]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -244,7 +404,7 @@ func (x *ListDaemonsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListDaemonsResponse.ProtoReflect.Descriptor instead.
 func (*ListDaemonsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{1}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListDaemonsResponse) GetDaemons() []*DaemonInfo {
@@ -263,7 +423,7 @@ type GetDaemonRequest struct {
 
 func (x *GetDaemonRequest) Reset() {
 	*x = GetDaemonRequest{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[2]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -275,7 +435,7 @@ func (x *GetDaemonRequest) String() string {
 func (*GetDaemonRequest) ProtoMessage() {}
 
 func (x *GetDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[2]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -288,7 +448,7 @@ func (x *GetDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDaemonRequest.ProtoReflect.Descriptor instead.
 func (*GetDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{2}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *GetDaemonRequest) GetDaemonId() string {
@@ -307,7 +467,7 @@ type GetDaemonResponse struct {
 
 func (x *GetDaemonResponse) Reset() {
 	*x = GetDaemonResponse{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[3]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -319,7 +479,7 @@ func (x *GetDaemonResponse) String() string {
 func (*GetDaemonResponse) ProtoMessage() {}
 
 func (x *GetDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[3]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -332,7 +492,7 @@ func (x *GetDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetDaemonResponse.ProtoReflect.Descriptor instead.
 func (*GetDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{3}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetDaemonResponse) GetDaemon() *DaemonInfo {
@@ -354,7 +514,7 @@ type ResolveDaemonRequest struct {
 
 func (x *ResolveDaemonRequest) Reset() {
 	*x = ResolveDaemonRequest{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[4]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -366,7 +526,7 @@ func (x *ResolveDaemonRequest) String() string {
 func (*ResolveDaemonRequest) ProtoMessage() {}
 
 func (x *ResolveDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[4]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -379,7 +539,7 @@ func (x *ResolveDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveDaemonRequest.ProtoReflect.Descriptor instead.
 func (*ResolveDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{4}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *ResolveDaemonRequest) GetDaemonId() string {
@@ -420,7 +580,7 @@ type ResolveDaemonResponse struct {
 
 func (x *ResolveDaemonResponse) Reset() {
 	*x = ResolveDaemonResponse{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[5]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -432,7 +592,7 @@ func (x *ResolveDaemonResponse) String() string {
 func (*ResolveDaemonResponse) ProtoMessage() {}
 
 func (x *ResolveDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[5]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -445,7 +605,7 @@ func (x *ResolveDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResolveDaemonResponse.ProtoReflect.Descriptor instead.
 func (*ResolveDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{5}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *ResolveDaemonResponse) GetDaemon() *DaemonInfo {
@@ -471,7 +631,7 @@ type ResumeDaemonRequest struct {
 
 func (x *ResumeDaemonRequest) Reset() {
 	*x = ResumeDaemonRequest{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[6]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -483,7 +643,7 @@ func (x *ResumeDaemonRequest) String() string {
 func (*ResumeDaemonRequest) ProtoMessage() {}
 
 func (x *ResumeDaemonRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[6]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -496,7 +656,7 @@ func (x *ResumeDaemonRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeDaemonRequest.ProtoReflect.Descriptor instead.
 func (*ResumeDaemonRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{6}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *ResumeDaemonRequest) GetDaemonId() string {
@@ -516,7 +676,7 @@ type ResumeDaemonResponse struct {
 
 func (x *ResumeDaemonResponse) Reset() {
 	*x = ResumeDaemonResponse{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[7]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -528,7 +688,7 @@ func (x *ResumeDaemonResponse) String() string {
 func (*ResumeDaemonResponse) ProtoMessage() {}
 
 func (x *ResumeDaemonResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[7]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -541,7 +701,7 @@ func (x *ResumeDaemonResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ResumeDaemonResponse.ProtoReflect.Descriptor instead.
 func (*ResumeDaemonResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{7}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *ResumeDaemonResponse) GetResumed() bool {
@@ -575,7 +735,7 @@ type DaemonWaking struct {
 
 func (x *DaemonWaking) Reset() {
 	*x = DaemonWaking{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -587,7 +747,7 @@ func (x *DaemonWaking) String() string {
 func (*DaemonWaking) ProtoMessage() {}
 
 func (x *DaemonWaking) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[8]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -600,7 +760,7 @@ func (x *DaemonWaking) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonWaking.ProtoReflect.Descriptor instead.
 func (*DaemonWaking) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{8}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *DaemonWaking) GetDaemonId() string {
@@ -619,7 +779,7 @@ type RefreshLocalModelsRequest struct {
 
 func (x *RefreshLocalModelsRequest) Reset() {
 	*x = RefreshLocalModelsRequest{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[9]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -631,7 +791,7 @@ func (x *RefreshLocalModelsRequest) String() string {
 func (*RefreshLocalModelsRequest) ProtoMessage() {}
 
 func (x *RefreshLocalModelsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[9]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -644,7 +804,7 @@ func (x *RefreshLocalModelsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshLocalModelsRequest.ProtoReflect.Descriptor instead.
 func (*RefreshLocalModelsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{9}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *RefreshLocalModelsRequest) GetDaemonId() string {
@@ -663,7 +823,7 @@ type RefreshLocalModelsResponse struct {
 
 func (x *RefreshLocalModelsResponse) Reset() {
 	*x = RefreshLocalModelsResponse{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[10]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[13]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -675,7 +835,7 @@ func (x *RefreshLocalModelsResponse) String() string {
 func (*RefreshLocalModelsResponse) ProtoMessage() {}
 
 func (x *RefreshLocalModelsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[10]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[13]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -688,7 +848,7 @@ func (x *RefreshLocalModelsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use RefreshLocalModelsResponse.ProtoReflect.Descriptor instead.
 func (*RefreshLocalModelsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{10}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{13}
 }
 
 func (x *RefreshLocalModelsResponse) GetLocalModels() *LocalModelInventory {
@@ -711,7 +871,7 @@ type SetLocalModelEndpointsRequest struct {
 
 func (x *SetLocalModelEndpointsRequest) Reset() {
 	*x = SetLocalModelEndpointsRequest{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[11]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -723,7 +883,7 @@ func (x *SetLocalModelEndpointsRequest) String() string {
 func (*SetLocalModelEndpointsRequest) ProtoMessage() {}
 
 func (x *SetLocalModelEndpointsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[11]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -736,7 +896,7 @@ func (x *SetLocalModelEndpointsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLocalModelEndpointsRequest.ProtoReflect.Descriptor instead.
 func (*SetLocalModelEndpointsRequest) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{11}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *SetLocalModelEndpointsRequest) GetDaemonId() string {
@@ -762,7 +922,7 @@ type SetLocalModelEndpointsResponse struct {
 
 func (x *SetLocalModelEndpointsResponse) Reset() {
 	*x = SetLocalModelEndpointsResponse{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[12]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[15]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -774,7 +934,7 @@ func (x *SetLocalModelEndpointsResponse) String() string {
 func (*SetLocalModelEndpointsResponse) ProtoMessage() {}
 
 func (x *SetLocalModelEndpointsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[12]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[15]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -787,7 +947,7 @@ func (x *SetLocalModelEndpointsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use SetLocalModelEndpointsResponse.ProtoReflect.Descriptor instead.
 func (*SetLocalModelEndpointsResponse) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{12}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{15}
 }
 
 func (x *SetLocalModelEndpointsResponse) GetLocalModels() *LocalModelInventory {
@@ -880,14 +1040,22 @@ type DaemonInfo struct {
 	// implementation detail no user chose — showing it is how a machine named
 	// "default" came to be listed under a doubled ws- prefix. Display the name;
 	// fall back to the hostname only for a self-hosted machine without one.
-	Name          string `protobuf:"bytes,22,opt,name=name,proto3" json:"name,omitempty"`
+	Name string `protobuf:"bytes,22,opt,name=name,proto3" json:"name,omitempty"`
+	// The machine's filesystems as its daemon last reported them in a
+	// heartbeat: which volume holds what, how full each is, a pressure bit per
+	// volume and, while one is under pressure, what is using it. Unlike the
+	// memory telemetry above it is kept while the machine is offline — a disk
+	// that was full is still full when the machine resumes — so read
+	// disk.reported_at_ms before treating it as current. Unset when the daemon
+	// has never reported one.
+	Disk          *DiskReport `protobuf:"bytes,23,opt,name=disk,proto3" json:"disk,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *DaemonInfo) Reset() {
 	*x = DaemonInfo{}
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[13]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[16]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -899,7 +1067,7 @@ func (x *DaemonInfo) String() string {
 func (*DaemonInfo) ProtoMessage() {}
 
 func (x *DaemonInfo) ProtoReflect() protoreflect.Message {
-	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[13]
+	mi := &file_reliant_v1_daemon_registry_proto_msgTypes[16]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -912,7 +1080,7 @@ func (x *DaemonInfo) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DaemonInfo.ProtoReflect.Descriptor instead.
 func (*DaemonInfo) Descriptor() ([]byte, []int) {
-	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{13}
+	return file_reliant_v1_daemon_registry_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *DaemonInfo) GetDaemonId() string {
@@ -1069,12 +1237,28 @@ func (x *DaemonInfo) GetName() string {
 	return ""
 }
 
+func (x *DaemonInfo) GetDisk() *DiskReport {
+	if x != nil {
+		return x.Disk
+	}
+	return nil
+}
+
 var File_reliant_v1_daemon_registry_proto protoreflect.FileDescriptor
 
 const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\n" +
 	" reliant/v1/daemon_registry.proto\x12\n" +
-	"reliant.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dreliant/v1/tools_daemon.proto\"\x14\n" +
+	"reliant.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1dreliant/v1/tools_daemon.proto\"N\n" +
+	"\x19ClearMachineCachesRequest\x12\x1b\n" +
+	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x14\n" +
+	"\x05kinds\x18\x02 \x03(\tR\x05kinds\"t\n" +
+	"\x1aClearMachineCachesResponse\x12\x18\n" +
+	"\astarted\x18\x01 \x03(\tR\astarted\x12<\n" +
+	"\askipped\x18\x02 \x03(\v2\".reliant.v1.ClearMachineCachesSkipR\askipped\"D\n" +
+	"\x16ClearMachineCachesSkip\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\"\x14\n" +
 	"\x12ListDaemonsRequest\"G\n" +
 	"\x13ListDaemonsResponse\x120\n" +
 	"\adaemons\x18\x01 \x03(\v2\x16.reliant.v1.DaemonInfoR\adaemons\"/\n" +
@@ -1110,7 +1294,7 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x1b\n" +
 	"\tbase_urls\x18\x02 \x03(\tR\bbaseUrls\"d\n" +
 	"\x1eSetLocalModelEndpointsResponse\x12B\n" +
-	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\x96\b\n" +
+	"\flocal_models\x18\x01 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\"\xc2\b\n" +
 	"\n" +
 	"DaemonInfo\x12\x1b\n" +
 	"\tdaemon_id\x18\x01 \x01(\tR\bdaemonId\x12\x17\n" +
@@ -1137,7 +1321,8 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\n" +
 	"created_at\x18\x14 \x01(\v2\x1a.google.protobuf.TimestampR\tcreatedAt\x12B\n" +
 	"\flocal_models\x18\x15 \x01(\v2\x1f.reliant.v1.LocalModelInventoryR\vlocalModels\x12\x12\n" +
-	"\x04name\x18\x16 \x01(\tR\x04name*\xd1\x01\n" +
+	"\x04name\x18\x16 \x01(\tR\x04name\x12*\n" +
+	"\x04disk\x18\x17 \x01(\v2\x16.reliant.v1.DiskReportR\x04disk*\xd1\x01\n" +
 	"\fDaemonStatus\x12\x1d\n" +
 	"\x19DAEMON_STATUS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14DAEMON_STATUS_ACTIVE\x10\x01\x12\x16\n" +
@@ -1153,14 +1338,15 @@ const file_reliant_v1_daemon_registry_proto_rawDesc = "" +
 	"\x1cDAEMON_LIFECYCLE_PHASE_READY\x10\x03\x12%\n" +
 	"!DAEMON_LIFECYCLE_PHASE_SUSPENDING\x10\x04\x12$\n" +
 	" DAEMON_LIFECYCLE_PHASE_SUSPENDED\x10\x05\x12!\n" +
-	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xbc\x04\n" +
+	"\x1dDAEMON_LIFECYCLE_PHASE_FAILED\x10\x062\xa3\x05\n" +
 	"\x15DaemonRegistryService\x12P\n" +
 	"\vListDaemons\x12\x1e.reliant.v1.ListDaemonsRequest\x1a\x1f.reliant.v1.ListDaemonsResponse\"\x00\x12J\n" +
 	"\tGetDaemon\x12\x1c.reliant.v1.GetDaemonRequest\x1a\x1d.reliant.v1.GetDaemonResponse\"\x00\x12V\n" +
 	"\rResolveDaemon\x12 .reliant.v1.ResolveDaemonRequest\x1a!.reliant.v1.ResolveDaemonResponse\"\x00\x12S\n" +
 	"\fResumeDaemon\x12\x1f.reliant.v1.ResumeDaemonRequest\x1a .reliant.v1.ResumeDaemonResponse\"\x00\x12e\n" +
 	"\x12RefreshLocalModels\x12%.reliant.v1.RefreshLocalModelsRequest\x1a&.reliant.v1.RefreshLocalModelsResponse\"\x00\x12q\n" +
-	"\x16SetLocalModelEndpoints\x12).reliant.v1.SetLocalModelEndpointsRequest\x1a*.reliant.v1.SetLocalModelEndpointsResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
+	"\x16SetLocalModelEndpoints\x12).reliant.v1.SetLocalModelEndpointsRequest\x1a*.reliant.v1.SetLocalModelEndpointsResponse\"\x00\x12e\n" +
+	"\x12ClearMachineCaches\x12%.reliant.v1.ClearMachineCachesRequest\x1a&.reliant.v1.ClearMachineCachesResponse\"\x00B:Z8github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1b\x06proto3"
 
 var (
 	file_reliant_v1_daemon_registry_proto_rawDescOnce sync.Once
@@ -1175,62 +1361,70 @@ func file_reliant_v1_daemon_registry_proto_rawDescGZIP() []byte {
 }
 
 var file_reliant_v1_daemon_registry_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_reliant_v1_daemon_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 15)
+var file_reliant_v1_daemon_registry_proto_msgTypes = make([]protoimpl.MessageInfo, 18)
 var file_reliant_v1_daemon_registry_proto_goTypes = []any{
 	(DaemonStatus)(0),                      // 0: reliant.v1.DaemonStatus
 	(DaemonLifecyclePhase)(0),              // 1: reliant.v1.DaemonLifecyclePhase
-	(*ListDaemonsRequest)(nil),             // 2: reliant.v1.ListDaemonsRequest
-	(*ListDaemonsResponse)(nil),            // 3: reliant.v1.ListDaemonsResponse
-	(*GetDaemonRequest)(nil),               // 4: reliant.v1.GetDaemonRequest
-	(*GetDaemonResponse)(nil),              // 5: reliant.v1.GetDaemonResponse
-	(*ResolveDaemonRequest)(nil),           // 6: reliant.v1.ResolveDaemonRequest
-	(*ResolveDaemonResponse)(nil),          // 7: reliant.v1.ResolveDaemonResponse
-	(*ResumeDaemonRequest)(nil),            // 8: reliant.v1.ResumeDaemonRequest
-	(*ResumeDaemonResponse)(nil),           // 9: reliant.v1.ResumeDaemonResponse
-	(*DaemonWaking)(nil),                   // 10: reliant.v1.DaemonWaking
-	(*RefreshLocalModelsRequest)(nil),      // 11: reliant.v1.RefreshLocalModelsRequest
-	(*RefreshLocalModelsResponse)(nil),     // 12: reliant.v1.RefreshLocalModelsResponse
-	(*SetLocalModelEndpointsRequest)(nil),  // 13: reliant.v1.SetLocalModelEndpointsRequest
-	(*SetLocalModelEndpointsResponse)(nil), // 14: reliant.v1.SetLocalModelEndpointsResponse
-	(*DaemonInfo)(nil),                     // 15: reliant.v1.DaemonInfo
-	nil,                                    // 16: reliant.v1.ResolveDaemonRequest.LabelsEntry
-	(*LocalModelInventory)(nil),            // 17: reliant.v1.LocalModelInventory
-	(*DiscoveredProject)(nil),              // 18: reliant.v1.DiscoveredProject
-	(*timestamppb.Timestamp)(nil),          // 19: google.protobuf.Timestamp
+	(*ClearMachineCachesRequest)(nil),      // 2: reliant.v1.ClearMachineCachesRequest
+	(*ClearMachineCachesResponse)(nil),     // 3: reliant.v1.ClearMachineCachesResponse
+	(*ClearMachineCachesSkip)(nil),         // 4: reliant.v1.ClearMachineCachesSkip
+	(*ListDaemonsRequest)(nil),             // 5: reliant.v1.ListDaemonsRequest
+	(*ListDaemonsResponse)(nil),            // 6: reliant.v1.ListDaemonsResponse
+	(*GetDaemonRequest)(nil),               // 7: reliant.v1.GetDaemonRequest
+	(*GetDaemonResponse)(nil),              // 8: reliant.v1.GetDaemonResponse
+	(*ResolveDaemonRequest)(nil),           // 9: reliant.v1.ResolveDaemonRequest
+	(*ResolveDaemonResponse)(nil),          // 10: reliant.v1.ResolveDaemonResponse
+	(*ResumeDaemonRequest)(nil),            // 11: reliant.v1.ResumeDaemonRequest
+	(*ResumeDaemonResponse)(nil),           // 12: reliant.v1.ResumeDaemonResponse
+	(*DaemonWaking)(nil),                   // 13: reliant.v1.DaemonWaking
+	(*RefreshLocalModelsRequest)(nil),      // 14: reliant.v1.RefreshLocalModelsRequest
+	(*RefreshLocalModelsResponse)(nil),     // 15: reliant.v1.RefreshLocalModelsResponse
+	(*SetLocalModelEndpointsRequest)(nil),  // 16: reliant.v1.SetLocalModelEndpointsRequest
+	(*SetLocalModelEndpointsResponse)(nil), // 17: reliant.v1.SetLocalModelEndpointsResponse
+	(*DaemonInfo)(nil),                     // 18: reliant.v1.DaemonInfo
+	nil,                                    // 19: reliant.v1.ResolveDaemonRequest.LabelsEntry
+	(*LocalModelInventory)(nil),            // 20: reliant.v1.LocalModelInventory
+	(*DiscoveredProject)(nil),              // 21: reliant.v1.DiscoveredProject
+	(*timestamppb.Timestamp)(nil),          // 22: google.protobuf.Timestamp
+	(*DiskReport)(nil),                     // 23: reliant.v1.DiskReport
 }
 var file_reliant_v1_daemon_registry_proto_depIdxs = []int32{
-	15, // 0: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
-	15, // 1: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	16, // 2: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
-	15, // 3: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
-	17, // 4: reliant.v1.RefreshLocalModelsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
-	17, // 5: reliant.v1.SetLocalModelEndpointsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
-	0,  // 6: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
-	18, // 7: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
-	19, // 8: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
-	19, // 9: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
-	1,  // 10: reliant.v1.DaemonInfo.lifecycle_phase:type_name -> reliant.v1.DaemonLifecyclePhase
-	19, // 11: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
-	19, // 12: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
-	19, // 13: reliant.v1.DaemonInfo.created_at:type_name -> google.protobuf.Timestamp
-	17, // 14: reliant.v1.DaemonInfo.local_models:type_name -> reliant.v1.LocalModelInventory
-	2,  // 15: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
-	4,  // 16: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
-	6,  // 17: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
-	8,  // 18: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
-	11, // 19: reliant.v1.DaemonRegistryService.RefreshLocalModels:input_type -> reliant.v1.RefreshLocalModelsRequest
-	13, // 20: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:input_type -> reliant.v1.SetLocalModelEndpointsRequest
-	3,  // 21: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
-	5,  // 22: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
-	7,  // 23: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
-	9,  // 24: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
-	12, // 25: reliant.v1.DaemonRegistryService.RefreshLocalModels:output_type -> reliant.v1.RefreshLocalModelsResponse
-	14, // 26: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:output_type -> reliant.v1.SetLocalModelEndpointsResponse
-	21, // [21:27] is the sub-list for method output_type
-	15, // [15:21] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	4,  // 0: reliant.v1.ClearMachineCachesResponse.skipped:type_name -> reliant.v1.ClearMachineCachesSkip
+	18, // 1: reliant.v1.ListDaemonsResponse.daemons:type_name -> reliant.v1.DaemonInfo
+	18, // 2: reliant.v1.GetDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	19, // 3: reliant.v1.ResolveDaemonRequest.labels:type_name -> reliant.v1.ResolveDaemonRequest.LabelsEntry
+	18, // 4: reliant.v1.ResolveDaemonResponse.daemon:type_name -> reliant.v1.DaemonInfo
+	20, // 5: reliant.v1.RefreshLocalModelsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
+	20, // 6: reliant.v1.SetLocalModelEndpointsResponse.local_models:type_name -> reliant.v1.LocalModelInventory
+	0,  // 7: reliant.v1.DaemonInfo.status:type_name -> reliant.v1.DaemonStatus
+	21, // 8: reliant.v1.DaemonInfo.projects:type_name -> reliant.v1.DiscoveredProject
+	22, // 9: reliant.v1.DaemonInfo.connected_at:type_name -> google.protobuf.Timestamp
+	22, // 10: reliant.v1.DaemonInfo.last_heartbeat:type_name -> google.protobuf.Timestamp
+	1,  // 11: reliant.v1.DaemonInfo.lifecycle_phase:type_name -> reliant.v1.DaemonLifecyclePhase
+	22, // 12: reliant.v1.DaemonInfo.last_status_changed_at:type_name -> google.protobuf.Timestamp
+	22, // 13: reliant.v1.DaemonInfo.last_oom_killed_at:type_name -> google.protobuf.Timestamp
+	22, // 14: reliant.v1.DaemonInfo.created_at:type_name -> google.protobuf.Timestamp
+	20, // 15: reliant.v1.DaemonInfo.local_models:type_name -> reliant.v1.LocalModelInventory
+	23, // 16: reliant.v1.DaemonInfo.disk:type_name -> reliant.v1.DiskReport
+	5,  // 17: reliant.v1.DaemonRegistryService.ListDaemons:input_type -> reliant.v1.ListDaemonsRequest
+	7,  // 18: reliant.v1.DaemonRegistryService.GetDaemon:input_type -> reliant.v1.GetDaemonRequest
+	9,  // 19: reliant.v1.DaemonRegistryService.ResolveDaemon:input_type -> reliant.v1.ResolveDaemonRequest
+	11, // 20: reliant.v1.DaemonRegistryService.ResumeDaemon:input_type -> reliant.v1.ResumeDaemonRequest
+	14, // 21: reliant.v1.DaemonRegistryService.RefreshLocalModels:input_type -> reliant.v1.RefreshLocalModelsRequest
+	16, // 22: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:input_type -> reliant.v1.SetLocalModelEndpointsRequest
+	2,  // 23: reliant.v1.DaemonRegistryService.ClearMachineCaches:input_type -> reliant.v1.ClearMachineCachesRequest
+	6,  // 24: reliant.v1.DaemonRegistryService.ListDaemons:output_type -> reliant.v1.ListDaemonsResponse
+	8,  // 25: reliant.v1.DaemonRegistryService.GetDaemon:output_type -> reliant.v1.GetDaemonResponse
+	10, // 26: reliant.v1.DaemonRegistryService.ResolveDaemon:output_type -> reliant.v1.ResolveDaemonResponse
+	12, // 27: reliant.v1.DaemonRegistryService.ResumeDaemon:output_type -> reliant.v1.ResumeDaemonResponse
+	15, // 28: reliant.v1.DaemonRegistryService.RefreshLocalModels:output_type -> reliant.v1.RefreshLocalModelsResponse
+	17, // 29: reliant.v1.DaemonRegistryService.SetLocalModelEndpoints:output_type -> reliant.v1.SetLocalModelEndpointsResponse
+	3,  // 30: reliant.v1.DaemonRegistryService.ClearMachineCaches:output_type -> reliant.v1.ClearMachineCachesResponse
+	24, // [24:31] is the sub-list for method output_type
+	17, // [17:24] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_reliant_v1_daemon_registry_proto_init() }
@@ -1245,7 +1439,7 @@ func file_reliant_v1_daemon_registry_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_reliant_v1_daemon_registry_proto_rawDesc), len(file_reliant_v1_daemon_registry_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   15,
+			NumMessages:   18,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

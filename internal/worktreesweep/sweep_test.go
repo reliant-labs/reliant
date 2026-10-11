@@ -162,7 +162,7 @@ func TestSweep_LocksActiveWorktreesAndNeverRemovesThem(t *testing.T) {
 	assert.False(t, meta.DirectoryDeleted, "an active row never records a removal")
 }
 
-func TestSweep_ReportsDiskAndAdoptsUnattributedRows(t *testing.T) {
+func TestSweep_AdoptsUnattributedRows(t *testing.T) {
 	e := newEnv(t)
 	wt, path := e.worktree(t, "legacy", true)
 	_, err := e.repo.DB.ExecContext(e.ctx, `UPDATE worktrees SET daemon_id = NULL WHERE id = $1`, wt.ID)
@@ -172,9 +172,6 @@ func TestSweep_ReportsDiskAndAdoptsUnattributedRows(t *testing.T) {
 	got := e.get(t, wt.ID)
 	require.NotNil(t, got.DaemonID, "the daemon that found the directory is recorded as its owner")
 	assert.Equal(t, e.daemon, *got.DaemonID)
-	states, err := e.repo.ListDaemonStorageState(e.ctx, e.userID)
-	require.NoError(t, err)
-	assert.Contains(t, states[e.daemon], `"free_bytes"`)
 }
 
 func TestSweep_SkipsOfflineDaemon(t *testing.T) {
@@ -217,11 +214,6 @@ func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
 	view, err = StorageView(e.ctx, e.repo, e.userID)
 	require.NoError(t, err)
 	assert.NotEqual(t, first, view[0].ItemSuffix)
-
-	assert.True(t, DiskIsLow(40<<30, 500<<30), "under 50 GiB")
-	assert.True(t, DiskIsLow(40<<30, 1000<<30))
-	assert.True(t, DiskIsLow(150<<30, 2000<<30), "under 10%")
-	assert.False(t, DiskIsLow(400<<30, 1000<<30))
 }
 
 func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {

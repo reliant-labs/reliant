@@ -37,6 +37,35 @@ service DaemonRegistryService {
   // re-probed inventory. Auto-detected well-known ports need no
   // configuration and are not listed here.
   rpc SetLocalModelEndpoints(SetLocalModelEndpointsRequest) returns (SetLocalModelEndpointsResponse) {}
+
+  // ClearMachineCaches frees space on an online machine by clearing the
+  // rebuildable caches the user confirmed — only kinds the daemon reports as
+  // clearable (DiskConsumer.clearable): a Go-format cache trim of entries
+  // untouched for 2h+, and docker's build cache. It never touches docker
+  // images, containers or volumes, the Go module cache, or anything else that
+  // could hold data. The clean-up runs in the background on the machine;
+  // progress shows as DiskConsumer.clearing and then as freed space in the
+  // next disk report. Fails with Unavailable when the machine is offline.
+  rpc ClearMachineCaches(ClearMachineCachesRequest) returns (ClearMachineCachesResponse) {}
+}
+
+message ClearMachineCachesRequest {
+  string daemon_id = 1;
+  // DiskConsumer.kind values from the confirmation dialog.
+  repeated string kinds = 2;
+}
+
+message ClearMachineCachesResponse {
+  // Kinds the machine started clearing.
+  repeated string started = 1;
+  // Kinds it refused, with why ("not clearable", "already clearing", "no
+  // such cache on this machine").
+  repeated ClearMachineCachesSkip skipped = 2;
+}
+
+message ClearMachineCachesSkip {
+  string kind = 1;
+  string reason = 2;
 }
 
 message ListDaemonsRequest {}
@@ -206,6 +235,15 @@ message DaemonInfo {
   // "default" came to be listed under a doubled ws- prefix. Display the name;
   // fall back to the hostname only for a self-hosted machine without one.
   string name = 22;
+
+  // The machine's filesystems as its daemon last reported them in a
+  // heartbeat: which volume holds what, how full each is, a pressure bit per
+  // volume and, while one is under pressure, what is using it. Unlike the
+  // memory telemetry above it is kept while the machine is offline — a disk
+  // that was full is still full when the machine resumes — so read
+  // disk.reported_at_ms before treating it as current. Unset when the daemon
+  // has never reported one.
+  DiskReport disk = 23;
 }
 
 // DaemonStatus is the SINGLE status vocabulary for a daemon in this registry.

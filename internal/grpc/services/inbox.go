@@ -470,8 +470,8 @@ func firstQuestionPrompt(metadata string) string {
 	return payload.Questions[0].Question
 }
 
-// storageItems returns one item per machine that is low on disk or holds
-// archived worktrees it declined to remove. Storage items are not tied to a
+// storageItems returns one item per machine with a volume under disk pressure
+// or archived worktrees it declined to remove. Storage items are not tied to a
 // project, so they appear in the unscoped inbox only.
 func (s *InboxService) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
 	machines, err := s.storageView(ctx, userID)
@@ -497,8 +497,10 @@ func (s *InboxService) storageItems(ctx context.Context, userID string) ([]*reli
 			Online:     m.Online,
 		}
 		if m.Disk != nil {
-			payload.DiskFreeBytes, payload.DiskTotalBytes = m.Disk.FreeBytes, m.Disk.TotalBytes
-			payload.ReportedAt = m.Disk.ReportedAt.UTC().Format(time.RFC3339)
+			// Every volume, fullest first: the item names the one that is
+			// full ("build caches & docker") and what is using it.
+			payload.Volumes = m.Disk.Volumes
+			payload.ReportedAt = time.UnixMilli(m.Disk.ReportedAtMs).UTC().Format(time.RFC3339)
 		}
 		for _, h := range m.Held {
 			payload.Held = append(payload.Held, &reliantv1.HeldWorktree{
