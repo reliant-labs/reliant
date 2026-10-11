@@ -43,6 +43,12 @@ import { toast } from "sonner";
 import { cn } from "../../lib/utils";
 import { Tooltip } from "../ui/Tooltip";
 import { trackEvent } from "../../lib/analytics";
+import { PendingFirstMessage } from "./PendingFirstMessage";
+
+// Text handed back after a failed start goes through the composer's prefill.
+// Its ids count up from here, so they can never equal a host's prefill id
+// (hosts count up from 0) and be skipped as one already applied.
+const RESTORED_PREFILL_BASE_ID = 1_000_000;
 
 interface NewChatViewProps {
   tabId: string;
@@ -66,6 +72,17 @@ export function NewChatView({
   composerPrefill,
 }: NewChatViewProps) {
   const [isCreating, setIsCreating] = useState(false);
+  // The message being sent while StartChat is in flight (PendingFirstMessage).
+  const [pendingFirst, setPendingFirst] = useState<{
+    content: string;
+    attachmentCount: number;
+  } | null>(null);
+  // A failed start hands its text back to the composer through `prefill`.
+  const [restoredPrefill, setRestoredPrefill] = useState<ComposerPrefill | null>(null);
+  // A new prefill from the host supersedes text handed back earlier.
+  useEffect(() => {
+    setRestoredPrefill(null);
+  }, [composerPrefill?.id]);
   const [showConnectDaemonModal, setShowConnectDaemonModal] = useState(false);
   const [showCreateWorktreeModal, setShowCreateWorktreeModal] = useState(false);
   const [showDiscoverWorktreeModal, setShowDiscoverWorktreeModal] = useState(false);
@@ -205,6 +222,9 @@ export function NewChatView({
     if ((!content.trim() && !attachmentIds?.length) || isCreating) return;
 
     setIsCreating(true);
+    // The composer has already cleared; until the chat exists, this is the
+    // only place the message is on screen.
+    setPendingFirst({ content, attachmentCount: attachmentIds?.length ?? 0 });
     try {
       // A chat with no machine runs in the project's main checkout: a branch
       // workspace is a checkout on one machine.
@@ -249,12 +269,22 @@ export function NewChatView({
       const errorMessage = error instanceof Error 
         ? error.message 
         : "An unexpected error occurred";
-      toast.error("Failed to create chat", {
-        description: errorMessage,
+      // Hand the text back: the composer cleared it on send, and a chat that
+      // was never created has no transcript to recover it from. Attachments
+      // cannot be handed back from here (the composer released them), so say so.
+      setRestoredPrefill((previous) => ({
+        text: content,
+        id: (previous?.id ?? RESTORED_PREFILL_BASE_ID) + 1,
+      }));
+      toast.error("Couldn't start the chat", {
+        description: attachmentIds?.length
+          ? `${errorMessage} Your message is back in the box; attach your files again before sending.`
+          : `${errorMessage} Your message is back in the box.`,
       });
       throw error;
     } finally {
       setIsCreating(false);
+      setPendingFirst(null);
     }
   };
 
@@ -312,9 +342,20 @@ export function NewChatView({
       <div className={cn("relative flex-1 min-h-0 overflow-y-auto", emptyState ? "px-4" : "px-8")}>
         <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(circle_at_50%_38%,hsl(var(--muted)_/_0.16),transparent_62%)]" />
 
-        {/* Without a host empty state the welcome block is all there is, so
+        {/* While the chat is being created, the message the user just sent
+            takes the welcome block's place, sitting where the transcript will
+            put it, above the composer. */}
+        {pendingFirst ? (
+          <div className="relative z-10 mx-auto flex min-h-full w-full max-w-5xl flex-col justify-end py-6">
+            <PendingFirstMessage
+              content={pendingFirst.content}
+              attachmentCount={pendingFirst.attachmentCount}
+            />
+          </div>
+        ) : (
+        /* Without a host empty state the welcome block is all there is, so
             it centres in the space above the composer instead of pinning to
-            the top of an otherwise empty pane. */}
+            the top of an otherwise empty pane. */
         <div
           className={cn(
             "relative z-10 min-h-full w-full max-w-5xl mx-auto",
@@ -476,6 +517,7 @@ export function NewChatView({
           )}
 
         </div>
+        )}
       </div>
 
       {/* OOM banner — machine ran out of memory recently (cloud daemons) */}
@@ -530,7 +572,7 @@ export function NewChatView({
             onSend={handleCreateAndSend}
             disabled={isCreating || !machineReady}
             worktreeId={selectedWorkspaceId || mainWorktree?.id}
-            prefill={composerPrefill}
+            prefill={restoredPrefill ?? composerPrefill}
           />
         </div>
       ) : (

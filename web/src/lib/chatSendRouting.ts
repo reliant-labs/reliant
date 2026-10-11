@@ -7,6 +7,9 @@ export interface ExistingChatSendOptions {
   workflowParams?: Record<string, unknown>;
   targetThread?: string | null;
   selectedPresets?: Record<string, string>;
+  // The id this send keeps on screen (chatStore.sendMessage). One id for every
+  // attempt, including a fallback to StartChat, so they are one message.
+  clientMessageId?: string;
 }
 
 export interface ExistingChatSendActions {

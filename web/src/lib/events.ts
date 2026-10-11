@@ -61,15 +61,18 @@ export interface EventMap {
   // The agent drained these mailbox rows into the transcript. Published from
   // the chat-update stream in the same synchronous task that commits the
   // resulting messages, so the pending-queue strip lets go of them in the
-  // same React commit the transcript entries appear in.
+  // same React commit the transcript entries appear in. Also published by the
+  // composer's sends to withdraw a row they showed and the server never kept
+  // (a failed send; a send the server saved instead of queueing).
   "agentMailbox:drained": { chatId: string; thread: string; messageIds: string[] };
 
-  // A message the composer sent was QUEUED in this thread's mailbox (its run
-  // was executing) rather than saved to history. Published by
-  // chatStore.sendMessage in the same synchronous batch that drops the
-  // optimistic transcript entry, so the message moves from the transcript to
-  // the pending-queue strip in one React commit. Shaped like a
-  // QueuedAgentMessageView row.
+  // A message the composer sent is, or will be, QUEUED in this thread's
+  // mailbox (its run is executing) rather than saved to history. Published by
+  // chatStore.sendMessage / ChatInput's queue when the send starts for a run
+  // that is executing, and when the response says the message was queued — in
+  // the same synchronous batch that drops any optimistic transcript entry, so
+  // the message is on screen in one place in every React commit. Shaped like
+  // a QueuedAgentMessageView row.
   "agentMailbox:queued": {
     chatId: string;
     thread: string;

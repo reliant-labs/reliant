@@ -1256,8 +1256,10 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
         // daemon defers it and retries for a full budget) and it can reject; in
         // both cases the user has already committed the message, so leaving the
         // text in the box reads as "not sent" and invites a double-send. The
-        // message is recoverable from history either way, and a failed send
-        // raises its own toast from ChatContainer.
+        // message is never lost: a send that fails stays in the transcript as
+        // "Not sent" with Retry (chatStore.markSendFailed), a new chat that
+        // fails to start hands its text back (NewChatView), and either raises
+        // its own toast.
         handleClearInput(); // This will clear both input and auto-draft
         clearAttachments(attachmentSessionId);
         clearContexts();

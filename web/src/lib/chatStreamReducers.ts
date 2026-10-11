@@ -18,6 +18,7 @@ import type {
   ToolExecutionStateUpdate,
 } from "../store/chatStore";
 import { logger } from "./logger";
+import { FAILED_SEND_PREFIX, OPTIMISTIC_USER_PREFIX } from "./pendingSends";
 
 // Resolve the streaming message a new batch of deltas should build on for a
 // given thread. If the existing message is already finalized (COMPLETE — e.g.
@@ -411,6 +412,8 @@ export function snapshotReplacesMessages(
  *   snapshotReplacesMessages.
  * - Incremental: upsert by id onto `existing`, and drop the optimistic user
  *   placeholder (`optimistic-user-*`) once a real user message arrives.
+ * A failed send (`optimistic-failed-*`, see lib/pendingSends.ts) survives both:
+ * the server never got it, so nothing it sends describes it.
  * Pure — `existing` comes from the RQ message cache; the result is written back
  * to it. Ordering is applied later by sortMessagesForDisplay at the render layer.
  */
@@ -420,16 +423,19 @@ export function mergeMessages(
   isSnapshot: boolean,
 ): Message[] {
   if (isSnapshot && snapshotReplacesMessages(existing, incoming)) {
-    return [...incoming];
+    // Replacing the list must not take away the user's only copy of a message
+    // that was never sent, nor its Retry.
+    const failed = existing.filter((m) => m.id.startsWith(FAILED_SEND_PREFIX));
+    return [...incoming, ...failed];
   }
 
   let next = [...existing];
 
   const hasRealUserMessage = incoming.some(
-    (m) => m.role === MessageRole.USER && !m.id.startsWith("optimistic-user-"),
+    (m) => m.role === MessageRole.USER && !m.id.startsWith(OPTIMISTIC_USER_PREFIX),
   );
   if (hasRealUserMessage) {
-    next = next.filter((m) => !m.id.startsWith("optimistic-user-"));
+    next = next.filter((m) => !m.id.startsWith(OPTIMISTIC_USER_PREFIX));
   }
 
   for (const newMessage of incoming) {

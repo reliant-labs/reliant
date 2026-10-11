@@ -57,11 +57,13 @@
  * A row also ARRIVES from the composer's ordinary send. SendMessage to a chat
  * whose run is executing queues the message here instead of writing it to the
  * transcript, and answers queued=true with the row's id — an id the client
- * chose before sending (lib/pendingSends.ts). Until that answer the message is
- * the send's optimistic transcript entry, so a read that already sees the row
- * leaves it out; on the answer, the optimistic entry is dropped and the row
- * taken ("agentMailbox:queued") in one commit. Sent, queued, picked up: the
- * message is on screen exactly once in each.
+ * chose before sending (lib/pendingSends.ts). The send shows the message where
+ * its run's activity says it will end up: in the strip from the start for a
+ * run that is executing (a local row every read keeps until the server's row
+ * is in one), otherwise as an optimistic transcript entry that a read already
+ * seeing the row leaves out. The answer moves it, in one commit, if that was
+ * wrong ("agentMailbox:queued" / "agentMailbox:drained"). Sent, queued, picked
+ * up: the message is on screen exactly once in each.
  */
 
 import { useCallback, useEffect, useMemo, useRef } from "react";

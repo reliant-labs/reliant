@@ -29,6 +29,8 @@ import { BranchToWorktreeModal } from "./BranchToWorktreeModal";
 import { BranchToExistingWorktreeModal } from "./BranchToExistingWorktreeModal";
 import { MessageActionsSheet, type MessageActionsSheetAction } from "./MessageActionsSheet";
 import { CodeContextPill } from "./CodeContextPill";
+import { FailedSendStatus } from "./FailedSendStatus";
+import { clientIdOfFailedSend } from "../../lib/pendingSends";
 import type { Message, ToolApprovalRequest } from "../../api/client";
 import { useChatStore } from "../../store/chatStore"; // For getState() only
 import {
@@ -670,6 +672,9 @@ function ChatMessageComponent({
   };
 
   const isOptimistic = message.id.startsWith("optimistic-");
+  // A send that failed for good: still local-only (no branching from it), but
+  // shown at full strength with a "Not sent" line rather than as pending.
+  const failedClientMessageId = clientIdOfFailedSend(message.id);
   const timestampText = message.createdAt ? formatTimestamp(message.createdAt) : "";
   const fullTimestampText = message.createdAt
     ? new Date(message.createdAt).toLocaleString()
@@ -744,7 +749,18 @@ function ChatMessageComponent({
         {copied ? <Check className="h-3.5 w-3.5" /> : <Copy className="h-3.5 w-3.5" />}
       </button>
       </Tooltip>
-      <Tooltip content={isOptimistic ? "Waiting for message to save" : "Branch from this message"} placement="top" delay={300} wrapperClassName="inline-flex">
+      <Tooltip
+        content={
+          failedClientMessageId
+            ? "This message wasn't sent"
+            : isOptimistic
+              ? "Waiting for message to save"
+              : "Branch from this message"
+        }
+        placement="top"
+        delay={300}
+        wrapperClassName="inline-flex"
+      >
       <button
         onClick={(e) => {
           e.stopPropagation();
@@ -891,7 +907,7 @@ function ChatMessageComponent({
         compactToolSpacing ? "mb-0" : "mb-1",
         variantClass,
         copied && "copied",
-        isOptimistic && "opacity-60",
+        isOptimistic && !failedClientMessageId && "opacity-60",
       )}
       data-testid={`message-${message.id}`}
       data-chat-timeline-variant={timelineVariant}
@@ -1021,6 +1037,9 @@ function ChatMessageComponent({
                   )}
                 </div>
               </div>
+              {failedClientMessageId && chatId && !pinned && (
+                <FailedSendStatus chatId={chatId} clientMessageId={failedClientMessageId} />
+              )}
               {showInlineActions && inlineMessageActions}
             </div>
           ) : (
