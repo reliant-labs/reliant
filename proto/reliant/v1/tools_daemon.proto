@@ -272,6 +272,13 @@ message DiskReport {
   // gateway stamps its own clock so readers never compare against a skewed
   // one.
   int64 reported_at_ms = 2;
+  // When the machine's current disk-pressure episode began (unix ms): the
+  // first stored report of the unbroken run in which some volume has been
+  // under pressure. Daemons leave it 0; the gateway stamps it and carries it
+  // forward across heartbeats, reconnects and daemon restarts, so one long
+  // spell of low disk is one episode (and one storage inbox item). 0 while no
+  // volume is under pressure.
+  int64 pressure_since_ms = 3;
 }
 
 // DiskVolume is one filesystem and what is using it.

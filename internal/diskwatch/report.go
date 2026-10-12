@@ -16,17 +16,89 @@ import (
 // The server half: the gateway stores a heartbeat's report in
 // daemons.storage_state, and the registry and the storage inbox item read it
 // back. It is stored on the daemon row, not on the attachment row with the
-// memory telemetry, because a full disk is still full after a disconnect.
+// memory telemetry, because a full disk is still full after a disconnect —
+// and so that the pressure episode (Stamp) survives one.
 
-// Encode stamps the server's clock on a report and serializes it for storage.
-func Encode(rep *reliantv1.DiskReport, now time.Time) (string, error) {
+// Stamp returns a copy of a heartbeat's report ready to store: the server's
+// clock as its reported-at, and its pressure episode. prev is the report
+// stored before it (nil when none). An episode that was already running
+// carries its start forward, so a reconnect, a daemon restart or a suspend
+// and resume in the middle of one long spell of low disk does not begin a new
+// one; a report with no volume under pressure ends it.
+func Stamp(rep, prev *reliantv1.DiskReport, now time.Time) *reliantv1.DiskReport {
 	cp := proto.Clone(rep).(*reliantv1.DiskReport)
 	cp.ReportedAtMs = now.UnixMilli()
-	b, err := protojson.Marshal(cp)
+	switch {
+	case len(UnderPressure(cp)) == 0:
+		cp.PressureSinceMs = 0
+	case prev.GetPressureSinceMs() > 0:
+		cp.PressureSinceMs = prev.GetPressureSinceMs()
+	default:
+		cp.PressureSinceMs = cp.ReportedAtMs
+	}
+	return cp
+}
+
+// Encode serializes a Stamped report for storage.
+func Encode(rep *reliantv1.DiskReport) (string, error) {
+	b, err := protojson.Marshal(rep)
 	if err != nil {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// Severity grades a machine's disk picture for the storage inbox item. Within
+// one pressure episode the item is raised again only when the severity climbs,
+// so every step up means the machine is materially closer to failing builds.
+type Severity int
+
+const (
+	// SeverityNone: no volume is under pressure.
+	SeverityNone Severity = iota
+	// SeverityLow: a volume is under pressure (the daemon's hysteresis bit).
+	SeverityLow
+	// SeverityCritical: a volume under pressure has less than its free floor
+	// left, so the next build burst may not fit, or almost no inodes.
+	SeverityCritical
+	// SeverityFailing: a command on the machine failed with "no space left on
+	// device" on a volume under pressure.
+	SeverityFailing
+)
+
+// CriticalInodeFraction is the inode use at which a volume under pressure is
+// critical: ENOSPC is also what a full inode table returns.
+const CriticalInodeFraction = 0.98
+
+// String is the severity's stable name; storage inbox item ids embed it.
+func (s Severity) String() string {
+	switch s {
+	case SeverityLow:
+		return "low"
+	case SeverityCritical:
+		return "critical"
+	case SeverityFailing:
+		return "failing"
+	default:
+		return "none"
+	}
+}
+
+// SeverityOf grades a report by its worst volume under pressure.
+func SeverityOf(rep *reliantv1.DiskReport) Severity {
+	worst := SeverityNone
+	for _, v := range UnderPressure(rep) {
+		s := SeverityLow
+		switch {
+		case v.LastNoSpaceAtMs > 0:
+			s = SeverityFailing
+		case v.FreeBytes < freeFloor(v.TotalBytes),
+			Usage{FilesTotal: v.FilesTotal, FilesFree: v.FilesFree}.InodeFraction() >= CriticalInodeFraction:
+			s = SeverityCritical
+		}
+		worst = max(worst, s)
+	}
+	return worst
 }
 
 // Decode reads a stored report. Nil when there is none, it is undecodable, or

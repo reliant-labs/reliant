@@ -29,6 +29,15 @@ func (r *diskStateRepo) SetDaemonStorageState(_ context.Context, _ string, state
 	return nil
 }
 
+func (r *diskStateRepo) GetDaemonStorageState(context.Context, string) (string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(r.stored) == 0 {
+		return "", nil
+	}
+	return r.stored[len(r.stored)-1], nil
+}
+
 func (r *diskStateRepo) writes() []string {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -78,4 +87,41 @@ func TestRecordDiskReport_StoresMaterialChangesAndAnnouncesUrgentOnes(t *testing
 	conn.lastDiskWrite = time.Now().Add(-diskReportRefresh - time.Second)
 	svc.recordDiskReport(context.Background(), conn, rep)
 	assert.Len(t, repo.writes(), 4)
+}
+
+// The pressure episode — what the storage inbox item is keyed by — is carried
+// from the stored row, not the connection: a machine that reconnects (a cloud
+// machine resuming from suspend) with the same full disk is still in the same
+// episode, so a dismissed storage item stays dismissed.
+func TestRecordDiskReport_PressureEpisodeOutlivesTheConnection(t *testing.T) {
+	repo := &diskStateRepo{}
+	svc := NewToolsDaemonService(repo)
+	t.Cleanup(svc.Close)
+	ctx := context.Background()
+	vol := &reliantv1.DiskVolume{Label: "build caches & docker", TotalBytes: 40 << 30, FreeBytes: 1 << 30, Pressure: true}
+	rep := &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{vol}}
+	last := func() *reliantv1.DiskReport {
+		w := repo.writes()
+		require.NotEmpty(t, w)
+		return diskwatch.Decode(w[len(w)-1])
+	}
+
+	svc.recordDiskReport(ctx, newTestConn("user-1", "daemon-1", newParkedStream()), rep)
+	since := last().PressureSinceMs
+	require.NotZero(t, since, "pressure starts an episode")
+
+	time.Sleep(2 * time.Millisecond)
+	conn := newTestConn("user-1", "daemon-1", newParkedStream())
+	svc.recordDiskReport(ctx, conn, rep)
+	require.Len(t, repo.writes(), 2, "a new connection's first report is stored")
+	assert.Equal(t, since, last().PressureSinceMs, "a reconnect does not start a new episode")
+
+	vol.FreeBytes, vol.Pressure = 12<<30, false
+	svc.recordDiskReport(ctx, conn, rep)
+	assert.Zero(t, last().PressureSinceMs, "the pressure clearing ends the episode")
+
+	time.Sleep(2 * time.Millisecond)
+	vol.FreeBytes, vol.Pressure = 1<<30, true
+	svc.recordDiskReport(ctx, conn, rep)
+	assert.Greater(t, last().PressureSinceMs, since, "pressure after a clear is a new episode")
 }

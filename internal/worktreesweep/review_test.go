@@ -185,13 +185,16 @@ func TestSweep_MissingRootDoesNotMarkRowsDeleted(t *testing.T) {
 func TestStorageView_DiskAlertIsTheVolumeUnderPressure(t *testing.T) {
 	e := newEnv(t)
 	const gib = 1 << 30
-	put := func(cacheFree uint64, pressure bool) {
-		raw, err := diskwatch.Encode(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
-			{Label: "home", Paths: []string{"/home/workspace"}, TotalBytes: 157 * gib, FreeBytes: 124 * gib},
-			{Label: "build caches & docker", Paths: []string{"/var/cache/workspace/go-build", "/var/lib/docker"}, TotalBytes: 40 * gib, FreeBytes: cacheFree, Pressure: pressure},
-		}}, time.Now())
+	store := func(rep *reliantv1.DiskReport) {
+		raw, err := diskwatch.Encode(diskwatch.Stamp(rep, nil, time.Now()))
 		require.NoError(t, err)
 		require.NoError(t, e.repo.SetDaemonStorageState(e.ctx, e.daemon, raw))
+	}
+	put := func(cacheFree uint64, pressure bool) {
+		store(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
+			{Label: "home", Paths: []string{"/home/workspace"}, TotalBytes: 157 * gib, FreeBytes: 124 * gib},
+			{Label: "build caches & docker", Paths: []string{"/var/cache/workspace/go-build", "/var/lib/docker"}, TotalBytes: 40 * gib, FreeBytes: cacheFree, Pressure: pressure},
+		}})
 	}
 
 	put(12*gib, false)
@@ -203,21 +206,20 @@ func TestStorageView_DiskAlertIsTheVolumeUnderPressure(t *testing.T) {
 	view, err = StorageView(e.ctx, e.repo, e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1, "a full cache volume raises the item even with nothing held")
-	assert.True(t, view[0].DiskLow)
+	assert.True(t, view[0].DiskLow())
+	assert.Equal(t, diskwatch.SeverityCritical, view[0].Severity, "no room left for a build burst")
 	require.NotNil(t, view[0].Disk)
 	assert.Equal(t, "build caches & docker", view[0].Disk.Volumes[0].Label, "fullest volume first")
-	low := view[0].ItemSuffix
+	assert.Equal(t, view[0].Disk.PressureSinceMs, view[0].Since.UnixMilli(), "the item dates from when the pressure began")
 
-	// Commands starting to fail on it is a new state, not the dismissed one.
-	raw, err := diskwatch.Encode(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
+	// Commands starting to fail on it is a worse state, not the dismissed one.
+	store(&reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{
 		{Label: "build caches & docker", TotalBytes: 40 * gib, FreeBytes: 0, Pressure: true, LastNoSpaceAtMs: time.Now().UnixMilli()},
-	}}, time.Now())
-	require.NoError(t, err)
-	require.NoError(t, e.repo.SetDaemonStorageState(e.ctx, e.daemon, raw))
+	}})
 	view, err = StorageView(e.ctx, e.repo, e.userID)
 	require.NoError(t, err)
 	require.Len(t, view, 1)
-	assert.NotEqual(t, low, view[0].ItemSuffix)
+	assert.Equal(t, diskwatch.SeverityFailing, view[0].Severity)
 
 	// The pre-report shape measured the worktree root; it is not a report.
 	require.NoError(t, e.repo.SetDaemonStorageState(e.ctx, e.daemon,

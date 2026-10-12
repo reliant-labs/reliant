@@ -204,11 +204,15 @@ type daemonConnection struct {
 
 	// Disk report bookkeeping (see recordDiskReport). lastDiskSig is the
 	// material signature last stored, lastDiskWrite when, and lastDiskUrgent
-	// the part of it the UI must hear about at once. Only the inbound state
-	// worker touches them.
+	// the part of it the UI must hear about at once. lastDiskStored is the
+	// report last stored, read from the daemon row on this connection's first
+	// write (lastDiskLoaded) so a pressure episode outlives the connection.
+	// Only the inbound state worker touches them.
 	lastDiskSig    string
 	lastDiskUrgent string
 	lastDiskWrite  time.Time
+	lastDiskStored *reliantv1.DiskReport
+	lastDiskLoaded bool
 
 	// Local-model relay (see localmodel_gateway.go). Guarded by localModelMu.
 	localModelMu sync.Mutex
@@ -628,13 +632,28 @@ const diskReportRefresh = 5 * time.Minute
 // refetch the daemon list when the part they must see at once changed — a
 // volume coming under pressure, a breakdown measured, a command failing with
 // ENOSPC, a cache clean-up starting or ending.
+//
+// Each write carries the pressure episode forward from the report stored
+// before it (diskwatch.Stamp). That episode is what the storage inbox item is
+// keyed by, so it must come from the row, not this connection: a cloud
+// machine that suspends and resumes with the same full disk is one episode.
 func (s *ToolsDaemonService) recordDiskReport(ctx context.Context, conn *daemonConnection, rep *reliantv1.DiskReport) {
 	now := time.Now().UTC()
 	sig := diskwatch.Signature(rep)
 	if sig == conn.lastDiskSig && now.Sub(conn.lastDiskWrite) < diskReportRefresh {
 		return
 	}
-	stored, err := diskwatch.Encode(rep, now)
+	if !conn.lastDiskLoaded {
+		raw, err := s.database.GetDaemonStorageState(ctx, conn.daemonID)
+		if err != nil {
+			// Not fatal: the worst case is a running episode restarting,
+			// which re-raises the storage item once.
+			logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to read stored disk report", "error", err, "daemonID", conn.daemonID)
+		}
+		conn.lastDiskStored, conn.lastDiskLoaded = diskwatch.Decode(raw), true
+	}
+	stamped := diskwatch.Stamp(rep, conn.lastDiskStored, now)
+	stored, err := diskwatch.Encode(stamped)
 	if err != nil {
 		logging.Warn(LOG_PREFIX_TOOLS_DAEMON+" Failed to encode disk report", "error", err, "daemonID", conn.daemonID)
 		return
@@ -645,7 +664,7 @@ func (s *ToolsDaemonService) recordDiskReport(ctx context.Context, conn *daemonC
 	}
 	urgent := diskwatch.UrgentSignature(rep)
 	urgentChanged := urgent != conn.lastDiskUrgent
-	conn.lastDiskSig, conn.lastDiskUrgent, conn.lastDiskWrite = sig, urgent, now
+	conn.lastDiskSig, conn.lastDiskUrgent, conn.lastDiskWrite, conn.lastDiskStored = sig, urgent, now, stamped
 	if urgentChanged {
 		s.publishDaemonListChanged(conn.userID, conn.daemonID)
 	}

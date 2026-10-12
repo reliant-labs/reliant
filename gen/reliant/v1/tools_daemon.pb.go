@@ -1371,9 +1371,16 @@ type DiskReport struct {
 	// When the server stored this report (unix ms). Daemons leave it 0; the
 	// gateway stamps its own clock so readers never compare against a skewed
 	// one.
-	ReportedAtMs  int64 `protobuf:"varint,2,opt,name=reported_at_ms,json=reportedAtMs,proto3" json:"reported_at_ms,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	ReportedAtMs int64 `protobuf:"varint,2,opt,name=reported_at_ms,json=reportedAtMs,proto3" json:"reported_at_ms,omitempty"`
+	// When the machine's current disk-pressure episode began (unix ms): the
+	// first stored report of the unbroken run in which some volume has been
+	// under pressure. Daemons leave it 0; the gateway stamps it and carries it
+	// forward across heartbeats, reconnects and daemon restarts, so one long
+	// spell of low disk is one episode (and one storage inbox item). 0 while no
+	// volume is under pressure.
+	PressureSinceMs int64 `protobuf:"varint,3,opt,name=pressure_since_ms,json=pressureSinceMs,proto3" json:"pressure_since_ms,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *DiskReport) Reset() {
@@ -1416,6 +1423,13 @@ func (x *DiskReport) GetVolumes() []*DiskVolume {
 func (x *DiskReport) GetReportedAtMs() int64 {
 	if x != nil {
 		return x.ReportedAtMs
+	}
+	return 0
+}
+
+func (x *DiskReport) GetPressureSinceMs() int64 {
+	if x != nil {
+		return x.PressureSinceMs
 	}
 	return 0
 }
@@ -4676,11 +4690,12 @@ const file_reliant_v1_tools_daemon_proto_rawDesc = "" +
 	"\x12memory_limit_bytes\x18\x03 \x01(\x04R\x10memoryLimitBytes\x12'\n" +
 	"\x0fmemory_pressure\x18\x04 \x01(\bR\x0ememoryPressure\x12%\n" +
 	"\x0edetected_ports\x18\x05 \x03(\rR\rdetectedPorts\x12*\n" +
-	"\x04disk\x18\x06 \x01(\v2\x16.reliant.v1.DiskReportR\x04disk\"d\n" +
+	"\x04disk\x18\x06 \x01(\v2\x16.reliant.v1.DiskReportR\x04disk\"\x90\x01\n" +
 	"\n" +
 	"DiskReport\x120\n" +
 	"\avolumes\x18\x01 \x03(\v2\x16.reliant.v1.DiskVolumeR\avolumes\x12$\n" +
-	"\x0ereported_at_ms\x18\x02 \x01(\x03R\freportedAtMs\"\xf3\x02\n" +
+	"\x0ereported_at_ms\x18\x02 \x01(\x03R\freportedAtMs\x12*\n" +
+	"\x11pressure_since_ms\x18\x03 \x01(\x03R\x0fpressureSinceMs\"\xf3\x02\n" +
 	"\n" +
 	"DiskVolume\x12\x14\n" +
 	"\x05label\x18\x01 \x01(\tR\x05label\x12\x14\n" +

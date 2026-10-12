@@ -204,16 +204,16 @@ func TestStorageView_ShowsHeldAndLowDiskPerMachine(t *testing.T) {
 	require.Len(t, view[0].Held, 1)
 	assert.Equal(t, "dirty", view[0].Held[0].Reason)
 	assert.True(t, view[0].Online)
-	first := view[0].ItemSuffix
+	assert.False(t, view[0].DiskLow(), "kept workspaces alone are not low disk")
 
-	// A second held worktree is a different state, so a dismissal of the first
-	// does not hide it.
+	// A second held worktree joins the same machine's entry.
 	_, path2 := e.worktree(t, "held2", true)
 	require.NoError(t, os.WriteFile(filepath.Join(path2, "wip.txt"), []byte("x"), 0o644))
 	require.NoError(t, e.sweeper.Sweep(e.ctx))
 	view, err = StorageView(e.ctx, e.repo, e.userID)
 	require.NoError(t, err)
-	assert.NotEqual(t, first, view[0].ItemSuffix)
+	require.Len(t, view, 1, "still one entry per machine")
+	assert.Len(t, view[0].Held, 2)
 }
 
 func TestStorageView_HealthyDiskWithNothingHeldHasNoItem(t *testing.T) {

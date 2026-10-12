@@ -1760,6 +1760,23 @@ func (r *Repo) SetDaemonStorageState(ctx context.Context, daemonID string, state
 	return nil
 }
 
+// GetDaemonStorageState returns the daemon's stored disk state; "" when it has
+// none or there is no such daemon.
+func (r *Repo) GetDaemonStorageState(ctx context.Context, daemonID string) (string, error) {
+	if daemonID == "" {
+		return "", fmt.Errorf("daemon ID cannot be empty")
+	}
+	var state string
+	err := r.DB.QueryRowContext(ctx, r.bindQuery(`SELECT storage_state FROM daemons WHERE id = ?`), daemonID).Scan(&state)
+	if errors.Is(err, sql.ErrNoRows) {
+		return "", nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("reading daemon storage state: %w", err)
+	}
+	return state, nil
+}
+
 // ListDaemonStorageState returns the stored disk state of every daemon the user
 // owns that has reported one, keyed by daemon ID.
 func (r *Repo) ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error) {

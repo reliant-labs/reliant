@@ -164,7 +164,7 @@ export function storageItem(
 ): InboxItem {
   return create(InboxItemSchema, {
     kind: InboxItemKind.STORAGE,
-    itemId: "storage:d-1:ab12cd34",
+    itemId: "storage:d-1:disk:1760000000000:critical",
     waitingSince: new Date(Date.now() - 3 * 3_600_000).toISOString(),
     payload: {
       case: "storage",

@@ -3,10 +3,7 @@ package worktreesweep
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
-	"fmt"
 	"slices"
 	"sort"
 	"strings"
@@ -60,15 +57,19 @@ type MachineStorage struct {
 	// Disk is the machine's last heartbeat disk report (diskwatch), every
 	// volume fullest first; nil when it has not reported one.
 	Disk *reliantv1.DiskReport
-	// DiskLow: at least one volume is under pressure — the daemon's own
-	// hysteresis bit, for whichever volume it is. On a cloud machine that is
-	// the build-cache/docker volume, which the worktree-root reading this
-	// replaced never saw.
-	DiskLow    bool
-	Online     bool
-	ItemSuffix string // changes when the picture changes, so a dismissal does not hide a new problem
-	Since      time.Time
+	// Severity grades the disk (diskwatch.SeverityOf): None unless a volume
+	// is under pressure — the daemon's own hysteresis bit, for whichever
+	// volume it is. On a cloud machine that is the build-cache/docker volume,
+	// which the worktree-root reading this replaced never saw.
+	Severity diskwatch.Severity
+	Online   bool
+	// Since is when the problem began: the pressure episode's start when the
+	// disk is low, otherwise when the oldest held worktree was archived.
+	Since time.Time
 }
+
+// DiskLow reports whether at least one volume is under pressure.
+func (m *MachineStorage) DiskLow() bool { return m.Severity > diskwatch.SeverityNone }
 
 // StorageView builds the per-machine storage picture for a user.
 func StorageView(ctx context.Context, store StorageStore, userID string) ([]*MachineStorage, error) {
@@ -122,12 +123,14 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 			continue
 		}
 		diskwatch.SortFullestFirst(rep.Volumes)
-		if len(diskwatch.UnderPressure(rep)) > 0 {
+		if sev := diskwatch.SeverityOf(rep); sev > diskwatch.SeverityNone {
 			m := get(id)
-			m.Disk, m.DiskLow = rep, true
-			if at := time.UnixMilli(rep.ReportedAtMs); m.Since.IsZero() || at.Before(m.Since) {
-				m.Since = at
+			m.Disk, m.Severity = rep, sev
+			since := rep.PressureSinceMs
+			if since == 0 {
+				since = rep.ReportedAtMs
 			}
+			m.Since = time.UnixMilli(since)
 		} else if m := machines[id]; m != nil {
 			m.Disk = rep
 		}
@@ -136,33 +139,10 @@ func StorageView(ctx context.Context, store StorageStore, userID string) ([]*Mac
 	out := make([]*MachineStorage, 0, len(machines))
 	for _, m := range machines {
 		sort.Slice(m.Held, func(i, j int) bool { return m.Held[i].WorktreeID < m.Held[j].WorktreeID })
-		m.ItemSuffix = storageSignature(m)
 		out = append(out, m)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].DaemonID < out[j].DaemonID })
 	return out, nil
-}
-
-// storageSignature changes when the picture does: a volume coming under
-// pressure, a worktree newly held, a volume getting much worse (each halving
-// of free space), or commands starting to fail on it.
-func storageSignature(m *MachineStorage) string {
-	h := sha256.New()
-	fmt.Fprintf(h, "low=%t", m.DiskLow)
-	for _, v := range diskwatch.UnderPressure(m.Disk) {
-		band := 0
-		if v.TotalBytes > 0 {
-			pct := 100 * float64(v.FreeBytes) / float64(v.TotalBytes)
-			for p := 10.0; pct < p && band < 6; p /= 2 {
-				band++
-			}
-		}
-		fmt.Fprintf(h, "|%s:band=%d:failing=%t", v.Label, band, v.LastNoSpaceAtMs > 0)
-	}
-	for _, w := range m.Held {
-		fmt.Fprintf(h, "|%s:%s", w.WorktreeID, w.Reason)
-	}
-	return hex.EncodeToString(h.Sum(nil))[:8]
 }
 
 // CleanupOutcome is the per-worktree result of a confirmed cleanup.

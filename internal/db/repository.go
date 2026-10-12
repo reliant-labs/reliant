@@ -461,10 +461,11 @@ type Repository interface {
 	// GetSettingValue returns a user-level setting and whether it is set.
 	GetSettingValue(ctx context.Context, userID, key string) (string, bool)
 	TryAdvisoryLock(ctx context.Context, key int64) (release func(), ok bool, err error)
-	// SetDaemonStorageState / ListDaemonStorageState store and read what each
-	// daemon last reported about the disk holding its worktrees (JSON). Like
-	// local models it outlives a disconnect; liveness is separate.
+	// SetDaemonStorageState / GetDaemonStorageState / ListDaemonStorageState
+	// store and read what each daemon last reported about its disks (JSON).
+	// Like local models it outlives a disconnect; liveness is separate.
 	SetDaemonStorageState(ctx context.Context, daemonID string, stateJSON string) error
+	GetDaemonStorageState(ctx context.Context, daemonID string) (string, error)
 	ListDaemonStorageState(ctx context.Context, userID string) (map[string]string, error)
 	// Custom model endpoints (model_endpoints). Every method is scoped to
 	// userID; another user's id behaves exactly like a missing one.

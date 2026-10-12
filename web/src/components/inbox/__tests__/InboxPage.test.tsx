@@ -368,7 +368,7 @@ describe("InboxPage storage item", () => {
   it("names the volume that is full and what fills it, and what it kept, under its own heading", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(screen.getByTestId(`inbox-section-${InboxItemKind.STORAGE}`)).toHaveTextContent(/^Storage1/);
     expect(within(row).getByText("MacBook storage")).toBeInTheDocument();
     // The full volume, not the home volume (124 GB free) the old item measured.
@@ -380,7 +380,7 @@ describe("InboxPage storage item", () => {
   it("Free up space offers only the safe caches, explains what it leaves alone, and calls nothing until confirmed", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     await userEvent.click(within(row).getByRole("button", { name: "Free up space" }));
 
     const dialog = await screen.findByRole("dialog");
@@ -406,7 +406,7 @@ describe("InboxPage storage item", () => {
   it("sorts after the blocking kinds and does not count as blocking", async () => {
     respond([storageItem(), approvalItem()]);
     renderInboxAt(<InboxPage />);
-    await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     const headings = screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent ?? "");
     expect(headings.findIndex((t) => t.startsWith("Approvals"))).toBeGreaterThanOrEqual(0);
     expect(headings.findIndex((t) => t.startsWith("Approvals"))).toBeLessThan(
@@ -417,7 +417,7 @@ describe("InboxPage storage item", () => {
   it("Clean up lists exactly what will be removed and calls nothing until confirmed", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     await userEvent.click(within(row).getByRole("button", { name: "Clean up" }));
 
     const dialog = await screen.findByRole("dialog");
@@ -441,7 +441,7 @@ describe("InboxPage storage item", () => {
   it("Cancel makes no call", async () => {
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     await userEvent.click(within(row).getByRole("button", { name: "Clean up" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Cancel" }));
     expect(mocks.cleanupStorage).not.toHaveBeenCalled();
@@ -459,7 +459,7 @@ describe("InboxPage storage item", () => {
     );
     respond([storageItem()]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     await userEvent.click(within(row).getByRole("button", { name: "Clean up" }));
     await userEvent.click(within(await screen.findByRole("dialog")).getByRole("button", { name: "Remove 2 workspaces" }));
 
@@ -474,14 +474,14 @@ describe("InboxPage storage item", () => {
   it("while a clean-up runs, Clean up is disabled and says so", async () => {
     respond([storageItem({}, { held: [{ worktreeId: "wt-1", name: "fix", removable: true, cleaning: true, reason: "dirty", sizeBytes: 1n } as never] })]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).getByRole("button", { name: "Cleaning up…" })).toBeDisabled();
   });
 
   it("when nothing is removable, Clean up is disabled and explains why", async () => {
     respond([storageItem({}, { held: [{ worktreeId: "wt-3", name: "taxes", removable: false, reason: "data", sizeBytes: 1n } as never] })]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     const button = within(row).getByRole("button", { name: "Clean up" });
     expect(button).toBeDisabled();
     expect(button).toHaveAttribute("title", expect.stringMatching(/remove it manually/i));
@@ -490,7 +490,7 @@ describe("InboxPage storage item", () => {
   it("an offline machine's Clean up is disabled", async () => {
     respond([storageItem({}, { online: false })]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).getByRole("button", { name: "Clean up" })).toBeDisabled();
     expect(within(row).getByText(/offline/)).toBeInTheDocument();
   });
@@ -498,7 +498,7 @@ describe("InboxPage storage item", () => {
   it("a disk-low item with nothing held has no Clean up action", async () => {
     respond([storageItem({}, { held: [] })]);
     renderInboxAt(<InboxPage />);
-    const row = await screen.findByTestId("inbox-item-storage:d-1:ab12cd34");
+    const row = await screen.findByTestId("inbox-item-storage:d-1:disk:1760000000000:critical");
     expect(within(row).queryByRole("button", { name: "Clean up" })).not.toBeInTheDocument();
   });
 });

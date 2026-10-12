@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -21,6 +22,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
+	"github.com/reliant-labs/reliant/internal/diskwatch"
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/worktreesweep"
@@ -33,7 +35,7 @@ const defaultInboxLimit = 100
 // stay one item (and one dismissal), while a new episode after a success is a
 // new item. A waiting-for-machine id embeds the chat and when the block began,
 // so a later block is a new item. Approval, question and run-finished ids
-// embed their row or chat.
+// embed their row or chat. Storage ids are described at storageItemID.
 const (
 	inboxApprovalPrefix          = "approval:"
 	inboxQuestionPrefix          = "question:"
@@ -184,7 +186,7 @@ func (s *InboxService) DismissInboxItem(
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
-	if err := s.database.DismissInboxItems(ctx, userID, req.Msg.ItemIds, time.Now().UTC()); err != nil {
+	if err := s.database.DismissInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds), time.Now().UTC()); err != nil {
 		logging.Error("Failed to dismiss inbox items", "error", err, "count", len(req.Msg.ItemIds))
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to dismiss inbox item"))
 	}
@@ -203,7 +205,7 @@ func (s *InboxService) RestoreInboxItem(
 	if err := validateInboxItemIDs(req.Msg.ItemIds); err != nil {
 		return nil, err
 	}
-	if err := s.database.RestoreInboxItems(ctx, userID, req.Msg.ItemIds); err != nil {
+	if err := s.database.RestoreInboxItems(ctx, userID, impliedDismissals(req.Msg.ItemIds)); err != nil {
 		logging.Error("Failed to restore inbox items", "error", err, "count", len(req.Msg.ItemIds))
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("failed to restore inbox item"))
 	}
@@ -323,9 +325,11 @@ func (s *InboxService) failingAutomations(ctx context.Context, userID string) ([
 }
 
 func (s *InboxService) dropDismissed(ctx context.Context, userID string, items []*reliantv1.InboxItem) ([]*reliantv1.InboxItem, error) {
+	keys := make([][]string, len(items))
 	candidates := make([]string, 0, len(items))
-	for _, it := range items {
-		candidates = append(candidates, it.ItemId)
+	for i, it := range items {
+		keys[i] = dismissalKeys(it.ItemId)
+		candidates = append(candidates, keys[i]...)
 	}
 	dismissed, err := s.database.ListDismissedInboxItemIDs(ctx, userID, candidates)
 	if err != nil {
@@ -335,8 +339,8 @@ func (s *InboxService) dropDismissed(ctx context.Context, userID string, items [
 		return items, nil
 	}
 	kept := items[:0]
-	for _, it := range items {
-		if !dismissed[it.ItemId] {
+	for i, it := range items {
+		if !slices.ContainsFunc(keys[i], func(id string) bool { return dismissed[id] }) {
 			kept = append(kept, it)
 		}
 	}
@@ -412,7 +416,7 @@ func firstQuestionPrompt(metadata string) string {
 
 // storageItems returns one item per machine with a volume under disk pressure
 // or archived worktrees it declined to remove. Storage items are not tied to a
-// project, so they appear in the unscoped inbox only.
+// project, so they appear in every project scope.
 func (s *InboxService) storageItems(ctx context.Context, userID string) ([]*reliantv1.InboxItem, error) {
 	machines, err := s.storageView(ctx, userID)
 	if err != nil || len(machines) == 0 {
@@ -433,7 +437,7 @@ func (s *InboxService) storageItems(ctx context.Context, userID string) ([]*reli
 		payload := &reliantv1.InboxStorage{
 			DaemonId:   m.DaemonID,
 			DaemonName: names[m.DaemonID],
-			DiskLow:    m.DiskLow,
+			DiskLow:    m.DiskLow(),
 			Online:     m.Online,
 		}
 		if m.Disk != nil {
@@ -450,16 +454,97 @@ func (s *InboxService) storageItems(ctx context.Context, userID string) ([]*reli
 			})
 		}
 		out = append(out, &reliantv1.InboxItem{
-			Kind: reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE,
-			// The suffix changes when the picture changes (low disk starts, a
-			// new worktree is held), so a dismissal hides this state and not
-			// the next problem on the same machine.
-			ItemId:       inboxStoragePrefix + m.DaemonID + ":" + m.ItemSuffix,
+			Kind:         reliantv1.InboxItemKind_INBOX_ITEM_KIND_STORAGE,
+			ItemId:       storageItemID(m.DaemonID, m.Severity, m.Disk.GetPressureSinceMs()),
 			WaitingSince: m.Since.UTC().Format(time.RFC3339Nano),
 			Payload:      &reliantv1.InboxItem_Storage{Storage: payload},
 		})
 	}
 	return out, nil
+}
+
+const (
+	storageKeptSuffix = ":kept"
+	storageDiskInfix  = ":disk:"
+)
+
+// storageItemID names a machine's storage item by what the user is told, so a
+// dismissal holds for exactly that and no longer:
+//
+//	storage:<daemon>:kept                           kept workspaces; the disk is fine
+//	storage:<daemon>:disk:<episode ms>:<severity>   one severity of one pressure episode
+//
+// Nothing else goes in the id. Another workspace kept or cleaned up, free
+// space drifting, the machine going offline: none of it is a new problem, and
+// an id that moved with the picture re-raised a dismissed item on every
+// change, better or worse. Within an episode a dismissal covers its severity
+// and every lower one (dismissalKeys), so only a climb toward failing builds
+// raises the item again; the disk recovering and filling up again later is a
+// new episode (diskwatch.Stamp), and a new item.
+func storageItemID(daemonID string, sev diskwatch.Severity, episodeMs int64) string {
+	if sev == diskwatch.SeverityNone {
+		return inboxStoragePrefix + daemonID + storageKeptSuffix
+	}
+	return inboxStoragePrefix + daemonID + storageDiskInfix + strconv.FormatInt(episodeMs, 10) + ":" + sev.String()
+}
+
+// parseStorageDiskID is storageItemID's inverse for a disk item; ok is false
+// for every other id, the kept item's included.
+func parseStorageDiskID(id string) (daemonID string, episodeMs int64, sev diskwatch.Severity, ok bool) {
+	rest, found := strings.CutPrefix(id, inboxStoragePrefix)
+	if !found {
+		return "", 0, 0, false
+	}
+	i := strings.LastIndex(rest, storageDiskInfix)
+	if i <= 0 {
+		return "", 0, 0, false
+	}
+	episode, name, found := strings.Cut(rest[i+len(storageDiskInfix):], ":")
+	if !found {
+		return "", 0, 0, false
+	}
+	episodeMs, err := strconv.ParseInt(episode, 10, 64)
+	if err != nil {
+		return "", 0, 0, false
+	}
+	for s := diskwatch.SeverityLow; s <= diskwatch.SeverityFailing; s++ {
+		if s.String() == name {
+			return rest[:i], episodeMs, s, true
+		}
+	}
+	return "", 0, 0, false
+}
+
+// dismissalKeys returns the ids whose dismissal hides an item: its own, and
+// for a disk storage item every higher severity of the same episode too — the
+// user who dismissed the disk at "critical" must not hear about it again
+// because it eased back to "low".
+func dismissalKeys(itemID string) []string {
+	daemonID, episodeMs, sev, ok := parseStorageDiskID(itemID)
+	if !ok {
+		return []string{itemID}
+	}
+	keys := make([]string, 0, int(diskwatch.SeverityFailing-sev)+1)
+	for s := sev; s <= diskwatch.SeverityFailing; s++ {
+		keys = append(keys, storageItemID(daemonID, s, episodeMs))
+	}
+	return keys
+}
+
+// impliedDismissals is what dismissing (or restoring) itemIDs records: the ids
+// themselves plus, for each disk storage item, its machine's kept item. The
+// disk item listed those workspaces; when the disk recovers they are what is
+// left, and that is not news.
+func impliedDismissals(itemIDs []string) []string {
+	out := slices.Clone(itemIDs)
+	for _, id := range itemIDs {
+		if daemonID, _, _, ok := parseStorageDiskID(id); ok {
+			if kept := storageItemID(daemonID, diskwatch.SeverityNone, 0); !slices.Contains(out, kept) {
+				out = append(out, kept)
+			}
+		}
+	}
+	return out
 }
 
 const storageViewTTL = 60 * time.Second

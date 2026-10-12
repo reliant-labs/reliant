@@ -426,20 +426,74 @@ func TestDockerConsumers_UseTheCLIAccounting(t *testing.T) {
 func TestEncodeDecode(t *testing.T) {
 	rep := &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{{Label: "build caches & docker", TotalBytes: 40 * GiB, FreeBytes: 1, Pressure: true}}}
 	at := time.UnixMilli(1760000000000)
-	s, err := Encode(rep, at)
+	s, err := Encode(Stamp(rep, nil, at))
 	if err != nil {
 		t.Fatal(err)
 	}
 	back := Decode(s)
-	if back == nil || back.ReportedAtMs != at.UnixMilli() || back.Volumes[0].Label != "build caches & docker" || !back.Volumes[0].Pressure {
+	if back == nil || back.ReportedAtMs != at.UnixMilli() || back.PressureSinceMs != at.UnixMilli() || back.Volumes[0].Label != "build caches & docker" || !back.Volumes[0].Pressure {
 		t.Fatalf("round trip lost data: %v", back)
 	}
-	if rep.ReportedAtMs != 0 {
-		t.Fatal("Encode must not mutate its input")
+	if rep.ReportedAtMs != 0 || rep.PressureSinceMs != 0 {
+		t.Fatal("Stamp must not mutate its input")
 	}
 	// The pre-report shape measured the worktree root — the wrong volume.
 	if Decode(`{"path":"/home/workspace/.reliant/worktrees","free_bytes":1,"total_bytes":2,"reported_at":"2026-10-10T00:00:00Z"}`) != nil {
 		t.Fatal("the legacy worktree-root reading must not decode as a report")
+	}
+}
+
+// One unbroken spell of pressure is one episode, however many reports (and
+// reconnects) it spans; a clear ends it, and the next spell is a new one.
+func TestStamp_CarriesThePressureEpisode(t *testing.T) {
+	low := &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{{Label: "build caches & docker", TotalBytes: 40 * GiB, FreeBytes: 3 * GiB, Pressure: true}}}
+	fine := &reliantv1.DiskReport{Volumes: []*reliantv1.DiskVolume{{Label: "build caches & docker", TotalBytes: 40 * GiB, FreeBytes: 12 * GiB}}}
+	t0 := time.UnixMilli(1760000000000)
+
+	first := Stamp(low, nil, t0)
+	if first.PressureSinceMs != t0.UnixMilli() {
+		t.Fatalf("pressure with nothing stored before starts an episode now: %d", first.PressureSinceMs)
+	}
+	later := Stamp(low, first, t0.Add(3*time.Hour))
+	if later.PressureSinceMs != t0.UnixMilli() || later.ReportedAtMs != t0.Add(3*time.Hour).UnixMilli() {
+		t.Fatalf("a running episode keeps its start: %v", later)
+	}
+	cleared := Stamp(fine, later, t0.Add(4*time.Hour))
+	if cleared.PressureSinceMs != 0 {
+		t.Fatalf("a report with no pressure ends the episode: %d", cleared.PressureSinceMs)
+	}
+	again := Stamp(low, cleared, t0.Add(5*time.Hour))
+	if again.PressureSinceMs != t0.Add(5*time.Hour).UnixMilli() {
+		t.Fatalf("pressure after a clear is a new episode: %d", again.PressureSinceMs)
+	}
+	if Stamp(fine, nil, t0).PressureSinceMs != 0 {
+		t.Fatal("no pressure, no episode")
+	}
+}
+
+func TestSeverityOf(t *testing.T) {
+	vol := func(free uint64, pressure bool) *reliantv1.DiskVolume {
+		return &reliantv1.DiskVolume{Label: "build caches & docker", TotalBytes: 40 * GiB, FreeBytes: free, Pressure: pressure}
+	}
+	report := func(vols ...*reliantv1.DiskVolume) *reliantv1.DiskReport { return &reliantv1.DiskReport{Volumes: vols} }
+
+	cases := []struct {
+		name string
+		rep  *reliantv1.DiskReport
+		want Severity
+	}{
+		{"no report", nil, SeverityNone},
+		{"nothing under pressure", report(vol(1*GiB, false)), SeverityNone},
+		{"under pressure with room for a build", report(vol(3*GiB, true)), SeverityLow},
+		{"under pressure below the free floor", report(vol(GiB, true)), SeverityCritical},
+		{"inodes nearly gone", report(&reliantv1.DiskVolume{TotalBytes: 40 * GiB, FreeBytes: 3 * GiB, Pressure: true, FilesTotal: 1000, FilesFree: 10}), SeverityCritical},
+		{"commands failing", report(&reliantv1.DiskVolume{TotalBytes: 40 * GiB, FreeBytes: 3 * GiB, Pressure: true, LastNoSpaceAtMs: 1}), SeverityFailing},
+		{"the worst volume decides", report(vol(3*GiB, true), vol(GiB/2, true)), SeverityCritical},
+	}
+	for _, c := range cases {
+		if got := SeverityOf(c.rep); got != c.want {
+			t.Errorf("%s: got %s, want %s", c.name, got, c.want)
+		}
 	}
 }
 

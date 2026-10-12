@@ -8172,6 +8172,10 @@
           {
             "name": "reported_at_ms",
             "kind": "int64"
+          },
+          {
+            "name": "pressure_since_ms",
+            "kind": "int64"
           }
         ],
         "reliant.v1.DiskVolume": [
@@ -9585,6 +9589,10 @@
           },
           {
             "name": "reported_at_ms",
+            "kind": "int64"
+          },
+          {
+            "name": "pressure_since_ms",
             "kind": "int64"
           }
         ],
@@ -33551,5 +33559,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "387620725ae643796bb79229d4fdc1f61fec4df36dfc6f46884bc043bcd304de"
+  "source_hash": "c3954cfeb84368dc0a89b4f2907505350fd11e2ef53e269499777d0e30761912"
 }
