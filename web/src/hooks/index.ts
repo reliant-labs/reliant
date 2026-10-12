@@ -6,7 +6,7 @@ export {
   type UseTitleBarChromeResult,
 } from './useTitleBarChrome';
 export { useWindowContext } from './useWindowContext';
-export { useKeyboardShortcuts, useAppKeyboardShortcuts } from './useKeyboardShortcuts';
+export { useKeyboardShortcuts } from './useKeyboardShortcuts';
 export { useUnifiedProcessCounts, useCurrentWorkspaceRunningCount } from './useUnifiedProcesses';
 export { useElectronIPC, type UseElectronIPCOptions } from './useElectronIPC';
 export { useSidebarOverlay, type UseSidebarOverlayOptions, type UseSidebarOverlayReturn } from './useSidebarOverlay';

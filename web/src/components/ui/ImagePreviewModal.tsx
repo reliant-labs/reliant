@@ -54,7 +54,7 @@ export function ImagePreviewModal({
     // as a React onKeyDown on the focused container, and NEITHER fired. The
     // global shortcut dispatcher (useAppKeyboardShortcuts -> lib/keyboard) owns
     // Escape from a single capture-phase listener on `document`, registered when
-    // ModernApp mounts — long before any preview opens. Because this overlay
+    // the keyboard host goes live — long before any preview opens. Because this overlay
     // renders `data-modal-open="true"`, detectActiveContexts puts the dispatcher
     // in the `modal` context, where Escape resolves to the non-passthrough
     // `dismissModal` shortcut, so the dispatcher calls stopImmediatePropagation.

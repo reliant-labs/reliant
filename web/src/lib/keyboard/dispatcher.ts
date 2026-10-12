@@ -18,9 +18,14 @@
  * have, and a menu echo of a keystroke already handled here is dropped.
  */
 
-import { eventToChordString } from "./chord";
-import { detectActiveContexts, type ShortcutContext } from "./contexts";
-import type { ShortcutRegistry } from "./registry";
+import { eventToChordString, isSelectionChord } from "./chord";
+import {
+  detectActiveContexts,
+  isEditableTarget,
+  isTextEntryContext,
+  type ShortcutContext,
+} from "./contexts";
+import { isBareKey, type ShortcutRegistry } from "./registry";
 
 /** How long a sequence prefix stays armed before it expires. */
 export const SEQUENCE_TIMEOUT_MS = 1500;
@@ -119,6 +124,18 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     const target = (event.target as Element | null) ?? null;
     const contexts = detectContexts(target);
 
+    // A field no context models — a settings input, a search box, a form on
+    // the Runs page — is still typing, and its own editing keys come first:
+    // the Shift+Arrow selection chords that next/previous chat and the sidebar
+    // tab shortcuts reuse, and bare keys a shortcut has not opted in to. The
+    // modeled editing surfaces (composer, Monaco, terminal) express the same
+    // thing per binding in config/shortcuts.yaml instead.
+    const inUnmodeledField =
+      !pending &&
+      isEditableTarget(target) &&
+      !contexts.some(isTextEntryContext);
+    if (inUnmodeledField && isSelectionChord(chord)) return;
+
     const result = registry.resolve(chord, contexts, pending);
 
     if (result.kind === "sequence-prefix") {
@@ -137,6 +154,7 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     }
 
     const shortcut = result.shortcut!;
+    if (inUnmodeledField && isBareKey(chord) && !shortcut.allowInInput) return;
     clearPending();
 
     const handler = getHandler(shortcut.handler);

@@ -50,9 +50,15 @@ interface ChatSearchProps {
    * the same argument.
    */
   initialMode?: SearchMode;
+  /**
+   * A result was opened. Searching from outside the workspace — the keyboard
+   * host opens this on every route — selecting a chat has to take the user
+   * to it; this is the host's cue.
+   */
+  onChatOpened?: () => void;
 }
 
-export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: externalIsOpen, onClose, initialMode }, ref) => {
+export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: externalIsOpen, onClose, initialMode, onChatOpened }, ref) => {
   const [internalIsOpen, setInternalIsOpen] = useState(false);
   
   // Use external control if provided, otherwise use internal state
@@ -366,15 +372,17 @@ export const ChatSearch = forwardRef<ChatSearchRef, ChatSearchProps>(({ isOpen: 
       if (result.matchedMessageId) {
         requestScrollToMessage(result.matchedMessageId);
       }
+      onChatOpened?.();
     }
     closeAndFocus();
   };
 
-  // Scroll to message in current chat
+  // Scroll to message in current chat. Requested rather than fired once: when
+  // the search was opened from another page, the timeline mounts only after
+  // onChatOpened has taken the user back to it.
   const scrollToMessage = (result: MessageSearchResult) => {
-    window.dispatchEvent(new CustomEvent("scroll-to-message", {
-      detail: { messageId: result.messageId }
-    }));
+    requestScrollToMessage(result.messageId);
+    onChatOpened?.();
     closeAndFocus();
   };
 

@@ -27,8 +27,6 @@ import { ResizableSidebar } from "./components/Layout/ResizableSidebar";
 import { RightSidebar } from "./components/FileBrowser/RightSidebar";
 import { GlobalSearch, FindReplace } from "./components/FileBrowser";
 import { QuickFileOpen } from "./components/Layout/QuickFileOpen";
-import { CommandPalette } from "./components/Layout/CommandPalette";
-import { ChatSearch } from "./components/Layout/ChatSearch";
 import { NewChatView } from "./components/Chat/NewChatView";
 import { useCurrentUser } from "@/hooks/useOnboardingQueries";
 import { approveAllPendingApprovals } from "./hooks/approval-queries";
@@ -43,17 +41,14 @@ import { RescanModal } from "./components/Projects/RescanModal";
 import { TerminalPanel } from "./components/Terminal/TerminalPanel";
 import { LoadingSpinner } from "./components/Layout/LoadingSpinner";
 import { GlobalUpdateHandler } from "./components/Settings/GlobalUpdateHandler";
-import { SequenceHint } from "./components/Layout/SequenceHint";
 import { useChatStore } from "./store/chatStore";
 import { useActivityStore, ChatActivity, isBusyActivity } from "./store/activityStore";
 import { useChatNavigationStore } from "./store/chatNavigationStore";
 import { useWindowContext } from "./hooks/useWindowContext";
 import { useOpenProjectListener } from "./hooks/useOpenProjectListener";
 import { useNavigateToProjectPicker } from "./hooks/useNavigateToProjectPicker";
-import {
-  useKeyboardShortcuts,
-  useAppKeyboardShortcuts,
-} from "./hooks/useKeyboardShortcuts";
+import { useKeyboardShortcuts } from "./hooks/useKeyboardShortcuts";
+import { useShortcutHost, useShortcutLayer } from "./hooks/useShortcutHost";
 import { useElectronIPC } from "./hooks/useElectronIPC";
 import { useSidebarOverlay } from "./hooks/useSidebarOverlay";
 import { useGitInitialization } from "./hooks/useGitInitialization";
@@ -371,9 +366,6 @@ function App() {
   const [showGlobalSearch, setShowGlobalSearch] = useState(false);
   const [showFindReplace, setShowFindReplace] = useState(false);
   const [showQuickFileOpen, setShowQuickFileOpen] = useState(false);
-  const [showCommandPalette, setShowCommandPalette] = useState(false);
-  const [showChatSearch, setShowChatSearch] = useState(false);
-  const [showChatSwitcher, setShowChatSwitcher] = useState(false);
 
   // Git initialization modal handlers
   const handleGitInitSuccess = useCallback(async () => {
@@ -434,15 +426,23 @@ function App() {
     disableDevTools: true,
   });
 
-  // Helper to close all modals
-  const closeAllModals = useCallback(() => {
-    setShowCommandPalette(false);
+  // The keyboard host owns the dispatcher and the app-level overlays (command
+  // palette, chat search); this component contributes its workspace handlers
+  // to it, below, once the workspace is ready.
+  const shortcutHost = useShortcutHost();
+
+  // The search overlays this component owns.
+  const closeLocalModals = useCallback(() => {
     setShowGlobalSearch(false);
     setShowQuickFileOpen(false);
     setShowFindReplace(false);
-    setShowChatSearch(false);
-    setShowChatSwitcher(false);
   }, []);
+
+  // Before opening one overlay, close every other — the host's included.
+  const closeAllModals = useCallback(() => {
+    closeLocalModals();
+    shortcutHost?.closeOverlays();
+  }, [closeLocalModals, shortcutHost]);
 
   /** Reveal the right sidebar and select a tab. */
   const showSidebarTab = useCallback(
@@ -492,17 +492,6 @@ function App() {
         const activeChat = activeChatId ? getChatFromCache(activeChatId) ?? null : null;
         const currentWorktreeId = activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
         chatStore.clearCurrentChat(currentWorktreeId);
-      },
-      onOpenProject: () => {
-        handleNavigateToProjectPicker();
-      },
-      onToggleSettings: () => {
-        // Toggle settings route
-        if (window.location.pathname.startsWith("/settings")) {
-          navigate({ to: '/', search: {} });
-        } else {
-          navigate({ to: '/settings' });
-        }
       },
       onCloseTab: () => {
         try {
@@ -569,33 +558,10 @@ function App() {
         closeAllModals();
         setShowFindReplace(true);
       },
-      onCommandPalette: () => {
-        closeAllModals();
-        setShowCommandPalette(true);
-      },
-      onChatSearch: () => {
-        closeAllModals();
-        setShowChatSearch(true);
-      },
       onStopStreaming: () => {
-        // Priority 1: Close Settings route if open
-        if (window.location.pathname.startsWith("/settings")) {
-          logger.info("🛑 ESC pressed - closing Settings");
-          navigate({ to: '/', search: {} });
-          // Focus chat input after closing settings
-          focusChatInput();
-          return;
-        }
-
-        // Priority 2: If on a workflow route, defer to WorkflowBuilderPage's
-        // own ESC handler (registered on window capture). When ModernApp is
-        // mounted we're not on a workflow route, but on multi-window setups
-        // this guards against the rare case where both are alive.
-        if (isWorkflowSurfacePath(window.location.pathname)) {
-          return;
-        }
-
-        // Priority 3: Find the active chat and pause it
+        // Pause the active chat. Registered only while the workspace is
+        // mounted, so there is no Settings or workflow route to defer to: off
+        // the workspace Escape is not a shortcut at all (lib/keyboard/scope).
         //
         // Modals no longer need checking here. An open modal puts the
         // dispatcher in the `modal` context, where dismissModal shadows this
@@ -654,6 +620,11 @@ function App() {
           // Terminal is closed, open it (opening asks the terminal for focus)
           toggleTerminal();
         }
+      },
+      onClearTerminal: () => {
+        // The active session's terminal clears itself: only it holds the
+        // xterm instance.
+        window.dispatchEvent(new CustomEvent("clear-active-terminal"));
       },
       onNewTerminal: () => {
         // Open terminal panel if not open
@@ -723,9 +694,6 @@ function App() {
           return next;
         });
       },
-      onOpenWorkflows: () => {
-        navigate({ to: '/workflows' });
-      },
       onNextRightSidebarTab: () => {
         const projectId = currentProject?.id;
         if (!projectId) return;
@@ -747,9 +715,6 @@ function App() {
       onSidebarTasks: () => showSidebarTab("tasks"),
       onSidebarProcesses: () => showSidebarTab("processes"),
       onSidebarBrowser: () => showSidebarTab("browser"),
-      onToggleRightSidebar: () => {
-        setShowFileBrowser((prev) => !prev);
-      },
       onFocusRightSidebar: () => {
         // Reveal before focusing — focusing a hidden pane does nothing.
         setShowFileBrowser(true);
@@ -777,14 +742,6 @@ function App() {
       },
 
       // --- Chat and project switching ---
-      onSwitchChat: () => {
-        closeAllModals();
-        setShowChatSwitcher(true);
-      },
-      onSwitchProject: () => {
-        closeAllModals();
-        handleNavigateToProjectPicker();
-      },
       onSwitchWorktree: () => {
         if (currentProject?.id) {
           useViewerStore.getState().openWorktreesViewer(currentProject.id);
@@ -797,35 +754,6 @@ function App() {
         void cycleProject(-1);
       },
 
-      // --- Search ---
-      // Cmd+F inside Monaco resolves to the editor's own find via the `monaco`
-      // context, so this only runs when the editor does not have focus.
-      onEditorFind: () => {
-        // Registered as passthrough: Monaco's own keybinding opens the widget.
-        // Nothing to do here beyond letting the event continue.
-      },
-
-      // --- Parameters ---
-      onChangeModel: () => {
-        window.dispatchEvent(new CustomEvent("open-model-selector"));
-      },
-      onChangeThinkingLevel: () => {
-        window.dispatchEvent(new CustomEvent("cycle-thinking-level"));
-      },
-      onChangeWorkflow: () => {
-        window.dispatchEvent(new CustomEvent("open-workflow-selector"));
-      },
-      onEditWorkflowParams: () => {
-        window.dispatchEvent(new CustomEvent("open-workflow-params"));
-      },
-
-
-      onSlashCommands: () => {
-        // The composer owns the menu; focus it and ask it to open. Opening this
-        // way does NOT insert a slash, so it works mid-sentence.
-        window.dispatchEvent(new CustomEvent("focus-chat-input"));
-        window.dispatchEvent(new CustomEvent("open-slash-menu"));
-      },
       onDismissModal: () => {
         // Modals that own their Escape (the shared ui/Modal, the command
         // palette, the search overlays) close themselves on the same keydown.
@@ -834,28 +762,16 @@ function App() {
         // modals here covers the ones whose open state we hold.
         closeAllModals();
       },
-      onDismissSlashMenu: () => {
-        window.dispatchEvent(new CustomEvent("dismiss-slash-menu"));
-      },
       onNextAttentionChat: () => {
         const { navigateToNextAttention } = useChatNavigationStore.getState();
         void navigateToNextAttention().then((found) => {
           if (!found) toast.success("No chats need your attention");
         });
       },
-      onComposerNewline: () => {
-        window.dispatchEvent(new CustomEvent("composer-insert-newline"));
-      },
-      onNativeSelection: () => {
-        // Registered as passthrough so the editor's own selection handling runs.
-        // The entry exists purely to claim the chord in editing contexts and
-        // stop the global chat/panel navigation from firing there.
-      },
     }),
 
     [
       closeAllModals,
-      handleNavigateToProjectPicker,
       activeChatId,
       toggleTerminal,
       isTerminalOpen,
@@ -865,14 +781,8 @@ function App() {
       getCurrentWorktreeId,
       currentProject?.id,
       currentWorktree?.id,
-      showGlobalSearch,
-      showFindReplace,
-      showQuickFileOpen,
-      showCommandPalette,
-      showChatSearch,
       setShowFileBrowser,
       setShowChatSidebar,
-      navigate,
       showSidebarTab,
       cycleProject,
     ]
@@ -1054,11 +964,6 @@ function App() {
     };
   }, []);
 
-  // Use app keyboard shortcuts with memoized handlers. `pendingSequence` drives
-  // the on-screen hint so the Cmd+K bindings are discoverable rather than
-  // something you have to already know.
-  const { pendingSequence } = useAppKeyboardShortcuts(keyboardHandlers);
-
   // Bridge pane-focus requests onto the events each pane already listens for.
   //
   // The panes predate the focus helper and each has its own established focus
@@ -1084,26 +989,9 @@ function App() {
     return () => unsubscribers.forEach((off) => off());
   }, []);
 
-  // Bridge for surfaces that invoke an action by its shortcut handler name —
-  // currently the composer's slash menu and the command palette. Routing them
-  // through the same handler map means an action has ONE implementation no
-  // matter which of the three surfaces triggered it.
-  useEffect(() => {
-    const runShortcut = (event: Event) => {
-      const handlerName = (event as CustomEvent<{ handler?: string }>).detail
-        ?.handler;
-      if (!handlerName) return;
-      const handler = keyboardHandlers[handlerName as keyof typeof keyboardHandlers];
-      if (typeof handler === "function") handler();
-    };
-
-    window.addEventListener("run-shortcut", runShortcut);
-    return () => window.removeEventListener("run-shortcut", runShortcut);
-  }, [keyboardHandlers]);
-
   // Handle the Electron IPC events that are not shortcuts (close all tabs,
-  // tab navigation, search focus, clear terminal, theme). Menu items that ARE
-  // shortcuts arrive through useAppKeyboardShortcuts above.
+  // tab navigation, search focus, theme). Menu items that ARE shortcuts arrive
+  // by id at the keyboard host, on every route.
   useElectronIPC({ headerRef });
 
   // Note: Appearance settings (theme, fonts, color scheme) are applied in two phases:
@@ -1263,22 +1151,20 @@ function App() {
   // Listen for search modal open requests (from Electron menu)
   useEffect(() => {
     const handleQuickFileOpen = () => setShowQuickFileOpen(true);
-    const handleChatSearch = () => setShowChatSearch(true);
+    // Chat search is the keyboard host's overlay.
+    const handleChatSearch = () => void shortcutHost?.run("onChatSearch");
     const handleFindInFiles = () => setShowGlobalSearch(true);
-    const handleCommandPalette = () => setShowCommandPalette(true);
     
     window.addEventListener("open-quick-file-open", handleQuickFileOpen);
     window.addEventListener("open-chat-search", handleChatSearch);
     window.addEventListener("open-find-in-files", handleFindInFiles);
-    window.addEventListener("open-command-palette", handleCommandPalette);
     
     return () => {
       window.removeEventListener("open-quick-file-open", handleQuickFileOpen);
       window.removeEventListener("open-chat-search", handleChatSearch);
       window.removeEventListener("open-find-in-files", handleFindInFiles);
-      window.removeEventListener("open-command-palette", handleCommandPalette);
     };
-  }, []);
+  }, [shortcutHost]);
 
   // Chats are already loaded by workspace restore / selectProject — no need to reload here.
 
@@ -1470,7 +1356,7 @@ function App() {
     const cleanups: Array<() => void> = [];
 
     // "New Tab" from the File menu, the tray and the dock arrives as the
-    // newChat shortcut, through useAppKeyboardShortcuts' menu bridge.
+    // newChat shortcut, through the keyboard host's menu bridge.
 
     const goToRecentChat = async (chatId?: string) => {
       const chatStore = useChatStore.getState();
@@ -1855,7 +1741,7 @@ function App() {
                 onOpenRuns={(search) => {
                   navigate({ to: '/workflows/runs', search: search ?? {} });
                 }}
-                onOpenChatSearch={() => setShowChatSearch(true)}
+                onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
                 onNavigateToSettings={() => {
                   navigate({ to: '/settings' });
                 }}
@@ -1891,7 +1777,7 @@ function App() {
                   onOpenRuns={(search) => {
                     navigate({ to: '/workflows/runs', search: search ?? {} });
                   }}
-                  onOpenChatSearch={() => setShowChatSearch(true)}
+                  onOpenChatSearch={() => void shortcutHost?.run("onChatSearch")}
                   onNavigateToSettings={() => {
                     navigate({ to: '/settings' });
                   }}
@@ -1997,35 +1883,6 @@ function App() {
         isOpen={showQuickFileOpen}
         onClose={() => setShowQuickFileOpen(false)}
       />
-      <CommandPalette
-        isOpen={showCommandPalette}
-        onClose={() => setShowCommandPalette(false)}
-        onNavigateToSettings={() => {
-          setShowCommandPalette(false);
-          navigate({ to: '/settings' });
-        }}
-        onNavigateToSettingsSection={(section) => {
-          setShowCommandPalette(false);
-          navigate({ to: '/settings/$section', params: { section } });
-        }}
-      />
-      {/* Cmd+F — find within the conversation you are looking at. */}
-      <ChatSearch
-        isOpen={showChatSearch}
-        initialMode="current"
-        onClose={() => setShowChatSearch(false)}
-      />
-
-      {/* Cmd+E — quick-switch to another chat by name. Same component, opened
-          on its history tab, so there is one search UI rather than two. */}
-      <ChatSearch
-        isOpen={showChatSwitcher}
-        initialMode="history"
-        onClose={() => setShowChatSwitcher(false)}
-      />
-
-      {/* Shows the available second keys while a Cmd+K prefix is armed. */}
-      <SequenceHint pending={pendingSequence} />
 
       {/* Global Update Handler - shows update modal when updates are available */}
       <GlobalUpdateHandler />
@@ -2047,6 +1904,21 @@ function App() {
     !isWorkspaceRestoring &&
     !isUserLoading &&
     !inOnboarding;
+
+  // Contribute the workspace's shortcut handlers to the keyboard host — from
+  // the moment the workspace can act on them (the same gate as the header:
+  // backend up, workspace restored). Registering earlier would let a shortcut
+  // run against a chat or panel the restore is about to replace; until then
+  // the host queues workspace shortcuts and runs them here once this lands,
+  // which is also how a shortcut pressed on /settings arrives.
+  useShortcutLayer(
+    {
+      handlers: keyboardHandlers,
+      workspace: true,
+      closeOverlays: closeLocalModals,
+    },
+    showHeader,
+  );
 
   return (
     <div className="flex flex-col h-screen">

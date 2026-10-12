@@ -563,6 +563,16 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     context: 'global',
     handler: 'onNewTerminal'
   },
+  clearTerminal: {
+    id: 'clearTerminal',
+    name: 'Clear Terminal',
+    description: 'Clear the active terminal\'s scrollback',
+    category: 'Terminal',
+    defaultBinding: 'Cmd+Shift+L',
+    defaultWebBinding: 'Cmd+Shift+L',
+    context: 'terminal',
+    handler: 'onClearTerminal'
+  },
   stopStreaming: {
     id: 'stopStreaming',
     name: 'Stop AI Response',

@@ -55,8 +55,6 @@ export interface ElectronAPI {
   getAllWindows: () => Promise<{ id: string; worktreeId?: string; projectId?: string }[]>;
   focusWindow: (windowId: string) => Promise<{ success: boolean; error?: string }>;
   createNewWindow: () => Promise<{ success: boolean; windowId?: string; error?: string }>;
-  createNewTab: () => Promise<{ success: boolean; error?: string }>;
-  closeCurrentTab: () => Promise<{ success: boolean; error?: string }>;
   closeWindowIfNoTabs: (tabCount: number) => Promise<{ success: boolean; error?: string }>;
 
   // Window controls
@@ -75,7 +73,12 @@ export interface ElectronAPI {
   // Event listeners
   onWorktreeContextChanged: (callback: (data: { worktreeId?: string; projectId?: string }) => void) => () => void;
   onSetWorktreeContext: (callback: (data: { worktreeId?: string; projectId?: string }) => void) => () => void;
-  onCreateNewTab: (callback: () => void) => void;
+  /**
+   * The native menu (and tray/dock) delivering a keyboard shortcut, by its id
+   * in config/shortcuts.yaml. One channel for every shortcut menu item; the
+   * keyboard host runs it through the same dispatcher a keystroke uses.
+   */
+  onMenuShortcut: (callback: (shortcutId: string) => void) => () => void;
   onResumeLastChat: (callback: () => void) => void;
   onTrayGoToChat: (callback: (payload: { chatId?: string }) => void) => void;
   onTrayGoToWorkflowHub: (callback: () => void) => void;
@@ -83,8 +86,6 @@ export interface ElectronAPI {
   onTrayGoToSettings: (callback: () => void) => void;
   onTrayGoToProjectPicker: (callback: () => void) => void;
   onTraySwitchWorkspace: (callback: (payload: { workspaceId?: string }) => void) => void;
-  onCloseCurrentTab: (callback: () => void) => void;
-  onReopenLastTab: (callback: () => void) => void;
   onCloseAllTabs: (callback: () => void) => void;
   onNavigateTab: (callback: (direction: 'next' | 'previous') => void) => void;
   onFocusChatSearch: (callback: () => void) => void;

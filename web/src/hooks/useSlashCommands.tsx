@@ -4,8 +4,9 @@
  * Bridges the shared command registry (src/lib/commands.ts) to runnable
  * actions. Rather than reaching into a dozen stores from the composer — which
  * would duplicate the shortcut handlers and drift from them — each command
- * dispatches the SAME window event its keyboard shortcut dispatches. ModernApp
- * owns those handlers, so there is exactly one implementation per action.
+ * runs its shortcut's handler through the keyboard host, exactly as the
+ * keystroke would: one implementation per action, and the same reach on every
+ * route (a run's chat composer included).
  *
  * The shortcut hint beside each entry is read from the shortcuts store, so it
  * reflects the user's current binding — including remaps — and the menu teaches
@@ -31,6 +32,7 @@ import {
   Share2,
 } from "lucide-react";
 import { slashCommands as registryCommands } from "../lib/commands";
+import { useShortcutHost } from "./useShortcutHost";
 import { effectiveBinding, useShortcutsStore } from "../store/shortcutsStore";
 import { parseBinding } from "../lib/keyboard/chord";
 import { detectPlatform, formatBinding } from "../lib/keyboard/platform";
@@ -57,6 +59,7 @@ const ICONS: Record<string, React.ReactNode> = {
 
 export function useSlashCommands(): SlashCommand[] {
   const shortcuts = useShortcutsStore((state) => state.shortcuts);
+  const host = useShortcutHost();
 
   return useMemo(() => {
     const { isMac } = detectPlatform();
@@ -84,11 +87,7 @@ export function useSlashCommands(): SlashCommand[] {
       shortcut: shortcutFor(command.handler),
       action: () => {
         if (command.handler) {
-          window.dispatchEvent(
-            new CustomEvent("run-shortcut", {
-              detail: { handler: command.handler },
-            }),
-          );
+          host?.run(command.handler);
           return;
         }
         // Composer-scoped actions have no shortcut handler; they are addressed
@@ -98,5 +97,5 @@ export function useSlashCommands(): SlashCommand[] {
         );
       },
     }));
-  }, [shortcuts]);
+  }, [shortcuts, host]);
 }

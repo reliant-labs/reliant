@@ -19,11 +19,14 @@
  *   1. It is the semantics of a control, not a command — Enter to send,
  *      Shift+Enter for a newline, xterm's key handling, a dropdown's arrow
  *      navigation. These belong to the component that owns the control.
- *   2. It lives on a route where the dispatcher is not mounted. ModernApp
- *      renders only on `/` and `/project/$projectId`, so the workflow builder
- *      (`/workflow/*`) has no global handler to race.
- *   3. Its trigger condition is weaker than any focus context — e.g. FileTree's
+ *   2. Its trigger condition is weaker than any focus context — e.g. FileTree's
  *      PageUp/PageDown, which must work while the tree is visible but unfocused.
+ *
+ * The dispatcher runs on every authenticated desktop route (the keyboard host
+ * in components/Shortcuts), not only in the workspace — so a direct listener
+ * on the workflow builder or a settings page is held to the same rule as one
+ * in ModernApp. A key whose handler is not registered on the current route is
+ * left alone, which is what keeps the builder's own Escape and undo working.
  *
  * The rule that keeps this honest: a direct listener must not claim a chord
  * that config/shortcuts.yaml binds. `bindings.test.ts` enforces the inverse —
@@ -126,8 +129,8 @@ export function detectActiveContexts(
 /**
  * True when focus is in a raw text-entry element.
  *
- * Used to suppress bare-key shortcuts even in contexts we do not explicitly
- * model — a search box inside a settings panel is still typing.
+ * Used by the dispatcher to keep bare keys and selection chords with a field
+ * no context models — a search box inside a settings panel is still typing.
  */
 export function isEditableTarget(target: Element | null): boolean {
   if (!target) return false;

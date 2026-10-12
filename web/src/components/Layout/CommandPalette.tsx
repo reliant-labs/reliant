@@ -1,16 +1,27 @@
-// CommandPalette - Commands and settings search (Cmd+Shift+P)
-import { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from "react";
+/**
+ * CommandPalette — commands and settings search (Cmd+Shift+P).
+ *
+ * Rendered by the keyboard host (components/Shortcuts/ShortcutHost), so it
+ * opens on every authenticated desktop route, not only in the workspace. That
+ * makes its list a claim about the route it opens on: an entry that would do
+ * nothing here — a workspace panel with no project, the page you are already
+ * on — is not offered, and a workspace action offered from another page says
+ * that it opens the workspace. Workspace actions run through the host, which
+ * goes there first when it has to.
+ */
+import { useState, useRef, useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { 
   Search, Settings, Keyboard, Info, Palette, Shield, 
   FolderOpen, GitBranch, Workflow, Bot, Terminal,
   Code, CalendarClock, Activity, Inbox
 } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
+import { useNavigate, useRouterState } from "@tanstack/react-router";
 import { cn } from "../../lib/utils";
 import { useViewerStore } from "../../store/viewerStore";
 import { useProjectStore } from "../../store/projectStore";
 import { focusChatInput } from "../../hooks/useFocusManager";
+import { useShortcutHost } from "../../hooks/useShortcutHost";
 import type { SettingsSection } from "../../routeSchemas";
 
 interface Command {
@@ -21,103 +32,104 @@ interface Command {
   category: "navigation" | "settings" | "actions";
   action: () => void;
   keywords?: string[];
-}
-
-export interface CommandPaletteRef {
-  open: () => void;
-  close: () => void;
-  isOpen: () => boolean;
+  /** False where running it would do nothing. Defaults to true. */
+  available?: boolean;
 }
 
 interface CommandPaletteProps {
-  isOpen?: boolean;
-  onClose?: () => void;
-  onNavigateToSettings?: () => void;
-  onNavigateToSettingsSection?: (section: SettingsSection) => void;
-  onNavigateToWorktrees?: () => void;
-  onNavigateToProjects?: () => void;
-  onOpenWorkflows?: () => void;
-  onToggleTerminal?: () => void;
-  onNewTerminal?: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+  /** Whether the workspace is the page behind the palette. */
+  inWorkspace: boolean;
 }
 
-export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>(
-  ({ 
-    isOpen: externalIsOpen,
-    onClose,
-    onNavigateToSettings: _onNavigateToSettings,
-    onNavigateToSettingsSection: _onNavigateToSettingsSection,
-    onNavigateToWorktrees: _onNavigateToWorktrees,
-    onNavigateToProjects: _onNavigateToProjects,
-    onOpenWorkflows: _onOpenWorkflows,
-    onToggleTerminal,
-    onNewTerminal,
-  }, ref) => {
-    const [internalIsOpen, setInternalIsOpen] = useState(false);
-    
-    // Use external control if provided, otherwise use internal state
-    const isOpen = externalIsOpen ?? internalIsOpen;
-    const setIsOpen = useCallback((value: boolean) => {
-      setInternalIsOpen(value);
-      if (!value && onClose) {
-        onClose();
-      }
-    }, [onClose]);
+/** Element focused when the palette opened, if focus can go back to it. */
+function restorableFocus(element: Element | null): HTMLElement | null {
+  if (!(element instanceof HTMLElement) || element === document.body) return null;
+  return element;
+}
+
+export function CommandPalette({ isOpen, onClose, inWorkspace }: CommandPaletteProps) {
     const [query, setQuery] = useState("");
     const [highlightedIndex, setHighlightedIndex] = useState(0);
 
     const inputRef = useRef<HTMLInputElement>(null);
     const modalContentRef = useRef<HTMLDivElement>(null);
-    
+    // Read during the opening render, before the search box takes focus.
+    const [returnFocus] = useState(() => restorableFocus(document.activeElement));
+
     const currentProject = useProjectStore((state) => state.currentProject);
+    const pathname = useRouterState({ select: (s) => s.location.pathname });
     const navigate = useNavigate();
+    const host = useShortcutHost();
     
-    // Sync with external isOpen state and focus input when opened
+    // Focus the search box when opened.
     useEffect(() => {
-      if (externalIsOpen) {
+      if (isOpen) {
         setQuery("");
         setHighlightedIndex(0);
         setTimeout(() => inputRef.current?.focus(), 50);
       }
-    }, [externalIsOpen]);
+    }, [isOpen]);
 
-    // Close helper
-    const closeAndFocus = useCallback(() => {
-      setIsOpen(false);
+    const close = useCallback(() => {
+      onClose();
       setQuery("");
-      focusChatInput();
-    }, [setIsOpen]);
+    }, [onClose]);
+
+    // Hand focus back to where it was when the palette goes away — however it
+    // was closed, including the workspace's Escape, which closes it from
+    // outside. In the workspace, the composer when it was nowhere in
+    // particular. A command that took focus itself keeps it.
+    const inWorkspaceRef = useRef(inWorkspace);
+    inWorkspaceRef.current = inWorkspace;
+    useEffect(() => () => {
+      const active = document.activeElement;
+      if (active && active !== document.body) return;
+      if (returnFocus?.isConnected) returnFocus.focus();
+      else if (inWorkspaceRef.current) focusChatInput();
+    }, [returnFocus]);
+
+    // Run a command: close first, so a command that moves focus (open the
+    // terminal) keeps it.
+    const runCommand = useCallback((command: Command) => {
+      close();
+      command.action();
+    }, [close]);
+
+    const goTo = (section: SettingsSection) => () =>
+      navigate({ to: '/settings/$section', params: { section } });
+    const isAt = (path: string) => pathname === path || pathname.startsWith(`${path}/`);
+
+    /** Open a workspace viewer for the current project, going there first if needed. */
+    const openViewer = (open: (projectId: string) => void) => () =>
+      host?.runInWorkspace(() => {
+        const projectId = useProjectStore.getState().currentProject?.id;
+        if (projectId) open(projectId);
+      });
 
     // Define all commands
-    const allCommands: Command[] = [
+    const commands: Command[] = [
       // Navigation
       {
         id: "projects",
         title: "Projects",
-        description: "Open projects panel",
+        description: inWorkspace ? "Open projects panel" : "Open the projects panel in the workspace",
         icon: <FolderOpen className="w-4 h-4" />,
         category: "navigation",
         keywords: ["project", "folder", "open"],
-        action: () => {
-          if (currentProject?.id) {
-            useViewerStore.getState().openProjectsViewer(currentProject.id);
-          }
-          closeAndFocus();
-        },
+        available: Boolean(currentProject),
+        action: openViewer((id) => useViewerStore.getState().openProjectsViewer(id)),
       },
       {
         id: "worktrees",
         title: "Workspaces",
-        description: "Open workspaces panel",
+        description: inWorkspace ? "Open workspaces panel" : "Open the workspaces panel in the workspace",
         icon: <GitBranch className="w-4 h-4" />,
         category: "navigation",
         keywords: ["worktree", "branch", "workspace"],
-        action: () => {
-          if (currentProject?.id) {
-            useViewerStore.getState().openWorktreesViewer(currentProject.id);
-          }
-          closeAndFocus();
-        },
+        available: Boolean(currentProject),
+        action: openViewer((id) => useViewerStore.getState().openWorktreesViewer(id)),
       },
       {
         id: "workflows",
@@ -126,10 +138,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Workflow className="w-4 h-4" />,
         category: "navigation",
         keywords: ["workflow", "automation", "flow"],
-        action: () => {
-          navigate({ to: '/workflows' });
-          closeAndFocus();
-        },
+        available: pathname !== "/workflows" && !isAt("/workflows/library"),
+        action: () => navigate({ to: '/workflows' }),
       },
       {
         id: "automations",
@@ -138,10 +148,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <CalendarClock className="w-4 h-4" />,
         category: "navigation",
         keywords: ["schedule", "trigger", "cron", "automation"],
-        action: () => {
-          navigate({ to: '/workflows/automations' });
-          closeAndFocus();
-        },
+        available: !isAt("/workflows/automations"),
+        action: () => navigate({ to: '/workflows/automations' }),
       },
       {
         id: "inbox",
@@ -150,10 +158,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Inbox className="w-4 h-4" />,
         category: "navigation",
         keywords: ["approval", "question", "waiting", "needs you", "notifications"],
-        action: () => {
-          navigate({ to: '/inbox' });
-          closeAndFocus();
-        },
+        available: !isAt("/inbox"),
+        action: () => navigate({ to: '/inbox' }),
       },
       {
         id: "runs",
@@ -162,10 +168,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Activity className="w-4 h-4" />,
         category: "navigation",
         keywords: ["run", "history", "execution", "agent", "started"],
-        action: () => {
-          navigate({ to: '/workflows/runs' });
-          closeAndFocus();
-        },
+        available: !isAt("/workflows/runs"),
+        action: () => navigate({ to: '/workflows/runs' }),
       },
       // Settings sections
       {
@@ -175,10 +179,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Settings className="w-4 h-4" />,
         category: "settings",
         keywords: ["preferences", "config", "configuration"],
-        action: () => {
-          navigate({ to: '/settings' });
-          closeAndFocus();
-        },
+        available: !isAt("/settings"),
+        action: () => navigate({ to: '/settings' }),
       },
       {
         id: "shortcuts",
@@ -187,10 +189,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Keyboard className="w-4 h-4" />,
         category: "settings",
         keywords: ["keys", "hotkeys", "bindings"],
-        action: () => {
-          navigate({ to: '/settings/$section', params: { section: 'shortcuts' } });
-          closeAndFocus();
-        },
+        available: pathname !== "/settings/shortcuts",
+        action: goTo('shortcuts'),
       },
       {
         id: "appearance",
@@ -199,10 +199,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Palette className="w-4 h-4" />,
         category: "settings",
         keywords: ["theme", "color", "dark", "light"],
-        action: () => {
-          navigate({ to: '/settings/$section', params: { section: 'appearance' } });
-          closeAndFocus();
-        },
+        available: pathname !== "/settings/appearance",
+        action: goTo('appearance'),
       },
       {
         id: "providers",
@@ -211,10 +209,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Bot className="w-4 h-4" />,
         category: "settings",
         keywords: ["api", "key", "openai", "anthropic", "claude"],
-        action: () => {
-          navigate({ to: '/settings/$section', params: { section: 'general' } });
-          closeAndFocus();
-        },
+        available: pathname !== "/settings/general",
+        action: goTo('general'),
       },
       {
         id: "privacy",
@@ -223,10 +219,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Shield className="w-4 h-4" />,
         category: "settings",
         keywords: ["data", "telemetry", "tracking"],
-        action: () => {
-          navigate({ to: '/settings/$section', params: { section: 'privacy' } });
-          closeAndFocus();
-        },
+        available: pathname !== "/settings/privacy",
+        action: goTo('privacy'),
       },
       {
         id: "developer",
@@ -235,10 +229,8 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Code className="w-4 h-4" />,
         category: "settings",
         keywords: ["debug", "dev", "advanced"],
-        action: () => {
-          navigate({ to: '/settings/$section', params: { section: 'developer' } });
-          closeAndFocus();
-        },
+        available: pathname !== "/settings/developer",
+        action: goTo('developer'),
       },
       {
         id: "about",
@@ -247,37 +239,34 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         icon: <Info className="w-4 h-4" />,
         category: "settings",
         keywords: ["version", "info"],
-        action: () => {
-          navigate({ to: '/settings/$section', params: { section: 'about' } });
-          closeAndFocus();
-        },
+        available: pathname !== "/settings/about",
+        action: goTo('about'),
       },
-      // Actions
+      // Actions — the same handlers as their keyboard shortcuts. Off the
+      // workspace the toggle opens the terminal there rather than toggling a
+      // panel nobody can see (lib/keyboard/scope).
       {
         id: "toggle-terminal",
-        title: "Toggle Terminal",
-        description: "Show or hide terminal",
+        title: inWorkspace ? "Toggle Terminal" : "Open Terminal",
+        description: inWorkspace ? "Show or hide terminal" : "Show the terminal in the workspace",
         icon: <Terminal className="w-4 h-4" />,
         category: "actions",
         keywords: ["console", "shell", "bash"],
-        action: () => {
-          onToggleTerminal?.();
-          closeAndFocus();
-        },
+        available: Boolean(currentProject),
+        action: () => host?.run("onToggleTerminal"),
       },
       {
         id: "new-terminal",
         title: "New Terminal",
-        description: "Create a new terminal tab",
+        description: inWorkspace ? "Create a new terminal tab" : "Open a new terminal in the workspace",
         icon: <Terminal className="w-4 h-4" />,
         category: "actions",
         keywords: ["console", "shell", "bash"],
-        action: () => {
-          onNewTerminal?.();
-          closeAndFocus();
-        },
+        available: Boolean(currentProject),
+        action: () => host?.run("onNewTerminal"),
       },
     ];
+    const allCommands = commands.filter((command) => command.available !== false);
 
     // Filter commands based on query
     const filteredCommands = query.trim()
@@ -300,21 +289,6 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
       actions: "Actions",
     };
 
-    // Expose methods via ref
-    useImperativeHandle(ref, () => ({
-      open: () => {
-        setIsOpen(true);
-        setQuery("");
-        setHighlightedIndex(0);
-        setTimeout(() => inputRef.current?.focus(), 50);
-      },
-      close: () => {
-        setIsOpen(false);
-        setQuery("");
-      },
-      isOpen: () => isOpen,
-    }), [isOpen, setIsOpen]);
-
     // Close on click outside - works when clicking anywhere outside the modal
     useEffect(() => {
       if (!isOpen) return;
@@ -323,7 +297,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         const target = e.target as Node;
         // Close if click is outside the modal content (but allow clicking the backdrop)
         if (modalContentRef.current && !modalContentRef.current.contains(target)) {
-          closeAndFocus();
+          close();
         }
       };
 
@@ -336,7 +310,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         clearTimeout(timeoutId);
         document.removeEventListener("mousedown", handleClickOutside);
       };
-    }, [isOpen, closeAndFocus]);
+    }, [isOpen, close]);
 
     // Reset highlight when results change
     useEffect(() => {
@@ -361,12 +335,12 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         case "Enter":
           e.preventDefault();
           if (filteredCommands[highlightedIndex]) {
-            filteredCommands[highlightedIndex].action();
+            runCommand(filteredCommands[highlightedIndex]);
           }
           break;
         case "Escape":
           e.preventDefault();
-          closeAndFocus();
+          close();
           break;
       }
     };
@@ -379,7 +353,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
         if (e.key === "Escape") {
           e.preventDefault();
           e.stopPropagation();
-          closeAndFocus();
+          close();
         }
       };
 
@@ -388,7 +362,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
       return () => {
         document.removeEventListener("keydown", handleGlobalKeyDown, true);
       };
-    }, [isOpen, closeAndFocus]);
+    }, [isOpen, close]);
 
     // Auto-scroll highlighted item into view
     useEffect(() => {
@@ -447,7 +421,7 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
                         <button
                           key={cmd.id}
                           data-index={globalIndex}
-                          onClick={() => cmd.action()}
+                          onClick={() => runCommand(cmd)}
                           onMouseEnter={() => setHighlightedIndex(globalIndex)}
                           className={cn(
                             "w-full flex items-center gap-3 px-4 py-2 text-left transition-colors",
@@ -491,7 +465,4 @@ export const CommandPalette = forwardRef<CommandPaletteRef, CommandPaletteProps>
       </div>,
       document.body
     );
-  }
-);
-
-CommandPalette.displayName = "CommandPalette";
+}

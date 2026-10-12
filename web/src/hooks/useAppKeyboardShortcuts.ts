@@ -1,61 +1,52 @@
 /**
  * Mounts the single keyboard dispatcher.
  *
+ * Called once, by the keyboard host (components/Shortcuts/ShortcutHost.tsx),
+ * which decides where it runs — every authenticated desktop route — and where
+ * each handler comes from. Do not call it anywhere else: a second dispatcher
+ * would see every keystroke too, and both would fire.
+ *
  * One capture-phase listener at the document root serves every shortcut. The
- * handler map is held in a ref so re-renders never re-register the listener,
- * and the registry comes from the shortcuts store so a user remap takes effect
- * immediately without a reload.
+ * handler lookup is held in a ref so re-renders never re-register the
+ * listener, and the registry comes from the shortcuts store so a user remap
+ * takes effect immediately without a reload.
  *
  * It is the same path on both surfaces. In a browser tab the keystroke is the
- * only way in. In the desktop app the native menu also delivers a few of these
- * shortcuts (its accelerators and its clicks); those are routed into the same
- * dispatcher by id, so a menu action runs the very handler the keystroke runs
- * and a shortcut fires once whichever of the two saw it.
+ * only way in. In the desktop app the native menu delivers shortcuts too — its
+ * accelerators and its clicks — on one IPC channel carrying the shortcut id;
+ * those are routed into the same dispatcher, so a menu action runs the very
+ * handler the keystroke runs and a shortcut fires once whichever of the two
+ * saw it.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { logger } from "../lib/logger";
 import { createDispatcher, type Dispatcher } from "../lib/keyboard/dispatcher";
 import { defaultShortcuts, useShortcutsStore } from "../store/shortcutsStore";
 
-export type ShortcutHandlers = Record<string, (() => void) | undefined>;
+/** The live handler for a handler name, or undefined where it does not run. */
+export type ShortcutHandlerLookup = (
+  handlerName: string,
+) => (() => void) | undefined;
+
+export interface UseAppKeyboardShortcutsOptions {
+  /**
+   * While true, keystrokes and menu deliveries are left alone entirely — the
+   * shortcut remap box is recording the raw chord.
+   */
+  isSuspended?: () => boolean;
+}
 
 export interface UseAppKeyboardShortcutsResult {
   /** Armed sequence prefix ("meta+K"), or "" — drives the on-screen hint. */
   pendingSequence: string;
-}
-
-type MenuSubscribe = (callback: () => void) => (() => void) | void;
-
-/**
- * Native menu items that deliver a shortcut, by the preload subscriber for the
- * IPC channel the item sends, mapped to the shortcut id it means.
- *
- * Declared here, where it is consumed, rather than as a dependency on the full
- * electronAPI type: this hook needs nothing from it but these subscribers.
- */
-export const MENU_DELIVERED_SHORTCUTS: ReadonlyArray<
-  readonly [subscriber: string, shortcutId: string]
-> = [
-  ["onCreateNewTab", "newChat"],
-  ["onCloseCurrentTab", "closeTab"],
-  ["onReopenLastTab", "reopenLastClosedFile"],
-  ["onToggleTerminal", "toggleTerminal"],
-  ["onNewTerminal", "newTerminal"],
-];
-
-function menuSubscriber(name: string): MenuSubscribe | undefined {
-  if (typeof window === "undefined" || !window.electronAPI) return undefined;
-  const candidate = (window.electronAPI as unknown as Record<string, unknown>)[
-    name
-  ];
-  return typeof candidate === "function"
-    ? (candidate as MenuSubscribe)
-    : undefined;
+  /** Abandon an armed sequence, as unrelated input would. */
+  clearPendingSequence: () => void;
 }
 
 export function useAppKeyboardShortcuts(
-  handlers: ShortcutHandlers,
+  getHandler: ShortcutHandlerLookup,
+  options: UseAppKeyboardShortcutsOptions = {},
 ): UseAppKeyboardShortcutsResult {
   const registry = useShortcutsStore((state) => state.registry);
   const initializeShortcuts = useShortcutsStore(
@@ -64,10 +55,12 @@ export function useAppKeyboardShortcuts(
 
   const [pendingSequence, setPendingSequence] = useState("");
 
-  // Handlers change identity on nearly every render; a ref keeps the listener
+  // The lookup may change identity on any render; a ref keeps the listener
   // stable so shortcuts never miss a keystroke during a re-render.
-  const handlersRef = useRef(handlers);
-  handlersRef.current = handlers;
+  const getHandlerRef = useRef(getHandler);
+  getHandlerRef.current = getHandler;
+  const isSuspendedRef = useRef(options.isSuspended);
+  isSuspendedRef.current = options.isSuspended;
 
   // The live dispatcher, for menu deliveries that arrive between registry
   // rebuilds. Null until shortcuts have loaded.
@@ -82,7 +75,7 @@ export function useAppKeyboardShortcuts(
 
     const dispatcher = createDispatcher({
       registry,
-      getHandler: (name) => handlersRef.current[name],
+      getHandler: (name) => getHandlerRef.current(name),
       onPendingChange: setPendingSequence,
       onError: (error, shortcutId) => {
         logger.error(`Shortcut handler failed: ${shortcutId}`, error);
@@ -93,7 +86,10 @@ export function useAppKeyboardShortcuts(
     // Capture phase at the document root: the dispatcher decides ownership
     // before any component sees the event, but it only claims chords that are
     // actually registered, so ordinary typing and leaf controls are untouched.
-    const onKeyDown = (event: KeyboardEvent) => dispatcher.handleKeyDown(event);
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (isSuspendedRef.current?.()) return;
+      dispatcher.handleKeyDown(event);
+    };
     document.addEventListener("keydown", onKeyDown, true);
 
     // A sequence left armed while the window is unfocused would fire on the
@@ -112,34 +108,44 @@ export function useAppKeyboardShortcuts(
   // Desktop only: the native menu's way in. Subscribed once — the dispatcher
   // is read through the ref, so a registry rebuild does not resubscribe.
   useEffect(() => {
-    const cleanups: Array<() => void> = [];
+    const api = typeof window === "undefined" ? undefined : window.electronAPI;
+    if (typeof api?.onMenuShortcut !== "function") return;
 
-    for (const [subscriber, shortcutId] of MENU_DELIVERED_SHORTCUTS) {
-      const subscribe = menuSubscriber(subscriber);
-      if (!subscribe) continue;
+    const unsubscribe = api.onMenuShortcut((shortcutId) => {
+      if (isSuspendedRef.current?.()) return;
 
-      const unsubscribe = subscribe(() => {
-        const dispatcher = dispatcherRef.current;
-        if (dispatcher) {
-          dispatcher.invoke(shortcutId);
-          return;
+      const dispatcher = dispatcherRef.current;
+      if (dispatcher) {
+        // False for the echo of a keystroke already handled — and for an id
+        // with nothing to run here, which should not happen: every shortcut
+        // has a reach on every route the host runs on (lib/keyboard/scope).
+        if (!dispatcher.invoke(shortcutId)) {
+          logger.debug(`Menu shortcut not run: ${shortcutId}`);
         }
-        // Shortcuts are still loading — the first moments after launch, which
-        // is exactly when the tray's "New Chat" arrives. No keystroke can have
-        // fired yet, so there is nothing to echo: run the handler directly.
-        const handlerName = defaultShortcuts[shortcutId]?.handler;
-        const handler = handlerName ? handlersRef.current[handlerName] : undefined;
-        try {
-          handler?.();
-        } catch (error) {
-          logger.error(`Shortcut handler failed: ${shortcutId}`, error);
-        }
-      });
-      if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
-    }
+        return;
+      }
+      // Shortcuts are still loading — the first moments after launch, which
+      // is exactly when the tray's "New Chat" arrives. No keystroke can have
+      // fired yet, so there is nothing to echo: run the handler directly.
+      const handlerName = defaultShortcuts[shortcutId]?.handler;
+      const handler = handlerName ? getHandlerRef.current(handlerName) : undefined;
+      if (!handler) {
+        logger.warn(`Menu shortcut has no handler: ${shortcutId}`);
+        return;
+      }
+      try {
+        handler();
+      } catch (error) {
+        logger.error(`Shortcut handler failed: ${shortcutId}`, error);
+      }
+    });
 
-    return () => cleanups.forEach((cleanup) => cleanup());
+    return typeof unsubscribe === "function" ? unsubscribe : undefined;
   }, []);
 
-  return { pendingSequence };
+  const clearPendingSequence = useCallback(() => {
+    dispatcherRef.current?.clearPending();
+  }, []);
+
+  return { pendingSequence, clearPendingSequence };
 }

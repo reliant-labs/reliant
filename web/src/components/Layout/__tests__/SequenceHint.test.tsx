@@ -107,4 +107,15 @@ describe("SequenceHint", () => {
     render(<SequenceHint pending={PREFIX} />);
     expect(screen.queryByText("Focus Terminal")).toBeNull();
   });
+
+  it("offers only the completions that run where the user is", () => {
+    render(
+      <SequenceHint
+        pending={PREFIX}
+        isAvailable={(handler) => handler !== "onFocusTerminal"}
+      />,
+    );
+    expect(screen.queryByText("Focus Terminal")).toBeNull();
+    expect(screen.getByText("Focus Chat List")).toBeTruthy();
+  });
 });

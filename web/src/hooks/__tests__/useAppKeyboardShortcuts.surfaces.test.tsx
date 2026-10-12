@@ -4,8 +4,8 @@
  *
  * In a browser tab the keystroke is the only way in, so every shortcut the app
  * leans on has to reach its handler from the keyboard alone. In the desktop app
- * the native menu delivers some of the same shortcuts too, and each must still
- * fire exactly once.
+ * the native menu delivers shortcuts too — by id, on the one `menu-shortcut`
+ * channel — and each must still fire exactly once.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -37,7 +37,30 @@ const HANDLERS = [
   "onToggleSidebar",
   "onToggleTerminal",
   "onNewTerminal",
+  "onClearTerminal",
+  "onReopenLastClosedFile",
+  "onNextChat",
+  "onPrevChat",
+  "onNextRightSidebarTab",
+  "onPrevRightSidebarTab",
 ] as const;
+
+/**
+ * Every shortcut the desktop menu delivers, with the handler it must reach.
+ * The contract with electron/: main sends `menu-shortcut` with the id.
+ */
+const MENU_SHORTCUTS: ReadonlyArray<readonly [id: string, handler: (typeof HANDLERS)[number]]> = [
+  ["newChat", "onNewChat"],
+  ["closeTab", "onCloseTab"],
+  ["reopenLastClosedFile", "onReopenLastClosedFile"],
+  ["toggleTerminal", "onToggleTerminal"],
+  ["newTerminal", "onNewTerminal"],
+  ["clearTerminal", "onClearTerminal"],
+  ["nextChat", "onNextChat"],
+  ["prevChat", "onPrevChat"],
+  ["nextRightSidebarTab", "onNextRightSidebarTab"],
+  ["prevRightSidebarTab", "onPrevRightSidebarTab"],
+];
 
 type Handlers = Record<(typeof HANDLERS)[number], ReturnType<typeof vi.fn>>;
 
@@ -57,25 +80,26 @@ function setSurface({ os, electron }: Surface) {
   w.RELIANT_CONFIG = electron ? { isElectron: true } : undefined;
 }
 
-/** Desktop-app menu subscribers, capturing what the main process would call. */
+/** The desktop app's menu bridge, capturing what the main process would call. */
 function installElectronMenu() {
-  const listeners = new Map<string, () => void>();
-  const subscriber = (name: string) => (callback: () => void) => {
-    listeners.set(name, callback);
-    return () => listeners.delete(name);
-  };
+  const listeners = new Set<(shortcutId: string) => void>();
   (window as unknown as Record<string, unknown>).electronAPI = {
-    onCreateNewTab: subscriber("onCreateNewTab"),
-    onCloseCurrentTab: subscriber("onCloseCurrentTab"),
-    onReopenLastTab: subscriber("onReopenLastTab"),
-    onToggleTerminal: subscriber("onToggleTerminal"),
-    onNewTerminal: subscriber("onNewTerminal"),
+    onMenuShortcut: vi.fn((callback: (shortcutId: string) => void) => {
+      listeners.add(callback);
+      return () => listeners.delete(callback);
+    }),
     updateShortcutBindings: vi.fn(async () => ({ success: true })),
   };
   return {
-    /** The main process sending a menu item's IPC message. */
-    deliver: (name: string) => act(() => listeners.get(name)?.()),
+    /** The main process sending `menu-shortcut` for a menu item. */
+    deliver: (shortcutId: string) =>
+      act(() => listeners.forEach((listener) => listener(shortcutId))),
+    subscribers: () => listeners.size,
   };
+}
+
+function lookupIn(handlers: Handlers) {
+  return (name: string) => handlers[name as keyof Handlers] as (() => void) | undefined;
 }
 
 async function mount(surface: Surface) {
@@ -83,7 +107,7 @@ async function mount(surface: Surface) {
   const handlers = Object.fromEntries(
     HANDLERS.map((name) => [name, vi.fn()]),
   ) as Handlers;
-  const view = renderHook(() => useAppKeyboardShortcuts(handlers));
+  const view = renderHook(() => useAppKeyboardShortcuts(lookupIn(handlers)));
   await waitFor(() =>
     expect(useShortcutsStore.getState().registry.size).toBeGreaterThan(0),
   );
@@ -254,7 +278,7 @@ describe("in the desktop app", () => {
     const menu = installElectronMenu();
     const { handlers } = await mount(surface);
 
-    menu.deliver("onToggleTerminal");
+    menu.deliver("toggleTerminal");
 
     expect(handlers.onToggleTerminal).toHaveBeenCalledOnce();
   });
@@ -265,25 +289,48 @@ describe("in the desktop app", () => {
     const { handlers } = await mount(surface);
 
     press({ key: "j", code: "KeyJ", metaKey: true });
-    menu.deliver("onToggleTerminal");
+    menu.deliver("toggleTerminal");
     press({ key: "t", code: "KeyT", metaKey: true });
-    menu.deliver("onCreateNewTab");
+    menu.deliver("newChat");
 
     expect(handlers.onToggleTerminal).toHaveBeenCalledOnce();
     expect(handlers.onNewChat).toHaveBeenCalledOnce();
   });
 
-  it("routes every shortcut menu item to its shortcut", async () => {
+  it.each(MENU_SHORTCUTS)(
+    "routes the %s menu item to %s, once",
+    async (shortcutId, handler) => {
+      const menu = installElectronMenu();
+      const { handlers } = await mount(surface);
+
+      menu.deliver(shortcutId);
+
+      expect(handlers[handler]).toHaveBeenCalledOnce();
+      for (const other of HANDLERS) {
+        if (other !== handler) expect(handlers[other]).not.toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("subscribes to the menu once, and not again when shortcuts reload", async () => {
+    const menu = installElectronMenu();
+    await mount(surface);
+    expect(menu.subscribers()).toBe(1);
+
+    // A remap rebuilds the registry, and with it the dispatcher.
+    await act(async () => {
+      useShortcutsStore.setState({ registry: new ShortcutRegistry([]) });
+    });
+    expect(menu.subscribers()).toBe(1);
+  });
+
+  it("ignores an id it does not know", async () => {
     const menu = installElectronMenu();
     const { handlers } = await mount(surface);
 
-    menu.deliver("onCreateNewTab");
-    menu.deliver("onCloseCurrentTab");
-    menu.deliver("onNewTerminal");
+    menu.deliver("notAShortcut");
 
-    expect(handlers.onNewChat).toHaveBeenCalledOnce();
-    expect(handlers.onCloseTab).toHaveBeenCalledOnce();
-    expect(handlers.onNewTerminal).toHaveBeenCalledOnce();
+    for (const name of HANDLERS) expect(handlers[name]).not.toHaveBeenCalled();
   });
 
   it("runs a menu item that arrives before shortcuts have loaded", async () => {
@@ -297,9 +344,9 @@ describe("in the desktop app", () => {
     const handlers = Object.fromEntries(
       HANDLERS.map((name) => [name, vi.fn()]),
     ) as Handlers;
-    renderHook(() => useAppKeyboardShortcuts(handlers));
+    renderHook(() => useAppKeyboardShortcuts(lookupIn(handlers)));
 
-    menu.deliver("onCreateNewTab");
+    menu.deliver("newChat");
     expect(handlers.onNewChat).toHaveBeenCalledOnce();
 
     await act(async () => release({ shortcuts: "{}" }));

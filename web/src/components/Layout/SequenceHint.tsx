@@ -22,6 +22,11 @@ import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
 interface SequenceHintProps {
   /** Canonical armed prefix ("meta+K"), or "" when idle. */
   pending: string;
+  /**
+   * Whether a handler runs where the user is. A completion that would do
+   * nothing on this route is not offered — the hint lists only what works.
+   */
+  isAvailable?: (handlerName: string) => boolean;
 }
 
 interface HintEntry {
@@ -31,7 +36,7 @@ interface HintEntry {
   category: string;
 }
 
-export function SequenceHint({ pending }: SequenceHintProps) {
+export function SequenceHint({ pending, isAvailable }: SequenceHintProps) {
   const shortcuts = useShortcutsStore((state) => state.shortcuts);
 
   const entries = useMemo<HintEntry[]>(() => {
@@ -42,6 +47,7 @@ export function SequenceHint({ pending }: SequenceHintProps) {
     for (const shortcut of Object.values(shortcuts)) {
       const authored = effectiveBinding(shortcut);
       if (!authored) continue;
+      if (isAvailable && !isAvailable(shortcut.handler)) continue;
 
       const binding = parseBinding(authored, isMac);
       if (!isSequence(binding)) continue;
@@ -60,7 +66,7 @@ export function SequenceHint({ pending }: SequenceHintProps) {
       (a, b) =>
         a.category.localeCompare(b.category) || a.key.localeCompare(b.key),
     );
-  }, [pending, shortcuts]);
+  }, [pending, shortcuts, isAvailable]);
 
   if (!pending || entries.length === 0) return null;
 

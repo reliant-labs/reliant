@@ -117,6 +117,7 @@ A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 | Desktop | Browser | Action |
 |---------|---------|--------|
+| `Cmd+Shift+L` |  | Clear Terminal |
 | `Cmd+Shift+J` |  | New Terminal |
 | `Cmd+J` |  | Toggle Terminal |
 

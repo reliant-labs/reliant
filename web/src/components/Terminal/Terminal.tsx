@@ -812,7 +812,8 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, active 
     };
   }, []);
 
-  // Listen for clear terminal event from Electron menu
+  // Clear Terminal (the clearTerminal shortcut: Cmd+Shift+L in the terminal,
+  // or the desktop menu item from anywhere) — only the active session clears.
   useEffect(() => {
     const handleClear = () => {
       // Only clear if this is the active terminal session

@@ -324,4 +324,73 @@ describe("dispatcher", () => {
       expect(onTest).not.toHaveBeenCalled();
     });
   });
+
+  describe("in a field no context models", () => {
+    // A settings input, a search box, a form on the Runs page. The dispatcher
+    // runs on those routes too, so the field's own editing keys come first.
+    function pressIn(
+      dispatcher: ReturnType<typeof setup>,
+      init: Partial<KeyboardEventInit> & { key: string },
+    ) {
+      const input = document.createElement("input");
+      document.body.appendChild(input);
+      const event = new KeyboardEvent("keydown", { cancelable: true, ...init });
+      Object.defineProperty(event, "target", { value: input });
+      dispatcher.handleKeyDown(event);
+      input.remove();
+      return event;
+    }
+
+    it("leaves Shift+Arrow selection to the field, even when a shortcut reuses it", () => {
+      const onNextChat = vi.fn();
+      const dispatcher = setup(
+        [shortcut({ binding: "meta+shift+Down", handler: "onNextChat" })],
+        { onNextChat },
+      );
+
+      const event = pressIn(dispatcher, { key: "ArrowDown", metaKey: true, shiftKey: true });
+
+      expect(onNextChat).not.toHaveBeenCalled();
+      expect(event.defaultPrevented).toBe(false);
+    });
+
+    it("still runs the shortcut outside the field", () => {
+      const onNextChat = vi.fn();
+      const dispatcher = setup(
+        [shortcut({ binding: "meta+shift+Down", handler: "onNextChat" })],
+        { onNextChat },
+      );
+
+      press(dispatcher, { key: "ArrowDown", metaKey: true, shiftKey: true });
+
+      expect(onNextChat).toHaveBeenCalledOnce();
+    });
+
+    it("does not steal a bare key, unless the shortcut opts in", () => {
+      const onTyped = vi.fn();
+      const onEscape = vi.fn();
+      const dispatcher = setup(
+        [
+          shortcut({ id: "typed", binding: "G", handler: "onTyped" }),
+          shortcut({ id: "escape", binding: "Escape", handler: "onEscape", allowInInput: true }),
+        ],
+        { onTyped, onEscape },
+      );
+
+      expect(pressIn(dispatcher, { key: "g" }).defaultPrevented).toBe(false);
+      pressIn(dispatcher, { key: "Escape" });
+
+      expect(onTyped).not.toHaveBeenCalled();
+      expect(onEscape).toHaveBeenCalledOnce();
+    });
+
+    it("runs modified shortcuts that are not text editing", () => {
+      const onTest = vi.fn();
+      const dispatcher = setup([shortcut({})], { onTest });
+
+      pressIn(dispatcher, { key: "p", metaKey: true });
+
+      expect(onTest).toHaveBeenCalledOnce();
+    });
+  });
 });

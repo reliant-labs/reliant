@@ -26,13 +26,14 @@ export interface UseElectronIPCOptions {
  * - Close-all-tabs from the menu
  * - Tab navigation (next/previous)
  * - Search focus events
- * - Clear terminal
  * - Theme toggle
  *
  * Menu items that ARE shortcuts (New Tab, Close Tab, Reopen Last Tab, Toggle
- * Terminal, New Terminal) are not handled here: they are routed into the
- * keyboard dispatcher by useAppKeyboardShortcuts, so the menu and the
- * keystroke run one implementation and cannot both fire.
+ * Terminal, New Terminal, Clear Terminal, Next/Previous Chat, Next/Previous
+ * Sidebar Tab) are not handled here: they arrive by shortcut id on the one
+ * `menu-shortcut` channel, at the keyboard host (components/Shortcuts), which
+ * runs them through the same dispatcher a keystroke uses — on every route,
+ * not only while this workspace is mounted.
  *
  * All listeners are properly cleaned up on unmount.
  */
@@ -88,23 +89,6 @@ export function useElectronIPC(options: UseElectronIPCOptions): void {
     const unsubscribe = window.electronAPI.onFocusChatSearch(() => {
       // Dispatch custom event that ModernApp listens for
       window.dispatchEvent(new CustomEvent("open-chat-search"));
-    });
-
-    return typeof unsubscribe === "function" ? unsubscribe : undefined;
-  }, []);
-
-  // Clear terminal listener
-  useEffect(() => {
-    if (!window.electronAPI || !("onClearTerminal" in window.electronAPI)) return;
-
-    const unsubscribe = (
-      window.electronAPI as unknown as {
-        onClearTerminal: (callback: () => void) => (() => void) | void;
-      }
-    ).onClearTerminal(() => {
-      // Send clear command to active terminal
-      const event = new CustomEvent("clear-active-terminal");
-      window.dispatchEvent(event);
     });
 
     return typeof unsubscribe === "function" ? unsubscribe : undefined;

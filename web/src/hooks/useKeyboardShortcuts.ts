@@ -97,6 +97,3 @@ export function useKeyboardShortcuts(config: KeyboardShortcutsConfig = {}) {
     };
   }, []);
 }
-
-export { useAppKeyboardShortcuts } from "./useAppKeyboardShortcuts";
-export type { ShortcutHandlers } from "./useAppKeyboardShortcuts";

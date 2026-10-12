@@ -272,6 +272,24 @@ function splitChord(chord: string): { mods: string[]; key: string } {
   return { mods, key: rest };
 }
 
+/** Caret-movement keys: with Shift held, they extend a text selection. */
+const CARET_KEYS = new Set(["Up", "Down", "Left", "Right", "Home", "End", "PageUp", "PageDown"]);
+
+/**
+ * True for a chord that extends a text selection in any text field: Shift plus
+ * a caret-movement key, with or without Cmd/Ctrl/Alt (Cmd+Shift+Down selects
+ * to the end, Alt+Shift+Left selects a word).
+ *
+ * Several global shortcuts reuse these chords — next/previous chat, next and
+ * previous sidebar tab — so a field the context model does not know about
+ * must still get them first. See the dispatcher.
+ */
+export function isSelectionChord(chord: string): boolean {
+  if (isSequence(chord)) return false;
+  const { mods, key } = splitChord(chord);
+  return mods.includes("shift") && CARET_KEYS.has(key);
+}
+
 /**
  * Drop modifiers the user is still holding down from the sequence prefix.
  *

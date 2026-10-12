@@ -34,6 +34,7 @@ import { Toaster } from './lib/toast'
 import { ContextualTipsLayer, OnboardingWizard } from './components/Onboarding'
 import { GitHubSyncStatus } from './components/Layout/GitHubSyncBanner'
 import { QueuedDeployWatch } from './components/Forge/QueuedDeployWatch'
+import { ShortcutHost } from './components/Shortcuts/ShortcutHost'
 
 // ─── Code-split route components ────────────────────────────────────────────
 //
@@ -211,9 +212,16 @@ function RootShell() {
     }
   }, [pathname, search, navigate]);
 
+  // Keyboard shortcuts are app-global too, for the same reason: the host here
+  // owns the one dispatcher, the desktop menu bridge and the command palette
+  // for every authenticated desktop route. It decides where it is live itself
+  // (signed in, desktop surface, an app route — never /auth, /onboarding or
+  // /m/*); ModernApp and the workflow builder contribute their handlers to it.
   return (
     <SurfaceProvider surface={surfaceForPath(pathname)}>
-      <Outlet />
+      <ShortcutHost>
+        <Outlet />
+      </ShortcutHost>
       <ModalLayer />
       <AnonSignInNudge />
       <Toaster />

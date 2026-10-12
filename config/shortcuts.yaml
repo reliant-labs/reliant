@@ -576,6 +576,20 @@ shortcuts:
     binding: Cmd+Shift+J
     handler: onNewTerminal
 
+  # Scoped to the terminal, which is what makes Cmd+Shift+L free to mean
+  # connectSelectedSteps on the workflow canvas: contexts are disjoint, so
+  # neither shadows the other. That is also why the desktop menu's Clear
+  # Terminal item carries no native accelerator — one native chord cannot mean
+  # two things — and delivers this id instead, clearing the active session
+  # wherever focus is.
+  - id: clearTerminal
+    name: Clear Terminal
+    description: Clear the active terminal's scrollback
+    category: Terminal
+    binding: Cmd+Shift+L
+    context: terminal
+    handler: onClearTerminal
+
   # ==================================
   # Chat Control
   # ==================================
@@ -686,8 +700,9 @@ shortcuts:
   # Workflow builder
   # ==================================
   # The builder marks its whole surface data-context="workflow-canvas" and
-  # mounts a dispatcher for these handlers (useWorkflowBuilderShortcuts), so a
-  # binding here actually fires on /workflow/*. An "edit the focused
+  # registers these handlers with the app's one keyboard host while it is
+  # mounted (useWorkflowBuilderShortcuts), so a binding here actually fires on
+  # /workflow/*. An "edit the focused
   # parameter" binding was removed earlier for lack of that marker; it can
   # return now that the marker exists.
   - id: openStepPalette

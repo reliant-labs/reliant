@@ -14,6 +14,7 @@ import {
 import type { Reservation } from "../../lib/keyboard/reserved";
 import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
 import { SettingsPageHeader } from "./SettingsPageHeader";
+import { useSuspendShortcuts } from "../../hooks/useShortcutHost";
 
 /** Render an authored binding ("Cmd+K C") for display. */
 function formatAuthored(authored: string): string {
@@ -127,6 +128,11 @@ function KeyInput({
   // keydown listener is registered once and must read the live value.
   const [pendingPrefix, setPendingPrefix] = useState<string | null>(null);
   const pendingPrefixRef = useRef<string | null>(null);
+
+  // The app's shortcuts run on this page too. While the box is recording, the
+  // chord being recorded must not also open the palette, start a chat or —
+  // delivered by the desktop menu — navigate away from the edit.
+  useSuspendShortcuts(isCapturing);
 
   useEffect(() => {
     if (inputRef.current) {
