@@ -59,7 +59,11 @@ const {
   resolveMenuAccelerators,
 } = require("./menu-accelerators");
 const WindowManager = require("./window-manager");
-const { pickWindowToSurface, shouldHideOnClose } = require("./window-surfacing");
+const {
+  createWindowSurfacer,
+  registerAppActivation,
+  shouldHideOnClose,
+} = require("./window-surfacing");
 const BrowserManager = require("./browser-manager");
 const windowConfig = require("./window-config");
 const { shouldOpenExternally } = require("./navigation-policy");
@@ -767,22 +771,25 @@ function appWindowsByRecency() {
   return mainWindow && !mainWindow.isDestroyed() ? [mainWindow] : [];
 }
 
-// Brings Reliant forward for the tray and the dock: the window the user was
-// last in if it is open, otherwise the one they closed to the tray, otherwise a
-// new one. NOT `mainWindow` — that is only the most recently created window, and
-// surfacing it resurrected windows the user had closed. See window-surfacing.js.
-function surfaceAppWindow() {
-  const window = pickWindowToSurface(appWindowsByRecency());
-  if (window) {
-    if (window.isMinimized()) {
-      window.restore();
-    }
-    window.show();
-    window.focus();
-    return Promise.resolve(window);
-  }
+// The tray, the dock, app activation (Cmd+Tab) and the startup window all
+// bring Reliant forward through this one surfacer, so they follow one rule and
+// a single gesture can never open two windows. See window-surfacing.js.
+const appWindowSurfacer = createWindowSurfacer({
+  getWindows: appWindowsByRecency,
+  createWindow: () => createWindow(),
+  isSuppressed: () => isQuitting || isInstallingUpdate,
+});
 
-  return createWindow().then(() => mainWindow);
+// Brings Reliant forward: the window the user was last in if it is open,
+// otherwise the one they closed to the tray, otherwise a new one. NOT
+// `mainWindow` — that is only the most recently created window, and surfacing
+// it resurrected windows the user had closed.
+function surfaceAppWindow() {
+  return appWindowSurfacer.surface();
+}
+
+function logSurfaceFailure(source, error) {
+  log.error(`[Window] Failed to surface a window (${source}):`, error);
 }
 
 function sendToSurfacedWindow(channel, payload) {
@@ -829,7 +836,7 @@ function refreshTrayMenu() {
     {
       label: "Show Reliant",
       click: () => {
-        surfaceAppWindow();
+        surfaceAppWindow().catch((error) => logSurfaceFailure("tray menu", error));
       },
     },
     {
@@ -1569,6 +1576,8 @@ async function createWindow(options = {}) {
   windowBrowserManager.initialize(currentWindow);
   currentWindow.browserManager = windowBrowserManager;
   log.debug("[Window] Browser manager initialized for window");
+
+  return currentWindow;
 }
 
 function createTray() {
@@ -1590,7 +1599,7 @@ function createTray() {
     tray.setToolTip("Reliant");
 
     tray.on("click", () => {
-      surfaceAppWindow();
+      surfaceAppWindow().catch((error) => logSurfaceFailure("tray", error));
     });
   } catch (error) {
     log.error("Failed to create tray:", error);
@@ -4228,6 +4237,12 @@ app.whenReady().then(async () => {
   windowManager = new WindowManager();
   log.info(`[WindowManager] ✓ WindowManager created in ${Date.now() - wmStart}ms`);
 
+  // Dock click, Cmd+Tab, launching again, a notification: bring a window
+  // forward. Registered here, before the first await below — this used to be
+  // added at the end of startup, so a startup step that rejected (the window's
+  // first load, the backend start) left the dock dead for the whole session.
+  registerAppActivation(app, appWindowSurfacer, { onError: logSurfaceFailure });
+
   // Initialize browser manager
   const browserManager = new BrowserManager();
   log.info("[BrowserManager] ✓ BrowserManager created");
@@ -4318,9 +4333,13 @@ app.whenReady().then(async () => {
   // Note: createWindow() now automatically registers with WindowManager
   const windowStart = Date.now();
 
-  // Create the main window first (with default bounds)
+  // Create the main window first (with default bounds). Through the surfacer,
+  // so a dock click or the launch's own activation while it loads waits for
+  // this window instead of showing it half-loaded or opening a second one.
+  // A failed first load is logged, not thrown: the window still exists, and
+  // the rest of startup (deep link, backend, window state) must still run.
   log.info("[Window] Creating main window...");
-  await createWindow();
+  await surfaceAppWindow().catch((error) => logSurfaceFailure("startup", error));
   log.info(`[App] ✓ Window created in ${Date.now() - windowStart}ms`);
 
   if (pendingLaunchDeepLink) {
@@ -4380,15 +4399,6 @@ app.whenReady().then(async () => {
   } else {
     log.info("[AutoUpdater] Automatic checks enabled - will check after window loads");
   }
-
-  // Dock click: same rule as the tray — focus the window in use, and only
-  // create one when there is none to bring back.
-  app.on("activate", () => {
-    log.debug("[App] activate event - app window count:", appWindowsByRecency().length);
-    surfaceAppWindow().catch((error) => {
-      log.error("[App] Failed to surface a window on activate:", error);
-    });
-  });
 });
 
 // Trust self-signed certificates for local gRPC server (HTTPS/HTTP2)
