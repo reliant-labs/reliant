@@ -121,6 +121,9 @@ type adapter struct{ deps Deps }
 //
 // forge:constructor
 func New(deps Deps) Service {
+	if deps.Dirs == nil {
+		deps.Dirs = credentials.Dirs{}
+	}
 	if deps.Now == nil {
 		deps.Now = time.Now
 	}

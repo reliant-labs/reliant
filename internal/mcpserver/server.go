@@ -119,13 +119,21 @@ type GrantResolver interface {
 	Resolve(ctx context.Context, grantID string) (*Session, error)
 }
 
+// CallLimiter admits or refuses one tool call for a grant. *Limiter is the
+// production implementation; a nil *Limiter admits every call.
+type CallLimiter interface {
+	// Acquire reserves capacity for one call. The returned release function
+	// must be called when the call finishes; it is a no-op on error.
+	Acquire(grantID string) (release func(), err error)
+}
+
 // Deps are the collaborators a Server needs.
 type Deps struct {
 	Sender   CommandSender
 	Waker    WorkspaceWaker
 	Audit    AuditSink
 	Resolver GrantResolver
-	Limiter  *Limiter
+	Limiter  CallLimiter
 }
 
 // NewServer builds an MCP server exposing sess's granted tools, backed by the

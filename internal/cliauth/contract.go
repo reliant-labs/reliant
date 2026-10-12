@@ -59,10 +59,17 @@ type Service interface {
 	RemoveLegacyForgeDeposits() (int, error)
 }
 
+// CredentialsLocator names the shared credentials file. credentials.Dirs is
+// the production locator (see DepsFromEnv).
+type CredentialsLocator interface {
+	Path() (string, error)
+}
+
 // Deps are the adapter's collaborators.
 type Deps struct {
-	// Dirs locates the shared credentials file (see DepsFromEnv).
-	Dirs credentials.Dirs
+	// Dirs locates the shared credentials file (see DepsFromEnv); nil
+	// resolves like a zero credentials.Dirs.
+	Dirs CredentialsLocator
 	// HTTPClient performs discovery and the token exchange; nil uses
 	// bounded defaults.
 	HTTPClient oauth2.HTTPDoer
