@@ -19,6 +19,8 @@ import type {
   Flamegraph,
   LogRecord,
   Panel,
+  PanelResult,
+  SeriesIntent,
   ServiceHealth,
   Severity,
   Span,
@@ -119,12 +121,15 @@ function traceSummaries(window: TimeWindow, count: number): TraceSummary[] {
   return Array.from({ length: count }, (_, i) => {
     const rpc = RPCS[i % RPCS.length];
     const failed = i % 9 === 4;
+    // The root span's own duration; every fifth trace has async work that outlives it.
+    const root = Math.round((rpc === "ListOrders" ? 180 : 40) * (0.5 + random() * 2) * 100) / 100;
     return {
       traceId: i === 0 ? FIXTURE_TRACE_ID : `${(i * 40503).toString(16).padStart(6, "0")}77b34da6a3ce929d0e0e47${(i % 100).toString().padStart(2, "0")}`.slice(0, 32),
       rootService: "api",
       rootOperation: PROCEDURE(rpc),
       startMs: window.endMs - (i + 1) * 9_000,
-      durationMs: Math.round((rpc === "ListOrders" ? 180 : 40) * (0.5 + random() * 2) * 100) / 100,
+      durationMs: root + (i % 5 === 0 ? 120 : 0),
+      rootDurationMs: root,
       spanCount: 4 + (i % 5),
       errorCount: failed ? 1 : 0,
       services: ["api", "worker"],
@@ -258,6 +263,7 @@ export function fixtureDashboards(): DashboardSpec {
       },
       { id: "red-by-service", title: "Rate, errors and latency by service", kind: "table", signal: "traces", where: rpcServer, series: redTable, groupBy: ["service.name"], width: 24, height: 8 },
       { id: "go-goroutines", title: "Goroutines", kind: "line", signal: "metrics", series: [{ label: "goroutines", agg: "sum", field: "go.goroutine.count", metricType: "sum" }], unit: "count", width: 12, height: 7 },
+      { id: "sessions", title: "Browser sessions", kind: "number", signal: "traces", series: [{ label: "sessions", agg: "count_distinct", field: "resource.attr.rum.sessionId" }], unit: "count", width: 12, height: 4 },
       { id: "error-logs", title: "Recent error logs", kind: "search", signal: "logs", where: [{ field: "log.severity", op: "eq", value: "error" }], series: [], width: 12, height: 7 },
     ],
   };
@@ -293,6 +299,60 @@ export function fixtureSpeedscope(): string {
     name: "api cpu",
     exporter: "reliant fixtures",
   });
+}
+
+/**
+ * What QueryPanel would answer for a panel over the fixture app: one value per
+ * series intent, shaped by the panel's kind and group-by.
+ */
+export function fixturePanel(panel: Panel, window: TimeWindow, services: string[]): PanelResult {
+  const random = rng(panel.id.length * 31 + 7);
+  const timestamps = buckets(window);
+  const sample = (intent: SeriesIntent, scale = 1): number => {
+    if (intent.agg === "quantile") return Math.round((intent.quantile ?? 0.5) * 120 * scale * (0.8 + random() * 0.4) * 10) / 10;
+    if ((intent.where ?? []).some((p) => p.value === "error")) return Math.round(4 * scale * random());
+    return Math.round(300 * scale * (0.7 + random() * 0.6));
+  };
+  const groupBy = panel.groupBy ?? [];
+  const groups: Record<string, string>[] =
+    groupBy[0] === "service.name"
+      ? (services.length ? services : ["api", "worker"]).map((name) => ({ "service.name": name }))
+      : groupBy[0] === "span.name"
+        ? RPCS.map((rpc) => ({ "span.name": PROCEDURE(rpc) }))
+        : groupBy.length
+          ? [{ [groupBy[0]]: "value-a" }, { [groupBy[0]]: "value-b" }]
+          : [{}];
+  const base = { kind: panel.kind, unit: panel.unit ?? "", stepSeconds: 120, truncated: false, columns: [] as string[], rows: [] as PanelResult["rows"] };
+
+  if (panel.kind === "table") {
+    return {
+      ...base,
+      series: [],
+      columns: panel.series.map((s) => s.label),
+      rows: groups.map((group, index) => ({ group, values: panel.series.map((intent) => sample(intent, 1 / (index + 1))) })),
+    };
+  }
+  if (panel.kind === "number") {
+    const value = (intent: SeriesIntent) => (panel.ratio ? 0.012 : sample(intent, 40));
+    const intents = panel.ratio ? [{ label: "ratio", agg: "count" }] : panel.series;
+    return { ...base, series: intents.map((intent) => ({ label: intent.label, group: {}, timestamps: [], values: [], value: value(intent) })) };
+  }
+  // Line: one series per (series × group); a ratio, one per group labelled "ratio".
+  const intents: SeriesIntent[] = panel.ratio ? [{ label: "ratio", agg: "count" }] : panel.series;
+  return {
+    ...base,
+    series: groups.flatMap((group, groupIndex) =>
+      intents.map((intent) => ({
+        label: intent.label,
+        group,
+        timestamps,
+        values: timestamps.map((_, i) =>
+          panel.ratio ? Math.max(0, 0.01 + (i > 18 && i < 23 ? 0.04 : 0) * random()) : sample(intent, (1 + Math.sin(i / 4) * 0.3) / (groupIndex + 1))
+        ),
+        value: null,
+      }))
+    ),
+  };
 }
 
 export interface FixtureOptions {
@@ -359,16 +419,14 @@ export function createFixtureApi(options: FixtureOptions = {}): ObservabilityApi
         };
       }),
     getTrace: (req) => call("GetTrace", req, () => fixtureTrace(req.traceId, req.window.endMs)),
-    queryMetric: (req) =>
-      call("QueryMetric", req, () => {
-        const timestamps = buckets(req.window);
-        const random = rng(17);
-        return {
-          stepSeconds: 60,
-          unit: "",
-          truncated: false,
-          series: [{ label: req.metricName, group: {}, timestamps, values: timestamps.map(() => Math.round(40 + random() * 30)) }],
-        };
+    queryPanel: (req) =>
+      call("QueryPanel", req, () => {
+        const { panel } = req;
+        const unsupported = panel.series.find((series) => series.agg === "count_distinct");
+        if (unsupported) {
+          throw new ConnectError(`aggregation "count_distinct" is not supported on field ${unsupported.field}`, Code.InvalidArgument);
+        }
+        return fixturePanel(panel, req.window, req.services);
       }),
     getFlamegraph: (req): Promise<Flamegraph> =>
       call("GetFlamegraph", req, () => ({

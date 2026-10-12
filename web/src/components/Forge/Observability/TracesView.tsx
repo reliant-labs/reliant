@@ -287,7 +287,7 @@ function TraceTable({
   onLoadMore: () => void;
   onOpen: (traceId: string) => void;
 }) {
-  const maxDuration = useMemo(() => Math.max(...traces.map((t) => t.durationMs), 1), [traces]);
+  const maxDuration = useMemo(() => Math.max(...traces.map((t) => t.rootDurationMs), 1), [traces]);
   const columns = useMemo(
     () =>
       column.columns([
@@ -310,18 +310,29 @@ function TraceTable({
             );
           },
         }),
-        column.accessor("durationMs", {
+        // The ROOT span's duration — the request as its caller saw it. The
+        // whole trace can run longer (work a queue picked up afterwards), and
+        // when it does, that is said beside it.
+        column.accessor("rootDurationMs", {
           header: "Duration",
           sortFn: "basic",
           cell: (info) => (
             <span className="flex items-center gap-2">
               <span className="w-16 shrink-0 tabular-nums text-foreground">{formatDuration(info.getValue())}</span>
+              {info.row.original.durationMs > info.getValue() * 1.05 && (
+                <span className="sr-only">, trace {formatDuration(info.row.original.durationMs)} in all</span>
+              )}
               <span className="h-1.5 w-24 overflow-hidden rounded-full bg-border/60" aria-hidden="true">
                 <span
                   className={cn("block h-full rounded-full", info.row.original.errorCount > 0 ? "bg-destructive" : "bg-primary")}
                   style={{ width: `${Math.max((info.getValue() / maxDuration) * 100, 2)}%` }}
                 />
               </span>
+              {info.row.original.durationMs > info.getValue() * 1.05 && (
+                <span className="shrink-0 text-2xs tabular-nums text-muted-foreground" aria-hidden="true" title="Whole trace, including work after the root span returned">
+                  {formatDuration(info.row.original.durationMs)} total
+                </span>
+              )}
             </span>
           ),
         }),
@@ -401,7 +412,7 @@ function TraceTable({
           <colgroup>
             <col className="w-36" />
             <col />
-            <col className="w-48" />
+            <col className="w-64" />
             <col className="w-20" />
             <col className="w-24" />
           </colgroup>
@@ -459,7 +470,7 @@ function TraceTable({
                           onFocus={() => setActive(item.index)}
                           onClick={() => onOpen(trace.traceId)}
                           className="flex w-full min-w-0 rounded-sm text-left focus:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                          aria-label={`Open trace ${trace.rootService} ${trace.rootOperation}, ${formatDuration(trace.durationMs)}${trace.errorCount ? `, ${trace.errorCount} errors` : ""}`}
+                          aria-label={`Open trace ${trace.rootService} ${trace.rootOperation}, ${formatDuration(trace.rootDurationMs)}${trace.errorCount ? `, ${trace.errorCount} errors` : ""}`}
                         >
                           <table.FlexRender cell={cell} />
                         </button>

@@ -15,7 +15,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file services/observability/v1/observability.proto.
  */
 export const file_services_observability_v1_observability: GenFile = /*@__PURE__*/
-  fileDesc("Ci1zZXJ2aWNlcy9vYnNlcnZhYmlsaXR5L3YxL29ic2VydmFiaWxpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJvCglUaW1lUmFuZ2USMQoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESLwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIGukgDyAEBIpkBCgpRdWVyeVNjb3BlEhcKBm9yZ19pZBgBIAEoCUIHukgEcgIQARITCgZlbnZfaWQYAiABKAlIAIgBARIaCghzZXJ2aWNlcxgDIAMoCUIIukgFkgECEDISNgoKdGltZV9yYW5nZRgEIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5UaW1lUmFuZ2VCBrpIA8gBAUIJCgdfZW52X2lkImMKD0F0dHJpYnV0ZUZpbHRlchIXCgNrZXkYASABKAlCCrpIB3IFEAEYgAESKAoCb3AYAiABKA4yHC5jb250cm9scGxhbmUudjEuQXR0cmlidXRlT3ASDQoFdmFsdWUYAyABKAkiRAoJVGltZVBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBItwBChFTZWFyY2hMb2dzUmVxdWVzdBIyCgVzY29wZRgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5RdWVyeVNjb3BlQga6SAPIAQESFwoFcXVlcnkYAiABKAlCCLpIBXIDGIAIEhwKCnNldmVyaXRpZXMYAyADKAlCCLpIBZIBAhAKEikKBW9yZGVyGAQgASgOMhouY29udHJvbHBsYW5lLnYxLlNvcnRPcmRlchIdCglwYWdlX3NpemUYBSABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgGIAEoCSJXChJTZWFyY2hMb2dzUmVzcG9uc2USKAoEbG9ncxgBIAMoCzIaLmNvbnRyb2xwbGFuZS52MS5Mb2dSZWNvcmQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIuIDCglMb2dSZWNvcmQSLQoJdGltZXN0YW1wGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1zZXZlcml0eV90ZXh0GAIgASgJEhcKD3NldmVyaXR5X251bWJlchgDIAEoBRIPCgdzZXJ2aWNlGAQgASgJEgwKBGJvZHkYBSABKAkSEAoIdHJhY2VfaWQYBiABKAkSDwoHc3Bhbl9pZBgHIAEoCRI+CgphdHRyaWJ1dGVzGAggAygLMiouY29udHJvbHBsYW5lLnYxLkxvZ1JlY29yZC5BdHRyaWJ1dGVzRW50cnkSTwoTcmVzb3VyY2VfYXR0cmlidXRlcxgJIAMoCzIyLmNvbnRyb2xwbGFuZS52MS5Mb2dSZWNvcmQuUmVzb3VyY2VBdHRyaWJ1dGVzRW50cnkSDgoGZW52X2lkGAogASgJEg4KBnNvdXJjZRgLIAEoCRIVCg1vcGVyYXRvcl9kYXRhGAwgASgIGjEKD0F0dHJpYnV0ZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjkKF1Jlc291cmNlQXR0cmlidXRlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEijwIKEUxpc3RUcmFjZXNSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLlF1ZXJ5U2NvcGVCBrpIA8gBARITCgtlcnJvcnNfb25seRgCIAEoCBIXCg9taW5fZHVyYXRpb25fbXMYAyABKAESIAoOcm9vdF9zcGFuX25hbWUYBCABKAlCCLpIBXIDGIACEkMKD3NwYW5fYXR0cmlidXRlcxgFIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5BdHRyaWJ1dGVGaWx0ZXJCCLpIBZIBAhAKEh0KCXBhZ2Vfc2l6ZRgGIAEoBUIKukgHGgUY9AMoABISCgpwYWdlX3Rva2VuGAcgASgJIosBChJMaXN0VHJhY2VzUmVzcG9uc2USLQoGdHJhY2VzGAEgAygLMh0uY29udHJvbHBsYW5lLnYxLlRyYWNlU3VtbWFyeRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSLQoDcmVkGAMgASgLMiAuY29udHJvbHBsYW5lLnYxLlRyYWNlUmVkU3VtbWFyeSL1AQoMVHJhY2VTdW1tYXJ5EhAKCHRyYWNlX2lkGAEgASgJEi4KCnN0YXJ0X3RpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEhMKC2R1cmF0aW9uX21zGAMgASgBEhQKDHJvb3Rfc2VydmljZRgEIAEoCRIWCg5yb290X3NwYW5fbmFtZRgFIAEoCRISCgpzcGFuX2NvdW50GAYgASgFEhMKC2Vycm9yX2NvdW50GAcgASgFEhAKCHNlcnZpY2VzGAggAygJEg4KBnNvdXJjZRgJIAEoCRIVCg1vcGVyYXRvcl9kYXRhGAogASgIIp4BCg9UcmFjZVJlZFN1bW1hcnkSEwoLdHJhY2VfY291bnQYASABKAMSGQoRZXJyb3JfdHJhY2VfY291bnQYAiABKAMSFwoPcmF0ZV9wZXJfc2Vjb25kGAMgASgBEhIKCmVycm9yX3JhdGUYBCABKAESDgoGcDUwX21zGAUgASgBEg4KBnA5NV9tcxgGIAEoARIOCgZwOTlfbXMYByABKAEiYgoPR2V0VHJhY2VSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLlF1ZXJ5U2NvcGVCBrpIA8gBARIbCgh0cmFjZV9pZBgCIAEoCUIJukgGcgQQARhAIl0KEEdldFRyYWNlUmVzcG9uc2USEAoIdHJhY2VfaWQYASABKAkSJAoFc3BhbnMYAiADKAsyFS5jb250cm9scGxhbmUudjEuU3BhbhIRCgl0cnVuY2F0ZWQYAyABKAgiwAQKBFNwYW4SDwoHc3Bhbl9pZBgBIAEoCRIWCg5wYXJlbnRfc3Bhbl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBGtpbmQYBCABKAkSDwoHc2VydmljZRgFIAEoCRIuCgpzdGFydF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkdXJhdGlvbl9ucxgHIAEoAxITCgtzdGF0dXNfY29kZRgIIAEoCRIWCg5zdGF0dXNfbWVzc2FnZRgJIAEoCRI5CgphdHRyaWJ1dGVzGAogAygLMiUuY29udHJvbHBsYW5lLnYxLlNwYW4uQXR0cmlidXRlc0VudHJ5EkoKE3Jlc291cmNlX2F0dHJpYnV0ZXMYCyADKAsyLS5jb250cm9scGxhbmUudjEuU3Bhbi5SZXNvdXJjZUF0dHJpYnV0ZXNFbnRyeRIqCgZldmVudHMYDCADKAsyGi5jb250cm9scGxhbmUudjEuU3BhbkV2ZW50EigKBWxpbmtzGA0gAygLMhkuY29udHJvbHBsYW5lLnYxLlNwYW5MaW5rEg4KBnNvdXJjZRgOIAEoCRIVCg1vcGVyYXRvcl9kYXRhGA8gASgIGjEKD0F0dHJpYnV0ZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjkKF1Jlc291cmNlQXR0cmlidXRlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEitgEKCVNwYW5FdmVudBIoCgR0aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRuYW1lGAIgASgJEj4KCmF0dHJpYnV0ZXMYAyADKAsyKi5jb250cm9scGxhbmUudjEuU3BhbkV2ZW50LkF0dHJpYnV0ZXNFbnRyeRoxCg9BdHRyaWJ1dGVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASItCghTcGFuTGluaxIQCgh0cmFjZV9pZBgBIAEoCRIPCgdzcGFuX2lkGAIgASgJIoQBChJMaXN0TWV0cmljc1JlcXVlc3QSMgoFc2NvcGUYASABKAsyGy5jb250cm9scGxhbmUudjEuUXVlcnlTY29wZUIGukgDyAEBEh8KDW5hbWVfY29udGFpbnMYAiABKAlCCLpIBXIDGIABEhkKBWxpbWl0GAMgASgFQgq6SAcaBRj0AygAIlYKE0xpc3RNZXRyaWNzUmVzcG9uc2USLAoHbWV0cmljcxgBIAMoCzIbLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNJbmZvEhEKCXRydW5jYXRlZBgCIAEoCCJoCgpNZXRyaWNJbmZvEgwKBG5hbWUYASABKAkSKQoEdHlwZRgCIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNUeXBlEgwKBHVuaXQYAyABKAkSEwoLZGVzY3JpcHRpb24YBCABKAkizAIKElF1ZXJ5TWV0cmljUmVxdWVzdBIyCgVzY29wZRgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5RdWVyeVNjb3BlQga6SAPIAQESHwoLbWV0cmljX25hbWUYAiABKAlCCrpIB3IFEAEYgAISMAoLbWV0cmljX3R5cGUYAyABKA4yGy5jb250cm9scGxhbmUudjEuTWV0cmljVHlwZRI3CgthZ2dyZWdhdGlvbhgEIAEoDjIiLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNBZ2dyZWdhdGlvbhIaCghncm91cF9ieRgFIAMoCUIIukgFkgECEAMSOwoHZmlsdGVycxgGIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5BdHRyaWJ1dGVGaWx0ZXJCCLpIBZIBAhAKEh0KDHN0ZXBfc2Vjb25kcxgHIAEoBUIHukgEGgIoACK0AQoTUXVlcnlNZXRyaWNSZXNwb25zZRItCgZzZXJpZXMYASADKAsyHS5jb250cm9scGxhbmUudjEuTWV0cmljU2VyaWVzEhQKDHN0ZXBfc2Vjb25kcxgCIAEoBRIwCgttZXRyaWNfdHlwZRgDIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNUeXBlEgwKBHVuaXQYBCABKAkSGAoQc2VyaWVzX3RydW5jYXRlZBgFIAEoCCKkAQoMTWV0cmljU2VyaWVzEjkKBmxhYmVscxgBIAMoCzIpLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNTZXJpZXMuTGFiZWxzRW50cnkSKgoGcG9pbnRzGAIgAygLMhouY29udHJvbHBsYW5lLnYxLlRpbWVQb2ludBotCgtMYWJlbHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIk8KGUdldFNlcnZpY2VPdmVydmlld1JlcXVlc3QSMgoFc2NvcGUYASABKAsyGy5jb250cm9scGxhbmUudjEuUXVlcnlTY29wZUIGukgDyAEBImwKGkdldFNlcnZpY2VPdmVydmlld1Jlc3BvbnNlEjIKCHNlcnZpY2VzGAEgAygLMiAuY29udHJvbHBsYW5lLnYxLlNlcnZpY2VPdmVydmlldxIaChJ0cmVuZF9zdGVwX3NlY29uZHMYAiABKAUizwIKD1NlcnZpY2VPdmVydmlldxIPCgdzZXJ2aWNlGAEgASgJEhUKDXJlcXVlc3RfY291bnQYAiABKAMSFwoPcmF0ZV9wZXJfc2Vjb25kGAMgASgBEhMKC2Vycm9yX2NvdW50GAQgASgDEhIKCmVycm9yX3JhdGUYBSABKAESDgoGcDUwX21zGAYgASgBEg4KBnA5NV9tcxgHIAEoARIOCgZwOTlfbXMYCCABKAESFwoPZXJyb3JfbG9nX2NvdW50GAkgASgDEjEKDXJlcXVlc3RfdHJlbmQYCiADKAsyGi5jb250cm9scGxhbmUudjEuVGltZVBvaW50Ei8KC2Vycm9yX3RyZW5kGAsgAygLMhouY29udHJvbHBsYW5lLnYxLlRpbWVQb2ludBIOCgZzb3VyY2UYDCABKAkSFQoNb3BlcmF0b3JfZGF0YRgNIAEoCCKkAQoUR2V0RmxhbWVncmFwaFJlcXVlc3QSMgoFc2NvcGUYASABKAsyGy5jb250cm9scGxhbmUudjEuUXVlcnlTY29wZUIGukgDyAEBEhsKB3NlcnZpY2UYAiABKAlCCrpIB3IFEAEYgAISIAoMcHJvZmlsZV90eXBlGAMgASgJQgq6SAdyBRABGIABEhkKCHRyYWNlX2lkGAQgASgJQge6SARyAhhAIpwBChVHZXRGbGFtZWdyYXBoUmVzcG9uc2USFwoPc3BlZWRzY29wZV9qc29uGAEgASgJEhMKC3RvdGFsX3ZhbHVlGAIgASgDEgwKBHVuaXQYAyABKAkSEwoLc3RhY2tfY291bnQYBCABKAUSHwoXYXZhaWxhYmxlX3Byb2ZpbGVfdHlwZXMYBSADKAkSEQoJdHJ1bmNhdGVkGAYgASgIIkoKFEdldERhc2hib2FyZHNSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLlF1ZXJ5U2NvcGVCBrpIA8gBASJVChVHZXREYXNoYm9hcmRzUmVzcG9uc2USLAoEc3BlYxgBIAEoCzIeLmNvbnRyb2xwbGFuZS52MS5EYXNoYm9hcmRTcGVjEg4KBnNvdXJjZRgCIAEoCSLIAQoNRGFzaGJvYXJkU3BlYxIPCgd2ZXJzaW9uGAEgASgJEg8KB3Byb2plY3QYAiABKAkSLgoKZGFzaGJvYXJkcxgDIAMoCzIaLmNvbnRyb2xwbGFuZS52MS5EYXNoYm9hcmQSNAoOc2F2ZWRfc2VhcmNoZXMYBCADKAsyHC5jb250cm9scGxhbmUudjEuU2F2ZWRTZWFyY2gSLwoGYWxlcnRzGAUgAygLMh8uY29udHJvbHBsYW5lLnYxLkRhc2hib2FyZEFsZXJ0IpYBCglEYXNoYm9hcmQSCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSMQoHZmlsdGVycxgEIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5EYXNoYm9hcmRGaWx0ZXISJgoGcGFuZWxzGAUgAygLMhYuY29udHJvbHBsYW5lLnYxLlBhbmVsIjsKD0Rhc2hib2FyZEZpbHRlchIKCgJpZBgBIAEoCRINCgVsYWJlbBgCIAEoCRINCgVmaWVsZBgDIAEoCSKSAgoFUGFuZWwSCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSEwoLZGVzY3JpcHRpb24YAyABKAkSDAoEa2luZBgEIAEoCRIOCgZzaWduYWwYBSABKAkSLAoGc2VyaWVzGAYgAygLMhwuY29udHJvbHBsYW5lLnYxLlBhbmVsU2VyaWVzEg0KBXJhdGlvGAcgASgIEi4KBXdoZXJlGAggAygLMh8uY29udHJvbHBsYW5lLnYxLlBhbmVsUHJlZGljYXRlEhAKCGdyb3VwX2J5GAkgAygJEg8KB2NvbHVtbnMYCiADKAkSDAoEdW5pdBgLIAEoCRINCgV3aWR0aBgMIAEoBRIOCgZoZWlnaHQYDSABKAUijwEKC1BhbmVsU2VyaWVzEg0KBWxhYmVsGAEgASgJEgsKA2FnZxgCIAEoCRIQCghxdWFudGlsZRgDIAEoARINCgVmaWVsZBgEIAEoCRITCgttZXRyaWNfdHlwZRgFIAEoCRIuCgV3aGVyZRgGIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5QYW5lbFByZWRpY2F0ZSJKCg5QYW5lbFByZWRpY2F0ZRINCgVmaWVsZBgBIAEoCRIKCgJvcBgCIAEoCRINCgV2YWx1ZRgDIAEoCRIOCgZ2YWx1ZXMYBCADKAkiiAEKC1NhdmVkU2VhcmNoEgoKAmlkGAEgASgJEg0KBXRpdGxlGAIgASgJEg4KBnNpZ25hbBgDIAEoCRIuCgV3aGVyZRgEIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5QYW5lbFByZWRpY2F0ZRIPCgdjb2x1bW5zGAUgAygJEg0KBXF1ZXJ5GAYgASgJIpUBCg5EYXNoYm9hcmRBbGVydBIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRINCgVwYW5lbBgDIAEoCRIQCghpbnRlcnZhbBgEIAEoCRIWCg50aHJlc2hvbGRfdHlwZRgFIAEoCRIRCgl0aHJlc2hvbGQYBiABKAESDgoGc3RhdHVzGAcgASgJEgwKBG5vdGUYCCABKAkqYQoJU29ydE9yZGVyEhoKFlNPUlRfT1JERVJfVU5TUEVDSUZJRUQQABIbChdTT1JUX09SREVSX05FV0VTVF9GSVJTVBABEhsKF1NPUlRfT1JERVJfT0xERVNUX0ZJUlNUEAIqbwoLQXR0cmlidXRlT3ASHAoYQVRUUklCVVRFX09QX1VOU1BFQ0lGSUVEEAASEwoPQVRUUklCVVRFX09QX0VREAESFAoQQVRUUklCVVRFX09QX05FURACEhcKE0FUVFJJQlVURV9PUF9FWElTVFMQAypwCgpNZXRyaWNUeXBlEhsKF01FVFJJQ19UWVBFX1VOU1BFQ0lGSUVEEAASFQoRTUVUUklDX1RZUEVfR0FVR0UQARITCg9NRVRSSUNfVFlQRV9TVU0QAhIZChVNRVRSSUNfVFlQRV9ISVNUT0dSQU0QAyrXAgoRTWV0cmljQWdncmVnYXRpb24SIgoeTUVUUklDX0FHR1JFR0FUSU9OX1VOU1BFQ0lGSUVEEAASGgoWTUVUUklDX0FHR1JFR0FUSU9OX0FWRxABEhoKFk1FVFJJQ19BR0dSRUdBVElPTl9TVU0QAhIaChZNRVRSSUNfQUdHUkVHQVRJT05fTUlOEAMSGgoWTUVUUklDX0FHR1JFR0FUSU9OX01BWBAEEhwKGE1FVFJJQ19BR0dSRUdBVElPTl9DT1VOVBAFEh8KG01FVFJJQ19BR0dSRUdBVElPTl9JTkNSRUFTRRAGEhsKF01FVFJJQ19BR0dSRUdBVElPTl9SQVRFEAcSGgoWTUVUUklDX0FHR1JFR0FUSU9OX1A1MBAIEhoKFk1FVFJJQ19BR0dSRUdBVElPTl9QOTUQCRIaChZNRVRSSUNfQUdHUkVHQVRJT05fUDk5EAoyowcKFE9ic2VydmFiaWxpdHlTZXJ2aWNlEl8KClNlYXJjaExvZ3MSIi5jb250cm9scGxhbmUudjEuU2VhcmNoTG9nc1JlcXVlc3QaIy5jb250cm9scGxhbmUudjEuU2VhcmNoTG9nc1Jlc3BvbnNlIgiiuxgECAEYARJfCgpMaXN0VHJhY2VzEiIuY29udHJvbHBsYW5lLnYxLkxpc3RUcmFjZXNSZXF1ZXN0GiMuY29udHJvbHBsYW5lLnYxLkxpc3RUcmFjZXNSZXNwb25zZSIIorsYBAgBGAESWQoIR2V0VHJhY2USIC5jb250cm9scGxhbmUudjEuR2V0VHJhY2VSZXF1ZXN0GiEuY29udHJvbHBsYW5lLnYxLkdldFRyYWNlUmVzcG9uc2UiCKK7GAQIARgBEmIKC0xpc3RNZXRyaWNzEiMuY29udHJvbHBsYW5lLnYxLkxpc3RNZXRyaWNzUmVxdWVzdBokLmNvbnRyb2xwbGFuZS52MS5MaXN0TWV0cmljc1Jlc3BvbnNlIgiiuxgECAEYARJiCgtRdWVyeU1ldHJpYxIjLmNvbnRyb2xwbGFuZS52MS5RdWVyeU1ldHJpY1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuUXVlcnlNZXRyaWNSZXNwb25zZSIIorsYBAgBGAESdwoSR2V0U2VydmljZU92ZXJ2aWV3EiouY29udHJvbHBsYW5lLnYxLkdldFNlcnZpY2VPdmVydmlld1JlcXVlc3QaKy5jb250cm9scGxhbmUudjEuR2V0U2VydmljZU92ZXJ2aWV3UmVzcG9uc2UiCKK7GAQIARgBEmgKDUdldEZsYW1lZ3JhcGgSJS5jb250cm9scGxhbmUudjEuR2V0RmxhbWVncmFwaFJlcXVlc3QaJi5jb250cm9scGxhbmUudjEuR2V0RmxhbWVncmFwaFJlc3BvbnNlIgiiuxgECAEYARJoCg1HZXREYXNoYm9hcmRzEiUuY29udHJvbHBsYW5lLnYxLkdldERhc2hib2FyZHNSZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkdldERhc2hib2FyZHNSZXNwb25zZSIIorsYBAgBGAEaWYK1GFUKFE9ic2VydmFiaWxpdHlTZXJ2aWNlEgUxLjAuMBo2VGVuYW50IG9ic2VydmFiaWxpdHkgcXVlcmllcyBvdmVyIHRoZSBvcmcncyBDbGlja0hvdXNlQuEBChNjb20uY29udHJvbHBsYW5lLnYxQhJPYnNlcnZhYmlsaXR5UHJvdG9QAVpZZ2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29udHJvbHBsYW5lL3NlcnZpY2VzL29ic2VydmFiaWxpdHkvdjE7Y29udHJvbHBsYW5ldjGiAgNDWFiqAg9Db250cm9scGxhbmUuVjHKAg9Db250cm9scGxhbmVcVjHiAhtDb250cm9scGxhbmVcVjFcR1BCTWV0YWRhdGHqAhBDb250cm9scGxhbmU6OlYxYgZwcm90bzM", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
+  fileDesc("Ci1zZXJ2aWNlcy9vYnNlcnZhYmlsaXR5L3YxL29ic2VydmFiaWxpdHkucHJvdG8SD2NvbnRyb2xwbGFuZS52MSJvCglUaW1lUmFuZ2USMQoFc3RhcnQYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wQga6SAPIAQESLwoDZW5kGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEIGukgDyAEBIpkBCgpRdWVyeVNjb3BlEhcKBm9yZ19pZBgBIAEoCUIHukgEcgIQARITCgZlbnZfaWQYAiABKAlIAIgBARIaCghzZXJ2aWNlcxgDIAMoCUIIukgFkgECEDISNgoKdGltZV9yYW5nZRgEIAEoCzIaLmNvbnRyb2xwbGFuZS52MS5UaW1lUmFuZ2VCBrpIA8gBAUIJCgdfZW52X2lkImMKD0F0dHJpYnV0ZUZpbHRlchIXCgNrZXkYASABKAlCCrpIB3IFEAEYgAESKAoCb3AYAiABKA4yHC5jb250cm9scGxhbmUudjEuQXR0cmlidXRlT3ASDQoFdmFsdWUYAyABKAkiRAoJVGltZVBvaW50EigKBHRpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBXZhbHVlGAIgASgBItwBChFTZWFyY2hMb2dzUmVxdWVzdBIyCgVzY29wZRgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5RdWVyeVNjb3BlQga6SAPIAQESFwoFcXVlcnkYAiABKAlCCLpIBXIDGIAIEhwKCnNldmVyaXRpZXMYAyADKAlCCLpIBZIBAhAKEikKBW9yZGVyGAQgASgOMhouY29udHJvbHBsYW5lLnYxLlNvcnRPcmRlchIdCglwYWdlX3NpemUYBSABKAVCCrpIBxoFGOgHKAASEgoKcGFnZV90b2tlbhgGIAEoCSJXChJTZWFyY2hMb2dzUmVzcG9uc2USKAoEbG9ncxgBIAMoCzIaLmNvbnRyb2xwbGFuZS52MS5Mb2dSZWNvcmQSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIuIDCglMb2dSZWNvcmQSLQoJdGltZXN0YW1wGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIVCg1zZXZlcml0eV90ZXh0GAIgASgJEhcKD3NldmVyaXR5X251bWJlchgDIAEoBRIPCgdzZXJ2aWNlGAQgASgJEgwKBGJvZHkYBSABKAkSEAoIdHJhY2VfaWQYBiABKAkSDwoHc3Bhbl9pZBgHIAEoCRI+CgphdHRyaWJ1dGVzGAggAygLMiouY29udHJvbHBsYW5lLnYxLkxvZ1JlY29yZC5BdHRyaWJ1dGVzRW50cnkSTwoTcmVzb3VyY2VfYXR0cmlidXRlcxgJIAMoCzIyLmNvbnRyb2xwbGFuZS52MS5Mb2dSZWNvcmQuUmVzb3VyY2VBdHRyaWJ1dGVzRW50cnkSDgoGZW52X2lkGAogASgJEg4KBnNvdXJjZRgLIAEoCRIVCg1vcGVyYXRvcl9kYXRhGAwgASgIGjEKD0F0dHJpYnV0ZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjkKF1Jlc291cmNlQXR0cmlidXRlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEi1QIKEUxpc3RUcmFjZXNSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLlF1ZXJ5U2NvcGVCBrpIA8gBARIYCgtlcnJvcnNfb25seRgCIAEoCEgAiAEBEhwKD21pbl9kdXJhdGlvbl9tcxgDIAEoAUgBiAEBEiUKDnJvb3Rfc3Bhbl9uYW1lGAQgASgJQgi6SAVyAxiAAkgCiAEBEkMKD3NwYW5fYXR0cmlidXRlcxgFIAMoCzIgLmNvbnRyb2xwbGFuZS52MS5BdHRyaWJ1dGVGaWx0ZXJCCLpIBZIBAhAKEh0KCXBhZ2Vfc2l6ZRgGIAEoBUIKukgHGgUY9AMoABISCgpwYWdlX3Rva2VuGAcgASgJQg4KDF9lcnJvcnNfb25seUISChBfbWluX2R1cmF0aW9uX21zQhEKD19yb290X3NwYW5fbmFtZSKLAQoSTGlzdFRyYWNlc1Jlc3BvbnNlEi0KBnRyYWNlcxgBIAMoCzIdLmNvbnRyb2xwbGFuZS52MS5UcmFjZVN1bW1hcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJEi0KA3JlZBgDIAEoCzIgLmNvbnRyb2xwbGFuZS52MS5UcmFjZVJlZFN1bW1hcnkijwIKDFRyYWNlU3VtbWFyeRIQCgh0cmFjZV9pZBgBIAEoCRIuCgpzdGFydF90aW1lGAIgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkdXJhdGlvbl9tcxgDIAEoARIUCgxyb290X3NlcnZpY2UYBCABKAkSFgoOcm9vdF9zcGFuX25hbWUYBSABKAkSEgoKc3Bhbl9jb3VudBgGIAEoBRITCgtlcnJvcl9jb3VudBgHIAEoBRIQCghzZXJ2aWNlcxgIIAMoCRIOCgZzb3VyY2UYCSABKAkSFQoNb3BlcmF0b3JfZGF0YRgKIAEoCBIYChByb290X2R1cmF0aW9uX21zGAsgASgBIp4BCg9UcmFjZVJlZFN1bW1hcnkSEwoLdHJhY2VfY291bnQYASABKAMSGQoRZXJyb3JfdHJhY2VfY291bnQYAiABKAMSFwoPcmF0ZV9wZXJfc2Vjb25kGAMgASgBEhIKCmVycm9yX3JhdGUYBCABKAESDgoGcDUwX21zGAUgASgBEg4KBnA5NV9tcxgGIAEoARIOCgZwOTlfbXMYByABKAEiYgoPR2V0VHJhY2VSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLlF1ZXJ5U2NvcGVCBrpIA8gBARIbCgh0cmFjZV9pZBgCIAEoCUIJukgGcgQQARhAIl0KEEdldFRyYWNlUmVzcG9uc2USEAoIdHJhY2VfaWQYASABKAkSJAoFc3BhbnMYAiADKAsyFS5jb250cm9scGxhbmUudjEuU3BhbhIRCgl0cnVuY2F0ZWQYAyABKAgiwAQKBFNwYW4SDwoHc3Bhbl9pZBgBIAEoCRIWCg5wYXJlbnRfc3Bhbl9pZBgCIAEoCRIMCgRuYW1lGAMgASgJEgwKBGtpbmQYBCABKAkSDwoHc2VydmljZRgFIAEoCRIuCgpzdGFydF90aW1lGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBITCgtkdXJhdGlvbl9ucxgHIAEoAxITCgtzdGF0dXNfY29kZRgIIAEoCRIWCg5zdGF0dXNfbWVzc2FnZRgJIAEoCRI5CgphdHRyaWJ1dGVzGAogAygLMiUuY29udHJvbHBsYW5lLnYxLlNwYW4uQXR0cmlidXRlc0VudHJ5EkoKE3Jlc291cmNlX2F0dHJpYnV0ZXMYCyADKAsyLS5jb250cm9scGxhbmUudjEuU3Bhbi5SZXNvdXJjZUF0dHJpYnV0ZXNFbnRyeRIqCgZldmVudHMYDCADKAsyGi5jb250cm9scGxhbmUudjEuU3BhbkV2ZW50EigKBWxpbmtzGA0gAygLMhkuY29udHJvbHBsYW5lLnYxLlNwYW5MaW5rEg4KBnNvdXJjZRgOIAEoCRIVCg1vcGVyYXRvcl9kYXRhGA8gASgIGjEKD0F0dHJpYnV0ZXNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBGjkKF1Jlc291cmNlQXR0cmlidXRlc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEitgEKCVNwYW5FdmVudBIoCgR0aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIMCgRuYW1lGAIgASgJEj4KCmF0dHJpYnV0ZXMYAyADKAsyKi5jb250cm9scGxhbmUudjEuU3BhbkV2ZW50LkF0dHJpYnV0ZXNFbnRyeRoxCg9BdHRyaWJ1dGVzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASItCghTcGFuTGluaxIQCgh0cmFjZV9pZBgBIAEoCRIPCgdzcGFuX2lkGAIgASgJIpsBChJMaXN0TWV0cmljc1JlcXVlc3QSMgoFc2NvcGUYASABKAsyGy5jb250cm9scGxhbmUudjEuUXVlcnlTY29wZUIGukgDyAEBEiQKDW5hbWVfY29udGFpbnMYAiABKAlCCLpIBXIDGIABSACIAQESGQoFbGltaXQYAyABKAVCCrpIBxoFGPQDKABCEAoOX25hbWVfY29udGFpbnMiVgoTTGlzdE1ldHJpY3NSZXNwb25zZRIsCgdtZXRyaWNzGAEgAygLMhsuY29udHJvbHBsYW5lLnYxLk1ldHJpY0luZm8SEQoJdHJ1bmNhdGVkGAIgASgIImgKCk1ldHJpY0luZm8SDAoEbmFtZRgBIAEoCRIpCgR0eXBlGAIgASgOMhsuY29udHJvbHBsYW5lLnYxLk1ldHJpY1R5cGUSDAoEdW5pdBgDIAEoCRITCgtkZXNjcmlwdGlvbhgEIAEoCSLMAgoSUXVlcnlNZXRyaWNSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLlF1ZXJ5U2NvcGVCBrpIA8gBARIfCgttZXRyaWNfbmFtZRgCIAEoCUIKukgHcgUQARiAAhIwCgttZXRyaWNfdHlwZRgDIAEoDjIbLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNUeXBlEjcKC2FnZ3JlZ2F0aW9uGAQgASgOMiIuY29udHJvbHBsYW5lLnYxLk1ldHJpY0FnZ3JlZ2F0aW9uEhoKCGdyb3VwX2J5GAUgAygJQgi6SAWSAQIQAxI7CgdmaWx0ZXJzGAYgAygLMiAuY29udHJvbHBsYW5lLnYxLkF0dHJpYnV0ZUZpbHRlckIIukgFkgECEAoSHQoMc3RlcF9zZWNvbmRzGAcgASgFQge6SAQaAigAIu0BChNRdWVyeU1ldHJpY1Jlc3BvbnNlEi0KBnNlcmllcxgBIAMoCzIdLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNTZXJpZXMSFAoMc3RlcF9zZWNvbmRzGAIgASgFEjAKC21ldHJpY190eXBlGAMgASgOMhsuY29udHJvbHBsYW5lLnYxLk1ldHJpY1R5cGUSDAoEdW5pdBgEIAEoCRI3CgthZ2dyZWdhdGlvbhgGIAEoDjIiLmNvbnRyb2xwbGFuZS52MS5NZXRyaWNBZ2dyZWdhdGlvbhIYChBzZXJpZXNfdHJ1bmNhdGVkGAUgASgIIqQBCgxNZXRyaWNTZXJpZXMSOQoGbGFiZWxzGAEgAygLMikuY29udHJvbHBsYW5lLnYxLk1ldHJpY1Nlcmllcy5MYWJlbHNFbnRyeRIqCgZwb2ludHMYAiADKAsyGi5jb250cm9scGxhbmUudjEuVGltZVBvaW50Gi0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiTwoZR2V0U2VydmljZU92ZXJ2aWV3UmVxdWVzdBIyCgVzY29wZRgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5RdWVyeVNjb3BlQga6SAPIAQEibAoaR2V0U2VydmljZU92ZXJ2aWV3UmVzcG9uc2USMgoIc2VydmljZXMYASADKAsyIC5jb250cm9scGxhbmUudjEuU2VydmljZU92ZXJ2aWV3EhoKEnRyZW5kX3N0ZXBfc2Vjb25kcxgCIAEoBSLPAgoPU2VydmljZU92ZXJ2aWV3Eg8KB3NlcnZpY2UYASABKAkSFQoNcmVxdWVzdF9jb3VudBgCIAEoAxIXCg9yYXRlX3Blcl9zZWNvbmQYAyABKAESEwoLZXJyb3JfY291bnQYBCABKAMSEgoKZXJyb3JfcmF0ZRgFIAEoARIOCgZwNTBfbXMYBiABKAESDgoGcDk1X21zGAcgASgBEg4KBnA5OV9tcxgIIAEoARIXCg9lcnJvcl9sb2dfY291bnQYCSABKAMSMQoNcmVxdWVzdF90cmVuZBgKIAMoCzIaLmNvbnRyb2xwbGFuZS52MS5UaW1lUG9pbnQSLwoLZXJyb3JfdHJlbmQYCyADKAsyGi5jb250cm9scGxhbmUudjEuVGltZVBvaW50Eg4KBnNvdXJjZRgMIAEoCRIVCg1vcGVyYXRvcl9kYXRhGA0gASgIIqQBChRHZXRGbGFtZWdyYXBoUmVxdWVzdBIyCgVzY29wZRgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5RdWVyeVNjb3BlQga6SAPIAQESGwoHc2VydmljZRgCIAEoCUIKukgHcgUQARiAAhIgCgxwcm9maWxlX3R5cGUYAyABKAlCCrpIB3IFEAEYgAESGQoIdHJhY2VfaWQYBCABKAlCB7pIBHICGEAinAEKFUdldEZsYW1lZ3JhcGhSZXNwb25zZRIXCg9zcGVlZHNjb3BlX2pzb24YASABKAkSEwoLdG90YWxfdmFsdWUYAiABKAMSDAoEdW5pdBgDIAEoCRITCgtzdGFja19jb3VudBgEIAEoBRIfChdhdmFpbGFibGVfcHJvZmlsZV90eXBlcxgFIAMoCRIRCgl0cnVuY2F0ZWQYBiABKAgi0QEKEVF1ZXJ5UGFuZWxSZXF1ZXN0EjIKBXNjb3BlGAEgASgLMhsuY29udHJvbHBsYW5lLnYxLlF1ZXJ5U2NvcGVCBrpIA8gBARItCgVwYW5lbBgCIAEoCzIWLmNvbnRyb2xwbGFuZS52MS5QYW5lbEIGukgDyAEBEjoKB2ZpbHRlcnMYAyADKAsyHy5jb250cm9scGxhbmUudjEuUGFuZWxQcmVkaWNhdGVCCLpIBZIBAhAKEh0KDHN0ZXBfc2Vjb25kcxgEIAEoBUIHukgEGgIoACLeAQoSUXVlcnlQYW5lbFJlc3BvbnNlEhAKCHBhbmVsX2lkGAEgASgJEgwKBGtpbmQYAiABKAkSDAoEdW5pdBgDIAEoCRIyCgZzZXJpZXMYBCADKAsyIi5jb250cm9scGxhbmUudjEuUGFuZWxTZXJpZXNSZXN1bHQSDwoHY29sdW1ucxgFIAMoCRIsCgRyb3dzGAYgAygLMh4uY29udHJvbHBsYW5lLnYxLlBhbmVsVGFibGVSb3cSFAoMc3RlcF9zZWNvbmRzGAcgASgFEhEKCXRydW5jYXRlZBgIIAEoCCLJAQoRUGFuZWxTZXJpZXNSZXN1bHQSDQoFbGFiZWwYASABKAkSPAoFZ3JvdXAYAiADKAsyLS5jb250cm9scGxhbmUudjEuUGFuZWxTZXJpZXNSZXN1bHQuR3JvdXBFbnRyeRIqCgZwb2ludHMYAyADKAsyGi5jb250cm9scGxhbmUudjEuVGltZVBvaW50Eg0KBXZhbHVlGAQgASgBGiwKCkdyb3VwRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASKHAQoNUGFuZWxUYWJsZVJvdxI4CgVncm91cBgBIAMoCzIpLmNvbnRyb2xwbGFuZS52MS5QYW5lbFRhYmxlUm93Lkdyb3VwRW50cnkSDgoGdmFsdWVzGAIgAygBGiwKCkdyb3VwRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgJOgI4ASJKChRHZXREYXNoYm9hcmRzUmVxdWVzdBIyCgVzY29wZRgBIAEoCzIbLmNvbnRyb2xwbGFuZS52MS5RdWVyeVNjb3BlQga6SAPIAQEiVQoVR2V0RGFzaGJvYXJkc1Jlc3BvbnNlEiwKBHNwZWMYASABKAsyHi5jb250cm9scGxhbmUudjEuRGFzaGJvYXJkU3BlYxIOCgZzb3VyY2UYAiABKAkiyAEKDURhc2hib2FyZFNwZWMSDwoHdmVyc2lvbhgBIAEoCRIPCgdwcm9qZWN0GAIgASgJEi4KCmRhc2hib2FyZHMYAyADKAsyGi5jb250cm9scGxhbmUudjEuRGFzaGJvYXJkEjQKDnNhdmVkX3NlYXJjaGVzGAQgAygLMhwuY29udHJvbHBsYW5lLnYxLlNhdmVkU2VhcmNoEi8KBmFsZXJ0cxgFIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5EYXNoYm9hcmRBbGVydCKWAQoJRGFzaGJvYXJkEgoKAmlkGAEgASgJEg0KBXRpdGxlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEjEKB2ZpbHRlcnMYBCADKAsyIC5jb250cm9scGxhbmUudjEuRGFzaGJvYXJkRmlsdGVyEiYKBnBhbmVscxgFIAMoCzIWLmNvbnRyb2xwbGFuZS52MS5QYW5lbCI7Cg9EYXNoYm9hcmRGaWx0ZXISCgoCaWQYASABKAkSDQoFbGFiZWwYAiABKAkSDQoFZmllbGQYAyABKAkikgIKBVBhbmVsEgoKAmlkGAEgASgJEg0KBXRpdGxlGAIgASgJEhMKC2Rlc2NyaXB0aW9uGAMgASgJEgwKBGtpbmQYBCABKAkSDgoGc2lnbmFsGAUgASgJEiwKBnNlcmllcxgGIAMoCzIcLmNvbnRyb2xwbGFuZS52MS5QYW5lbFNlcmllcxINCgVyYXRpbxgHIAEoCBIuCgV3aGVyZRgIIAMoCzIfLmNvbnRyb2xwbGFuZS52MS5QYW5lbFByZWRpY2F0ZRIQCghncm91cF9ieRgJIAMoCRIPCgdjb2x1bW5zGAogAygJEgwKBHVuaXQYCyABKAkSDQoFd2lkdGgYDCABKAUSDgoGaGVpZ2h0GA0gASgFIo8BCgtQYW5lbFNlcmllcxINCgVsYWJlbBgBIAEoCRILCgNhZ2cYAiABKAkSEAoIcXVhbnRpbGUYAyABKAESDQoFZmllbGQYBCABKAkSEwoLbWV0cmljX3R5cGUYBSABKAkSLgoFd2hlcmUYBiADKAsyHy5jb250cm9scGxhbmUudjEuUGFuZWxQcmVkaWNhdGUiSgoOUGFuZWxQcmVkaWNhdGUSDQoFZmllbGQYASABKAkSCgoCb3AYAiABKAkSDQoFdmFsdWUYAyABKAkSDgoGdmFsdWVzGAQgAygJIogBCgtTYXZlZFNlYXJjaBIKCgJpZBgBIAEoCRINCgV0aXRsZRgCIAEoCRIOCgZzaWduYWwYAyABKAkSLgoFd2hlcmUYBCADKAsyHy5jb250cm9scGxhbmUudjEuUGFuZWxQcmVkaWNhdGUSDwoHY29sdW1ucxgFIAMoCRINCgVxdWVyeRgGIAEoCSKVAQoORGFzaGJvYXJkQWxlcnQSCgoCaWQYASABKAkSDQoFdGl0bGUYAiABKAkSDQoFcGFuZWwYAyABKAkSEAoIaW50ZXJ2YWwYBCABKAkSFgoOdGhyZXNob2xkX3R5cGUYBSABKAkSEQoJdGhyZXNob2xkGAYgASgBEg4KBnN0YXR1cxgHIAEoCRIMCgRub3RlGAggASgJKmEKCVNvcnRPcmRlchIaChZTT1JUX09SREVSX1VOU1BFQ0lGSUVEEAASGwoXU09SVF9PUkRFUl9ORVdFU1RfRklSU1QQARIbChdTT1JUX09SREVSX09MREVTVF9GSVJTVBACKm8KC0F0dHJpYnV0ZU9wEhwKGEFUVFJJQlVURV9PUF9VTlNQRUNJRklFRBAAEhMKD0FUVFJJQlVURV9PUF9FURABEhQKEEFUVFJJQlVURV9PUF9ORVEQAhIXChNBVFRSSUJVVEVfT1BfRVhJU1RTEAMqcAoKTWV0cmljVHlwZRIbChdNRVRSSUNfVFlQRV9VTlNQRUNJRklFRBAAEhUKEU1FVFJJQ19UWVBFX0dBVUdFEAESEwoPTUVUUklDX1RZUEVfU1VNEAISGQoVTUVUUklDX1RZUEVfSElTVE9HUkFNEAMq1wIKEU1ldHJpY0FnZ3JlZ2F0aW9uEiIKHk1FVFJJQ19BR0dSRUdBVElPTl9VTlNQRUNJRklFRBAAEhoKFk1FVFJJQ19BR0dSRUdBVElPTl9BVkcQARIaChZNRVRSSUNfQUdHUkVHQVRJT05fU1VNEAISGgoWTUVUUklDX0FHR1JFR0FUSU9OX01JThADEhoKFk1FVFJJQ19BR0dSRUdBVElPTl9NQVgQBBIcChhNRVRSSUNfQUdHUkVHQVRJT05fQ09VTlQQBRIfChtNRVRSSUNfQUdHUkVHQVRJT05fSU5DUkVBU0UQBhIbChdNRVRSSUNfQUdHUkVHQVRJT05fUkFURRAHEhoKFk1FVFJJQ19BR0dSRUdBVElPTl9QNTAQCBIaChZNRVRSSUNfQUdHUkVHQVRJT05fUDk1EAkSGgoWTUVUUklDX0FHR1JFR0FUSU9OX1A5ORAKMoQIChRPYnNlcnZhYmlsaXR5U2VydmljZRJfCgpTZWFyY2hMb2dzEiIuY29udHJvbHBsYW5lLnYxLlNlYXJjaExvZ3NSZXF1ZXN0GiMuY29udHJvbHBsYW5lLnYxLlNlYXJjaExvZ3NSZXNwb25zZSIIorsYBAgBGAESXwoKTGlzdFRyYWNlcxIiLmNvbnRyb2xwbGFuZS52MS5MaXN0VHJhY2VzUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5MaXN0VHJhY2VzUmVzcG9uc2UiCKK7GAQIARgBElkKCEdldFRyYWNlEiAuY29udHJvbHBsYW5lLnYxLkdldFRyYWNlUmVxdWVzdBohLmNvbnRyb2xwbGFuZS52MS5HZXRUcmFjZVJlc3BvbnNlIgiiuxgECAEYARJiCgtMaXN0TWV0cmljcxIjLmNvbnRyb2xwbGFuZS52MS5MaXN0TWV0cmljc1JlcXVlc3QaJC5jb250cm9scGxhbmUudjEuTGlzdE1ldHJpY3NSZXNwb25zZSIIorsYBAgBGAESYgoLUXVlcnlNZXRyaWMSIy5jb250cm9scGxhbmUudjEuUXVlcnlNZXRyaWNSZXF1ZXN0GiQuY29udHJvbHBsYW5lLnYxLlF1ZXJ5TWV0cmljUmVzcG9uc2UiCKK7GAQIARgBEncKEkdldFNlcnZpY2VPdmVydmlldxIqLmNvbnRyb2xwbGFuZS52MS5HZXRTZXJ2aWNlT3ZlcnZpZXdSZXF1ZXN0GisuY29udHJvbHBsYW5lLnYxLkdldFNlcnZpY2VPdmVydmlld1Jlc3BvbnNlIgiiuxgECAEYARJoCg1HZXRGbGFtZWdyYXBoEiUuY29udHJvbHBsYW5lLnYxLkdldEZsYW1lZ3JhcGhSZXF1ZXN0GiYuY29udHJvbHBsYW5lLnYxLkdldEZsYW1lZ3JhcGhSZXNwb25zZSIIorsYBAgBGAESXwoKUXVlcnlQYW5lbBIiLmNvbnRyb2xwbGFuZS52MS5RdWVyeVBhbmVsUmVxdWVzdBojLmNvbnRyb2xwbGFuZS52MS5RdWVyeVBhbmVsUmVzcG9uc2UiCKK7GAQIARgBEmgKDUdldERhc2hib2FyZHMSJS5jb250cm9scGxhbmUudjEuR2V0RGFzaGJvYXJkc1JlcXVlc3QaJi5jb250cm9scGxhbmUudjEuR2V0RGFzaGJvYXJkc1Jlc3BvbnNlIgiiuxgECAEYARpZgrUYVQoUT2JzZXJ2YWJpbGl0eVNlcnZpY2USBTEuMC4wGjZUZW5hbnQgb2JzZXJ2YWJpbGl0eSBxdWVyaWVzIG92ZXIgdGhlIG9yZydzIENsaWNrSG91c2VC4QEKE2NvbS5jb250cm9scGxhbmUudjFCEk9ic2VydmFiaWxpdHlQcm90b1ABWllnaXRodWIuY29tL3JlbGlhbnQtbGFicy9yZWxpYW50L2dlbi9jb250cm9scGxhbmUvc2VydmljZXMvb2JzZXJ2YWJpbGl0eS92MTtjb250cm9scGxhbmV2MaICA0NYWKoCD0NvbnRyb2xwbGFuZS5WMcoCD0NvbnRyb2xwbGFuZVxWMeICG0NvbnRyb2xwbGFuZVxWMVxHUEJNZXRhZGF0YeoCEENvbnRyb2xwbGFuZTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_forge_v1_forge, file_google_protobuf_timestamp]);
 
 /**
  * TimeRange is a half-open range [start, end). Both ends are required and
@@ -151,7 +151,7 @@ export type SearchLogsRequest = Message<"controlplane.v1.SearchLogsRequest"> & {
    * Query string. Whitespace-separated terms are ANDed; "OR" and "NOT"/"-",
    * parentheses and quoting are supported:
    *
-   *   timeout                       body contains the token "timeout"
+   *   timeout                       body contains "timeout" (case-insensitive substring)
    *   "connection refused"          body contains the phrase
    *   severity:error                severity equals (case-insensitive); also
    *                                 severity:>=warn
@@ -317,23 +317,23 @@ export type ListTracesRequest = Message<"controlplane.v1.ListTracesRequest"> & {
   /**
    * Only traces with at least one error span.
    *
-   * @generated from field: bool errors_only = 2;
+   * @generated from field: optional bool errors_only = 2;
    */
-  errorsOnly: boolean;
+  errorsOnly?: boolean | undefined;
 
   /**
    * Only traces at least this long (ms).
    *
-   * @generated from field: double min_duration_ms = 3;
+   * @generated from field: optional double min_duration_ms = 3;
    */
-  minDurationMs: number;
+  minDurationMs?: number | undefined;
 
   /**
    * Substring of the root span name.
    *
-   * @generated from field: string root_span_name = 4;
+   * @generated from field: optional string root_span_name = 4;
    */
-  rootSpanName: string;
+  rootSpanName?: string | undefined;
 
   /**
    * @generated from field: repeated controlplane.v1.AttributeFilter span_attributes = 5;
@@ -444,6 +444,13 @@ export type TraceSummary = Message<"controlplane.v1.TraceSummary"> & {
    * @generated from field: bool operator_data = 10;
    */
   operatorData: boolean;
+
+  /**
+   * Duration of the root span alone (duration_ms spans the whole trace).
+   *
+   * @generated from field: double root_duration_ms = 11;
+   */
+  rootDurationMs: number;
 };
 
 /**
@@ -707,9 +714,9 @@ export type ListMetricsRequest = Message<"controlplane.v1.ListMetricsRequest"> &
   /**
    * Substring of the metric name.
    *
-   * @generated from field: string name_contains = 2;
+   * @generated from field: optional string name_contains = 2;
    */
-  nameContains: string;
+  nameContains?: string | undefined;
 
   /**
    * Max 500 (default 200).
@@ -802,6 +809,12 @@ export type QueryMetricRequest = Message<"controlplane.v1.QueryMetricRequest"> &
   metricType: MetricType;
 
   /**
+   * Gauge and sum: each series is first reduced to its last value in the
+   * bucket, then AVG/SUM/MIN/MAX are taken across series (so SUM of a memory
+   * gauge over pods is the total); COUNT is the number of data points.
+   * INCREASE/RATE (sum, histogram) use per-series deltas and handle both
+   * cumulative and delta temporality, treating a decrease as a counter reset.
+   *
    * @generated from field: controlplane.v1.MetricAggregation aggregation = 4;
    */
   aggregation: MetricAggregation;
@@ -859,6 +872,14 @@ export type QueryMetricResponse = Message<"controlplane.v1.QueryMetricResponse">
    * @generated from field: string unit = 4;
    */
   unit: string;
+
+  /**
+   * The aggregation used (the default per type when the request left it
+   * unspecified).
+   *
+   * @generated from field: controlplane.v1.MetricAggregation aggregation = 6;
+   */
+  aggregation: MetricAggregation;
 
   /**
    * True when more than 50 series matched; the largest 50 are returned.
@@ -921,8 +942,8 @@ export const GetServiceOverviewRequestSchema: GenMessage<GetServiceOverviewReque
  */
 export type GetServiceOverviewResponse = Message<"controlplane.v1.GetServiceOverviewResponse"> & {
   /**
-   * Busiest first. A service appears if it emitted server spans, logs or
-   * metrics in the range (request figures are zero when it has no server spans).
+   * Busiest first. A service appears if it emitted server spans or logs in
+   * the range (request figures are zero when it has no server spans).
    *
    * @generated from field: repeated controlplane.v1.ServiceOverview services = 1;
    */
@@ -1036,7 +1057,9 @@ export type GetFlamegraphRequest = Message<"controlplane.v1.GetFlamegraphRequest
   scope?: QueryScope | undefined;
 
   /**
-   * Exactly one service (scope.services is ignored here).
+   * Exactly one service (scope.services is ignored here). scope.env_id is
+   * not applied either: profile aggregates are keyed by the forge environment
+   * NAME, not the Reliant environment id.
    *
    * @generated from field: string service = 2;
    */
@@ -1114,6 +1137,167 @@ export const GetFlamegraphResponseSchema: GenMessage<GetFlamegraphResponse> = /*
   messageDesc(file_services_observability_v1_observability, 26);
 
 /**
+ * @generated from message controlplane.v1.QueryPanelRequest
+ */
+export type QueryPanelRequest = Message<"controlplane.v1.QueryPanelRequest"> & {
+  /**
+   * scope.env_id and scope.services apply as the dashboard's filters.
+   *
+   * @generated from field: controlplane.v1.QueryScope scope = 1;
+   */
+  scope?: QueryScope | undefined;
+
+  /**
+   * @generated from field: controlplane.v1.Panel panel = 2;
+   */
+  panel?: Panel | undefined;
+
+  /**
+   * Extra predicates ANDed to every series of the panel (the dashboard's other
+   * filter dropdowns, e.g. deployment.environment.name). Same vocabulary as
+   * Panel.where.
+   *
+   * @generated from field: repeated controlplane.v1.PanelPredicate filters = 3;
+   */
+  filters: PanelPredicate[];
+
+  /**
+   * Bucket width for line panels. 0 = chosen from the range; raised so a series
+   * never exceeds 1500 points (step_seconds in the response is what was used).
+   *
+   * @generated from field: int32 step_seconds = 4;
+   */
+  stepSeconds: number;
+};
+
+/**
+ * Describes the message controlplane.v1.QueryPanelRequest.
+ * Use `create(QueryPanelRequestSchema)` to create a new message.
+ */
+export const QueryPanelRequestSchema: GenMessage<QueryPanelRequest> = /*@__PURE__*/
+  messageDesc(file_services_observability_v1_observability, 27);
+
+/**
+ * @generated from message controlplane.v1.QueryPanelResponse
+ */
+export type QueryPanelResponse = Message<"controlplane.v1.QueryPanelResponse"> & {
+  /**
+   * @generated from field: string panel_id = 1;
+   */
+  panelId: string;
+
+  /**
+   * Echo of panel.kind: "line", "number" or "table".
+   *
+   * @generated from field: string kind = 2;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string unit = 3;
+   */
+  unit: string;
+
+  /**
+   * line panels: one entry per (series x group); a ratio panel yields one
+   * entry per group labelled "ratio". number panels: one entry per series with
+   * `value` set (metrics panels: the most recent bucket's value).
+   *
+   * @generated from field: repeated controlplane.v1.PanelSeriesResult series = 4;
+   */
+  series: PanelSeriesResult[];
+
+  /**
+   * table panels: the columns after the group-by columns, in series order.
+   *
+   * @generated from field: repeated string columns = 5;
+   */
+  columns: string[];
+
+  /**
+   * @generated from field: repeated controlplane.v1.PanelTableRow rows = 6;
+   */
+  rows: PanelTableRow[];
+
+  /**
+   * @generated from field: int32 step_seconds = 7;
+   */
+  stepSeconds: number;
+
+  /**
+   * True when a cap cut the result (50 series, 200 table rows).
+   *
+   * @generated from field: bool truncated = 8;
+   */
+  truncated: boolean;
+};
+
+/**
+ * Describes the message controlplane.v1.QueryPanelResponse.
+ * Use `create(QueryPanelResponseSchema)` to create a new message.
+ */
+export const QueryPanelResponseSchema: GenMessage<QueryPanelResponse> = /*@__PURE__*/
+  messageDesc(file_services_observability_v1_observability, 28);
+
+/**
+ * @generated from message controlplane.v1.PanelSeriesResult
+ */
+export type PanelSeriesResult = Message<"controlplane.v1.PanelSeriesResult"> & {
+  /**
+   * @generated from field: string label = 1;
+   */
+  label: string;
+
+  /**
+   * panel.group_by field -> value for this entry. Empty without group_by.
+   *
+   * @generated from field: map<string, string> group = 2;
+   */
+  group: { [key: string]: string };
+
+  /**
+   * @generated from field: repeated controlplane.v1.TimePoint points = 3;
+   */
+  points: TimePoint[];
+
+  /**
+   * @generated from field: double value = 4;
+   */
+  value: number;
+};
+
+/**
+ * Describes the message controlplane.v1.PanelSeriesResult.
+ * Use `create(PanelSeriesResultSchema)` to create a new message.
+ */
+export const PanelSeriesResultSchema: GenMessage<PanelSeriesResult> = /*@__PURE__*/
+  messageDesc(file_services_observability_v1_observability, 29);
+
+/**
+ * @generated from message controlplane.v1.PanelTableRow
+ */
+export type PanelTableRow = Message<"controlplane.v1.PanelTableRow"> & {
+  /**
+   * @generated from field: map<string, string> group = 1;
+   */
+  group: { [key: string]: string };
+
+  /**
+   * One per entry of QueryPanelResponse.columns.
+   *
+   * @generated from field: repeated double values = 2;
+   */
+  values: number[];
+};
+
+/**
+ * Describes the message controlplane.v1.PanelTableRow.
+ * Use `create(PanelTableRowSchema)` to create a new message.
+ */
+export const PanelTableRowSchema: GenMessage<PanelTableRow> = /*@__PURE__*/
+  messageDesc(file_services_observability_v1_observability, 30);
+
+/**
  * @generated from message controlplane.v1.GetDashboardsRequest
  */
 export type GetDashboardsRequest = Message<"controlplane.v1.GetDashboardsRequest"> & {
@@ -1128,7 +1312,7 @@ export type GetDashboardsRequest = Message<"controlplane.v1.GetDashboardsRequest
  * Use `create(GetDashboardsRequestSchema)` to create a new message.
  */
 export const GetDashboardsRequestSchema: GenMessage<GetDashboardsRequest> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 27);
+  messageDesc(file_services_observability_v1_observability, 31);
 
 /**
  * @generated from message controlplane.v1.GetDashboardsResponse
@@ -1153,7 +1337,7 @@ export type GetDashboardsResponse = Message<"controlplane.v1.GetDashboardsRespon
  * Use `create(GetDashboardsResponseSchema)` to create a new message.
  */
 export const GetDashboardsResponseSchema: GenMessage<GetDashboardsResponse> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 28);
+  messageDesc(file_services_observability_v1_observability, 32);
 
 /**
  * @generated from message controlplane.v1.DashboardSpec
@@ -1190,7 +1374,7 @@ export type DashboardSpec = Message<"controlplane.v1.DashboardSpec"> & {
  * Use `create(DashboardSpecSchema)` to create a new message.
  */
 export const DashboardSpecSchema: GenMessage<DashboardSpec> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 29);
+  messageDesc(file_services_observability_v1_observability, 33);
 
 /**
  * @generated from message controlplane.v1.Dashboard
@@ -1227,7 +1411,7 @@ export type Dashboard = Message<"controlplane.v1.Dashboard"> & {
  * Use `create(DashboardSchema)` to create a new message.
  */
 export const DashboardSchema: GenMessage<Dashboard> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 30);
+  messageDesc(file_services_observability_v1_observability, 34);
 
 /**
  * @generated from message controlplane.v1.DashboardFilter
@@ -1254,7 +1438,7 @@ export type DashboardFilter = Message<"controlplane.v1.DashboardFilter"> & {
  * Use `create(DashboardFilterSchema)` to create a new message.
  */
 export const DashboardFilterSchema: GenMessage<DashboardFilter> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 31);
+  messageDesc(file_services_observability_v1_observability, 35);
 
 /**
  * @generated from message controlplane.v1.Panel
@@ -1337,7 +1521,7 @@ export type Panel = Message<"controlplane.v1.Panel"> & {
  * Use `create(PanelSchema)` to create a new message.
  */
 export const PanelSchema: GenMessage<Panel> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 32);
+  messageDesc(file_services_observability_v1_observability, 36);
 
 /**
  * @generated from message controlplane.v1.PanelSeries
@@ -1381,7 +1565,7 @@ export type PanelSeries = Message<"controlplane.v1.PanelSeries"> & {
  * Use `create(PanelSeriesSchema)` to create a new message.
  */
 export const PanelSeriesSchema: GenMessage<PanelSeries> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 33);
+  messageDesc(file_services_observability_v1_observability, 37);
 
 /**
  * @generated from message controlplane.v1.PanelPredicate
@@ -1415,7 +1599,7 @@ export type PanelPredicate = Message<"controlplane.v1.PanelPredicate"> & {
  * Use `create(PanelPredicateSchema)` to create a new message.
  */
 export const PanelPredicateSchema: GenMessage<PanelPredicate> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 34);
+  messageDesc(file_services_observability_v1_observability, 38);
 
 /**
  * @generated from message controlplane.v1.SavedSearch
@@ -1459,7 +1643,7 @@ export type SavedSearch = Message<"controlplane.v1.SavedSearch"> & {
  * Use `create(SavedSearchSchema)` to create a new message.
  */
 export const SavedSearchSchema: GenMessage<SavedSearch> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 35);
+  messageDesc(file_services_observability_v1_observability, 39);
 
 /**
  * @generated from message controlplane.v1.DashboardAlert
@@ -1513,7 +1697,7 @@ export type DashboardAlert = Message<"controlplane.v1.DashboardAlert"> & {
  * Use `create(DashboardAlertSchema)` to create a new message.
  */
 export const DashboardAlertSchema: GenMessage<DashboardAlert> = /*@__PURE__*/
-  messageDesc(file_services_observability_v1_observability, 36);
+  messageDesc(file_services_observability_v1_observability, 40);
 
 /**
  * @generated from enum controlplane.v1.SortOrder
@@ -1800,6 +1984,24 @@ export const ObservabilityService: GenService<{
     methodKind: "unary";
     input: typeof GetFlamegraphRequestSchema;
     output: typeof GetFlamegraphResponseSchema;
+  },
+  /**
+   * QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
+   * returns, forge's obsdash panel spec) and returns its data: a time series
+   * per series x group for line panels, a value per series for number panels,
+   * rows for table panels. The panel's semantic fields (service.name,
+   * span.attr.<k>, log.severity, metric.attr.<k>, ...) are compiled
+   * server-side to parameterized SQL over the known OTel columns; an unknown
+   * field, operator or aggregation is InvalidArgument. Search panels are not
+   * run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
+   * Max range 7 days for traces/logs panels, 30 days for metrics panels.
+   *
+   * @generated from rpc controlplane.v1.ObservabilityService.QueryPanel
+   */
+  queryPanel: {
+    methodKind: "unary";
+    input: typeof QueryPanelRequestSchema;
+    output: typeof QueryPanelResponseSchema;
   },
   /**
    * GetDashboards returns the dashboards for an environment in forge's

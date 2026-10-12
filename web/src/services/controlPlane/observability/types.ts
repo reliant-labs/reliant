@@ -94,7 +94,10 @@ export interface TraceSummary extends Provenance {
   rootService: string;
   rootOperation: string;
   startMs: number;
+  /** The whole trace, first span start to last span end. */
   durationMs: number;
+  /** The root span alone — the request as its caller experienced it. */
+  rootDurationMs: number;
   spanCount: number;
   errorCount: number;
   services: string[];
@@ -112,12 +115,6 @@ export interface TraceRed {
   p99Ms: number;
 }
 
-export interface AttributeFilter {
-  key: string;
-  op: "eq" | "neq" | "exists";
-  value: string;
-}
-
 export interface ListTracesRequest extends EnvScope {
   window: TimeWindow;
   /** Substring of the root span's name. */
@@ -125,7 +122,6 @@ export interface ListTracesRequest extends EnvScope {
   services: string[];
   errorsOnly: boolean;
   minDurationMs: number;
-  spanAttributes?: AttributeFilter[];
   limit: number;
   cursor?: string;
 }
@@ -166,39 +162,41 @@ export interface Trace {
   truncated: boolean;
 }
 
-// ── Metrics ──────────────────────────────────────────────────────────────────
+// ── Panels ───────────────────────────────────────────────────────────────────
 
 /** One line. `timestamps` are epoch SECONDS (uPlot's x unit); a null value is a gap. */
 export interface Series {
   label: string;
-  /** For a grouped query, the group-by key → value (`{"service.name": "api"}`). */
+  /** For a grouped panel, the group-by field → value (`{"service.name": "api"}`). */
   group: Record<string, string>;
   timestamps: number[];
   values: (number | null)[];
+  /** A number panel's value. */
+  value: number | null;
 }
 
-export type MetricKind = "gauge" | "sum" | "histogram";
-export type MetricAggregation = "avg" | "sum" | "min" | "max" | "count" | "increase" | "rate" | "p50" | "p95" | "p99";
-
-export interface QueryMetricRequest extends EnvScope {
+export interface QueryPanelRequest extends EnvScope {
   window: TimeWindow;
-  metricName: string;
-  /** Unset: the server looks it up. */
-  metricType?: MetricKind;
-  /** Unset: the server's per-type default (avg gauge, rate sum, avg histogram). */
-  aggregation?: MetricAggregation;
-  groupBy: string[];
-  filters: AttributeFilter[];
+  panel: Panel;
+  /** The dashboard's service filter — applied by the server as scope.services. */
   services: string[];
   /** 0 lets the server pick (~120 buckets). */
   stepSeconds: number;
 }
 
-export interface MetricResult {
-  stepSeconds: number;
+/**
+ * One panel's data, computed server-side from its intent (QueryPanel):
+ * `series` for line panels (one per series × group; a ratio panel, one per
+ * group) and number panels (`value`), `columns`/`rows` for tables.
+ */
+export interface PanelResult {
+  kind: string;
   unit: string;
   series: Series[];
-  /** More than 50 series matched; the largest 50 came back. */
+  columns: string[];
+  rows: { group: Record<string, string>; values: (number | null)[] }[];
+  stepSeconds: number;
+  /** A cap cut the result (50 series, 200 rows). */
   truncated: boolean;
 }
 

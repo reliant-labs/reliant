@@ -22,7 +22,7 @@ export interface ObservabilityApi {
   searchLogs: typeof rpc.searchLogs;
   listTraces: typeof rpc.listTraces;
   getTrace: typeof rpc.getTrace;
-  queryMetric: typeof rpc.queryMetric;
+  queryPanel: typeof rpc.queryPanel;
   getServiceOverview: typeof rpc.getServiceOverview;
   getFlamegraph: typeof rpc.getFlamegraph;
   getDashboards: typeof rpc.getDashboards;
@@ -34,7 +34,7 @@ export const controlPlaneObservabilityApi: ObservabilityApi = {
   searchLogs: rpc.searchLogs,
   listTraces: rpc.listTraces,
   getTrace: rpc.getTrace,
-  queryMetric: rpc.queryMetric,
+  queryPanel: rpc.queryPanel,
   getServiceOverview: rpc.getServiceOverview,
   getFlamegraph: rpc.getFlamegraph,
   getDashboards: rpc.getDashboards,

@@ -54,6 +54,9 @@ const (
 	// ObservabilityServiceGetFlamegraphProcedure is the fully-qualified name of the
 	// ObservabilityService's GetFlamegraph RPC.
 	ObservabilityServiceGetFlamegraphProcedure = "/controlplane.v1.ObservabilityService/GetFlamegraph"
+	// ObservabilityServiceQueryPanelProcedure is the fully-qualified name of the ObservabilityService's
+	// QueryPanel RPC.
+	ObservabilityServiceQueryPanelProcedure = "/controlplane.v1.ObservabilityService/QueryPanel"
 	// ObservabilityServiceGetDashboardsProcedure is the fully-qualified name of the
 	// ObservabilityService's GetDashboards RPC.
 	ObservabilityServiceGetDashboardsProcedure = "/controlplane.v1.ObservabilityService/GetDashboards"
@@ -87,6 +90,16 @@ type ObservabilityServiceClient interface {
 	// (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
 	// 72 hours).
 	GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error)
+	// QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
+	// returns, forge's obsdash panel spec) and returns its data: a time series
+	// per series x group for line panels, a value per series for number panels,
+	// rows for table panels. The panel's semantic fields (service.name,
+	// span.attr.<k>, log.severity, metric.attr.<k>, ...) are compiled
+	// server-side to parameterized SQL over the known OTel columns; an unknown
+	// field, operator or aggregation is InvalidArgument. Search panels are not
+	// run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
+	// Max range 7 days for traces/logs panels, 30 days for metrics panels.
+	QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error)
 	// GetDashboards returns the dashboards for an environment in forge's
 	// dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
 	// synthesized from the services seen in the org's data in scope.time_range;
@@ -148,6 +161,12 @@ func NewObservabilityServiceClient(httpClient connect.HTTPClient, baseURL string
 			connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
 			connect.WithClientOptions(opts...),
 		),
+		queryPanel: connect.NewClient[v1.QueryPanelRequest, v1.QueryPanelResponse](
+			httpClient,
+			baseURL+ObservabilityServiceQueryPanelProcedure,
+			connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
+			connect.WithClientOptions(opts...),
+		),
 		getDashboards: connect.NewClient[v1.GetDashboardsRequest, v1.GetDashboardsResponse](
 			httpClient,
 			baseURL+ObservabilityServiceGetDashboardsProcedure,
@@ -166,6 +185,7 @@ type observabilityServiceClient struct {
 	queryMetric        *connect.Client[v1.QueryMetricRequest, v1.QueryMetricResponse]
 	getServiceOverview *connect.Client[v1.GetServiceOverviewRequest, v1.GetServiceOverviewResponse]
 	getFlamegraph      *connect.Client[v1.GetFlamegraphRequest, v1.GetFlamegraphResponse]
+	queryPanel         *connect.Client[v1.QueryPanelRequest, v1.QueryPanelResponse]
 	getDashboards      *connect.Client[v1.GetDashboardsRequest, v1.GetDashboardsResponse]
 }
 
@@ -204,6 +224,11 @@ func (c *observabilityServiceClient) GetFlamegraph(ctx context.Context, req *con
 	return c.getFlamegraph.CallUnary(ctx, req)
 }
 
+// QueryPanel calls controlplane.v1.ObservabilityService.QueryPanel.
+func (c *observabilityServiceClient) QueryPanel(ctx context.Context, req *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error) {
+	return c.queryPanel.CallUnary(ctx, req)
+}
+
 // GetDashboards calls controlplane.v1.ObservabilityService.GetDashboards.
 func (c *observabilityServiceClient) GetDashboards(ctx context.Context, req *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {
 	return c.getDashboards.CallUnary(ctx, req)
@@ -238,6 +263,16 @@ type ObservabilityServiceHandler interface {
 	// (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
 	// 72 hours).
 	GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error)
+	// QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
+	// returns, forge's obsdash panel spec) and returns its data: a time series
+	// per series x group for line panels, a value per series for number panels,
+	// rows for table panels. The panel's semantic fields (service.name,
+	// span.attr.<k>, log.severity, metric.attr.<k>, ...) are compiled
+	// server-side to parameterized SQL over the known OTel columns; an unknown
+	// field, operator or aggregation is InvalidArgument. Search panels are not
+	// run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
+	// Max range 7 days for traces/logs panels, 30 days for metrics panels.
+	QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error)
 	// GetDashboards returns the dashboards for an environment in forge's
 	// dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
 	// synthesized from the services seen in the org's data in scope.time_range;
@@ -295,6 +330,12 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 		connect.WithSchema(observabilityServiceMethods.ByName("GetFlamegraph")),
 		connect.WithHandlerOptions(opts...),
 	)
+	observabilityServiceQueryPanelHandler := connect.NewUnaryHandler(
+		ObservabilityServiceQueryPanelProcedure,
+		svc.QueryPanel,
+		connect.WithSchema(observabilityServiceMethods.ByName("QueryPanel")),
+		connect.WithHandlerOptions(opts...),
+	)
 	observabilityServiceGetDashboardsHandler := connect.NewUnaryHandler(
 		ObservabilityServiceGetDashboardsProcedure,
 		svc.GetDashboards,
@@ -317,6 +358,8 @@ func NewObservabilityServiceHandler(svc ObservabilityServiceHandler, opts ...con
 			observabilityServiceGetServiceOverviewHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetFlamegraphProcedure:
 			observabilityServiceGetFlamegraphHandler.ServeHTTP(w, r)
+		case ObservabilityServiceQueryPanelProcedure:
+			observabilityServiceQueryPanelHandler.ServeHTTP(w, r)
 		case ObservabilityServiceGetDashboardsProcedure:
 			observabilityServiceGetDashboardsHandler.ServeHTTP(w, r)
 		default:
@@ -354,6 +397,10 @@ func (UnimplementedObservabilityServiceHandler) GetServiceOverview(context.Conte
 
 func (UnimplementedObservabilityServiceHandler) GetFlamegraph(context.Context, *connect.Request[v1.GetFlamegraphRequest]) (*connect.Response[v1.GetFlamegraphResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.GetFlamegraph is not implemented"))
+}
+
+func (UnimplementedObservabilityServiceHandler) QueryPanel(context.Context, *connect.Request[v1.QueryPanelRequest]) (*connect.Response[v1.QueryPanelResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("controlplane.v1.ObservabilityService.QueryPanel is not implemented"))
 }
 
 func (UnimplementedObservabilityServiceHandler) GetDashboards(context.Context, *connect.Request[v1.GetDashboardsRequest]) (*connect.Response[v1.GetDashboardsResponse], error) {

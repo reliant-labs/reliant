@@ -82,13 +82,18 @@ test.describe('observability console', () => {
 
   test('dashboards draw forge per-rpc RED panels', async ({ page }) => {
     await openHarness(page, '?view=dashboards');
-    await expect(page.getByTestId('obs-panel-requests')).toContainText('requests');
+    await expect(page.getByTestId('obs-panel-requests').getByTestId('obs-panel-number')).toBeVisible();
+    await expect(page.getByTestId('obs-panel-sessions').getByTestId('obs-panel-unsupported')).toContainText('count_distinct');
     await expect(page.getByTestId('obs-panel-red-by-service').getByRole('table')).toContainText('worker');
     await shot(page, 'dashboards');
 
     await page.getByTestId('obs-dashboard-picker').selectOption('service-api');
     await expect(page.getByTestId('obs-panel-red-by-rpc').getByRole('table')).toContainText('orders.v1.OrdersService/CreateOrder');
-    await expect(page.getByTestId('obs-panel-rpc-CreateOrder-latency')).toContainText('p95');
+    // Per-rpc latency over time is a real line now (QueryPanel), drawn on a canvas.
+    const latency = page.getByTestId('obs-panel-rpc-CreateOrder-latency');
+    await expect(latency.locator('canvas').first()).toBeVisible();
+    await expect(latency.locator('figcaption')).toContainText('p95: latest');
+    await shot(page, 'dashboards-service');
   });
 
   test('an org without observability gets the set-up explanation, once', async ({ page }) => {

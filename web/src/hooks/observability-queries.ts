@@ -14,20 +14,19 @@
  * request), or rows slip between pages as time moves.
  */
 
-import { useInfiniteQuery, useQueries, useQuery } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery } from "@tanstack/react-query";
 
 import { useObservabilityApi } from "@/services/controlPlane/observability/ObservabilityApiContext";
 import { obsRetry } from "@/services/controlPlane/observability/errors";
 import type {
-  AttributeFilter,
   EnvScope,
   ListTracesResult,
+  Panel,
   SearchLogsResult,
   Severity,
   TimeWindow,
 } from "@/services/controlPlane/observability/types";
 import { resolveWindow, type RangePreset } from "@/services/controlPlane/observability/window";
-import type { MetricPlanQuery, TraceScope } from "@/components/Forge/Observability/panelPlan";
 
 export const obsKeys = {
   org: () => ["observability", "org"] as const,
@@ -36,11 +35,9 @@ export const obsKeys = {
     [...obsKeys.all(scope), "overview", range, services] as const,
   logs: (scope: EnvScope | null, filters: LogFilters) => [...obsKeys.all(scope), "logs", filters] as const,
   traces: (scope: EnvScope | null, filters: TraceFilters) => [...obsKeys.all(scope), "traces", filters] as const,
-  traceRed: (scope: EnvScope | null, range: RangePreset, traceScope: TraceScope, limit: number) =>
-    [...obsKeys.all(scope), "trace-red", range, traceScope, limit] as const,
   trace: (scope: EnvScope | null, traceId: string) => [...obsKeys.all(scope), "trace", traceId] as const,
-  metric: (scope: EnvScope | null, range: RangePreset, query: MetricPlanQuery, step: number) =>
-    [...obsKeys.all(scope), "metric", range, query, step] as const,
+  panel: (scope: EnvScope | null, range: RangePreset, panel: Panel, services: string[]) =>
+    [...obsKeys.all(scope), "panel", range, panel, services] as const,
   dashboards: (scope: EnvScope | null) => [...obsKeys.all(scope), "dashboards"] as const,
   flamegraph: (scope: EnvScope | null, filters: FlamegraphFilters) => [...obsKeys.all(scope), "flamegraph", filters] as const,
 };
@@ -166,32 +163,6 @@ export function useListTraces(scope: EnvScope | null, filters: TraceFilters) {
 }
 
 /**
- * ListTraces for a dashboard panel: the server's RED summary over every
- * matching trace (`limit` 1 — only `red` is read), or the newest `limit`
- * traces for a per-rpc table grouped in the browser.
- */
-export function useTraceRed(scope: EnvScope | null, range: RangePreset, traceScope: TraceScope, limit: number) {
-  const api = useObservabilityApi();
-  return useQuery({
-    queryKey: obsKeys.traceRed(scope, range, traceScope, limit),
-    queryFn: () =>
-      api.listTraces({
-        ...(scope as EnvScope),
-        window: resolveWindow(range),
-        rootSpanName: traceScope.rootSpanName,
-        services: traceScope.services,
-        errorsOnly: traceScope.errorsOnly,
-        minDurationMs: 0,
-        spanAttributes: traceScope.spanAttributes as AttributeFilter[],
-        limit,
-      }),
-    enabled: !!scope,
-    staleTime: 30_000,
-    retry: obsRetry,
-  });
-}
-
-/**
  * One trace. Spans are immutable once written, so it never goes stale. The
  * lookup searches the whole 7 days traces are kept, not the list's window: a
  * trace linked from a log may be older than the window the reader is in.
@@ -209,22 +180,18 @@ export function useTrace(scope: EnvScope | null, traceId: string | null) {
 
 // ── Metrics and dashboards ───────────────────────────────────────────────────
 
-/** Every metric query of one panel, together: a panel draws its series on one chart. */
-export function useMetricQueries(scope: EnvScope | null, range: RangePreset, queries: MetricPlanQuery[], step: number | "window" = 0) {
+/**
+ * One dashboard panel, computed server-side (QueryPanel). The dashboard's
+ * service filter rides as `services`; search panels are never run here.
+ */
+export function usePanelQuery(scope: EnvScope | null, range: RangePreset, panel: Panel, services: string[]) {
   const api = useObservabilityApi();
-  const stepKey = step === "window" ? -1 : step;
-  return useQueries({
-    queries: queries.map((query) => ({
-      queryKey: obsKeys.metric(scope, range, query, stepKey),
-      queryFn: () => {
-        const window = resolveWindow(range);
-        const stepSeconds = step === "window" ? Math.ceil((window.endMs - window.startMs) / 1000) : step;
-        return api.queryMetric({ ...(scope as EnvScope), window, ...query, stepSeconds });
-      },
-      enabled: !!scope,
-      staleTime: 30_000,
-      retry: obsRetry,
-    })),
+  return useQuery({
+    queryKey: obsKeys.panel(scope, range, panel, services),
+    queryFn: () => api.queryPanel({ ...(scope as EnvScope), window: resolveWindow(range), panel, services, stepSeconds: 0 }),
+    enabled: !!scope && panel.kind !== "search",
+    staleTime: 30_000,
+    retry: obsRetry,
   });
 }
 

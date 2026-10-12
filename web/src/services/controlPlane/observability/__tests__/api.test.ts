@@ -12,11 +12,13 @@ import { Code, ConnectError } from "@connectrpc/connect";
 
 import { SortOrder } from "@/gen/controlplane/services/observability/v1/observability_pb";
 
-import { composeLogQuery, getServiceOverview, getTrace, msOf, searchLogs, severityOf, statusOf } from "../api";
+import { composeLogQuery, getServiceOverview, getTrace, listTraces, msOf, queryPanel, searchLogs, severityOf, statusOf } from "../api";
 import { obsErrorKind, obsRetry } from "../errors";
 
 const client = {
   searchLogs: vi.fn(),
+  listTraces: vi.fn(),
+  queryPanel: vi.fn(),
   getTrace: vi.fn(),
   getServiceOverview: vi.fn(),
 };
@@ -147,6 +149,54 @@ describe("response mapping", () => {
     expect(services[0]).toMatchObject({ requestCount: 180, errorCount: 6, errorLogCount: 3 });
     expect(services[0].rateSeries).toEqual([2, 1, 0]);
     expect(services[0].errorRateSeries).toEqual([0, 0.1, null]);
+  });
+});
+
+describe("traces and panels", () => {
+  it("sends ListTraces filters only when set, and reads the root span's duration", async () => {
+    client.listTraces.mockResolvedValue({
+      traces: [{ traceId: "t", startTime: ts(window.startMs), durationMs: 300, rootDurationMs: 120, rootService: "api", rootSpanName: "op", spanCount: 3, errorCount: 0, services: ["api"], source: "", operatorData: false }],
+      nextPageToken: "",
+    });
+    const result = await listTraces({ ...env, window, rootSpanName: "", services: [], errorsOnly: false, minDurationMs: 0, limit: 50 });
+    const req = client.listTraces.mock.calls[0][0];
+    expect(req.errorsOnly).toBeUndefined();
+    expect(req.minDurationMs).toBeUndefined();
+    expect(req.rootSpanName).toBeUndefined();
+    expect(result.traces[0]).toMatchObject({ durationMs: 300, rootDurationMs: 120 });
+    expect(result.red).toBeNull();
+  });
+
+  it("sends a panel to QueryPanel as-is, with the service filter as scope, and maps lines, numbers and rows", async () => {
+    client.queryPanel.mockResolvedValue({
+      panelId: "p",
+      kind: "line",
+      unit: "percent",
+      stepSeconds: 60,
+      truncated: false,
+      columns: ["requests"],
+      rows: [{ group: { "span.name": "a/B" }, values: [12] }],
+      series: [{ label: "ratio", group: { "service.name": "api" }, points: [{ time: ts(window.startMs), value: 0.02 }], value: 0 }],
+    });
+    const panel = {
+      id: "p",
+      title: "Error rate",
+      kind: "line",
+      signal: "traces",
+      ratio: true,
+      series: [
+        { label: "errors", agg: "count", where: [{ field: "span.status", op: "eq", value: "error" }] },
+        { label: "requests", agg: "count" },
+      ],
+      groupBy: ["service.name"],
+      unit: "percent" as const,
+    };
+    const result = await queryPanel({ ...env, window, panel, services: ["api"], stepSeconds: 0 });
+    const req = client.queryPanel.mock.calls[0][0];
+    expect(req.scope).toMatchObject({ orgId: "org-1", envId: "env-1", services: ["api"] });
+    expect(req.panel).toMatchObject({ id: "p", ratio: true, groupBy: ["service.name"], series: [{ agg: "count", where: [{ field: "span.status", op: "eq", value: "error", values: [] }] }, { label: "requests" }] });
+    expect(result.series[0]).toMatchObject({ label: "ratio", group: { "service.name": "api" }, timestamps: [window.startMs / 1000], values: [0.02] });
+    expect(result.rows[0]).toEqual({ group: { "span.name": "a/B" }, values: [12] });
   });
 });
 

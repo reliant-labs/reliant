@@ -106,6 +106,22 @@ service ObservabilityService {
     };
   }
 
+  // QueryPanel runs ONE dashboard panel (the Panel message GetDashboards
+  // returns, forge's obsdash panel spec) and returns its data: a time series
+  // per series x group for line panels, a value per series for number panels,
+  // rows for table panels. The panel's semantic fields (service.name,
+  // span.attr.<k>, log.severity, metric.attr.<k>, ...) are compiled
+  // server-side to parameterized SQL over the known OTel columns; an unknown
+  // field, operator or aggregation is InvalidArgument. Search panels are not
+  // run here (use SearchLogs / ListTraces). Same guardrails as every other RPC.
+  // Max range 7 days for traces/logs panels, 30 days for metrics panels.
+  rpc QueryPanel(QueryPanelRequest) returns (QueryPanelResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
   // GetDashboards returns the dashboards for an environment in forge's
   // dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
   // synthesized from the services seen in the org's data in scope.time_range;
@@ -175,7 +191,7 @@ message SearchLogsRequest {
   // Query string. Whitespace-separated terms are ANDed; "OR" and "NOT"/"-",
   // parentheses and quoting are supported:
   //
-  //   timeout                       body contains the token "timeout"
+  //   timeout                       body contains "timeout" (case-insensitive substring)
   //   "connection refused"          body contains the phrase
   //   severity:error                severity equals (case-insensitive); also
   //                                 severity:>=warn
@@ -228,11 +244,11 @@ message LogRecord {
 message ListTracesRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
   // Only traces with at least one error span.
-  bool errors_only = 2;
+  optional bool errors_only = 2;
   // Only traces at least this long (ms).
-  double min_duration_ms = 3;
+  optional double min_duration_ms = 3;
   // Substring of the root span name.
-  string root_span_name = 4 [(buf.validate.field).string.max_len = 256];
+  optional string root_span_name = 4 [(buf.validate.field).string.max_len = 256];
   repeated AttributeFilter span_attributes = 5 [(buf.validate.field).repeated.max_items = 10];
   // Rows per page. Default 50, max 500.
   int32 page_size = 6 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 500];
@@ -258,6 +274,8 @@ message TraceSummary {
   repeated string services = 8;
   string source = 9;
   bool operator_data = 10;
+  // Duration of the root span alone (duration_ms spans the whole trace).
+  double root_duration_ms = 11;
 }
 
 // TraceRedSummary: Rate, Errors, Duration over the matched traces.
@@ -340,7 +358,7 @@ enum MetricAggregation {
 message ListMetricsRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
   // Substring of the metric name.
-  string name_contains = 2 [(buf.validate.field).string.max_len = 128];
+  optional string name_contains = 2 [(buf.validate.field).string.max_len = 128];
   // Max 500 (default 200).
   int32 limit = 3 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 500];
 }
@@ -362,6 +380,11 @@ message QueryMetricRequest {
   string metric_name = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 256];
   // Unset: looked up from the org's data.
   MetricType metric_type = 3;
+  // Gauge and sum: each series is first reduced to its last value in the
+  // bucket, then AVG/SUM/MIN/MAX are taken across series (so SUM of a memory
+  // gauge over pods is the total); COUNT is the number of data points.
+  // INCREASE/RATE (sum, histogram) use per-series deltas and handle both
+  // cumulative and delta temporality, treating a decrease as a counter reset.
   MetricAggregation aggregation = 4;
   // Data-point attribute keys to split series by; "service.name" groups by
   // service. Max 3.
@@ -378,6 +401,9 @@ message QueryMetricResponse {
   int32 step_seconds = 2;
   MetricType metric_type = 3;
   string unit = 4;
+  // The aggregation used (the default per type when the request left it
+  // unspecified).
+  MetricAggregation aggregation = 6;
   // True when more than 50 series matched; the largest 50 are returned.
   bool series_truncated = 5;
 }
@@ -395,8 +421,8 @@ message GetServiceOverviewRequest {
 }
 
 message GetServiceOverviewResponse {
-  // Busiest first. A service appears if it emitted server spans, logs or
-  // metrics in the range (request figures are zero when it has no server spans).
+  // Busiest first. A service appears if it emitted server spans or logs in
+  // the range (request figures are zero when it has no server spans).
   repeated ServiceOverview services = 1;
   // Width of one trend bucket.
   int32 trend_step_seconds = 2;
@@ -424,7 +450,9 @@ message ServiceOverview {
 
 message GetFlamegraphRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
-  // Exactly one service (scope.services is ignored here).
+  // Exactly one service (scope.services is ignored here). scope.env_id is
+  // not applied either: profile aggregates are keyed by the forge environment
+  // NAME, not the Reliant environment id.
   string service = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 256];
   // cpu, alloc_space, inuse_space, goroutine, ...
   string profile_type = 3 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 128];
@@ -450,6 +478,50 @@ message GetFlamegraphResponse {
 // Enum-like fields are plain strings with forge's values so the JSON of
 // deploy/observability/dashboard-spec_gen.json unmarshals into these messages
 // as-is (protojson, camelCase names).
+
+message QueryPanelRequest {
+  // scope.env_id and scope.services apply as the dashboard's filters.
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  Panel panel = 2 [(buf.validate.field).required = true];
+  // Extra predicates ANDed to every series of the panel (the dashboard's other
+  // filter dropdowns, e.g. deployment.environment.name). Same vocabulary as
+  // Panel.where.
+  repeated PanelPredicate filters = 3 [(buf.validate.field).repeated.max_items = 10];
+  // Bucket width for line panels. 0 = chosen from the range; raised so a series
+  // never exceeds 1500 points (step_seconds in the response is what was used).
+  int32 step_seconds = 4 [(buf.validate.field).int32.gte = 0];
+}
+
+message QueryPanelResponse {
+  string panel_id = 1;
+  // Echo of panel.kind: "line", "number" or "table".
+  string kind = 2;
+  string unit = 3;
+  // line panels: one entry per (series x group); a ratio panel yields one
+  // entry per group labelled "ratio". number panels: one entry per series with
+  // `value` set (metrics panels: the most recent bucket's value).
+  repeated PanelSeriesResult series = 4;
+  // table panels: the columns after the group-by columns, in series order.
+  repeated string columns = 5;
+  repeated PanelTableRow rows = 6;
+  int32 step_seconds = 7;
+  // True when a cap cut the result (50 series, 200 table rows).
+  bool truncated = 8;
+}
+
+message PanelSeriesResult {
+  string label = 1;
+  // panel.group_by field -> value for this entry. Empty without group_by.
+  map<string, string> group = 2;
+  repeated TimePoint points = 3;
+  double value = 4;
+}
+
+message PanelTableRow {
+  map<string, string> group = 1;
+  // One per entry of QueryPanelResponse.columns.
+  repeated double values = 2;
+}
 
 message GetDashboardsRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];

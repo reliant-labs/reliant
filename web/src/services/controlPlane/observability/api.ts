@@ -5,10 +5,10 @@
  * control-plane's public listener — mapped into the console's model
  * (./types.ts). This is the only file that knows the wire shape.
  *
- * Every request carries a QueryScope: the caller's org (verified server-side
- * against membership), this environment, the services filter, and a time range
- * the server caps per RPC (7 days for logs, traces and the overview; 30 for
- * metrics, profiles and dashboards). The browser sends typed requests and a
+ * Every request carries a QueryScope: the caller's current org (verified
+ * server-side against membership), this environment's control-plane id, the
+ * services filter, and a time range the server caps per RPC (7 days for logs,
+ * traces and the overview; 30 for metrics, profiles and dashboards). The browser sends typed requests and a
  * query STRING; it never sends SQL, and it never builds a filter out of the
  * text a reader typed.
  *
@@ -24,12 +24,9 @@ import { create, type MessageInitShape } from "@bufbuild/protobuf";
 import { TimestampSchema, type Timestamp } from "@bufbuild/protobuf/wkt";
 
 import {
-  AttributeOp,
-  MetricAggregation as WireAggregation,
-  MetricType as WireMetricType,
   ObservabilityService,
   SortOrder,
-  AttributeFilterSchema,
+  type PanelSchema,
   type LogRecord as WireLogRecord,
   type Panel as WirePanel,
   type PanelPredicate as WirePredicate,
@@ -40,7 +37,6 @@ import {
 
 import { getControlPlaneClient } from "../client";
 import type {
-  AttributeFilter,
   DashboardSpec,
   EnvScope,
   Flamegraph,
@@ -48,12 +44,10 @@ import type {
   ListTracesRequest,
   ListTracesResult,
   LogRecord,
-  MetricAggregation,
-  MetricKind,
-  MetricResult,
   Panel,
+  PanelResult,
   Predicate,
-  QueryMetricRequest,
+  QueryPanelRequest,
   SearchLogsRequest,
   SearchLogsResult,
   ServiceHealth,
@@ -166,16 +160,6 @@ export async function searchLogs(req: SearchLogsRequest): Promise<SearchLogsResu
 
 // ── Traces ───────────────────────────────────────────────────────────────────
 
-const ATTRIBUTE_OP: Record<AttributeFilter["op"], AttributeOp> = {
-  eq: AttributeOp.EQ,
-  neq: AttributeOp.NEQ,
-  exists: AttributeOp.EXISTS,
-};
-
-function attributeFilters(filters: AttributeFilter[] = []): MessageInitShape<typeof AttributeFilterSchema>[] {
-  return filters.map((f) => ({ key: f.key, op: ATTRIBUTE_OP[f.op], value: f.value }));
-}
-
 function mapTraceSummary(t: WireTraceSummary): TraceSummary {
   return {
     traceId: t.traceId,
@@ -183,6 +167,7 @@ function mapTraceSummary(t: WireTraceSummary): TraceSummary {
     rootOperation: t.rootSpanName,
     startMs: msOf(t.startTime),
     durationMs: t.durationMs,
+    rootDurationMs: t.rootDurationMs,
     spanCount: t.spanCount,
     errorCount: t.errorCount,
     services: [...t.services],
@@ -194,10 +179,9 @@ function mapTraceSummary(t: WireTraceSummary): TraceSummary {
 export async function listTraces(req: ListTracesRequest): Promise<ListTracesResult> {
   const res = await client().listTraces({
     scope: scope(req, req.window, req.services),
-    errorsOnly: req.errorsOnly,
-    minDurationMs: req.minDurationMs,
-    rootSpanName: req.rootSpanName,
-    spanAttributes: attributeFilters(req.spanAttributes),
+    errorsOnly: req.errorsOnly || undefined,
+    minDurationMs: req.minDurationMs > 0 ? req.minDurationMs : undefined,
+    rootSpanName: req.rootSpanName || undefined,
     pageSize: req.limit,
     pageToken: req.cursor ?? "",
   });
@@ -252,26 +236,7 @@ export async function getTrace(req: EnvScope & { traceId: string; window: TimeWi
   return { traceId: res.traceId || req.traceId, spans: res.spans.map(mapSpan), truncated: res.truncated };
 }
 
-// ── Metrics ──────────────────────────────────────────────────────────────────
-
-const METRIC_TYPE: Record<MetricKind, WireMetricType> = {
-  gauge: WireMetricType.GAUGE,
-  sum: WireMetricType.SUM,
-  histogram: WireMetricType.HISTOGRAM,
-};
-
-const AGGREGATION: Record<MetricAggregation, WireAggregation> = {
-  avg: WireAggregation.AVG,
-  sum: WireAggregation.SUM,
-  min: WireAggregation.MIN,
-  max: WireAggregation.MAX,
-  count: WireAggregation.COUNT,
-  increase: WireAggregation.INCREASE,
-  rate: WireAggregation.RATE,
-  p50: WireAggregation.P50,
-  p95: WireAggregation.P95,
-  p99: WireAggregation.P99,
-};
+// ── Panels ───────────────────────────────────────────────────────────────────
 
 function pointsOf(points: TimePoint[]): { timestamps: number[]; values: (number | null)[] } {
   return {
@@ -280,24 +245,55 @@ function pointsOf(points: TimePoint[]): { timestamps: number[]; values: (number 
   };
 }
 
-export async function queryMetric(req: QueryMetricRequest): Promise<MetricResult> {
-  const res = await client().queryMetric({
+function panelInit(p: Panel): MessageInitShape<typeof PanelSchema> {
+  return {
+    id: p.id,
+    title: p.title,
+    description: p.description ?? "",
+    kind: p.kind,
+    signal: p.signal,
+    series: p.series.map((s) => ({
+      label: s.label,
+      agg: s.agg,
+      quantile: s.quantile ?? 0,
+      field: s.field ?? "",
+      metricType: s.metricType ?? "",
+      where: (s.where ?? []).map(predicateInit),
+    })),
+    ratio: !!p.ratio,
+    where: (p.where ?? []).map(predicateInit),
+    groupBy: p.groupBy ?? [],
+    columns: p.columns ?? [],
+    unit: p.unit ?? "",
+    width: p.width ?? 0,
+    height: p.height ?? 0,
+  };
+}
+
+function predicateInit(p: Predicate) {
+  return { field: p.field, op: p.op, value: p.value ?? "", values: p.values ?? [] };
+}
+
+/** Runs one dashboard panel server-side (any line, number or table panel; search panels are not run here). */
+export async function queryPanel(req: QueryPanelRequest): Promise<PanelResult> {
+  const res = await client().queryPanel({
     scope: scope(req, req.window, req.services),
-    metricName: req.metricName,
-    metricType: req.metricType ? METRIC_TYPE[req.metricType] : WireMetricType.UNSPECIFIED,
-    aggregation: req.aggregation ? AGGREGATION[req.aggregation] : WireAggregation.UNSPECIFIED,
-    groupBy: req.groupBy,
-    filters: attributeFilters(req.filters),
+    panel: panelInit(req.panel),
     stepSeconds: req.stepSeconds,
   });
   return {
-    stepSeconds: res.stepSeconds,
+    kind: res.kind,
     unit: res.unit,
-    truncated: res.seriesTruncated,
-    series: res.series.map((s) => {
-      const group = { ...s.labels };
-      return { label: Object.values(group).join(" · ") || req.metricName, group, ...pointsOf(s.points) };
-    }),
+    stepSeconds: res.stepSeconds,
+    truncated: res.truncated,
+    columns: [...res.columns],
+    rows: res.rows.map((r) => ({ group: { ...r.group }, values: r.values.map((v) => (Number.isFinite(v) ? v : null)) })),
+    series: res.series.map((s) => ({
+      label: s.label,
+      group: { ...s.group },
+      ...pointsOf(s.points),
+      value: Number.isFinite(s.value) ? s.value : null,
+    })),
   };
 }
 

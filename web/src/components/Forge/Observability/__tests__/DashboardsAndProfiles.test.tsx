@@ -1,7 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 
 /**
- * Dashboards render forge's spec through panelPlan's translation (per-rpc RED
+ * Dashboards run forge's spec panel by panel through QueryPanel (per-rpc RED
  * by default), and Profiles embeds speedscope with a text alternative beside
  * it.
  */
@@ -17,33 +17,57 @@ vi.mock("uplot", async () => (await import("./obsMocks")).obsMocks.uplot());
 vi.mock("@tanstack/react-virtual", async () => (await import("./obsMocks")).obsMocks.virtual());
 
 describe("DashboardsView", () => {
-  it("draws the overview dashboard: numbers, per-service lines, a RED table, a metric and a way into Logs", async () => {
-    renderPanel(createFixtureApi(), { view: "dashboards" });
+  it("runs each panel through QueryPanel: numbers, per-service lines, a RED table, a metric and a way into Logs", async () => {
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall }), { view: "dashboards" });
     const requests = await screen.findByTestId("obs-panel-requests");
-    expect(requests).toHaveAttribute("data-plan", "overview");
-    await waitFor(() => expect(within(requests).getByTestId("obs-panel-number")).toBeInTheDocument());
-    expect(screen.getByTestId("obs-panel-request-rate").querySelector("figure")).toHaveAccessibleName("Requests per service");
+    await waitFor(() => expect(within(requests).getByTestId("obs-panel-number")).toHaveTextContent(/\d/));
+    // A grouped line: one uPlot series per service, the canvas described in words.
+    const rate = screen.getByTestId("obs-panel-request-rate");
+    await waitFor(() => expect(rate.querySelector("figure")).toHaveAccessibleName("Requests per service"));
+    expect(rate.querySelector("figcaption")).toHaveTextContent(/api: latest .*worker: latest/);
+    // A ratio line: one series per group, labelled by the group alone.
     await waitFor(() =>
-      expect(within(screen.getByTestId("obs-panel-red-by-service")).getByTestId("obs-panel-table")).toHaveTextContent("worker")
+      expect(screen.getByTestId("obs-panel-error-rate").querySelector("figcaption")).toHaveTextContent(/^api: latest [\d.<]+%/)
     );
-    expect(screen.getByTestId("obs-panel-go-goroutines")).toHaveAttribute("data-plan", "metric");
-    expect(screen.getByTestId("obs-panel-error-logs")).toHaveAttribute("data-plan", "link");
+    const table = await within(screen.getByTestId("obs-panel-red-by-service")).findByTestId("obs-panel-table");
+    expect(table).toHaveTextContent("worker");
+    expect(table).toHaveTextContent(/\d+(\.\d+)?ms/);
+    await waitFor(() => expect(screen.getByTestId("obs-panel-go-goroutines").querySelector("figure")).toBeInTheDocument());
+    expect(within(screen.getByTestId("obs-panel-error-logs")).getByTestId("obs-panel-link")).toHaveTextContent("errors only");
+    // Search panels are never sent to QueryPanel.
+    expect(onCall.mock.calls.filter(([rpc]) => rpc === "QueryPanel").map(([, req]) => req.panel.id)).not.toContain("error-logs");
     expect(screen.getByTestId("obs-dashboards-synthesized")).toBeInTheDocument();
   });
 
-  it("opens a service's own dashboard from the service, with per-rpc RED", async () => {
+  it("says in place when the server can't compute a panel, with its reason", async () => {
+    renderPanel(createFixtureApi(), { view: "dashboards" });
+    const sessions = await screen.findByTestId("obs-panel-sessions");
+    const note = await within(sessions).findByTestId("obs-panel-unsupported");
+    expect(note).toHaveTextContent('aggregation "count_distinct" is not supported');
+    expect(within(note).getByRole("button", { name: /Open Traces/ })).toBeInTheDocument();
+  });
+
+  it("draws an rpc's rate, error ratio and latency as lines over time", async () => {
     const onCall = vi.fn();
     renderPanel(createFixtureApi({ onCall }), { view: "dashboards", service: "api" });
-    const table = await screen.findByTestId("obs-panel-red-by-rpc");
-    expect(table).toHaveAttribute("data-plan", "rpcTable");
-    await waitFor(() => expect(within(table).getByTestId("obs-panel-table")).toHaveTextContent("orders.v1.OrdersService/CreateOrder"));
-    const latency = screen.getByTestId("obs-panel-rpc-CreateOrder-latency");
-    expect(latency).toHaveAttribute("data-plan", "red");
-    await waitFor(() => expect(latency).toHaveTextContent(/p95/));
-    expect(latency).toHaveTextContent("per-rpc trends aren't available yet");
-    expect(onCall).toHaveBeenCalledWith(
-      "ListTraces",
-      expect.objectContaining({ rootSpanName: "orders.v1.OrdersService/CreateOrder", limit: 1 })
+    const latency = await screen.findByTestId("obs-panel-rpc-CreateOrder-latency");
+    await waitFor(() => expect(latency.querySelector("figure")).toHaveAccessibleName("CreateOrder: latency"));
+    expect(latency.querySelector("figcaption")).toHaveTextContent(/p50: latest .*p95: latest .*p99: latest/);
+    const table = await within(screen.getByTestId("obs-panel-red-by-rpc")).findByTestId("obs-panel-table");
+    expect(table).toHaveTextContent("orders.v1.OrdersService/CreateOrder");
+    // The service's own dashboard is not narrowed by the service filter a second time.
+    const call = onCall.mock.calls.find(([rpc, req]) => rpc === "QueryPanel" && req.panel.id === "rpc-CreateOrder-latency");
+    expect(call?.[1]).toMatchObject({ services: [], orgId: expect.any(String), environmentId: "env-prod" });
+  });
+
+  it("applies the dashboard's service filter to every panel", async () => {
+    const user = userEvent.setup();
+    const onCall = vi.fn();
+    renderPanel(createFixtureApi({ onCall }), { view: "dashboards" });
+    await user.selectOptions(await screen.findByTestId("obs-dashboard-service"), "worker");
+    await waitFor(() =>
+      expect(onCall).toHaveBeenCalledWith("QueryPanel", expect.objectContaining({ services: ["worker"], panel: expect.objectContaining({ id: "requests" }) }))
     );
   });
 

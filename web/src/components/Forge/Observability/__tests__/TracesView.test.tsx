@@ -41,6 +41,13 @@ describe("trace list", () => {
     );
   });
 
+  it("shows the root span's duration, and the whole trace's when work outlived it", async () => {
+    renderPanel(createFixtureApi(), { view: "traces" });
+    const [first] = await screen.findAllByTestId("obs-trace-row");
+    // Trace 0 in the fixture has 120ms of queue work after its root returned.
+    expect(first).toHaveTextContent(/ms total/);
+  });
+
   it("sorts by duration from a column header, and says so to assistive tech", async () => {
     const user = userEvent.setup();
     renderPanel(createFixtureApi(), { view: "traces" });
