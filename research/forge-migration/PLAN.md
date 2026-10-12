@@ -93,20 +93,25 @@ Every change ships as its own **small PR** that leaves everything that works tod
 
 ### Status (updated 2026-10-12)
 
-| Item | Where | State |
-|---|---|---|
-| P0 unblock | — | done (disk freed; spawning works) |
-| F11 + `generate.hooks` | forge #641 | open. CI: guards/prettier failures pre-exist on main (fixed by forge #645); e2e shard 1 re-run |
-| 1a canonical contracts | reliant #740 | open, CI green |
-| 1b ScenarioService split | reliant #741 | open, CI running |
-| 1f F8/F9 in-place pin + buf pre-flight | forge #646 | open |
-| migratekit run-lock race (all forge projects) | forge #648 | open |
-| 1e F1 goose adoption | forge #649 (stacked on #648) | open; cutover runbook: `04-p5a-cutover-runbook.md` |
-| 1c F4 unmanaged services (`// forge:unmanaged`) | forge #650 | open |
-| 1d F2 non-server contracts (`//forge:not-a-component`) | forge #651 | open (skill split into `contracts/package-markers` to fit the 24 KB cap; marker-count conflict with #650 on rebase) |
-| F3a `binary_config` must name a real binary | forge #653 | open |
-| F3b role-scoped config (`binary_config.command`) | forge #654 (stacked on #653) | open |
-| P6 wave 0: dead pkgs / deps-are-interfaces / exclude-contract on 21 pure pkgs | reliant #743 / #744 / #745 | open |
+**Merged** (CI budget exhausted; each change was verified locally before merging, and forge main was re-verified with all of them combined):
+
+| Item | PR |
+|---|---|
+| P0 unblock (disk freed, spawning works) | — |
+| F11 sqlc removed from forge + `generate.hooks` escape hatch | forge #641 |
+| migratekit run-lock race (affected every forge project) | forge #648 |
+| F1 goose adoption (`-- forge:adopts goose …`); runbook `04-p5a-cutover-runbook.md` | forge #649 |
+| F8/F9 in-place adoption keeps go.mod's forge pin; buf plugin pre-flight | forge #646 |
+| F4 adopt one service at a time (`// forge:unmanaged`) | forge #650 |
+| F2 CLI/daemon-only contract packages (`//forge:not-a-component`) | forge #651 |
+| F3a `binary_config` must name a real binary | forge #653 |
+| F3b role-scoped config (`binary_config.command`) | forge #654 |
+| 1a canonical contracts | reliant #740 |
+| 1b ScenarioService split (wire-identical) | reliant #741 |
+| P6 wave 0: dead packages / deps-are-interfaces / exclude-contract on 21 pure packages | reliant #743 / #744 / #745 |
+| Dev CORS: reliant now gets `CORS_ALLOWED_ORIGINS` (was a no-op `CORS_ORIGINS`) | control-plane #841 |
+
+**Next:** a forge release, then pin it in reliant (and control-plane). Then slice 1g: a minimal reliant `forge.yaml` (every service `// forge:unmanaged`, `cliauth`/`forgecred` `//forge:not-a-component`, sqlc as a `generate.hooks` entry), then 1h (`forge lint` in CI). The dev DBs are approved to be destroyed and rebuilt, so P5a skips goose adoption for dev; it is still required for prod.
 
 Research inputs: `02-contracts-classification.md` (P6) and `03-config-census.md` (P4), both in this dir.
 
