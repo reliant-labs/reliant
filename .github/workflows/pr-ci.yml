@@ -22,13 +22,23 @@ on:
 # github.ref is the PR ref, so every PR gets its own group and they never
 # interfere.
 #
-# On main, consecutive merges would land in one group and cancel each other —
-# merge A gets killed by merge B, so A is never verified and a break introduced
-# by A is attributed to B (or to nothing at all, if B is green). That is the
-# exact failure this trigger was added to prevent, so main runs are grouped per
-# COMMIT SHA and never cancelled: every merged commit gets its own verdict.
+# On main, grouping by ref with cancel-in-progress would let each merge kill the
+# run before it, so a burst of merges leaves main with no verdict at all. That
+# is why main used to get one group per COMMIT SHA, never cancelled. The cost
+# was the opposite failure: a burst of N merges parked N full runs (10 jobs
+# each) on runners, 285 jobs ended up cancelled and some sat ~2.7 hours, and
+# because this repo shares the org's 20-concurrent-job limit with control-plane
+# it starved control-plane's CI too.
+#
+# So all pushes to main share ONE group and nothing in it is cancelled once it
+# starts: the run in progress always finishes and so always ends in a verdict.
+# GitHub keeps at most ONE pending run per group and a newer push supersedes
+# it, so a burst costs at most one extra run, not one per merge. The surviving
+# run tests the newest main, which contains every superseded commit, so a break
+# introduced by a skipped SHA is still caught; only the attribution is coarser
+# (bisect the range between two verdicts). This mirrors control-plane's ci.yml.
 concurrency:
-  group: pr-ci-${{ github.event_name }}-${{ github.event_name == 'push' && github.sha || github.ref }}
+  group: pr-ci-${{ github.event_name == 'push' && 'main' || github.ref }}
   cancel-in-progress: ${{ github.event_name != 'push' }}
 
 permissions:
@@ -362,7 +372,7 @@ jobs:
   generate-drift:
     name: Generated code is up to date
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     steps:
       - uses: actions/checkout@v6
 
@@ -618,7 +628,7 @@ jobs:
   e2e-backend:
     name: E2E Backend (Go)
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 8
     # The stories need a REAL Postgres (the Temporal dev server they start
     # themselves). Without this service DATABASE_URL was unset, TestMain
     # skipped every DB-backed story, and this job went green running exactly
@@ -697,7 +707,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.non_gomod == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v6
 
@@ -776,28 +786,12 @@ jobs:
     needs: changes
     if: needs.changes.outputs.non_gomod == 'true'
     runs-on: ubuntu-latest
-    # Measured, not guessed: this job was cancelled at 15m in every one of
-    # the last 50 runs that reached the test step (the other 8/50 died in
-    # <3s on an unrelated `goose install` flake, now pinned — see below).
-    # It was never a slow-but-passing job; the Playwright suite itself was
-    # genuinely failing and playwright.config.ts's `retries: 2` (single
-    # worker in CI) was tripling the cost of every failure.
-    #
-    # After this change (make generate scoped to generate-shortcuts, goose
-    # pinned, browser cache added, one stale assertion fixed, two
-    # non-test manual-QA scripts excluded from the run):
-    #   - setup (checkout -> build -> browser install) measures ~2-3 min
-    #   - the suite itself, run locally with CI's exact config (single
-    #     worker, 2 retries, `CI=true`), takes 15.3 minutes wall clock —
-    #     because 26 onboarding.spec.ts tests are genuinely failing against
-    #     a refactored onboarding step model (see commit message) and each
-    #     failure still costs 3 attempts.
-    # 15+3 leaves no margin for CI-runner variance, so this is set to 20,
-    # not bumped arbitrarily. It should come back down once onboarding.spec.ts
-    # is rewritten against the current step model (tracked separately, not
-    # in scope for this CI-infra fix) — at that point the real number is
-    # close to 3-4 minutes.
-    timeout-minutes: 20
+    # Recent green runs take ~2 minutes (setup 2-3 min plus the suite), so 10
+    # is ~4x typical. History: this was 20 when 26 onboarding.spec.ts tests were
+    # genuinely failing and each failure cost 3 attempts (`retries: 2`, single
+    # worker); that suite is healthy now, and a long-running job here means a
+    # hang, which should fail fast rather than hold a runner.
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
@@ -879,7 +873,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.non_gomod == 'true'
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
 
