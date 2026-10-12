@@ -3761,21 +3761,7 @@ function createApplicationMenu() {
         shortcut.newTerminal,
         shortcut.toggleTerminal,
         { type: "separator" },
-        {
-          label: "Clear Terminal",
-          // Deliberately NOT Cmd+K: that chord is the renderer's sequence
-          // prefix (Cmd+K T, Cmd+K G, ...). A menu accelerator is handled by
-          // the OS before the renderer sees the keydown, so claiming Cmd+K here
-          // would swallow every sequence in the app. Clearing the terminal is
-          // scoped to the terminal anyway, so it belongs to that surface.
-          accelerator: "CmdOrCtrl+Shift+L",
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("clear-terminal");
-            }
-          },
-        },
+        shortcut.clearTerminal,
       ],
     },
     {

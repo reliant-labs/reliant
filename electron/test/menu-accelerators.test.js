@@ -31,9 +31,16 @@ function yamlDesktopBindings() {
   return bindings;
 }
 
-// The menu items whose default chords the composer and the editor also bind
-// (Cmd+Shift+Arrow extends the text selection there).
-const CONTEXT_RESOLVED = ["nextChat", "prevChat", "nextRightSidebarTab", "prevRightSidebarTab"];
+// The menu items whose default chords another context also binds:
+// Cmd+Shift+Arrow extends the text selection in the composer and the editor,
+// and Cmd+Shift+L connects steps on the workflow canvas.
+const CONTEXT_RESOLVED = [
+  "nextChat",
+  "prevChat",
+  "nextRightSidebarTab",
+  "prevRightSidebarTab",
+  "clearTerminal",
+];
 
 test("toElectronAccelerator maps Cmd to CmdOrCtrl", () => {
   assert.strictEqual(toElectronAccelerator("Cmd+T"), "CmdOrCtrl+T");
@@ -95,6 +102,19 @@ test("a chord the composer and editor use for selection gets no native accelerat
     }
     assert.strictEqual(accelerators.newChat, "CmdOrCtrl+T", "a chord nothing else binds is still claimed");
   }
+});
+
+test("Clear Terminal leaves Cmd+Shift+L to the workflow canvas, and reclaims it once free", () => {
+  // Clear Terminal is a terminal-context shortcut; Connect Selected Steps holds
+  // the same chord on the workflow canvas. As a native accelerator it cleared
+  // the terminal from the canvas instead of connecting the steps.
+  const yaml = yamlDesktopBindings();
+  assert.strictEqual(yaml.clearTerminal, "Cmd+Shift+L");
+  assert.strictEqual(yaml.connectSelectedSteps, "Cmd+Shift+L");
+  assert.strictEqual(resolveMenuAccelerators(yaml).clearTerminal, undefined);
+
+  const freed = resolveMenuAccelerators({ ...yaml, connectSelectedSteps: "Cmd+Alt+L" });
+  assert.strictEqual(freed.clearTerminal, "CmdOrCtrl+Shift+L");
 });
 
 test("re-sending the same chord for a context-resolved item does not reclaim it", () => {

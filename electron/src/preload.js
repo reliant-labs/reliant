@@ -322,12 +322,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     // Return cleanup function
     return () => ipcRenderer.removeListener('fullscreen-changed', listener);
   },
-  onClearTerminal: (callback) => {
-    const listener = (event) => callback();
-    ipcRenderer.on('clear-terminal', listener);
-    // Return cleanup function
-    return () => ipcRenderer.removeListener('clear-terminal', listener);
-  },
 
   // Keyboard shortcuts — push effective bindings so the native menu's
   // accelerators track the user's remaps instead of silently overriding them.

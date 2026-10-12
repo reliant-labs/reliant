@@ -30,9 +30,20 @@ const REMOVED_CHANNELS = [
   "navigate-prev-chat",
   "navigate-next-sidebar",
   "navigate-prev-sidebar",
+  "clear-terminal",
 ];
 
-const CONTEXT_RESOLVED = ["nextChat", "prevChat", "nextRightSidebarTab", "prevRightSidebarTab"];
+const CONTEXT_RESOLVED = [
+  "nextChat",
+  "prevChat",
+  "nextRightSidebarTab",
+  "prevRightSidebarTab",
+  "clearTerminal",
+];
+
+// Shortcuts that act on what the user is looking at, so do nothing when no
+// Reliant window has focus.
+const NEEDS_FOCUSED_WINDOW = ["closeTab", "clearTerminal"];
 
 // A BrowserWindow stand-in. open = on screen, minimized = in the Dock,
 // hidden = closed to the tray. Its webContents records what it was sent.
@@ -122,6 +133,7 @@ test("menu items carry the resolved accelerators, and none for context-resolved 
     selectionUpMonaco: "Cmd+Shift+Up",
     selectionLeftMonaco: "Cmd+Shift+Left",
     selectionRightMonaco: "Cmd+Shift+Right",
+    connectSelectedSteps: "Shift+Cmd+L",
   });
 
   for (const accelerators of [defaultAccelerators(), remapped]) {
@@ -190,8 +202,8 @@ test("File › New Tab in a focused window delivers to it without opening anothe
   assert.deepEqual(other.webContents.sent, [], "only the window the user is in");
 });
 
-test("every shortcut but Close Tab brings a window back when none is in front", async () => {
-  for (const id of MENU_SHORTCUT_IDS.filter((id) => id !== "closeTab")) {
+test("every shortcut but Close Tab and Clear Terminal brings a window back when none is in front", async () => {
+  for (const id of MENU_SHORTCUT_IDS.filter((id) => !NEEDS_FOCUSED_WINDOW.includes(id))) {
     const closed = fakeWindow("closed", "hidden");
     const menu = fakeMenu({ windows: [closed] });
 
@@ -204,24 +216,28 @@ test("every shortcut but Close Tab brings a window back when none is in front", 
   }
 });
 
-test("Close Tab with no focused window does nothing rather than resurrect one to close it", async () => {
-  const closed = fakeWindow("closed", "hidden");
-  const menu = fakeMenu({ windows: [closed], focused: false });
+for (const id of NEEDS_FOCUSED_WINDOW) {
+  test(`${id} with no focused window does nothing rather than resurrect one to act on`, async () => {
+    // Closing a tab or clearing a terminal acts on what the user is looking
+    // at. With no Reliant window focused there is nothing on screen to act on.
+    const closed = fakeWindow("closed", "hidden");
+    const menu = fakeMenu({ windows: [closed], focused: false });
 
-  menu.items.closeTab.click();
-  await menu.settled();
+    menu.items[id].click();
+    await menu.settled();
 
-  assert.equal(closed.state, "hidden");
-  assert.deepEqual(closed.calls, []);
-  assert.deepEqual(closed.webContents.sent, []);
-  assert.equal(menu.created.length, 0);
+    assert.equal(closed.state, "hidden");
+    assert.deepEqual(closed.calls, []);
+    assert.deepEqual(closed.webContents.sent, []);
+    assert.equal(menu.created.length, 0);
 
-  const open = fakeWindow("open", "open");
-  const focusedMenu = fakeMenu({ windows: [open], focused: true });
-  focusedMenu.items.closeTab.click();
-  await focusedMenu.settled();
-  assert.deepEqual(open.webContents.sent, [["menu-shortcut", "closeTab"]]);
-});
+    const open = fakeWindow("open", "open");
+    const focusedMenu = fakeMenu({ windows: [open], focused: true });
+    focusedMenu.items[id].click();
+    await focusedMenu.settled();
+    assert.deepEqual(open.webContents.sent, [["menu-shortcut", id]]);
+  });
+}
 
 test("main.js puts every shortcut on the menu through menuShortcutItems", () => {
   const src = fs.readFileSync(path.join(SRC, "main.js"), "utf8");
@@ -312,13 +328,14 @@ test("preload exposes onMenuShortcut and none of the per-shortcut subscribers", 
     "onReopenLastTab",
     "onToggleTerminal",
     "onNewTerminal",
+    "onClearTerminal",
     "createNewTab",
     "closeCurrentTab",
   ]) {
     assert.equal(api[removed], undefined, `${removed} must be gone`);
   }
   // Menu items that are not shortcuts keep their own channels.
-  for (const kept of ["onResumeLastChat", "onNavigateTab", "onCloseAllTabs", "onClearTerminal"]) {
+  for (const kept of ["onResumeLastChat", "onNavigateTab", "onCloseAllTabs"]) {
     assert.equal(typeof api[kept], "function", `${kept} must remain`);
   }
 });

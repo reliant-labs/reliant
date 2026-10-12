@@ -42,6 +42,7 @@ const MENU_SHORTCUT_BINDINGS = Object.freeze({
   reopenLastClosedFile: "Cmd+Shift+T",
   toggleTerminal: "Cmd+J",
   newTerminal: "Cmd+Shift+J",
+  clearTerminal: "Cmd+Shift+L",
   nextChat: "Cmd+Shift+Down",
   prevChat: "Cmd+Shift+Up",
   nextRightSidebarTab: "Cmd+Shift+Right",
@@ -51,9 +52,12 @@ const MENU_SHORTCUT_BINDINGS = Object.freeze({
 /**
  * The other shortcuts in config/shortcuts.yaml bound to a menu item's chord,
  * for the same stopgap: the composer and the editor keep Cmd+Shift+Arrow for
- * text selection. Once the renderer reports in, its full table replaces this.
+ * text selection, and the workflow canvas keeps Cmd+Shift+L, which clears the
+ * terminal only while the terminal has focus. Once the renderer reports in, its
+ * full table replaces this.
  */
 const SHARED_CHORD_BINDINGS = Object.freeze({
+  connectSelectedSteps: "Cmd+Shift+L",
   selectionUpMonaco: "Cmd+Shift+Up",
   selectionDownMonaco: "Cmd+Shift+Down",
   selectionLeftMonaco: "Cmd+Shift+Left",
