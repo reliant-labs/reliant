@@ -22,8 +22,10 @@
 // its authorization server, so the CLI asks the server it was given rather
 // than guessing from hostnames.
 //
-// reliant is not a forge-managed project, so nothing generates this package's
-// mock; tests fake Service or stand up an httptest authorization server.
+// `forge generate` writes this package's mock (mock_gen.go); adapter tests
+// stand up an httptest authorization server.
+//
+//forge:not-a-component: CLI-only — the reliant CLI's browser login (`reliant daemon`, `reliant auth`); the server never builds it
 package cliauth
 
 import (

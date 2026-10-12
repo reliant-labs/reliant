@@ -26,6 +26,8 @@
 // Reliant's retired credential families (per-daemon/API PATs in daemon_pats,
 // hashed connector credentials in connector_grants) are gone. The only token
 // shape anything here accepts is forge/pkg/accesstoken's.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/grpc, internal/servergateway), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package tokenauthority
 
 import (

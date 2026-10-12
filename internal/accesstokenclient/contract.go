@@ -30,9 +30,11 @@
 //     the API for up to CacheTTL. That bound is the documented window;
 //     TestCacheTTL_IsBounded pins it so it cannot silently grow.
 //
-// reliant is not a forge-managed project, so nothing generates this package's
-// mock; consumers fake Service (tokenauthority.Memory is the conformance-tested
-// in-process implementation) and adapter tests stand up an httptest server.
+// `forge generate` writes this package's mock (mock_gen.go). A consumer that
+// needs a working fake uses tokenauthority.Memory, the conformance-tested
+// in-process implementation; adapter tests stand up an httptest server.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/tokenauthority, internal/llm/drivers), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package accesstokenclient
 
 import (

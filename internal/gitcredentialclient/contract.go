@@ -22,6 +22,8 @@
 //
 // User ids are EXTERNAL (the IdP subject) — the id reliant already holds for
 // every user. control-plane translates at its boundary.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/grpc, internal/serverapi, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package gitcredentialclient
 
 import (

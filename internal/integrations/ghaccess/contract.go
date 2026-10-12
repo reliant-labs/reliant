@@ -25,6 +25,8 @@
 // Refreshes happen when a trigger is activated (TriggerService), and
 // periodically for every user with an enabled GitHub trigger (Run). Webhook
 // revocations cut access between refreshes; a refresh restores what remains.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package ghaccess
 
 import (

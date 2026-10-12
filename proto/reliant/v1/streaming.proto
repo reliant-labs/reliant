@@ -99,6 +99,9 @@ enum WorkflowExecutionEventType {
   WORKFLOW_EXECUTION_EVENT_TYPE_CANCELLED = 4;
 }
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // StreamingService provides real-time streaming of updates.
 // Uses gRPC server-streaming for efficient push-based updates.
 // A single StreamUserUpdates stream handles BOTH global user-level events

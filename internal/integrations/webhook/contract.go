@@ -18,6 +18,8 @@
 // database or trigger knowledge, so adding one is a file plus a Register call.
 // See Provider. Every payload is untrusted: bodies are size-capped and
 // secret-bearing headers never reach the stored event.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/serverapi), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package webhook
 
 import (

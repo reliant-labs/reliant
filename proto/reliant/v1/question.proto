@@ -12,6 +12,9 @@ enum QuestionStatus {
   QUESTION_STATUS_RESOLVED = 2;
 }
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 service QuestionService {
   // ResolveQuestion resolves a pending question with the user's answer
   rpc ResolveQuestion(ResolveQuestionRequest) returns (ResolveQuestionResponse) {}

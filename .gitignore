@@ -353,3 +353,13 @@ console.logs
 web/data
 # Local-only patterns for the forbidden-strings pre-commit guard (never committed)
 .forbidden-strings
+
+# forge (forge.yaml). .forge/ is per-checkout run state — the generate lock,
+# logs, failed-generate snapshots — except the records forge keeps as project
+# decisions: the scaffold birth ledger (a scaffold deleted on purpose stays
+# deleted; forge's CI workflows are, because reliant's CI is pr-ci.yml) and the
+# disown / hash records.
+.forge/*
+!.forge/scaffolded.json
+!.forge/disowned.json
+!.forge/hashes.json

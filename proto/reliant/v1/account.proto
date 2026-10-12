@@ -5,6 +5,9 @@ package reliant.v1;
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // AccountService is the user's escape hatch: it removes everything reliant
 // stores about them.
 //

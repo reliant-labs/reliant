@@ -8,6 +8,9 @@ import "reliant/v1/connection.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // CatalogService provides discovery endpoints for models, tools, and activities
 service CatalogService {
   // ListModels returns all available models filtered by user's configured API keys

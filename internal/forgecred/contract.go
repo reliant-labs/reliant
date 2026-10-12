@@ -33,6 +33,8 @@
 // terminal) every session on the machine is a candidate, the CLI's resolved
 // server first. The server answers "not my control plane" without minting, so
 // trying candidates in order is safe.
+//
+//forge:not-a-component: CLI-only — built by `reliant auth forge-credential`; the server never builds it
 package forgecred
 
 import (

@@ -26,6 +26,9 @@ enum WorktreeStatus {
   WORKTREE_STATUS_FAILED = 6;
 }
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // WorktreeService handles worktree-related operations
 service WorktreeService {
   // CRUD Operations

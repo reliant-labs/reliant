@@ -9,6 +9,9 @@ import "reliant/v1/trigger.proto";
 
 option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // InboxService lists everything waiting on the calling user, across every
 // project and launch kind (research/WORKFLOW_UI.md §8), or within one project.
 // Scope is always the caller; no request carries a user id.

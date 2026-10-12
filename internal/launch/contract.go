@@ -16,6 +16,8 @@
 // and it does not import connect: handlers map its errors to wire codes.
 //
 // See research/TRIGGERS.md.
+//
+//forge:not-a-component: built by reliant's hand-wired server (internal/grpc/services, internal/serverworker), not forge's composition root — until P3c (research/forge-migration/PLAN.md)
 package launch
 
 import (

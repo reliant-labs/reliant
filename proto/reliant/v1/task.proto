@@ -28,6 +28,9 @@ enum DependencyType {
   DEPENDENCY_TYPE_PARALLEL_WITH = 3;
 }
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // TaskService handles task-related operations
 service TaskService {
   // CreateTask creates a new task

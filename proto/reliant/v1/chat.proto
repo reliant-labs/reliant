@@ -121,6 +121,9 @@ enum ChatActivity {
   CHAT_ACTIVITY_QUEUED_FOR_MACHINE = 6;
 }
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // ChatService handles chat-related operations
 service ChatService {
   // ============================================

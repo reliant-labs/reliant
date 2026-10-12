@@ -483,6 +483,10 @@ func TestDaemon_NeverOverridesAUsersHelper(t *testing.T) {
 // for its own process when nothing did, and only when a forge command runs.
 func TestReliantForge_PointsForgeAtTheSession(t *testing.T) {
 	isolateForgeCredHome(t)
+	// The forge command runs from this package's directory, so it finds
+	// reliant's forge.yaml, and forge's pre-run would otherwise configure the
+	// developer's checkout (core.hooksPath in the clone's shared .git/config).
+	t.Setenv("FORGE_NO_HOOKS", "1")
 	root := NewRootCmd()
 	if os.Getenv(cloudcred.HelperEnv) != "" {
 		t.Fatal("building the command tree must not set the helper (a daemon would inherit it unpinned)")

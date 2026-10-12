@@ -9,6 +9,9 @@ option go_package = "github.com/reliant-labs/reliant/gen/reliant/v1;reliantv1";
 // Workflow Scenarios - Test workflows with mocked events
 // ============================================
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // ScenarioService handles workflow scenario testing
 service ScenarioService {
   // ListScenarios returns all scenarios for a workflow

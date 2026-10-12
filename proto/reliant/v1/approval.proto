@@ -24,6 +24,9 @@ enum ApprovalStatus {
   APPROVAL_STATUS_DENIED = 3;
 }
 
+// forge:unmanaged — reliant's own handlers serve this service, not forge's;
+// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
+
 // ApprovalService handles workflow approval operations.
 service ApprovalService {
   // ListApprovalsByChat lists all pending approvals for a chat

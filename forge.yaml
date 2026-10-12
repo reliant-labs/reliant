@@ -1,0 +1,36 @@
+# Forge project manifest — see https://github.com/reliant-labs/forge.
+# This file is minimal on purpose. Features, the database, the frontends and
+# the project kind are derived from what exists in the repo (db/migrations,
+# frontends/, deploy/kcl, internal/operators, ...), not configured here.
+# Add a section (ci, lint, contracts, ...) only to override a default
+# (`forge skill load architecture` documents the schema;
+# `forge skill list` indexes the per-topic skills, e.g. `auth`).
+#
+# reliant adopts forge in place, one concern per PR
+# (research/forge-migration/PLAN.md). Today forge manages no serving code:
+# every proto service is `// forge:unmanaged`, and the contract packages the
+# server or CLI builds by hand are `//forge:not-a-component`. So
+# `forge generate` projects only the contract mocks/decorators, the
+# descriptor and the open-procedure set, and runs sqlc (below). The Makefile
+# stays the entrypoint: CI's "Generated code is up to date" job runs
+# `make generate-all`, and `forge generate` leaves that output byte-identical.
+# After changing a proto service or a contract.go interface, run
+# `forge generate` at the version go.mod pins and commit what it writes: the
+# generated mocks assert their interface at compile time, and
+# gen/forge_descriptor.json mirrors the protos.
+
+name: reliant
+module_path: github.com/reliant-labs/reliant
+forge_version: v0.1.45-0.20261012061327-4aa7e58b787e
+harness: reliant
+config:
+    # Typed config (proto/config) is P4. Until every os.Getenv read moves
+    # onto it, the typed-access guard reports rather than fails.
+    enforce_typed_access: warn
+generate:
+    hooks:
+        # sqlc until the forge ORM replaces it (P5b). `make sqlc` runs the
+        # sqlc version the Makefile pins.
+        - name: sqlc
+          command: [make, sqlc]
+          writes: [internal/db/postgres/generated]

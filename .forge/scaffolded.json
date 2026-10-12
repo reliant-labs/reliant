@@ -1,0 +1,26 @@
+{
+  "files": {
+    ".github/dependabot.yml": {
+      "scaffolded_at": "2026-10-12T05:26:21Z"
+    },
+    ".github/workflows/ci.yml": {
+      "scaffolded_at": "2026-10-12T05:26:21Z"
+    },
+    ".github/workflows/deploy.yml": {
+      "scaffolded_at": "2026-10-12T05:30:41Z"
+    },
+    ".github/workflows/e2e.yml": {
+      "scaffolded_at": "2026-10-12T05:30:41Z"
+    },
+    ".github/workflows/proto-breaking.yml": {
+      "scaffolded_at": "2026-10-12T05:30:41Z"
+    }
+  },
+  "absent_reported": [
+    ".github/dependabot.yml",
+    ".github/workflows/ci.yml",
+    ".github/workflows/deploy.yml",
+    ".github/workflows/e2e.yml",
+    ".github/workflows/proto-breaking.yml"
+  ]
+}
