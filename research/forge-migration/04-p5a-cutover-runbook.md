@@ -56,6 +56,9 @@ In the throwaway container, with the cutover binary:
 Then `docker rm -fv reliant-baseline-cut`.
 
 ## 5. Read-only pre-flight per environment
+
+**Dev databases are destroyed and rebuilt from the baseline instead (user decision, 2026-10-12)**, so this pre-flight and the adoption path apply to prod (and any env whose data we keep). Never run a dev teardown against prod.
+
 ```sql
 SELECT version_id FROM (SELECT DISTINCT ON (version_id) version_id, is_applied
   FROM goose_db_version ORDER BY version_id, id DESC) t

@@ -110,8 +110,12 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | 1b ScenarioService split (wire-identical) | reliant #741 |
 | P6 wave 0: dead packages / deps-are-interfaces / exclude-contract on 21 pure packages | reliant #743 / #744 / #745 |
 | Dev CORS: reliant now gets `CORS_ALLOWED_ORIGINS` (was a no-op `CORS_ORIGINS`) | control-plane #841 |
+| reliant pins forge `07720bbc` (all of the above) | reliant #749 |
 
-**Next:** a forge release, then pin it in reliant (and control-plane). Then slice 1g: a minimal reliant `forge.yaml` (every service `// forge:unmanaged`, `cliauth`/`forgecred` `//forge:not-a-component`, sqlc as a `generate.hooks` entry), then 1h (`forge lint` in CI). The dev DBs are approved to be destroyed and rebuilt, so P5a skips goose adoption for dev; it is still required for prod.
+**Next:** a forge release, then pin it in reliant (and control-plane). Then slice 1g: a minimal reliant `forge.yaml` (every service `// forge:unmanaged`, `cliauth`/`forgecred` `//forge:not-a-component`, sqlc as a `generate.hooks` entry), then 1h (`forge lint` in CI). **Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) are dropped and rebuilt from the new baseline, with no goose adoption and no reconciling branch-only versions. **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. Never touch prod in a "dev DB" teardown.
+- As of 2026-10-12 this sandbox has no dev Postgres (no `postgres_data` volume, no k3d cluster); only prod kube contexts exist, and they are untouched. The dev stacks rebuild their DB on next `forge env up`.
+- Reliant pins forge `07720bbc` (reliant #749).
+- Slice 1g (first `forge.yaml`) is in progress in worktree `fm-r-1g-forge-yaml`.
 
 Research inputs: `02-contracts-classification.md` (P6) and `03-config-census.md` (P4), both in this dir.
 
