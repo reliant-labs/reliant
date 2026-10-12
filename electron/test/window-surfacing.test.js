@@ -368,6 +368,62 @@ test("a window that failed to open does not block the next activation", async ()
   assert.equal(app.created.length, 1, "the next activation tries again");
 });
 
+// Gives a fake window a webContents that records what it was sent. `loading`
+// pages emit did-finish-load on finishLoad().
+function withWebContents(window, { loading = false } = {}) {
+  const contents = new EventEmitter();
+  contents.loading = loading;
+  contents.sent = [];
+  contents.isLoading = () => contents.loading;
+  contents.send = (channel, payload) => contents.sent.push([channel, payload]);
+  contents.finishLoad = () => {
+    contents.loading = false;
+    contents.emit("did-finish-load");
+  };
+  window.webContents = contents;
+  return window;
+}
+
+test("surfaceAndSend sends to the window it brought back, not a new one", async () => {
+  const closed = withWebContents(fakeWindow("closed", "hidden"));
+  const app = fakeApp({ windows: [closed] });
+
+  assert.equal(await app.surfacer.surfaceAndSend("tray:go-to-settings"), closed);
+
+  assert.equal(closed.state, "open");
+  assert.deepEqual(closed.webContents.sent, [["tray:go-to-settings", undefined]]);
+  assert.equal(app.created.length, 0);
+});
+
+test("surfaceAndSend waits for a loading page, then settles before sending", async () => {
+  const settling = [];
+  const loading = withWebContents(fakeWindow("loading", "open"), { loading: true });
+  const surfacer = createWindowSurfacer({
+    getWindows: () => [loading],
+    createWindow: () => assert.fail("must not create a window"),
+    settle: (fn) => settling.push(fn),
+  });
+
+  const sent = surfacer.surfaceAndSend("menu-shortcut", "newChat");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(loading.webContents.sent, [], "not sent while the page loads");
+
+  loading.webContents.finishLoad();
+  assert.deepEqual(loading.webContents.sent, [], "not sent before it settles");
+  settling.shift()();
+
+  assert.equal(await sent, loading);
+  assert.deepEqual(loading.webContents.sent, [["menu-shortcut", "newChat"]]);
+});
+
+test("surfaceAndSend sends nothing while the app is quitting", async () => {
+  const closed = withWebContents(fakeWindow("closed", "hidden"));
+  const app = fakeApp({ windows: [closed], quitting: true });
+
+  assert.equal(await app.surfacer.surfaceAndSend("menu-shortcut", "newChat"), null);
+  assert.deepEqual(closed.webContents.sent, []);
+});
+
 test("main.js listens for activation before startup's first await", () => {
   // The other half of the bug. `activate` used to be registered at the very
   // end of startup, after awaiting the first window's load and the backend

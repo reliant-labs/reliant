@@ -3,6 +3,62 @@ const { contextBridge, ipcRenderer } = require('electron');
 // Store config in preload context
 let reliantConfig = null;
 
+// Menu shortcuts (electron/src/menu-shortcuts.js). Main can deliver one before
+// the renderer is listening: a window opened for File › New Tab, or the tray's
+// "New Chat", has finished loading its page, but React has not yet mounted the
+// hook that subscribes. Sent then, the id would be dropped, and the old fix was
+// a guessed delay. Instead this listener exists from the moment the page does,
+// and holds ids that arrive with nobody subscribed until someone is.
+//
+// Held ids expire: one the user asked for while the app was still starting is
+// what they want, but one that fires long afterwards — say once they have
+// signed in — is a surprise.
+const MENU_SHORTCUT_HOLD_MS = 10000;
+const MENU_SHORTCUT_HOLD_MAX = 10;
+const menuShortcutSubscriptions = new Set();
+let heldMenuShortcuts = []; // { shortcutId, at }
+let heldFlushScheduled = false;
+
+function runMenuShortcut(shortcutId) {
+  for (const { callback } of [...menuShortcutSubscriptions]) {
+    try {
+      callback(shortcutId);
+    } catch (error) {
+      console.error('[Preload] menu shortcut handler failed:', shortcutId, error);
+    }
+  }
+}
+
+// Hands held ids to the subscribers a turn after one subscribes: the
+// subscriber has its unsubscribe back first, and a subscription that is
+// immediately torn down and redone (React StrictMode) gets them once, not twice.
+function scheduleHeldMenuShortcuts() {
+  if (heldFlushScheduled || heldMenuShortcuts.length === 0) return;
+  heldFlushScheduled = true;
+  setTimeout(() => {
+    heldFlushScheduled = false;
+    if (menuShortcutSubscriptions.size === 0) return;
+    const now = Date.now();
+    const due = heldMenuShortcuts.filter(({ at }) => now - at <= MENU_SHORTCUT_HOLD_MS);
+    heldMenuShortcuts = [];
+    for (const { shortcutId } of due) {
+      runMenuShortcut(shortcutId);
+    }
+  }, 0);
+}
+
+ipcRenderer.on('menu-shortcut', (_event, shortcutId) => {
+  if (typeof shortcutId !== 'string' || shortcutId === '') return;
+  // While held ids are about to be handed over, queue behind them so the
+  // shortcuts still run in the order they were invoked.
+  if (menuShortcutSubscriptions.size > 0 && !heldFlushScheduled) {
+    runMenuShortcut(shortcutId);
+    return;
+  }
+  heldMenuShortcuts.push({ shortcutId, at: Date.now() });
+  heldMenuShortcuts = heldMenuShortcuts.slice(-MENU_SHORTCUT_HOLD_MAX);
+});
+
 // Expose protected methods that allow the renderer process to use
 // the ipcRenderer without exposing the entire object
 contextBridge.exposeInMainWorld('electronAPI', {
@@ -35,8 +91,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getAllWindows: () => ipcRenderer.invoke('get-all-windows'),
   focusWindow: (windowId) => ipcRenderer.invoke('focus-window', windowId),
   createNewWindow: () => ipcRenderer.invoke('create-new-window'),
-  createNewTab: () => ipcRenderer.invoke('create-new-tab'),
-  closeCurrentTab: () => ipcRenderer.invoke('close-current-tab'),
   closeWindowIfNoTabs: (tabCount) => ipcRenderer.invoke('close-window-if-no-tabs', tabCount),
 
   // Window controls
@@ -187,11 +241,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('set-worktree-context', listener);
     return () => ipcRenderer.removeListener('set-worktree-context', listener);
   },
-  onCreateNewTab: (callback) => {
-    const listener = (event) => callback();
-    ipcRenderer.on('create-new-tab', listener);
-    // Return cleanup function
-    return () => ipcRenderer.removeListener('create-new-tab', listener);
+  // A shortcut invoked from the application menu or the tray, by id
+  // (config/shortcuts.yaml). The renderer runs it through its keystroke
+  // dispatcher. Ids that arrived before anyone subscribed are handed to the
+  // first subscriber — see the menu-shortcut listener above.
+  onMenuShortcut: (callback) => {
+    const subscription = { callback };
+    menuShortcutSubscriptions.add(subscription);
+    scheduleHeldMenuShortcuts();
+    return () => menuShortcutSubscriptions.delete(subscription);
   },
   onResumeLastChat: (callback) => {
     const listener = (event) => callback();
@@ -228,18 +286,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('tray:switch-workspace', listener);
     return () => ipcRenderer.removeListener('tray:switch-workspace', listener);
   },
-  onCloseCurrentTab: (callback) => {
-    const listener = (event) => callback();
-    ipcRenderer.on('close-current-tab', listener);
-    // Return cleanup function
-    return () => ipcRenderer.removeListener('close-current-tab', listener);
-  },
-  onReopenLastTab: (callback) => {
-    const listener = (event) => callback();
-    ipcRenderer.on('reopen-last-tab', listener);
-    // Return cleanup function
-    return () => ipcRenderer.removeListener('reopen-last-tab', listener);
-  },
   onCloseAllTabs: (callback) => {
     const listener = (event) => callback();
     ipcRenderer.on('close-all-tabs', listener);
@@ -275,18 +321,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('fullscreen-changed', listener);
     // Return cleanup function
     return () => ipcRenderer.removeListener('fullscreen-changed', listener);
-  },
-  onToggleTerminal: (callback) => {
-    const listener = (event) => callback();
-    ipcRenderer.on('toggle-terminal', listener);
-    // Return cleanup function
-    return () => ipcRenderer.removeListener('toggle-terminal', listener);
-  },
-  onNewTerminal: (callback) => {
-    const listener = (event) => callback();
-    ipcRenderer.on('new-terminal', listener);
-    // Return cleanup function
-    return () => ipcRenderer.removeListener('new-terminal', listener);
   },
   onClearTerminal: (callback) => {
     const listener = (event) => callback();

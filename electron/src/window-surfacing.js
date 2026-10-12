@@ -34,7 +34,8 @@
 //
 // Kept free of Electron imports so the policy is unit-testable; a "window" here
 // is anything with isDestroyed / isVisible / isMinimized (and restore / show /
-// focus, to be brought forward), and `app` is anything with on().
+// focus, to be brought forward; webContents, to be sent to), and `app` is
+// anything with on().
 
 // Orders tracked windows most recently focused first, dropping destroyed ones.
 // Each entry is { window, lastFocusedAt }; a missing lastFocusedAt sorts last.
@@ -85,7 +86,14 @@ function hasWindowOnScreen(windows) {
 //   createWindow() — opens a new app window; may resolve before or after the
 //                    window appears in getWindows().
 //   isSuppressed() — true while quitting or installing an update.
-function createWindowSurfacer({ getWindows, createWindow, isSuppressed = () => false }) {
+//   settle(fn)     — runs fn a moment after a still-loading page finishes, so
+//                    its app has started before surfaceAndSend's message lands.
+function createWindowSurfacer({
+  getWindows,
+  createWindow,
+  isSuppressed = () => false,
+  settle = (fn) => setTimeout(fn, 150),
+}) {
   // The pending createWindow() while one is in flight. Every gesture that
   // arrives meanwhile shares it: that window shows itself once it has loaded,
   // so the gesture neither opens a second one nor shows it half-loaded.
@@ -141,7 +149,36 @@ function createWindowSurfacer({ getWindows, createWindow, isSuppressed = () => f
     return surface();
   }
 
-  return { surface, surfaceIfNothingOnScreen };
+  // A gesture that acts inside the app (the tray's "New Chat", a menu
+  // shortcut): surface() a window, then send it `channel` — after its page has
+  // loaded if it is still loading. Resolves the window it sent to, or null when
+  // nothing was surfaced.
+  function surfaceAndSend(channel, payload) {
+    return surface().then((window) => {
+      if (!window || window.isDestroyed()) {
+        return null;
+      }
+      const { webContents } = window;
+      if (!webContents.isLoading()) {
+        webContents.send(channel, payload);
+        return window;
+      }
+      return new Promise((resolve) => {
+        webContents.once("did-finish-load", () => {
+          settle(() => {
+            if (window.isDestroyed()) {
+              resolve(null);
+              return;
+            }
+            webContents.send(channel, payload);
+            resolve(window);
+          });
+        });
+      });
+    });
+  }
+
+  return { surface, surfaceIfNothingOnScreen, surfaceAndSend };
 }
 
 // Listens for every way macOS activates the app. Register it before anything

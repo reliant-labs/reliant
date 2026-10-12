@@ -58,6 +58,7 @@ const {
   defaultAccelerators,
   resolveMenuAccelerators,
 } = require("./menu-accelerators");
+const { createMenuShortcutDelivery, menuShortcutItems } = require("./menu-shortcuts");
 const WindowManager = require("./window-manager");
 const {
   createWindowSurfacer,
@@ -792,26 +793,27 @@ function logSurfaceFailure(source, error) {
   log.error(`[Window] Failed to surface a window (${source}):`, error);
 }
 
+// Surfaces the window the user is in (see surfaceAppWindow) and sends it
+// `channel` once its page has loaded.
 function sendToSurfacedWindow(channel, payload) {
-  surfaceAppWindow()
-    .then((window) => {
-      if (!window || window.isDestroyed()) {
-        return;
-      }
-
-      const send = () => window.webContents.send(channel, payload);
-      if (window.webContents.isLoading()) {
-        window.webContents.once("did-finish-load", () => {
-          setTimeout(send, 150);
-        });
-      } else {
-        send();
-      }
-    })
-    .catch((error) => {
-      log.error("[Tray] Failed to deliver event to main window:", { channel, error });
-    });
+  appWindowSurfacer.surfaceAndSend(channel, payload).catch((error) => {
+    log.error("[Window] Failed to deliver event to a surfaced window:", { channel, error });
+  });
 }
+
+function hasFocusedAppWindow() {
+  const focused = BrowserWindow.getFocusedWindow();
+  return Boolean(focused) && appWindowsByRecency().includes(focused);
+}
+
+// Runs a shortcut by id in the window the user is in, bringing one back first
+// when none is in front. The menu and the tray's "New Chat" both use it, so a
+// shortcut reaches the renderer the same way however it was invoked. See
+// menu-shortcuts.js.
+const deliverMenuShortcut = createMenuShortcutDelivery({
+  send: sendToSurfacedWindow,
+  hasFocusedWindow: hasFocusedAppWindow,
+});
 
 function refreshTrayMenu() {
   if (!tray) {
@@ -843,7 +845,7 @@ function refreshTrayMenu() {
       label: "New Chat",
       enabled: trayStatus.canCreateChat,
       click: () => {
-        sendToSurfacedWindow("create-new-tab");
+        deliverMenuShortcut("newChat");
       },
     },
     {
@@ -1018,9 +1020,7 @@ function updateTrayStatus(status) {
   refreshTrayMenu();
 }
 
-async function createWindow(options = {}) {
-  const { createInitialTab = false } = options;
-
+async function createWindow() {
   // In development, append directory basename and port to title for clarity
   let windowTitle = "Reliant";
   if (!app.isPackaged && process.cwd()) {
@@ -1395,16 +1395,6 @@ async function createWindow(options = {}) {
       log.debug("[Window] Opening pending project:", pendingProjectPath);
       mainWindow.webContents.send("open-project", pendingProjectPath);
       pendingProjectPath = null;
-    }
-
-
-    // If this window was created with the intent to have an initial tab (e.g., from cmd+n with no windows)
-    if (createInitialTab) {
-      log.debug("[Window] Creating initial tab as requested");
-      // Small delay to ensure React app is ready to receive the message
-      setTimeout(() => {
-        mainWindow.webContents.send("create-new-tab");
-      }, 500);
     }
 
     // Check for updates after window is fully loaded (only in packaged app)
@@ -2377,22 +2367,6 @@ ipcMain.handle("get-cli-status", () => {
 });
 
 // Tab and window management handlers
-ipcMain.handle("create-new-tab", (event) => {
-  // Send create new tab event to the renderer
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (window) {
-    window.webContents.send("create-new-tab");
-  }
-});
-
-ipcMain.handle("close-current-tab", (event) => {
-  // Send close current tab event to the renderer
-  const window = BrowserWindow.fromWebContents(event.sender);
-  if (window) {
-    window.webContents.send("close-current-tab");
-  }
-});
-
 ipcMain.handle("close-window-if-no-tabs", (event, tabCount) => {
   const window = BrowserWindow.fromWebContents(event.sender);
   if (window && tabCount === 0) {
@@ -3586,7 +3560,13 @@ function updateMenuAccelerators(bindings) {
 
 // Create application menu
 function createApplicationMenu() {
-  const accel = menuAccelerators;
+  // Every item that is a keyboard shortcut. Each delivers its shortcut id to
+  // the renderer's dispatcher (see menu-shortcuts.js) and carries the user's
+  // chord only when no other shortcut needs it (see menu-accelerators.js).
+  const shortcut = menuShortcutItems({
+    accelerators: menuAccelerators,
+    deliver: deliverMenuShortcut,
+  });
   const template = [
     {
       label: "Reliant",
@@ -3625,46 +3605,15 @@ function createApplicationMenu() {
     {
       label: "File",
       submenu: [
-        {
-          label: "New Tab",
-          accelerator: accel.newChat,
-          click: () => {
-            // Send to focused window to create new tab
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("create-new-tab");
-            } else {
-              // If no window is open, create a new window with a tab
-              createWindow({ createInitialTab: true });
-            }
-          },
-        },
+        shortcut.newChat,
         {
           label: "New Window",
           accelerator: "CmdOrCtrl+N",
           click: () => createWindow(),
         },
         { type: "separator" },
-        {
-          label: "Close Tab",
-          accelerator: accel.closeTab,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("close-current-tab");
-            }
-          },
-        },
-        {
-          label: "Reopen Last Tab",
-          accelerator: accel.reopenLastClosedFile,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("reopen-last-tab");
-            }
-          },
-        },
+        shortcut.closeTab,
+        shortcut.reopenLastClosedFile,
         {
           label: "Close All Tabs",
           accelerator: "CmdOrCtrl+Alt+W",
@@ -3809,26 +3758,8 @@ function createApplicationMenu() {
     {
       label: "Terminal",
       submenu: [
-        {
-          label: "New Terminal",
-          accelerator: accel.newTerminal,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("new-terminal");
-            }
-          },
-        },
-        {
-          label: "Toggle Terminal",
-          accelerator: accel.toggleTerminal,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("toggle-terminal");
-            }
-          },
-        },
+        shortcut.newTerminal,
+        shortcut.toggleTerminal,
         { type: "separator" },
         {
           label: "Clear Terminal",
@@ -3854,46 +3785,10 @@ function createApplicationMenu() {
     {
       label: "Navigate",
       submenu: [
-        {
-          label: "Next Chat",
-          accelerator: accel.nextChat,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("navigate-next-chat");
-            }
-          },
-        },
-        {
-          label: "Previous Chat",
-          accelerator: accel.prevChat,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("navigate-prev-chat");
-            }
-          },
-        },
-        {
-          label: "Next Sidebar Tab",
-          accelerator: accel.nextRightSidebarTab,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("navigate-next-sidebar");
-            }
-          },
-        },
-        {
-          label: "Previous Sidebar Tab",
-          accelerator: accel.prevRightSidebarTab,
-          click: () => {
-            const focusedWindow = BrowserWindow.getFocusedWindow();
-            if (focusedWindow) {
-              focusedWindow.webContents.send("navigate-prev-sidebar");
-            }
-          },
-        },
+        shortcut.nextChat,
+        shortcut.prevChat,
+        shortcut.nextRightSidebarTab,
+        shortcut.prevRightSidebarTab,
       ],
     },
   ];
