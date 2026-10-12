@@ -154,6 +154,8 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge lint`](#reliant-forge-lint) | Run linters on the project |
 | [`reliant forge login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`reliant forge logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
+| [`reliant forge observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
+| [`reliant forge observe profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
 | [`reliant forge package`](#reliant-forge-package) | Manage internal packages |
 | [`reliant forge package new`](#reliant-forge-package-new) | Create a new internal package with contract interface |
 | [`reliant forge project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
@@ -786,6 +788,7 @@ reliant forge
 | [`lint`](#reliant-forge-lint) | Run linters on the project |
 | [`login`](#reliant-forge-login) | Authenticate to the control plane(s) this project declares |
 | [`logout`](#reliant-forge-logout) | Forget the stored credential for this project's control plane(s) |
+| [`observe`](#reliant-forge-observe) | Read back what the local observability stack collected |
 | [`package`](#reliant-forge-package) | Manage internal packages |
 | [`project`](#reliant-forge-project) | Create, evolve, and inspect the project as a whole |
 | [`registry`](#reliant-forge-registry) | Log in to and read refs from the registries an env's workloads declare |
@@ -5270,6 +5273,72 @@ reliant forge logout [--endpoint URL] [flags]
 | Flag | Type | Default | Description |
 |------|------|---------|-------------|
 | `--endpoint` | `string` | - | Forget this control plane URL only, instead of every one the project declares |
+
+---
+
+### reliant forge observe
+
+Read back what the local observability stack collected
+
+```
+reliant forge observe
+```
+
+**Subcommands:**
+
+| Command | Description |
+|---------|-------------|
+| [`profile`](#reliant-forge-observe-profile) | Export an aggregated continuous profile as pprof, speedscope or collapsed stacks |
+
+---
+
+#### reliant forge observe profile
+
+Export an aggregated continuous profile as pprof, speedscope or collapsed stacks
+
+Export the continuous profile the local ClickStack collected, for a service
+over a time range or for one trace.
+
+Apps push a 10s CPU profile plus heap and goroutine snapshots about once a
+minute (pkg/observe, on by default whenever an OTLP endpoint is set). They land
+in ClickHouse; HyperDX cannot draw flamegraphs, so this exports them:
+
+  forge observe profile --service api --since 30m -o api.pb.gz
+  go tool pprof -http=: api.pb.gz                  # flamegraph, top, source
+
+  forge observe profile --service api --format speedscope -o api.speedscope.json
+  #   open api.speedscope.json at https://www.speedscope.app
+
+  forge observe profile --trace 0af7651916cd43dd8448eb211c80319c   # CPU burned inside one trace
+  forge observe profile --service api --format folded | flamegraph.pl > api.svg
+
+Sample types: cpu (nanoseconds), alloc_space / inuse_space / alloc_objects /
+inuse_objects (heap), goroutine. Raw samples (and so --trace) are kept 72h; the
+per-minute aggregate behind --since is kept 30 days. --sql prints the query so
+you can run it yourself against the ClickStack ClickHouse.
+
+Needs the local ClickStack running (`forge env up`).
+
+```
+reliant forge observe profile [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--env` | `string` | - | only samples from this deployment.environment.name |
+| `--format` | `string` | `pprof` | pprof | speedscope | folded |
+| `--from` | `string` | - | range start, RFC 3339 |
+| `--list` | `bool` | - | list the services that sent profiles in the range |
+| `--output`, `-o` | `string` | - | write to this file instead of stdout |
+| `--service` | `string` | - | service.name to export (default: the only service that sent profiles) |
+| `--since` | `duration` | `1h0m0s` | how far back to read (ignored with --from) |
+| `--span` | `string` | - | narrow --trace to one span id |
+| `--sql` | `bool` | - | print the query and its parameters instead of running it |
+| `--to` | `string` | - | range end, RFC 3339 (default now) |
+| `--trace` | `string` | - | export only samples linked to this trace id (raw tier, last 72h) |
+| `--type` | `string` | `cpu` | sample type: cpu, alloc_space, inuse_space, alloc_objects, inuse_objects, goroutine |
 
 ---
 
