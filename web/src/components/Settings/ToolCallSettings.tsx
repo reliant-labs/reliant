@@ -100,7 +100,7 @@ export function getToolCategory(toolName: string): keyof ToolCollapseDefaults | 
   }
 
   // Execution tools
-  if (['shell', 'shell_list', 'shell_output', 'shell_wait', 'shell_kill', 'run_command', 'worktree'].includes(nameLower)) {
+  if (['shell', 'shell_list', 'shell_output', 'shell_wait', 'wait_for_machine', 'shell_kill', 'run_command', 'worktree'].includes(nameLower)) {
     return 'execution';
   }
   

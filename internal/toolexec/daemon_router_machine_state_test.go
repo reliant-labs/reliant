@@ -20,6 +20,9 @@ func TestMachineState(t *testing.T) {
 	startingMachine := &db.Daemon{ID: "m-starting", UserID: "u", DaemonType: &managed,
 		LifecyclePhase: strPtr("provisioning")}
 
+	suspendedMachine := &db.Daemon{ID: "m-suspended", UserID: "u", DaemonType: &managed,
+		LifecyclePhase: strPtr("suspended")}
+
 	cases := []struct {
 		name     string
 		records  *fakeDaemonRecords
@@ -41,12 +44,17 @@ func TestMachineState(t *testing.T) {
 		{
 			name:    "a machine still provisioning is coming up",
 			records: &fakeDaemonRecords{daemons: []*db.Daemon{startingMachine}},
-			want:    MachineState{DaemonID: "m-starting", Exists: true},
+			want:    MachineState{DaemonID: "m-starting", Exists: true, Starting: true},
+		},
+		{
+			name:    "a suspended machine is asleep, not failed or starting",
+			records: &fakeDaemonRecords{daemons: []*db.Daemon{suspendedMachine}},
+			want:    MachineState{DaemonID: "m-suspended", Exists: true, Suspended: true},
 		},
 		{
 			name:    "routing picks the starting machine over a failed one, so the run waits for it",
 			records: &fakeDaemonRecords{daemons: []*db.Daemon{failedMachine, startingMachine}},
-			want:    MachineState{DaemonID: "m-starting", Exists: true},
+			want:    MachineState{DaemonID: "m-starting", Exists: true, Starting: true},
 		},
 		{
 			name:     "a pinned machine that is gone does not exist",

@@ -12,6 +12,7 @@ import (
 func TestIsPreemptable_TheBlockingWaiters(t *testing.T) {
 	assert.True(t, IsPreemptable(ToolShellWait))
 	assert.True(t, IsPreemptable(ToolSpawnStatus))
+	assert.True(t, IsPreemptable(ToolWaitForMachine))
 }
 
 func TestIsPreemptable_EverythingElseIsNot(t *testing.T) {

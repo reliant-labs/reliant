@@ -2214,6 +2214,10 @@ func (a *CallLLMActivity) getAvailableTools(ctx context.Context, chat *db.Chat, 
 	access := tools.ResolveToolAccess(req.Preloaded, req.Loadable, mcpToolNames)
 	if noMachine {
 		access = withoutMachineTools(access)
+	} else if projectScopedToolsFactory.ObservesMachine() {
+		// The machine is remote, so it can drop mid-turn: a node that reaches
+		// any machine tool is handed wait_for_machine to ride that out.
+		access = withWaitForMachine(access)
 	}
 
 	// Integration tools that need a connection reach only an owner who has

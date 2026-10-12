@@ -82,6 +82,12 @@ type ToolsOptions struct {
 	// machine the run's tools execute on. Optional: nil means the worktree
 	// tool reports that creating and deleting worktrees is unavailable here.
 	RunMachine RunMachine
+	// MachineObserver lets wait_for_machine see whether the run's machine is
+	// connected. Wired where tools reach the machine over the network (the
+	// worker); its presence is what makes a run's machine REMOTE, and so what
+	// earns a run wait_for_machine (see ObservesMachine). Optional: nil means
+	// there is no remote machine to wait for here.
+	MachineObserver MachineObserver
 }
 
 // ToolsFactory is a global factory for creating tool instances
@@ -399,6 +405,12 @@ func (f *ToolsFactory) MetadataWriter() Tool {
 // Component library
 func (f *ToolsFactory) ComponentLibrary() Tool {
 	return NewComponentLibraryTool()
+}
+
+// WaitForMachine returns wait_for_machine, which watches the run's machine
+// through the factory's MachineObserver.
+func (f *ToolsFactory) WaitForMachine() Tool {
+	return NewWaitForMachineTool(f.opts.MachineObserver)
 }
 
 // Worktree tools

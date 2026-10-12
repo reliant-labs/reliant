@@ -10,6 +10,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/daemonoffline"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -918,7 +919,14 @@ func (a *ExecuteToolsActivity) handleToolExecutionResult(
 
 	// The tool ran. Decide the outcome BEFORE announcing it.
 	isError := !execResult.Success || execResult.IsError
-	result := a.buildToolResult(toolCallID, toolName, execResult.Content, execResult.Metadata, isError, execResult.BinaryParts, attachmentIDsFromMetadata(execResult.Metadata))
+	content := execResult.Content
+	if isError && tools.CapabilitiesFrom(ctx).Offers(tools.ToolWaitForMachine) && daemonoffline.IsToolResultContent(content) {
+		// Appended, never replaced: the breaker counts the original text. It
+		// is added here, before the model's copy and the durable row are both
+		// taken from the result, so the two agree.
+		content += machineOfflineHint
+	}
+	result := a.buildToolResult(toolCallID, toolName, content, execResult.Metadata, isError, execResult.BinaryParts, attachmentIDsFromMetadata(execResult.Metadata))
 
 	// What the command actually printed. Captured BEFORE the nudge below,
 	// because this is what gets stored and rendered: a tip appended to the

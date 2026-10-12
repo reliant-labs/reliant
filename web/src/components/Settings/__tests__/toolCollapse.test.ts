@@ -7,7 +7,7 @@ import {
 
 describe("tool collapse defaults", () => {
   it("collapses the shell tool and its background-process family", () => {
-    for (const tool of ["shell", "shell_list", "shell_output", "shell_wait", "shell_kill"]) {
+    for (const tool of ["shell", "shell_list", "shell_output", "shell_wait", "shell_kill", "wait_for_machine"]) {
       expect(getToolCategory(tool), tool).toBe("execution");
       expect(shouldToolBeCollapsed(tool), tool).toBe(true);
     }

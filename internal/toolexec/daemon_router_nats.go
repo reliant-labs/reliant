@@ -525,6 +525,11 @@ type MachineState struct {
 	// start. Nothing will bring it up on its own schedule; the owner has to
 	// retry it (or the control plane rebuilds it).
 	Failed bool
+	// Suspended: the machine is asleep (suspending or suspended). Tool-time
+	// traffic never wakes it; the user, or their next message, does.
+	Suspended bool
+	// Starting: provisioning or cloning — on its way up.
+	Starting bool
 	// StatusMessage is the control plane's latest reason, shown verbatim.
 	StatusMessage string
 }
@@ -555,6 +560,8 @@ func (r *NATSDaemonRouter) MachineState(ctx context.Context, userID string, sele
 		DaemonID:      rec.id,
 		Exists:        true,
 		Failed:        rec.failed,
+		Suspended:     rec.state == recordSuspended,
+		Starting:      rec.state == recordStarting,
 		StatusMessage: rec.statusMessage,
 	}, nil
 }

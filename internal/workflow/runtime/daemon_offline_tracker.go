@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/reliant-labs/reliant/internal/daemonoffline"
+	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"go.temporal.io/sdk/workflow"
 )
 
@@ -72,6 +73,10 @@ const DaemonOfflinePauseMessage = "Paused: this chat has been unable to reach it
 //     "no daemon connected" (and none succeeded) → consecutive++.
 //   - A completed step where the daemon answered at least one call (any
 //     non-error tool result, or a successful run step) → consecutive = 0.
+//   - A wait_for_machine result (matched by tool name) is skipped entirely:
+//     its "still not connected" answer is not evidence either way, so it
+//     neither bumps nor resets the streak. A machine tool succeeding after
+//     the wait is what resets it.
 //   - Anything else (CallLLM, save_message, non-daemon tool errors,
 //     cancellations, Go-level step errors) → consecutive UNCHANGED. Neutral
 //     steps must not reset the streak, otherwise the
@@ -142,9 +147,9 @@ const (
 //   - A successful ExecuteRunStep proves the daemon executed a command.
 //   - ExecuteTools outputs are scanned per tool result: a result with
 //     is_error=true carrying the daemon-offline substring counts as offline;
-//     any non-error result counts as the daemon (or an inline tool)
-//     answering, which resets the streak — a successful tool call is the
-//     canonical "we're back" signal.
+//     any non-error result (except wait_for_machine's, which is skipped)
+//     counts as the daemon (or an inline tool) answering, which resets the
+//     streak — a successful tool call is the canonical "we're back" signal.
 func classifyStepEvent(activityName string, stepEvent *StepEvent) stepVerdict {
 	if stepEvent == nil || stepEvent.Error != nil {
 		return verdictNeutral
@@ -166,6 +171,12 @@ func classifyStepEvent(activityName string, stepEvent *StepEvent) stepVerdict {
 	for _, item := range toolResults {
 		tr, ok := item.(map[string]interface{})
 		if !ok {
+			continue
+		}
+		// wait_for_machine's "still not connected" answer is a successful
+		// result that says nothing about the daemon: counting it as success
+		// would falsely reset the streak.
+		if name, _ := tr["name"].(string); name == names.ToolWaitForMachine {
 			continue
 		}
 		content, _ := tr["content"].(string)

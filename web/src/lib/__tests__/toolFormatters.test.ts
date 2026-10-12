@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { formatShellParams } from "../toolFormatters";
+import {
+  formatShellParams,
+  formatWaitForMachineParams,
+  getToolCategory,
+  TOOL_FORMATTERS,
+  ToolCategory,
+} from "../toolFormatters";
 
 describe("formatShellParams", () => {
   // The collapsed tool row shows `summary`, so description-over-command is the
@@ -34,5 +40,25 @@ describe("formatShellParams", () => {
 
   it("returns an empty summary when there is no command", () => {
     expect(formatShellParams({ description: "orphan" }).summary).toBe("");
+  });
+});
+
+describe("wait_for_machine", () => {
+  it("is an execution tool with a registered formatter", () => {
+    expect(getToolCategory("wait_for_machine")).toBe(ToolCategory.EXECUTION);
+    expect(TOOL_FORMATTERS.wait_for_machine).toBe(formatWaitForMachineParams);
+  });
+
+  it("reads as a wait on the machine and surfaces the timeout", () => {
+    expect(formatWaitForMachineParams({ timeout_seconds: 120 })).toEqual({
+      summary: "machine",
+      fullText: "wait_for_machine(machine)",
+      structured: { timeoutSeconds: 120 },
+    });
+  });
+
+  it("handles missing or non-object input", () => {
+    expect(formatWaitForMachineParams({}).structured).toEqual({ timeoutSeconds: undefined });
+    expect(formatWaitForMachineParams(null as never).summary).toBe("machine");
   });
 });

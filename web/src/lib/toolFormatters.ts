@@ -84,6 +84,7 @@ export const TOOL_CATEGORIES: Record<string, ToolCategory> = {
   shell_list: ToolCategory.EXECUTION,
   shell_output: ToolCategory.EXECUTION,
   shell_wait: ToolCategory.EXECUTION,
+  wait_for_machine: ToolCategory.EXECUTION,
   shell_kill: ToolCategory.EXECUTION,
   run_command: ToolCategory.EXECUTION,
 };
@@ -686,6 +687,20 @@ export const formatShellWaitParams: ToolFormatter = (input) => {
 };
 
 /**
+ * Format wait_for_machine parameters: the only input is an optional timeout,
+ * so the row reads as a wait on the machine.
+ */
+export const formatWaitForMachineParams: ToolFormatter = (input) => {
+  const timeout = typeof input === 'object' && input !== null ? input.timeout_seconds : undefined;
+  const timeoutSeconds = typeof timeout === 'number' ? timeout : undefined;
+  return {
+    summary: formatWaitLabel('machine'),
+    fullText: 'wait_for_machine(machine)',
+    structured: { timeoutSeconds },
+  };
+};
+
+/**
  * Format spawn_status parameters without showing agent/thread UUIDs. In listing
  * mode it names the list; in single-agent mode ToolExecution may augment the
  * display-only input with the resolved spawn title.
@@ -763,6 +778,7 @@ export const TOOL_FORMATTERS: Record<string, ToolFormatter> = {
   load_tool: formatLoadToolParams,
   skill: formatSkillParams,
   shell_wait: formatShellWaitParams,
+  wait_for_machine: formatWaitForMachineParams,
   spawn_status: formatSpawnStatusParams,
   spawn: formatSpawnParams,
 };

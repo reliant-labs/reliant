@@ -14,6 +14,7 @@ import (
 	"go.temporal.io/sdk/temporal"
 	"go.temporal.io/sdk/workflow"
 
+	"github.com/reliant-labs/reliant/internal/llm/tools/names"
 	"github.com/reliant-labs/reliant/internal/temporal/temporaltest"
 )
 
@@ -81,6 +82,17 @@ func nonDaemonErrorResultsEvent() *StepEvent {
 			},
 		},
 	}
+}
+
+// waitForMachineEvent is a wait_for_machine result — successful, by design,
+// even while the machine is still away — optionally alongside other results.
+func waitForMachineEvent(others ...interface{}) *StepEvent {
+	results := append([]interface{}{map[string]interface{}{
+		"name":     names.ToolWaitForMachine,
+		"is_error": false,
+		"content":  "Still not connected after 20m0s; call again to keep waiting.",
+	}}, others...)
+	return &StepEvent{StepID: "execute_tools", Data: map[string]interface{}{"tool_results": results}}
 }
 
 func callLLMEvent() *StepEvent {
@@ -227,6 +239,29 @@ func TestDaemonOfflineCircuitBreaker_CounterAndPauseSemantics(t *testing.T) {
 			},
 			wantPauseCount:  1,
 			wantPauseStreak: []int{3},
+			wantFinalStreak: 1,
+		},
+		{
+			name: "a wait_for_machine result alone is neutral (no bump, no reset)",
+			steps: []step{
+				offline(), offline(),
+				{"ExecuteTools", waitForMachineEvent()},
+				offline(),
+			},
+			wantPauseCount:  1,
+			wantPauseStreak: []int{3},
+			wantFinalStreak: 3,
+		},
+		{
+			name: "an offline machine result next to wait_for_machine is still offline",
+			steps: []step{
+				{"ExecuteTools", waitForMachineEvent(map[string]interface{}{
+					"name":     "bash",
+					"is_error": true,
+					"content":  offlineToolResultContent,
+				})},
+			},
+			wantPauseCount:  0,
 			wantFinalStreak: 1,
 		},
 		{

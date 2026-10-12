@@ -118,12 +118,16 @@ const (
 	ToolWriteScenario  = "write_scenario"
 	ToolDeleteScenario = "delete_scenario"
 	ToolRunScenario    = "run_scenario"
+
+	// Machine tools
+	ToolWaitForMachine = "wait_for_machine"
 )
 
 // AllToolNames returns all known tool names for validation.
 var AllToolNames = []string{
 	ToolView, ToolWrite, ToolEdit, ToolFindReplace,
 	ToolShell, ToolShellList, ToolShellOutput, ToolShellWait, ToolShellKill,
+	ToolWaitForMachine,
 	ToolProveTest,
 	ToolFetch, ToolWebSearch,
 	ToolCreatePlan, ToolUpdatePlan, ToolGetPlan,

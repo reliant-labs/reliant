@@ -139,6 +139,11 @@ const (
 	// Reachable only in a run with no machine (OnlyWithoutMachine; enforced by
 	// the capability resolver).
 	ToolRequestMachine = "request_machine"
+
+	// ToolWaitForMachine blocks until the run's machine reconnects. Handed
+	// to every run whose tools reach a remote machine (call_llm's
+	// withWaitForMachine), and meaningless in a run with no machine.
+	ToolWaitForMachine = "wait_for_machine"
 )
 
 // Placement says where a tool or MCP server may execute. See PlacementOf.
@@ -580,6 +585,14 @@ func GetToolRegistry() []ToolDefinition {
 		// Preemptable: a wait is exactly the call a new message should cut
 		// short, and ending it early stops nothing — the process keeps running.
 		{ToolShellWait, (*ToolsFactory).ShellWait, []ToolTag{TagExecution, TagShell, TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementDaemon, true},
+		// wait_for_machine is server-placed: it reads the registry and the
+		// transport, not the machine. Preemptable for the same reason as
+		// shell_wait — a new message should cut a wait short, and ending it
+		// early changes nothing. It is preloaded into every run whose machine
+		// is remote (call_llm's withWaitForMachine) rather than loaded on
+		// demand: it is needed exactly when a machine tool has just failed, and
+		// a model that must first discover it ends its turn instead.
+		{ToolWaitForMachine, (*ToolsFactory).WaitForMachine, []ToolTag{TagReadOnly, TagCodingPlan, TagCodingDefault}, PlacementServer, true},
 		{ToolShellKill, (*ToolsFactory).ShellKill, []ToolTag{TagExecution, TagShell, TagCodingDefault}, PlacementDaemon, false},
 
 		// prove_test reverts the fix, runs a test expecting failure, restores,

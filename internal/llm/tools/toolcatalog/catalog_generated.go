@@ -883,6 +883,12 @@ var generatedToolParams = map[string]ToolParams{
 		},
 		Unbindable: map[string]string{},
 	},
+	"wait_for_machine": {
+		Bindable: map[string]struct{}{
+			"timeout_seconds": {},
+		},
+		Unbindable: map[string]string{},
+	},
 	"websearch": {
 		Bindable: map[string]struct{}{
 			"count": {},

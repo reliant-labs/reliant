@@ -330,6 +330,7 @@ func Run(ctx context.Context, opts Options) error {
 		}).
 		WithPolledIntegrations(triggerPollers.IsPolled)
 
+	runMachine := toolexec.NewRunMachine(router)
 	toolsFactory := tools.NewToolsFactory(&tools.ToolsOptions{
 		Repo: repo,
 		// The worker is where spawn_send actually executes (inside the
@@ -368,7 +369,8 @@ func Run(ctx context.Context, opts Options) error {
 		CatalogSearch: catalogSearch,
 		// The worktree tool executes here, on a worker with no access to the
 		// user's files: its git work goes to the run's machine instead.
-		RunMachine: toolexec.NewRunMachine(router),
+		RunMachine:      runMachine,
+		MachineObserver: runMachine,
 	})
 	// Wire server-side tool execution so PlacementServer / PlacementAny
 	// tools execute in the worker process without a daemon round-trip.
