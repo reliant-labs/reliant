@@ -4687,7 +4687,6 @@ When forge.yaml exists, generation is driven by the config:
   - buf generate for TypeScript stubs for Next.js frontends
   - Service stubs and mocks for new services
   - pkg/app/bootstrap.go with explicit service bootstrapping
-  - sqlc generate if sqlc.yaml exists
   - go mod tidy in gen/
 
 Without forge.yaml, falls back to directory convention scanning:
@@ -5879,6 +5878,14 @@ For each *.sql file in --src-dir, the importer:
      pack-installed migrations (00001-0000N) keep their slots.
 
 Files with no goose markers are skipped.
+
+Importing renumbers the history, so it suits a project whose databases can be
+rebuilt. A database goose ALREADY migrated would run every imported migration
+again. For those, squash goose's history into one baseline whose header
+declares it — "-- forge:adopts goose <every goose version>" — and the migrator
+adopts each goose database on its next run without re-running anything. See
+the forge skill db/deploy-migrations, "Adopting a database another tool
+migrated".
 
 Examples:
   forge project migrate import --from goose --src-dir ../old-project/migrations
