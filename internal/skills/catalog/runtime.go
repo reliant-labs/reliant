@@ -1,3 +1,4 @@
+//forge:exclude-contract: skill discovery and SKILL.md parsing over local skill dirs, the embedded builtin FS and forge's embedded skills; its only methods are value accessors
 package catalog
 
 import (

@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: pure unified-diff generation over two in-memory strings; no I/O, state or time
 package diff
 
 import (

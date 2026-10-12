@@ -13,6 +13,8 @@
 // It imports nothing from this module on purpose. config imports logging and
 // logging imports telemetry, so the resolution can only be shared by all three
 // from a package below them.
+//
+//forge:exclude-contract: resolves the dev/test/prod tier from RELIANT_ENV and NODE_ENV; reads process env only, no I/O or state
 package runenv
 
 import (

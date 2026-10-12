@@ -12,6 +12,8 @@
 // refuses one before dispatch, so a marked context reaching the router means a
 // layer above was bypassed — and the router must still not resolve, and so must
 // never wake, a daemon.
+//
+//forge:exclude-contract: pure context marker carrying the no-machine fact through a context.Context; no I/O, state or time
 package nomachine
 
 import (

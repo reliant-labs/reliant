@@ -23,6 +23,8 @@
 // knows the names it was taught. The budget knows none of that and stops
 // anyway; when it fires the result is marked Truncated rather than silently
 // short.
+//
+//forge:exclude-contract: bounded directory walk over a local root (skip set, .gitignore, node budget); local filesystem reads only, no network
 package filetree
 
 import (

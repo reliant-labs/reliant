@@ -1,5 +1,7 @@
 // Copyright (c) 2025 Reliant Labs
 // Package certs provides self-signed certificate generation for local HTTPS/HTTP2.
+//
+//forge:exclude-contract: self-signed TLS cert generation and fingerprinting in a caller-named directory; local file I/O only, no network
 package certs
 
 import (

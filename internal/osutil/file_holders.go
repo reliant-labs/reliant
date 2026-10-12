@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: local process helpers (priority, OOM score, graceful cancel, liveness, file holders) over syscalls and os/exec; no network, no second implementation
 package osutil
 
 import "context"

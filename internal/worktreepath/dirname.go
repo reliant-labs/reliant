@@ -2,6 +2,8 @@
 // worktree workspaces. The chosen path becomes part of the absolute path
 // the user sees on disk, so it should be readable, scoped by project,
 // and disambiguated against orphans from previously-deleted worktrees.
+//
+//forge:exclude-contract: worktree directory-name builders over a project name plus a random uuid suffix; no I/O or state
 package worktreepath
 
 import (

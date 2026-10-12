@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: pure context-key vocabulary: typed key constants and the ToolCallContext value; no functions, I/O or state
 package ctxkeys
 
 // ContextKey is the type for context keys

@@ -8,6 +8,8 @@
 // pulling in each other's transitive deps — important because
 // internal/toolexec depends on internal/llm/tools, and
 // internal/workflow/runtime is imported by internal/llm/tools.
+//
+//forge:exclude-contract: pure error classification: recognizes the no-daemon-connected condition in an error chain or tool result; no I/O, state or time
 package daemonoffline
 
 import (

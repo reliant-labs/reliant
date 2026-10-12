@@ -42,6 +42,8 @@
 //     (markers_test.go here, chatMarkers.test.ts in web/).
 //  4. Producer call sites use chatmarkers.Wrap(kind, payload); consumer
 //     call sites use Extract / Strip.
+//
+//forge:exclude-contract: pure wire vocabulary: wraps and parses the [KIND:payload] chat-error markers in strings; no I/O, state or time
 package chatmarkers
 
 import (

@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: pure generic pointer helpers; no I/O, state or time
 package ptr
 
 // Of returns a pointer to v.

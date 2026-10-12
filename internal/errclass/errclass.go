@@ -16,6 +16,8 @@
 // user error as ApplicationErrorCategoryBenign, and this package reads it back.
 // Temporal itself treats a benign error the same way: its own "Activity
 // error." line drops to DEBUG and the failure metrics skip it.
+//
+//forge:exclude-contract: pure error classification over svcerr kinds and Temporal's benign error category; no I/O, state or time
 package errclass
 
 import (

@@ -28,6 +28,8 @@
 // Use filepath, NOT this package, for a path this process itself will open —
 // its own config file, its own temp dir, its own log path. There the host OS
 // genuinely is the authority.
+//
+//forge:exclude-contract: pure cross-OS path predicates and normalization for paths from another machine; no I/O, state or time
 package ospath
 
 import (

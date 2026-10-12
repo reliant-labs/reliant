@@ -6,6 +6,8 @@
 // which must never touch the filesystem or shell out to git — that boundary is
 // enforced by the architecture contract test. Anything that actually runs git
 // or reads the working tree lives in internal/gitutil (daemon-side) instead.
+//
+//forge:exclude-contract: pure git branch-name normalization and validation; no I/O, state or time
 package gitref
 
 import (

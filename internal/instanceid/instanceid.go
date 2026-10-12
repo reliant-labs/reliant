@@ -37,6 +37,8 @@
 // column and the registration message keep carrying the real hostname because
 // the server's daemon-row reuse path matches on it. Nothing here is a lookup
 // key, so nothing here can desynchronize one.
+//
+//forge:exclude-contract: per-machine id persisted to ~/.reliant/instance.json and cached per process; local file I/O only, no collaborator to fake
 package instanceid
 
 import (

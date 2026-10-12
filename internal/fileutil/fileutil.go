@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: local glob and ripgrep-command helpers for the daemon's file tools; local filesystem and PATH lookup only, builds but never runs rg
 package fileutil
 
 import (

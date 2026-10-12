@@ -1,3 +1,4 @@
+//forge:exclude-contract: type and constant aliases re-exported from skills/core; no functions, I/O or state
 package skills
 
 import skillscore "github.com/reliant-labs/reliant/internal/skills/core"

@@ -1,4 +1,6 @@
 // Copyright (c) 2025 Reliant Labs
+//
+//forge:exclude-contract: daemon-side helpers that run the local git binary on a working tree (init, commit, branch, index lock); local exec only, no network git operations
 package gitutil
 
 import (

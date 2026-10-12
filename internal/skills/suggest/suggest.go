@@ -6,6 +6,8 @@
 //
 // The tokenizer and scoring logic here mirrors the original catalog matcher
 // but is decoupled from the daemon-only catalog package.
+//
+//forge:exclude-contract: pure skill matching and scoring over pre-loaded []config.StoredSkill; no I/O, state or time
 package suggest
 
 import (

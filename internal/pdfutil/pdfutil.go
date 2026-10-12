@@ -4,6 +4,8 @@
 // needs: counting pages and extracting a page range into a new self-contained
 // PDF. It exists so the daemon command handler and the local daemon client
 // share one implementation.
+//
+//forge:exclude-contract: pure PDF page counting and page-range extraction over in-memory bytes (pdfcpu); no I/O, state or time
 package pdfutil
 
 import (
