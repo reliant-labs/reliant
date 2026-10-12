@@ -1467,6 +1467,21 @@ Re-running connect UPDATES the cluster of that name, so fixing an endpoint is
 the same command again. --env names WHICH control plane to talk to, from that
 env's forge.ControlPlane declaration.
 
+SECRET DELIVERY — opt-in, off unless named. A Secret the control plane supplies
+and renews (forge.ControlPlaneSecret) needs write access to exactly that
+Secret and no other. Name each one:
+
+  forge cluster connect prod-us --context ... --env prod \
+    --delivery-secret control-plane-prod/reliant-otel-auth
+
+forge then applies, per namespace, a Role limited by resourceNames to get,
+update, patch and delete on the named Secrets, plus create — which RBAC cannot
+limit by name, so a ValidatingAdmissionPolicy admits only the named
+namespace/name pairs, only as type Opaque, for the delivery identities only.
+--delivery-subject (user:`<name>` or serviceaccount:`<ns>`/`<name>`) binds a second,
+dedicated delivery identity alongside the connect identity. Re-running connect
+re-converges the grant; --dry-run prints every object.
+
 ```
 reliant forge cluster connect <name> [flags]
 ```
@@ -1477,6 +1492,8 @@ reliant forge cluster connect <name> [flags]
 |------|------|---------|-------------|
 | `--auth` | `string` | `auto` | How the hub authenticates: auto, gcp or token |
 | `--context` | `string` | - | kubectl context addressing the cluster (required) |
+| `--delivery-secret` | `stringArray` | `[]` | `<namespace>`/`<name>` of a Secret the control plane may write and renew (repeatable) |
+| `--delivery-subject` | `string` | - | Also bind the delivery grant to this dedicated identity: user:`<name>` or serviceaccount:`<namespace>`/`<name>` |
 | `--dry-run` | `bool` | - | Print what would be sent and applied, and contact nothing |
 | `--env` | `string` | - | Environment whose control plane to talk to (required) |
 | `--token` | `string` | - | Credential to use, ahead of the env var and the credentials file |
@@ -3521,6 +3538,7 @@ reliant forge env deploy <environment> [version] [flags]
 | `--no-run` | `bool` | - | Record no run, even inside CI |
 | `--no-wait` | `bool` | - | Record and apply, but do NOT wait for health. Gate on it later with `forge env status <env> --wait` |
 | `--note` | `string` | - | Why — recorded on the ledger entry (most valuable on a deploy that moves the env BEHIND) |
+| `--offline-ledger` | `bool` | - | Break-glass for a control plane that is down: deploy the env's cached CURRENT release by its recorded digests (nothing is built, the ledger is not contacted) and queue the promotion record, replayed idempotently on the next successful ledger contact. Refuses a hosted tier and a hub-converged env, and a move to any other release. Prints the cache's age; the cache is refreshed by every successful ledger read or write |
 | `--option`, `-D` | `stringArray` | `[]` | Set a render option the env's KCL declares, as name=value (repeatable). Relayed to KCL verbatim — forge does not interpret the value. List an env's options with `forge env options <env>`. |
 | `--plan` | `bool` | - | Compute and print the full change set WITHOUT writing the binding or applying anything |
 | `--plan-only` | `bool` | - | Build, push and cut as usual, print the plan, and STOP without writing the promotion (exit 0). The first stage of a two-stage pipeline |
