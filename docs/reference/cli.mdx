@@ -43,6 +43,7 @@ tools daemon, authenticating, and working with workflows.
 | [`reliant forge api curl`](#reliant-forge-api-curl) | Print a copy-pasteable curl command for a Connect RPC method |
 | [`reliant forge build`](#reliant-forge-build) | Compile the project's binaries and frontends locally (never publishes) |
 | [`reliant forge ci`](#reliant-forge-ci) | CI helper commands — verify, scan, and validate in CI pipelines |
+| [`reliant forge ci gate`](#reliant-forge-ci-gate) | Run the local CI gate: every check, one summary table, non-zero if any failed or was skipped |
 | [`reliant forge ci migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
 | [`reliant forge ci run`](#reliant-forge-ci-run) | Show one CI run's timeline — cut, checks, promotes, rollouts — and whether it passed |
 | [`reliant forge ci summarize`](#reliant-forge-ci-summarize) | Render forge --json documents as a Markdown job summary (for $GITHUB_STEP_SUMMARY) |
@@ -944,6 +945,7 @@ reliant forge ci
 
 | Command | Description |
 |---------|-------------|
+| [`gate`](#reliant-forge-ci-gate) | Run the local CI gate: every check, one summary table, non-zero if any failed or was skipped |
 | [`migration-safety`](#reliant-forge-ci-migration-safety) | Run SQL migration safety checks based on forge.yaml config |
 | [`run`](#reliant-forge-ci-run) | Show one CI run's timeline — cut, checks, promotes, rollouts — and whether it passed |
 | [`summarize`](#reliant-forge-ci-summarize) | Render forge --json documents as a Markdown job summary (for $GITHUB_STEP_SUMMARY) |
@@ -951,6 +953,47 @@ reliant forge ci
 | [`verify-generated`](#reliant-forge-ci-verify-generated) | Verify generated code is pristine and up to date |
 | [`verify-test-run`](#reliant-forge-ci-verify-test-run) | Verify a `go test -json` run actually ran its tests (reads output; runs nothing) |
 | [`vuln-scan`](#reliant-forge-ci-vuln-scan) | Run vulnerability scanners based on forge.yaml config |
+
+---
+
+#### reliant forge ci gate
+
+Run the local CI gate: every check, one summary table, non-zero if any failed or was skipped
+
+Runs the project's CI checks locally, exactly as the scaffolded workflow does.
+
+Lanes (default: all):
+  checks       verify-generated, lint, build, vuln-scan, license-check, KCL validation,
+               deployability, and any ci.gate.extra_checks from forge.yaml   (`task ci:checks`)
+  test         the unit suite, via `task test`
+  integration  the integration suite, via `task test:integration`
+  all          the three lanes, in that order                                  (`task ci`)
+
+Four rules:
+  1. Every check runs even if an earlier one failed; a summary table follows and the
+     exit status is non-zero if any failed.
+  2. A check that could not run (missing tool or prerequisite) is SKIPPED, not PASS,
+     and fails the gate unless CI_SKIP names it: CI_SKIP=golangci-lint,license-check.
+     The summary still lists it. N/A rows (nothing for the check to look at) are fine.
+  3. Pinned tools (golangci-lint, buf, govulncheck, go-licenses) run at the versions the
+     scaffolded workflow installs, from forge's tool cache, never from a different
+     version that happens to be on PATH.
+  4. Under GitHub Actions the table is appended to $GITHUB_STEP_SUMMARY.
+
+Change detection (skip jobs a docs-only change cannot affect) is a CI cost optimization and
+stays in the workflow. Locally you scope by choosing a lane.
+
+```
+reliant forge ci gate [checks|test|integration|all] [flags]
+```
+
+**Flags:**
+
+| Flag | Type | Default | Description |
+|------|------|---------|-------------|
+| `--groups` | `bool` | - | Wrap each check's output in GitHub Actions ::group:: lines (automatic under GITHUB_ACTIONS) |
+| `--list` | `bool` | - | Print the checks of the selected lanes and exit |
+| `--skip` | `stringSlice` | `[]` | Check names to skip, in addition to CI_SKIP (still listed, as SKIPPED) |
 
 ---
 
@@ -3205,7 +3248,20 @@ artifact the env declares, and every image it pins still resolves in its
 registry, nothing is built or cut: forge prints "reusing release `<v>`" and
 deploys it. Otherwise it prints "cutting new release `<v>` because …" before
 building. A dirty checkout, another forge version, a -D option, an artifact the
-release lacks, or an image the registry no longer holds each cut a new one.
+release lacks, or an image the registry no longer holds each cut a new one. A nested git checkout inside the
+project (a parked worktree, a cloned repo) is another repository, not a change
+to this one, and does not make the checkout dirty; the decision line names the
+ones it ignored.
+
+A DIRTY CUT ON A SHARED ENV ASKS FIRST. When the checkout has uncommitted
+changes and the env is hosted or runs on a cluster that is not a local dev
+cluster, forge prompts (default no) before building, because the release it
+would cut describes no commit. With no terminal it refuses (exit 5) having
+built nothing; --yes accepts it. A local env never asks.
+
+--dry-run PREDICTS THIS. It prints the same decision line the real run prints
+-- "would reuse release `<v>`" or "would cut new release `<v>` because …" -- from
+the same function, and --json carries it as release_decision.
 
 A SCOPED DEPLOY NEEDS A RELEASE. --frontends-only and --target ship part of the
 env, so they are refused with NO version: a no-version deploy cuts a release
