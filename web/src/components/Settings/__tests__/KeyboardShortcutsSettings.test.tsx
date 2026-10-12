@@ -91,6 +91,32 @@ describe("KeyboardShortcutsSettings capture", () => {
       expect(screen.queryAllByText(/Now press the second key/)).toHaveLength(0);
     });
 
+    it("drops the prefix modifier still held for the second key", () => {
+      // Cmd+K then Cmd+X is the same binding as Cmd+K then X — the dispatcher
+      // strips the held modifier before matching. Captured as "Cmd+K Cmd+X" it
+      // could never fire.
+      render(<KeyboardShortcutsSettings />);
+      startEditing();
+
+      press({ key: "k", ctrlKey: true });
+      press({ key: "x", ctrlKey: true });
+
+      expect(screen.getAllByText(/then X/).length).toBeGreaterThan(0);
+      expect(screen.queryAllByText(/then Ctrl\+X/)).toHaveLength(0);
+    });
+
+    it("warns that a held second key would hit a browser tab command", () => {
+      render(<KeyboardShortcutsSettings />);
+      startEditing();
+
+      press({ key: "k", ctrlKey: true });
+      press({ key: "w" });
+
+      expect(
+        screen.getAllByText(/Release Cmd before the second key/).length,
+      ).toBeGreaterThan(0);
+    });
+
     it("cannot be saved while only the prefix is captured", () => {
       // Saving a bare prefix would shadow every sequence starting with it.
       render(<KeyboardShortcutsSettings />);

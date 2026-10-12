@@ -41,6 +41,7 @@ export interface ResolveResult {
  */
 export class ShortcutRegistry {
   private byBinding = new Map<string, ResolvedShortcut[]>();
+  private byId = new Map<string, ResolvedShortcut>();
   private sequencePrefixes = new Set<string>();
 
   constructor(shortcuts: ResolvedShortcut[] = []) {
@@ -49,9 +50,11 @@ export class ShortcutRegistry {
 
   replaceAll(shortcuts: ResolvedShortcut[]): void {
     this.byBinding.clear();
+    this.byId.clear();
     this.sequencePrefixes.clear();
 
     for (const shortcut of shortcuts) {
+      this.byId.set(shortcut.id, shortcut);
       if (!shortcut.binding) continue;
 
       const existing = this.byBinding.get(shortcut.binding);
@@ -71,6 +74,11 @@ export class ShortcutRegistry {
 
   get size(): number {
     return this.byBinding.size;
+  }
+
+  /** A shortcut by id, bound or not — for delivery that is not a keystroke. */
+  get(id: string): ResolvedShortcut | undefined {
+    return this.byId.get(id);
   }
 
   /**

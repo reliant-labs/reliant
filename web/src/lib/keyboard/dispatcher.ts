@@ -10,6 +10,12 @@
  * key handling) still belongs to the component: those are not shortcuts, they
  * are the semantics of the control. The dispatcher stays out of their way by
  * only claiming chords that are actually registered.
+ *
+ * It is the one path on every surface. In a browser tab it sees every
+ * keystroke. In the desktop app the native menu is a second way in to a few of
+ * the same shortcuts (its accelerators and its clicks), and those arrive
+ * through `invoke` — so the menu runs the very handler the keystroke would
+ * have, and a menu echo of a keystroke already handled here is dropped.
  */
 
 import { eventToChordString } from "./chord";
@@ -18,6 +24,18 @@ import type { ShortcutRegistry } from "./registry";
 
 /** How long a sequence prefix stays armed before it expires. */
 export const SEQUENCE_TIMEOUT_MS = 1500;
+
+/**
+ * How long after handling a keystroke a menu delivery of the same shortcut is
+ * treated as that keystroke's echo rather than a second request.
+ *
+ * Which of the two sees a menu accelerator first is the platform's call: macOS
+ * offers the keydown to the page and only falls back to the menu when the page
+ * leaves it unclaimed; Windows and Linux can resolve the accelerator before the
+ * page sees anything. An echo, when there is one, follows within milliseconds,
+ * while nobody reaches for the menu to repeat a shortcut in half a second.
+ */
+export const MENU_ECHO_WINDOW_MS = 500;
 
 export interface DispatcherOptions {
   registry: ShortcutRegistry;
@@ -28,10 +46,19 @@ export interface DispatcherOptions {
   /** Notified when a sequence prefix is armed or cleared, for the hint UI. */
   onPendingChange?: (pending: string) => void;
   onError?: (error: unknown, shortcutId: string) => void;
+  /** Clock for echo detection (tests). */
+  now?: () => number;
 }
 
 export interface Dispatcher {
   handleKeyDown: (event: KeyboardEvent) => void;
+  /**
+   * Run a shortcut by id for a delivery that was not a keystroke this
+   * dispatcher saw — the desktop app's native menu. Returns whether it ran:
+   * false for an unknown id, a missing handler, or the echo of a keystroke
+   * that already fired it.
+   */
+  invoke: (shortcutId: string) => boolean;
   /** Currently armed sequence prefix, or "" when idle. */
   getPending: () => string;
   clearPending: () => void;
@@ -45,10 +72,21 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
     detectContexts = detectActiveContexts,
     onPendingChange,
     onError,
+    now = Date.now,
   } = options;
 
   let pending = "";
   let pendingTimer: ReturnType<typeof setTimeout> | undefined;
+  /** The last shortcut a keystroke fired, for menu echo detection. */
+  let lastKeyFire: { id: string; at: number } | undefined;
+
+  const run = (handler: () => void, shortcutId: string) => {
+    try {
+      handler();
+    } catch (error) {
+      onError?.(error, shortcutId);
+    }
+  };
 
   const setPending = (next: string) => {
     if (pending === next) return;
@@ -111,15 +149,37 @@ export function createDispatcher(options: DispatcherOptions): Dispatcher {
       event.stopImmediatePropagation();
     }
 
-    try {
-      handler();
-    } catch (error) {
-      onError?.(error, shortcut.id);
+    lastKeyFire = { id: shortcut.id, at: now() };
+    run(handler, shortcut.id);
+  };
+
+  const invoke = (shortcutId: string): boolean => {
+    const shortcut = registry.get(shortcutId);
+    if (!shortcut) return false;
+
+    if (
+      lastKeyFire?.id === shortcutId &&
+      now() - lastKeyFire.at < MENU_ECHO_WINDOW_MS
+    ) {
+      // The menu saw the keystroke this dispatcher just handled. Consumed, so
+      // a deliberate menu click right after still runs.
+      lastKeyFire = undefined;
+      return false;
     }
+
+    const handler = getHandler(shortcut.handler);
+    if (!handler) return false;
+
+    // Acting from the menu abandons a half-typed sequence, as any other
+    // unrelated input would.
+    clearPending();
+    run(handler, shortcut.id);
+    return true;
   };
 
   return {
     handleKeyDown,
+    invoke,
     getPending: () => pending,
     clearPending,
     destroy: clearPending,

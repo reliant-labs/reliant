@@ -19,7 +19,7 @@ import { api } from "../api/client";
 import { logger } from "../lib/logger";
 import { isPackagedRendererOrigin } from "../lib/protocol";
 import { parseBinding } from "../lib/keyboard/chord";
-import { detectPlatform } from "../lib/keyboard/platform";
+import { detectPlatform, type KeyboardPlatform } from "../lib/keyboard/platform";
 import { getReservation, type Reservation } from "../lib/keyboard/reserved";
 import { ShortcutRegistry, type ResolvedShortcut } from "../lib/keyboard/registry";
 import { defaultShortcuts } from "./shortcutsData.generated";
@@ -55,6 +55,12 @@ interface ShortcutsState {
   setEditing: (id: string | null) => void;
   /** The binding in effect for this platform, authored form. */
   getEffectiveBinding: (id: string) => string;
+  /**
+   * The user's override when this surface cannot use it (a desktop remap to a
+   * chord the browser never releases), so the UI can say why it is not in
+   * effect. Undefined when the override is in effect or there is none.
+   */
+  getUnavailableOverride: (id: string) => string | undefined;
   /** Another shortcut in the same context already claims this binding. */
   findConflict: (binding: string, excludeId?: string) => ShortcutDefinition | undefined;
   /** Browser reservation for a binding, when running in a browser tab. */
@@ -64,18 +70,46 @@ interface ShortcutsState {
 export { defaultShortcuts };
 
 /**
- * The binding a shortcut should use right now.
+ * True when a user override cannot work on this surface.
  *
- * A user override always wins. Otherwise desktop takes the plain default and
- * the browser takes the web default, which is where reserved chords like Cmd+T
- * get replaced by their Cmd+K sequences.
+ * Overrides are stored once per user, not per surface, so a remap made in the
+ * desktop app follows the user into the browser. A remap onto a chord the
+ * browser never releases (Cmd+T, Cmd+W) would be dead there — and it would
+ * shadow the web default that does work.
  */
-function effectiveBinding(
-  shortcut: ShortcutDefinition,
-  isDesktop: boolean,
+function overrideUnavailable(
+  override: string,
+  { isMac, isDesktop }: KeyboardPlatform,
+): boolean {
+  if (isDesktop) return false;
+  return getReservation(parseBinding(override, isMac), isMac)?.level === "hard";
+}
+
+/**
+ * The binding a shortcut should use right now, in authored form.
+ *
+ * A user override wins wherever it can fire. Otherwise desktop takes the plain
+ * default and the browser takes the web default, which is where chords the
+ * browser reserves (Cmd+T, Cmd+W) are replaced by ones it releases.
+ *
+ * Every surface that SHOWS a binding must use this, so what the UI says is
+ * what the dispatcher actually matches.
+ */
+export function effectiveBinding(
+  shortcut: Pick<
+    ShortcutDefinition,
+    "currentBinding" | "defaultBinding" | "defaultWebBinding"
+  >,
+  platform: KeyboardPlatform = detectPlatform(),
 ): string {
-  if (shortcut.currentBinding) return shortcut.currentBinding;
-  return isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding;
+  const surfaceDefault = platform.isDesktop
+    ? shortcut.defaultBinding
+    : shortcut.defaultWebBinding;
+  const override = shortcut.currentBinding;
+  if (!override || overrideUnavailable(override, platform)) {
+    return surfaceDefault;
+  }
+  return override;
 }
 
 /**
@@ -91,10 +125,10 @@ function syncToNativeMenu(shortcuts: Record<string, ShortcutDefinition>): void {
     return;
   }
 
-  const { isDesktop } = detectPlatform();
+  const platform = detectPlatform();
   const bindings: Record<string, string> = {};
   for (const [id, shortcut] of Object.entries(shortcuts)) {
-    bindings[id] = effectiveBinding(shortcut, isDesktop);
+    bindings[id] = effectiveBinding(shortcut, platform);
   }
 
   void window.electronAPI.updateShortcutBindings(bindings).catch((error) => {
@@ -106,17 +140,18 @@ function syncToNativeMenu(shortcuts: Record<string, ShortcutDefinition>): void {
 function buildRegistry(
   shortcuts: Record<string, ShortcutDefinition>,
 ): ShortcutRegistry {
-  const { isMac, isDesktop } = detectPlatform();
+  const platform = detectPlatform();
   const resolved: ResolvedShortcut[] = [];
 
   for (const shortcut of Object.values(shortcuts)) {
-    const authored = effectiveBinding(shortcut, isDesktop);
-    if (!authored) continue;
+    // Unbound shortcuts stay in the registry (with no binding, so no keystroke
+    // matches them) because the desktop menu can still invoke them by id.
+    const authored = effectiveBinding(shortcut, platform);
 
     resolved.push({
       id: shortcut.id,
       handler: shortcut.handler,
-      binding: parseBinding(authored, isMac),
+      binding: authored ? parseBinding(authored, platform.isMac) : "",
       context: shortcut.context,
       allowInInput: shortcut.allowInInput,
       passthrough: shortcut.passthrough,
@@ -283,12 +318,18 @@ export const useShortcutsStore = create<ShortcutsState>()((set, get) => ({
   getEffectiveBinding: (id: string) => {
     const shortcut = get().shortcuts[id];
     if (!shortcut) return "";
-    return effectiveBinding(shortcut, detectPlatform().isDesktop);
+    return effectiveBinding(shortcut);
+  },
+
+  getUnavailableOverride: (id: string) => {
+    const override = get().shortcuts[id]?.currentBinding;
+    if (!override) return undefined;
+    return overrideUnavailable(override, detectPlatform()) ? override : undefined;
   },
 
   findConflict: (binding: string, excludeId?: string) => {
-    const { isMac, isDesktop } = detectPlatform();
-    const target = parseBinding(binding, isMac);
+    const platform = detectPlatform();
+    const target = parseBinding(binding, platform.isMac);
     const shortcuts = get().shortcuts;
     const subject = excludeId ? shortcuts[excludeId] : undefined;
 
@@ -297,7 +338,7 @@ export const useShortcutsStore = create<ShortcutsState>()((set, get) => ({
       // The same chord in a different context is the point of the design, not
       // a conflict — only flag shortcuts that would actually shadow each other.
       if (subject && candidate.context !== subject.context) return false;
-      return parseBinding(effectiveBinding(candidate, isDesktop), isMac) === target;
+      return parseBinding(effectiveBinding(candidate, platform), platform.isMac) === target;
     });
   },
 

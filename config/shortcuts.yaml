@@ -23,7 +23,12 @@
 #   A space-separated binding is a sequence. The first chord arms a prefix and
 #   the next key completes it (1.5s timeout). Sequences are how we get rich
 #   shortcuts in a browser tab: once Cmd+K is captured, the following keystroke
-#   is ours alone and no browser chord can claim it.
+#   is ours — PROVIDED the browser releases it. The second key may be typed with
+#   Cmd still held (Cmd+K then Cmd+W, VS Code muscle memory), and the browser
+#   judges that held chord before the page sees it. So on the web a sequence's
+#   second key must not be T, N, W or Q: held, those open or close a browser
+#   tab/window — Cmd+K Cmd+W would close Reliant's own tab. bindings.test.ts
+#   enforces this.
 #
 # WEB BINDINGS:
 #   `binding` is the desktop (Electron) chord. `web_binding` overrides it in a
@@ -78,13 +83,19 @@ shortcuts:
   # File & Window Management
   # ==================================
   # Cmd+T / Cmd+W / Cmd+Shift+T are hard-reserved by every browser — the page
-  # never sees them — so the web variants go through the Cmd+K prefix.
+  # never sees them — so they need web variants. Not Cmd+K T / Cmd+K W: typed
+  # with Cmd still held, those ARE Cmd+T / Cmd+W (see SEQUENCES above).
+  #
+  # New chat is the most-used of them, so the browser gets one chord rather than
+  # a sequence. Cmd+Alt+N is what VS Code in a browser uses for "new" on macOS
+  # and Linux; it is free in every browser, and on Windows it is not AltGr+N
+  # (which types a character) because the dispatcher leaves Ctrl+Alt alone.
   - id: newChat
     name: New Chat
     description: Create a new chat tab
     category: File & Window Management
     binding: Cmd+T
-    web_binding: Cmd+K T
+    web_binding: Cmd+Alt+N
     handler: onNewChat
 
   - id: openProject
@@ -100,7 +111,8 @@ shortcuts:
     description: Close active file viewer tab or window
     category: File & Window Management
     binding: Cmd+W
-    web_binding: Cmd+K W
+    # X, not W: Cmd+K then Cmd+W, held, would close the browser tab.
+    web_binding: Cmd+K X
     handler: onCloseTab
 
   - id: openWorkflows
@@ -504,11 +516,14 @@ shortcuts:
   # Jumps to the package/process tab and focuses it, so the command list is
   # keyboard-reachable. There is no separate "runner" UI to open — the tab IS
   # the browsable list of npm/cargo/poetry commands.
+  #
+  # S ("scripts") on the web: Cmd+K then Cmd+N, held, opens a browser window.
   - id: runPackageCommand
     name: Package Commands
     description: Show package commands and running processes
     category: Panel Navigation
     binding: Cmd+K N
+    web_binding: Cmd+K S
     handler: onRunPackageCommand
 
   # ==================================

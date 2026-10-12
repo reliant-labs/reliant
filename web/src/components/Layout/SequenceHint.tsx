@@ -15,7 +15,7 @@
 
 import { useMemo } from "react";
 import { createPortal } from "react-dom";
-import { useShortcutsStore } from "../../store/shortcutsStore";
+import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
 import { parseBinding, sequencePrefix, isSequence } from "../../lib/keyboard/chord";
 import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
 
@@ -36,13 +36,11 @@ export function SequenceHint({ pending }: SequenceHintProps) {
 
   const entries = useMemo<HintEntry[]>(() => {
     if (!pending) return [];
-    const { isMac, isDesktop } = detectPlatform();
+    const { isMac } = detectPlatform();
 
     const matches: HintEntry[] = [];
     for (const shortcut of Object.values(shortcuts)) {
-      const authored =
-        shortcut.currentBinding ??
-        (isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding);
+      const authored = effectiveBinding(shortcut);
       if (!authored) continue;
 
       const binding = parseBinding(authored, isMac);

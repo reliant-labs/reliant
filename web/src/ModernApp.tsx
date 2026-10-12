@@ -1107,17 +1107,10 @@ function App() {
     return () => window.removeEventListener("run-shortcut", runShortcut);
   }, [keyboardHandlers]);
 
-  // Handle all Electron IPC events (menu commands, deep links, etc.)
-  useElectronIPC({
-    headerRef,
-    isTerminalOpen,
-    toggleTerminal,
-    openTerminal,
-    createTerminalSession,
-    getTerminalWorkingDir,
-    getCurrentWorktreeId,
-    currentProjectId: currentProject?.id,
-  });
+  // Handle the Electron IPC events that are not shortcuts (close all tabs,
+  // tab navigation, search focus, clear terminal, theme). Menu items that ARE
+  // shortcuts arrive through useAppKeyboardShortcuts above.
+  useElectronIPC({ headerRef });
 
   // Note: Appearance settings (theme, fonts, color scheme) are applied in two phases:
   // 1. index.html applies from localStorage immediately (prevents flash)
@@ -1482,17 +1475,8 @@ function App() {
 
     const cleanups: Array<() => void> = [];
 
-    const goToNewChat = () => {
-      const chatStore = useChatStore.getState();
-      const worktreeStore = useWorktreeStore.getState();
-      const activeChatId = chatStore.activeChatId;
-      const activeChat = activeChatId
-        ? getChatFromCache(activeChatId) ?? null
-        : null;
-      const currentWorktreeId =
-        activeChat?.worktreeId || worktreeStore.currentWorktree?.id || null;
-      chatStore.clearCurrentChat(currentWorktreeId);
-    };
+    // "New Tab" from the File menu, the tray and the dock arrives as the
+    // newChat shortcut, through useAppKeyboardShortcuts' menu bridge.
 
     const goToRecentChat = async (chatId?: string) => {
       const chatStore = useChatStore.getState();
@@ -1533,11 +1517,6 @@ function App() {
         await alignWorktreeAndSelect(mostRecent);
       }
     };
-
-    if ("onCreateNewTab" in window.electronAPI) {
-      const unsubscribe = window.electronAPI.onCreateNewTab(goToNewChat);
-      if (typeof unsubscribe === "function") cleanups.push(unsubscribe);
-    }
 
     if ("onResumeLastChat" in window.electronAPI) {
       const unsubscribe = window.electronAPI.onResumeLastChat(() => goToRecentChat());

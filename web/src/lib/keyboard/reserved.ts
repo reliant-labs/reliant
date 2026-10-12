@@ -5,37 +5,52 @@
  * take first. This is advisory, not enforcement — Electron users are unaffected
  * and can bind whatever they like.
  *
- * Two tiers, because they fail differently:
+ * Three tiers, because they fail differently:
  *   HARD     — the page never receives the event. Overriding is impossible, so
  *              the shortcut would silently do nothing.
  *   HOSTILE  — the page CAN intercept, but doing so breaks an expectation the
  *              user brought with them from every other site.
+ *   HELD     — a sequence whose second key, typed with the prefix modifier
+ *              still held (Cmd+K then Cmd+W), is a HARD tab/window chord. It
+ *              works when the modifier is released first; held, the browser
+ *              acts instead — and for W that closes Reliant's own tab.
  *
  * Keys are canonical binding strings for the current platform.
  *
  * NOTE: This table is compiled from browser documentation and needs a manual
  * pass in real Chrome/Firefox/Safari before we lean on it hard. Entries marked
- * UNVERIFIED are the ones most likely to be wrong.
+ * UNVERIFIED are the ones most likely to be wrong. The `lifecycle` entries are
+ * the exception: they are the tab/window commands every major browser
+ * reserves (Chrome's reserved-command set, Firefox's `reserved="true"` keys).
  */
 
-export type ReservationLevel = "hard" | "hostile";
+import { heldSecondChord } from "./chord";
+
+export type ReservationLevel = "hard" | "hostile" | "held";
 
 export interface Reservation {
   level: ReservationLevel;
   /** What the browser does with it, shown to the user. */
   reason: string;
+  /**
+   * Opens, closes or quits a browser tab or window — the user ends up outside
+   * Reliant. Reserved by every major browser, so safe to build invariants on.
+   */
+  lifecycle?: true;
 }
 
 /** macOS chords, expressed in canonical form (meta = Cmd). */
 const MAC_RESERVED: Record<string, Reservation> = {
-  "meta+T": { level: "hard", reason: "opens a new browser tab" },
-  "meta+N": { level: "hard", reason: "opens a new browser window" },
-  "meta+W": { level: "hard", reason: "closes the browser tab" },
-  "meta+Q": { level: "hard", reason: "quits the browser" },
-  "meta+shift+T": { level: "hard", reason: "reopens the last closed tab" },
-  "meta+shift+N": { level: "hard", reason: "opens a private window" },
+  "meta+T": { level: "hard", lifecycle: true, reason: "opens a new browser tab" },
+  "meta+N": { level: "hard", lifecycle: true, reason: "opens a new browser window" },
+  "meta+W": { level: "hard", lifecycle: true, reason: "closes the browser tab" },
+  "meta+Q": { level: "hard", lifecycle: true, reason: "quits the browser" },
+  "meta+shift+T": { level: "hard", lifecycle: true, reason: "reopens the last closed tab" },
+  "meta+shift+N": { level: "hard", lifecycle: true, reason: "opens a private window" },
+  // UNVERIFIED: Minimize is a macOS Window-menu action rather than a browser
+  // command, so browsers may hand it to the page first.
   "meta+M": { level: "hard", reason: "minimizes the window" },
-  "meta+shift+W": { level: "hard", reason: "closes the browser window" },
+  "meta+shift+W": { level: "hard", lifecycle: true, reason: "closes the browser window" },
 
   // Cmd+1..8 jump to the Nth tab and Cmd+9 to the last one, in every major
   // browser. Interceptable, but taking them breaks tab switching everywhere.
@@ -69,12 +84,13 @@ const MAC_RESERVED: Record<string, Reservation> = {
 
 /** Windows/Linux chords (ctrl = the primary modifier). */
 const PC_RESERVED: Record<string, Reservation> = {
-  "ctrl+T": { level: "hard", reason: "opens a new browser tab" },
-  "ctrl+N": { level: "hard", reason: "opens a new browser window" },
-  "ctrl+W": { level: "hard", reason: "closes the browser tab" },
-  "ctrl+shift+T": { level: "hard", reason: "reopens the last closed tab" },
-  "ctrl+shift+N": { level: "hard", reason: "opens a private window" },
-  "ctrl+shift+W": { level: "hard", reason: "closes the browser window" },
+  "ctrl+T": { level: "hard", lifecycle: true, reason: "opens a new browser tab" },
+  "ctrl+N": { level: "hard", lifecycle: true, reason: "opens a new browser window" },
+  "ctrl+W": { level: "hard", lifecycle: true, reason: "closes the browser tab" },
+  "ctrl+shift+T": { level: "hard", lifecycle: true, reason: "reopens the last closed tab" },
+  "ctrl+shift+N": { level: "hard", lifecycle: true, reason: "opens a private window" },
+  "ctrl+shift+W": { level: "hard", lifecycle: true, reason: "closes the browser window" },
+  "ctrl+shift+Q": { level: "hard", lifecycle: true, reason: "quits the browser" },
 
   "ctrl+1": { level: "hostile", reason: "switches to browser tab 1" },
   "ctrl+2": { level: "hostile", reason: "switches to browser tab 2" },
@@ -105,20 +121,26 @@ const PC_RESERVED: Record<string, Reservation> = {
 /**
  * Look up a reservation for a canonical binding.
  *
- * Only the FIRST chord of a sequence is checked: once a prefix is captured the
- * remaining keystrokes belong to the app, which is exactly why sequences are
- * the escape hatch for reserved chords.
+ * A sequence's prefix is captured by the app, so its keystrokes are the app's
+ * — with one exception. The second key is commonly typed with the prefix
+ * modifier still held (Cmd+K then Cmd+W: VS Code muscle memory, which the
+ * dispatcher accepts on purpose), and the browser judges THAT chord before the
+ * page sees it. A held form that lands on a tab/window command is reported at
+ * the `held` level.
  */
 export function getReservation(
   binding: string,
   isMac: boolean,
 ): Reservation | undefined {
   if (!binding) return undefined;
-  const chords = binding.split(" ");
-  // A sequence's prefix is captured by the app, so only a single-chord binding
-  // can actually be lost to the browser.
-  if (chords.length > 1) return undefined;
-  return (isMac ? MAC_RESERVED : PC_RESERVED)[chords[0]];
+  const table = isMac ? MAC_RESERVED : PC_RESERVED;
+
+  const held = heldSecondChord(binding);
+  if (held === undefined) return table[binding];
+
+  const reservation = table[held];
+  if (!reservation?.lifecycle) return undefined;
+  return { level: "held", reason: reservation.reason };
 }
 
 /** True when the browser will never deliver this chord to the page. */

@@ -221,8 +221,11 @@ Reliant includes keyboard shortcuts for common actions. All shortcuts can be cus
 
 Some shortcuts differ between the desktop app and the browser. Browsers reserve
 chords like ` + "`Cmd+T`" + ` and ` + "`Cmd+W`" + ` for their own tabs and windows and will not
-release them to a web page, so those actions use a ` + "`Cmd+K`" + ` prefix on the web.
-Where the **Browser** column is blank the shortcut is the same on both.
+release them to a web page, so those actions use a different chord on the web —
+usually a ` + "`Cmd+K`" + ` sequence. Where the **Browser** column is blank the shortcut
+is the same on both.
+
+A ` + "`Cmd+K`" + ` sequence's second key can be typed with ` + "`Cmd`" + ` released or still held.
 
 `)
 

@@ -31,7 +31,7 @@ import {
   Share2,
 } from "lucide-react";
 import { slashCommands as registryCommands } from "../lib/commands";
-import { useShortcutsStore } from "../store/shortcutsStore";
+import { effectiveBinding, useShortcutsStore } from "../store/shortcutsStore";
 import { parseBinding } from "../lib/keyboard/chord";
 import { detectPlatform, formatBinding } from "../lib/keyboard/platform";
 import type { SlashCommand } from "../components/Chat/SlashCommandMenu";
@@ -59,7 +59,7 @@ export function useSlashCommands(): SlashCommand[] {
   const shortcuts = useShortcutsStore((state) => state.shortcuts);
 
   return useMemo(() => {
-    const { isMac, isDesktop } = detectPlatform();
+    const { isMac } = detectPlatform();
 
     /** The live, user-visible binding for a shortcut handler, if it has one. */
     const shortcutFor = (handler?: string): string | undefined => {
@@ -69,9 +69,7 @@ export function useSlashCommands(): SlashCommand[] {
       );
       if (!shortcut) return undefined;
 
-      const authored =
-        shortcut.currentBinding ??
-        (isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding);
+      const authored = effectiveBinding(shortcut);
       if (!authored) return undefined;
 
       return formatBinding(parseBinding(authored, isMac), isMac);

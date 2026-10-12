@@ -8,9 +8,8 @@
  * @module hooks/useElectronIPC
  */
 
-import { useEffect, useCallback, useRef } from "react";
+import { useEffect } from "react";
 import { logger } from "../lib/logger";
-import { useViewerStore } from "../store/viewerStore";
 import { useChatNavigationStore } from "../store/chatNavigationStore";
 import { settingsSync, SETTINGS_KEYS } from "../services/settingsSync";
 import type { HeaderRef } from "../components/Layout/Header";
@@ -18,110 +17,27 @@ import type { HeaderRef } from "../components/Layout/Header";
 export interface UseElectronIPCOptions {
   /** Reference to the Header component for search functionality */
   headerRef: React.RefObject<HeaderRef | null>;
-  /** Whether the terminal panel is currently open */
-  isTerminalOpen: boolean;
-  /** Function to toggle terminal visibility */
-  toggleTerminal: () => void;
-  /** Function to open the terminal panel */
-  openTerminal: () => void;
-  /** Function to create a new terminal session */
-  createTerminalSession: (
-    workingDir?: string,
-    projectId?: string,
-    worktreeId?: string
-  ) => void;
-  /**
-   * Function to get the terminal working directory. Undefined means there is
-   * no directory to start in yet; do not create a session.
-   */
-  getTerminalWorkingDir: () => string | undefined;
-  /** Function to get the current worktree ID */
-  getCurrentWorktreeId: () => string | undefined;
-  /** Current project ID */
-  currentProjectId?: string;
 }
 
 /**
- * Hook that manages all Electron IPC event listeners.
+ * Hook that manages the Electron IPC event listeners that are not shortcuts.
  *
  * Handles:
- * - Tab close/close-all events from menu
+ * - Close-all-tabs from the menu
  * - Tab navigation (next/previous)
  * - Search focus events
- * - Terminal commands (toggle, new, clear)
+ * - Clear terminal
  * - Theme toggle
+ *
+ * Menu items that ARE shortcuts (New Tab, Close Tab, Reopen Last Tab, Toggle
+ * Terminal, New Terminal) are not handled here: they are routed into the
+ * keyboard dispatcher by useAppKeyboardShortcuts, so the menu and the
+ * keystroke run one implementation and cannot both fire.
  *
  * All listeners are properly cleaned up on unmount.
  */
 export function useElectronIPC(options: UseElectronIPCOptions): void {
-  const {
-    headerRef: _headerRef,
-    isTerminalOpen,
-    toggleTerminal,
-    openTerminal,
-    createTerminalSession,
-    getTerminalWorkingDir,
-    getCurrentWorktreeId,
-    currentProjectId,
-  } = options;
-
-  // Use refs for values that change frequently to avoid effect re-runs
-  const isTerminalOpenRef = useRef(isTerminalOpen);
-  const currentProjectIdRef = useRef(currentProjectId);
-  const getTerminalWorkingDirRef = useRef(getTerminalWorkingDir);
-  const getCurrentWorktreeIdRef = useRef(getCurrentWorktreeId);
-
-  // Keep refs in sync
-  useEffect(() => {
-    isTerminalOpenRef.current = isTerminalOpen;
-  }, [isTerminalOpen]);
-
-  useEffect(() => {
-    currentProjectIdRef.current = currentProjectId;
-  }, [currentProjectId]);
-
-  useEffect(() => {
-    getTerminalWorkingDirRef.current = getTerminalWorkingDir;
-  }, [getTerminalWorkingDir]);
-
-  useEffect(() => {
-    getCurrentWorktreeIdRef.current = getCurrentWorktreeId;
-  }, [getCurrentWorktreeId]);
-
-  // Memoized handler for closing current tab
-  const handleCloseCurrentTab = useCallback(() => {
-    try {
-      const viewerStore = useViewerStore.getState();
-      const { viewers } = viewerStore;
-      const viewerClosed = viewerStore.closeActiveViewer();
-
-      if (viewerClosed) {
-        logger.info("🗑️ Electron: Closed active viewer tab");
-        return;
-      }
-
-      // No viewers left - close the window
-      if (viewers.length === 0 && window.electronAPI?.closeWindowIfNoTabs) {
-        logger.info("🗑️ Electron: No tabs remaining, closing window");
-        window.electronAPI.closeWindowIfNoTabs(0);
-      } else {
-        logger.info("🗑️ Electron: No active viewer to close");
-      }
-    } catch (error) {
-      logger.error("🛡️ Electron close tab handler error:", error);
-    }
-  }, []);
-
-  // Close current tab listener
-  useEffect(() => {
-    if (!window.electronAPI?.onCloseCurrentTab) return;
-
-    const unsubscribe = window.electronAPI.onCloseCurrentTab(() => {
-      handleCloseCurrentTab();
-    });
-
-    return typeof unsubscribe === "function" ? unsubscribe : undefined;
-  }, [handleCloseCurrentTab]);
+  const { headerRef: _headerRef } = options;
 
   // Close all tabs listener
   useEffect(() => {
@@ -176,47 +92,6 @@ export function useElectronIPC(options: UseElectronIPCOptions): void {
 
     return typeof unsubscribe === "function" ? unsubscribe : undefined;
   }, []);
-
-  // Toggle terminal listener
-  useEffect(() => {
-    if (!window.electronAPI || !("onToggleTerminal" in window.electronAPI)) return;
-
-    const unsubscribe = (
-      window.electronAPI as unknown as {
-        onToggleTerminal: (callback: () => void) => (() => void) | void;
-      }
-    ).onToggleTerminal(() => {
-      toggleTerminal();
-    });
-
-    return typeof unsubscribe === "function" ? unsubscribe : undefined;
-  }, [toggleTerminal]);
-
-  // New terminal listener
-  useEffect(() => {
-    if (!window.electronAPI || !("onNewTerminal" in window.electronAPI)) return;
-
-    const unsubscribe = (
-      window.electronAPI as unknown as {
-        onNewTerminal: (callback: () => void) => (() => void) | void;
-      }
-    ).onNewTerminal(() => {
-      // Open terminal panel if not open
-      if (!isTerminalOpenRef.current) {
-        openTerminal();
-      }
-      // Create new terminal session with context-aware working directory.
-      // Undefined means the workspace has no directory yet; the opened panel
-      // creates the session once it settles.
-      const workingDir = getTerminalWorkingDirRef.current();
-      if (!workingDir) return;
-      const projectId = currentProjectIdRef.current;
-      const worktreeId = getCurrentWorktreeIdRef.current();
-      createTerminalSession(workingDir, projectId, worktreeId);
-    });
-
-    return typeof unsubscribe === "function" ? unsubscribe : undefined;
-  }, [openTerminal, createTerminalSession]);
 
   // Clear terminal listener
   useEffect(() => {

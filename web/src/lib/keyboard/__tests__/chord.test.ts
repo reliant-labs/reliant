@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   chordToString,
   eventToChordString,
+  heldSecondChord,
   isSequence,
   normalizeKey,
   parseBinding,
@@ -103,6 +104,87 @@ describe("eventToChordString", () => {
       event({ key: "ArrowDown", metaKey: true, ctrlKey: true }),
     );
     expect(fromEvent).toBe(parseBinding("Cmd+Ctrl+Down", true));
+  });
+
+  describe("when the keyboard substitutes the key", () => {
+    // event.key reports what the keyboard PRODUCED. Bindings name the key that
+    // was pressed. Where the two differ, the physical key (event.code) decides.
+
+    it("matches Cmd+Option chords on macOS, where Option composes a glyph", () => {
+      // Option+B types "∫", so Cmd+Option+B used to arrive as meta+alt+∫ and
+      // the left-sidebar toggle never fired on a Mac.
+      const fromEvent = eventToChordString(
+        event({ key: "∫", code: "KeyB", metaKey: true, altKey: true }),
+      );
+      expect(fromEvent).toBe(parseBinding("Cmd+Alt+B", true));
+    });
+
+    it("matches Cmd+Option chords whose Option form is a dead key", () => {
+      // Option+N starts a tilde: the browser reports "Dead".
+      const fromEvent = eventToChordString(
+        event({ key: "Dead", code: "KeyN", metaKey: true, altKey: true }),
+      );
+      expect(fromEvent).toBe(parseBinding("Cmd+Alt+N", true));
+    });
+
+    it("matches Ctrl+letter on a non-Latin layout", () => {
+      // Russian layout: the K key types "л". Every letter shortcut was dead.
+      const fromEvent = eventToChordString(
+        event({ key: "л", code: "KeyK", ctrlKey: true }),
+      );
+      expect(fromEvent).toBe(parseBinding("Cmd+K", false));
+    });
+
+    it("matches Cmd+letter on a non-Latin layout on macOS", () => {
+      const fromEvent = eventToChordString(
+        event({ key: "о", code: "KeyJ", metaKey: true }),
+      );
+      expect(fromEvent).toBe(parseBinding("Cmd+J", true));
+    });
+
+    it("maps punctuation by position", () => {
+      const fromEvent = eventToChordString(
+        event({ key: "х", code: "BracketLeft", metaKey: true, shiftKey: true }),
+      );
+      expect(fromEvent).toBe(parseBinding("Cmd+Shift+[", true));
+    });
+
+    it("keeps the layout's own Latin letter when it is one (AZERTY, Dvorak)", () => {
+      // AZERTY: the key in QWERTY's Q position types "a". The user pressed the
+      // key labelled A, and that is the binding they mean.
+      const fromEvent = eventToChordString(
+        event({ key: "a", code: "KeyQ", ctrlKey: true }),
+      );
+      expect(fromEvent).toBe("ctrl+A");
+    });
+
+    it("leaves AltGr text alone on Windows", () => {
+      // AltGr arrives as Ctrl+Alt. AltGr+N types "ñ" — that is typing, and
+      // reading it as Ctrl+Alt+N would steal the character.
+      const fromEvent = eventToChordString(
+        event({ key: "ñ", code: "KeyN", ctrlKey: true, altKey: true }),
+      );
+      expect(fromEvent).not.toBe(parseBinding("Cmd+Alt+N", false));
+    });
+
+    it("leaves plain typing alone", () => {
+      // No command modifier: a non-Latin letter is just text.
+      expect(eventToChordString(event({ key: "л", code: "KeyK" }))).toBe("л");
+    });
+  });
+});
+
+describe("heldSecondChord", () => {
+  it("is the second chord with the prefix modifier still held", () => {
+    // What the browser sees when Cmd+K then W is typed without releasing Cmd.
+    expect(heldSecondChord(parseBinding("Cmd+K W", true))).toBe("meta+W");
+    expect(heldSecondChord(parseBinding("Cmd+K Shift+P", false))).toBe(
+      "ctrl+shift+P",
+    );
+  });
+
+  it("is undefined for a single chord", () => {
+    expect(heldSecondChord(parseBinding("Cmd+W", true))).toBeUndefined();
   });
 });
 

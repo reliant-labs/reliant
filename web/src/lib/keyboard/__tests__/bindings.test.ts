@@ -65,6 +65,69 @@ describe("shortcut definitions", () => {
     }
   });
 
+  it("never puts a tab or window command under a held sequence key on the web", () => {
+    // Cmd+K then W is commonly typed with Cmd still held, and the browser sees
+    // that as Cmd+W before the page does: it closed Reliant's own tab. The
+    // second key of a web sequence must survive being typed either way.
+    for (const shortcut of Object.values(defaultShortcuts)) {
+      for (const platform of [MAC_WEB, PC_WEB]) {
+        const binding = parseBinding(
+          shortcut.defaultWebBinding,
+          platform.isMac,
+        );
+        const reservation = getReservation(binding, platform.isMac);
+        expect(
+          reservation?.level === "held" ? `${shortcut.id}: ${binding}` : null,
+        ).toBeNull();
+      }
+    }
+  });
+
+  describe("in a browser tab", () => {
+    // The actions the app leans on must each have a binding that reaches the
+    // page in a browser — and actually resolves to that action when typed.
+    const ESSENTIAL = [
+      "commandPalette",
+      "newChat",
+      "closeTab",
+      "quickFileOpen",
+      "toggleSidebar",
+      "toggleFileBrowser",
+      "toggleTerminal",
+      "newTerminal",
+      "reopenLastClosedFile",
+      "toggleSettings",
+      "focusChat",
+    ];
+
+    /** Type a canonical binding chord by chord, the way the dispatcher sees it. */
+    function typed(registry: ShortcutRegistry, binding: string) {
+      let pending = "";
+      for (const chord of binding.split(" ")) {
+        const result = registry.resolve(chord, ["global"], pending);
+        if (result.kind === "sequence-prefix") {
+          pending = chord;
+          continue;
+        }
+        return result.shortcut?.id;
+      }
+      return undefined;
+    }
+
+    it.each(ESSENTIAL)("%s fires from its web binding", (id) => {
+      for (const platform of [MAC_WEB, PC_WEB]) {
+        const shortcut = defaultShortcuts[id];
+        const binding = parseBinding(
+          shortcut.defaultWebBinding,
+          platform.isMac,
+        );
+
+        expect(getReservation(binding, platform.isMac)?.level).not.toBe("hard");
+        expect(typed(buildRegistry(platform), binding)).toBe(id);
+      }
+    });
+  });
+
   describe("Cmd+Shift+Arrow", () => {
     // These navigate chats and panels, but the same chord extends a text
     // selection in any editor. Context precedence has to keep both working.

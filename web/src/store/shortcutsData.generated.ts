@@ -40,7 +40,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Create a new chat tab',
     category: 'File & Window Management',
     defaultBinding: 'Cmd+T',
-    defaultWebBinding: 'Cmd+K T',
+    defaultWebBinding: 'Cmd+Alt+N',
     context: 'global',
     handler: 'onNewChat'
   },
@@ -60,7 +60,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Close active file viewer tab or window',
     category: 'File & Window Management',
     defaultBinding: 'Cmd+W',
-    defaultWebBinding: 'Cmd+K W',
+    defaultWebBinding: 'Cmd+K X',
     context: 'global',
     handler: 'onCloseTab'
   },
@@ -509,7 +509,7 @@ export const defaultShortcuts: Record<string, Omit<ShortcutDefinition, 'currentB
     description: 'Show package commands and running processes',
     category: 'Panel Navigation',
     defaultBinding: 'Cmd+K N',
-    defaultWebBinding: 'Cmd+K N',
+    defaultWebBinding: 'Cmd+K S',
     context: 'global',
     handler: 'onRunPackageCommand'
   },

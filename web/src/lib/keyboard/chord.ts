@@ -82,6 +82,70 @@ export function sequenceToString(chords: Chord[]): string {
   return chords.map(chordToString).join(" ");
 }
 
+/** Punctuation keys by physical position, for the `event.code` fallback. */
+const CODE_PUNCTUATION: Record<string, string> = {
+  BracketLeft: "[",
+  BracketRight: "]",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Backquote: "`",
+  Backslash: "\\",
+  Minus: "-",
+  Equal: "=",
+};
+
+/** The key a physical position names on a US layout ("KeyB" -> "B"). */
+function keyFromCode(code: string): string | undefined {
+  if (/^Key[A-Z]$/.test(code)) return code.slice(3);
+  if (/^Digit[0-9]$/.test(code)) return code.slice(5);
+  return CODE_PUNCTUATION[code];
+}
+
+/**
+ * True when `event.key` names something a binding can be written as: a single
+ * printable ASCII character, or a named key ("Enter", "ArrowUp", "F5").
+ *
+ * What it rejects is what the layout or a modifier substituted for the key the
+ * user pressed: the glyph macOS Option composes ("∫" for Option+B), a dead key
+ * ("Dead" for Option+E), or a non-Latin letter ("л" for K on a Russian layout).
+ */
+function isBindableKey(key: string): boolean {
+  if (key === "Dead" || key === "Unidentified" || key === "Process") {
+    return false;
+  }
+  if (key.length === 1) return key >= " " && key <= "~";
+  return true;
+}
+
+/**
+ * The key a live event should match bindings by.
+ *
+ * Bindings are written with Latin letters, but `event.key` reports whatever the
+ * keyboard produced: on macOS, Option turns Cmd+Option+B into "∫", and on a
+ * Cyrillic, Greek or Hebrew layout every Cmd/Ctrl+letter arrives as a non-Latin
+ * letter. Matching on `event.key` alone left those users with almost no working
+ * shortcuts in a browser — while the desktop app's menu accelerators, which the
+ * OS matches by physical key, kept the common ones working there.
+ *
+ * So when a command modifier is held and the reported key is not bindable, the
+ * physical key (`event.code`) decides. A bindable `event.key` always wins, which
+ * keeps layouts like AZERTY and Dvorak matching by the letter printed on the
+ * key. Ctrl+Alt without Meta is left alone: on Windows that is AltGr, which
+ * TYPES a character (AltGr+N is "ñ"), and treating it as a shortcut would eat
+ * the user's text.
+ */
+export function eventKey(event: KeyboardEvent): string {
+  if (isBindableKey(event.key)) return event.key;
+
+  const commandHeld = event.metaKey || (event.ctrlKey && !event.altKey);
+  if (!commandHeld) return event.key;
+
+  return keyFromCode(event.code ?? "") ?? event.key;
+}
+
 /**
  * Build the canonical chord string for a live KeyboardEvent.
  *
@@ -99,7 +163,7 @@ export function eventToChordString(event: KeyboardEvent): string | null {
   }
 
   return chordToString({
-    key: event.key,
+    key: eventKey(event),
     ctrl: event.ctrlKey,
     meta: event.metaKey,
     shift: event.shiftKey,
@@ -230,6 +294,27 @@ export function stripHeldModifiers(chord: string, prefix: string): string {
   if (kept.length === mods.length) return chord;
 
   return [...kept, key].join("+");
+}
+
+/**
+ * A sequence's second chord as typed with the prefix's modifiers still held:
+ * `meta+K W` becomes `meta+W`.
+ *
+ * stripHeldModifiers lets the dispatcher accept this form, but the dispatcher
+ * only sees it if the browser lets it through — and this is the chord the
+ * browser judges, not `W`. Returns undefined for a single-chord binding.
+ */
+export function heldSecondChord(binding: string): string | undefined {
+  const chords = binding.split(" ");
+  if (chords.length < 2) return undefined;
+
+  const prefix = splitChord(chords[0]);
+  const second = splitChord(chords[1]);
+  const mods = MODIFIER_TOKENS.filter(
+    (mod) => prefix.mods.includes(mod) || second.mods.includes(mod),
+  );
+
+  return [...mods, second.key].join("+");
 }
 
 /** The first chord of a canonical sequence — the prefix that opens it. */

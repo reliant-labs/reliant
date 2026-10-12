@@ -1,15 +1,17 @@
 import { useState, useEffect, useRef } from "react";
 import { cn } from "../../lib/utils";
-import { useShortcutsStore } from "../../store/shortcutsStore";
+import { effectiveBinding, useShortcutsStore } from "../../store/shortcutsStore";
 import { Button } from "../ui/Button";
 import { RotateCcw, Edit3, Check, X, AlertTriangle, Keyboard, Globe } from "lucide-react";
 import { toast } from "../../lib/toast-manager";
 import {
   chordToString,
+  eventKey,
   isSequence,
   parseBinding,
   sequencePrefix,
 } from "../../lib/keyboard/chord";
+import type { Reservation } from "../../lib/keyboard/reserved";
 import { detectPlatform, formatBinding } from "../../lib/keyboard/platform";
 import { SettingsPageHeader } from "./SettingsPageHeader";
 
@@ -30,12 +32,9 @@ function formatAuthored(authored: string): string {
 function isSequencePrefix(authoredChord: string, isMac: boolean): boolean {
   const canonical = parseBinding(authoredChord, isMac);
   const { shortcuts } = useShortcutsStore.getState();
-  const { isDesktop } = detectPlatform();
 
   return Object.values(shortcuts).some((shortcut) => {
-    const authored =
-      shortcut.currentBinding ??
-      (isDesktop ? shortcut.defaultBinding : shortcut.defaultWebBinding);
+    const authored = effectiveBinding(shortcut);
     if (!authored) return false;
 
     const binding = parseBinding(authored, isMac);
@@ -51,7 +50,9 @@ function isSequencePrefix(authoredChord: string, isMac: boolean): boolean {
  */
 function eventToAuthored(e: KeyboardEvent, isMac: boolean): string {
   const canonical = chordToString({
-    key: e.key,
+    // The same key the dispatcher will match on, so a capture of Cmd+Option+B
+    // stores "B" rather than the "∫" macOS composed for it.
+    key: eventKey(e),
     ctrl: e.ctrlKey,
     meta: e.metaKey,
     shift: e.shiftKey,
@@ -77,6 +78,31 @@ function eventToAuthored(e: KeyboardEvent, isMac: boolean): string {
 
   out.push(key);
   return out.join("+");
+}
+
+/**
+ * The completing chord of a sequence, minus modifiers still held from the
+ * prefix: Cmd+K then Cmd+W is captured as "Cmd+K W", the binding the
+ * dispatcher matches either way of typing it. Kept as "Cmd+K Cmd+W" it would
+ * never match, because the dispatcher strips the held Cmd before looking up.
+ */
+function withoutHeldModifiers(chord: string, prefix: string): string {
+  const held = new Set(prefix.split("+").slice(0, -1));
+  const parts = chord.split("+");
+  const key = parts.pop() ?? "";
+  return [...parts.filter((part) => !held.has(part)), key].join("+");
+}
+
+/** What a browser reservation means for the binding being entered. */
+function reservationMessage(reservation: Reservation): string {
+  switch (reservation.level) {
+    case "hard":
+      return `Your browser ${reservation.reason} with this combination and will not pass it to Reliant — this shortcut would never fire. Try a Cmd+K sequence instead.`;
+    case "held":
+      return `Release Cmd before the second key: with it still held, your browser ${reservation.reason} instead.`;
+    case "hostile":
+      return `Your browser ${reservation.reason} with this combination. Reliant will override it.`;
+  }
 }
 
 // Key input component for capturing key combinations
@@ -146,7 +172,8 @@ function KeyInput({
       // it and wait for the completing key. Anything else replaces the binding
       // outright, so a plain remap still takes one keystroke.
       if (pendingPrefixRef.current) {
-        onChange(`${pendingPrefixRef.current} ${chord}`);
+        const prefix = pendingPrefixRef.current;
+        onChange(`${prefix} ${withoutHeldModifiers(chord, prefix)}`);
         pendingPrefixRef.current = null;
         setPendingPrefix(null);
         return;
@@ -249,6 +276,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
     getEffectiveBinding,
     findConflict,
     getReservationFor,
+    getUnavailableOverride,
   } = useShortcutsStore();
 
   const shortcut = shortcuts[shortcutId];
@@ -257,6 +285,8 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
   if (!shortcut) return null;
 
   const effective = getEffectiveBinding(shortcutId);
+  // A desktop remap the browser will not release: the web default stands in.
+  const unavailableOverride = getUnavailableOverride(shortcutId);
   const isEditingThis = isEditing === shortcutId;
   const isDefault = shortcut.currentBinding === null;
 
@@ -271,9 +301,7 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
   const reservation =
     isEditingThis && tempBinding ? getReservationFor(tempBinding) : undefined;
   const reservationWarning = reservation
-    ? reservation.level === "hard"
-      ? `Your browser ${reservation.reason} with this combination and will not pass it to Reliant — this shortcut would never fire. Try a Cmd+K sequence instead.`
-      : `Your browser ${reservation.reason} with this combination. Reliant will override it.`
+    ? reservationMessage(reservation)
     : undefined;
 
   const handleEdit = () => {
@@ -407,6 +435,16 @@ function ShortcutRow({ shortcutId }: { shortcutId: string }) {
             {conflictWarning}
           </div>
         )}
+
+        {unavailableOverride && !isEditingThis && (
+          <div className="flex items-start gap-1 text-xs text-amber-600 dark:text-amber-500">
+            <Globe className="w-3 h-3 mt-0.5 shrink-0" />
+            <span>
+              Your binding {formatAuthored(unavailableOverride)} is taken by the
+              browser, so {formatAuthored(effective)} works here instead.
+            </span>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -439,9 +477,7 @@ export function KeyboardShortcutsSettings() {
           shortcut.description
             .toLowerCase()
             .includes(searchQuery.toLowerCase()) ||
-          formatAuthored(
-            shortcut.currentBinding ?? shortcut.defaultBinding,
-          )
+          formatAuthored(effectiveBinding(shortcut))
             .toLowerCase()
             .includes(searchQuery.toLowerCase())
       );

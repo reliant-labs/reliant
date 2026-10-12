@@ -1,5 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { createDispatcher, SEQUENCE_TIMEOUT_MS } from "../dispatcher";
+import {
+  createDispatcher,
+  MENU_ECHO_WINDOW_MS,
+  SEQUENCE_TIMEOUT_MS,
+} from "../dispatcher";
 import { ShortcutRegistry, type ResolvedShortcut } from "../registry";
 import type { ShortcutContext } from "../contexts";
 
@@ -247,6 +251,77 @@ describe("dispatcher", () => {
       );
 
       expect(onPendingChange).toHaveBeenCalledWith("meta+K");
+    });
+  });
+
+  describe("delivery from the native menu", () => {
+    // The desktop app's menu is a second way in for a few shortcuts. It must
+    // run the same handler as the keystroke, and never on top of it.
+
+    function menuSetup(start = 1_000) {
+      let clock = start;
+      const onTest = vi.fn();
+      const registry = new ShortcutRegistry([shortcut({ id: "toggle" })]);
+      const dispatcher = createDispatcher({
+        registry,
+        getHandler: (name) => ({ onTest })[name],
+        detectContexts: () => ["global"],
+        now: () => clock,
+      });
+      return {
+        dispatcher,
+        onTest,
+        advance: (ms: number) => {
+          clock += ms;
+        },
+      };
+    }
+
+    it("runs the shortcut's handler by id", () => {
+      const { dispatcher, onTest } = menuSetup();
+
+      expect(dispatcher.invoke("toggle")).toBe(true);
+      expect(onTest).toHaveBeenCalledOnce();
+    });
+
+    it("drops the menu's echo of a keystroke it already handled", () => {
+      // macOS can offer the keydown to the page AND fire the menu item; either
+      // order, the shortcut must run once.
+      const { dispatcher, onTest, advance } = menuSetup();
+
+      press(dispatcher, { key: "p", metaKey: true });
+      advance(5);
+      expect(dispatcher.invoke("toggle")).toBe(false);
+
+      expect(onTest).toHaveBeenCalledOnce();
+    });
+
+    it("runs a deliberate menu click that follows the echo", () => {
+      const { dispatcher, onTest, advance } = menuSetup();
+
+      press(dispatcher, { key: "p", metaKey: true });
+      dispatcher.invoke("toggle"); // the echo
+      advance(10);
+      dispatcher.invoke("toggle"); // the user, from the menu
+
+      expect(onTest).toHaveBeenCalledTimes(2);
+    });
+
+    it("treats a menu click well after the keystroke as a new request", () => {
+      const { dispatcher, onTest, advance } = menuSetup();
+
+      press(dispatcher, { key: "p", metaKey: true });
+      advance(MENU_ECHO_WINDOW_MS + 1);
+      dispatcher.invoke("toggle");
+
+      expect(onTest).toHaveBeenCalledTimes(2);
+    });
+
+    it("refuses an id it does not know", () => {
+      const { dispatcher, onTest } = menuSetup();
+
+      expect(dispatcher.invoke("nope")).toBe(false);
+      expect(onTest).not.toHaveBeenCalled();
     });
   });
 });

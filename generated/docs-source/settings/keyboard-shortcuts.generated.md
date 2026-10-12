@@ -16,8 +16,11 @@ Reliant includes keyboard shortcuts for common actions. All shortcuts can be cus
 
 Some shortcuts differ between the desktop app and the browser. Browsers reserve
 chords like `Cmd+T` and `Cmd+W` for their own tabs and windows and will not
-release them to a web page, so those actions use a `Cmd+K` prefix on the web.
-Where the **Browser** column is blank the shortcut is the same on both.
+release them to a web page, so those actions use a different chord on the web —
+usually a `Cmd+K` sequence. Where the **Browser** column is blank the shortcut
+is the same on both.
+
+A `Cmd+K` sequence's second key can be typed with `Cmd` released or still held.
 
 ## Focus
 
@@ -35,8 +38,8 @@ Where the **Browser** column is blank the shortcut is the same on both.
 
 | Desktop | Browser | Action |
 |---------|---------|--------|
-| `Cmd+W` | `Cmd+K W` | Close Tab |
-| `Cmd+T` | `Cmd+K T` | New Chat |
+| `Cmd+W` | `Cmd+K X` | Close Tab |
+| `Cmd+T` | `Cmd+Alt+N` | New Chat |
 | `Cmd+O` | `Cmd+K O` | Open Project |
 | `Cmd+Shift+K` |  | Open Workflow Builder |
 
@@ -93,7 +96,7 @@ Where the **Browser** column is blank the shortcut is the same on both.
 | `Cmd+Shift+Right` |  | Extend Selection Right |
 | `Cmd+Shift+Right` |  | Extend Selection Right (Composer) |
 | `Cmd+Shift+Right` |  | Next Right Sidebar Tab |
-| `Cmd+K N` |  | Package Commands |
+| `Cmd+K N` | `Cmd+K S` | Package Commands |
 | `Cmd+Shift+Left` |  | Previous Right Sidebar Tab |
 | `Cmd+K V` |  | Show Browser |
 | `Cmd+K G` |  | Show Changes |
