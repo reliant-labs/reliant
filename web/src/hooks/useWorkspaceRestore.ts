@@ -286,7 +286,8 @@ export function useWorkspaceRestore(
 
       // Step 9: Restore terminal open state
       if (worktreeState.terminalOpen) {
-        useTerminalStore.getState().showTerminal();
+        // Restored, not opened by the user: takes no focus.
+        useTerminalStore.getState().restoreOpen(true);
         logger.info("[WorkspaceRestore] Restored terminal open state");
       }
 

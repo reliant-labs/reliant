@@ -32,14 +32,57 @@ export interface TerminalSession {
   daemonSessionId?: string;
 }
 
+/**
+ * The user asked for the cursor to be in the terminal.
+ *
+ * The terminal used to focus itself whenever a session became active, and
+ * sessions become active without anyone asking: a new workspace restores its
+ * panel open, the panel creates the session when the checkout lands ~10s
+ * later, and by then the user is typing in the composer — the terminal took
+ * the cursor mid-sentence. Switching workspaces did the same.
+ *
+ * So focus follows intent only. The user-facing actions below (opening or
+ * toggling the panel, creating a terminal, picking a tab, the focus-terminal
+ * shortcut) make a request; restoring saved panel state and the session the
+ * panel creates for itself make none. The visible terminal claims a request as
+ * soon as it can take focus (claimFocusRequest), so a request made before the
+ * terminal exists waits for it, but it is withdrawn the moment the user does
+ * something elsewhere (armFocusRequestExpiry): a terminal that turns up after
+ * the user moved on must not pull them back.
+ */
+export interface TerminalFocusRequest {
+  id: number;
+  /** What had focus when the user asked. A user still waiting has left it there. */
+  restingFocus: Element | null;
+}
+
+/**
+ * Selector for the terminal panel's root, which carries `data-terminal-panel`.
+ * Activity inside it is the user engaging with the terminal, so it never
+ * withdraws a focus request, and focus inside it is the terminal's to move.
+ */
+const TERMINAL_PANEL_SELECTOR = "[data-terminal-panel]";
+
 interface TerminalState {
   sessions: TerminalSession[];
   activeSessionId: string | null;
   activeSessionPerWorktree: Record<string, string>; // worktreeId -> sessionId ("__main__" for main workspace)
   isOpen: boolean;
+  /** Pending request for the terminal to take focus. See TerminalFocusRequest. */
+  focusRequest: TerminalFocusRequest | null;
 
   // Actions
-  createSession: (workingDir?: string, projectId?: string, worktreeId?: string) => string;
+  /**
+   * Create a session and make it the active one. Focuses it, because creating
+   * a terminal is something the user asks for — except `focus: false`, for a
+   * session the app creates on its own.
+   */
+  createSession: (
+    workingDir?: string,
+    projectId?: string,
+    worktreeId?: string,
+    options?: { focus?: boolean },
+  ) => string;
   killSession: (id: string) => void; // Terminates the session process
   setActiveSession: (id: string) => void;
   setActiveSessionForWorktree: (worktreeId: string | undefined, sessionId: string) => void;
@@ -56,9 +99,24 @@ interface TerminalState {
    * or no longer listed). See pruneSessionsForWorkspaces.
    */
   pruneSessions: (projectId: string, liveWorktreeIds: ReadonlySet<string>) => void;
+  // The panel actions below are the USER's: opening requests focus, and the
+  // new state is saved for the workspace. Restoring saved state is restoreOpen.
   toggleTerminal: () => void; // Show/hide the terminal panel
   showTerminal: () => void; // Expand/show the terminal panel
   hideTerminal: () => void; // Collapse/hide the terminal panel
+  /**
+   * Match the panel to the workspace's saved state. Not a user action, so it
+   * never moves focus and saves nothing (the value came from the save).
+   */
+  restoreOpen: (open: boolean) => void;
+  /** Ask for the cursor in the active terminal, now or as soon as it exists. User intent only. */
+  requestFocus: () => void;
+  /**
+   * The visible terminal settles request `id`: clears it and returns whether
+   * to take focus — false when it is stale, or focus has since gone somewhere
+   * other than where the user left it.
+   */
+  claimFocusRequest: (id: number) => boolean;
 
   closeSession: (id: string) => void;
   openTerminal: () => void;
@@ -96,6 +154,77 @@ function persistableSessions(sessions: readonly TerminalSession[]): TerminalSess
   return sessions.map(({ daemonSessionId: _daemonSessionId, ...rest }) => rest);
 }
 
+function isInsideTerminalPanel(target: EventTarget | null): boolean {
+  return target instanceof Element && target.closest(TERMINAL_PANEL_SELECTOR) !== null;
+}
+
+/**
+ * Call `withdraw` the moment the user does something outside the terminal
+ * panel — presses a key or a pointer. Returns the disarm function.
+ *
+ * Armed on the next task, not now: a request is made from inside the very
+ * keydown or click that expressed it, and that event is the intent, not the
+ * user moving on.
+ */
+function armFocusRequestExpiry(withdraw: () => void): () => void {
+  if (typeof document === "undefined") return () => {};
+  const onActivity = (event: Event) => {
+    if (!isInsideTerminalPanel(event.target)) withdraw();
+  };
+  let armed = false;
+  const timer = setTimeout(() => {
+    armed = true;
+    document.addEventListener("keydown", onActivity, true);
+    document.addEventListener("pointerdown", onActivity, true);
+  }, 0);
+  return () => {
+    clearTimeout(timer);
+    if (!armed) return;
+    document.removeEventListener("keydown", onActivity, true);
+    document.removeEventListener("pointerdown", onActivity, true);
+  };
+}
+
+// At most one request is pending; these are its expiry listeners.
+let lastFocusRequestId = 0;
+let disarmPendingFocusRequest: () => void = () => {};
+
+/** A fresh request, superseding any pending one. Goes into the same set() as the action that made it. */
+function newFocusRequest(): TerminalFocusRequest {
+  disarmPendingFocusRequest();
+  const request: TerminalFocusRequest = {
+    id: ++lastFocusRequestId,
+    restingFocus: typeof document === "undefined" ? null : document.activeElement,
+  };
+  disarmPendingFocusRequest = armFocusRequestExpiry(() => {
+    if (useTerminalStore.getState().focusRequest?.id === request.id) {
+      useTerminalStore.setState({ focusRequest: dropFocusRequest() });
+    }
+  });
+  return request;
+}
+
+/** Withdraw the pending request. Returns the `focusRequest` value to set. */
+function dropFocusRequest(): null {
+  disarmPendingFocusRequest();
+  disarmPendingFocusRequest = () => {};
+  return null;
+}
+
+/**
+ * Whether focus is still where a user waiting for the terminal would leave it:
+ * nowhere, on whatever had it when they asked, or already in the panel.
+ */
+function focusIsWhereUserLeftIt(request: TerminalFocusRequest): boolean {
+  const active = document.activeElement;
+  return (
+    !active ||
+    active === document.body ||
+    active === request.restingFocus ||
+    isInsideTerminalPanel(active)
+  );
+}
+
 export const useTerminalStore = create(
   persist<TerminalState, [], [], PersistedTerminalState>(
     (set, get) => ({
@@ -103,8 +232,9 @@ export const useTerminalStore = create(
   activeSessionId: null,
   activeSessionPerWorktree: {},
   isOpen: false,
+  focusRequest: null,
 
-  createSession: (workingDir?: string, projectId?: string, worktreeId?: string) => {
+  createSession: (workingDir?: string, projectId?: string, worktreeId?: string, options?: { focus?: boolean }) => {
     const id = `terminal-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
     const worktreeKey = worktreeId || MAIN_WORKSPACE_KEY;
     const session: TerminalSession = {
@@ -124,6 +254,7 @@ export const useTerminalStore = create(
         ...state.activeSessionPerWorktree,
         [worktreeKey]: id,
       },
+      ...(options?.focus === false ? {} : { focusRequest: newFocusRequest() }),
     }));
 
     logger.info("[TerminalStore] Created session", { id, workingDir, projectId, worktreeId });
@@ -265,7 +396,7 @@ export const useTerminalStore = create(
 
   toggleTerminal: () => {
     const newIsOpen = !get().isOpen;
-    set({ isOpen: newIsOpen });
+    set({ isOpen: newIsOpen, focusRequest: newIsOpen ? newFocusRequest() : dropFocusRequest() });
     logger.debug("[TerminalStore] Toggled terminal panel", { isOpen: newIsOpen });
     
     // Persist to workspace state
@@ -282,7 +413,7 @@ export const useTerminalStore = create(
   },
 
   showTerminal: () => {
-    set({ isOpen: true });
+    set({ isOpen: true, focusRequest: newFocusRequest() });
     logger.debug("[TerminalStore] Showed terminal panel");
     
     // Persist to workspace state
@@ -298,7 +429,7 @@ export const useTerminalStore = create(
   },
 
   hideTerminal: () => {
-    set({ isOpen: false });
+    set({ isOpen: false, focusRequest: dropFocusRequest() });
     logger.debug("[TerminalStore] Hid terminal panel");
     
     // Persist to workspace state
@@ -311,6 +442,23 @@ export const useTerminalStore = create(
         }
       });
     });
+  },
+
+  restoreOpen: (open: boolean) => {
+    if (get().isOpen === open) return;
+    set(open ? { isOpen: true } : { isOpen: false, focusRequest: dropFocusRequest() });
+    logger.debug("[TerminalStore] Restored terminal panel state", { isOpen: open });
+  },
+
+  requestFocus: () => {
+    set({ focusRequest: newFocusRequest() });
+  },
+
+  claimFocusRequest: (id: number) => {
+    const request = get().focusRequest;
+    if (!request || request.id !== id) return false;
+    set({ focusRequest: dropFocusRequest() });
+    return focusIsWhereUserLeftIt(request);
   },
 
   closeSession: (id: string) => get().killSession(id),

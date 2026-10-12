@@ -288,15 +288,9 @@ function App() {
 
     // Terminal visibility is also per-worktree. terminalStore.isOpen is not
     // persisted itself, so without this a project selected outside the restore
-    // path (first run, manual switch) would ignore the saved value.
-    const terminalStore = useTerminalStore.getState();
-    if (state.terminalOpen !== terminalStore.isOpen) {
-      if (state.terminalOpen) {
-        terminalStore.showTerminal();
-      } else {
-        terminalStore.hideTerminal();
-      }
-    }
+    // path (first run, manual switch) would ignore the saved value. Restored,
+    // not opened: the user did not ask for the terminal, so it takes no focus.
+    useTerminalStore.getState().restoreOpen(state.terminalOpen);
 
     logger.debug("[ModernApp] Restored panel state for worktree", {
       worktreeId,
@@ -657,7 +651,7 @@ function App() {
             window.dispatchEvent(new CustomEvent("focus-terminal"));
           }
         } else {
-          // Terminal is closed, open it (focus handled by TerminalPanel effect)
+          // Terminal is closed, open it (opening asks the terminal for focus)
           toggleTerminal();
         }
       },

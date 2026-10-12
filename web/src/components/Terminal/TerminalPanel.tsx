@@ -44,6 +44,7 @@ export function TerminalPanel(_props: TerminalPanelProps) {
   const createSession = useTerminalStore((state) => state.createSession);
   const killSession = useTerminalStore((state) => state.killSession);
   const setActiveSession = useTerminalStore((state) => state.setActiveSession);
+  const requestFocus = useTerminalStore((state) => state.requestFocus);
   const hideTerminal = useTerminalStore((state) => state.hideTerminal);
   const isTerminalOpen = useTerminalStore((state) => state.isOpen);
   const currentProject = useProjectStore((state) => state.currentProject);
@@ -131,8 +132,10 @@ export function TerminalPanel(_props: TerminalPanelProps) {
       }
     } else if (workingDir.kind === "ready") {
       // No sessions for this worktree - create one. A pending workspace
-      // re-runs this effect when its path lands.
-      const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId);
+      // re-runs this effect when its path lands — often ~10s after the user
+      // started typing in the new workspace's chat — so this session does not
+      // ask for focus. If the user opened the panel, that already did.
+      const sessionId = createSession(workingDir.path, currentProject.id, currentWorktreeId, { focus: false });
       logger.info("[TerminalPanel] Created session for worktree", {
         worktreeId: currentWorktreeId,
         sessionId,
@@ -164,30 +167,32 @@ export function TerminalPanel(_props: TerminalPanelProps) {
     [killSession, hideTerminal, sessions.length]
   );
 
-  // Handler to set active session with worktree tracking
+  // A tab click: select that terminal and put the cursor in it.
   const handleSetActiveSession = useCallback(
     (sessionId: string) => {
       setActiveSessionForWorktree(currentWorktreeId, sessionId);
+      requestFocus();
     },
-    [currentWorktreeId, setActiveSessionForWorktree]
+    [currentWorktreeId, setActiveSessionForWorktree, requestFocus]
   );
 
-  // Dispatch event when terminal opens or active session changes to trigger refit and focus
+  // Refit when the terminal becomes visible or the active session changes.
+  // Deliberately NOT focus: the active session also changes on a workspace
+  // switch and when the panel creates a session itself. Focus follows only
+  // the user asking (terminalStore TerminalFocusRequest).
   useEffect(() => {
     if (!isTerminalOpen) return;
-    
-    // Terminal is now visible, dispatch event to trigger fit
     window.dispatchEvent(new CustomEvent("terminal-container-changed"));
-
-    // Focus the active terminal session
-    if (activeSessionId) {
-      window.dispatchEvent(
-        new CustomEvent("focus-active-terminal", {
-          detail: { sessionId: activeSessionId },
-        })
-      );
-    }
   }, [activeSessionId, isTerminalOpen]);
+
+  // "focus-terminal": the user asked for the terminal by shortcut (Cmd+J
+  // while the panel is open, or pane navigation). A request rather than a
+  // direct focus, so it also lands on a terminal that does not exist yet.
+  useEffect(() => {
+    const handleFocusTerminal = () => requestFocus();
+    window.addEventListener("focus-terminal", handleFocusTerminal);
+    return () => window.removeEventListener("focus-terminal", handleFocusTerminal);
+  }, [requestFocus]);
 
   // Handle width resizing
   useEffect(() => {
@@ -228,6 +233,8 @@ export function TerminalPanel(_props: TerminalPanelProps) {
   return (
     <div
       ref={panelRef}
+      // Activity in here never withdraws a terminal focus request (terminalStore).
+      data-terminal-panel=""
       className="relative bg-card border-l border-border flex flex-col"
       style={{
         height: "100%", // Always take full height of the flex container
@@ -325,22 +332,21 @@ export function TerminalPanel(_props: TerminalPanelProps) {
             </div>
           )}
           {/* Render ALL project terminals - show only the active one from current worktree */}
-          {projectSessions.map((session) => (
-            <Terminal
-              key={session.id}
-              sessionId={session.id}
-              workingDir={session.workingDir}
-              worktreeId={session.worktreeId}
-              projectId={session.projectId}
-              className={cn(
-                "absolute inset-0",
-                // Only show if this is the active session AND belongs to current worktree
-                activeSessionId === session.id && session.worktreeId === currentWorktreeId
-                  ? "block"
-                  : "hidden"
-              )}
-            />
-          ))}
+          {projectSessions.map((session) => {
+            // Only show if this is the active session AND belongs to current worktree
+            const shown = activeSessionId === session.id && session.worktreeId === currentWorktreeId;
+            return (
+              <Terminal
+                key={session.id}
+                sessionId={session.id}
+                workingDir={session.workingDir}
+                worktreeId={session.worktreeId}
+                projectId={session.projectId}
+                active={shown && isTerminalOpen}
+                className={cn("absolute inset-0", shown ? "block" : "hidden")}
+              />
+            );
+          })}
         </div>
 
         {/* Terminal list sidebar */}

@@ -24,6 +24,12 @@ interface TerminalProps {
   worktreeId?: string;
   /** The project the terminal belongs to. Sent so the server can log it. */
   projectId?: string;
+  /**
+   * This is the terminal the user is looking at: the panel is open, this tab is
+   * selected, and it belongs to the current workspace. Only the active
+   * terminal claims a focus request.
+   */
+  active?: boolean;
   onExit?: () => void;
   className?: string;
 }
@@ -93,7 +99,7 @@ type TerminalConnectionState =
   | "no_machine"
   | "disconnected";
 
-export function Terminal({ sessionId, workingDir, worktreeId, projectId, className }: TerminalProps) {
+export function Terminal({ sessionId, workingDir, worktreeId, projectId, active = false, className }: TerminalProps) {
   const terminalRef = useRef<HTMLDivElement>(null);
   const xtermRef = useRef<XTerm | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
@@ -820,40 +826,23 @@ export function Terminal({ sessionId, workingDir, worktreeId, projectId, classNa
     return () => window.removeEventListener('clear-active-terminal', handleClear);
   }, [sessionId, activeSessionId]);
 
-  // Auto-focus terminal when it becomes active
+  // Take the cursor when the user asked for the terminal, and only then.
+  //
+  // This used to focus whenever the session became active — including the
+  // session the panel creates by itself when a new workspace's checkout lands,
+  // which took the cursor out of the composer mid-sentence. Requests now come
+  // only from user actions (TerminalFocusRequest in terminalStore). One made
+  // before this terminal existed is claimed when it mounts, and the store
+  // declines it if the user has moved on since.
+  const focusRequest = useTerminalStore((state) => state.focusRequest);
+  const claimFocusRequest = useTerminalStore((state) => state.claimFocusRequest);
   useEffect(() => {
-    if (sessionId === activeSessionId && xtermRef.current) {
-      // Focus the terminal when it becomes the active session
+    if (!active || !focusRequest || !xtermRef.current) return;
+    if (claimFocusRequest(focusRequest.id)) {
       xtermRef.current.focus();
-      logger.debug('[Terminal] Auto-focused active terminal', { sessionId });
+      logger.debug('[Terminal] Focused on request', { sessionId });
     }
-  }, [sessionId, activeSessionId]);
-
-  // Listen for focus-active-terminal event
-  useEffect(() => {
-    const handleFocusTerminal = (event: CustomEvent) => {
-      if (event.detail?.sessionId === sessionId && xtermRef.current) {
-        xtermRef.current.focus();
-        logger.debug('[Terminal] Focused terminal via event', { sessionId });
-      }
-    };
-
-    window.addEventListener('focus-active-terminal', handleFocusTerminal as EventListener);
-    return () => window.removeEventListener('focus-active-terminal', handleFocusTerminal as EventListener);
-  }, [sessionId]);
-
-  // Listen for general focus-terminal event (when Cmd+J is pressed while terminal is open but not focused)
-  useEffect(() => {
-    const handleFocusTerminalGeneral = () => {
-      if (sessionId === activeSessionId && xtermRef.current) {
-        xtermRef.current.focus();
-        logger.debug('[Terminal] Focused active terminal via toggle shortcut', { sessionId });
-      }
-    };
-
-    window.addEventListener('focus-terminal', handleFocusTerminalGeneral);
-    return () => window.removeEventListener('focus-terminal', handleFocusTerminalGeneral);
-  }, [sessionId, activeSessionId]);
+  }, [active, focusRequest, claimFocusRequest, sessionId]);
 
   // Listen for terminal container changes and refit
   useEffect(() => {
