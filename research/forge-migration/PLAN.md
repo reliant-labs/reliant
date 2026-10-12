@@ -111,11 +111,34 @@ Every change ships as its own **small PR** that leaves everything that works tod
 | P6 wave 0: dead packages / deps-are-interfaces / exclude-contract on 21 pure packages | reliant #743 / #744 / #745 |
 | Dev CORS: reliant now gets `CORS_ALLOWED_ORIGINS` (was a no-op `CORS_ORIGINS`) | control-plane #841 |
 | reliant pins forge `07720bbc` (all of the above) | reliant #749 |
+| forge: only activate `.githooks` forge wrote | forge #657 |
+| forge: generate no longer leaves an empty `pkg/app` (project-kind flip) | forge #658 |
+| forge: in-place adoption keeps a root-module-owned `gen/` | forge #659 |
+| reliant pins forge `4aa7e58b` | reliant #751 |
+| **1g: reliant `forge.yaml`, all 35 services `// forge:unmanaged`, 11 contract packages `//forge:not-a-component`, sqlc as a generate hook, first generated mocks** | reliant #752 |
 
-**Next:** a forge release, then pin it in reliant (and control-plane). Then slice 1g: a minimal reliant `forge.yaml` (every service `// forge:unmanaged`, `cliauth`/`forgecred` `//forge:not-a-component`, sqlc as a `generate.hooks` entry), then 1h (`forge lint` in CI). **Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) are dropped and rebuilt from the new baseline, with no goose adoption and no reconciling branch-only versions. **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. Never touch prod in a "dev DB" teardown.
+**Next:**
+- **1h (needs a human):** CI runs pinned `forge generate` plus a clean-tree check, and `forge lint` goes non-gating, then gating. The GitHub App token cannot push `.github/workflows/*`, so someone with workflow permission lands it.
+- **Before lint can gate:**
+  - the 26 contract-lane findings (P6 waves 1+);
+  - 20 golangci-lint and 2 buf findings (`forge.proto` RPC_REQUEST_RESPONSE_UNIQUE) that predate 1g.
+- **P2:** proto hygiene, one PR per proto file.
+- **P3a:** extract shared helpers out of `internal/grpc/services`.
+- **P4:** typed config, starting with forge F3d (env aliases), or with reliant lanes using `binary_config.command`.
+- **P6 wave 1:** packages with narrow interfaces already.
+- **New contributor obligation:** after editing a proto or one of the 11 contract interfaces, run the pinned `forge generate`.
+
+**Open forge bugs from 1g (reported, not fixed):**
+- composition emits non-compiling `New(Deps{})` for non-canonical contract packages and blames the forge-written `compose.go`;
+- the `--in-place` `.gitignore` merge ignores tracked `/package.json`, `/package-lock.json` and `go.work.sum`;
+- `--in-place` writes `enforce_typed_access: error` instead of the soft default;
+- there is no way to opt out of CI scaffolding except deleting the files;
+- G6 (combined lint lane flags) is still open.
+
+**Dev databases (user decision, 2026-10-12): fully destroyable.** At the P5a cutover, dev databases (the `forge env up` stack's `reliant` DB on 5434, per-developer 5433 DBs) are dropped and rebuilt from the new baseline, with no goose adoption and no reconciling branch-only versions. **Goose adoption stays mandatory for prod (`reliant_cp` on Cloud SQL `reliant-pg`)** and for any env holding data we keep. Never touch prod in a "dev DB" teardown.
 - As of 2026-10-12 this sandbox has no dev Postgres (no `postgres_data` volume, no k3d cluster); only prod kube contexts exist, and they are untouched. The dev stacks rebuild their DB on next `forge env up`.
 - Reliant pins forge `07720bbc` (reliant #749).
-- Slice 1g (first `forge.yaml`) is in progress in worktree `fm-r-1g-forge-yaml`.
+- Slice 1g landed (reliant #752).
 
 Research inputs: `02-contracts-classification.md` (P6) and `03-config-census.md` (P4), both in this dir.
 
