@@ -87,6 +87,10 @@ const SecretsPreview = lazyRoute(
 // fixtures) — see ForgePanePreview for why the fake sits at fetch.
 const ForgePanePreview = lazyRoute(
   () => import('./components/Forge/__preview__/ForgePanePreview'), 'ForgePanePreview')
+// The Observability tab against in-memory fixtures — every view and state,
+// no backend. Also what the Playwright smoke drives (e2e/observability.spec.ts).
+const ObservabilityPreview = lazyRoute(
+  () => import('./components/Forge/Observability/__preview__/ObservabilityPreview'), 'default')
 const SettingsPage = lazyRoute(
   () => import('./components/Settings/SettingsPage'), 'SettingsPage')
 const ConnectorConsentPage = lazyRoute(
@@ -471,6 +475,12 @@ const forgePanePreviewRoute = createRoute({
   component: () => <DevOnlyRoute><ForgePanePreview /></DevOnlyRoute>,
 })
 
+const forgeObservabilityPreviewRoute = createRoute({
+  getParentRoute: () => rootRoute,
+  path: '/forge-observability-preview',
+  component: () => <DevOnlyRoute><ObservabilityPreview /></DevOnlyRoute>,
+})
+
 // (`/checkout/embed` removed with the embedded-checkout path. It existed to
 // host Stripe's hosted checkout page in a bare Electron BrowserWindow, because
 // payment-method domains are registered by HOSTNAME and app://bundle cannot be
@@ -811,6 +821,7 @@ const routeTree = rootRoute.addChildren([
   forgeWorkloadsPreviewRoute,
   forgeSecretsPreviewRoute,
   forgePanePreviewRoute,
+  forgeObservabilityPreviewRoute,
   projectPickerRedirectRoute,
   mobileIndexRoute,
   authenticatedLayoutRoute.addChildren([

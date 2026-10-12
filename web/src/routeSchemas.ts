@@ -481,6 +481,7 @@ export const forgeEnvPageSearchSchema = z.object({
   tab: z
     .enum([
       "overview",
+      "observability",
       "running",
       "releases",
       "activity",
@@ -492,6 +493,29 @@ export const forgeEnvPageSearchSchema = z.object({
       "preview",
     ])
     .optional(),
+  /**
+   * The Observability tab's state (components/Forge/Observability/obsSearch.ts).
+   * In the URL because "look at these errors in prod" is a link: which view,
+   * which window, the query, the trace and span someone opened.
+   *
+   * `range` is a PRESET, never timestamps, so a link to the last hour means
+   * the last hour when it is opened. `severity` is a comma list
+   * (`warn,error`). `q` is the Logs query string, or in Traces the root
+   * operation to match. `trace`/`span` name the trace in focus: its waterfall
+   * in Traces, the logs it wrote in Logs, its samples in Profiles.
+   */
+  view: z.enum(["overview", "logs", "traces", "dashboards", "profiles"]).optional(),
+  range: z.enum(["15m", "1h", "6h", "24h", "7d"]).optional(),
+  service: z.string().optional(),
+  severity: z.string().optional(),
+  q: z.string().optional(),
+  trace: z.string().optional(),
+  span: z.string().optional(),
+  dashboard: z.string().optional(),
+  profileType: z.string().optional(),
+  live: z.boolean().optional(),
+  errors: z.boolean().optional(),
+  minDuration: z.string().optional(),
 });
 
 /**

@@ -1,0 +1,544 @@
+syntax = "proto3";
+
+package controlplane.v1;
+
+import "buf/validate/validate.proto";
+import "forge/v1/forge.proto";
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/reliant-labs/control-plane/gen/services/observability/v1;observabilityv1";
+
+// === ObservabilityService ===
+//
+// The TENANT OBSERVABILITY QUERY SERVICE: what the Reliant console calls so a
+// customer can see their logs, traces, metrics, profiles and dashboards
+// (hosted-design P6; HOSTED_BRIEF owner decision 2).
+//
+// TYPED REQUESTS ONLY. No RPC accepts SQL. Free-text query syntax (SearchLogs)
+// is parsed server-side into parameterized SQL over allowlisted OTel columns.
+//
+// ORG-SCOPED, AND THE ORG IS A REQUEST FIELD THAT IS NEVER TRUSTED. Every RPC
+// carries scope.org_id; the handler verifies the caller is a member of that org
+// (controlplane.org_memberships) before touching ClickHouse — a non-member gets
+// PermissionDenied. Every query then runs as THAT org's own ClickHouse user
+// (EXECUTE AS r_<org>), so the database, not this code, is the tenant boundary.
+//
+// BOUNDED. scope.time_range is required on every RPC and capped per RPC (see
+// each RPC). Row limits and ClickHouse execution caps apply on top; a result cut
+// short by a cap says so (`truncated`).
+//
+// ERRORS: InvalidArgument (bad range, bad query syntax — the message names the
+// position), PermissionDenied (not a member), FailedPrecondition (the org's
+// observability tenant is not set up yet), ResourceExhausted (a ClickHouse
+// quota/limit was hit), DeadlineExceeded (query timeout).
+service ObservabilityService {
+  option (forge.v1.service) = {
+    name: "ObservabilityService"
+    version: "1.0.0"
+    description: "Tenant observability queries over the org's ClickHouse"
+  };
+
+  // SearchLogs returns log records matching a severity filter, a service filter
+  // and a query string (grammar on SearchLogsRequest.query), newest first by
+  // default, with cursor pagination. Max range 7 days.
+  rpc SearchLogs(SearchLogsRequest) returns (SearchLogsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListTraces returns one summary row per trace in the range (root span, total
+  // duration, span and error counts, services touched) plus a RED summary of
+  // the matched traces. Max range 7 days.
+  rpc ListTraces(ListTracesRequest) returns (ListTracesResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetTrace returns every span of one trace, for the waterfall. Max range 7
+  // days (the traces TTL).
+  rpc GetTrace(GetTraceRequest) returns (GetTraceResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // ListMetrics returns the metric names the org has, with their type and unit,
+  // so a metric picker has something to offer. Max range 30 days.
+  rpc ListMetrics(ListMetricsRequest) returns (ListMetricsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // QueryMetric returns time series for one metric: an aggregation, optional
+  // group-by attribute keys, and a step. Max range 30 days.
+  rpc QueryMetric(QueryMetricRequest) returns (QueryMetricResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetServiceOverview returns per-service request rate, errors and
+  // p50/p95/p99 latency over server spans: the default landing view. Max range
+  // 7 days.
+  rpc GetServiceOverview(GetServiceOverviewRequest) returns (GetServiceOverviewResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetFlamegraph returns a service's aggregated profile as speedscope JSON,
+  // optionally narrowed to the samples of one trace. Max range 30 days
+  // (30 days of aggregates; the raw per-sample tier, used for trace_id, keeps
+  // 72 hours).
+  rpc GetFlamegraph(GetFlamegraphRequest) returns (GetFlamegraphResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+
+  // GetDashboards returns the dashboards for an environment in forge's
+  // dashboard-spec shape (forge.dashboards/v1). In phase 1 the spec is
+  // synthesized from the services seen in the org's data in scope.time_range;
+  // a deployed environment's real spec replaces it once it reaches
+  // control-plane. Max range 30 days.
+  rpc GetDashboards(GetDashboardsRequest) returns (GetDashboardsResponse) {
+    option (forge.v1.method) = {
+      auth_required: true
+      idempotent: true
+    };
+  }
+}
+
+// === Shared ===
+
+// TimeRange is a half-open range [start, end). Both ends are required and
+// end must be after start; each RPC caps the length.
+message TimeRange {
+  google.protobuf.Timestamp start = 1 [(buf.validate.field).required = true];
+  google.protobuf.Timestamp end = 2 [(buf.validate.field).required = true];
+}
+
+// QueryScope is what every request is scoped by.
+message QueryScope {
+  // The org whose data is read. The caller MUST be a member; this is verified
+  // server-side, never assumed.
+  string org_id = 1 [(buf.validate.field).string.min_len = 1];
+  // Narrow to one environment (reliant.env.id). Unset = every environment.
+  optional string env_id = 2;
+  // Narrow to these services (service.name). Empty = every service.
+  repeated string services = 3 [(buf.validate.field).repeated.max_items = 50];
+  TimeRange time_range = 4 [(buf.validate.field).required = true];
+}
+
+enum SortOrder {
+  SORT_ORDER_UNSPECIFIED = 0; // newest first
+  SORT_ORDER_NEWEST_FIRST = 1;
+  SORT_ORDER_OLDEST_FIRST = 2;
+}
+
+// AttributeFilter is a structured attribute predicate (metrics group/filter
+// keys, trace filters). Logs use the query grammar instead.
+message AttributeFilter {
+  // Attribute key, e.g. "http.route". Resolved against the signal's own
+  // attributes, then the resource's.
+  string key = 1 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 128];
+  AttributeOp op = 2;
+  string value = 3;
+}
+
+enum AttributeOp {
+  ATTRIBUTE_OP_UNSPECIFIED = 0; // eq
+  ATTRIBUTE_OP_EQ = 1;
+  ATTRIBUTE_OP_NEQ = 2;
+  ATTRIBUTE_OP_EXISTS = 3; // value ignored
+}
+
+message TimePoint {
+  google.protobuf.Timestamp time = 1;
+  double value = 2;
+}
+
+// === Logs ===
+
+message SearchLogsRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Query string. Whitespace-separated terms are ANDed; "OR" and "NOT"/"-",
+  // parentheses and quoting are supported:
+  //
+  //   timeout                       body contains the token "timeout"
+  //   "connection refused"          body contains the phrase
+  //   severity:error                severity equals (case-insensitive); also
+  //                                 severity:>=warn
+  //   service:api                   service.name equals; service:api*  prefix
+  //   trace_id:<hex>  span_id:<hex> exact
+  //   attr.http.status:500          log attribute equals (attr.<key>:<value>)
+  //   res.k8s.pod.name:web-1        resource attribute equals
+  //   attr.user.id:*                attribute exists
+  //   -severity:debug  NOT timeout  negation
+  //   a OR b, (a OR b) c            alternation, grouping
+  //
+  // Bad syntax is InvalidArgument naming the position. Max 1024 characters.
+  string query = 2 [(buf.validate.field).string.max_len = 1024];
+  // Quick severity filter ANDed with `query` (e.g. ["ERROR","WARN"]).
+  repeated string severities = 3 [(buf.validate.field).repeated.max_items = 10];
+  SortOrder order = 4;
+  // Rows per page. Default 100, max 1000.
+  int32 page_size = 5 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 1000];
+  // Opaque cursor from a previous response's next_page_token. Valid only with
+  // the same scope/query/order.
+  string page_token = 6;
+}
+
+message SearchLogsResponse {
+  repeated LogRecord logs = 1;
+  // Empty when there are no more rows.
+  string next_page_token = 2;
+}
+
+message LogRecord {
+  google.protobuf.Timestamp timestamp = 1;
+  string severity_text = 2;
+  int32 severity_number = 3;
+  string service = 4;
+  string body = 5;
+  string trace_id = 6;
+  string span_id = 7;
+  map<string, string> attributes = 8;
+  map<string, string> resource_attributes = 9;
+  string env_id = 10;
+  // reliant.source: "daemon" / "platform" rows exist only in tenant zero
+  // (Reliant's own org); empty for customer data.
+  string source = 11;
+  // True when source marks Reliant operator data (daemon/platform).
+  bool operator_data = 12;
+}
+
+// === Traces ===
+
+message ListTracesRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Only traces with at least one error span.
+  bool errors_only = 2;
+  // Only traces at least this long (ms).
+  double min_duration_ms = 3;
+  // Substring of the root span name.
+  string root_span_name = 4 [(buf.validate.field).string.max_len = 256];
+  repeated AttributeFilter span_attributes = 5 [(buf.validate.field).repeated.max_items = 10];
+  // Rows per page. Default 50, max 500.
+  int32 page_size = 6 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 500];
+  string page_token = 7;
+}
+
+message ListTracesResponse {
+  // Newest first.
+  repeated TraceSummary traces = 1;
+  string next_page_token = 2;
+  // RED summary of the matched traces in the range (not just this page).
+  TraceRedSummary red = 3;
+}
+
+message TraceSummary {
+  string trace_id = 1;
+  google.protobuf.Timestamp start_time = 2;
+  double duration_ms = 3;
+  string root_service = 4;
+  string root_span_name = 5;
+  int32 span_count = 6;
+  int32 error_count = 7;
+  repeated string services = 8;
+  string source = 9;
+  bool operator_data = 10;
+}
+
+// TraceRedSummary: Rate, Errors, Duration over the matched traces.
+message TraceRedSummary {
+  int64 trace_count = 1;
+  int64 error_trace_count = 2;
+  double rate_per_second = 3;
+  double error_rate = 4; // fraction of traces, 0..1
+  double p50_ms = 5;
+  double p95_ms = 6;
+  double p99_ms = 7;
+}
+
+message GetTraceRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // 32 lowercase hex characters.
+  string trace_id = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 64];
+}
+
+message GetTraceResponse {
+  string trace_id = 1;
+  // Ordered by start time.
+  repeated Span spans = 2;
+  // True when the trace has more spans than the per-trace cap (10000).
+  bool truncated = 3;
+}
+
+message Span {
+  string span_id = 1;
+  string parent_span_id = 2;
+  string name = 3;
+  string kind = 4;
+  string service = 5;
+  google.protobuf.Timestamp start_time = 6;
+  int64 duration_ns = 7;
+  string status_code = 8;
+  string status_message = 9;
+  map<string, string> attributes = 10;
+  map<string, string> resource_attributes = 11;
+  repeated SpanEvent events = 12;
+  repeated SpanLink links = 13;
+  string source = 14;
+  bool operator_data = 15;
+}
+
+message SpanEvent {
+  google.protobuf.Timestamp time = 1;
+  string name = 2;
+  map<string, string> attributes = 3;
+}
+
+message SpanLink {
+  string trace_id = 1;
+  string span_id = 2;
+}
+
+// === Metrics ===
+
+enum MetricType {
+  METRIC_TYPE_UNSPECIFIED = 0;
+  METRIC_TYPE_GAUGE = 1;
+  METRIC_TYPE_SUM = 2; // counters and up-down counters
+  METRIC_TYPE_HISTOGRAM = 3;
+}
+
+enum MetricAggregation {
+  METRIC_AGGREGATION_UNSPECIFIED = 0; // default per type: AVG gauge, RATE sum, AVG histogram
+  METRIC_AGGREGATION_AVG = 1;
+  METRIC_AGGREGATION_SUM = 2;
+  METRIC_AGGREGATION_MIN = 3;
+  METRIC_AGGREGATION_MAX = 4;
+  METRIC_AGGREGATION_COUNT = 5; // data points (gauge), observations (histogram)
+  METRIC_AGGREGATION_INCREASE = 6; // sum/histogram: growth within each step
+  METRIC_AGGREGATION_RATE = 7; // INCREASE per second
+  METRIC_AGGREGATION_P50 = 8; // histogram only
+  METRIC_AGGREGATION_P95 = 9; // histogram only
+  METRIC_AGGREGATION_P99 = 10; // histogram only
+}
+
+message ListMetricsRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Substring of the metric name.
+  string name_contains = 2 [(buf.validate.field).string.max_len = 128];
+  // Max 500 (default 200).
+  int32 limit = 3 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 500];
+}
+
+message ListMetricsResponse {
+  repeated MetricInfo metrics = 1;
+  bool truncated = 2;
+}
+
+message MetricInfo {
+  string name = 1;
+  MetricType type = 2;
+  string unit = 3;
+  string description = 4;
+}
+
+message QueryMetricRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  string metric_name = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 256];
+  // Unset: looked up from the org's data.
+  MetricType metric_type = 3;
+  MetricAggregation aggregation = 4;
+  // Data-point attribute keys to split series by; "service.name" groups by
+  // service. Max 3.
+  repeated string group_by = 5 [(buf.validate.field).repeated.max_items = 3];
+  repeated AttributeFilter filters = 6 [(buf.validate.field).repeated.max_items = 10];
+  // Bucket width. 0 = chosen from the range (about 120 points). The server
+  // raises it so a series never exceeds 1500 points; step_seconds in the
+  // response is the width used.
+  int32 step_seconds = 7 [(buf.validate.field).int32.gte = 0];
+}
+
+message QueryMetricResponse {
+  repeated MetricSeries series = 1;
+  int32 step_seconds = 2;
+  MetricType metric_type = 3;
+  string unit = 4;
+  // True when more than 50 series matched; the largest 50 are returned.
+  bool series_truncated = 5;
+}
+
+message MetricSeries {
+  // group_by key -> value for this series. Empty without group_by.
+  map<string, string> labels = 1;
+  repeated TimePoint points = 2;
+}
+
+// === Service overview ===
+
+message GetServiceOverviewRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+}
+
+message GetServiceOverviewResponse {
+  // Busiest first. A service appears if it emitted server spans, logs or
+  // metrics in the range (request figures are zero when it has no server spans).
+  repeated ServiceOverview services = 1;
+  // Width of one trend bucket.
+  int32 trend_step_seconds = 2;
+}
+
+message ServiceOverview {
+  string service = 1;
+  int64 request_count = 2;
+  double rate_per_second = 3;
+  int64 error_count = 4;
+  double error_rate = 5; // fraction, 0..1
+  double p50_ms = 6;
+  double p95_ms = 7;
+  double p99_ms = 8;
+  // Error-level log records in the range.
+  int64 error_log_count = 9;
+  // Requests per trend bucket / errors per trend bucket (same timestamps).
+  repeated TimePoint request_trend = 10;
+  repeated TimePoint error_trend = 11;
+  string source = 12;
+  bool operator_data = 13;
+}
+
+// === Profiles ===
+
+message GetFlamegraphRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+  // Exactly one service (scope.services is ignored here).
+  string service = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 256];
+  // cpu, alloc_space, inuse_space, goroutine, ...
+  string profile_type = 3 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 128];
+  // Narrow to the samples whose goroutine served this trace (raw tier, 72h).
+  string trace_id = 4 [(buf.validate.field).string.max_len = 64];
+}
+
+message GetFlamegraphResponse {
+  // speedscope file-format JSON ("sampled" profile), loadable directly in
+  // speedscope / an embedded speedscope view.
+  string speedscope_json = 1;
+  int64 total_value = 2;
+  string unit = 3;
+  int32 stack_count = 4;
+  // Profile types the service has in the range, for the type picker.
+  repeated string available_profile_types = 5;
+  // True when the stack list was cut at the cap (the heaviest stacks are kept).
+  bool truncated = 6;
+}
+
+// === Dashboards (mirror of forge internal/obsdash Spec, forge.dashboards/v1) ===
+//
+// Enum-like fields are plain strings with forge's values so the JSON of
+// deploy/observability/dashboard-spec_gen.json unmarshals into these messages
+// as-is (protojson, camelCase names).
+
+message GetDashboardsRequest {
+  QueryScope scope = 1 [(buf.validate.field).required = true];
+}
+
+message GetDashboardsResponse {
+  DashboardSpec spec = 1;
+  // "synthesized": built from the services seen in the data (phase 1).
+  // "release": the environment's own generated spec.
+  string source = 2;
+}
+
+message DashboardSpec {
+  string version = 1;
+  string project = 2;
+  repeated Dashboard dashboards = 3;
+  repeated SavedSearch saved_searches = 4;
+  repeated DashboardAlert alerts = 5;
+}
+
+message Dashboard {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  repeated DashboardFilter filters = 4;
+  repeated Panel panels = 5;
+}
+
+message DashboardFilter {
+  string id = 1;
+  string label = 2;
+  string field = 3;
+}
+
+message Panel {
+  string id = 1;
+  string title = 2;
+  string description = 3;
+  // number | line | table | search
+  string kind = 4;
+  // traces | metrics | logs
+  string signal = 5;
+  repeated PanelSeries series = 6;
+  bool ratio = 7;
+  repeated PanelPredicate where = 8;
+  repeated string group_by = 9;
+  repeated string columns = 10;
+  // "" | count | ms | bytes | percent
+  string unit = 11;
+  int32 width = 12;
+  int32 height = 13;
+}
+
+message PanelSeries {
+  string label = 1;
+  // count | count_distinct | sum | avg | max | quantile | last
+  string agg = 2;
+  double quantile = 3;
+  string field = 4;
+  string metric_type = 5;
+  repeated PanelPredicate where = 6;
+}
+
+message PanelPredicate {
+  string field = 1;
+  // eq | neq | in | not_in | prefix | match | exists | gte
+  string op = 2;
+  string value = 3;
+  repeated string values = 4;
+}
+
+message SavedSearch {
+  string id = 1;
+  string title = 2;
+  string signal = 3;
+  repeated PanelPredicate where = 4;
+  repeated string columns = 5;
+  // SearchLogs query string equivalent of `where`, when signal is logs.
+  string query = 6;
+}
+
+message DashboardAlert {
+  string id = 1;
+  string title = 2;
+  // "<dashboard id>/<panel id>"
+  string panel = 3;
+  string interval = 4;
+  string threshold_type = 5;
+  double threshold = 6;
+  string status = 7;
+  string note = 8;
+}

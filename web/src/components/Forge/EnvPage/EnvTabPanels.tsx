@@ -11,7 +11,7 @@
  * hand-rolled copies of the same heading-and-rule.
  */
 
-import { useState, type ReactNode } from "react";
+import { lazy, Suspense, useState, type ReactNode } from "react";
 import { Play, RefreshCw, Rocket } from "lucide-react";
 
 import Card, { CardHeader } from "@/components/forge-ui/card";
@@ -28,6 +28,7 @@ import { declaredNotBuilt, isPlacedKind, neverBuilt, type LiveConvergence, type 
 import { devStackRunsHere, type DaemonSide } from "@/services/forge/environments";
 import type { ForgeEnvStatusReport } from "@/services/forge/status";
 import type { ForgeOutcome, ForgeTopologyEnv } from "@/services/forge/topology";
+import { isChunkLoadError, staleChunkModule } from "@/lib/lazyRoute";
 
 import { AuditStrip } from "../Audit/AuditStrip";
 import { WorkloadInventory } from "../Environments/WorkloadInventory";
@@ -43,6 +44,18 @@ import { LiveReleases } from "./LiveReleases";
 import { LiveSecretsSection } from "./LiveSecretsSection";
 import { LiveState } from "./LiveState";
 import { LiveWorkloads } from "./LiveWorkloads";
+import type { ObsNavigate, ObsSearch } from "../Observability/obsSearch";
+
+// The whole Observability area — uPlot, TanStack Table, the waterfall, every
+// view — is its own chunk, fetched the first time the tab opens. A chunk gone
+// after a deploy resolves to lazyRoute's reload-once screen, never a reload
+// from inside render.
+const ObservabilityPanel = lazy(() =>
+  import("../Observability/ObservabilityPanel").catch((error: unknown) => {
+    if (!isChunkLoadError(error)) throw error;
+    return staleChunkModule(error, "default") as unknown as typeof import("../Observability/ObservabilityPanel");
+  })
+);
 
 /** A titled section. */
 export function Panel({
@@ -74,6 +87,44 @@ function PanelSkeleton({ testId, rows = 3 }: { testId: string; rows?: number }) 
     <Card padding="md" data-testid={testId} aria-busy="true">
       <SkeletonLoader variant="list-item" count={rows} />
     </Card>
+  );
+}
+
+// ── Observability (control plane) ───────────────────────────────────────────
+
+export function ObservabilityTab({
+  envName,
+  live,
+  liveLoading,
+  search,
+  navigate,
+}: {
+  envName: string;
+  live: LiveEnv | null;
+  liveLoading: boolean;
+  search: ObsSearch;
+  navigate: ObsNavigate;
+}) {
+  if (liveLoading && !live) return <PanelSkeleton testId="obs-tab-loading" rows={4} />;
+  // Telemetry is filed under the control plane's environment id (the env_id
+  // its telemetry token carries), so an environment it has no record of has
+  // nothing filed under it yet.
+  if (!live) {
+    return (
+      <p
+        data-testid="obs-unregistered"
+        className="rounded-lg border border-dashed border-border bg-background px-4 py-5 text-sm text-muted-foreground"
+      >
+        Reliant has no record of <span className="font-mono text-foreground">{envName}</span>, so no telemetry is
+        filed under it. Register it from the Overview tab; once it is deployed through Reliant, its logs, traces and
+        metrics appear here.
+      </p>
+    );
+  }
+  return (
+    <Suspense fallback={<PanelSkeleton testId="obs-tab-loading" rows={4} />}>
+      <ObservabilityPanel environmentId={live.id} envName={envName} search={search} navigate={navigate} />
+    </Suspense>
   );
 }
 

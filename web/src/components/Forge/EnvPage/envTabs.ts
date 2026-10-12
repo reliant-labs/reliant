@@ -10,7 +10,8 @@
  *
  * The boundary still holds — per TAB:
  *
- *   overview  releases  activity
+ *   overview  observability
+ *   releases  activity
  *   secrets   domains               the control plane only. Render with the
  *                                   daemon asleep, from any browser.
  *   running                         the dev stack `forge env up` runs on the
@@ -23,6 +24,11 @@
  * in one list, the observations pushed the releases apart and a burst of them
  * buried the history a reader opened the tab for.
  *
+ * OBSERVABILITY sits beside Overview because it answers the next question
+ * ("it's deployed — is it healthy?"). A local environment has none: `forge env
+ * up` runs its own ClickStack on the developer's machine, and the hosted store
+ * this tab reads only receives telemetry from deployed environments.
+ *
  * A LOCAL environment has no releases (it runs the working tree) and leads
  * with what is running. An environment the control plane has no record of
  * leads with Overview, which is where Register lives.
@@ -32,6 +38,7 @@ import type { EnvLifecycle } from "@/services/forge/roster";
 
 export type EnvTab =
   | "overview"
+  | "observability"
   | "running"
   | "releases"
   | "activity"
@@ -49,6 +56,7 @@ export interface EnvTabSpec {
 
 const SPECS: Record<EnvTab, EnvTabSpec> = {
   overview: { id: "overview", label: "Overview", needsDaemon: false },
+  observability: { id: "observability", label: "Observability", needsDaemon: false },
   running: { id: "running", label: "Running", needsDaemon: true },
   releases: { id: "releases", label: "Releases", needsDaemon: false },
   activity: { id: "activity", label: "Activity", needsDaemon: false },
@@ -62,7 +70,7 @@ export function tabsFor(lifecycle: EnvLifecycle): EnvTabSpec[] {
   const ids: EnvTab[] =
     lifecycle === "local"
       ? ["running", "secrets", "changes", "checks"]
-      : ["overview", "releases", "activity", "secrets", "domains", "changes", "checks"];
+      : ["overview", "observability", "releases", "activity", "secrets", "domains", "changes", "checks"];
   return ids.map((id) => SPECS[id]);
 }
 

@@ -539,7 +539,7 @@ describe("tab routing", () => {
     expect(screen.getByTestId("env-tab-overview")).toHaveAttribute("aria-selected", "true");
   });
 
-  it.each(["releases", "activity", "secrets", "domains"])("selects the %s tab from the URL", async (tab) => {
+  it.each(["observability", "releases", "activity", "secrets", "domains"])("selects the %s tab from the URL", async (tab) => {
     routeState.env = "prod";
     routeState.tab = tab;
     renderWithQuery(<ForgeEnvPage />);
@@ -567,6 +567,22 @@ describe("tab routing", () => {
       search: (prev: Record<string, unknown>) => Record<string, unknown>;
     };
     expect(back.search({ project: "proj-1", tab: "activity" })).toEqual({ project: "proj-1", tab: undefined });
+  });
+
+  it("drops the Observability tab's filters from the URL on leaving it", async () => {
+    routeState.env = "prod";
+    routeState.tab = "observability";
+    const user = userEvent.setup();
+    renderWithQuery(<ForgeEnvPage />);
+    await waitFor(() => expect(screen.getByTestId("forge-env-page")).toHaveAttribute("data-tab", "observability"));
+
+    await user.click(screen.getByTestId("env-tab-secrets"));
+    const call = navigate.mock.calls.at(-1)?.[0] as {
+      search: (prev: Record<string, unknown>) => Record<string, unknown>;
+    };
+    expect(
+      call.search({ project: "proj-1", tab: "observability", view: "logs", q: "timeout", range: "6h", trace: "abc" })
+    ).toEqual({ project: "proj-1", tab: "secrets" });
   });
 
   it("follows the URL when it moves after a click (Back/Forward)", async () => {

@@ -1,0 +1,55 @@
+// Copyright (c) 2025 Reliant Labs
+
+/**
+ * What an observability failure MEANS to the reader, which is not what its
+ * Connect code says.
+ *
+ *   not-set-up   FailedPrecondition. The org has no tenant on the observability
+ *                stack yet (control-plane provisions one per org). Nothing is
+ *                broken and retrying will not help; the page explains it.
+ *   denied       PermissionDenied / Unauthenticated. The caller may not read
+ *                this environment's telemetry.
+ *   invalid      InvalidArgument. Almost always the free-text query — the
+ *                server's parse error is the message worth showing, next to
+ *                the box that caused it.
+ *   too-broad    ResourceExhausted / DeadlineExceeded. The tenant's ClickHouse
+ *                quota or execution limit stopped the query; a narrower window
+ *                usually fixes it.
+ *   unavailable  everything else: the stack is down, a network blip.
+ */
+
+import { Code, ConnectError } from "@connectrpc/connect";
+
+export type ObsErrorKind = "not-set-up" | "denied" | "invalid" | "too-broad" | "unavailable";
+
+export function obsErrorKind(error: unknown): ObsErrorKind {
+  if (!(error instanceof ConnectError)) return "unavailable";
+  switch (error.code) {
+    case Code.FailedPrecondition:
+      return "not-set-up";
+    case Code.PermissionDenied:
+    case Code.Unauthenticated:
+      return "denied";
+    case Code.InvalidArgument:
+      return "invalid";
+    case Code.ResourceExhausted:
+    case Code.DeadlineExceeded:
+      return "too-broad";
+    default:
+      return "unavailable";
+  }
+}
+
+/** The server's own words, without Connect's `[code]` prefix. */
+export function obsErrorMessage(error: unknown): string {
+  if (error instanceof ConnectError) return error.rawMessage || error.message.replace(/^\[[^\]]+\]\s*/, "");
+  if (error instanceof Error) return error.message;
+  return "";
+}
+
+/** A not-set-up answer is a fact about the org, not a fault: never retry it, nor any other answer the server gave on purpose. */
+export function obsRetry(failureCount: number, error: unknown): boolean {
+  const kind = obsErrorKind(error);
+  if (kind !== "unavailable") return false;
+  return failureCount < 1;
+}

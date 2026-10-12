@@ -59,6 +59,7 @@ import { environments } from "@/services/forge/topology";
 import { useProjectStore, type Project } from "@/store/projectStore";
 
 import { DeployDialog } from "../Deploy/DeployDialog";
+import { OBS_SEARCH_KEYS, type ObsNavigate } from "../Observability/obsSearch";
 import { forgeScopeOf } from "../forgeScope";
 import { PromoteDialog } from "../Promote/PromoteDialog";
 import { CloudNotice } from "../SourceNotices";
@@ -71,6 +72,7 @@ import {
   ChangesTab,
   ChecksTab,
   DomainsTab,
+  ObservabilityTab,
   OverviewTab,
   ReleasesTab,
   RunningTab,
@@ -86,6 +88,7 @@ export function ForgeEnvPage() {
     forgeProject: forgeProjectParam,
     secret: secretParam,
     tab: tabSearch,
+    ...obsSearch
   } = useSearch({ from: "/_authenticated/_forge/forge/env/$env" });
   const currentProject = useProjectStore((state) => state.currentProject);
   // A control-plane link can name the FORGE project with no Reliant project
@@ -184,10 +187,28 @@ export function ForgeEnvPage() {
       setClicked({ tab: next, fromUrl: tabSearch });
       void navigate({
         to: ".",
-        search: (prev: Record<string, unknown>) => ({ ...prev, tab: tabParam(next, lifecycle) }),
+        search: (prev: Record<string, unknown>) => {
+          const kept: Record<string, unknown> = { ...prev, tab: tabParam(next, lifecycle) };
+          if (next !== "observability") for (const key of OBS_SEARCH_KEYS) delete kept[key];
+          return kept;
+        },
       });
     },
     [navigate, lifecycle, tabSearch]
+  );
+
+  // The Observability tab's own URL keys (obsSearch.ts), merged over the rest.
+  // Filter changes replace the entry; opening a trace or switching view pushes
+  // one, so Back returns to the list the reader came from.
+  const navigateObs = useCallback<ObsNavigate>(
+    (next, options) => {
+      void navigate({
+        to: ".",
+        search: (prev: Record<string, unknown>) => ({ ...prev, ...next }),
+        replace: options?.replace,
+      });
+    },
+    [navigate]
   );
 
   const openDomainsScreen = useCallback(() => {
@@ -346,6 +367,14 @@ export function ForgeEnvPage() {
             domainsLoading={domains.isLoading}
             onOpenDomains={() => selectTab("domains")}
             onManageDomains={openDomainsScreen}
+          />
+        ) : tab === "observability" ? (
+          <ObservabilityTab
+            envName={envName}
+            live={liveEnv}
+            liveLoading={live.isLoading}
+            search={obsSearch}
+            navigate={navigateObs}
           />
         ) : tab === "running" ? (
           <RunningTab

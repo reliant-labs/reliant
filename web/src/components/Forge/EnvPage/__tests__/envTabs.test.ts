@@ -16,6 +16,7 @@ describe("an environment page's tabs", () => {
     expect(defaultTab("deployed")).toBe("overview");
     expect(tabsFor("deployed").map((tab) => tab.id)).toEqual([
       "overview",
+      "observability",
       "releases",
       "activity",
       "secrets",
@@ -29,6 +30,7 @@ describe("an environment page's tabs", () => {
     const needs = Object.fromEntries(tabsFor("deployed").map((tab) => [tab.id, tab.needsDaemon]));
     expect(needs).toEqual({
       overview: false,
+      observability: false,
       releases: false,
       activity: false,
       secrets: false,
@@ -46,6 +48,8 @@ describe("an environment page's tabs", () => {
 
   it("falls back to the default for a tab this env does not have", () => {
     expect(resolveTab("running", "deployed")).toBe("overview");
+    // The hosted telemetry store only hears from deployed environments.
+    expect(resolveTab("observability", "local")).toBe("running");
     expect(resolveTab("releases", "local")).toBe("running");
     expect(resolveTab("nonsense", "deployed")).toBe("overview");
   });

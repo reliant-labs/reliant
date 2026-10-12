@@ -4,6 +4,7 @@ import path from "path";
 import { browserLogSink } from "./vite-plugin-browser-logs";
 import { versionJson } from "./vite-plugin-version-json";
 import { cspPlugin } from "./vite-plugin-csp";
+import { speedscopeStatic } from "./vite-plugin-speedscope";
 
 // Get worktree name from parent directory
 // When Vite runs, cwd is the 'web' directory, so we need to go up one level
@@ -33,7 +34,10 @@ export default defineConfig({
   // Firebase-hosted SPA and the packaged app:// renderer. forge's
   // FirebaseHosting schema has no `headers` field, so a response header is not
   // expressible; see vite-plugin-csp.ts.
-  plugins: [react(), browserLogSink(), versionJson(), cspPlugin()],
+  // speedscopeStatic serves speedscope's prebuilt viewer at /speedscope/ (dev)
+  // and copies it into the build — the Profiles view iframes it, so none of it
+  // enters the JS bundle. See vite-plugin-speedscope.ts.
+  plugins: [react(), browserLogSink(), versionJson(), cspPlugin(), speedscopeStatic()],
   // Load .env files from project root instead of web directory
   envDir: path.resolve(__dirname, ".."),
   // Define global constants available in the app
