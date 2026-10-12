@@ -167,7 +167,10 @@ enum SortOrder {
 message AttributeFilter {
   // Attribute key, e.g. "http.route". Resolved against the signal's own
   // attributes, then the resource's.
-  string key = 1 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 128];
+  string key = 1 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
   AttributeOp op = 2;
   string value = 3;
 }
@@ -209,7 +212,10 @@ message SearchLogsRequest {
   repeated string severities = 3 [(buf.validate.field).repeated.max_items = 10];
   SortOrder order = 4;
   // Rows per page. Default 100, max 1000.
-  int32 page_size = 5 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 1000];
+  int32 page_size = 5 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 1000
+  ];
   // Opaque cursor from a previous response's next_page_token. Valid only with
   // the same scope/query/order.
   string page_token = 6;
@@ -251,7 +257,10 @@ message ListTracesRequest {
   optional string root_span_name = 4 [(buf.validate.field).string.max_len = 256];
   repeated AttributeFilter span_attributes = 5 [(buf.validate.field).repeated.max_items = 10];
   // Rows per page. Default 50, max 500.
-  int32 page_size = 6 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 500];
+  int32 page_size = 6 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 500
+  ];
   string page_token = 7;
 }
 
@@ -292,7 +301,10 @@ message TraceRedSummary {
 message GetTraceRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
   // 32 lowercase hex characters.
-  string trace_id = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 64];
+  string trace_id = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 64
+  ];
 }
 
 message GetTraceResponse {
@@ -360,7 +372,10 @@ message ListMetricsRequest {
   // Substring of the metric name.
   optional string name_contains = 2 [(buf.validate.field).string.max_len = 128];
   // Max 500 (default 200).
-  int32 limit = 3 [(buf.validate.field).int32.gte = 0, (buf.validate.field).int32.lte = 500];
+  int32 limit = 3 [
+    (buf.validate.field).int32.gte = 0,
+    (buf.validate.field).int32.lte = 500
+  ];
 }
 
 message ListMetricsResponse {
@@ -377,7 +392,10 @@ message MetricInfo {
 
 message QueryMetricRequest {
   QueryScope scope = 1 [(buf.validate.field).required = true];
-  string metric_name = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 256];
+  string metric_name = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
   // Unset: looked up from the org's data.
   MetricType metric_type = 3;
   // Gauge and sum: each series is first reduced to its last value in the
@@ -453,9 +471,15 @@ message GetFlamegraphRequest {
   // Exactly one service (scope.services is ignored here). scope.env_id is
   // not applied either: profile aggregates are keyed by the forge environment
   // NAME, not the Reliant environment id.
-  string service = 2 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 256];
+  string service = 2 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 256
+  ];
   // cpu, alloc_space, inuse_space, goroutine, ...
-  string profile_type = 3 [(buf.validate.field).string.min_len = 1, (buf.validate.field).string.max_len = 128];
+  string profile_type = 3 [
+    (buf.validate.field).string.min_len = 1,
+    (buf.validate.field).string.max_len = 128
+  ];
   // Narrow to the samples whose goroutine served this trace (raw tier, 72h).
   string trace_id = 4 [(buf.validate.field).string.max_len = 64];
 }
