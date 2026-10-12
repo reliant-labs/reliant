@@ -109,7 +109,20 @@ type Publisher struct {
 
 // EnsureStream creates or updates the DAEMON_EVENTS JetStream stream.
 // Uses file storage with 7-day retention so a downed consumer can catch up.
+//
+// It KEEPS the replica count the stream already has. CreateOrUpdateStream reads
+// an unset Replicas as 1, so a bare re-assert at every gateway boot would drop a
+// stream a clustered NATS runs at 3 back to 1 on the next rollout, silently.
+// The operator that owns the cluster (control-plane's natsio.EnsureStreams,
+// NATS_STREAM_REPLICAS) decides the count; a stream this creates first, before
+// that owner has, starts at 1 and is raised by it.
 func EnsureStream(ctx context.Context, js jetstream.JetStream) error {
+	replicas := 1
+	if existing, err := js.Stream(ctx, StreamDaemonEvents); err == nil {
+		if info, ierr := existing.Info(ctx); ierr == nil && info.Config.Replicas > 0 {
+			replicas = info.Config.Replicas
+		}
+	}
 	_, err := js.CreateOrUpdateStream(ctx, jetstream.StreamConfig{
 		Name:      StreamDaemonEvents,
 		Subjects:  []string{SubjectDaemonEventsAll},
@@ -117,6 +130,7 @@ func EnsureStream(ctx context.Context, js jetstream.JetStream) error {
 		Storage:   jetstream.FileStorage,
 		MaxAge:    7 * 24 * time.Hour,
 		MaxMsgs:   1000000,
+		Replicas:  replicas,
 	})
 	if err != nil {
 		return fmt.Errorf("create/update %s: %w", StreamDaemonEvents, err)

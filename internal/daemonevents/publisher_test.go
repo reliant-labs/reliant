@@ -141,3 +141,47 @@ func TestPublisher_OnDaemonConnected_NoInfoStillPublishes(t *testing.T) {
 	require.Equal(t, "daemon-1", evt.Name)
 	require.Empty(t, evt.Hostname)
 }
+
+// replicaJetStream is a JetStream that holds one stream config and records what
+// EnsureStream asks it to become.
+type replicaJetStream struct {
+	jetstream.JetStream
+	existing *jetstream.StreamConfig
+	updated  jetstream.StreamConfig
+}
+
+type replicaStream struct {
+	jetstream.Stream
+	cfg jetstream.StreamConfig
+}
+
+func (s replicaStream) Info(context.Context, ...jetstream.StreamInfoOpt) (*jetstream.StreamInfo, error) {
+	return &jetstream.StreamInfo{Config: s.cfg}, nil
+}
+
+func (r *replicaJetStream) Stream(context.Context, string) (jetstream.Stream, error) {
+	if r.existing == nil {
+		return nil, jetstream.ErrStreamNotFound
+	}
+	return replicaStream{cfg: *r.existing}, nil
+}
+
+func (r *replicaJetStream) CreateOrUpdateStream(_ context.Context, cfg jetstream.StreamConfig) (jetstream.Stream, error) {
+	r.updated = cfg
+	return nil, nil
+}
+
+// A clustered NATS runs this stream at 3. A bare re-assert at each gateway boot
+// would send Replicas 0 (= 1) and silently undo it at the next rollout.
+func TestEnsureStreamKeepsTheExistingReplicaCount(t *testing.T) {
+	r := &replicaJetStream{existing: &jetstream.StreamConfig{Name: StreamDaemonEvents, Replicas: 3}}
+	require.NoError(t, EnsureStream(context.Background(), r))
+	require.Equal(t, 3, r.updated.Replicas)
+}
+
+func TestEnsureStreamCreatesAtOneReplicaWhenAbsent(t *testing.T) {
+	r := &replicaJetStream{}
+	require.NoError(t, EnsureStream(context.Background(), r))
+	require.Equal(t, 1, r.updated.Replicas)
+	require.Equal(t, StreamDaemonEvents, r.updated.Name)
+}
