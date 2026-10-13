@@ -1,4 +1,10 @@
 // Copyright (c) 2025 Reliant Labs
+
+// Package workersetup registers reliant's Temporal workflows and activities
+// on a worker and starts it (StartWorker), for the api-server and the
+// temporal-worker alike.
+//
+//forge:exclude-contract: Temporal worker composition (workflow/activity registration over injected collaborators) shared by reliant's hand-wired server mains; it wires services rather than being one, and becomes a supervised forge worker in P3c (research/forge-migration/PLAN.md)
 package workersetup
 
 import (
