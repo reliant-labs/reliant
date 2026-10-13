@@ -55,6 +55,23 @@ message ReliantConfig {
   option (forge.v1.binary_config) = {binary: "reliant"};
 
   LogConfig log = 1;
+  RuntimeConfig runtime = 2;
+}
+
+// RuntimeConfig is where the process is running. The entrypoint hands it to
+// internal/runenv once at boot; every tier decision asks runenv.
+message RuntimeConfig {
+  // The environment tier, as the operator spelled it: dev, development,
+  // local or e2e is dev; test or testing is test; ANYTHING else, unset
+  // included, is prod (internal/runenv.Parse fails closed). NODE_ENV is read
+  // when RELIANT_ENV is unset: it is Node's convention, which the desktop app
+  // and every dev shell already export, so it is a permanent name, not one
+  // being retired.
+  string environment = 1 [(forge.v1.config) = {
+    env_var: "RELIANT_ENV"
+    env_var_aliases: [{name: "NODE_ENV"}]
+    description: "Environment tier: dev, test or prod (unset or unrecognised is prod)"
+  }];
 }
 
 // LogConfig is how a process's logger is built. Both fields carry the value

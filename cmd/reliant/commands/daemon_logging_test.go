@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runenv"
 )
 
 // A quiet foreground daemon must still write EVERYTHING to the log file.
@@ -111,6 +112,7 @@ func TestSetupToolsDaemonLoggingManagedWritesJSONToStdout(t *testing.T) {
 // the root config's log settings, loaded from this process's environment.
 func loadedLogSettings(t *testing.T) logging.Settings {
 	t.Helper()
+	runenv.ConfigureForTest(t, "") // loadRootConfig sets the tier; undo it after t
 	cmd, _, err := NewRootCmd().Find([]string{"daemon", "start"})
 	if err != nil {
 		t.Fatal(err)

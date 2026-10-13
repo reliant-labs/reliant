@@ -27,6 +27,7 @@ const (
 type ReliantConfig struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Log           *LogConfig             `protobuf:"bytes,1,opt,name=log,proto3" json:"log,omitempty"`
+	Runtime       *RuntimeConfig         `protobuf:"bytes,2,opt,name=runtime,proto3" json:"runtime,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -68,6 +69,65 @@ func (x *ReliantConfig) GetLog() *LogConfig {
 	return nil
 }
 
+func (x *ReliantConfig) GetRuntime() *RuntimeConfig {
+	if x != nil {
+		return x.Runtime
+	}
+	return nil
+}
+
+// RuntimeConfig is where the process is running. The entrypoint hands it to
+// internal/runenv once at boot; every tier decision asks runenv.
+type RuntimeConfig struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// The environment tier, as the operator spelled it: dev, development,
+	// local or e2e is dev; test or testing is test; ANYTHING else, unset
+	// included, is prod (internal/runenv.Parse fails closed). NODE_ENV is read
+	// when RELIANT_ENV is unset: it is Node's convention, which the desktop app
+	// and every dev shell already export, so it is a permanent name, not one
+	// being retired.
+	Environment   string `protobuf:"bytes,1,opt,name=environment,proto3" json:"environment,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *RuntimeConfig) Reset() {
+	*x = RuntimeConfig{}
+	mi := &file_config_v1_config_proto_msgTypes[1]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *RuntimeConfig) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RuntimeConfig) ProtoMessage() {}
+
+func (x *RuntimeConfig) ProtoReflect() protoreflect.Message {
+	mi := &file_config_v1_config_proto_msgTypes[1]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RuntimeConfig.ProtoReflect.Descriptor instead.
+func (*RuntimeConfig) Descriptor() ([]byte, []int) {
+	return file_config_v1_config_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *RuntimeConfig) GetEnvironment() string {
+	if x != nil {
+		return x.Environment
+	}
+	return ""
+}
+
 // LogConfig is how a process's logger is built. Both fields carry the value
 // exactly as the operator spelled it; internal/logging parses it (any case,
 // surrounding space ignored) and warns, once its logger exists, about a value
@@ -86,7 +146,7 @@ type LogConfig struct {
 
 func (x *LogConfig) Reset() {
 	*x = LogConfig{}
-	mi := &file_config_v1_config_proto_msgTypes[1]
+	mi := &file_config_v1_config_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -98,7 +158,7 @@ func (x *LogConfig) String() string {
 func (*LogConfig) ProtoMessage() {}
 
 func (x *LogConfig) ProtoReflect() protoreflect.Message {
-	mi := &file_config_v1_config_proto_msgTypes[1]
+	mi := &file_config_v1_config_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -111,7 +171,7 @@ func (x *LogConfig) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use LogConfig.ProtoReflect.Descriptor instead.
 func (*LogConfig) Descriptor() ([]byte, []int) {
-	return file_config_v1_config_proto_rawDescGZIP(), []int{1}
+	return file_config_v1_config_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *LogConfig) GetLevel() string {
@@ -132,10 +192,16 @@ var File_config_v1_config_proto protoreflect.FileDescriptor
 
 const file_config_v1_config_proto_rawDesc = "" +
 	"\n" +
-	"\x16config/v1/config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"F\n" +
+	"\x16config/v1/config.proto\x12\tconfig.v1\x1a\x14forge/v1/forge.proto\"z\n" +
 	"\rReliantConfig\x12&\n" +
-	"\x03log\x18\x01 \x01(\v2\x14.config.v1.LogConfigR\x03log:\r\xca\xc1\x18\t\n" +
-	"\areliant\"\xf9\x01\n" +
+	"\x03log\x18\x01 \x01(\v2\x14.config.v1.LogConfigR\x03log\x122\n" +
+	"\aruntime\x18\x02 \x01(\v2\x18.config.v1.RuntimeConfigR\aruntime:\r\xca\xc1\x18\t\n" +
+	"\areliant\"\x96\x01\n" +
+	"\rRuntimeConfig\x12\x84\x01\n" +
+	"\venvironment\x18\x01 \x01(\tBb\x82\xce\x18^\n" +
+	"\vRELIANT_ENV*CEnvironment tier: dev, test or prod (unset or unrecognised is prod)Z\n" +
+	"\n" +
+	"\bNODE_ENVR\venvironment\"\xf9\x01\n" +
 	"\tLogConfig\x12n\n" +
 	"\x05level\x18\x01 \x01(\tBX\x82\xce\x18T\n" +
 	"\x11RELIANT_LOG_LEVEL\x12\tlog-level*4Log level: debug, info, warn or error (default info)R\x05level\x12|\n" +
@@ -156,18 +222,20 @@ func file_config_v1_config_proto_rawDescGZIP() []byte {
 	return file_config_v1_config_proto_rawDescData
 }
 
-var file_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_config_v1_config_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_config_v1_config_proto_goTypes = []any{
 	(*ReliantConfig)(nil), // 0: config.v1.ReliantConfig
-	(*LogConfig)(nil),     // 1: config.v1.LogConfig
+	(*RuntimeConfig)(nil), // 1: config.v1.RuntimeConfig
+	(*LogConfig)(nil),     // 2: config.v1.LogConfig
 }
 var file_config_v1_config_proto_depIdxs = []int32{
-	1, // 0: config.v1.ReliantConfig.log:type_name -> config.v1.LogConfig
-	1, // [1:1] is the sub-list for method output_type
-	1, // [1:1] is the sub-list for method input_type
-	1, // [1:1] is the sub-list for extension type_name
-	1, // [1:1] is the sub-list for extension extendee
-	0, // [0:1] is the sub-list for field type_name
+	2, // 0: config.v1.ReliantConfig.log:type_name -> config.v1.LogConfig
+	1, // 1: config.v1.ReliantConfig.runtime:type_name -> config.v1.RuntimeConfig
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_config_v1_config_proto_init() }
@@ -181,7 +249,7 @@ func file_config_v1_config_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_config_v1_config_proto_rawDesc), len(file_config_v1_config_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

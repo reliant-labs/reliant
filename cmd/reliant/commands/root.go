@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runenv"
 	"github.com/reliant-labs/reliant/pkg/config"
 )
 
@@ -70,8 +71,18 @@ func Execute() error {
 // ReliantConfig) for the process cmd runs. Every process that reads it — the
 // servers and the daemon — calls this first thing in its RunE, before it
 // builds anything from the config.
+//
+// It also records the process's environment tier in internal/runenv, which
+// the log level, telemetry, analytics and feature flags all ask: they sit far
+// below the entrypoint, and must agree, so the tier is set once here rather
+// than threaded to each of them.
 func loadRootConfig(cmd *cobra.Command) (*config.ReliantConfig, error) {
-	return config.LoadReliantConfig(cmd)
+	cfg, err := config.LoadReliantConfig(cmd)
+	if err != nil {
+		return nil, err
+	}
+	runenv.Configure(cfg.GetRuntime().GetEnvironment())
+	return cfg, nil
 }
 
 // logSettings is the root config's logger configuration, in the shape

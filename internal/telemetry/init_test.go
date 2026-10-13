@@ -4,6 +4,8 @@ package telemetry
 import (
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/runenv"
+
 	"github.com/getsentry/sentry-go"
 )
 
@@ -57,8 +59,7 @@ func TestNewReporterFromEnv(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			t.Setenv("RELIANT_ENV", tt.reliantEnv)
-			t.Setenv("NODE_ENV", "")
+			runenv.ConfigureForTest(t, tt.reliantEnv)
 			t.Setenv("SENTRY_DSN", tt.sentryDSN)
 			t.Setenv("SENTRY_ENABLED", tt.sentryEnable)
 
@@ -77,8 +78,7 @@ func TestNewReporterFromEnv(t *testing.T) {
 // reporter ignored it and guessed from the version string, so the deploy could
 // not say which environment its events belong to.
 func TestNewReporterFromEnv_EnvironmentFromDeploy(t *testing.T) {
-	t.Setenv("RELIANT_ENV", "prod")
-	t.Setenv("NODE_ENV", "")
+	runenv.ConfigureForTest(t, "prod")
 	t.Setenv("SENTRY_DSN", "https://public@example.ingest.sentry.io/1")
 	t.Setenv("SENTRY_ENABLED", "")
 

@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/runenv"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -156,7 +158,7 @@ func TestFlush_RejectedKeyStopsSendingAndWarnsOnce(t *testing.T) {
 // at startup and never contacts Statsig.
 func TestNewClientFromSettings_WithoutAKeySendsNothing(t *testing.T) {
 	logs := captureAnalyticsLogs(t)
-	t.Setenv("RELIANT_ENV", "prod")
+	runenv.ConfigureForTest(t, "prod")
 	t.Setenv("RELIANT_ANALYTICS_DISABLED", "")
 	t.Setenv("STATSIG_CLIENT_KEY", "")
 	t.Setenv("RELIANT_APP_DATA_DIR", "")

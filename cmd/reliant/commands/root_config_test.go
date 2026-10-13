@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/reliant-labs/reliant/internal/logging"
+	"github.com/reliant-labs/reliant/internal/runenv"
 )
 
 // rootConfigProcesses are the commands that load the root config
@@ -80,6 +81,7 @@ func TestRootConfigEnvContract(t *testing.T) {
 		for _, tc := range cases {
 			t.Run(strings.Join(process, " ")+"/"+tc.name, func(t *testing.T) {
 				// Dev, so DEBUG is reachable and the level is the one asked for.
+				// The root config load below hands it to runenv.
 				t.Setenv("RELIANT_ENV", "dev")
 				t.Setenv("NODE_ENV", "")
 				for _, name := range rootConfigEnv {
@@ -112,6 +114,7 @@ func TestRootConfigEnvContract(t *testing.T) {
 // parsing args, and returns the logger settings it hands internal/logging.
 func loadLogSettings(t *testing.T, process []string, args ...string) logging.Settings {
 	t.Helper()
+	runenv.ConfigureForTest(t, "") // loadRootConfig sets the tier; undo it after t
 	cmd, _, err := NewRootCmd().Find(process)
 	require.NoError(t, err)
 	require.NoError(t, cmd.ParseFlags(args))

@@ -57,7 +57,7 @@ func TestProxyPreviewURL(t *testing.T) {
 }
 
 func TestPreviewURLsForProcess(t *testing.T) {
-	t.Setenv("RELIANT_ENV", "dev")
+	runenv.ConfigureForTest(t, "dev")
 	t.Setenv("PROXY_HOST", "")
 
 	// Remote daemon, dev-server on 0.0.0.0 → proxied preview line.

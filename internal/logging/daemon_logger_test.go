@@ -12,20 +12,20 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/runenv"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/trace"
 )
 
 // isolateDaemonLogging is isolateLogging plus the daemon-only globals, and a
-// clean slate for every variable SetupDaemon reads (the level and format reach
-// it through Settings).
+// clean slate for everything SetupDaemon reads: the level and format reach it
+// through Settings, the tier through runenv (prod until a test says otherwise).
 func isolateDaemonLogging(t *testing.T) {
 	t.Helper()
 	isolateLogging(t)
-	for _, name := range []string{"RELIANT_ENV", "NODE_ENV"} {
-		t.Setenv(name, "")
-	}
+	runenv.ConfigureForTest(t, "")
 	prevFields := daemonFields.Load()
 	prevNotices := notices.Load()
 	prevLevel := levelVar.Level()
@@ -94,8 +94,12 @@ func TestDaemonLogLevel(t *testing.T) {
 			isolateDaemonLogging(t)
 			var s Settings
 			for k, v := range tc.env {
-				if k == logLevelEnv {
+				switch k {
+				case logLevelEnv:
 					s.Level = v // reaches the logger through the loaded config
+					continue
+				case "RELIANT_ENV":
+					runenv.ConfigureForTest(t, v) // so does the tier
 					continue
 				}
 				t.Setenv(k, v)

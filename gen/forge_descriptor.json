@@ -33739,11 +33739,52 @@
           "Category": "",
           "MessageType": "LogConfig",
           "ProtoFile": "config/v1/config.proto"
+        },
+        {
+          "Name": "runtime",
+          "GoName": "Runtime",
+          "GoType": "",
+          "ProtoType": "message",
+          "EnvVar": "",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "",
+          "Sensitive": false,
+          "Category": "",
+          "MessageType": "RuntimeConfig",
+          "ProtoFile": "config/v1/config.proto"
         }
       ],
       "Binary": "reliant",
       "ProtoFile": "config/v1/config.proto",
       "Line": 55
+    },
+    {
+      "Name": "RuntimeConfig",
+      "Fields": [
+        {
+          "Name": "environment",
+          "GoName": "Environment",
+          "GoType": "string",
+          "ProtoType": "string",
+          "EnvVar": "RELIANT_ENV",
+          "Flag": "",
+          "DefaultValue": "",
+          "Required": false,
+          "Description": "Environment tier: dev, test or prod (unset or unrecognised is prod)",
+          "Sensitive": false,
+          "Category": "",
+          "ProtoFile": "config/v1/config.proto",
+          "EnvVarAliases": [
+            {
+              "Name": "NODE_ENV"
+            }
+          ]
+        }
+      ],
+      "ProtoFile": "config/v1/config.proto",
+      "Line": 63
     },
     {
       "Name": "LogConfig",
@@ -33778,8 +33819,8 @@
         }
       ],
       "ProtoFile": "config/v1/config.proto",
-      "Line": 64
+      "Line": 81
     }
   ],
-  "source_hash": "22212ceedc95a9248efe44d10b16ef85d2cd8aae3663df111648744f89b54613"
+  "source_hash": "801e0d7767c52f522ec56bb87c2e2c5d613a741ae8d7ab5dfda372620bb50d40"
 }

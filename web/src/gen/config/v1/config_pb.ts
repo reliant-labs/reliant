@@ -12,7 +12,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file config/v1/config.proto.
  */
 export const file_config_v1_config: GenFile = /*@__PURE__*/
-  fileDesc("ChZjb25maWcvdjEvY29uZmlnLnByb3RvEgljb25maWcudjEiQQoNUmVsaWFudENvbmZpZxIhCgNsb2cYASABKAsyFC5jb25maWcudjEuTG9nQ29uZmlnOg3KwRgJCgdyZWxpYW50IuoBCglMb2dDb25maWcSZwoFbGV2ZWwYASABKAlCWILOGFQKEVJFTElBTlRfTE9HX0xFVkVMEglsb2ctbGV2ZWwqNExvZyBsZXZlbDogZGVidWcsIGluZm8sIHdhcm4gb3IgZXJyb3IgKGRlZmF1bHQgaW5mbykSdAoGZm9ybWF0GAIgASgJQmSCzhhgCgpMT0dfRk9STUFUEgpsb2ctZm9ybWF0KkZMb2cgbGluZSBmb3JtYXQ6IHRleHQgb3IganNvbiAoZGVmYXVsdCB0ZXh0OyBqc29uIGZvciBhIGhvc3RlZCBkYWVtb24pQjhaNmdpdGh1Yi5jb20vcmVsaWFudC1sYWJzL3JlbGlhbnQvZ2VuL2NvbmZpZy92MTtjb25maWd2MWIGcHJvdG8z", [file_forge_v1_forge]);
+  fileDesc("ChZjb25maWcvdjEvY29uZmlnLnByb3RvEgljb25maWcudjEibAoNUmVsaWFudENvbmZpZxIhCgNsb2cYASABKAsyFC5jb25maWcudjEuTG9nQ29uZmlnEikKB3J1bnRpbWUYAiABKAsyGC5jb25maWcudjEuUnVudGltZUNvbmZpZzoNysEYCQoHcmVsaWFudCKIAQoNUnVudGltZUNvbmZpZxJ3CgtlbnZpcm9ubWVudBgBIAEoCUJigs4YXgoLUkVMSUFOVF9FTlYqQ0Vudmlyb25tZW50IHRpZXI6IGRldiwgdGVzdCBvciBwcm9kICh1bnNldCBvciB1bnJlY29nbmlzZWQgaXMgcHJvZClaCgoITk9ERV9FTlYi6gEKCUxvZ0NvbmZpZxJnCgVsZXZlbBgBIAEoCUJYgs4YVAoRUkVMSUFOVF9MT0dfTEVWRUwSCWxvZy1sZXZlbCo0TG9nIGxldmVsOiBkZWJ1ZywgaW5mbywgd2FybiBvciBlcnJvciAoZGVmYXVsdCBpbmZvKRJ0CgZmb3JtYXQYAiABKAlCZILOGGAKCkxPR19GT1JNQVQSCmxvZy1mb3JtYXQqRkxvZyBsaW5lIGZvcm1hdDogdGV4dCBvciBqc29uIChkZWZhdWx0IHRleHQ7IGpzb24gZm9yIGEgaG9zdGVkIGRhZW1vbilCOFo2Z2l0aHViLmNvbS9yZWxpYW50LWxhYnMvcmVsaWFudC9nZW4vY29uZmlnL3YxO2NvbmZpZ3YxYgZwcm90bzM", [file_forge_v1_forge]);
 
 /**
  * ReliantConfig is the reliant binary's root config: the surface every
@@ -25,6 +25,11 @@ export type ReliantConfig = Message<"config.v1.ReliantConfig"> & {
    * @generated from field: config.v1.LogConfig log = 1;
    */
   log?: LogConfig | undefined;
+
+  /**
+   * @generated from field: config.v1.RuntimeConfig runtime = 2;
+   */
+  runtime?: RuntimeConfig | undefined;
 };
 
 /**
@@ -33,6 +38,33 @@ export type ReliantConfig = Message<"config.v1.ReliantConfig"> & {
  */
 export const ReliantConfigSchema: GenMessage<ReliantConfig> = /*@__PURE__*/
   messageDesc(file_config_v1_config, 0);
+
+/**
+ * RuntimeConfig is where the process is running. The entrypoint hands it to
+ * internal/runenv once at boot; every tier decision asks runenv.
+ *
+ * @generated from message config.v1.RuntimeConfig
+ */
+export type RuntimeConfig = Message<"config.v1.RuntimeConfig"> & {
+  /**
+   * The environment tier, as the operator spelled it: dev, development,
+   * local or e2e is dev; test or testing is test; ANYTHING else, unset
+   * included, is prod (internal/runenv.Parse fails closed). NODE_ENV is read
+   * when RELIANT_ENV is unset: it is Node's convention, which the desktop app
+   * and every dev shell already export, so it is a permanent name, not one
+   * being retired.
+   *
+   * @generated from field: string environment = 1;
+   */
+  environment: string;
+};
+
+/**
+ * Describes the message config.v1.RuntimeConfig.
+ * Use `create(RuntimeConfigSchema)` to create a new message.
+ */
+export const RuntimeConfigSchema: GenMessage<RuntimeConfig> = /*@__PURE__*/
+  messageDesc(file_config_v1_config, 1);
 
 /**
  * LogConfig is how a process's logger is built. Both fields carry the value
@@ -65,5 +97,5 @@ export type LogConfig = Message<"config.v1.LogConfig"> & {
  * Use `create(LogConfigSchema)` to create a new message.
  */
 export const LogConfigSchema: GenMessage<LogConfig> = /*@__PURE__*/
-  messageDesc(file_config_v1_config, 1);
+  messageDesc(file_config_v1_config, 2);
 

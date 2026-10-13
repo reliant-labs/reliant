@@ -7,6 +7,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/reliant-labs/reliant/internal/runenv"
+
 	"github.com/stretchr/testify/assert"
 )
 
@@ -50,8 +52,7 @@ func TestGetLogLevel(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			t.Setenv("RELIANT_ENV", tc.reliantEnv)
-			t.Setenv("NODE_ENV", "")
+			runenv.ConfigureForTest(t, tc.reliantEnv)
 			t.Setenv("DEBUG", tc.debug)
 			t.Setenv("RELIANT_DEV_DEBUG", tc.devDebug)
 
@@ -94,8 +95,7 @@ func TestProdRefusesDebugAndWarnsOnce(t *testing.T) {
 		for _, req := range requests {
 			t.Run("RELIANT_ENV="+prodEnv+"/"+req.name+"="+req.value, func(t *testing.T) {
 				isolateLogging(t)
-				t.Setenv("RELIANT_ENV", prodEnv)
-				t.Setenv("NODE_ENV", "")
+				runenv.ConfigureForTest(t, prodEnv)
 				var s Settings
 				if req.name == "RELIANT_LOG_LEVEL" {
 					s.Level = req.value
@@ -120,8 +120,7 @@ func TestProdRefusesDebugAndWarnsOnce(t *testing.T) {
 // entry point is a way around the prod floor.
 func TestProdCapsDebugPassedByCaller(t *testing.T) {
 	isolateLogging(t)
-	t.Setenv("RELIANT_ENV", "")
-	t.Setenv("NODE_ENV", "")
+	runenv.ConfigureForTest(t, "")
 
 	var buf bytes.Buffer
 	DefaultOutput = &buf
@@ -143,8 +142,7 @@ func TestProdWithoutDebugRequestDoesNotWarn(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			isolateLogging(t)
-			t.Setenv("RELIANT_ENV", "")
-			t.Setenv("NODE_ENV", "")
+			runenv.ConfigureForTest(t, "")
 			t.Setenv("DEBUG", tc.debug)
 
 			out := setupLikeAServer(t, Settings{Level: tc.logLevel})
@@ -162,8 +160,7 @@ func TestNonProdHonoursDebug(t *testing.T) {
 		for _, flag := range []string{"DEBUG", "RELIANT_DEV_DEBUG"} {
 			t.Run(env+"/"+flag, func(t *testing.T) {
 				isolateLogging(t)
-				t.Setenv("RELIANT_ENV", env)
-				t.Setenv("NODE_ENV", "")
+				runenv.ConfigureForTest(t, env)
 				t.Setenv(flag, "true")
 
 				out := setupLikeAServer(t, Settings{})

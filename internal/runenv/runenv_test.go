@@ -19,8 +19,7 @@ import "testing"
 func TestRemovedEnvironmentsDoNotBypassAuth(t *testing.T) {
 	for _, name := range []string{"staging", "preprod", "STAGING", "PreProd"} {
 		t.Run(name, func(t *testing.T) {
-			t.Setenv("RELIANT_ENV", name)
-			t.Setenv("NODE_ENV", "")
+			ConfigureForTest(t, name)
 
 			if got := Get(); got != Prod {
 				t.Errorf("Get() = %q, want %q: a removed environment name must fail closed, not fall through to the permissive tier", got, Prod)
@@ -39,8 +38,7 @@ func TestRemovedEnvironmentsDoNotBypassAuth(t *testing.T) {
 func TestUnrecognisedEnvironmentFailsClosed(t *testing.T) {
 	for _, name := range []string{"", "qa", "sandbox", "devv", "produciton", "nonprod"} {
 		t.Run("RELIANT_ENV="+name, func(t *testing.T) {
-			t.Setenv("RELIANT_ENV", name)
-			t.Setenv("NODE_ENV", "")
+			ConfigureForTest(t, name)
 
 			if got := Get(); got != Prod {
 				t.Errorf("Get() = %q, want %q", got, Prod)
@@ -76,8 +74,7 @@ func TestRecognisedEnvironments(t *testing.T) {
 
 	for _, tc := range cases {
 		t.Run(tc.reliantEnv, func(t *testing.T) {
-			t.Setenv("RELIANT_ENV", tc.reliantEnv)
-			t.Setenv("NODE_ENV", "")
+			ConfigureForTest(t, tc.reliantEnv)
 
 			if got := Get(); got != tc.want {
 				t.Errorf("Get() = %q, want %q", got, tc.want)
@@ -89,31 +86,32 @@ func TestRecognisedEnvironments(t *testing.T) {
 	}
 }
 
-// TestNodeEnvFallback covers the second input. NODE_ENV is only consulted when
-// RELIANT_ENV is unset, and it obeys the same fail-closed rule — Node's own
-// convention of leaving NODE_ENV empty must not mean "dev".
-func TestNodeEnvFallback(t *testing.T) {
-	t.Run("development", func(t *testing.T) {
-		t.Setenv("RELIANT_ENV", "")
-		t.Setenv("NODE_ENV", "development")
+// Which variable supplies the tier (RELIANT_ENV, else NODE_ENV) is the root
+// config's business, pinned by cmd/reliant/commands TestRuntimeEnvContract.
+// What runenv owns is what happens before and without that: a process that
+// never configured a tier is prod, and a test's tier does not outlive it.
+func TestUnconfiguredIsProd(t *testing.T) {
+	prev := configured.Load()
+	configured.Store(nil)
+	t.Cleanup(func() { configured.Store(prev) })
+
+	if got := Get(); got != Prod {
+		t.Errorf("Get() = %q with no tier configured, want %q", got, Prod)
+	}
+	if IsDev() {
+		t.Error("IsDev() = true with no tier configured")
+	}
+}
+
+func TestConfigureForTestRestores(t *testing.T) {
+	ConfigureForTest(t, "test")
+	t.Run("inner", func(t *testing.T) {
+		ConfigureForTest(t, "dev")
 		if !IsDev() {
-			t.Error("NODE_ENV=development should select the dev tier when RELIANT_ENV is unset")
+			t.Fatal("ConfigureForTest(dev) did not take")
 		}
 	})
-
-	t.Run("both unset defaults to prod", func(t *testing.T) {
-		t.Setenv("RELIANT_ENV", "")
-		t.Setenv("NODE_ENV", "")
-		if got := Get(); got != Prod {
-			t.Errorf("Get() = %q with no env vars set, want %q", got, Prod)
-		}
-	})
-
-	t.Run("RELIANT_ENV wins over NODE_ENV", func(t *testing.T) {
-		t.Setenv("RELIANT_ENV", "prod")
-		t.Setenv("NODE_ENV", "development")
-		if IsDev() {
-			t.Error("RELIANT_ENV=prod must win over NODE_ENV=development")
-		}
-	})
+	if !IsTest() {
+		t.Errorf("Get() = %q after the subtest, want the outer %q back", Get(), Test)
+	}
 }
