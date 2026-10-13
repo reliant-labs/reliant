@@ -32340,7 +32340,7 @@
           {
             "Name": "include_archived",
             "ProtoType": "bool",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListWorktreesResponse": [
@@ -33119,7 +33119,8 @@
           },
           {
             "name": "include_archived",
-            "kind": "bool"
+            "kind": "bool",
+            "optional": true
           }
         ],
         "reliant.v1.ListWorktreesResponse": [
@@ -33584,5 +33585,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "10856a7471145ecab0a5c71a1aba366bc596c2de8344f8c14485f2f543ae0281"
+  "source_hash": "b78c42d4d31626367ccb3a24f7ec9f8d6920dc75ce7e3cadac2fd6d0d24d2e5d"
 }

@@ -873,7 +873,7 @@ type ListWorktreesRequest struct {
 	ProjectId       string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"` // Required
 	ChatId          *string                `protobuf:"bytes,2,opt,name=chat_id,json=chatId,proto3,oneof" json:"chat_id,omitempty"`
 	Limit           int32                  `protobuf:"varint,3,opt,name=limit,proto3" json:"limit,omitempty"`
-	IncludeArchived bool                   `protobuf:"varint,4,opt,name=include_archived,json=includeArchived,proto3" json:"include_archived,omitempty"`
+	IncludeArchived *bool                  `protobuf:"varint,4,opt,name=include_archived,json=includeArchived,proto3,oneof" json:"include_archived,omitempty"`
 	unknownFields   protoimpl.UnknownFields
 	sizeCache       protoimpl.SizeCache
 }
@@ -930,8 +930,8 @@ func (x *ListWorktreesRequest) GetLimit() int32 {
 }
 
 func (x *ListWorktreesRequest) GetIncludeArchived() bool {
-	if x != nil {
-		return x.IncludeArchived
+	if x != nil && x.IncludeArchived != nil {
+		return *x.IncludeArchived
 	}
 	return false
 }
@@ -3707,15 +3707,16 @@ const file_reliant_v1_worktree_proto_rawDesc = "" +
 	"\x13_source_worktree_idB\x12\n" +
 	"\x10_idempotency_key\"J\n" +
 	"\x16CreateWorktreeResponse\x120\n" +
-	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xa0\x01\n" +
+	"\bworktree\x18\x01 \x01(\v2\x14.reliant.v1.WorktreeR\bworktree\"\xba\x01\n" +
 	"\x14ListWorktreesRequest\x12\x1d\n" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1c\n" +
 	"\achat_id\x18\x02 \x01(\tH\x00R\x06chatId\x88\x01\x01\x12\x14\n" +
-	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12)\n" +
-	"\x10include_archived\x18\x04 \x01(\bR\x0fincludeArchivedB\n" +
+	"\x05limit\x18\x03 \x01(\x05R\x05limit\x12.\n" +
+	"\x10include_archived\x18\x04 \x01(\bH\x01R\x0fincludeArchived\x88\x01\x01B\n" +
 	"\n" +
-	"\b_chat_id\"a\n" +
+	"\b_chat_idB\x13\n" +
+	"\x11_include_archived\"a\n" +
 	"\x15ListWorktreesResponse\x122\n" +
 	"\tworktrees\x18\x01 \x03(\v2\x14.reliant.v1.WorktreeR\tworktrees\x12\x14\n" +
 	"\x05total\x18\x02 \x01(\x05R\x05total\"5\n" +
