@@ -49,48 +49,6 @@ func taskStatusFromInt32(v int32) reliantv1.TaskStatus {
 // settings, streaming).
 // ============================================================================
 
-// --- BackgroundProcessStatus (from shell.BackgroundProcess in-memory, still string) ---
-
-func backgroundProcessStatusFromString(s string) reliantv1.BackgroundProcessStatus {
-	switch s {
-	case "running":
-		return reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_RUNNING
-	case "completed":
-		return reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_COMPLETED
-	case "failed":
-		return reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_FAILED
-	case "killed":
-		return reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_KILLED
-	case "killed_externally":
-		return reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_KILLED_EXTERNALLY
-	case "stale":
-		return reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_STALE
-	default:
-		return reliantv1.BackgroundProcessStatus_BACKGROUND_PROCESS_STATUS_UNSPECIFIED
-	}
-}
-
-func backgroundProcessStatusPtr(s string) *reliantv1.BackgroundProcessStatus {
-	if s == "" {
-		return nil
-	}
-	v := backgroundProcessStatusFromString(s)
-	return &v
-}
-
-// --- OutputStreamType ---
-
-func outputStreamTypeFromString(s string) reliantv1.OutputStreamType {
-	switch s {
-	case "stdout":
-		return reliantv1.OutputStreamType_OUTPUT_STREAM_TYPE_STDOUT
-	case "stderr":
-		return reliantv1.OutputStreamType_OUTPUT_STREAM_TYPE_STDERR
-	default:
-		return reliantv1.OutputStreamType_OUTPUT_STREAM_TYPE_UNSPECIFIED
-	}
-}
-
 // --- FileNodeType ---
 
 func fileNodeTypeFromString(s string) reliantv1.FileNodeType {

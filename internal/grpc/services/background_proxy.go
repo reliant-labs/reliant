@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/daemonerr"
+	"github.com/reliant-labs/reliant/internal/processproto"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -91,7 +92,7 @@ func (s *BackgroundProxyService) ListProcesses(
 		proc := &reliantv1.BackgroundProcess{
 			Id:        p.ID,
 			Command:   p.Command,
-			Status:    backgroundProcessStatusFromString(p.Status),
+			Status:    processproto.Status(p.Status),
 			StartTime: p.StartTime.Format(time.RFC3339),
 		}
 		if p.ExitCode != nil {

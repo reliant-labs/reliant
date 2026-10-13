@@ -12,6 +12,7 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/processproto"
 )
 
 // BackgroundService implements the BackgroundService RPC handlers
@@ -65,7 +66,7 @@ func convertProcessInfoToProto(p *BackgroundProcessInfo) *reliantv1.BackgroundPr
 	result := &reliantv1.BackgroundProcess{
 		Id:         p.ID,
 		Command:    p.Command,
-		Status:     backgroundProcessStatusFromString(p.Status),
+		Status:     processproto.Status(p.Status),
 		StartTime:  p.StartTime.Format("2006-01-02T15:04:05Z07:00"),
 		WorkingDir: p.WorkingDir,
 		SessionId:  p.SessionID,
@@ -237,7 +238,7 @@ func (s *BackgroundService) StreamProcessOutput(
 		protoLines := make([]*reliantv1.ProcessOutputLine, len(lines))
 		for i, line := range lines {
 			protoLines[i] = &reliantv1.ProcessOutputLine{
-				Type:     outputStreamTypeFromString(line.Type),
+				Type:     processproto.OutputStream(line.Type),
 				Text:     line.Text,
 				Sequence: line.Sequence,
 			}
@@ -250,7 +251,7 @@ func (s *BackgroundService) StreamProcessOutput(
 			IsComplete:     isComplete,
 		}
 		if isComplete {
-			snapshot.Status = backgroundProcessStatusPtr(status)
+			snapshot.Status = processproto.StatusPtr(status)
 			if exitCode != nil {
 				snapshot.ExitCode = proto.Int32(int32(*exitCode))
 			}
@@ -297,7 +298,7 @@ func (s *BackgroundService) StreamProcessOutput(
 			if err := stream.Send(&reliantv1.ProcessOutputEvent{
 				Event: &reliantv1.ProcessOutputEvent_Line{
 					Line: &reliantv1.ProcessOutputLine{
-						Type:     outputStreamTypeFromString(line.Type),
+						Type:     processproto.OutputStream(line.Type),
 						Text:     line.Text,
 						Sequence: line.Sequence,
 					},
@@ -331,7 +332,7 @@ func (s *BackgroundService) sendCompletionEvent(
 	}
 
 	complete := &reliantv1.ProcessOutputComplete{
-		Status:  backgroundProcessStatusFromString(status),
+		Status:  processproto.Status(status),
 		EndTime: endTime,
 	}
 	if exitCode != nil {

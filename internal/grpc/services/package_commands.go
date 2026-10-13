@@ -15,6 +15,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
+	"github.com/reliant-labs/reliant/internal/processproto"
 )
 
 // PackageCommandsService implements the PackageCommandsService RPC handlers
@@ -56,7 +57,7 @@ func convertProcessToPackageProcess(p *shell.BackgroundProcess) *reliantv1.Packa
 	result := &reliantv1.PackageProcess{
 		Id:         p.ID,
 		Command:    p.Command,
-		Status:     backgroundProcessStatusFromString(p.Status),
+		Status:     processproto.Status(p.Status),
 		WorkingDir: p.WorkingDir,
 		StartTime:  p.StartTime.Format("2006-01-02T15:04:05Z07:00"),
 	}
@@ -285,7 +286,7 @@ func (s *PackageCommandsService) GetProcessLogs(
 	protoCombined := make([]*reliantv1.OutputLine, len(combinedOutput))
 	for i, line := range combinedOutput {
 		protoCombined[i] = &reliantv1.OutputLine{
-			Type: outputStreamTypeFromString(line.Type),
+			Type: processproto.OutputStream(line.Type),
 			Text: line.Text,
 		}
 	}
