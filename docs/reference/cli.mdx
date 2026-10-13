@@ -2400,7 +2400,8 @@ Collapse N migrations into one canonical baseline (.up.sql)
 
 Squash applies every migration in --from-dir against an ephemeral Postgres
 container, dumps the resulting schema + seed data with pg_dump, and writes
-a single forward-only baseline migration.
+a single forward-only baseline migration. With --from-dsn it dumps an existing
+database instead: see "Squashing a database" below.
 
 Output:
   `<out-dir>`/`<baseline>`.up.sql    (CREATE statements + INSERTs for non-schema_migrations rows)
@@ -2414,6 +2415,10 @@ migration of a run on one session, so an emptied search_path would break the
 next migration and leak into a server's pool. Function bodies, comments and
 inserted values are kept byte for byte.
 
+The baseline is reproducible: its header names the squashed migrations (how
+many, first and last version), never a time or a path, so squashing the same
+history with the same --image writes the same bytes.
+
 This is the canonical "N migrations → one baseline" workflow used when
 pulling a long-lived schema into a new project, or when collapsing
 historical migrations into a checkpoint. Paths resolve against the project
@@ -2426,10 +2431,22 @@ Requires:
 The migrations are applied by forge's migrator, the same one
 'forge db migrate up' runs.
 
+Squashing a database (--from-dsn):
+  A history forge cannot replay (goose's, or any other tool's) is squashed
+  from a database it built. Point --from-dsn at a throwaway database the
+  COMPLETE history built, such as goose up on an empty database: its rows
+  become INSERTs in every fresh database, so the command lists them. pg_dump
+  runs in a postgres:\<server major>-alpine container (--image overrides).
+  When the database has goose_db_version, the baseline declares every version
+  goose applied there ("-- forge:adopts goose ..."), so the migrator ADOPTS a
+  database goose migrated instead of re-running the history. Tables named
+  like another tool's history are listed; leave one out with --exclude-table.
+
 Examples:
   forge db squash
   forge db squash --from-dir db/migrations --to 00001_baseline
   forge db squash --to 20260506_baseline --out-dir db/baselines/
+  forge db squash --from-dsn 'postgres://postgres:pw@localhost:5432/goose_built?sslmode=disable'
 
 ```
 reliant forge db squash [flags]
@@ -2442,9 +2459,11 @@ reliant forge db squash [flags]
 | `--db-name` | `string` | `forge_squash` | Database name created inside the ephemeral container |
 | `--db-pass` | `string` | `forge_squash` | Database password for the ephemeral container |
 | `--db-user` | `string` | `postgres` | Database user (default container superuser) |
+| `--exclude-table` | `stringArray` | `[]` | With --from-dsn: a table to leave out of the baseline, such as another tool's history table (pg_dump pattern, e.g. public.flyway_schema_history; repeatable) |
 | `--from-dir` | `string` | - | Source directory holding the migrations to squash (default: the project's migrations directory; a relative path resolves against the project root) |
-| `--image` | `string` | `postgres:16-alpine` | Postgres docker image used for the ephemeral container |
-| `--out-dir` | `string` | - | Output directory for the baseline files (default: same as --from-dir; a relative path resolves against the project root) |
+| `--from-dsn` | `string` | - | Squash an existing database instead of replaying --from-dir: a postgres:// URL of a throwaway database the complete history built |
+| `--image` | `string` | `postgres:16-alpine` | Postgres docker image used for the ephemeral container (with --from-dsn, the one pg_dump runs in; default postgres:\<server major>-alpine) |
+| `--out-dir` | `string` | - | Output directory for the baseline files (default: same as --from-dir, or the project's migrations directory with --from-dsn; a relative path resolves against the project root) |
 | `--to` | `string` | `00001_baseline` | Baseline filename stem (writes `<stem>`.up.sql) |
 
 ---
@@ -6164,8 +6183,13 @@ For each *.sql file in --src-dir, the importer:
      writes no .down.sql; each dropped Down section is listed so you can
      see what was discarded.
   2. Drops -- +goose StatementBegin / -- +goose StatementEnd markers.
-  3. Carries -- +goose NO TRANSACTION over to a golang-migrate x-no-tx-wrap
-     header.
+  3. Splits a -- +goose NO TRANSACTION file into one migration per goose
+     statement. goose ran each of those statements on its own, outside any
+     transaction. golang-migrate runs a file as ONE multi-statement query,
+     which postgres runs as one implicit transaction, so two
+     CREATE INDEX CONCURRENTLY statements in one file fail with SQLSTATE
+     25001 and leave the schema dirty. One statement per file runs exactly
+     as goose ran it.
   4. Renumbers starting from the next-available index in --dest-dir, so
      pack-installed migrations (00001-0000N) keep their slots.
 
