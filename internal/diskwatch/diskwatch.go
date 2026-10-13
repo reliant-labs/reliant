@@ -17,9 +17,10 @@
 // per volume (this file), measures what is using a volume only while it is
 // under pressure (consumers.go), and reports the lot on its heartbeat as a
 // reliantv1.DiskReport (watcher.go). The server stores that report and the UI,
-// the storage inbox item and the agent's tool results all read it.
+// the storage inbox item and the agent's tool results all read it. Docker's
+// share is asked of the engine through the internal/dockerengine adapter.
 //
-//forge:exclude-contract: statfs and directory walks over the daemon's own filesystems; one implementation, nothing to substitute
+//forge:exclude-contract: a watcher over the daemon's own filesystems (statfs, directory walks, cache trims), with one implementation; its one outbound boundary, docker's engine API, is the internal/dockerengine adapter
 package diskwatch
 
 // GiB is 2^30 bytes.

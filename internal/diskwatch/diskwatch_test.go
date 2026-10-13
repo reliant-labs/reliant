@@ -3,7 +3,6 @@ package diskwatch
 
 import (
 	"context"
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -11,6 +10,7 @@ import (
 	"time"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/dockerengine"
 )
 
 func usageOf(total, free uint64) Usage {
@@ -394,30 +394,31 @@ func TestClearCaches_RefusesWhatIsNotSafe(t *testing.T) {
 	waitCleared(t, w)
 }
 
-func TestDockerConsumers_UseTheCLIAccounting(t *testing.T) {
-	var df dockerDF
-	raw := `{"LayersSize": 9783382589,
-	  "Images": [{"Containers": 1, "Size": 400, "SharedSize": 100}, {"Containers": 0, "Size": 900, "SharedSize": 0}],
-	  "Containers": [{"SizeRw": 10, "State": "running"}, {"SizeRw": 5, "State": "exited"}],
-	  "Volumes": [{"UsageData": {"Size": 73886027, "RefCount": 0}}, {"UsageData": {"Size": 100, "RefCount": 1}}, {"UsageData": {"Size": -1, "RefCount": 0}}],
-	  "BuildCache": [{"Size": 308856101, "InUse": false, "Shared": true}, {"Size": 50, "InUse": false, "Shared": false}]}`
-	if err := json.Unmarshal([]byte(raw), &df); err != nil {
-		t.Fatal(err)
-	}
+// The docker CLI's accounting itself is dockerengine's
+// (TestDiskUsage_UsesTheCLIAccounting); this pins how its categories become
+// consumers, and that only the build cache is ever clearable.
+func TestDockerConsumers_OnlyTheBuildCacheIsClearable(t *testing.T) {
 	got := map[string]*reliantv1.DiskConsumer{}
-	for _, c := range df.consumers() {
+	for _, c := range dockerConsumers(dockerengine.Usage{
+		Images:     dockerengine.Category{Bytes: 9783382589, Reclaimable: 9783382289},
+		Containers: dockerengine.Category{Bytes: 15, Reclaimable: 5},
+		Volumes:    dockerengine.Category{Bytes: 73886127, Reclaimable: 73886027},
+		BuildCache: dockerengine.Category{Bytes: 308856151, Reclaimable: 50},
+	}) {
+		if c.Category != CategoryDocker || c.Label != ConsumerLabel(c.Kind) {
+			t.Errorf("%s: want the docker category and its kind's label, got %v", c.Kind, c)
+		}
 		got[c.Kind] = c
 	}
-	if c := got[KindDockerImages]; c.Bytes != 9783382589 || c.ReclaimableBytes != 9783382589-300 || c.Clearable {
+	if c := got[KindDockerImages]; c.Bytes != 9783382589 || c.ReclaimableBytes != 9783382289 || c.Clearable {
 		t.Errorf("images: %v", c)
 	}
-	if c := got[KindDockerContainers]; c.Bytes != 15 || c.ReclaimableBytes != 5 {
+	if c := got[KindDockerContainers]; c.Bytes != 15 || c.ReclaimableBytes != 5 || c.Clearable {
 		t.Errorf("containers: %v", c)
 	}
 	if c := got[KindDockerVolumes]; c.Bytes != 73886127 || c.ReclaimableBytes != 73886027 || c.Clearable {
 		t.Errorf("volumes must never be clearable: %v", c)
 	}
-	// A record shared with an image frees nothing when pruned.
 	if c := got[KindDockerBuildCache]; c.Bytes != 308856151 || c.ReclaimableBytes != 50 || !c.Clearable {
 		t.Errorf("build cache: %v", c)
 	}
