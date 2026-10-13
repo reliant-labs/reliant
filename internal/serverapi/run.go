@@ -38,7 +38,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/telemetry"
 	"github.com/reliant-labs/reliant/internal/temporal"
 	"github.com/reliant-labs/reliant/internal/temporal/claimcheck"
-	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 	"github.com/reliant-labs/reliant/internal/triggers"
 	"github.com/reliant-labs/reliant/internal/videojobs"
@@ -204,7 +203,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// Credential vault: required when hosted, generated when self-hosted.
 	// Fails startup on a missing or malformed key.
-	vaultKeys, err := db.BootVault(ctx, repo, tokenauthority.ControlPlaneURL() != "", opts.DataDir)
+	vaultKeys, err := db.BootVault(ctx, repo, controlplane.BaseURLFromEnv() != "", opts.DataDir)
 	if err != nil {
 		return err
 	}
@@ -219,7 +218,7 @@ func Run(ctx context.Context, opts Options) error {
 
 	// API key provider (allows LLM drivers to resolve per-user keys from DB)
 	drivers.InitializeAPIKeyProvider(repo)
-	drivers.InstallReliantKeyHealer(ctx, repo, tokenauthority.ControlPlaneURL(), strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")), time.Hour)
+	drivers.InstallReliantKeyHealer(ctx, repo, controlplane.BaseURLFromEnv(), strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")), time.Hour)
 
 	// Claim-check store for large Temporal payloads. The worker shares the
 	// same table; both processes must use it or neither can read the other's

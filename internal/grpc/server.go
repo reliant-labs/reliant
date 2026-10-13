@@ -29,6 +29,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/cliauth"
 	"github.com/reliant-labs/reliant/internal/connections"
 	"github.com/reliant-labs/reliant/internal/connectorgrant"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/errclass"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
@@ -242,7 +243,7 @@ func NewServer(cfg *Config) (*Server, error) {
 		Issuer:      os.Getenv(cliauth.AuthorizationServerEnv),
 		ClipsGrants: authorityMode == tokenauthority.ModeControlPlane,
 	})
-	if cpURL := tokenauthority.ControlPlaneURL(); cpURL != "" {
+	if cpURL := controlplane.BaseURLFromEnv(); cpURL != "" {
 		// Hosted users' git tokens live at control-plane. tokenauthority.New
 		// already refused to boot without the secret; check again so this
 		// wiring never rests on that ordering.
@@ -846,7 +847,11 @@ func mountConnectorMCP(
 	// an interface is NOT nil, and would turn "no control plane" into a nil
 	// dereference on the first suspended workspace.
 	var resumer mcpserver.DaemonResumer
-	if cp := mcpserver.NewControlPlaneResumer(controlPlaneBaseURL()); cp != nil {
+	// The URL has no localhost default (controlplane.BaseURLFromEnv, not the
+	// client's fallback): silently pointing at a control plane that is not
+	// there would turn "cannot start workspaces" into a connection error on
+	// every suspended-workspace request.
+	if cp := mcpserver.NewControlPlaneResumer(controlplane.BaseURLFromEnv()); cp != nil {
 		resumer = cp
 	} else {
 		logging.Info("connector workspace wake unavailable: no control plane URL configured")
@@ -965,27 +970,6 @@ func forgeAPIDisabled() bool {
 	default:
 		return false
 	}
-}
-
-// controlPlaneBaseURL returns the control-plane origin, or "" when this
-// deployment has none.
-//
-// The env names match internal/controlplane's client so a deployment
-// configures one URL rather than one per consumer. Unlike that client there is
-// no localhost default: silently pointing at a control plane that is not there
-// would turn "cannot start workspaces" into a connection error on every
-// suspended-workspace request.
-func controlPlaneBaseURL() string {
-	for _, key := range []string{
-		"RELIANT_CONTROL_PLANE_URL",
-		"CONTROL_PLANE_API_URL",
-		"CONTROL_PLANE_BASE_URL",
-	} {
-		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-			return v
-		}
-	}
-	return ""
 }
 
 // cleartextHTTP2Protocols is the protocol set for a listener with no TLS:

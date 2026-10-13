@@ -7,12 +7,12 @@ import (
 	"os"
 
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
 	"github.com/reliant-labs/reliant/internal/integrations/catalogindex"
 	"github.com/reliant-labs/reliant/internal/integrations/ghdelegated"
 	"github.com/reliant-labs/reliant/internal/logging"
-	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/vault"
 )
 
@@ -42,7 +42,7 @@ func wireConnections(repo *db.Repo, keys *vault.Vault, publicURL string, appOrig
 	tokens := connections.NewTokenSource(store, keys, providers, nil)
 	broker := connections.NewBroker(store, keys, providers, nil, publicURL).WithAppOrigins(appOrigins)
 	svc := connections.NewService(store, keys, providers, tokens, broker, nil).
-		WithDelegated(delegatedAvailable(tokenauthority.ControlPlaneURL() != ""))
+		WithDelegated(delegatedAvailable(controlplane.BaseURLFromEnv() != ""))
 	for _, in := range svc.ListIntegrations() {
 		for _, m := range in.Methods {
 			if !m.Available {
@@ -61,7 +61,7 @@ func wireCatalogSearch(repo *db.Repo) (*catalogindex.Service, error) {
 	if err != nil {
 		return nil, fmt.Errorf("integration catalog index: %w", err)
 	}
-	delegated := delegatedAvailable(tokenauthority.ControlPlaneURL() != "")
+	delegated := delegatedAvailable(controlplane.BaseURLFromEnv() != "")
 	return catalogindex.NewService(idx, repo.Connections(), catalogindex.DelegatedAvailable(delegated)), nil
 }
 

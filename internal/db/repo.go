@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"os"
 	"sort"
 	"strconv"
 	"strings"
@@ -267,14 +266,6 @@ func (r *Repo) sessionPool() *sql.DB {
 		return r.session
 	}
 	return r.DB.SQLDB()
-}
-
-func DatabaseDriverFromEnv() DatabaseDriver {
-	driver, err := ParseDatabaseDriver(os.Getenv("DATABASE_DRIVER"))
-	if err != nil {
-		return DriverPostgres
-	}
-	return driver
 }
 
 func (r *Repo) Close() error {

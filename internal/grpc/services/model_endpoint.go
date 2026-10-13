@@ -12,10 +12,10 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/modelendpoints"
 	"github.com/reliant-labs/reliant/internal/netguard"
-	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
@@ -32,7 +32,7 @@ func NewModelEndpointService(database db.Repository, router toolexec.DaemonRoute
 	cfg := modelendpoints.Config{
 		Store:       database,
 		Credentials: creds,
-		Policy:      netguard.ForDeployment(tokenauthority.ControlPlaneURL()),
+		Policy:      netguard.ForDeployment(controlplane.BaseURLFromEnv()),
 	}
 	if router != nil {
 		cfg.Daemons = routerDaemonControl{router: router}

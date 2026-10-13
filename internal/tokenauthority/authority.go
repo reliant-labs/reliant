@@ -11,27 +11,17 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/accesstokenclient"
 	"github.com/reliant-labs/reliant/internal/auth"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 )
 
 // ErrInactive reports a token that is not live (unknown, revoked, expired,
 // malformed, or not an `rlat_` at all).
 var ErrInactive = accesstokenclient.ErrInactive
 
-// ControlPlaneURL resolves the control-plane base URL from the environment,
-// the same variables internal/controlplane reads.
-func ControlPlaneURL() string {
-	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
-		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
-			return v
-		}
-	}
-	return ""
-}
-
 // DepsFromEnv reads Deps from the environment.
 func DepsFromEnv(db *sql.DB) Deps {
 	return Deps{
-		ControlPlaneURL:       ControlPlaneURL(),
+		ControlPlaneURL:       controlplane.BaseURLFromEnv(),
 		InternalServiceSecret: strings.TrimSpace(os.Getenv("INTERNAL_SERVICE_SECRET")),
 		DB:                    db,
 	}

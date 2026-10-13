@@ -176,10 +176,8 @@ func NewClient(baseURL string) Client {
 }
 
 func getBaseURL() string {
-	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
-		if value := strings.TrimSpace(os.Getenv(key)); value != "" {
-			return value
-		}
+	if v := BaseURLFromEnv(); v != "" {
+		return v
 	}
 	return defaultBaseURL
 }
@@ -188,10 +186,19 @@ func getBaseURL() string {
 // this deployment has none configured. Unlike getBaseURL/NewClient there is
 // no localhost fallback — callers that need to distinguish "no control
 // plane at all" from "control plane at the default address" (e.g. deciding
-// whether to wire an optional daemon-registry client) use this instead.
+// whether to wire an optional daemon-registry client, or which token store
+// the deployment uses) use this instead.
 func BaseURLFromEnv() string {
+	return BaseURLFrom(os.Getenv)
+}
+
+// BaseURLFrom is BaseURLFromEnv over an injectable getenv, for callers whose
+// tests supply the environment. It is the ONE reader of the control-plane URL
+// variables: RELIANT_CONTROL_PLANE_URL, then the legacy CONTROL_PLANE_API_URL
+// and CONTROL_PLANE_BASE_URL; the first non-blank one wins.
+func BaseURLFrom(getenv func(string) string) string {
 	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
-		if v := strings.TrimSpace(os.Getenv(key)); v != "" {
+		if v := strings.TrimSpace(getenv(key)); v != "" {
 			return v
 		}
 	}

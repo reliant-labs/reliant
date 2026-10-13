@@ -11,6 +11,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/integrations/catalog"
@@ -59,7 +60,9 @@ func newConnectionResolver(repo *db.Repo, keys *vault.Vault) (*connections.Resol
 // every one of them.
 func newIntegrationCredentials(resolver *connections.Resolver, getenv func(string) string) (httpaction.CredentialSource, error) {
 	saved := connauth.New(resolver)
-	cpURL := controlPlaneURLFrom(getenv)
+	// The same resolution BootVault and the token authority use, so the
+	// worker's notion of "hosted" cannot disagree with theirs.
+	cpURL := controlplane.BaseURLFrom(getenv)
 	if cpURL == "" {
 		return saved, nil
 	}
@@ -112,17 +115,4 @@ func newCatalogSearch(conns catalogindex.ConnectionLister, creds httpaction.Cred
 		return false, "delegated broker " + brokerID + " is not registered on this worker"
 	}
 	return catalogindex.NewService(idx, conns, delegated), nil
-}
-
-// controlPlaneURLFrom reads the control-plane URL from the same variables, in
-// the same order, as tokenauthority.ControlPlaneURL — so the worker's notion
-// of "hosted" is the one BootVault and the token authority already use —
-// from an injectable getenv.
-func controlPlaneURLFrom(getenv func(string) string) string {
-	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
-		if v := strings.TrimSpace(getenv(key)); v != "" {
-			return v
-		}
-	}
-	return ""
 }

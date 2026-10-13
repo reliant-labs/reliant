@@ -12,6 +12,7 @@ import (
 
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/connections"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/gitcredentialclient"
 	"github.com/reliant-labs/reliant/internal/grpc/services"
@@ -96,7 +97,7 @@ func wireGitHubAccess(repo *db.Repo, keys *vault.Vault, getenv func(string) stri
 }
 
 func gitHubTokenSource(repo *db.Repo, keys *vault.Vault, getenv func(string) string) (ghaccess.TokenSource, error) {
-	if cpURL := controlPlaneURLFrom(getenv); cpURL != "" {
+	if cpURL := controlplane.BaseURLFrom(getenv); cpURL != "" {
 		secret := strings.TrimSpace(getenv("INTERNAL_SERVICE_SECRET"))
 		if secret == "" {
 			return nil, errors.New("github triggers: RELIANT_CONTROL_PLANE_URL is set but INTERNAL_SERVICE_SECRET is not; " +
@@ -116,16 +117,4 @@ func gitHubTokenSource(repo *db.Repo, keys *vault.Vault, getenv func(string) str
 	}
 	store := repo.Connections()
 	return ghaccess.NewSavedTokens(store, connections.NewTokenSource(store, keys, providers, nil)), nil
-}
-
-// controlPlaneURLFrom reads the control-plane URL from the same variables, in
-// the same order, as tokenauthority.ControlPlaneURL (and the worker's
-// controlPlaneURLFrom), from an injectable getenv.
-func controlPlaneURLFrom(getenv func(string) string) string {
-	for _, key := range []string{"RELIANT_CONTROL_PLANE_URL", "CONTROL_PLANE_API_URL", "CONTROL_PLANE_BASE_URL"} {
-		if v := strings.TrimSpace(getenv(key)); v != "" {
-			return v
-		}
-	}
-	return ""
 }

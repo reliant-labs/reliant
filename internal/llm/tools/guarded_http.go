@@ -4,14 +4,14 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/netguard"
-	"github.com/reliant-labs/reliant/internal/tokenauthority"
 )
 
 // webToolTransport builds the dial-guarded transport for every outbound HTTP
 // client of an in-process (PlacementServer/PlacementAny) tool. Tests override it.
 var webToolTransport = func() http.RoundTripper {
-	return netguard.ForDeployment(tokenauthority.ControlPlaneURL()).Transport()
+	return netguard.ForDeployment(controlplane.BaseURLFromEnv()).Transport()
 }
 
 // newGuardedHTTPClient is the only way tools in this package may build an

@@ -16,6 +16,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/analytics"
 	"github.com/reliant-labs/reliant/internal/auth"
 	cfgpkg "github.com/reliant-labs/reliant/internal/config"
+	"github.com/reliant-labs/reliant/internal/controlplane"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 
@@ -32,7 +33,6 @@ import (
 	"github.com/reliant-labs/reliant/internal/preset"
 	"github.com/reliant-labs/reliant/internal/rctx"
 	"github.com/reliant-labs/reliant/internal/skills/suggest"
-	"github.com/reliant-labs/reliant/internal/tokenauthority"
 
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/threads"
@@ -158,7 +158,7 @@ func (a *CallLLMActivity) localModelSpec(preferDaemonID string, noMachine bool) 
 		PreferDaemonID: preferDaemonID,
 		Custom: &local.CustomRoutes{
 			Relay:  relay,
-			Policy: netguard.ForDeployment(tokenauthority.ControlPlaneURL()),
+			Policy: netguard.ForDeployment(controlplane.BaseURLFromEnv()),
 		},
 	}
 }
