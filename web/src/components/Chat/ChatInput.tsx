@@ -58,6 +58,7 @@ import {
   nestedToFlatParams,
   paramValuesEqual,
   reconcileParamsWithServer,
+  threadParamsAcceptChanges,
 } from "../../lib/paramUtils";
 import { askUserQuestionItems } from "./askUserUtils";
 import { QuestionPrompt } from "./QuestionPrompt";
@@ -368,6 +369,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
       inputs: WorkflowInputs;  // Schema for the thread's workflow
       values: Record<string, unknown>;  // Flattened param values from Temporal
       isRunning: boolean;
+      resumable: boolean;  // Stopped on an error; a message resumes it with these params
     } | null>(null);
     // Current thread param values (full values map, updated by WorkflowParamsPanel.onChange)
     const [threadParamValues, setThreadParamValues] = useState<Record<string, unknown> | null>(null);
@@ -490,6 +492,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
             inputs,
             values: flatValues,
             isRunning: result.isRunning,
+            resumable: result.resumable,
           });
         } catch (error) {
           if (!cancelled) {
@@ -954,7 +957,7 @@ const ChatInputComponent = forwardRef<HTMLTextAreaElement, ChatInputProps>(
 
     // Check if thread params have unsaved changes (compare against fetched baseline)
     const hasUnsyncedThreadChanges = useMemo(() => {
-      if (!isViewingThreadParams || !threadParamsOverride?.isRunning) return false;
+      if (!isViewingThreadParams || !threadParamsAcceptChanges(threadParamsOverride)) return false;
       if (!chatId || !threadParamValues) return false;  // No local edits yet
 
       const baseline = threadParamsOverride.values;

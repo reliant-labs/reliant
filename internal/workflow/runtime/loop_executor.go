@@ -1938,21 +1938,53 @@ func (e *InlineLoopExecutor) executeIteration() (map[string]interface{}, error) 
 					// A sub-agent ends alone and reports to its parent; only
 					// the root pauses the run. See failsAlone.
 					if e.pauseCtrl.failsAlone(e.ctx) {
-						e.logger.Warn("[InlineLoop] Sub-agent step exhausted retries; ending this agent and reporting to its parent",
-							"loopID", e.loopID,
-							"iteration", e.iteration,
-							"stepID", running.StepID,
-							"thread", e.threadForError(),
-							"error", stepEvent.Error,
-						)
-						return nil, endSubAgent(e.ctx, retryExhaustionError{
+						exhaustion := retryExhaustionError{
 							ChatID:       e.chatID,
 							WorkflowID:   e.workflowID,
 							WorkflowName: e.workflowName,
 							Message:      stepEvent.Error.Error(),
 							Thread:       e.threadForError(),
 							Err:          stepEvent.Error,
-						}, running.StepID)
+						}
+						// Unless a message reached it after this turn began:
+						// then it takes the turn that message is owed, on
+						// whatever the user has changed since (as a paused
+						// main thread does on resume).
+						if retriesForUnreadMessage(e.ctx, e.childTracker, exhaustion) {
+							e.logger.Info("[InlineLoop] Sub-agent step failed with a message unread; retrying in place for it",
+								"loopID", e.loopID,
+								"iteration", e.iteration,
+								"stepID", running.StepID,
+								"thread", e.threadForError(),
+								"error", stepEvent.Error,
+							)
+							e.syncIterationInputs(iterInputs)
+							// The retry reads the mailbox and history afresh,
+							// so it is what the loop-exit gate measures from:
+							// a doorbell it answers must not buy another turn.
+							if e.turnBaseline != nil {
+								thread := e.GetThread()
+								e.turnBaseline = &detachedSpawnBaseline{
+									completions: e.childTracker.detachedCompletionCount(thread),
+									wakes:       e.childTracker.threadWakeCount(thread),
+									reports:     e.childTracker.detachedReportCount(thread),
+								}
+							}
+							newRunning := iterExecutor.Start(&core.TriggeredNode{
+								Node:  running.Node,
+								Event: running.Event,
+							})
+							runningSteps = append(runningSteps, newRunning)
+							continue
+						}
+						e.logger.Warn("[InlineLoop] Sub-agent step failed; ending this agent and reporting to its parent",
+							"loopID", e.loopID,
+							"iteration", e.iteration,
+							"stepID", running.StepID,
+							"thread", e.threadForError(),
+							"error", stepEvent.Error,
+						)
+						return nil, endSubAgent(e.ctx, exhaustion, running.StepID)
 					}
 
 					e.logger.Warn("[InlineLoop] Activity exhausted retries; pausing until resume",

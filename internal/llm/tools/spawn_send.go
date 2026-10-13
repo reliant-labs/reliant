@@ -28,12 +28,16 @@ Do not proceed as though your instruction has already taken effect — if you
 need to know whether it landed, check back with spawn_status or wait for a
 response.
 
-v1 is parent \u2194 child only: you may message a direct sub-agent (a spawn of
+v1 is parent ↔ child only: you may message a direct sub-agent (a spawn of
 this thread) or your own parent. Messaging a sibling or unrelated agent is
 rejected.
 
-If the target has already finished, this FAILS rather than silently doing
-nothing \u2014 use spawn(agent_id=...) to resume it instead.`
+A sub-agent of yours that stopped on an error is not finished: your message
+resumes it where it stopped, and it reads the message at its first turn.
+
+If the target has finished (completed, or stopped by the user), this FAILS
+rather than silently doing nothing — use spawn(agent_id=...) to resume it
+instead.`
 )
 
 // AgentMessageNotifier wakes the workflow that owns a thread after a message
@@ -109,7 +113,15 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 	if err != nil || target == nil {
 		return NewTextErrorResponse(fmt.Sprintf("Target agent %q could not be found.", params.AgentID)), nil
 	}
-	if core.ThreadStatusIsTerminal(target.Status) {
+	// A sub-agent that stopped on an error is not finished: this message
+	// resumes it. The doorbell rung below is what resumes it — the run
+	// relaunches a stopped agent that has a message waiting — so without
+	// one there is nothing to resume it, and it is refused like a finished
+	// agent. Only a parent resumes its sub-agent; a child does not restart
+	// its parent.
+	resumesStoppedAgent := relationship == spawnRelationshipChild &&
+		target.Status == core.ThreadStatusFailed && s.notifier != nil
+	if core.ThreadStatusIsTerminal(target.Status) && !resumesStoppedAgent {
 		return NewTextErrorResponse(fmt.Sprintf(
 			"Agent %q has already finished (status: %s) — its loop has exited and there is nothing to deliver into. "+
 				"Use spawn(agent_id=%q, ...) to resume it instead; spawn_send never silently resurrects a finished agent.",
@@ -144,6 +156,14 @@ func (s *spawnSendTool) Execute(rctx *rctx.ToolContext, params SpawnSendParams) 
 	// case for it.
 	if s.notifier != nil {
 		s.notifier.NotifyAgentMessageQueued(rctx.Context, rctx.ChatID, params.AgentID)
+	}
+
+	if resumesStoppedAgent {
+		return NewTextResponse(fmt.Sprintf(
+			"Queued for delivery to %q (%s). It had stopped on an error; this message resumes it where it stopped, "+
+				"and it will read it at its first turn. It has NOT been read yet — do not assume it has acted on this. "+
+				"You will be notified when it finishes.",
+			title, params.AgentID)), nil
 	}
 
 	return NewTextResponse(fmt.Sprintf(

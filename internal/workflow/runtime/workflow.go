@@ -105,6 +105,15 @@ type ResumeInput struct {
 	// ToolGrantsFromDurableState). Relaunched spawns keep their thread, and
 	// with it their grants.
 	ToolGrants map[string][]string `json:"tool_grants,omitempty"`
+	// StoppedSpawns are the sub-agents that stopped on a failure in the
+	// predecessor and can still be resumed by a message (subagent_resume.go).
+	// Carried by a continue-as-new only; they are not relaunched, just
+	// remembered.
+	StoppedSpawns []SpawnHandoff `json:"stopped_spawns,omitempty"`
+	// ThreadInputs are the per-thread param changes the user made (a model
+	// switch on one agent's thread), so a thread rebuilt after the boundary
+	// keeps them (ChildWorkflowTracker.threadInputOverrides).
+	ThreadInputs map[string]map[string]interface{} `json:"thread_inputs,omitempty"`
 }
 
 // SpawnHandoff is one background spawn carried across an execution boundary.
@@ -138,6 +147,14 @@ type SpawnHandoff struct {
 	// the spawn parked. The successor re-applies it before relaunching, so
 	// the spawn stops at its first boundary instead of running on.
 	Cancelled bool `json:"cancelled,omitempty"`
+	// ReportID is the mailbox slot this run of the spawn reports its outcome
+	// under, when it is not ToolCallID: a stopped sub-agent resumed by a
+	// message reports under a fresh slot, because its tool call's one report
+	// slot already holds the failure it stopped with (subagent_resume.go).
+	ReportID string `json:"report_id,omitempty"`
+	// Resumes counts the times a message has resumed this spawn after it
+	// stopped; it numbers the fresh report slots.
+	Resumes int `json:"resumes,omitempty"`
 }
 
 // ChatContext provides chat-level data for CEL evaluation (chat.id)
@@ -331,6 +348,26 @@ type ChildWorkflowTracker struct {
 	// result's row, which is what a restart from the checkpoint rebuilds this
 	// from (ToolGrantsFromDurableState).
 	toolGrants map[string][]string
+
+	// ── Resuming a stopped sub-agent (subagent_resume.go) ─────────────────
+
+	// stoppedSpawns is every background spawn that ended on a failure and
+	// has not been resumed since, keyed by its child thread. A message to
+	// one resumes it (resumeStopped).
+	stoppedSpawns map[string]*detachedSpawnRecord
+	// threadInputOverrides records, per thread, the params the user set on
+	// that thread alone (a thread-scoped update_workflow_state). Applied on
+	// top of the thread's inputs whenever its executor is built, so a thread
+	// that is resumed or retried runs on what the user chose rather than on
+	// what it started with.
+	threadInputOverrides map[string]map[string]interface{}
+	// lastThreadInputs is each finished thread's inputs as they were when it
+	// stopped, for get_thread_inputs on a thread that is no longer running.
+	lastThreadInputs map[string]map[string]interface{}
+	// resumeStopped resumes the stopped sub-agent on thread, if there is one,
+	// and reports whether it did. Set by DynamicWorkflow, which holds what a
+	// relaunch needs; nil in tests that build a bare tracker.
+	resumeStopped func(ctx workflow.Context, thread string) bool
 }
 
 // detachedSpawnRecord is one live background spawn, tracked from the moment
@@ -564,7 +601,16 @@ func (t *ChildWorkflowTracker) RegisterThreadInputs(thread string, inputs map[st
 }
 
 // UnregisterThreadInputs removes a thread's input map when execution completes.
+// A background spawn's map is kept as its last inputs: if the spawn stopped on
+// a failure, get_thread_inputs reports them, since they are what a message
+// resumes it with (subagent_resume.go).
 func (t *ChildWorkflowTracker) UnregisterThreadInputs(thread string) {
+	if inputs, ok := t.threadInputs[thread]; ok && t.liveSpawnFor(thread) != nil {
+		if t.lastThreadInputs == nil {
+			t.lastThreadInputs = make(map[string]map[string]interface{})
+		}
+		t.lastThreadInputs[thread] = inputs
+	}
 	delete(t.threadInputs, thread)
 	delete(t.threadOwnedKeys, thread)
 }
@@ -666,6 +712,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	// tool results (ToolGrantsFromDurableState).
 	if input.Resume != nil {
 		childTracker.seedToolGrants(input.Resume.ToolGrants)
+		// Likewise the sub-agents that stopped on a failure, which a message
+		// can still resume, and the params the user set on single threads.
+		childTracker.seedStoppedSpawns(input.Resume.StoppedSpawns)
+		childTracker.seedThreadInputOverrides(input.Resume.ThreadInputs)
 	}
 
 	// NOTE: Signal handler and query handler are set up AFTER ApplyDefaults (below)
@@ -1002,6 +1052,10 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 		if threadInputs := childTracker.GetThreadInputs(thread); threadInputs != nil {
 			return threadInputs, nil
 		}
+		// A stopped sub-agent's are the inputs it will resume with.
+		if stoppedInputs := childTracker.stoppedThreadInputs(thread); stoppedInputs != nil {
+			return stoppedInputs, nil
+		}
 		// Fall back to root inputs if thread not registered (e.g. root thread or completed)
 		return input.Inputs, nil
 	})
@@ -1261,6 +1315,21 @@ func DynamicWorkflow(ctx workflow.Context, input WorkflowInput) (result *Workflo
 	interruptCoordinator := NewThreadInterruptCoordinator(ctx, workflowID)
 	makeThreadInterrupt := func(thread string) *ThreadInterrupt {
 		return interruptCoordinator.ForThread(thread)
+	}
+
+	// A message to a sub-agent that stopped on a failure resumes it, in this
+	// execution, under the parent it reports to (subagent_resume.go).
+	childTracker.resumeStopped = func(resumeCtx workflow.Context, stoppedThread string) bool {
+		return resumeStoppedSpawn(resumeCtx, stoppedThread, stoppedSpawnResumeDeps{
+			rootThread:          execCtx.Thread,
+			chatID:              input.ChatID,
+			projectPath:         execCtx.ProjectPath,
+			workflowInputs:      input.Inputs,
+			childTracker:        childTracker,
+			cancelledThreads:    cancelledThreads,
+			makeThreadPauseCtrl: makeThreadPauseCtrl,
+			makeThreadInterrupt: makeThreadInterrupt,
+		})
 	}
 
 	// Receive mailbox doorbells so a thread parked on its background spawns
@@ -2661,6 +2730,12 @@ func setupThreadWakeHandler(ctx workflow.Context, childTracker *ChildWorkflowTra
 			childTracker.notifyThreadWake(sig.Thread)
 			logger.Info("[ThreadWake] Wake notification received",
 				"workflowID", workflowID, "thread", sig.Thread, "reason", string(sig.Reason))
+			// The doorbell of a sub-agent that stopped on a failure has no
+			// parked gate behind it: the agent's loop has exited. What it
+			// rang for is a message to that agent, and a message resumes it.
+			if childTracker.resumeStopped != nil {
+				childTracker.resumeStopped(gCtx, sig.Thread)
+			}
 		}
 	})
 }
@@ -2698,6 +2773,10 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 
 				// Check if this is a thread-scoped update (contains __thread key)
 				if isThreadScoped {
+					// Remembered for the thread itself, not only applied to
+					// the run in flight: a thread that is retried or resumed
+					// rebuilds its inputs, and must rebuild them with this.
+					childTracker.recordThreadInputOverride(targetThread, update)
 					threadInputs := childTracker.GetThreadInputs(targetThread)
 					if threadInputs != nil {
 						for key, value := range update {
@@ -2708,8 +2787,9 @@ func setupInputUpdateHandler(ctx workflow.Context, workflowInputs map[string]int
 							threadInputs[key] = value
 						}
 					} else {
-						logger.Warn("[Workflow Runtime] Thread-scoped update for unregistered thread, ignoring",
+						logger.Info("[Workflow Runtime] Thread-scoped update for a thread that is not running; kept for its next run",
 							"thread", targetThread,
+							"stoppedSubAgent", childTracker.stoppedSpawnFor(targetThread) != nil,
 						)
 					}
 				} else {
@@ -2999,6 +3079,18 @@ type spawnChildWorkflowConfig struct {
 	// rawInput is the unwrapped spawn tool input JSON, carried so the durable
 	// tool_calls row records what the LLM actually asked for.
 	rawInput string
+	// reportID, when set, is the mailbox slot the outcome is reported under
+	// instead of toolCallID (see SpawnHandoff.ReportID).
+	reportID string
+}
+
+// reportKey is the tool_call_id the spawn's outcome is reported to its parent
+// under.
+func (c *spawnChildWorkflowConfig) reportKey() string {
+	if c.reportID != "" {
+		return c.reportID
+	}
+	return c.toolCallID
 }
 
 // parseSpawnToolCall parses a spawn tool call and returns the configuration
@@ -3390,10 +3482,19 @@ func prepareSpawnInline(
 
 // notifySpawnTerminal writes a detached spawn's terminal state: the child
 // workflow row and the spawn tool call's status.
+//
+// A run that a message resumed after the agent stopped (it reports under a
+// slot of its own, config.reportID) writes the child row only. Its tool call
+// already ended — failed, with the agent — and a call ends once
+// (db.UpsertToolCallStatus pins the first outcome); the agent's card reads the
+// child row, which is what moves.
 func notifySpawnTerminal(ctx workflow.Context, chatID string, config *spawnChildWorkflowConfig, prep *spawnPrepResult, parentWorkflowID, status string) {
 	notifyWorkflowStatus(ctx, chatID, config.childWorkflowID, prep.targetWorkflow, status, parentWorkflowID, config.childThread, &workflowStatusOpts{
 		SpawnedByToolCallID: config.toolCallID,
 	})
+	if config.reportID != "" {
+		return
+	}
 	notifyToolCallStatus(ctx, chatID, config.toolCallID, "spawn", status, prep.spawnStatusOpts)
 }
 
@@ -3639,12 +3740,24 @@ func dispatchSpawnBackground(
 	makeThreadPauseCtrl func(string) *PauseController,
 	makeThreadInterrupt func(string) *ThreadInterrupt,
 ) *spawnInlineResult {
+	// An agent is one loop on one thread. A message can resume a stopped
+	// agent behind its parent's back (subagent_resume.go), so the parent may
+	// ask to resume one that is already running again; a second loop on the
+	// same thread would interleave two conversations in one history.
+	if refusal := refuseResumingLiveAgent(ctx, config, childTracker); refusal != nil {
+		return refusal
+	}
 	prep := prepareSpawnInline(ctx, config, projectPath, chatID, parentWorkflowID, parentThread, workflowInputs, makeThreadPauseCtrl)
 	if prep.earlyResult != nil {
 		// Prep itself failed (thread validation, child init) — nothing was
 		// detached, so this is exactly as synchronous as any other spawn
 		// parse/setup error. No registry entry to clean up.
 		return prep.earlyResult
+	}
+	// The parent resumed it, so it is no longer a stopped agent waiting for
+	// a message.
+	if config.isResumption {
+		childTracker.forgetStoppedSpawn(config.childThread)
 	}
 
 	// tool_calls.status = 6 (backgrounded): a result was returned to the LLM
@@ -3784,7 +3897,7 @@ func runDetachedSpawnChild(
 		"to_thread_id":   parentThread,
 		"kind":           spawnResultKindForMailbox(result),
 		"body":           result.Content,
-		"tool_call_id":   config.toolCallID,
+		"tool_call_id":   config.reportKey(),
 	}
 	var enqueueOutput map[string]interface{}
 	if err := workflow.ExecuteActivity(enqueueCtx, "EnqueueAgentMessage", enqueueInput).Get(gCtx, &enqueueOutput); err != nil {
@@ -3806,7 +3919,24 @@ func runDetachedSpawnChild(
 		notifySpawnTerminal(gCtx, chatID, config, prep, parentWorkflowID, result.terminalStatus)
 	}
 
+	// An agent that stopped on a failure is not finished: remember it, so a
+	// message can resume it. Recorded before the completion is counted, so
+	// a parent woken by that count already finds the agent resumable.
+	stopped := result.IsError && !result.Cancelled
+	if stopped {
+		childTracker.recordStoppedSpawn(config.toolCallID)
+	} else {
+		childTracker.forgetLastThreadInputs(config.childThread)
+	}
 	childTracker.completeDetachedSpawn(config.toolCallID, parentThread)
+
+	// A message that reached the agent while it was reporting its failure
+	// rang a doorbell nothing acted on: the agent was still registered live,
+	// so the doorbell only counted. Nothing will read that message unless the
+	// agent resumes for it now.
+	if stopped && childTracker.wakeSinceLastTurn(config.childThread) && childTracker.resumeStopped != nil {
+		childTracker.resumeStopped(gCtx, config.childThread)
+	}
 }
 
 // spawnHandoffFor is the record a successor execution needs to relaunch this
@@ -3876,6 +4006,7 @@ func relaunchCarriedSpawns(
 			presetName:      handoff.Preset,
 			title:           handoff.Title,
 			isResumption:    true,
+			reportID:        handoff.ReportID,
 		}
 		if config.childWorkflowID == "" {
 			config.childWorkflowID = DeterministicWorkflowID(handoff.ParentWorkflowID, handoff.ToolCallID)

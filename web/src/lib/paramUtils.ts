@@ -132,6 +132,20 @@ export function reconcileParamsWithServer(
 }
 
 /**
+ * Whether a selected thread's param edits can be pushed to the server. A
+ * running thread applies them at once. A sub-agent that stopped on an error
+ * (`resumable`) is not running, but a message resumes it, and it resumes with
+ * these params — switching its model to another provider is how a user gets it
+ * past a provider's usage limit. A finished thread has no next run to apply
+ * them to.
+ */
+export function threadParamsAcceptChanges(
+  thread: { isRunning: boolean; resumable: boolean } | null | undefined
+): boolean {
+  return thread != null && (thread.isRunning || thread.resumable);
+}
+
+/**
  * Check if a model input is effectively required (has no meaningful default).
  * 
  * Model inputs with default: '' are considered required because empty string

@@ -59,14 +59,11 @@ func (s *ChatService) UpdateWorkflowParams(
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
 
-	// If targeting a specific thread, verify it exists and is running
+	// If targeting a specific thread, verify there is a run of it for the
+	// params to apply to.
 	if req.Msg.ThreadId != nil && *req.Msg.ThreadId != "" {
-		wf, wfErr := s.database.GetWorkflowByThread(ctx, req.Msg.ChatId, *req.Msg.ThreadId)
-		if wfErr != nil || wf == nil {
-			return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("no workflow found for thread"))
-		}
-		if wf.Status != db.Active() {
-			return nil, connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("thread workflow is not running"))
+		if err := s.threadAcceptsParamUpdate(ctx, chat, *req.Msg.ThreadId); err != nil {
+			return nil, err
 		}
 	}
 
@@ -122,6 +119,36 @@ func (s *ChatService) UpdateWorkflowParams(
 		Success: true,
 		Message: "Workflow parameters updated",
 	}), nil
+}
+
+// threadAcceptsParamUpdate reports whether thread-scoped params can be applied
+// to threadID: nil when its run is going, or when it is a sub-agent that
+// stopped on an error — its params are the ones it resumes with, and
+// switching its model is how a user gets it past a provider's usage limit.
+// A thread that finished has no next run for them to apply to.
+func (s *ChatService) threadAcceptsParamUpdate(ctx context.Context, chat *db.Chat, threadID string) error {
+	wf, err := s.database.GetWorkflowByThread(ctx, chat.ID, threadID)
+	if err != nil || wf == nil {
+		return connect.NewError(connect.CodeNotFound, fmt.Errorf("no workflow found for thread"))
+	}
+	if wf.Status == db.Active() {
+		return nil
+	}
+	if s.canResumeStoppedAgent(ctx, chat, threadID) {
+		return nil
+	}
+	return connect.NewError(connect.CodeFailedPrecondition, fmt.Errorf("thread workflow is not running"))
+}
+
+// canResumeStoppedAgent reports whether threadID is a sub-agent that stopped
+// on an error and that a message could resume now.
+func (s *ChatService) canResumeStoppedAgent(ctx context.Context, chat *db.Chat, threadID string) bool {
+	thread, err := s.database.GetThread(ctx, threadID)
+	if err != nil || !isResumableStoppedAgent(thread, chat) {
+		return false
+	}
+	refusal, _ := s.stoppedAgentResumability(ctx, chat, thread)
+	return refusal == ""
 }
 
 // staleWorkflowSignalError is the error for a param-update signal that found
@@ -338,6 +365,10 @@ func (s *ChatService) GetThreadWorkflowInputs(
 	}
 
 	isRunning := wf.Status == db.Active()
+	// A sub-agent that stopped on an error is not running, but its params
+	// still matter: they are what it resumes with, and the run that will
+	// resume it holds them.
+	resumable := !isRunning && s.canResumeStoppedAgent(ctx, chat, req.Msg.ThreadId)
 
 	// Resolve to root workflow ID for Temporal queries.
 	// Child workflows are inline goroutines with synthetic DB IDs that Temporal doesn't know.
@@ -352,7 +383,7 @@ func (s *ChatService) GetThreadWorkflowInputs(
 
 	// Try to query Temporal for thread-specific inputs (only works for running workflows)
 	inputsMap := make(map[string]*structpb.Value)
-	if isRunning && rootWorkflowID != "" {
+	if (isRunning || resumable) && rootWorkflowID != "" {
 		// Use get_thread_inputs query which returns the thread's subInputs map
 		queryResp, err := s.tempClient.QueryWorkflow(ctx, rootWorkflowID, rootRunID, "get_thread_inputs", req.Msg.ThreadId)
 		if err == nil {
@@ -378,6 +409,7 @@ func (s *ChatService) GetThreadWorkflowInputs(
 		WorkflowName: wf.WorkflowName,
 		Inputs:       inputsMap,
 		IsRunning:    isRunning,
+		Resumable:    resumable,
 	}), nil
 }
 

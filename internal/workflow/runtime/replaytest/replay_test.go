@@ -30,6 +30,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	historypb "go.temporal.io/api/history/v1"
+	"go.temporal.io/sdk/client"
 	"go.temporal.io/sdk/interceptor"
 	tlog "go.temporal.io/sdk/log"
 	"go.temporal.io/sdk/worker"
@@ -168,11 +170,52 @@ func replayFixture(t *testing.T, fixture, howToFix string) {
 	}
 	t.Run(name, func(t *testing.T) {
 		t.Parallel()
+		history, workflowID, err := loadFixtureHistory(fixture)
+		if err != nil {
+			t.Fatalf("load fixture %s: %v", name, err)
+		}
 		replayer := newProductionMirroredReplayer(t)
-		if err := replayer.ReplayWorkflowHistoryFromJSONFile(replayLogger(), fixture); err != nil {
+		if err := replayer.ReplayWorkflowHistoryWithOptions(replayLogger(), history, worker.ReplayWorkflowHistoryOptions{
+			OriginalExecution: sdkworkflow.Execution{ID: workflowID},
+		}); err != nil {
 			t.Fatalf("replay of fixture %s FAILED: the current workflow code is not replay-compatible with this recorded history.\n\n%s\n\nReplay error: %v", name, howToFix, err)
 		}
 	})
+}
+
+// loadFixtureHistory reads a fixture's history and the workflow id it was
+// recorded under.
+//
+// The replayer must run under that id, as a production worker replaying the
+// run would. Left to itself it makes one up, and every id the workflow derives
+// from its own (DeterministicWorkflowID: a spawn's thread and child workflow)
+// then differs from the one the recorded run used — so a signal that names
+// such an id, like the doorbell that resumes a stopped sub-agent, names a
+// thread the replay never had, and the replay diverges where production would
+// not. The id is the run's ExecContext.WorkflowID, in the start event's input;
+// "" (the replayer's own default) when a history does not carry one.
+func loadFixtureHistory(fixture string) (*historypb.History, string, error) {
+	f, err := os.Open(fixture)
+	if err != nil {
+		return nil, "", err
+	}
+	defer f.Close()
+	history, err := client.HistoryFromJSON(f, client.HistoryJSONOptions{})
+	if err != nil {
+		return nil, "", err
+	}
+	if len(history.GetEvents()) == 0 {
+		return history, "", nil
+	}
+	payloads := history.GetEvents()[0].GetWorkflowExecutionStartedEventAttributes().GetInput().GetPayloads()
+	if len(payloads) == 0 {
+		return history, "", nil
+	}
+	var input v2.WorkflowInput
+	if err := rtemporal.NewFlexibleDataConverter().FromPayload(payloads[0], &input); err != nil || input.ExecContext == nil {
+		return history, "", nil
+	}
+	return history, input.ExecContext.WorkflowID, nil
 }
 
 const currentFixtureBreak = `Your change altered the workflow command sequence (activities, timers, side

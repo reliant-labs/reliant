@@ -679,6 +679,13 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 	if _, ok := subInputs["mode"]; !ok {
 		subInputs["mode"] = getModeFromInputs(e.workflowInputs)
 	}
+	// What the user set on this thread alone wins over everything the thread
+	// started with — the model they switched a stopped agent to, above all.
+	// Only for a body with inputs of its own: an inline body's map IS its
+	// parent's, and a thread's choice must not leak into the parent.
+	if e.inputPolicy() != core.InputPolicyInlineInheritParentInputs {
+		e.childTracker.applyThreadInputOverrides(subThread, subInputs, ownedKeys)
+	}
 
 	// Register thread inputs for per-thread param queries and updates.
 	// This allows the root workflow's query/signal handlers to access this thread's inputs.
@@ -1063,21 +1070,38 @@ func (e *InlineWorkflowExecutor) executeSubWorkflow() (map[string]interface{}, e
 					// A sub-agent ends alone and reports to its parent; only
 					// the root pauses the run. See failsAlone.
 					if e.pauseCtrl.failsAlone(e.ctx) {
-						e.logger.Warn("[InlineWorkflow] Sub-agent step exhausted retries; ending this agent and reporting to its parent",
-							"nodeID", e.nodeID,
-							"subWorkflow", e.subWorkflowName,
-							"stepID", running.StepID,
-							"thread", e.threadForError(),
-							"error", stepEvent.Error,
-						)
-						return nil, endSubAgent(e.ctx, retryExhaustionError{
+						exhaustion := retryExhaustionError{
 							ChatID:       e.chatID,
 							WorkflowID:   e.workflowID,
 							WorkflowName: e.workflowName,
 							Message:      stepEvent.Error.Error(),
 							Thread:       e.threadForError(),
 							Err:          stepEvent.Error,
-						}, running.StepID)
+						}
+						// See the matching comment in loop_executor.go.
+						if retriesForUnreadMessage(e.ctx, e.childTracker, exhaustion) {
+							e.logger.Info("[InlineWorkflow] Sub-agent step failed with a message unread; retrying in place for it",
+								"nodeID", e.nodeID,
+								"subWorkflow", e.subWorkflowName,
+								"stepID", running.StepID,
+								"thread", e.threadForError(),
+								"error", stepEvent.Error,
+							)
+							newRunning := executor.Start(&core.TriggeredNode{
+								Node:  running.Node,
+								Event: running.Event,
+							})
+							runningSteps = append(runningSteps, newRunning)
+							continue
+						}
+						e.logger.Warn("[InlineWorkflow] Sub-agent step failed; ending this agent and reporting to its parent",
+							"nodeID", e.nodeID,
+							"subWorkflow", e.subWorkflowName,
+							"stepID", running.StepID,
+							"thread", e.threadForError(),
+							"error", stepEvent.Error,
+						)
+						return nil, endSubAgent(e.ctx, exhaustion, running.StepID)
 					}
 
 					e.logger.Warn("[InlineWorkflow] Activity exhausted retries; pausing until resume",

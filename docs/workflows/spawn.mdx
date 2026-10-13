@@ -38,6 +38,19 @@ A wait never makes the parent deaf. If a message arrives for the parent while it
 
 Once an agent has spawned at least one child, `spawn_status`, `spawn_send` and `spawn_stop` are on its tool list from its next turn on — there is nothing to load by hand. Before its first spawn, `spawn_status` is left off, so an agent that never fans out does not pay for its schema on every request.
 
+### When a sub-agent stops on an error
+
+A sub-agent whose step fails — its retries are used up, the provider returns an error, or the provider's usage limit is reached — stops on its own. Nothing else in the chat pauses. Its parent is told why, and so are you, in the sub-agent's thread.
+
+A stopped sub-agent is not finished. A message sent to it resumes it where it stopped, and it reads that message on its first turn:
+
+- From the app: select the sub-agent's thread and send it a message, or use **Message this agent to resume it** on its spawn card.
+- From its parent: `spawn_send` to the agent's id, or `spawn` with its `agent_id`.
+
+If it stopped on a provider usage limit, the error says when the limit resets. To carry on before then, switch the sub-agent's thread to a model from another provider first: the resumed agent runs on the model you chose.
+
+A sub-agent that completed, or that you stopped, is finished: a message to it is refused, and its parent can start it again with `spawn` and its `agent_id`. A stopped sub-agent is resumed inside the chat's run, so it can only be resumed while that run is going; once the run has ended, send a message to the chat and the main agent can resume it with `spawn`.
+
 ### Branching a chat that has sub-agents
 
 Branching a conversation copies its transcript, including the spawn calls, but not ownership of the agents those calls started. The original conversation keeps running, keeps receiving their results, and stays the only one that can wait on, message, or stop them.

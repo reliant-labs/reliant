@@ -890,7 +890,13 @@ export const chatGrpc = {
   async getThreadWorkflowInputs(
     chatId: string,
     threadId: string
-  ): Promise<{ workflowName: string; inputs: Record<string, unknown>; isRunning: boolean }> {
+  ): Promise<{
+    workflowName: string;
+    inputs: Record<string, unknown>;
+    isRunning: boolean;
+    /** A sub-agent that stopped on an error: a message resumes it, with these params. */
+    resumable: boolean;
+  }> {
     const client = grpcClient.chat();
     const request = create(GetThreadWorkflowInputsRequestSchema, { chatId, threadId });
     const response = await client.getThreadWorkflowInputs(request);
@@ -905,6 +911,7 @@ export const chatGrpc = {
       workflowName: response.workflowName,
       inputs,
       isRunning: response.isRunning,
+      resumable: response.resumable,
     };
   },
 };

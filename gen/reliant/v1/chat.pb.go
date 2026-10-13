@@ -5651,10 +5651,15 @@ func (x *GetThreadWorkflowInputsRequest) GetThreadId() string {
 
 // GetThreadWorkflowInputsResponse returns the workflow inputs and metadata for a thread
 type GetThreadWorkflowInputsResponse struct {
-	state         protoimpl.MessageState     `protogen:"open.v1"`
-	WorkflowName  string                     `protobuf:"bytes,1,opt,name=workflow_name,json=workflowName,proto3" json:"workflow_name,omitempty"`                                           // The workflow name (e.g., "builtin://agent")
-	Inputs        map[string]*structpb.Value `protobuf:"bytes,2,rep,name=inputs,proto3" json:"inputs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Current workflow input values
-	IsRunning     bool                       `protobuf:"varint,3,opt,name=is_running,json=isRunning,proto3" json:"is_running,omitempty"`                                                   // Whether the workflow is still running
+	state        protoimpl.MessageState     `protogen:"open.v1"`
+	WorkflowName string                     `protobuf:"bytes,1,opt,name=workflow_name,json=workflowName,proto3" json:"workflow_name,omitempty"`                                           // The workflow name (e.g., "builtin://agent")
+	Inputs       map[string]*structpb.Value `protobuf:"bytes,2,rep,name=inputs,proto3" json:"inputs,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"` // Current workflow input values
+	IsRunning    bool                       `protobuf:"varint,3,opt,name=is_running,json=isRunning,proto3" json:"is_running,omitempty"`                                                   // Whether the workflow is still running
+	// The thread is a sub-agent that stopped on an error and is resumed by a
+	// message to it. Not running, but its params can still be changed: they are
+	// what it resumes with (e.g. a model from another provider after a usage
+	// limit).
+	Resumable     bool `protobuf:"varint,4,opt,name=resumable,proto3" json:"resumable,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -5706,6 +5711,13 @@ func (x *GetThreadWorkflowInputsResponse) GetInputs() map[string]*structpb.Value
 func (x *GetThreadWorkflowInputsResponse) GetIsRunning() bool {
 	if x != nil {
 		return x.IsRunning
+	}
+	return false
+}
+
+func (x *GetThreadWorkflowInputsResponse) GetResumable() bool {
+	if x != nil {
+		return x.Resumable
 	}
 	return false
 }
@@ -6547,12 +6559,13 @@ const file_reliant_v1_chat_proto_rawDesc = "" +
 	"\b_outcome\"V\n" +
 	"\x1eGetThreadWorkflowInputsRequest\x12\x17\n" +
 	"\achat_id\x18\x01 \x01(\tR\x06chatId\x12\x1b\n" +
-	"\tthread_id\x18\x02 \x01(\tR\bthreadId\"\x89\x02\n" +
+	"\tthread_id\x18\x02 \x01(\tR\bthreadId\"\xa7\x02\n" +
 	"\x1fGetThreadWorkflowInputsResponse\x12#\n" +
 	"\rworkflow_name\x18\x01 \x01(\tR\fworkflowName\x12O\n" +
 	"\x06inputs\x18\x02 \x03(\v27.reliant.v1.GetThreadWorkflowInputsResponse.InputsEntryR\x06inputs\x12\x1d\n" +
 	"\n" +
-	"is_running\x18\x03 \x01(\bR\tisRunning\x1aQ\n" +
+	"is_running\x18\x03 \x01(\bR\tisRunning\x12\x1c\n" +
+	"\tresumable\x18\x04 \x01(\bR\tresumable\x1aQ\n" +
 	"\vInputsEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12,\n" +
 	"\x05value\x18\x02 \x01(\v2\x16.google.protobuf.ValueR\x05value:\x028\x01\"n\n" +

@@ -2640,12 +2640,16 @@ Do not proceed as though your instruction has already taken effect — if you
 need to know whether it landed, check back with spawn_status or wait for a
 response.
 
-v1 is parent \u2194 child only: you may message a direct sub-agent (a spawn of
+v1 is parent ↔ child only: you may message a direct sub-agent (a spawn of
 this thread) or your own parent. Messaging a sibling or unrelated agent is
 rejected.
 
-If the target has already finished, this FAILS rather than silently doing
-nothing \u2014 use spawn(agent_id=...) to resume it instead.
+A sub-agent of yours that stopped on an error is not finished: your message
+resumes it where it stopped, and it reads the message at its first turn.
+
+If the target has finished (completed, or stopped by the user), this FAILS
+rather than silently doing nothing — use spawn(agent_id=...) to resume it
+instead.
 
 ---
 

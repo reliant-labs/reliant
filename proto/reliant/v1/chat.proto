@@ -1052,6 +1052,11 @@ message GetThreadWorkflowInputsResponse {
   string workflow_name = 1;  // The workflow name (e.g., "builtin://agent")
   map<string, google.protobuf.Value> inputs = 2;  // Current workflow input values
   bool is_running = 3;  // Whether the workflow is still running
+  // The thread is a sub-agent that stopped on an error and is resumed by a
+  // message to it. Not running, but its params can still be changed: they are
+  // what it resumes with (e.g. a model from another provider after a usage
+  // limit).
+  bool resumable = 4;
 }
 
 // WorkflowExecutionView selects how much step history GetWorkflowExecutions

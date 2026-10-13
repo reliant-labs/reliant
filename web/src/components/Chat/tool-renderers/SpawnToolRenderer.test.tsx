@@ -127,14 +127,35 @@ describe("SpawnToolRenderer", () => {
     expect(screen.queryByPlaceholderText("Message this agent…")).not.toBeInTheDocument();
   });
 
-  it("child FAILED: does not offer the message form, shows a terminal failed state", () => {
+  // A failed agent stopped on an error — retries exhausted, a usage limit — and
+  // is not finished: a message to it resumes it where it stopped.
+  it("child FAILED: shows the failure and offers a message that resumes it", () => {
     mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.FAILED, children: [] }];
     mockThreadMessages = [assistantMessage("m1", "Ran into trouble")];
 
     render(<SpawnToolRenderer ctx={createContext({ isCompleted: false, hasFailed: true })} />);
 
-    expect(screen.queryByPlaceholderText("Message this agent…")).not.toBeInTheDocument();
     expect(screen.getByText("Agent failed")).toBeInTheDocument();
+    expect(screen.getByPlaceholderText("Message this agent to resume it…")).toBeInTheDocument();
+  });
+
+  it("send-to-agent form surfaces a refusal and keeps the text", async () => {
+    mockAllWorkflows = [{ id: "wf-child-1", state: WorkflowState.STOPPED, stopReason: WorkflowStopReason.FAILED, children: [] }];
+    sendAgentMessageMock.mockResolvedValue({
+      success: false,
+      message: "This agent stopped on an error, and this chat's run has since ended.",
+    });
+
+    render(<SpawnToolRenderer ctx={createContext({ isCompleted: false, hasFailed: true })} />);
+
+    const input = screen.getByPlaceholderText("Message this agent to resume it…");
+    fireEvent.change(input, { target: { value: "carry on" } });
+    fireEvent.click(screen.getByLabelText("Send message to agent"));
+
+    await waitFor(() => {
+      expect(toastErrorMock).toHaveBeenCalledWith("This agent stopped on an error, and this chat's run has since ended.");
+    });
+    expect(input).toHaveValue("carry on");
   });
 
   it("child CANCELLED: does not offer the message form, shows a terminal cancelled state", () => {

@@ -1400,6 +1400,21 @@ func (s *ChatService) SendAgentMessage(
 	restartMainRun := isMainThread && s.tempClient != nil && s.runs != nil && owningWorkflow != nil &&
 		owningWorkflow.Status.IsStopped() && !owningWorkflow.Status.Resumable()
 
+	// A sub-agent that stopped on an error is not finished: a message to it
+	// resumes it, inside the chat's run, which relaunches it when its
+	// doorbell rings (internal/workflow/runtime/subagent_resume.go). Its
+	// thread and its own workflow row are terminal, so it bypasses both
+	// liveness checks below; what it needs instead is a run to resume in.
+	resumeStoppedAgent := isResumableStoppedAgent(target, chat)
+	rootRunPaused := false
+	if resumeStoppedAgent {
+		refusal, paused := s.stoppedAgentResumability(ctx, chat, target)
+		if refusal != "" {
+			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{Success: false, Message: refusal}), nil
+		}
+		rootRunPaused = paused
+	}
+
 	// A terminal thread means the loop has exited. This is trustworthy in the
 	// closing direction because a thread is only revived by the run that
 	// starts on it (WorkflowStatusActivity's "started" arm calls
@@ -1411,7 +1426,7 @@ func (s *ChatService) SendAgentMessage(
 	// just written its own "completed" sits in exactly that state for the
 	// moment before its workflow follows, and reviving it would queue a
 	// message into an agent that really has stopped.
-	if !restartMainRun && core.ThreadStatusIsTerminal(target.Status) {
+	if !restartMainRun && !resumeStoppedAgent && core.ThreadStatusIsTerminal(target.Status) {
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: fmt.Sprintf(
@@ -1451,7 +1466,7 @@ func (s *ChatService) SendAgentMessage(
 	// it is not proof the agent is idle, and wrongly refusing loses the
 	// message outright, whereas wrongly accepting only reproduces today's
 	// late delivery.
-	if !restartMainRun && owningWorkflow != nil && !owningWorkflow.Status.Live() {
+	if !restartMainRun && !resumeStoppedAgent && owningWorkflow != nil && !owningWorkflow.Status.Live() {
 		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
 			Success: false,
 			Message: fmt.Sprintf(
@@ -1516,6 +1531,25 @@ func (s *ChatService) SendAgentMessage(
 	}
 
 	switch {
+	case resumeStoppedAgent:
+		// The doorbell is the only thing that resumes a stopped agent: it
+		// has no next turn of its own to drain the row at. So unlike a live
+		// agent's, a doorbell that cannot be rung is not a late delivery but
+		// none — withdraw the row rather than promise one.
+		if err := s.notifyThreadWake(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox); err != nil {
+			if _, cancelErr := s.database.CancelQueuedAgentMessage(ctx, msg.ID, chat.ID); cancelErr != nil {
+				logging.Warn("Could not withdraw a message queued to a stopped agent that could not be woken",
+					"error", cancelErr, "chatID", chat.ID, "messageID", msg.ID)
+			}
+			return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+				Success: false,
+				Message: "This agent stopped on an error, and its run could not be reached to resume it. Try sending again in a moment.",
+			}), nil
+		}
+		return connect.NewResponse(&reliantv1.SendAgentMessageResponse{
+			Success: true,
+			Message: stoppedAgentResumeReceipt(rootRunPaused),
+		}), nil
 	case !isMainThread:
 		_ = s.notifyThreadWake(ctx, chat, req.Msg.ThreadId, threadwake.ReasonMailbox)
 	case restartMainRun && owningWorkflow.Status.StopReason == core.StopReasonCancelled:
@@ -1542,6 +1576,60 @@ func (s *ChatService) SendAgentMessage(
 }
 
 const queuedReceipt = "Queued for delivery. It will be read at that agent's next turn — it has not been read yet."
+
+// stoppedAgentResumeReceipt is the receipt for a message that resumes a
+// sub-agent that had stopped on an error. As honest as queuedReceipt: queued
+// is not read. A paused run resumes the agent only when the chat resumes.
+func stoppedAgentResumeReceipt(runPaused bool) string {
+	receipt := "Queued. This agent had stopped on an error; your message resumes it where it stopped, " +
+		"and it will read it at its first turn — it has not been read yet."
+	if runPaused {
+		receipt += " This chat is paused, so the agent resumes when the chat does."
+	}
+	return receipt
+}
+
+// isResumableStoppedAgent reports whether thread is a sub-agent that stopped
+// on an error — retries exhausted, a provider error, a usage limit — rather
+// than one that finished. Such an agent is resumed by a message to it. One
+// that completed, or that the user stopped (cancelled), is finished.
+func isResumableStoppedAgent(thread *db.Thread, chat *db.Chat) bool {
+	return thread != nil && chat != nil && thread.ID != chat.MainThreadID() &&
+		thread.Origin == db.ThreadOriginSpawn && thread.Status == db.ThreadStatusFailed
+}
+
+// stoppedAgentResumability decides whether a message can resume a stopped
+// sub-agent now. It returns the user-facing refusal when it cannot (and ""
+// when it can), and whether the chat's run is paused.
+//
+// The agent is resumed INSIDE the chat's run, under the parent it reports to,
+// so both must still be there: the run live (running, pending or paused), and
+// the parent — the main thread, which lives as long as the run, or a
+// sub-agent that has not finished. Either one gone, the message would sit
+// queued behind a receipt promising a turn nothing will take. A row that
+// cannot be read fails open: the doorbell that follows still finds out
+// whether the run is there.
+func (s *ChatService) stoppedAgentResumability(ctx context.Context, chat *db.Chat, thread *db.Thread) (refusal string, runPaused bool) {
+	resumeElsewhere := fmt.Sprintf(
+		"Send a message to the chat instead — the main agent can resume it with spawn(agent_id=%q).", thread.ID)
+
+	if rootRun, err := s.database.GetWorkflow(ctx, chat.MainThreadID()); err == nil && rootRun != nil {
+		if !rootRun.Status.Live() {
+			return "This agent stopped on an error, and this chat's run has since ended, so nothing is running that could resume it. " +
+				resumeElsewhere, false
+		}
+		runPaused = rootRun.Status.IsStopped() && rootRun.Status.StopReason == core.StopReasonPaused
+	}
+
+	if thread.ParentThreadID != nil && *thread.ParentThreadID != chat.MainThreadID() {
+		parent, err := s.database.GetThread(ctx, *thread.ParentThreadID)
+		if err == nil && parent != nil && core.ThreadStatusIsTerminal(parent.Status) {
+			return "This agent stopped on an error, and the agent that started it has since finished, so its result would have nowhere to go. " +
+				resumeElsewhere, false
+		}
+	}
+	return "", runPaused
+}
 
 // owningWorkflow is the workflow row that owns a thread: the thread's own
 // workflow, or the one named after it. Nil when it cannot be read.

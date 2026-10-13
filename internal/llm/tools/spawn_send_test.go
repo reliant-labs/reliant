@@ -43,8 +43,13 @@ func seedSpawnRelationship(
 
 	childWorkflowID := childThreadID
 	wfStatus := db.Active()
-	if childThreadStatus != db.ThreadStatusRunning {
+	switch childThreadStatus {
+	case db.ThreadStatusCompleted:
 		wfStatus = db.Completed()
+	case db.ThreadStatusFailed:
+		wfStatus = db.Failed()
+	case db.ThreadStatusCancelled:
+		wfStatus = db.Cancelled()
 	}
 	require.NoError(t, repo.CreateWorkflow(ctx, &db.Workflow{
 		ID: childWorkflowID, ChatID: chatID, WorkflowName: "builtin://agent",
@@ -214,6 +219,83 @@ func TestSpawnSend_ToFinishedAgent_FailsWithGuidance(t *testing.T) {
 	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
 	require.NoError(t, err)
 	require.Empty(t, queued, "no message may be enqueued for a finished agent — a silent no-op is exactly what the spec forbids")
+}
+
+// A sub-agent that stopped on a failure is not finished: its parent's message
+// resumes it. spawn_send queues the row and rings the agent's doorbell, and the
+// run relaunches the agent to read it — the same resume spawn(agent_id=...)
+// does, without the parent having to know the difference.
+func TestSpawnSend_ToFailedChild_ResumesIt(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusFailed)
+
+	notifier := &recordingAgentMessageNotifier{}
+	tool := NewSpawnSendTool(repo, notifier)
+	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
+
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "use the other provider and carry on"})
+	require.False(t, resp.IsError, "a failed sub-agent must be resumable by its parent's message: %+v", resp)
+	require.Contains(t, resp.Content, "resum", "the receipt must say the message resumes the agent")
+	require.Contains(t, resp.Content, "It has NOT been read yet")
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	require.NoError(t, err)
+	require.Len(t, queued, 1)
+	require.Equal(t, "use the other provider and carry on", queued[0].Body)
+
+	require.Len(t, notifier.rings, 1, "the doorbell is what resumes a stopped agent")
+	require.Equal(t, childID, notifier.rings[0].threadID)
+}
+
+// Without a doorbell nothing can resume a stopped agent, so the message would
+// sit queued forever. Refuse, and point at spawn(agent_id=...).
+func TestSpawnSend_ToFailedChild_WithoutDoorbell_FailsWithGuidance(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusFailed)
+
+	tool := NewSpawnSendTool(repo, nil)
+	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
+
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "carry on"})
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "spawn(agent_id=")
+
+	queued, err := repo.ListQueuedAgentMessagesForThread(ctx, childID)
+	require.NoError(t, err)
+	require.Empty(t, queued)
+}
+
+// A sub-agent the user stopped is finished, exactly like a completed one.
+func TestSpawnSend_ToCancelledChild_FailsWithGuidance(t *testing.T) {
+	t.Parallel()
+	repo, cleanup := setupTestDB(t)
+	defer cleanup()
+	ctx := context.Background()
+	chatID := uuid.New().String()
+	createTestChat(t, repo, chatID)
+
+	parentID, childID, _ := seedSpawnRelationship(t, repo, ctx, chatID, db.ThreadStatusCancelled)
+
+	notifier := &recordingAgentMessageNotifier{}
+	tool := NewSpawnSendTool(repo, notifier)
+	rc := rctx.NewToolContext(ctx, chatID, parentID, nil, nil)
+
+	resp := runSpawnSend(t, tool, rc, SpawnSendParams{AgentID: childID, Message: "carry on"})
+	require.True(t, resp.IsError)
+	require.Contains(t, resp.Content, "already finished")
+	require.Empty(t, notifier.rings)
 }
 
 func TestSpawnSend_ToSibling_Rejected(t *testing.T) {

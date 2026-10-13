@@ -15,6 +15,7 @@ package replaytest
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/reliant-labs/reliant/internal/chatmarkers"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/db/core"
 	"github.com/reliant-labs/reliant/internal/llm/tools"
@@ -198,6 +200,82 @@ func TestGenerateFixture_SpawnFailure(t *testing.T) {
 	h.RequireToolCallStatus(spawnCall.ID, core.ToolCallStatusFailed)
 
 	h.ExportHistory(workflowID, "spawn_failure")
+}
+
+// usageLimitFailure is the error a provider usage window fails a request with:
+// the anthropic driver's marked sentence (RetryAfterTooLongError) inside the
+// stream-error wrap, so CallLLM fails it at once rather than retrying.
+func usageLimitFailure() error {
+	sentence := chatmarkers.ProviderUsageLimitLead +
+		" (Anthropic, 7-day window, overage unavailable: org level disabled) — resets Sun Oct 18 02:00 UTC (in 4d22h). " +
+		"Switch to another provider, or send a message after it resets"
+	return fmt.Errorf("LLM streaming error: %s: 429 Too Many Requests",
+		chatmarkers.Wrap(chatmarkers.KindProviderUsageLimit, "2026-10-18T02:00:00Z", sentence))
+}
+
+// TestGenerateFixture_SpawnFailureResumedByMessage pins a stopped sub-agent
+// resumed by a message (the 2026-10-13 prod shape, workflow 9fbaace8): the
+// spawned agent's first call_llm hits a provider usage limit and fails at once,
+// the agent stops and reports to its parent, the user messages the stopped
+// agent through the production SendAgentMessage handler, and the run relaunches
+// it — the message-resumes-stopped-subagent marker, the agent's row and spawn
+// card back to running — so its next call_llm reads that message. It reports
+// its completion to the parent, which reacts and finishes.
+func TestGenerateFixture_SpawnFailureResumedByMessage(t *testing.T) {
+	const resumeText = "Switched you to another provider; carry on from where you stopped."
+	spawnCall := ToolCall("call-spawn-1", "spawn", `{"preset":"general","prompt":"`+subAgentFailureMarker+` Implement the change."}`)
+
+	var h *Harness
+	chatIDs := make(chan string, 1)
+	parentWaiting := make(chan struct{})
+	sendResult := make(chan error, 1)
+	script := NewScriptedLLM(
+		// Turn 1: the parent delegates.
+		Turn{Text: "I'll delegate this to a sub-agent.", ToolCalls: []message.ToolCall{spawnCall}},
+		// Turn 2: the parent's exit candidate; it parks on the live agent.
+		// The agent fails only once this turn has read its mailbox, so the
+		// failure report always buys the parent the turn below.
+		Turn{Text: "Waiting on the sub-agent.", During: func() { close(parentWaiting) }},
+		// Turn 3: the parent reads the failure, and the user messages the
+		// stopped agent while this turn is in flight.
+		Turn{Text: "The sub-agent hit a usage limit.", During: func() {
+			chatID := <-chatIDs
+			agentThread := wfruntime.DeterministicWorkflowID(chatID, spawnCall.ID)
+			resp, err := h.SendAgentMessage(chatID, agentThread, resumeText)
+			if err == nil && !resp.Success {
+				err = fmt.Errorf("SendAgentMessage refused: %s", resp.Message)
+			}
+			sendResult <- err
+		}},
+		// Turn 4: the resumed agent's first turn, which reads the message.
+		Turn{Text: "Picked up where I left off; the change is done."},
+		// Turn 5: the parent reacts to the resumed agent's completion.
+		Turn{Text: "The sub-agent finished after all."},
+	)
+	script.FailWhen(func(msgs []message.Message) error {
+		if !conversationMentions(msgs, subAgentFailureMarker) || conversationMentions(msgs, resumeText) {
+			return nil
+		}
+		<-parentWaiting
+		return usageLimitFailure()
+	})
+	h = newHarness(t, script)
+
+	created := h.StartChat("builtin://agent", "Please delegate a task to a sub-agent", map[string]any{
+		"mode": "auto",
+	})
+	workflowID := created.WorkflowId
+	chatIDs <- created.Chat.Id
+
+	require.NoError(t, <-sendResult, "the message to the stopped sub-agent must be accepted")
+	h.WaitTemporalWorkflowDone(workflowID)
+	h.WaitWorkflowStatus(workflowID, db.Completed())
+	// The agent's row tells the agent's story: stopped, resumed, completed.
+	// Its spawn call ended once, with the failure, and stays that way.
+	h.WaitWorkflowStatus(wfruntime.DeterministicWorkflowID(workflowID, spawnCall.ID), db.Completed())
+	h.RequireToolCallStatus(spawnCall.ID, core.ToolCallStatusFailed)
+
+	h.ExportHistory(workflowID, "spawn_failure_resumed_by_message")
 }
 
 // replayRouterWorkflowYAML is a minimal pitch-deck-shaped workflow: an

@@ -439,6 +439,22 @@ func (h *Harness) SendMessage(chatID, content string) error {
 	return err
 }
 
+// SendAgentMessage messages one thread of a started chat — a sub-agent —
+// through the production ChatService handler, as the composer does. Like
+// SendMessage it returns rather than failing the test, so a During hook can
+// call it.
+func (h *Harness) SendAgentMessage(chatID, threadID, content string) (*reliantv1.SendAgentMessageResponse, error) {
+	resp, err := h.ChatSvc.SendAgentMessage(h.Ctx, connect.NewRequest(&reliantv1.SendAgentMessageRequest{
+		ChatId:   chatID,
+		ThreadId: threadID,
+		Message:  content,
+	}))
+	if err != nil {
+		return nil, err
+	}
+	return resp.Msg, nil
+}
+
 // ResolveQuestion answers a pending ask_question through the production
 // QuestionService handler (same double-shape payload as the e2e stories —
 // "answers" for the workflow, "reply" for thread persistence).

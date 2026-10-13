@@ -71,7 +71,9 @@ type ScriptedLLM struct {
 	// failWhen, when set, sees every agent-loop request before the script
 	// does. A non-nil error fails that request WITHOUT consuming a turn, so a
 	// scenario can fail one thread's calls (a sub-agent's) while the other
-	// threads keep playing the script in order. See FailWhen.
+	// threads keep playing the script in order. It runs without the lock
+	// held, so a rule may block to order its failure after another thread's
+	// turn. See FailWhen.
 	failWhen func(msgs []message.Message) error
 }
 
@@ -198,14 +200,15 @@ func (s *ScriptedLLM) StreamResponse(ctx context.Context, prompts []string, msgs
 		})
 	}
 
-	if s.failWhen != nil {
-		if err := s.failWhen(msgs); err != nil {
-			s.mu.Unlock()
+	if failWhen := s.failWhen; failWhen != nil {
+		s.mu.Unlock()
+		if err := failWhen(msgs); err != nil {
 			ch := make(chan llm.DriverEvent, 1)
 			ch <- llm.DriverEvent{Type: llm.EventError, Model: s.Model(), Error: err}
 			close(ch)
 			return ch
 		}
+		s.mu.Lock()
 	}
 
 	var turn Turn

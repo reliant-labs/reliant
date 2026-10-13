@@ -8,6 +8,7 @@ import {
   nestedToFlatParams,
   paramValuesEqual,
   reconcileParamsWithServer,
+  threadParamsAcceptChanges,
 } from "../paramUtils";
 import { buildWorkflowInputsFromProto } from "../../components/Chat/ChatInput";
 
@@ -341,5 +342,23 @@ describe("reconcileParamsWithServer", () => {
 
     expect(changed).toBe(false);
     expect(params).toEqual({ mode: "fast" });
+  });
+});
+
+describe("threadParamsAcceptChanges", () => {
+  it("accepts edits for a running thread", () => {
+    expect(threadParamsAcceptChanges({ isRunning: true, resumable: false })).toBe(true);
+  });
+
+  // A sub-agent that hit a provider usage limit is switched to another
+  // provider's model BEFORE the message that resumes it, so the picker on its
+  // thread has to keep working while it is stopped.
+  it("accepts edits for a sub-agent that stopped on an error", () => {
+    expect(threadParamsAcceptChanges({ isRunning: false, resumable: true })).toBe(true);
+  });
+
+  it("refuses edits for a finished thread, and when nothing is known yet", () => {
+    expect(threadParamsAcceptChanges({ isRunning: false, resumable: false })).toBe(false);
+    expect(threadParamsAcceptChanges(null)).toBe(false);
   });
 });

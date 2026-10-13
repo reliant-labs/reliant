@@ -218,14 +218,15 @@ function SpawnPreview({ ctx }: ToolContentProps) {
     ? spawnWorkflow?.state === WorkflowState.STOPPED
     : isCompleted || hasFailed;
 
-  // The "message this agent" affordance only makes sense while the agent is
-  // actually running. A failed or cancelled spawn is just as "not done" as
-  // a running one, but offering to message a dead agent is a lie the UI
-  // shouldn't tell, even though the backend safely rejects it.
+  // The "message this agent" affordance is offered while the agent is running,
+  // and after it stopped on an error: a failed agent is not finished, and a
+  // message to it resumes it where it stopped. One that completed, or that
+  // was cancelled, is finished, and offering to message it would be a lie.
   const spawnRunning =
     !!spawnThreadId &&
     (!spawnWorkflow ||
       isWorkflowLive(spawnWorkflow.state, spawnWorkflow.stopReason));
+  const spawnStoppedOnError = !!spawnThreadId && workflowFailed && !isCancelledChild;
 
   const summaries = useMemo((): MessageSummary[] => {
     if (!spawnThreadId) {
@@ -289,8 +290,8 @@ function SpawnPreview({ ctx }: ToolContentProps) {
 
   return (
     <div className="tool-content-spawn w-full">
-      {spawnRunning && chatId && spawnThreadId && (
-        <SendToAgentForm chatId={chatId} threadId={spawnThreadId} />
+      {(spawnRunning || spawnStoppedOnError) && chatId && spawnThreadId && (
+        <SendToAgentForm chatId={chatId} threadId={spawnThreadId} resumes={spawnStoppedOnError} />
       )}
       {workflowFailed && (
         <div
@@ -371,9 +372,18 @@ function SpawnPreview({ ctx }: ToolContentProps) {
  * Minimal affordance to steer a running sub-agent without pausing the whole
  * chat: queues into the agent's mailbox (agent_messages), delivered at its
  * next loop step boundary -- same mechanism spawn_send uses for agent-to-
- * agent messages.
+ * agent messages. For an agent that stopped on an error (`resumes`), the
+ * message is what resumes it.
  */
-function SendToAgentForm({ chatId, threadId }: { chatId: string; threadId: string }) {
+function SendToAgentForm({
+  chatId,
+  threadId,
+  resumes,
+}: {
+  chatId: string;
+  threadId: string;
+  resumes: boolean;
+}) {
   const [value, setValue] = useState("");
   const [sending, setSending] = useState(false);
 
@@ -382,13 +392,19 @@ function SendToAgentForm({ chatId, threadId }: { chatId: string; threadId: strin
     if (!message || sending) return;
     setSending(true);
     try {
-      await chatGrpc.sendAgentMessage(
+      const response = await chatGrpc.sendAgentMessage(
         chatId,
         threadId,
         message,
         undefined,
         newClientMessageId(),
       );
+      // A refusal is an answer, not a transport error: say why, and keep the
+      // text so it can be sent where the refusal points.
+      if (response?.success === false) {
+        toast.error(response.message);
+        return;
+      }
       setValue("");
     } catch (error) {
       logger.error("[SendToAgentForm] Failed to send agent message", { error, chatId, threadId });
@@ -411,7 +427,7 @@ function SendToAgentForm({ chatId, threadId }: { chatId: string; threadId: strin
           }
         }}
         onClick={(e) => e.stopPropagation()}
-        placeholder="Message this agent…"
+        placeholder={resumes ? "Message this agent to resume it…" : "Message this agent…"}
         disabled={sending}
         className="flex-1 min-w-0 bg-transparent text-xs text-foreground placeholder:text-muted-foreground/60 outline-none disabled:opacity-50"
       />
