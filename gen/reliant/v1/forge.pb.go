@@ -1692,7 +1692,7 @@ type ListForgeCheckoutsRequest struct {
 	ProjectId string                 `protobuf:"bytes,1,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
 	// Also compute each checkout's content hash. It costs about half a second per
 	// checkout, so it is opt-in: the picker does not need it, a diff cache does.
-	WithTree      bool `protobuf:"varint,2,opt,name=with_tree,json=withTree,proto3" json:"with_tree,omitempty"`
+	WithTree      *bool `protobuf:"varint,2,opt,name=with_tree,json=withTree,proto3,oneof" json:"with_tree,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1735,8 +1735,8 @@ func (x *ListForgeCheckoutsRequest) GetProjectId() string {
 }
 
 func (x *ListForgeCheckoutsRequest) GetWithTree() bool {
-	if x != nil {
-		return x.WithTree
+	if x != nil && x.WithTree != nil {
+		return *x.WithTree
 	}
 	return false
 }
@@ -2706,11 +2706,13 @@ const file_reliant_v1_forge_proto_rawDesc = "" +
 	"\n" +
 	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x10\n" +
 	"\x03env\x18\x02 \x01(\tR\x03env\x12#\n" +
-	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"W\n" +
+	"\rcheckout_path\x18\x03 \x01(\tR\fcheckoutPath\"j\n" +
 	"\x19ListForgeCheckoutsRequest\x12\x1d\n" +
 	"\n" +
-	"project_id\x18\x01 \x01(\tR\tprojectId\x12\x1b\n" +
-	"\twith_tree\x18\x02 \x01(\bR\bwithTree\"n\n" +
+	"project_id\x18\x01 \x01(\tR\tprojectId\x12 \n" +
+	"\twith_tree\x18\x02 \x01(\bH\x00R\bwithTree\x88\x01\x01B\f\n" +
+	"\n" +
+	"_with_tree\"n\n" +
 	"\x1aListForgeCheckoutsResponse\x12/\n" +
 	"\x04meta\x18\x01 \x01(\v2\x1b.reliant.v1.ForgeReportMetaR\x04meta\x12\x1f\n" +
 	"\vreport_json\x18\x02 \x01(\tR\n" +
@@ -2931,6 +2933,7 @@ func file_reliant_v1_forge_proto_init() {
 	if File_reliant_v1_forge_proto != nil {
 		return
 	}
+	file_reliant_v1_forge_proto_msgTypes[21].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

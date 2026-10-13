@@ -11684,7 +11684,7 @@
           {
             "Name": "with_tree",
             "ProtoType": "bool",
-            "IsOptional": false
+            "IsOptional": true
           }
         ],
         "ListForgeCheckoutsResponse": [
@@ -12216,7 +12216,8 @@
           },
           {
             "name": "with_tree",
-            "kind": "bool"
+            "kind": "bool",
+            "optional": true
           }
         ],
         "reliant.v1.ListForgeCheckoutsResponse": [
@@ -33575,5 +33576,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "40d660829e83aeef77465191b5bb1ef5ff176dc499c3ece6272218f64711166e"
+  "source_hash": "36e3d5eadc7931f96dfe8991cc4bb7e9db71b8f0f69550faf9124f514714a382"
 }

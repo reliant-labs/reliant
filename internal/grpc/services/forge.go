@@ -1346,7 +1346,7 @@ func (s *ForgeService) ListCheckouts(
 	payload := struct {
 		ProjectPath string `json:"project_path"`
 		WithTree    bool   `json:"with_tree,omitempty"`
-	}{ProjectPath: path, WithTree: req.Msg.WithTree}
+	}{ProjectPath: path, WithTree: req.Msg.GetWithTree()}
 
 	// readsCluster=false: this is git on the daemon's disk, and nothing else.
 	reply, unreachable, err := s.forgeDispatch(

@@ -602,7 +602,7 @@ message ListForgeCheckoutsRequest {
 
   // Also compute each checkout's content hash. It costs about half a second per
   // checkout, so it is opt-in: the picker does not need it, a diff cache does.
-  bool with_tree = 2;
+  optional bool with_tree = 2;
 }
 
 message ListForgeCheckoutsResponse {
