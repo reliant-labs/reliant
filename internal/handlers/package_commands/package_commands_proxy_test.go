@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package package_commands
 
 import (
 	"context"
@@ -14,13 +14,13 @@ import (
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
+	"github.com/reliant-labs/reliant/internal/ptr"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
 
-// pkgProxyRouter stubs the daemon round trip for PackageCommandsProxyService.
-// It embeds toolexectest.Stub to satisfy
-// the full DaemonRouter interface, and lets each test dictate the reply for
-// pkg.list_commands.
+// pkgProxyRouter stubs the daemon round trip for ListCommands. It embeds
+// toolexectest.Stub to satisfy the full DaemonRouter interface, and lets each
+// test dictate the reply for pkg.list_commands.
 type pkgProxyRouter struct {
 	toolexectest.Stub
 	lastCommandType string
@@ -37,6 +37,12 @@ func (r *pkgProxyRouter) SendDaemonCommand(_ context.Context, _ string, commandT
 	r.lastCommandType = commandType
 	r.lastPayload = payload
 	return r.reply, r.replyErr
+}
+
+// newService builds the service on router; the harness stubs the rest.
+func newService(t *testing.T, router Router) *Service {
+	t.Helper()
+	return NewTestPackageCommands(t, WithPackageCommandsDeps(Deps{Router: router}))
 }
 
 func authedCtx() context.Context {
@@ -57,10 +63,10 @@ func TestPackageCommandsProxy_ListCommands_Success(t *testing.T) {
 	require.NoError(t, err)
 
 	router := &pkgProxyRouter{reply: replyBytes}
-	svc := NewPackageCommandsProxyService(router, nil)
+	svc := newService(t, router)
 
 	resp, err := svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
-		Path: strPtr("/daemon/workspace/proj"),
+		Path: ptr.Of("/daemon/workspace/proj"),
 	}))
 	require.NoError(t, err)
 	require.NotNil(t, resp)
@@ -89,10 +95,10 @@ func TestPackageCommandsProxy_ListCommands_EmptyIsSuccess(t *testing.T) {
 	require.NoError(t, err)
 
 	router := &pkgProxyRouter{reply: replyBytes}
-	svc := NewPackageCommandsProxyService(router, nil)
+	svc := newService(t, router)
 
 	resp, err := svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
-		Path: strPtr("/daemon/workspace/empty"),
+		Path: ptr.Of("/daemon/workspace/empty"),
 	}))
 	require.NoError(t, err)
 	assert.Empty(t, resp.Msg.Commands)
@@ -103,10 +109,10 @@ func TestPackageCommandsProxy_ListCommands_EmptyIsSuccess(t *testing.T) {
 // error, never as an empty command list.
 func TestPackageCommandsProxy_ListCommands_DispatchFailure_IsLoud(t *testing.T) {
 	router := &pkgProxyRouter{replyErr: fmt.Errorf("daemon command pkg.list_commands (subject x, timeout 30s): nats: timeout")}
-	svc := NewPackageCommandsProxyService(router, nil)
+	svc := newService(t, router)
 
 	resp, err := svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
-		Path: strPtr("/daemon/workspace/proj"),
+		Path: ptr.Of("/daemon/workspace/proj"),
 	}))
 	require.Error(t, err)
 	assert.Nil(t, resp)
@@ -119,10 +125,10 @@ func TestPackageCommandsProxy_ListCommands_MissingDir_IsNotFound(t *testing.T) {
 	router := &pkgProxyRouter{
 		replyErr: fmt.Errorf(`daemon command "pkg.list_commands" failed: working dir does not exist: /daemon/workspace/gone`),
 	}
-	svc := NewPackageCommandsProxyService(router, nil)
+	svc := newService(t, router)
 
 	resp, err := svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
-		Path: strPtr("/daemon/workspace/gone"),
+		Path: ptr.Of("/daemon/workspace/gone"),
 	}))
 	require.Error(t, err)
 	assert.Nil(t, resp)
@@ -132,10 +138,10 @@ func TestPackageCommandsProxy_ListCommands_MissingDir_IsNotFound(t *testing.T) {
 // A malformed daemon reply is a loud Internal error, not a silent empty result.
 func TestPackageCommandsProxy_ListCommands_MalformedReply_IsLoud(t *testing.T) {
 	router := &pkgProxyRouter{reply: []byte("not json")}
-	svc := NewPackageCommandsProxyService(router, nil)
+	svc := newService(t, router)
 
 	resp, err := svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
-		Path: strPtr("/daemon/workspace/proj"),
+		Path: ptr.Of("/daemon/workspace/proj"),
 	}))
 	require.Error(t, err)
 	assert.Nil(t, resp)
@@ -145,7 +151,7 @@ func TestPackageCommandsProxy_ListCommands_MalformedReply_IsLoud(t *testing.T) {
 // Neither worktree_id nor path is an InvalidArgument, and nothing is forwarded.
 func TestPackageCommandsProxy_ListCommands_NoTargetIsInvalidArgument(t *testing.T) {
 	router := &pkgProxyRouter{}
-	svc := NewPackageCommandsProxyService(router, nil)
+	svc := newService(t, router)
 
 	_, err := svc.ListCommands(authedCtx(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{}))
 	require.Error(t, err)
@@ -156,10 +162,10 @@ func TestPackageCommandsProxy_ListCommands_NoTargetIsInvalidArgument(t *testing.
 // Missing auth is Unauthenticated.
 func TestPackageCommandsProxy_ListCommands_RequiresAuth(t *testing.T) {
 	router := &pkgProxyRouter{}
-	svc := NewPackageCommandsProxyService(router, nil)
+	svc := newService(t, router)
 
 	_, err := svc.ListCommands(context.Background(), connect.NewRequest(&reliantv1.ListPackageCommandsRequest{
-		Path: strPtr("/daemon/workspace/proj"),
+		Path: ptr.Of("/daemon/workspace/proj"),
 	}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))

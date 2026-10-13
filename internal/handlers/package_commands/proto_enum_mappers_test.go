@@ -1,4 +1,4 @@
-package services
+package package_commands
 
 import (
 	"testing"

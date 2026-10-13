@@ -17794,8 +17794,7 @@
           "ImportPath": "github.com/reliant-labs/reliant/gen/reliant/v1",
           "GoName": "PackageType"
         }
-      },
-      "Unmanaged": true
+      }
     },
     {
       "Name": "TaskService",
@@ -33657,5 +33656,5 @@
     }
   ],
   "configs": null,
-  "source_hash": "afbaf1a851737284966f4998230e37ad156eaa0a8ff8bb5109fd8c710b1e8310"
+  "source_hash": "85e515821f962c0d57792684b07869a9fb7b9b7d12fef5719fd73e691c9f359f"
 }

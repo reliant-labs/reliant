@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package package_commands
 
 import (
 	"context"
@@ -10,28 +10,11 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
-	"github.com/reliant-labs/reliant/gen/reliant/v1/reliantv1connect"
 	"github.com/reliant-labs/reliant/internal/auth"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/llm/tools/shell"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/internal/processproto"
 )
-
-// PackageCommandsService implements the PackageCommandsService RPC handlers
-type PackageCommandsService struct {
-	reliantv1connect.UnimplementedPackageCommandsServiceHandler
-	database db.Repository
-	service  *pkgmgr.Service
-}
-
-// NewPackageCommandsService creates a new PackageCommandsService
-func NewPackageCommandsService(database db.Repository) *PackageCommandsService {
-	return &PackageCommandsService{
-		database: database,
-		service:  pkgmgr.NewService(),
-	}
-}
 
 // ============================================================================
 // Helper Methods
@@ -82,71 +65,12 @@ func convertProcessToPackageProcess(p *shell.BackgroundProcess) *reliantv1.Packa
 // RPC Handlers
 // ============================================================================
 
-// ListCommands returns available commands for a directory
-func (s *PackageCommandsService) ListCommands(
-	ctx context.Context,
-	req *connect.Request[reliantv1.ListPackageCommandsRequest],
-) (*connect.Response[reliantv1.ListPackageCommandsResponse], error) {
-	// Determine working directory
-	var workingDir string
-
-	worktreeID := ""
-	if req.Msg.WorktreeId != nil {
-		worktreeID = *req.Msg.WorktreeId
-	}
-
-	path := ""
-	if req.Msg.Path != nil {
-		path = *req.Msg.Path
-	}
-
-	if worktreeID != "" {
-		// Look up worktree to get its path
-		worktree, err := s.database.GetWorktree(ctx, worktreeID)
-		if err != nil {
-			return nil, connect.NewError(connect.CodeNotFound,
-				fmt.Errorf("worktree not found: %w", err))
-		}
-		workingDir = worktree.Path
-	} else if path != "" {
-		workingDir = path
-	} else {
-		return nil, connect.NewError(connect.CodeInvalidArgument,
-			fmt.Errorf("worktree_id or path is required"))
-	}
-
-	// List commands
-	result, err := s.service.ListCommands(ctx, workingDir)
-	if err != nil {
-		return nil, connect.NewError(connect.CodeInternal,
-			fmt.Errorf("failed to list commands: %w", err))
-	}
-
-	// Convert to proto format
-	commands := make(map[string]*reliantv1.CommandsByType)
-	for pkgType, cmds := range result.Commands {
-		protoCommands := make([]*reliantv1.PackageCommand, len(cmds))
-		for i, cmd := range cmds {
-			protoCommands[i] = convertCommandToProto(cmd)
-		}
-		commands[string(pkgType)] = &reliantv1.CommandsByType{
-			Commands: protoCommands,
-		}
-	}
-
-	detectedTypes := make([]string, len(result.DetectedTypes))
-	for i, t := range result.DetectedTypes {
-		detectedTypes[i] = string(t)
-	}
-
-	return connect.NewResponse(&reliantv1.ListPackageCommandsResponse{
-		Commands:      commands,
-		DetectedTypes: detectedTypes,
-	}), nil
-}
-
-// RunCommand executes a package command
-func (s *PackageCommandsService) RunCommand(
+// RunCommand executes a package command.
+//
+// It runs the command on THIS server through Deps.Processes, as do the
+// process rpcs below. Running and scoping them on the daemon is a separate,
+// paused effort; the favorites rpcs are DB-backed and belong here.
+func (s *Service) RunCommand(
 	ctx context.Context,
 	req *connect.Request[reliantv1.RunPackageCommandRequest],
 ) (*connect.Response[reliantv1.RunPackageCommandResponse], error) {
@@ -168,7 +92,7 @@ func (s *PackageCommandsService) RunCommand(
 	if req.Msg.WorktreeId != nil && *req.Msg.WorktreeId != "" {
 		worktreeID = *req.Msg.WorktreeId
 		// Look up worktree to get its path
-		worktree, err := s.database.GetWorktree(ctx, worktreeID)
+		worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 		if err != nil {
 			return nil, connect.NewError(connect.CodeNotFound,
 				fmt.Errorf("worktree not found: %w", err))
@@ -196,7 +120,7 @@ func (s *PackageCommandsService) RunCommand(
 	}
 
 	// Run the command
-	result, err := s.service.RunCommand(ctx, pkgmgr.RunRequest{
+	result, err := s.deps.Processes.RunCommand(ctx, pkgmgr.RunRequest{
 		WorktreeID:  worktreeID,
 		WorkingDir:  workingDir,
 		CommandName: req.Msg.CommandName,
@@ -216,7 +140,7 @@ func (s *PackageCommandsService) RunCommand(
 }
 
 // ListProcesses returns processes for a worktree, or all processes if no filter is provided
-func (s *PackageCommandsService) ListProcesses(
+func (s *Service) ListProcesses(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListPackageProcessesRequest],
 ) (*connect.Response[reliantv1.ListPackageProcessesResponse], error) {
@@ -224,10 +148,10 @@ func (s *PackageCommandsService) ListProcesses(
 
 	var processes []*shell.BackgroundProcess
 	if worktreeID != "" {
-		processes = s.service.GetProcessesByWorktree(worktreeID)
+		processes = s.deps.Processes.GetProcessesByWorktree(worktreeID)
 	} else {
 		// No filter - return all processes
-		processes = s.service.GetAllProcesses()
+		processes = s.deps.Processes.GetAllProcesses()
 	}
 
 	protoProcesses := make([]*reliantv1.PackageProcess, len(processes))
@@ -241,7 +165,7 @@ func (s *PackageCommandsService) ListProcesses(
 }
 
 // GetProcess returns a specific process
-func (s *PackageCommandsService) GetProcess(
+func (s *Service) GetProcess(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetPackageProcessRequest],
 ) (*connect.Response[reliantv1.GetPackageProcessResponse], error) {
@@ -250,7 +174,7 @@ func (s *PackageCommandsService) GetProcess(
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
-	process, err := s.service.GetProcess(processID)
+	process, err := s.deps.Processes.GetProcess(processID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -261,7 +185,7 @@ func (s *PackageCommandsService) GetProcess(
 }
 
 // GetProcessLogs returns the logs for a process
-func (s *PackageCommandsService) GetProcessLogs(
+func (s *Service) GetProcessLogs(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetPackageProcessLogsRequest],
 ) (*connect.Response[reliantv1.GetPackageProcessLogsResponse], error) {
@@ -271,13 +195,13 @@ func (s *PackageCommandsService) GetProcessLogs(
 	}
 
 	// Get separate stdout/stderr for backwards compatibility
-	stdout, stderr, err := s.service.GetProcessOutput(processID)
+	stdout, stderr, err := s.deps.Processes.GetProcessOutput(processID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
 
 	// Get combined interleaved output
-	combinedOutput, err := s.service.GetCombinedOutput(processID)
+	combinedOutput, err := s.deps.Processes.GetCombinedOutput(processID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound, err)
 	}
@@ -299,7 +223,7 @@ func (s *PackageCommandsService) GetProcessLogs(
 }
 
 // KillProcess terminates a process
-func (s *PackageCommandsService) KillProcess(
+func (s *Service) KillProcess(
 	ctx context.Context,
 	req *connect.Request[reliantv1.KillPackageProcessRequest],
 ) (*connect.Response[reliantv1.KillPackageProcessResponse], error) {
@@ -308,7 +232,7 @@ func (s *PackageCommandsService) KillProcess(
 		return nil, connect.NewError(connect.CodeInvalidArgument, nil)
 	}
 
-	err := s.service.KillProcess(processID)
+	err := s.deps.Processes.KillProcess(processID)
 	if err != nil {
 		// If process is already dead, treat as success - the desired state is achieved
 		if strings.Contains(err.Error(), "is not running") {
@@ -326,7 +250,7 @@ func (s *PackageCommandsService) KillProcess(
 }
 
 // GetCommandFavorites returns the list of favorited command keys for a project
-func (s *PackageCommandsService) GetCommandFavorites(
+func (s *Service) GetCommandFavorites(
 	ctx context.Context,
 	req *connect.Request[reliantv1.GetCommandFavoritesRequest],
 ) (*connect.Response[reliantv1.GetCommandFavoritesResponse], error) {
@@ -342,14 +266,14 @@ func (s *PackageCommandsService) GetCommandFavorites(
 	}
 
 	// Verify project exists and belongs to user
-	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound,
 			fmt.Errorf("project not found: %w", err))
 	}
 
 	// Get favorites from database
-	commandKeys, err := s.database.ListCommandFavorites(ctx, userID, projectID)
+	commandKeys, err := s.deps.Repo.ListCommandFavorites(ctx, userID, projectID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal,
 			fmt.Errorf("failed to list command favorites: %w", err))
@@ -361,7 +285,7 @@ func (s *PackageCommandsService) GetCommandFavorites(
 }
 
 // SetCommandFavorite adds or removes a command from favorites
-func (s *PackageCommandsService) SetCommandFavorite(
+func (s *Service) SetCommandFavorite(
 	ctx context.Context,
 	req *connect.Request[reliantv1.SetCommandFavoriteRequest],
 ) (*connect.Response[reliantv1.SetCommandFavoriteResponse], error) {
@@ -383,7 +307,7 @@ func (s *PackageCommandsService) SetCommandFavorite(
 	}
 
 	// Verify project exists and belongs to user
-	_, err := s.database.GetProjectWithUserCheck(ctx, projectID, userID)
+	_, err := s.deps.Repo.GetProjectWithUserCheck(ctx, projectID, userID)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeNotFound,
 			fmt.Errorf("project not found: %w", err))
@@ -391,9 +315,9 @@ func (s *PackageCommandsService) SetCommandFavorite(
 
 	// Add or remove favorite based on is_favorite flag
 	if req.Msg.IsFavorite {
-		err = s.database.AddCommandFavorite(ctx, userID, projectID, commandKey)
+		err = s.deps.Repo.AddCommandFavorite(ctx, userID, projectID, commandKey)
 	} else {
-		err = s.database.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
+		err = s.deps.Repo.RemoveCommandFavorite(ctx, userID, projectID, commandKey)
 	}
 
 	if err != nil {

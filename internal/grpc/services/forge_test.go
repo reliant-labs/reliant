@@ -14,9 +14,18 @@ import (
 	"github.com/stretchr/testify/require"
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
+	"github.com/reliant-labs/reliant/internal/auth"
 	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/toolexec/toolexectest"
 )
+
+// authedCtx is a request context signed in as "test-user". It lived with
+// PackageCommands' tests, which moved to internal/handlers/package_commands;
+// Forge's tests are its main user, and the Background, Daemon and Terminal
+// tests still here share it.
+func authedCtx() context.Context {
+	return context.WithValue(context.Background(), auth.UserIDContextKey, "test-user")
+}
 
 // forgeTestRouter stubs the daemon round trip. It embeds
 // toolexectest.Stub to satisfy the full DaemonRouter

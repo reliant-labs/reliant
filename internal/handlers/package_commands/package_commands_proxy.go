@@ -1,5 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
-package services
+package package_commands
 
 import (
 	"context"
@@ -9,9 +9,7 @@ import (
 
 	reliantv1 "github.com/reliant-labs/reliant/gen/reliant/v1"
 	"github.com/reliant-labs/reliant/internal/daemoncmd"
-	"github.com/reliant-labs/reliant/internal/db"
 	"github.com/reliant-labs/reliant/internal/pkgmgr"
-	"github.com/reliant-labs/reliant/internal/toolexec"
 )
 
 // pkgListCommandsTimeoutMs bounds the pkg.list_commands round trip. Discovery is
@@ -20,34 +18,12 @@ import (
 // uses the same budget.
 const pkgListCommandsTimeoutMs = 30000
 
-// PackageCommandsProxyService is the cloud-daemon implementation of the
-// PackageCommandsService RPCs. On a cloud daemon the browser's worktree lives on
-// the DAEMON's filesystem, so command discovery must run there — not on the
-// api-server, where the path does not exist (the bug this type fixes).
-//
-// Only ListCommands is proxied to the daemon today. The remaining methods
-// (RunCommand + the process lifecycle: ListProcesses/GetProcess/GetProcessLogs/
-// KillProcess) are promoted unchanged from the embedded local PackageCommandsService.
-// Those intersect a separately-paused effort to run and scope background
-// processes on the daemon; wiring them through the daemon is a follow-up. The
-// favorites RPCs (GetCommandFavorites/SetCommandFavorite) are DB-backed and
-// correctly belong on the api-server, so delegating them is not a stopgap.
-type PackageCommandsProxyService struct {
-	daemon daemoncmd.Service
-	// Embedded local service supplies every handler method by promotion; only
-	// ListCommands below overrides it.
-	*PackageCommandsService
-	database db.Repository
-}
-
-// NewPackageCommandsProxyService creates a proxy that forwards ListCommands to
-// the user's daemon and delegates all other RPCs to the local service.
-func NewPackageCommandsProxyService(router toolexec.DaemonRouter, database db.Repository) *PackageCommandsProxyService {
-	return &PackageCommandsProxyService{
-		daemon:                 daemoncmd.New(daemoncmd.Deps{Sender: router}),
-		PackageCommandsService: NewPackageCommandsService(database),
-		database:               database,
-	}
+// daemon is the round trip ListCommands makes to the user's daemon. On a cloud
+// daemon the browser's worktree lives on the DAEMON's filesystem, so command
+// discovery must run there — not on the api-server, where the path does not
+// exist and discovery silently found nothing.
+func (s *Service) daemon() daemoncmd.Service {
+	return daemoncmd.New(daemoncmd.Deps{Sender: s.deps.Router})
 }
 
 // pkgListCommandsCmd mirrors daemonruntime.pkgListCommandsRequest.
@@ -56,10 +32,10 @@ type pkgListCommandsCmd struct {
 }
 
 // ListCommands forwards package-command discovery to the user's daemon and
-// converts the result to proto. It resolves the working directory exactly as the
-// local service does (worktree_id -> worktree.Path, else the explicit path), but
-// runs discovery on the daemon's filesystem via the pkg.list_commands command.
-func (s *PackageCommandsProxyService) ListCommands(
+// converts the result to proto. It resolves the working directory
+// (worktree_id -> worktree.Path, else the explicit path) and runs discovery on
+// the daemon's filesystem via the pkg.list_commands command.
+func (s *Service) ListCommands(
 	ctx context.Context,
 	req *connect.Request[reliantv1.ListPackageCommandsRequest],
 ) (*connect.Response[reliantv1.ListPackageCommandsResponse], error) {
@@ -74,7 +50,7 @@ func (s *PackageCommandsProxyService) ListCommands(
 	}
 
 	var result pkgmgr.CommandListResponse
-	if err := s.daemon.Dispatch(ctx, userID, "pkg.list_commands",
+	if err := s.daemon().Dispatch(ctx, userID, "pkg.list_commands",
 		pkgListCommandsCmd{WorkingDir: workingDir}, &result, pkgListCommandsTimeoutMs); err != nil {
 		// dispatch already returns a loud Connect error (Unavailable for a dead
 		// daemon / timeout / unknown command; NotFound for a missing dir). We
@@ -86,9 +62,9 @@ func (s *PackageCommandsProxyService) ListCommands(
 	return connect.NewResponse(packageCommandListToProto(&result)), nil
 }
 
-// resolveWorkingDir mirrors PackageCommandsService.ListCommands: prefer the
-// worktree's stored path (a daemon-side path), else the caller-supplied path.
-func (s *PackageCommandsProxyService) resolveWorkingDir(
+// resolveWorkingDir prefers the worktree's stored path (a daemon-side path),
+// else the caller-supplied path.
+func (s *Service) resolveWorkingDir(
 	ctx context.Context,
 	msg *reliantv1.ListPackageCommandsRequest,
 ) (string, error) {
@@ -103,7 +79,7 @@ func (s *PackageCommandsProxyService) resolveWorkingDir(
 
 	switch {
 	case worktreeID != "":
-		worktree, err := s.database.GetWorktree(ctx, worktreeID)
+		worktree, err := s.deps.Repo.GetWorktree(ctx, worktreeID)
 		if err != nil {
 			return "", connect.NewError(connect.CodeNotFound, fmt.Errorf("worktree not found: %w", err))
 		}
@@ -116,8 +92,7 @@ func (s *PackageCommandsProxyService) resolveWorkingDir(
 }
 
 // packageCommandListToProto converts a pkgmgr discovery result to the proto
-// response, reusing convertCommandToProto so the proxy and the local service
-// produce byte-identical output.
+// response.
 func packageCommandListToProto(result *pkgmgr.CommandListResponse) *reliantv1.ListPackageCommandsResponse {
 	commands := make(map[string]*reliantv1.CommandsByType, len(result.Commands))
 	for pkgType, cmds := range result.Commands {

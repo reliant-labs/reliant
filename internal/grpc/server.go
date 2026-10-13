@@ -41,6 +41,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/handlers/connector"
 	"github.com/reliant-labs/reliant/internal/handlers/file_system"
 	"github.com/reliant-labs/reliant/internal/handlers/message"
+	"github.com/reliant-labs/reliant/internal/handlers/package_commands"
 	"github.com/reliant-labs/reliant/internal/handlers/preset"
 	"github.com/reliant-labs/reliant/internal/handlers/question"
 	"github.com/reliant-labs/reliant/internal/handlers/run"
@@ -54,6 +55,7 @@ import (
 	"github.com/reliant-labs/reliant/internal/logging"
 	"github.com/reliant-labs/reliant/internal/machinewake"
 	"github.com/reliant-labs/reliant/internal/mcpserver"
+	"github.com/reliant-labs/reliant/internal/pkgmgr"
 	"github.com/reliant-labs/reliant/internal/streaming"
 	"github.com/reliant-labs/reliant/internal/tokenauthority"
 	"github.com/reliant-labs/reliant/internal/toolexec"
@@ -260,11 +262,25 @@ func NewServer(cfg *Config) (*Server, error) {
 	mcpService := services.NewMCPService(database, router)
 	workflowService := services.NewWorkflowService(database, router)
 	scenarioService := services.NewScenarioService(database, router)
-	// PackageCommands is a browser-facing workspace service: on a cloud daemon
-	// (router != nil) its filesystem discovery must run on the daemon, so it uses
-	// the proxy. Without this it silently returned an empty command list because
-	// discovery ran against the api-server's filesystem. See pickPackageCommandsService.
-	packageCommandsService := pickPackageCommandsService(router, database)
+	// PackageCommands is a browser-facing workspace service: its command
+	// discovery must run on the daemon's filesystem (run against the
+	// api-server's, it silently returned an empty command list), so it is
+	// mounted only with a daemon router, as FileSystem is.
+	var packageCommandsPath string
+	var packageCommandsHandler http.Handler
+	if router != nil {
+		packageCommandsService, err := package_commands.New(package_commands.Deps{
+			Logger:    handlerLogger,
+			Config:    handlerConfig,
+			Router:    router,
+			Repo:      database,
+			Processes: pkgmgr.NewService(),
+		})
+		if err != nil {
+			return nil, fmt.Errorf("package_commands service: %w", err)
+		}
+		packageCommandsPath, packageCommandsHandler = reliantv1connect.NewPackageCommandsServiceHandler(packageCommandsService, opts...)
+	}
 
 	streamingService, err := streaminghandler.New(streaminghandler.Deps{
 		Logger:      handlerLogger,
@@ -374,7 +390,6 @@ func NewServer(cfg *Config) (*Server, error) {
 	mcpPath, mcpHandler := reliantv1connect.NewMCPServiceHandler(mcpService, opts...)
 	workflowPath, workflowHandler := reliantv1connect.NewWorkflowServiceHandler(workflowService, opts...)
 	scenarioPath, scenarioHandler := reliantv1connect.NewScenarioServiceHandler(scenarioService, opts...)
-	packageCommandsPath, packageCommandsHandler := reliantv1connect.NewPackageCommandsServiceHandler(packageCommandsService, opts...)
 	toolCallPath, toolCallHandler := reliantv1connect.NewToolCallServiceHandler(toolCallService, opts...)
 
 	// ForgeService reads a forge project's release/env/secret state off the
@@ -572,7 +587,9 @@ func NewServer(cfg *Config) (*Server, error) {
 	if filesystemHandler != nil {
 		mux.Handle(filesystemPath, filesystemHandler)
 	}
-	mux.Handle(packageCommandsPath, packageCommandsHandler)
+	if packageCommandsHandler != nil {
+		mux.Handle(packageCommandsPath, packageCommandsHandler)
+	}
 	mux.Handle(toolCallPath, toolCallHandler)
 	if forgeHandler != nil {
 		mux.Handle(forgePath, forgeHandler)

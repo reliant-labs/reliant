@@ -24,6 +24,10 @@
         "rpc_service": "reliant.v1.MessageService"
       },
       {
+        "name": "package_commands",
+        "rpc_service": "reliant.v1.PackageCommandsService"
+      },
+      {
         "name": "preset",
         "rpc_service": "reliant.v1.PresetService"
       },

@@ -21,7 +21,7 @@ func init() {
 // DAEMON's filesystem at the requested working directory. This exists because
 // worktrees on a cloud daemon live on the daemon's disk, not the api-server's:
 // running pkgmgr discovery on the api-server (as the un-proxied local service
-// did) always found nothing. See PackageCommandsProxyService.
+// did) always found nothing. See internal/handlers/package_commands.
 // =============================================================================
 
 type pkgListCommandsRequest struct {

@@ -15,9 +15,6 @@ enum PackageType {
   PACKAGE_TYPE_TASKFILE = 3;
 }
 
-// forge:unmanaged — reliant's own handlers serve this service, not forge's;
-// it is adopted in its own PR (research/forge-migration/PLAN.md, P3b).
-
 // PackageCommandsService handles package command discovery and execution
 service PackageCommandsService {
   // ListCommands returns available commands for a directory

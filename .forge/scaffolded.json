@@ -99,6 +99,30 @@
     "internal/handlers/message/handlers_scaffold_get_message_test.go": {
       "scaffolded_at": "2026-10-13T13:35:41Z"
     },
+    "internal/handlers/package_commands/handlers_scaffold_get_command_favorites_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
+    "internal/handlers/package_commands/handlers_scaffold_get_process_logs_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
+    "internal/handlers/package_commands/handlers_scaffold_get_process_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
+    "internal/handlers/package_commands/handlers_scaffold_kill_process_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
+    "internal/handlers/package_commands/handlers_scaffold_list_commands_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
+    "internal/handlers/package_commands/handlers_scaffold_list_processes_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
+    "internal/handlers/package_commands/handlers_scaffold_run_command_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
+    "internal/handlers/package_commands/handlers_scaffold_set_command_favorite_test.go": {
+      "scaffolded_at": "2026-10-13T17:02:28Z"
+    },
     "internal/handlers/preset/handlers_scaffold_create_preset_test.go": {
       "scaffolded_at": "2026-10-13T13:50:35Z"
     },
@@ -232,6 +256,7 @@
     "internal/handlers/file_system/handlers_scaffold_replace_in_files_test.go",
     "internal/handlers/file_system/handlers_scaffold_save_file_content_test.go",
     "internal/handlers/file_system/handlers_scaffold_search_files_test.go",
+    "internal/handlers/package_commands/handlers_scaffold_list_commands_test.go",
     "internal/handlers/preset/handlers_scaffold_create_preset_test.go",
     "internal/handlers/preset/handlers_scaffold_delete_preset_test.go",
     "internal/handlers/preset/handlers_scaffold_get_default_preset_test.go",
