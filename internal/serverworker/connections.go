@@ -37,7 +37,7 @@ func checkExecutors() error {
 // newConnectionResolver builds the worker-side resolver. It shares the vault
 // key with the api-server: the worker is the only process that reads secrets,
 // and the only one besides the api-server that writes them (on refresh).
-func newConnectionResolver(repo *db.Repo, keys *vault.Vault) (*connections.Resolver, error) {
+func newConnectionResolver(repo *db.Repo, keys vault.Service) (*connections.Resolver, error) {
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), os.Getenv)
 	if err != nil {
 		return nil, fmt.Errorf("connections: %w", err)

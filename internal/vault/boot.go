@@ -34,14 +34,14 @@ type BootOptions struct {
 	Warn func(msg string, args ...any)
 }
 
-// Boot resolves the key-encryption key and returns a ready Vault.
+// Boot resolves the key-encryption key and returns a ready vault.
 //
 //   - A present but malformed key is always fatal.
 //   - Hosted with no key is fatal.
 //   - Self-hosted with no key reuses <DataDir>/vault.key, or generates one
 //     (0600, create-exclusive) and warns. It refuses to generate when sealed data
 //     already exists: a fresh key would silently orphan it.
-func Boot(ctx context.Context, opts BootOptions) (*Vault, error) {
+func Boot(ctx context.Context, opts BootOptions) (Service, error) {
 	getenv := opts.Getenv
 	if getenv == nil {
 		getenv = os.Getenv
@@ -111,12 +111,12 @@ func Boot(ctx context.Context, opts BootOptions) (*Vault, error) {
 	return fromRaw(opts.DB, generated, path)
 }
 
-func fromRaw(db DBTX, raw, source string) (*Vault, error) {
+func fromRaw(db DBTX, raw, source string) (Service, error) {
 	ring, err := crypto.ParseKeyring(raw)
 	if err != nil {
 		return nil, fmt.Errorf("vault key from %s is malformed: %w", source, err)
 	}
-	return New(db, NewEnvKeyWrapper(ring)), nil
+	return New(Deps{DB: db, Keys: NewEnvKeyWrapper(ring)}), nil
 }
 
 func sealedDataExists(ctx context.Context, db DBTX) (bool, error) {

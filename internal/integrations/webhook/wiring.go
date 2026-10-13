@@ -24,7 +24,7 @@ type Store interface {
 	EventsStore
 }
 
-// Vault seals and opens webhook HMAC secrets. Satisfied by *vault.Vault.
+// Vault seals and opens webhook HMAC secrets. Satisfied by vault.Service.
 type Vault interface {
 	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
 	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)

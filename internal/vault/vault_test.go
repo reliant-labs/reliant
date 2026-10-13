@@ -30,7 +30,7 @@ func newKeyring(t *testing.T, ids ...string) string {
 	return strings.Join(parts, ",")
 }
 
-func newVault(t *testing.T) (*vault.Vault, *sql.DB) {
+func newVault(t *testing.T) (vault.Service, *sql.DB) {
 	t.Helper()
 	_, raw, cleanup := db.SetupTestDBWithRawDB(t)
 	t.Cleanup(cleanup)
@@ -38,7 +38,7 @@ func newVault(t *testing.T) (*vault.Vault, *sql.DB) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return vault.New(raw, vault.NewEnvKeyWrapper(ring)), raw
+	return vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)}), raw
 }
 
 func TestSealOpenRoundTrip(t *testing.T) {
@@ -154,7 +154,7 @@ func TestWrongKEKCannotUnwrap(t *testing.T) {
 		t.Fatal(err)
 	}
 	other, _ := crypto.ParseKeyring(newKeyring(t, "v1"))
-	v2 := vault.New(h, vault.NewEnvKeyWrapper(other))
+	v2 := vault.New(vault.Deps{DB: h, Keys: vault.NewEnvKeyWrapper(other)})
 	if _, err := v2.Open(ctx, vault.UserTenant("dave"), ct, []byte("a")); err == nil {
 		t.Fatal("a different KEK unwrapped the DEK")
 	}

@@ -87,7 +87,7 @@ func (te *tokenEndpoint) Do(req *http.Request) (*http.Response, error) {
 type pollCredEnv struct {
 	repo   *db.Repo
 	store  core.ConnectionStore
-	vault  *vault.Vault
+	vault  vault.Service
 	tokens *tokenEndpoint
 	poller *credPoller
 	tp     *TriggerPoller
@@ -105,7 +105,7 @@ func newPollCredEnv(t *testing.T) *pollCredEnv {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	v := vault.New(raw, vault.NewEnvKeyWrapper(ring))
+	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(key string) string {
 		return map[string]string{"RELIANT_OAUTH_GITHUB_CLIENT_ID": "cid", "RELIANT_OAUTH_GITHUB_CLIENT_SECRET": "csecret"}[key]
 	})

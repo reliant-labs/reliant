@@ -154,7 +154,7 @@ func setupTestRepo(t *testing.T) (*Repo, *sql.DB, func()) {
 	if err != nil {
 		t.Fatalf("parse test vault key: %v", err)
 	}
-	if err := repo.EnableCredentialSealing(vault.New(db, vault.NewEnvKeyWrapper(ring))); err != nil {
+	if err := repo.EnableCredentialSealing(vault.New(vault.Deps{DB: db, Keys: vault.NewEnvKeyWrapper(ring)})); err != nil {
 		t.Fatalf("enable api key sealing: %v", err)
 	}
 	cleanup := func() {

@@ -24,7 +24,7 @@ import (
 // they carry credentials (a webhook token, an HMAC secret) or a connection.
 
 // webhookSealer seals a webhook trigger's HMAC secret under its owner's
-// tenant. Satisfied by *vault.Vault.
+// tenant. Satisfied by vault.Service.
 type webhookSealer interface {
 	Seal(ctx context.Context, tenant vault.Tenant, plaintext, aad []byte) ([]byte, error)
 }

@@ -221,7 +221,7 @@ type env struct {
 	t         *testing.T
 	repo      *db.Repo
 	raw       *sql.DB
-	vault     *vault.Vault
+	vault     vault.Service
 	store     core.ConnectionStore
 	gh        *fakeGitHub
 	providers *connections.Registry
@@ -242,7 +242,7 @@ func newEnv(t *testing.T) *env {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(k))
 	require.NoError(t, err)
-	v := vault.New(raw, vault.NewEnvKeyWrapper(ring))
+	v := vault.New(vault.Deps{DB: raw, Keys: vault.NewEnvKeyWrapper(ring)})
 
 	gh := newFakeGitHub(t)
 	providers, err := connections.ProvidersFromCatalog(testManifests(t), oauthEnv(map[string]string{

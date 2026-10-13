@@ -12,14 +12,6 @@ import (
 // forge keyring: "id:base64,id:base64", first entry primary.
 const EnvKey = "RELIANT_VAULT_KEY"
 
-// KeyWrapper wraps and unwraps per-tenant DEKs. It is the seam a KMS or Bao
-// Transit implementation would later fill without touching stored secrets.
-type KeyWrapper interface {
-	// Wrap seals dek under the current primary KEK and reports which KEK id did.
-	Wrap(dek, aad []byte) (wrapped []byte, kekID string, err error)
-	Unwrap(wrapped, aad []byte) ([]byte, error)
-}
-
 // envKeyWrapper is the one v1 implementation: a forge keyring from EnvKey.
 type envKeyWrapper struct{ ring *crypto.Keyring }
 

@@ -54,7 +54,7 @@ func (gitHubSenders) IsInvalid(err error) bool { return errors.Is(err, ghusers.E
 // wireGitHubSenders builds the GitHub people lookup behind "Only from", or
 // nil under the same condition as wireGitHubAccess: a deployment that
 // receives no GitHub webhooks has no GitHub triggers to restrict.
-func wireGitHubSenders(repo *db.Repo, keys *vault.Vault, getenv func(string) string) (map[string]services.SenderDirectory, error) {
+func wireGitHubSenders(repo *db.Repo, keys vault.Service, getenv func(string) string) (map[string]services.SenderDirectory, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
@@ -80,7 +80,7 @@ func wireGitHubSenders(repo *db.Repo, keys *vault.Vault, getenv func(string) str
 // control-plane URL without INTERNAL_SERVICE_SECRET is a boot error, never a
 // silent fall-back: hosted users have no saved connection, so falling back
 // would refuse every GitHub trigger as "not connected".
-func wireGitHubAccess(repo *db.Repo, keys *vault.Vault, getenv func(string) string) (*ghaccess.Refresher, error) {
+func wireGitHubAccess(repo *db.Repo, keys vault.Service, getenv func(string) string) (*ghaccess.Refresher, error) {
 	if getenv == nil {
 		getenv = os.Getenv
 	}
@@ -96,7 +96,7 @@ func wireGitHubAccess(repo *db.Repo, keys *vault.Vault, getenv func(string) stri
 	}), nil
 }
 
-func gitHubTokenSource(repo *db.Repo, keys *vault.Vault, getenv func(string) string) (ghaccess.TokenSource, error) {
+func gitHubTokenSource(repo *db.Repo, keys vault.Service, getenv func(string) string) (ghaccess.TokenSource, error) {
 	if cpURL := controlplane.BaseURLFrom(getenv); cpURL != "" {
 		secret := strings.TrimSpace(getenv("INTERNAL_SERVICE_SECRET"))
 		if secret == "" {

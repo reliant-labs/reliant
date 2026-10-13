@@ -17,7 +17,7 @@ import (
 // and the provider sign-in token tables), and seals any legacy plaintext
 // api_keys rows. Both composition roots call it right after the
 // repo is built, so a missing or malformed key stops startup.
-func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir string) (*vault.Vault, error) {
+func BootVault(ctx context.Context, repo *Repo, hosted bool, dataDir string) (vault.Service, error) {
 	v, err := vault.Boot(ctx, vault.BootOptions{
 		Hosted:  hosted,
 		DataDir: dataDir,

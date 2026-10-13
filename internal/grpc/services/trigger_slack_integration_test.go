@@ -79,7 +79,7 @@ func TestSlackEventsLaunchRunsEndToEnd(t *testing.T) {
 	require.NoError(t, err)
 	ring, err := crypto.ParseKeyring("v1:" + base64.StdEncoding.EncodeToString(key))
 	require.NoError(t, err)
-	sealer := vault.New(repo.DB, vault.NewEnvKeyWrapper(ring))
+	sealer := vault.New(vault.Deps{DB: repo.DB, Keys: vault.NewEnvKeyWrapper(ring)})
 	providers, err := connections.ProvidersFromCatalog(catalog.MustBuiltin().Manifests(), func(k string) string {
 		return map[string]string{"RELIANT_OAUTH_SLACK_CLIENT_ID": "1234.5678", "RELIANT_OAUTH_SLACK_CLIENT_SECRET": "s3cret"}[k]
 	})

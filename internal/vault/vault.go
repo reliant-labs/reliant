@@ -1,9 +1,5 @@
 // Copyright (c) 2025 Reliant Labs
 
-// Package vault seals secrets at rest. A single key-encryption key (KEK, from
-// RELIANT_VAULT_KEY) wraps one random data-encryption key (DEK) per tenant;
-// DEKs seal the values. Ciphertext and wrapped DEKs live in reliant Postgres.
-// See research/CONNECTIONS_VAULT.md.
 package vault
 
 import (
@@ -43,19 +39,14 @@ type Tenant struct{ Kind, ID string }
 // UserTenant is the v1 tenant for a user id.
 func UserTenant(userID string) Tenant { return Tenant{Kind: TenantUser, ID: userID} }
 
-// DBTX is the slice of *sql.DB the vault needs.
-type DBTX interface {
-	ExecContext(ctx context.Context, query string, args ...any) (sql.Result, error)
-	QueryRowContext(ctx context.Context, query string, args ...any) *sql.Row
-}
-
 type cachedKey struct {
 	tenant Tenant
 	ring   *crypto.Keyring
 }
 
-// Vault seals and opens values per tenant.
-type Vault struct {
+// sealer is the Service: it seals and opens values per tenant, caching the
+// unwrapped DEKs it has used.
+type sealer struct {
 	db      DBTX
 	wrapper KeyWrapper
 
@@ -64,20 +55,18 @@ type Vault struct {
 	keys    map[string]cachedKey
 }
 
-// New builds a Vault over db and wrapper.
-func New(db DBTX, wrapper KeyWrapper) *Vault {
-	return &Vault{
-		db:      db,
-		wrapper: wrapper,
+// New builds the vault over deps.DB and deps.Keys.
+func New(deps Deps) Service {
+	return &sealer{
+		db:      deps.DB,
+		wrapper: deps.Keys,
 		primary: map[Tenant]string{},
 		keys:    map[string]cachedKey{},
 	}
 }
 
-// Seal encrypts plaintext under the tenant's primary DEK, creating the DEK on
-// first use. aad is bound to the ciphertext together with the tenant, so a blob
-// copied to another row or another user's row does not open.
-func (v *Vault) Seal(ctx context.Context, tenant Tenant, plaintext, aad []byte) ([]byte, error) {
+// Seal implements Service.
+func (v *sealer) Seal(ctx context.Context, tenant Tenant, plaintext, aad []byte) ([]byte, error) {
 	_, ring, err := v.primaryRing(ctx, tenant)
 	if err != nil {
 		return nil, err
@@ -85,8 +74,8 @@ func (v *Vault) Seal(ctx context.Context, tenant Tenant, plaintext, aad []byte) 
 	return ring.Seal(plaintext, boundAAD(tenant, aad))
 }
 
-// Open decrypts a blob produced by Seal for the same tenant and aad.
-func (v *Vault) Open(ctx context.Context, tenant Tenant, ciphertext, aad []byte) ([]byte, error) {
+// Open implements Service.
+func (v *sealer) Open(ctx context.Context, tenant Tenant, ciphertext, aad []byte) ([]byte, error) {
 	keyID, err := envelopeKeyID(ciphertext)
 	if err != nil {
 		return nil, err
@@ -98,8 +87,8 @@ func (v *Vault) Open(ctx context.Context, tenant Tenant, ciphertext, aad []byte)
 	return ring.Open(ciphertext, boundAAD(tenant, aad))
 }
 
-// OpenSecret is Open, returning a value that cannot be printed.
-func (v *Vault) OpenSecret(ctx context.Context, tenant Tenant, ciphertext, aad []byte) (Secret, error) {
+// OpenSecret implements Service.
+func (v *sealer) OpenSecret(ctx context.Context, tenant Tenant, ciphertext, aad []byte) (Secret, error) {
 	pt, err := v.Open(ctx, tenant, ciphertext, aad)
 	if err != nil {
 		return Secret{}, err
@@ -135,7 +124,7 @@ func envelopeKeyID(blob []byte) (string, error) {
 	return string(blob[envelopeMagicLen+1 : end]), nil
 }
 
-func (v *Vault) primaryRing(ctx context.Context, tenant Tenant) (string, *crypto.Keyring, error) {
+func (v *sealer) primaryRing(ctx context.Context, tenant Tenant) (string, *crypto.Keyring, error) {
 	v.mu.RLock()
 	id, ok := v.primary[tenant]
 	v.mu.RUnlock()
@@ -169,7 +158,7 @@ func (v *Vault) primaryRing(ctx context.Context, tenant Tenant) (string, *crypto
 	return id, ring, nil
 }
 
-func (v *Vault) selectPrimary(ctx context.Context, t Tenant) (id string, wrapped []byte, found bool, err error) {
+func (v *sealer) selectPrimary(ctx context.Context, t Tenant) (id string, wrapped []byte, found bool, err error) {
 	err = v.db.QueryRowContext(ctx,
 		`SELECT id, wrapped_dek FROM vault_keys WHERE tenant_kind = $1 AND tenant_id = $2 AND state = $3`,
 		t.Kind, t.ID, stateGlobalPrimary).Scan(&id, &wrapped)
@@ -184,7 +173,7 @@ func (v *Vault) selectPrimary(ctx context.Context, t Tenant) (id string, wrapped
 
 // createPrimary inserts the tenant's first DEK. ON CONFLICT DO NOTHING makes
 // concurrent first uses converge on one row: the loser re-reads the winner's.
-func (v *Vault) createPrimary(ctx context.Context, t Tenant) error {
+func (v *sealer) createPrimary(ctx context.Context, t Tenant) error {
 	dek := make([]byte, dekLen)
 	if _, err := rand.Read(dek); err != nil {
 		return fmt.Errorf("vault: generating dek: %w", err)
@@ -209,7 +198,7 @@ func (v *Vault) createPrimary(ctx context.Context, t Tenant) error {
 	return nil
 }
 
-func (v *Vault) ringByID(ctx context.Context, t Tenant, id string) (*crypto.Keyring, error) {
+func (v *sealer) ringByID(ctx context.Context, t Tenant, id string) (*crypto.Keyring, error) {
 	v.mu.RLock()
 	c, ok := v.keys[id]
 	v.mu.RUnlock()
@@ -244,7 +233,7 @@ func (v *Vault) ringByID(ctx context.Context, t Tenant, id string) (*crypto.Keyr
 
 // install unwraps a DEK and caches the resulting single-key ring. The ring id
 // is the vault key id, so every ciphertext it seals names its own key.
-func (v *Vault) install(t Tenant, id string, wrapped []byte) (*crypto.Keyring, error) {
+func (v *sealer) install(t Tenant, id string, wrapped []byte) (*crypto.Keyring, error) {
 	dek, err := v.wrapper.Unwrap(wrapped, wrapAAD(id, t))
 	if err != nil {
 		return nil, err

@@ -30,7 +30,7 @@ type HooksStore interface {
 }
 
 // SecretOpener opens a webhook trigger's sealed HMAC secret. Satisfied by
-// *vault.Vault.
+// vault.Service.
 type SecretOpener interface {
 	Open(ctx context.Context, tenant vault.Tenant, ciphertext, aad []byte) ([]byte, error)
 }
