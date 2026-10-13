@@ -5,6 +5,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http/httptest"
 	"net/url"
 	"strings"
@@ -84,6 +85,37 @@ func TestTerminalWS_MachineNotReadyIsLoggedOnceBelowErrorWithContext(t *testing.
 	require.Equal(t, terminalTestUserID, record["user_id"])
 	require.Equal(t, "proj-1", record["project_id"])
 	require.Equal(t, "wt-1", record["worktree_id"])
+	require.Equal(t, "test-daemon-id", record["daemon_id"])
+}
+
+// Prod, 2026-10-11 (ELECTRON-CZ): one machine whose daemon was connected but
+// never answered terminal.create produced 24 "[TerminalWS] Error" events in
+// five minutes — four terminals, each retrying every ~62s. A connected daemon
+// that cannot open a shell is still an error, but it is the machine's state:
+// said once per window, with whose machine it was, not once per retry.
+func TestTerminalWS_MachineNotAnsweringIsOneErrorPerWindowWithContext(t *testing.T) {
+	logs := captureLogs(t)
+	freshTerminalMachineStateLog(t)
+	// The NATS router's shape for a live subscription that did not reply.
+	notAnswering := fmt.Errorf("daemon command terminal.create (subject daemon.command.u.d, timeout 30s) via NATS failed: %w: %w",
+		toolexec.ErrDaemonTimeout, errors.New("nats: timeout"))
+	router := &terminalCreateRouter{createErr: notAnswering}
+
+	for i := 0; i < 4; i++ {
+		first := dialTerminalWSForProject(t, router, "proj-1")
+		require.Equal(t, "error", first["type"], "the browser is still told, and retries")
+	}
+
+	require.Empty(t, logRecords(logs, "[TerminalWS] Error"), "a machine's state is not a per-retry error")
+	require.Empty(t, logRecords(logs, "[TerminalWS] Machine not ready; the browser shows it and retries"),
+		"a connected machine that does not answer is not a machine that is not up")
+	records := logRecords(logs, "[TerminalWS] Machine is connected but did not answer; the browser retries")
+	require.Len(t, records, 1, "the browser's retries are the same news")
+	record := records[0]
+	require.Equal(t, "ERROR", record["level"], "nothing the user did explains a connected daemon that cannot open a shell")
+	require.Equal(t, "not_answering", record["machine_state"])
+	require.Equal(t, terminalTestUserID, record["user_id"])
+	require.Equal(t, "proj-1", record["project_id"])
 	require.Equal(t, "test-daemon-id", record["daemon_id"])
 }
 

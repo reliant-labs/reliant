@@ -243,8 +243,9 @@ func TerminalWSHandler(router toolexec.DaemonRouter, validator auth.TokenValidat
 				return
 			}
 			message := fmt.Sprintf("create terminal session: %v", err)
-			// No machine, or one that is not up yet, is the machine's state:
-			// the browser shows it and retries. Said once, below ERROR.
+			// No machine, one that is not up yet, or one that is up but not
+			// answering is the machine's state: the browser shows it and
+			// retries. Said once per window (see logTerminalMachineState).
 			if state, ok := terminalMachineState(err); ok {
 				logTerminalMachineState(ctx, router, userID, state, err, logFields)
 				writeWSJSON(conn, wsMessage{Type: "error", Data: message})
@@ -426,7 +427,8 @@ func writeWSJSON(conn *websocket.Conn, msg wsMessage) {
 
 // writeWSError sends an error message to the browser and logs it at ERROR
 // with the connection's context. Only for real failures: the machine not being
-// there or not being up goes through logTerminalMachineState instead.
+// there, not being up, or not answering goes through logTerminalMachineState
+// instead.
 func writeWSError(conn *websocket.Conn, msg string, logFields ...any) {
 	logging.Error("[TerminalWS] Error", append([]any{"message", msg}, logFields...)...)
 	writeWSJSON(conn, wsMessage{Type: "error", Data: msg})
@@ -441,10 +443,21 @@ const terminalMachineStateLogWindow = 5 * time.Minute
 
 var terminalMachineStateLog = logging.NewThrottle(terminalMachineStateLogWindow, time.Now)
 
+// terminalMachineNotAnswering is the machine state of a daemon that is
+// connected but did not answer terminal.create before its deadline.
+const terminalMachineNotAnswering = "not_answering"
+
 // terminalMachineState names why a terminal could not be created when the
-// reason is the machine's state rather than a failure: the user has no
-// machine, it is starting or asleep, or it is not connected (NATS had no
-// responder). ok is false for anything else, which is a real failure.
+// reason is the machine's state rather than the command itself — the
+// distinctions daemonerr.MachineStateConnectError draws for every daemon-proxy
+// RPC. ok is false for anything else, which is a real failure.
+//
+//   - no_machine, starting_or_asleep, not_connected (NATS had no responder):
+//     the machine is not up. The UI already shows that; it is not an error.
+//   - not_answering: the machine is connected — NATS delivered the request to
+//     its live subscription — but did not answer in time
+//     (toolexec.ErrDaemonTimeout). Nothing the user did explains a connected
+//     daemon that cannot open a shell, so it stays an error.
 func terminalMachineState(err error) (state string, ok bool) {
 	switch {
 	case toolexec.IsNoDaemon(err):
@@ -453,14 +466,22 @@ func terminalMachineState(err error) (state string, ok bool) {
 		return "starting_or_asleep", true
 	case daemonerr.Unreachable(err):
 		return "not_connected", true
+	case toolexec.IsDaemonTimeout(err):
+		return terminalMachineNotAnswering, true
 	default:
 		return "", false
 	}
 }
 
-// logTerminalMachineState logs an expected machine state at INFO, at most once
-// per window per user and state, with how many were suppressed since and the
-// machine default resolution names, when it names one.
+// logTerminalMachineState logs a machine state at most once per window per
+// user and state, with how many were suppressed since and the machine default
+// resolution names, when it names one.
+//
+// A machine that is not up is INFO. A connected machine that did not answer
+// is ERROR, but it is still one machine's state, said once per window rather
+// than once per browser retry: one such machine produced 24 "[TerminalWS]
+// Error" events in five minutes (ELECTRON-CZ, 2026-10-11) — four terminals,
+// each retrying every ~62s, the 30s timeout plus the browser's backoff.
 func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, userID, state string, err error, logFields []any) {
 	suppressed, ok := terminalMachineStateLog.Allow(userID + "|" + state)
 	if !ok {
@@ -469,6 +490,10 @@ func logTerminalMachineState(ctx context.Context, router toolexec.DaemonRouter, 
 	fields := append([]any{"machine_state", state, "error", err, "suppressed_since_last", suppressed}, logFields...)
 	if daemonID, resolveErr := router.ResolveDaemonID(ctx, userID); resolveErr == nil {
 		fields = append(fields, "daemon_id", daemonID)
+	}
+	if state == terminalMachineNotAnswering {
+		logging.Error("[TerminalWS] Machine is connected but did not answer; the browser retries", fields...)
+		return
 	}
 	logging.Info("[TerminalWS] Machine not ready; the browser shows it and retries", fields...)
 }
