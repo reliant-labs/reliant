@@ -132,7 +132,7 @@ type PollOutput struct {
 
 // PollCredentials resolves the credential a polled trigger authenticates with.
 // It is handed the trigger id and nothing else: the owner, the connection and
-// the integration are read from the trigger row. connauth.Source satisfies it.
+// the integration are read from the trigger row. connauth.Service satisfies it.
 type PollCredentials interface {
 	ForTrigger(ctx context.Context, triggerID string) (httpaction.Credential, error)
 }

@@ -76,7 +76,7 @@ type Config struct {
 
 	// TriggerCredentials resolves a polled trigger's credential from the
 	// trigger row (owner and connection), for the poll activity. Normally the
-	// same connauth.Source as IntegrationCredentials. nil skips every poll
+	// same connauth.Service as IntegrationCredentials. nil skips every poll
 	// rather than letting a poller run unauthenticated.
 	TriggerCredentials triggers.PollCredentials
 

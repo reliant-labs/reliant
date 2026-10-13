@@ -106,10 +106,10 @@ func (e *env) newRun(userID string) string {
 // source is the hosted composition: the broker registered under BrokerID,
 // which the `github` manifest's delegated method names. host pins the
 // credential to the test server instead of api.github.com.
-func (e *env) source(host string) *connauth.Source {
+func (e *env) source(host string) connauth.Service {
 	brokers := connauth.NewBrokers()
 	require.NoError(e.t, brokers.Register(BrokerID, newBroker(e.cp, host, nil)))
-	return connauth.New(e.resolver).WithBrokers(brokers)
+	return connauth.New(connauth.Deps{Resolver: e.resolver, Broker: brokers.Get})
 }
 
 // githubSpec is the embedded `github` manifest's connection declaration.
@@ -237,7 +237,7 @@ func TestBrokerOnlyForItsIntegrationAndSelfHostedFallsThrough(t *testing.T) {
 
 	// Self-hosted: no broker registered, so github without a saved connection
 	// is "no github connection", not a control-plane call.
-	_, err = connauth.New(e.resolver).Credential(context.Background(), githubReq(t, run))
+	_, err = connauth.New(connauth.Deps{Resolver: e.resolver}).Credential(context.Background(), githubReq(t, run))
 	var ce *httpaction.CredentialError
 	require.True(t, errors.As(err, &ce))
 	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)

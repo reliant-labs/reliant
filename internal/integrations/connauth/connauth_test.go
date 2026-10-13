@@ -40,7 +40,7 @@ type env struct {
 	repo     *db.Repo
 	svc      *connections.Service
 	resolver *connections.Resolver
-	source   *connauth.Source
+	source   connauth.Service
 }
 
 func newEnv(t *testing.T) *env {
@@ -59,7 +59,7 @@ func newEnv(t *testing.T) *env {
 	tokens := connections.NewTokenSource(store, v, providers, nil)
 	broker := connections.NewBroker(store, v, providers, nil, "https://reliant.example")
 	resolver := connections.NewResolver(repo, store, tokens)
-	return &env{t: t, repo: repo, svc: connections.NewService(store, v, providers, tokens, broker, nil), resolver: resolver, source: connauth.New(resolver)}
+	return &env{t: t, repo: repo, svc: connections.NewService(store, v, providers, tokens, broker, nil), resolver: resolver, source: connauth.New(connauth.Deps{Resolver: resolver})}
 }
 
 func (e *env) newRun(userID string) string {
@@ -360,7 +360,7 @@ func TestForTriggerNeedsReauthIsTyped(t *testing.T) {
 }
 
 func TestForTriggerWithoutAResolverRefuses(t *testing.T) {
-	_, err := connauth.New(nil).ForTrigger(context.Background(), "trg-1")
+	_, err := connauth.New(connauth.Deps{}).ForTrigger(context.Background(), "trg-1")
 	var ce *httpaction.CredentialError
 	require.True(t, errors.As(err, &ce))
 	assert.Equal(t, httpaction.CodeFailedPrecondition, ce.Code)

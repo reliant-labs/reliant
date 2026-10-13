@@ -59,11 +59,11 @@ func specs(t *testing.T, ids ...string) map[string]*reliantv1.ConnectionSpec {
 	return out
 }
 
-func (e *env) withBroker(b connauth.DelegatedBroker) *connauth.Source {
+func (e *env) withBroker(b connauth.DelegatedBroker) connauth.Service {
 	e.t.Helper()
 	brokers := connauth.NewBrokers()
 	require.NoError(e.t, brokers.Register("controlplane-github", b))
-	return e.source.WithBrokers(brokers)
+	return connauth.New(connauth.Deps{Resolver: e.resolver, Broker: brokers.Get})
 }
 
 // A saved default connection makes its integration usable for the owner's
@@ -170,7 +170,7 @@ func TestUsableIntegrations_UnknownOwnerMakesNothingUsable(t *testing.T) {
 // A process without connections answers nothing usable rather than erroring
 // every model turn.
 func TestUsableIntegrations_WithoutAResolverIsEmpty(t *testing.T) {
-	got, err := connauth.New(nil).UsableIntegrations(context.Background(), "run", specs(t, "github"))
+	got, err := connauth.New(connauth.Deps{}).UsableIntegrations(context.Background(), "run", specs(t, "github"))
 	require.NoError(t, err)
 	assert.Empty(t, got)
 }

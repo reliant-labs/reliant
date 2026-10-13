@@ -59,12 +59,15 @@ func newConnectionResolver(repo *db.Repo, keys vault.Service) (*connections.Reso
 // live at control-plane, so falling back would answer "not connected" for
 // every one of them.
 func newIntegrationCredentials(resolver *connections.Resolver, getenv func(string) string) (httpaction.CredentialSource, error) {
-	saved := connauth.New(resolver)
+	var deps connauth.Deps
+	if resolver != nil {
+		deps.Resolver = resolver
+	}
 	// The same resolution BootVault and the token authority use, so the
 	// worker's notion of "hosted" cannot disagree with theirs.
 	cpURL := controlplane.BaseURLFrom(getenv)
 	if cpURL == "" {
-		return saved, nil
+		return connauth.New(deps), nil
 	}
 	brokers := connauth.NewBrokers()
 	secret := strings.TrimSpace(getenv("INTERNAL_SERVICE_SECRET"))
@@ -80,7 +83,8 @@ func newIntegrationCredentials(resolver *connections.Resolver, getenv func(strin
 	if err := brokers.Register(ghdelegated.BrokerID, broker); err != nil {
 		return nil, fmt.Errorf("integrations: %w", err)
 	}
-	return saved.WithBrokers(brokers), nil
+	deps.Broker = brokers.Get
+	return connauth.New(deps), nil
 }
 
 // triggerCredentials is what the poll activity resolves a polled trigger's
@@ -88,7 +92,7 @@ func newIntegrationCredentials(resolver *connections.Resolver, getenv func(strin
 // id rather than by run. nil (the poll is skipped) when the source is not one
 // that can.
 func triggerCredentials(creds httpaction.CredentialSource) triggers.PollCredentials {
-	if cs, ok := creds.(*connauth.Source); ok && cs != nil {
+	if cs, ok := creds.(connauth.Service); ok {
 		return cs
 	}
 	return nil
@@ -104,13 +108,12 @@ func newCatalogSearch(conns catalogindex.ConnectionLister, creds httpaction.Cred
 	if err != nil {
 		return nil, fmt.Errorf("integration catalog index: %w", err)
 	}
-	var brokers *connauth.Brokers
-	if cs, ok := creds.(*connauth.Source); ok {
-		brokers = cs.Brokers()
-	}
+	cs, _ := creds.(connauth.Service)
 	delegated := func(brokerID string) (bool, string) {
-		if _, ok := brokers.Get(brokerID); ok {
-			return true, ""
+		if cs != nil {
+			if _, ok := cs.Broker(brokerID); ok {
+				return true, ""
+			}
 		}
 		return false, "delegated broker " + brokerID + " is not registered on this worker"
 	}

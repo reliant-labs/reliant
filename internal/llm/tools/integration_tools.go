@@ -106,7 +106,7 @@ func MutatingIntegrationAction(name string) bool {
 // connectionAvailability is the half of a credential source that can say,
 // without resolving a credential for any call, which integrations a run's
 // owner could authenticate now. Declared here, where it is consumed:
-// connauth.Source implements it by walking the same resolution order its
+// connauth.Service implements it by walking the same resolution order its
 // Credential uses (the owner's default saved connection, else a delegated
 // authority), so a tool offered because of it is a tool whose call will find
 // a credential.

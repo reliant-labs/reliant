@@ -101,7 +101,7 @@ func TestGmailPollsIntoLaunchedRunsEndToEnd(t *testing.T) {
 	tokens := connections.NewTokenSource(store, sealer, providers, doer)
 	broker := connections.NewBroker(store, sealer, providers, doer, "https://reliant.example")
 	conns := connections.NewService(store, sealer, providers, tokens, broker, doer)
-	source := connauth.New(connections.NewResolver(repo, store, tokens))
+	source := connauth.New(connauth.Deps{Resolver: connections.NewResolver(repo, store, tokens)})
 
 	connectGmail := func(userID, email string) *core.Connection {
 		google.nextEmail = email

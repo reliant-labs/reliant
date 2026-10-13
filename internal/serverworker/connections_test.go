@@ -26,9 +26,9 @@ func TestIntegrationCredentials_HostedUsesControlPlane(t *testing.T) {
 		"INTERNAL_SERVICE_SECRET":   "s",
 	}))
 	require.NoError(t, err)
-	cs, ok := src.(*connauth.Source)
+	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
-	_, registered := cs.Brokers().Get(ghdelegated.BrokerID)
+	_, registered := cs.Broker(ghdelegated.BrokerID)
 	assert.True(t, registered, "hosted registers the control-plane GitHub broker under the id the github manifest names")
 }
 
@@ -47,9 +47,9 @@ func TestIntegrationCredentials_HostedWithoutSecretFailsBoot(t *testing.T) {
 func TestIntegrationCredentials_SelfHostedIsSavedConnections(t *testing.T) {
 	src, err := newIntegrationCredentials(nil, envOf(nil))
 	require.NoError(t, err)
-	cs, ok := src.(*connauth.Source)
+	cs, ok := src.(connauth.Service)
 	require.True(t, ok)
-	_, registered := cs.Brokers().Get(ghdelegated.BrokerID)
+	_, registered := cs.Broker(ghdelegated.BrokerID)
 	assert.False(t, registered, "self-hosted has no control plane to delegate to")
 }
 
