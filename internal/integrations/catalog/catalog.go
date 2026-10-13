@@ -1,5 +1,7 @@
 // Package catalog embeds the curated integration manifests and resolves
 // `uses: <integration>/<action>@<major>` references against them.
+//
+//forge:exclude-contract: embed-only: the curated manifests (//go:embed) and pure resolution of uses references over them; no I/O beyond the embedded FS, nothing to substitute
 package catalog
 
 import (
